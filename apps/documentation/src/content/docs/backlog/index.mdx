@@ -1,0 +1,39 @@
+---
+title: Backlog — Cosas por hacer
+description: Ideas, propuestas, mejoras y trabajo planeado para Kaipu Recorder que no está hecho todavía. El mapa de "lo que viene".
+---
+
+# Backlog — Cosas por hacer
+
+Trabajo planeado, propuestas y mejoras que **aún no** están implementadas. Cada ítem con suficiente contexto para retomarlo sin re-investigar.
+
+**Leyenda de estado:** 🟡 En progreso (pausado) · 🔵 Propuesto · ⚪ Idea
+
+## Mapa
+
+| Ítem                                                         | Área          | Estado         | Esfuerzo        | Detalle                       |
+| ------------------------------------------------------------ | ------------- | -------------- | --------------- | ----------------------------- |
+| Limpieza de LibraryPage (remove code trash)                  | Refactor / UI | 🟡 En progreso | ~½ día restante | [Ver](./library-page-cleanup) |
+| Migración Jest → Vitest                                      | Testing       | 🟡 En progreso | ~½ día restante | [Ver](./vitest-migration)     |
+| E2E con Playwright                                           | Testing       | 🔵 Propuesto   | Medio           | [Ver](./playwright-e2e)       |
+| Encode por hardware (VideoToolbox/NVENC)                     | Pipeline      | ⚪ Idea        | Alto            | —                             |
+| Captura nativa (ScreenCaptureKit / Windows.Graphics.Capture) | Pipeline      | ⚪ Idea        | Alto            | —                             |
+| Output MP4/H.264 para screen-only vía FFmpeg                 | Pipeline      | 🔵 Propuesto   | Medio           | —                             |
+| Benchmark propio (CPU/RAM/frames dropped)                    | Pipeline      | ⚪ Idea        | Medio           | —                             |
+
+## Detalle de ítems sin doc propio
+
+### Pipeline de grabación
+
+Estos salen de la auditoría en [Recording Pipeline → "Lo que NO existe todavía"](/desktop/recording-pipeline). Resumen:
+
+- **Encode por hardware** — hoy el encode corre en el renderer (`MediaRecorder`, VP9+Opus). Moverlo a FFmpeg con VideoToolbox/NVENC liberaría el thread de React. FFmpeg ya está bundleado → costo de bundle cero.
+- **Captura nativa** — `getDisplayMedia()` en el renderer hoy; ScreenCaptureKit (macOS) / Windows.Graphics.Capture darían mejor rendimiento y fidelidad.
+- **Output MP4/H.264** — el output actual es WebM (salvo con webcam). Pasar a MP4 vía FFmpeg da compatibilidad universal para sharing. El IPC de streaming a disco ya funciona, no cambia.
+- **Benchmark propio** — no hay medición de CPU/RAM/frames dropped para validar las mejoras anteriores.
+
+## Cómo usar esta sección
+
+- Cada ítem que se empieza a trabajar pasa a 🟡 y, si tiene sustancia, gana su propio doc (como [vitest-migration](./vitest-migration)).
+- Al completar un ítem: mover el aprendizaje al doc de feature/arquitectura correspondiente (`desktop/`) y quitarlo del mapa.
+- Mantener el **esfuerzo** y el **estado** actualizados — es la fuente de verdad de "qué sigue".

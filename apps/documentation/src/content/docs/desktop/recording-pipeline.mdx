@@ -1,0 +1,131 @@
+---
+title: Recording Pipeline
+description: Current state of the capture and encode pipeline — what runs where, IPC channels, FFmpeg bundling, and what doesn't exist yet.
+---
+
+# Recording Pipeline — Estado actual (2026-06-14)
+
+Auditoría técnica del pipeline de captura y encode existente.
+
+## TL;DR
+
+| Dimensión          | Hoy                                              |
+| ------------------ | ------------------------------------------------ |
+| Captura            | `getDisplayMedia()` en el renderer               |
+| Encoder            | `MediaRecorder` VP9+Opus, 2.5 Mbps default       |
+| Encode corre en    | Renderer (thread principal de React)             |
+| Data handling      | Streaming a disco vía IPC (1 chunk/segundo)      |
+| Output screen-only | WebM (VP9 + Opus)                                |
+| Output con webcam  | MP4 (H.264 + AAC, re-encode FFmpeg post)         |
+| FFmpeg bundleado   | ✅ Sí (forge.config.ts, binarios por plataforma) |
+| Electron           | 38.1.2                                           |
+| Filesystem-first   | ✅ Mergeado (branch feat/offline-setup)          |
+
+---
+
+## Captura
+
+**Método:** `navigator.mediaDevices.getDisplayMedia()` en el renderer.
+
+Tres estrategias en cascada:
+
+1. Audio con constraints explícitas (`echoCancellation: false`, 48kHz, stereo)
+2. `audio: true` simple
+3. Solo video como último fallback
+
+El main process usa `desktopCapturer.getSources()` para listar pantallas.
+
+**Archivo:** `src/features/recording/hooks/useMediaRecorder.ts`
+
+---
+
+## Encoder
+
+`MediaRecorder` con:
+
+```
+mimeType: 'video/webm;codecs=vp9,opus'
+videoBitsPerSecond: 2_500_000  (configurable por settings)
+chunk interval: 1000 ms
+```
+
+Webcam en paralelo:
+
+```
+mimeType: 'video/webm;codecs=vp9'
+videoBitsPerSecond: 1_000_000
+```
+
+**Encode corre en el renderer** — compite con el thread de React.
+
+---
+
+## Data handling — streaming a disco
+
+**No hay acumulación en memoria.** Anti-OOM para grabaciones largas.
+
+```
+ondataavailable → blob → base64 (renderer)
+  → IPC recording:append-chunk → main
+  → WriteStream (backpressure, 1 MB buffer)
+  → archivo temp en app.getPath('temp')
+  → al parar: finalize → move → vault del usuario
+```
+
+**Archivo:** `src/features/recording/hooks/useMediaRecorder.ts`, `src/main.ts`
+
+---
+
+## Post-procesamiento
+
+**Screen-only:** WebM directo del MediaRecorder → `remuxWebmInPlace` agrega header de duración.
+
+**Con webcam:** MP4 via re-encode FFmpeg post-grabación (`VideoComposer`, CRF 20, 4 threads, target 30fps).
+
+**Thumbnail:** PNG 320×240 extraído al segundo 1, en background (no bloquea).
+
+---
+
+## FFmpeg en el bundle
+
+**Ya está bundleado.** Binarios por plataforma en `forge.config.ts`:
+
+| Plataforma    | Paquete                          |
+| ------------- | -------------------------------- |
+| macOS arm64   | `@ffmpeg-installer/darwin-arm64` |
+| macOS x64     | `@ffmpeg-installer/darwin-x64`   |
+| Windows/Linux | `ffmpeg-static`                  |
+
+Pasar a FFmpeg para captura+encode **no agrega peso al bundle**.
+
+---
+
+## IPC channels de grabación
+
+**Control:** `start-screen-recording` / `stop-screen-recording` / `recording:pause` / `recording:resume`
+
+**Stream I/O (hot path):**
+
+- `recording:get-temp-stream-path`
+- `recording:append-chunk`
+- `recording:finalize-stream`
+- `recording:move-file`
+- `recording:cleanup-streams`
+
+---
+
+## Lo que NO existe todavía
+
+- Encode por hardware (VideoToolbox, NVENC)
+- Captura nativa (ScreenCaptureKit, Windows.Graphics.Capture)
+- Benchmark propio de CPU/RAM/frames dropped
+- Output MP4 para screen-only (hoy solo con webcam)
+
+---
+
+## Implicaciones para el próximo paso (FFmpeg/hardware)
+
+1. **FFmpeg ya está** → costo de bundle: cero.
+2. **El IPC de streaming ya funciona** → la arquitectura de escritura a disco no cambia.
+3. **El encode corre hoy en el renderer** → cualquier mejora libera el thread de React.
+4. **Output actual es WebM** → pasar a MP4/H.264 via FFmpeg da compatibilidad universal para sharing.

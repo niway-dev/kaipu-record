@@ -57,3 +57,7 @@ pr-summaries/
 
 # Temporary files
 workspace-temp
+
+# Brainstorming / planning tool output (superpowers plugin)
+docs/superpowers/
+docs/specs

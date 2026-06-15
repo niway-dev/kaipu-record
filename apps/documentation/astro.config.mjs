@@ -18,7 +18,29 @@ export default defineConfig({
         },
         {
           label: "Stack",
-          items: [{ slug: "stack/hono" }],
+          items: [{ slug: "stack/hono" }, { slug: "stack/better-auth-electron-bug" }],
+        },
+        {
+          label: "Desktop App",
+          items: [
+            { slug: "desktop/product-philosophy" },
+            { slug: "desktop/filesystem-first-monetization" },
+            { slug: "desktop/recording-pipeline" },
+            { slug: "desktop/electron-vs-tauri" },
+          ],
+        },
+        {
+          label: "Features",
+          autogenerate: { directory: "features" },
+        },
+        {
+          label: "Backlog",
+          items: [
+            { slug: "backlog" },
+            { slug: "backlog/library-page-cleanup" },
+            { slug: "backlog/vitest-migration" },
+            { slug: "backlog/playwright-e2e" },
+          ],
         },
         {
           label: "Architecture",

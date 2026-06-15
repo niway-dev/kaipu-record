@@ -1,0 +1,230 @@
+---
+title: Library — Detail Page & Video Player
+description: Card actions en la grid, reproductor embebido en el detail page, y arquitectura local/online del player.
+---
+
+# Library — Detail Page & Video Player (2026-06-14)
+
+Cambios implementados en las sesiones de junio 2026. Cubre tres áreas: acciones en tarjetas de la grid, reproductor embebido en el detail page, y robustez del player.
+
+---
+
+## 1. Card action buttons (LibraryPage)
+
+### Qué se agregó
+
+Cada `VideoCard` en la grid view ahora tiene un footer con tres botones de acción:
+
+| Botón  | Ícono       | Acción                          |
+| ------ | ----------- | ------------------------------- |
+| Rename | `SquarePen` | Activa inline rename en la card |
+| Upload | `Upload`    | Sube el video local a la nube   |
+| Delete | `Trash2`    | Abre diálogo de confirmación    |
+
+### Archivos modificados
+
+- `apps/kaipu-recorder/src/pages/LibraryPage.tsx` — JSX del footer en `VideoCard`
+- `apps/kaipu-recorder/src/pages/LibraryPage.module.css` — estilos `.cardActions`, `.cardActionBtn`, `.cardDeleteBtn`
+
+### Diseño
+
+```css
+/* Footer separado del thumbnail con border-top */
+.cardActions {
+  display: flex;
+  gap: 2px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+/* Delete tiene hover rojo (accent-blue = #f6055c) */
+.cardDeleteBtn:hover {
+  background: rgba(246, 5, 92, 0.12);
+  color: #f6055c;
+}
+```
+
+El inline rename usa estado local en `VideoCard` (`isEditing`, `editValue`) con input controlado, commit en Enter/blur y cancel en Escape.
+
+---
+
+## 2. Reproductor embebido en LibraryDetailPage
+
+### Motivación
+
+El flujo anterior requería dos clics: Library grid → Detail page → PlayerPage independiente. Se eliminó esa navegación embebiendo el player directamente en el detail page.
+
+### Antes vs después
+
+| Antes                                                     | Después                                          |
+| --------------------------------------------------------- | ------------------------------------------------ |
+| Click en card → `/library/:id` (thumbnail + botón "Play") | Click en card → `/library/:id` (player inline)   |
+| Click "Play" → navega a `/player/:id`                     | Click en video → play/pause en la misma pantalla |
+| 2 clics para ver el video                                 | 1 clic                                           |
+
+### Layout del detail page
+
+```
+┌─────────────────────────┬──────────────┐
+│                         │              │
+│    Video player         │   Título     │
+│    (flex: 1)            │   Metadatos  │
+│                         │   Acciones   │
+│ ┌─────────────────────┐ │              │
+│ │ controls bar        │ │              │
+│ └─────────────────────┘ │              │
+└─────────────────────────┴──────────────┘
+         grid: 1fr 340px
+```
+
+### URL del stream
+
+El IPC `library:get-video` (`localLibraryWindow.ts`) retorna:
+
+```
+Video local  →  video:///path/to/file.webm
+Video cloud  →  https://... (presigned URL o CDN)
+```
+
+El protocolo `video://` está registrado en `main.ts` y hace `net.fetch(file://)` con soporte de range requests (necesario para seeking en archivos grandes).
+
+### Acciones del panel derecho
+
+Sin el botón "Play" que ya no es necesario, el panel quedó:
+
+| Botón           | Tipo              | Condición                 |
+| --------------- | ----------------- | ------------------------- |
+| Upload to cloud | primaryBtn (pink) | Solo videos locales       |
+| Copy link       | secondaryBtn      | Solo cloud con `shareUrl` |
+| Open in browser | ghostBtn          | Solo cloud                |
+| Show in Finder  | ghostBtn          | Si tiene `filePath`       |
+| Delete          | dangerBtn         | Siempre                   |
+
+El botón Fullscreen **no está** en el panel de acciones — solo existe en la barra de controles del video.
+
+---
+
+## 3. Robustez del player (blob fallback + error state)
+
+### Problema
+
+El player básico solo asignaba `src={videoUrl}`. Si el protocolo `video://` fallaba (permisos, archivo movido, etc.) no había ningún mecanismo de recuperación.
+
+### Solución: blob fallback + error state
+
+#### Estados
+
+```tsx
+const [streamError, setStreamError] = useState<string | undefined>();
+const blobUrlRef = useRef<string | null>(null);
+const triedBlobFallbackRef = useRef(false);
+```
+
+#### clearBlobUrl + cleanup en useEffect
+
+```tsx
+const clearBlobUrl = useCallback(() => {
+  if (blobUrlRef.current) {
+    URL.revokeObjectURL(blobUrlRef.current);
+    blobUrlRef.current = null;
+  }
+}, []);
+
+useEffect(() => {
+  // ...load video...
+  return clearBlobUrl; // revoca blob URL al desmontar o cambiar video
+}, [videoId, clearBlobUrl]);
+```
+
+#### handleVideoError — blob fallback
+
+Si `video://` falla, se lee el archivo completo y se crea un `blob:` URL:
+
+```tsx
+const handleVideoError = useCallback(() => {
+  if (!triedBlobFallbackRef.current && video?.filePath) {
+    triedBlobFallbackRef.current = true;
+    window.electronAPI?.readVideoFile?.(video.filePath)
+      .then((rawBytes) => {
+        const bytes = /* normaliza Buffer/ArrayBuffer/plain object → Uint8Array */;
+        const fallbackUrl = URL.createObjectURL(
+          new Blob([bytes.buffer as ArrayBuffer], { type: 'video/webm' })
+        );
+        blobUrlRef.current = fallbackUrl;
+        setVideoUrl(fallbackUrl);
+      })
+      .catch(() => setStreamError('Unable to play this video locally.'));
+  }
+}, [video?.filePath, clearBlobUrl]);
+```
+
+#### Estado de error en la UI
+
+```tsx
+{videoUrl ? (
+  <div className={styles.videoArea}>...</div>
+) : streamError ? (
+  <div className={styles.videoUnavailable}>
+    <Film size={40} />
+    <span>Video unavailable</span>
+    <span>{streamError}</span>
+  </div>
+) : (
+  <div className={styles.thumbWrap}>...</div>
+)}
+```
+
+#### Keyboard support
+
+```tsx
+<div
+  className={styles.videoArea}
+  onClick={handlePlayPause}
+  onKeyDown={handleVideoKeyDown}
+  tabIndex={0}
+  role="button"
+>
+```
+
+---
+
+## 4. Arquitectura local vs online
+
+### Decisión de composición
+
+El player **no necesita componentes separados** para video local vs online. La diferencia es solo el `streamUrl`:
+
+| Tipo   | streamUrl                         | Protocolo                              |
+| ------ | --------------------------------- | -------------------------------------- |
+| Local  | `video:///Users/.../archivo.webm` | Custom Electron `video://` → `file://` |
+| Online | `https://cdn.example.com/...`     | HTTPS estándar                         |
+
+El mismo `<video src={streamUrl}>` reproduce ambos. El composition pattern aplica solo si hubiera **comportamiento diferente** en la UI (e.g. controles distintos, DRM, HLS).
+
+### Cadena de fallback completa
+
+```
+1. libraryGetVideo IPC
+   ├─ éxito → setVideoUrl(streamUrl)
+   └─ fallo → setStreamError(...)
+
+2. <video src> → onError
+   ├─ readVideoFile(filePath) → blob URL fallback
+   └─ sin filePath → setStreamError(...)
+
+3. UI
+   ├─ videoUrl disponible → player
+   ├─ streamError → error state
+   └─ ninguno aún → thumbnail fallback
+```
+
+---
+
+## Archivos modificados
+
+| Archivo                                  | Cambios                                                               |
+| ---------------------------------------- | --------------------------------------------------------------------- |
+| `src/pages/LibraryPage.tsx`              | Footer de acciones en `VideoCard`, inline rename state                |
+| `src/pages/LibraryPage.module.css`       | `.cardActions`, `.cardActionBtn`, `.cardDeleteBtn`                    |
+| `src/pages/LibraryDetailPage.tsx`        | Player embebido, streamError, blob fallback, keyboard support         |
+| `src/pages/LibraryDetailPage.module.css` | `.videoArea`, `.videoEl`, `.videoControls`, `.videoUnavailable`, etc. |

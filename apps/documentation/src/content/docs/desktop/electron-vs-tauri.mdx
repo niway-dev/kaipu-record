@@ -1,0 +1,126 @@
+---
+title: Electron vs Tauri
+description: ADR — why Kaipu stays on Electron, where the real performance gap comes from, and the trigger conditions for reconsidering Tauri.
+---
+
+# Electron vs Tauri: Performance y Tamaño para un Grabador de Pantalla
+
+> Análisis del tradeoff de framework para Kaipu, Junio 2026.
+
+## Veredicto
+
+**No reescribas a Tauri ahora.** El gap de performance que sentís en Cap no viene del framework —
+viene del pipeline de captura+encode. Eso lo arreglás en Electron, sin reescribir. Tauri es real
+pero sus ventajas (RAM idle, tamaño, batería) son secundarias para un grabador y no bloquean el
+objetivo de entregar la app. El diferenciador es el diseño, y Electron ayuda ahí.
+
+```
+Lo que el usuario SIENTE en un grabador = pipeline de captura + encode.
+Lo que Tauri mejora = RAM idle + tamaño + arranque + batería.
+Para un grabador, lo primero domina. Y lo primero se arregla en Electron.
+```
+
+---
+
+## Los números reales (2026)
+
+| Métrica                        | Electron    | Tauri          | Delta              |
+| ------------------------------ | ----------- | -------------- | ------------------ |
+| Bundle/installer (app trivial) | 80–200 MB   | 2–10 MB        | ~10–25x            |
+| RAM idle (app trivial)         | ~120–300 MB | ~30–50 MB      | ~5x / 58–75% menos |
+| Arranque                       | baseline    | ~4x más rápido | —                  |
+
+**El detalle que invalida estos números para Kaipu:**
+
+Cap pesa 96 MB. **Y Cap ES Tauri.** Si la webview fuera lo que domina el tamaño, Cap pesaría 5–10 MB. Pesa 96 porque un grabador carga FFmpeg, codecs, y librerías de captura nativas — ese payload es el mismo en Electron que en Tauri.
+
+**Conclusión del tamaño:** el delta real para Kaipu es ~2x (≈200 MB Electron vs ≈96 MB Tauri), no ~25x.
+
+---
+
+## De dónde viene la performance REAL en un grabador
+
+### 2.1 Captura (el más importante)
+
+| Approach                                         | Qué es                                      | Costo                                                                  |
+| ------------------------------------------------ | ------------------------------------------- | ---------------------------------------------------------------------- |
+| `getDisplayMedia()` + `MediaRecorder` (renderer) | API del browser, lo que Electron usa hoy    | Funciona, pero corre en el renderer, poco control de bitrate/keyframes |
+| **ScreenCaptureKit** (macOS 12.3+)               | API nativa moderna de Apple, lo que usa Cap | Bajo. Eficiente.                                                       |
+
+**Cap es rápido en gran parte porque captura nativo, no porque Tauri sea mágico.**
+
+### 2.2 Encode (donde se va la CPU)
+
+| Approach                                                       | Costo CPU                                    |
+| -------------------------------------------------------------- | -------------------------------------------- |
+| Software (libx264 en CPU, típico de MediaRecorder)             | **Alto.** Esto es lo que calienta el laptop. |
+| **Hardware** — VideoToolbox (macOS), NVENC/QuickSync (Windows) | **Bajo.** La GPU/chip hace el encode.        |
+
+Este es el cuello de botella #1.
+
+### 2.3 El framework (UI)
+
+El render de la UI no es el cuello de botella durante la grabación. La diferencia de Tauri está en **RAM idle** y **arranque**, no en lo que pasa mientras grabás.
+
+> **El insight central:** los dos ejes que más afectan la experiencia (captura + encode) **no dependen de Electron vs Tauri**. Dependen de cómo se implementa el pipeline. Se puede tener captura nativa + encode por hardware **dentro de Electron**.
+
+---
+
+## La jugada de mayor leverage (en Electron HOY)
+
+### 1. Mover el encode a FFmpeg con hardware (subproceso)
+
+```bash
+# macOS — captura via avfoundation + encode por hardware (VideoToolbox)
+ffmpeg -f avfoundation -framerate 60 -i "1:0" \
+  -c:v h264_videotoolbox -b:v 8M -pix_fmt yuv420p out.mp4
+```
+
+**FFmpeg ya está bundleado.** Costo de bundle: cero. Solo hay que usarlo para capture+encode.
+
+### 2. Single-window + matar renderers idle
+
+Cada `BrowserWindow` es un Chromium aparte. Una sola ventana principal; destruir renderers que no estén en uso.
+
+### 3. Trimming del bundle
+
+Con `electron-builder`: exclusión de archivos, `files`/`!**/*.map`, remover locales de Chromium que no se usen.
+
+---
+
+## Por qué Electron AYUDA al diferenciador
+
+Lo que diferencia a Kaipu de Cap: **performance clase-Cap con diseño que da gusto usar**.
+
+- Chromium completo = libertad total de CSS, animaciones, fuentes. Todo lo moderno funciona idéntico cross-platform.
+- La WKWebView de Tauri en macOS tiene inconsistencias en CSS y render — fricción contra una UI pulida.
+
+El framework que conviene para ser _más lindo que Cap_ es el que ya estamos usando.
+
+---
+
+## El caso honesto a favor de Tauri (gatillos para reconsiderar)
+
+Tauri tiene ventajas reales que podrían importar más adelante:
+
+- **Batería / RAM idle:** ~40 MB vs ~180 MB en idle es real para una app que dejás corriendo todo el día.
+- **"Se siente liviano/nativo":** complementa el objetivo de pulcritud.
+- **Mobile (Tauri 2):** si algún día querés iOS/Android, Tauri 2 lo cubre.
+
+**Gatillos para reconsiderar Tauri** (cualquiera de estos):
+
+1. Conseguís tracción **y** el footprint/RAM idle se vuelve una queja _real y repetida_ de usuarios.
+2. Querés mobile.
+3. Electron optimizado **no** pasa el umbral de performance (ver abajo).
+
+**El umbral sugerido:** "Si el Electron optimizado idlea bajo ~150 MB y graba 1080p60 bajo ~15% CPU con encode por hardware, el delta de Tauri no justifica reescribir."
+
+---
+
+## Secuencia recomendada
+
+1. **Ahora:** entregá el Electron que existe (filesystem-first + lo que ya funciona).
+2. **Optimización #1:** pipeline FFmpeg + encode por hardware. Es el 80% del "feel" de Cap.
+3. **Optimización #2:** single-window estricto, matar renderers idle, trimming de bundle.
+4. **Medí** contra el umbral.
+5. **Solo si** no pasás el umbral, o querés mobile, o el footprint se vuelve queja real → spike de Tauri.

@@ -1,0 +1,35 @@
+---
+title: E2E testing con Playwright (kaipu-recorder)
+description: Propuesta diferida — añadir E2E con Playwright para flujos de UI del Electron app y para web-recorder. Alcance, caveats nativos y alternativa WebdriverIO.
+---
+
+# E2E con Playwright
+
+> **Estado: 🔵 Propuesto (diferido).**
+> Se decidió priorizar primero la [migración a Vitest](./vitest-migration) (unit + integration). El E2E queda para después.
+
+## Alcance propuesto
+
+| Target                      | Fit        | Notas                                                     |
+| --------------------------- | ---------- | --------------------------------------------------------- |
+| `web-recorder` (web)        | ✅ Maduro  | Playwright integra con Vite sin fricción. No hay E2E hoy. |
+| `kaipu-recorder` (Electron) | 🟡 Acotado | `_electron.launch` funciona pero es **experimental**.     |
+
+## Caveats del E2E en Electron
+
+La app vive de cosas que el E2E **no** cubre fácilmente:
+
+- Permiso de **screen recording / audio** de macOS (el prompt nativo no se auto-concede).
+- Captura nativa, subproceso **FFmpeg**, **Keychain**.
+
+**Alcance realista:** flujos de UI (auth, navegación, Library, Settings, estados de la state machine con servicios nativos mockeados). El pipeline de captura real **se queda en integration**, no en E2E.
+
+## Alternativa a evaluar
+
+`wdio-electron-service` (WebdriverIO) es el estándar de facto para E2E de Electron — más maduro que Playwright para mockear módulos de Electron y multi-ventana. Si el E2E de Electron crece, comparar antes de comprometerse. Si ya se usa Playwright para `web-recorder`, mantener un solo runner también es argumento válido.
+
+## Pirámide objetivo
+
+- **Unit + integration** → Vitest (ver [migración](./vitest-migration))
+- **E2E web** → Playwright
+- **E2E Electron** → Playwright (smoke UI) · WebdriverIO si crece

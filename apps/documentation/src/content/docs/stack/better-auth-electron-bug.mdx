@@ -1,0 +1,85 @@
+---
+title: better-auth/electron + Cloudflare Workers Bug
+description: TypeError — Can't modify immutable headers. Workaround and root cause for @better-auth/electron with Cloudflare Workers runtime.
+---
+
+# `@better-auth/electron` `onRequest` fails on Cloudflare Workers
+
+**Package:** `@better-auth/electron@1.6.9`  
+**Server runtime:** Cloudflare Workers (Wrangler, Hono framework)  
+**Status:** Workaround in place; fix pending upstream
+
+## Summary
+
+The Electron plugin's `onRequest` hook calls `headers.set("origin", ...)` on a cloned `Request`. On Cloudflare Workers (strict Fetch spec), `Request.headers` is immutable even after `.clone()`. Every `/api/auth/*` call from an Electron client returns `500 Internal Server Error`.
+
+## Root Cause
+
+`@better-auth/electron@1.6.9`, `dist/index.mjs`:
+
+```js
+async onRequest(request, _ctx) {
+  if (opts.disableOriginOverride || request.headers.get("origin")) return;
+  const electronOrigin = request.headers.get("electron-origin");
+  if (!electronOrigin) return;
+  const req = request.clone();          // headers still immutable on Workers
+  req.headers.set("origin", electronOrigin); // ← throws
+  return { request: req };
+}
+```
+
+Per the Fetch spec, `Request.headers` on an incoming request is in the `"immutable"` guard. Cloning a Request preserves that guard. Node-based servers are lax; Workers enforces it strictly.
+
+## Fix (upstream)
+
+Replace the `clone() + set` pattern with a fresh `Headers` + `new Request`:
+
+```js
+async onRequest(request, _ctx) {
+  if (opts.disableOriginOverride || request.headers.get("origin")) return;
+  const electronOrigin = request.headers.get("electron-origin");
+  if (!electronOrigin) return;
+
+  const headers = new Headers(request.headers);
+  headers.set("origin", electronOrigin);
+
+  const req = new Request(request.url, {
+    method: request.method,
+    headers,
+    body: request.method === "GET" || request.method === "HEAD"
+      ? undefined
+      : request.body,
+    redirect: request.redirect,
+  });
+  return { request: req };
+}
+```
+
+## Current Workaround (applied in server-hono)
+
+```ts
+// lib/auth.ts
+plugins: [electron({ disableOriginOverride: true })],
+```
+
+```ts
+// index.ts (Hono)
+app.on(["GET", "POST"], "/api/auth/*", async (c) => {
+  const raw = c.req.raw;
+  const electronOrigin = raw.headers.get("electron-origin");
+  if (!electronOrigin || raw.headers.get("origin")) {
+    return auth.handler(raw);
+  }
+  const headers = new Headers(raw.headers);
+  headers.set("origin", electronOrigin);
+  const rebuilt = new Request(raw.url, {
+    method: raw.method,
+    headers,
+    body: raw.method === "GET" || raw.method === "HEAD" ? undefined : raw.body,
+    redirect: raw.redirect,
+  });
+  return auth.handler(rebuilt);
+});
+```
+
+**Confirmed working:** `getSession`, `signUp.email`, `signIn.email`, `signOut` all complete successfully with this workaround.

@@ -1,0 +1,231 @@
+---
+title: Library Filter Chips
+description: Design spec for the chip-based filter bar — semantics, chip states, card redesign, and sort simplification.
+---
+
+# Library Filter System — Chip Bar Design
+
+**Goal:** Replace the toolbar (status dropdown, 5-option sort, grid/list, refresh button) with a chip-based filter bar that shows only real, actionable filters.
+
+**Architecture:** Client-side filter layer on top of the existing `allItems` merged array. No changes to the data-fetching layer (`useLibrary.ts`).
+
+---
+
+## Design decisions
+
+| Decision                     | Choice                                                                                                            |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Local/Cloud chips visibility | **Always visible** — Cloud chip is greyed/disabled when no cloud items exist. Teaches users the feature is there. |
+| Sort                         | **Keep**: Newest · Oldest · Largest (remove Most viewed, Longest)                                                 |
+| Grid/List toggle             | **Keep**                                                                                                          |
+| Refresh/Sync button          | **Remove** — auto-refresh on `library:refresh` IPC event already handles this                                     |
+| Status dropdown              | **Remove** — replaced by storage chips                                                                            |
+| Card badge `LOCAL`           | **Replace** with a small storage dot (gray=local, green=cloud, animated=uploading)                                |
+| Card date                    | **Replace** absolute date with relative date: `Today 3:55 PM` / `Yesterday` / `Jun 9`                             |
+| Card size/resolution         | **Move to hover** — tech info only shows on card hover                                                            |
+
+---
+
+## Filter semantics
+
+```
+visibleItems = allItems
+  .filter(matchSearch)      // by title; empty = all
+  .filter(matchStorage)     // single-select; 'all' = no filter
+  .filter(matchTags)        // multi-select OR; empty = no filter
+sorted by currentSort       // 'newest' | 'oldest' | 'largest'
+```
+
+- **Storage chips** = single-select (`All` / `Local` / `Cloud` / `Failed`)
+- **Tag chips** = multi-select OR — item passes if it has ≥1 selected tag
+- **Cross-facet** = AND (e.g. Local + tag "bug" = local items with tag "bug")
+
+### StorageState derivation
+
+```ts
+// LocalSavedVideo (local vault entries):
+//   → storage = 'local'
+//
+// LibraryVideo (cloud API entries):
+//   status === 'local'                               → 'local'
+//   status === 'uploading' | 'processing'            → 'local' (transitional)
+//   status === 'ready' && sourcePath exists          → 'synced'  (matches local + cloud)
+//   status === 'ready' && !sourcePath               → 'cloud'
+//   status === 'failed'                              → 'failed' (shown by Failed chip)
+//   status === 'archived'                            → 'cloud'
+
+const isLocal  = (v) => ['local', 'uploading', 'processing'].includes(v.status) || v._id.startsWith('local-');
+const isCloud  = (v) => ['ready', 'archived'].includes(v.status);
+const isFailed = (v) => v.status === 'failed';
+// 'synced' items match both Local and Cloud
+```
+
+### Chip disabled vs hidden
+
+Chips are **always rendered**. When a chip would filter to 0 items:
+
+- The chip stays visible but gets `data-empty="true"` → greyed out style
+- Cloud chip: empty today (all items are local) → grey
+- Failed chip: empty when no failures → grey
+- User tag chips: empty when no items have that tag → grey
+
+`All` chip is never greyed (it always has items).
+
+---
+
+## Filter state
+
+```ts
+type StorageFilter = 'all' | 'local' | 'cloud' | 'failed';
+type SortKey = 'newest' | 'oldest' | 'largest';
+
+const [storageFilter, setStorageFilter] = useState<StorageFilter>('all');
+const [selectedTags, setSelectedTags] = useState<string[]>([]);
+const [sortKey, setSortKey] = useState<SortKey>('newest');
+```
+
+### Computed values
+
+```ts
+const failedCount = allItems.filter(isFailed).length;
+const availableTags = [...new Set(allItems.flatMap(v => v.tags ?? []))];
+const localCount  = allItems.filter(isLocal).length;
+const cloudCount  = allItems.filter(isCloud).length;
+
+const visibleItems = useMemo(() => {
+  let out = allItems.filter(v => !searchTerm || v.title.toLowerCase().includes(searchTerm.toLowerCase()));
+  if (storageFilter === 'local') out = out.filter(isLocal);
+  else if (storageFilter === 'cloud') out = out.filter(isCloud);
+  else if (storageFilter === 'failed') out = out.filter(isFailed);
+  if (selectedTags.length) out = out.filter(v => selectedTags.some(t => (v.tags ?? []).includes(t)));
+  return [...out].sort((a, b) => {
+    const ta = new Date(a.createdAt).getTime();
+    const tb = new Date(b.createdAt).getTime();
+    if (sortKey === 'newest') return tb - ta;
+    if (sortKey === 'oldest') return ta - tb;
+    return (b.fileSize ?? 0) - (a.fileSize ?? 0);
+  });
+}, [allItems, searchTerm, storageFilter, selectedTags, sortKey]);
+```
+
+Note: `searchTerm` is still sent to the cloud API via `useLibrary.search()` to filter server-side. The client-side filter on `allItems.title` covers local videos that the API doesn't touch.
+
+---
+
+## Chip row UI
+
+```
+┌────────────────────────────────────────────────────────────┐
+│  🔍 Search recordings…          [↕ Newest ▾]  [⊞] [≡]     │
+│  [ All ] [ ● Local ] [ ● Cloud ] [ ⚠ Failed(2) ] | [ ● tutorial ] [ ● bug ] │
+└────────────────────────────────────────────────────────────┘
+```
+
+Chip states:
+
+| State               | Background             | Border                  | Text/icon color |
+| ------------------- | ---------------------- | ----------------------- | --------------- |
+| Inactive            | transparent            | `var(--bd)`             | `var(--dim)`    |
+| Active              | `var(--soft)`          | `var(--ring)`           | `var(--accent)` |
+| Empty (no items)    | transparent            | `rgba(255,255,255,.04)` | `var(--faint)`  |
+| Alert/Failed active | `rgba(245,166,35,.16)` | `rgba(245,166,35,.5)`   | `#f5a623`       |
+
+User tag chips: same states. Prefix: small dot (`var(--faint)` inactive, `var(--accent)` active).
+
+Divider between storage chips and tag chips: `1px` vertical line `var(--bd2)`, only rendered if `availableTags.length > 0`.
+
+---
+
+## Card redesign
+
+### Storage dot (replaces LOCAL badge)
+
+```tsx
+// Position: absolute, top-left corner of thumbnail
+// Size: 8px circle
+<span
+  className={styles.storageDot}
+  data-state={uploading ? 'uploading' : isCloud(v) ? 'cloud' : 'local'}
+/>
+```
+
+CSS:
+
+```css
+.storageDot { position: absolute; top: 8px; left: 8px; width: 8px; height: 8px; border-radius: 50%; }
+.storageDot[data-state="local"]     { background: var(--dim); }
+.storageDot[data-state="cloud"]     { background: var(--good, #43c463); }
+.storageDot[data-state="uploading"] { background: var(--accent); animation: kpulse 1s ease-in-out infinite; }
+```
+
+### Relative date (replaces absolute date)
+
+```ts
+function relativeDate(iso: string): string {
+  const now = Date.now();
+  const ms = new Date(iso).getTime();
+  const diffMs = now - ms;
+  const diffDays = Math.floor(diffMs / 86_400_000);
+  const time = new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  const isToday = new Date(iso).toDateString() === new Date(now).toDateString();
+  const yesterday = new Date(now - 86_400_000).toDateString();
+  const isYesterday = new Date(iso).toDateString() === yesterday;
+  if (isToday) return `Today ${time}`;
+  if (isYesterday) return `Yesterday`;
+  if (diffDays < 7) return new Date(iso).toLocaleDateString('en-US', { weekday: 'short' });
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+```
+
+### Tech info on hover
+
+`formatSize(v.fileSize) · formatDuration(v.duration)` lives in a `.cardTech` div:
+
+- `opacity: 0` by default, transitions to `opacity: 1` on `.card:hover`
+
+---
+
+## Sort simplification
+
+Remove from sort options: `Most viewed` (requires cloud analytics), `Longest` (uncommon use case).
+
+```ts
+const SORT_OPTS = [
+  { key: 'newest', label: 'Newest' },
+  { key: 'oldest', label: 'Oldest' },
+  { key: 'largest', label: 'Largest' },
+];
+```
+
+Replace the `Select` component with an inline dropdown button styled with `ArrowUpDown` + label + `ChevronDown`.
+
+---
+
+## Empty states
+
+| Condition                                          | Message                                              | CTA                    |
+| -------------------------------------------------- | ---------------------------------------------------- | ---------------------- |
+| `allItems.length === 0`                            | "No recordings yet. Hit ⌘⇧P to capture your screen." | Record button          |
+| `visibleItems.length === 0 && allItems.length > 0` | "No recordings match these filters."                 | "Clear filters" button |
+
+"Clear filters" resets: `setStorageFilter('all')`, `setSelectedTags([])`, calls `useLibrary.search('')`.
+
+---
+
+## Files changed
+
+| File                                                           | Changes                                                        |
+| -------------------------------------------------------------- | -------------------------------------------------------------- |
+| `apps/kaipu-recorder/src/pages/LibraryPage.tsx`                | New filter state, chip row, sort simplification, card redesign |
+| `apps/kaipu-recorder/src/pages/LibraryPage.module.css`         | Chip styles, storage dot, relative date, tech hover            |
+| `apps/kaipu-recorder/src/features/library/hooks/useLibrary.ts` | **No changes** — data fetching layer stays the same            |
+
+---
+
+## Phases
+
+| Phase    | Scope                                                                                                         |
+| -------- | ------------------------------------------------------------------------------------------------------------- |
+| **v1**   | Chip bar UI, sort simplification, card redesign. All items are local → Cloud/Failed chips visible but greyed. |
+| **v1.5** | Cloud launches → Cloud chip activates automatically (no UI changes needed)                                    |
+| **v2**   | User tags: add tag editor to detail panel; tags appear in chip row when present                               |
