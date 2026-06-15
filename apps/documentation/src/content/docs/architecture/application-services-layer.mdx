@@ -105,12 +105,12 @@ export class CreateYourEntityCommand {
 ```typescript
 // packages/your-context/application/use-cases/create-your-entity/create-your-entity.handler.ts
 
-import type { IYourEntityRepository } from "@monorepo-template/your-context/domain/repositories";
-import type { IEventPublisher } from "@monorepo-template/shared-kernel/events";
-import { YourEntity } from "@monorepo-template/your-context/domain/entities";
-import { Priority } from "@monorepo-template/your-context/domain/value-objects";
+import type { IYourEntityRepository } from "@kaipu/your-context/domain/repositories";
+import type { IEventPublisher } from "@kaipu/shared-kernel/events";
+import { YourEntity } from "@kaipu/your-context/domain/entities";
+import { Priority } from "@kaipu/your-context/domain/value-objects";
 import type { CreateYourEntityCommand } from "./create-your-entity.command";
-import { Result, tryCatch } from "@monorepo-template/shared-kernel/result";
+import { Result, tryCatch } from "@kaipu/shared-kernel/result";
 
 export class CreateYourEntityHandler {
   constructor(
@@ -183,11 +183,11 @@ export class GetYourEntityQuery {
 ```typescript
 // packages/your-context/application/queries/get-your-entity/get-your-entity.handler.ts
 
-import type { IYourEntityRepository } from "@monorepo-template/your-context/domain/repositories";
+import type { IYourEntityRepository } from "@kaipu/your-context/domain/repositories";
 import type { GetYourEntityQuery } from "./get-your-entity.query";
 import type { YourEntityDTO } from "../../dto/your-entity.dto";
 import { YourEntityMapper } from "../../mappers/your-entity-dto.mapper";
-import { Result } from "@monorepo-template/shared-kernel/result";
+import { Result } from "@kaipu/shared-kernel/result";
 
 export class GetYourEntityHandler {
   constructor(
@@ -226,8 +226,8 @@ DTOs are simple data containers for transferring data between layers:
 ```typescript
 // packages/your-context/application/dto/your-entity.dto.ts
 
-import type { Currency } from "@monorepo-template/shared-kernel";
-import type { YourEntityStatus } from "@monorepo-template/your-context/domain";
+import type { Currency } from "@kaipu/shared-kernel";
+import type { YourEntityStatus } from "@kaipu/your-context/domain";
 
 /**
  * DTO for entity representation
@@ -292,7 +292,7 @@ Mappers convert between domain entities and DTOs:
 ```typescript
 // packages/your-context/application/mappers/your-entity-dto.mapper.ts
 
-import type { YourEntity } from "@monorepo-template/your-context/domain/entities";
+import type { YourEntity } from "@kaipu/your-context/domain/entities";
 import type {
   YourEntityDTO,
   YourEntityListItemDTO,
@@ -347,16 +347,16 @@ Instead of separate Commands/Queries, you can use an Application Service class:
 ```typescript
 // packages/your-context/application/services/your-entity.service.ts
 
-import type { IYourEntityRepository } from "@monorepo-template/your-context/domain/repositories";
-import type { IEventPublisher } from "@monorepo-template/shared-kernel/events";
-import { YourEntity } from "@monorepo-template/your-context/domain/entities";
+import type { IYourEntityRepository } from "@kaipu/your-context/domain/repositories";
+import type { IEventPublisher } from "@kaipu/shared-kernel/events";
+import { YourEntity } from "@kaipu/your-context/domain/entities";
 import type {
   CreateYourEntityDTO,
   UpdateYourEntityDTO,
   YourEntityDTO,
 } from "../dto";
 import { YourEntityDTOMapper } from "../mappers/your-entity-dto.mapper";
-import { Result, tryCatch } from "@monorepo-template/shared-kernel/result";
+import { Result, tryCatch } from "@kaipu/shared-kernel/result";
 
 export class YourEntityService {
   constructor(
@@ -475,9 +475,9 @@ The application layer is called from HTTP routes:
 // apps/server/src/routes/your-entities.ts
 
 import { Elysia } from "elysia";
-import { CreateYourEntityHandler } from "@monorepo-template/your-context/application";
-import { CreateYourEntityCommand } from "@monorepo-template/your-context/application";
-import { YourEntityRepositoryDrizzle } from "@monorepo-template/your-context/infrastructure";
+import { CreateYourEntityHandler } from "@kaipu/your-context/application";
+import { CreateYourEntityCommand } from "@kaipu/your-context/application";
+import { YourEntityRepositoryDrizzle } from "@kaipu/your-context/infrastructure";
 
 export const yourEntityRoutes = new Elysia({ prefix: "/your-entities" })
   .derive(({ db }) => ({
@@ -536,8 +536,8 @@ Application layer is easy to test with mocks:
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { CreateYourEntityHandler } from "../create-your-entity.handler";
 import { CreateYourEntityCommand } from "../create-your-entity.command";
-import type { IYourEntityRepository } from "@monorepo-template/your-context/domain/repositories";
-import type { IEventPublisher } from "@monorepo-template/shared-kernel/events";
+import type { IYourEntityRepository } from "@kaipu/your-context/domain/repositories";
+import type { IEventPublisher } from "@kaipu/shared-kernel/events";
 
 describe("CreateYourEntityHandler", () => {
   let handler: CreateYourEntityHandler;

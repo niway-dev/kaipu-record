@@ -54,3 +54,6 @@ coverage
 tmp
 temp
 pr-summaries/
+
+# Temporary files
+workspace-temp

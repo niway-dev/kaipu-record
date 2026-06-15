@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { createProxyHandler } from "@monorepo-template/infra-cloudflare";
+import { createProxyHandler } from "@kaipu/infra-cloudflare";
 import { env } from "@/env/server";
 import { apiFetch } from "@/lib/api-fetch";
 

@@ -8,13 +8,17 @@ export default defineConfig({
   integrations: [
     mermaid(),
     starlight({
-      title: "Monorepo Template",
+      title: "Kaipu",
       lastUpdated: true,
       social: [{ icon: "github", label: "GitHub", href: "https://github.com/withastro/starlight" }],
       sidebar: [
         {
           label: "Getting Started",
           items: [{ slug: "index" }],
+        },
+        {
+          label: "Stack",
+          items: [{ slug: "stack/hono" }],
         },
         {
           label: "Architecture",
@@ -36,30 +40,6 @@ export default defineConfig({
         {
           label: "Frontend",
           autogenerate: { directory: "frontend" },
-        },
-        {
-          label: "Features",
-          items: [
-            { slug: "convex" },
-            {
-              label: "Convex",
-              autogenerate: { directory: "features/convex" },
-            },
-          ],
-        },
-        {
-          label: "Guides",
-          items: [
-            { slug: "application-layer" },
-            { slug: "constants-pattern" },
-            { slug: "domain-architecture-patterns" },
-            { slug: "environment-variables" },
-            { slug: "fullstack-tanstack-elysia" },
-            { slug: "infrastructure-naming" },
-            { slug: "mobile-app" },
-            { slug: "schemas-implementation" },
-            { slug: "web-ui-package" },
-          ],
         },
         {
           label: "Changelog",

@@ -2,7 +2,7 @@
 
 All code for the Todo CRUD example across every layer. Use this to re-apply the todo feature on a fresh copy of the template.
 
-> **Important**: The namespace below uses `@monorepo-template/*`. Replace with whatever namespace the new project uses.
+> **Important**: The namespace below uses `@kaipu/*`. Replace with whatever namespace the new project uses.
 
 ---
 
@@ -74,8 +74,8 @@ export type { ITodoRepository } from "./todo.repository";
 ### `src/todos/create-todo.ts`
 
 ```ts
-import type { ITodoRepository } from "@monorepo-template/domain/repositories";
-import type { CreateTodo, TodoBase } from "@monorepo-template/domain/schemas";
+import type { ITodoRepository } from "@kaipu/domain/repositories";
+import type { CreateTodo, TodoBase } from "@kaipu/domain/schemas";
 
 export async function createTodo(
   repository: ITodoRepository,
@@ -89,8 +89,8 @@ export async function createTodo(
 ### `src/todos/list-todos.ts`
 
 ```ts
-import type { ITodoRepository } from "@monorepo-template/domain/repositories";
-import type { TodoBase } from "@monorepo-template/domain/schemas";
+import type { ITodoRepository } from "@kaipu/domain/repositories";
+import type { TodoBase } from "@kaipu/domain/schemas";
 
 export async function listTodos(
   repository: ITodoRepository,
@@ -103,8 +103,8 @@ export async function listTodos(
 ### `src/todos/get-todo.ts`
 
 ```ts
-import type { ITodoRepository } from "@monorepo-template/domain/repositories";
-import type { TodoBase } from "@monorepo-template/domain/schemas";
+import type { ITodoRepository } from "@kaipu/domain/repositories";
+import type { TodoBase } from "@kaipu/domain/schemas";
 
 export async function getTodo(
   repository: ITodoRepository,
@@ -118,8 +118,8 @@ export async function getTodo(
 ### `src/todos/update-todo.ts`
 
 ```ts
-import type { ITodoRepository } from "@monorepo-template/domain/repositories";
-import type { UpdateTodo, TodoBase } from "@monorepo-template/domain/schemas";
+import type { ITodoRepository } from "@kaipu/domain/repositories";
+import type { UpdateTodo, TodoBase } from "@kaipu/domain/schemas";
 
 export async function updateTodo(
   repository: ITodoRepository,
@@ -134,7 +134,7 @@ export async function updateTodo(
 ### `src/todos/delete-todo.ts`
 
 ```ts
-import type { ITodoRepository } from "@monorepo-template/domain/repositories";
+import type { ITodoRepository } from "@kaipu/domain/repositories";
 
 export async function deleteTodo(
   repository: ITodoRepository,
@@ -196,7 +196,7 @@ export const todoRelations = relations(todoTable, ({ one }) => ({
 ### `src/mappers/todo.mapper.ts`
 
 ```ts
-import type { TodoBase } from "@monorepo-template/domain/schemas";
+import type { TodoBase } from "@kaipu/domain/schemas";
 import type { todoTable } from "../schema/todo";
 
 type TodoRow = typeof todoTable.$inferSelect;
@@ -218,8 +218,8 @@ export function mapTodoToDomain(row: TodoRow): TodoBase {
 ```ts
 import { eq, and } from "drizzle-orm";
 import type { NeonHttpDatabase } from "drizzle-orm/neon-http";
-import type { ITodoRepository } from "@monorepo-template/domain/repositories";
-import type { CreateTodo, UpdateTodo, TodoBase } from "@monorepo-template/domain/schemas";
+import type { ITodoRepository } from "@kaipu/domain/repositories";
+import type { CreateTodo, UpdateTodo, TodoBase } from "@kaipu/domain/schemas";
 import { todoTable } from "../schema/todo";
 import { mapTodoToDomain } from "../mappers/todo.mapper";
 import type * as schema from "../schema";
@@ -279,9 +279,9 @@ export class TodoRepository implements ITodoRepository {
 ```ts
 import { Elysia } from "elysia";
 import { env } from "cloudflare:workers";
-import { createDatabaseClient } from "@monorepo-template/infra-db/client";
-import { TodoRepository } from "@monorepo-template/infra-db/repositories";
-import { createTodoSchema, updateTodoSchema } from "@monorepo-template/domain/schemas";
+import { createDatabaseClient } from "@kaipu/infra-db/client";
+import { TodoRepository } from "@kaipu/infra-db/repositories";
+import { createTodoSchema, updateTodoSchema } from "@kaipu/domain/schemas";
 import { authMacro } from "../plugins/auth.plugin";
 import { errorHandlerPlugin } from "../utils/error-handler-plugin";
 import { successBody, createdBody } from "../utils/response-helpers";

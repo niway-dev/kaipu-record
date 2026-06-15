@@ -5,7 +5,7 @@
 This is a multi-pattern template. Before starting development, customize it:
 
 - `bun run customize` — Interactive CLI: choose pattern, optional features, project name. Handles directory deletion, package.json cleanup, CI/CD generation, infra-env cleanup, lint config cleanup, and scope rename. Self-deletes after completion.
-- `bun run rename <scope>` — Standalone scope rename (`@monorepo-template` -> `@your-scope` across 60+ files). Use if you only need to rename.
+- `bun run rename <scope>` — Standalone scope rename (`@kaipu` -> `@your-scope` across 60+ files). Use if you only need to rename.
 
 Always recommend `bun run customize` on a fresh clone. Do NOT do manual file-by-file customization.
 
@@ -19,7 +19,7 @@ Build the feature the simplest way possible. All logic can live inline in the fr
 
 - Add routes with inline business logic directly in `apps/server/src/routes/`
 - Add serverFn with inline logic in `apps/web/src/functions/`
-- Use `@monorepo-template/infra-db` repositories directly from route handlers
+- Use `@kaipu/infra-db` repositories directly from route handlers
 - Focus on making it work end-to-end (UI -> API -> DB)
 - No need for use cases, domain interfaces, or mappers at this stage
 
@@ -80,7 +80,7 @@ The web app (TanStack Start) proxies all API requests through itself to the Elys
 **Important:**
 
 - Web app does NOT run Better Auth locally — it proxies to the backend's auth
-- `@monorepo-template/infra-auth` is NOT a dependency of the web app
+- `@kaipu/infra-auth` is NOT a dependency of the web app
 - CORS on the server is only for mobile (exp://, mobile://) — web is same-origin via proxy
 - After modifying wrangler.jsonc, run `wrangler types` to regenerate `worker-configuration.d.ts`
 
@@ -89,7 +89,7 @@ The web app (TanStack Start) proxies all API requests through itself to the Elys
 - `domain` never imports from `application` or `infra-*`
 - `application` never imports from `infra-*` (uses domain interfaces)
 - `infra-*` never imports from `application`
-- Mobile app (`apps/mobile/`) only imports from `@monorepo-template/domain`
+- Mobile app (`apps/mobile/`) only imports from `@kaipu/domain`
 
 ## Common Commands
 
@@ -98,4 +98,4 @@ The web app (TanStack Start) proxies all API requests through itself to the Elys
 
 ## Known Issues
 
-- `@monorepo-template/web-ui` requires `dist/` to exist — the package exports point to built files (`./dist/index.d.ts`, `./dist/index.es.js`). If you get "Cannot find module" errors, run `bun run build` in `packages/web-ui/` to regenerate it. The `dist/` directory is committed to the repo and should be rebuilt after modifying web-ui components
+- `@kaipu/web-ui` requires `dist/` to exist — the package exports point to built files (`./dist/index.d.ts`, `./dist/index.es.js`). If you get "Cannot find module" errors, run `bun run build` in `packages/web-ui/` to regenerate it. The `dist/` directory is committed to the repo and should be rebuilt after modifying web-ui components

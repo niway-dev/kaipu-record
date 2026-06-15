@@ -1,6 +1,6 @@
-# @monorepo-template/domain
+# @kaipu/domain
 
-Domain constants, types, and utilities for the monorepo-template project.
+Domain constants, types, and utilities for the kaipu project.
 
 ## Purpose
 
@@ -28,19 +28,19 @@ packages/domain/
 ### Importing Constants
 
 ```typescript
-import { CURRENCIES, CURRENCY_INFO, TODO_STATUSES } from "@monorepo-template/domain/constants";
+import { CURRENCIES, CURRENCY_INFO, TODO_STATUSES } from "@kaipu/domain/constants";
 ```
 
 ### Importing Types
 
 ```typescript
-import type { Currency, TodoStatus } from "@monorepo-template/domain/constants";
+import type { Currency, TodoStatus } from "@kaipu/domain/constants";
 ```
 
 ### Importing Utility Types
 
 ```typescript
-import type { ObjectProperties } from "@monorepo-template/domain/types";
+import type { ObjectProperties } from "@kaipu/domain/types";
 ```
 
 ## Development

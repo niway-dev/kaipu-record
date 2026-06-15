@@ -51,7 +51,7 @@ class SubscriptionUser {
 ### Full Monorepo Architecture
 
 ```bash
-monorepo-template/                              # Monorepo root
+kaipu/                              # Monorepo root
 ├── apps/                                 # Applications
 │   ├── web/                              # Frontend app
 │   ├── server/                           # Backend API
@@ -298,9 +298,9 @@ export class YourEntity {
 
 ```typescript
 // packages/your-context/application/use-cases/create-your-entity/create-your-entity.handler.ts
-import type { IYourEntityRepository } from "@monorepo-template/your-context/domain";
-import { YourEntity } from "@monorepo-template/your-context/domain";
-import { Priority } from "@monorepo-template/your-context/domain/value-objects";
+import type { IYourEntityRepository } from "@kaipu/your-context/domain";
+import { YourEntity } from "@kaipu/your-context/domain";
+import { Priority } from "@kaipu/your-context/domain/value-objects";
 import type { CreateYourEntityCommand } from "./create-your-entity.command";
 
 export class CreateYourEntityHandler {
@@ -353,10 +353,10 @@ export class CreateYourEntityHandler {
 
 ```typescript
 // packages/your-context/infrastructure/persistence/repositories/your-entity.repository.drizzle.ts
-import type { IYourEntityRepository } from "@monorepo-template/your-context/domain";
-import type { YourEntity } from "@monorepo-template/your-context/domain";
+import type { IYourEntityRepository } from "@kaipu/your-context/domain";
+import type { YourEntity } from "@kaipu/your-context/domain";
 import { YourEntityMapper } from "../mappers/your-entity.mapper";
-import { db } from "@monorepo-template/database/client";
+import { db } from "@kaipu/database/client";
 
 export class YourEntityRepositoryDrizzle implements IYourEntityRepository {
   async save(yourEntity: YourEntity): Promise<void> {
@@ -404,7 +404,7 @@ export interface YourEntitySummaryDTO {
 
 ```typescript
 // packages/analytics/application/queries/get-success-rate.query.ts
-import type { YourEntitySummaryDTO } from "@monorepo-template/integration/your-context-api";
+import type { YourEntitySummaryDTO } from "@kaipu/integration/your-context-api";
 
 export class GetSuccessRateQuery {
   constructor(private readonly yourApi: YourApiClient) {}
@@ -453,8 +453,8 @@ Protect your context from external models:
 
 ```typescript
 // packages/analytics/infrastructure/anti-corruption/your-context-adapter.ts
-import type { YourEntityDTO } from "@monorepo-template/integration/your-context-api";
-import { EntityMetric } from "@monorepo-template/analytics/domain";
+import type { YourEntityDTO } from "@kaipu/integration/your-context-api";
+import { EntityMetric } from "@kaipu/analytics/domain";
 
 export class YourContextAdapter {
   // Translate external DTO to Analytics domain model
@@ -482,7 +482,7 @@ export class YourContextAdapter {
 ```json
 // packages/your-context/package.json
 {
-  "name": "@monorepo-template/your-context",
+  "name": "@kaipu/your-context",
   "version": "1.0.0",
   "type": "module",
   "exports": {
@@ -491,8 +491,8 @@ export class YourContextAdapter {
     "./infrastructure": "./infrastructure/index.ts"
   },
   "dependencies": {
-    "@monorepo-template/shared-kernel": "workspace:*",
-    "@monorepo-template/database": "workspace:*",
+    "@kaipu/shared-kernel": "workspace:*",
+    "@kaipu/database": "workspace:*",
     "zod": "catalog:"
   },
   "devDependencies": {
@@ -509,7 +509,7 @@ export class YourContextAdapter {
 ```json
 // packages/analytics/package.json
 {
-  "name": "@monorepo-template/analytics",
+  "name": "@kaipu/analytics",
   "version": "1.0.0",
   "type": "module",
   "exports": {
@@ -517,8 +517,8 @@ export class YourContextAdapter {
     "./application": "./application/index.ts"
   },
   "dependencies": {
-    "@monorepo-template/shared-kernel": "workspace:*",
-    "@monorepo-template/integration": "workspace:*",  // ← Uses context API
+    "@kaipu/shared-kernel": "workspace:*",
+    "@kaipu/integration": "workspace:*",  // ← Uses context API
     "zod": "catalog:"
   }
 }
@@ -531,7 +531,7 @@ export class YourContextAdapter {
 ```json
 // packages/integration/package.json
 {
-  "name": "@monorepo-template/integration",
+  "name": "@kaipu/integration",
   "version": "1.0.0",
   "type": "module",
   "exports": {
@@ -539,7 +539,7 @@ export class YourContextAdapter {
     "./analytics-api": "./analytics-api/index.ts"
   },
   "dependencies": {
-    "@monorepo-template/shared-kernel": "workspace:*"
+    "@kaipu/shared-kernel": "workspace:*"
   }
 }
 ```
@@ -568,13 +568,13 @@ All layers can use: Shared Kernel
 
 ```typescript
 // Application uses Domain ✅
-import { YourEntity } from "@monorepo-template/your-context/domain";
+import { YourEntity } from "@kaipu/your-context/domain";
 
 // Infrastructure implements Domain ✅
-import type { IYourEntityRepository } from "@monorepo-template/your-context/domain";
+import type { IYourEntityRepository } from "@kaipu/your-context/domain";
 
 // All use Shared Kernel ✅
-import { Currency } from "@monorepo-template/shared-kernel";
+import { Currency } from "@kaipu/shared-kernel";
 ```
 
 ---
@@ -591,13 +591,13 @@ Context A → Context B (directly) ❌
 
 ```typescript
 // Domain CANNOT use Application ❌
-import { CreateYourEntityHandler } from "@monorepo-template/your-context/application";
+import { CreateYourEntityHandler } from "@kaipu/your-context/application";
 
 // Domain CANNOT use Infrastructure ❌
-import { YourEntityRepositoryDrizzle } from "@monorepo-template/your-context/infrastructure";
+import { YourEntityRepositoryDrizzle } from "@kaipu/your-context/infrastructure";
 
 // Your Context CANNOT directly use Analytics ❌
-import { MetricsService } from "@monorepo-template/analytics/domain";
+import { MetricsService } from "@kaipu/analytics/domain";
 ```
 
 ---
@@ -608,10 +608,10 @@ Use integration packages:
 
 ```typescript
 // Analytics using Your Context's public API ✅
-import type { YourEntityDTO } from "@monorepo-template/integration/your-context-api";
+import type { YourEntityDTO } from "@kaipu/integration/your-context-api";
 
 // Billing subscribing to Your Context events ✅
-import type { YourEntityCreatedEvent } from "@monorepo-template/integration/your-context-api/events";
+import type { YourEntityCreatedEvent } from "@kaipu/integration/your-context-api/events";
 ```
 
 ---
@@ -714,8 +714,8 @@ Visual representation of context relationships:
 ### 1. Keep Contexts Small and Focused
 
 ```bash
-✅ Good: @monorepo-template/your-context (single responsibility)
-❌ Bad: @monorepo-template/your-context-analytics-billing (mixed concerns)
+✅ Good: @kaipu/your-context (single responsibility)
+❌ Bad: @kaipu/your-context-analytics-billing (mixed concerns)
 ```
 
 ### 2. Use Explicit Boundaries

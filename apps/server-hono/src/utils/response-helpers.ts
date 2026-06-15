@@ -3,7 +3,7 @@ import type {
   PaginationMeta,
   PaginationQuery,
   PaginationResult,
-} from "@monorepo-template/domain/types";
+} from "@kaipu/domain/types";
 
 /**
  * Calculate pagination values from query params

@@ -1,7 +1,7 @@
 {
-  "name": "@monorepo-template/domain",
+  "name": "@kaipu/domain",
   "version": "1.0.0",
-  "description": "Domain constants, types, and utilities for monorepo-template",
+  "description": "Domain constants, types, and utilities for kaipu",
   "keywords": [
     "constants",
     "domain",

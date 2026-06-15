@@ -1,5 +1,5 @@
 {
-  "name": "@monorepo-template/infra-auth",
+  "name": "@kaipu/infra-auth",
   "type": "module",
   "main": "./dist/index.mjs",
   "module": "./dist/index.mjs",
@@ -23,14 +23,14 @@
     "lint:fix": "oxlint --fix src"
   },
   "dependencies": {
-    "@monorepo-template/domain": "workspace:*",
-    "@monorepo-template/infra-db": "workspace:*",
+    "@kaipu/domain": "workspace:*",
+    "@kaipu/infra-db": "workspace:*",
     "better-auth": "catalog:",
     "dotenv": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@monorepo-template/config": "workspace:*",
+    "@kaipu/config": "workspace:*",
     "tsdown": "catalog:",
     "typescript": "catalog:"
   }

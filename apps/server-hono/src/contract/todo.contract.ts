@@ -6,7 +6,7 @@ import {
   updateTodoSchema,
   paginationQuerySchema,
   paginationMetaSchema,
-} from "@monorepo-template/domain/schemas";
+} from "@kaipu/domain/schemas";
 
 const errorSchema = z.object({ message: z.string() });
 

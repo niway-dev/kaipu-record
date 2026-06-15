@@ -1,4 +1,4 @@
-import { createServiceFetch } from "@monorepo-template/infra-cloudflare";
+import { createServiceFetch } from "@kaipu/infra-cloudflare";
 
 export const apiFetch = createServiceFetch(async () => {
   try {

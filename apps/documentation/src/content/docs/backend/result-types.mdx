@@ -42,7 +42,7 @@ type Result<T, E = Error> = Success<T> | Failure<E>;
 ### Wrapping Promises
 
 ```typescript
-import { tryCatch } from "@monorepo-template/domain/types";
+import { tryCatch } from "@kaipu/domain/types";
 
 const result = await tryCatch(
   db.select().from(users).where(eq(users.id, userId))
@@ -52,7 +52,7 @@ const result = await tryCatch(
 ### Checking Results
 
 ```typescript
-import { isFailure, isSuccess } from "@monorepo-template/domain/types";
+import { isFailure, isSuccess } from "@kaipu/domain/types";
 
 if (isFailure(result)) {
   // TypeScript knows result.error exists

@@ -11,7 +11,7 @@ A production-ready monorepo template demonstrating DDD + Hexagonal Architecture 
 ## 2. Current Package Structure
 
 ```
-monorepo-template/
+kaipu/
 ├── apps/
 │   ├── server/          # Elysia API on Cloudflare Workers
 │   ├── web/             # TanStack Start (React 19) web app
@@ -79,10 +79,10 @@ Mobile must NEVER import from: infra-db, application, infra-auth, server
 **Exports via subpath:**
 
 ```
-@monorepo-template/domain/schemas
-@monorepo-template/domain/types
-@monorepo-template/domain/constants
-@monorepo-template/domain/repositories
+@kaipu/domain/schemas
+@kaipu/domain/types
+@kaipu/domain/constants
+@kaipu/domain/repositories
 ```
 
 ### 4.2 `packages/application/` -- Use cases
@@ -206,14 +206,14 @@ Response
 
 ## 7. Architectural Patterns in Use
 
-| Pattern                      | Where                                 | How                                                                          |
-| ---------------------------- | ------------------------------------- | ---------------------------------------------------------------------------- |
-| **Repository pattern**       | domain (interface) -> infra-db (impl) | `ITodoRepository` / `TodoRepository`                                         |
-| **Data Mapper**              | infra-db/mappers/                     | `mapTodoToDomain()` -- decouples DB schema from domain model                 |
-| **Result type**              | domain/types                          | `Result<T,E>` -- Rust-style, no exceptions for business errors               |
-| **Dependency injection**     | application use cases                 | Caller passes `repository` instance, use case does not know about DB         |
-| **Schema-driven validation** | domain/schemas                        | Zod schemas shared between server validation and client forms                |
-| **Subpath exports**          | all packages                          | `@monorepo-template/domain/schemas`, `@monorepo-template/domain/types`, etc. |
+| Pattern                      | Where                                 | How                                                                  |
+| ---------------------------- | ------------------------------------- | -------------------------------------------------------------------- |
+| **Repository pattern**       | domain (interface) -> infra-db (impl) | `ITodoRepository` / `TodoRepository`                                 |
+| **Data Mapper**              | infra-db/mappers/                     | `mapTodoToDomain()` -- decouples DB schema from domain model         |
+| **Result type**              | domain/types                          | `Result<T,E>` -- Rust-style, no exceptions for business errors       |
+| **Dependency injection**     | application use cases                 | Caller passes `repository` instance, use case does not know about DB |
+| **Schema-driven validation** | domain/schemas                        | Zod schemas shared between server validation and client forms        |
+| **Subpath exports**          | all packages                          | `@kaipu/domain/schemas`, `@kaipu/domain/types`, etc.                 |
 
 ---
 

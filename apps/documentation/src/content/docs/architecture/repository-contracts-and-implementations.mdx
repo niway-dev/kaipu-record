@@ -135,7 +135,7 @@ packages/
 import type {
   YourEntityRepositoryContract,
   PaginatedResult,
-} from "@monorepo-template/domain/repositories";
+} from "@kaipu/domain/repositories";
 
 export class YourEntityRepository implements YourEntityRepositoryContract {
   constructor(private readonly db: NeonHttpDatabase<typeof schema>) {}
@@ -242,7 +242,7 @@ If you have existing repository interfaces named with an `I` prefix (e.g. `IYour
 
 3. **Docs**: In `apps/documentation/src/content/docs/architecture/*.mdx`, replace any remaining references to the old interface name (e.g. `IYourEntityRepository`) with the new one (`YourEntityRepositoryContract`).
 
-Application code that uses the **concrete class** (e.g. `YourEntityRepository` from `@monorepo-template/infra-db/repositories`) does not need to change; only the interface name in the domain and the implementation's `implements` clause change.
+Application code that uses the **concrete class** (e.g. `YourEntityRepository` from `@kaipu/infra-db/repositories`) does not need to change; only the interface name in the domain and the implementation's `implements` clause change.
 
 ---
 

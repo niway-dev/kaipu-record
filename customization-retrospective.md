@@ -2,22 +2,22 @@
 
 > Generated after customizing the template for the **Raiko** project.
 > Pattern chosen: **Fullstack serverFn Only** + Mobile + Docs.
-> Use this to improve the official `monorepo-template` and reduce future customization time.
+> Use this to improve the official `kaipu` and reduce future customization time.
 
 ---
 
 ## Time Breakdown
 
-| Step                          | Effort        | Why it was slow                                                                                                           |
-| ----------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Codebase exploration          | High          | Had to read 15+ files to understand the full dependency graph                                                             |
-| Delete directories            | Trivial       | Just `rm -rf`                                                                                                             |
-| Root package.json             | Low           | Straightforward edits                                                                                                     |
-| infra-env cleanup             | Low           | Delete files + update index.ts                                                                                            |
-| CI/CD workflows               | Medium        | Had to understand env vars per pattern, rewrite YAML                                                                      |
-| **Rename @monorepo-template** | **Very High** | **62 files. This dominated the entire process.**                                                                          |
-| Dead reference cleanup        | High          | Grep found references in .cursorrules, README, .claude/_, .cursor/_, fumadocs docs, .oxlintrc.json, .oxfmtrc.json, .env.x |
-| Post-cleanup verification     | Low           | bun install + grep                                                                                                        |
+| Step                      | Effort        | Why it was slow                                                                                                           |
+| ------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Codebase exploration      | High          | Had to read 15+ files to understand the full dependency graph                                                             |
+| Delete directories        | Trivial       | Just `rm -rf`                                                                                                             |
+| Root package.json         | Low           | Straightforward edits                                                                                                     |
+| infra-env cleanup         | Low           | Delete files + update index.ts                                                                                            |
+| CI/CD workflows           | Medium        | Had to understand env vars per pattern, rewrite YAML                                                                      |
+| **Rename @kaipu**         | **Very High** | **62 files. This dominated the entire process.**                                                                          |
+| Dead reference cleanup    | High          | Grep found references in .cursorrules, README, .claude/_, .cursor/_, fumadocs docs, .oxlintrc.json, .oxfmtrc.json, .env.x |
+| Post-cleanup verification | Low           | bun install + grep                                                                                                        |
 
 **Total: ~80% of time was spent on renaming and dead reference cleanup.**
 
@@ -27,7 +27,7 @@
 
 ### 1. Rename is the #1 bottleneck (62 files touched)
 
-**Problem:** `@monorepo-template` appears in:
+**Problem:** `@kaipu` appears in:
 
 - 7 `package.json` files (packages)
 - 5 `package.json` files (apps)
@@ -45,7 +45,7 @@
 
 **Recommendation:** Add a `bun run rename <new-scope>` script to the template root that:
 
-1. Finds all files containing `@monorepo-template` or `monorepo-template`
+1. Finds all files containing `@kaipu` or `kaipu`
 2. Replaces them (excluding node_modules, bun.lock, .git)
 3. Runs `bun install` to regenerate lockfile
 4. Prints a summary of changed files
@@ -185,7 +185,7 @@ packages/infra-env/src/web-client.ts
 | `README.md`                               | Rewritten for fullstack-fn-only pattern                                                 |
 | `.cursorrules`                            | Updated tech stack, workspace structure, patterns                                       |
 
-### Files Modified (Rename Only — @monorepo-template → @raiko)
+### Files Modified (Rename Only — @kaipu → @raiko)
 
 ```
 packages/domain/package.json
@@ -266,7 +266,7 @@ These files still reference the old architecture but were left as-is:
 
 ```bash
 # 1. Clone template
-git clone monorepo-template my-project
+git clone kaipu my-project
 cd my-project
 
 # 2. Run interactive customizer (< 10 seconds)

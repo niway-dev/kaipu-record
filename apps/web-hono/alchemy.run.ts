@@ -5,7 +5,7 @@ import { config } from "dotenv";
 
 config({ path: ".env" });
 
-const app = await alchemy("monorepo-template", {
+const app = await alchemy("kaipu", {
   password: alchemy.env.ALCHEMY_PASSWORD,
   stateStore:
     alchemy.env.ENVIRONMENT === "production"

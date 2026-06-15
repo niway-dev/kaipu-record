@@ -40,7 +40,7 @@ A **Bounded Context** is a logical boundary where a particular domain model appl
 
 ### ✅ Shared Kernel Candidates
 
-These should move to `@monorepo-template/shared-kernel`:
+These should move to `@kaipu/shared-kernel`:
 
 #### 1. Currency (`currency.ts`)
 
@@ -132,7 +132,7 @@ export type ObjectProperties<T> = T[keyof T];
 
 ### ❌ Context-Specific (Stay in Your Context)
 
-These should remain in `@monorepo-template/domain` (or future `@monorepo-template/your-context`):
+These should remain in `@kaipu/domain` (or future `@kaipu/your-context`):
 
 #### 1. Entity Status (`entity-status.ts`)
 
@@ -295,13 +295,13 @@ packages/
 
 ### Shared Kernel Package Names
 
-**Recommended:** `@monorepo-template/shared-kernel`
+**Recommended:** `@kaipu/shared-kernel`
 
 **Alternatives:**
 
-- `@monorepo-template/shared` - Shorter, still clear
-- `@monorepo-template/core` - Generic but semantic
-- `@monorepo-template/common` - Common in industry
+- `@kaipu/shared` - Shorter, still clear
+- `@kaipu/core` - Generic but semantic
+- `@kaipu/common` - Common in industry
 
 **Rationale:** "Shared Kernel" is explicit DDD terminology
 
@@ -313,7 +313,7 @@ packages/
 
 ```json
 {
-  "name": "@monorepo-template/domain"
+  "name": "@kaipu/domain"
 }
 ```
 
@@ -325,9 +325,9 @@ Keep generic until you add a second context.
 
 ```json
 {
-  "name": "@monorepo-template/your-context",
-  "name": "@monorepo-template/analytics",
-  "name": "@monorepo-template/billing"
+  "name": "@kaipu/your-context",
+  "name": "@kaipu/analytics",
+  "name": "@kaipu/billing"
 }
 ```
 
@@ -341,12 +341,12 @@ Be explicit about which bounded context each package represents.
 
 ```typescript
 // Generic primitives from shared kernel
-import { CURRENCIES, Currency } from "@monorepo-template/shared-kernel/currency";
-import { Result } from "@monorepo-template/shared-kernel/result";
-import { ApiResponse } from "@monorepo-template/shared-kernel/api";
+import { CURRENCIES, Currency } from "@kaipu/shared-kernel/currency";
+import { Result } from "@kaipu/shared-kernel/result";
+import { ApiResponse } from "@kaipu/shared-kernel/api";
 
 // Context-specific from domain
-import { YOUR_ENTITY_STATUSES } from "@monorepo-template/domain/constants";
+import { YOUR_ENTITY_STATUSES } from "@kaipu/domain/constants";
 ```
 
 **Benefits:**
@@ -367,8 +367,8 @@ export * from "./result";
 export * from "./utils";
 
 // Usage
-import { CURRENCIES, Result, ApiResponse } from "@monorepo-template/shared-kernel";
-import { YOUR_ENTITY_STATUSES } from "@monorepo-template/domain";
+import { CURRENCIES, Result, ApiResponse } from "@kaipu/shared-kernel";
+import { YOUR_ENTITY_STATUSES } from "@kaipu/domain";
 ```
 
 **Benefits:**
@@ -384,15 +384,15 @@ import { YOUR_ENTITY_STATUSES } from "@monorepo-template/domain";
 ```typescript
 // packages/domain/src/index.ts
 // Re-export shared kernel types for convenience
-export { CURRENCIES, Currency, CURRENCY_INFO } from "@monorepo-template/shared-kernel/currency";
-export { Result, tryCatch } from "@monorepo-template/shared-kernel/result";
+export { CURRENCIES, Currency, CURRENCY_INFO } from "@kaipu/shared-kernel/currency";
+export { Result, tryCatch } from "@kaipu/shared-kernel/result";
 
 // Export domain-specific
 export * from "./constants";
 export * from "./repositories";
 
 // Usage - everything from one place
-import { CURRENCIES, YOUR_ENTITY_STATUSES } from "@monorepo-template/domain";
+import { CURRENCIES, YOUR_ENTITY_STATUSES } from "@kaipu/domain";
 ```
 
 **Benefits:**
@@ -415,7 +415,7 @@ cd packages/shared-kernel
 # Create package.json
 cat > package.json << 'EOF'
 {
-  "name": "@monorepo-template/shared-kernel",
+  "name": "@kaipu/shared-kernel",
   "version": "1.0.0",
   "type": "module",
   "exports": {
@@ -479,17 +479,17 @@ EOF
 **Before:**
 
 ```typescript
-import { CURRENCIES, Currency } from "@monorepo-template/domain/constants";
-import { Result } from "@monorepo-template/domain/types";
-import { ApiResponse } from "@monorepo-template/domain/types";
+import { CURRENCIES, Currency } from "@kaipu/domain/constants";
+import { Result } from "@kaipu/domain/types";
+import { ApiResponse } from "@kaipu/domain/types";
 ```
 
 **After:**
 
 ```typescript
-import { CURRENCIES, Currency } from "@monorepo-template/shared-kernel/currency";
-import { Result } from "@monorepo-template/shared-kernel/result";
-import { ApiResponse } from "@monorepo-template/shared-kernel/api";
+import { CURRENCIES, Currency } from "@kaipu/shared-kernel/currency";
+import { Result } from "@kaipu/shared-kernel/result";
+import { ApiResponse } from "@kaipu/shared-kernel/api";
 ```
 
 ---
@@ -500,23 +500,23 @@ import { ApiResponse } from "@monorepo-template/shared-kernel/api";
 // packages/domain/package.json
 {
   "dependencies": {
-    "@monorepo-template/shared-kernel": "workspace:*"
+    "@kaipu/shared-kernel": "workspace:*"
   }
 }
 
 // packages/database/package.json
 {
   "dependencies": {
-    "@monorepo-template/shared-kernel": "workspace:*",
-    "@monorepo-template/domain": "workspace:*"
+    "@kaipu/shared-kernel": "workspace:*",
+    "@kaipu/domain": "workspace:*"
   }
 }
 
 // apps/web/package.json
 {
   "dependencies": {
-    "@monorepo-template/shared-kernel": "workspace:*",
-    "@monorepo-template/domain": "workspace:*"
+    "@kaipu/shared-kernel": "workspace:*",
+    "@kaipu/domain": "workspace:*"
   }
 }
 ```
@@ -564,7 +564,7 @@ Before adding to shared kernel, verify:
 
 ```typescript
 // packages/analytics/domain/repositories/entity-metrics.repository.ts
-import type { Currency } from "@monorepo-template/shared-kernel/currency";
+import type { Currency } from "@kaipu/shared-kernel/currency";
 
 export interface IEntityMetricsRepository {
   getAverageTimeToClosure(currency?: Currency): Promise<number>;
@@ -585,7 +585,7 @@ export interface IEntityMetricsRepository {
 
 ```typescript
 // packages/billing/domain/repositories/subscription.repository.ts
-import type { Currency } from "@monorepo-template/shared-kernel/currency";
+import type { Currency } from "@kaipu/shared-kernel/currency";
 
 export interface ISubscriptionRepository {
   getCurrentPlan(userId: string): Promise<SubscriptionPlan>;
@@ -622,7 +622,7 @@ export interface ISubscriptionRepository {
    - Repository interfaces
 
 3. **Start Small, Refactor as Needed**
-   - Begin with `@monorepo-template/domain`
+   - Begin with `@kaipu/domain`
    - Extract shared kernel when clear
    - Split into contexts when you add 2nd domain
 

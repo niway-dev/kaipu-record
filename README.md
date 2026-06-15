@@ -15,7 +15,7 @@ A production-ready monorepo template with DDD + Hexagonal Architecture, authenti
 
 ```bash
 git clone <repository-url>
-cd monorepo-template
+cd kaipu
 ```
 
 2. Install dependencies:
@@ -75,7 +75,7 @@ The application will be available at:
 ## Project Structure
 
 ```
-monorepo-template/
+kaipu/
 ├── apps/
 │   ├── web/              # Frontend (TanStack Start on Cloudflare Workers)
 │   ├── server/           # Backend API (Elysia on Cloudflare Workers)

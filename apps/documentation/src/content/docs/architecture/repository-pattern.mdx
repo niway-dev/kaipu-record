@@ -93,7 +93,7 @@ packages/
 // packages/domain/your-context/repositories/your-entity.repository.ts
 
 import type { YourEntity } from "../entities/your-entity.entity";
-import type { PaginationParams, PaginatedResult } from "@monorepo-template/domain/types";
+import type { PaginationParams, PaginatedResult } from "@kaipu/domain/types";
 
 export interface IYourEntityRepository {
   /**
@@ -138,9 +138,9 @@ export interface IYourEntityRepository {
 import { eq, and, desc, sql, isNull } from "drizzle-orm";
 import { yourEntityTable } from "../../schema";
 import type { NeonHttpDatabase } from "drizzle-orm/neon-http";
-import type { IYourEntityRepository } from "@monorepo-template/domain/your-context/repositories";
-import type { YourEntity } from "@monorepo-template/domain/your-context/entities";
-import type { PaginationParams, PaginatedResult } from "@monorepo-template/domain/types";
+import type { IYourEntityRepository } from "@kaipu/domain/your-context/repositories";
+import type { YourEntity } from "@kaipu/domain/your-context/entities";
+import type { PaginationParams, PaginatedResult } from "@kaipu/domain/types";
 import { YourEntityMapper } from "../mappers/your-entity.mapper";
 
 export class YourEntityRepositoryDrizzle implements IYourEntityRepository {
@@ -223,7 +223,7 @@ export class YourEntityRepositoryDrizzle implements IYourEntityRepository {
 ```typescript
 // packages/database/your-context/mappers/your-entity.mapper.ts
 
-import type { YourEntity } from "@monorepo-template/domain/your-context/entities";
+import type { YourEntity } from "@kaipu/domain/your-context/entities";
 
 export class YourEntityMapper {
   /**
@@ -271,9 +271,9 @@ export class YourEntityMapper {
 ```typescript
 // packages/application/your-context/use-cases/get-your-entities.service.ts
 
-import type { IYourEntityRepository } from "@monorepo-template/domain/your-context/repositories";
-import type { PaginationParams, PaginatedResult } from "@monorepo-template/domain/types";
-import type { YourEntity } from "@monorepo-template/domain/your-context/entities";
+import type { IYourEntityRepository } from "@kaipu/domain/your-context/repositories";
+import type { PaginationParams, PaginatedResult } from "@kaipu/domain/types";
+import type { YourEntity } from "@kaipu/domain/your-context/entities";
 
 export class GetYourEntities {
   constructor(private readonly yourEntityRepo: IYourEntityRepository) {}
@@ -305,8 +305,8 @@ export class GetYourEntities {
 // apps/server/src/routes/your-entities.ts
 
 import { Elysia } from "elysia";
-import { GetYourEntities } from "@monorepo-template/application/your-context";
-import { YourEntityRepositoryDrizzle } from "@monorepo-template/database/your-context";
+import { GetYourEntities } from "@kaipu/application/your-context";
+import { YourEntityRepositoryDrizzle } from "@kaipu/database/your-context";
 
 export const yourEntityRoutes = new Elysia({ prefix: "/your-entities" })
   .decorate("db", createDatabaseClient(env.DATABASE_URL))

@@ -1,8 +1,8 @@
 import { implement, ORPCError } from "@orpc/server";
 import { todoContract } from "../../contract/todo.contract";
-import { createDatabaseClient } from "@monorepo-template/infra-db/client";
-import { TodoRepository } from "@monorepo-template/infra-db/repositories";
-import { listTodos } from "@monorepo-template/application";
+import { createDatabaseClient } from "@kaipu/infra-db/client";
+import { TodoRepository } from "@kaipu/infra-db/repositories";
+import { listTodos } from "@kaipu/application";
 import { authMiddleware } from "../../middleware/auth";
 import { env } from "../../env";
 

@@ -1,4 +1,4 @@
-# @monorepo-template/infra-db — Package Spec
+# @kaipu/infra-db — Package Spec
 
 ```
 src/

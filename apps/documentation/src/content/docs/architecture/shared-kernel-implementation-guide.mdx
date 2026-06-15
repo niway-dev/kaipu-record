@@ -11,7 +11,7 @@ This is a practical, step-by-step guide to extract the shared kernel from the cu
 
 ## 📋 Prerequisites
 
-- Existing `@monorepo-template/domain` package
+- Existing `@kaipu/domain` package
 - Files to move identified (see [Shared Kernel & Bounded Contexts](/architecture/shared-kernel-and-bounded-contexts))
 - All tests passing
 - Clean git working directory
@@ -69,7 +69,7 @@ mkdir -p shared-kernel/src
 # Create package.json
 cat > shared-kernel/package.json << 'EOF'
 {
-  "name": "@monorepo-template/shared-kernel",
+  "name": "@kaipu/shared-kernel",
   "version": "1.0.0",
   "description": "Shared primitives and utilities across all bounded contexts",
   "type": "module",
@@ -104,7 +104,7 @@ cat > shared-kernel/package.json << 'EOF'
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@monorepo-template/config": "workspace:*",
+    "@kaipu/config": "workspace:*",
     "@types/node": "^22",
     "tsdown": "^0.18.2",
     "typescript": "^5"
@@ -116,7 +116,7 @@ EOF
 # Create tsconfig.json
 cat > shared-kernel/tsconfig.json << 'EOF'
 {
-  "extends": "@monorepo-template/config/tsconfig.base.json",
+  "extends": "@kaipu/config/tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
     "rootDir": "src"
@@ -357,9 +357,9 @@ EOF
 
 ```json
 {
-  "name": "@monorepo-template/domain",
+  "name": "@kaipu/domain",
   "dependencies": {
-    "@monorepo-template/shared-kernel": "workspace:*",
+    "@kaipu/shared-kernel": "workspace:*",
     "zod": "catalog:"
   }
 }
@@ -373,7 +373,7 @@ Update `packages/domain/src/constants/index.ts`:
 
 ```typescript
 // Re-export shared types for convenience
-export { CURRENCIES, Currency, CURRENCY_INFO } from "@monorepo-template/shared-kernel/currency";
+export { CURRENCIES, Currency, CURRENCY_INFO } from "@kaipu/shared-kernel/currency";
 
 // Export domain-specific constants
 export * from "./entity-status";
@@ -394,9 +394,9 @@ export type {
   Success,
   Failure,
   ObjectProperties,
-} from "@monorepo-template/shared-kernel";
+} from "@kaipu/shared-kernel";
 
-export { tryCatch, isSuccess, isFailure, unwrap } from "@monorepo-template/shared-kernel";
+export { tryCatch, isSuccess, isFailure, unwrap } from "@kaipu/shared-kernel";
 ```
 
 ---
@@ -420,51 +420,51 @@ Find and replace across the codebase:
 
 ```typescript
 // Before
-import { CURRENCIES } from "@monorepo-template/domain/constants";
-import { Result } from "@monorepo-template/domain/types";
-import { ApiResponse } from "@monorepo-template/domain/types";
+import { CURRENCIES } from "@kaipu/domain/constants";
+import { Result } from "@kaipu/domain/types";
+import { ApiResponse } from "@kaipu/domain/types";
 
 // After
-import { CURRENCIES } from "@monorepo-template/shared-kernel/currency";
-import { Result } from "@monorepo-template/shared-kernel/result";
-import { ApiResponse } from "@monorepo-template/shared-kernel/api";
+import { CURRENCIES } from "@kaipu/shared-kernel/currency";
+import { Result } from "@kaipu/shared-kernel/result";
+import { ApiResponse } from "@kaipu/shared-kernel/api";
 ```
 
 **Option B: Re-export from domain (recommended for backward compatibility)**
 
 ```typescript
 // No changes needed - domain re-exports shared-kernel types
-import { CURRENCIES, Result, ApiResponse } from "@monorepo-template/domain";
+import { CURRENCIES, Result, ApiResponse } from "@kaipu/domain";
 ```
 
 ---
 
 ### Step 11: Update Package Dependencies
 
-Add `@monorepo-template/shared-kernel` to all packages that need it:
+Add `@kaipu/shared-kernel` to all packages that need it:
 
 ```json
 // packages/database/package.json
 {
   "dependencies": {
-    "@monorepo-template/shared-kernel": "workspace:*",
-    "@monorepo-template/domain": "workspace:*"
+    "@kaipu/shared-kernel": "workspace:*",
+    "@kaipu/domain": "workspace:*"
   }
 }
 
 // apps/server/package.json
 {
   "dependencies": {
-    "@monorepo-template/shared-kernel": "workspace:*",
-    "@monorepo-template/domain": "workspace:*"
+    "@kaipu/shared-kernel": "workspace:*",
+    "@kaipu/domain": "workspace:*"
   }
 }
 
 // apps/web/package.json
 {
   "dependencies": {
-    "@monorepo-template/shared-kernel": "workspace:*",
-    "@monorepo-template/domain": "workspace:*"
+    "@kaipu/shared-kernel": "workspace:*",
+    "@kaipu/domain": "workspace:*"
   }
 }
 ```
@@ -582,7 +582,7 @@ bun install
 **Solution:**
 
 1. Ensure `bun install` was run
-2. Check `node_modules/@monorepo-template/shared-kernel` exists
+2. Check `node_modules/@kaipu/shared-kernel` exists
 3. Restart TypeScript server in your IDE
 
 ---

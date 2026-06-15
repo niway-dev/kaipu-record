@@ -1,5 +1,5 @@
-import { db } from "@monorepo-template/infra-db/client";
-import { userTable, accountTable, sessionTable } from "@monorepo-template/infra-db/schemas";
+import { db } from "@kaipu/infra-db/client";
+import { userTable, accountTable, sessionTable } from "@kaipu/infra-db/schemas";
 import type { BetterAuthOptions } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { randomBytes, scryptSync } from "node:crypto";

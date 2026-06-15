@@ -11,12 +11,11 @@
     "cf:gen-types": "wrangler types --env-interface CloudflareBindings"
   },
   "dependencies": {
-    "@better-auth/expo": "catalog:",
-    "@monorepo-template/application": "workspace:*",
-    "@monorepo-template/domain": "workspace:*",
-    "@monorepo-template/infra-auth": "workspace:*",
-    "@monorepo-template/infra-db": "workspace:*",
-    "@monorepo-template/infra-env": "workspace:*",
+    "@kaipu/application": "workspace:*",
+    "@kaipu/domain": "workspace:*",
+    "@kaipu/infra-auth": "workspace:*",
+    "@kaipu/infra-db": "workspace:*",
+    "@kaipu/infra-env": "workspace:*",
     "@orpc/contract": "catalog:",
     "@orpc/openapi": "catalog:",
     "@orpc/server": "catalog:",
@@ -26,7 +25,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@monorepo-template/config": "workspace:*",
+    "@kaipu/config": "workspace:*",
     "tsdown": "catalog:",
     "typescript": "catalog:"
   }
