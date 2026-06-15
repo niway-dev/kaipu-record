@@ -34,11 +34,11 @@ export function VideoRow({
         }
       }}
     >
-      <div className={styles.thumb}>
+      <div className={styles.poster}>
         {video.thumbnailUrl ? (
-          <img src={video.thumbnailUrl} alt="" className={styles.thumbImage} />
+          <img src={video.thumbnailUrl} alt="" className={styles.posterImage} />
         ) : (
-          <div className={styles.thumbFallback} aria-hidden>
+          <div className={styles.posterFallback} aria-hidden>
             <Film size={18} strokeWidth={1.5} />
           </div>
         )}
@@ -49,9 +49,9 @@ export function VideoRow({
 
       <div className={styles.info}>
         <p className={styles.title}>{video.title || "Untitled recording"}</p>
-        <div className={styles.metaRow}>
+        <div className={styles.metaLine}>
           <StorageMeta video={video} />
-          <span className={styles.tech}>
+          <span className={styles.specs}>
             {formatSize(video.fileSizeBytes)} · {formatDuration(video.durationSeconds)}
           </span>
         </div>

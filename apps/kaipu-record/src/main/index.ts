@@ -1,13 +1,30 @@
-import { app, shell, BrowserWindow, ipcMain } from "electron";
+import { app, shell, BrowserWindow, ipcMain, Tray } from "electron";
 import { join } from "path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import icon from "../../resources/icon.png?asset";
+import { CapturePanelWindow } from "./capture-panel-window";
+import { createTray } from "./tray";
+import { registerRecordingSourceHandlers } from "./recording-sources";
+import { registerPermissionHandlers } from "./permissions";
+import { registerLibraryVaultHandlers } from "./library";
+import { registerMediaProtocol, registerMediaScheme } from "./media-protocol";
+
+let mainWindow: BrowserWindow | null = null;
+let capturePanel: CapturePanelWindow | null = null;
+let tray: Tray | null = null;
+
+// Must run before `app.whenReady` — privileged scheme registration.
+registerMediaScheme();
 
 function createWindow(): void {
   // Create the browser window.
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 900,
     height: 670,
+    // Floor the size so neither the main UI nor the onboarding overlay can be
+    // squeezed into a broken layout.
+    minWidth: 720,
+    minHeight: 560,
     show: false,
     autoHideMenuBar: true,
     ...(process.platform === "linux" ? { icon } : {}),
@@ -18,7 +35,11 @@ function createWindow(): void {
   });
 
   mainWindow.on("ready-to-show", () => {
-    mainWindow.show();
+    mainWindow?.show();
+  });
+
+  mainWindow.on("closed", () => {
+    mainWindow = null;
   });
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -35,12 +56,23 @@ function createWindow(): void {
   }
 }
 
+/** Show & focus the main window, recreating it if it was closed. */
+function showMainWindow(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow();
+    return;
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
   // Set app user model id for windows
-  electronApp.setAppUserModelId("com.electron");
+  electronApp.setAppUserModelId("com.niway.kaipu-record");
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.
@@ -52,13 +84,42 @@ app.whenReady().then(() => {
   // IPC test
   ipcMain.on("ping", () => console.log("pong"));
 
+  // Capture Panel → show the main window (the panel's "Open ↗" button).
+  ipcMain.on("capture-panel:open-main", () => {
+    capturePanel?.hide();
+    showMainWindow();
+  });
+
+  // Recording: screen/window source enumeration.
+  registerRecordingSourceHandlers();
+
+  // Library: local recordings vault.
+  registerLibraryVaultHandlers();
+
+  // macOS media permissions (onboarding + settings).
+  registerPermissionHandlers();
+
+  // Stream local vault files to the renderer for playback (kaipu-media://).
+  registerMediaProtocol();
+
   createWindow();
+
+  // Menu-bar tray + its Capture Panel.
+  capturePanel = new CapturePanelWindow();
+  tray = createTray(capturePanel, showMainWindow);
 
   app.on("activate", function () {
     // On macOS it's common to re-create a window in the app when the
     // dock icon is clicked and there are no other windows open.
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+});
+
+// The app lives in the menu bar — keep the tray reference alive and release it
+// only on quit so the icon isn't garbage-collected.
+app.on("before-quit", () => {
+  tray?.destroy();
+  tray = null;
 });
 
 // Quit when all windows are closed, except on macOS. There, it's common
@@ -69,6 +130,3 @@ app.on("window-all-closed", () => {
     app.quit();
   }
 });
-
-// In this file you can include the rest of your app's specific main process
-// code. You can also put them in separate files and require them here.

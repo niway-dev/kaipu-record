@@ -1,0 +1,61 @@
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.indicator {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-card-hover);
+  border: 1px solid var(--border-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 200ms ease;
+}
+
+.indicatorActive {
+  background: var(--accent-primary);
+  border-color: rgba(246, 5, 92, 0.36);
+}
+
+.ring {
+  width: 7px;
+  height: 7px;
+  border: 1.5px solid var(--text-primary);
+  border-radius: 50%;
+}
+
+.name {
+  font-size: 13px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.1px;
+}
+
+.openButton {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 3px 9px;
+  font-size: 11px;
+  font-family: var(--font-family);
+  cursor: pointer;
+  transition:
+    color var(--transition),
+    border-color var(--transition);
+}
+
+.openButton:hover {
+  color: var(--text-primary);
+  border-color: var(--border-light);
+}

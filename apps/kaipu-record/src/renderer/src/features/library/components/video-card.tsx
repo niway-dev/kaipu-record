@@ -32,11 +32,11 @@ export function VideoCard({
         }
       }}
     >
-      <div className={styles.thumb}>
+      <div className={styles.poster}>
         {video.thumbnailUrl ? (
-          <img src={video.thumbnailUrl} alt="" className={styles.thumbImage} />
+          <img src={video.thumbnailUrl} alt="" className={styles.posterImage} />
         ) : (
-          <div className={styles.thumbFallback} aria-hidden>
+          <div className={styles.posterFallback} aria-hidden>
             <Film size={26} strokeWidth={1.5} />
           </div>
         )}
@@ -48,15 +48,15 @@ export function VideoCard({
         )}
 
         {video.storage === "uploading" && (
-          <div className={styles.progress} aria-hidden>
+          <div className={styles.progressTrack} aria-hidden>
             <div
-              className={styles.progressBar}
+              className={styles.progressFill}
               style={{ width: `${Math.round(video.processingProgress ?? 0)}%` }}
             />
           </div>
         )}
 
-        <div className={styles.playOverlay} aria-hidden>
+        <div className={styles.playLayer} aria-hidden>
           <span className={styles.playButton}>
             <Play size={18} fill="#fff" strokeWidth={0} />
           </span>
@@ -65,10 +65,10 @@ export function VideoCard({
 
       <div className={styles.footer}>
         <p className={styles.title}>{video.title || "Untitled recording"}</p>
-        <div className={styles.metaRow}>
+        <div className={styles.metaLine}>
           <StorageMeta video={video} />
         </div>
-        <span className={styles.tech}>
+        <span className={styles.specs}>
           {formatSize(video.fileSizeBytes)} · {formatDuration(video.durationSeconds)}
         </span>
 

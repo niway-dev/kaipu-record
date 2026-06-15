@@ -15,9 +15,9 @@
   background: var(--bg-card-hover);
 }
 
-/* ── Thumbnail ────────────────────────── */
+/* ── Poster ───────────────────────────── */
 
-.thumb {
+.poster {
   position: relative;
   width: 104px;
   height: 64px;
@@ -32,13 +32,13 @@
   );
 }
 
-.thumbImage {
+.posterImage {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.thumbFallback {
+.posterFallback {
   position: absolute;
   inset: 0;
   display: flex;
@@ -75,14 +75,14 @@
   text-overflow: ellipsis;
 }
 
-.metaRow {
+.metaLine {
   display: flex;
   align-items: center;
   gap: 12px;
   margin-top: 6px;
 }
 
-.tech {
+.specs {
   font-family: var(--font-mono);
   font-size: 10.5px;
   letter-spacing: 0.02em;
