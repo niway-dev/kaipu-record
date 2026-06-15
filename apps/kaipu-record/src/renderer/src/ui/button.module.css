@@ -1,0 +1,82 @@
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-family: var(--font-family);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    border-color var(--transition),
+    color var(--transition),
+    opacity var(--transition);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ── Sizes ────────────────────────────── */
+
+.sm {
+  height: 28px;
+  padding: 0 10px;
+  font-size: var(--font-size-sm);
+}
+
+.default {
+  height: 34px;
+  padding: 0 14px;
+  font-size: var(--font-size-base);
+}
+
+.lg {
+  height: 40px;
+  padding: 0 20px;
+  font-size: var(--font-size-md);
+}
+
+/* ── Variants ─────────────────────────── */
+
+.primary {
+  background: var(--accent-primary);
+  color: #fff;
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--accent-primary-hover);
+}
+
+.danger {
+  background: var(--accent-red);
+  color: #fff;
+}
+
+.danger:hover:not(:disabled) {
+  background: var(--accent-red-hover);
+}
+
+.ghost {
+  background: transparent;
+  color: var(--accent-primary);
+}
+
+.ghost:hover:not(:disabled) {
+  background: rgba(246, 5, 92, 0.1);
+}
+
+.outline {
+  background: transparent;
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.outline:hover:not(:disabled) {
+  background: rgba(246, 5, 92, 0.1);
+}

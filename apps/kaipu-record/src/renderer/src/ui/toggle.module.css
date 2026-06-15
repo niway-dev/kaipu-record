@@ -1,0 +1,44 @@
+.toggle {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  border: none;
+  border-radius: 10px;
+  background: var(--border);
+  cursor: pointer;
+  padding: 0;
+  transition: background var(--transition);
+  flex-shrink: 0;
+  outline: none;
+}
+
+.toggle[data-disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.toggle[data-state="checked"] {
+  background: var(--accent-primary);
+}
+
+.toggle:focus-visible {
+  box-shadow: 0 0 0 2px rgba(246, 5, 92, 0.4);
+}
+
+.thumb {
+  display: block;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform var(--transition);
+  will-change: transform;
+}
+
+.thumb[data-state="checked"] {
+  transform: translateX(16px);
+}
