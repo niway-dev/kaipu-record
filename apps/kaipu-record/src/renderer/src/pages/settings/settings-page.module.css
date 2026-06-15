@@ -1,0 +1,144 @@
+/*
+ * Settings page chrome — a single scrolling column of titled sections. The
+ * Card/Row primitives carry their own styling; this file only frames the page,
+ * its header, and the few inline controls (kbd hints, permission status, the
+ * appearance segmented control, the vault path).
+ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.page::-webkit-scrollbar {
+  display: none;
+}
+
+/* ── Header ─────────────────────────────────── */
+
+.pageHeader {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: var(--space-xl) 0 var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pageTitle {
+  margin: 0;
+  font-size: 20px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.pageSubtitle {
+  margin: 0;
+  font-size: var(--font-size-base);
+  color: var(--text-secondary);
+}
+
+/* ── Sections ───────────────────────────────── */
+
+.sections {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding-bottom: var(--space-xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.sectionTitle {
+  margin: 0;
+  padding: 0 var(--space-xs);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+/* ── Permission status ──────────────────────── */
+
+.statusGranted,
+.statusDenied {
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.statusGranted {
+  color: var(--accent-green);
+}
+
+.statusDenied {
+  color: var(--accent-red);
+}
+
+/* ── Keyboard hints ─────────────────────────── */
+
+.kbd {
+  padding: 2px 7px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+/* ── Appearance segmented control ───────────── */
+
+.segmented {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.segment {
+  padding: 4px 14px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.segment:hover {
+  color: var(--text-primary);
+}
+
+.segmentActive,
+.segmentActive:hover {
+  background: var(--accent-primary);
+  color: #fff;
+}
+
+/* ── Vault path ─────────────────────────────── */
+
+.pathValue {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
