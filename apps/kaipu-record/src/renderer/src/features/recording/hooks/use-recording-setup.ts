@@ -1,0 +1,138 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useMicrophones } from "@renderer/features/recording/hooks/use-microphones";
+import type { Microphone, SelectedSource } from "@renderer/features/recording/types";
+
+const COUNTDOWN_SECONDS = 3;
+
+/**
+ * Smart container for the recording controls. Holds all the UI state the Record
+ * page and the Capture Panel need, so both can render dumb components against the
+ * same shape. Each consumer (separate windows) gets its own instance — this is
+ * shared *code*, not shared *state*.
+ */
+export interface RecordingSetup {
+  // Source
+  selectedSource: SelectedSource | null;
+  selectSource(source: SelectedSource | null): void;
+  isSourcePickerOpen: boolean;
+  openSourcePicker(): void;
+  closeSourcePicker(): void;
+
+  // Capture toggles
+  isMicrophoneEnabled: boolean;
+  isSystemAudioEnabled: boolean;
+  isCameraEnabled: boolean;
+  toggleMicrophone(): void;
+  toggleSystemAudio(): void;
+  toggleCamera(): void;
+
+  // Microphone device
+  microphones: Microphone[];
+  selectedMicrophone: Microphone | null;
+  isMicrophoneMenuOpen: boolean;
+  toggleMicrophoneMenu(): void;
+  selectMicrophone(microphone: Microphone): void;
+
+  // Recording lifecycle
+  isRecording: boolean;
+  /** Current countdown tick (3→1) while a start is pending; null otherwise. */
+  countdown: number | null;
+  canStartRecording: boolean;
+  /** Begin recording after a short countdown (used by the Record page). */
+  startRecording(): void;
+  stopRecording(): void;
+  /** Immediate start/stop, no countdown (used by the Capture Panel). */
+  toggleRecording(): void;
+}
+
+export function useRecordingSetup(options?: {
+  initialSource?: SelectedSource | null;
+}): RecordingSetup {
+  const [selectedSource, setSelectedSource] = useState<SelectedSource | null>(
+    options?.initialSource ?? null,
+  );
+  const [isSourcePickerOpen, setSourcePickerOpen] = useState(false);
+  const [isMicrophoneEnabled, setMicrophoneEnabled] = useState(true);
+  const [isSystemAudioEnabled, setSystemAudioEnabled] = useState(false);
+  const [isCameraEnabled, setCameraEnabled] = useState(false);
+
+  const microphones = useMicrophones();
+  const [selectedMicrophone, setSelectedMicrophone] = useState<Microphone | null>(null);
+  // Default to the first device once enumerated; keep the choice valid as
+  // devices are plugged/unplugged.
+  useEffect(() => {
+    setSelectedMicrophone((current) => {
+      if (current && microphones.some((m) => m.deviceId === current.deviceId)) return current;
+      return microphones[0] ?? null;
+    });
+  }, [microphones]);
+
+  const [isMicrophoneMenuOpen, setMicrophoneMenuOpen] = useState(false);
+  const [isRecording, setRecording] = useState(false);
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const countdownTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const clearCountdown = useCallback(() => {
+    if (countdownTimer.current) {
+      clearInterval(countdownTimer.current);
+      countdownTimer.current = null;
+    }
+    setCountdown(null);
+  }, []);
+
+  const startRecording = useCallback(() => {
+    if (countdownTimer.current || isRecording) return;
+    let remaining = COUNTDOWN_SECONDS;
+    setCountdown(remaining);
+    countdownTimer.current = setInterval(() => {
+      remaining -= 1;
+      if (remaining <= 0) {
+        clearCountdown();
+        setRecording(true);
+      } else {
+        setCountdown(remaining);
+      }
+    }, 1000);
+  }, [isRecording, clearCountdown]);
+
+  const stopRecording = useCallback(() => {
+    clearCountdown();
+    setRecording(false);
+  }, [clearCountdown]);
+
+  const toggleRecording = useCallback(() => setRecording((on) => !on), []);
+
+  // Stop the countdown if the consumer unmounts mid-count.
+  useEffect(() => () => clearCountdown(), [clearCountdown]);
+
+  return {
+    selectedSource,
+    selectSource: setSelectedSource,
+    isSourcePickerOpen,
+    openSourcePicker: () => setSourcePickerOpen(true),
+    closeSourcePicker: () => setSourcePickerOpen(false),
+
+    isMicrophoneEnabled,
+    isSystemAudioEnabled,
+    isCameraEnabled,
+    toggleMicrophone: () => setMicrophoneEnabled((on) => !on),
+    toggleSystemAudio: () => setSystemAudioEnabled((on) => !on),
+    toggleCamera: () => setCameraEnabled((on) => !on),
+
+    microphones,
+    selectedMicrophone,
+    isMicrophoneMenuOpen,
+    toggleMicrophoneMenu: () => setMicrophoneMenuOpen((open) => !open),
+    selectMicrophone: (microphone) => {
+      setSelectedMicrophone(microphone);
+      setMicrophoneMenuOpen(false);
+    },
+
+    isRecording,
+    countdown,
+    canStartRecording: Boolean(selectedSource),
+    startRecording,
+    stopRecording,
+    toggleRecording,
+  };
+}
