@@ -1,0 +1,523 @@
+---
+title: Domain Architecture Patterns
+description: Understanding Entity-Based (DDD) vs Schema-Based architectures and when to use each approach
+---
+
+# Domain Architecture Patterns
+
+This document explains two fundamental approaches to modeling domain logic in our application: **Entity-Based (DDD)** and **Schema-Based** architectures.
+
+## Overview
+
+When building applications, we need to decide how to structure our domain models. The choice between these two patterns significantly impacts code organization, maintainability, and complexity.
+
+## Architecture Comparison
+
+### Entity-Based Architecture (Domain-Driven Design)
+
+**Philosophy**: Domain models are rich objects with both data and behavior. Business logic lives within the entities themselves.
+
+**Structure**:
+
+```typescript
+export class CommonAreaReservation {
+  private readonly _id: UniqueIdVO;
+  private readonly _status: ReservationStatusVO;
+  private readonly _startTime: AvailableFromVO;
+
+  // Business methods
+  public cancel(at: Date): CommonAreaReservation {
+    // Business logic here
+    return CommonAreaReservation.create({
+      ...this.toJson(),
+      status: 'CANCELLED',
+      isInactive: at.toISOString(),
+      updatedAt: at,
+    });
+  }
+
+  public confirm(at: Date): CommonAreaReservation {
+    // Business logic here
+  }
+}
+```
+
+### Schema-Based Architecture (Data Transfer Pattern)
+
+**Philosophy**: Domain models are validated data structures. Business logic lives in service layers or functions.
+
+**Structure**:
+
+```typescript
+// Validation schemas
+export const yourEntityBaseSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1),
+  status: z.enum(['active', 'rejected', 'cancelled', 'completed']),
+  salary: z.number().min(0).nullable(),
+  currency: z.enum(['USD', 'PEN']),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+
+// Derived schemas
+export const createYourEntitySchema = yourEntityBaseSchema.pick({
+  name: true,
+  status: true,
+}).extend({
+  salary: z.number().min(0).optional(),
+  currency: z.enum(['USD', 'PEN']).optional(),
+});
+
+export const updateYourEntitySchema = createYourEntitySchema;
+
+// Type inference
+export type YourEntity = z.infer<typeof yourEntityBaseSchema>;
+export type CreateYourEntity = z.infer<typeof createYourEntitySchema>;
+export type UpdateYourEntity = z.infer<typeof updateYourEntitySchema>;
+```
+
+---
+
+## Detailed Comparison
+
+### Entity-Based (DDD) Approach
+
+#### ✅ Advantages
+
+**1. Rich Domain Model**
+
+- Business logic is encapsulated within entities
+- Methods like `cancel()`, `confirm()` express domain operations
+- Clear separation of concerns
+
+**2. Type Safety with Value Objects**
+
+- `UniqueIdVO`, `ReservationStatusVO` prevent primitive obsession
+- Validation happens at the value object level
+- Compile-time safety for domain concepts
+
+**3. Encapsulation**
+
+- Private fields with public getters
+- Cannot create invalid entities
+- Business invariants are always enforced
+
+**4. Testability**
+
+- Unit test business logic independently
+- Pure domain logic separate from infrastructure
+- Clear boundaries between layers
+
+**5. Domain-Driven Design Benefits**
+
+- Ubiquitous language reflected in code
+- Matches business domain concepts
+- Better for complex business rules
+
+#### ❌ Disadvantages
+
+**1. Complexity Overhead**
+
+- More boilerplate code
+- Steeper learning curve
+- Value objects add additional layers
+
+**2. Serialization Issues**
+
+- Classes don't serialize naturally to JSON
+- Requires `toJson()` methods
+- Hydration challenges in frontend
+
+**3. Frontend Integration Friction**
+
+- React prefers plain objects
+- Cannot easily store class instances in React state
+- Type conversion at boundaries
+
+**4. Over-engineering Risk**
+
+- May be overkill for simple CRUD
+- Team needs to understand DDD principles
+- Higher initial development cost
+
+**5. Shared Type Challenges**
+
+- Entities are backend-centric
+- Frontend usually needs separate DTOs
+- More type definitions to maintain
+
+---
+
+### Schema-Based Approach
+
+#### ✅ Advantages
+
+**1. Simplicity**
+
+- Minimal boilerplate
+- Easy to understand and maintain
+- Quick to implement
+
+**2. API-First Design**
+
+- Direct JSON validation
+- Works seamlessly with REST/tRPC/GraphQL
+- No serialization complexity
+
+**3. Frontend-Friendly**
+
+- Plain objects work everywhere
+- Easy state management in React
+- No hydration issues in Next.js
+
+**4. Easy Derivation**
+
+- Use `.pick()`, `.omit()`, `.partial()` for variants
+- DRY principle with minimal code
+- Automatic type inference
+
+**5. Shared Validation**
+
+- Same schemas in frontend and backend
+- Consistent validation rules across layers
+- Single source of truth for structure
+
+**6. Perfect for CRUD**
+
+- Most web apps are CRUD-heavy
+- Schemas are sufficient for validation
+- Business logic can live in services
+
+#### ❌ Disadvantages
+
+**1. No Behavior Encapsulation**
+
+- Validation only, no business methods
+- Business rules scattered in services
+- Easier to bypass domain invariants
+
+**2. Anemic Domain Model**
+
+- Just data structures
+- No domain behavior
+- Can be considered an anti-pattern for complex domains
+
+**3. Less Semantic Type Safety**
+
+- Primitives instead of value objects
+- `string` instead of `Email` or `UserId`
+- Can pass wrong values accidentally
+
+**4. Business Logic Duplication Risk**
+
+- Same logic might exist in multiple places
+- Harder to ensure consistency
+- No centralized place for domain operations
+
+**5. Scalability for Complex Domains**
+
+- When business rules grow, becomes harder to maintain
+- No clear structure for domain logic
+- Can become procedural spaghetti code
+
+---
+
+## When to Use Each Approach
+
+### Use Entity-Based (DDD) When:
+
+✅ **Complex Business Rules**
+
+- State machines and workflows
+- Multi-step processes with invariants
+- Domain logic is the core business value
+- Example: Reservation conflicts, booking workflows, financial transactions
+
+✅ **Long-term Projects**
+
+- Multiple teams working on the codebase
+- Domain will evolve over time
+- Maintainability is critical
+
+✅ **Domain Expertise Required**
+
+- Close collaboration with business stakeholders
+- Ubiquitous language is important
+- Complex bounded contexts
+
+**Example Domains**:
+
+- Booking/Reservation systems (e.g., miCondominioWeb)
+- Financial systems with complex rules
+- E-commerce with inventory and pricing logic
+- Healthcare systems with regulatory requirements
+
+---
+
+### Use Schema-Based When:
+
+✅ **Simple CRUD Operations**
+
+- Most operations are basic create/read/update/delete
+- Validation is the primary concern
+- Few complex business rules
+
+✅ **API-First Applications**
+
+- RESTful APIs, GraphQL, or tRPC
+- Data transfer is the main purpose
+- Frontend and backend share types
+
+✅ **Fast Iteration Needed**
+
+- Startups, MVPs, prototypes
+- Small teams
+- Need to move quickly
+- Simpler codebase preferred
+
+**Example Domains**:
+
+- Your application (monorepo-template)
+- Content management systems
+- Dashboards and analytics
+- Basic CRUD applications
+- Admin panels
+
+---
+
+## Current Implementation Strategy
+
+### Monorepo Template: Schema-Based ✅
+
+**Rationale:**
+
+- Primarily a tracking/logging application
+- Simple state transitions (active → rejected/completed)
+- CRUD-heavy operations
+- API-first design with Eden Treaty
+- Fast iteration needed
+
+**Structure:**
+
+```
+packages/domain/src/
+├── constants/
+│   ├── currency.ts
+│   ├── your-entity-status.ts
+│   └── comment-type.ts
+├── types/
+│   ├── api-response.ts
+│   └── result.ts
+└── schemas/              👈 NEW
+    ├── your-entity.ts
+    ├── your-entity-details.ts
+    ├── comment.ts
+    └── index.ts
+```
+
+---
+
+## Migration Path: From Schemas to Entities
+
+If your application grows in complexity, you can migrate from schema-based to entity-based gradually.
+
+### Phase 1: Pure Schemas (Current)
+
+```typescript
+// packages/domain/src/schemas/your-entity.ts
+export const yourEntityBaseSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1),
+  status: z.enum(['active', 'rejected', 'cancelled', 'completed']),
+});
+
+export type YourEntity = z.infer<typeof yourEntityBaseSchema>;
+```
+
+### Phase 2: Add Domain Functions
+
+```typescript
+// packages/domain/src/schemas/your-entity.ts
+export const yourEntityBaseSchema = z.object({...});
+
+// Add business logic as functions
+export function canTransitionStatus(
+  from: YourEntityStatus,
+  to: YourEntityStatus
+): boolean {
+  const allowedTransitions = {
+    'active': ['rejected', 'cancelled', 'completed'],
+    'rejected': [],
+    'cancelled': [],
+    'completed': [],
+  };
+  return allowedTransitions[from]?.includes(to) ?? false;
+}
+
+export function calculateDaysSinceLastUpdate(
+  entity: YourEntity
+): number {
+  const now = new Date();
+  const updated = new Date(entity.updatedAt);
+  return Math.floor((now.getTime() - updated.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+export function isStale(entity: YourEntity): boolean {
+  return calculateDaysSinceLastUpdate(entity) > 30;
+}
+```
+
+### Phase 3: Introduce Value Objects
+
+```typescript
+// packages/domain/src/value-objects/your-entity-status.ts
+export class YourEntityStatusVO {
+  private constructor(private readonly value: YourEntityStatus) {}
+
+  public static create(value: string): YourEntityStatusVO {
+    if (!isValidStatus(value)) {
+      throw new Error(`Invalid status: ${value}`);
+    }
+    return new YourEntityStatusVO(value as YourEntityStatus);
+  }
+
+  public canTransitionTo(target: YourEntityStatus): boolean {
+    // Encapsulate business logic
+  }
+
+  public getValue(): YourEntityStatus {
+    return this.value;
+  }
+}
+```
+
+### Phase 4: Full Entity Model
+
+```typescript
+// packages/domain/src/entities/your-entity.ts
+export class YourEntity {
+  private readonly _id: UniqueIdVO;
+  private readonly _status: YourEntityStatusVO;
+  private readonly _name: string;
+
+  private constructor(props: YourEntityProps) {
+    this._id = UniqueIdVO.create(props.id);
+    this._status = YourEntityStatusVO.create(props.status);
+    this._name = props.name;
+  }
+
+  public static create(props: YourEntityProps): YourEntity {
+    const validated = yourEntityBaseSchema.parse(props);
+    return new YourEntity(validated);
+  }
+
+  public reject(reason?: string): YourEntity {
+    if (!this._status.canTransitionTo('rejected')) {
+      throw new Error('Cannot reject from current status');
+    }
+    return YourEntity.create({
+      ...this.toJson(),
+      status: 'rejected',
+      updatedAt: new Date(),
+    });
+  }
+
+  public toJson() {
+    return {
+      id: this._id.toString(),
+      name: this._name,
+      status: this._status.getValue(),
+    };
+  }
+}
+```
+
+---
+
+## Best Practices
+
+### For Schema-Based Architecture (Current)
+
+1. **Organize schemas by entity**
+   - One file per domain entity
+   - Group related schemas together
+
+2. **Use schema derivation**
+   - Base schema as source of truth
+   - Derive create/update/partial schemas using `.pick()`, `.omit()`
+
+3. **Place business logic in services**
+   - Keep schemas focused on validation
+   - Business logic in `services/` or as standalone functions
+
+4. **Export types**
+   - Always export inferred types
+   - Use consistent naming: `BaseSchema`, `CreateSchema`, `UpdateSchema`
+
+5. **Share schemas across layers**
+   - Backend uses for validation
+   - Frontend uses for forms and type safety
+
+### Signals to Consider Migration
+
+If you encounter any of these, consider moving to entity-based:
+
+- ⚠️ Same business logic duplicated in multiple places
+- ⚠️ Complex state transitions with many rules
+- ⚠️ Domain invariants being violated
+- ⚠️ Business stakeholders requesting more complex features
+- ⚠️ Team spending time coordinating business logic changes
+- ⚠️ Difficulty testing business rules
+
+---
+
+## Package Configuration
+
+### Adding Zod to Domain Package
+
+Update `packages/domain/package.json`:
+
+```json
+{
+  "name": "@monorepo-template/domain",
+  "exports": {
+    "./constants": {
+      "types": "./dist/constants.d.mts",
+      "import": "./dist/constants.mjs"
+    },
+    "./types": {
+      "types": "./dist/types.d.mts",
+      "import": "./dist/types.mjs"
+    },
+    "./schemas": {
+      "types": "./dist/schemas.d.mts",
+      "import": "./dist/schemas.mjs"
+    }
+  },
+  "dependencies": {
+    "zod": "catalog:"
+  }
+}
+```
+
+---
+
+## Conclusion
+
+**For monorepo-template**, we're using the **Schema-Based approach** because:
+
+1. It's a CRUD-focused application
+2. Validation is the primary concern
+3. Fast iteration is important
+4. Team velocity is key
+5. API-first design with Eden Treaty
+
+This decision keeps the codebase simple while maintaining flexibility. If the application evolves to require complex business logic, we can gradually introduce domain functions, value objects, and eventually full entities.
+
+## References
+
+- [Domain-Driven Design by Eric Evans](https://www.domainlanguage.com/ddd/)
+- [Anemic Domain Model by Martin Fowler](https://martinfowler.com/bliki/AnemicDomainModel.html)
+- [Zod Documentation](https://zod.dev/)
+- [Value Objects Pattern](https://martinfowler.com/bliki/ValueObject.html)

@@ -1,0 +1,412 @@
+---
+title: "TanStack Start + Hono + oRPC"
+description: "Architecture documentation for the Hono + oRPC API pattern with TanStack Start web app. Contract-first, REST-style URLs, OpenAPI-compatible."
+---
+
+## Overview
+
+A **two-Worker architecture** with a Hono API server and a TanStack Start web app. The API uses **oRPC with a contract-first approach** — contracts define routes, input/output schemas, and REST paths. The web app proxies all API requests through itself (same-origin) to solve cookie-based auth on Cloudflare Workers.
+
+**Key choices:**
+
+- **Contract-first**: `@orpc/contract` defines procedures with `.route()` for REST paths
+- **REST-style URLs**: `GET /api/v1/todos`, `POST /api/v1/todos`, etc. via `OpenAPIHandler`
+- **OpenAPILink on client**: Resolves procedure names to REST URLs using the contract
+- **Cross-app contract import**: Web app imports contract from server via relative path (same pattern as Eden Treaty's `type { App }` import)
+- **Domain schemas reused**: `todoBaseSchema`, `createTodoSchema`, etc. from `@monorepo-template/domain/schemas`
+
+## Architecture
+
+```
+Browser (same-origin requests)
+  └── Web Worker (TanStack Start, port 3001)
+        ├── /                     → React SSR (landing page)
+        ├── /todos                → React SSR (authenticated)
+        ├── /auth/login           → React SSR
+        ├── /auth/signup          → React SSR
+        ├── /api/auth/*           → Proxy → API Worker (Better Auth)
+        └── /api/v1/*             → Proxy → API Worker (oRPC OpenAPI)
+
+API Worker (Hono, port 3000)
+  ├── /api/auth/*               → Better Auth handler
+  ├── /api/v1/health            → Health check (Hono route)
+  ├── /api/v1/todos             → oRPC OpenAPIHandler
+  ├── /api/v1/todos/{id}        → oRPC OpenAPIHandler
+  └── OpenAPI spec available at /api/v1/* via OpenAPIHandler
+```
+
+**Production:** Cloudflare Service Bindings (Worker-to-Worker, no public DNS).
+**Local dev:** Regular `fetch()` fallback.
+
+## File Structure
+
+### Server (`apps/server-hono/`)
+
+```
+apps/server-hono/
+├── src/
+│   ├── index.ts                    # Hono app: CORS, auth handler, health, OpenAPIHandler
+│   ├── router.ts                   # implement(contract).$context → appRouter
+│   ├── contract/
+│   │   ├── index.ts                # Exports contract, todoContract, Contract type
+│   │   └── todo.contract.ts        # 5 procedures with .route() + domain schemas
+│   ├── middleware/
+│   │   └── auth.ts                 # oRPC auth middleware (os.$context + auth.api.getSession)
+│   ├── modules/
+│   │   └── todo/
+│   │       └── todo.router.ts      # Implements todoContract with auth + handlers
+│   ├── env.ts                      # Cloudflare env parsing via infra-env
+│   ├── lib/
+│   │   └── auth.ts                 # Better Auth config (betterAuth + expo plugin)
+│   └── utils/
+│       ├── errors.ts               # Custom error classes (kept, framework-agnostic)
+│       └── response-helpers.ts     # successBody, errorBody helpers (kept)
+├── package.json                    # name: "server-hono"
+├── tsconfig.json
+└── wrangler.jsonc                  # name: "server-hono-api"
+```
+
+### Web (`apps/web-hono/`)
+
+```
+apps/web-hono/
+├── src/
+│   ├── lib/
+│   │   ├── orpc-client.ts          # OpenAPILink + createORPCClient + createTanstackQueryUtils
+│   │   ├── api-fetch.ts            # Service Binding fetch wrapper (unchanged)
+│   │   ├── auth/
+│   │   │   ├── auth-client.ts      # Better Auth client
+│   │   │   └── get-auth-session.ts # Server-side session check
+│   │   └── query-client.ts         # React Query setup
+│   ├── hooks/
+│   │   ├── use-todos.ts            # oRPC queryOptions/mutationOptions for todo CRUD
+│   │   └── use-session.ts          # Auth session hooks with router.invalidate()
+│   ├── server-functions/
+│   │   └── list-todos.ts           # TanStack serverFn for paginated list (unchanged)
+│   ├── routes/
+│   │   ├── __root.tsx              # Root layout with Header, beforeLoad session
+│   │   ├── index.tsx               # Landing page with Hono + oRPC tech badges
+│   │   ├── _authenticated.tsx      # Auth guard
+│   │   ├── _authenticated/todos/index.tsx  # Todo CRUD UI
+│   │   ├── api/auth/$.ts           # Auth proxy to API Worker
+│   │   ├── api/v1/$.ts             # API proxy to API Worker
+│   │   ├── auth/login.tsx
+│   │   └── auth/signup.tsx
+│   ├── components/
+│   │   ├── header.tsx
+│   │   ├── user-menu.tsx
+│   │   ├── sign-in-form.tsx        # router.invalidate() after sign-in
+│   │   └── sign-up-form.tsx        # router.invalidate() after sign-up
+│   ├── router.tsx
+│   └── routeTree.gen.ts
+├── package.json                    # name: "web-hono"
+├── tsconfig.json
+├── vite.config.ts
+└── wrangler.jsonc                  # name: "web-hono", service: "server-hono-api"
+```
+
+## Key Patterns
+
+### Contract Definition (`src/contract/todo.contract.ts`)
+
+Contracts use `@orpc/contract`'s `oc` builder with `.route()` for REST paths. Input/output schemas reuse domain schemas directly:
+
+```typescript
+import { oc } from "@orpc/contract";
+import { todoBaseSchema, createTodoSchema, updateTodoSchema, paginationQuerySchema } from "@monorepo-template/domain/schemas";
+
+export const todoContract = {
+  list: oc
+    .route({ method: "GET", path: "/todos" })
+    .input(paginationQuerySchema)
+    .output(paginatedApiResponseSchema(z.array(todoBaseSchema))),
+
+  get: oc
+    .route({ method: "GET", path: "/todos/{id}" })
+    .input(z.object({ id: z.string() }))
+    .output(apiResponseSchema(todoBaseSchema)),
+
+  create: oc
+    .route({ method: "POST", path: "/todos", successStatus: 201 })
+    .input(createTodoSchema)
+    .output(apiResponseSchema(todoBaseSchema)),
+
+  update: oc
+    .route({ method: "PUT", path: "/todos/{id}" })
+    .input(updateTodoSchema.extend({ id: z.string() }))
+    .output(apiResponseSchema(todoBaseSchema)),
+
+  delete: oc
+    .route({ method: "DELETE", path: "/todos/{id}" })
+    .input(z.object({ id: z.string() }))
+    .output(apiResponseSchema(z.object({ success: z.boolean() }))),
+};
+```
+
+Output schemas wrap data in `ApiResponse` shape: `{ data: T | null, error: { message } | null, meta?: { pagination } }`.
+
+### Contract Router (`src/contract/index.ts`)
+
+```typescript
+import { oc } from "@orpc/contract";
+import { todoContract } from "./todo.contract";
+
+export const contract = oc.router({ todo: todoContract });
+export { todoContract };
+export type Contract = typeof contract;
+```
+
+### oRPC Auth Middleware (`src/middleware/auth.ts`)
+
+Uses standalone `os` builder to define context-aware middleware:
+
+```typescript
+import { os, ORPCError } from "@orpc/server";
+import { auth } from "../lib/auth";
+
+export const authMiddleware = os
+  .$context<{ headers: Headers }>()
+  .middleware(async ({ context, next }) => {
+    const session = await auth.api.getSession({ headers: context.headers });
+    if (!session?.user) throw new ORPCError("UNAUTHORIZED");
+    return next({ context: { user: session.user, session: session.session } });
+  });
+```
+
+### Router Implementation (`src/router.ts`)
+
+```typescript
+import { implement } from "@orpc/server";
+import { contract } from "./contract";
+import { todoRouter } from "./modules/todo/todo.router";
+
+const impl = implement(contract).$context<{ headers: Headers }>();
+
+export const appRouter = impl.router({ todo: todoRouter });
+export type AppRouter = typeof appRouter;
+```
+
+### Todo Router (`src/modules/todo/todo.router.ts`)
+
+Implements the contract with auth middleware and infrastructure wiring:
+
+```typescript
+const impl = implement(todoContract).$context<{ headers: Headers }>();
+
+export const todoRouter = impl.router({
+  list: impl.list.use(authMiddleware).handler(async ({ input, context }) => {
+    const result = await listTodos({ repo, userId: context.user.id, pagination: input });
+    if (result.error) throw result.error;
+    return { data: result.data.data, error: null, meta: { pagination: result.data.meta } };
+  }),
+  // get, create, update, delete follow same pattern
+});
+```
+
+### Hono Entry Point (`src/index.ts`)
+
+```typescript
+import { Hono } from "hono";
+import { cors } from "hono/cors";
+import { OpenAPIHandler } from "@orpc/openapi/fetch";
+import { auth } from "./lib/auth";
+import { appRouter } from "./router";
+
+const app = new Hono();
+
+app.use("*", cors({ origin: ["exp://", "mobile://", "exp://*"], credentials: true }));
+app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
+app.get("/api/v1/health", (c) => c.json({ status: "healthy", timestamp: new Date().toISOString() }));
+
+const openAPIHandler = new OpenAPIHandler(appRouter);
+app.all("/api/v1/*", async (c) => {
+  const { matched, response } = await openAPIHandler.handle(c.req.raw, {
+    prefix: "/api/v1",
+    context: { headers: c.req.raw.headers },
+  });
+  if (matched) return response;
+  return c.notFound();
+});
+
+export default app;
+```
+
+No `CloudflareAdapter` needed — Hono is native on Cloudflare Workers.
+
+### oRPC Client (`src/lib/orpc-client.ts`)
+
+Cross-app import of the contract + explicit client typing for proper type inference:
+
+```typescript
+import { createORPCClient } from "@orpc/client";
+import type { ContractRouterClient } from "@orpc/contract";
+import { OpenAPILink } from "@orpc/openapi-client/fetch";
+import type { JsonifiedClient } from "@orpc/openapi-client";
+import { createTanstackQueryUtils } from "@orpc/tanstack-query";
+import { contract, type Contract } from "../../../server-hono/src/contract";
+
+type Client = JsonifiedClient<ContractRouterClient<Contract>>;
+
+const link = new OpenAPILink(contract, {
+  url: () => typeof window !== "undefined"
+    ? `${window.location.origin}/api/v1`
+    : "http://localhost:3000/api/v1",
+  fetch: (request, init) => globalThis.fetch(request, { ...init, credentials: "include" }),
+});
+
+export const client: Client = createORPCClient(link);
+export const orpc = createTanstackQueryUtils(client);
+```
+
+**Important:** `JsonifiedClient` wraps the client type to convert `Date` → `string` (JSON serialization). `ContractRouterClient` is needed because `createORPCClient` cannot infer the type from `OpenAPILink` alone.
+
+### Todo Hooks (`src/hooks/use-todos.ts`)
+
+```typescript
+// List uses TanStack serverFn (runs on web Worker, not proxied)
+export const todosQueryOptions = (params) => queryOptions({
+  queryKey: todoKeys.list(params),
+  queryFn: () => listTodos({ data: { page: params.page, limit: params.limit } }),
+});
+
+// Single todo uses oRPC client (proxied to API Worker)
+export const useTodo = (id: string) => useQuery({
+  ...orpc.todo.get.queryOptions({ input: { id } }),
+  queryKey: todoKeys.detail(id),
+  enabled: !!id,
+});
+
+// Mutations use oRPC mutationOptions
+export const useCreateTodo = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    ...orpc.todo.create.mutationOptions(),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: todoKeys.all }),
+  });
+};
+// mutation.mutate({ title: "..." })  ← input matches contract's createTodoSchema
+
+export const useDeleteTodo = () => {
+  // ...
+  // mutation.mutate({ id: "..." })  ← input matches contract's { id: string }
+};
+```
+
+### Router Invalidation (Header Update)
+
+After auth actions (sign-in, sign-up, sign-out), `router.invalidate()` must be called to re-run the root route's `beforeLoad` which fetches the session. Without this, the Header shows stale auth state.
+
+```typescript
+// In sign-in/sign-up forms:
+onSuccess: async () => {
+  await router.invalidate();
+  navigate({ to: "/todos" });
+};
+
+// In useSignOut:
+onSuccess: async () => {
+  queryClient.setQueryData(sessionKeys.session(), null);
+  queryClient.invalidateQueries({ queryKey: sessionKeys.all });
+  await router.invalidate();
+  navigate({ to: "/" });
+};
+```
+
+## Dependencies
+
+### Server (`apps/server-hono/`)
+
+```json
+{
+  "hono": "catalog:",
+  "@orpc/contract": "catalog:",
+  "@orpc/server": "catalog:",
+  "@orpc/openapi": "catalog:",
+  "better-auth": "catalog:",
+  "@better-auth/expo": "catalog:",
+  "drizzle-orm": "^0.45.1",
+  "zod": "catalog:",
+  "@monorepo-template/application": "workspace:*",
+  "@monorepo-template/domain": "workspace:*",
+  "@monorepo-template/infra-auth": "workspace:*",
+  "@monorepo-template/infra-db": "workspace:*",
+  "@monorepo-template/infra-env": "workspace:*"
+}
+```
+
+### Web (`apps/web-hono/`)
+
+```json
+{
+  "@orpc/client": "catalog:",
+  "@orpc/contract": "catalog:",
+  "@orpc/openapi-client": "catalog:",
+  "@orpc/tanstack-query": "catalog:",
+  "@tanstack/react-start": "^1.141.1",
+  "@tanstack/react-query": "^5.90.12",
+  "better-auth": "catalog:",
+  "zod": "catalog:"
+}
+```
+
+### Catalog Versions (root `package.json`)
+
+```json
+{
+  "hono": "4.12.3",
+  "@orpc/contract": "1.13.5",
+  "@orpc/server": "1.13.5",
+  "@orpc/openapi": "1.13.5",
+  "@orpc/client": "1.13.5",
+  "@orpc/openapi-client": "1.13.5",
+  "@orpc/tanstack-query": "1.13.5"
+}
+```
+
+## Config
+
+- **Server port**: 3000 (inspector: 9229)
+- **Web port**: 3001 (inspector: 9230)
+- **Server wrangler name**: `server-hono-api`
+- **Web wrangler name**: `web-hono`
+- **Service Binding**: `API_SERVICE` → `server-hono-api`
+
+## Dev Commands
+
+```bash
+bun run dev:server-hono   # Start API server
+bun run dev:web-hono      # Start web app
+```
+
+## Route Map
+
+| Method | Path                 | Handler                | Auth   |
+| ------ | -------------------- | ---------------------- | ------ |
+| GET    | `/`                  | Landing page           | No     |
+| GET    | `/auth/login`        | Login form             | No     |
+| GET    | `/auth/signup`       | Signup form            | No     |
+| GET    | `/todos`             | Todo dashboard         | Yes    |
+| \*     | `/api/auth/*`        | Better Auth (proxy)    | Varies |
+| GET    | `/api/v1/health`     | Health check           | No     |
+| GET    | `/api/v1/todos`      | List todos (paginated) | Yes    |
+| GET    | `/api/v1/todos/{id}` | Get single todo        | Yes    |
+| POST   | `/api/v1/todos`      | Create todo (201)      | Yes    |
+| PUT    | `/api/v1/todos/{id}` | Update todo            | Yes    |
+| DELETE | `/api/v1/todos/{id}` | Delete todo            | Yes    |
+
+## Comparison: Elysia vs Hono+oRPC
+
+| Aspect            | Elysia + Eden                               | Hono + oRPC                                                   |
+| ----------------- | ------------------------------------------- | ------------------------------------------------------------- |
+| API framework     | Elysia                                      | Hono                                                          |
+| Type-safe client  | Eden Treaty (imports `App` type)            | oRPC OpenAPILink (imports contract)                           |
+| Contract location | Implicit (inferred from Elysia routes)      | Explicit (`src/contract/`)                                    |
+| Route definition  | `app.get("/path", handler)`                 | `oc.route({ method, path }).input().output()` + `implement()` |
+| Auth middleware   | Elysia macro (`{ isAuth: true }`)           | oRPC middleware (`impl.use(authMiddleware)`)                  |
+| Error handling    | Custom error classes + error handler plugin | `ORPCError` codes (UNAUTHORIZED, NOT_FOUND)                   |
+| Cloudflare compat | Needs `CloudflareAdapter`                   | Native (Hono is built for Workers)                            |
+| OpenAPI           | Manual                                      | Auto-generated via `OpenAPIHandler`                           |
+
+## Future: Extracting Contract to a Package
+
+See [API Contract Package Migration](/api-contract-package-migration) for steps to move the contract from `apps/server-hono/src/contract/` into a dedicated `packages/api-contract/` workspace package.

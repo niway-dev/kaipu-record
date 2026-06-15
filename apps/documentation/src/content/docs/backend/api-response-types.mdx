@@ -1,0 +1,123 @@
+---
+title: API Response Types
+description: Standardized API response structure for consistent error handling
+---
+
+# API Response Types
+
+## Overview
+
+The `ApiResponse<T>` interface defines the consistent format for all API responses across the application. Using a standardized response format provides several benefits:
+
+1. **Consistency**: All endpoints return responses in the same structure, making it easier for frontend developers to handle responses uniformly.
+
+2. **Type Safety**: TypeScript can infer and validate response types, catching errors at compile time rather than runtime.
+
+3. **Error Handling**: Errors are always in the same format, making error handling predictable and easier to implement on the client side.
+
+4. **Extensibility**: The `meta` field allows adding additional metadata (like pagination) without breaking existing clients.
+
+## Response Structure
+
+```typescript
+interface ApiResponse<T> {
+  data: T | null;
+  error: { message: string } | null;
+  meta?: {
+    pagination?: PaginationMeta;
+  };
+}
+```
+
+## Examples
+
+### Success Response
+
+```json
+{
+  "data": {
+    "id": "123",
+    "name": "John Doe",
+    "email": "john@example.com"
+  },
+  "error": null
+}
+```
+
+### Error Response
+
+```json
+{
+  "data": null,
+  "error": {
+    "message": "Resource not found"
+  }
+}
+```
+
+### Paginated Response
+
+```json
+{
+  "data": [
+    { "id": "1", "name": "Item 1" },
+    { "id": "2", "name": "Item 2" }
+  ],
+  "error": null,
+  "meta": {
+    "pagination": {
+      "page": 1,
+      "limit": 10,
+      "total": 100,
+      "totalPages": 10
+    }
+  }
+}
+```
+
+## Pagination
+
+Pagination is handled through query parameters and metadata:
+
+### Query Parameters
+
+- `page` (optional): Page number (1-indexed). Defaults to 1.
+- `limit` (optional): Number of items per page. Defaults to 10, max 100.
+
+### Pagination Metadata
+
+```typescript
+interface PaginationMeta {
+  page: number;        // Current page number (1-indexed)
+  limit: number;       // Number of items per page
+  total: number;       // Total number of items across all pages
+  totalPages: number;  // Total number of pages
+}
+```
+
+### Example Request
+
+```
+GET /api/your-entities?page=2&limit=20
+```
+
+### Example Response
+
+```json
+{
+  "data": [...],
+  "error": null,
+  "meta": {
+    "pagination": {
+      "page": 2,
+      "limit": 20,
+      "total": 150,
+      "totalPages": 8
+    }
+  }
+}
+```
+
+## Usage in Routes
+
+See [Response Helpers](/backend/response-helpers) for helper functions that create these response structures.

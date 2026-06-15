@@ -1,0 +1,417 @@
+---
+title: Repository Pattern Architecture
+description: Understanding the Repository pattern in our DDD architecture
+---
+
+# Repository Pattern Architecture
+
+This guide explains how we implement the Repository pattern following Domain-Driven Design principles.
+
+---
+
+## 🎯 Core Principle
+
+**Repositories are split between two packages:**
+
+1. **Interface (Contract)** → `packages/domain/` - What the repository can do
+2. **Implementation** → `packages/database/` - How it actually does it
+
+This follows the **Dependency Inversion Principle** and keeps our domain clean and independent of infrastructure concerns.
+
+---
+
+## 📦 Package Structure
+
+```bash
+packages/
+  domain/
+    your-context/
+      entities/
+        your-entity.entity.ts           # Rich domain model
+      repositories/
+        your-entity.repository.ts       # ← INTERFACE (contract)
+      value-objects/
+        amount.ts
+        display-name.ts
+
+  database/
+    your-context/
+      repositories/
+        your-entity.repository.drizzle.ts  # ← IMPLEMENTATION
+      mappers/
+        your-entity.mapper.ts              # Maps DB rows ↔ Domain entities
+    schema/
+      your-entity.schema.ts                # Drizzle table definition
+
+  application/
+    your-context/
+      use-cases/
+        get-your-entities.service.ts       # Orchestrates business flow
+        create-your-entity.service.ts
+```
+
+---
+
+## 🔑 Why This Separation?
+
+### Dependency Flow
+
+```
+┌─────────────────────────────────────────────┐
+│  packages/application/                      │
+│  (Use Cases / Orchestration)                │
+│    ↓ depends on                             │
+│  packages/domain/                           │
+│  (Repository Interface + Entities)          │
+└─────────────────────────────────────────────┘
+                    ↑
+                    │ implements
+                    │
+┌─────────────────────────────────────────────┐
+│  packages/database/                         │
+│  (Repository Implementation + Drizzle)      │
+└─────────────────────────────────────────────┘
+```
+
+### Benefits
+
+| Benefit                    | Why It Matters                                      |
+| -------------------------- | --------------------------------------------------- |
+| **Separation of Concerns** | Domain logic is independent of database             |
+| **Testability**            | Can test use cases without a real DB                |
+| **Flexibility**            | Can swap Drizzle for Prisma without touching domain |
+| **Clean Dependencies**     | Domain doesn't depend on infrastructure             |
+| **Rich Domain Model**      | Entities contain business logic, not just data      |
+
+---
+
+## 📝 Implementation Example
+
+### 1. Repository Interface (Domain Layer)
+
+```typescript
+// packages/domain/your-context/repositories/your-entity.repository.ts
+
+import type { YourEntity } from "../entities/your-entity.entity";
+import type { PaginationParams, PaginatedResult } from "@monorepo-template/domain/types";
+
+export interface IYourEntityRepository {
+  /**
+   * Find an entity by ID for a specific user
+   */
+  findById(id: string, userId: string): Promise<YourEntity | null>;
+
+  /**
+   * Find paginated entities for a user
+   */
+  findPaginated(
+    userId: string,
+    params: PaginationParams
+  ): Promise<PaginatedResult<YourEntity>>;
+
+  /**
+   * Save an entity (create or update)
+   */
+  save(yourEntity: YourEntity): Promise<void>;
+
+  /**
+   * Soft delete an entity
+   */
+  delete(id: string, userId: string): Promise<void>;
+}
+```
+
+**Key Points:**
+
+- ✅ Works with **Domain Entities**, not raw DB data
+- ✅ Returns **rich domain objects** like `YourEntity`
+- ✅ No SQL, no ORM references
+- ✅ Pure TypeScript interfaces
+
+---
+
+### 2. Repository Implementation (Database Layer)
+
+```typescript
+// packages/database/your-context/repositories/your-entity.repository.drizzle.ts
+
+import { eq, and, desc, sql, isNull } from "drizzle-orm";
+import { yourEntityTable } from "../../schema";
+import type { NeonHttpDatabase } from "drizzle-orm/neon-http";
+import type { IYourEntityRepository } from "@monorepo-template/domain/your-context/repositories";
+import type { YourEntity } from "@monorepo-template/domain/your-context/entities";
+import type { PaginationParams, PaginatedResult } from "@monorepo-template/domain/types";
+import { YourEntityMapper } from "../mappers/your-entity.mapper";
+
+export class YourEntityRepositoryDrizzle implements IYourEntityRepository {
+  constructor(private readonly db: NeonHttpDatabase) {}
+
+  async findById(id: string, userId: string): Promise<YourEntity | null> {
+    const row = await this.db.query.yourEntityTable.findFirst({
+      where: and(
+        eq(yourEntityTable.id, id),
+        eq(yourEntityTable.userId, userId),
+        isNull(yourEntityTable.deletedAt)
+      )
+    });
+
+    return row ? YourEntityMapper.toDomain(row) : null;
+  }
+
+  async findPaginated(
+    userId: string,
+    params: PaginationParams
+  ): Promise<PaginatedResult<YourEntity>> {
+    const offset = (params.page - 1) * params.limit;
+
+    const [entities, countResult] = await Promise.all([
+      this.db.select()
+        .from(yourEntityTable)
+        .where(and(
+          eq(yourEntityTable.userId, userId),
+          isNull(yourEntityTable.deletedAt)
+        ))
+        .orderBy(desc(yourEntityTable.updatedAt))
+        .limit(params.limit)
+        .offset(offset),
+      this.db.select({ count: sql<number>`count(*)` })
+        .from(yourEntityTable)
+        .where(and(
+          eq(yourEntityTable.userId, userId),
+          isNull(yourEntityTable.deletedAt)
+        ))
+    ]);
+
+    const total = Number(countResult[0]?.count || 0);
+
+    return {
+      data: entities.map(row => YourEntityMapper.toDomain(row)),
+      total,
+      page: params.page,
+      limit: params.limit,
+      totalPages: Math.ceil(total / params.limit)
+    };
+  }
+
+  async save(yourEntity: YourEntity): Promise<void> {
+    const persistence = YourEntityMapper.toPersistence(yourEntity);
+    await this.db.insert(yourEntityTable).values(persistence);
+  }
+
+  async delete(id: string, userId: string): Promise<void> {
+    await this.db.update(yourEntityTable)
+      .set({ deletedAt: new Date() })
+      .where(and(
+        eq(yourEntityTable.id, id),
+        eq(yourEntityTable.userId, userId)
+      ));
+  }
+}
+```
+
+**Key Points:**
+
+- ✅ Implements the domain interface
+- ✅ Uses Drizzle for actual DB operations
+- ✅ Uses **Mappers** to convert DB rows ↔ Domain entities
+- ✅ Encapsulates all SQL/ORM logic
+
+---
+
+### 3. Mapper (Database Layer)
+
+```typescript
+// packages/database/your-context/mappers/your-entity.mapper.ts
+
+import type { YourEntity } from "@monorepo-template/domain/your-context/entities";
+
+export class YourEntityMapper {
+  /**
+   * Convert a database row to a domain entity
+   */
+  static toDomain(row: any): YourEntity {
+    return {
+      id: row.id,
+      userId: row.userId,
+      name: row.name,
+      title: row.title,
+      status: row.status,
+      description: row.description,
+      url: row.url,
+      notes: row.notes,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    };
+  }
+
+  /**
+   * Convert a domain entity to a database record
+   */
+  static toPersistence(yourEntity: YourEntity): any {
+    return {
+      id: yourEntity.id,
+      userId: yourEntity.userId,
+      name: yourEntity.name,
+      title: yourEntity.title,
+      status: yourEntity.status,
+      description: yourEntity.description,
+      url: yourEntity.url,
+      notes: yourEntity.notes,
+      createdAt: yourEntity.createdAt,
+      updatedAt: yourEntity.updatedAt,
+    };
+  }
+}
+```
+
+---
+
+### 4. Application Service (Use Case)
+
+```typescript
+// packages/application/your-context/use-cases/get-your-entities.service.ts
+
+import type { IYourEntityRepository } from "@monorepo-template/domain/your-context/repositories";
+import type { PaginationParams, PaginatedResult } from "@monorepo-template/domain/types";
+import type { YourEntity } from "@monorepo-template/domain/your-context/entities";
+
+export class GetYourEntities {
+  constructor(private readonly yourEntityRepo: IYourEntityRepository) {}
+
+  async execute(
+    userId: string,
+    params: PaginationParams
+  ): Promise<PaginatedResult<YourEntity>> {
+    // Validate business rules here if needed
+    // For example: check user permissions, apply filters, etc.
+
+    return await this.yourEntityRepo.findPaginated(userId, params);
+  }
+}
+```
+
+**Key Points:**
+
+- ✅ Depends only on the **interface**, not the implementation
+- ✅ Orchestrates business flow
+- ✅ Can add validation, authorization, etc.
+- ✅ Testable with mock repositories
+
+---
+
+### 5. Controller/Route (Infrastructure)
+
+```typescript
+// apps/server/src/routes/your-entities.ts
+
+import { Elysia } from "elysia";
+import { GetYourEntities } from "@monorepo-template/application/your-context";
+import { YourEntityRepositoryDrizzle } from "@monorepo-template/database/your-context";
+
+export const yourEntityRoutes = new Elysia({ prefix: "/your-entities" })
+  .decorate("db", createDatabaseClient(env.DATABASE_URL))
+  .decorate("getYourEntities", (db) => {
+    const repo = new YourEntityRepositoryDrizzle(db);
+    return new GetYourEntities(repo);
+  })
+  .get("/", async ({ query, user, db, getYourEntities }) => {
+    const result = await getYourEntities(db).execute(user.id, query);
+    return successWithPaginationBody(result.data, result);
+  });
+```
+
+---
+
+## 🚫 What NOT to Do
+
+### ❌ Bad: Direct Queries in Routes
+
+```typescript
+// DON'T DO THIS
+export const yourEntityRoutes = new Elysia()
+  .get("/", async ({ query, user, db }) => {
+    const entities = await db.select()
+      .from(yourEntityTable)
+      .where(eq(yourEntityTable.userId, user.id));
+
+    return { data: entities };
+  });
+```
+
+### ❌ Bad: Queries Folder in Database Package
+
+```typescript
+// DON'T DO THIS
+// packages/db/src/queries/your-entity.ts
+export async function findPaginatedYourEntities(db, userId, params) {
+  // Raw query logic
+}
+```
+
+### ❌ Bad: Repository Returning Raw DB Data
+
+```typescript
+// DON'T DO THIS
+async findById(id: string): Promise<any> {
+  return await db.query.yourEntityTable.findFirst({ where: eq(id) });
+}
+```
+
+---
+
+## ✅ Rules to Follow
+
+| Rule                                      | Why                                |
+| ----------------------------------------- | ---------------------------------- |
+| Repository interfaces in `domain/`        | Domain defines what it needs       |
+| Repository implementations in `database/` | Infrastructure provides how        |
+| Always return domain entities             | Never expose raw DB data           |
+| Use mappers for conversions               | Keep domain and DB layers separate |
+| Application services orchestrate          | Routes should be thin              |
+| No ORM references in domain               | Domain stays pure                  |
+
+---
+
+## 🧪 Testing Benefits
+
+With this architecture, you can easily test:
+
+```typescript
+// Mock repository for testing
+class MockYourEntityRepository implements IYourEntityRepository {
+  private entities: YourEntity[] = [];
+
+  async findPaginated(userId: string, params: PaginationParams) {
+    return {
+      data: this.entities,
+      total: this.entities.length,
+      page: 1,
+      limit: 10,
+      totalPages: 1
+    };
+  }
+
+  // ... other methods
+}
+
+// Test your use case
+const mockRepo = new MockYourEntityRepository();
+const useCase = new GetYourEntities(mockRepo);
+const result = await useCase.execute("user-123", { page: 1, limit: 10 });
+```
+
+---
+
+## 📚 Related Documentation
+
+- [Application Services Layer](/architecture/application-services-layer)
+- [Bounded Contexts Complete Guide](/architecture/bounded-contexts-complete-guide)
+- [Repository Contracts and Implementations](/architecture/repository-contracts-and-implementations)
+
+---
+
+## 💡 Key Takeaway
+
+> **"From the domain's perspective, it's like having a list of objects, even though they're in a database."**
+
+The Repository pattern abstracts away data access concerns, allowing your domain to stay clean, testable, and independent of infrastructure decisions.

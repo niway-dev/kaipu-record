@@ -1,0 +1,314 @@
+# Frontend Best Practices
+
+## API Client Setup
+
+### Eden Treaty Client
+Always use `clientTreaty` from `apps/web/src/lib/client-treaty.ts`:
+- Type-safe API client generated from backend Elysia app
+- Automatically includes credentials for authentication
+- Provides full TypeScript autocomplete and type checking
+
+```typescript
+import { clientTreaty } from "@/lib/client-treaty";
+
+const result = await clientTreaty.api["todos"].get();
+```
+
+## Data Fetching with TanStack Query
+
+### Query Client Setup
+Use the configured `queryClient` from `apps/web/src/lib/query-client.ts`:
+- Global error handling with toast notifications
+- Automatic retry on error with user action
+- Configured for optimal caching and refetching
+
+### Query Keys Pattern
+Always use hierarchical query keys for proper cache invalidation:
+
+```typescript
+const resourceKeys = {
+  all: ["resourceName"] as const,
+  lists: () => [...resourceKeys.all, "list"] as const,
+  list: () => [...resourceKeys.lists()] as const,
+  details: () => [...resourceKeys.all, "detail"] as const,
+  detail: (id: string) => [...resourceKeys.details(), id] as const,
+};
+```
+
+### Error Handling Pattern
+
+#### Eden Treaty Error Handling
+Always check `result.error` first, then handle the API response structure:
+
+```typescript
+// Helper function for extracting error messages
+function getErrorMessage(error: unknown): string {
+  if (typeof error === "string") {
+    return error;
+  }
+  if (error && typeof error === "object" && "message" in error) {
+    return String(error.message);
+  }
+  if (error && typeof error === "object" && "value" in error) {
+    const value = (error as { value: unknown }).value;
+    if (typeof value === "string") {
+      return value;
+    }
+    if (value && typeof value === "object" && "message" in value) {
+      return String(value.message);
+    }
+  }
+  return "An error occurred";
+}
+```
+
+#### API Response Structure
+Backend returns `ApiResponse<T>` format:
+- Success: `{ data: T, error: null }`
+- Error: `{ data: null, error: { message: string } }`
+
+Always extract data from `result.data.data` for success responses.
+
+## Query Hooks Pattern
+
+### Fetch Single Item
+```typescript
+export function useResource(id: string) {
+  return useQuery({
+    queryKey: resourceKeys.detail(id),
+    queryFn: async () => {
+      const result = await clientTreaty.api["resources"]({ id }).get();
+      
+      // 1. Check Eden Treaty error
+      if (result.error) {
+        throw new Error(getErrorMessage(result.error));
+      }
+      
+      // 2. Check if data exists
+      if (!result.data) {
+        throw new Error("No data returned from server");
+      }
+      
+      // 3. Check API response error
+      const { error, data } = result.data;
+      if (error) {
+        throw new Error(error.message || "An error occurred");
+      }
+      
+      // 4. Return the actual data
+      return data;
+    },
+    enabled: !!id, // Only fetch when id is available
+  });
+}
+```
+
+### Fetch List
+```typescript
+export function useResources() {
+  return useQuery({
+    queryKey: resourceKeys.list(),
+    queryFn: async () => {
+      const result = await clientTreaty.api["resources"].get();
+      
+      if (result.error) {
+        throw new Error(getErrorMessage(result.error));
+      }
+      
+      // For lists, result.data is the array directly (or wrapped in ApiResponse)
+      return result.data;
+    },
+  });
+}
+```
+
+### Create Mutation
+```typescript
+export function useCreateResource() {
+  const queryClient = useQueryClient();
+
+  return useMutation<Resource, Error, CreateResourceInput>({
+    mutationFn: async (data: CreateResourceInput): Promise<Resource> => {
+      const result = await clientTreaty.api["resources"].post(data);
+      
+      if (result.error) {
+        throw new Error(getErrorMessage(result.error));
+      }
+      
+      // Backend returns { data: Resource }, extract it
+      return (result.data as { data: Resource }).data;
+    },
+    onSuccess: () => {
+      // Invalidate list to refetch
+      queryClient.invalidateQueries({ queryKey: resourceKeys.list() });
+    },
+  });
+}
+```
+
+### Update Mutation
+```typescript
+export function useUpdateResource() {
+  const queryClient = useQueryClient();
+
+  return useMutation<Resource, Error, { id: string; data: UpdateResourceInput }>({
+    mutationFn: async ({ id, data }): Promise<Resource> => {
+      const result = await clientTreaty.api["resources"]({ id }).put(data);
+      
+      if (result.error) {
+        throw new Error(getErrorMessage(result.error));
+      }
+      
+      return (result.data as { data: Resource }).data;
+    },
+    onSuccess: (_, variables) => {
+      // Invalidate both list and specific detail
+      queryClient.invalidateQueries({ queryKey: resourceKeys.list() });
+      queryClient.invalidateQueries({ queryKey: resourceKeys.detail(variables.id) });
+    },
+  });
+}
+```
+
+### Delete Mutation
+```typescript
+export function useDeleteResource() {
+  const queryClient = useQueryClient();
+
+  return useMutation<void, Error, string>({
+    mutationFn: async (id: string) => {
+      const result = await clientTreaty.api["resources"]({ id }).delete();
+      
+      if (result.error) {
+        throw new Error(getErrorMessage(result.error));
+      }
+      
+      // 204 No Content - no body to return
+      return;
+    },
+    onSuccess: () => {
+      // Invalidate list to refetch
+      queryClient.invalidateQueries({ queryKey: resourceKeys.list() });
+    },
+  });
+}
+```
+
+## Response Data Extraction
+
+### Success Response
+Backend returns: `{ data: Resource, error: null }`
+```typescript
+const result = await clientTreaty.api["resources"]({ id }).get();
+// result.data = { data: Resource, error: null }
+const resource = result.data.data; // Extract the actual resource
+```
+
+### Error Response
+Backend returns: `{ data: null, error: { message: string } }`
+```typescript
+const { error, data } = result.data;
+if (error) {
+  throw new Error(error.message);
+}
+```
+
+### Paginated Response
+Backend returns: `{ data: Resource[], error: null, meta: { pagination: {...} } }`
+```typescript
+const result = await clientTreaty.api["resources"].get();
+// result.data = { data: Resource[], error: null, meta: { pagination: {...} } }
+const resources = result.data.data;
+const pagination = result.data.meta?.pagination;
+```
+
+## Cache Invalidation Strategy
+
+### After Create
+```typescript
+onSuccess: () => {
+  queryClient.invalidateQueries({ queryKey: resourceKeys.list() });
+}
+```
+
+### After Update
+```typescript
+onSuccess: (_, variables) => {
+  queryClient.invalidateQueries({ queryKey: resourceKeys.list() });
+  queryClient.invalidateQueries({ queryKey: resourceKeys.detail(variables.id) });
+}
+```
+
+### After Delete
+```typescript
+onSuccess: () => {
+  queryClient.invalidateQueries({ queryKey: resourceKeys.list() });
+}
+```
+
+## Type Definitions
+
+### Export Domain Types
+Re-export types from domain package for consistency:
+```typescript
+export type { TodoStatus } from "@monorepo-template/domain/constants";
+```
+
+### Define Local Types
+Define types based on schema for frontend use:
+```typescript
+export interface Resource {
+  id: string;
+  name: string;
+  // ... other fields
+}
+
+export interface CreateResourceInput {
+  name: string;
+  // ... other fields
+}
+```
+
+## File Organization
+
+### Hooks Location
+- All data fetching hooks: `apps/web/src/hooks/`
+- One file per resource: `use-resource-name.ts`
+
+### Hook Naming
+- Queries: `useResource(id)` or `useResources()`
+- Mutations: `useCreateResource()`, `useUpdateResource()`, `useDeleteResource()`
+
+### Imports
+- TanStack Query: `@tanstack/react-query`
+- Client Treaty: `@/lib/client-treaty`
+- Domain types: `@monorepo-template/domain/constants`
+
+## Error Handling
+
+### Global Error Handling
+Errors are automatically handled by `queryClient` configuration:
+- Toast notifications shown on error
+- Retry action available to user
+- Errors logged for debugging
+
+### Local Error Handling
+For custom error handling in components:
+```typescript
+const { data, error, isLoading } = useResource(id);
+
+if (error) {
+  // Handle error in UI
+  return <ErrorDisplay message={error.message} />;
+}
+```
+
+## Best Practices
+
+1. **Always check `result.error` first** - Eden Treaty errors occur before API response
+2. **Extract data from `result.data.data`** - Backend wraps data in ApiResponse
+3. **Use `enabled` option** - Prevent queries from running with invalid parameters
+4. **Invalidate related queries** - Keep cache in sync after mutations
+5. **Type your mutations** - Use generics: `useMutation<ReturnType, ErrorType, InputType>`
+6. **Handle 204 responses** - DELETE returns void, not data
+7. **Use hierarchical query keys** - Enables efficient cache invalidation

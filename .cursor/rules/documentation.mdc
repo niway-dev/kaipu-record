@@ -1,0 +1,250 @@
+---
+alwaysApply: true
+---
+
+# Documentation Standards
+
+## Version Management
+
+### Current Version
+- **Always ask the user for the current version** before creating new documentation
+- If version is unknown, ask: "What version are we currently working on?"
+- New features automatically belong to the current version unless specified otherwise
+- Version format: `v1`, `v2`, `v3`, etc. (matches folder structure)
+
+### Version Folders
+- Version-specific documentation goes in: `apps/documentation/src/content/docs/v{version}/`
+- Each version folder contains:
+  - Feature documentation
+  - Implementation summaries
+  - Architecture decisions
+  - Schema changes
+  - API changes
+  - Migration guides
+
+## File Organization
+
+### Version-Specific Documentation (`/v{version}/`)
+Place in version folders when documenting:
+- ✅ New features or epics
+- ✅ Schema changes (database migrations)
+- ✅ API endpoint changes
+- ✅ DTO modifications
+- ✅ Business logic changes
+- ✅ Implementation summaries
+- ✅ Architecture decisions for that version
+- ✅ User stories and requirements
+
+**File naming pattern:**
+- Features: `feature-name.mdx` or `epic-name.mdx`
+- Summaries: `implementation-summary.mdx`
+- Architecture: `architecture.mdx`
+- Stories: `stories.mdx` or `user-stories.mdx`
+- Migrations: `migrations.mdx` or `schema-changes.mdx`
+
+### General Documentation (root `/docs/`)
+Place outside version folders when documenting:
+- ✅ Framework/technology patterns (e.g., `backend/`, `constants-pattern.mdx`)
+- ✅ Reusable utilities and helpers
+- ✅ Development guidelines
+- ✅ Package documentation
+- ✅ Cross-version concepts
+- ✅ Best practices that apply to all versions
+
+**Folder structure:**
+- `/backend/` - Backend patterns and utilities
+- `/frontend/` - Frontend patterns and utilities
+- `/database/` - Database patterns and schemas (if not version-specific)
+- Root level - General patterns (e.g., `constants-pattern.mdx`)
+
+## What Must Be Documented
+
+### Code Changes
+- ✅ **Schema changes**: Any database schema modifications
+- ✅ **DTO changes**: Input/output type changes
+- ✅ **API changes**: New endpoints, modified endpoints, deprecated endpoints
+- ✅ **Logic changes**: Significant business logic modifications
+- ✅ **Type changes**: Domain type modifications
+- ✅ **Constant changes**: New or modified constants/enums
+
+### Features
+- ✅ **Feature description**: What the feature does
+- ✅ **Implementation details**: How it was implemented
+- ✅ **API endpoints**: New or modified endpoints
+- ✅ **Database changes**: Schema modifications
+- ✅ **Frontend changes**: New components, hooks, or pages
+- ✅ **Dependencies**: New packages or version updates
+
+### Architecture Decisions
+- ✅ **Decision rationale**: Why a decision was made
+- ✅ **Alternatives considered**: What other options were evaluated
+- ✅ **Trade-offs**: Pros and cons of the chosen approach
+- ✅ **Impact**: What parts of the system are affected
+
+## Documentation File Structure
+
+### Required Frontmatter
+Every MDX file must include:
+
+```yaml
+---
+title: Document Title
+description: Brief description for search and preview
+date: YYYY-MM-DD
+tags:
+  - relevant-tag-1
+  - relevant-tag-2
+---
+```
+
+### Version-Specific Frontmatter
+For version-specific docs, add:
+
+```yaml
+---
+title: Feature Name - V{version}
+description: Description
+date: YYYY-MM-DD
+version: v{version}
+status: draft | in-progress | complete
+tags:
+  - feature
+  - v{version}
+---
+```
+
+## Documentation Workflow
+
+### When Starting a New Feature
+1. **Ask for version**: "What version are we working on?"
+2. **Create feature doc**: `apps/documentation/src/content/docs/v{version}/feature-name.mdx`
+3. **Document as you go**: Update the doc as you implement
+4. **Include sections**:
+   - Overview
+   - Requirements
+   - Implementation details
+   - API changes
+   - Database changes
+   - Testing notes
+
+### When Making Code Changes
+1. **Identify change type**: Schema, DTO, API, Logic, etc.
+2. **Determine location**: Version-specific or general?
+3. **Update or create doc**: Add to existing or create new
+4. **Link related docs**: Reference other relevant documentation
+
+### When Completing a Feature
+1. **Update implementation summary**: Add to `implementation-summary.mdx`
+2. **Mark as complete**: Update status in frontmatter
+3. **Add completion date**: Update date field
+4. **Review checklist**: Ensure all sections are documented
+
+## File Naming Conventions
+
+### Version-Specific Files
+- `feature-{name}.mdx` - Individual features
+- `epic-{name}.mdx` - Large epics with multiple features
+- `implementation-summary.mdx` - Summary of all changes
+- `architecture.mdx` - Architecture decisions
+- `schema-changes.mdx` - Database schema modifications
+- `api-changes.mdx` - API endpoint changes
+- `migrations.mdx` - Migration guides
+
+### General Documentation Files
+- `{pattern-name}-pattern.mdx` - Design patterns (e.g., `constants-pattern.mdx`)
+- `{technology}-guide.mdx` - Technology guides
+- `{package-name}.mdx` - Package documentation
+
+## Content Structure
+
+### Feature Documentation Template
+```markdown
+# Feature Name
+
+## Overview
+Brief description of the feature
+
+## Requirements
+- Requirement 1
+- Requirement 2
+
+## Implementation
+
+### Backend Changes
+- API endpoints
+- Database changes
+- Business logic
+
+### Frontend Changes
+- Components
+- Hooks
+- Pages
+
+### Database Changes
+- Schema modifications
+- Migrations needed
+
+## API Documentation
+- Endpoint details
+- Request/response examples
+
+## Testing
+- Test cases
+- Manual testing steps
+```
+
+## Additional Best Practices
+
+### Cross-References
+- Link related documentation using relative paths
+- Reference version docs from general docs when applicable
+- Use consistent linking format: `[Link Text](/docs/path)`
+
+### Code Examples
+- Include code examples for complex patterns
+- Show before/after for changes
+- Use TypeScript syntax highlighting
+- Keep examples up-to-date with actual code
+
+### Diagrams
+- Use Mermaid diagrams for complex flows
+- Include architecture diagrams for major changes
+- Document data flow for new features
+
+### Migration Guides
+- Document breaking changes clearly
+- Provide step-by-step migration instructions
+- Include rollback procedures
+- List affected files and components
+
+### API Documentation
+- Document all new endpoints
+- Include request/response examples
+- Document error responses
+- Include authentication requirements
+
+### Schema Documentation
+- Document all table changes
+- Include field descriptions
+- Document relationships
+- Include index information
+
+## Questions to Ask
+
+Before creating documentation, ask:
+1. **Version**: "What version are we working on?"
+2. **Scope**: "Is this version-specific or general documentation?"
+3. **Type**: "Is this a feature, bug fix, refactor, or pattern?"
+4. **Impact**: "What parts of the system are affected?"
+5. **Breaking**: "Are there any breaking changes?"
+
+## Review Checklist
+
+Before marking documentation as complete:
+- [ ] Frontmatter is complete and accurate
+- [ ] All code changes are documented
+- [ ] Examples are included and tested
+- [ ] Related documentation is linked
+- [ ] Version is correctly specified
+- [ ] Status is updated
+- [ ] Date reflects last update

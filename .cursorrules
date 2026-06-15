@@ -1,0 +1,588 @@
+# Monorepo Template - Project Cursor Rules
+
+## Tech Stack
+
+### Monorepo Structure
+- **Package Manager**: Bun
+- **Build Tool**: Turbo
+- **Monorepo**: Turborepo with workspace packages
+
+### Backend
+- **Framework**: Elysia
+- **Database**: PostgreSQL with Drizzle ORM
+- **Authentication**: better-auth
+- **Validation**: Zod v4
+- **API Type Safety**: Eden Treaty
+
+### Frontend
+- **Framework**: React with TanStack Start
+- **Routing**: TanStack Router
+- **State Management**: TanStack Query (React Query)
+- **UI Library**: shadcn/ui with TailwindCSS
+- **Forms**: React Hook Form with Zod resolver
+- **Validation**: Zod v4
+
+### Documentation
+- **Framework**: Fumadocs (Starlight alternative)
+
+---
+
+## Authentication Architecture (Full-Stack Implementation)
+
+### Overview
+
+This application uses **Better Auth** with **TanStack Start** to create a **full-stack authentication system** with server-side session validation, intelligent caching, and seamless data flow.
+
+### Key Components
+
+#### 1. Auth Proxy Pattern (`apps/web/src/routes/api/auth/$.ts`)
+
+**Purpose**: Solve cross-origin cookie issues by proxying all auth requests.
+
+```typescript
+// Catches ALL /api/auth/* requests and forwards to backend
+export const Route = createFileRoute("/api/auth/$")({
+  server: {
+    handlers: {
+      GET: async ({ request }) => proxyAuthRequest(request),
+      POST: async ({ request }) => proxyAuthRequest(request),
+      // ... forwards all methods to backend
+    },
+  },
+});
+```
+
+**Flow**:
+```
+Browser → /api/auth/* (same origin) → Proxy → Backend → Cookies work! ✅
+```
+
+#### 2. Server-Side Session Validation (`apps/web/src/routes/__root.tsx`)
+
+**Purpose**: Validate session on the server BEFORE rendering any page.
+
+```typescript
+export const Route = createRootRouteWithContext<RouterAppContext>()({
+  staleTime: 10 * 60 * 1000, // Cache for 10 minutes
+  
+  beforeLoad: async () => {
+    // 🔥 Runs on SERVER before any component renders
+    const session = await getAuthSession();
+    
+    return { 
+      session,              // Full session object
+      isAuthenticated: !!session  // Boolean flag
+    };
+  },
+});
+```
+
+**Critical**: This runs on the **server** during SSR and on **client** during navigation.
+
+#### 3. Context-Based Session Access
+
+**Usage**: Access session in any component via `useRouteContext()`.
+
+```typescript
+function MyComponent() {
+  // Get session from parent route's beforeLoad
+  const { session, isAuthenticated } = Route.useRouteContext();
+  
+  return (
+    <div>
+      {isAuthenticated && <p>Hello, {session.user?.name}!</p>}
+    </div>
+  );
+}
+```
+
+**Benefits**:
+- No prop drilling
+- Type-safe
+- Available in all child routes
+- Automatically updated
+
+#### 4. Auth Client Configuration
+
+**Location**: `apps/web/src/lib/auth/auth-client.ts`
+
+```typescript
+export const authClient = createAuthClient({
+  basePath: "/api/auth",  // Uses proxy (current origin + path)
+  fetchOptions: {
+    credentials: "include",  // Send cookies
+  },
+});
+```
+
+**Important**: Only use `basePath` (not `baseURL`) to automatically use current origin.
+
+#### 5. Server Functions
+
+**Location**: `apps/web/src/lib/auth/functions.ts`
+
+```typescript
+// Server function to get session
+export const getAuthSession = createServerFn({ method: "GET" })
+  .handler(async () => {
+    const headers = getRequestHeaders();
+    const session = await auth.api.getSession({ headers });
+    return session;
+  });
+```
+
+### Multi-Layer Caching
+
+```
+┌─────────────────────────────────────────────────────┐
+│ Layer 1: Better Auth Session Cache (Backend)        │
+│ Duration: 10 minutes                                 │
+│ Benefit: Repeated getSession() calls don't hit DB   │
+└──────────────────────┬──────────────────────────────┘
+                       ▼
+┌─────────────────────────────────────────────────────┐
+│ Layer 2: TanStack Router Cache (Frontend)           │
+│ Duration: 10 minutes (staleTime)                    │
+│ Benefit: Page navigation doesn't refetch            │
+└──────────────────────┬──────────────────────────────┘
+                       ▼
+┌─────────────────────────────────────────────────────┐
+│ Layer 3: React Context (Runtime)                    │
+│ Duration: Component lifecycle                       │
+│ Benefit: Components share data without requests     │
+└─────────────────────────────────────────────────────┘
+```
+
+**Performance Impact**: ~90% reduction in auth database queries.
+
+### Protected Routes Pattern
+
+```typescript
+// apps/web/src/routes/_authenticated.tsx
+export const Route = createFileRoute("/_authenticated")({
+  component: AuthenticatedLayout,
+});
+
+function AuthenticatedLayout() {
+  const { session, isAuthenticated } = useSession();
+
+  // Redirect if not authenticated
+  if (!isAuthenticated && !isPending) {
+    return <Navigate to="/auth/login" />;
+  }
+
+  return <Outlet />;
+}
+```
+
+All routes under `/_authenticated/` are automatically protected.
+
+### Why This is Full-Stack
+
+This implementation makes TanStack Start a **true full-stack framework**:
+
+1. ✅ **Server-side session validation** - Sessions validated before render
+2. ✅ **Cookie handling** - Proxy solves cross-origin issues
+3. ✅ **Seamless data flow** - Server → Context → Components
+4. ✅ **Intelligent caching** - Multi-layer caching system
+5. ✅ **Type safety** - End-to-end TypeScript support
+
+### AI Assistant Guidelines
+
+When working with authentication:
+
+1. **Use the proxy** - Never bypass `/api/auth/*` proxy
+2. **Use context** - Access session via `Route.useRouteContext()`
+3. **Server validation** - Always validate sessions on server in `beforeLoad`
+4. **Respect cache** - Don't disable `staleTime` without reason
+5. **Follow patterns** - Use established auth patterns from docs
+
+### Documentation
+
+- [Authentication Overview](./apps/documentation/src/content/docs/authentication/overview.mdx) - Complete architecture guide
+- [Quick Reference](./apps/documentation/src/content/docs/authentication/quick-reference.mdx) - Quick reference
+- [Implementation](./apps/documentation/src/content/docs/authentication/implementation.mdx) - Implementation details
+- [Main Auth Docs](./apps/documentation/src/content/docs/authentication.mdx) - User-facing documentation
+
+---
+
+## Code Standards
+
+### TypeScript
+- Use strict mode
+- Explicit return types for functions
+- Use `interface` for object shapes
+- Use `type` for unions and primitives
+- Avoid `any` - use `unknown` when type is truly unknown
+
+### Validation with Zod v4
+
+**IMPORTANT**: Always use Zod v4 syntax:
+
+```typescript
+// ✅ Zod v4 (CORRECT)
+z.uuid()                    // Not z.string().uuid()
+z.url()                     // Not z.string().url()
+z.email()                   // Not z.string().email()
+z.date()                    // For date objects
+z.coerce.date()             // To coerce strings to dates
+
+// ❌ Zod v3 syntax (WRONG - DO NOT USE)
+z.string().uuid()
+z.string().url()
+z.string().email()
+```
+
+### Schema Organization
+
+**Location**: `packages/domain/src/schemas/`
+
+**Pattern**: Schema-based architecture (not entity-based)
+- Base schema as source of truth
+- Derive create/update schemas using `.pick()`, `.omit()`, `.extend()`
+- Export inferred types
+
+**Example**:
+```typescript
+// packages/domain/src/schemas/entity-name.ts
+import { z } from "zod";
+
+// Base schema
+export const entityBaseSchema = z.object({
+  id: z.uuid(),                    // ✅ Zod v4
+  email: z.email(),                // ✅ Zod v4
+  website: z.url().nullable(),     // ✅ Zod v4
+  name: z.string().min(1),
+  createdAt: z.coerce.date(),
+});
+
+// Derived schemas
+export const createEntitySchema = entityBaseSchema.pick({
+  name: true,
+}).extend({
+  email: z.email().optional(),
+});
+
+export const updateEntitySchema = createEntitySchema;
+
+// Type exports
+export type EntityBase = z.infer<typeof entityBaseSchema>;
+export type CreateEntity = z.infer<typeof createEntitySchema>;
+export type UpdateEntity = z.infer<typeof updateEntitySchema>;
+```
+
+---
+
+## Backend Patterns
+
+### API Response Standardization
+
+All API responses MUST follow the `ApiResponse<T>` structure:
+- Success: `{ data: T, error: null }`
+- Error: `{ data: null, error: { message: string } }`
+- Paginated: Include `meta.pagination` with pagination metadata
+
+### Response Helpers
+
+Always use helpers from `apps/server/src/utils/response-helpers.ts`:
+- `successBody(data)` - 200 OK
+- `createdBody(data)` - 201 Created
+- `successWithPaginationBody(data, pagination, total)` - Paginated response
+- `errorBody(message)` - Error response
+
+### Validation in Routes
+
+Use Zod schemas from `@monorepo-template/domain/schemas`:
+
+```typescript
+import { updateEntitySchema } from "@monorepo-template/domain/schemas";
+
+export const routes = new Elysia({ prefix: "/api/entities" })
+  .put("/:id", async ({ body }) => {
+    // body is automatically validated and typed
+  }, {
+    body: updateEntitySchema,  // ✅ Use Zod schema from domain
+  });
+```
+
+### Error Handling
+
+Use custom errors from `apps/server/src/utils/errors.ts`:
+- `BadRequestError` - 400 (validation failures)
+- `UnauthorizedError` - 401 (auth required)
+- `ForbiddenError` - 403 (authorization failed)
+- `NotFoundError` - 404 (resource not found)
+- `ConflictError` - 409 (resource conflict)
+- `InternalServerError` - 500 (server errors)
+
+### Database Operations
+
+- Use typed enums from constants
+- Use `createTable()` from table-creator for consistent naming
+- Export types: `typeof table.$inferSelect` and `typeof table.$inferInsert`
+
+### Constants Pattern with Zod
+
+**IMPORTANT**: When using constants in Zod schemas, use the const object directly with `z.enum()`:
+
+```typescript
+// ✅ CORRECT: Use the const object directly
+import { z } from "zod";
+import { TODO_STATUSES } from "@monorepo-template/domain/constants";
+
+export const schema = z.object({
+  status: z.enum(TODO_STATUSES),
+});
+
+// ✅ CORRECT: For optional fields
+export const filterSchema = z.object({
+  status: z.enum(TODO_STATUSES).optional(),
+});
+
+// ❌ WRONG: Don't use Object.values() - use the const object directly
+status: z.enum(Object.values(TODO_STATUSES) as [string, ...string[]]),
+
+// ❌ WRONG: Don't use the values array - use the const object
+status: z.enum(TODO_STATUS_VALUES),
+```
+
+**Key Principle**: According to [Zod's enum API](https://zod.dev/api#enum), `z.enum()` accepts enum-like object literals (`{ [key: string]: string | number }`). Use the const object (`TODO_STATUSES`) directly - it is the single source of truth.
+
+For database enums (Drizzle), use the values array:
+
+```typescript
+// ✅ CORRECT: Database enum (Drizzle requires array)
+import { pgEnum } from "drizzle-orm/pg-core";
+import { TODO_STATUS_VALUES } from "@monorepo-template/domain/constants";
+
+export const todoStatusEnum = pgEnum(
+  "todo_status",
+  TODO_STATUS_VALUES,
+);
+```
+
+---
+
+## Frontend Patterns
+
+### Import Organization
+
+1. React and framework imports
+2. Third-party libraries (alphabetical)
+3. Internal utilities and hooks (`@/lib`, `@/hooks`)
+4. Internal components (`@/components`)
+5. Relative imports
+
+### Component Structure
+
+```typescript
+interface ComponentProps {
+  required: string;
+  optional?: boolean;
+}
+
+export function Component({ required, optional = false }: ComponentProps) {
+  // 1. Hooks
+  // 2. Derived state
+  // 3. Event handlers
+  // 4. Effects
+  // 5. Render
+  
+  return <div>...</div>;
+}
+```
+
+### Form Validation
+
+Use Zod schemas with React Hook Form:
+
+```typescript
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { updateEntitySchema, type UpdateEntity } from "@monorepo-template/domain/schemas";
+
+export function EntityForm() {
+  const form = useForm<UpdateEntity>({
+    resolver: zodResolver(updateEntitySchema),
+  });
+
+  return <form onSubmit={form.handleSubmit(onSubmit)}>...</form>;
+}
+```
+
+### State Management
+
+- Use TanStack Query for server state
+- Use React state for UI state
+- Zustand only if shared state is needed
+
+### Query Keys
+
+Use query key factory pattern:
+
+```typescript
+export const entityKeys = {
+  all: ['entities'] as const,
+  lists: () => [...entityKeys.all, 'list'] as const,
+  detail: (id: string) => [...entityKeys.all, 'detail', id] as const,
+};
+```
+
+---
+
+## Workspace Structure
+
+```
+monorepo-template/
+├── apps/
+│   ├── documentation/     # Documentation (Astro Starlight)
+│   ├── server/            # Elysia backend
+│   └── web/               # TanStack Start frontend
+├── packages/
+│   ├── infra-auth/        # better-auth config
+│   ├── config/            # Shared TS configs
+│   ├── infra-db/          # Drizzle ORM schemas
+│   ├── domain/            # Constants, types, schemas
+│   ├── application/       # Use cases and application logic
+│   └── web-ui/            # shadcn/ui components
+```
+
+### Package Imports
+
+```typescript
+// From domain
+import { TODO_STATUSES } from "@monorepo-template/domain/constants";
+import { type ApiResponse } from "@monorepo-template/domain/types";
+import { updateTodoSchema } from "@monorepo-template/domain/schemas";
+
+// From database
+import { db } from "@monorepo-template/infra-db";
+import { todos } from "@monorepo-template/infra-db/schema";
+
+// From auth
+import { auth } from "@monorepo-template/infra-auth";
+
+// From web-ui
+import { Button, Card } from "@monorepo-template/web-ui";
+```
+
+---
+
+## Documentation
+
+### When to Document
+
+Document these changes in `apps/documentation/src/content/docs/`:
+
+**Version-specific** (`v{version}/`):
+- New features or epics
+- Schema changes
+- API endpoint changes
+- DTO modifications
+- Implementation summaries
+
+**General** (root):
+- Framework patterns
+- Reusable utilities
+- Development guidelines
+- Package documentation
+
+### Documentation Structure
+
+```markdown
+---
+title: Document Title
+description: Brief description
+date: YYYY-MM-DD
+tags:
+  - relevant-tag
+---
+
+# Title
+
+Content...
+```
+
+---
+
+## Architecture Decisions
+
+### Domain Architecture: Schema-Based
+
+We use **Schema-Based architecture** (not Entity-Based/DDD) because:
+- CRUD-focused application
+- Fast iteration needed
+- API-first design
+- Validation is primary concern
+
+See `/docs/domain-architecture-patterns` for details.
+
+### Migration Path
+
+If complexity grows:
+1. Add domain functions alongside schemas
+2. Introduce value objects for complex types
+3. Consider full entity model if needed
+
+---
+
+## Common Tasks
+
+### Adding a New Entity
+
+1. Create constants in `packages/domain/src/constants/`
+2. Create schemas in `packages/domain/src/schemas/`
+3. Create database schema in `packages/infra-db/src/schema/`
+4. Run migrations
+5. Create backend routes in `apps/server/src/routes/`
+6. Create frontend hooks in `apps/web/src/hooks/`
+7. Create UI components in `apps/web/src/components/`
+8. Document in `apps/documentation/src/content/docs/`
+
+### Building Packages
+
+```bash
+# Build domain package
+bun run --filter=@monorepo-template/domain build
+
+# Build all packages
+bun run build
+
+# Development mode
+bun run dev
+```
+
+---
+
+## Testing
+
+- Use Vitest for unit tests
+- Test business logic in services
+- Test components with React Testing Library
+- Mock external dependencies
+- Use MSW for API mocking
+
+---
+
+## Best Practices
+
+1. **Always use Zod v4 syntax** for validation
+2. **Derive schemas** - don't duplicate
+3. **Use response helpers** for consistent API responses
+4. **Export types** from schemas
+5. **Document significant changes** in documentation
+6. **Handle errors gracefully** with custom error classes
+7. **Use TypeScript strict mode**
+8. **Follow schema-based architecture** pattern
+9. **Keep components small** (< 200 lines)
+10. **Write descriptive validation messages**
+
+---
+
+## References
+
+- [Domain Architecture Patterns](/docs/domain-architecture-patterns)
+- [Schemas Implementation Guide](/docs/schemas-implementation)
+- [Backend Best Practices](/docs/backend)
+- [Constants Pattern](/docs/constants-pattern)
+

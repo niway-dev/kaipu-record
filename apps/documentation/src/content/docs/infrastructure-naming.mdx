@@ -1,0 +1,72 @@
+---
+title: Infrastructure Package Naming Strategy
+description: Naming convention and structural intent for infrastructure packages in the monorepo
+---
+
+## Why Change the Naming?
+
+We are early enough in the project that renaming infra packages has **low cost** and **high long-term payoff**.
+
+Goals:
+
+- Make architectural intent obvious
+- Prevent domain/application pollution
+- Scale cleanly as more infrastructure adapters are added
+- Avoid technology-coupled naming
+
+---
+
+## Core Principle
+
+> **Infrastructure packages represent adapters, not technologies.**
+
+They implement contracts defined in the **domain** or **application**, and are wired together by the **server**.
+
+---
+
+## Naming Convention
+
+### Use: `infra-<capability>`
+
+Examples:
+
+- `@monorepo-template/infra-db`
+- `@monorepo-template/infra-auth`
+- `@monorepo-template/infra-email` (future)
+- `@monorepo-template/infra-notifications` (future)
+
+Where `<capability>` describes **what the package does**, not **how it does it**.
+
+---
+
+## Why `infra-*` Works Well
+
+### 1. Explicit Architectural Intent
+
+- Makes it immediately clear this is **infrastructure**
+- Discourages accidental imports into domain or application
+- Reinforces dependency direction: infra depends on domain, never the reverse
+
+### 2. Scales Cleanly
+
+- Adding `infra-email`, `infra-notifications`, `infra-storage` follows the same pattern
+- All infra packages are visually grouped in the file tree under `packages/infra-*`
+
+### 3. Technology-Agnostic
+
+- `infra-db` could be backed by Drizzle + Neon today, Prisma + Supabase tomorrow
+- The package name describes the **capability** (database access), not the **implementation** (Drizzle)
+
+### 4. Import Clarity
+
+- When you see `@monorepo-template/infra-db` in an import, you immediately know it's infrastructure
+- Makes code review easier: infra imports in `domain/` or `application/` are instant red flags
+
+---
+
+## Current Infrastructure Packages
+
+| Package                         | Capability      | Implements                                 |
+| ------------------------------- | --------------- | ------------------------------------------ |
+| `@monorepo-template/infra-db`   | Database access | Drizzle ORM repositories, mappers, schemas |
+| `@monorepo-template/infra-auth` | Authentication  | Better Auth server configuration           |

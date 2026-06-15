@@ -1,0 +1,26 @@
+language: en
+allow_apply_suggestions: true
+reviews:
+  review_status: true
+  base_branches:
+    - production
+    - master
+  auto_review:
+    enabled: true
+    base_branches:
+      - production
+      - master
+  path_filters:
+    - "**/*"
+    - "!**/*.md"
+    - "!**/*.mdx"
+    - "!**/node_modules/**"
+    - "!**/dist/**"
+    - "!**/.next/**"
+    - "!**/_generated/**"
+    - "!**/routeTree.gen.ts"
+    - "!**/biome.json"
+    - "!**/package.json"
+    - "!**/package-lock.json"
+    - "!**/yarn.lock"
+    - "!**/pnpm-lock.yaml"

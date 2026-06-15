@@ -1,0 +1,191 @@
+---
+alwaysApply: true
+---
+# Backend Best Practices
+
+## API Response Standardization
+
+### Response Format
+All API responses MUST follow the `ApiResponse<T>` structure:
+- Success: `{ data: T, error: null }`
+- Error: `{ data: null, error: { message: string } }`
+- Paginated: Include `meta.pagination` with pagination metadata
+
+### HTTP Status Codes
+- **200 OK**: Use `successBody()` for successful GET, PUT requests
+- **201 Created**: Use `createdBody()` for successful POST requests
+- **204 No Content**: Use `set.status = 204` for successful DELETE requests
+- **400 Bad Request**: Validation errors
+- **401 Unauthorized**: Authentication required
+- **404 Not Found**: Resource not found
+- **500 Internal Server Error**: Server errors
+
+### Response Helpers
+Always use response helpers from `apps/server/src/utils/response-helpers.ts`:
+- `successBody(data)` - Success response
+- `createdBody(data)` - Created response (201)
+- `successWithPaginationBody(data, pagination, total)` - Paginated response
+- `errorBody(message)` - Error response (in error handlers)
+
+## Error Handling
+
+### Result Type Pattern
+Use the Result type pattern for functional error handling:
+- Wrap promises with `tryCatch()` from `@monorepo-template/domain/types`
+- Use `isSuccess()` or `isFailure()` to check results
+- Avoid `unwrap()` unless absolutely necessary
+
+### Error Handlers
+Use error handlers from `apps/server/src/utils/error-handlers.ts`:
+- `handleDatabaseResult()` - Single item queries
+- `handleListDatabaseResult()` - List queries
+- `handleMutationResult()` - Mutations (insert, update, delete)
+- `handleResult()` - Generic with custom error mapping
+
+### Promise Handlers
+Alternative approach using promise handlers from `apps/server/src/utils/promise-handlers.ts`:
+- `handleDatabaseQuery()` - Single item queries
+- `handleDatabaseListQuery()` - List queries
+- `handleDatabaseMutation()` - Mutations
+- `handleValidationPromise()` - Validation operations
+- `handleParallelPromises()` - Parallel operations
+
+### Custom Errors
+Use custom error classes from `apps/server/src/utils/errors.ts`:
+- `BadRequestError` - Validation failures (400)
+- `UnauthorizedError` - Authentication required (401)
+- `ForbiddenError` - Authorization failed (403)
+- `NotFoundError` - Resource not found (404)
+- `ConflictError` - Resource conflict (409)
+- `InternalServerError` - Server errors (500)
+
+## Database Operations
+
+### Type Safety
+- Use typed enums for status fields
+- Always use `createTable()` from table-creator for consistent table naming
+- Export types: `typeof table.$inferSelect` and `typeof table.$inferInsert`
+
+### Query Patterns
+```typescript
+// Single item
+const result = await tryCatch(
+  db.select().from(table).where(eq(table.id, id)).limit(1)
+);
+const item = handleDatabaseResult(result, "Not found");
+
+// List
+const result = await tryCatch(
+  db.select().from(table).where(conditions)
+);
+const items = handleListDatabaseResult(result);
+
+// Mutation
+const result = await tryCatch(
+  db.insert(table).values(data).returning()
+);
+const created = handleMutationResult(result);
+```
+
+## Route Structure
+
+### Elysia Routes
+- Use `.error()` to register custom error classes
+- Use `.onError()` for centralized error handling
+- Use `status()` function for setting HTTP status codes
+- Use response helpers for consistent response format
+
+### Example Route
+```typescript
+export const routes = new Elysia({ prefix: "/api/resource" })
+  .error({
+    NotFoundError,
+    BadRequestError,
+  })
+  .onError(({ code, error, set }) => {
+    if (code === "NotFoundError") {
+      set.status = 404;
+      return errorBody(error.message);
+    }
+    // ... other errors
+  })
+  .get("/:id", async ({ params, status }) => {
+    const item = await handleDatabaseQuery(
+      db.select().from(table).where(eq(table.id, params.id)).limit(1),
+      "Not found"
+    );
+    return status(200, successBody(item));
+  });
+```
+
+## Pagination
+
+### Query Parameters
+- `page` (optional): Page number (1-indexed), defaults to 1
+- `limit` (optional): Items per page, defaults to 10, max 100
+
+### Implementation
+```typescript
+import { getPaginationParams, successWithPaginationBody } from "../utils/response-helpers";
+
+const pagination = getPaginationParams(query);
+const items = await db.select().from(table)
+  .limit(pagination.limit)
+  .offset(pagination.offset);
+const total = await getTotalCount();
+
+return status(200, successWithPaginationBody(items, pagination, total));
+```
+
+## Authentication
+
+### User Extraction
+Always use the `getUserFromRequest()` helper pattern:
+```typescript
+async function getUserFromRequest(request: Request): Promise<{ id: string } | null> {
+  const session = await auth.api.getSession({ headers: request.headers });
+  if (!session?.user) {
+    return null;
+  }
+  return { id: session.user.id };
+}
+```
+
+### Authorization Checks
+```typescript
+const user = await getUserFromRequest(request);
+if (!user) {
+  throw new UnauthorizedError();
+}
+
+// Verify resource ownership
+const [resource] = await db.select()
+  .from(resources)
+  .where(and(eq(resources.id, id), eq(resources.userId, user.id)));
+
+if (!resource) {
+  throw new NotFoundError("Resource not found");
+}
+```
+
+## Code Organization
+
+### File Structure
+- Routes: `apps/server/src/routes/`
+- Utils: `apps/server/src/utils/`
+- Domain types: `packages/domain/src/types/`
+- Database schema: `packages/db/src/schema/`
+
+### Imports
+- Domain types: `@monorepo-template/domain/types`
+- Database: `@monorepo-template/infra-db`
+- Constants: `@monorepo-template/domain/constants`
+
+## Documentation
+
+All backend patterns and utilities are documented in:
+- `/docs/backend/api-response-types` - API response structure
+- `/docs/backend/result-types` - Result type pattern
+- `/docs/backend/response-helpers` - Response helper functions
+- `/docs/backend/error-handlers` - Error handling utilities
+- `/docs/backend/promise-handlers` - Promise handling utilities

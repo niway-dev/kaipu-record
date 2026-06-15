@@ -1,0 +1,229 @@
+---
+title: "Fullstack TanStack + Elysia (Archived)"
+description: "Reference documentation for the archived fullstack-tanstack-elysia app pattern. Elysia API embedded inside TanStack Start with isomorphic Eden treaty."
+---
+
+## Status: Archived
+
+This app pattern was removed from the template due to runtime issues with Elysia embedded inside TanStack Start on Cloudflare Workers. This document preserves the architecture and implementation for future recreation.
+
+## Overview
+
+A fullstack app with a **full Elysia API embedded inside TanStack Start**. The key innovation was an **isomorphic Eden treaty** — direct Elysia call during SSR (no HTTP overhead), HTTP request on the client. Single deployable Cloudflare Worker.
+
+## Architecture
+
+```
+Browser
+  ├── Client-side: Eden treaty → HTTP → /api/v1/* → Elysia handler
+  └── SSR: Eden treaty → direct Elysia.fetch() (no HTTP)
+
+TanStack Start (Cloudflare Worker)
+  ├── /api/auth/*  → Better Auth handler
+  ├── /api/v1/*    → Elysia router (todos CRUD, health, test)
+  ├── /            → React SSR (pages)
+  └── /todos       → React SSR (authenticated)
+```
+
+## File Structure
+
+```
+apps/fullstack-tanstack-elysia/
+├── src/
+│   ├── api/                          # Elysia API (embedded)
+│   │   ├── index.ts                  # Elysia app with /api/v1 prefix
+│   │   ├── plugins/
+│   │   │   └── auth.plugin.ts        # Auth macro (session check)
+│   │   ├── routes/
+│   │   │   └── todos.ts              # Todo CRUD routes
+│   │   └── utils/
+│   │       ├── error-handler-plugin.ts
+│   │       ├── errors.ts             # Custom error classes
+│   │       └── response-helpers.ts   # successBody, errorBody
+│   ├── components/                   # Shared UI (header, forms, etc.)
+│   ├── env/
+│   │   └── server.ts                 # Zod env validation
+│   ├── hooks/
+│   │   ├── use-session.ts            # Auth session hooks
+│   │   └── use-todos.ts             # Todo CRUD hooks (uses treaty)
+│   ├── lib/
+│   │   ├── auth/                     # Better Auth (server + client)
+│   │   ├── query-client.ts           # React Query setup
+│   │   └── treaty.ts                 # Isomorphic Eden treaty
+│   ├── routes/
+│   │   ├── __root.tsx
+│   │   ├── _authenticated.tsx        # Auth guard
+│   │   ├── _authenticated/todos/index.tsx
+│   │   ├── api/auth/$.ts             # Better Auth catch-all
+│   │   ├── api/v1/$.ts               # Elysia catch-all
+│   │   ├── auth/login.tsx
+│   │   ├── auth/signup.tsx
+│   │   └── index.tsx                 # Landing page
+│   ├── server-functions/
+│   │   └── list-todos.ts             # SSR data loading via serverFn
+│   ├── router.tsx
+│   ├── routeTree.gen.ts
+│   └── index.css
+├── .env.example
+├── package.json
+├── tsconfig.json
+├── vite.config.ts                    # Port 3003, inspector 9233
+└── wrangler.jsonc
+```
+
+## Key Patterns
+
+### Isomorphic Eden Treaty (`src/lib/treaty.ts`)
+
+```typescript
+import { createIsomorphicFn } from "@tanstack/react-start";
+import { treaty } from "@elysiajs/eden";
+import type { App } from "@/api";
+import { app } from "@/api";
+
+export const getTreaty = createIsomorphicFn()
+  .server(() => treaty(app).api.v1)       // Direct call, no HTTP
+  .client(() => treaty<App>(window.location.origin).api.v1);  // HTTP
+```
+
+### Elysia App with Prefix (`src/api/index.ts`)
+
+```typescript
+import { Elysia, t } from "elysia";
+import { todoRoutes } from "./routes/todos";
+
+export const app = new Elysia({ prefix: "/api/v1" })
+  .use(todoRoutes)
+  .post("/test", ({ body }) => ({ message: "Hello, world!" }), {
+    body: t.Object({ title: t.String() }),
+  })
+  .get("/health", () => ({
+    status: "healthy",
+    timestamp: new Date().toISOString(),
+  }));
+
+export type App = typeof app;
+```
+
+### Auth Macro Plugin (`src/api/plugins/auth.plugin.ts`)
+
+```typescript
+import { Elysia } from "elysia";
+import { UnauthorizedError } from "../utils/errors";
+import { auth } from "@/lib/auth/auth-server";
+
+export const authMacro = new Elysia({ name: "auth-macro" })
+  .error({ UnauthorizedError })
+  .macro({
+    isAuth: {
+      async resolve({ request: { headers } }) {
+        const session = await auth.api.getSession({ headers });
+        if (!session) throw new UnauthorizedError();
+        return { user: session.user, session: session.session };
+      },
+    },
+  });
+```
+
+Usage: `{ isAuth: true }` on any route to require authentication.
+
+### Elysia Route Handler in TanStack Start (`src/routes/api/v1/$.ts`)
+
+```typescript
+import { createFileRoute } from "@tanstack/react-router";
+import { app } from "@/api";
+
+const handle = async ({ request }: { request: Request }) => app.fetch(request);
+
+export const Route = createFileRoute("/api/v1/$")({
+  server: {
+    handlers: { GET: handle, POST: handle, PUT: handle, DELETE: handle, PATCH: handle },
+  },
+});
+```
+
+### Todo CRUD Routes (`src/api/routes/todos.ts`)
+
+Full Elysia route with DI pattern:
+
+```typescript
+export const todoRoutes = new Elysia({ prefix: "/todos" })
+  .use(errorHandlerPlugin)
+  .decorate("db", createDatabaseClient(env.DATABASE_URL))
+  .derive(({ db }) => ({ todoRepository: new TodoRepository(db) }))
+  .use(authMacro)
+  .get("/", handler, { query: paginationQuerySchema, isAuth: true })
+  .get("/:id", handler, { isAuth: true })
+  .post("/", handler, { body: t.Object({ title: t.String() }), isAuth: true })
+  .put("/:id", handler, { body: updateTodoSchema, isAuth: true })
+  .delete("/:id", handler, { isAuth: true });
+```
+
+### Error Handling Pattern
+
+Custom error classes (`errors.ts`):
+
+- `UnauthorizedError` (401)
+- `NotFoundError` (404)
+- `BadRequestError` (400)
+- `ConflictError` (409)
+- `ForbiddenError` (403)
+- `InternalServerError` (500)
+
+Centralized error handler plugin maps error codes to status codes and returns `{ data: null, error: { message } }`.
+
+### API Response Helpers
+
+```typescript
+function successBody<T>(data: T): ApiResponse<T>   // { data, error: null }
+function createdBody<T>(data: T): ApiResponse<T>    // same as success
+function errorBody(message: string): ApiResponse<never>  // { data: null, error: { message } }
+```
+
+## Dependencies
+
+```json
+{
+  "elysia": "catalog:",
+  "@elysiajs/eden": "catalog:",
+  "@tanstack/react-start": "^1.141.1",
+  "@tanstack/react-router": "^1.141.1",
+  "@tanstack/react-query": "^5.90.12",
+  "better-auth": "catalog:",
+  "@cloudflare/vite-plugin": "^1.20.1"
+}
+```
+
+## Config
+
+- **Port**: 3003 (inspector: 9233)
+- **Wrangler**: `monorepo-template-fullstack-elysia`, compatibility date 2025-10-04, `nodejs_compat`
+- **Env vars**: `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`
+
+## Known Issues (Reason for Archival)
+
+The Elysia integration had runtime issues:
+
+- Body parsing problems with Elysia inside TanStack Start's request handling
+- `app.fetch(request)` didn't always pass the body correctly through the catch-all route
+- Debug logging was needed extensively in the todo creation flow
+- The `aot: false` flag and CloudflareAdapter were commented out, indicating compatibility issues
+- Zod validators from domain schemas couldn't be used directly as Elysia body validators (had to fall back to `t.Object`)
+
+## Route Map
+
+| Method | Path                | Handler                   | Auth                            |
+| ------ | ------------------- | ------------------------- | ------------------------------- |
+| GET    | `/`                 | Landing page              | No                              |
+| GET    | `/auth/login`       | Login form                | No (redirects if authenticated) |
+| GET    | `/auth/signup`      | Signup form               | No (redirects if authenticated) |
+| GET    | `/todos`            | Todo list with pagination | Yes                             |
+| GET    | `/api/auth/*`       | Better Auth handler       | Varies                          |
+| POST   | `/api/auth/*`       | Better Auth handler       | Varies                          |
+| GET    | `/api/v1/health`    | Health check              | No                              |
+| POST   | `/api/v1/test`      | Test endpoint             | No                              |
+| GET    | `/api/v1/todos`     | List todos (paginated)    | Yes                             |
+| GET    | `/api/v1/todos/:id` | Get single todo           | Yes                             |
+| POST   | `/api/v1/todos`     | Create todo               | Yes                             |
+| PUT    | `/api/v1/todos/:id` | Update todo               | Yes                             |
+| DELETE | `/api/v1/todos/:id` | Delete todo               | Yes                             |

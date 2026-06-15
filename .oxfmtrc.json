@@ -1,0 +1,13 @@
+{
+  "ignorePatterns": [
+    "**/routeTree.gen.ts",
+    "**/*routeTree.gen.ts",
+    "routeTree.gen.ts",
+    "apps/web-elysia/src/routeTree.gen.ts",
+    "apps/web-hono/src/routeTree.gen.ts",
+    "**/.next/**",
+    "**/.wrangler/**",
+    "**/.source/**",
+    "**/convex/_generated/**"
+  ]
+}

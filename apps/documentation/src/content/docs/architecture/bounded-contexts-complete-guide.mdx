@@ -1,0 +1,804 @@
+---
+title: Bounded Contexts - Complete Architecture Guide
+description: Comprehensive guide to organizing packages per bounded context with full DDD implementation
+---
+
+# Bounded Contexts - Complete Architecture Guide
+
+This is the **complete guide** to implementing Bounded Contexts in a monorepo, covering package structure, layers, integration patterns, and real-world examples.
+
+---
+
+## 🎯 What is a Bounded Context?
+
+A **Bounded Context** is an explicit boundary within which a particular domain model applies. It's a logical division of your business domain where:
+
+- 🔹 Terms have specific meanings
+- 🔹 Models are self-contained
+- 🔹 Rules are enforced
+- 🔹 Teams can work independently
+
+### Example: "User" in Different Contexts
+
+```typescript
+// Your Context
+class ContextUser {
+  createEntity()
+  trackEntityStatus()
+  uploadDocument()
+}
+
+// Analytics Context
+class AnalyticsUser {
+  getActivityMetrics()
+  calculateEngagement()
+}
+
+// Billing Context
+class SubscriptionUser {
+  subscribeToPlan()
+  processPayment()
+  checkUsageLimit()
+}
+```
+
+**Same entity, different meanings in each context!**
+
+---
+
+## 📦 Complete Package Structure Per Context
+
+### Full Monorepo Architecture
+
+```bash
+monorepo-template/                              # Monorepo root
+├── apps/                                 # Applications
+│   ├── web/                              # Frontend app
+│   ├── server/                           # Backend API
+│   └── documentation/                    # Documentation
+│
+├── packages/                             # Shared packages
+│   ├── shared-kernel/                    # ← Shared primitives
+│   │   ├── src/
+│   │   │   ├── api.ts                    # ApiResponse, Pagination
+│   │   │   ├── currency.ts               # Currency constants
+│   │   │   ├── result.ts                 # Result<T, E> pattern
+│   │   │   ├── utils.ts                  # TypeScript utilities
+│   │   │   └── index.ts
+│   │   ├── package.json
+│   │   └── tsconfig.json
+│   │
+│   ├── your-context/                     # ← Your Bounded Context
+│   │   ├── domain/                       # Domain layer
+│   │   │   ├── entities/
+│   │   │   │   ├── your-entity.entity.ts
+│   │   │   │   └── comment.entity.ts
+│   │   │   ├── value-objects/
+│   │   │   │   ├── priority.ts
+│   │   │   │   ├── title.ts
+│   │   │   │   └── entity-status.ts
+│   │   │   ├── repositories/             # Interfaces only
+│   │   │   │   ├── your-entity.repository.ts
+│   │   │   │   ├── comment.repository.ts
+│   │   │   │   └── index.ts
+│   │   │   ├── services/                 # Domain services
+│   │   │   │   ├── status-transition.service.ts
+│   │   │   │   └── priority-calculator.service.ts
+│   │   │   ├── events/                   # Domain events
+│   │   │   │   ├── your-entity-created.event.ts
+│   │   │   │   └── status-changed.event.ts
+│   │   │   ├── constants/
+│   │   │   │   ├── entity-status.ts
+│   │   │   │   └── comment-type.ts
+│   │   │   └── index.ts
+│   │   │
+│   │   ├── application/                  # Application layer (Use Cases)
+│   │   │   ├── use-cases/
+│   │   │   │   ├── create-your-entity/
+│   │   │   │   │   ├── create-your-entity.command.ts
+│   │   │   │   │   ├── create-your-entity.handler.ts
+│   │   │   │   │   └── index.ts
+│   │   │   │   ├── update-status/
+│   │   │   │   │   ├── update-status.command.ts
+│   │   │   │   │   ├── update-status.handler.ts
+│   │   │   │   │   └── index.ts
+│   │   │   │   ├── add-comment/
+│   │   │   │   └── list-your-entities/
+│   │   │   ├── queries/
+│   │   │   │   ├── get-your-entity.query.ts
+│   │   │   │   └── get-entity-list.query.ts
+│   │   │   ├── dto/
+│   │   │   │   ├── create-your-entity.dto.ts
+│   │   │   │   └── your-entity-response.dto.ts
+│   │   │   └── index.ts
+│   │   │
+│   │   ├── infrastructure/               # Infrastructure layer
+│   │   │   ├── persistence/
+│   │   │   │   ├── repositories/
+│   │   │   │   │   ├── your-entity.repository.drizzle.ts
+│   │   │   │   │   └── comment.repository.drizzle.ts
+│   │   │   │   └── mappers/
+│   │   │   │       ├── your-entity.mapper.ts
+│   │   │   │       └── comment.mapper.ts
+│   │   │   ├── events/
+│   │   │   │   └── event-publisher.ts
+│   │   │   └── index.ts
+│   │   │
+│   │   ├── package.json                  # Context-specific dependencies
+│   │   └── tsconfig.json
+│   │
+│   ├── analytics/                        # ← Analytics Bounded Context
+│   │   ├── domain/
+│   │   │   ├── entities/
+│   │   │   │   ├── entity-metric.entity.ts
+│   │   │   │   └── user-activity.entity.ts
+│   │   │   ├── repositories/
+│   │   │   │   └── metrics.repository.ts
+│   │   │   └── index.ts
+│   │   ├── application/
+│   │   │   ├── queries/
+│   │   │   │   ├── get-success-rate.query.ts
+│   │   │   │   ├── get-time-to-complete.query.ts
+│   │   │   │   └── get-status-distribution.query.ts
+│   │   │   └── index.ts
+│   │   ├── infrastructure/
+│   │   │   └── persistence/
+│   │   │       └── repositories/
+│   │   │           └── metrics.repository.drizzle.ts
+│   │   └── package.json
+│   │
+│   ├── billing/                          # ← Billing Bounded Context
+│   │   ├── domain/
+│   │   │   ├── entities/
+│   │   │   │   ├── subscription.entity.ts
+│   │   │   │   └── payment.entity.ts
+│   │   │   ├── value-objects/
+│   │   │   │   ├── plan.ts
+│   │   │   │   └── usage-limit.ts
+│   │   │   ├── repositories/
+│   │   │   │   ├── subscription.repository.ts
+│   │   │   │   └── payment.repository.ts
+│   │   │   └── index.ts
+│   │   ├── application/
+│   │   │   ├── use-cases/
+│   │   │   │   ├── subscribe-to-plan/
+│   │   │   │   └── process-payment/
+│   │   │   └── index.ts
+│   │   ├── infrastructure/
+│   │   │   ├── persistence/
+│   │   │   └── payment-providers/
+│   │   │       └── stripe.adapter.ts
+│   │   └── package.json
+│   │
+│   ├── integration/                      # ← Integration layer (Context → Context)
+│   │   ├── your-context-api/             # Public API for Your context
+│   │   │   ├── dto/
+│   │   │   │   ├── your-entity.dto.ts
+│   │   │   │   └── your-entity-summary.dto.ts
+│   │   │   └── index.ts
+│   │   ├── analytics-api/                # Public API for Analytics context
+│   │   │   ├── dto/
+│   │   │   └── index.ts
+│   │   └── package.json
+│   │
+│   ├── database/                         # ← Shared database infrastructure
+│   │   ├── schema/                       # Drizzle table definitions
+│   │   │   ├── your-entity.schema.ts
+│   │   │   ├── comment.schema.ts
+│   │   │   ├── subscription.schema.ts
+│   │   │   └── index.ts
+│   │   ├── client/
+│   │   │   └── index.ts
+│   │   └── package.json
+│   │
+│   └── web-ui/                           # ← Shared UI components
+│       └── components/
+│
+├── package.json                          # Root package.json
+└── bun.lockb
+```
+
+---
+
+## 🏗️ Layers Within Each Context
+
+Each bounded context follows **Clean Architecture** with distinct layers:
+
+### 1. Domain Layer (Core Business Logic)
+
+**What goes here:**
+
+- ✅ Entities with business behavior
+- ✅ Value Objects with invariants
+- ✅ Domain Services for business rules
+- ✅ Repository Interfaces
+- ✅ Domain Events
+- ✅ Domain Exceptions
+
+**What DOESN'T go here:**
+
+- ❌ Database queries
+- ❌ HTTP requests
+- ❌ Framework dependencies
+- ❌ UI logic
+
+**Example:**
+
+```typescript
+// packages/your-context/domain/entities/your-entity.entity.ts
+import { YourEntityStatus } from "../value-objects/entity-status";
+import { Priority } from "../value-objects/priority";
+import { YourEntityCreatedEvent } from "../events/your-entity-created.event";
+
+export class YourEntity {
+  private constructor(
+    public readonly id: string,
+    private title: string,
+    private status: YourEntityStatus,
+    private priority: Priority | null,
+    private comments: Comment[],
+  ) {}
+
+  static create(data: { title: string; priority?: Priority }): YourEntity {
+    const entity = new YourEntity(
+      crypto.randomUUID(),
+      data.title,
+      YourEntityStatus.draft(),
+      data.priority ?? null,
+      [],
+    );
+
+    // Domain event
+    entity.raise(new YourEntityCreatedEvent(entity.id, data.title));
+
+    return entity;
+  }
+
+  // Business logic - status transitions
+  updateStatus(newStatus: YourEntityStatus): void {
+    if (!this.status.canTransitionTo(newStatus)) {
+      throw new InvalidStatusTransitionError(this.status, newStatus);
+    }
+    this.status = newStatus;
+  }
+
+  // Business logic - add comment
+  addComment(comment: Comment): void {
+    if (!this.isActive()) {
+      throw new Error("Cannot add comment to closed entity");
+    }
+    this.comments.push(comment);
+  }
+
+  isActive(): boolean {
+    return this.status.isActive();
+  }
+}
+```
+
+---
+
+### 2. Application Layer (Use Cases / Orchestration)
+
+**What goes here:**
+
+- ✅ Use Case handlers (Commands/Queries)
+- ✅ Application Services
+- ✅ DTOs (Data Transfer Objects)
+- ✅ Input validation
+- ✅ Transaction orchestration
+
+**What DOESN'T go here:**
+
+- ❌ Business rules (go in domain)
+- ❌ Database implementation
+- ❌ HTTP routing
+
+**Example:**
+
+```typescript
+// packages/your-context/application/use-cases/create-your-entity/create-your-entity.handler.ts
+import type { IYourEntityRepository } from "@monorepo-template/your-context/domain";
+import { YourEntity } from "@monorepo-template/your-context/domain";
+import { Priority } from "@monorepo-template/your-context/domain/value-objects";
+import type { CreateYourEntityCommand } from "./create-your-entity.command";
+
+export class CreateYourEntityHandler {
+  constructor(
+    private readonly yourEntityRepo: IYourEntityRepository,
+    private readonly eventPublisher: IEventPublisher,
+  ) {}
+
+  async execute(command: CreateYourEntityCommand): Promise<string> {
+    // 1. Create domain entity (business logic in domain)
+    const priority = command.priority
+      ? Priority.create(command.priority)
+      : null;
+
+    const yourEntity = YourEntity.create({
+      title: command.title,
+      priority,
+    });
+
+    // 2. Persist using repository
+    await this.yourEntityRepo.save(yourEntity);
+
+    // 3. Publish domain events
+    await this.eventPublisher.publish(yourEntity.getDomainEvents());
+
+    // 4. Return result
+    return yourEntity.id;
+  }
+}
+```
+
+---
+
+### 3. Infrastructure Layer (Technical Implementation)
+
+**What goes here:**
+
+- ✅ Repository implementations
+- ✅ ORM/Database code
+- ✅ External API adapters
+- ✅ File system operations
+- ✅ Email/SMS services
+
+**What DOESN'T go here:**
+
+- ❌ Business logic
+- ❌ Use case orchestration
+
+**Example:**
+
+```typescript
+// packages/your-context/infrastructure/persistence/repositories/your-entity.repository.drizzle.ts
+import type { IYourEntityRepository } from "@monorepo-template/your-context/domain";
+import type { YourEntity } from "@monorepo-template/your-context/domain";
+import { YourEntityMapper } from "../mappers/your-entity.mapper";
+import { db } from "@monorepo-template/database/client";
+
+export class YourEntityRepositoryDrizzle implements IYourEntityRepository {
+  async save(yourEntity: YourEntity): Promise<void> {
+    const data = YourEntityMapper.toPersistence(yourEntity);
+    await db.insert(yourEntityTable).values(data);
+  }
+
+  async findById(id: string): Promise<YourEntity | null> {
+    const row = await db.query.yourEntityTable.findFirst({
+      where: eq(yourEntityTable.id, id),
+    });
+
+    return row ? YourEntityMapper.toDomain(row) : null;
+  }
+}
+```
+
+---
+
+## 🔗 Context Integration Patterns
+
+### Pattern 1: Published Language (DTOs)
+
+Each context exposes a **Public API** for other contexts to consume:
+
+```typescript
+// packages/integration/your-context-api/dto/your-entity.dto.ts
+export interface YourEntityDTO {
+  id: string;
+  title: string;
+  status: string;  // Simple string, not rich domain object
+  priority: number | null;
+  category: string;
+  createdAt: Date;
+}
+
+export interface YourEntitySummaryDTO {
+  totalEntities: number;
+  activeEntities: number;
+  successRate: number;
+}
+```
+
+**Usage in Analytics Context:**
+
+```typescript
+// packages/analytics/application/queries/get-success-rate.query.ts
+import type { YourEntitySummaryDTO } from "@monorepo-template/integration/your-context-api";
+
+export class GetSuccessRateQuery {
+  constructor(private readonly yourApi: YourApiClient) {}
+
+  async execute(userId: string): Promise<number> {
+    // Analytics context uses Your Context's public API (DTO)
+    const summary = await this.yourApi.getSummary(userId);
+    return summary.successRate;
+  }
+}
+```
+
+---
+
+### Pattern 2: Domain Events (Asynchronous Integration)
+
+Contexts communicate through events without direct coupling:
+
+```typescript
+// packages/your-context/domain/events/your-entity-created.event.ts
+export class YourEntityCreatedEvent {
+  constructor(
+    public readonly yourEntityId: string,
+    public readonly title: string,
+    public readonly userId: string,
+    public readonly occurredAt: Date = new Date(),
+  ) {}
+}
+
+// packages/analytics/application/event-handlers/your-entity-created.handler.ts
+export class OnYourEntityCreated {
+  constructor(private readonly metricsRepo: IMetricsRepository) {}
+
+  async handle(event: YourEntityCreatedEvent): Promise<void> {
+    // Analytics context reacts to Your Context events
+    await this.metricsRepo.incrementTotalEntities(event.userId);
+  }
+}
+```
+
+---
+
+### Pattern 3: Anti-Corruption Layer (ACL)
+
+Protect your context from external models:
+
+```typescript
+// packages/analytics/infrastructure/anti-corruption/your-context-adapter.ts
+import type { YourEntityDTO } from "@monorepo-template/integration/your-context-api";
+import { EntityMetric } from "@monorepo-template/analytics/domain";
+
+export class YourContextAdapter {
+  // Translate external DTO to Analytics domain model
+  toDomain(dto: YourEntityDTO): EntityMetric {
+    return new EntityMetric({
+      entityId: dto.id,
+      wasSuccessful: dto.status === "completed",
+      duration: this.calculateDuration(dto),
+    });
+  }
+
+  private calculateDuration(dto: YourEntityDTO): number {
+    // Analytics-specific calculation
+    return 0; // Simplified
+  }
+}
+```
+
+---
+
+## 📋 Package.json Per Context
+
+### Your Context Package
+
+```json
+// packages/your-context/package.json
+{
+  "name": "@monorepo-template/your-context",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    "./domain": "./domain/index.ts",
+    "./application": "./application/index.ts",
+    "./infrastructure": "./infrastructure/index.ts"
+  },
+  "dependencies": {
+    "@monorepo-template/shared-kernel": "workspace:*",
+    "@monorepo-template/database": "workspace:*",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "typescript": "^5",
+    "vitest": "catalog:"
+  }
+}
+```
+
+---
+
+### Analytics Context Package
+
+```json
+// packages/analytics/package.json
+{
+  "name": "@monorepo-template/analytics",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    "./domain": "./domain/index.ts",
+    "./application": "./application/index.ts"
+  },
+  "dependencies": {
+    "@monorepo-template/shared-kernel": "workspace:*",
+    "@monorepo-template/integration": "workspace:*",  // ← Uses context API
+    "zod": "catalog:"
+  }
+}
+```
+
+---
+
+### Integration Package
+
+```json
+// packages/integration/package.json
+{
+  "name": "@monorepo-template/integration",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    "./your-context-api": "./your-context-api/index.ts",
+    "./analytics-api": "./analytics-api/index.ts"
+  },
+  "dependencies": {
+    "@monorepo-template/shared-kernel": "workspace:*"
+  }
+}
+```
+
+---
+
+## 🎯 Dependency Rules
+
+### ✅ Allowed Dependencies
+
+```
+┌─────────────────────────────────────┐
+│ Application Layer                   │
+│   ↓ can use                         │
+│ Domain Layer                        │
+└─────────────────────────────────────┘
+      ↑ implements
+┌─────────────────────────────────────┐
+│ Infrastructure Layer                │
+└─────────────────────────────────────┘
+
+All layers can use: Shared Kernel
+```
+
+**Valid:**
+
+```typescript
+// Application uses Domain ✅
+import { YourEntity } from "@monorepo-template/your-context/domain";
+
+// Infrastructure implements Domain ✅
+import type { IYourEntityRepository } from "@monorepo-template/your-context/domain";
+
+// All use Shared Kernel ✅
+import { Currency } from "@monorepo-template/shared-kernel";
+```
+
+---
+
+### ❌ Forbidden Dependencies
+
+```
+Domain → Application ❌
+Domain → Infrastructure ❌
+Context A → Context B (directly) ❌
+```
+
+**Invalid:**
+
+```typescript
+// Domain CANNOT use Application ❌
+import { CreateYourEntityHandler } from "@monorepo-template/your-context/application";
+
+// Domain CANNOT use Infrastructure ❌
+import { YourEntityRepositoryDrizzle } from "@monorepo-template/your-context/infrastructure";
+
+// Your Context CANNOT directly use Analytics ❌
+import { MetricsService } from "@monorepo-template/analytics/domain";
+```
+
+---
+
+### ✅ Context-to-Context Communication
+
+Use integration packages:
+
+```typescript
+// Analytics using Your Context's public API ✅
+import type { YourEntityDTO } from "@monorepo-template/integration/your-context-api";
+
+// Billing subscribing to Your Context events ✅
+import type { YourEntityCreatedEvent } from "@monorepo-template/integration/your-context-api/events";
+```
+
+---
+
+## 🚀 Real-World Example: Multiple Contexts
+
+### Scenario: User Creates an Entity
+
+**Flow across contexts:**
+
+1. **Your Context** - Create entity
+2. **Analytics Context** - Update metrics
+3. **Billing Context** - Check usage limits
+
+```typescript
+// 1. User action in frontend
+// apps/web/src/routes/your-entities/create.tsx
+const createEntity = async (data: CreateYourEntityInput) => {
+  // Calls Your Context API
+  const result = await api.yourContext.createEntity(data);
+  return result;
+};
+
+// 2. Your context handles creation
+// packages/your-context/application/use-cases/create-your-entity/handler.ts
+export class CreateYourEntityHandler {
+  async execute(command: CreateYourEntityCommand): Promise<string> {
+    const entity = YourEntity.create(command);
+    await this.repo.save(entity);
+
+    // Publish event (other contexts can listen)
+    await this.eventBus.publish(
+      new YourEntityCreatedEvent(entity.id, command.userId)
+    );
+
+    return entity.id;
+  }
+}
+
+// 3. Analytics context reacts to event
+// packages/analytics/application/event-handlers/on-your-entity-created.ts
+export class OnYourEntityCreated {
+  async handle(event: YourEntityCreatedEvent): Promise<void> {
+    // Update analytics metrics
+    await this.metricsRepo.incrementEntityCount(event.userId);
+  }
+}
+
+// 4. Billing context reacts to event
+// packages/billing/application/event-handlers/on-your-entity-created.ts
+export class OnYourEntityCreatedForBilling {
+  async handle(event: YourEntityCreatedEvent): Promise<void> {
+    // Check usage limits
+    const subscription = await this.subscriptionRepo.findByUserId(event.userId);
+
+    if (subscription.hasExceededLimit()) {
+      // Send notification
+      await this.notificationService.sendLimitWarning(event.userId);
+    }
+  }
+}
+```
+
+---
+
+## 📊 Context Mapping
+
+Visual representation of context relationships:
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                     Shared Kernel                            │
+│  (Currency, Result, ApiResponse, Pagination)                 │
+└──────────────────────────────────────────────────────────────┘
+                            ↑ uses
+        ┌───────────────────┼───────────────────┐
+        │                   │                   │
+┌───────▼────────┐  ┌───────▼────────┐  ┌───────▼────────┐
+│  Your Context  │  │Analytics Context│  │ Billing Context│
+│                │  │                 │  │                │
+│ • Entities     │  │ • Metrics       │  │ • Subscriptions│
+│ • Comments     │  │ • Reports       │  │ • Payments     │
+│ • Workflows    │  │ • Dashboards    │  │ • Usage        │
+└────────┬───────┘  └────────┬────────┘  └────────┬───────┘
+         │                   │                     │
+         │    publishes      │      listens        │
+         │    events         │      to events      │
+         └──────────►────────┴──────◄──────────────┘
+                            │
+                    ┌───────▼────────┐
+                    │  Integration   │
+                    │  (Event Bus)   │
+                    └────────────────┘
+```
+
+---
+
+## 💡 Best Practices
+
+### 1. Keep Contexts Small and Focused
+
+```bash
+✅ Good: @monorepo-template/your-context (single responsibility)
+❌ Bad: @monorepo-template/your-context-analytics-billing (mixed concerns)
+```
+
+### 2. Use Explicit Boundaries
+
+```typescript
+// ✅ Clear boundary - context exports only domain
+export * from "./domain";
+export * from "./application";
+
+// ❌ Unclear - exporting everything
+export * from "./domain";
+export * from "./infrastructure";  // Leaking implementation details
+```
+
+### 3. Version Your Integration APIs
+
+```typescript
+// packages/integration/your-context-api/v1/
+export interface YourEntityDTO_V1 { /* ... */ }
+
+// packages/integration/your-context-api/v2/
+export interface YourEntityDTO_V2 { /* ... */ }
+```
+
+### 4. Test Contexts Independently
+
+```typescript
+// packages/your-context/domain/__tests__/your-entity.test.ts
+describe("YourEntity", () => {
+  it("should transition to active status", () => {
+    const entity = YourEntity.create({ title: "Example" });
+    entity.updateStatus(YourEntityStatus.active());
+    expect(entity.status).toBe(YourEntityStatus.active());
+  });
+});
+```
+
+---
+
+## 🎯 Migration Strategy
+
+### Phase 1: Single Context (Current)
+
+```
+packages/domain/  ← All business logic here
+packages/database/  ← All infrastructure
+```
+
+### Phase 2: Extract Shared Kernel
+
+```
+packages/shared-kernel/  ← Generic primitives
+packages/domain/  ← Rename to your-context later
+packages/database/
+```
+
+### Phase 3: Add Second Context
+
+```
+packages/shared-kernel/
+packages/your-context/  ← Renamed from domain
+packages/analytics/  ← New context
+packages/database/
+```
+
+### Phase 4: Full Multi-Context
+
+```
+packages/shared-kernel/
+packages/your-context/
+packages/analytics/
+packages/billing/
+packages/integration/  ← Context APIs
+packages/database/
+```
+
+---
+
+## 🔗 Related Documentation
+
+- [Shared Kernel & Bounded Contexts](/architecture/shared-kernel-and-bounded-contexts)
+- [Shared Kernel Implementation Guide](/architecture/shared-kernel-implementation-guide)
+- [Repository Pattern](/architecture/repository-pattern)
+- [Application Services Layer](/architecture/application-services-layer)
+
+---

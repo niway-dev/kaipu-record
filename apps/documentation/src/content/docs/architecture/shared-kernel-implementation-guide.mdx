@@ -1,0 +1,634 @@
+---
+title: Shared Kernel Implementation Guide
+description: Step-by-step guide to implementing the shared kernel architecture
+---
+
+# Shared Kernel Implementation Guide
+
+This is a practical, step-by-step guide to extract the shared kernel from the current domain package.
+
+---
+
+## 📋 Prerequisites
+
+- Existing `@monorepo-template/domain` package
+- Files to move identified (see [Shared Kernel & Bounded Contexts](/architecture/shared-kernel-and-bounded-contexts))
+- All tests passing
+- Clean git working directory
+
+---
+
+## 🎯 Goal
+
+Transform this:
+
+```bash
+packages/domain/
+  src/
+    constants/
+      currency.ts              # ← Move to shared-kernel
+      entity-status.ts         # ← Keep
+      comment-type.ts          # ← Keep
+    types/
+      api-response.ts          # ← Move to shared-kernel
+      result.ts                # ← Move to shared-kernel
+```
+
+Into this:
+
+```bash
+packages/shared-kernel/
+  src/
+    api.ts                     # ← From api-response.ts
+    currency.ts                # ← From currency.ts
+    result.ts                  # ← From result.ts
+    utils.ts                   # ← New file with ObjectProperties
+    index.ts                   # ← Barrel exports
+
+packages/domain/
+  src/
+    constants/
+      entity-status.ts         # ← Stays
+      comment-type.ts          # ← Stays
+      priority-level.ts        # ← Stays
+```
+
+---
+
+## 🚀 Implementation Steps
+
+### Step 1: Create Shared Kernel Package
+
+```bash
+# Navigate to packages directory
+cd packages
+
+# Create shared-kernel directory structure
+mkdir -p shared-kernel/src
+
+# Create package.json
+cat > shared-kernel/package.json << 'EOF'
+{
+  "name": "@monorepo-template/shared-kernel",
+  "version": "1.0.0",
+  "description": "Shared primitives and utilities across all bounded contexts",
+  "type": "module",
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./api": "./src/api.ts",
+    "./currency": "./src/currency.ts",
+    "./result": "./src/result.ts",
+    "./utils": "./src/utils.ts",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": "./dist/index.mjs",
+      "./api": "./dist/api.mjs",
+      "./currency": "./dist/currency.mjs",
+      "./result": "./dist/result.mjs",
+      "./utils": "./dist/utils.mjs",
+      "./package.json": "./package.json"
+    }
+  },
+  "scripts": {
+    "build": "tsdown",
+    "dev:watch": "tsdown --watch",
+    "clean": "rm -rf dist",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@monorepo-template/config": "workspace:*",
+    "@types/node": "^22",
+    "tsdown": "^0.18.2",
+    "typescript": "^5"
+  },
+  "packageManager": "bun@1.3.4"
+}
+EOF
+
+# Create tsconfig.json
+cat > shared-kernel/tsconfig.json << 'EOF'
+{
+  "extends": "@monorepo-template/config/tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}
+EOF
+```
+
+---
+
+### Step 2: Create API Types File
+
+```bash
+cat > shared-kernel/src/api.ts << 'EOF'
+/**
+ * Standard API response structure
+ * All API responses follow this format for consistency
+ */
+export interface ApiResponse<T> {
+  data: T | null;
+  error: { message: string } | null;
+  meta?: {
+    pagination?: PaginationMeta;
+  };
+}
+
+/**
+ * Pagination metadata
+ */
+export interface PaginationMeta {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+/**
+ * Pagination query parameters
+ */
+export interface PaginationParams {
+  page?: number;
+  limit?: number;
+}
+
+/**
+ * Calculated pagination values
+ */
+export interface PaginationResult {
+  page: number;
+  limit: number;
+  offset: number;
+}
+EOF
+```
+
+---
+
+### Step 3: Create Currency File
+
+```bash
+cat > shared-kernel/src/currency.ts << 'EOF'
+import type { ObjectProperties } from "./utils";
+
+/**
+ * Supported currency codes
+ * Following ISO 4217 standard
+ */
+export const CURRENCIES = {
+  USD: "USD",
+  PEN: "PEN",
+} as const;
+
+/**
+ * Type for currency values
+ */
+export type Currency = ObjectProperties<typeof CURRENCIES>;
+
+/**
+ * Array of currency values for iteration
+ */
+export const CURRENCY_VALUES = [CURRENCIES.USD, CURRENCIES.PEN] as const;
+
+/**
+ * Check if a value is a valid currency
+ */
+export function isValidCurrency(value: string): value is Currency {
+  return CURRENCY_VALUES.includes(value as Currency);
+}
+
+/**
+ * Currency display information
+ */
+export const CURRENCY_INFO: Record<Currency, { label: string; symbol: string }> = {
+  USD: { label: "US Dollar", symbol: "$" },
+  PEN: { label: "Peruvian Sol", symbol: "S/" },
+};
+EOF
+```
+
+---
+
+### Step 4: Create Result Pattern File
+
+```bash
+cat > shared-kernel/src/result.ts << 'EOF'
+/**
+ * Result type pattern for better error handling
+ * Inspired by Rust's Result<T, E> type
+ *
+ * This is a domain-level concept representing the outcome of operations
+ * without throwing exceptions, making error handling explicit and type-safe.
+ */
+
+/**
+ * Success result with data
+ */
+export type Success<T> = {
+  data: T;
+  error: null;
+};
+
+/**
+ * Failure result with error
+ */
+export type Failure<E> = {
+  data: null;
+  error: E;
+};
+
+/**
+ * Result type - either Success or Failure
+ */
+export type Result<T, E = Error> = Success<T> | Failure<E>;
+
+/**
+ * Wraps a promise in a Result type for better error handling
+ *
+ * @example
+ * const result = await tryCatch(db.select().from(users));
+ * if (result.error) {
+ *   // Handle error
+ *   return;
+ * }
+ * // TypeScript knows result.data exists here
+ * console.log(result.data);
+ */
+export async function tryCatch<T, E = Error>(promise: Promise<T>): Promise<Result<T, E>> {
+  try {
+    const data = await promise;
+    return { data, error: null };
+  } catch (error) {
+    return { data: null, error: error as E };
+  }
+}
+
+/**
+ * Helper to check if result is success
+ */
+export function isSuccess<T, E>(result: Result<T, E>): result is Success<T> {
+  return result.error === null;
+}
+
+/**
+ * Helper to check if result is failure
+ */
+export function isFailure<T, E>(result: Result<T, E>): result is Failure<E> {
+  return result.error !== null;
+}
+
+/**
+ * Unwrap result or throw error
+ * Use with caution - only when you're certain it's a success
+ */
+export function unwrap<T, E>(result: Result<T, E>): T {
+  if (result.error) {
+    throw result.error;
+  }
+  return result.data as T;
+}
+EOF
+```
+
+---
+
+### Step 5: Create Utils File
+
+```bash
+cat > shared-kernel/src/utils.ts << 'EOF'
+/**
+ * Utility type to extract object property values
+ * Useful for creating type-safe constants
+ *
+ * @example
+ * const COLORS = { RED: "red", BLUE: "blue" } as const;
+ * type Color = ObjectProperties<typeof COLORS>; // "red" | "blue"
+ */
+export type ObjectProperties<T> = T[keyof T];
+EOF
+```
+
+---
+
+### Step 6: Create Barrel Export
+
+```bash
+cat > shared-kernel/src/index.ts << 'EOF'
+// API types
+export type {
+  ApiResponse,
+  PaginationMeta,
+  PaginationParams,
+  PaginationResult,
+} from "./api";
+
+// Currency
+export { CURRENCIES, CURRENCY_VALUES, CURRENCY_INFO, isValidCurrency } from "./currency";
+export type { Currency } from "./currency";
+
+// Result pattern
+export { tryCatch, isSuccess, isFailure, unwrap } from "./result";
+export type { Result, Success, Failure } from "./result";
+
+// Utilities
+export type { ObjectProperties } from "./utils";
+EOF
+```
+
+---
+
+### Step 7: Update Domain Package Dependencies
+
+```bash
+# Edit packages/domain/package.json
+# Add shared-kernel dependency:
+```
+
+```json
+{
+  "name": "@monorepo-template/domain",
+  "dependencies": {
+    "@monorepo-template/shared-kernel": "workspace:*",
+    "zod": "catalog:"
+  }
+}
+```
+
+---
+
+### Step 8: Update Domain Package Imports
+
+Update `packages/domain/src/constants/index.ts`:
+
+```typescript
+// Re-export shared types for convenience
+export { CURRENCIES, Currency, CURRENCY_INFO } from "@monorepo-template/shared-kernel/currency";
+
+// Export domain-specific constants
+export * from "./entity-status";
+export * from "./comment-type";
+export * from "./priority-level";
+```
+
+Update `packages/domain/src/types/index.ts`:
+
+```typescript
+// Re-export shared types
+export type {
+  ApiResponse,
+  PaginationMeta,
+  PaginationParams,
+  PaginationResult,
+  Result,
+  Success,
+  Failure,
+  ObjectProperties,
+} from "@monorepo-template/shared-kernel";
+
+export { tryCatch, isSuccess, isFailure, unwrap } from "@monorepo-template/shared-kernel";
+```
+
+---
+
+### Step 9: Delete Old Files
+
+```bash
+# Only after confirming all imports work
+rm packages/domain/src/types/api-response.ts
+rm packages/domain/src/types/result.ts
+rm packages/domain/src/constants/currency.ts
+```
+
+---
+
+### Step 10: Update All Import Statements
+
+Find and replace across the codebase:
+
+**Option A: Use shared-kernel directly**
+
+```typescript
+// Before
+import { CURRENCIES } from "@monorepo-template/domain/constants";
+import { Result } from "@monorepo-template/domain/types";
+import { ApiResponse } from "@monorepo-template/domain/types";
+
+// After
+import { CURRENCIES } from "@monorepo-template/shared-kernel/currency";
+import { Result } from "@monorepo-template/shared-kernel/result";
+import { ApiResponse } from "@monorepo-template/shared-kernel/api";
+```
+
+**Option B: Re-export from domain (recommended for backward compatibility)**
+
+```typescript
+// No changes needed - domain re-exports shared-kernel types
+import { CURRENCIES, Result, ApiResponse } from "@monorepo-template/domain";
+```
+
+---
+
+### Step 11: Update Package Dependencies
+
+Add `@monorepo-template/shared-kernel` to all packages that need it:
+
+```json
+// packages/database/package.json
+{
+  "dependencies": {
+    "@monorepo-template/shared-kernel": "workspace:*",
+    "@monorepo-template/domain": "workspace:*"
+  }
+}
+
+// apps/server/package.json
+{
+  "dependencies": {
+    "@monorepo-template/shared-kernel": "workspace:*",
+    "@monorepo-template/domain": "workspace:*"
+  }
+}
+
+// apps/web/package.json
+{
+  "dependencies": {
+    "@monorepo-template/shared-kernel": "workspace:*",
+    "@monorepo-template/domain": "workspace:*"
+  }
+}
+```
+
+---
+
+### Step 12: Install Dependencies
+
+```bash
+# From monorepo root
+bun install
+```
+
+---
+
+### Step 13: Build and Test
+
+```bash
+# Build shared-kernel
+cd packages/shared-kernel
+bun run build
+
+# Build domain (depends on shared-kernel)
+cd ../domain
+bun run build
+
+# Run type checks
+cd ../..
+bun run check-types
+
+# Run tests
+bun test
+```
+
+---
+
+## ✅ Verification Checklist
+
+After migration, verify:
+
+- [ ] `bun install` runs without errors
+- [ ] All packages build successfully
+- [ ] TypeScript type checking passes
+- [ ] No import errors in any package
+- [ ] All tests pass
+- [ ] Dev servers start correctly (`bun run dev`)
+- [ ] Production build works (`bun run build`)
+
+---
+
+## 🔄 Rollback Plan
+
+If something goes wrong:
+
+```bash
+# 1. Revert all changes
+git reset --hard HEAD
+
+# 2. Or selectively undo specific files
+git checkout HEAD -- packages/shared-kernel
+git checkout HEAD -- packages/domain
+
+# 3. Reinstall dependencies
+bun install
+```
+
+---
+
+## 📊 Expected File Changes
+
+### New Files (7)
+
+- `packages/shared-kernel/package.json`
+- `packages/shared-kernel/tsconfig.json`
+- `packages/shared-kernel/src/api.ts`
+- `packages/shared-kernel/src/currency.ts`
+- `packages/shared-kernel/src/result.ts`
+- `packages/shared-kernel/src/utils.ts`
+- `packages/shared-kernel/src/index.ts`
+
+### Modified Files (3)
+
+- `packages/domain/package.json` (add shared-kernel dependency)
+- `packages/domain/src/constants/index.ts` (re-export shared types)
+- `packages/domain/src/types/index.ts` (re-export shared types)
+
+### Deleted Files (3)
+
+- `packages/domain/src/types/api-response.ts`
+- `packages/domain/src/types/result.ts`
+- `packages/domain/src/constants/currency.ts`
+
+### Updated Dependencies (3+)
+
+- `packages/database/package.json`
+- `apps/server/package.json`
+- `apps/web/package.json`
+
+---
+
+## 🚨 Common Issues & Solutions
+
+### Issue 1: Circular Dependencies
+
+**Problem:** `shared-kernel` imports from `domain`, creating a cycle
+
+**Solution:** Shared kernel should NEVER import from domain. Only domain imports from shared-kernel.
+
+---
+
+### Issue 2: Type Errors After Migration
+
+**Problem:** TypeScript can't find types from shared-kernel
+
+**Solution:**
+
+1. Ensure `bun install` was run
+2. Check `node_modules/@monorepo-template/shared-kernel` exists
+3. Restart TypeScript server in your IDE
+
+---
+
+### Issue 3: Build Fails
+
+**Problem:** `tsdown` build fails in shared-kernel
+
+**Solution:**
+
+1. Check `tsconfig.json` extends base config correctly
+2. Ensure all imports are valid
+3. Run `bun run check-types` first
+
+---
+
+## 📚 Related Documentation
+
+- [Shared Kernel & Bounded Contexts](/architecture/shared-kernel-and-bounded-contexts) - Conceptual guide
+- [Repository Pattern](/architecture/repository-pattern) - Repository architecture
+- [Architecture Overview](/architecture/) - Package organization
+
+---
+
+## 💡 Tips for Success
+
+1. **Do it in a feature branch**
+
+   ```bash
+   git checkout -b refactor/extract-shared-kernel
+   ```
+
+2. **Commit incrementally**
+   - Create package structure
+   - Move one file at a time
+   - Update imports
+   - Test after each step
+
+3. **Use re-exports for backward compatibility**
+   - Domain package re-exports shared types
+   - Existing imports continue to work
+   - Migrate imports gradually
+
+4. **Test thoroughly**
+   - Run full test suite
+   - Test dev and prod builds
+   - Verify all apps start
+
+---

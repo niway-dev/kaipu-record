@@ -1,0 +1,155 @@
+---
+title: Result Types
+description: Functional error handling with Result type pattern
+---
+
+# Result Types
+
+## Overview
+
+The Result type pattern provides a functional approach to error handling that makes errors explicit and type-safe. Inspired by Rust's `Result<T, E>` type.
+
+## Why Use Result Types?
+
+1. **Explicit Error Handling**: Errors are part of the return type, forcing developers to handle them explicitly rather than relying on try/catch blocks.
+
+2. **Type Safety**: TypeScript's discriminated unions allow the compiler to narrow types based on whether the result is a success or failure.
+
+3. **No Hidden Exceptions**: All errors are visible in the type system, making it impossible to forget error handling.
+
+4. **Composable**: Results can be chained and transformed using functional patterns.
+
+5. **Better for Async Operations**: Works seamlessly with async/await without the complexity of exception propagation.
+
+## Type Definition
+
+```typescript
+type Success<T> = {
+  data: T;
+  error: null;
+};
+
+type Failure<E> = {
+  data: null;
+  error: E;
+};
+
+type Result<T, E = Error> = Success<T> | Failure<E>;
+```
+
+## Basic Usage
+
+### Wrapping Promises
+
+```typescript
+import { tryCatch } from "@monorepo-template/domain/types";
+
+const result = await tryCatch(
+  db.select().from(users).where(eq(users.id, userId))
+);
+```
+
+### Checking Results
+
+```typescript
+import { isFailure, isSuccess } from "@monorepo-template/domain/types";
+
+if (isFailure(result)) {
+  // TypeScript knows result.error exists
+  console.error(result.error);
+  return;
+}
+
+// TypeScript knows result.data exists here
+const user = result.data[0];
+```
+
+## Helper Functions
+
+### `tryCatch<T, E>(promise: Promise<T>): Promise<Result<T, E>>`
+
+Wraps a promise in a Result type, catching any errors automatically.
+
+```typescript
+const result = await tryCatch(someAsyncOperation());
+```
+
+### `isSuccess<T, E>(result: Result<T, E>): result is Success<T>`
+
+Type guard to check if a result is successful.
+
+```typescript
+if (isSuccess(result)) {
+  // TypeScript knows result.data exists
+  console.log(result.data);
+}
+```
+
+### `isFailure<T, E>(result: Result<T, E>): result is Failure<E>`
+
+Type guard to check if a result is a failure.
+
+```typescript
+if (isFailure(result)) {
+  // TypeScript knows result.error exists
+  handleError(result.error);
+}
+```
+
+### `unwrap<T, E>(result: Result<T, E>): T`
+
+⚠️ **Use with caution**: Unwraps a result, throwing the error if it's a failure.
+
+```typescript
+// Only use when you're certain it's a success
+const data = unwrap(result);
+```
+
+## Real-World Examples
+
+### Database Query
+
+```typescript
+const result = await tryCatch(
+  db.select().from(users).where(eq(users.id, userId)).limit(1)
+);
+
+if (isFailure(result)) {
+  throw new InternalServerError("Failed to fetch user");
+}
+
+const user = result.data[0];
+if (!user) {
+  throw new NotFoundError("User not found");
+}
+```
+
+### API Call
+
+```typescript
+const result = await tryCatch(fetchUserFromAPI(userId));
+
+if (isFailure(result)) {
+  return errorBody(result.error.message);
+}
+
+return successBody(result.data);
+```
+
+## Best Practices
+
+1. **Always check for failures**: Use `isFailure()` or `isSuccess()` before accessing data.
+
+2. **Avoid `unwrap()`**: Prefer explicit error handling over `unwrap()`.
+
+3. **Use with error handlers**: Combine with [Error Handlers](/backend/error-handlers) for consistent error handling.
+
+4. **Type your errors**: Specify error types when possible:
+   ```typescript
+   type Result<User, DatabaseError>
+   ```
+
+## See Also
+
+- [Error Handlers](/backend/error-handlers) - Utilities for handling Result types
+- [Response Helpers](/backend/response-helpers) - Creating API responses

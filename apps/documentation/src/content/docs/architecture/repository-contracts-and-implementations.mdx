@@ -1,0 +1,253 @@
+---
+title: Repository Contracts and Implementations
+description: Architectural decision and rules for repository contracts (domain) vs implementations (infrastructure). Use this for future migration and consistency.
+---
+
+# Repository Contracts and Implementations
+
+This document captures the architectural decision around repository **contracts** (interfaces) and their **implementations** in this codebase. These rules are important for migrating and evolving the application without coupling the domain to infrastructure.
+
+---
+
+## Purpose
+
+The goal is to:
+
+- Keep the domain layer pure (no infrastructure concerns)
+- Make it explicit that repositories in the domain are **contracts only**
+- Allow infrastructure (DB, ORM, APIs) to evolve independently
+
+This is a lightweight application of DDD + Hexagonal Architecture, intentionally kept minimal to avoid over-engineering.
+
+---
+
+## Core Principle
+
+**The domain defines what it needs. Infrastructure decides how to provide it.**
+
+- The domain owns the repository **contract**
+- The infrastructure owns the repository **implementation**
+- Dependency direction always points toward the domain
+
+---
+
+## Repository Contract (Domain Layer)
+
+### What It Is
+
+A repository contract is a pure TypeScript interface that defines the data access API required by the domain.
+
+It:
+
+- Contains **no implementation**
+- Knows nothing about databases, ORMs, SQL, or frameworks
+- Exists only to express **capabilities**, not technology
+
+### Naming
+
+We use the suffix **Contract**:
+
+```text
+YourEntityRepositoryContract
+```
+
+Why:
+
+- Makes it explicit this is not an implementation
+- Avoids language-specific prefixes like `I` (e.g. `IYourEntityRepository`)
+- Is understandable without knowing Hexagonal jargon
+
+### Location
+
+In this project:
+
+```text
+packages/
+  domain/
+    src/
+      repositories/
+        your-entity.repository.ts   # Contract(s) + PaginatedResult, etc.
+```
+
+### Example
+
+```typescript
+/**
+ * Entity repository contract (domain layer).
+ * Defines the data access API only; no implementation lives here.
+ */
+export interface YourEntityRepositoryContract {
+  findById(id: string, userId: string): Promise<YourEntityBase | null>;
+  findPaginated(
+    userId: string,
+    params: PaginationParams
+  ): Promise<PaginatedResult<YourEntityBase>>;
+  save(yourEntity: YourEntityBase): Promise<void>;
+  update(
+    id: string,
+    userId: string,
+    data: Partial<Omit<YourEntityBase, "id" | "userId" | "createdAt">>
+  ): Promise<YourEntityBase>;
+  delete(id: string, userId: string): Promise<void>;
+}
+```
+
+---
+
+## Repository Implementation (Infrastructure Layer)
+
+### What It Is
+
+A repository implementation is a concrete adapter that fulfills a domain contract using a specific technology (e.g. Drizzle, Prisma).
+
+It:
+
+- Implements **exactly one** contract
+- Is free to use ORM / SQL / DB-specific optimizations
+- Can be replaced without touching domain or application logic
+
+### Naming
+
+Implementations can be explicit and technology-specific:
+
+- **`YourEntityRepository`** -- current Drizzle implementation (concrete class name)
+- **`DrizzleYourEntityRepository`** -- alternative name that makes the technology obvious
+
+Both are valid; the important part is that the class **implements** the contract from the domain.
+
+### Location
+
+In this project:
+
+```text
+packages/
+  db/
+    src/
+      repositories/
+        your-entity.repository.ts   # Drizzle implementation
+      mappers/
+        your-entity.mapper.ts       # DB row ↔ domain type mapping
+```
+
+### Example
+
+```typescript
+import type {
+  YourEntityRepositoryContract,
+  PaginatedResult,
+} from "@monorepo-template/domain/repositories";
+
+export class YourEntityRepository implements YourEntityRepositoryContract {
+  constructor(private readonly db: NeonHttpDatabase<typeof schema>) {}
+
+  async findById(id: string, userId: string): Promise<YourEntityBase | null> {
+    // Drizzle-specific implementation
+  }
+
+  async findPaginated(
+    userId: string,
+    params: PaginationParams
+  ): Promise<PaginatedResult<YourEntityBase>> {
+    // Drizzle-specific implementation
+  }
+
+  // ... save, update, delete
+}
+```
+
+---
+
+## Application Layer Usage
+
+The application layer (use cases, server functions, routes) should depend only on the **contract**, not the implementation, when possible.
+
+Example (use case style):
+
+```typescript
+export class GetYourEntities {
+  constructor(
+    private readonly repository: YourEntityRepositoryContract
+  ) {}
+
+  async execute(userId: string, params: PaginationParams) {
+    return this.repository.findPaginated(userId, params);
+  }
+}
+```
+
+**Wiring** (instantiating the concrete repository and passing it in) happens at the edge of the system (e.g. route setup, server bootstrap, or server functions that create the DB client and repository).
+
+---
+
+## Architectural Context
+
+This pattern combines:
+
+| Idea                                          | Role                                                                                    |
+| --------------------------------------------- | --------------------------------------------------------------------------------------- |
+| **Domain-Driven Design (DDD)**                | Domain owns business rules and contracts; bounded contexts are explicit.                |
+| **Hexagonal Architecture (Ports & Adapters)** | Repository contracts act as **ports**; infrastructure repositories act as **adapters**. |
+
+DDD defines structure and language. Hexagonal defines dependency direction.
+
+---
+
+## On Over-Engineering
+
+This setup is intentionally minimal:
+
+- One contract per repository
+- One implementation per technology
+- No CQRS, no event sourcing, no premature abstractions
+
+It provides:
+
+- Clear intent
+- Testability (mock the contract)
+- Future flexibility (swap ORM or add another adapter)
+
+While slightly more structured than a quick MVP, it avoids long-term coupling and keeps refactors cheap.
+
+---
+
+## Rules of Thumb
+
+| Rule                                                              | Reason                                                                          |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Domain **never** imports infrastructure                           | Keeps domain pure and stable.                                                   |
+| Contracts live **only** in `packages/domain`                      | Single place that defines "what" is needed.                                     |
+| Implementations live in infrastructure (e.g. `packages/infra-db`) | "How" is isolated and replaceable.                                              |
+| If an abstraction feels speculative                               | Don't add it yet; add it when you have a second implementation or a clear need. |
+
+---
+
+## Summary
+
+- **Repository contracts** express needs (domain).
+- **Repository implementations** provide solutions (infrastructure).
+- The domain stays clean and stable.
+- Infrastructure stays replaceable.
+
+This pattern is deliberate, lightweight, and reversible -- optimized for long-term maintainability without enterprise bloat. Use it as the reference when migrating or adding new repositories.
+
+---
+
+## Migration: Applying contract naming
+
+If you have existing repository interfaces named with an `I` prefix (e.g. `IYourEntityRepository`), you can rename them to the contract naming as follows.
+
+1. **Domain** (`packages/domain/src/repositories/<entity>.repository.ts`): Rename the interface to `<Entity>RepositoryContract` and update the JSDoc to state it is the contract only (no implementation). Example: `IYourEntityRepository` -> `YourEntityRepositoryContract`.
+
+2. **DB package** (`packages/infra-db/src/repositories/<entity>.repository.ts`): Update the import from the domain to use the new contract name, and change the class `implements` clause and class JSDoc to reference the new name.
+
+3. **Docs**: In `apps/documentation/src/content/docs/architecture/*.mdx`, replace any remaining references to the old interface name (e.g. `IYourEntityRepository`) with the new one (`YourEntityRepositoryContract`).
+
+Application code that uses the **concrete class** (e.g. `YourEntityRepository` from `@monorepo-template/infra-db/repositories`) does not need to change; only the interface name in the domain and the implementation's `implements` clause change.
+
+---
+
+## Related Documentation
+
+- [Repository Pattern](/architecture/repository-pattern) -- Detailed implementation guide and examples
+- [Repository Refactoring Summary](/architecture/repository-refactoring-summary) -- Refactoring history
+- [Application Services Layer](/architecture/application-services-layer) -- How use cases use repositories

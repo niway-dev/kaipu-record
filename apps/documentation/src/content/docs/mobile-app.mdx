@@ -1,0 +1,43 @@
+---
+title: Mobile App
+description: Expo React Native mobile app with tab navigation and Better Auth integration
+---
+
+## Overview
+
+The mobile app is built with **Expo** and **React Native**, providing a native mobile experience. It shares domain logic with the web app through the `@monorepo-template/domain` package.
+
+## Tab Structure
+
+The app uses a bottom tab navigator with three tabs:
+
+| Tab         | Screen        | Description                                                      |
+| ----------- | ------------- | ---------------------------------------------------------------- |
+| **Home**    | `index.tsx`   | Lists your entities with status badges, key info, and pagination |
+| **Explore** | `explore.tsx` | Discovery and exploration features                               |
+| **Profile** | `profile.tsx` | User info display and sign-out                                   |
+
+## Profile Screen
+
+The Profile tab displays the authenticated user's information and provides account actions:
+
+- **User name** — displayed as a subtitle heading
+- **Email** — shown below the name
+- **Sign Out** — ends the session and redirects to the sign-in screen
+
+## Shared Domain Package
+
+The mobile app imports **only** from `@monorepo-template/domain` — the pure domain package with zero infrastructure dependencies. This is safe because everything in it is pure data: constants, types, and Zod schemas.
+
+Currently imported:
+
+- `@monorepo-template/domain/constants` — `YOUR_ENTITY_STATUS_INFO`, status labels, colors, and display constants
+- `@monorepo-template/domain/schemas` — `createYourEntitySchema` for client-side form validation
+
+The mobile app **must never** import from `@monorepo-template/db` or `@monorepo-template/application`. These are server-only packages. An ESLint `no-restricted-imports` rule enforces this — see [Application Layer & Package Architecture](/application-layer) for details.
+
+This ensures entity statuses are displayed consistently across the web and mobile apps, while keeping server code out of the mobile JS bundle.
+
+## Authentication
+
+Authentication is handled via **Better Auth** using the same auth client pattern as the web app. See [Full-Stack Authentication](/authentication) for details on the auth architecture.

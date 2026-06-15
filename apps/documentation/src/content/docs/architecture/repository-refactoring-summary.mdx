@@ -1,0 +1,325 @@
+---
+title: Repository Pattern Refactoring Summary
+description: Summary of the repository pattern implementation and refactoring
+---
+
+# Repository Pattern Refactoring Summary
+
+This document summarizes the refactoring work done to implement the proper Repository pattern following Domain-Driven Design principles.
+
+---
+
+## 🎯 What Was Changed
+
+### Before (❌ Anti-pattern)
+
+```
+packages/db/src/queries/your-entity.ts  ← Direct query functions
+  └─ findPaginatedYourEntities()       ← Called directly from routes
+
+apps/server/src/routes/your-entities.ts
+  └─ Direct SQL/ORM queries in route handlers
+```
+
+**Problems:**
+
+- Domain logic mixed with infrastructure
+- No separation of concerns
+- Hard to test
+- Tight coupling to Drizzle ORM
+- Raw database queries in routes
+
+---
+
+### After (✅ Clean Architecture)
+
+```
+packages/domain/src/repositories/
+  └─ your-entity.repository.ts         ← Interface (contract)
+
+packages/database/src/repositories/
+  └─ your-entity.repository.drizzle.ts ← Implementation
+
+packages/database/src/mappers/
+  └─ your-entity.mapper.ts             ← DB ↔ Domain conversion
+
+apps/server/src/routes/
+  └─ your-entities.ts                  ← Uses repository interface
+```
+
+**Benefits:**
+
+- ✅ Clean separation of concerns
+- ✅ Domain independent of infrastructure
+- ✅ Easy to test with mocks
+- ✅ Can swap Drizzle for Prisma
+- ✅ Rich domain model
+- ✅ Follows DDD principles
+
+---
+
+## 📦 Files Created
+
+### 1. Repository Interface (Domain Layer)
+
+**Location:** `packages/domain/src/repositories/your-entity.repository.ts`
+
+```typescript
+export interface IYourEntityRepository {
+  findById(id: string, userId: string): Promise<YourEntityBase | null>;
+  findPaginated(userId: string, params: PaginationParams): Promise<PaginatedResult<YourEntityBase>>;
+  save(yourEntity: YourEntityBase): Promise<void>;
+  update(id: string, userId: string, data: Partial<YourEntityBase>): Promise<YourEntityBase>;
+  delete(id: string, userId: string): Promise<void>;
+}
+```
+
+---
+
+### 2. Repository Implementation (Database Layer)
+
+**Location:** `packages/database/src/repositories/your-entity.repository.drizzle.ts`
+
+```typescript
+export class YourEntityRepositoryDrizzle implements IYourEntityRepository {
+  constructor(private readonly db: NeonHttpDatabase) {}
+
+  async findPaginated(userId: string, params: PaginationParams) {
+    // Drizzle queries here
+    // Returns domain entities via mapper
+  }
+
+  // ... other methods
+}
+```
+
+---
+
+### 3. Mapper (Database Layer)
+
+**Location:** `packages/database/src/mappers/your-entity.mapper.ts`
+
+```typescript
+export class YourEntityMapper {
+  static toDomain(row: any): YourEntityBase {
+    // Convert DB row to domain entity
+  }
+
+  static toPersistence(yourEntity: YourEntityBase): any {
+    // Convert domain entity to DB record
+  }
+}
+```
+
+---
+
+### 4. Documentation
+
+**Location:** `apps/documentation/src/content/docs/architecture/repository-pattern.mdx`
+
+Comprehensive guide covering:
+
+- Repository pattern principles
+- Package structure
+- Implementation examples
+- Testing strategies
+- Best practices
+
+---
+
+## 🔄 Files Modified
+
+### 1. Server Routes
+
+**Before:**
+
+```typescript
+// Direct database queries in route
+const entities = await db
+  .select()
+  .from(yourEntityTable)
+  .where(and(eq(yourEntityTable.userId, user.id), isNull(yourEntityTable.deletedAt)))
+  .orderBy(desc(yourEntityTable.updatedAt))
+  .limit(pagination.limit)
+  .offset(pagination.offset);
+```
+
+**After:**
+
+```typescript
+// Clean, abstracted repository call
+const result = await yourEntityRepo.findPaginated(user.id, {
+  page: query.page || 1,
+  limit: query.limit || 10,
+});
+```
+
+---
+
+### 2. Package Exports
+
+**`packages/domain/package.json`:**
+
+```json
+{
+  "exports": {
+    "./repositories": "./src/repositories/index.ts"
+  }
+}
+```
+
+**`packages/database/package.json`:**
+
+```json
+{
+  "exports": {
+    "./repositories": "./src/repositories/index.ts",
+    "./mappers": "./src/mappers/index.ts"
+  }
+}
+```
+
+---
+
+## 🗑️ Files Deleted
+
+- ❌ `packages/db/src/queries/your-entity.ts` - Deprecated query functions
+- ✅ Replaced by repository pattern
+
+---
+
+## 📊 Impact Analysis
+
+### Code Organization
+
+| Aspect                 | Before       | After          |
+| ---------------------- | ------------ | -------------- |
+| Separation of Concerns | ❌ Mixed     | ✅ Clear       |
+| Testability            | ❌ Hard      | ✅ Easy        |
+| Domain Independence    | ❌ Coupled   | ✅ Independent |
+| Reusability            | ❌ Low       | ✅ High        |
+| Maintainability        | ❌ Difficult | ✅ Simple      |
+
+---
+
+### Architecture Flow
+
+**Before:**
+
+```
+Route → Direct DB Query → Response
+```
+
+**After:**
+
+```
+Route → Repository Interface → Repository Implementation → Mapper → DB
+                                                          ↓
+                                                   Domain Entity
+```
+
+---
+
+## 🧪 Testing Benefits
+
+### Before (Hard to Test)
+
+```typescript
+// Need real database to test routes
+test('GET /your-entities', async () => {
+  const response = await request(app).get('/your-entities');
+  // Requires database connection
+});
+```
+
+### After (Easy to Test)
+
+```typescript
+// Mock repository for testing
+class MockYourEntityRepository implements IYourEntityRepository {
+  async findPaginated(userId: string, params: PaginationParams) {
+    return mockData;
+  }
+}
+
+test('GET /your-entities', async () => {
+  const mockRepo = new MockYourEntityRepository();
+  // Test with mock data, no database needed
+});
+```
+
+---
+
+## 📚 Related Documentation
+
+- [Repository Pattern Guide](/architecture/repository-pattern) - Full implementation guide
+- [Domain-Driven Design](/domain-architecture-patterns) - DDD principles
+- [Authentication Architecture](/authentication/overview) - Similar clean architecture
+
+---
+
+## 🎯 Next Steps
+
+### Recommended Refactorings
+
+1. **Comments Repository**
+   - Create interface in `packages/domain/src/repositories/`
+   - Implement in `packages/database/src/repositories/`
+   - Add mapper for DB ↔ Domain conversion
+
+2. **Related Details Repository**
+   - Follow same pattern
+   - Extract from direct queries
+
+3. **Application Services Layer**
+   - Create `packages/application/` for use cases
+   - Move business logic from routes to application services
+   - Example: `CreateYourEntity`, `UpdateYourEntity`, etc.
+
+---
+
+## 💡 Key Learnings
+
+1. **Repository Interface in Domain**
+   - Defines what data operations are needed
+   - Independent of infrastructure
+   - Easy to mock for testing
+
+2. **Repository Implementation in Database**
+   - Concrete implementation with ORM
+   - Can be swapped without affecting domain
+   - Encapsulates all SQL/ORM logic
+
+3. **Mapper Pattern**
+   - Converts between DB and domain representations
+   - Keeps domain entities clean
+   - Allows different DB schemas vs domain models
+
+4. **Clean Routes**
+   - Routes become thin orchestrators
+   - Business logic in domain/application layer
+   - Infrastructure concerns in database layer
+
+---
+
+## 🚀 Migration Guide
+
+If you have other features using direct queries, follow these steps:
+
+1. **Create Repository Interface** in `packages/domain/`
+2. **Create Repository Implementation** in `packages/database/`
+3. **Create Mapper** for DB ↔ Domain conversion
+4. **Update Routes** to use repository
+5. **Delete Old Query Files**
+6. **Write Tests** with mock repositories
+
+---
+
+## 📞 Support
+
+For questions about this refactoring or the repository pattern:
+
+- See: [Repository Pattern Guide](/architecture/repository-pattern)
+- Check: Architecture discussion docs in `/architecture-discussion/`
+
+---

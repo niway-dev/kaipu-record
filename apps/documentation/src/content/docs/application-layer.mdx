@@ -1,0 +1,315 @@
+---
+title: Application Layer & Package Architecture
+description: Layer-first architecture for sharing business logic across multiple server-side consumers while keeping the mobile app safe
+---
+
+## The Problem
+
+This monorepo serves multiple consumers that need the same business logic:
+
+| Consumer                 | How it calls business logic                   | Example                    |
+| ------------------------ | --------------------------------------------- | -------------------------- |
+| **TanStack Start** (web) | `serverFn` — runs on server, no HTTP hop      | Direct function call       |
+| **Elysia API** (server)  | HTTP routes — for mobile and external clients | REST endpoint              |
+| **Astro** (website)      | Server functions                              | Direct function call       |
+| **Cron jobs / workers**  | Direct execution                              | Scheduled task             |
+| **Mobile app** (Expo)    | HTTP client — calls the Elysia API            | `fetch()` to REST endpoint |
+
+If use cases live inside `apps/server/src/routes/`, TanStack Start can't use them without making an HTTP call to itself. Same for Astro, same for cron jobs. Duplicating the logic across consumers leads to drift and bugs.
+
+## The Architecture
+
+We use a **layer-first** package structure where each package represents an architectural layer, not a bounded context:
+
+```
+packages/domain/          <-- Pure. Mobile-safe. Constants, schemas, types, interfaces.
+packages/application/     <-- Use cases. Server-only. Depends on domain interfaces.
+packages/infra-db/              <-- Infrastructure. Server-only. Implements domain interfaces.
+
+apps/web/                 <-- TanStack Start: serverFn -> application -> infra-db
+apps/server/              <-- Elysia: HTTP routes -> application -> infra-db
+apps/mobile/              <-- Expo: calls server API, imports ONLY domain
+apps/website/             <-- Astro: server functions -> application -> infra-db
+workers/                  <-- Cron jobs -> application -> infra-db
+```
+
+### Dependency Rule
+
+The dependency arrow **always points inward** toward domain. This is strict and non-negotiable:
+
+```
+domain          <-- depends on NOTHING (leaf package, mobile-safe)
+application     <-- depends on domain ONLY (server-only)
+infra-db        <-- depends on domain ONLY (server-only)
+apps/*          <-- wire application + infra-db together
+```
+
+- `domain` never imports from `application` or `infra-db`
+- `application` never imports from `infra-db` (uses domain interfaces instead)
+- `infra-db` never imports from `application`
+- Only the app layer (routes, serverFn, workers) wires concrete implementations
+
+### Why Layer-First, Not Vertical Bounded Contexts
+
+We considered organizing by bounded context (one package per context with all layers inside):
+
+```
+// NOT what we do
+packages/your-context/
+  domain/
+  application/
+  infrastructure/
+```
+
+We chose layer-first instead because:
+
+1. **Mobile safety is structural.** The mobile app imports `@monorepo-template/domain` — a package that _cannot_ contain infrastructure by design. With vertical slicing, the mobile app would need to avoid `@monorepo-template/your-context/application` — a subpath in the same package. One wrong import and Metro bundles your DB code into the mobile binary.
+
+2. **Package boundary > subpath boundary.** A separate package is a harder boundary than a subpath export. You can't accidentally import what doesn't exist in the dependency tree.
+
+3. **Less overhead.** Three packages (domain, application, infra-db) instead of N packages per bounded context, each with its own `package.json`, `tsconfig`, and build config.
+
+4. **Cross-context sharing is trivial.** If one context needs a type from another, it's a relative import within the same package.
+
+When bounded contexts grow, we organize them as **folders within each layer package**:
+
+```
+packages/domain/src/
+  your-context/
+    constants/
+    schemas/
+    types/
+  evaluations/        <-- future context, just a folder
+    constants/
+    schemas/
+
+packages/application/src/
+  your-context/
+    create-your-entity.ts
+  evaluations/        <-- future context, just a folder
+    create-evaluation.ts
+
+packages/infra-db/src/
+  your-context/
+    schema/
+    repositories/
+    mappers/
+  evaluations/
+```
+
+## Package Details
+
+### `@monorepo-template/domain` — Pure, Mobile-Safe
+
+Contains only:
+
+- **Constants** — enums, status info, labels, display metadata, state transitions
+- **Zod schemas** — validation contracts for input/output (create, update, filter)
+- **TypeScript types** — `ApiResponse`, `Result`, `ObjectProperties`, inferred schema types
+- **Repository interfaces** — `IYourEntityRepository` (just TypeScript interfaces, erased at runtime)
+
+**Zero dependencies on infrastructure.** No I/O, no side effects, no DB, no HTTP. This is what makes it safe for the mobile app to import — everything is pure data and type definitions.
+
+The Zod schemas serve as **contracts**: both the server (for validation) and the mobile app (for form validation) use the same schemas. This guarantees the mobile form sends exactly what the server expects.
+
+### `@monorepo-template/application` — Server-Only Use Cases
+
+Contains **use case functions** that orchestrate business logic. Each use case:
+
+- Accepts **domain interfaces** as dependencies (not concrete implementations)
+- Takes **input validated by domain schemas** (the Zod types)
+- Returns **`Result<T>`** (domain type) for explicit error handling
+- Has **zero infrastructure imports** — no DB, no HTTP, no framework
+
+Example — `createYourEntity`:
+
+```typescript
+// packages/application/src/your-context/create-your-entity.ts
+import type { IYourEntityRepository } from "@monorepo-template/domain/repositories";
+import type { CreateYourEntity, YourEntityBase } from "@monorepo-template/domain/schemas";
+import type { Result } from "@monorepo-template/domain/types";
+import { CURRENCIES } from "@monorepo-template/domain/constants";
+
+export async function createYourEntity(params: {
+  repo: IYourEntityRepository;
+  input: CreateYourEntity;
+  userId: string;
+}): Promise<Result<YourEntityBase>> {
+  const { repo, input, userId } = params;
+
+  const yourEntity: YourEntityBase = {
+    id: crypto.randomUUID(),
+    name: input.name,
+    description: input.description ?? null,
+    status: input.status,
+    salary: input.salary ?? null,
+    currency: input.currency ?? CURRENCIES.USD,
+    userId,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    deletedAt: null,
+  };
+
+  try {
+    await repo.save(yourEntity);
+    return { data: yourEntity, error: null };
+  } catch (error) {
+    return { data: null, error: error as Error };
+  }
+}
+```
+
+Notice: the function doesn't know if it's running inside an Elysia route, a TanStack serverFn, or a cron job. It doesn't care. The caller provides the repo.
+
+### `@monorepo-template/infra-db` — Infrastructure
+
+Contains concrete implementations:
+
+- **Drizzle schema definitions** — table columns, relations
+- **Repository implementations** — `YourEntityRepository implements IYourEntityRepository`
+- **Mappers** — convert between DB rows and domain types
+- **DB client** — connection factory
+- **Config** — table prefix, DB-specific settings
+
+### How Consumers Wire It Together
+
+Each consumer is responsible for wiring the concrete dependencies:
+
+**Elysia API route** (for mobile/external clients):
+
+```typescript
+// apps/server/src/routes/your-entities.ts
+import { createYourEntity } from "@monorepo-template/application/your-context";
+import { YourEntityRepository } from "@monorepo-template/infra-db/repositories";
+
+.post("/", async ({ body, yourEntityRepo, user }) => {
+  const result = await createYourEntity({
+    repo: yourEntityRepo,
+    input: body,
+    userId: user.id,
+  });
+
+  if (result.error) throw result.error;
+  return status(201, createdBody(result.data));
+})
+```
+
+**TanStack Start serverFn** (web app, no HTTP hop):
+
+```typescript
+// apps/web/src/server/your-context.ts
+import { createYourEntity } from "@monorepo-template/application/your-context";
+import { YourEntityRepository } from "@monorepo-template/infra-db/repositories";
+
+export const createYourEntitySFn = createServerFn({ method: "POST" })
+  .validator(createYourEntitySchema)
+  .handler(async ({ data, context }) => {
+    const repo = new YourEntityRepository(db);
+    return createYourEntity({ repo, input: data, userId: context.user.id });
+  });
+```
+
+**Mobile app** (calls the API, never imports application or infra-db):
+
+```typescript
+// apps/mobile/app/your-context/create.tsx
+import { createYourEntitySchema } from "@monorepo-template/domain/schemas";
+
+// Validate client-side with the same Zod schema the server uses
+const validated = createYourEntitySchema.parse(formData);
+const response = await fetch(`${API_URL}/your-entities`, {
+  method: "POST",
+  body: JSON.stringify(validated),
+});
+```
+
+## The Contract Pattern
+
+Zod schemas in `@monorepo-template/domain/schemas` act as the **contract** between consumers and the application layer:
+
+```
+Mobile app                                 Server
+    |                                        |
+    |  createYourEntitySchema.parse()        |  createYourEntitySchema (validation)
+    |  (client-side form validation)         |  (Elysia body validation)
+    |                                        |
+    |  ---------- HTTP POST body ----------> |
+    |                                        |
+    |                              CreateYourEntity (type)
+    |                                        |
+    |                              createYourEntity(input)
+    |                                        |
+    |  <-------- YourEntityBase ------------ |
+    |  (ApiResponse<YourEntityBase>)         |
+```
+
+- **Input contract:** `createYourEntitySchema` (Zod) / `CreateYourEntity` (type)
+- **Output contract:** `YourEntityBase` (type inferred from `yourEntityBaseSchema`)
+- **Error contract:** `ApiResponse<T>` with `{ data, error, meta }` structure
+
+Both sides share the same types. If a field is added to the schema, both the mobile form and the server validation update simultaneously.
+
+## Mobile Safety
+
+The mobile JS bundle is extractable — anyone can reverse-engineer it. These are the rules:
+
+### Safe to import in mobile (`@monorepo-template/domain`)
+
+- Constants, enums, labels, colors
+- Zod schemas (for client-side form validation)
+- TypeScript types and interfaces (erased at runtime)
+- Pure functions with no I/O (type guards, status helpers)
+
+### Never import in mobile
+
+- `@monorepo-template/infra-db` — DB client, connection strings, Drizzle schemas
+- `@monorepo-template/application` — use cases that reference domain interfaces for repos
+- `@monorepo-template/infra-auth` server config — server-side auth secrets
+
+An ESLint rule in `apps/mobile/eslint.config.js` enforces this:
+
+```javascript
+"no-restricted-imports": ["error", {
+  patterns: [
+    {
+      group: ["@monorepo-template/infra-db", "@monorepo-template/infra-db/*"],
+      message: "Do not import DB infrastructure into the mobile app."
+    },
+    {
+      group: ["@monorepo-template/application", "@monorepo-template/application/*"],
+      message: "Do not import server-side use cases into the mobile app."
+    }
+  ]
+}]
+```
+
+## When to Extract a Use Case
+
+Not every route handler needs a use case. Extract when:
+
+- **Multiple consumers** need the same logic (web serverFn + API route)
+- **Business logic** goes beyond simple CRUD (defaults, transitions, validations, side effects)
+- **The logic is growing** — if a route handler exceeds ~15 lines of business logic
+
+Keep it in the route when:
+
+- It's a simple passthrough to the repository (find by ID, list with pagination)
+- Only one consumer needs it
+- The logic is trivial (no defaults, no orchestration)
+
+## Adding a New Use Case
+
+1. Create the function in `packages/application/src/{context}/`
+2. Use only domain types and interfaces as dependencies
+3. Return `Result<T>` for explicit error handling
+4. Export from `packages/application/src/{context}/index.ts`
+5. Wire it in each consumer that needs it (route, serverFn, worker)
+
+## Summary
+
+| Layer          | Package                          | Mobile-safe? | Contains                                 |
+| -------------- | -------------------------------- | :----------: | ---------------------------------------- |
+| Domain         | `@monorepo-template/domain`      |     Yes      | Constants, schemas, types, interfaces    |
+| Application    | `@monorepo-template/application` |      No      | Use cases, business logic orchestration  |
+| Infrastructure | `@monorepo-template/infra-db`    |      No      | Drizzle repos, mappers, DB client        |
+| Consumers      | `apps/*`, `workers/`             |     N/A      | Wiring: route/serverFn + repo + use case |

@@ -1,0 +1,391 @@
+---
+title: Constants Pattern
+description: Documentation for the type-safe constants pattern used in the project
+---
+
+# Constants Pattern
+
+**Last Updated:** December 27, 2025  
+**Status:** Active Pattern
+
+## Overview
+
+This document describes the **type-safe constants pattern** used throughout the project. This pattern provides type safety, autocompletion, and runtime validation for enum-like values.
+
+## Pattern Structure
+
+The pattern consists of four main parts:
+
+1. **Constant Object** - Defines the values as a const object (single source of truth)
+2. **Type Definition** - Extracts the type from the constant object
+3. **Values Array** - Array of all valid values for runtime checks and Zod schemas (derived from object)
+4. **Validation Function** - Type guard to validate values at runtime
+
+**Key Principle:** The constant object is the single source of truth. Use the const object directly with `z.enum()` - Zod accepts enum-like object literals (`{ [key: string]: string | number }`) according to the [Zod enum API](https://zod.dev/api#enum).
+
+## Example Implementation
+
+```typescript
+import type { ObjectProperties } from "../types";
+
+// 1. Constant object with all possible values
+export const CURRENCIES = {
+  USD: "USD",
+  PEN: "PEN",
+} as const;
+
+// 2. Type extracted from the constant object
+export type Currency = ObjectProperties<typeof CURRENCIES>;
+
+// 3. Array of all valid values (for database enums and runtime checks)
+export const CURRENCY_VALUES = [CURRENCIES.USD, CURRENCIES.PEN] as const;
+
+// 4. Type guard for runtime validation
+export function isValidCurrency(value: string): value is Currency {
+  return Object.values(CURRENCIES).includes(value as Currency);
+}
+```
+
+## Benefits
+
+### 1. Type Safety
+
+- TypeScript knows all possible values at compile time
+- Prevents typos and invalid values
+- Full autocompletion support
+
+### 2. Single Source of Truth
+
+- Values are defined once in the constant object
+- Changes propagate automatically through types
+- No need to update multiple places
+
+### 3. Runtime Validation
+
+- Type guard functions allow runtime checks
+- Useful for API validation, form validation, etc.
+- Type narrowing works correctly
+
+### 4. Refactoring Safety
+
+- Renaming values is safe (TypeScript will catch all usages)
+- Adding/removing values is straightforward
+- IDE can find all usages easily
+
+## Usage Examples
+
+### In Type Definitions
+
+```typescript
+// ✅ Good: Using the type from constants
+import type { Currency } from "@monorepo-template/domain/constants";
+
+interface YourEntity {
+  currency: Currency; // Type-safe, only USD or PEN allowed
+}
+```
+
+### In Components
+
+```typescript
+// ✅ Good: Using constants instead of string literals
+import { CURRENCIES, CURRENCY_INFO } from "@monorepo-template/domain/constants";
+
+const currencyOptions = [
+  { value: CURRENCIES.USD, label: CURRENCY_INFO[CURRENCIES.USD].label },
+  { value: CURRENCIES.PEN, label: CURRENCY_INFO[CURRENCIES.PEN].label },
+];
+```
+
+### In Validation
+
+```typescript
+// ✅ Good: Using type guard for validation
+import { isValidCurrency } from "@monorepo-template/domain/constants";
+
+function validateCurrency(input: string): Currency | null {
+  if (isValidCurrency(input)) {
+    return input; // TypeScript knows this is Currency
+  }
+  return null;
+}
+```
+
+### In Backend Validation
+
+```typescript
+// ✅ Good: Using constants in Elysia validation
+import { CURRENCIES } from "@monorepo-template/domain/constants";
+import { t } from "elysia";
+
+body: t.Object({
+  currency: t.Optional(
+    t.Union([
+      t.Literal(CURRENCIES.USD),
+      t.Literal(CURRENCIES.PEN),
+    ]),
+  ),
+})
+```
+
+### In Zod Schemas
+
+```typescript
+// ✅ Good: Using the const object directly with z.enum() - simpler and less work
+import { z } from "zod";
+import { COMMENT_TYPES } from "@monorepo-template/domain/constants";
+
+export const commentSchema = z.object({
+  type: z.enum(COMMENT_TYPES),
+});
+
+// ✅ Good: For optional enum fields with defaults
+export const createCommentSchema = z.object({
+  type: z.enum(COMMENT_TYPES).optional().default(COMMENT_TYPES.NOTE),
+});
+
+// ✅ Good: For optional enum fields
+export const updateCommentSchema = z.object({
+  type: z.enum(COMMENT_TYPES).optional(),
+});
+```
+
+**Important:** Always use the const object (e.g., `COMMENT_TYPES`) directly with `z.enum()`, not the `*_VALUES` array. This is:
+
+- **Simpler** - No need to manually list all values
+- **Less work** - Single source of truth, automatically stays in sync
+- **More maintainable** - Adding/removing values automatically updates schemas
+- **Direct** - Use the constant object itself, which is the single source of truth
+
+**❌ Never do this** - Don't manually list enum values in Zod schemas:
+
+```typescript
+// ❌ Bad: Manual listing is verbose and error-prone
+type: z.enum([
+  COMMENT_TYPES.EMAIL,
+  COMMENT_TYPES.PHONE_CALL,
+  COMMENT_TYPES.VIDEO_CALL,
+  // ... more values
+])
+```
+
+**✅ Always do this** - Use the const object directly:
+
+```typescript
+// ✅ Good: Simple, maintainable, single source of truth
+type: z.enum(COMMENT_TYPES)
+```
+
+**Note:** For database enums (like Drizzle's `pgEnum`), you still need to use the `*_VALUES` array since database libraries require arrays, not objects.
+
+## When to Use This Pattern
+
+### ✅ Use This Pattern For:
+
+- Enum-like values that won't change frequently
+- Values that need type safety
+- Values used across multiple files/packages
+- Values that need runtime validation
+- Database enums or status fields
+
+### ❌ Don't Use This Pattern For:
+
+- Simple one-off constants
+- Values that change very frequently
+- Values only used in a single file
+- Configuration values that come from environment
+
+## File Organization
+
+Constants should be placed in:
+
+```
+packages/domain/src/constants/
+  ├── currency.ts
+  ├── your-entity-status.ts
+  └── ...
+```
+
+Each constant file should:
+
+- Export the constant object
+- Export the type
+- Export the values array
+- Export the validation function
+- Include JSDoc comments
+
+## Adding New Values
+
+When adding a new value to an existing constant:
+
+1. Add the value to the constant object
+2. Add it to the values array
+3. TypeScript will automatically update the type
+4. Update any switch statements or mappings
+5. Update validation schemas if needed
+
+### Example: Adding EUR Currency
+
+```typescript
+// Before
+export const CURRENCIES = {
+  USD: "USD",
+  PEN: "PEN",
+} as const;
+
+// After
+export const CURRENCIES = {
+  USD: "USD",
+  PEN: "PEN",
+  EUR: "EUR", // New value
+} as const;
+
+// Update values array
+export const CURRENCY_VALUES = [
+  CURRENCIES.USD,
+  CURRENCIES.PEN,
+  CURRENCIES.EUR, // Add here
+] as const;
+
+// Update info object if it exists
+export const CURRENCY_INFO: Record<Currency, { label: string; symbol: string }> = {
+  USD: { label: "US Dollar", symbol: "$" },
+  PEN: { label: "Peruvian Sol", symbol: "S/" },
+  EUR: { label: "Euro", symbol: "€" }, // Add here
+};
+```
+
+## Type Utility: ObjectProperties
+
+The `ObjectProperties` utility type extracts all property values from a const object:
+
+```typescript
+export type ObjectProperties<T> = T[keyof T];
+
+// Example
+const STATUSES = {
+  ACTIVE: "active",
+  INACTIVE: "inactive",
+} as const;
+
+type Status = ObjectProperties<typeof STATUSES>;
+// Result: "active" | "inactive"
+```
+
+This utility is essential for the pattern to work correctly.
+
+## Current Constants in Project
+
+### Currency (`packages/domain/src/constants/currency.ts`)
+
+- `CURRENCIES` - Currency codes (USD, PEN)
+- `Currency` - Type for currency values
+- `CURRENCY_VALUES` - Array of all currencies
+- `isValidCurrency()` - Validation function
+- `CURRENCY_INFO` - Display information (label, symbol)
+
+### Your Entity Status (`packages/domain/src/constants/your-entity-status.ts`)
+
+- `YOUR_ENTITY_STATUSES` - Status values (draft, active, paused, rejected, cancelled, completed)
+- `YourEntityStatus` - Type for status values
+- `YOUR_ENTITY_STATUS_VALUES` - Array of all statuses (deprecated, use `Object.values(YOUR_ENTITY_STATUSES)`)
+- `isValidYourEntityStatus()` - Validation function
+- `YOUR_ENTITY_STATUS_INFO` - Display metadata (label, description, order, category, color)
+- `STATUS_TRANSITIONS` - Valid status transition rules
+
+#### Cross-Platform Status Colors
+
+The `color` property in `YOUR_ENTITY_STATUS_INFO` provides a single source of truth for status colors across both the web and mobile apps. Each hex value corresponds to the Tailwind color-500 family used by the web app:
+
+| Status    | Color Family | Hex       |
+| --------- | ------------ | --------- |
+| draft     | purple       | `#8b5cf6` |
+| active    | blue         | `#3b82f6` |
+| paused    | yellow       | `#f59e0b` |
+| rejected  | red          | `#ef4444` |
+| cancelled | gray         | `#6b7280` |
+| completed | green        | `#22c55e` |
+| review    | cyan         | `#06b6d4` |
+| approved  | emerald      | `#10b981` |
+
+**Web app** uses Tailwind classes that map to these color families. **Mobile app** uses the `color` hex values directly for badge backgrounds:
+
+```typescript
+import { YOUR_ENTITY_STATUS_INFO } from "@monorepo-template/domain/constants";
+import type { YourEntityStatus } from "@monorepo-template/domain/constants";
+
+// Mobile usage
+const statusInfo = YOUR_ENTITY_STATUS_INFO[status as YourEntityStatus];
+const backgroundColor = statusInfo.color;  // e.g. "#8b5cf6"
+const label = statusInfo.label;            // e.g. "Draft"
+```
+
+When adding a new status, always add both the Tailwind class in the web app and the matching hex `color` in the domain info object to keep both platforms in sync.
+
+## Best Practices
+
+1. **Always use constants, never string literals**
+
+   ```typescript
+   // ❌ Bad
+   status: "active"
+
+   // ✅ Good
+   status: YOUR_ENTITY_STATUSES.ACTIVE
+   ```
+
+2. **Use the type, not the union**
+
+   ```typescript
+   // ❌ Bad
+   type Status = "active" | "rejected";
+
+   // ✅ Good
+   import type { YourEntityStatus } from "@monorepo-template/domain/constants";
+   ```
+
+3. **Use validation functions for runtime checks**
+
+   ```typescript
+   // ❌ Bad
+   if (value === "USD" || value === "PEN") { ... }
+
+   // ✅ Good
+   if (isValidCurrency(value)) { ... }
+   ```
+
+4. **Export from domain package**
+
+   ```typescript
+   // ✅ Good: Export from @monorepo-template/domain/constants
+   export * from "./constants/currency";
+   ```
+
+5. **Add JSDoc comments**
+   ```typescript
+   /**
+    * Type for currency values
+    */
+   export type Currency = ObjectProperties<typeof CURRENCIES>;
+   ```
+
+## Migration Guide
+
+When migrating existing string literal types to this pattern:
+
+1. Create the constant file following the pattern
+2. Update type imports to use the new type
+3. Replace string literals with constant references
+4. Update validation schemas
+5. Test thoroughly
+
+## References
+
+- [TypeScript Const Assertions](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-3-4.html#const-assertions)
+- [TypeScript Utility Types](https://www.typescriptlang.org/docs/handbook/utility-types.html)
+- [Type Guards](https://www.typescriptlang.org/docs/handbook/2/narrowing.html#using-type-predicates)
+
+---
+
+**Pattern Status:** ✅ Recommended for all enum-like values  
+**Maintained By:** Development Team

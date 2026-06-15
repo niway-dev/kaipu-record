@@ -1,0 +1,744 @@
+---
+title: Application Services Layer
+description: Complete guide to implementing the Application layer with Use Cases, Commands, Queries, and DTOs
+---
+
+# Application Services Layer
+
+The **Application Layer** (also called Application Services or Use Cases layer) orchestrates domain logic to fulfill specific user actions. It sits between the presentation layer (HTTP/UI) and the domain layer.
+
+---
+
+## 🎯 Purpose of Application Layer
+
+The Application Layer:
+
+- ✅ **Orchestrates** domain objects to complete a task
+- ✅ **Validates** input from external sources
+- ✅ **Manages** transactions and persistence
+- ✅ **Publishes** domain events
+- ✅ **Transforms** domain models to DTOs
+
+It does **NOT**:
+
+- ❌ Contain business rules (those go in domain)
+- ❌ Access database directly (uses repositories)
+- ❌ Handle HTTP concerns (that's infrastructure)
+
+---
+
+## 📦 Application Layer Structure
+
+```bash
+packages/your-context/application/
+├── use-cases/                    # Commands (writes)
+│   ├── create-your-entity/
+│   │   ├── create-your-entity.command.ts
+│   │   ├── create-your-entity.handler.ts
+│   │   ├── create-your-entity.validator.ts
+│   │   └── index.ts
+│   ├── update-status/
+│   │   ├── update-status.command.ts
+│   │   ├── update-status.handler.ts
+│   │   └── index.ts
+│   ├── add-comment/
+│   └── delete-your-entity/
+│
+├── queries/                      # Queries (reads)
+│   ├── get-your-entity/
+│   │   ├── get-your-entity.query.ts
+│   │   ├── get-your-entity.handler.ts
+│   │   └── index.ts
+│   ├── list-your-entities/
+│   │   ├── list-your-entities.query.ts
+│   │   ├── list-your-entities.handler.ts
+│   │   └── index.ts
+│   └── get-entity-stats/
+│
+├── dto/                          # Data Transfer Objects
+│   ├── your-entity.dto.ts
+│   ├── create-your-entity.dto.ts
+│   ├── update-your-entity.dto.ts
+│   └── index.ts
+│
+├── services/                     # Application services (if needed)
+│   └── your-entity.service.ts
+│
+├── events/                       # Application event handlers
+│   └── your-entity-created.handler.ts
+│
+└── index.ts                      # Barrel exports
+```
+
+---
+
+## 🔀 CQRS Pattern (Commands and Queries)
+
+We use **CQRS** (Command Query Responsibility Segregation) to separate writes from reads:
+
+### Commands (Write Operations)
+
+**Change system state, no return value (or just ID)**
+
+```typescript
+// packages/your-context/application/use-cases/create-your-entity/create-your-entity.command.ts
+
+/**
+ * Command to create a new entity
+ *
+ * Commands represent user intentions to change system state
+ */
+export class CreateYourEntityCommand {
+  constructor(
+    public readonly userId: string,
+    public readonly title: string,
+    public readonly description: string,
+    public readonly priority?: number,
+    public readonly category?: string,
+    public readonly tags?: string[],
+  ) {}
+}
+```
+
+**Command Handler:**
+
+```typescript
+// packages/your-context/application/use-cases/create-your-entity/create-your-entity.handler.ts
+
+import type { IYourEntityRepository } from "@monorepo-template/your-context/domain/repositories";
+import type { IEventPublisher } from "@monorepo-template/shared-kernel/events";
+import { YourEntity } from "@monorepo-template/your-context/domain/entities";
+import { Priority } from "@monorepo-template/your-context/domain/value-objects";
+import type { CreateYourEntityCommand } from "./create-your-entity.command";
+import { Result, tryCatch } from "@monorepo-template/shared-kernel/result";
+
+export class CreateYourEntityHandler {
+  constructor(
+    private readonly yourEntityRepo: IYourEntityRepository,
+    private readonly eventPublisher: IEventPublisher,
+  ) {}
+
+  async execute(command: CreateYourEntityCommand): Promise<Result<string, Error>> {
+    // 1. Validate business rules (if not in domain)
+    // Already validated by Zod at API boundary
+
+    // 2. Create domain entity with business logic
+    const priority = command.priority
+      ? Priority.create({
+          level: command.priority,
+          category: command.category || "default",
+        })
+      : null;
+
+    const yourEntity = YourEntity.create({
+      userId: command.userId,
+      title: command.title,
+      description: command.description,
+      priority,
+    });
+
+    // 3. Persist using repository
+    const saveResult = await tryCatch(
+      this.yourEntityRepo.save(yourEntity)
+    );
+
+    if (saveResult.error) {
+      return saveResult;
+    }
+
+    // 4. Publish domain events
+    const events = yourEntity.getDomainEvents();
+    await this.eventPublisher.publishAll(events);
+
+    // 5. Return success with ID
+    return { data: yourEntity.id, error: null };
+  }
+}
+```
+
+---
+
+### Queries (Read Operations)
+
+**Read system state, no side effects**
+
+```typescript
+// packages/your-context/application/queries/get-your-entity/get-your-entity.query.ts
+
+/**
+ * Query to get a single entity
+ *
+ * Queries fetch data without changing system state
+ */
+export class GetYourEntityQuery {
+  constructor(
+    public readonly yourEntityId: string,
+    public readonly userId: string,
+  ) {}
+}
+```
+
+**Query Handler:**
+
+```typescript
+// packages/your-context/application/queries/get-your-entity/get-your-entity.handler.ts
+
+import type { IYourEntityRepository } from "@monorepo-template/your-context/domain/repositories";
+import type { GetYourEntityQuery } from "./get-your-entity.query";
+import type { YourEntityDTO } from "../../dto/your-entity.dto";
+import { YourEntityMapper } from "../../mappers/your-entity-dto.mapper";
+import { Result } from "@monorepo-template/shared-kernel/result";
+
+export class GetYourEntityHandler {
+  constructor(
+    private readonly yourEntityRepo: IYourEntityRepository,
+  ) {}
+
+  async execute(query: GetYourEntityQuery): Promise<Result<YourEntityDTO, Error>> {
+    // 1. Fetch from repository
+    const yourEntity = await this.yourEntityRepo.findById(
+      query.yourEntityId,
+      query.userId,
+    );
+
+    if (!yourEntity) {
+      return {
+        data: null,
+        error: new Error("Entity not found"),
+      };
+    }
+
+    // 2. Transform domain entity to DTO
+    const dto = YourEntityMapper.toDTO(yourEntity);
+
+    // 3. Return DTO
+    return { data: dto, error: null };
+  }
+}
+```
+
+---
+
+## 📋 Data Transfer Objects (DTOs)
+
+DTOs are simple data containers for transferring data between layers:
+
+```typescript
+// packages/your-context/application/dto/your-entity.dto.ts
+
+import type { Currency } from "@monorepo-template/shared-kernel";
+import type { YourEntityStatus } from "@monorepo-template/your-context/domain";
+
+/**
+ * DTO for entity representation
+ *
+ * DTOs are:
+ * - Plain objects (no methods)
+ * - Framework-agnostic
+ * - Easy to serialize/deserialize
+ * - Different from domain entities
+ */
+export interface YourEntityDTO {
+  id: string;
+  userId: string;
+  title: string;
+  description: string;
+  status: YourEntityStatus;
+  priority: number | null;
+  category: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * DTO for creating an entity
+ */
+export interface CreateYourEntityDTO {
+  title: string;
+  description: string;
+  priority?: number;
+  category?: string;
+}
+
+/**
+ * DTO for updating an entity
+ */
+export interface UpdateYourEntityDTO {
+  title?: string;
+  description?: string;
+  status?: YourEntityStatus;
+  priority?: number;
+  category?: string;
+}
+
+/**
+ * DTO for entity list item (simplified)
+ */
+export interface YourEntityListItemDTO {
+  id: string;
+  title: string;
+  description: string;
+  status: YourEntityStatus;
+  createdAt: Date;
+}
+```
+
+---
+
+## 🗺️ DTO Mappers
+
+Mappers convert between domain entities and DTOs:
+
+```typescript
+// packages/your-context/application/mappers/your-entity-dto.mapper.ts
+
+import type { YourEntity } from "@monorepo-template/your-context/domain/entities";
+import type {
+  YourEntityDTO,
+  YourEntityListItemDTO,
+} from "../dto/your-entity.dto";
+
+export class YourEntityDTOMapper {
+  /**
+   * Convert domain entity to full DTO
+   */
+  static toDTO(entity: YourEntity): YourEntityDTO {
+    return {
+      id: entity.id,
+      userId: entity.userId,
+      title: entity.title,
+      description: entity.description,
+      status: entity.status.value,
+      priority: entity.priority?.level ?? null,
+      category: entity.category ?? "default",
+      createdAt: entity.createdAt,
+      updatedAt: entity.updatedAt,
+    };
+  }
+
+  /**
+   * Convert domain entity to list item DTO (simplified)
+   */
+  static toListItemDTO(entity: YourEntity): YourEntityListItemDTO {
+    return {
+      id: entity.id,
+      title: entity.title,
+      description: entity.description,
+      status: entity.status.value,
+      createdAt: entity.createdAt,
+    };
+  }
+
+  /**
+   * Convert array of entities to list DTOs
+   */
+  static toListDTOs(entities: YourEntity[]): YourEntityListItemDTO[] {
+    return entities.map(entity => this.toListItemDTO(entity));
+  }
+}
+```
+
+---
+
+## 🏗️ Application Service (Alternative Pattern)
+
+Instead of separate Commands/Queries, you can use an Application Service class:
+
+```typescript
+// packages/your-context/application/services/your-entity.service.ts
+
+import type { IYourEntityRepository } from "@monorepo-template/your-context/domain/repositories";
+import type { IEventPublisher } from "@monorepo-template/shared-kernel/events";
+import { YourEntity } from "@monorepo-template/your-context/domain/entities";
+import type {
+  CreateYourEntityDTO,
+  UpdateYourEntityDTO,
+  YourEntityDTO,
+} from "../dto";
+import { YourEntityDTOMapper } from "../mappers/your-entity-dto.mapper";
+import { Result, tryCatch } from "@monorepo-template/shared-kernel/result";
+
+export class YourEntityService {
+  constructor(
+    private readonly yourEntityRepo: IYourEntityRepository,
+    private readonly eventPublisher: IEventPublisher,
+  ) {}
+
+  async create(
+    userId: string,
+    dto: CreateYourEntityDTO,
+  ): Promise<Result<string, Error>> {
+    // Create domain entity
+    const yourEntity = YourEntity.create({
+      userId,
+      ...dto,
+    });
+
+    // Save
+    const result = await tryCatch(
+      this.yourEntityRepo.save(yourEntity)
+    );
+
+    if (result.error) {
+      return result;
+    }
+
+    // Publish events
+    await this.eventPublisher.publishAll(yourEntity.getDomainEvents());
+
+    return { data: yourEntity.id, error: null };
+  }
+
+  async update(
+    id: string,
+    userId: string,
+    dto: UpdateYourEntityDTO,
+  ): Promise<Result<YourEntityDTO, Error>> {
+    // Fetch entity
+    const yourEntity = await this.yourEntityRepo.findById(id, userId);
+
+    if (!yourEntity) {
+      return {
+        data: null,
+        error: new Error("Entity not found"),
+      };
+    }
+
+    // Update entity (business logic in domain)
+    if (dto.title) {
+      yourEntity.updateTitle(dto.title);
+    }
+
+    if (dto.status) {
+      yourEntity.updateStatus(dto.status);
+    }
+
+    // Save
+    const result = await tryCatch(
+      this.yourEntityRepo.update(yourEntity)
+    );
+
+    if (result.error) {
+      return { data: null, error: result.error };
+    }
+
+    // Return DTO
+    return {
+      data: YourEntityDTOMapper.toDTO(yourEntity),
+      error: null,
+    };
+  }
+
+  async getById(
+    id: string,
+    userId: string,
+  ): Promise<Result<YourEntityDTO, Error>> {
+    const yourEntity = await this.yourEntityRepo.findById(id, userId);
+
+    if (!yourEntity) {
+      return {
+        data: null,
+        error: new Error("Entity not found"),
+      };
+    }
+
+    return {
+      data: YourEntityDTOMapper.toDTO(yourEntity),
+      error: null,
+    };
+  }
+
+  async list(userId: string): Promise<Result<YourEntityDTO[], Error>> {
+    const result = await tryCatch(
+      this.yourEntityRepo.findByUserId(userId)
+    );
+
+    if (result.error) {
+      return { data: null, error: result.error };
+    }
+
+    return {
+      data: result.data.map(YourEntityDTOMapper.toDTO),
+      error: null,
+    };
+  }
+}
+```
+
+---
+
+## 🔌 Wiring in Infrastructure (HTTP Layer)
+
+The application layer is called from HTTP routes:
+
+```typescript
+// apps/server/src/routes/your-entities.ts
+
+import { Elysia } from "elysia";
+import { CreateYourEntityHandler } from "@monorepo-template/your-context/application";
+import { CreateYourEntityCommand } from "@monorepo-template/your-context/application";
+import { YourEntityRepositoryDrizzle } from "@monorepo-template/your-context/infrastructure";
+
+export const yourEntityRoutes = new Elysia({ prefix: "/your-entities" })
+  .derive(({ db }) => ({
+    // Dependency injection
+    yourEntityRepo: new YourEntityRepositoryDrizzle(db),
+    createYourEntityHandler: new CreateYourEntityHandler(
+      new YourEntityRepositoryDrizzle(db),
+      eventPublisher,
+    ),
+  }))
+  .post(
+    "/",
+    async ({ body, user, createYourEntityHandler, status }) => {
+      // Create command from HTTP body
+      const command = new CreateYourEntityCommand(
+        user.id,
+        body.title,
+        body.description,
+        body.priority,
+        body.category,
+        body.tags,
+      );
+
+      // Execute use case
+      const result = await createYourEntityHandler.execute(command);
+
+      // Handle result
+      if (result.error) {
+        return status(400, {
+          data: null,
+          error: { message: result.error.message },
+        });
+      }
+
+      return status(201, {
+        data: { id: result.data },
+        error: null,
+      });
+    },
+    {
+      body: createYourEntitySchema,
+      isAuth: true,
+    },
+  );
+```
+
+---
+
+## 🧪 Testing Application Layer
+
+Application layer is easy to test with mocks:
+
+```typescript
+// packages/your-context/application/use-cases/create-your-entity/__tests__/create-your-entity.handler.test.ts
+
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import { CreateYourEntityHandler } from "../create-your-entity.handler";
+import { CreateYourEntityCommand } from "../create-your-entity.command";
+import type { IYourEntityRepository } from "@monorepo-template/your-context/domain/repositories";
+import type { IEventPublisher } from "@monorepo-template/shared-kernel/events";
+
+describe("CreateYourEntityHandler", () => {
+  let handler: CreateYourEntityHandler;
+  let mockRepo: IYourEntityRepository;
+  let mockEventPublisher: IEventPublisher;
+
+  beforeEach(() => {
+    // Mock repository
+    mockRepo = {
+      save: vi.fn().mockResolvedValue(undefined),
+      findById: vi.fn(),
+    };
+
+    // Mock event publisher
+    mockEventPublisher = {
+      publishAll: vi.fn().mockResolvedValue(undefined),
+    };
+
+    handler = new CreateYourEntityHandler(mockRepo, mockEventPublisher);
+  });
+
+  it("should create entity successfully", async () => {
+    // Arrange
+    const command = new CreateYourEntityCommand(
+      "user-123",
+      "Example Entity",
+      "A sample description",
+      1,
+      "default",
+    );
+
+    // Act
+    const result = await handler.execute(command);
+
+    // Assert
+    expect(result.error).toBeNull();
+    expect(result.data).toBeDefined();
+    expect(mockRepo.save).toHaveBeenCalledOnce();
+    expect(mockEventPublisher.publishAll).toHaveBeenCalledOnce();
+  });
+
+  it("should return error when repository fails", async () => {
+    // Arrange
+    mockRepo.save = vi.fn().mockRejectedValue(new Error("DB Error"));
+    const command = new CreateYourEntityCommand(
+      "user-123",
+      "Example Entity",
+      "A sample description",
+    );
+
+    // Act
+    const result = await handler.execute(command);
+
+    // Assert
+    expect(result.error).toBeDefined();
+    expect(result.data).toBeNull();
+  });
+});
+```
+
+---
+
+## 📐 Application Layer Patterns
+
+### Pattern 1: Command/Query Handlers (Recommended)
+
+**Structure:**
+
+```
+use-cases/create-your-entity/
+  - command.ts      ← Command definition
+  - handler.ts      ← Command handler
+  - validator.ts    ← Optional validation
+```
+
+**Benefits:**
+
+- ✅ Single Responsibility
+- ✅ Easy to test
+- ✅ Clear separation
+- ✅ Scalable
+
+---
+
+### Pattern 2: Application Service Class
+
+**Structure:**
+
+```
+services/
+  - your-entity.service.ts  ← All operations in one class
+```
+
+**Benefits:**
+
+- ✅ Grouped related operations
+- ✅ Less boilerplate
+- ✅ Familiar pattern
+
+**Drawbacks:**
+
+- ⚠️ Can become large (God class)
+- ⚠️ Mixed responsibilities
+
+---
+
+### Pattern 3: Feature Folders (Vertical Slices)
+
+**Structure:**
+
+```
+features/create-your-entity/
+  - command.ts
+  - handler.ts
+  - validator.ts
+  - dto.ts
+  - route.ts
+```
+
+**Benefits:**
+
+- ✅ Everything related to feature in one place
+- ✅ Easy to find code
+- ✅ Can be moved to separate package
+
+---
+
+## 🎯 Best Practices
+
+### 1. Keep Application Layer Thin
+
+```typescript
+// ❌ Bad - Business logic in application layer
+async create(dto: CreateDTO) {
+  if (dto.priority < 0) {  // Business rule!
+    throw new Error("Priority must be positive");
+  }
+  // ...
+}
+
+// ✅ Good - Business logic in domain
+async create(dto: CreateDTO) {
+  const entity = YourEntity.create(dto);  // Validation in entity
+  await this.repo.save(entity);
+}
+```
+
+---
+
+### 2. Use DTOs for External Communication
+
+```typescript
+// ✅ Good - Return DTO, not domain entity
+async getById(id: string): Promise<YourEntityDTO> {
+  const entity = await this.repo.findById(id);
+  return YourEntityDTOMapper.toDTO(entity);
+}
+
+// ❌ Bad - Exposing domain entity
+async getById(id: string): Promise<YourEntity> {
+  return await this.repo.findById(id);  // Domain leaks out!
+}
+```
+
+---
+
+### 3. Use Result Pattern for Error Handling
+
+```typescript
+// ✅ Good - Explicit error handling
+async execute(command: Command): Promise<Result<string, Error>> {
+  const result = await tryCatch(this.repo.save(entity));
+  return result;
+}
+
+// ❌ Bad - Throwing exceptions
+async execute(command: Command): Promise<string> {
+  await this.repo.save(entity);  // Exception can be thrown
+  return entity.id;
+}
+```
+
+---
+
+### 4. Publish Domain Events
+
+```typescript
+// ✅ Good - Events published by application layer
+async execute(command: Command) {
+  const entity = Entity.create(command);
+  await this.repo.save(entity);
+  await this.eventPublisher.publishAll(entity.getDomainEvents());
+}
+```
+
+---
+
+## 🔗 Related Documentation
+
+- [Bounded Contexts Complete Guide](/architecture/bounded-contexts-complete-guide)
+- [Repository Pattern](/architecture/repository-pattern)
+- [Domain Architecture Patterns](/domain-architecture-patterns)
+
+---

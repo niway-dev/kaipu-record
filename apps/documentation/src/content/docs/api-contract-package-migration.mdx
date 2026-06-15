@@ -1,0 +1,150 @@
+---
+title: "API Contract Package Migration"
+description: "How to extract the oRPC contract into a dedicated packages/api-contract/ package"
+---
+
+# API Contract Package Migration
+
+## Current State
+
+The oRPC contract lives inside `apps/server-hono/src/contract/` and the web app imports it via a cross-app relative path:
+
+```
+apps/web-hono/src/lib/orpc-client.ts
+  → import { contract } from "../../../server-hono/src/contract"
+```
+
+This mirrors the Eden Treaty pattern (which imports `type { App }` from the server app).
+
+## Why Extract to a Package
+
+- **Cleaner imports**: `@monorepo-template/api-contract` instead of fragile relative paths
+- **Multiple consumers**: Mobile app, CLI tools, or other services can depend on the contract
+- **Explicit dependency graph**: Workspace deps are visible in `package.json`
+- **Build isolation**: Turborepo can cache the contract independently
+
+## Migration Steps
+
+### 1. Create `packages/api-contract/`
+
+```
+packages/api-contract/
+├── package.json
+├── tsconfig.json
+└── src/
+    ├── index.ts
+    └── modules/
+        └── todo/
+            └── todo.contract.ts
+```
+
+### 2. `packages/api-contract/package.json`
+
+```json
+{
+  "name": "@monorepo-template/api-contract",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./todos": "./src/modules/todo/todo.contract.ts",
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@monorepo-template/domain": "workspace:*",
+    "@orpc/contract": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@monorepo-template/config": "workspace:*",
+    "typescript": "catalog:"
+  }
+}
+```
+
+### 3. `packages/api-contract/tsconfig.json`
+
+```json
+{
+  "extends": "@monorepo-template/config/tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "outDir": "dist",
+    "baseUrl": ".",
+    "moduleResolution": "bundler"
+  },
+  "include": ["src/**/*"]
+}
+```
+
+### 4. Move Contract Files
+
+```bash
+# Move from server app to package
+cp apps/server-hono/src/contract/todo.contract.ts packages/api-contract/src/modules/todo/
+cp apps/server-hono/src/contract/index.ts packages/api-contract/src/
+```
+
+No code changes needed — the files use `@monorepo-template/domain/schemas` imports which work in both locations.
+
+### 5. Update Server Imports
+
+In `apps/server-hono/`:
+
+```diff
+# src/router.ts
+-import { contract } from "./contract";
++import { contract } from "@monorepo-template/api-contract";
+
+# src/modules/todo/todo.router.ts
+-import { todoContract } from "../../contract/todo.contract";
++import { todoContract } from "@monorepo-template/api-contract/todos";
+```
+
+Add to `apps/server-hono/package.json` dependencies:
+
+```json
+"@monorepo-template/api-contract": "workspace:*"
+```
+
+Remove `@orpc/contract` from server-hono deps (it comes through the api-contract package).
+
+### 6. Update Web Imports
+
+In `apps/web-hono/src/lib/orpc-client.ts`:
+
+```diff
+-import { contract, type Contract } from "../../../server-hono/src/contract";
++import { contract, type Contract } from "@monorepo-template/api-contract";
+```
+
+Add to `apps/web-hono/package.json` dependencies:
+
+```json
+"@monorepo-template/api-contract": "workspace:*"
+```
+
+### 7. Clean Up
+
+```bash
+# Remove old contract from server app
+rm -rf apps/server-hono/src/contract/
+
+# Install
+bun install
+
+# Verify
+bun run check-types
+```
+
+## Architecture After Migration
+
+```
+packages/api-contract/     Contract definitions (schemas, routes, types)
+  ↑                    ↑
+server-hono            web-hono
+(implements via        (consumes via
+ @orpc/server)          OpenAPILink)
+```
+
+Both apps depend on `@monorepo-template/api-contract` as a workspace dependency. The contract imports domain schemas from `@monorepo-template/domain/schemas`, keeping it aligned with the existing layer architecture.

@@ -1,0 +1,30 @@
+#!/usr/bin/env sh
+. "$(dirname "$0")/_/husky.sh"
+
+echo "🔍 Running oxlint on all files..."
+bunx oxlint
+
+if [ $? -ne 0 ]; then
+  echo "❌ oxlint found errors. Please fix them before pushing."
+  exit 1
+fi
+
+echo "✨ Formatting all tracked files with oxfmt..."
+# Format only tracked files (excludes untracked)
+TRACKED_FILES=$(git ls-files | grep -E '\.(ts|tsx|js|jsx|json|jsonc|md|mdx)$')
+
+if [ -z "$TRACKED_FILES" ]; then
+  echo "ℹ️  No tracked files to format."
+else
+  echo "$TRACKED_FILES" | xargs bunx oxfmt --write
+  
+  if [ $? -ne 0 ]; then
+    echo "❌ oxfmt failed. Please check the errors."
+    exit 1
+  fi
+  
+  # Stage any formatting changes
+  git add -u
+fi
+
+echo "✅ All tracked files formatted and linted successfully!"
