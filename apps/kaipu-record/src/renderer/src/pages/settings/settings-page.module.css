@@ -89,53 +89,6 @@
   color: var(--accent-red);
 }
 
-/* ── Keyboard hints ─────────────────────────── */
-
-.kbd {
-  padding: 2px 7px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-secondary);
-  background: var(--bg-input);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-}
-
-/* ── Appearance segmented control ───────────── */
-
-.segmented {
-  display: flex;
-  gap: 2px;
-  padding: 2px;
-  background: var(--bg-input);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-}
-
-.segment {
-  padding: 4px 14px;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-secondary);
-  font-family: var(--font-family);
-  font-size: var(--font-size-sm);
-  cursor: pointer;
-  transition:
-    background var(--transition),
-    color var(--transition);
-}
-
-.segment:hover {
-  color: var(--text-primary);
-}
-
-.segmentActive,
-.segmentActive:hover {
-  background: var(--accent-primary);
-  color: #fff;
-}
-
 /* ── Vault path ─────────────────────────────── */
 
 .pathValue {

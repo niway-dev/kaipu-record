@@ -11,15 +11,14 @@ Trabajo planeado, propuestas y mejoras que **aún no** están implementadas. Cad
 
 ## Mapa
 
-| Ítem                                                         | Área          | Estado         | Esfuerzo        | Detalle                       |
-| ------------------------------------------------------------ | ------------- | -------------- | --------------- | ----------------------------- |
-| Limpieza de LibraryPage (remove code trash)                  | Refactor / UI | 🟡 En progreso | ~½ día restante | [Ver](./library-page-cleanup) |
-| Migración Jest → Vitest                                      | Testing       | 🟡 En progreso | ~½ día restante | [Ver](./vitest-migration)     |
-| E2E con Playwright                                           | Testing       | 🔵 Propuesto   | Medio           | [Ver](./playwright-e2e)       |
-| Encode por hardware (VideoToolbox/NVENC)                     | Pipeline      | ⚪ Idea        | Alto            | —                             |
-| Captura nativa (ScreenCaptureKit / Windows.Graphics.Capture) | Pipeline      | ⚪ Idea        | Alto            | —                             |
-| Output MP4/H.264 para screen-only vía FFmpeg                 | Pipeline      | 🔵 Propuesto   | Medio           | —                             |
-| Benchmark propio (CPU/RAM/frames dropped)                    | Pipeline      | ⚪ Idea        | Medio           | —                             |
+| Ítem                                                         | Área     | Estado       | Esfuerzo | Detalle                    |
+| ------------------------------------------------------------ | -------- | ------------ | -------- | -------------------------- |
+| E2E con Playwright                                           | Testing  | 🔵 Propuesto | Medio    | [Ver](./playwright-e2e)    |
+| Settings — controles por cablear                            | Settings | 🔵 Propuesto | Variado  | [Ver](./settings-roadmap)  |
+| Encode por hardware (VideoToolbox/NVENC)                     | Pipeline | ⚪ Idea      | Alto     | —                       |
+| Captura nativa (ScreenCaptureKit / Windows.Graphics.Capture) | Pipeline | ⚪ Idea      | Alto     | —                       |
+| Output MP4/H.264 para screen-only vía FFmpeg                 | Pipeline | 🔵 Propuesto | Medio    | —                       |
+| Benchmark propio (CPU/RAM/frames dropped)                    | Pipeline | ⚪ Idea      | Medio    | —                       |
 
 ## Detalle de ítems sin doc propio
 
@@ -34,6 +33,6 @@ Estos salen de la auditoría en [Recording Pipeline → "Lo que NO existe todav�
 
 ## Cómo usar esta sección
 
-- Cada ítem que se empieza a trabajar pasa a 🟡 y, si tiene sustancia, gana su propio doc (como [vitest-migration](./vitest-migration)).
+- Cada ítem que se empieza a trabajar pasa a 🟡 y, si tiene sustancia, gana su propio doc (como [playwright-e2e](./playwright-e2e)).
 - Al completar un ítem: mover el aprendizaje al doc de feature/arquitectura correspondiente (`desktop/`) y quitarlo del mapa.
 - Mantener el **esfuerzo** y el **estado** actualizados — es la fuente de verdad de "qué sigue".

@@ -19,19 +19,21 @@ describe("SettingsPage", () => {
     expect(screen.getByRole("heading", { level: 1, name: /settings/i })).toBeInTheDocument();
   });
 
-  it("renders the main settings sections", () => {
+  it("renders only the wired settings sections", () => {
     renderSettings();
-    expect(screen.getByRole("heading", { name: /^devices$/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /^permissions$/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /recording quality/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /^files$/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /keyboard shortcuts/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /^app$/i })).toBeInTheDocument();
   });
 
-  it("does not render legacy cloud-upload settings", () => {
+  it("does not render unwired placeholder settings", () => {
     renderSettings();
+    // These controls had no backend wiring and were removed (tracked in the
+    // settings-roadmap backlog). They must not reappear as inert placeholders.
     expect(screen.queryByRole("heading", { name: /storage & uploads/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /^devices$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /recording quality/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /keyboard shortcuts/i })).not.toBeInTheDocument();
   });
 
   it("renders permission request controls", () => {
