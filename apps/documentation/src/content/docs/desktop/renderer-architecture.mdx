@@ -1,0 +1,93 @@
+---
+title: Renderer Architecture & Migration Pattern
+description: How the kaipu-record renderer is organized (pages, features, ui, shell) and the repeatable workflow for migrating legacy screens into it.
+---
+
+# Renderer Architecture & Migration Pattern
+
+How the `apps/kaipu-record` renderer (`src/renderer/src`) is structured, and the
+repeatable workflow we use to bring screens over from the legacy recorder.
+
+## Folder layout
+
+| Folder | Holds | Test |
+| --- | --- | --- |
+| `pages/<page>/` | One screen. **Composition only** — local state + wiring of the pieces below. | The page (jsdom) |
+| `features/<feature>/` | Feature-specific building blocks: `components/`, `types.ts`, pure helpers. | Helpers + components |
+| `ui/` | Generic, domain-agnostic primitives (`Button`, `Card`, `Row`, `Select`, `Toggle`, `SearchInput`…). | Primitive |
+| `shell/` | App layout: `app-shell`, `sidebar`, `route-error`. | — |
+| `app/` | `router.tsx` (route tree) and `App.tsx`. | — |
+| `helpers/` | Cross-page pure helpers. | Helper |
+
+The rule of thumb that decides where a component lives: **"would I use this in any
+app?"** → `ui/`. **"does it only make sense inside this feature?"** → `features/<feature>/components/`.
+A page never owns markup it could delegate — it composes.
+
+## The migration workflow
+
+Every legacy screen comes over in the same three ordered steps:
+
+1. **Migrate the page.** Bring the screen in as a single presentational page under
+   `pages/<page>/`. Strip everything that connects to the outside world — stores,
+   IPC, `electron-log`, device/media APIs, persistence — and replace it with
+   **local state + placeholder data**. The goal is a screen that renders, not one
+   that works end-to-end.
+2. **Rename to convention.** Files are **kebab-case** (`record-page.tsx`,
+   `screen-source-selector.tsx`). The component *identifier* stays PascalCase
+   (`export function RecordPage`). Framework entry points keep their conventional
+   names (see Gotchas).
+3. **Split into components.** Extract each distinct section into its own
+   presentational component under `features/<feature>/components/`, with a
+   **co-located CSS module**. The page shrinks to composition + state.
+
+Record was the reference migration: `record-page.tsx` went from ~290 lines of
+inline markup to a composition of `source-card`, `recording-toggles`,
+`microphone-selector`, `webcam-preview`, `start-recording-button`,
+`starting-overlay` and `screen-source-selector`.
+
+## Styling
+
+- **CSS Modules, co-located** next to each component (`x.tsx` + `x.module.css`).
+- **Design tokens only** — colors/space/radii/typography come from
+  `src/renderer/src/assets/base.css` via `var(--token)`. No hardcoded colors in JS.
+  When migrating, conditional inline styles (e.g. an active "pink" state) become
+  CSS classes driven by the token set (`--accent-primary`, `.toggleCardActive`, `:not(:disabled)`).
+- The legacy token `--accent-blue` maps to `--accent-primary` here — rename it when
+  copying CSS over.
+
+## Routing & error handling
+
+`app/router.tsx` uses `createHashRouter` (required for `file://` in packaged
+Electron). Every page is a child of `<AppShell />` so it shares the sidebar.
+
+Two safety nets live in `shell/route-error.tsx`:
+
+- **`errorElement`** on the shell route catches thrown render errors anywhere in
+  the tree and shows a styled full-screen fallback.
+- A **`{ path: "*" }` catch-all** renders an in-shell 404 (sidebar stays visible)
+  instead of React Router's default developer error screen.
+
+## Connecting comes later
+
+Migrated screens are intentionally **UI-only**. The handoff points are marked in
+code (placeholder data, `// wired later` comments, optional-chained
+`window.electronAPI?.x?.()`), so wiring a real store/IPC is an additive step that
+doesn't reshape the component tree.
+
+## Gotchas
+
+- ⚠️ **Don't rename framework entry points.** `src/main/index.ts`,
+  `src/preload/index.ts` + `index.d.ts`, `src/renderer/src/main.tsx` (referenced by
+  `index.html`), `*.config.ts` and `env.d.ts` keep their names — the build/HTML
+  reference them by path.
+- ⚠️ **Copy CSS verbatim, not by hand.** Faithfully port the legacy `.module.css`
+  (with the `--accent-blue` → `--accent-primary` rename) rather than rewriting it —
+  it's how the migrated screen matches the original design.
+- ⚠️ **The custom titlebar needs a frameless window.** Matching the legacy
+  chrome (custom titlebar, hidden native frame) is a main-process change
+  (`titleBarStyle` / frameless), so it's deferred as "connecting", not UI.
+
+## Related
+
+- [Recording Pipeline](/desktop/recording-pipeline)
+- [Product Philosophy](/desktop/product-philosophy)
