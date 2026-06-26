@@ -222,6 +222,22 @@ costaron y conviene recordar:
   orden `punto · timer · separador · medidor de mic · pausa · stop · atajo`, sin
   focus-ring (el accent del SO lo hacía ver "preseleccionado"), sombra discreta.
 
+### Encode por hardware (VideoToolbox) y el caveat de OpenH264
+
+mediabunny pasa `hardwareAcceleration: 'no-preference'` por defecto, y en la build de
+Chromium de Electron eso seleccionaba el **encoder H.264 por software (OpenH264)** —
+visible como warnings `[OpenH264] ... bitrate can't be controlled...` en consola, e
+implica más CPU/calor que el hardware. El engine ahora pide
+**`hardwareAcceleration: "prefer-hardware"`** (+ `latencyMode: "realtime"` para
+captura en vivo) en el `VideoEncodingConfig` del `MediaStreamVideoTrackSource`, para
+empujar a **VideoToolbox**. Es un *hint*: si el encode H.264 por hardware no está
+disponible vía WebCodecs, cae a software (el comportamiento previo, sin romper).
+
+**Verificación:** el `onEncoderConfig` loguea el config real; si el hardware engancha,
+los mensajes `[OpenH264]` **desaparecen** de la consola. (Los warnings
+`representedObject is not a WeakPtrToElectronMenuModelAsNSObject` y
+`sysctlbyname ... kern.hv_vmm_present failed` son ruido inofensivo de Electron/macOS.)
+
 ### Por qué mediabunny y no FFmpeg
 
 No portamos el stack `MediaRecorder`+FFmpeg del legacy. Gran parte del rol de FFmpeg ahí era **parchear lo que `MediaRecorder` rompe** (WebM sin duration header → remux). mediabunny no usa `MediaRecorder`, así que esos parches no nacen.
