@@ -136,6 +136,17 @@ describe("useScreenRecorder", () => {
     expect(window.electronAPI.recordingFinalize).toHaveBeenCalledOnce();
   });
 
+  it("ignores a second start while one is already starting (no double session)", async () => {
+    const { result } = renderHook(() => useScreenRecorder());
+
+    await act(async () => {
+      void result.current.start(input); // sets sessionRef synchronously
+      await result.current.start(input); // must early-return
+    });
+
+    expect(window.electronAPI.recordingCreate).toHaveBeenCalledOnce();
+  });
+
   it("aborts the session and surfaces an error when the engine fails to start", async () => {
     startEngineMock.mockRejectedValue(new Error("getDisplayMedia denied"));
     const { result } = renderHook(() => useScreenRecorder());

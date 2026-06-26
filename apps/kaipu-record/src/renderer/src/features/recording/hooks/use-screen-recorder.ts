@@ -59,7 +59,9 @@ export function useScreenRecorder(options: ScreenRecorderOptions = {}): ScreenRe
   }, []);
 
   const start = useCallback(async (input: StartInput): Promise<void> => {
-    if (engineRef.current) return;
+    // `sessionRef` is set synchronously below, so this also blocks re-entry during
+    // the async "starting" window (streams acquiring) — no double session.
+    if (engineRef.current || sessionRef.current) return;
     setStatus("starting");
     const sessionId = `session-${++sessionCounter}`;
     sessionRef.current = sessionId;

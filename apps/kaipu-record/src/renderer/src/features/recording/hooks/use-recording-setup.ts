@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { LocalRecording } from "@shared/types";
 import { useMicrophones } from "@renderer/features/recording/hooks/use-microphones";
-import { useScreenRecorder } from "@renderer/features/recording/hooks/use-screen-recorder";
+import {
+  useScreenRecorder,
+  type RecorderStatus,
+} from "@renderer/features/recording/hooks/use-screen-recorder";
 import type { Microphone, SelectedSource } from "@renderer/features/recording/types";
 
 export interface RecordingSetupOptions {
@@ -42,6 +45,8 @@ export interface RecordingSetup {
 
   // Recording lifecycle
   isRecording: boolean;
+  /** Full recorder status — `"starting"` covers the stream-acquire gap after the countdown. */
+  recordingStatus: RecorderStatus;
   /** Current countdown tick (3→1) while a start is pending; null otherwise. */
   countdown: number | null;
   canStartRecording: boolean;
@@ -154,6 +159,7 @@ export function useRecordingSetup(options: RecordingSetupOptions = {}): Recordin
     },
 
     isRecording,
+    recordingStatus: recorder.status,
     countdown,
     canStartRecording: Boolean(selectedSource),
     startRecording,

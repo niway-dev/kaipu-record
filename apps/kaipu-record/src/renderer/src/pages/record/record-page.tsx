@@ -47,6 +47,9 @@ export function RecordPage(): React.JSX.Element {
   const activity = useRecordingActivity();
   const isRecording = setup.isRecording;
   const isPaused = isRecording && activity.status === "paused";
+  // The gap between the countdown ending and the window handing off to the bar:
+  // streams are acquiring, isRecording is still false. Keep the overlay up.
+  const isStarting = setup.recordingStatus === "starting";
   const timer = formatElapsed(activity.elapsedSeconds * 1000);
 
   return (
@@ -134,7 +137,7 @@ export function RecordPage(): React.JSX.Element {
       ) : (
         <RecordButton
           isRecording={false}
-          disabled={!setup.canStartRecording}
+          disabled={!setup.canStartRecording || isStarting || setup.countdown !== null}
           shortcut="⌘⇧P"
           onClick={setup.startRecording}
         />
@@ -157,7 +160,7 @@ export function RecordPage(): React.JSX.Element {
         onGrantAccess={() => void openPermissionSettings("screen")}
       />
 
-      {setup.countdown !== null && <CountdownOverlay value={setup.countdown} />}
+      {(setup.countdown !== null || isStarting) && <CountdownOverlay value={setup.countdown} />}
     </div>
   );
 }
