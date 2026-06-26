@@ -9,49 +9,47 @@ export interface PopoverProps {
 
 export function Popover({ trigger, children, align = "left" }: PopoverProps): React.JSX.Element {
   const [open, setOpen] = useState(false);
-  const [coords, setCoords] = useState({ top: 0, left: 0, right: 0 });
+  const [anchor, setAnchor] = useState({ top: 0, left: 0, right: 0 });
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+    const dismiss = (event: MouseEvent): void => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false);
     };
-    const handleScroll = () => setOpen(false);
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("scroll", handleScroll, true);
+    const onScroll = (): void => setOpen(false);
+    document.addEventListener("mousedown", dismiss);
+    document.addEventListener("scroll", onScroll, true);
     return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("scroll", handleScroll, true);
+      document.removeEventListener("mousedown", dismiss);
+      document.removeEventListener("scroll", onScroll, true);
     };
   }, [open]);
 
-  const handleToggle = () => {
+  const toggle = (): void => {
     if (!open && ref.current) {
       const rect = ref.current.getBoundingClientRect();
-      setCoords({ top: rect.top, left: rect.left, right: window.innerWidth - rect.right });
+      setAnchor({ top: rect.top, left: rect.left, right: window.innerWidth - rect.right });
     }
     setOpen((prev) => !prev);
   };
 
-  const contentStyle: React.CSSProperties = {
+  const placement: React.CSSProperties = {
     position: "fixed",
-    bottom: `calc(100vh - ${coords.top}px + 8px)`,
-    ...(align === "right" ? { right: coords.right } : { left: coords.left }),
+    bottom: `calc(100vh - ${anchor.top}px + 8px)`,
+    ...(align === "right" ? { right: anchor.right } : { left: anchor.left }),
   };
 
   return (
     <div className={styles.wrapper} ref={ref}>
-      <div onClick={handleToggle} className={styles.trigger}>
+      <div className={styles.trigger} onClick={toggle}>
         {trigger}
       </div>
-      {open && (
-        <div className={styles.content} style={contentStyle}>
+      {open ? (
+        <div className={styles.content} style={placement}>
           {children}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -64,11 +62,7 @@ export interface PopoverItemProps {
 
 export function PopoverItem({ onClick, children, danger }: PopoverItemProps): React.JSX.Element {
   return (
-    <button
-      className={`${styles.item} ${danger ? styles.danger : ""}`}
-      onClick={onClick}
-      type="button"
-    >
+    <button type="button" className={styles.item} data-danger={danger} onClick={onClick}>
       {children}
     </button>
   );

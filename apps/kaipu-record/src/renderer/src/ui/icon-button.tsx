@@ -1,4 +1,5 @@
 import React from "react";
+import { cx } from "./cx";
 import styles from "./icon-button.module.css";
 
 export interface IconButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -11,9 +12,8 @@ export function IconButton({
   children,
   ...props
 }: IconButtonProps): React.JSX.Element {
-  const cls = [styles.iconButton, styles[size], className].filter(Boolean).join(" ");
   return (
-    <button className={cls} {...props}>
+    <button className={cx(styles.iconButton, className)} data-size={size} {...props}>
       {children}
     </button>
   );

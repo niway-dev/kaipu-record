@@ -1,5 +1,6 @@
 import React from "react";
 import { Search } from "lucide-react";
+import { cx } from "./cx";
 import styles from "./search-input.module.css";
 
 export interface SearchInputProps extends Omit<
@@ -15,17 +16,18 @@ export function SearchInput({
   className,
   ...props
 }: SearchInputProps): React.JSX.Element {
-  const cls = [styles.wrapper, className].filter(Boolean).join(" ");
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    onChange?.(e);
-    onSearch?.(e.target.value);
-  };
-
   return (
-    <div className={cls}>
-      <Search size={14} className={styles.icon} />
-      <input type="text" className={styles.input} onChange={handleChange} {...props} />
-    </div>
+    <label className={cx(styles.wrapper, className)}>
+      <Search size={14} strokeWidth={1.8} className={styles.icon} />
+      <input
+        type="text"
+        className={styles.input}
+        onChange={(event) => {
+          onChange?.(event);
+          onSearch?.(event.target.value);
+        }}
+        {...props}
+      />
+    </label>
   );
 }

@@ -2,24 +2,25 @@
   position: relative;
   display: flex;
   align-items: center;
+  width: 100%;
 }
 
 .icon {
   position: absolute;
-  left: 10px;
+  left: 11px;
   color: var(--text-muted);
   pointer-events: none;
 }
 
 .input {
   width: 100%;
+  padding: 8px 12px 8px 32px;
   background: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   color: var(--text-primary);
   font-family: var(--font-family);
   font-size: var(--font-size-sm);
-  padding: 8px 12px 8px 32px;
   transition: border-color var(--transition);
 }
 
@@ -31,7 +32,7 @@
   border-color: var(--border-light);
 }
 
-.input:focus {
+.input:focus-visible {
   outline: none;
   border-color: var(--accent-primary);
 }

@@ -1,4 +1,5 @@
 import React from "react";
+import { cx } from "./cx";
 import styles from "./card.module.css";
 
 export interface CardProps {
@@ -7,6 +8,5 @@ export interface CardProps {
 }
 
 export function Card({ children, className }: CardProps): React.JSX.Element {
-  const cls = [styles.card, className].filter(Boolean).join(" ");
-  return <div className={cls}>{children}</div>;
+  return <div className={cx(styles.card, className)}>{children}</div>;
 }

@@ -1,4 +1,5 @@
 import React from "react";
+import { cx } from "./cx";
 import styles from "./row.module.css";
 
 export interface RowProps {
@@ -18,16 +19,18 @@ export function Row({
   className,
   actionClassName,
 }: RowProps): React.JSX.Element {
-  const cls = [styles.row, className].filter(Boolean).join(" ");
-  const actionCls = [styles.action, actionClassName].filter(Boolean).join(" ");
   return (
-    <div className={cls}>
-      {icon && <div className={styles.icon}>{icon}</div>}
+    <div className={cx(styles.row, className)}>
+      {icon ? (
+        <span className={styles.icon} aria-hidden>
+          {icon}
+        </span>
+      ) : null}
       <div className={styles.info}>
         <span className={styles.label}>{label}</span>
-        {description && <span className={styles.description}>{description}</span>}
+        {description ? <span className={styles.description}>{description}</span> : null}
       </div>
-      {action && <div className={actionCls}>{action}</div>}
+      {action ? <div className={cx(styles.action, actionClassName)}>{action}</div> : null}
     </div>
   );
 }

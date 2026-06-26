@@ -12,13 +12,13 @@
 }
 
 .input {
+  padding: 8px 12px;
   background: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
   font-family: var(--font-family);
   font-size: var(--font-size-base);
-  padding: 8px 12px;
   transition: border-color var(--transition);
 }
 
@@ -30,7 +30,7 @@
   border-color: var(--border-light);
 }
 
-.input:focus {
+.input:focus-visible {
   outline: none;
   border-color: var(--accent-primary);
 }

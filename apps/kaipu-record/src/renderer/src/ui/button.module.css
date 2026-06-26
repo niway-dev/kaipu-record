@@ -1,20 +1,26 @@
 .button {
+  --btn-h: 34px;
+  --btn-px: 14px;
+  --btn-fs: var(--font-size-base);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-sm);
+  height: var(--btn-h);
+  padding: 0 var(--btn-px);
+  font-family: var(--font-family);
+  font-size: var(--btn-fs);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+  user-select: none;
+  cursor: pointer;
   border: 1px solid transparent;
   border-radius: var(--radius-md);
-  font-family: var(--font-family);
-  font-weight: var(--font-weight-medium);
-  cursor: pointer;
   transition:
     background var(--transition),
     border-color var(--transition),
     color var(--transition),
     opacity var(--transition);
-  white-space: nowrap;
-  user-select: none;
 }
 
 .button:disabled {
@@ -22,61 +28,52 @@
   cursor: not-allowed;
 }
 
-/* ── Sizes ────────────────────────────── */
+/* ── Sizes (driven by data-size) ──────── */
 
-.sm {
-  height: 28px;
-  padding: 0 10px;
-  font-size: var(--font-size-sm);
+.button[data-size="sm"] {
+  --btn-h: 28px;
+  --btn-px: 10px;
+  --btn-fs: var(--font-size-sm);
 }
 
-.default {
-  height: 34px;
-  padding: 0 14px;
-  font-size: var(--font-size-base);
+.button[data-size="lg"] {
+  --btn-h: 40px;
+  --btn-px: 20px;
+  --btn-fs: var(--font-size-md);
 }
 
-.lg {
-  height: 40px;
-  padding: 0 20px;
-  font-size: var(--font-size-md);
-}
+/* ── Variants (driven by data-variant) ── */
 
-/* ── Variants ─────────────────────────── */
-
-.primary {
+.button[data-variant="primary"] {
   background: var(--accent-primary);
   color: #fff;
 }
 
-.primary:hover:not(:disabled) {
+.button[data-variant="primary"]:hover:not(:disabled) {
   background: var(--accent-primary-hover);
 }
 
-.danger {
+.button[data-variant="danger"] {
   background: var(--accent-red);
   color: #fff;
 }
 
-.danger:hover:not(:disabled) {
+.button[data-variant="danger"]:hover:not(:disabled) {
   background: var(--accent-red-hover);
 }
 
-.ghost {
+.button[data-variant="ghost"] {
   background: transparent;
   color: var(--accent-primary);
 }
 
-.ghost:hover:not(:disabled) {
-  background: rgba(246, 5, 92, 0.1);
-}
-
-.outline {
+.button[data-variant="outline"] {
   background: transparent;
   border-color: var(--accent-primary);
   color: var(--accent-primary);
 }
 
-.outline:hover:not(:disabled) {
+.button[data-variant="ghost"]:hover:not(:disabled),
+.button[data-variant="outline"]:hover:not(:disabled) {
   background: rgba(246, 5, 92, 0.1);
 }

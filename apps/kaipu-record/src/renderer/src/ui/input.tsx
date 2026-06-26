@@ -1,4 +1,5 @@
 import React from "react";
+import { cx } from "./cx";
 import styles from "./input.module.css";
 
 export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
@@ -6,18 +7,16 @@ export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> 
 }
 
 export function Input({ label, className, id, ...props }: InputProps): React.JSX.Element {
-  const cls = [styles.input, className].filter(Boolean).join(" ");
+  const field = <input id={id} className={cx(styles.input, className)} {...props} />;
 
-  if (label) {
-    return (
-      <div className={styles.wrapper}>
-        <label className={styles.label} htmlFor={id}>
-          {label}
-        </label>
-        <input id={id} className={cls} {...props} />
-      </div>
-    );
-  }
+  if (!label) return field;
 
-  return <input id={id} className={cls} {...props} />;
+  return (
+    <div className={styles.wrapper}>
+      <label className={styles.label} htmlFor={id}>
+        {label}
+      </label>
+      {field}
+    </div>
+  );
 }

@@ -9,12 +9,12 @@ export interface PageHeaderProps {
 
 export function PageHeader({ title, subtitle, action }: PageHeaderProps): React.JSX.Element {
   return (
-    <div className={styles.header}>
+    <header className={styles.header}>
       <div className={styles.text}>
         <h1 className={styles.title}>{title}</h1>
-        {subtitle && <p className={styles.subtitle}>{subtitle}</p>}
+        {subtitle ? <p className={styles.subtitle}>{subtitle}</p> : null}
       </div>
-      {action && <div className={styles.action}>{action}</div>}
-    </div>
+      {action ? <div className={styles.action}>{action}</div> : null}
+    </header>
   );
 }

@@ -1,25 +1,26 @@
 .toggle {
+  --track: var(--border);
   position: relative;
+  flex-shrink: 0;
   width: 36px;
   height: 20px;
+  padding: 0;
   border: none;
   border-radius: 10px;
-  background: var(--border);
-  cursor: pointer;
-  padding: 0;
-  transition: background var(--transition);
-  flex-shrink: 0;
   outline: none;
+  cursor: pointer;
+  background: var(--track);
+  transition: background var(--transition);
+}
+
+.toggle[data-state="checked"] {
+  --track: var(--accent-primary);
 }
 
 .toggle[data-disabled] {
   opacity: 0.45;
   cursor: not-allowed;
   pointer-events: none;
-}
-
-.toggle[data-state="checked"] {
-  background: var(--accent-primary);
 }
 
 .toggle:focus-visible {

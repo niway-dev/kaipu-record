@@ -1,4 +1,5 @@
 import React from "react";
+import { cx } from "./cx";
 import styles from "./button.module.css";
 
 type ButtonVariant = "primary" | "danger" | "ghost" | "outline";
@@ -16,9 +17,13 @@ export function Button({
   children,
   ...props
 }: ButtonProps): React.JSX.Element {
-  const cls = [styles.button, styles[variant], styles[size], className].filter(Boolean).join(" ");
   return (
-    <button className={cls} {...props}>
+    <button
+      className={cx(styles.button, className)}
+      data-variant={variant}
+      data-size={size}
+      {...props}
+    >
       {children}
     </button>
   );
