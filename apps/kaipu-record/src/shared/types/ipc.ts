@@ -52,7 +52,8 @@ export const IPC_CHANNELS = {
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
 
-export type RecordingStatus = "recording" | "paused";
+/** `saving` covers the brief finalize/encode-flush window after Stop. */
+export type RecordingStatus = "recording" | "paused" | "saving";
 
 export interface RecordingTick {
   elapsedSeconds: number;

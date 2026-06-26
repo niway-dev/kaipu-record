@@ -37,4 +37,17 @@ describe("ControlBar", () => {
     screen.getByRole("button", { name: /stop/i }).click();
     expect(onStop).toHaveBeenCalledOnce();
   });
+
+  it("shows a Saving state with no controls while finalizing", () => {
+    render(
+      <ControlBar
+        tick={{ ...baseTick, status: "saving" }}
+        onPause={vi.fn()}
+        onResume={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/saving/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /stop/i })).not.toBeInTheDocument();
+  });
 });

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useRecordingSetup } from "@renderer/features/recording/hooks/use-recording-setup";
 import { useSourceSelection } from "@renderer/features/recording/hooks/use-source-selection";
 import { useCameraPreview } from "@renderer/features/recording/hooks/use-camera-preview";
@@ -15,7 +16,11 @@ import styles from "./record-page.module.css";
 
 // Composition only. State lives in the hooks; this wires them to dumb components.
 export function RecordPage(): React.JSX.Element {
-  const setup = useRecordingSetup();
+  const navigate = useNavigate();
+  // After a recording saves, jump straight to its detail page to see the output.
+  const setup = useRecordingSetup({
+    onRecordingComplete: (recording) => navigate(`/library/${recording.id}`),
+  });
   const { sources, isLoading: isLoadingSources, error: sourcesError } = useSourceSelection(setup);
   const camera = useCameraPreview(setup.isCameraEnabled);
   const {

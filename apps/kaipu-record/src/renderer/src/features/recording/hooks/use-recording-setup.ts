@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { LocalRecording } from "@shared/types";
 import { useMicrophones } from "@renderer/features/recording/hooks/use-microphones";
 import { useScreenRecorder } from "@renderer/features/recording/hooks/use-screen-recorder";
 import type { Microphone, SelectedSource } from "@renderer/features/recording/types";
+
+export interface RecordingSetupOptions {
+  /** Fires when a recording finishes saving — the Record page uses it to navigate. */
+  onRecordingComplete?: (recording: LocalRecording) => void;
+}
 
 const COUNTDOWN_SECONDS = 3;
 
@@ -46,7 +52,7 @@ export interface RecordingSetup {
   toggleRecording(): void;
 }
 
-export function useRecordingSetup(): RecordingSetup {
+export function useRecordingSetup(options: RecordingSetupOptions = {}): RecordingSetup {
   const [selectedSource, setSelectedSource] = useState<SelectedSource | null>(null);
   const [isSourcePickerOpen, setSourcePickerOpen] = useState(false);
   const [isMicrophoneEnabled, setMicrophoneEnabled] = useState(true);
@@ -54,7 +60,7 @@ export function useRecordingSetup(): RecordingSetup {
   const [isCameraEnabled, setCameraEnabled] = useState(false);
 
   const microphones = useMicrophones();
-  const recorder = useScreenRecorder();
+  const recorder = useScreenRecorder({ onComplete: options.onRecordingComplete });
   const [selectedMicrophone, setSelectedMicrophone] = useState<Microphone | null>(null);
   // Default to the first device once enumerated; keep the choice valid as
   // devices are plugged/unplugged.

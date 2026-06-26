@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { LocalRecording } from "@shared/types";
 import {
   elapsedMs,
   pauseElapsed,
@@ -17,6 +18,11 @@ export interface StartInput {
   systemAudio: boolean;
 }
 
+export interface ScreenRecorderOptions {
+  /** Called once the recording is finalized into the vault (used to navigate). */
+  onComplete?: (recording: LocalRecording) => void;
+}
+
 export interface ScreenRecorderControls {
   status: RecorderStatus;
   start(input: StartInput): Promise<void>;
@@ -27,6 +33,10 @@ export interface ScreenRecorderControls {
 
 let sessionCounter = 0;
 
+/** Minimum time the bar shows "Saving…" so it never just flashes on short clips. */
+const MIN_SAVING_MS = 600;
+const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
 /**
  * Orchestrates a recording: opens a disk-writer session, starts the mediabunny
  * engine, drives the elapsed clock, streams a ~10/s tick (elapsed + mic levels +
@@ -34,12 +44,14 @@ let sessionCounter = 0;
  * pause/resume/stop commands. The heavy lifting lives in the engine + the pure
  * clock; this hook is just wiring + React state.
  */
-export function useScreenRecorder(): ScreenRecorderControls {
+export function useScreenRecorder(options: ScreenRecorderOptions = {}): ScreenRecorderControls {
   const [status, setStatus] = useState<RecorderStatus>("idle");
   const engineRef = useRef<EngineHandle | null>(null);
   const sessionRef = useRef<string | null>(null);
   const clockRef = useRef<ElapsedState | null>(null);
   const tickTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const onCompleteRef = useRef(options.onComplete);
+  onCompleteRef.current = options.onComplete;
 
   const stopTicks = useCallback(() => {
     if (tickTimer.current) clearInterval(tickTimer.current);
@@ -105,28 +117,47 @@ export function useScreenRecorder(): ScreenRecorderControls {
     const sessionId = sessionRef.current;
     if (!engine || !sessionId) return;
     setStatus("finalizing");
-    stopTicks();
     const durationSeconds = clockRef.current
       ? Math.floor(elapsedMs(clockRef.current, Date.now()) / 1000)
       : 0;
+    // Flip the bar to "Saving…" before the timer stops, so the finalize wait reads
+    // as progress instead of a frozen widget.
+    window.electronAPI.recordingReportTick({
+      elapsedSeconds: durationSeconds,
+      levels: [0, 0, 0, 0, 0],
+      status: "saving",
+    });
+    stopTicks();
+
+    let recording: LocalRecording | null = null;
     try {
-      await engine.stop();
       const title = `Recording — ${new Date().toLocaleString()}`;
-      await window.electronAPI.recordingFinalize(sessionId, {
-        title,
-        durationSeconds,
-        thumbnail: engine.thumbnail,
-      });
+      // Run the real finalize and a minimum dwell together so "Saving…" is visible
+      // even when the clip is tiny and the write is instant.
+      [recording] = await Promise.all([
+        (async (): Promise<LocalRecording> => {
+          await engine.stop();
+          return window.electronAPI.recordingFinalize(sessionId, {
+            title,
+            durationSeconds,
+            thumbnail: engine.thumbnail,
+          });
+        })(),
+        delay(MIN_SAVING_MS),
+      ]);
     } catch (error) {
       console.error("failed to finalize recording", error);
       await window.electronAPI.recordingAbort(sessionId);
-    } finally {
-      window.electronAPI.recordingStop();
-      engineRef.current = null;
-      sessionRef.current = null;
-      clockRef.current = null;
-      setStatus("idle");
     }
+
+    // Navigate to the new recording BEFORE the main window reappears, so it lands
+    // on the detail page rather than flashing the Record page first.
+    if (recording) onCompleteRef.current?.(recording);
+    window.electronAPI.recordingStop();
+    engineRef.current = null;
+    sessionRef.current = null;
+    clockRef.current = null;
+    setStatus("idle");
   }, [stopTicks]);
 
   // The bar's buttons arrive as relayed commands. Subscribe once; read the

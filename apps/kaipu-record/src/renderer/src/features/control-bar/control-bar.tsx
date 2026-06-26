@@ -1,5 +1,5 @@
 import React from "react";
-import { Pause, Play, Square } from "lucide-react";
+import { Loader2, Pause, Play, Square } from "lucide-react";
 import { formatElapsed } from "@renderer/features/recording/elapsed";
 import { cx } from "@renderer/ui/cx";
 import type { RecordingTick } from "@shared/types/ipc";
@@ -19,6 +19,15 @@ export function ControlBar({
   onResume,
   onStop,
 }: ControlBarProps): React.JSX.Element {
+  if (tick.status === "saving") {
+    return (
+      <div className={styles.bar}>
+        <Loader2 size={14} className={styles.spinner} />
+        <span className={styles.savingLabel}>Saving…</span>
+      </div>
+    );
+  }
+
   const paused = tick.status === "paused";
   return (
     <div className={styles.bar} data-paused={paused || undefined}>
