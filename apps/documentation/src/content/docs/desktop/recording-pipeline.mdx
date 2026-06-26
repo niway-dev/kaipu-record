@@ -174,6 +174,26 @@ El timer en vivo de ambas ventanas sale de `RecordingActivity.elapsedSeconds`, q
 el hub actualiza desde los ticks del grabador y re-emite ~1/s (no en cada tick de
 10/s).
 
+### El hueco "starting" después del countdown
+
+Tras el countdown `3·2·1`, el grabador entra en estado **`"starting"`** mientras
+adquiere los streams y arma el encoder — ahí `isRecording` todavía es `false` y la
+ventana **aún no se ocultó**, así que el botón Start quedaba visible y clickeable
+~0.5–1s (se podía disparar una segunda grabación). Se cierra por tres lados:
+
+- El **overlay del countdown sigue arriba durante `"starting"`** mostrando un
+  spinner (su `value` pasa de número a `null`). Como el overlay es un backdrop que
+  captura clicks, el botón no se puede tocar en ese intervalo. No hay parpadeo:
+  `clearCountdown()` y `setStatus("starting")` ocurren en el mismo tick, así que la
+  condición `countdown !== null || isStarting` nunca queda en falso.
+- **Guard de re-entrada** en `useScreenRecorder.start`: chequea
+  `engineRef || sessionRef`, y `sessionRef` se setea sincrónicamente, así que un
+  segundo `start()` durante "starting" retorna de inmediato — sin doble sesión.
+- El botón Start queda `disabled` durante el countdown y "starting" (defensa extra).
+
+`useRecordingSetup` expone `recordingStatus` (el `RecorderStatus` completo) para que
+el Record page distinga "starting". El número del countdown usa el color de acento.
+
 ### Después de grabar: navegación + estado "Saving"
 
 Al detener, `useScreenRecorder` muestra un breve estado **"Saving…"** en la barra
