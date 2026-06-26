@@ -1,0 +1,70 @@
+---
+title: IPC Contract
+description: Los canales IPC entre main y renderer, el bridge de preload, y los tipos compartidos que mantienen el contrato verificado por TypeScript.
+---
+
+# IPC Contract
+
+Referencia del puente entre el proceso main y el renderer. El renderer **nunca** habla con `electron` ni con `node:*` directo — todo pasa por `window.electronAPI`, expuesto por el preload vía `contextBridge`.
+
+## Las tres capas
+
+```
+renderer  →  window.electronAPI.foo()          (src/renderer)
+          →  contextBridge bridge               (src/preload/index.ts)
+          →  ipcRenderer.invoke/send → ipcMain  (canal con nombre)
+          →  register*Handlers()                (src/main/*)
+```
+
+El contrato está **tipado de punta a punta** por archivos puros en `src/shared/types/` que importan ambos procesos. No hay tests de runtime del bridge: si el tipo no cuadra, no compila (`shared/types/ipc.ts:1`).
+
+## Nombres de canal
+
+Centralizados en `IPC_CHANNELS` (`shared/types/ipc.ts:26`) para mantener main y renderer en sync. Dos canales del hot-path de captura/panel se nombran inline (no en el mapa).
+
+## Canales
+
+| Canal | Tipo | Dirección | Firma (en `electronAPI`) | Handler |
+| --- | --- | --- | --- | --- |
+| `recording:get-screen-sources` | invoke | render→main | `getScreenSources(): Promise<ScreenSource[]>` | `recording-sources.ts:13` |
+| `capture-panel:resize` | send | render→main | `resizeCapturePanel(height): void` | `capture-panel-window.ts:97` |
+| `capture-panel:open-main` | send | render→main | `openMainWindow(): void` | `index.ts:88` |
+| `permissions:check` | invoke | render→main | `checkPermissions(): Promise<PermissionStatus>` | `permissions.ts:105` |
+| `permissions:request` | invoke | render→main | `requestPermission(kind): Promise<boolean>` | `permissions.ts:109` |
+| `permissions:open-settings` | invoke | render→main | `openSystemSettings(kind): Promise<void>` | `permissions.ts:116` |
+| `library:list-local` | invoke | render→main | `listLocalRecordings(): Promise<LocalRecording[]>` | `library/index.ts:24` |
+| `library:rename-local` | invoke | render→main | `renameLocalRecording(id, title): Promise<void>` | `library/index.ts:25` |
+| `library:delete-local` | invoke | render→main | `deleteLocalRecording(id): Promise<void>` | `library/index.ts:28` |
+| `library:reveal-local` | invoke | render→main | `revealLocalRecording(id): Promise<void>` | `library/index.ts:31` |
+| `library:get-vault-dir` | invoke | render→main | `getVaultDirectory(): Promise<VaultDirectory>` | `library/index.ts:35` |
+| `library:choose-vault-dir` | invoke | render→main | `chooseVaultDirectory(): Promise<VaultDirectory \| null>` | `library/index.ts:37` |
+| `library:reset-vault-dir` | invoke | render→main | `resetVaultDirectory(): Promise<VaultDirectory>` | `library/index.ts:58` |
+
+## `invoke` vs `send`
+
+- **`invoke`** (request/response) — para cualquier cosa que devuelve un valor o donde el renderer espera confirmación. Es lo normal acá.
+- **`send`** (fire-and-forget) — solo los dos canales del Capture Panel (`resize`, `open-main`), que son imperativos puros y no necesitan respuesta.
+
+## Tipos compartidos
+
+Todos en `src/shared/types/`, puros (sin `electron`/`node:*`):
+
+| Tipo | Archivo | Qué describe |
+| --- | --- | --- |
+| `IPC_CHANNELS`, `IpcChannel` | `ipc.ts` | Nombres de canal + tipo unión |
+| `AppSettings`, `Theme`, `DEFAULT_SETTINGS` | `ipc.ts` | Settings de la app |
+| `KaipuElectronAPI` | `electron-api.ts` | La forma completa de `window.electronAPI` |
+| `ScreenSource`, `PermissionKind`, `PermissionStatus` | `electron-api.ts` | Captura y permisos |
+| `LocalRecording`, `VaultDirectory` | `library-storage.ts` | Vault |
+
+## Gotchas
+
+- ⚠️ **`IPC_CHANNELS` define `settings:get` y `settings:update`, pero el bridge NO los expone** (no hay método `getSettings`/`updateSettings` en `preload/index.ts`, ni handler en main). Son un placeholder para persistencia futura de settings — hoy lo único persistido es el vault directory en `preferences.json`. No asumir que existen.
+- ⚠️ El bridge solo expone métodos con un handler vivo en main (comentario en `preload/index.ts:6`). Agregar un método a `KaipuElectronAPI` sin registrar su handler compila pero falla en runtime.
+- ⚠️ `recording:get-screen-sources` está hardcodeado (no en `IPC_CHANNELS`). Si se centraliza, cambiar ambos lados a la vez.
+
+## Related
+
+- [Main Process Architecture](/desktop/main-process-architecture) — quién registra los handlers
+- [Library Vault](/desktop/library-vault) — qué hacen los handlers `library:*`
+- [Permissions & Onboarding](/desktop/permissions-and-onboarding) — los handlers `permissions:*`
