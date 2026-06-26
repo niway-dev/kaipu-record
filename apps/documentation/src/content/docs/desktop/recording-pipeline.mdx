@@ -162,11 +162,17 @@ solo cuando el status cambia — no en cada tick de 10/s. Cada ventana lee esto 
 **`useRecordingActivity()`**, que además **consulta `getRecordingState()` al
 montar** (por si una ventana se abre con la grabación ya en curso). Con eso:
 
-- **Record page:** el encabezado muestra "Recording"/"Paused" y los controles de
-  setup quedan `inert` (no se pueden tocar ni re-disparar).
-- **Capture Panel:** indicador en el header, controles `inert`, y el botón pasa a
-  **"Stop Recording"** que envía el comando stop al hub — imposible arrancar una
-  segunda grabación desde el tray.
+- **Record page:** una **tarjeta de cabecera** con "Recording"/"Paused" + **timer
+  en vivo**, la fuente con badge **LOCKED**, y una fila **Pause / Stop recording**
+  (pause/resume expuestos desde `useRecordingSetup`); los controles de setup quedan
+  `inert`.
+- **Capture Panel:** un **banner rojo "Recording — mm:ss"** con timer en vivo,
+  controles `inert`, y el botón pasa a **"Stop Recording"** (comando stop al hub) —
+  imposible arrancar una segunda grabación desde el tray.
+
+El timer en vivo de ambas ventanas sale de `RecordingActivity.elapsedSeconds`, que
+el hub actualiza desde los ticks del grabador y re-emite ~1/s (no en cada tick de
+10/s).
 
 ### Después de grabar: navegación + estado "Saving"
 
