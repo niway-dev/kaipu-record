@@ -11,16 +11,18 @@ vi.mock("@renderer/features/recording/hooks/use-microphones", () => ({
 }));
 
 // The real recording engine is mocked: status stays "idle" so the hook never
-// reports an active session, and we assert the hook delegates to start/stop.
+// reports an active session, and we assert the hook delegates to start/stop/pause.
 const recorderStart = vi.fn();
 const recorderStop = vi.fn();
+const recorderPause = vi.fn();
+const recorderResume = vi.fn();
 vi.mock("@renderer/features/recording/hooks/use-screen-recorder", () => ({
   useScreenRecorder: () => ({
     status: "idle",
     start: recorderStart,
     stop: recorderStop,
-    pause: vi.fn(),
-    resume: vi.fn(),
+    pause: recorderPause,
+    resume: recorderResume,
   }),
 }));
 
@@ -31,6 +33,8 @@ describe("useRecordingSetup", () => {
     vi.useFakeTimers();
     recorderStart.mockClear();
     recorderStop.mockClear();
+    recorderPause.mockClear();
+    recorderResume.mockClear();
   });
   afterEach(() => vi.useRealTimers());
 
@@ -46,6 +50,15 @@ describe("useRecordingSetup", () => {
     expect(result.current.canStartRecording).toBe(false);
     act(() => result.current.selectSource({ id: "s1", name: "Display 1", type: "screen" }));
     expect(result.current.canStartRecording).toBe(true);
+  });
+
+  it("exposes the recorder status and delegates pause/resume", () => {
+    const { result } = renderHook(() => useRecordingSetup());
+    expect(result.current.recordingStatus).toBe("idle");
+    act(() => result.current.pauseRecording());
+    expect(recorderPause).toHaveBeenCalledTimes(1);
+    act(() => result.current.resumeRecording());
+    expect(recorderResume).toHaveBeenCalledTimes(1);
   });
 
   it("toggles capture flags", () => {
