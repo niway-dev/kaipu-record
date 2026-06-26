@@ -148,6 +148,54 @@ Ventana principal (oculta)                  Barra flotante (ventana aparte)
 
 **Vault:** ahora es agnóstico de extensión (`.mp4`/`.webm`), con sidecar de duración + thumbnail; `kaipu-media://thumb/<id>` sirve el póster.
 
+### Estado global de grabación (entre ventanas)
+
+**Problema:** cada ventana (Record page, Capture Panel) tiene su propia instancia
+de `useScreenRecorder` — comparten *código, no estado*. Sin coordinación, el
+Capture Panel (otra ventana) no sabe que hay una grabación activa y mostraría
+"Start Recording", permitiendo arrancar una segunda grabación → errores.
+
+**Solución:** el `recording-hub` (main, única fuente de verdad) mantiene
+`RecordingActivity { active, status }` y lo **transmite a todas las ventanas**
+(`recording:state`) en cada transición (start/stop/pause/resume), re-emitiendo
+solo cuando el status cambia — no en cada tick de 10/s. Cada ventana lee esto con
+**`useRecordingActivity()`**, que además **consulta `getRecordingState()` al
+montar** (por si una ventana se abre con la grabación ya en curso). Con eso:
+
+- **Record page:** el encabezado muestra "Recording"/"Paused" y los controles de
+  setup quedan `inert` (no se pueden tocar ni re-disparar).
+- **Capture Panel:** indicador en el header, controles `inert`, y el botón pasa a
+  **"Stop Recording"** que envía el comando stop al hub — imposible arrancar una
+  segunda grabación desde el tray.
+
+### Después de grabar: navegación + estado "Saving"
+
+Al detener, `useScreenRecorder` muestra un breve estado **"Saving…"** en la barra
+mientras el encoder hace flush y el archivo se finaliza (metadata, thumbnail,
+nombre) — `recordingFinalize` solo resuelve cuando todo eso existe en el vault, así
+que la espera es real, no artificial (con un mínimo de ~600ms para que no parpadee
+en clips cortos). Luego dispara `onComplete(recording)` que navega a
+`/library/:id` **antes** de volver a mostrar la ventana principal, para aterrizar
+directo en el detalle del video (sin flash del Record page). El detalle tiene su
+propio "Loading…" mientras `useLocalLibrary` re-lista el vault.
+
+### La barra como ventana-widget
+
+La barra es una `BrowserWindow` frameless/transparent/always-on-top. Detalles que
+costaron y conviene recordar:
+
+- **`backgroundColor: "#00000000"`** es obligatorio junto con `transparent: true`;
+  sin él, la ventana pinta un fondo opaco que se ve como una caja oscura sobre
+  fondos claros.
+- **No debe scrollear.** El renderer marca `body[data-window="control-bar"]` y
+  `main.css` la fija al viewport con `overflow: hidden` y le da a `#root` un
+  *block-formatting context*, evitando que el margen superior del pill colapse
+  hacia el body y empuje el documento más allá de los 64px (lo que sacaba una
+  scrollbar — la global temada).
+- **Diseño:** rectángulo redondeado (no pill), botones cuadrados redondeados,
+  orden `punto · timer · separador · medidor de mic · pausa · stop · atajo`, sin
+  focus-ring (el accent del SO lo hacía ver "preseleccionado"), sombra discreta.
+
 ### Por qué mediabunny y no FFmpeg
 
 No portamos el stack `MediaRecorder`+FFmpeg del legacy. Gran parte del rol de FFmpeg ahí era **parchear lo que `MediaRecorder` rompe** (WebM sin duration header → remux). mediabunny no usa `MediaRecorder`, así que esos parches no nacen.
