@@ -100,6 +100,25 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
   const videoSource = new MediaStreamVideoTrackSource(screenTrack, {
     codec: "avc",
     bitrate: VIDEO_BITRATE,
+    // Nudge Chromium toward the platform encoder (VideoToolbox on macOS) instead
+    // of its bundled software H.264 (OpenH264). It's a hint — if hardware H.264
+    // encode isn't available via WebCodecs, it falls back to software (the prior
+    // behaviour). `realtime` suits live capture: drop frames under load rather
+    // than build a backlog.
+    hardwareAcceleration: "prefer-hardware",
+    latencyMode: "realtime",
+    onEncoderConfig: (config) => {
+      // Verify what Chromium actually configured. If hardware engaged, the
+      // "[OpenH264]" warnings in the console disappear.
+      console.info("[recorder] video encoder config:", {
+        codec: config.codec,
+        hardwareAcceleration: config.hardwareAcceleration,
+        latencyMode: config.latencyMode,
+        width: config.width,
+        height: config.height,
+        bitrate: config.bitrate,
+      });
+    },
   });
   output.addVideoTrack(videoSource, { frameRate: 30 });
   let audioSource: MediaStreamAudioTrackSource | null = null;
