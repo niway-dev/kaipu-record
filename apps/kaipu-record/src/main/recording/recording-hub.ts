@@ -2,6 +2,7 @@ import { BrowserWindow, ipcMain } from "electron";
 import { IPC_CHANNELS } from "@shared/types";
 import type {
   ControlCommand,
+  RecordingActivity,
   RecordingFinalizeMeta,
   RecordingStartInfo,
   RecordingTick,
@@ -25,6 +26,19 @@ export function registerRecordingHub(getMainWindow: () => BrowserWindow | null):
     newId: () => timestampId(Date.now()),
   });
 
+  // Single source of truth for "is a recording happening", broadcast to every
+  // window so non-recorder windows (reopened Record page, Capture Panel) can
+  // reflect it and refuse to start a second recording.
+  const activity: RecordingActivity = { active: false, status: "recording" };
+  const broadcastActivity = (): void => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) {
+        window.webContents.send(IPC_CHANNELS.recordingState, activity);
+      }
+    }
+  };
+  ipcMain.handle(IPC_CHANNELS.recordingGetState, (): RecordingActivity => activity);
+
   // ── Disk writer ──────────────────────────────────────────────────────
   ipcMain.handle(IPC_CHANNELS.recordingCreate, (_e, sessionId: string) => writer.create(sessionId));
   ipcMain.on(
@@ -43,19 +57,30 @@ export function registerRecordingHub(getMainWindow: () => BrowserWindow | null):
 
   // ── Window orchestration ────────────────────────────────────────────
   ipcMain.on(IPC_CHANNELS.recordingStart, (_e, _info: RecordingStartInfo) => {
+    activity.active = true;
+    activity.status = "recording";
     getMainWindow()?.hide();
     bar.show();
+    broadcastActivity();
   });
   ipcMain.on(IPC_CHANNELS.recordingStop, () => {
+    activity.active = false;
     bar.hide();
     const main = getMainWindow();
     main?.show();
     main?.focus();
+    broadcastActivity();
   });
 
   // ── Relay ────────────────────────────────────────────────────────────
   ipcMain.on(IPC_CHANNELS.recordingReportTick, (_e, tick: RecordingTick) => {
     bar.send(IPC_CHANNELS.controlTick, tick);
+    // Only re-broadcast global activity when the status actually changes
+    // (pause/resume/saving) — not on every 10/s tick.
+    if (activity.active && tick.status !== activity.status) {
+      activity.status = tick.status;
+      broadcastActivity();
+    }
   });
   ipcMain.on(IPC_CHANNELS.controlCommand, (_e, command: ControlCommand) => {
     getMainWindow()?.webContents.send(IPC_CHANNELS.recordingCommand, command);

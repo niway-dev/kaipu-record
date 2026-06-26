@@ -27,6 +27,36 @@
   background: var(--accent-primary);
 }
 
+.headingDot[data-recording] {
+  animation: recordingPulse 1.4s ease-in-out infinite;
+}
+
+.headingDot[data-paused] {
+  background: var(--accent-yellow);
+}
+
+@keyframes recordingPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* Setup controls (source, toggles, mic, camera) that lock while recording. */
+.lockable {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.lockable[data-locked] {
+  opacity: 0.5;
+  transition: opacity 140ms ease;
+}
+
 .headingTitle {
   font-family: var(--font-family);
   font-size: var(--font-size-xl);

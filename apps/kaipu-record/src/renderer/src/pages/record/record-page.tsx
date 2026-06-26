@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useRecordingSetup } from "@renderer/features/recording/hooks/use-recording-setup";
+import { useRecordingActivity } from "@renderer/features/recording/hooks/use-recording-activity";
 import { useSourceSelection } from "@renderer/features/recording/hooks/use-source-selection";
 import { useCameraPreview } from "@renderer/features/recording/hooks/use-camera-preview";
 import { usePermissions } from "@renderer/features/onboarding/use-permissions";
@@ -39,51 +40,68 @@ export function RecordPage(): React.JSX.Element {
   const isMicrophoneDenied = permissionsChecked && !permissionStatus.microphone;
   const isCameraDenied = permissionsChecked && !permissionStatus.camera;
 
+  // Recording runs in this window; reflect it in the heading and lock the
+  // setup controls so the user can't fiddle with (or re-trigger) it mid-record.
+  const activity = useRecordingActivity();
+  const isRecording = setup.isRecording;
+  const isPaused = isRecording && activity.status === "paused";
+  const headingLabel = isRecording ? (isPaused ? "Paused" : "Recording") : "Ready to record";
+
   return (
     <div className={styles.page}>
-      <div className={styles.heading}>
-        <span className={styles.headingDot} />
-        <h1 className={styles.headingTitle}>Ready to record</h1>
+      <div className={styles.heading} data-recording={isRecording || undefined}>
+        <span
+          className={styles.headingDot}
+          data-recording={(isRecording && !isPaused) || undefined}
+          data-paused={isPaused || undefined}
+        />
+        <h1 className={styles.headingTitle}>{headingLabel}</h1>
       </div>
 
-      <SourceCard source={setup.selectedSource} onChoose={setup.openSourcePicker} />
+      <div
+        className={styles.lockable}
+        data-locked={isRecording || undefined}
+        inert={isRecording || undefined}
+      >
+        <SourceCard source={setup.selectedSource} onChoose={setup.openSourcePicker} />
 
-      <RecordingToggles
-        isMicrophoneEnabled={setup.isMicrophoneEnabled}
-        isSystemAudioEnabled={setup.isSystemAudioEnabled}
-        isCameraEnabled={setup.isCameraEnabled}
-        onToggleMicrophone={setup.toggleMicrophone}
-        onToggleSystemAudio={setup.toggleSystemAudio}
-        onToggleCamera={setup.toggleCamera}
-      />
+        <RecordingToggles
+          isMicrophoneEnabled={setup.isMicrophoneEnabled}
+          isSystemAudioEnabled={setup.isSystemAudioEnabled}
+          isCameraEnabled={setup.isCameraEnabled}
+          onToggleMicrophone={setup.toggleMicrophone}
+          onToggleSystemAudio={setup.toggleSystemAudio}
+          onToggleCamera={setup.toggleCamera}
+        />
 
-      {setup.isMicrophoneEnabled &&
-        (isMicrophoneDenied ? (
-          <PermissionNotice
-            label="Microphone access is off"
-            onOpenSettings={() => void openPermissionSettings("microphone")}
-          />
-        ) : (
-          setup.microphones.length > 0 && (
-            <MicPicker
-              microphones={setup.microphones}
-              selected={setup.selectedMicrophone}
-              isOpen={setup.isMicrophoneMenuOpen}
-              onToggle={setup.toggleMicrophoneMenu}
-              onSelect={setup.selectMicrophone}
+        {setup.isMicrophoneEnabled &&
+          (isMicrophoneDenied ? (
+            <PermissionNotice
+              label="Microphone access is off"
+              onOpenSettings={() => void openPermissionSettings("microphone")}
             />
-          )
-        ))}
+          ) : (
+            setup.microphones.length > 0 && (
+              <MicPicker
+                microphones={setup.microphones}
+                selected={setup.selectedMicrophone}
+                isOpen={setup.isMicrophoneMenuOpen}
+                onToggle={setup.toggleMicrophoneMenu}
+                onSelect={setup.selectMicrophone}
+              />
+            )
+          ))}
 
-      {setup.isCameraEnabled &&
-        (isCameraDenied ? (
-          <PermissionNotice
-            label="Camera access is off"
-            onOpenSettings={() => void openPermissionSettings("camera")}
-          />
-        ) : (
-          <WebcamPreview videoRef={camera.videoRef} hasStream={camera.hasStream} />
-        ))}
+        {setup.isCameraEnabled &&
+          (isCameraDenied ? (
+            <PermissionNotice
+              label="Camera access is off"
+              onOpenSettings={() => void openPermissionSettings("camera")}
+            />
+          ) : (
+            <WebcamPreview videoRef={camera.videoRef} hasStream={camera.hasStream} />
+          ))}
+      </div>
 
       <RecordButton
         isRecording={setup.isRecording}

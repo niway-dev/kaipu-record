@@ -37,4 +37,6 @@ window.electronAPI = {
   onRecordingCommand: () => () => {},
   onControlTick: () => () => {},
   controlCommand: () => {},
+  getRecordingState: async () => ({ active: false, status: "recording" }),
+  onRecordingState: () => () => {},
 };

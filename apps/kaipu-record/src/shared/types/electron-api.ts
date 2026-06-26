@@ -6,6 +6,7 @@
 import type { LocalRecording, VaultDirectory } from "./library-storage";
 import type {
   ControlCommand,
+  RecordingActivity,
   RecordingFinalizeMeta,
   RecordingStartInfo,
   RecordingTick,
@@ -84,4 +85,10 @@ export interface KaipuElectronAPI {
   onControlTick(callback: (tick: RecordingTick) => void): () => void;
   /** Bar sends a command to the hub. */
   controlCommand(command: ControlCommand): void;
+
+  // ── Global recording activity (any window) ────────────────────────────
+  /** Current recording activity — query on mount in case a recording is already running. */
+  getRecordingState(): Promise<RecordingActivity>;
+  /** Subscribe to recording activity changes (start/stop/pause/resume). */
+  onRecordingState(callback: (state: RecordingActivity) => void): () => void;
 }

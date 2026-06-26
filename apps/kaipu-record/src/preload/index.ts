@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 import { electronAPI } from "@electron-toolkit/preload";
 import { IPC_CHANNELS } from "@shared/types";
 import type { KaipuElectronAPI } from "@shared/types/electron-api";
-import type { ControlCommand, RecordingTick } from "@shared/types/ipc";
+import type { ControlCommand, RecordingActivity, RecordingTick } from "@shared/types/ipc";
 
 // Custom Kaipu bridge. Only methods with a live main-process handler are exposed.
 const kaipuApi: KaipuElectronAPI = {
@@ -40,6 +40,12 @@ const kaipuApi: KaipuElectronAPI = {
     return () => ipcRenderer.removeListener(IPC_CHANNELS.controlTick, listener);
   },
   controlCommand: (command) => ipcRenderer.send(IPC_CHANNELS.controlCommand, command),
+  getRecordingState: () => ipcRenderer.invoke(IPC_CHANNELS.recordingGetState),
+  onRecordingState: (callback) => {
+    const listener = (_e: IpcRendererEvent, state: RecordingActivity): void => callback(state);
+    ipcRenderer.on(IPC_CHANNELS.recordingState, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.recordingState, listener);
+  },
 };
 
 // Use `contextBridge` APIs to expose Electron APIs to

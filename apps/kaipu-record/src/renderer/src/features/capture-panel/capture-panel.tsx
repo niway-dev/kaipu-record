@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { useRecordingSetup } from "@renderer/features/recording/hooks/use-recording-setup";
+import { useRecordingActivity } from "@renderer/features/recording/hooks/use-recording-activity";
 import { useSourceSelection } from "@renderer/features/recording/hooks/use-source-selection";
 import { SourceCard } from "@renderer/features/recording/components/source-card";
 import { RecordingToggles } from "@renderer/features/recording/components/recording-toggles";
@@ -17,6 +18,12 @@ export function CapturePanel(): React.JSX.Element {
   // show the same screen instead of a hardcoded placeholder.
   useSourceSelection(setup);
 
+  // The recording runs in another window, so this panel learns about it through
+  // the global activity broadcast — it can't tell from its own (idle) recorder.
+  const activity = useRecordingActivity();
+  const isBusy = activity.active;
+  const stopRecording = (): void => window.electronAPI?.controlCommand("stop");
+
   // Keep the Electron window height matched to the content (mic menu, etc.).
   useEffect(() => {
     const el = rootRef.current;
@@ -32,39 +39,47 @@ export function CapturePanel(): React.JSX.Element {
 
   return (
     <div ref={rootRef} className={styles.panel}>
-      <PanelHeader isRecording={setup.isRecording} onOpenMainWindow={openMain} />
+      <PanelHeader isRecording={isBusy} onOpenMainWindow={openMain} />
 
-      <SourceCard source={setup.selectedSource} variant="compact" onChoose={openMain} />
+      {/* While a recording is in progress its settings are locked — changing the
+          source/mic mid-recording does nothing, so the controls go inert. */}
+      <div
+        className={styles.lockable}
+        data-locked={isBusy || undefined}
+        inert={isBusy || undefined}
+      >
+        <SourceCard source={setup.selectedSource} variant="compact" onChoose={openMain} />
 
-      <RecordingToggles
-        variant="compact"
-        isMicrophoneEnabled={setup.isMicrophoneEnabled}
-        isSystemAudioEnabled={setup.isSystemAudioEnabled}
-        isCameraEnabled={setup.isCameraEnabled}
-        onToggleMicrophone={setup.toggleMicrophone}
-        onToggleSystemAudio={setup.toggleSystemAudio}
-        onToggleCamera={setup.toggleCamera}
-      />
-
-      {setup.isMicrophoneEnabled && setup.microphones.length > 0 && (
-        <MicPicker
+        <RecordingToggles
           variant="compact"
-          microphones={setup.microphones}
-          selected={setup.selectedMicrophone}
-          isOpen={setup.isMicrophoneMenuOpen}
-          onToggle={setup.toggleMicrophoneMenu}
-          onSelect={setup.selectMicrophone}
+          isMicrophoneEnabled={setup.isMicrophoneEnabled}
+          isSystemAudioEnabled={setup.isSystemAudioEnabled}
+          isCameraEnabled={setup.isCameraEnabled}
+          onToggleMicrophone={setup.toggleMicrophone}
+          onToggleSystemAudio={setup.toggleSystemAudio}
+          onToggleCamera={setup.toggleCamera}
         />
-      )}
+
+        {setup.isMicrophoneEnabled && setup.microphones.length > 0 && (
+          <MicPicker
+            variant="compact"
+            microphones={setup.microphones}
+            selected={setup.selectedMicrophone}
+            isOpen={setup.isMicrophoneMenuOpen}
+            onToggle={setup.toggleMicrophoneMenu}
+            onSelect={setup.selectMicrophone}
+          />
+        )}
+      </div>
 
       {/* Recording runs in the main window renderer (getDisplayMedia/WebCodecs
-          live there), not this transparent panel — so the button opens the
-          main window instead of recording here (see Option A). */}
+          live there), not this transparent panel. While idle the button opens
+          the main window; while recording it stops via the hub command. */}
       <RecordButton
         variant="compact"
-        isRecording={setup.isRecording}
+        isRecording={isBusy}
         shortcut="⌘⇧6"
-        onClick={openMain}
+        onClick={isBusy ? stopRecording : openMain}
       />
     </div>
   );

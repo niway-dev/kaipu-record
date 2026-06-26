@@ -1,3 +1,15 @@
+/* Settings group that locks (inert + dimmed) while a recording is in progress. */
+.lockable {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lockable[data-locked] {
+  opacity: 0.45;
+  transition: opacity 140ms ease;
+}
+
 .panel {
   width: 340px;
   box-sizing: border-box;

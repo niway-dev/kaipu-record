@@ -48,6 +48,10 @@ export const IPC_CHANNELS = {
   controlTick: "control:tick",
   controlCommand: "control:command",
   recordingCommand: "recording:command",
+  // Global recording activity, broadcast to every window so non-recorder windows
+  // (Record page when reopened, Capture Panel) reflect an in-progress recording.
+  recordingState: "recording:state",
+  recordingGetState: "recording:get-state",
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
@@ -62,6 +66,12 @@ export interface RecordingTick {
 }
 
 export type ControlCommand = "pause" | "resume" | "stop";
+
+/** Global recording activity shared across windows. `status` is meaningful only when active. */
+export interface RecordingActivity {
+  active: boolean;
+  status: RecordingStatus;
+}
 
 export interface RecordingFinalizeMeta {
   title: string;
