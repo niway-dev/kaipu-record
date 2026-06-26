@@ -8,6 +8,7 @@ import { registerRecordingSourceHandlers } from "./recording-sources";
 import { registerPermissionHandlers } from "./permissions";
 import { registerLibraryVaultHandlers } from "./library";
 import { registerMediaProtocol, registerMediaScheme } from "./media-protocol";
+import { registerRecordingHub } from "./recording/recording-hub";
 
 let mainWindow: BrowserWindow | null = null;
 let capturePanel: CapturePanelWindow | null = null;
@@ -33,6 +34,8 @@ function createWindow(): void {
       sandbox: false,
     },
   });
+
+  mainWindow.webContents.setBackgroundThrottling(false);
 
   mainWindow.on("ready-to-show", () => {
     mainWindow?.show();
@@ -92,6 +95,9 @@ app.whenReady().then(() => {
 
   // Recording: screen/window source enumeration.
   registerRecordingSourceHandlers();
+
+  // Recording engine: disk writer, control-bar window, state relay.
+  registerRecordingHub(() => mainWindow);
 
   // Library: local recordings vault.
   registerLibraryVaultHandlers();
