@@ -1,5 +1,5 @@
 import React from "react";
-import { Monitor } from "lucide-react";
+import { Lock, Monitor } from "lucide-react";
 import type { SelectedSource } from "@renderer/features/recording/types";
 import { cx } from "@renderer/ui/cx";
 import styles from "./source-card.module.css";
@@ -7,13 +7,16 @@ import styles from "./source-card.module.css";
 interface SourceCardProps {
   source: SelectedSource | null;
   variant?: "full" | "compact";
+  /** While recording the source can't change — show a LOCKED badge, not Change. */
+  locked?: boolean;
   onChoose: () => void;
 }
 
-/** Dumb selected-source summary + choose/change action. */
+/** Dumb selected-source summary + choose/change action (or a LOCKED badge). */
 export function SourceCard({
   source,
   variant = "full",
+  locked = false,
   onChoose,
 }: SourceCardProps): React.JSX.Element {
   const compact = variant === "compact";
@@ -26,9 +29,16 @@ export function SourceCard({
           {source ? (source.type === "screen" ? "SCREEN" : "WINDOW") : "CHOOSE A SOURCE"}
         </span>
       </div>
-      <button type="button" className={styles.button} onClick={onChoose}>
-        {source ? "Change" : "Choose"}
-      </button>
+      {locked ? (
+        <span className={styles.locked}>
+          <Lock size={11} />
+          LOCKED
+        </span>
+      ) : (
+        <button type="button" className={styles.button} onClick={onChoose}>
+          {source ? "Change" : "Choose"}
+        </button>
+      )}
     </div>
   );
 }

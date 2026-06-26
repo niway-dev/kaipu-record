@@ -50,6 +50,8 @@ export interface RecordingSetup {
   stopRecording(): void;
   /** Stop if recording, otherwise start (with the same countdown). */
   toggleRecording(): void;
+  pauseRecording(): void;
+  resumeRecording(): void;
 }
 
 export function useRecordingSetup(options: RecordingSetupOptions = {}): RecordingSetup {
@@ -157,5 +159,7 @@ export function useRecordingSetup(options: RecordingSetupOptions = {}): Recordin
     startRecording,
     stopRecording,
     toggleRecording,
+    pauseRecording: recorder.pause,
+    resumeRecording: recorder.resume,
   };
 }

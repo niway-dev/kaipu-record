@@ -27,12 +27,99 @@
   background: var(--accent-primary);
 }
 
-.headingDot[data-recording] {
+/* ── Recording state ────────────────────────── */
+
+/* Header card shown while recording: dot + label, live mono timer on the right. */
+.recordingBar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-sm);
+}
+
+.recordingDot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--accent-primary);
   animation: recordingPulse 1.4s ease-in-out infinite;
 }
 
-.headingDot[data-paused] {
+.recordingDot[data-paused] {
   background: var(--accent-yellow);
+  animation: none;
+}
+
+.recordingLabel {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.recordingTimer {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  color: var(--text-primary);
+}
+
+/* Pause + Stop row (replaces the single Start button while recording). */
+.recordingControls {
+  display: flex;
+  gap: 10px;
+}
+
+.pauseButton,
+.stopButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 50px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+
+.pauseButton {
+  padding: 0 26px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+
+.pauseButton:hover {
+  background: var(--bg-card-hover);
+}
+
+.stopButton {
+  flex: 1;
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #fff;
+}
+
+.stopButton:hover {
+  filter: brightness(1.06);
+}
+
+.recordingHint {
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 
 @keyframes recordingPulse {

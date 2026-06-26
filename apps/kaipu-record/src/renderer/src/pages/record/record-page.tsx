@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Pause, Play, Square } from "lucide-react";
+import { formatElapsed } from "@renderer/features/recording/elapsed";
 import { useRecordingSetup } from "@renderer/features/recording/hooks/use-recording-setup";
 import { useRecordingActivity } from "@renderer/features/recording/hooks/use-recording-activity";
 import { useSourceSelection } from "@renderer/features/recording/hooks/use-source-selection";
@@ -45,25 +47,33 @@ export function RecordPage(): React.JSX.Element {
   const activity = useRecordingActivity();
   const isRecording = setup.isRecording;
   const isPaused = isRecording && activity.status === "paused";
-  const headingLabel = isRecording ? (isPaused ? "Paused" : "Recording") : "Ready to record";
+  const timer = formatElapsed(activity.elapsedSeconds * 1000);
 
   return (
     <div className={styles.page}>
-      <div className={styles.heading} data-recording={isRecording || undefined}>
-        <span
-          className={styles.headingDot}
-          data-recording={(isRecording && !isPaused) || undefined}
-          data-paused={isPaused || undefined}
-        />
-        <h1 className={styles.headingTitle}>{headingLabel}</h1>
-      </div>
+      {isRecording ? (
+        <div className={styles.recordingBar} data-paused={isPaused || undefined}>
+          <span className={styles.recordingDot} data-paused={isPaused || undefined} />
+          <span className={styles.recordingLabel}>{isPaused ? "Paused" : "Recording"}</span>
+          <span className={styles.recordingTimer}>{timer}</span>
+        </div>
+      ) : (
+        <div className={styles.heading}>
+          <span className={styles.headingDot} />
+          <h1 className={styles.headingTitle}>Ready to record</h1>
+        </div>
+      )}
 
       <div
         className={styles.lockable}
         data-locked={isRecording || undefined}
         inert={isRecording || undefined}
       >
-        <SourceCard source={setup.selectedSource} onChoose={setup.openSourcePicker} />
+        <SourceCard
+          source={setup.selectedSource}
+          locked={isRecording}
+          onChoose={setup.openSourcePicker}
+        />
 
         <RecordingToggles
           isMicrophoneEnabled={setup.isMicrophoneEnabled}
@@ -103,12 +113,34 @@ export function RecordPage(): React.JSX.Element {
           ))}
       </div>
 
-      <RecordButton
-        isRecording={setup.isRecording}
-        disabled={!setup.canStartRecording}
-        shortcut="⌘⇧P"
-        onClick={setup.isRecording ? setup.stopRecording : setup.startRecording}
-      />
+      {isRecording ? (
+        <div className={styles.recordingControls}>
+          {isPaused ? (
+            <button className={styles.pauseButton} type="button" onClick={setup.resumeRecording}>
+              <Play size={15} fill="currentColor" />
+              Resume
+            </button>
+          ) : (
+            <button className={styles.pauseButton} type="button" onClick={setup.pauseRecording}>
+              <Pause size={15} />
+              Pause
+            </button>
+          )}
+          <button className={styles.stopButton} type="button" onClick={setup.stopRecording}>
+            <Square size={13} fill="currentColor" />
+            Stop recording
+          </button>
+        </div>
+      ) : (
+        <RecordButton
+          isRecording={false}
+          disabled={!setup.canStartRecording}
+          shortcut="⌘⇧P"
+          onClick={setup.startRecording}
+        />
+      )}
+
+      {isRecording && <p className={styles.recordingHint}>Stop from here or the floating bar</p>}
 
       <ScreenSourceSelector
         isOpen={setup.isSourcePickerOpen}
