@@ -1,0 +1,80 @@
+---
+title: "ADR 0001: Mediabunny (WebCodecs) over FFmpeg for the recording pipeline"
+description: Why kaipu-record builds the real capture pipeline on mediabunny instead of porting the legacy MediaRecorder + FFmpeg stack.
+---
+
+# ADR 0001: Mediabunny (WebCodecs) over FFmpeg for the recording pipeline
+
+## Status
+
+| Field         | Value      |
+| ------------- | ---------- |
+| Status        | Accepted   |
+| Date          | 2026-06-26 |
+| Supersedes    | —          |
+| Superseded by | —          |
+
+## Context
+
+kaipu-record has all the **peripheral** recording infrastructure wired up — source enumeration (`recording:get-screen-sources` via `desktopCapturer`), screen/mic/camera permissions, the `kaipu-media://` playback protocol, the Library vault (list/rename/delete/reveal + custom directory), and the Capture Panel window + tray. What is missing is the **heavy core**: the real capture pipeline, encoding/writing to disk, the start/stop/pause cycle, the live timer + mic level, writing the final file to the vault, and the floating control bar. Today `startRecording()` only flips a boolean — it records nothing (`src/renderer/src/features/recording/hooks/use-recording-setup.ts`).
+
+We have a reference implementation in `workspace-temp/legacy-kaipu-recorder`. It captures with `MediaRecorder` (`video/webm;codecs=vp9,opus`) and leans on FFmpeg for three distinct jobs:
+
+1. **Fixing broken WebM** — `MediaRecorder` emits WebM with no duration header, so the file is not seekable and reports the wrong duration. The legacy runs `ffmpeg -fflags +genpts -i in.webm -c copy out.webm` (lossless remux) after every recording to inject timestamps (`src/infrastructure/ffmpeg/remuxWebmInPlace.ts`).
+2. **Compositing** — webcam overlay + watermark via a `filter_complex` with a full re-encode (`src/services/video/VideoComposer.ts`, `VideoEditingService.ts`).
+3. **The binary stack** — ~250 lines resolving which FFmpeg binary to use (bundled vs system, per-arch) plus per-platform installer packages (`ffmpeg-static`, `@ffmpeg-installer/darwin-*`, `fluent-ffmpeg`).
+
+A large part of FFmpeg's role in the legacy was a **patch for problems `MediaRecorder` itself causes**. The question for the new pipeline is whether to port that stack or replace it.
+
+## Decision
+
+Build the real capture pipeline on **mediabunny** (a TypeScript toolkit over the WebCodecs API), not on `MediaRecorder` + FFmpeg.
+
+The capture flow becomes: `getDisplayMedia()` / `getUserMedia()` tracks → `MediaStreamVideoTrackSource` / `MediaStreamAudioTrackSource` → `Output({ format: Mp4OutputFormat, target: StreamTarget })`, which writes a real, seekable MP4 (H.264 + AAC) **incrementally to disk** using positioned chunks. Encode runs in the Electron renderer (Chromium → WebCodecs is native there); the main process receives positioned byte chunks over IPC and writes them with `fd.write(data, offset, length, position)`.
+
+FFmpeg is **removed from the live capture path**. It is kept only as an **optional, lazy, on-demand tool for offline post-processing** (e.g. VFR→CFR normalization, exotic-codec export, filter graphs the canvas approach can't cover) — never embedded by default in every build.
+
+## Consequences
+
+**Positive:**
+
+- **Real MP4 from the first byte** — seekable, correct duration, universally shareable. The entire `remuxWebmInPlace` step disappears because the problem it patched no longer exists.
+- **Hardware encode via WebCodecs** — ~200fps for 1080p H.264 at ~15% CPU and under 500MB RAM, vs ffmpeg.wasm's ~25fps at 100% CPU and over 2GB. Roughly 8× faster.
+- **No base64 hot path** — the legacy converts every chunk WebM→base64→IPC→`Buffer.from`→WriteStream (33% inflation + CPU on both processes). mediabunny's `StreamTarget` yields raw bytes with a `position`.
+- **Bundle shrinks** — ~70 kB gzipped, tree-shakable, zero dependencies, instead of ~50–80MB of per-arch native binaries.
+- **Packaging simplifies** — the ~250 lines of binary-path resolution and the per-arch installer packages are gone.
+- **Format = one line** — `Mp4OutputFormat` ↔ `WebMOutputFormat`, the rest of the API is identical.
+
+**Negative:**
+
+- **No `filter_complex`.** Webcam overlay + watermark (legacy job #2) must be re-implemented by compositing into a `<canvas>` per frame and feeding a mediabunny `CanvasSource`. More code than a one-liner, but runs in real time on hardware and removes the second encode pass.
+- **`StreamTarget` may rewrite byte regions** — the main process must honor each chunk's `position` (use `fd.write` at offset, not append/concat).
+- **WebCodecs codec ceiling** — ProRes, DNxHD, and exotic containers are out of reach; covered by the optional FFmpeg escape hatch, not the core.
+- **New dependency to learn** — mediabunny is younger than FFmpeg; smaller community, less battle-tested.
+
+**Neutral:**
+
+- Capture + encode stay in the renderer; the existing disk-write IPC architecture is preserved in shape (positioned writes instead of base64 appends).
+- `@mediabunny/server` exists for Node/Bun/Deno if any main-process media work is ever needed.
+
+## Alternatives considered
+
+### Port the legacy MediaRecorder + FFmpeg stack as-is
+
+Rejected. It carries forward the WebM-is-broken problem and its FFmpeg remux patch, the base64 hot path, the per-arch binary bundling, and slow CPU-bound re-encode — all of which mediabunny eliminates. We would be porting the workarounds, not just the feature.
+
+### MediaRecorder for capture, mediabunny only for muxing/fixing
+
+Rejected. Keeping `MediaRecorder` keeps the broken-WebM root cause and a remux step. Capturing directly through WebCodecs sources writes a correct MP4 in one pass.
+
+### ffmpeg.wasm (no native binaries)
+
+Rejected for the live path. It removes per-arch binaries but is ~8× slower, pins the CPU, and uses over 2GB RAM — unworkable for real-time capture. Still a candidate for the optional offline tool.
+
+## References
+
+- [Recording Pipeline](../../desktop/recording-pipeline) — current state and the mediabunny target
+- [Mediabunny — Introduction](https://mediabunny.dev/guide/introduction)
+- [Mediabunny — Writing media files](https://mediabunny.dev/guide/writing-media-files)
+- [Mediabunny — ffmpeg for the web (WebCodecs Fundamentals)](https://webcodecsfundamentals.org/projects/media-bunny/)
+- Legacy reference: `workspace-temp/legacy-kaipu-recorder`

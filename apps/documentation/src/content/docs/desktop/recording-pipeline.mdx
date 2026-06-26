@@ -1,11 +1,13 @@
 ---
 title: Recording Pipeline
-description: Current state of the capture and encode pipeline — what runs where, IPC channels, FFmpeg bundling, and what doesn't exist yet.
+description: The legacy reference capture/encode pipeline, the current stub state, and the chosen mediabunny target.
 ---
 
-# Recording Pipeline — Estado actual (2026-06-14)
+# Recording Pipeline
 
-Auditoría técnica del pipeline de captura y encode existente.
+> **Estado (2026-06-26).** El grabador de **kaipu-record hoy es un stub**: `startRecording()` solo cambia un booleano tras un countdown — no captura nada (`src/renderer/src/features/recording/hooks/use-recording-setup.ts`). Lo que sigue describe el pipeline del **recorder legacy** (`workspace-temp/legacy-kaipu-recorder`) como referencia técnica. El **target elegido** para construir el core real es **mediabunny, no FFmpeg** — ver [ADR 0001](../architecture/decisions/0001-mediabunny-over-ffmpeg).
+
+Auditoría técnica del pipeline de captura y encode legacy (referencia).
 
 ## TL;DR
 
@@ -114,18 +116,38 @@ Pasar a FFmpeg para captura+encode **no agrega peso al bundle**.
 
 ---
 
-## Lo que NO existe todavía
+## Lo que NO existe todavía (en kaipu-record)
 
-- Encode por hardware (VideoToolbox, NVENC)
-- Captura nativa (ScreenCaptureKit, Windows.Graphics.Capture)
-- Benchmark propio de CPU/RAM/frames dropped
-- Output MP4 para screen-only (hoy solo con webcam)
+- El core de captura completo (hoy es un stub booleano)
+- Encode por hardware
+- Output MP4 seekable directo
+- Timer + nivel de mic en vivo, barra flotante de control
 
 ---
 
-## Implicaciones para el próximo paso (FFmpeg/hardware)
+## Target elegido: mediabunny (no FFmpeg)
 
-1. **FFmpeg ya está** → costo de bundle: cero.
-2. **El IPC de streaming ya funciona** → la arquitectura de escritura a disco no cambia.
-3. **El encode corre hoy en el renderer** → cualquier mejora libera el thread de React.
-4. **Output actual es WebM** → pasar a MP4/H.264 via FFmpeg da compatibilidad universal para sharing.
+La decisión es **no portar** el stack `MediaRecorder` + FFmpeg del legacy, sino construir el core sobre **mediabunny** (WebCodecs). Razón corta: gran parte del rol de FFmpeg en el legacy era **parchear problemas que `MediaRecorder` causa** (WebM sin duration header → remux). mediabunny no usa `MediaRecorder`, así que esos parches no nacen.
+
+Flujo target:
+
+```
+getDisplayMedia() ─┐
+getUserMedia(mic) ─┤─► MediaStreamVideo/AudioTrackSource
+                   └─► Output({ format: Mp4OutputFormat, target: StreamTarget })
+                       → MP4 real seekable, escrito a disco incremental (chunk.position)
+                       → main: fd.write(data, 0, len, position) vía IPC
+```
+
+Qué cambia vs. el legacy:
+
+| Aspecto         | Legacy                          | Target mediabunny                     |
+| --------------- | ------------------------------- | ------------------------------------- |
+| Encoder         | `MediaRecorder` VP9/Opus        | WebCodecs H.264/AAC (HW, ~8× más rápido) |
+| Output          | WebM roto → remux FFmpeg        | MP4 seekable de un solo paso          |
+| Hot path a disco| base64 → IPC → WriteStream      | bytes crudos posicionados (`StreamTarget`) |
+| Compositing     | FFmpeg `filter_complex`         | canvas + `CanvasSource` en vivo       |
+| Bundle          | ~50–80MB binarios por arch      | ~70 kB, tree-shakable, sin deps       |
+| FFmpeg          | core del pipeline               | opcional/lazy, solo post-proceso offline |
+
+Detalle completo y alternativas descartadas: [ADR 0001 — Mediabunny over FFmpeg](../architecture/decisions/0001-mediabunny-over-ffmpeg).
