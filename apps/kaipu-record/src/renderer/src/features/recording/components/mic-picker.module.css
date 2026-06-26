@@ -67,7 +67,10 @@
   background: var(--bg-card);
   border: 1px solid rgba(246, 5, 92, 0.32);
   border-radius: var(--radius-md);
-  overflow: hidden;
+  /* Cap the height so a long device list scrolls instead of growing the
+     window/page; the scrollbar is themed globally in base.css. */
+  max-height: min(280px, 50vh);
+  overflow-y: auto;
 }
 
 .option {

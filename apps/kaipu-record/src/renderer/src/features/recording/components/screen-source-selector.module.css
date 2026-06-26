@@ -105,7 +105,11 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* Reserve the scrollbar's lane (themed globally in base.css) so it never
+     overlaps the tile grid; the trimmed right padding balances that lane. */
+  scrollbar-gutter: stable;
   padding: 18px;
+  padding-right: 12px;
 }
 
 .grid {

@@ -92,3 +92,32 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/*
+ * App-wide scrollbar standard. Thin, themed, rounded thumb (the inset
+ * transparent border keeps it off the track edge) that brightens on hover, so
+ * every scroll area — pages, sidebar, modals, dropdowns — looks consistent.
+ * Chromium-only `::-webkit-` pseudo-elements are fine here (this is Electron).
+ * A container that needs the scrollbar to never overlap its content can add
+ * `scrollbar-gutter: stable` locally to reserve its lane.
+ */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--border-light);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+  background-clip: padding-box;
+}

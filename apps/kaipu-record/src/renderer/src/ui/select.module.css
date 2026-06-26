@@ -54,7 +54,7 @@
   padding: 4px 0;
   min-width: var(--radix-select-trigger-width);
   max-height: min(280px, 50vh);
-  overflow: hidden;
+  overflow-y: auto;
   z-index: 20000;
 }
 
