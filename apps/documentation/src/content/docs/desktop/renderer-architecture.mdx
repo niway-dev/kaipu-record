@@ -46,6 +46,27 @@ Record was the reference migration: `record-page.tsx` went from ~290 lines of
 inline markup to a composition of `source-card`, `recording-toggles`, `mic-picker`,
 `webcam-preview`, `record-button`, `countdown-overlay` and `screen-source-selector`.
 
+## Sharing recording state across windows
+
+The Record page and the menu-bar **Capture Panel** are separate Electron windows —
+separate renderer instances — that show the same controls. They share **code, not
+state**: each renders the same dumb components (`SourceCard`, `RecordingToggles`,
+`MicPicker`, `RecordButton`) against its own `useRecordingSetup` instance.
+
+Source discovery and the default pick live in one place so both windows agree:
+
+- **`useRecordingSetup`** — pure UI state (selected source, capture toggles, mic
+  device, countdown/recording lifecycle). No IPC, no device APIs; easy to test.
+- **`useSourceSelection(setup)`** — loads the real screen/window list via
+  `getScreenSources()` (on mount and when the picker opens) and **preselects the
+  primary screen** (first `type: "screen"`, else the first source) onto the setup,
+  so recording is ready without a manual pick. Returns the list for the picker.
+
+Both the Record page and the Capture Panel call `useSourceSelection(setup)`, so
+they enumerate the same way and default to the **same** screen — no window
+hardcodes a placeholder source. The Capture Panel has no picker of its own; its
+**Change** button just opens the main window.
+
 ## Styling
 
 - **CSS Modules, co-located** next to each component (`x.tsx` + `x.module.css`).
@@ -59,6 +80,11 @@ inline markup to a composition of `source-card`, `recording-toggles`, `mic-picke
   values through **CSS custom properties** (`--btn-h`, `--track`) rather than a
   `styles[variant]` lookup or an appended `*Active` class.
 - The legacy token `--accent-blue` maps to `--accent-primary` here.
+- **Scrollbars are themed globally** in `assets/base.css` (a thin, rounded,
+  hover-brightening `::-webkit-scrollbar`), so every scroll area looks the same —
+  don't restyle or hide them per-component. A container whose scrollbar must not
+  overlap its content adds `scrollbar-gutter: stable` locally to reserve the lane
+  (e.g. the screen-source picker grid).
 
 ## Routing & error handling
 
