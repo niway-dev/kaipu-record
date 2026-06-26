@@ -5,7 +5,8 @@ description: All notable feature work documented in this project.
 
 # Changelog
 
-| Date | Feature | Type | Summary |
-| ---- | ------- | ---- | ------- |
-| 2026-06-15 | Renderer architecture | 🏛️ | Documented the pages/features/ui/shell layout and the page→rename→split migration workflow. [Docs](/desktop/renderer-architecture) |
-| 2026-06-15 | Record / Library / Settings | 💄 | Migrated the Record, Library and Settings screens (UI-only) + icon sidebar and router error handling. |
+| Date       | Feature                     | Type | Summary                                                                                                                                                                                                                                                                                               |
+| ---------- | --------------------------- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-06-26 | UI de-port + house style    | ♻️   | Rebuilt the shared `ui/` primitives and a few feature components to original structure — a `cx()` helper plus `data-*` variant attributes and CSS custom properties — removing copied CSS. Reviewed the whole app (renderer, main, preload, shared) for similarity to the reference recorders; clean. |
+| 2026-06-15 | Renderer architecture       | 🏛️   | Documented the pages/features/ui/shell layout and the page→rename→split migration workflow. [Docs](/desktop/renderer-architecture)                                                                                                                                                                    |
+| 2026-06-15 | Record / Library / Settings | 💄   | Migrated the Record, Library and Settings screens (UI-only) + icon sidebar and router error handling.                                                                                                                                                                                                 |

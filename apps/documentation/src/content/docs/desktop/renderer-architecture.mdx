@@ -6,18 +6,20 @@ description: How the kaipu-record renderer is organized (pages, features, ui, sh
 # Renderer Architecture & Migration Pattern
 
 How the `apps/kaipu-record` renderer (`src/renderer/src`) is structured, and the
-repeatable workflow we use to bring screens over from the legacy recorder.
+repeatable workflow we use to rebuild screens from a reference recorder. Reference
+apps are for **comparison only** — we reproduce the design, not the source (see
+Styling and Gotchas).
 
 ## Folder layout
 
-| Folder | Holds | Test |
-| --- | --- | --- |
-| `pages/<page>/` | One screen. **Composition only** — local state + wiring of the pieces below. | The page (jsdom) |
-| `features/<feature>/` | Feature-specific building blocks: `components/`, `types.ts`, pure helpers. | Helpers + components |
-| `ui/` | Generic, domain-agnostic primitives (`Button`, `Card`, `Row`, `Select`, `Toggle`, `SearchInput`…). | Primitive |
-| `shell/` | App layout: `app-shell`, `sidebar`, `route-error`. | — |
-| `app/` | `router.tsx` (route tree) and `App.tsx`. | — |
-| `helpers/` | Cross-page pure helpers. | Helper |
+| Folder                | Holds                                                                                              | Test                 |
+| --------------------- | -------------------------------------------------------------------------------------------------- | -------------------- |
+| `pages/<page>/`       | One screen. **Composition only** — local state + wiring of the pieces below.                       | The page (jsdom)     |
+| `features/<feature>/` | Feature-specific building blocks: `components/`, `types.ts`, pure helpers.                         | Helpers + components |
+| `ui/`                 | Generic, domain-agnostic primitives (`Button`, `Card`, `Row`, `Select`, `Toggle`, `SearchInput`…). | Primitive            |
+| `shell/`              | App layout: `app-shell`, `sidebar`, `route-error`.                                                 | —                    |
+| `app/`                | `router.tsx` (route tree) and `App.tsx`.                                                           | —                    |
+| `helpers/`            | Cross-page pure helpers.                                                                           | Helper               |
 
 The rule of thumb that decides where a component lives: **"would I use this in any
 app?"** → `ui/`. **"does it only make sense inside this feature?"** → `features/<feature>/components/`.
@@ -33,7 +35,7 @@ Every legacy screen comes over in the same three ordered steps:
    **local state + placeholder data**. The goal is a screen that renders, not one
    that works end-to-end.
 2. **Rename to convention.** Files are **kebab-case** (`record-page.tsx`,
-   `screen-source-selector.tsx`). The component *identifier* stays PascalCase
+   `screen-source-selector.tsx`). The component _identifier_ stays PascalCase
    (`export function RecordPage`). Framework entry points keep their conventional
    names (see Gotchas).
 3. **Split into components.** Extract each distinct section into its own
@@ -41,19 +43,22 @@ Every legacy screen comes over in the same three ordered steps:
    **co-located CSS module**. The page shrinks to composition + state.
 
 Record was the reference migration: `record-page.tsx` went from ~290 lines of
-inline markup to a composition of `source-card`, `recording-toggles`,
-`microphone-selector`, `webcam-preview`, `start-recording-button`,
-`starting-overlay` and `screen-source-selector`.
+inline markup to a composition of `source-card`, `recording-toggles`, `mic-picker`,
+`webcam-preview`, `record-button`, `countdown-overlay` and `screen-source-selector`.
 
 ## Styling
 
 - **CSS Modules, co-located** next to each component (`x.tsx` + `x.module.css`).
 - **Design tokens only** — colors/space/radii/typography come from
   `src/renderer/src/assets/base.css` via `var(--token)`. No hardcoded colors in JS.
-  When migrating, conditional inline styles (e.g. an active "pink" state) become
-  CSS classes driven by the token set (`--accent-primary`, `.toggleCardActive`, `:not(:disabled)`).
-- The legacy token `--accent-blue` maps to `--accent-primary` here — rename it when
-  copying CSS over.
+- **`cx()` + `data-*` is the className house style.** Compose classes with the
+  `ui/cx.ts` helper (`cx(styles.card, compact && styles.compact)`) instead of inline
+  `[...].join(" ")` or template literals. Express variants and interactive state as
+  **`data-*` attributes** matched by CSS attribute selectors
+  (`.toggle[data-active]`, `.button[data-variant="primary"]`), and drive per-variant
+  values through **CSS custom properties** (`--btn-h`, `--track`) rather than a
+  `styles[variant]` lookup or an appended `*Active` class.
+- The legacy token `--accent-blue` maps to `--accent-primary` here.
 
 ## Routing & error handling
 
@@ -80,9 +85,11 @@ doesn't reshape the component tree.
   `src/preload/index.ts` + `index.d.ts`, `src/renderer/src/main.tsx` (referenced by
   `index.html`), `*.config.ts` and `env.d.ts` keep their names — the build/HTML
   reference them by path.
-- ⚠️ **Copy CSS verbatim, not by hand.** Faithfully port the legacy `.module.css`
-  (with the `--accent-blue` → `--accent-primary` rename) rather than rewriting it —
-  it's how the migrated screen matches the original design.
+- ⚠️ **Match the design, don't copy the source.** Reproduce the _look_ of a
+  reference screen, but write the markup/CSS in our own structure (`cx()`, `data-*`
+  attributes, custom properties). Do **not** port `.module.css` or component source
+  verbatim — the reference recorders are similarity-checked and known to carry copied
+  code, so verbatim porting re-introduces it. Restructure, keep the visuals.
 - ⚠️ **The custom titlebar needs a frameless window.** Matching the legacy
   chrome (custom titlebar, hidden native frame) is a main-process change
   (`titleBarStyle` / frameless), so it's deferred as "connecting", not UI.
