@@ -20,12 +20,14 @@
     background var(--transition),
     border-color var(--transition),
     color var(--transition),
+    box-shadow var(--transition),
     opacity var(--transition);
 }
 
 .button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+  box-shadow: none;
 }
 
 /* ── Sizes (driven by data-size) ──────── */
@@ -47,6 +49,7 @@
 .button[data-variant="primary"] {
   background: var(--accent-primary);
   color: #fff;
+  box-shadow: var(--glow-accent);
 }
 
 .button[data-variant="primary"]:hover:not(:disabled) {

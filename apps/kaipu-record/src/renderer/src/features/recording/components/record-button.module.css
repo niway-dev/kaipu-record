@@ -14,7 +14,10 @@
   font-weight: var(--font-weight-semibold);
   color: #fff;
   letter-spacing: -0.2px;
-  transition: filter 150ms ease;
+  box-shadow: var(--glow-accent);
+  transition:
+    filter 150ms ease,
+    box-shadow var(--transition);
   appearance: none;
   margin-top: var(--space-sm);
   position: relative;
@@ -28,12 +31,15 @@
 .button:disabled {
   background: var(--bg-input);
   border-color: var(--border);
+  box-shadow: none;
   cursor: not-allowed;
 }
 
+/* The recording state is a dark fill, not the accent — no glow. */
 .button[data-recording] {
   background: #2a0010;
   border-color: rgba(246, 5, 92, 0.36);
+  box-shadow: none;
 }
 
 .label {
@@ -62,12 +68,14 @@
   padding: 10px 12px;
   font-size: 13px;
   margin-top: 0;
-  justify-content: space-between;
+  /* Center the label like the full button; the shortcut is pinned right. */
+  justify-content: center;
   border-color: rgba(246, 5, 92, 0.36);
 }
 
 .compact .shortcut {
-  position: static;
+  position: absolute;
+  right: 12px;
   font-size: 10px;
   opacity: 0.5;
 }

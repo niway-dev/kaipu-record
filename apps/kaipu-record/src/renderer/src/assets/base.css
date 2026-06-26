@@ -26,6 +26,8 @@
   /* ── Accent — Kaipu Primary (pink) ─────────── */
   --accent-primary: #f6055c;
   --accent-primary-hover: #d4044f;
+  /* Signature CTA glow — a soft accent halo under primary buttons. */
+  --glow-accent: 0 10px 26px -8px rgba(246, 5, 92, 0.75);
 
   /* ── Accent — semantic ──────────────────────── */
   --accent-green: #22c55e;

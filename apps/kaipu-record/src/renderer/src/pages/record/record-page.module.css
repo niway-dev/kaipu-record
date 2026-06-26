@@ -106,6 +106,7 @@
   background: var(--accent-primary);
   border-color: var(--accent-primary);
   color: #fff;
+  box-shadow: var(--glow-accent);
 }
 
 .stopButton:hover {
