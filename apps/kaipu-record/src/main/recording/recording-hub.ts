@@ -29,7 +29,7 @@ export function registerRecordingHub(getMainWindow: () => BrowserWindow | null):
   // Single source of truth for "is a recording happening", broadcast to every
   // window so non-recorder windows (reopened Record page, Capture Panel) can
   // reflect it and refuse to start a second recording.
-  const activity: RecordingActivity = { active: false, status: "recording" };
+  const activity: RecordingActivity = { active: false, status: "recording", elapsedSeconds: 0 };
   const broadcastActivity = (): void => {
     for (const window of BrowserWindow.getAllWindows()) {
       if (!window.isDestroyed()) {
@@ -59,6 +59,7 @@ export function registerRecordingHub(getMainWindow: () => BrowserWindow | null):
   ipcMain.on(IPC_CHANNELS.recordingStart, (_e, _info: RecordingStartInfo) => {
     activity.active = true;
     activity.status = "recording";
+    activity.elapsedSeconds = 0;
     getMainWindow()?.hide();
     bar.show();
     broadcastActivity();
@@ -75,10 +76,12 @@ export function registerRecordingHub(getMainWindow: () => BrowserWindow | null):
   // ── Relay ────────────────────────────────────────────────────────────
   ipcMain.on(IPC_CHANNELS.recordingReportTick, (_e, tick: RecordingTick) => {
     bar.send(IPC_CHANNELS.controlTick, tick);
-    // Only re-broadcast global activity when the status actually changes
-    // (pause/resume/saving) — not on every 10/s tick.
-    if (activity.active && tick.status !== activity.status) {
+    if (!activity.active) return;
+    // Re-broadcast global activity when the status changes (pause/resume/saving)
+    // or the whole-second timer advances — never on every 10/s tick.
+    if (tick.status !== activity.status || tick.elapsedSeconds !== activity.elapsedSeconds) {
       activity.status = tick.status;
+      activity.elapsedSeconds = tick.elapsedSeconds;
       broadcastActivity();
     }
   });

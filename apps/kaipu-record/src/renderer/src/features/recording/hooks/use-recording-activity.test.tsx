@@ -11,7 +11,11 @@ describe("useRecordingActivity", () => {
     listeners = [];
     unsubscribe = vi.fn();
     window.electronAPI.getRecordingState = vi.fn(
-      async (): Promise<RecordingActivity> => ({ active: false, status: "recording" }),
+      async (): Promise<RecordingActivity> => ({
+        active: false,
+        status: "recording",
+        elapsedSeconds: 0,
+      }),
     );
     window.electronAPI.onRecordingState = vi.fn((callback: (state: RecordingActivity) => void) => {
       listeners.push(callback);
@@ -21,20 +25,25 @@ describe("useRecordingActivity", () => {
 
   it("starts idle, then adopts the state queried on mount", async () => {
     window.electronAPI.getRecordingState = vi.fn(
-      async (): Promise<RecordingActivity> => ({ active: true, status: "paused" }),
+      async (): Promise<RecordingActivity> => ({
+        active: true,
+        status: "paused",
+        elapsedSeconds: 12,
+      }),
     );
     const { result } = renderHook(() => useRecordingActivity());
-    expect(result.current).toEqual({ active: false, status: "recording" }); // before the query resolves
+    expect(result.current.active).toBe(false); // before the query resolves
     await waitFor(() => expect(result.current.active).toBe(true));
     expect(result.current.status).toBe("paused");
+    expect(result.current.elapsedSeconds).toBe(12);
   });
 
   it("updates when the hub broadcasts a change", async () => {
     const { result } = renderHook(() => useRecordingActivity());
     await waitFor(() => expect(listeners).toHaveLength(1));
-    act(() => listeners[0]({ active: true, status: "recording" }));
-    expect(result.current).toEqual({ active: true, status: "recording" });
-    act(() => listeners[0]({ active: false, status: "recording" }));
+    act(() => listeners[0]({ active: true, status: "recording", elapsedSeconds: 3 }));
+    expect(result.current).toEqual({ active: true, status: "recording", elapsedSeconds: 3 });
+    act(() => listeners[0]({ active: false, status: "recording", elapsedSeconds: 0 }));
     expect(result.current.active).toBe(false);
   });
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { RecordingActivity } from "@shared/types";
 
-const IDLE: RecordingActivity = { active: false, status: "recording" };
+const IDLE: RecordingActivity = { active: false, status: "recording", elapsedSeconds: 0 };
 
 /**
  * Global recording activity, shared across windows via the main-process hub.

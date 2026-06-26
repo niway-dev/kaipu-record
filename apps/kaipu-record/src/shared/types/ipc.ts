@@ -67,10 +67,11 @@ export interface RecordingTick {
 
 export type ControlCommand = "pause" | "resume" | "stop";
 
-/** Global recording activity shared across windows. `status` is meaningful only when active. */
+/** Global recording activity shared across windows. `status`/`elapsedSeconds` matter when active. */
 export interface RecordingActivity {
   active: boolean;
   status: RecordingStatus;
+  elapsedSeconds: number;
 }
 
 export interface RecordingFinalizeMeta {

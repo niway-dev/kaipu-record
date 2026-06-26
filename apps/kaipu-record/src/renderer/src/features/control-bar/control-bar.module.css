@@ -4,14 +4,14 @@
   -webkit-app-region: drag;
   display: flex;
   align-items: center;
-  gap: 10px;
-  height: 46px;
+  gap: 12px;
+  height: 54px;
   width: max-content;
-  padding: 0 10px 0 14px;
+  padding: 0 14px 0 18px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   /* Squarer than a pill — a rounded rectangle, matching the design. */
-  border-radius: 14px;
+  border-radius: 16px;
   /* Tight, modest elevation — reads cleanly on light and dark backdrops instead
      of a heavy halo that looks like a gradient box over white. */
   box-shadow: 0 3px 12px rgba(0, 0, 0, 0.28);
@@ -30,8 +30,8 @@
 }
 
 .dot {
-  width: 9px;
-  height: 9px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   background: var(--accent-primary);
   animation: pulse 1.4s ease-in-out infinite;
@@ -44,20 +44,21 @@
 
 .time {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 16px;
   font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
   color: var(--text-primary);
 }
 
 .pausedLabel {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
 
 .savingLabel {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-secondary);
 }
 
@@ -76,12 +77,12 @@
   display: flex;
   align-items: flex-end;
   gap: 2px;
-  height: 16px;
+  height: 20px;
 }
 
 .meterBar {
   width: 3px;
-  height: calc(4px + var(--level, 0) * 12px);
+  height: calc(5px + var(--level, 0) * 15px);
   border-radius: 2px;
   background: var(--accent-primary);
   transition: height 80ms linear;
@@ -89,19 +90,19 @@
 
 .divider {
   width: 1px;
-  height: 22px;
+  height: 26px;
   background: var(--border);
 }
 
-/* Pause/resume — a squarer button, matching the design's rounded squares. */
+/* Pause/resume — a squarer button with the icon centred and roomy padding. */
 .control {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -116,10 +117,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--accent-primary);
   color: #fff;
   cursor: pointer;
@@ -132,10 +133,10 @@
 /* Keyboard-shortcut hint, far right — subtle mono glyphs like the design. */
 .shortcut {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.04em;
   color: var(--text-muted);
-  padding-left: 2px;
+  padding-left: 4px;
 }
 
 @keyframes pulse {

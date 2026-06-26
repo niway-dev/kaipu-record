@@ -22,7 +22,7 @@ export function ControlBar({
   if (tick.status === "saving") {
     return (
       <div className={styles.bar}>
-        <Loader2 size={14} className={styles.spinner} />
+        <Loader2 size={16} className={styles.spinner} />
         <span className={styles.savingLabel}>Saving…</span>
       </div>
     );
@@ -44,15 +44,15 @@ export function ControlBar({
 
       {paused ? (
         <button className={styles.control} type="button" aria-label="Resume" onClick={onResume}>
-          <Play size={14} />
+          <Play size={17} />
         </button>
       ) : (
         <button className={styles.control} type="button" aria-label="Pause" onClick={onPause}>
-          <Pause size={14} />
+          <Pause size={17} />
         </button>
       )}
       <button className={styles.stop} type="button" aria-label="Stop" onClick={onStop}>
-        <Square size={12} fill="currentColor" />
+        <Square size={14} fill="currentColor" />
       </button>
 
       {!paused && <kbd className={styles.shortcut}>⌘⇧P</kbd>}

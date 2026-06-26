@@ -2,8 +2,8 @@ import { BrowserWindow, screen } from "electron";
 import { join } from "path";
 import { is } from "@electron-toolkit/utils";
 
-const BAR_WIDTH = 400;
-const BAR_HEIGHT = 64;
+const BAR_WIDTH = 430;
+const BAR_HEIGHT = 82;
 const BOTTOM_MARGIN = 40;
 
 /**
