@@ -67,6 +67,13 @@ they enumerate the same way and default to the **same** screen — no window
 hardcodes a placeholder source. The Capture Panel has no picker of its own; its
 **Change** button just opens the main window.
 
+`useRecordingSetup` no longer fakes recording: its `startRecording` now drives the
+real engine via **`useScreenRecorder`** (capture + mediabunny MP4 encode + the
+floating control bar), which runs in the main window only. Because recording must
+run where capture/WebCodecs live, the Capture Panel's record button opens the main
+window rather than encoding in its own (transparent) renderer. See the
+[Recording Pipeline](/desktop/recording-pipeline) for the full capture→encode→vault flow.
+
 ## Styling
 
 - **CSS Modules, co-located** next to each component (`x.tsx` + `x.module.css`).

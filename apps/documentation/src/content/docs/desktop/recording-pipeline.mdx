@@ -5,13 +5,13 @@ description: The legacy reference capture/encode pipeline, the current stub stat
 
 # Recording Pipeline
 
-> **Estado (2026-06-26).** El grabador de **kaipu-record hoy es un stub**: `startRecording()` solo cambia un booleano tras un countdown — no captura nada (`src/renderer/src/features/recording/hooks/use-recording-setup.ts`). Lo que sigue describe el pipeline del **recorder legacy** (`workspace-temp/legacy-kaipu-recorder`) como referencia técnica. El **target elegido** para construir el core real es **mediabunny, no FFmpeg** — ver [ADR 0001](../architecture/decisions/0001-mediabunny-over-ffmpeg).
+> **Estado (2026-06-26).** El core real **ya está construido** (rama `feat/screen-recording-control-bar`) sobre **mediabunny/WebCodecs** — MP4 H.264/AAC seekable, escrito a disco posicionalmente, con una **barra flotante de control**. Ver [Arquitectura implementada](#arquitectura-implementada-kaipu-record) abajo. La decisión mediabunny-no-FFmpeg está en el [ADR 0001](../architecture/decisions/0001-mediabunny-over-ffmpeg). Las secciones de **Captura / Encoder / Data handling** que siguen describen el **recorder legacy** (`workspace-temp/legacy-kaipu-recorder`) como referencia histórica, no el estado actual.
 
 Auditoría técnica del pipeline de captura y encode legacy (referencia).
 
-## TL;DR
+## TL;DR — legacy (referencia)
 
-| Dimensión          | Hoy                                              |
+| Dimensión          | Legacy                                           |
 | ------------------ | ------------------------------------------------ |
 | Captura            | `getDisplayMedia()` en el renderer               |
 | Encoder            | `MediaRecorder` VP9+Opus, 2.5 Mbps default       |
@@ -116,38 +116,55 @@ Pasar a FFmpeg para captura+encode **no agrega peso al bundle**.
 
 ---
 
-## Lo que NO existe todavía (en kaipu-record)
+## Arquitectura implementada (kaipu-record)
 
-- El core de captura completo (hoy es un stub booleano)
-- Encode por hardware
-- Output MP4 seekable directo
-- Timer + nivel de mic en vivo, barra flotante de control
-
----
-
-## Target elegido: mediabunny (no FFmpeg)
-
-La decisión es **no portar** el stack `MediaRecorder` + FFmpeg del legacy, sino construir el core sobre **mediabunny** (WebCodecs). Razón corta: gran parte del rol de FFmpeg en el legacy era **parchear problemas que `MediaRecorder` causa** (WebM sin duration header → remux). mediabunny no usa `MediaRecorder`, así que esos parches no nacen.
-
-Flujo target:
+El core real está construido sobre **mediabunny/WebCodecs**, no `MediaRecorder`+FFmpeg. Sigue el modelo **Opción A**: el renderer de la ventana principal (oculta mientras grabás) captura y encodea; el main escribe a disco; una ventana flotante aparte muestra la barra de control.
 
 ```
-getDisplayMedia() ─┐
-getUserMedia(mic) ─┤─► MediaStreamVideo/AudioTrackSource
-                   └─► Output({ format: Mp4OutputFormat, target: StreamTarget })
-                       → MP4 real seekable, escrito a disco incremental (chunk.position)
-                       → main: fd.write(data, 0, len, position) vía IPC
+Ventana principal (oculta)                  Barra flotante (ventana aparte)
+ useScreenRecorder                           ControlBar  timer · 5 barras · ⏸/▶ · ■
+  getUserMedia(chromeMediaSourceId) ─┐
+  getUserMedia(mic) + sys audio ─────┤─► MediaStreamVideo/AudioTrackSource
+  AudioContext mix + AnalyserNode    └─► Output(Mp4OutputFormat, StreamTarget)
+                                          → chunks { data, position } ─┐
+        ┌──────────────────────── main process ───────────────────────┘
+        │ recording-writer  fd.write(buf, 0, len, position)  (posicional, no append)
+        │ recording-hub     relay estado↔comandos · oculta/muestra la principal
+        │ finalize → vault <id>.mp4 + sidecar (título, duración, thumbnail)
+        └──────────────────────────────────────────────────────────────
 ```
 
-Qué cambia vs. el legacy:
+**Piezas:**
 
-| Aspecto         | Legacy                          | Target mediabunny                     |
-| --------------- | ------------------------------- | ------------------------------------- |
-| Encoder         | `MediaRecorder` VP9/Opus        | WebCodecs H.264/AAC (HW, ~8× más rápido) |
-| Output          | WebM roto → remux FFmpeg        | MP4 seekable de un solo paso          |
-| Hot path a disco| base64 → IPC → WriteStream      | bytes crudos posicionados (`StreamTarget`) |
-| Compositing     | FFmpeg `filter_complex`         | canvas + `CanvasSource` en vivo       |
-| Bundle          | ~50–80MB binarios por arch      | ~70 kB, tree-shakable, sin deps       |
-| FFmpeg          | core del pipeline               | opcional/lazy, solo post-proceso offline |
+- `features/recording/recorder-engine.ts` — captura + mezcla de audio + encode mediabunny (MP4 H.264/AAC). Seam `videoProvider`/`audioProvider` para meter cámara/watermark después sin tocar lo de abajo.
+- `features/recording/hooks/use-screen-recorder.ts` — ciclo start/pause/resume/stop, timer (descuenta la pausa), tick ~10/s al main.
+- `features/recording/elapsed.ts` + `audio-levels.ts` — lógica pura testeada (clock con pausa, RMS→5 barras).
+- `features/control-bar/` — barra flotante con nuestros tokens/`cx()`/`data-*`.
+- `main/recording/recording-writer.ts` — escritura **posicional** + finalize al vault. Drena los writes en vuelo antes de cerrar el handle (los chunks llegan fire-and-forget por IPC).
+- `main/recording/control-bar-window.ts` — `BrowserWindow` frameless/transparent/always-on-top, abajo-centro de la pantalla.
+- `main/recording/recording-hub.ts` — relay de estado/comandos + oculta/muestra la ventana principal.
 
-Detalle completo y alternativas descartadas: [ADR 0001 — Mediabunny over FFmpeg](../architecture/decisions/0001-mediabunny-over-ffmpeg).
+**IPC nuevo:** `recording:create|write|finalize|abort` (writer) · `recording:report-tick` → `control:tick` (estado → barra) · `control:command` → `recording:command` (botones → grabador) · `recording:start|stop` (mostrar/ocultar ventanas).
+
+**Vault:** ahora es agnóstico de extensión (`.mp4`/`.webm`), con sidecar de duración + thumbnail; `kaipu-media://thumb/<id>` sirve el póster.
+
+### Por qué mediabunny y no FFmpeg
+
+No portamos el stack `MediaRecorder`+FFmpeg del legacy. Gran parte del rol de FFmpeg ahí era **parchear lo que `MediaRecorder` rompe** (WebM sin duration header → remux). mediabunny no usa `MediaRecorder`, así que esos parches no nacen.
+
+| Aspecto          | Legacy                     | Implementado (mediabunny)                  |
+| ---------------- | -------------------------- | ------------------------------------------ |
+| Encoder          | `MediaRecorder` VP9/Opus   | WebCodecs H.264/AAC (HW, ~8× más rápido)   |
+| Output           | WebM roto → remux FFmpeg   | MP4 seekable de un solo paso               |
+| Hot path a disco | base64 → IPC → WriteStream | bytes crudos posicionados (`StreamTarget`) |
+| Compositing      | FFmpeg `filter_complex`    | canvas + `CanvasSource` en vivo (follow-up) |
+| Bundle           | ~50–80MB binarios por arch | mediabunny tree-shakable, sin deps         |
+
+Detalle y alternativas descartadas: [ADR 0001 — Mediabunny over FFmpeg](../architecture/decisions/0001-mediabunny-over-ffmpeg).
+
+### Pendiente (follow-ups diseñados)
+
+- **Cámara PiP** — compositar el webcam vía `CanvasSource` en el seam `videoProvider`.
+- **Watermark** — pasada de dibujo extra en el mismo compositor.
+- **Grabar desde el Capture Panel** — hoy su botón abre la ventana principal (el encode no debe correr en la ventana transparente del menu-bar); falta el IPC panel→main para arrancar.
+- **Calidad configurable** — resolución/fps/bitrate están hardcodeados (1080p/30/auto), sin cablear a Settings.
