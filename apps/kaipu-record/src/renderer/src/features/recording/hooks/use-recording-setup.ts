@@ -42,7 +42,7 @@ export interface RecordingSetup {
   /** Begin recording after a short countdown (used by the Record page). */
   startRecording(): void;
   stopRecording(): void;
-  /** Immediate start/stop, no countdown (used by the Capture Panel). */
+  /** Stop if recording, otherwise start (with the same countdown). */
   toggleRecording(): void;
 }
 
