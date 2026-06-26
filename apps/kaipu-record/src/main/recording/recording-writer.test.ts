@@ -1,0 +1,59 @@
+import { describe, expect, it } from "vitest";
+import { mkdtemp, readFile, readdir, access } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { RecordingWriter } from "./recording-writer";
+
+async function setup() {
+  const vaultDir = await mkdtemp(join(tmpdir(), "rw-vault-"));
+  const tempDir = await mkdtemp(join(tmpdir(), "rw-temp-"));
+  const writer = new RecordingWriter({
+    vaultDir: () => vaultDir,
+    newId: () => "rec-fixed",
+    now: () => 5000,
+    tempDir,
+  });
+  return { writer, vaultDir, tempDir };
+}
+
+describe("RecordingWriter", () => {
+  it("reconstructs the exact byte stream, honoring overwritten regions", async () => {
+    const { writer, vaultDir } = await setup();
+    await writer.create("s1");
+    await writer.write("s1", new TextEncoder().encode("AAAAAAAA").buffer, 0);
+    await writer.write("s1", new TextEncoder().encode("BB").buffer, 2);
+    const rec = await writer.finalize("s1", { title: "T", durationSeconds: 3 });
+    const bytes = await readFile(rec.filePath, "utf-8");
+    expect(bytes).toBe("AABBAAAA");
+    expect(rec).toMatchObject({ id: "rec-fixed", title: "T", durationSeconds: 3 });
+    expect(rec.filePath.endsWith("rec-fixed.mp4")).toBe(true);
+    expect(rec.filePath.startsWith(vaultDir)).toBe(true);
+  });
+
+  it("writes a thumbnail when provided", async () => {
+    const { writer, vaultDir } = await setup();
+    await writer.create("s1");
+    await writer.write("s1", new TextEncoder().encode("x").buffer, 0);
+    await writer.finalize("s1", {
+      title: "T",
+      durationSeconds: 1,
+      thumbnail: new Uint8Array([0xff, 0xd8, 0xff]).buffer,
+    });
+    await expect(access(join(vaultDir, ".kaipu", "rec-fixed.jpg"))).resolves.toBeUndefined();
+  });
+
+  it("abort deletes the temp file and leaves the vault empty", async () => {
+    const { writer, vaultDir, tempDir } = await setup();
+    await writer.create("s1");
+    await writer.write("s1", new TextEncoder().encode("x").buffer, 0);
+    await writer.abort("s1");
+    expect(await readdir(tempDir)).toHaveLength(0);
+    const vaultFiles = (await readdir(vaultDir)).filter((f) => f.endsWith(".mp4"));
+    expect(vaultFiles).toHaveLength(0);
+  });
+
+  it("throws when writing to an unknown session", async () => {
+    const { writer } = await setup();
+    await expect(writer.write("ghost", new ArrayBuffer(1), 0)).rejects.toThrow(/session/i);
+  });
+});
