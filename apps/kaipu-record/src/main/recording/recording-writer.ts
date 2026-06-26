@@ -2,14 +2,8 @@ import { copyFile, open, mkdir, rename, unlink, type FileHandle } from "node:fs/
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { LocalRecording } from "@shared/types/library-storage";
+import type { RecordingFinalizeMeta } from "@shared/types/ipc";
 import { LibraryVault } from "../library/library-vault";
-
-export interface FinalizeMeta {
-  title: string;
-  durationSeconds: number;
-  /** JPEG bytes for the poster, optional. */
-  thumbnail?: ArrayBuffer | null;
-}
 
 export interface RecordingWriterDeps {
   /** Current vault directory (can change at runtime). */
@@ -25,6 +19,13 @@ export interface RecordingWriterDeps {
 interface Session {
   handle: FileHandle;
   tempPath: string;
+  /**
+   * Tail of the serialized write chain. Chunks arrive fire-and-forget over IPC,
+   * so finalize/abort await this to guarantee every positional write has hit
+   * disk *before* the handle is closed (closing mid-write loses the tail).
+   * Kept non-rejecting so one failed write doesn't drop the rest.
+   */
+  queue: Promise<void>;
 }
 
 /**
@@ -47,7 +48,7 @@ export class RecordingWriter {
   async create(sessionId: string): Promise<{ tempPath: string }> {
     const tempPath = join(this.tempDir, `kaipu-rec-${sessionId}.mp4.part`);
     const handle = await open(tempPath, "w+");
-    this.sessions.set(sessionId, { handle, tempPath });
+    this.sessions.set(sessionId, { handle, tempPath, queue: Promise.resolve() });
     return { tempPath };
   }
 
@@ -55,12 +56,20 @@ export class RecordingWriter {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`No recording session "${sessionId}"`);
     const buf = Buffer.from(data);
-    await session.handle.write(buf, 0, buf.byteLength, position);
+    const op = session.queue.then(() => session.handle.write(buf, 0, buf.byteLength, position));
+    // The queue tail must never reject, or a single failed write would poison
+    // every subsequent one; callers still see their own write's error via `op`.
+    session.queue = op.then(
+      () => undefined,
+      () => undefined,
+    );
+    await op;
   }
 
-  async finalize(sessionId: string, meta: FinalizeMeta): Promise<LocalRecording> {
+  async finalize(sessionId: string, meta: RecordingFinalizeMeta): Promise<LocalRecording> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`No recording session "${sessionId}"`);
+    await session.queue; // flush in-flight positional writes before closing
     await session.handle.close();
     this.sessions.delete(sessionId);
 
@@ -91,6 +100,7 @@ export class RecordingWriter {
   async abort(sessionId: string): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (!session) return;
+    await session.queue; // let in-flight writes settle before closing the handle
     await session.handle.close().catch(() => {});
     await unlink(session.tempPath).catch(() => {});
     this.sessions.delete(sessionId);

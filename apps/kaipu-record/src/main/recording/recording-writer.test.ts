@@ -30,6 +30,16 @@ describe("RecordingWriter", () => {
     expect(rec.filePath.startsWith(vaultDir)).toBe(true);
   });
 
+  it("drains fire-and-forget writes before finalize closes the file", async () => {
+    const { writer } = await setup();
+    await writer.create("s1");
+    // Mimic the IPC path: chunks are sent without awaiting each write.
+    void writer.write("s1", new TextEncoder().encode("AAAA").buffer, 0);
+    void writer.write("s1", new TextEncoder().encode("BBBB").buffer, 4);
+    const rec = await writer.finalize("s1", { title: "T", durationSeconds: 1 });
+    expect(await readFile(rec.filePath, "utf-8")).toBe("AAAABBBB");
+  });
+
   it("writes a thumbnail when provided", async () => {
     const { writer, vaultDir } = await setup();
     await writer.create("s1");
