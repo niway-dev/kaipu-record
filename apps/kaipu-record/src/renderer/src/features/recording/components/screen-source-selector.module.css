@@ -93,8 +93,8 @@
   color: var(--text-primary);
 }
 
-.tabButtonActive,
-.tabButtonActive:hover {
+.tabButton[data-active],
+.tabButton[data-active]:hover {
   background: rgba(246, 5, 92, 0.12);
   color: var(--accent-primary);
 }
@@ -129,8 +129,8 @@
   border-color: rgba(246, 5, 92, 0.4);
 }
 
-.tileActive,
-.tileActive:hover {
+.tile[data-active],
+.tile[data-active]:hover {
   border-color: var(--accent-primary);
 }
 

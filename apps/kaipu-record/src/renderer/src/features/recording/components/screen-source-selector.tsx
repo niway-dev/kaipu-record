@@ -76,9 +76,8 @@ export function ScreenSourceSelector(props: ScreenSourceSelectorProps): React.JS
         {tiles.map((source) => (
           <div
             key={source.id}
-            className={
-              source.id === currentSourceId ? `${styles.tile} ${styles.tileActive}` : styles.tile
-            }
+            className={styles.tile}
+            data-active={source.id === currentSourceId || undefined}
             onClick={() => choose(source)}
           >
             <img src={source.thumbnail} alt={source.name} />
@@ -110,9 +109,8 @@ export function ScreenSourceSelector(props: ScreenSourceSelectorProps): React.JS
           {KINDS.map((k) => (
             <button
               key={k.id}
-              className={
-                k.id === kind ? `${styles.tabButton} ${styles.tabButtonActive}` : styles.tabButton
-              }
+              className={styles.tabButton}
+              data-active={k.id === kind || undefined}
               onClick={() => setKind(k.id)}
             >
               {k.label}

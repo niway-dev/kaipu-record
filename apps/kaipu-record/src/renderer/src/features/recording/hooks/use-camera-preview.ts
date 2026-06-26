@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 
+/** A small, square-ish preview is all the UI shows, so we cap the resolution. */
+const PREVIEW_CONSTRAINTS: MediaStreamConstraints = {
+  video: { facingMode: "user", width: { ideal: 320 }, height: { ideal: 240 } },
+  audio: false,
+};
+
 export interface CameraPreview {
   videoRef: RefObject<HTMLVideoElement | null>;
   hasStream: boolean;
@@ -15,36 +21,44 @@ export function useCameraPreview(enabled: boolean): CameraPreview {
   const [hasStream, setHasStream] = useState(false);
 
   useEffect(() => {
-    if (!enabled) {
-      streamRef.current?.getTracks().forEach((track) => track.stop());
+    // Tear down whatever is currently open and detach it from the element.
+    const releaseStream = (): void => {
+      const open = streamRef.current;
       streamRef.current = null;
+      if (open) for (const track of open.getTracks()) track.stop();
+      if (videoRef.current) videoRef.current.srcObject = null;
+    };
+
+    if (!enabled) {
+      releaseStream();
       setHasStream(false);
       return;
     }
 
-    let active = true;
-    navigator.mediaDevices
-      .getUserMedia({
-        video: { facingMode: "user", width: { ideal: 320 }, height: { ideal: 240 } },
-        audio: false,
-      })
-      .then((stream) => {
-        if (!active) {
-          stream.getTracks().forEach((track) => track.stop());
+    // An AbortController lets us discard a stream that resolves after the effect
+    // has already been cleaned up (toggle off, or unmount, mid-request).
+    const controller = new AbortController();
+
+    const open = async (): Promise<void> => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia(PREVIEW_CONSTRAINTS);
+        if (controller.signal.aborted) {
+          for (const track of stream.getTracks()) track.stop();
           return;
         }
         streamRef.current = stream;
         if (videoRef.current) videoRef.current.srcObject = stream;
         setHasStream(true);
-      })
-      .catch(() => {
-        if (active) setHasStream(false);
-      });
+      } catch {
+        if (!controller.signal.aborted) setHasStream(false);
+      }
+    };
+
+    void open();
 
     return () => {
-      active = false;
-      streamRef.current?.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
+      controller.abort();
+      releaseStream();
     };
   }, [enabled]);
 
