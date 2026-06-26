@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMicrophones } from "@renderer/features/recording/hooks/use-microphones";
+import { useScreenRecorder } from "@renderer/features/recording/hooks/use-screen-recorder";
 import type { Microphone, SelectedSource } from "@renderer/features/recording/types";
 
 const COUNTDOWN_SECONDS = 3;
@@ -53,6 +54,7 @@ export function useRecordingSetup(): RecordingSetup {
   const [isCameraEnabled, setCameraEnabled] = useState(false);
 
   const microphones = useMicrophones();
+  const recorder = useScreenRecorder();
   const [selectedMicrophone, setSelectedMicrophone] = useState<Microphone | null>(null);
   // Default to the first device once enumerated; keep the choice valid as
   // devices are plugged/unplugged.
@@ -64,9 +66,12 @@ export function useRecordingSetup(): RecordingSetup {
   }, [microphones]);
 
   const [isMicrophoneMenuOpen, setMicrophoneMenuOpen] = useState(false);
-  const [isRecording, setRecording] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const countdownTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Recording lives in the real engine; "recording" and "paused" both count as
+  // an active session for the UI.
+  const isRecording = recorder.status === "recording" || recorder.status === "paused";
 
   const clearCountdown = useCallback(() => {
     if (countdownTimer.current) {
@@ -77,26 +82,42 @@ export function useRecordingSetup(): RecordingSetup {
   }, []);
 
   const startRecording = useCallback(() => {
-    if (countdownTimer.current || isRecording) return;
+    if (countdownTimer.current || isRecording || !selectedSource) return;
     let remaining = COUNTDOWN_SECONDS;
     setCountdown(remaining);
     countdownTimer.current = setInterval(() => {
       remaining -= 1;
       if (remaining <= 0) {
         clearCountdown();
-        setRecording(true);
+        void recorder.start({
+          sourceId: selectedSource.id,
+          sourceName: selectedSource.name,
+          microphoneDeviceId: isMicrophoneEnabled ? (selectedMicrophone?.deviceId ?? null) : null,
+          systemAudio: isSystemAudioEnabled,
+        });
       } else {
         setCountdown(remaining);
       }
     }, 1000);
-  }, [isRecording, clearCountdown]);
+  }, [
+    isRecording,
+    clearCountdown,
+    selectedSource,
+    isMicrophoneEnabled,
+    selectedMicrophone,
+    isSystemAudioEnabled,
+    recorder,
+  ]);
 
   const stopRecording = useCallback(() => {
     clearCountdown();
-    setRecording(false);
-  }, [clearCountdown]);
+    void recorder.stop();
+  }, [clearCountdown, recorder]);
 
-  const toggleRecording = useCallback(() => setRecording((on) => !on), []);
+  const toggleRecording = useCallback(() => {
+    if (isRecording) void recorder.stop();
+    else startRecording();
+  }, [isRecording, recorder, startRecording]);
 
   // Stop the countdown if the consumer unmounts mid-count.
   useEffect(() => () => clearCountdown(), [clearCountdown]);

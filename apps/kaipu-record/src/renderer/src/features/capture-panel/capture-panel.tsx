@@ -57,11 +57,14 @@ export function CapturePanel(): React.JSX.Element {
         />
       )}
 
+      {/* Recording runs in the main window renderer (getDisplayMedia/WebCodecs
+          live there), not this transparent panel — so the button opens the
+          main window instead of recording here (see Option A). */}
       <RecordButton
         variant="compact"
         isRecording={setup.isRecording}
         shortcut="⌘⇧6"
-        onClick={setup.toggleRecording}
+        onClick={openMain}
       />
     </div>
   );

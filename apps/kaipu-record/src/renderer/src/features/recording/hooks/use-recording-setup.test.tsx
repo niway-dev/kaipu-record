@@ -10,10 +10,28 @@ vi.mock("@renderer/features/recording/hooks/use-microphones", () => ({
   useMicrophones: () => MICS,
 }));
 
+// The real recording engine is mocked: status stays "idle" so the hook never
+// reports an active session, and we assert the hook delegates to start/stop.
+const recorderStart = vi.fn();
+const recorderStop = vi.fn();
+vi.mock("@renderer/features/recording/hooks/use-screen-recorder", () => ({
+  useScreenRecorder: () => ({
+    status: "idle",
+    start: recorderStart,
+    stop: recorderStop,
+    pause: vi.fn(),
+    resume: vi.fn(),
+  }),
+}));
+
 import { useRecordingSetup } from "./use-recording-setup";
 
 describe("useRecordingSetup", () => {
-  beforeEach(() => vi.useFakeTimers());
+  beforeEach(() => {
+    vi.useFakeTimers();
+    recorderStart.mockClear();
+    recorderStop.mockClear();
+  });
   afterEach(() => vi.useRealTimers());
 
   it("defaults the selected microphone to the first device", () => {
@@ -37,12 +55,13 @@ describe("useRecordingSetup", () => {
     expect(result.current.isMicrophoneEnabled).toBe(false);
   });
 
-  it("counts down 3 → 2 → 1 and then starts recording", () => {
+  it("counts down 3 → 2 → 1 and then starts the engine", () => {
     const { result } = renderHook(() => useRecordingSetup());
 
+    act(() => result.current.selectSource({ id: "s1", name: "Display 1", type: "screen" }));
     act(() => result.current.startRecording());
     expect(result.current.countdown).toBe(3);
-    expect(result.current.isRecording).toBe(false);
+    expect(recorderStart).not.toHaveBeenCalled();
 
     act(() => vi.advanceTimersByTime(1000));
     expect(result.current.countdown).toBe(2);
@@ -52,21 +71,22 @@ describe("useRecordingSetup", () => {
 
     act(() => vi.advanceTimersByTime(1000));
     expect(result.current.countdown).toBeNull();
-    expect(result.current.isRecording).toBe(true);
+    expect(recorderStart).toHaveBeenCalledWith(expect.objectContaining({ sourceId: "s1" }));
   });
 
   it("stopRecording cancels an in-progress countdown", () => {
     const { result } = renderHook(() => useRecordingSetup());
 
+    act(() => result.current.selectSource({ id: "s1", name: "Display 1", type: "screen" }));
     act(() => result.current.startRecording());
     expect(result.current.countdown).toBe(3);
 
     act(() => result.current.stopRecording());
     expect(result.current.countdown).toBeNull();
-    expect(result.current.isRecording).toBe(false);
+    expect(recorderStop).toHaveBeenCalledTimes(1);
 
-    // Any pending tick must not flip recording back on.
+    // A cancelled countdown must never reach the engine.
     act(() => vi.advanceTimersByTime(5000));
-    expect(result.current.isRecording).toBe(false);
+    expect(recorderStart).not.toHaveBeenCalled();
   });
 });
