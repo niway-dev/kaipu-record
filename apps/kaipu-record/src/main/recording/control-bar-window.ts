@@ -27,6 +27,9 @@ export class ControlBarWindow {
       show: false,
       frame: false,
       transparent: true,
+      // Fully transparent backdrop — without this a transparent window can paint
+      // an opaque/dark backing that shows as an ugly box over light backgrounds.
+      backgroundColor: "#00000000",
       resizable: false,
       movable: true,
       minimizable: false,

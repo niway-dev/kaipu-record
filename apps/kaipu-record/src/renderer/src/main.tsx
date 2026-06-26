@@ -17,8 +17,10 @@ const isControlBar = params.get("window") === "control-bar";
 const root = createRoot(document.getElementById("root")!);
 
 if (isControlBar) {
-  // Transparent window — only the bar pill paints.
+  // Transparent, fixed-size widget — only the bar pill paints, and it never
+  // scrolls (see the `[data-window="control-bar"]` rule in main.css).
   document.body.style.background = "transparent";
+  document.body.dataset.window = "control-bar";
   root.render(
     <StrictMode>
       <ControlBarWindowRoot />

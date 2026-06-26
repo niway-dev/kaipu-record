@@ -7,3 +7,16 @@ body {
 #root {
   min-height: 100vh;
 }
+
+/*
+ * The floating control bar window (`?window=control-bar`) is a fixed-size widget.
+ * Pin it to the viewport and never scroll. Giving #root its own block-formatting
+ * context (overflow) also stops the pill's top margin from collapsing out to the
+ * body, which otherwise pushes the document past the 64px window → a scrollbar.
+ */
+body[data-window="control-bar"],
+body[data-window="control-bar"] #root {
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
+}
