@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { IPC_CHANNELS } from "@shared/types";
 import type { VaultDirectory } from "@shared/types";
@@ -9,9 +10,14 @@ function currentVault(): LibraryVault {
   return new LibraryVault(vaultDirectory().path);
 }
 
-/** Absolute path to a recording's video file in the current vault. */
-export function recordingFilePath(id: string): string {
+/** Absolute path to a recording's real video file in the current vault. */
+export async function recordingFilePath(id: string): Promise<string> {
   return currentVault().filePath(id);
+}
+
+/** Absolute path to a recording's thumbnail jpg (may not exist). */
+export function thumbnailFilePath(id: string): string {
+  return join(vaultDirectory().path, ".kaipu", `${id}.jpg`);
 }
 
 export function registerLibraryVaultHandlers(): void {
@@ -22,8 +28,8 @@ export function registerLibraryVaultHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.deleteLocalRecording, (_event, id: string) =>
     currentVault().remove(id),
   );
-  ipcMain.handle(IPC_CHANNELS.revealLocalRecording, (_event, id: string) =>
-    shell.showItemInFolder(currentVault().filePath(id)),
+  ipcMain.handle(IPC_CHANNELS.revealLocalRecording, async (_event, id: string) =>
+    shell.showItemInFolder(await currentVault().filePath(id)),
   );
 
   ipcMain.handle(IPC_CHANNELS.getVaultDirectory, (): VaultDirectory => vaultDirectory());

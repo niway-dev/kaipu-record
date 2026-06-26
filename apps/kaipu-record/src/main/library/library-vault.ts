@@ -1,9 +1,10 @@
 import { basename, join } from "node:path";
-import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import type { LocalRecording } from "@shared/types/library-storage";
 
 const META_DIR = ".kaipu";
-const VIDEO_EXT = ".webm";
+/** Known video containers, in preference order — `.mp4` is what we now write. */
+const VIDEO_EXTS = [".mp4", ".webm"] as const;
 
 interface Sidecar {
   title?: string;
@@ -11,20 +12,31 @@ interface Sidecar {
   createdAt?: number;
 }
 
+async function exists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Local recordings vault. Recordings live as `<id>.webm` in `directory`, with
- * optional sidecar metadata (`.kaipu/<id>.json`) for fields the filesystem can't
- * carry (title, duration). Everything else — created date, size — is read from
- * the file. Deliberately simple: the filename *is* the id.
- *
- * Pure: no Electron. The directory is injected so it's testable against a temp
- * folder; the Electron wiring (default dir, IPC, reveal) lives in `index.ts`.
+ * Local recordings vault. A recording lives as `<id><ext>` (ext ∈ VIDEO_EXTS)
+ * with optional sidecar metadata (`.kaipu/<id>.json`) and thumbnail
+ * (`.kaipu/<id>.jpg`). The filename *is* the id. Pure: no Electron — the
+ * directory is injected so it's testable against a temp folder.
  */
 export class LibraryVault {
   constructor(private readonly directory: string) {}
 
-  filePath(id: string): string {
-    return join(this.directory, `${id}${VIDEO_EXT}`);
+  /** Resolve an id to its real file; if none exists yet, default to `.mp4`. */
+  async filePath(id: string): Promise<string> {
+    for (const ext of VIDEO_EXTS) {
+      const candidate = join(this.directory, `${id}${ext}`);
+      if (await exists(candidate)) return candidate;
+    }
+    return join(this.directory, `${id}${VIDEO_EXTS[0]}`);
   }
 
   private metaDirectory(): string {
@@ -35,25 +47,29 @@ export class LibraryVault {
     return join(this.metaDirectory(), `${id}.json`);
   }
 
+  private thumbnailPath(id: string): string {
+    return join(this.metaDirectory(), `${id}.jpg`);
+  }
+
   async list(): Promise<LocalRecording[]> {
     await mkdir(this.directory, { recursive: true });
-
     let entries: string[];
     try {
       entries = await readdir(this.directory);
     } catch {
       return [];
     }
-
-    const ids = entries.filter((f) => f.endsWith(VIDEO_EXT)).map((f) => basename(f, VIDEO_EXT));
+    const ids = entries
+      .filter((f) => VIDEO_EXTS.some((ext) => f.endsWith(ext)))
+      .map((f) => basename(f, VIDEO_EXTS.find((ext) => f.endsWith(ext))!));
     const described = await Promise.all(ids.map((id) => this.describe(id)));
     return described
       .filter((r): r is LocalRecording => r !== null)
       .sort((a, b) => b.createdAt - a.createdAt);
   }
 
-  private async describe(id: string): Promise<LocalRecording | null> {
-    const filePath = this.filePath(id);
+  async describe(id: string): Promise<LocalRecording | null> {
+    const filePath = await this.filePath(id);
     let info;
     try {
       info = await stat(filePath);
@@ -68,7 +84,7 @@ export class LibraryVault {
       createdAt: meta.createdAt ?? info.birthtimeMs,
       sizeBytes: info.size,
       durationSeconds: meta.durationSeconds ?? 0,
-      thumbnailUrl: null,
+      thumbnailUrl: (await exists(this.thumbnailPath(id))) ? `kaipu-media://thumb/${id}` : null,
     };
   }
 
@@ -80,19 +96,29 @@ export class LibraryVault {
     }
   }
 
-  /** Updates the user-facing title in the sidecar without touching the video file. */
-  async rename(id: string, title: string): Promise<void> {
-    const meta = await this.readSidecar(id);
+  /** Merge fields into the sidecar (used by rename and by finalize). */
+  async writeMeta(id: string, meta: Sidecar): Promise<void> {
+    const current = await this.readSidecar(id);
     await mkdir(this.metaDirectory(), { recursive: true });
-    await writeFile(this.sidecarPath(id), JSON.stringify({ ...meta, title }, null, 2));
+    await writeFile(this.sidecarPath(id), JSON.stringify({ ...current, ...meta }, null, 2));
+  }
+
+  async writeThumbnail(id: string, jpg: Buffer): Promise<void> {
+    await mkdir(this.metaDirectory(), { recursive: true });
+    await writeFile(this.thumbnailPath(id), jpg);
+  }
+
+  /** Updates the user-facing title without touching the video file. */
+  async rename(id: string, title: string): Promise<void> {
+    await this.writeMeta(id, { title });
   }
 
   /** Removes the video plus its sidecar and thumbnail (best-effort). */
   async remove(id: string): Promise<void> {
     await Promise.allSettled([
-      rm(this.filePath(id), { force: true }),
+      rm(await this.filePath(id), { force: true }),
       rm(this.sidecarPath(id), { force: true }),
-      rm(join(this.metaDirectory(), `${id}.jpg`), { force: true }),
+      rm(this.thumbnailPath(id), { force: true }),
     ]);
   }
 }

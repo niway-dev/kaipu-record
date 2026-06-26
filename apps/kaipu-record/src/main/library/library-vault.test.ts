@@ -79,3 +79,34 @@ describe("LibraryVault", () => {
     expect(await readdir(directory)).not.toContain("clip.webm");
   });
 });
+
+describe("LibraryVault — mp4 + thumbnails", () => {
+  async function tempVault(): Promise<LibraryVault> {
+    const dir = await mkdtemp(join(tmpdir(), "vault-mp4-"));
+    return new LibraryVault(dir);
+  }
+
+  it("discovers .mp4 recordings", async () => {
+    const vault = await tempVault();
+    const file = await vault.filePath("rec-1");
+    expect(file.endsWith("rec-1.mp4")).toBe(true);
+    await writeFile(file, "data");
+    const list = await vault.list();
+    expect(list.map((r) => r.id)).toContain("rec-1");
+  });
+
+  it("writeMeta + describe surface title, duration and thumbnail url", async () => {
+    const vault = await tempVault();
+    await writeFile(await vault.filePath("rec-2"), "data");
+    await vault.writeMeta("rec-2", { title: "Demo", durationSeconds: 12, createdAt: 111 });
+    await vault.writeThumbnail("rec-2", Buffer.from([0xff, 0xd8, 0xff]));
+    const rec = await vault.describe("rec-2");
+    expect(rec).toMatchObject({
+      id: "rec-2",
+      title: "Demo",
+      durationSeconds: 12,
+      createdAt: 111,
+      thumbnailUrl: "kaipu-media://thumb/rec-2",
+    });
+  });
+});
