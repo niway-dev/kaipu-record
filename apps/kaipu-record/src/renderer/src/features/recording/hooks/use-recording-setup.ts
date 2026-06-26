@@ -45,12 +45,8 @@ export interface RecordingSetup {
   toggleRecording(): void;
 }
 
-export function useRecordingSetup(options?: {
-  initialSource?: SelectedSource | null;
-}): RecordingSetup {
-  const [selectedSource, setSelectedSource] = useState<SelectedSource | null>(
-    options?.initialSource ?? null,
-  );
+export function useRecordingSetup(): RecordingSetup {
+  const [selectedSource, setSelectedSource] = useState<SelectedSource | null>(null);
   const [isSourcePickerOpen, setSourcePickerOpen] = useState(false);
   const [isMicrophoneEnabled, setMicrophoneEnabled] = useState(true);
   const [isSystemAudioEnabled, setSystemAudioEnabled] = useState(false);

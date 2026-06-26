@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { useRecordingSetup } from "@renderer/features/recording/hooks/use-recording-setup";
+import { useSourceSelection } from "@renderer/features/recording/hooks/use-source-selection";
 import { SourceCard } from "@renderer/features/recording/components/source-card";
 import { RecordingToggles } from "@renderer/features/recording/components/recording-toggles";
 import { MicPicker } from "@renderer/features/recording/components/mic-picker";
@@ -11,9 +12,10 @@ import styles from "./capture-panel.module.css";
 // Reuses the same dumb components + useRecordingSetup hook as the Record page.
 export function CapturePanel(): React.JSX.Element {
   const rootRef = useRef<HTMLDivElement>(null);
-  const setup = useRecordingSetup({
-    initialSource: { id: "display-1", name: "Built-in Retina Display", type: "screen" },
-  });
+  const setup = useRecordingSetup();
+  // Same source loading/default-selection as the Record page, so both windows
+  // show the same screen instead of a hardcoded placeholder.
+  useSourceSelection(setup);
 
   // Keep the Electron window height matched to the content (mic menu, etc.).
   useEffect(() => {

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useRecordingSetup } from "@renderer/features/recording/hooks/use-recording-setup";
-import { useScreenSources } from "@renderer/features/recording/hooks/use-screen-sources";
+import { useSourceSelection } from "@renderer/features/recording/hooks/use-source-selection";
 import { useCameraPreview } from "@renderer/features/recording/hooks/use-camera-preview";
 import { usePermissions } from "@renderer/features/onboarding/use-permissions";
 import { SourceCard } from "@renderer/features/recording/components/source-card";
@@ -16,12 +16,7 @@ import styles from "./record-page.module.css";
 // Composition only. State lives in the hooks; this wires them to dumb components.
 export function RecordPage(): React.JSX.Element {
   const setup = useRecordingSetup();
-  const {
-    sources,
-    isLoading: isLoadingSources,
-    error: sourcesError,
-    refresh: refreshSources,
-  } = useScreenSources();
+  const { sources, isLoading: isLoadingSources, error: sourcesError } = useSourceSelection(setup);
   const camera = useCameraPreview(setup.isCameraEnabled);
   const {
     status: permissionStatus,
@@ -35,11 +30,6 @@ export function RecordPage(): React.JSX.Element {
   useEffect(() => {
     void recheckPermissions().then(() => setPermissionsChecked(true));
   }, [recheckPermissions]);
-
-  // Refresh the source list whenever the picker opens.
-  useEffect(() => {
-    if (setup.isSourcePickerOpen) void refreshSources();
-  }, [setup.isSourcePickerOpen, refreshSources]);
 
   const isMicrophoneDenied = permissionsChecked && !permissionStatus.microphone;
   const isCameraDenied = permissionsChecked && !permissionStatus.camera;
