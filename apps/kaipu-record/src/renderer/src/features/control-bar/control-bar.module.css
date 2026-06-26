@@ -1,25 +1,32 @@
-/* The floating control bar. Transparent window → this pill is the only paint. */
+/* The floating control bar. Transparent window → this pill is the only paint.
+   #root flex-centers it (see main.css), so no margins here. */
 .bar {
   -webkit-app-region: drag;
   display: flex;
   align-items: center;
   gap: 10px;
-  height: 44px;
-  margin: 10px auto;
+  height: 46px;
   width: max-content;
-  padding: 0 8px 0 14px;
+  padding: 0 10px 0 14px;
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 999px;
-  /* Tight, modest elevation — reads cleanly on both light and dark backdrops
-     instead of a heavy halo that looks like a gradient box over white. */
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+  /* Squarer than a pill — a rounded rectangle, matching the design. */
+  border-radius: 14px;
+  /* Tight, modest elevation — reads cleanly on light and dark backdrops instead
+     of a heavy halo that looks like a gradient box over white. */
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.28);
   font-family: var(--font-family);
 }
 
 .bar button,
 .meter {
   -webkit-app-region: no-drag;
+}
+
+/* Frameless widget: the OS focus ring (it picks up the system accent colour) makes
+   a clicked button look pre-selected. Drop it — hover/active carry the affordance. */
+.bar button:focus {
+  outline: none;
 }
 
 .dot {
@@ -66,10 +73,11 @@
 
 .divider {
   width: 1px;
-  height: 20px;
+  height: 22px;
   background: var(--border);
 }
 
+/* Pause/resume — a squarer button, matching the design's rounded squares. */
 .control {
   display: flex;
   align-items: center;
@@ -77,7 +85,7 @@
   width: 30px;
   height: 30px;
   border: none;
-  border-radius: 50%;
+  border-radius: 8px;
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -95,7 +103,7 @@
   width: 30px;
   height: 30px;
   border: none;
-  border-radius: 50%;
+  border-radius: 8px;
   background: var(--accent-primary);
   color: #fff;
   cursor: pointer;
@@ -103,6 +111,15 @@
 
 .stop:hover {
   filter: brightness(1.08);
+}
+
+/* Keyboard-shortcut hint, far right — subtle mono glyphs like the design. */
+.shortcut {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  padding-left: 2px;
 }
 
 @keyframes pulse {

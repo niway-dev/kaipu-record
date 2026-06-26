@@ -20,3 +20,9 @@ body[data-window="control-bar"] #root {
   min-height: 0;
   overflow: hidden;
 }
+
+body[data-window="control-bar"] #root {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

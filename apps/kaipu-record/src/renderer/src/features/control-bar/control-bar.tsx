@@ -12,7 +12,7 @@ interface ControlBarProps {
   onStop(): void;
 }
 
-/** The floating recording HUD: status dot · mono timer · live mic level · pause/resume · stop. */
+/** Floating recording HUD: dot · timer · separator · live mic level · pause/resume · stop · shortcut. */
 export function ControlBar({
   tick,
   onPause,
@@ -23,25 +23,30 @@ export function ControlBar({
   return (
     <div className={styles.bar} data-paused={paused || undefined}>
       <span className={styles.dot} data-paused={paused || undefined} />
-      {paused ? (
-        <span className={styles.pausedLabel}>Paused</span>
-      ) : (
-        <MicLevel levels={tick.levels} />
-      )}
+      {paused && <span className={styles.pausedLabel}>Paused</span>}
       <span className={styles.time}>{formatElapsed(tick.elapsedSeconds * 1000)}</span>
-      <div className={styles.divider} />
+
+      {!paused && (
+        <>
+          <span className={styles.divider} />
+          <MicLevel levels={tick.levels} />
+        </>
+      )}
+
       {paused ? (
-        <button className={styles.control} aria-label="Resume" onClick={onResume}>
-          <Play size={15} />
+        <button className={styles.control} type="button" aria-label="Resume" onClick={onResume}>
+          <Play size={14} />
         </button>
       ) : (
-        <button className={styles.control} aria-label="Pause" onClick={onPause}>
-          <Pause size={15} />
+        <button className={styles.control} type="button" aria-label="Pause" onClick={onPause}>
+          <Pause size={14} />
         </button>
       )}
-      <button className={styles.stop} aria-label="Stop" onClick={onStop}>
-        <Square size={13} fill="currentColor" />
+      <button className={styles.stop} type="button" aria-label="Stop" onClick={onStop}>
+        <Square size={12} fill="currentColor" />
       </button>
+
+      {!paused && <kbd className={styles.shortcut}>⌘⇧P</kbd>}
     </div>
   );
 }
