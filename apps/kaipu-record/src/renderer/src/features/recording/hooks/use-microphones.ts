@@ -20,12 +20,15 @@ export function useMicrophones(): Microphone[] {
         // Permission denied — still enumerate, labels may be empty.
       }
       const devices = await navigator.mediaDevices.enumerateDevices();
-      const mics = devices
-        .filter((device) => device.kind === "audioinput" && device.deviceId !== "default")
-        .map((device, i) => ({
-          deviceId: device.deviceId,
-          label: device.label || `Microphone ${i + 1}`,
-        }));
+      const inputs = devices.filter(
+        (device) => device.kind === "audioinput" && device.deviceId !== "default",
+      );
+      let unnamed = 0;
+      const mics = inputs.map((device) => ({
+        deviceId: device.deviceId,
+        // Fall back to a stable ordinal only for devices the OS won't name yet.
+        label: device.label || `Microphone ${++unnamed}`,
+      }));
       if (!cancelled) setMicrophones(mics);
     };
 

@@ -1,5 +1,6 @@
 import React from "react";
 import { Mic, Volume2, Camera } from "lucide-react";
+import { cx } from "@renderer/ui/cx";
 import styles from "./recording-toggles.module.css";
 
 interface RecordingToggleProps {
@@ -19,7 +20,8 @@ function RecordingToggle({
     <button
       type="button"
       onClick={onToggle}
-      className={[styles.toggle, isActive ? styles.toggleActive : ""].join(" ")}
+      className={styles.toggle}
+      data-active={isActive || undefined}
     >
       <span className={styles.icon}>{icon}</span>
       {label && <span className={styles.label}>{label}</span>}
@@ -55,7 +57,7 @@ export function RecordingToggles({
     : { mic: "Mic", audio: "Audio", camera: "Camera" };
 
   return (
-    <div className={[styles.row, compact ? styles.compact : ""].join(" ")}>
+    <div className={cx(styles.row, compact && styles.compact)}>
       <RecordingToggle
         icon={<Mic size={iconSize} />}
         label={labels.mic}

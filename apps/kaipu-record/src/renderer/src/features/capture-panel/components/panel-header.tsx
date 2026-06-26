@@ -14,7 +14,7 @@ export function PanelHeader({
   return (
     <div className={styles.header}>
       <div className={styles.brand}>
-        <span className={[styles.indicator, isRecording ? styles.indicatorActive : ""].join(" ")}>
+        <span className={styles.indicator} data-active={isRecording || undefined}>
           <span className={styles.ring} />
         </span>
         <span className={styles.name}>Kaipu Record</span>

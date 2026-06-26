@@ -93,11 +93,11 @@
   background: var(--bg-input);
 }
 
-.optionActive {
+.option[data-active] {
   background: rgba(246, 5, 92, 0.08);
 }
 
-.optionActive:hover {
+.option[data-active]:hover {
   background: rgba(246, 5, 92, 0.12);
 }
 
@@ -117,7 +117,7 @@
   text-overflow: ellipsis;
 }
 
-.optionActive .optionName {
+.option[data-active] .optionName {
   color: var(--accent-primary);
 }
 

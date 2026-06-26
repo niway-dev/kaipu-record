@@ -31,7 +31,7 @@
   cursor: not-allowed;
 }
 
-.recording {
+.button[data-recording] {
   background: #2a0010;
   border-color: rgba(246, 5, 92, 0.36);
 }

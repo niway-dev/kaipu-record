@@ -23,7 +23,7 @@
   transition: background 200ms ease;
 }
 
-.indicatorActive {
+.indicator[data-active] {
   background: var(--accent-primary);
   border-color: rgba(246, 5, 92, 0.36);
 }

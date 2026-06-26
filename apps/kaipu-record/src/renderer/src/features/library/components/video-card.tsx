@@ -2,6 +2,7 @@ import { Film, Upload, Trash2, Play } from "lucide-react";
 import { formatDuration, formatSize } from "@renderer/features/library/format";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import { StorageMeta } from "./storage-meta";
+import { cx } from "@renderer/ui/cx";
 import styles from "./video-card.module.css";
 
 interface VideoCardProps {
@@ -78,7 +79,7 @@ export function VideoCard({
               <Upload size={14} strokeWidth={1.8} />
             </button>
           )}
-          <button className={`${styles.action} ${styles.delete}`} onClick={onDelete} title="Delete">
+          <button className={cx(styles.action, styles.delete)} onClick={onDelete} title="Delete">
             <Trash2 size={14} strokeWidth={1.8} />
           </button>
         </div>

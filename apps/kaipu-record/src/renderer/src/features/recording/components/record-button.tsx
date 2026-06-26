@@ -1,4 +1,5 @@
 import React from "react";
+import { cx } from "@renderer/ui/cx";
 import styles from "./record-button.module.css";
 
 interface RecordButtonProps {
@@ -21,11 +22,8 @@ export function RecordButton({
   return (
     <button
       type="button"
-      className={[
-        styles.button,
-        compact ? styles.compact : "",
-        isRecording ? styles.recording : "",
-      ].join(" ")}
+      className={cx(styles.button, compact && styles.compact)}
+      data-recording={isRecording || undefined}
       disabled={disabled && !isRecording}
       onClick={onClick}
     >

@@ -1,8 +1,7 @@
 /*
  * Settings page chrome — a single scrolling column of titled sections. The
  * Card/Row primitives carry their own styling; this file only frames the page,
- * its header, and the few inline controls (kbd hints, permission status, the
- * appearance segmented control, the vault path).
+ * its header, and the few inline bits (permission status text, the vault path).
  */
 
 .page {

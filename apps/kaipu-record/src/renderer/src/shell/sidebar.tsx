@@ -1,10 +1,11 @@
 import { NavLink } from "react-router-dom";
 import { Video, Library, Settings, User } from "lucide-react";
 import { KaipuMark } from "./kaipu-mark";
+import { cx } from "@renderer/ui/cx";
 import styles from "./sidebar.module.css";
 
 const linkClass = ({ isActive }: { isActive: boolean }): string =>
-  [styles.navItem, isActive ? styles.active : ""].filter(Boolean).join(" ");
+  cx(styles.navItem, isActive && styles.active);
 
 interface NavItem {
   to: string;

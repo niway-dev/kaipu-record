@@ -38,7 +38,7 @@
   border-radius: var(--radius-sm);
 }
 
-.toggleActive {
+.toggle[data-active] {
   background: rgba(246, 5, 92, 0.12);
   border-color: rgba(246, 5, 92, 0.32);
   color: var(--accent-primary);
@@ -69,6 +69,6 @@
   font-size: 9px;
 }
 
-.toggleActive .status {
+.toggle[data-active] .status {
   color: var(--accent-primary);
 }

@@ -2,6 +2,7 @@ import React from "react";
 import { Mic, ChevronDown, ChevronUp, Check } from "lucide-react";
 import { getMicrophoneType } from "@renderer/features/recording/microphone";
 import type { Microphone } from "@renderer/features/recording/types";
+import { cx } from "@renderer/ui/cx";
 import styles from "./mic-picker.module.css";
 
 interface MicPickerProps {
@@ -27,7 +28,7 @@ export function MicPicker({
   const affordanceSize = compact ? 11 : 13;
 
   return (
-    <div className={[styles.selector, compact ? styles.compact : ""].join(" ")}>
+    <div className={cx(styles.selector, compact && styles.compact)}>
       <button type="button" className={styles.trigger} onClick={onToggle}>
         <span className={styles.triggerIcon}>
           <Mic size={iconSize} />
@@ -50,7 +51,8 @@ export function MicPicker({
               <button
                 key={microphone.deviceId}
                 type="button"
-                className={[styles.option, isActive ? styles.optionActive : ""].join(" ")}
+                className={styles.option}
+                data-active={isActive || undefined}
                 onClick={() => onSelect(microphone)}
               >
                 <div className={styles.optionInfo}>

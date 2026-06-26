@@ -1,6 +1,7 @@
 import React from "react";
 import { Monitor } from "lucide-react";
 import type { SelectedSource } from "@renderer/features/recording/types";
+import { cx } from "@renderer/ui/cx";
 import styles from "./source-card.module.css";
 
 interface SourceCardProps {
@@ -17,7 +18,7 @@ export function SourceCard({
 }: SourceCardProps): React.JSX.Element {
   const compact = variant === "compact";
   return (
-    <div className={[styles.card, compact ? styles.compact : ""].join(" ")}>
+    <div className={cx(styles.card, compact && styles.compact)}>
       <Monitor size={compact ? 14 : 16} className={styles.icon} />
       <div className={styles.info}>
         <span className={styles.name}>{source?.name ?? "No source selected"}</span>
