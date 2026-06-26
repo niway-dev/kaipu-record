@@ -1,0 +1,114 @@
+/* The floating control bar. Transparent window → this pill is the only paint. */
+.bar {
+  -webkit-app-region: drag;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  margin: 10px auto;
+  width: max-content;
+  padding: 0 8px 0 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  font-family: var(--font-family);
+}
+
+.bar button,
+.meter {
+  -webkit-app-region: no-drag;
+}
+
+.dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.dot[data-paused] {
+  background: var(--accent-amber, #f5a623);
+  animation: none;
+}
+
+.time {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.pausedLabel {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.meter {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 16px;
+}
+
+.meterBar {
+  width: 3px;
+  height: calc(4px + var(--level, 0) * 12px);
+  border-radius: 2px;
+  background: var(--accent-primary);
+  transition: height 80ms linear;
+}
+
+.divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+}
+
+.control {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.control:hover {
+  background: var(--bg-input);
+  color: var(--text-primary);
+}
+
+.stop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  color: #fff;
+  cursor: pointer;
+}
+
+.stop:hover {
+  filter: brightness(1.08);
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
