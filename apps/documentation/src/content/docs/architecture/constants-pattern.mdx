@@ -114,18 +114,13 @@ function validateCurrency(input: string): Currency | null {
 ### In Backend Validation
 
 ```typescript
-// ✅ Good: Using constants in Elysia validation
+// ✅ Good: Using constants in an oRPC contract (Zod)
+import { z } from "zod";
 import { CURRENCIES } from "@kaipu/domain/constants";
-import { t } from "elysia";
 
-body: t.Object({
-  currency: t.Optional(
-    t.Union([
-      t.Literal(CURRENCIES.USD),
-      t.Literal(CURRENCIES.PEN),
-    ]),
-  ),
-})
+const bodySchema = z.object({
+  currency: z.enum([CURRENCIES.USD, CURRENCIES.PEN]).optional(),
+});
 ```
 
 ### In Zod Schemas

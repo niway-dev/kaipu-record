@@ -98,45 +98,30 @@ export type UpdateYourEntity = z.infer<typeof updateYourEntitySchema>;
 
 ## Backend Usage
 
-### Elysia Route Validation
+### oRPC Contract Validation
+
+The domain Zod schema is the input contract for the route. oRPC validates the
+body against it before the handler runs.
 
 ```typescript
-// apps/server/src/routes/your-entities.ts
-import { Elysia, t } from "elysia";
+// apps/server-hono/src/contract/your-entity.contract.ts
+import { z } from "zod";
+import { oc } from "@orpc/contract";
 import { updateYourEntitySchema } from "@kaipu/domain/schemas";
 
-export const yourEntityRoutes = new Elysia({ prefix: "/api/your-entities" })
-  .put(
-    "/:id",
-    async ({ params, body }) => {
-      // body is automatically validated and typed
-      const updated = await db
-        .update(yourEntity)
-        .set({
-          name: body.name,
-          status: body.status,
-          salary: body.salary,
-          currency: body.currency,
-        })
-        .where(eq(yourEntity.id, params.id))
-        .returning();
-
-      return successBody(updated);
-    },
-    {
-      params: t.Object({
-        id: t.String(),
-      }),
-      body: updateYourEntitySchema, // 👈 Zod schema from domain
-    },
-  );
+export const yourEntityContract = {
+  update: oc
+    .route({ method: "PUT", path: "/your-entities/{id}" })
+    .input(updateYourEntitySchema.extend({ id: z.string() })) // 👈 Zod schema from domain
+    .output(/* response schema */),
+};
 ```
 
 ### Benefits:
 
 - ✅ Automatic validation
-- ✅ Type inference
-- ✅ Consistent validation rules
+- ✅ Type inference (end-to-end via the contract)
+- ✅ Consistent validation rules shared between frontend and backend
 - ✅ Single source of truth
 
 ## Frontend Usage
@@ -397,39 +382,6 @@ describe("createYourEntitySchema", () => {
   });
 });
 ```
-
-## Migration from Elysia `t` to Zod
-
-### Before (Elysia `t`)
-
-```typescript
-{
-  body: t.Object({
-    name: t.String({ minLength: 1 }),
-    status: t.Union([
-      t.Literal("active"),
-      t.Literal("rejected"),
-    ]),
-    salary: t.Optional(t.Number({ minimum: 0 })),
-  }),
-}
-```
-
-### After (Zod schema)
-
-```typescript
-{
-  body: updateYourEntitySchema, // from @kaipu/domain/schemas
-}
-```
-
-### Benefits of Migration:
-
-- ✅ Shared between frontend and backend
-- ✅ Better error messages
-- ✅ Easier to derive and compose
-- ✅ Type inference works better
-- ✅ More ecosystem support (React Hook Form, etc.)
 
 ## Troubleshooting
 

@@ -14,7 +14,7 @@ This application implements a **full-stack authentication system** using Better 
 ```mermaid
 graph TD
     A[Browser] -->|/api/auth/*| B[Auth Proxy]
-    B -->|Forward Request| C[Elysia Backend]
+    B -->|Forward Request| C[Hono Backend]
     C -->|Validate Session| D[PostgreSQL]
     D -->|Session Data| C
     C -->|Set-Cookie| B
@@ -178,7 +178,7 @@ staleTime: 10 * 60 * 1000,
 sequenceDiagram
     participant B as Browser
     participant P as Proxy (/api/auth)
-    participant E as Elysia Backend
+    participant E as Hono Backend
     participant D as Database
 
     B->>P: POST /api/auth/sign-in/email
