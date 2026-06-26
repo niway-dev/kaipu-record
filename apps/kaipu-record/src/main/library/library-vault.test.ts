@@ -81,8 +81,15 @@ describe("LibraryVault", () => {
 });
 
 describe("LibraryVault — mp4 + thumbnails", () => {
+  const dirs: string[] = [];
+
+  afterEach(async () => {
+    await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  });
+
   async function tempVault(): Promise<LibraryVault> {
     const dir = await mkdtemp(join(tmpdir(), "vault-mp4-"));
+    dirs.push(dir);
     return new LibraryVault(dir);
   }
 
