@@ -10,29 +10,13 @@
   gap: 7px;
 }
 
-.indicator {
-  width: 20px;
-  height: 20px;
-  border-radius: var(--radius-sm);
-  background: var(--bg-card-hover);
-  border: 1px solid var(--border-light);
-  display: flex;
+/* The Kaipu brand mark, accent-pink (fills via currentColor). */
+.mark {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: background 200ms ease;
-}
-
-.indicator[data-active] {
-  background: var(--accent-primary);
-  border-color: rgba(246, 5, 92, 0.36);
-}
-
-.ring {
-  width: 7px;
-  height: 7px;
-  border: 1.5px solid var(--text-primary);
-  border-radius: 50%;
+  color: var(--accent-primary);
 }
 
 .name {

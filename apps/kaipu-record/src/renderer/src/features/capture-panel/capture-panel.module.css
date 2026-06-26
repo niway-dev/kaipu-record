@@ -51,7 +51,7 @@
 .lockable {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .lockable[data-locked] {
@@ -65,10 +65,10 @@
   background: var(--bg-app);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 14px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 14px;
   font-family: var(--font-family);
   color: var(--text-primary);
 }

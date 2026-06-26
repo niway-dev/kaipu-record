@@ -40,7 +40,7 @@ export function CapturePanel(): React.JSX.Element {
 
   return (
     <div ref={rootRef} className={styles.panel}>
-      <PanelHeader isRecording={isBusy} onOpenMainWindow={openMain} />
+      <PanelHeader onOpenMainWindow={openMain} />
 
       {isBusy && (
         <div
