@@ -55,6 +55,10 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
   const screenTrack = screenStream.getVideoTracks()[0];
 
   // 2. Mic (best-effort) + system-audio (best-effort) → mixed single track.
+  // Every acquired stream is tracked so stop() releases the OS devices (closing
+  // the AudioContext alone does NOT stop the underlying tracks — the mic light
+  // would stay on).
+  const inputStreams: MediaStream[] = [screenStream];
   const audioContext = new AudioContext();
   const destination = audioContext.createMediaStreamDestination();
   if (options.microphoneDeviceId) {
@@ -62,6 +66,7 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
       const mic = await navigator.mediaDevices.getUserMedia({
         audio: { deviceId: { ideal: options.microphoneDeviceId } },
       });
+      inputStreams.push(mic);
       audioContext.createMediaStreamSource(mic).connect(destination);
     } catch {
       /* mic unavailable — continue without it */
@@ -126,7 +131,7 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
     thumbnail,
     async stop() {
       await output.finalize();
-      screenStream.getTracks().forEach((t) => t.stop());
+      for (const stream of inputStreams) stream.getTracks().forEach((t) => t.stop());
       destination.stream.getTracks().forEach((t) => t.stop());
       await audioContext.close();
     },
