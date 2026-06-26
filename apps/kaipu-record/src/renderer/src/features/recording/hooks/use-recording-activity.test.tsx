@@ -10,18 +10,19 @@ describe("useRecordingActivity", () => {
   beforeEach(() => {
     listeners = [];
     unsubscribe = vi.fn();
-    window.electronAPI.getRecordingState = vi.fn(async () => ({
-      active: false,
-      status: "recording",
-    }));
-    window.electronAPI.onRecordingState = vi.fn((callback) => {
+    window.electronAPI.getRecordingState = vi.fn(
+      async (): Promise<RecordingActivity> => ({ active: false, status: "recording" }),
+    );
+    window.electronAPI.onRecordingState = vi.fn((callback: (state: RecordingActivity) => void) => {
       listeners.push(callback);
-      return unsubscribe;
+      return unsubscribe as () => void;
     });
   });
 
   it("starts idle, then adopts the state queried on mount", async () => {
-    window.electronAPI.getRecordingState = vi.fn(async () => ({ active: true, status: "paused" }));
+    window.electronAPI.getRecordingState = vi.fn(
+      async (): Promise<RecordingActivity> => ({ active: true, status: "paused" }),
+    );
     const { result } = renderHook(() => useRecordingActivity());
     expect(result.current).toEqual({ active: false, status: "recording" }); // before the query resolves
     await waitFor(() => expect(result.current.active).toBe(true));
