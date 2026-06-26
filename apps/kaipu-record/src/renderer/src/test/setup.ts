@@ -25,4 +25,16 @@ window.electronAPI = {
   getVaultDirectory: async () => ({ path: "/tmp/vault", isCustom: false }),
   chooseVaultDirectory: async () => null,
   resetVaultDirectory: async () => ({ path: "/tmp/vault", isCustom: false }),
+  recordingCreate: async () => ({ tempPath: "/tmp/session" }),
+  recordingWrite: () => {},
+  recordingFinalize: async () => {
+    throw new Error("not implemented in test stub");
+  },
+  recordingAbort: async () => {},
+  recordingReportTick: () => {},
+  recordingStart: () => {},
+  recordingStop: () => {},
+  onRecordingCommand: () => () => {},
+  onControlTick: () => () => {},
+  controlCommand: () => {},
 };

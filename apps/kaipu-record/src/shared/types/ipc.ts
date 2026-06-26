@@ -36,6 +36,40 @@ export const IPC_CHANNELS = {
   getVaultDirectory: "library:get-vault-dir",
   chooseVaultDirectory: "library:choose-vault-dir",
   resetVaultDirectory: "library:reset-vault-dir",
+  // Recording engine (renderer ↔ main)
+  recordingCreate: "recording:create",
+  recordingWrite: "recording:write",
+  recordingFinalize: "recording:finalize",
+  recordingAbort: "recording:abort",
+  recordingReportTick: "recording:report-tick",
+  recordingStart: "recording:start",
+  recordingStop: "recording:stop",
+  // Control bar (main → bar broadcasts, bar → main commands)
+  controlTick: "control:tick",
+  controlCommand: "control:command",
+  recordingCommand: "recording:command",
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
+
+export type RecordingStatus = "recording" | "paused";
+
+export interface RecordingTick {
+  elapsedSeconds: number;
+  levels: number[];
+  status: RecordingStatus;
+}
+
+export type ControlCommand = "pause" | "resume" | "stop";
+
+export interface RecordingFinalizeMeta {
+  title: string;
+  durationSeconds: number;
+  thumbnail?: ArrayBuffer | null;
+}
+
+/** Source identity for placing the bar on the recorded screen. */
+export interface RecordingStartInfo {
+  sourceId: string;
+  sourceName: string;
+}

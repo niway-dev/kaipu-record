@@ -4,6 +4,12 @@
  */
 
 import type { LocalRecording, VaultDirectory } from "./library-storage";
+import type {
+  ControlCommand,
+  RecordingFinalizeMeta,
+  RecordingStartInfo,
+  RecordingTick,
+} from "./ipc";
 
 /** A capture source returned by the screen picker — includes a base64 thumbnail. */
 export interface ScreenSource {
@@ -54,4 +60,28 @@ export interface KaipuElectronAPI {
   chooseVaultDirectory(): Promise<VaultDirectory | null>;
   /** Reset the recordings folder back to the platform default. */
   resetVaultDirectory(): Promise<VaultDirectory>;
+
+  // ── Recording engine (used by the main/recorder window) ───────────────
+  /** Open a disk-writer session; returns the temp path. */
+  recordingCreate(sessionId: string): Promise<{ tempPath: string }>;
+  /** Write a chunk at an exact byte position (positional, not append). */
+  recordingWrite(sessionId: string, data: ArrayBuffer, position: number): void;
+  /** Close the file, move it into the vault, return the new recording. */
+  recordingFinalize(sessionId: string, meta: RecordingFinalizeMeta): Promise<LocalRecording>;
+  /** Discard a failed session (delete temp). */
+  recordingAbort(sessionId: string): Promise<void>;
+  /** Push a live tick (elapsed/levels/status) to the hub for the bar. */
+  recordingReportTick(tick: RecordingTick): void;
+  /** Tell the hub recording started: hide main window, show the bar. */
+  recordingStart(info: RecordingStartInfo): void;
+  /** Tell the hub recording ended: hide the bar, restore main window. */
+  recordingStop(): void;
+  /** Recorder window subscribes to commands from the bar (pause/resume/stop). */
+  onRecordingCommand(callback: (command: ControlCommand) => void): () => void;
+
+  // ── Control bar window ────────────────────────────────────────────────
+  /** Bar subscribes to live ticks. Returns an unsubscribe fn. */
+  onControlTick(callback: (tick: RecordingTick) => void): () => void;
+  /** Bar sends a command to the hub. */
+  controlCommand(command: ControlCommand): void;
 }

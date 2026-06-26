@@ -1,7 +1,8 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 import { electronAPI } from "@electron-toolkit/preload";
 import { IPC_CHANNELS } from "@shared/types";
 import type { KaipuElectronAPI } from "@shared/types/electron-api";
+import type { ControlCommand, RecordingTick } from "@shared/types/ipc";
 
 // Custom Kaipu bridge. Only methods with a live main-process handler are exposed.
 const kaipuApi: KaipuElectronAPI = {
@@ -19,6 +20,26 @@ const kaipuApi: KaipuElectronAPI = {
   getVaultDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.getVaultDirectory),
   chooseVaultDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.chooseVaultDirectory),
   resetVaultDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.resetVaultDirectory),
+  recordingCreate: (sessionId) => ipcRenderer.invoke(IPC_CHANNELS.recordingCreate, sessionId),
+  recordingWrite: (sessionId, data, position) =>
+    ipcRenderer.send(IPC_CHANNELS.recordingWrite, sessionId, data, position),
+  recordingFinalize: (sessionId, meta) =>
+    ipcRenderer.invoke(IPC_CHANNELS.recordingFinalize, sessionId, meta),
+  recordingAbort: (sessionId) => ipcRenderer.invoke(IPC_CHANNELS.recordingAbort, sessionId),
+  recordingReportTick: (tick) => ipcRenderer.send(IPC_CHANNELS.recordingReportTick, tick),
+  recordingStart: (info) => ipcRenderer.send(IPC_CHANNELS.recordingStart, info),
+  recordingStop: () => ipcRenderer.send(IPC_CHANNELS.recordingStop),
+  onRecordingCommand: (callback) => {
+    const listener = (_e: IpcRendererEvent, command: ControlCommand): void => callback(command);
+    ipcRenderer.on(IPC_CHANNELS.recordingCommand, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.recordingCommand, listener);
+  },
+  onControlTick: (callback) => {
+    const listener = (_e: IpcRendererEvent, tick: RecordingTick): void => callback(tick);
+    ipcRenderer.on(IPC_CHANNELS.controlTick, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.controlTick, listener);
+  },
+  controlCommand: (command) => ipcRenderer.send(IPC_CHANNELS.controlCommand, command),
 };
 
 // Use `contextBridge` APIs to expose Electron APIs to
