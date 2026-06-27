@@ -13,8 +13,8 @@ Status legend: ⬜ todo · 🔨 in progress · ✅ done
 | # | Feature | Priority | Status | Depends on |
 | - | ------- | -------- | ------ | ---------- |
 | 1 | Camera bubble (floating window) | High | ✅ | — |
-| 2 | Start recording from the Capture Panel (#4) | High · easy | ⬜ | — |
-| 3 | Floating bar on the recorded display (#7) | High · easy | ⬜ | — |
+| 2 | Start recording from the Capture Panel (#4) | High · easy | ✅ | — |
+| 3 | Floating bar on the recorded display (#7) | High · easy | ✅ | — |
 | 4 | Feature flags via PostHog | Medium | ⬜ | — (base for #6) |
 | 5 | Configurable quality (non-technical copy) | Medium | ⬜ | — |
 | 6 | Watermark, free → paid (scalable plan) | Medium | ⬜ | #4 + plan/entitlement |
@@ -52,22 +52,18 @@ it from the Camera toggle; control bar gets content-protection. Reuses `useCamer
 **Follow-ups:** camera device picker, resize/shape options, sync the bubble with the
 Capture Panel's camera toggle (v1 is driven by the Record page).
 
-## 2 — Start recording from the Capture Panel (#4)
+## 2 — Start recording from the Capture Panel (#4) ✅ (shipped)
 
-Today the panel's **Start** just opens the main window (recording runs in the main
-renderer, not the transparent panel). Make panel **Start** trigger recording in the main
-window directly: panel → IPC → main shows the window + runs its `startRecording`. One-click
-record from the tray.
+Panel **Start** sends `recording:request-start` → main opens/focuses the main window and
+tells its Record page to run the normal start (countdown + record). The main window's
+current settings apply. **v1 limitation:** if the main window is on a non-Record route, the
+start signal is missed (no listener) — fine for the common case.
 
-**Open question:** which settings win when started from the panel — the main window's
-setup (recommended, since recording runs there) — both default to the same source via
-`useSourceSelection`.
+## 3 — Floating bar on the recorded display (#7) ✅ (shipped)
 
-## 3 — Floating bar on the recorded display (#7)
-
-Multi-monitor only. The bar currently positions by **cursor** display; place it on the
-**recorded** display. Plumb the source's `display_id` (from `desktopCapturer`) through
-`RecordingStartInfo` → hub → `ControlBarWindow.position()`. Single-monitor: no change.
+The hub resolves the recorded screen's `display_id` from the source id (one
+`desktopCapturer` lookup at start) and `ControlBarWindow` positions itself on that display
+(falls back to the cursor display). Kept entirely in main — no renderer plumbing.
 
 ## 4 — Feature flags via PostHog
 
