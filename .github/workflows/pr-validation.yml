@@ -49,35 +49,14 @@ jobs:
         working-directory: apps/server-hono
         run: bun run build
 
-  desktop:
-    name: Validate desktop app (kaipu-record)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.3.4
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      # kaipu-record's own checks — not covered by the `validate` job above
-      # (turbo's `check-types`/`build` filters skip it, and nothing runs its tests).
-      - name: Type check
+      # kaipu-record (desktop) — turbo's check-types/build filters skip it, and
+      # nothing else runs its test suite. Validate it in the SAME job so we reuse
+      # the single install above (no duplicate setup). The platform/distribution
+      # build is its own next task (#7 — needs the Apple Developer account).
+      - name: Type check desktop app
         working-directory: apps/kaipu-record
         run: bun run typecheck
 
-      - name: Test
+      - name: Test desktop app
         working-directory: apps/kaipu-record
         run: bun run test
-
-      # Bundle main + preload + renderer (electron-vite). Verifies imports/assets
-      # compile and the three process targets build. Calls electron-vite directly
-      # to avoid re-running the typecheck the previous step already did.
-      # (Full signed/notarized packaging is #7 — needs the Apple Developer account.)
-      - name: Build (electron-vite bundle)
-        working-directory: apps/kaipu-record
-        run: bunx electron-vite build
