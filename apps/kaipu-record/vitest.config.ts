@@ -12,6 +12,23 @@ const sharedAlias = { "@shared": resolve("src/shared") };
  */
 export default defineConfig({
   test: {
+    coverage: {
+      provider: "v8",
+      reporter: ["text"],
+      // Report every source file, not just the ones a test happened to import,
+      // so untested modules (e.g. recorder-engine) show up as 0% instead of vanishing.
+      all: true,
+      include: ["src/**/*.{ts,tsx}"],
+      exclude: [
+        "src/**/*.{test,spec}.{ts,tsx}",
+        "src/**/*.d.ts",
+        "src/**/index.ts", // barrels — re-exports only
+        "src/preload/**", // thin IPC bridge, intentionally untested
+        "src/renderer/src/main.tsx", // app entry
+        "src/renderer/src/test/**", // test harness
+        "src/shared/types/**", // type-only declarations
+      ],
+    },
     projects: [
       {
         resolve: { alias: sharedAlias },
