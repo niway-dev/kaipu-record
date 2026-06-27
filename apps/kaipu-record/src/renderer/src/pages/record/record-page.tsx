@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Pause, Play, Square } from "lucide-react";
 import { useRecordingSetup } from "@renderer/features/recording/hooks/use-recording-setup";
@@ -45,6 +45,12 @@ export function RecordPage(): React.JSX.Element {
     window.electronAPI.setCameraBubble(setup.isCameraEnabled && !isCameraDenied);
   }, [setup.isCameraEnabled, isCameraDenied]);
   useEffect(() => () => window.electronAPI.setCameraBubble(false), []);
+
+  // A "Start" from the Capture Panel runs our normal start here (countdown + record).
+  // Read the latest handler through a ref so the listener never goes stale.
+  const startRef = useRef(setup.startRecording);
+  startRef.current = setup.startRecording;
+  useEffect(() => window.electronAPI.onRequestStartRecording(() => startRef.current()), []);
 
   // Recording runs in this window; reflect it in the heading and lock the
   // setup controls so the user can't fiddle with (or re-trigger) it mid-record.

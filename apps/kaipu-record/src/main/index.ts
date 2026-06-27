@@ -1,6 +1,7 @@
 import { app, shell, BrowserWindow, ipcMain, Tray } from "electron";
 import { join } from "path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
+import { IPC_CHANNELS } from "@shared/types";
 import icon from "../../resources/icon.png?asset";
 import { CapturePanelWindow } from "./capture-panel-window";
 import { createTray } from "./tray";
@@ -91,6 +92,20 @@ app.whenReady().then(() => {
   ipcMain.on("capture-panel:open-main", () => {
     capturePanel?.hide();
     showMainWindow();
+  });
+
+  // Capture Panel "Start" → open the main window and tell its Record page to
+  // start (recording runs in the main renderer, not the transparent panel).
+  ipcMain.on(IPC_CHANNELS.recordingRequestStart, () => {
+    capturePanel?.hide();
+    showMainWindow();
+    const contents = mainWindow?.webContents;
+    if (!contents) return;
+    if (contents.isLoading()) {
+      contents.once("did-finish-load", () => contents.send(IPC_CHANNELS.recordingRequestStart));
+    } else {
+      contents.send(IPC_CHANNELS.recordingRequestStart);
+    }
   });
 
   // Recording: screen/window source enumeration.

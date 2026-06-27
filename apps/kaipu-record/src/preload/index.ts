@@ -47,6 +47,12 @@ const kaipuApi: KaipuElectronAPI = {
     return () => ipcRenderer.removeListener(IPC_CHANNELS.recordingState, listener);
   },
   setCameraBubble: (enabled) => ipcRenderer.send(IPC_CHANNELS.cameraBubbleSet, enabled),
+  requestStartRecording: () => ipcRenderer.send(IPC_CHANNELS.recordingRequestStart),
+  onRequestStartRecording: (callback) => {
+    const listener = (): void => callback();
+    ipcRenderer.on(IPC_CHANNELS.recordingRequestStart, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.recordingRequestStart, listener);
+  },
 };
 
 // Use `contextBridge` APIs to expose Electron APIs to

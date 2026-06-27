@@ -40,4 +40,6 @@ window.electronAPI = {
   getRecordingState: async () => ({ active: false, status: "recording", elapsedSeconds: 0 }),
   onRecordingState: () => () => {},
   setCameraBubble: () => {},
+  requestStartRecording: () => {},
+  onRequestStartRecording: () => () => {},
 };

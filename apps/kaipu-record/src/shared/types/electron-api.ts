@@ -95,4 +95,10 @@ export interface KaipuElectronAPI {
   // ── Camera bubble ─────────────────────────────────────────────────────
   /** Show/hide the floating webcam bubble (follows the Camera toggle). */
   setCameraBubble(enabled: boolean): void;
+
+  // ── Start from the Capture Panel ──────────────────────────────────────
+  /** Capture Panel → main: open the main window and start recording there. */
+  requestStartRecording(): void;
+  /** Record page subscribes so a panel request triggers its start. */
+  onRequestStartRecording(callback: () => void): () => void;
 }

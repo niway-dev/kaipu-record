@@ -37,6 +37,8 @@ export function CapturePanel(): React.JSX.Element {
   }, []);
 
   const openMain = (): void => window.electronAPI?.openMainWindow();
+  // Start from the tray: open the main window and have its Record page start.
+  const requestStart = (): void => window.electronAPI?.requestStartRecording();
 
   return (
     <div ref={rootRef} className={styles.panel}>
@@ -82,13 +84,13 @@ export function CapturePanel(): React.JSX.Element {
       </div>
 
       {/* Recording runs in the main window renderer (getDisplayMedia/WebCodecs
-          live there), not this transparent panel. While idle the button opens
-          the main window; while recording it stops via the hub command. */}
+          live there), not this transparent panel. While idle the button asks the
+          main window to start; while recording it stops via the hub command. */}
       <RecordButton
         variant="compact"
         isRecording={isBusy}
         shortcut="⌘⇧6"
-        onClick={isBusy ? stopRecording : openMain}
+        onClick={isBusy ? stopRecording : requestStart}
       />
     </div>
   );

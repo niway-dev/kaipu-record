@@ -54,6 +54,8 @@ export const IPC_CHANNELS = {
   recordingGetState: "recording:get-state",
   // Show/hide the floating camera bubble (driven by the Camera toggle).
   cameraBubbleSet: "camera:set",
+  // Capture Panel asks the main window to start recording (panel → main → Record page).
+  recordingRequestStart: "recording:request-start",
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
