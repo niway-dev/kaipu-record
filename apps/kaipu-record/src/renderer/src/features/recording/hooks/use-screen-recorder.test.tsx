@@ -3,10 +3,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LocalRecording } from "@shared/types";
 import type { ControlCommand } from "@shared/types/ipc";
 import { startEngine, type EngineHandle } from "@renderer/features/recording/recorder-engine";
+import { reportError } from "@renderer/features/analytics";
 import { useScreenRecorder } from "./use-screen-recorder";
 
 vi.mock("@renderer/features/recording/recorder-engine", () => ({
   startEngine: vi.fn(),
+}));
+
+vi.mock("@renderer/features/analytics", () => ({
+  reportError: vi.fn(),
 }));
 
 const startEngineMock = vi.mocked(startEngine);
@@ -45,6 +50,7 @@ describe("useScreenRecorder", () => {
     vi.useFakeTimers();
     commands = [];
     startEngineMock.mockReset();
+    vi.mocked(reportError).mockClear();
     startEngineMock.mockResolvedValue(fakeEngine());
     window.electronAPI.recordingCreate = vi.fn(async () => ({ tempPath: "/tmp/s" }));
     window.electronAPI.recordingWrite = vi.fn();
@@ -157,6 +163,11 @@ describe("useScreenRecorder", () => {
     // The app recovers: the main window is restored and we're not stuck recording.
     expect(window.electronAPI.recordingStop).toHaveBeenCalledOnce();
     expect(result.current.status).toBe("idle");
+    expect(reportError).toHaveBeenCalledWith(
+      expect.stringMatching(/grabación/i),
+      expect.any(Error),
+      expect.objectContaining({ retry: expect.any(Function) }),
+    );
   });
 
   it("ignores a second start while one is already starting (no double session)", async () => {

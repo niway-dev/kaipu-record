@@ -9,6 +9,7 @@ import {
 } from "@renderer/features/recording/elapsed";
 import { startEngine, type EngineHandle } from "@renderer/features/recording/recorder-engine";
 import type { WatermarkConfig } from "@renderer/features/watermark/watermark";
+import { reportError } from "@renderer/features/analytics";
 
 export type RecorderStatus = "idle" | "starting" | "recording" | "paused" | "finalizing" | "error";
 
@@ -59,6 +60,7 @@ export function useScreenRecorder(options: ScreenRecorderOptions = {}): ScreenRe
   const clockRef = useRef<ElapsedState | null>(null);
   const tickTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const stoppingRef = useRef(false);
+  const lastInputRef = useRef<StartInput | null>(null);
   const onCompleteRef = useRef(options.onComplete);
   onCompleteRef.current = options.onComplete;
 
@@ -71,6 +73,7 @@ export function useScreenRecorder(options: ScreenRecorderOptions = {}): ScreenRe
     // `sessionRef` is set synchronously below, so this also blocks re-entry during
     // the async "starting" window (streams acquiring) — no double session.
     if (engineRef.current || sessionRef.current) return;
+    lastInputRef.current = input;
     setStatus("starting");
     const sessionId = `session-${++sessionCounter}`;
     sessionRef.current = sessionId;
@@ -90,7 +93,17 @@ export function useScreenRecorder(options: ScreenRecorderOptions = {}): ScreenRe
         // runs the same robust stop — finalize-or-abort + always restore the
         // window/Dock/bar — so the app never gets stuck.
         onError: (error) => {
-          console.error("recording engine failed mid-recording", error);
+          reportError(
+            "La grabación se detuvo por un error. Guardamos lo que se pudo.",
+            error,
+            {
+              context: { sourceId: input.sourceId, phase: "mid-recording" },
+              retry: () => {
+                const i = lastInputRef.current;
+                if (i) void startRef.current(i);
+              },
+            },
+          );
           void stopRef.current();
         },
       });
@@ -113,7 +126,13 @@ export function useScreenRecorder(options: ScreenRecorderOptions = {}): ScreenRe
         });
       }, 100);
     } catch (error) {
-      console.error("failed to start recording", error);
+      reportError("No pudimos iniciar la grabación. Vuelve a intentarlo.", error, {
+        context: { sourceId: input.sourceId, phase: "start" },
+        retry: () => {
+          const i = lastInputRef.current;
+          if (i) void startRef.current(i);
+        },
+      });
       if (sessionRef.current) await window.electronAPI.recordingAbort(sessionRef.current);
       engineRef.current = null;
       sessionRef.current = null;
@@ -171,7 +190,13 @@ export function useScreenRecorder(options: ScreenRecorderOptions = {}): ScreenRe
         delay(MIN_SAVING_MS),
       ]);
     } catch (error) {
-      console.error("failed to finalize recording", error);
+      reportError("No pudimos guardar la grabación.", error, {
+        context: { sessionId, phase: "finalize" },
+        retry: () => {
+          const i = lastInputRef.current;
+          if (i) void startRef.current(i);
+        },
+      });
       await window.electronAPI.recordingAbort(sessionId);
     }
 
@@ -191,9 +216,11 @@ export function useScreenRecorder(options: ScreenRecorderOptions = {}): ScreenRe
   const pauseRef = useRef(pause);
   const resumeRef = useRef(resume);
   const stopRef = useRef(stop);
+  const startRef = useRef(start);
   pauseRef.current = pause;
   resumeRef.current = resume;
   stopRef.current = stop;
+  startRef.current = start;
   useEffect(() => {
     return window.electronAPI.onRecordingCommand((command) => {
       if (command === "pause") pauseRef.current();
