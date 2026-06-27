@@ -77,6 +77,8 @@ export const IPC_CHANNELS = {
   recordingSettingsChanged: "recording-settings:changed",
   // Capture Panel asks the main window to start recording (panel → main → Record page).
   recordingRequestStart: "recording:request-start",
+  // Analytics: secondary windows forward serialized exceptions to the main-process sink.
+  analyticsCaptureException: "analytics:capture-exception",
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];

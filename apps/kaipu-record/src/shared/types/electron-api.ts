@@ -3,6 +3,7 @@
  * `src/preload`, typed for the renderer via `src/preload/index.d.ts`). Pure types.
  */
 
+import type { SerializedError } from "../analytics";
 import type { AppSettings } from "./ipc";
 import type { LocalRecording, VaultDirectory } from "./library-storage";
 import type {
@@ -112,4 +113,8 @@ export interface KaipuElectronAPI {
   requestStartRecording(): void;
   /** Record page subscribes so a panel request triggers its start. */
   onRequestStartRecording(callback: () => void): () => void;
+
+  // ── Analytics ─────────────────────────────────────────────────────────
+  /** Forward a serialized exception (+ origin/context) to the main-process sink. */
+  reportException(payload: SerializedError, origin: string, context?: Record<string, unknown>): void;
 }

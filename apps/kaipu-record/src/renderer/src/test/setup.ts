@@ -61,4 +61,5 @@ window.electronAPI = {
   onRecordingSettingsChanged: () => () => {},
   requestStartRecording: () => {},
   onRequestStartRecording: () => () => {},
+  reportException: () => {},
 };

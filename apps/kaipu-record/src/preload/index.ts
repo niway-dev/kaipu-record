@@ -67,6 +67,8 @@ const kaipuApi: KaipuElectronAPI = {
     ipcRenderer.on(IPC_CHANNELS.recordingRequestStart, listener);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.recordingRequestStart, listener);
   },
+  reportException: (payload, origin, context) =>
+    ipcRenderer.send(IPC_CHANNELS.analyticsCaptureException, payload, origin, context),
 };
 
 // Use `contextBridge` APIs to expose Electron APIs to
