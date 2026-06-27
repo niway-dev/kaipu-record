@@ -31,6 +31,10 @@ describe("watermarkRect", () => {
     expect(watermarkRect(1920, 1080, 2, { ...base, position: "bottom-center" })).toMatchObject({
       x: Math.round((1920 - 216) / 2),
     });
+    expect(watermarkRect(1920, 1080, 2, { ...base, position: "middle-right" })).toMatchObject({
+      x: 1920 - 216 - 54, // right edge
+      y: Math.round((1080 - 108) / 2), // vertically centered
+    });
   });
 
   it("scales with the frame height (same relative size at 4K)", () => {

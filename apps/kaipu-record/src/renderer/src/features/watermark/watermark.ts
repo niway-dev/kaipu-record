@@ -15,6 +15,7 @@ export const WATERMARK_POSITIONS = [
   "top-right",
   "top-left",
   "bottom-center",
+  "middle-right",
 ] as const;
 export type WatermarkPosition = (typeof WATERMARK_POSITIONS)[number];
 
@@ -36,7 +37,7 @@ export interface WatermarkConfig {
 
 export const DEFAULT_WATERMARK_CONFIG: WatermarkConfig = {
   variant: "wordmark",
-  position: "bottom-right",
+  position: "middle-right",
   tint: "white",
   opacity: 0.9,
   heightRatio: 0.054, // ~20% larger than the original 0.045 — readable past player chrome
@@ -68,6 +69,7 @@ export function watermarkRect(
   const rightX = canvasW - width - margin;
   const bottomY = canvasH - height - margin;
   const centerX = Math.round((canvasW - width) / 2);
+  const middleY = Math.round((canvasH - height) / 2);
 
   switch (config.position) {
     case "bottom-right":
@@ -80,6 +82,8 @@ export function watermarkRect(
       return { x: margin, y: margin, width, height };
     case "bottom-center":
       return { x: centerX, y: bottomY, width, height };
+    case "middle-right":
+      return { x: rightX, y: middleY, width, height };
   }
 }
 
