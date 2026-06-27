@@ -81,6 +81,10 @@ into `recorder-engine`. **Hard requirement:** each control has **plain-language 
 non-technical users explaining what raising/lowering it does (size vs sharpness vs
 smoothness), not just numbers.
 
+**Unblocked:** persisted-settings infra now exists (`main/infrastructure/settings-store.ts`
++ `AppSettings` + `useAppSettings`), added for the Dock toggle — quality knobs can reuse it
+(extend `AppSettings`, add rows to the Settings page, read in `recorder-engine`).
+
 ## 6 — Watermark, free → paid (scalable plan)
 
 A watermark drawn on the recording **only for free users**; paying removes it. The
