@@ -29,47 +29,6 @@
 
 /* ── Recording state ────────────────────────── */
 
-/* Header card shown while recording: dot + label, live mono timer on the right. */
-.recordingBar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 18px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  margin-bottom: var(--space-sm);
-}
-
-.recordingDot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: var(--accent-primary);
-  animation: recordingPulse 1.4s ease-in-out infinite;
-}
-
-.recordingDot[data-paused] {
-  background: var(--accent-yellow);
-  animation: none;
-}
-
-.recordingLabel {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
-}
-
-.recordingTimer {
-  margin-left: auto;
-  font-family: var(--font-mono);
-  font-size: 22px;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.02em;
-  color: var(--text-primary);
-}
-
 /* Pause + Stop row (replaces the single Start button while recording). */
 .recordingControls {
   display: flex;
@@ -121,16 +80,6 @@
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--text-muted);
-}
-
-@keyframes recordingPulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.35;
-  }
 }
 
 /* Setup controls (source, toggles, mic, camera) that lock while recording. */
