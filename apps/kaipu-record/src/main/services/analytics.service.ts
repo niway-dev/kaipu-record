@@ -31,6 +31,11 @@ export function initMainAnalytics(deviceId: string): void {
     flushInterval: 0,
   });
 
+  // Deliberate: attaching these handlers suppresses Node's default exit-on-crash,
+  // so the main process stays alive after an otherwise-fatal error. For this test
+  // phase we prioritize capturing every failure (to learn) and not crashing the
+  // app over a hard exit. The event is sent immediately (flushAt: 1). Revisit once
+  // out of the test phase — a corrupted main process may warrant a controlled exit.
   process.on("uncaughtException", (error) => {
     captureMainException(error, "uncaughtException");
   });

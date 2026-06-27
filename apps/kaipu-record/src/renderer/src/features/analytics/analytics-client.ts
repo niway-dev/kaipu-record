@@ -32,10 +32,6 @@ export function initAnalytics(deviceId: string): void {
   if (deviceId) posthog.identify(deviceId);
 }
 
-export function isAnalyticsStarted(): boolean {
-  return started;
-}
-
 /** Send an exception with the full technical payload (developer channel). No-op if disabled. */
 export function captureException(error: unknown, context?: Record<string, unknown>): void {
   if (!started) return;

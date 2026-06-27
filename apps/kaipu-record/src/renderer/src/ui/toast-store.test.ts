@@ -37,4 +37,13 @@ describe("toast store", () => {
     getToasts()[0].action?.onClick();
     expect(retry).toHaveBeenCalled();
   });
+
+  it("caps the stack at 3, dropping the oldest", () => {
+    const ids = [1, 2, 3, 4].map((n) => showToast({ message: `t${n}` }));
+    const visible = getToasts();
+    expect(visible).toHaveLength(3);
+    expect(visible.map((t) => t.message)).toEqual(["t2", "t3", "t4"]);
+    // the dropped oldest id is gone
+    expect(visible.some((t) => t.id === ids[0])).toBe(false);
+  });
 });

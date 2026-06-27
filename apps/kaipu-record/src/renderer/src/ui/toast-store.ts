@@ -16,6 +16,7 @@ export interface ToastSpec {
 }
 
 const DEFAULT_DURATION_MS = 5000;
+const MAX_TOASTS = 3;
 
 let toasts: ToastSpec[] = [];
 let counter = 0;
@@ -35,6 +36,17 @@ export function showToast(spec: { message: string; action?: ToastAction; duratio
     id,
     setTimeout(() => dismissToast(id), durationMs),
   );
+  if (toasts.length > MAX_TOASTS) {
+    const dropped = toasts.slice(0, toasts.length - MAX_TOASTS);
+    toasts = toasts.slice(toasts.length - MAX_TOASTS);
+    for (const t of dropped) {
+      const timer = timers.get(t.id);
+      if (timer) {
+        clearTimeout(timer);
+        timers.delete(t.id);
+      }
+    }
+  }
   emit();
   return id;
 }
