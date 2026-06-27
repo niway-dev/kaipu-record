@@ -1,0 +1,194 @@
+/*
+ * Recording-quality control: preset chips + caption + three discrete sliders.
+ * All colour/spacing from design tokens. Active state uses the brand accent
+ * (--accent-primary), matching the chips/fill in the design.
+ */
+
+.quality {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md);
+}
+
+/* ── Preset chips ───────────────────────────── */
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.chip {
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    border-color var(--transition),
+    color var(--transition);
+}
+
+.chip:hover:not(:disabled):not([data-active="true"]) {
+  border-color: var(--text-muted);
+  color: var(--text-primary);
+}
+
+.chip[data-active="true"] {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #fff;
+}
+
+/* The "Personalizado" chip is a status indicator — inert until it lights up. */
+.chip:disabled {
+  cursor: default;
+}
+
+.chip:disabled:not([data-active="true"]) {
+  opacity: 0.55;
+}
+
+.caption {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+/* ── Sliders ────────────────────────────────── */
+
+.slider {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.sliderHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sliderLabel {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+}
+
+.infoIcon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--transition);
+}
+
+.infoIcon:hover {
+  color: var(--text-primary);
+}
+
+/* Right-aligned current value (accent so it reads as the live readout). */
+.sliderValue {
+  margin-left: auto;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--accent-primary);
+}
+
+.info {
+  margin: 0;
+  max-width: 260px;
+  padding: var(--space-sm) var(--space-md);
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+/* Track: a thin rail, inset by the dot radius so the end dots sit fully inside. */
+.track {
+  position: relative;
+  height: 16px;
+  margin: 6px 8px 0;
+}
+
+.track::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 3px;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  background: var(--border);
+}
+
+.trackFill {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  height: 3px;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  background: var(--accent-primary);
+  transition: width var(--transition);
+}
+
+.dot {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  transform: translate(-50%, -50%);
+  border: 2px solid var(--border);
+  border-radius: 50%;
+  background: var(--bg-card);
+  cursor: pointer;
+  transition:
+    border-color var(--transition),
+    background var(--transition);
+}
+
+.dot[data-active="true"] {
+  border-color: var(--accent-primary);
+}
+
+/* The selected step gets a filled, slightly larger thumb. */
+.dot[data-current="true"] {
+  width: 18px;
+  height: 18px;
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  box-shadow: var(--glow-accent);
+}
+
+/* Tick labels, centered under each dot (same percentage positions). */
+.ticks {
+  position: relative;
+  height: 18px;
+  margin: 0 8px;
+}
+
+.tick {
+  position: absolute;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  transition: color var(--transition);
+}
+
+.tick[data-active="true"] {
+  color: var(--accent-primary);
+  font-weight: var(--font-weight-medium);
+}

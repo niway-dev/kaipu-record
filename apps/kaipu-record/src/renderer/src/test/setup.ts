@@ -1,6 +1,14 @@
 import "@testing-library/jest-dom/vitest";
 import { afterEach } from "vitest";
 import { cleanup } from "@testing-library/react";
+import { DEFAULT_QUALITY } from "@shared/recording-quality";
+
+const STUB_SETTINGS = {
+  theme: "system",
+  launchAtLogin: false,
+  showInDock: true,
+  recordingQuality: DEFAULT_QUALITY,
+} as const;
 
 // Vitest does not expose `afterEach` as a global (globals: false), so
 // React Testing Library's automatic cleanup never registers. Do it here
@@ -12,8 +20,8 @@ afterEach(() => {
 // Minimal `window.electronAPI` stub so renderer code that talks to the preload
 // bridge (e.g. usePermissions) works under jsdom. Individual tests can override.
 window.electronAPI = {
-  getSettings: async () => ({ theme: "system", launchAtLogin: false, showInDock: true }),
-  updateSettings: async () => ({ theme: "system", launchAtLogin: false, showInDock: true }),
+  getSettings: async () => STUB_SETTINGS,
+  updateSettings: async () => STUB_SETTINGS,
   getScreenSources: async () => [],
   resizeCapturePanel: () => {},
   openMainWindow: () => {},

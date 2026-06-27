@@ -35,7 +35,8 @@ export default defineConfig({
         test: {
           name: "main",
           environment: "node",
-          include: ["src/main/**/*.{test,spec}.ts"],
+          // Pure `shared/` logic (no DOM) is exercised here in the node project.
+          include: ["src/main/**/*.{test,spec}.ts", "src/shared/**/*.{test,spec}.ts"],
         },
       },
       {

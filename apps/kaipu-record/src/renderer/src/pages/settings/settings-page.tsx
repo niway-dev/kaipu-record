@@ -8,19 +8,21 @@ import { useOnboarding } from "@renderer/features/onboarding";
 import { usePermissions } from "@renderer/features/permissions";
 import { useVaultDirectory } from "@renderer/features/library/hooks/use-vault-directory";
 import { useAppSettings } from "./use-app-settings";
+import { RecordingQualitySettings } from "./recording-quality-settings";
+import { DEFAULT_QUALITY } from "@shared/recording-quality";
 import type { PermissionKind } from "@shared/types";
 import styles from "./settings-page.module.css";
 
 /*
  * This page intentionally only surfaces settings that are wired end-to-end:
- *   • Permissions  → window.electronAPI permission bridge
- *   • Files        → real on-disk recordings vault
- *   • Onboarding   → replay the first-run flow
+ *   • Permissions       → window.electronAPI permission bridge
+ *   • Recording quality → persisted AppSettings.recordingQuality → encoder
+ *   • Files             → real on-disk recordings vault
+ *   • App / Onboarding  → Dock policy, replay the first-run flow
  *
- * Device pickers, recording-quality knobs, configurable keyboard shortcuts,
- * the countdown/minimize-to-tray toggles and theme switching were removed
- * because no backend wiring exists for them yet — they were inert local state.
- * They are tracked as concepts to build in the backlog:
+ * Device pickers, configurable keyboard shortcuts and theme switching are still
+ * absent because no backend wiring exists for them yet — they were inert local
+ * state. They are tracked as concepts to build in the backlog:
  *   apps/documentation/src/content/docs/backlog/settings-roadmap.mdx
  * Re-add each control here only once its IPC + persistence is implemented.
  */
@@ -85,6 +87,13 @@ export function SettingsPage(): React.JSX.Element {
               />
             );
           })}
+        </Section>
+
+        <Section title="Recording quality">
+          <RecordingQualitySettings
+            quality={settings?.recordingQuality ?? DEFAULT_QUALITY}
+            onChange={(recordingQuality) => void update({ recordingQuality })}
+          />
         </Section>
 
         <Section title="Files">

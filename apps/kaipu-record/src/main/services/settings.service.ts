@@ -1,4 +1,5 @@
 import { type AppSettings, DEFAULT_SETTINGS, type Theme } from "@shared/types";
+import { sanitizeQuality } from "@shared/recording-quality";
 
 /**
  * Pure settings logic — the kind of code that lives in the `main` process but
@@ -26,5 +27,6 @@ export function mergeSettings(stored: Partial<AppSettings> | null | undefined): 
       typeof safe.launchAtLogin === "boolean" ? safe.launchAtLogin : DEFAULT_SETTINGS.launchAtLogin,
     showInDock:
       typeof safe.showInDock === "boolean" ? safe.showInDock : DEFAULT_SETTINGS.showInDock,
+    recordingQuality: sanitizeQuality(safe.recordingQuality),
   };
 }

@@ -22,6 +22,7 @@ describe("SettingsPage", () => {
   it("renders only the wired settings sections", () => {
     renderSettings();
     expect(screen.getByRole("heading", { name: /^permissions$/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /recording quality/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /^files$/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /^app$/i })).toBeInTheDocument();
   });
@@ -32,7 +33,6 @@ describe("SettingsPage", () => {
     // settings-roadmap backlog). They must not reappear as inert placeholders.
     expect(screen.queryByRole("heading", { name: /storage & uploads/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /^devices$/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: /recording quality/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /keyboard shortcuts/i })).not.toBeInTheDocument();
   });
 

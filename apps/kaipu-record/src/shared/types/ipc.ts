@@ -2,10 +2,12 @@
  * Shared IPC contract between the main and renderer processes.
  *
  * This file is PURE: it must not import from `electron`, `node:*`, or any
- * renderer-only API. Both processes import these types so the contract is
- * verified by TypeScript at compile time (this is what replaces runtime
- * tests for the preload bridge).
+ * renderer-only API (the `recording-quality` import is itself pure). Both
+ * processes import these types so the contract is verified by TypeScript at
+ * compile time (this is what replaces runtime tests for the preload bridge).
  */
+
+import { DEFAULT_QUALITY, type RecordingQuality } from "../recording-quality";
 
 export type Theme = "light" | "dark" | "system";
 
@@ -17,12 +19,15 @@ export interface AppSettings {
    * policy). Off = menu-bar/tray-only (`accessory`) — no Dock, no switcher.
    */
   showInDock: boolean;
+  /** Resolution/fps/bitrate the encoder targets (a preset or a custom combo). */
+  recordingQuality: RecordingQuality;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
   theme: "system",
   launchAtLogin: false,
   showInDock: true,
+  recordingQuality: DEFAULT_QUALITY,
 };
 
 /**

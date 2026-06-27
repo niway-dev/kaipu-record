@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_SETTINGS } from "@shared/types";
+import { DEFAULT_QUALITY, QUALITY_PRESETS } from "@shared/recording-quality";
 import { isValidTheme, mergeSettings } from "./settings.service";
 
 describe("isValidTheme", () => {
@@ -23,16 +24,34 @@ describe("mergeSettings", () => {
   });
 
   it("keeps valid stored values", () => {
-    expect(mergeSettings({ theme: "dark", launchAtLogin: true, showInDock: false })).toEqual({
+    expect(
+      mergeSettings({
+        theme: "dark",
+        launchAtLogin: true,
+        showInDock: false,
+        recordingQuality: QUALITY_PRESETS.max,
+      }),
+    ).toEqual({
       theme: "dark",
       launchAtLogin: true,
       showInDock: false,
+      recordingQuality: QUALITY_PRESETS.max,
     });
   });
 
   it("defaults showInDock to true when absent or invalid", () => {
     expect(mergeSettings({ theme: "dark" }).showInDock).toBe(true);
     expect(mergeSettings({ showInDock: "no" as never }).showInDock).toBe(true);
+  });
+
+  it("sanitizes recordingQuality — keeps valid, defaults garbage/absent", () => {
+    expect(mergeSettings({}).recordingQuality).toEqual(DEFAULT_QUALITY);
+    expect(
+      mergeSettings({ recordingQuality: { resolution: 9, fps: 1, bitrate: "x" } as never })
+        .recordingQuality,
+    ).toEqual(DEFAULT_QUALITY);
+    const custom = { resolution: 2160, fps: 48, bitrate: "max" } as const;
+    expect(mergeSettings({ recordingQuality: custom }).recordingQuality).toEqual(custom);
   });
 
   it("falls back to defaults for invalid fields", () => {

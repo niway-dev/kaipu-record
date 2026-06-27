@@ -151,7 +151,7 @@ Ventana principal (oculta)                  Barra flotante (ventana aparte)
 ### Estado global de grabación (entre ventanas)
 
 **Problema:** cada ventana (Record page, Capture Panel) tiene su propia instancia
-de `useScreenRecorder` — comparten *código, no estado*. Sin coordinación, el
+de `useScreenRecorder` — comparten _código, no estado_. Sin coordinación, el
 Capture Panel (otra ventana) no sabe que hay una grabación activa y mostraría
 "Start Recording", permitiendo arrancar una segunda grabación → errores.
 
@@ -193,11 +193,36 @@ captura de pantalla la incluye en el video. La maneja el toggle Cámara del Reco
 
 Para que **la barra de control NO salga en el video** pero **la cámara sí**, la ventana de
 la barra usa `setContentProtection(true)` (macOS: `NSWindowSharingNone`); la burbuja
-deliberadamente no la usa. *(Verificar en runtime que el screen-capture respeta la exclusión.)*
+deliberadamente no la usa. _(Verificar en runtime que el screen-capture respeta la exclusión.)_
 
 La burbuja se maneja desde el **estado global de settings** (ver abajo): el hub la
 muestra/oculta según el toggle global de Cámara, así que **funciona prendiéndola desde la
 app o desde el Capture Panel**. Follow-ups: selector de dispositivo de cámara, resize/forma.
+
+### Calidad configurable (presets + sliders)
+
+La calidad de grabación es un **modelo puro** en `src/shared/recording-quality.ts` (sin
+imports de electron/node/react), compartido por main (validación) y renderer (UI + wiring):
+
+- **Tres knobs** (`RecordingQuality { resolution, fps, bitrate }`) con pasos discretos.
+  `resolution` 720/1080/1440/2160 → dimensiones 16:9; `fps` 24/30/48/60; `bitrate`
+  light/medium/high/max → 4/8/16/24 Mbps. El **peso ≈ bitrate** (`mbPerMinute`).
+- **Presets como vista derivada:** `activePreset(quality)` matchea contra Liviano (720/24/
+  light), Equilibrado (1080/30/medium) y Máxima calidad (1440/60/high); si no matchea →
+  `"custom"`. No se guarda `preset` aparte, así que **no hay desync** preset/valores: clickear
+  un chip aplica el combo; mover cualquier slider cae en Personalizado. 4K y bitrate máximo
+  solo se alcanzan en Personalizado.
+- **Persistencia:** vive en `AppSettings.recordingQuality` (reusa el `settings-store` +
+  `settings:get/update`), validado por `sanitizeQuality` en `mergeSettings`.
+- **Wiring al encoder:** `qualityToEngine(quality)` → `{ width, height, frameRate,
+  videoBitrate }`. `use-recording-setup` lo lee en mount (ref) y lo pasa por `StartInput` →
+  `useScreenRecorder` → `startEngine`. El engine usa esos valores en las constraints
+  `maxWidth/maxHeight/maxFrameRate` y en el bitrate del track; **los defaults preservan
+  1080p30·8 Mbps** (callers/tests que no los pasan no cambian). El `maxWidth/Height` es un
+  techo: **no upscalea** sobre la resolución nativa de la pantalla.
+- **UI** (`pages/settings/recording-quality-settings.tsx`): chips con emoji + caption que
+  cambia por preset + tres sliders discretos con label semántico (Cine/Estándar/Muy fluido,
+  ≈MB/min) y un **ⓘ** (popover) por slider. Copy en español neutro, orientado al beneficio.
 
 ### Recuperación de fallas (no quedar trabado)
 
@@ -275,9 +300,10 @@ Detalles que costaron y conviene recordar:
 >    una caja oscura. Regla: la sombra debe **desvanecerse por completo dentro del
 >    margen** (window − elemento). Ej. burbuja: window 224 − círculo 192 = 16px de
 >    margen, así que un blur de ~8px entra holgado; un blur de 18px se cortaba.
+
 - **No debe scrollear.** El renderer marca `body[data-window="control-bar"]` y
   `main.css` la fija al viewport con `overflow: hidden` y le da a `#root` un
-  *block-formatting context*, evitando que el margen superior del pill colapse
+  _block-formatting context_, evitando que el margen superior del pill colapse
   hacia el body y empuje el documento más allá de los 64px (lo que sacaba una
   scrollbar — la global temada).
 - **Diseño:** rectángulo redondeado (no pill), botones cuadrados redondeados,
@@ -292,7 +318,7 @@ visible como warnings `[OpenH264] ... bitrate can't be controlled...` en consola
 implica más CPU/calor que el hardware. El engine ahora pide
 **`hardwareAcceleration: "prefer-hardware"`** (+ `latencyMode: "realtime"` para
 captura en vivo) en el `VideoEncodingConfig` del `MediaStreamVideoTrackSource`, para
-empujar a **VideoToolbox**. Es un *hint*: si el encode H.264 por hardware no está
+empujar a **VideoToolbox**. Es un _hint_: si el encode H.264 por hardware no está
 disponible vía WebCodecs, cae a software (el comportamiento previo, sin romper).
 
 **Verificación:** el `onEncoderConfig` loguea el config real; si el hardware engancha,
@@ -304,13 +330,13 @@ los mensajes `[OpenH264]` **desaparecen** de la consola. (Los warnings
 
 No portamos el stack `MediaRecorder`+FFmpeg del legacy. Gran parte del rol de FFmpeg ahí era **parchear lo que `MediaRecorder` rompe** (WebM sin duration header → remux). mediabunny no usa `MediaRecorder`, así que esos parches no nacen.
 
-| Aspecto          | Legacy                     | Implementado (mediabunny)                  |
-| ---------------- | -------------------------- | ------------------------------------------ |
-| Encoder          | `MediaRecorder` VP9/Opus   | WebCodecs H.264/AAC (HW, ~8× más rápido)   |
-| Output           | WebM roto → remux FFmpeg   | MP4 seekable de un solo paso               |
-| Hot path a disco | base64 → IPC → WriteStream | bytes crudos posicionados (`StreamTarget`) |
+| Aspecto          | Legacy                     | Implementado (mediabunny)                   |
+| ---------------- | -------------------------- | ------------------------------------------- |
+| Encoder          | `MediaRecorder` VP9/Opus   | WebCodecs H.264/AAC (HW, ~8× más rápido)    |
+| Output           | WebM roto → remux FFmpeg   | MP4 seekable de un solo paso                |
+| Hot path a disco | base64 → IPC → WriteStream | bytes crudos posicionados (`StreamTarget`)  |
 | Compositing      | FFmpeg `filter_complex`    | canvas + `CanvasSource` en vivo (follow-up) |
-| Bundle           | ~50–80MB binarios por arch | mediabunny tree-shakable, sin deps         |
+| Bundle           | ~50–80MB binarios por arch | mediabunny tree-shakable, sin deps          |
 
 Detalle y alternativas descartadas: [ADR 0001 — Mediabunny over FFmpeg](../architecture/decisions/0001-mediabunny-over-ffmpeg).
 

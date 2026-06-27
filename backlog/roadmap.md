@@ -10,15 +10,15 @@ Status legend: ⬜ todo · 🔨 in progress · ✅ done
 
 ## Kill order
 
-| # | Feature | Priority | Status | Depends on |
-| - | ------- | -------- | ------ | ---------- |
-| 1 | Camera bubble (floating window) | High | ✅ | — |
-| 2 | Start recording from the Capture Panel (#4) | High · easy | ✅ | — |
-| 3 | Floating bar on the recorded display (#7) | High · easy | ✅ | — |
-| 4 | Feature flags via PostHog | Medium | ⬜ | — (base for #6) |
-| 5 | Configurable quality (non-technical copy) | Medium | ⬜ | — |
-| 6 | Watermark, free → paid (scalable plan) | Medium | ⬜ | #4 + plan/entitlement |
-| 7 | Builds + distribution | Medium | ⬜ | — (parallel) |
+| #   | Feature                                     | Priority    | Status | Depends on            |
+| --- | ------------------------------------------- | ----------- | ------ | --------------------- |
+| 1   | Camera bubble (floating window)             | High        | ✅     | —                     |
+| 2   | Start recording from the Capture Panel (#4) | High · easy | ✅     | —                     |
+| 3   | Floating bar on the recorded display (#7)   | High · easy | ✅     | —                     |
+| 4   | Feature flags via PostHog                   | Medium      | ⬜     | — (base for #6)       |
+| 5   | Configurable quality (non-technical copy)   | Medium      | ✅     | —                     |
+| 6   | Watermark, free → paid (scalable plan)      | Medium      | ⬜     | #4 + plan/entitlement |
+| 7   | Builds + distribution                       | Medium      | ⬜     | — (parallel)          |
 
 ### Shipped beyond the kill order ✅
 
@@ -56,6 +56,7 @@ draggable, and **captured into the recording because it's on screen** (no canvas
 compositing).
 
 **Decisions (locked):**
+
 - Approach: **floating window**, captured by the screen recording (not CanvasSource).
 - Appears when the **Camera toggle is on** (preview + position before recording, stays
   during).
@@ -92,16 +93,20 @@ Add PostHog + a thin flag/entitlement layer. Foundation for #6 (watermark gating
 rolling out #1/#5/#7. Needs: SDK init (main or renderer), a `useFlag(name)` helper, and a
 way to define flags. Keep it offline-safe (flags default sensibly when offline).
 
-## 5 — Configurable quality (non-technical copy)
+## 5 — Configurable quality (non-technical copy) ✅ (shipped)
 
-Expose resolution / fps / bitrate in Settings (currently hardcoded 1080p/30/auto), wired
-into `recorder-engine`. **Hard requirement:** each control has **plain-language copy** for
-non-technical users explaining what raising/lowering it does (size vs sharpness vs
-smoothness), not just numbers.
+Shipped: a **Recording quality** section in Settings. Pure model in
+`shared/recording-quality.ts` (presets, discrete steps, encoder mapping, validation) used by
+both processes. Friendly preset chips (🚀 Liviano · 🎯 Equilibrado · ✨ Máxima calidad ·
+🎛️ Personalizado) over three discrete sliders — **Resolución / Fluidez / Bitrate** — with a
+live **"≈MB/min"** weight, a per-preset **caption**, and **ⓘ** deep-dive popovers. The active
+chip is **derived** from the values (moving any slider → Personalizado; 4K + max bitrate only
+reachable there). Persisted in `AppSettings.recordingQuality` (reuses the settings-store) and
+threaded into `recorder-engine` (`width/height/frameRate/videoBitrate`, defaults preserve
+1080p30·8 Mbps). Copy is neutral Spanish, benefit-first. ~162 tests green.
 
-**Unblocked:** persisted-settings infra now exists (`main/infrastructure/settings-store.ts`
-+ `AppSettings` + `useAppSettings`), added for the Dock toggle — quality knobs can reuse it
-(extend `AppSettings`, add rows to the Settings page, read in `recorder-engine`).
+**Follow-ups:** runtime GUI check on multi-DPI displays; a label for the 48 fps step (left as
+"48 fps" — user didn't want "Fluido"); optional estimate that also factors fps/resolution.
 
 ## 6 — Watermark, free → paid (scalable plan)
 

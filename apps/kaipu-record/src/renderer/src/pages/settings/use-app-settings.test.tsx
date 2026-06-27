@@ -1,9 +1,15 @@
 import { renderHook, waitFor, act } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppSettings } from "@shared/types";
+import { DEFAULT_QUALITY } from "@shared/recording-quality";
 import { useAppSettings } from "./use-app-settings";
 
-const SETTINGS: AppSettings = { theme: "system", launchAtLogin: false, showInDock: true };
+const SETTINGS: AppSettings = {
+  theme: "system",
+  launchAtLogin: false,
+  showInDock: true,
+  recordingQuality: DEFAULT_QUALITY,
+};
 
 describe("useAppSettings", () => {
   beforeEach(() => {

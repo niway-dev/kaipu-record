@@ -16,6 +16,11 @@ export interface StartInput {
   sourceName: string;
   microphoneDeviceId: string | null;
   systemAudio: boolean;
+  /** Encoder targets resolved from the user's quality preset (optional → engine defaults). */
+  width?: number;
+  height?: number;
+  frameRate?: number;
+  videoBitrate?: number;
 }
 
 export interface ScreenRecorderOptions {
@@ -72,6 +77,10 @@ export function useScreenRecorder(options: ScreenRecorderOptions = {}): ScreenRe
         sourceId: input.sourceId,
         microphoneDeviceId: input.microphoneDeviceId,
         systemAudio: input.systemAudio,
+        width: input.width,
+        height: input.height,
+        frameRate: input.frameRate,
+        videoBitrate: input.videoBitrate,
         onChunk: (data, position) => window.electronAPI.recordingWrite(sessionId, data, position),
         // A failure mid-recording (encoder error or the screen capture ending)
         // runs the same robust stop — finalize-or-abort + always restore the

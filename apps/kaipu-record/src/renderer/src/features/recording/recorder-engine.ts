@@ -23,6 +23,16 @@ export interface EngineOptions {
   sourceId: string;
   microphoneDeviceId: string | null;
   systemAudio: boolean;
+  /**
+   * Encoder targets resolved from the user's quality preset. All optional — the
+   * defaults below preserve the original 1080p · 30fps · 8 Mbps behaviour, so
+   * callers/tests that omit them are unaffected. The max* constraints are a
+   * ceiling: capture never upscales past the display's native resolution.
+   */
+  width?: number;
+  height?: number;
+  frameRate?: number;
+  videoBitrate?: number;
   /** Receives each StreamTarget chunk to forward to the main-process writer. */
   onChunk(data: ArrayBuffer, position: number): void;
   /**
@@ -33,7 +43,10 @@ export interface EngineOptions {
   onError?(error: unknown): void;
 }
 
-const VIDEO_BITRATE = 8_000_000; // ~8 Mbps, fine for 1080p screen content
+const DEFAULT_WIDTH = 1920;
+const DEFAULT_HEIGHT = 1080;
+const DEFAULT_FRAME_RATE = 30;
+const DEFAULT_VIDEO_BITRATE = 8_000_000; // ~8 Mbps, fine for 1080p screen content
 const AUDIO_BITRATE = 128_000;
 
 /**
@@ -42,6 +55,11 @@ const AUDIO_BITRATE = 128_000;
  * pause/resume/stop and live levels.
  */
 export async function startEngine(options: EngineOptions): Promise<EngineHandle> {
+  const width = options.width ?? DEFAULT_WIDTH;
+  const height = options.height ?? DEFAULT_HEIGHT;
+  const frameRate = options.frameRate ?? DEFAULT_FRAME_RATE;
+  const videoBitrate = options.videoBitrate ?? DEFAULT_VIDEO_BITRATE;
+
   // 1. Screen (deterministic Electron desktop capture by source id).
   const screenStream = await navigator.mediaDevices.getUserMedia({
     audio: options.systemAudio
@@ -52,9 +70,9 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
       mandatory: {
         chromeMediaSource: "desktop",
         chromeMediaSourceId: options.sourceId,
-        maxWidth: 1920,
-        maxHeight: 1080,
-        maxFrameRate: 30,
+        maxWidth: width,
+        maxHeight: height,
+        maxFrameRate: frameRate,
       },
     },
   });
@@ -105,7 +123,7 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
   });
   const videoSource = new MediaStreamVideoTrackSource(screenTrack, {
     codec: "avc",
-    bitrate: VIDEO_BITRATE,
+    bitrate: videoBitrate,
     // Nudge Chromium toward the platform encoder (VideoToolbox on macOS) instead
     // of its bundled software H.264 (OpenH264). It's a hint — if hardware H.264
     // encode isn't available via WebCodecs, it falls back to software (the prior
@@ -126,7 +144,7 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
       });
     },
   });
-  output.addVideoTrack(videoSource, { frameRate: 30 });
+  output.addVideoTrack(videoSource, { frameRate });
   let audioSource: MediaStreamAudioTrackSource | null = null;
   if (mixedAudioTrack) {
     audioSource = new MediaStreamAudioTrackSource(mixedAudioTrack, {

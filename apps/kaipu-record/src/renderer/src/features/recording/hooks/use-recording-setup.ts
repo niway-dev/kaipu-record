@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { LocalRecording } from "@shared/types";
+import {
+  DEFAULT_QUALITY,
+  qualityToEngine,
+  sanitizeQuality,
+  type RecordingQuality,
+} from "@shared/recording-quality";
 import { useMicrophones } from "@renderer/features/recording/hooks/use-microphones";
 import { useRecordingSettings } from "@renderer/features/recording/hooks/use-recording-settings";
 import {
@@ -82,6 +88,17 @@ export function useRecordingSetup(options: RecordingSetupOptions = {}): Recordin
   const microphones = useMicrophones();
   const recorder = useScreenRecorder({ onComplete: options.onRecordingComplete });
 
+  // The encoder quality is a persisted app setting (Settings page). Read it on
+  // mount so it's available synchronously at start; kept in a ref so the start
+  // callback never goes stale. Navigating Settings → Record remounts this hook,
+  // so a just-changed quality is always picked up.
+  const qualityRef = useRef<RecordingQuality>(DEFAULT_QUALITY);
+  useEffect(() => {
+    void window.electronAPI.getSettings().then((appSettings) => {
+      qualityRef.current = sanitizeQuality(appSettings.recordingQuality);
+    });
+  }, []);
+
   // Default the mic to the first device once enumerated, into the shared settings
   // (idempotent — only when nothing is selected yet).
   useEffect(() => {
@@ -110,11 +127,16 @@ export function useRecordingSetup(options: RecordingSetupOptions = {}): Recordin
       remaining -= 1;
       if (remaining <= 0) {
         clearCountdown();
+        const engineQuality = qualityToEngine(qualityRef.current);
         void recorder.start({
           sourceId: selectedSource.id,
           sourceName: selectedSource.name,
           microphoneDeviceId: isMicrophoneEnabled ? (selectedMicrophone?.deviceId ?? null) : null,
           systemAudio: isSystemAudioEnabled,
+          width: engineQuality.width,
+          height: engineQuality.height,
+          frameRate: engineQuality.frameRate,
+          videoBitrate: engineQuality.videoBitrate,
         });
       } else {
         setCountdown(remaining);
