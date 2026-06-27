@@ -1,15 +1,17 @@
 ---
 title: Recording Pipeline
-description: Current state of the capture and encode pipeline — what runs where, IPC channels, FFmpeg bundling, and what doesn't exist yet.
+description: The legacy reference capture/encode pipeline, the current stub state, and the chosen mediabunny target.
 ---
 
-# Recording Pipeline — Estado actual (2026-06-14)
+# Recording Pipeline
 
-Auditoría técnica del pipeline de captura y encode existente.
+> **Estado (2026-06-26).** El core real **ya está construido** (rama `feat/screen-recording-control-bar`) sobre **mediabunny/WebCodecs** — MP4 H.264/AAC seekable, escrito a disco posicionalmente, con una **barra flotante de control**. Ver [Arquitectura implementada](#arquitectura-implementada-kaipu-record) abajo. La decisión mediabunny-no-FFmpeg está en el [ADR 0001](../architecture/decisions/0001-mediabunny-over-ffmpeg). Las secciones de **Captura / Encoder / Data handling** que siguen describen el **recorder legacy** (`workspace-temp/legacy-kaipu-recorder`) como referencia histórica, no el estado actual.
 
-## TL;DR
+Auditoría técnica del pipeline de captura y encode legacy (referencia).
 
-| Dimensión          | Hoy                                              |
+## TL;DR — legacy (referencia)
+
+| Dimensión          | Legacy                                           |
 | ------------------ | ------------------------------------------------ |
 | Captura            | `getDisplayMedia()` en el renderer               |
 | Encoder            | `MediaRecorder` VP9+Opus, 2.5 Mbps default       |
@@ -114,18 +116,269 @@ Pasar a FFmpeg para captura+encode **no agrega peso al bundle**.
 
 ---
 
-## Lo que NO existe todavía
+## Arquitectura implementada (kaipu-record)
 
-- Encode por hardware (VideoToolbox, NVENC)
-- Captura nativa (ScreenCaptureKit, Windows.Graphics.Capture)
-- Benchmark propio de CPU/RAM/frames dropped
-- Output MP4 para screen-only (hoy solo con webcam)
+El core real está construido sobre **mediabunny/WebCodecs**, no `MediaRecorder`+FFmpeg. Sigue el modelo **Opción A**: el renderer de la ventana principal (oculta mientras grabás) captura y encodea; el main escribe a disco; una ventana flotante aparte muestra la barra de control.
 
----
+```
+Ventana principal (oculta)                  Barra flotante (ventana aparte)
+ useScreenRecorder                           ControlBar  timer · 5 barras · ⏸/▶ · ■
+  getUserMedia(chromeMediaSourceId) ─┐
+  getUserMedia(mic) + sys audio ─────┤─► MediaStreamVideo/AudioTrackSource
+  AudioContext mix + AnalyserNode    └─► Output(Mp4OutputFormat, StreamTarget)
+                                          → chunks { data, position } ─┐
+        ┌──────────────────────── main process ───────────────────────┘
+        │ recording-writer  fd.write(buf, 0, len, position)  (posicional, no append)
+        │ recording-hub     relay estado↔comandos · oculta/muestra la principal
+        │ finalize → vault <id>.mp4 + sidecar (título, duración, thumbnail)
+        └──────────────────────────────────────────────────────────────
+```
 
-## Implicaciones para el próximo paso (FFmpeg/hardware)
+**Piezas:**
 
-1. **FFmpeg ya está** → costo de bundle: cero.
-2. **El IPC de streaming ya funciona** → la arquitectura de escritura a disco no cambia.
-3. **El encode corre hoy en el renderer** → cualquier mejora libera el thread de React.
-4. **Output actual es WebM** → pasar a MP4/H.264 via FFmpeg da compatibilidad universal para sharing.
+- `features/recording/recorder-engine.ts` — captura + mezcla de audio + encode mediabunny (MP4 H.264/AAC). Seam `videoProvider`/`audioProvider` para meter cámara/watermark después sin tocar lo de abajo.
+- `features/recording/hooks/use-screen-recorder.ts` — ciclo start/pause/resume/stop, timer (descuenta la pausa), tick ~10/s al main.
+- `features/recording/elapsed.ts` + `audio-levels.ts` — lógica pura testeada (clock con pausa, RMS→5 barras).
+- `features/control-bar/` — barra flotante con nuestros tokens/`cx()`/`data-*`.
+- `main/recording/recording-writer.ts` — escritura **posicional** + finalize al vault. Drena los writes en vuelo antes de cerrar el handle (los chunks llegan fire-and-forget por IPC).
+- `main/recording/control-bar-window.ts` — `BrowserWindow` frameless/transparent/always-on-top, abajo-centro de la pantalla.
+- `main/recording/recording-hub.ts` — relay de estado/comandos + oculta/muestra la ventana principal.
+
+**IPC nuevo:** `recording:create|write|finalize|abort` (writer) · `recording:report-tick` → `control:tick` (estado → barra) · `control:command` → `recording:command` (botones → grabador) · `recording:start|stop` (mostrar/ocultar ventanas).
+
+**Vault:** ahora es agnóstico de extensión (`.mp4`/`.webm`), con sidecar de duración + thumbnail; `kaipu-media://thumb/<id>` sirve el póster.
+
+### Estado global de grabación (entre ventanas)
+
+**Problema:** cada ventana (Record page, Capture Panel) tiene su propia instancia
+de `useScreenRecorder` — comparten _código, no estado_. Sin coordinación, el
+Capture Panel (otra ventana) no sabe que hay una grabación activa y mostraría
+"Start Recording", permitiendo arrancar una segunda grabación → errores.
+
+**Solución:** el `recording-hub` (main, única fuente de verdad) mantiene
+`RecordingActivity { active, status }` y lo **transmite a todas las ventanas**
+(`recording:state`) en cada transición (start/stop/pause/resume), re-emitiendo
+solo cuando el status cambia — no en cada tick de 10/s. Cada ventana lee esto con
+**`useRecordingActivity()`**, que además **consulta `getRecordingState()` al
+montar** (por si una ventana se abre con la grabación ya en curso). Con eso:
+
+- **Record page:** una **tarjeta de cabecera** con "Recording"/"Paused" + **timer
+  en vivo**, la fuente con badge **LOCKED**, y una fila **Pause / Stop recording**
+  (pause/resume expuestos desde `useRecordingSetup`); los controles de setup quedan
+  `inert`.
+- **Capture Panel:** un **banner rojo "Recording — mm:ss"** con timer en vivo,
+  controles `inert`, y el botón pasa a **"Stop Recording"** (comando stop al hub) —
+  imposible arrancar una segunda grabación desde el tray.
+
+El timer en vivo de ambas ventanas sale de `RecordingActivity.elapsedSeconds`, que
+el hub actualiza desde los ticks del grabador y re-emite ~1/s (no en cada tick de
+10/s).
+
+**Settings compartidos (misma idea, bidireccional).** La fuente, los toggles
+(mic/audio/cámara) y el micrófono seleccionado viven en el hub como `RecordingSettings`
+— **una sola fuente de verdad** para todas las ventanas. `useRecordingSettings` (en el
+renderer) consulta al montar, se suscribe a cambios y **escribe optimista** vía
+`recording-settings:update`; el hub mergea, **re-emite a todas las ventanas** y de paso
+maneja la burbuja de cámara. `useRecordingSetup` toma esos campos del estado global y deja
+local solo la UI transitoria (picker/menú abiertos, countdown) y el ciclo de grabación.
+Resultado: cambiás un toggle en la app o en el panel y **se refleja en ambos**.
+
+### Cámara bubble (ventana flotante capturada)
+
+La cámara es una **burbuja flotante** (`?window=camera-bubble`): una `BrowserWindow`
+circular, frameless/transparent/always-on-top, arrastrable, que muestra el webcam vía el
+hook testeado `useCameraPreview`. **No se compone en canvas** — como está en pantalla, la
+captura de pantalla la incluye en el video. La maneja el toggle Cámara del Record page
+(`camera:set` → `recording-hub` → `CameraBubbleWindow.show/hide`).
+
+Para que **la barra de control NO salga en el video** pero **la cámara sí**, la ventana de
+la barra usa `setContentProtection(true)` (macOS: `NSWindowSharingNone`); la burbuja
+deliberadamente no la usa. _(Verificar en runtime que el screen-capture respeta la exclusión.)_
+
+La burbuja se maneja desde el **estado global de settings** (ver abajo): el hub la
+muestra/oculta según el toggle global de Cámara, así que **funciona prendiéndola desde la
+app o desde el Capture Panel**. Follow-ups: selector de dispositivo de cámara, resize/forma.
+
+### Calidad configurable (presets + sliders)
+
+La calidad de grabación es un **modelo puro** en `src/shared/recording-quality.ts` (sin
+imports de electron/node/react), compartido por main (validación) y renderer (UI + wiring):
+
+- **Tres knobs** (`RecordingQuality { resolution, fps, bitrate }`) con pasos discretos.
+  `resolution` 720/1080/1440/2160 → dimensiones 16:9; `fps` 24/30/48/60; `bitrate`
+  light/medium/high/max → 4/8/16/24 Mbps. El **peso ≈ bitrate** (`mbPerMinute`).
+- **Presets como vista derivada:** `activePreset(quality)` matchea contra Liviano (720/24/
+  light), Equilibrado (1080/30/medium) y Máxima calidad (1440/60/high); si no matchea →
+  `"custom"`. No se guarda `preset` aparte, así que **no hay desync** preset/valores: clickear
+  un chip aplica el combo; mover cualquier slider cae en Personalizado. 4K y bitrate máximo
+  solo se alcanzan en Personalizado.
+- **Persistencia:** vive en `AppSettings.recordingQuality` (reusa el `settings-store` +
+  `settings:get/update`), validado por `sanitizeQuality` en `mergeSettings`.
+- **Wiring al encoder:** `qualityToEngine(quality)` → `{ width, height, frameRate,
+videoBitrate }`. `use-recording-setup` lo lee en mount (ref) y lo pasa por `StartInput` →
+  `useScreenRecorder` → `startEngine`. El engine usa esos valores en las constraints
+  `maxWidth/maxHeight/maxFrameRate` y en el bitrate del track. **El `maxWidth/Height` es un
+  techo: no upscalea** sobre la resolución nativa de la pantalla.
+- **Una sola fuente para los números de encode:** el engine **no reescribe** ningún valor —
+  su fallback es `qualityToEngine(DEFAULT_QUALITY)` (preserva 1080p30·8 Mbps para
+  callers/tests que omiten los campos), y el bitrate de audio sale de `AUDIO_BITRATE_BPS`.
+  Todo (resoluciones, bitrates, presets, default, audio) vive en `recording-quality.ts`.
+- **Sin enums:** los sets (`RESOLUTION_STEPS`, `FPS_STEPS`, `BITRATE_STEPS`, `NAMED_PRESETS`,
+  `PRESET_ORDER`) son arrays `as const` y el tipo se deriva con `(typeof X)[number]` — ver
+  [Enums: as const, not enum](/architecture/enums-as-const).
+- **UI** (`pages/settings/recording-quality-settings.tsx`): chips con emoji + caption que
+  cambia por preset + tres sliders discretos con label semántico (Cine/Estándar/Muy fluido,
+  ≈MB/min) y un **ⓘ** (popover) por slider. Copy en español neutro, orientado al beneficio.
+
+### Watermark (free → paid)
+
+Un watermark (wordmark "Kaipu") **quemado en el video** solo para usuarios free; pagar lo
+quita. La decisión está **centralizada en un solo hook** — el resto de la app (engine
+incluido) no sabe de planes ni flags.
+
+- **`useWatermark()`** (`features/watermark/use-watermark.ts`) es el único seam. Compone tres
+  inputs, hoy stubs: `entitlement.isPaid` (TODO backend), `featureFlag` (TODO PostHog) y un
+  **override de dev**. La regla pura `resolveWatermarkEnabled({flagOn, isPaid, devForce})` =
+  `flagOn && !paid`. Devuelve `{ enabled, config }`.
+- **Toggle de dev que NUNCA llega a prod:** un switch en Settings ("Quitar watermark — simular
+  plan pago"), **visible solo en dev**, guarda el override en `localStorage`
+  (`features/watermark/dev-override.ts`). Tanto la sección del toggle como la lectura están
+  gateadas por `import.meta.env.DEV` (literal en build), así que se **eliminan del bundle de
+  producción** — y un usuario no puede sacarse el watermark seteando localStorage a mano. Como
+  se lee en cada render y cambiar de Settings→Record remonta el consumidor, el flip aplica
+  **sin reiniciar**.
+- **Draw-pass (canvas compositor)** `watermark-compositor.ts`: el screen track va a un
+  `<canvas>` (frame + el asset re-teñido a **silueta blanca** con sombra suave, en la esquina
+  vía `watermarkRect`), y se re-captura con `canvas.captureStream(frameRate)`. Ese track va al
+  encoder. **Costo cero cuando está apagado:** si `enabled === false` se encodea el screen
+  track directo (sin canvas). La detección de fallas sigue mirando el `screenTrack` original.
+- **Wiring:** `useWatermark()` → `use-recording-setup` (ref) → `StartInput.watermark` →
+  `startEngine`. `EngineOptions.watermark` decide compositar o no; `stop()` corta el draw loop.
+- **Config** (`watermark.ts`, sets `as const`): variant (wordmark/mark), position, tint
+  (white/original), opacity, height/margin ratios. Default: wordmark · centro-derecha · white.
+
+**Pendiente (#6 real):** el `isPaid`/flag son stubs — el gating real depende de #4 (PostHog +
+entitlement). El seam ya está, así que enchufarlo no toca nada más.
+
+### Recuperación de fallas (no quedar trabado)
+
+Las rutas de error restauran **siempre** el estado de la app:
+
+- **Falla al arrancar** (permiso denegado, `getDisplayMedia` falla): el `catch` corre
+  **antes** de ocultar la ventana (`recordingStart` va después de `startEngine`), así que
+  nunca deja la ventana oculta — aborta la sesión y queda en `error`.
+- **Falla al finalizar:** `recordingStop()` (mostrar ventana + restaurar Dock + esconder
+  barra) se llama **siempre**, fuera del try/catch.
+- **Falla a mitad de grabación** (encoder error, o el track de pantalla termina porque el
+  usuario corta el screen-share): el engine la expone vía `onError` (el `errorPromise` de
+  las sources + el evento `ended` del track de pantalla) → corre el mismo `stop()` robusto
+  (finaliza-o-aborta + restaura todo). Un `stoppingRef` evita doble-teardown si el usuario
+  toca Stop y la falla disparan a la vez. Así la app **nunca queda trabada** con la ventana
+  oculta y la barra colgada.
+
+### Gotcha: ocultar la ventana principal y el Dock/Cmd+Tab (macOS)
+
+El hub **oculta la ventana principal mientras grabás** (`mainWindow.hide()`) para que
+solo se vea la barra flotante. En macOS, ocultar la única ventana puede **sacar la app
+del Dock y del switcher (Cmd+Tab)**, y `show()` no siempre la devuelve. Por eso, al
+**detener**, el hub **re-afirma la activation policy** (`applyDockPolicy()`) y trae la app
+al frente (`app.focus({ steal: true })`) — así vuelve al Cmd+Tab.
+
+La visibilidad en el Dock/switcher es ahora un **setting persistido** (`showInDock`):
+`regular` (con Dock + Cmd+Tab) vs `accessory` (solo barra de menú/tray). Vive en
+`infrastructure/settings-store.ts` (la primera infra de settings persistidos de la app) y
+se togglea desde Settings.
+
+### El hueco "starting" después del countdown
+
+Tras el countdown `3·2·1`, el grabador entra en estado **`"starting"`** mientras
+adquiere los streams y arma el encoder — ahí `isRecording` todavía es `false` y la
+ventana **aún no se ocultó**, así que el botón Start quedaba visible y clickeable
+~0.5–1s (se podía disparar una segunda grabación). Se cierra por tres lados:
+
+- El **overlay del countdown sigue arriba durante `"starting"`** mostrando un
+  spinner (su `value` pasa de número a `null`). Como el overlay es un backdrop que
+  captura clicks, el botón no se puede tocar en ese intervalo. No hay parpadeo:
+  `clearCountdown()` y `setStatus("starting")` ocurren en el mismo tick, así que la
+  condición `countdown !== null || isStarting` nunca queda en falso.
+- **Guard de re-entrada** en `useScreenRecorder.start`: chequea
+  `engineRef || sessionRef`, y `sessionRef` se setea sincrónicamente, así que un
+  segundo `start()` durante "starting" retorna de inmediato — sin doble sesión.
+- El botón Start queda `disabled` durante el countdown y "starting" (defensa extra).
+
+`useRecordingSetup` expone `recordingStatus` (el `RecorderStatus` completo) para que
+el Record page distinga "starting". El número del countdown usa el color de acento.
+
+### Después de grabar: navegación + estado "Saving"
+
+Al detener, `useScreenRecorder` muestra un breve estado **"Saving…"** en la barra
+mientras el encoder hace flush y el archivo se finaliza (metadata, thumbnail,
+nombre) — `recordingFinalize` solo resuelve cuando todo eso existe en el vault, así
+que la espera es real, no artificial (con un mínimo de ~600ms para que no parpadee
+en clips cortos). Luego dispara `onComplete(recording)` que navega a
+`/library/:id` **antes** de volver a mostrar la ventana principal, para aterrizar
+directo en el detalle del video (sin flash del Record page). El detalle tiene su
+propio "Loading…" mientras `useLocalLibrary` re-lista el vault.
+
+### Ventanas flotantes transparentes (barra y burbuja)
+
+La barra y la burbuja son `BrowserWindow` frameless/transparent/always-on-top.
+Detalles que costaron y conviene recordar:
+
+> **Dos causas de "caja oscura" sobre una ventana transparente** (ambas se ven
+> parecidas, pero la raíz es distinta — confundirlas hace perder tiempo):
+>
+> 1. **Falta `backgroundColor: "#00000000"`** (junto con `transparent: true`): la
+>    ventana pinta un fondo opaco que se ve como una caja oscura sobre fondos claros.
+>    Obligatorio en **toda** ventana transparente.
+> 2. **Un `box-shadow` de CSS más grande que el margen transparente de la ventana**:
+>    la sombra **se recorta contra los bordes (rectangulares) de la ventana** y queda
+>    una caja oscura. Regla: la sombra debe **desvanecerse por completo dentro del
+>    margen** (window − elemento). Ej. burbuja: window 224 − círculo 192 = 16px de
+>    margen, así que un blur de ~8px entra holgado; un blur de 18px se cortaba.
+
+- **No debe scrollear.** El renderer marca `body[data-window="control-bar"]` y
+  `main.css` la fija al viewport con `overflow: hidden` y le da a `#root` un
+  _block-formatting context_, evitando que el margen superior del pill colapse
+  hacia el body y empuje el documento más allá de los 64px (lo que sacaba una
+  scrollbar — la global temada).
+- **Diseño:** rectángulo redondeado (no pill), botones cuadrados redondeados,
+  orden `punto · timer · separador · medidor de mic · pausa · stop · atajo`, sin
+  focus-ring (el accent del SO lo hacía ver "preseleccionado"), sombra discreta.
+
+### Encode por hardware (VideoToolbox) y el caveat de OpenH264
+
+mediabunny pasa `hardwareAcceleration: 'no-preference'` por defecto, y en la build de
+Chromium de Electron eso seleccionaba el **encoder H.264 por software (OpenH264)** —
+visible como warnings `[OpenH264] ... bitrate can't be controlled...` en consola, e
+implica más CPU/calor que el hardware. El engine ahora pide
+**`hardwareAcceleration: "prefer-hardware"`** (+ `latencyMode: "realtime"` para
+captura en vivo) en el `VideoEncodingConfig` del `MediaStreamVideoTrackSource`, para
+empujar a **VideoToolbox**. Es un _hint_: si el encode H.264 por hardware no está
+disponible vía WebCodecs, cae a software (el comportamiento previo, sin romper).
+
+**Verificación:** el `onEncoderConfig` loguea el config real; si el hardware engancha,
+los mensajes `[OpenH264]` **desaparecen** de la consola. (Los warnings
+`representedObject is not a WeakPtrToElectronMenuModelAsNSObject` y
+`sysctlbyname ... kern.hv_vmm_present failed` son ruido inofensivo de Electron/macOS.)
+
+### Por qué mediabunny y no FFmpeg
+
+No portamos el stack `MediaRecorder`+FFmpeg del legacy. Gran parte del rol de FFmpeg ahí era **parchear lo que `MediaRecorder` rompe** (WebM sin duration header → remux). mediabunny no usa `MediaRecorder`, así que esos parches no nacen.
+
+| Aspecto          | Legacy                     | Implementado (mediabunny)                   |
+| ---------------- | -------------------------- | ------------------------------------------- |
+| Encoder          | `MediaRecorder` VP9/Opus   | WebCodecs H.264/AAC (HW, ~8× más rápido)    |
+| Output           | WebM roto → remux FFmpeg   | MP4 seekable de un solo paso                |
+| Hot path a disco | base64 → IPC → WriteStream | bytes crudos posicionados (`StreamTarget`)  |
+| Compositing      | FFmpeg `filter_complex`    | canvas + `CanvasSource` en vivo (follow-up) |
+| Bundle           | ~50–80MB binarios por arch | mediabunny tree-shakable, sin deps          |
+
+Detalle y alternativas descartadas: [ADR 0001 — Mediabunny over FFmpeg](../architecture/decisions/0001-mediabunny-over-ffmpeg).
+
+### Pendiente (follow-ups diseñados)
+
+- **Cámara PiP** — compositar el webcam vía `CanvasSource` en el seam `videoProvider`.
+- **Watermark** — pasada de dibujo extra en el mismo compositor.
+- **Grabar desde el Capture Panel** — hoy su botón abre la ventana principal (el encode no debe correr en la ventana transparente del menu-bar); falta el IPC panel→main para arrancar.
+- **Calidad configurable** — resolución/fps/bitrate están hardcodeados (1080p/30/auto), sin cablear a Settings.

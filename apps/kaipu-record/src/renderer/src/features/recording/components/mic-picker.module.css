@@ -1,0 +1,188 @@
+/* Base = "full" (Record page). `.compact` overrides for the Capture Panel. */
+
+.selector {
+  position: relative;
+}
+
+.trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--bg-card);
+  border: 1px solid rgba(246, 5, 92, 0.32);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  appearance: none;
+  text-align: left;
+  transition: border-color 120ms ease;
+}
+
+.triggerIcon {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: rgba(246, 5, 92, 0.12);
+  color: var(--accent-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.triggerText {
+  flex: 1;
+  min-width: 0;
+}
+
+.triggerLabel {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  margin-bottom: 2px;
+}
+
+.triggerName {
+  display: block;
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.chevron {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.menu {
+  margin-top: 4px;
+  background: var(--bg-card);
+  border: 1px solid rgba(246, 5, 92, 0.32);
+  border-radius: var(--radius-md);
+  /* Cap the height so a long device list scrolls instead of growing the
+     window/page; the scrollbar is themed globally in base.css. */
+  max-height: min(280px, 50vh);
+  overflow-y: auto;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--border);
+  cursor: pointer;
+  text-align: left;
+  transition: background 100ms ease;
+  appearance: none;
+}
+
+.option:first-child {
+  border-top: none;
+}
+
+.option:hover {
+  background: var(--bg-input);
+}
+
+.option[data-active] {
+  background: rgba(246, 5, 92, 0.08);
+}
+
+.option[data-active]:hover {
+  background: rgba(246, 5, 92, 0.12);
+}
+
+.optionInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.optionName {
+  display: block;
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.option[data-active] .optionName {
+  color: var(--accent-primary);
+}
+
+.optionType {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin-top: 2px;
+}
+
+.check {
+  color: var(--accent-primary);
+  flex-shrink: 0;
+}
+
+/* ── Compact (Capture Panel) ───────────────────────────── */
+
+.compact .trigger {
+  padding: 8px 10px;
+  gap: 8px;
+  background: var(--bg-input);
+  border-radius: var(--radius-sm);
+}
+
+.compact .triggerIcon {
+  width: 24px;
+  height: 24px;
+  border-radius: 3px;
+}
+
+.compact .triggerLabel {
+  font-size: 8px;
+  margin-bottom: 1px;
+}
+
+.compact .triggerName {
+  font-size: 11px;
+}
+
+.compact .menu {
+  margin-top: 3px;
+  background: var(--bg-input);
+  border-radius: var(--radius-sm);
+}
+
+.compact .option {
+  padding: 8px 10px;
+  gap: 8px;
+}
+
+.compact .option:hover {
+  background: var(--bg-card-hover);
+}
+
+.compact .optionName {
+  font-size: 11px;
+}
+
+.compact .optionType {
+  font-size: 8px;
+  margin-top: 1px;
+}

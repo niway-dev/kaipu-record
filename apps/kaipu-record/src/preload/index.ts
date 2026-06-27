@@ -1,8 +1,75 @@
-import { contextBridge } from "electron";
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 import { electronAPI } from "@electron-toolkit/preload";
+import { IPC_CHANNELS } from "@shared/types";
+import type { KaipuElectronAPI } from "@shared/types/electron-api";
+import type {
+  ControlCommand,
+  RecordingActivity,
+  RecordingSettings,
+  RecordingTick,
+} from "@shared/types/ipc";
 
-// Custom APIs for renderer
-const api = {};
+// Custom Kaipu bridge. Only methods with a live main-process handler are exposed.
+const kaipuApi: KaipuElectronAPI = {
+  getSettings: () => ipcRenderer.invoke(IPC_CHANNELS.getSettings),
+  updateSettings: (patch) => ipcRenderer.invoke(IPC_CHANNELS.updateSettings, patch),
+  getScreenSources: () => ipcRenderer.invoke("recording:get-screen-sources"),
+  resizeCapturePanel: (height) => ipcRenderer.send("capture-panel:resize", height),
+  openMainWindow: () => ipcRenderer.send("capture-panel:open-main"),
+  checkPermissions: () => ipcRenderer.invoke(IPC_CHANNELS.checkPermissions),
+  requestPermission: (kind) => ipcRenderer.invoke(IPC_CHANNELS.requestPermission, kind),
+  openSystemSettings: (kind) => ipcRenderer.invoke(IPC_CHANNELS.openSystemSettings, kind),
+  listLocalRecordings: () => ipcRenderer.invoke(IPC_CHANNELS.listLocalRecordings),
+  renameLocalRecording: (id, title) =>
+    ipcRenderer.invoke(IPC_CHANNELS.renameLocalRecording, id, title),
+  deleteLocalRecording: (id) => ipcRenderer.invoke(IPC_CHANNELS.deleteLocalRecording, id),
+  revealLocalRecording: (id) => ipcRenderer.invoke(IPC_CHANNELS.revealLocalRecording, id),
+  getVaultDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.getVaultDirectory),
+  chooseVaultDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.chooseVaultDirectory),
+  resetVaultDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.resetVaultDirectory),
+  recordingCreate: (sessionId) => ipcRenderer.invoke(IPC_CHANNELS.recordingCreate, sessionId),
+  recordingWrite: (sessionId, data, position) =>
+    ipcRenderer.send(IPC_CHANNELS.recordingWrite, sessionId, data, position),
+  recordingFinalize: (sessionId, meta) =>
+    ipcRenderer.invoke(IPC_CHANNELS.recordingFinalize, sessionId, meta),
+  recordingAbort: (sessionId) => ipcRenderer.invoke(IPC_CHANNELS.recordingAbort, sessionId),
+  recordingReportTick: (tick) => ipcRenderer.send(IPC_CHANNELS.recordingReportTick, tick),
+  recordingStart: (info) => ipcRenderer.send(IPC_CHANNELS.recordingStart, info),
+  recordingStop: () => ipcRenderer.send(IPC_CHANNELS.recordingStop),
+  onRecordingCommand: (callback) => {
+    const listener = (_e: IpcRendererEvent, command: ControlCommand): void => callback(command);
+    ipcRenderer.on(IPC_CHANNELS.recordingCommand, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.recordingCommand, listener);
+  },
+  onControlTick: (callback) => {
+    const listener = (_e: IpcRendererEvent, tick: RecordingTick): void => callback(tick);
+    ipcRenderer.on(IPC_CHANNELS.controlTick, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.controlTick, listener);
+  },
+  controlCommand: (command) => ipcRenderer.send(IPC_CHANNELS.controlCommand, command),
+  getRecordingState: () => ipcRenderer.invoke(IPC_CHANNELS.recordingGetState),
+  onRecordingState: (callback) => {
+    const listener = (_e: IpcRendererEvent, state: RecordingActivity): void => callback(state);
+    ipcRenderer.on(IPC_CHANNELS.recordingState, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.recordingState, listener);
+  },
+  getRecordingSettings: () => ipcRenderer.invoke(IPC_CHANNELS.recordingSettingsGet),
+  updateRecordingSettings: (patch) => ipcRenderer.send(IPC_CHANNELS.recordingSettingsUpdate, patch),
+  onRecordingSettingsChanged: (callback) => {
+    const listener = (_e: IpcRendererEvent, settings: RecordingSettings): void =>
+      callback(settings);
+    ipcRenderer.on(IPC_CHANNELS.recordingSettingsChanged, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.recordingSettingsChanged, listener);
+  },
+  requestStartRecording: () => ipcRenderer.send(IPC_CHANNELS.recordingRequestStart),
+  onRequestStartRecording: (callback) => {
+    const listener = (): void => callback();
+    ipcRenderer.on(IPC_CHANNELS.recordingRequestStart, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.recordingRequestStart, listener);
+  },
+  reportException: (payload, origin, context) =>
+    ipcRenderer.send(IPC_CHANNELS.analyticsCaptureException, payload, origin, context),
+};
 
 // Use `contextBridge` APIs to expose Electron APIs to
 // renderer only if context isolation is enabled, otherwise
@@ -10,7 +77,7 @@ const api = {};
 if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld("electron", electronAPI);
-    contextBridge.exposeInMainWorld("api", api);
+    contextBridge.exposeInMainWorld("electronAPI", kaipuApi);
   } catch (error) {
     console.error(error);
   }
@@ -18,5 +85,5 @@ if (process.contextIsolated) {
   // @ts-ignore (define in dts)
   window.electron = electronAPI;
   // @ts-ignore (define in dts)
-  window.api = api;
+  window.electronAPI = kaipuApi;
 }

@@ -158,7 +158,7 @@ These handlers throw domain-specific errors:
 1. **Use appropriate handler**: Choose the handler that matches your operation type
 2. **Provide meaningful messages**: Customize `notFoundMessage` for better error messages
 3. **Combine with Result types**: Always use `tryCatch` first, then handle the result
-4. **Let Elysia handle errors**: These handlers throw errors that Elysia's error handler will catch
+4. **Let the framework handle errors**: These handlers throw errors that the backend's error handler (oRPC/Hono) will catch
 
 ## See Also
 

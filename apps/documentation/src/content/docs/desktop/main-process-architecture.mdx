@@ -1,0 +1,62 @@
+---
+title: Main Process Architecture
+description: Cómo arranca el proceso main de kaipu-record, qué subsistemas registra, y el ciclo de vida de ventanas + tray.
+---
+
+# Main Process Architecture
+
+Contraparte de [Renderer Architecture](/desktop/renderer-architecture): cómo está armado el **proceso main** de Electron. El renderer es Chromium puro; el main es el dueño de las ventanas, el tray, los permisos del SO, el acceso a disco y el protocolo de media. Todo lo que toca el sistema operativo vive acá.
+
+## Arranque
+
+`src/main/index.ts` es el entry point. El orden importa:
+
+1. **Antes de `app.whenReady`** — `registerMediaScheme()` registra `kaipu-media://` como esquema privilegiado. Tiene que correr antes del ready o Electron no lo trata como streamable. (`media-protocol.ts:17`)
+2. **En `app.whenReady`** — registra todos los handlers IPC y crea las ventanas:
+   - `registerRecordingSourceHandlers()` — enumeración de pantallas/ventanas
+   - `registerLibraryVaultHandlers()` — vault local
+   - `registerPermissionHandlers()` — permisos macOS/Windows
+   - `registerMediaProtocol()` — streaming de archivos del vault
+   - `createWindow()` + `new CapturePanelWindow()` + `createTray(...)`
+3. **Ciclo de vida** — `before-quit` destruye el tray; `window-all-closed` cierra la app salvo en macOS (donde vive en la menu bar).
+
+## Subsistemas
+
+Cada subsistema es un módulo con una función `register*` que engancha sus handlers. El main no tiene un "god object": `index.ts` solo orquesta el registro.
+
+| Subsistema        | Archivo                   | Qué hace                                                                                                                   |
+| ----------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Window management | `index.ts:19`             | `mainWindow` 900×670 (min 720×560), `show` en `ready-to-show`, links externos al navegador del SO                          |
+| Capture Panel     | `capture-panel-window.ts` | Ventana flotante frameless del tray (ver abajo)                                                                            |
+| Tray              | `tray.ts`                 | Ícono de menu bar: click izq = toggle panel, click der = menú (Open / Quit)                                                |
+| Recording sources | `recording-sources.ts`    | `desktopCapturer.getSources()` → thumbnails base64 320×200                                                                 |
+| Permissions       | `permissions.ts`          | Estado y prompts de screen/mic/camera por plataforma — ver [Permissions & Onboarding](/desktop/permissions-and-onboarding) |
+| Library vault     | `library/`                | Grabaciones en disco + sidecars — ver [Library Vault](/desktop/library-vault)                                              |
+| Media protocol    | `media-protocol.ts`       | `kaipu-media://` para reproducir/posters desde el vault                                                                    |
+
+El contrato IPC entre main y renderer está en [IPC Contract](/desktop/ipc-contract).
+
+## Dos ventanas, un renderer
+
+La app no tiene dos bundles de renderer: tiene **uno solo cargado con un query distinto**. `src/renderer/src/main.tsx` lee `?mode=capture` y monta `<CapturePanel/>` en vez de `<App/>` (`main.tsx:10`).
+
+- **Main window** — la app completa (Record / Library / Settings). Se crea al arrancar y se re-crea on-demand (`showMainWindow` la recrea si fue cerrada).
+- **Capture Panel** — `capture-panel-window.ts`: frameless, `alwaysOnTop`, transparente, 340px de ancho, altura 180–640 (inicial 380). Se ancla bajo el ícono del tray (`position()` clampea al work area), se auto-oculta en `blur` (comportamiento natural de popover), y ajusta su alto cuando el renderer reporta el contenido vía `capture-panel:resize`.
+
+## Constraints
+
+- `registerMediaScheme()` **debe** correr antes de `app.whenReady` (esquema privilegiado).
+- El tray se mantiene en una variable de módulo y se libera solo en `before-quit` — si no, el GC se lleva el ícono.
+- `sandbox: false` en ambas ventanas: el preload necesita `node:*` para el bridge.
+
+## Gotchas
+
+- ⚠️ El **renderer es el mismo** para app y panel; cualquier estado global que asuma una sola instancia se duplica. Record page y Capture Panel **no comparten estado en memoria** — coordinan vía hooks/IPC, no vía un store compartido.
+- ⚠️ La Capture Panel se oculta en `blur`. Abrir un dropdown/diálogo del SO que robe foco la cierra; tenerlo en cuenta al agregar UI ahí.
+- ⚠️ `mainWindow` puede ser `null` (cerrada). Todo acceso pasa por `showMainWindow()`, que la recrea — no asumir que existe.
+
+## Related
+
+- [Renderer Architecture](/desktop/renderer-architecture) — el otro lado
+- [IPC Contract](/desktop/ipc-contract) — los canales main ↔ renderer
+- [Recording Pipeline](/desktop/recording-pipeline) — el core de captura (target mediabunny)

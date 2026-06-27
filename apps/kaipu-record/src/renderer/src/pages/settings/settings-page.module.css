@@ -1,0 +1,91 @@
+/*
+ * Settings page chrome — a single scrolling column of titled sections. The
+ * Card/Row primitives carry their own styling; this file only frames the page,
+ * its header, and the few inline bits (permission status text, the vault path).
+ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow-y: auto;
+  /* Scrollbar themed globally in base.css. */
+}
+
+/* ── Header ─────────────────────────────────── */
+
+.pageHeader {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: var(--space-xl) 0 var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pageTitle {
+  margin: 0;
+  font-size: 20px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.pageSubtitle {
+  margin: 0;
+  font-size: var(--font-size-base);
+  color: var(--text-secondary);
+}
+
+/* ── Sections ───────────────────────────────── */
+
+.sections {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding-bottom: var(--space-xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.sectionTitle {
+  margin: 0;
+  padding: 0 var(--space-xs);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+/* ── Permission status ──────────────────────── */
+
+.statusGranted,
+.statusDenied {
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.statusGranted {
+  color: var(--accent-green);
+}
+
+.statusDenied {
+  color: var(--accent-red);
+}
+
+/* ── Vault path ─────────────────────────────── */
+
+.pathValue {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}

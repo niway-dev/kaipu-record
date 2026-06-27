@@ -472,56 +472,47 @@ export class YourEntityService {
 The application layer is called from HTTP routes:
 
 ```typescript
-// apps/server/src/routes/your-entities.ts
+// apps/server-hono/src/modules/your-context/your-entity.router.ts
 
-import { Elysia } from "elysia";
-import { CreateYourEntityHandler } from "@kaipu/your-context/application";
-import { CreateYourEntityCommand } from "@kaipu/your-context/application";
-import { YourEntityRepositoryDrizzle } from "@kaipu/your-context/infrastructure";
+import { implement, ORPCError } from "@orpc/server";
+import { yourEntityContract } from "../../contract/your-entity.contract";
+import { CreateYourEntityHandler } from "@kaipu/application";
+import { CreateYourEntityCommand } from "@kaipu/application";
+import { createDatabaseClient } from "@kaipu/infra-db/client";
+import { YourEntityRepository } from "@kaipu/infra-db/repositories";
+import { authMiddleware } from "../../middleware/auth";
+import { env } from "../../env";
 
-export const yourEntityRoutes = new Elysia({ prefix: "/your-entities" })
-  .derive(({ db }) => ({
-    // Dependency injection
-    yourEntityRepo: new YourEntityRepositoryDrizzle(db),
-    createYourEntityHandler: new CreateYourEntityHandler(
-      new YourEntityRepositoryDrizzle(db),
-      eventPublisher,
-    ),
-  }))
-  .post(
-    "/",
-    async ({ body, user, createYourEntityHandler, status }) => {
-      // Create command from HTTP body
-      const command = new CreateYourEntityCommand(
-        user.id,
-        body.title,
-        body.description,
-        body.priority,
-        body.category,
-        body.tags,
-      );
+const db = createDatabaseClient(env.DATABASE_URL);
+// Dependency injection: handler depends only on the domain repository interface
+const createYourEntityHandler = new CreateYourEntityHandler(
+  new YourEntityRepository(db),
+  eventPublisher,
+);
 
-      // Execute use case
-      const result = await createYourEntityHandler.execute(command);
+const impl = implement(yourEntityContract).$context<{ headers: Headers }>();
 
-      // Handle result
-      if (result.error) {
-        return status(400, {
-          data: null,
-          error: { message: result.error.message },
-        });
-      }
+export const yourEntityRouter = impl.router({
+  create: impl.create.use(authMiddleware).handler(async ({ input, context }) => {
+    // Build the command from validated input (the contract validates the body)
+    const command = new CreateYourEntityCommand(
+      context.user.id,
+      input.title,
+      input.description,
+      input.priority,
+      input.category,
+      input.tags,
+    );
 
-      return status(201, {
-        data: { id: result.data },
-        error: null,
-      });
-    },
-    {
-      body: createYourEntitySchema,
-      isAuth: true,
-    },
-  );
+    const result = await createYourEntityHandler.execute(command);
+
+    if (result.error) {
+      throw new ORPCError("BAD_REQUEST", { message: result.error.message });
+    }
+
+    return { data: { id: result.data }, error: null };
+  }),
+});
 ```
 
 ---

@@ -37,7 +37,7 @@ jobs:
       - name: Type check
         run: bun run check-types
 
-      - name: Build app
+      - name: Build web app
         working-directory: apps/web-hono
         env:
           VITE_SERVER_URL: https://placeholder.example.com
@@ -48,3 +48,15 @@ jobs:
       - name: Build backend
         working-directory: apps/server-hono
         run: bun run build
+
+      # kaipu-record (desktop) — turbo's check-types/build filters skip it, and
+      # nothing else runs its test suite. Validate it in the SAME job so we reuse
+      # the single install above (no duplicate setup). The platform/distribution
+      # build is its own next task (#7 — needs the Apple Developer account).
+      - name: Type check desktop app
+        working-directory: apps/kaipu-record
+        run: bun run typecheck
+
+      - name: Test desktop app
+        working-directory: apps/kaipu-record
+        run: bun run test

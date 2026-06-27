@@ -1,0 +1,34 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+  font-family: var(--font-family);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  /* Tone vars are set per variant below and consumed once here. */
+  background: var(--badge-bg, var(--bg-card-hover));
+  color: var(--badge-fg, var(--text-secondary));
+}
+
+.badge[data-variant="success"] {
+  --badge-bg: rgba(34, 197, 94, 0.15);
+  --badge-fg: var(--accent-green);
+}
+
+.badge[data-variant="info"] {
+  --badge-bg: rgba(246, 5, 92, 0.12);
+  --badge-fg: var(--accent-primary);
+}
+
+.badge[data-variant="warning"] {
+  --badge-bg: rgba(234, 179, 8, 0.15);
+  --badge-fg: var(--accent-yellow);
+}
+
+.badge[data-variant="danger"] {
+  --badge-bg: rgba(239, 68, 68, 0.15);
+  --badge-fg: var(--accent-red);
+}

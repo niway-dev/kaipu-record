@@ -1,0 +1,92 @@
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  box-sizing: border-box;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: border-color var(--transition);
+  min-width: 120px;
+  max-width: 280px;
+  text-align: left;
+  outline: none;
+}
+
+.trigger:hover:not([data-disabled]) {
+  border-color: var(--accent-primary);
+}
+
+.trigger[data-state="open"],
+.trigger:focus-visible {
+  border-color: var(--accent-primary);
+}
+
+.trigger[data-disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.triggerChevron {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: transform var(--transition);
+}
+
+.trigger[data-state="open"] .triggerChevron {
+  transform: rotate(180deg);
+}
+
+/* ── Dropdown ────────────────────────────── */
+
+.menu {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  padding: 4px 0;
+  min-width: var(--radix-select-trigger-width);
+  max-height: min(280px, 50vh);
+  overflow-y: auto;
+  z-index: 20000;
+}
+
+.menuOption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  outline: none;
+  user-select: none;
+}
+
+.menuOption[data-highlighted] {
+  background: rgba(246, 5, 92, 0.15);
+  color: var(--accent-primary);
+}
+
+.menuOption[data-state="checked"] {
+  color: var(--accent-primary);
+}
+
+.menuOptionIndicator {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--accent-primary);
+}

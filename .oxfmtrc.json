@@ -7,6 +7,8 @@
     "**/.next/**",
     "**/.wrangler/**",
     "**/.source/**",
-    "**/convex/_generated/**"
+    "**/convex/_generated/**",
+    "**/workspace-temp/**",
+    "**/node_modules/**"
   ]
 }

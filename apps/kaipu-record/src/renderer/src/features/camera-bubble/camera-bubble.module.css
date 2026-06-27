@@ -1,0 +1,32 @@
+/* A fixed-size square → a true circle (a percentage height wouldn't resolve
+   against the auto-height window body, which is what gave the oval). Centered in
+   a slightly larger window so the shadow shows. */
+.bubble {
+  -webkit-app-region: drag;
+  width: 192px;
+  height: 192px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--bg-card);
+  border: 3px solid var(--accent-primary);
+  /* On a transparent floating window a box-shadow is CLIPPED to the window's
+     rectangular bounds — if it reaches the edge you get an ugly dark box. Keep it
+     small enough to fully fade within the window margin (window 224 − bubble 192 =
+     16px each side, so an 8px blur fades well before the edge). */
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Mirror like a selfie cam — matches what the user expects to see. */
+  transform: scaleX(-1);
+}
+
+.placeholder {
+  color: var(--text-muted);
+}

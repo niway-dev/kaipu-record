@@ -1,0 +1,24 @@
+.preview {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: inset 0 0 0 1px rgba(246, 5, 92, 0.15);
+}
+
+.video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.icon {
+  color: var(--text-muted);
+}

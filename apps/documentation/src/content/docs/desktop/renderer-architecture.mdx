@@ -1,0 +1,138 @@
+---
+title: Renderer Architecture & Migration Pattern
+description: How the kaipu-record renderer is organized (pages, features, ui, shell) and the repeatable workflow for migrating legacy screens into it.
+---
+
+# Renderer Architecture & Migration Pattern
+
+How the `apps/kaipu-record` renderer (`src/renderer/src`) is structured, and the
+repeatable workflow we use to rebuild screens from a reference recorder. Reference
+apps are for **comparison only** — we reproduce the design, not the source (see
+Styling and Gotchas).
+
+## Folder layout
+
+| Folder                | Holds                                                                                              | Test                 |
+| --------------------- | -------------------------------------------------------------------------------------------------- | -------------------- |
+| `pages/<page>/`       | One screen. **Composition only** — local state + wiring of the pieces below.                       | The page (jsdom)     |
+| `features/<feature>/` | Feature-specific building blocks: `components/`, `types.ts`, pure helpers.                         | Helpers + components |
+| `ui/`                 | Generic, domain-agnostic primitives (`Button`, `Card`, `Row`, `Select`, `Toggle`, `SearchInput`…). | Primitive            |
+| `shell/`              | App layout: `app-shell`, `sidebar`, `route-error`.                                                 | —                    |
+| `app/`                | `router.tsx` (route tree) and `App.tsx`.                                                           | —                    |
+| `helpers/`            | Cross-page pure helpers.                                                                           | Helper               |
+
+The rule of thumb that decides where a component lives: **"would I use this in any
+app?"** → `ui/`. **"does it only make sense inside this feature?"** → `features/<feature>/components/`.
+A page never owns markup it could delegate — it composes.
+
+## The migration workflow
+
+Every legacy screen comes over in the same three ordered steps:
+
+1. **Migrate the page.** Bring the screen in as a single presentational page under
+   `pages/<page>/`. Strip everything that connects to the outside world — stores,
+   IPC, `electron-log`, device/media APIs, persistence — and replace it with
+   **local state + placeholder data**. The goal is a screen that renders, not one
+   that works end-to-end.
+2. **Rename to convention.** Files are **kebab-case** (`record-page.tsx`,
+   `screen-source-selector.tsx`). The component _identifier_ stays PascalCase
+   (`export function RecordPage`). Framework entry points keep their conventional
+   names (see Gotchas).
+3. **Split into components.** Extract each distinct section into its own
+   presentational component under `features/<feature>/components/`, with a
+   **co-located CSS module**. The page shrinks to composition + state.
+
+Record was the reference migration: `record-page.tsx` went from ~290 lines of
+inline markup to a composition of `source-card`, `recording-toggles`, `mic-picker`,
+`webcam-preview`, `record-button`, `countdown-overlay` and `screen-source-selector`.
+
+## Sharing recording state across windows
+
+The Record page and the menu-bar **Capture Panel** are separate Electron windows —
+separate renderer instances — that show the same controls. They share **code, not
+state**: each renders the same dumb components (`SourceCard`, `RecordingToggles`,
+`MicPicker`, `RecordButton`) against its own `useRecordingSetup` instance.
+
+Source discovery and the default pick live in one place so both windows agree:
+
+- **`useRecordingSetup`** — pure UI state (selected source, capture toggles, mic
+  device, countdown/recording lifecycle). No IPC, no device APIs; easy to test.
+- **`useSourceSelection(setup)`** — loads the real screen/window list via
+  `getScreenSources()` (on mount and when the picker opens) and **preselects the
+  primary screen** (first `type: "screen"`, else the first source) onto the setup,
+  so recording is ready without a manual pick. Returns the list for the picker.
+
+Both the Record page and the Capture Panel call `useSourceSelection(setup)`, so
+they enumerate the same way and default to the **same** screen — no window
+hardcodes a placeholder source. The Capture Panel has no picker of its own; its
+**Change** button just opens the main window.
+
+`useRecordingSetup` no longer fakes recording: its `startRecording` now drives the
+real engine via **`useScreenRecorder`** (capture + mediabunny MP4 encode + the
+floating control bar), which runs in the main window only. Because recording must
+run where capture/WebCodecs live, the Capture Panel's record button opens the main
+window rather than encoding in its own (transparent) renderer. See the
+[Recording Pipeline](/desktop/recording-pipeline) for the full capture→encode→vault flow.
+
+## Styling
+
+- **CSS Modules, co-located** next to each component (`x.tsx` + `x.module.css`).
+- **Design tokens only** — colors/space/radii/typography come from
+  `src/renderer/src/assets/base.css` via `var(--token)`. No hardcoded colors in JS.
+- **`cx()` + `data-*` is the className house style.** Compose classes with the
+  `ui/cx.ts` helper (`cx(styles.card, compact && styles.compact)`) instead of inline
+  `[...].join(" ")` or template literals. Express variants and interactive state as
+  **`data-*` attributes** matched by CSS attribute selectors
+  (`.toggle[data-active]`, `.button[data-variant="primary"]`), and drive per-variant
+  values through **CSS custom properties** (`--btn-h`, `--track`) rather than a
+  `styles[variant]` lookup or an appended `*Active` class.
+- The legacy token `--accent-blue` maps to `--accent-primary` here.
+- **Primary CTAs share one glow.** The signature accent halo lives in the
+  `--glow-accent` token; every primary/accent button applies `box-shadow:
+var(--glow-accent)` (ui `Button[data-variant="primary"]`, `RecordButton`, the
+  Record-page Stop, the onboarding CTA). Drop it on `:disabled` and on dark/non-accent
+  states — don't redefine the shadow per-component.
+- **Scrollbars are themed globally** in `assets/base.css` (a thin, rounded,
+  hover-brightening `::-webkit-scrollbar`), so every scroll area looks the same —
+  don't restyle or hide them per-component. A container whose scrollbar must not
+  overlap its content adds `scrollbar-gutter: stable` locally to reserve the lane
+  (e.g. the screen-source picker grid).
+
+## Routing & error handling
+
+`app/router.tsx` uses `createHashRouter` (required for `file://` in packaged
+Electron). Every page is a child of `<AppShell />` so it shares the sidebar.
+
+Two safety nets live in `shell/route-error.tsx`:
+
+- **`errorElement`** on the shell route catches thrown render errors anywhere in
+  the tree and shows a styled full-screen fallback.
+- A **`{ path: "*" }` catch-all** renders an in-shell 404 (sidebar stays visible)
+  instead of React Router's default developer error screen.
+
+## Connecting comes later
+
+Migrated screens are intentionally **UI-only**. The handoff points are marked in
+code (placeholder data, `// wired later` comments, optional-chained
+`window.electronAPI?.x?.()`), so wiring a real store/IPC is an additive step that
+doesn't reshape the component tree.
+
+## Gotchas
+
+- ⚠️ **Don't rename framework entry points.** `src/main/index.ts`,
+  `src/preload/index.ts` + `index.d.ts`, `src/renderer/src/main.tsx` (referenced by
+  `index.html`), `*.config.ts` and `env.d.ts` keep their names — the build/HTML
+  reference them by path.
+- ⚠️ **Match the design, don't copy the source.** Reproduce the _look_ of a
+  reference screen, but write the markup/CSS in our own structure (`cx()`, `data-*`
+  attributes, custom properties). Do **not** port `.module.css` or component source
+  verbatim — the reference recorders are similarity-checked and known to carry copied
+  code, so verbatim porting re-introduces it. Restructure, keep the visuals.
+- ⚠️ **The custom titlebar needs a frameless window.** Matching the legacy
+  chrome (custom titlebar, hidden native frame) is a main-process change
+  (`titleBarStyle` / frameless), so it's deferred as "connecting", not UI.
+
+## Related
+
+- [Recording Pipeline](/desktop/recording-pipeline)
+- [Product Philosophy](/desktop/product-philosophy)

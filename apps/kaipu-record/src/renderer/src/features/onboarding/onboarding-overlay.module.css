@@ -1,0 +1,140 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-app);
+  color: var(--text-primary);
+}
+
+/* ── Stage ────────────────────────────── */
+
+.stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background: radial-gradient(110% 70% at 50% -8%, rgba(246, 5, 92, 0.12), transparent 58%);
+}
+
+.content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 40px;
+  text-align: center;
+}
+
+/* Center the step, but let it scroll (instead of clipping the footer) when the
+   window is too short to fit everything. `margin: auto` keeps it centered while
+   still allowing overflow scroll in both directions. */
+.content > * {
+  margin: auto;
+}
+
+/* ── Footer ───────────────────────────── */
+
+.footer {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding: 12px 28px;
+  border-top: 1px solid var(--border);
+  gap: 16px;
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-family);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-secondary);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.dots {
+  display: flex;
+  gap: 7px;
+  margin: 0 auto;
+}
+
+.dot,
+.dotActive {
+  height: 7px;
+  border-radius: 999px;
+  background: var(--border-light);
+  transition: all 0.2s;
+}
+
+.dot {
+  width: 7px;
+}
+
+.dotActive {
+  width: 20px;
+  background: var(--accent-primary);
+}
+
+.advance {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--accent-primary);
+  color: #fff;
+  font-family: var(--font-family);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  border: none;
+  border-radius: 8px;
+  padding: 9px 18px;
+  cursor: pointer;
+  box-shadow: var(--glow-accent);
+  transition: background var(--transition);
+}
+
+.cta:hover:not(:disabled) {
+  background: var(--accent-primary-hover);
+}
+
+.cta:disabled {
+  background: var(--bg-card-hover);
+  color: var(--text-muted);
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.skip {
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.hint {
+  flex-shrink: 0;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  padding-bottom: 10px;
+}

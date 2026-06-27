@@ -1,5 +1,5 @@
-appId: com.electron.app
-productName: kaipu-record
+appId: com.niway.kaipu-record
+productName: Kaipu Record
 directories:
   buildResources: build
 files:

@@ -302,22 +302,28 @@ export class GetYourEntities {
 ### 5. Controller/Route (Infrastructure)
 
 ```typescript
-// apps/server/src/routes/your-entities.ts
+// apps/server-hono/src/modules/your-context/your-entity.router.ts
 
-import { Elysia } from "elysia";
-import { GetYourEntities } from "@kaipu/application/your-context";
-import { YourEntityRepositoryDrizzle } from "@kaipu/database/your-context";
+import { implement } from "@orpc/server";
+import { yourEntityContract } from "../../contract/your-entity.contract";
+import { createDatabaseClient } from "@kaipu/infra-db/client";
+import { YourEntityRepository } from "@kaipu/infra-db/repositories";
+import { getYourEntities } from "@kaipu/application";
+import { authMiddleware } from "../../middleware/auth";
+import { env } from "../../env";
 
-export const yourEntityRoutes = new Elysia({ prefix: "/your-entities" })
-  .decorate("db", createDatabaseClient(env.DATABASE_URL))
-  .decorate("getYourEntities", (db) => {
-    const repo = new YourEntityRepositoryDrizzle(db);
-    return new GetYourEntities(repo);
-  })
-  .get("/", async ({ query, user, db, getYourEntities }) => {
-    const result = await getYourEntities(db).execute(user.id, query);
-    return successWithPaginationBody(result.data, result);
-  });
+const db = createDatabaseClient(env.DATABASE_URL);
+const repo = new YourEntityRepository(db);
+
+const impl = implement(yourEntityContract).$context<{ headers: Headers }>();
+
+export const yourEntityRouter = impl.router({
+  list: impl.list.use(authMiddleware).handler(async ({ input, context }) => {
+    const result = await getYourEntities({ repo, userId: context.user.id, pagination: input });
+    if (result.error) throw result.error;
+    return { data: result.data.data, error: null, meta: { pagination: result.data.meta } };
+  }),
+});
 ```
 
 ---
@@ -327,15 +333,15 @@ export const yourEntityRoutes = new Elysia({ prefix: "/your-entities" })
 ### ❌ Bad: Direct Queries in Routes
 
 ```typescript
-// DON'T DO THIS
-export const yourEntityRoutes = new Elysia()
-  .get("/", async ({ query, user, db }) => {
-    const entities = await db.select()
-      .from(yourEntityTable)
-      .where(eq(yourEntityTable.userId, user.id));
+// DON'T DO THIS — querying the DB straight from the route handler
+list: impl.list.use(authMiddleware).handler(async ({ context }) => {
+  const entities = await db
+    .select()
+    .from(yourEntityTable)
+    .where(eq(yourEntityTable.userId, context.user.id));
 
-    return { data: entities };
-  });
+  return { data: entities, error: null };
+}),
 ```
 
 ### ❌ Bad: Queries Folder in Database Package

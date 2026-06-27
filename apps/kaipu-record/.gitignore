@@ -4,3 +4,8 @@ out
 .DS_Store
 .eslintcache
 *.log*
+
+# electron-builder buildResources (app icons + entitlements) are SOURCE inputs,
+# not build output. The root .gitignore "build" rule would drop them, so re-include.
+!build/
+!build/**

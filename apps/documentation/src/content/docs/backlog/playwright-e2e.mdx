@@ -6,7 +6,7 @@ description: Propuesta diferida — añadir E2E con Playwright para flujos de UI
 # E2E con Playwright
 
 > **Estado: 🔵 Propuesto (diferido).**
-> Se decidió priorizar primero la [migración a Vitest](./vitest-migration) (unit + integration). El E2E queda para después.
+> Se decidió priorizar primero el testing unit + integration con Vitest. El E2E queda para después.
 
 ## Alcance propuesto
 
@@ -30,6 +30,6 @@ La app vive de cosas que el E2E **no** cubre fácilmente:
 
 ## Pirámide objetivo
 
-- **Unit + integration** → Vitest (ver [migración](./vitest-migration))
+- **Unit + integration** → Vitest
 - **E2E web** → Playwright
 - **E2E Electron** → Playwright (smoke UI) · WebdriverIO si crece

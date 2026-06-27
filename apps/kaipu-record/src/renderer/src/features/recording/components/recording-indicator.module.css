@@ -1,0 +1,104 @@
+/* Shared "recording / paused + timer" strip. Two variants:
+   - bar:    full-width header on the Record page
+   - banner: compact pink pill in the Capture Panel */
+
+.bar,
+.banner {
+  display: flex;
+  align-items: center;
+}
+
+.bar {
+  gap: 12px;
+  padding: 14px 18px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-sm);
+}
+
+.banner {
+  gap: 8px;
+  padding: 9px 12px;
+  background: rgba(246, 5, 92, 0.1);
+  border: 1px solid rgba(246, 5, 92, 0.32);
+  border-radius: var(--radius-sm);
+}
+
+/* ── Dot ────────────────────────────────────── */
+
+.dot {
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--accent-primary);
+}
+
+.bar .dot {
+  width: 9px;
+  height: 9px;
+  animation: recordingPulse 1.4s ease-in-out infinite;
+}
+
+.banner .dot {
+  width: 8px;
+  height: 8px;
+  animation: bannerPulse 1.4s ease-in-out infinite;
+}
+
+.dot[data-paused] {
+  background: var(--accent-yellow);
+  animation: none;
+}
+
+/* ── Label ──────────────────────────────────── */
+
+.label {
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.bar .label {
+  font-size: var(--font-size-lg);
+}
+
+.banner .label {
+  font-size: var(--font-size-sm);
+}
+
+/* ── Timer ──────────────────────────────────── */
+
+.timer {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.bar .timer {
+  font-size: 22px;
+  letter-spacing: 0.02em;
+}
+
+.banner .timer {
+  font-size: 14px;
+}
+
+@keyframes recordingPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@keyframes bannerPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}

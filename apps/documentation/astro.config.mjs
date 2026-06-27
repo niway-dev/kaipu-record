@@ -26,6 +26,11 @@ export default defineConfig({
             { slug: "desktop/product-philosophy" },
             { slug: "desktop/filesystem-first-monetization" },
             { slug: "desktop/recording-pipeline" },
+            { slug: "desktop/renderer-architecture" },
+            { slug: "desktop/main-process-architecture" },
+            { slug: "desktop/ipc-contract" },
+            { slug: "desktop/library-vault" },
+            { slug: "desktop/permissions-and-onboarding" },
             { slug: "desktop/electron-vs-tauri" },
           ],
         },
@@ -35,12 +40,7 @@ export default defineConfig({
         },
         {
           label: "Backlog",
-          items: [
-            { slug: "backlog" },
-            { slug: "backlog/library-page-cleanup" },
-            { slug: "backlog/vitest-migration" },
-            { slug: "backlog/playwright-e2e" },
-          ],
+          items: [{ slug: "backlog" }, { slug: "backlog/playwright-e2e" }],
         },
         {
           label: "Architecture",

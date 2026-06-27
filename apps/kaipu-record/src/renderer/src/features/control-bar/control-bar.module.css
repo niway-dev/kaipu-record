@@ -1,0 +1,150 @@
+/* The floating control bar. Transparent window → this pill is the only paint.
+   #root flex-centers it (see main.css), so no margins here. */
+.bar {
+  -webkit-app-region: drag;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 54px;
+  width: max-content;
+  padding: 0 14px 0 18px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  /* Squarer than a pill — a rounded rectangle, matching the design. */
+  border-radius: 16px;
+  /* Tight, modest elevation — reads cleanly on light and dark backdrops instead
+     of a heavy halo that looks like a gradient box over white. */
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.28);
+  font-family: var(--font-family);
+}
+
+.bar button,
+.meter {
+  -webkit-app-region: no-drag;
+}
+
+/* Frameless widget: the OS focus ring (it picks up the system accent colour) makes
+   a clicked button look pre-selected. Drop it — hover/active carry the affordance. */
+.bar button:focus {
+  outline: none;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.dot[data-paused] {
+  background: var(--accent-yellow);
+  animation: none;
+}
+
+.time {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  color: var(--text-primary);
+}
+
+.pausedLabel {
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.savingLabel {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.spinner {
+  color: var(--text-secondary);
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.meter {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 20px;
+}
+
+.meterBar {
+  width: 3px;
+  height: calc(5px + var(--level, 0) * 15px);
+  border-radius: 2px;
+  background: var(--accent-primary);
+  transition: height 80ms linear;
+}
+
+.divider {
+  width: 1px;
+  height: 26px;
+  background: var(--border);
+}
+
+/* Pause/resume — a squarer button with the icon centred and roomy padding. */
+.control {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.control:hover {
+  background: var(--bg-input);
+  color: var(--text-primary);
+}
+
+.stop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 10px;
+  background: var(--accent-primary);
+  color: #fff;
+  cursor: pointer;
+}
+
+.stop:hover {
+  filter: brightness(1.08);
+}
+
+/* Keyboard-shortcut hint, far right — subtle mono glyphs like the design. */
+.shortcut {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  padding-left: 4px;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}

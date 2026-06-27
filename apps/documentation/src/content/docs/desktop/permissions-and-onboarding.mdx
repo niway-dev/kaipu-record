@@ -1,0 +1,62 @@
+---
+title: Permissions & Onboarding
+description: Cómo el recorder chequea y solicita permisos de screen/mic/camera por plataforma, y el flujo de onboarding de primer arranque.
+---
+
+# Permissions & Onboarding
+
+Para grabar, el recorder necesita permisos del SO (screen recording, micrófono, cámara). El comportamiento del SO varía mucho por plataforma, así que la lógica está partida en dos: **wiring que toca el SO** en el main, y **lógica pura testeable** en el renderer.
+
+## El reparto
+
+- **Main** (`main/permissions.ts`) — wiring fino sobre `systemPreferences` y `shell`. Sin lógica de negocio.
+- **Renderer puro** (`features/onboarding/permissions.ts`) — qué permisos son requeridos, metadata de display, sin React ni Electron (trivialmente testeable).
+- **Renderer side-effecting** (`features/onboarding/use-permissions.ts`) — el hook que llama al IPC.
+
+## Realidad por plataforma
+
+El principio: **click en "Grant" siempre hace algo visible.** Pero el SO no siempre deja:
+
+| Plataforma  | Screen                                                                                                                                    | Mic / Camera                                                                          |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| **macOS**   | Sin API de prompt. Si está `not-determined`, se "empuja" con una enumeración 1×1 de `desktopCapturer`; si no, deep-link a System Settings | `askForMediaAccess` solo prompea en `not-determined`; si ya está denegado → deep-link |
+| **Windows** | No se gatea — siempre disponible                                                                                                          | Sin `askForMediaAccess`; deep-link a `ms-settings:`                                   |
+| **Otras**   | No se gatea — todo lee como granted                                                                                                       | igual                                                                                 |
+
+`checkPermission()` refleja esto: screen solo se gatea en macOS; mic/camera usan `getMediaAccessStatus` en macOS y Windows; el resto lee granted (`permissions.ts:51`).
+
+## El flujo de `requestPermission`
+
+`permissions.ts:72`:
+
+1. ¿Ya está granted? → `true`.
+2. macOS + mic/camera + `not-determined` → `askForMediaAccess` (prompt nativo).
+3. macOS + screen + `not-determined` → nudge con `desktopCapturer` 1×1, re-chequea.
+4. Cualquier otro caso (ya denegado, screen, Windows) → abre el pane de System Settings.
+5. Siempre devuelve el estado **re-leído** después de intentar.
+
+Los panes son URLs deep-link por kind y plataforma (`MAC_PANES` / `WINDOWS_PANES` en `permissions.ts:25`).
+
+## Onboarding
+
+`features/onboarding/` — overlay de primer arranque con tres pasos (`steps/`): **welcome → permissions → done**.
+
+- **Requeridos para terminar**: `screen` y `microphone`. La cámara es **opcional** (`REQUIRED_PERMISSIONS` en `permissions.ts`).
+- `requiredPermissionsMet(status)` decide si se puede avanzar.
+- El estado vive en `onboarding-store.ts`, expuesto vía `onboarding-context.ts` / `onboarding-provider.tsx`.
+- **Replay**: la Settings page puede re-abrir el overlay (`useOnboarding`), así el usuario revisa permisos cuando quiera.
+
+Cada permiso tiene metadata de display (`PERMISSION_META`): ícono (lucide), nombre, si es requerido, y descripción.
+
+## Gotchas
+
+- ⚠️ **Screen recording en macOS no tiene prompt asíncrono.** El "nudge" via `desktopCapturer` solo dispara el diálogo del SO la primera vez (`not-determined`). Una vez denegado, el único camino es System Settings — y el cambio **no aplica hasta reiniciar la app** (limitación de macOS).
+- ⚠️ Sin permiso de screen, `recording:get-screen-sources` igual resuelve, pero los **thumbnails vienen en blanco** (`recording-sources.ts:8`). No interpretar thumbnails vacíos como "no hay fuentes".
+- ⚠️ La cámara es opcional; no bloquear el onboarding por ella.
+- ⚠️ La lógica de "qué cuenta como listo" está en el helper puro del renderer, no en el main. Cambiar requisitos = editar `REQUIRED_PERMISSIONS`, no el main.
+
+## Related
+
+- [Main Process Architecture](/desktop/main-process-architecture) — dónde se registran los handlers
+- [IPC Contract](/desktop/ipc-contract) — los canales `permissions:*`
+- [Recording Pipeline](/desktop/recording-pipeline) — qué se desbloquea con los permisos

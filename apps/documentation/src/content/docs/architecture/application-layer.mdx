@@ -1,315 +1,195 @@
 ---
 title: Application Layer & Package Architecture
-description: Layer-first architecture for sharing business logic across multiple server-side consumers while keeping the mobile app safe
+description: Layer-first architecture for sharing business logic across multiple server-side consumers (Hono/oRPC API + TanStack serverFn) while keeping the domain client-safe.
 ---
 
 ## The Problem
 
 This monorepo serves multiple consumers that need the same business logic:
 
-| Consumer                 | How it calls business logic                   | Example                    |
-| ------------------------ | --------------------------------------------- | -------------------------- |
-| **TanStack Start** (web) | `serverFn` — runs on server, no HTTP hop      | Direct function call       |
-| **Elysia API** (server)  | HTTP routes — for mobile and external clients | REST endpoint              |
-| **Astro** (website)      | Server functions                              | Direct function call       |
-| **Cron jobs / workers**  | Direct execution                              | Scheduled task             |
-| **Mobile app** (Expo)    | HTTP client — calls the Elysia API            | `fetch()` to REST endpoint |
+| Consumer                                 | How it calls business logic                  | Example              |
+| ---------------------------------------- | -------------------------------------------- | -------------------- |
+| **TanStack Start** (`apps/web-hono`)     | `serverFn` — runs on the server, no HTTP hop | Direct function call |
+| **Hono + oRPC API** (`apps/server-hono`) | HTTP routes — for external/mobile clients    | REST/oRPC endpoint   |
+| **Cron jobs / workers**                  | Direct execution                             | Scheduled task       |
 
-If use cases live inside `apps/server/src/routes/`, TanStack Start can't use them without making an HTTP call to itself. Same for Astro, same for cron jobs. Duplicating the logic across consumers leads to drift and bugs.
+If a use case lived inside `apps/server-hono/src/modules/`, the web app couldn't reuse it without making an HTTP call to itself. Duplicating the logic across consumers leads to drift and bugs. So business logic lives in a **shared package**, and each consumer wires it to its own infrastructure.
 
 ## The Architecture
 
-We use a **layer-first** package structure where each package represents an architectural layer, not a bounded context:
+A **layer-first** package structure where each package is an architectural layer, not a bounded context:
 
 ```
-packages/domain/          <-- Pure. Mobile-safe. Constants, schemas, types, interfaces.
-packages/application/     <-- Use cases. Server-only. Depends on domain interfaces.
-packages/infra-db/              <-- Infrastructure. Server-only. Implements domain interfaces.
+packages/domain/        <-- Pure. Client-safe. Constants, schemas, types, interfaces.
+packages/application/   <-- Use cases. Server-only. Depends on domain interfaces.
+packages/infra-db/      <-- Infrastructure. Server-only. Implements domain interfaces.
 
-apps/web/                 <-- TanStack Start: serverFn -> application -> infra-db
-apps/server/              <-- Elysia: HTTP routes -> application -> infra-db
-apps/mobile/              <-- Expo: calls server API, imports ONLY domain
-apps/website/             <-- Astro: server functions -> application -> infra-db
-workers/                  <-- Cron jobs -> application -> infra-db
+apps/web-hono/          <-- TanStack Start: serverFn -> application -> infra-db
+apps/server-hono/       <-- Hono + oRPC: route handler -> application -> infra-db
 ```
 
 ### Dependency Rule
 
-The dependency arrow **always points inward** toward domain. This is strict and non-negotiable:
+The dependency arrow **always points inward** toward domain. Strict and non-negotiable:
 
 ```
-domain          <-- depends on NOTHING (leaf package, mobile-safe)
-application     <-- depends on domain ONLY (server-only)
-infra-db        <-- depends on domain ONLY (server-only)
-apps/*          <-- wire application + infra-db together
+domain        <-- depends on NOTHING (leaf package, client-safe)
+application   <-- depends on domain ONLY (server-only)
+infra-db      <-- depends on domain ONLY (server-only)
+apps/*        <-- wire application + infra-db together
 ```
 
 - `domain` never imports from `application` or `infra-db`
 - `application` never imports from `infra-db` (uses domain interfaces instead)
 - `infra-db` never imports from `application`
-- Only the app layer (routes, serverFn, workers) wires concrete implementations
+- Only the app layer (route handlers, serverFn, workers) wires concrete implementations
 
 ### Why Layer-First, Not Vertical Bounded Contexts
 
-We considered organizing by bounded context (one package per context with all layers inside):
+We considered organizing by bounded context (one package per context with all layers inside). We chose layer-first because:
 
-```
-// NOT what we do
-packages/your-context/
-  domain/
-  application/
-  infrastructure/
-```
+1. **Client safety is structural.** Any client surface (browser bundle, Electron renderer, a future mobile app) imports `@kaipu/domain` — a package that _cannot_ contain infrastructure by design. With vertical slicing, a client would have to avoid `@kaipu/your-context/application` — a subpath in the same package. One wrong import bundles your DB code into the client.
+2. **Package boundary > subpath boundary.** A separate package is a harder boundary than a subpath export. You can't accidentally import what isn't in the dependency tree.
+3. **Less overhead.** Three packages (domain, application, infra-db) instead of N packages per context, each with its own `package.json`, `tsconfig`, and build config.
+4. **Cross-context sharing is trivial.** A type from another context is a relative import within the same package.
 
-We chose layer-first instead because:
-
-1. **Mobile safety is structural.** The mobile app imports `@kaipu/domain` — a package that _cannot_ contain infrastructure by design. With vertical slicing, the mobile app would need to avoid `@kaipu/your-context/application` — a subpath in the same package. One wrong import and Metro bundles your DB code into the mobile binary.
-
-2. **Package boundary > subpath boundary.** A separate package is a harder boundary than a subpath export. You can't accidentally import what doesn't exist in the dependency tree.
-
-3. **Less overhead.** Three packages (domain, application, infra-db) instead of N packages per bounded context, each with its own `package.json`, `tsconfig`, and build config.
-
-4. **Cross-context sharing is trivial.** If one context needs a type from another, it's a relative import within the same package.
-
-When bounded contexts grow, we organize them as **folders within each layer package**:
-
-```
-packages/domain/src/
-  your-context/
-    constants/
-    schemas/
-    types/
-  evaluations/        <-- future context, just a folder
-    constants/
-    schemas/
-
-packages/application/src/
-  your-context/
-    create-your-entity.ts
-  evaluations/        <-- future context, just a folder
-    create-evaluation.ts
-
-packages/infra-db/src/
-  your-context/
-    schema/
-    repositories/
-    mappers/
-  evaluations/
-```
+When bounded contexts grow, they become **folders within each layer package** (`packages/application/src/todos/`, a future `packages/application/src/evaluations/`, etc.) — see [Bounded Contexts](/architecture/bounded-contexts-complete-guide).
 
 ## Package Details
 
-### `@kaipu/domain` — Pure, Mobile-Safe
+### `@kaipu/domain` — Pure, Client-Safe
 
-Contains only:
+Contains only constants, Zod schemas (validation contracts), TypeScript types (`ApiResponse`, `Result`, inferred schema types), and repository interfaces (e.g. `ITodoRepository` — erased at runtime).
 
-- **Constants** — enums, status info, labels, display metadata, state transitions
-- **Zod schemas** — validation contracts for input/output (create, update, filter)
-- **TypeScript types** — `ApiResponse`, `Result`, `ObjectProperties`, inferred schema types
-- **Repository interfaces** — `IYourEntityRepository` (just TypeScript interfaces, erased at runtime)
-
-**Zero dependencies on infrastructure.** No I/O, no side effects, no DB, no HTTP. This is what makes it safe for the mobile app to import — everything is pure data and type definitions.
-
-The Zod schemas serve as **contracts**: both the server (for validation) and the mobile app (for form validation) use the same schemas. This guarantees the mobile form sends exactly what the server expects.
+**Zero dependencies on infrastructure.** No I/O, no side effects, no DB, no HTTP, no `electron`/`node:*`. That purity is what makes it safe to import from any client. The Zod schemas double as **contracts**: server validation and client-side form validation use the same schema, so the client sends exactly what the server expects.
 
 ### `@kaipu/application` — Server-Only Use Cases
 
-Contains **use case functions** that orchestrate business logic. Each use case:
+Use case functions that orchestrate business logic. Each one accepts **domain interfaces** as dependencies (not concrete implementations), takes **input validated by domain schemas**, and returns a domain type — `Result<T>` for explicit error handling, or the value directly for trivial passthroughs. **Zero infrastructure imports.**
 
-- Accepts **domain interfaces** as dependencies (not concrete implementations)
-- Takes **input validated by domain schemas** (the Zod types)
-- Returns **`Result<T>`** (domain type) for explicit error handling
-- Has **zero infrastructure imports** — no DB, no HTTP, no framework
-
-Example — `createYourEntity`:
+Real example — `listTodos` (`packages/application/src/todos/list-todos.ts`):
 
 ```typescript
-// packages/application/src/your-context/create-your-entity.ts
-import type { IYourEntityRepository } from "@kaipu/domain/repositories";
-import type { CreateYourEntity, YourEntityBase } from "@kaipu/domain/schemas";
-import type { Result } from "@kaipu/domain/types";
-import { CURRENCIES } from "@kaipu/domain/constants";
+import type { ITodoRepository } from "@kaipu/domain/repositories";
+import type { TodoBase } from "@kaipu/domain/schemas";
+import type { Result, PaginationQuery, PaginatedResult } from "@kaipu/domain/types";
 
-export async function createYourEntity(params: {
-  repo: IYourEntityRepository;
-  input: CreateYourEntity;
+export async function listTodos(params: {
+  repo: ITodoRepository;
   userId: string;
-}): Promise<Result<YourEntityBase>> {
-  const { repo, input, userId } = params;
-
-  const yourEntity: YourEntityBase = {
-    id: crypto.randomUUID(),
-    name: input.name,
-    description: input.description ?? null,
-    status: input.status,
-    salary: input.salary ?? null,
-    currency: input.currency ?? CURRENCIES.USD,
-    userId,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    deletedAt: null,
-  };
+  pagination: PaginationQuery;
+}): Promise<Result<PaginatedResult<TodoBase>>> {
+  const { repo, userId, pagination } = params;
+  const page = pagination.page ?? 1;
+  const limit = pagination.limit ?? 5;
+  const offset = (page - 1) * limit;
 
   try {
-    await repo.save(yourEntity);
-    return { data: yourEntity, error: null };
+    const result = await repo.findAllByUserIdPaginated(userId, limit, offset);
+    return {
+      data: {
+        data: result.data,
+        meta: { page, limit, total: result.total, totalPages: Math.ceil(result.total / limit) },
+      },
+      error: null,
+    };
   } catch (error) {
     return { data: null, error: error as Error };
   }
 }
 ```
 
-Notice: the function doesn't know if it's running inside an Elysia route, a TanStack serverFn, or a cron job. It doesn't care. The caller provides the repo.
+Notice: the function doesn't know whether it runs inside an oRPC route handler, a TanStack serverFn, or a cron job. It doesn't care — the caller provides the repo.
 
 ### `@kaipu/infra-db` — Infrastructure
 
-Contains concrete implementations:
+Concrete implementations: Drizzle schema definitions, repository implementations (`TodoRepository implements ITodoRepository`), mappers (DB row ↔ domain type), and the DB client factory.
 
-- **Drizzle schema definitions** — table columns, relations
-- **Repository implementations** — `YourEntityRepository implements IYourEntityRepository`
-- **Mappers** — convert between DB rows and domain types
-- **DB client** — connection factory
-- **Config** — table prefix, DB-specific settings
+## How Consumers Wire It Together
 
-### How Consumers Wire It Together
+Each consumer wires the same use case to its own infrastructure. Both of these call `listTodos`:
 
-Each consumer is responsible for wiring the concrete dependencies:
-
-**Elysia API route** (for mobile/external clients):
+**Hono + oRPC route** (`apps/server-hono/src/modules/todo/todo.router.ts`):
 
 ```typescript
-// apps/server/src/routes/your-entities.ts
-import { createYourEntity } from "@kaipu/application/your-context";
-import { YourEntityRepository } from "@kaipu/infra-db/repositories";
+import { implement } from "@orpc/server";
+import { todoContract } from "../../contract/todo.contract";
+import { createDatabaseClient } from "@kaipu/infra-db/client";
+import { TodoRepository } from "@kaipu/infra-db/repositories";
+import { listTodos } from "@kaipu/application";
+import { authMiddleware } from "../../middleware/auth";
+import { env } from "../../env";
 
-.post("/", async ({ body, yourEntityRepo, user }) => {
-  const result = await createYourEntity({
-    repo: yourEntityRepo,
-    input: body,
-    userId: user.id,
-  });
+const db = createDatabaseClient(env.DATABASE_URL);
+const repo = new TodoRepository(db);
+const impl = implement(todoContract).$context<{ headers: Headers }>();
 
-  if (result.error) throw result.error;
-  return status(201, createdBody(result.data));
-})
-```
-
-**TanStack Start serverFn** (web app, no HTTP hop):
-
-```typescript
-// apps/web/src/server/your-context.ts
-import { createYourEntity } from "@kaipu/application/your-context";
-import { YourEntityRepository } from "@kaipu/infra-db/repositories";
-
-export const createYourEntitySFn = createServerFn({ method: "POST" })
-  .validator(createYourEntitySchema)
-  .handler(async ({ data, context }) => {
-    const repo = new YourEntityRepository(db);
-    return createYourEntity({ repo, input: data, userId: context.user.id });
-  });
-```
-
-**Mobile app** (calls the API, never imports application or infra-db):
-
-```typescript
-// apps/mobile/app/your-context/create.tsx
-import { createYourEntitySchema } from "@kaipu/domain/schemas";
-
-// Validate client-side with the same Zod schema the server uses
-const validated = createYourEntitySchema.parse(formData);
-const response = await fetch(`${API_URL}/your-entities`, {
-  method: "POST",
-  body: JSON.stringify(validated),
+export const todoRouter = impl.router({
+  list: impl.list.use(authMiddleware).handler(async ({ input, context }) => {
+    const result = await listTodos({ repo, userId: context.user.id, pagination: input });
+    if (result.error) throw result.error;
+    return { data: result.data.data, error: null, meta: { pagination: result.data.meta } };
+  }),
 });
 ```
 
+**TanStack Start serverFn** (`apps/web-hono/src/server-functions/list-todos.ts`) — no HTTP hop, calls the use case in-process:
+
+```typescript
+import { createServerFn } from "@tanstack/react-start";
+import { paginationQuerySchema } from "@kaipu/domain/schemas";
+import { createDatabaseClient } from "@kaipu/infra-db/client";
+import { TodoRepository } from "@kaipu/infra-db/repositories";
+import { listTodos as listTodosUseCase } from "@kaipu/application";
+import { getAuthSession } from "@/lib/auth/get-auth-session";
+import { env } from "@/env/server";
+
+export const listTodos = createServerFn({ method: "GET" })
+  .inputValidator((input) => paginationQuerySchema.parse(input))
+  .handler(async (ctx) => {
+    const session = await getAuthSession();
+    if (!session) return { data: null, error: { message: "Unauthorized" } };
+
+    const repo = new TodoRepository(createDatabaseClient(env.DATABASE_URL));
+    const result = await listTodosUseCase({ repo, userId: session.user.id, pagination: ctx.data });
+    if (result.error) return { data: null, error: { message: "Failed to list todos" } };
+
+    return { data: result.data.data, error: null, meta: { pagination: result.data.meta } };
+  });
+```
+
+Same use case, same repository, same Zod input schema — two different transport layers. That is the entire point of the application package.
+
 ## The Contract Pattern
 
-Zod schemas in `@kaipu/domain/schemas` act as the **contract** between consumers and the application layer:
+Zod schemas in `@kaipu/domain/schemas` are the **contract** between a client and the application layer:
 
-```
-Mobile app                                 Server
-    |                                        |
-    |  createYourEntitySchema.parse()        |  createYourEntitySchema (validation)
-    |  (client-side form validation)         |  (Elysia body validation)
-    |                                        |
-    |  ---------- HTTP POST body ----------> |
-    |                                        |
-    |                              CreateYourEntity (type)
-    |                                        |
-    |                              createYourEntity(input)
-    |                                        |
-    |  <-------- YourEntityBase ------------ |
-    |  (ApiResponse<YourEntityBase>)         |
-```
+- **Input contract:** `createTodoSchema` (Zod) / `CreateTodo` (inferred type)
+- **Output contract:** `TodoBase` (type inferred from `todoBaseSchema`)
+- **Error contract:** `ApiResponse<T>` with `{ data, error, meta }`
 
-- **Input contract:** `createYourEntitySchema` (Zod) / `CreateYourEntity` (type)
-- **Output contract:** `YourEntityBase` (type inferred from `yourEntityBaseSchema`)
-- **Error contract:** `ApiResponse<T>` with `{ data, error, meta }` structure
+A client validates its form with the same schema the server validates the body with. Add a field to the schema and both update simultaneously — no drift.
 
-Both sides share the same types. If a field is added to the schema, both the mobile form and the server validation update simultaneously.
+## Client-Safe Domain
 
-## Mobile Safety
+Any shipped client bundle is extractable, so the boundary matters:
 
-The mobile JS bundle is extractable — anyone can reverse-engineer it. These are the rules:
+- **Safe to import in a client** (`@kaipu/domain`): constants, Zod schemas, types/interfaces (erased at runtime), pure helpers with no I/O.
+- **Never import in a client**: `@kaipu/infra-db` (DB client, connection strings, Drizzle schemas), `@kaipu/application` (server-only use cases), server-side `@kaipu/infra-auth` config.
 
-### Safe to import in mobile (`@kaipu/domain`)
-
-- Constants, enums, labels, colors
-- Zod schemas (for client-side form validation)
-- TypeScript types and interfaces (erased at runtime)
-- Pure functions with no I/O (type guards, status helpers)
-
-### Never import in mobile
-
-- `@kaipu/infra-db` — DB client, connection strings, Drizzle schemas
-- `@kaipu/application` — use cases that reference domain interfaces for repos
-- `@kaipu/infra-auth` server config — server-side auth secrets
-
-An ESLint rule in `apps/mobile/eslint.config.js` enforces this:
-
-```javascript
-"no-restricted-imports": ["error", {
-  patterns: [
-    {
-      group: ["@kaipu/infra-db", "@kaipu/infra-db/*"],
-      message: "Do not import DB infrastructure into the mobile app."
-    },
-    {
-      group: ["@kaipu/application", "@kaipu/application/*"],
-      message: "Do not import server-side use cases into the mobile app."
-    }
-  ]
-}]
-```
+The boundary is enforced structurally by the package graph (a client only depends on `@kaipu/domain`) and by the [Package Import Rules](/architecture/infrastructure-naming). A client that needs to add a repo call must go through the API, never import infra directly.
 
 ## When to Extract a Use Case
 
-Not every route handler needs a use case. Extract when:
+Extract into `@kaipu/application` when **multiple consumers** need the same logic (web serverFn + API route), when business logic goes beyond simple CRUD (defaults, transitions, orchestration, side effects), or when a handler exceeds ~15 lines of business logic.
 
-- **Multiple consumers** need the same logic (web serverFn + API route)
-- **Business logic** goes beyond simple CRUD (defaults, transitions, validations, side effects)
-- **The logic is growing** — if a route handler exceeds ~15 lines of business logic
-
-Keep it in the route when:
-
-- It's a simple passthrough to the repository (find by ID, list with pagination)
-- Only one consumer needs it
-- The logic is trivial (no defaults, no orchestration)
-
-## Adding a New Use Case
-
-1. Create the function in `packages/application/src/{context}/`
-2. Use only domain types and interfaces as dependencies
-3. Return `Result<T>` for explicit error handling
-4. Export from `packages/application/src/{context}/index.ts`
-5. Wire it in each consumer that needs it (route, serverFn, worker)
+Keep it inline in the handler when it's a trivial passthrough to the repository, only one consumer needs it, and there's no orchestration. (`createTodo` is deliberately a thin passthrough — `repository.create({ ...data, userId })` — precisely because it has no orchestration yet.)
 
 ## Summary
 
-| Layer          | Package              | Mobile-safe? | Contains                                 |
-| -------------- | -------------------- | :----------: | ---------------------------------------- |
-| Domain         | `@kaipu/domain`      |     Yes      | Constants, schemas, types, interfaces    |
-| Application    | `@kaipu/application` |      No      | Use cases, business logic orchestration  |
-| Infrastructure | `@kaipu/infra-db`    |      No      | Drizzle repos, mappers, DB client        |
-| Consumers      | `apps/*`, `workers/` |     N/A      | Wiring: route/serverFn + repo + use case |
+| Layer          | Package                             | Client-safe? | Contains                                 |
+| -------------- | ----------------------------------- | :----------: | ---------------------------------------- |
+| Domain         | `@kaipu/domain`                     |     Yes      | Constants, schemas, types, interfaces    |
+| Application    | `@kaipu/application`                |      No      | Use cases, business-logic orchestration  |
+| Infrastructure | `@kaipu/infra-db`                   |      No      | Drizzle repos, mappers, DB client        |
+| Consumers      | `apps/web-hono`, `apps/server-hono` |     N/A      | Wiring: route/serverFn + repo + use case |
