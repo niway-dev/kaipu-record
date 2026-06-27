@@ -28,5 +28,6 @@ export function mergeSettings(stored: Partial<AppSettings> | null | undefined): 
     showInDock:
       typeof safe.showInDock === "boolean" ? safe.showInDock : DEFAULT_SETTINGS.showInDock,
     recordingQuality: sanitizeQuality(safe.recordingQuality),
+    deviceId: typeof safe.deviceId === "string" ? safe.deviceId : "",
   };
 }

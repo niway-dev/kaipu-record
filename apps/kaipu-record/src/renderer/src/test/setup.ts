@@ -8,6 +8,7 @@ const STUB_SETTINGS = {
   launchAtLogin: false,
   showInDock: true,
   recordingQuality: DEFAULT_QUALITY,
+  deviceId: "",
 } as const;
 
 // Vitest does not expose `afterEach` as a global (globals: false), so

@@ -21,6 +21,11 @@ export interface AppSettings {
   showInDock: boolean;
   /** Resolution/fps/bitrate the encoder targets (a preset or a custom combo). */
   recordingQuality: RecordingQuality;
+  /**
+   * Stable per-install id for analytics identity. Empty until the settings-store
+   * mints one on first load; never shown in the UI.
+   */
+  deviceId: string;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -28,6 +33,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   launchAtLogin: false,
   showInDock: true,
   recordingQuality: DEFAULT_QUALITY,
+  deviceId: "",
 };
 
 /**

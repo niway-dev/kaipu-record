@@ -1,6 +1,7 @@
 import { app, ipcMain } from "electron";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import { IPC_CHANNELS } from "@shared/types";
 import type { AppSettings } from "@shared/types";
 import { mergeSettings } from "../services/settings.service";
@@ -25,6 +26,10 @@ function load(): void {
   } catch {
     settings = mergeSettings(null);
   }
+  if (!settings.deviceId) {
+    settings = { ...settings, deviceId: randomUUID() };
+    persist();
+  }
 }
 
 function persist(): void {
@@ -33,6 +38,11 @@ function persist(): void {
   } catch (error) {
     console.error("failed to persist settings", error);
   }
+}
+
+/** Stable per-install analytics id, minted on first load. */
+export function getDeviceId(): string {
+  return settings.deviceId;
 }
 
 /**

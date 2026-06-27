@@ -30,12 +30,14 @@ describe("mergeSettings", () => {
         launchAtLogin: true,
         showInDock: false,
         recordingQuality: QUALITY_PRESETS.max,
+        deviceId: "stored-id",
       }),
     ).toEqual({
       theme: "dark",
       launchAtLogin: true,
       showInDock: false,
       recordingQuality: QUALITY_PRESETS.max,
+      deviceId: "stored-id",
     });
   });
 
@@ -62,5 +64,19 @@ describe("mergeSettings", () => {
         showInDock: 1 as never,
       }),
     ).toEqual(DEFAULT_SETTINGS);
+  });
+});
+
+describe("deviceId", () => {
+  it("defaults to an empty string (the store fills it in)", () => {
+    expect(mergeSettings(null).deviceId).toBe("");
+  });
+
+  it("preserves a stored device id", () => {
+    expect(mergeSettings({ deviceId: "abc-123" }).deviceId).toBe("abc-123");
+  });
+
+  it("ignores a non-string device id", () => {
+    expect(mergeSettings({ deviceId: 42 as unknown as string }).deviceId).toBe("");
   });
 });

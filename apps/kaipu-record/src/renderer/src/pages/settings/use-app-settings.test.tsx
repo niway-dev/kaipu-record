@@ -9,6 +9,7 @@ const SETTINGS: AppSettings = {
   launchAtLogin: false,
   showInDock: true,
   recordingQuality: DEFAULT_QUALITY,
+  deviceId: "",
 };
 
 describe("useAppSettings", () => {
