@@ -12,7 +12,7 @@ Status legend: ⬜ todo · 🔨 in progress · ✅ done
 
 | # | Feature | Priority | Status | Depends on |
 | - | ------- | -------- | ------ | ---------- |
-| 1 | Camera bubble (floating window) | High | 🔨 | — |
+| 1 | Camera bubble (floating window) | High | ✅ | — |
 | 2 | Start recording from the Capture Panel (#4) | High · easy | ⬜ | — |
 | 3 | Floating bar on the recorded display (#7) | High · easy | ⬜ | — |
 | 4 | Feature flags via PostHog | Medium | ⬜ | — (base for #6) |
@@ -22,7 +22,16 @@ Status legend: ⬜ todo · 🔨 in progress · ✅ done
 
 ---
 
-## 1 — Camera bubble 🔨
+## 1 — Camera bubble ✅ (shipped)
+
+Shipped: `camera-bubble-window` (frameless/transparent/always-on-top circle) shown via
+`?window=camera-bubble`, driven by the Camera toggle (`camera:set` IPC) from the Record
+page, reusing the tested `useCameraPreview`. The control bar now `setContentProtection(true)`
+so it's excluded from the recording while the bubble is captured. **Runtime check pending:**
+confirm on macOS that the control bar is actually absent from the recorded video and the
+bubble is present.
+
+Original plan:
 
 A floating, always-on-top **webcam bubble** (circular), like the control-bar widget:
 draggable, and **captured into the recording because it's on screen** (no canvas
