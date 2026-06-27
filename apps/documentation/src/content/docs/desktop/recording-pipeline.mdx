@@ -199,6 +199,22 @@ La burbuja se maneja desde el **estado global de settings** (ver abajo): el hub 
 muestra/oculta según el toggle global de Cámara, así que **funciona prendiéndola desde la
 app o desde el Capture Panel**. Follow-ups: selector de dispositivo de cámara, resize/forma.
 
+### Recuperación de fallas (no quedar trabado)
+
+Las rutas de error restauran **siempre** el estado de la app:
+
+- **Falla al arrancar** (permiso denegado, `getDisplayMedia` falla): el `catch` corre
+  **antes** de ocultar la ventana (`recordingStart` va después de `startEngine`), así que
+  nunca deja la ventana oculta — aborta la sesión y queda en `error`.
+- **Falla al finalizar:** `recordingStop()` (mostrar ventana + restaurar Dock + esconder
+  barra) se llama **siempre**, fuera del try/catch.
+- **Falla a mitad de grabación** (encoder error, o el track de pantalla termina porque el
+  usuario corta el screen-share): el engine la expone vía `onError` (el `errorPromise` de
+  las sources + el evento `ended` del track de pantalla) → corre el mismo `stop()` robusto
+  (finaliza-o-aborta + restaura todo). Un `stoppingRef` evita doble-teardown si el usuario
+  toca Stop y la falla disparan a la vez. Así la app **nunca queda trabada** con la ventana
+  oculta y la barra colgada.
+
 ### Gotcha: ocultar la ventana principal y el Dock/Cmd+Tab (macOS)
 
 El hub **oculta la ventana principal mientras grabás** (`mainWindow.hide()`) para que
