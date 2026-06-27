@@ -30,7 +30,10 @@ export function CapturePanel(): React.JSX.Element {
     const el = rootRef.current;
     if (!el) return;
     const observer = new ResizeObserver(() => {
-      window.electronAPI?.resizeCapturePanel(el.offsetHeight);
+      // getBoundingClientRect is fractional; ceil + a 1px cushion so the window
+      // is never a hair shorter than the content (which would trip a scrollbar).
+      const height = Math.ceil(el.getBoundingClientRect().height) + 1;
+      window.electronAPI?.resizeCapturePanel(height);
     });
     observer.observe(el);
     return () => observer.disconnect();

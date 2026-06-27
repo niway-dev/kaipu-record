@@ -44,7 +44,10 @@ if (isControlBar) {
   );
 } else if (isCapturePanel) {
   // The panel window is transparent — let its own rounded background show.
+  // Tag it so the never-scroll rule in main.css applies (the panel is sized to
+  // its content; a sub-pixel mismatch must not trip a scrollbar).
   document.body.style.background = "transparent";
+  document.body.dataset.window = "capture-panel";
   installCrashForwarder("capture-panel");
   root.render(
     <StrictMode>

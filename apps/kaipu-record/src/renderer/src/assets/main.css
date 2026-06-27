@@ -41,3 +41,19 @@ body[data-window="camera-bubble"] #root {
   align-items: center;
   justify-content: center;
 }
+
+/*
+ * The tray Capture Panel (`?mode=capture`) is sized to its content by a
+ * ResizeObserver. Drop the global `#root { min-height: 100vh }` (which would
+ * force #root past the window on any sub-pixel rounding) and hide overflow, so a
+ * fractional mismatch can never trip a vertical scrollbar — whose width would
+ * then trip a horizontal one. The measured height carries a 1px cushion so
+ * nothing is clipped.
+ */
+body[data-window="capture-panel"] {
+  overflow: hidden;
+}
+
+body[data-window="capture-panel"] #root {
+  min-height: 0;
+}
