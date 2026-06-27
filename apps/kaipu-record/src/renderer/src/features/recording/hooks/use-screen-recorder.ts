@@ -50,6 +50,7 @@ export function useScreenRecorder(options: ScreenRecorderOptions = {}): ScreenRe
   const sessionRef = useRef<string | null>(null);
   const clockRef = useRef<ElapsedState | null>(null);
   const tickTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const stoppingRef = useRef(false);
   const onCompleteRef = useRef(options.onComplete);
   onCompleteRef.current = options.onComplete;
 
@@ -72,6 +73,13 @@ export function useScreenRecorder(options: ScreenRecorderOptions = {}): ScreenRe
         microphoneDeviceId: input.microphoneDeviceId,
         systemAudio: input.systemAudio,
         onChunk: (data, position) => window.electronAPI.recordingWrite(sessionId, data, position),
+        // A failure mid-recording (encoder error or the screen capture ending)
+        // runs the same robust stop — finalize-or-abort + always restore the
+        // window/Dock/bar — so the app never gets stuck.
+        onError: (error) => {
+          console.error("recording engine failed mid-recording", error);
+          void stopRef.current();
+        },
       });
       engineRef.current = engine;
       clockRef.current = startElapsed(Date.now());
@@ -117,7 +125,9 @@ export function useScreenRecorder(options: ScreenRecorderOptions = {}): ScreenRe
   const stop = useCallback(async (): Promise<void> => {
     const engine = engineRef.current;
     const sessionId = sessionRef.current;
-    if (!engine || !sessionId) return;
+    // Guard re-entry: the user clicking Stop and an engine-failure can both fire.
+    if (stoppingRef.current || !engine || !sessionId) return;
+    stoppingRef.current = true;
     setStatus("finalizing");
     const durationSeconds = clockRef.current
       ? Math.floor(elapsedMs(clockRef.current, Date.now()) / 1000)
@@ -159,6 +169,7 @@ export function useScreenRecorder(options: ScreenRecorderOptions = {}): ScreenRe
     engineRef.current = null;
     sessionRef.current = null;
     clockRef.current = null;
+    stoppingRef.current = false;
     setStatus("idle");
   }, [stopTicks]);
 

@@ -136,6 +136,29 @@ describe("useScreenRecorder", () => {
     expect(window.electronAPI.recordingFinalize).toHaveBeenCalledOnce();
   });
 
+  it("tears down and restores the window when the engine fails mid-recording", async () => {
+    let onError: ((error: unknown) => void) | undefined;
+    startEngineMock.mockImplementation(async (opts) => {
+      onError = opts.onError;
+      return fakeEngine();
+    });
+    const { result } = renderHook(() => useScreenRecorder());
+    await act(async () => {
+      await result.current.start(input);
+    });
+    expect(result.current.status).toBe("recording");
+
+    // Simulate the encoder erroring / the screen capture ending mid-recording.
+    await act(async () => {
+      onError?.(new Error("screen capture ended"));
+      await vi.advanceTimersByTimeAsync(700);
+    });
+
+    // The app recovers: the main window is restored and we're not stuck recording.
+    expect(window.electronAPI.recordingStop).toHaveBeenCalledOnce();
+    expect(result.current.status).toBe("idle");
+  });
+
   it("ignores a second start while one is already starting (no double session)", async () => {
     const { result } = renderHook(() => useScreenRecorder());
 

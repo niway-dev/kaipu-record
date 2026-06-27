@@ -25,6 +25,12 @@ export interface EngineOptions {
   systemAudio: boolean;
   /** Receives each StreamTarget chunk to forward to the main-process writer. */
   onChunk(data: ArrayBuffer, position: number): void;
+  /**
+   * Fires if the engine fails *during* a recording — the encoder errors or the
+   * screen capture ends (the user stops sharing / closes the source). The caller
+   * should tear the recording down cleanly so the app never gets stuck.
+   */
+  onError?(error: unknown): void;
 }
 
 const VIDEO_BITRATE = 8_000_000; // ~8 Mbps, fine for 1080p screen content
@@ -131,6 +137,19 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
   }
   await output.start();
 
+  // Surface mid-recording failures so the caller tears down cleanly (otherwise the
+  // app gets stuck: window hidden, bar showing, no real recording). Fires at most
+  // once, and not for our own teardown (stop() sets the flag first).
+  let teardownStarted = false;
+  const notifyError = (error: unknown): void => {
+    if (teardownStarted) return;
+    teardownStarted = true;
+    options.onError?.(error);
+  };
+  videoSource.errorPromise.catch(notifyError);
+  audioSource?.errorPromise.catch(notifyError);
+  screenTrack.addEventListener("ended", () => notifyError(new Error("screen capture ended")));
+
   // 5. Poster thumbnail from the first screen frame.
   const thumbnail = await captureThumbnail(screenStream);
 
@@ -149,6 +168,7 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
     },
     thumbnail,
     async stop() {
+      teardownStarted = true; // stopping the tracks below would otherwise fire onError
       await output.finalize();
       for (const stream of inputStreams) stream.getTracks().forEach((t) => t.stop());
       destination.stream.getTracks().forEach((t) => t.stop());
