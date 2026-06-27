@@ -15,9 +15,9 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text"],
-      // Report every source file, not just the ones a test happened to import,
-      // so untested modules (e.g. recorder-engine) show up as 0% instead of vanishing.
-      all: true,
+      // `include` makes v8 report every matching source file, not just the ones a
+      // test happened to import — so untested modules (e.g. recorder-engine) show
+      // up as 0% instead of vanishing. (Vitest 4 dropped the old `all` flag.)
       include: ["src/**/*.{ts,tsx}"],
       exclude: [
         "src/**/*.{test,spec}.{ts,tsx}",
