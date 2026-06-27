@@ -10,10 +10,24 @@
  * users — see the `copy-language` rule.
  */
 
-export type ResolutionStep = 720 | 1080 | 1440 | 2160;
-export type FpsStep = 24 | 30 | 48 | 60;
-export type BitrateStep = "light" | "medium" | "high" | "max";
-export type QualityPresetId = "light" | "balanced" | "max" | "custom";
+// Each enum-like set is ONE source of truth: the `as const` array defines the
+// runtime values AND the type (`(typeof […])[number]`). No TS `enum` — the
+// const-array + typeof idiom is the house style (same as `IPC_CHANNELS`).
+export const RESOLUTION_STEPS = [720, 1080, 1440, 2160] as const;
+export type ResolutionStep = (typeof RESOLUTION_STEPS)[number];
+
+export const FPS_STEPS = [24, 30, 48, 60] as const;
+export type FpsStep = (typeof FPS_STEPS)[number];
+
+export const BITRATE_STEPS = ["light", "medium", "high", "max"] as const;
+export type BitrateStep = (typeof BITRATE_STEPS)[number];
+
+/** The three named presets; "custom" is appended for the chip render order. */
+export const NAMED_PRESETS = ["light", "balanced", "max"] as const;
+export type NamedPresetId = (typeof NAMED_PRESETS)[number];
+
+export const PRESET_ORDER = [...NAMED_PRESETS, "custom"] as const;
+export type QualityPresetId = (typeof PRESET_ORDER)[number];
 
 /** The three knobs the user controls. The active preset is *derived* from these. */
 export interface RecordingQuality {
@@ -21,10 +35,6 @@ export interface RecordingQuality {
   fps: FpsStep;
   bitrate: BitrateStep;
 }
-
-export const RESOLUTION_STEPS: readonly ResolutionStep[] = [720, 1080, 1440, 2160];
-export const FPS_STEPS: readonly FpsStep[] = [24, 30, 48, 60];
-export const BITRATE_STEPS: readonly BitrateStep[] = ["light", "medium", "high", "max"];
 
 /** 16:9 pixel dimensions for each resolution step (also the encoder cap). */
 export const RESOLUTION_DIMENSIONS: Record<ResolutionStep, { width: number; height: number }> = {
@@ -41,6 +51,12 @@ export const BITRATE_BPS: Record<BitrateStep, number> = {
   high: 16_000_000,
   max: 24_000_000,
 };
+
+/**
+ * Audio (AAC) bitrate. Not a user knob yet, but it lives here so EVERY encoder
+ * number sits in one place — the engine never restates an encoder value.
+ */
+export const AUDIO_BITRATE_BPS = 128_000;
 
 /** Short label shown under each resolution step. */
 export const RESOLUTION_STEP_LABELS: Record<ResolutionStep, string> = {
@@ -80,7 +96,7 @@ export const BITRATE_STEP_LABELS: Record<BitrateStep, string> = {
  * derived whenever the values don't match one of these (see `activePreset`).
  * 4K and the "max" bitrate are intentionally reachable only via Personalizado.
  */
-export const QUALITY_PRESETS: Record<"light" | "balanced" | "max", RecordingQuality> = {
+export const QUALITY_PRESETS: Record<NamedPresetId, RecordingQuality> = {
   light: { resolution: 720, fps: 24, bitrate: "light" },
   balanced: { resolution: 1080, fps: 30, bitrate: "medium" },
   max: { resolution: 1440, fps: 60, bitrate: "high" },
@@ -124,9 +140,6 @@ export const PRESET_META: Record<QualityPresetId, PresetMeta> = {
   },
 };
 
-/** The order the chips render in. */
-export const PRESET_ORDER: readonly QualityPresetId[] = ["light", "balanced", "max", "custom"];
-
 /** Deep-dive copy behind each ⓘ icon, for the curious. */
 export const QUALITY_INFO = {
   resolution:
@@ -138,7 +151,7 @@ export const QUALITY_INFO = {
 
 /** Which preset a combo matches; "custom" when it matches none. */
 export function activePreset(quality: RecordingQuality): QualityPresetId {
-  for (const id of ["light", "balanced", "max"] as const) {
+  for (const id of NAMED_PRESETS) {
     const preset = QUALITY_PRESETS[id];
     if (
       preset.resolution === quality.resolution &&

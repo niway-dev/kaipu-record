@@ -6,6 +6,7 @@ import {
   StreamTarget,
   type StreamTargetChunk,
 } from "mediabunny";
+import { AUDIO_BITRATE_BPS, DEFAULT_QUALITY, qualityToEngine } from "@shared/recording-quality";
 import { levelsFromTimeDomain } from "./audio-levels";
 
 export interface EngineHandle {
@@ -43,11 +44,10 @@ export interface EngineOptions {
   onError?(error: unknown): void;
 }
 
-const DEFAULT_WIDTH = 1920;
-const DEFAULT_HEIGHT = 1080;
-const DEFAULT_FRAME_RATE = 30;
-const DEFAULT_VIDEO_BITRATE = 8_000_000; // ~8 Mbps, fine for 1080p screen content
-const AUDIO_BITRATE = 128_000;
+// Fallback encoder targets when a caller omits them — derived from the model's
+// default preset (Equilibrado → 1080p · 30fps · 8 Mbps). No encoder number is
+// restated here; the single source of truth is `shared/recording-quality.ts`.
+const ENGINE_DEFAULTS = qualityToEngine(DEFAULT_QUALITY);
 
 /**
  * Acquire screen + mic, mix audio, and start encoding to MP4 (H.264/AAC) via
@@ -55,10 +55,10 @@ const AUDIO_BITRATE = 128_000;
  * pause/resume/stop and live levels.
  */
 export async function startEngine(options: EngineOptions): Promise<EngineHandle> {
-  const width = options.width ?? DEFAULT_WIDTH;
-  const height = options.height ?? DEFAULT_HEIGHT;
-  const frameRate = options.frameRate ?? DEFAULT_FRAME_RATE;
-  const videoBitrate = options.videoBitrate ?? DEFAULT_VIDEO_BITRATE;
+  const width = options.width ?? ENGINE_DEFAULTS.width;
+  const height = options.height ?? ENGINE_DEFAULTS.height;
+  const frameRate = options.frameRate ?? ENGINE_DEFAULTS.frameRate;
+  const videoBitrate = options.videoBitrate ?? ENGINE_DEFAULTS.videoBitrate;
 
   // 1. Screen (deterministic Electron desktop capture by source id).
   const screenStream = await navigator.mediaDevices.getUserMedia({
@@ -149,7 +149,7 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
   if (mixedAudioTrack) {
     audioSource = new MediaStreamAudioTrackSource(mixedAudioTrack, {
       codec: "aac",
-      bitrate: AUDIO_BITRATE,
+      bitrate: AUDIO_BITRATE_BPS,
     });
     output.addAudioTrack(audioSource);
   }
