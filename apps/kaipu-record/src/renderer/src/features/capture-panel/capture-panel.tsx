@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from "react";
-import { formatElapsed } from "@renderer/features/recording/elapsed";
+import { RecordingIndicator } from "@renderer/features/recording/components/recording-indicator";
 import { useRecordingSetup } from "@renderer/features/recording/hooks/use-recording-setup";
 import { useRecordingActivity } from "@renderer/features/recording/hooks/use-recording-activity";
 import { useSourceSelection } from "@renderer/features/recording/hooks/use-source-selection";
@@ -43,21 +43,11 @@ export function CapturePanel(): React.JSX.Element {
       <PanelHeader onOpenMainWindow={openMain} />
 
       {isBusy && (
-        <div
-          className={styles.recordingBanner}
-          data-paused={activity.status === "paused" || undefined}
-        >
-          <span
-            className={styles.recordingDot}
-            data-paused={activity.status === "paused" || undefined}
-          />
-          <span className={styles.recordingLabel}>
-            {activity.status === "paused" ? "Paused" : "Recording"}
-          </span>
-          <span className={styles.recordingTimer}>
-            {formatElapsed(activity.elapsedSeconds * 1000)}
-          </span>
-        </div>
+        <RecordingIndicator
+          variant="banner"
+          paused={activity.status === "paused"}
+          elapsedSeconds={activity.elapsedSeconds}
+        />
       )}
 
       {/* While a recording is in progress its settings are locked — changing the

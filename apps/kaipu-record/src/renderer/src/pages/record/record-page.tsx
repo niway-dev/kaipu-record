@@ -1,17 +1,15 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Pause, Play, Square } from "lucide-react";
-import { formatElapsed } from "@renderer/features/recording/elapsed";
 import { useRecordingSetup } from "@renderer/features/recording/hooks/use-recording-setup";
 import { useRecordingActivity } from "@renderer/features/recording/hooks/use-recording-activity";
 import { useSourceSelection } from "@renderer/features/recording/hooks/use-source-selection";
-import { useCameraPreview } from "@renderer/features/recording/hooks/use-camera-preview";
 import { usePermissions } from "@renderer/features/permissions";
 import { SourceCard } from "@renderer/features/recording/components/source-card";
 import { RecordingToggles } from "@renderer/features/recording/components/recording-toggles";
 import { MicPicker } from "@renderer/features/recording/components/mic-picker";
-import { WebcamPreview } from "@renderer/features/recording/components/webcam-preview";
 import { RecordButton } from "@renderer/features/recording/components/record-button";
+import { RecordingIndicator } from "@renderer/features/recording/components/recording-indicator";
 import { CountdownOverlay } from "@renderer/features/recording/components/countdown-overlay";
 import { ScreenSourceSelector } from "@renderer/features/recording/components/screen-source-selector";
 import { PermissionNotice } from "@renderer/features/recording/components/permission-notice";
@@ -25,7 +23,6 @@ export function RecordPage(): React.JSX.Element {
     onRecordingComplete: (recording) => navigate(`/library/${recording.id}`),
   });
   const { sources, isLoading: isLoadingSources, error: sourcesError } = useSourceSelection(setup);
-  const camera = useCameraPreview(setup.isCameraEnabled);
   const {
     status: permissionStatus,
     check: recheckPermissions,
@@ -42,6 +39,13 @@ export function RecordPage(): React.JSX.Element {
   const isMicrophoneDenied = permissionsChecked && !permissionStatus.microphone;
   const isCameraDenied = permissionsChecked && !permissionStatus.camera;
 
+  // The live camera now lives in its own floating bubble window (captured into the
+  // recording). Drive it from the Camera toggle; hide it when leaving the page.
+  useEffect(() => {
+    window.electronAPI.setCameraBubble(setup.isCameraEnabled && !isCameraDenied);
+  }, [setup.isCameraEnabled, isCameraDenied]);
+  useEffect(() => () => window.electronAPI.setCameraBubble(false), []);
+
   // Recording runs in this window; reflect it in the heading and lock the
   // setup controls so the user can't fiddle with (or re-trigger) it mid-record.
   const activity = useRecordingActivity();
@@ -50,16 +54,15 @@ export function RecordPage(): React.JSX.Element {
   // The gap between the countdown ending and the window handing off to the bar:
   // streams are acquiring, isRecording is still false. Keep the overlay up.
   const isStarting = setup.recordingStatus === "starting";
-  const timer = formatElapsed(activity.elapsedSeconds * 1000);
 
   return (
     <div className={styles.page}>
       {isRecording ? (
-        <div className={styles.recordingBar} data-paused={isPaused || undefined}>
-          <span className={styles.recordingDot} data-paused={isPaused || undefined} />
-          <span className={styles.recordingLabel}>{isPaused ? "Paused" : "Recording"}</span>
-          <span className={styles.recordingTimer}>{timer}</span>
-        </div>
+        <RecordingIndicator
+          variant="bar"
+          paused={isPaused}
+          elapsedSeconds={activity.elapsedSeconds}
+        />
       ) : (
         <div className={styles.heading}>
           <span className={styles.headingDot} />
@@ -105,15 +108,12 @@ export function RecordPage(): React.JSX.Element {
             )
           ))}
 
-        {setup.isCameraEnabled &&
-          (isCameraDenied ? (
-            <PermissionNotice
-              label="Camera access is off"
-              onOpenSettings={() => void openPermissionSettings("camera")}
-            />
-          ) : (
-            <WebcamPreview videoRef={camera.videoRef} hasStream={camera.hasStream} />
-          ))}
+        {setup.isCameraEnabled && isCameraDenied && (
+          <PermissionNotice
+            label="Camera access is off"
+            onOpenSettings={() => void openPermissionSettings("camera")}
+          />
+        )}
       </div>
 
       {isRecording ? (
