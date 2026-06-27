@@ -14,8 +14,11 @@ const BOTTOM_MARGIN = 40;
  */
 export class ControlBarWindow {
   private window: BrowserWindow | null = null;
+  /** The display being recorded, so the bar appears there (multi-monitor). */
+  private displayId: string | undefined;
 
-  show(): void {
+  show(displayId?: string): void {
+    this.displayId = displayId;
     if (this.window && !this.window.isDestroyed()) {
       this.position();
       this.window.showInactive();
@@ -85,7 +88,12 @@ export class ControlBarWindow {
 
   private position(): void {
     if (!this.window) return;
-    const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+    // Prefer the recorded display; fall back to the one under the cursor.
+    const recorded =
+      this.displayId !== undefined
+        ? screen.getAllDisplays().find((d) => String(d.id) === this.displayId)
+        : undefined;
+    const display = recorded ?? screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
     const { x, y, width, height } = display.workArea;
     this.window.setBounds({
       x: Math.round(x + (width - BAR_WIDTH) / 2),

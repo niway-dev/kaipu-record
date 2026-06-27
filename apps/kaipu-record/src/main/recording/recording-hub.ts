@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain } from "electron";
+import { BrowserWindow, desktopCapturer, ipcMain } from "electron";
 import { IPC_CHANNELS } from "@shared/types";
 import type {
   ControlCommand,
@@ -58,13 +58,14 @@ export function registerRecordingHub(getMainWindow: () => BrowserWindow | null):
   ipcMain.handle(IPC_CHANNELS.recordingAbort, (_e, sessionId: string) => writer.abort(sessionId));
 
   // ── Window orchestration ────────────────────────────────────────────
-  ipcMain.on(IPC_CHANNELS.recordingStart, (_e, _info: RecordingStartInfo) => {
+  ipcMain.on(IPC_CHANNELS.recordingStart, (_e, info: RecordingStartInfo) => {
     activity.active = true;
     activity.status = "recording";
     activity.elapsedSeconds = 0;
     getMainWindow()?.hide();
-    bar.show();
     broadcastActivity();
+    // Place the bar on the screen being recorded (resolved from the source id).
+    void displayIdForSource(info.sourceId).then((displayId) => bar.show(displayId));
   });
   ipcMain.on(IPC_CHANNELS.recordingStop, () => {
     activity.active = false;
@@ -96,4 +97,18 @@ export function registerRecordingHub(getMainWindow: () => BrowserWindow | null):
     if (enabled) cameraBubble.show();
     else cameraBubble.hide();
   });
+}
+
+/** Resolve which display a screen source belongs to (windows have none). */
+async function displayIdForSource(sourceId: string): Promise<string | undefined> {
+  if (!sourceId.startsWith("screen:")) return undefined;
+  try {
+    const sources = await desktopCapturer.getSources({
+      types: ["screen"],
+      thumbnailSize: { width: 0, height: 0 },
+    });
+    return sources.find((source) => source.id === sourceId)?.display_id || undefined;
+  } catch {
+    return undefined;
+  }
 }
