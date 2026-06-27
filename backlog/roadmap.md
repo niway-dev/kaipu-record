@@ -1,6 +1,6 @@
-# Kaipu Record — Working Roadmap
+# Kaipu Record — Backlog
 
-Living working doc. We kill these **one by one**; each is marked done when shipped
+Living backlog. We kill these **one by one**; each is marked done when shipped
 (code + tests + docs). Product is **offline-only until the first prod upload** — no
 cloud/Cloudflare work for now.
 
