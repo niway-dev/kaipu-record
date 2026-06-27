@@ -15,9 +15,9 @@ Status legend: ⬜ todo · 🔨 in progress · ✅ done
 | 1   | Camera bubble (floating window)             | High        | ✅     | —                     |
 | 2   | Start recording from the Capture Panel (#4) | High · easy | ✅     | —                     |
 | 3   | Floating bar on the recorded display (#7)   | High · easy | ✅     | —                     |
-| 4   | Feature flags via PostHog                   | Medium      | ⬜     | — (base for #6)       |
+| 4   | Feature flags via PostHog                   | Medium      | ✅     | — (base for #6)       |
 | 5   | Configurable quality (non-technical copy)   | Medium      | ✅     | —                     |
-| 6   | Watermark, free → paid (scalable plan)      | Medium      | ✅\*   | #4 for live gating    |
+| 6   | Watermark, free → paid (scalable plan)      | Medium      | ✅\*   | plans API for `isPaid` |
 | 7   | Builds + distribution                       | Medium      | ⬜     | — (parallel)          |
 
 ### Shipped beyond the kill order ✅
@@ -87,11 +87,27 @@ The hub resolves the recorded screen's `display_id` from the source id (one
 `desktopCapturer` lookup at start) and `ControlBarWindow` positions itself on that display
 (falls back to the cursor display). Kept entirely in main — no renderer plumbing.
 
-## 4 — Feature flags via PostHog
+## 4 — Feature flags via PostHog ✅ (shipped)
 
-Add PostHog + a thin flag/entitlement layer. Foundation for #6 (watermark gating) and for
-rolling out #1/#5/#7. Needs: SDK init (main or renderer), a `useFlag(name)` helper, and a
-way to define flags. Keep it offline-safe (flags default sensibly when offline).
+**Shipped:** PostHog analytics with a **renderer-primary + main-sink** architecture:
+
+- **`useFlag(name)` hook** (`src/renderer/src/features/analytics/`) — offline-safe; returns
+  the flag default when PostHog is unreachable or no key is set.
+- **Two flags:** `watermark-enabled` (remote kill-switch, default `true` — wired into
+  `useWatermark` directly) and `bypass-login` (seam for the future login gate, default
+  treated as bypassed).
+- **Identity:** a stable `deviceId` UUID minted once per install (persisted in
+  `AppSettings`), used for `posthog.identify()`. Super-properties `product=kaipu-recorder`
+  + `surface=desktop` tag every event and error.
+- **Offline-safe:** missing `VITE_POSTHOG_KEY` or no network → SDKs no-op; flag defaults
+  apply; app runs normally.
+- **Main-process sink** (`src/main/services/analytics.service.ts` + `analytics-ipc.ts`):
+  `posthog-node` captures Node-level `uncaughtException`/`unhandledRejection`; IPC channel
+  `analytics:capture-exception` lets secondary windows (control-bar, camera-bubble,
+  capture-panel) forward errors via `installCrashForwarder(origin)`.
+
+**Follow-up:** add a **telemetry opt-out toggle** in Settings (`posthog.optOut()/optIn()`,
+persisted in `AppSettings`). Currently no user-facing way to opt out.
 
 ## 5 — Configurable quality (non-technical copy) ✅ (shipped)
 
@@ -121,9 +137,10 @@ flips it and is stripped from prod builds (`import.meta.env.DEV` guard). Config 
 `watermark.ts` (`as const` sets — variant/position/tint/opacity/size). See
 [recording-pipeline](../apps/documentation) docs.
 
-**\* The one remaining piece is not #6's — it's #4's:** `isPaid` and the flag are **stubs**.
-Live paid-detection is a **one-line swap inside `useWatermark`** once #4 (PostHog +
-entitlement) lands; nothing else changes. The definition of "paid" must stay a
+**\* The flag wiring is done (#4 shipped):** `useWatermark` now reads `watermark-enabled`
+directly — the PostHog flag gates the watermark in production. **The one remaining piece is
+`isPaid`:** live paid-detection is a **one-line swap inside `useWatermark`** once a
+plans/entitlement API exists; nothing else changes. The definition of "paid" must stay a
 **configurable, scalable plan/entitlement**, not a hardcoded boolean.
 
 ## 7 — Builds + distribution
