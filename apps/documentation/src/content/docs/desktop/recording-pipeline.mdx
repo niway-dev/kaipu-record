@@ -240,10 +240,13 @@ incluido) no sabe de planes ni flags.
   inputs, hoy stubs: `entitlement.isPaid` (TODO backend), `featureFlag` (TODO PostHog) y un
   **override de dev**. La regla pura `resolveWatermarkEnabled({flagOn, isPaid, devForce})` =
   `flagOn && !paid`. Devuelve `{ enabled, config }`.
-- **Override de dev que NUNCA llega a prod:** `VITE_WATERMARK_FORCE=free|paid` flipea el
-  watermark mientras desarrollás. Se lee **solo** bajo `import.meta.env.DEV`; como ese guard
-  se reemplaza por un literal en build, toda la rama (y la lectura de la env var) se
-  **elimina del bundle de producción** por dead-code removal.
+- **Toggle de dev que NUNCA llega a prod:** un switch en Settings ("Quitar watermark — simular
+  plan pago"), **visible solo en dev**, guarda el override en `localStorage`
+  (`features/watermark/dev-override.ts`). Tanto la sección del toggle como la lectura están
+  gateadas por `import.meta.env.DEV` (literal en build), así que se **eliminan del bundle de
+  producción** — y un usuario no puede sacarse el watermark seteando localStorage a mano. Como
+  se lee en cada render y cambiar de Settings→Record remonta el consumidor, el flip aplica
+  **sin reiniciar**.
 - **Draw-pass (canvas compositor)** `watermark-compositor.ts`: el screen track va a un
   `<canvas>` (frame + el asset re-teñido a **silueta blanca** con sombra suave, en la esquina
   vía `watermarkRect`), y se re-captura con `canvas.captureStream(frameRate)`. Ese track va al

@@ -10,6 +10,10 @@ import { useVaultDirectory } from "@renderer/features/library/hooks/use-vault-di
 import { useAppSettings } from "./use-app-settings";
 import { RecordingQualitySettings } from "./recording-quality-settings";
 import { DEFAULT_QUALITY } from "@shared/recording-quality";
+import {
+  readDevSimulatePaid,
+  writeDevSimulatePaid,
+} from "@renderer/features/watermark/dev-override";
 import type { PermissionKind } from "@shared/types";
 import styles from "./settings-page.module.css";
 
@@ -57,6 +61,9 @@ export function SettingsPage(): React.JSX.Element {
   const { status: permissionStatus, request: requestPermission } = usePermissions();
   const vault = useVaultDirectory();
   const { settings, update } = useAppSettings();
+  // Dev-only watermark bypass. `import.meta.env.DEV` is a build-time literal, so
+  // this state + the section below are stripped from production bundles.
+  const [simulatePaid, setSimulatePaid] = React.useState(() => readDevSimulatePaid());
 
   return (
     <div className={styles.page}>
@@ -142,6 +149,24 @@ export function SettingsPage(): React.JSX.Element {
             }
           />
         </Section>
+
+        {import.meta.env.DEV && (
+          <Section title="Developer (dev only)">
+            <Row
+              label="Quitar watermark (simular plan pago)"
+              description="Solo visible en desarrollo — graba sin el watermark para probar"
+              action={
+                <Toggle
+                  checked={simulatePaid}
+                  onChange={(checked) => {
+                    setSimulatePaid(checked);
+                    writeDevSimulatePaid(checked);
+                  }}
+                />
+              }
+            />
+          </Section>
+        )}
       </div>
     </div>
   );

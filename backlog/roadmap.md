@@ -115,9 +115,10 @@ threaded into `recorder-engine` (`width/height/frameRate/videoBitrate`, defaults
 `featureFlag` + a dev override → `{ enabled, config }`; pure `resolveWatermarkEnabled`. The
 draw-pass is a canvas compositor (`watermark-compositor.ts`): screen → `<canvas>` (frame +
 white-silhouette "Kaipu" wordmark, bottom-right) → `captureStream` → encoder; **zero cost
-when off** (raw screen track encoded directly). A **dev-only** `VITE_WATERMARK_FORCE=free|paid`
-flips it and is eliminated from prod builds (`import.meta.env.DEV` guard). Config in
-`watermark.ts` (`as const` sets). See [recording-pipeline](../apps/documentation) docs.
+when off** (raw screen track encoded directly). A **dev-only Settings toggle** ("simular plan
+pago", localStorage-backed in `features/watermark/dev-override.ts`) flips it and is stripped
+from prod builds (`import.meta.env.DEV` guard). Config in `watermark.ts` (`as const` sets).
+See [recording-pipeline](../apps/documentation) docs.
 
 **Pending (the "real" gating):** `isPaid` and the flag are **stubs**. The real plan/entitlement
 + flag come from **#4 (PostHog)** — when it lands, only `useWatermark` changes (the seam).
