@@ -8,6 +8,7 @@ import type {
   RecordingTick,
 } from "@shared/types/ipc";
 import { ControlBarWindow } from "./control-bar-window";
+import { CameraBubbleWindow } from "./camera-bubble-window";
 import { RecordingWriter, timestampId } from "./recording-writer";
 import { vaultDirectory } from "../library/vault-location";
 
@@ -21,6 +22,7 @@ import { vaultDirectory } from "../library/vault-location";
  */
 export function registerRecordingHub(getMainWindow: () => BrowserWindow | null): void {
   const bar = new ControlBarWindow();
+  const cameraBubble = new CameraBubbleWindow();
   const writer = new RecordingWriter({
     vaultDir: () => vaultDirectory().path,
     newId: () => timestampId(Date.now()),
@@ -87,5 +89,11 @@ export function registerRecordingHub(getMainWindow: () => BrowserWindow | null):
   });
   ipcMain.on(IPC_CHANNELS.controlCommand, (_e, command: ControlCommand) => {
     getMainWindow()?.webContents.send(IPC_CHANNELS.recordingCommand, command);
+  });
+
+  // ── Camera bubble ────────────────────────────────────────────────────
+  ipcMain.on(IPC_CHANNELS.cameraBubbleSet, (_e, enabled: boolean) => {
+    if (enabled) cameraBubble.show();
+    else cameraBubble.hide();
   });
 }

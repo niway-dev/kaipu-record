@@ -2,33 +2,31 @@ import { BrowserWindow, screen } from "electron";
 import { join } from "path";
 import { is } from "@electron-toolkit/utils";
 
-const BAR_WIDTH = 430;
-const BAR_HEIGHT = 82;
-const BOTTOM_MARGIN = 40;
+const BUBBLE_SIZE = 200;
+const SCREEN_MARGIN = 40;
 
 /**
- * The floating, always-on-top control bar. A frameless, transparent window that
- * renders the renderer in control-bar mode (`?window=control-bar`). It floats
- * over every other app — including fullscreen — so the user keeps control while
- * working in the app they're recording.
+ * The floating webcam bubble. A frameless, transparent, always-on-top window
+ * showing the live camera in a circle. The user drags it where they want; because
+ * it sits on screen, the screen recording captures it — no compositing needed.
+ *
+ * Unlike the control bar, this window is deliberately NOT content-protected, so it
+ * *does* appear in the recording.
  */
-export class ControlBarWindow {
+export class CameraBubbleWindow {
   private window: BrowserWindow | null = null;
 
   show(): void {
     if (this.window && !this.window.isDestroyed()) {
-      this.position();
       this.window.showInactive();
       return;
     }
     this.window = new BrowserWindow({
-      width: BAR_WIDTH,
-      height: BAR_HEIGHT,
+      width: BUBBLE_SIZE,
+      height: BUBBLE_SIZE,
       show: false,
       frame: false,
       transparent: true,
-      // Fully transparent backdrop — without this a transparent window can paint
-      // an opaque/dark backing that shows as an ugly box over light backgrounds.
       backgroundColor: "#00000000",
       resizable: false,
       movable: true,
@@ -46,15 +44,12 @@ export class ControlBarWindow {
     });
     this.window.setAlwaysOnTop(true, "screen-saver");
     this.window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-    // Keep the user's own controls out of the recording (the camera bubble, by
-    // contrast, is left capturable on purpose). macOS: NSWindowSharingNone.
-    this.window.setContentProtection(true);
 
     if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
-      void this.window.loadURL(`${process.env["ELECTRON_RENDERER_URL"]}/?window=control-bar`);
+      void this.window.loadURL(`${process.env["ELECTRON_RENDERER_URL"]}/?window=camera-bubble`);
     } else {
       void this.window.loadFile(join(__dirname, "../renderer/index.html"), {
-        search: "?window=control-bar",
+        search: "?window=camera-bubble",
       });
     }
 
@@ -67,13 +62,6 @@ export class ControlBarWindow {
     });
   }
 
-  /** Push a message to the bar renderer. */
-  send(channel: string, payload: unknown): void {
-    if (this.window && !this.window.isDestroyed()) {
-      this.window.webContents.send(channel, payload);
-    }
-  }
-
   hide(): void {
     this.window?.hide();
   }
@@ -83,15 +71,16 @@ export class ControlBarWindow {
     this.window = null;
   }
 
+  /** Default to the bottom-left corner of the active display (clear of the bar). */
   private position(): void {
     if (!this.window) return;
     const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-    const { x, y, width, height } = display.workArea;
+    const { x, y, height } = display.workArea;
     this.window.setBounds({
-      x: Math.round(x + (width - BAR_WIDTH) / 2),
-      y: Math.round(y + height - BAR_HEIGHT - BOTTOM_MARGIN),
-      width: BAR_WIDTH,
-      height: BAR_HEIGHT,
+      x: x + SCREEN_MARGIN,
+      y: y + height - BUBBLE_SIZE - SCREEN_MARGIN,
+      width: BUBBLE_SIZE,
+      height: BUBBLE_SIZE,
     });
   }
 }

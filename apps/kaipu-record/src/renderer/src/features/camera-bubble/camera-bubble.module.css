@@ -1,0 +1,26 @@
+/* Fills the transparent bubble window. Circular, draggable, accent ring. */
+.bubble {
+  -webkit-app-region: drag;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--bg-card);
+  border: 3px solid var(--accent-primary);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Mirror like a selfie cam — matches what the user expects to see. */
+  transform: scaleX(-1);
+}
+
+.placeholder {
+  color: var(--text-muted);
+}

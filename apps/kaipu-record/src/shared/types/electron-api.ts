@@ -91,4 +91,8 @@ export interface KaipuElectronAPI {
   getRecordingState(): Promise<RecordingActivity>;
   /** Subscribe to recording activity changes (start/stop/pause/resume). */
   onRecordingState(callback: (state: RecordingActivity) => void): () => void;
+
+  // ── Camera bubble ─────────────────────────────────────────────────────
+  /** Show/hide the floating webcam bubble (follows the Camera toggle). */
+  setCameraBubble(enabled: boolean): void;
 }

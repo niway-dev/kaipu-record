@@ -39,4 +39,5 @@ window.electronAPI = {
   controlCommand: () => {},
   getRecordingState: async () => ({ active: false, status: "recording", elapsedSeconds: 0 }),
   onRecordingState: () => () => {},
+  setCameraBubble: () => {},
 };

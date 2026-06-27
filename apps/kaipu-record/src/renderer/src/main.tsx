@@ -5,14 +5,18 @@ import { createRoot } from "react-dom/client";
 import App from "./app/app";
 import { CapturePanel } from "./features/capture-panel/capture-panel";
 import { ControlBarWindowRoot } from "./features/control-bar/control-bar-window";
+import { CameraBubble } from "./features/camera-bubble/camera-bubble";
 
-// Same HTML entry, three render targets selected by query param:
-//   ?mode=capture        → the menu-bar tray's compact panel
-//   ?window=control-bar  → the floating recording control bar
-//   (default)            → the full app
+// Same HTML entry, four render targets selected by query param:
+//   ?mode=capture         → the menu-bar tray's compact panel
+//   ?window=control-bar   → the floating recording control bar
+//   ?window=camera-bubble → the floating webcam bubble
+//   (default)             → the full app
 const params = new URLSearchParams(window.location.search);
 const isCapturePanel = params.get("mode") === "capture";
-const isControlBar = params.get("window") === "control-bar";
+const windowKind = params.get("window");
+const isControlBar = windowKind === "control-bar";
+const isCameraBubble = windowKind === "camera-bubble";
 
 const root = createRoot(document.getElementById("root")!);
 
@@ -24,6 +28,14 @@ if (isControlBar) {
   root.render(
     <StrictMode>
       <ControlBarWindowRoot />
+    </StrictMode>,
+  );
+} else if (isCameraBubble) {
+  // Transparent window — only the round bubble paints.
+  document.body.style.background = "transparent";
+  root.render(
+    <StrictMode>
+      <CameraBubble />
     </StrictMode>,
   );
 } else if (isCapturePanel) {
