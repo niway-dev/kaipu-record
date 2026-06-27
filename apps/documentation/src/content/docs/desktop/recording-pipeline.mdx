@@ -199,6 +199,19 @@ La burbuja se maneja desde el **estado global de settings** (ver abajo): el hub 
 muestra/oculta según el toggle global de Cámara, así que **funciona prendiéndola desde la
 app o desde el Capture Panel**. Follow-ups: selector de dispositivo de cámara, resize/forma.
 
+### Gotcha: ocultar la ventana principal y el Dock/Cmd+Tab (macOS)
+
+El hub **oculta la ventana principal mientras grabás** (`mainWindow.hide()`) para que
+solo se vea la barra flotante. En macOS, ocultar la única ventana puede **sacar la app
+del Dock y del switcher (Cmd+Tab)**, y `show()` no siempre la devuelve. Por eso, al
+**detener**, el hub **re-afirma la activation policy** (`applyDockPolicy()`) y trae la app
+al frente (`app.focus({ steal: true })`) — así vuelve al Cmd+Tab.
+
+La visibilidad en el Dock/switcher es ahora un **setting persistido** (`showInDock`):
+`regular` (con Dock + Cmd+Tab) vs `accessory` (solo barra de menú/tray). Vive en
+`infrastructure/settings-store.ts` (la primera infra de settings persistidos de la app) y
+se togglea desde Settings.
+
 ### El hueco "starting" después del countdown
 
 Tras el countdown `3·2·1`, el grabador entra en estado **`"starting"`** mientras
