@@ -49,8 +49,11 @@ region) showing the live cam via the existing tested `useCameraPreview`; IPC to 
 it from the Camera toggle; control bar gets content-protection. Reuses `useCameraPreview`
 (already tested), so little new untested surface.
 
-**Follow-ups:** camera device picker, resize/shape options, sync the bubble with the
-Capture Panel's camera toggle (v1 is driven by the Record page).
+**Follow-ups:** camera device picker, resize/shape options.
+
+**Update:** the recording **settings** (source/toggles/mic) are now a single source of
+truth in the hub, broadcast to every window — so the bubble (and every control) syncs
+between the Record page and the Capture Panel. The old per-window `camera:set` is gone.
 
 ## 2 — Start recording from the Capture Panel (#4) ✅ (shipped)
 

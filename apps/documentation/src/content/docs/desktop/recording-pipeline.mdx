@@ -174,6 +174,15 @@ El timer en vivo de ambas ventanas sale de `RecordingActivity.elapsedSeconds`, q
 el hub actualiza desde los ticks del grabador y re-emite ~1/s (no en cada tick de
 10/s).
 
+**Settings compartidos (misma idea, bidireccional).** La fuente, los toggles
+(mic/audio/cámara) y el micrófono seleccionado viven en el hub como `RecordingSettings`
+— **una sola fuente de verdad** para todas las ventanas. `useRecordingSettings` (en el
+renderer) consulta al montar, se suscribe a cambios y **escribe optimista** vía
+`recording-settings:update`; el hub mergea, **re-emite a todas las ventanas** y de paso
+maneja la burbuja de cámara. `useRecordingSetup` toma esos campos del estado global y deja
+local solo la UI transitoria (picker/menú abiertos, countdown) y el ciclo de grabación.
+Resultado: cambiás un toggle en la app o en el panel y **se refleja en ambos**.
+
 ### Cámara bubble (ventana flotante capturada)
 
 La cámara es una **burbuja flotante** (`?window=camera-bubble`): una `BrowserWindow`
@@ -186,8 +195,9 @@ Para que **la barra de control NO salga en el video** pero **la cámara sí**, l
 la barra usa `setContentProtection(true)` (macOS: `NSWindowSharingNone`); la burbuja
 deliberadamente no la usa. *(Verificar en runtime que el screen-capture respeta la exclusión.)*
 
-Follow-ups: selector de dispositivo de cámara, resize/forma, y sincronizar la burbuja con
-el toggle del Capture Panel (hoy la maneja el Record page).
+La burbuja se maneja desde el **estado global de settings** (ver abajo): el hub la
+muestra/oculta según el toggle global de Cámara, así que **funciona prendiéndola desde la
+app o desde el Capture Panel**. Follow-ups: selector de dispositivo de cámara, resize/forma.
 
 ### El hueco "starting" después del countdown
 
