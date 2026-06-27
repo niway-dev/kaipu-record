@@ -1,0 +1,114 @@
+---
+title: "Enums: as const, not TypeScript enum"
+description: Why we never use TS `enum`, and the `as const` + `typeof` idioms we use instead.
+---
+
+# Enums: `as const`, not TypeScript `enum`
+
+**Status:** Active convention · applies repo-wide (desktop + packages)
+
+## The rule
+
+**Never use TypeScript `enum`.** For enum-like sets, define the values once as an
+`as const` array (or object) and **derive the type** from it with `typeof`. The values
+and the type come from a single source — no hand-written literal union alongside.
+
+```ts
+// ✅ one source of truth: the array defines the values AND the type
+export const BITRATE_STEPS = ["light", "medium", "high", "max"] as const;
+export type BitrateStep = (typeof BITRATE_STEPS)[number]; // "light" | "medium" | "high" | "max"
+```
+
+```ts
+// ❌ never
+enum BitrateStep { Light, Medium, High, Max }
+// ❌ also wrong: the union duplicates the values — they drift
+export const BITRATE_STEPS = ["light", "medium", "high", "max"] as const;
+export type BitrateStep = "light" | "medium" | "high" | "max";
+```
+
+## Why not the TypeScript `enum`
+
+1. **It emits runtime code.** A `enum` compiles to a JS object/IIFE — it is *not*
+   type-only, so it can't be erased. It ships in the bundle and exists at runtime even
+   when all you wanted was the type. An `as const` array is plain data you were going to
+   ship anyway; the derived type costs nothing.
+2. **`const enum` is not an escape hatch here.** It would inline, but it is banned under
+   `isolatedModules` and single-file transpilers (Vite / esbuild / electron-vite — exactly
+   our toolchain). So the "lighter" enum isn't even available.
+3. **Numeric enums are unsafe.** `enum E { A, B }` lets *any* `number` be assigned to `E`
+   and creates reverse mappings (`E[0] === "A"`) that pollute the object. A union literal
+   rejects anything outside the set.
+4. **No free iteration.** You usually need the list of values (render options, validate,
+   map to labels). With an enum you must `Object.values(E)` and filter out the numeric
+   reverse-mappings. With the `as const` array, the array **is** the list.
+5. **String enums are nominal.** A string-enum member is *not* assignable from a plain
+   matching string literal, which creates friction at every boundary (JSON, IPC, props).
+   Union literals are structural — a matching string just works.
+
+## The two idioms we use
+
+### Array form — when you mainly need the list / order
+
+Best when the set is iterated, rendered, or its order matters (steps, chips, options).
+
+```ts
+export const RESOLUTION_STEPS = [720, 1080, 1440, 2160] as const;
+export type ResolutionStep = (typeof RESOLUTION_STEPS)[number];
+
+export const NAMED_PRESETS = ["light", "balanced", "max"] as const;
+export type NamedPresetId = (typeof NAMED_PRESETS)[number];
+
+// Compose instead of restating:
+export const PRESET_ORDER = [...NAMED_PRESETS, "custom"] as const;
+export type QualityPresetId = (typeof PRESET_ORDER)[number];
+```
+
+### Object form — when you need named keys + metadata
+
+Best when you reference members by name or attach per-value info. This is the
+[Constants Pattern](/architecture/constants-pattern) (`ObjectProperties<T>` is just
+`T[keyof T]`).
+
+```ts
+export const CURRENCIES = { USD: "USD", PEN: "PEN" } as const;
+export type Currency = (typeof CURRENCIES)[keyof typeof CURRENCIES];
+```
+
+## Corollary: derive, don't restate
+
+The same single-source-of-truth principle applies *across files* — never copy a value
+into a second module; derive it. In the recorder, the engine's fallback targets are
+**derived from the default preset**, not retyped:
+
+```ts
+// ❌ restating the balanced preset's numbers in the engine
+const DEFAULT_WIDTH = 1920;
+const DEFAULT_VIDEO_BITRATE = 8_000_000;
+
+// ✅ derive from the model — change the preset, the default follows
+const ENGINE_DEFAULTS = qualityToEngine(DEFAULT_QUALITY); // { width, height, frameRate, videoBitrate }
+```
+
+## Real example in this repo
+
+`apps/kaipu-record/src/shared/recording-quality.ts` is the canonical example: every
+enum-like set (`RESOLUTION_STEPS`, `FPS_STEPS`, `BITRATE_STEPS`, `NAMED_PRESETS`,
+`PRESET_ORDER`) is an `as const` array with its type derived via `(typeof X)[number]`, and
+every encoder number (`BITRATE_BPS`, `AUDIO_BITRATE_BPS`, `RESOLUTION_DIMENSIONS`,
+`QUALITY_PRESETS`, `DEFAULT_QUALITY`) lives in that one file. The
+[recording pipeline](/desktop/recording-pipeline) consumes it; nothing is restated
+elsewhere. `IPC_CHANNELS` (the IPC contract) follows the object form.
+
+## Checklist
+
+- ❌ `enum` / `const enum` — never.
+- ❌ A literal union written by hand next to its values array — that's two sources.
+- ✅ `as const` array + `(typeof X)[number]` for lists/order.
+- ✅ `as const` object + `(typeof X)[keyof typeof X]` for named keys + metadata.
+- ✅ Compose (`[...A, "extra"] as const`) and derive across files instead of restating.
+
+## References
+
+- [Constants Pattern](/architecture/constants-pattern) — the object-form variant in depth.
+- [TypeScript Const Assertions](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-3-4.html#const-assertions)

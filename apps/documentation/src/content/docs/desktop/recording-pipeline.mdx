@@ -217,9 +217,15 @@ imports de electron/node/react), compartido por main (validación) y renderer (U
 - **Wiring al encoder:** `qualityToEngine(quality)` → `{ width, height, frameRate,
   videoBitrate }`. `use-recording-setup` lo lee en mount (ref) y lo pasa por `StartInput` →
   `useScreenRecorder` → `startEngine`. El engine usa esos valores en las constraints
-  `maxWidth/maxHeight/maxFrameRate` y en el bitrate del track; **los defaults preservan
-  1080p30·8 Mbps** (callers/tests que no los pasan no cambian). El `maxWidth/Height` es un
-  techo: **no upscalea** sobre la resolución nativa de la pantalla.
+  `maxWidth/maxHeight/maxFrameRate` y en el bitrate del track. **El `maxWidth/Height` es un
+  techo: no upscalea** sobre la resolución nativa de la pantalla.
+- **Una sola fuente para los números de encode:** el engine **no reescribe** ningún valor —
+  su fallback es `qualityToEngine(DEFAULT_QUALITY)` (preserva 1080p30·8 Mbps para
+  callers/tests que omiten los campos), y el bitrate de audio sale de `AUDIO_BITRATE_BPS`.
+  Todo (resoluciones, bitrates, presets, default, audio) vive en `recording-quality.ts`.
+- **Sin enums:** los sets (`RESOLUTION_STEPS`, `FPS_STEPS`, `BITRATE_STEPS`, `NAMED_PRESETS`,
+  `PRESET_ORDER`) son arrays `as const` y el tipo se deriva con `(typeof X)[number]` — ver
+  [Enums: as const, not enum](/architecture/enums-as-const).
 - **UI** (`pages/settings/recording-quality-settings.tsx`): chips con emoji + caption que
   cambia por preset + tres sliders discretos con label semántico (Cine/Estándar/Muy fluido,
   ≈MB/min) y un **ⓘ** (popover) por slider. Copy en español neutro, orientado al beneficio.
