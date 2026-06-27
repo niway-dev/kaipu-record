@@ -19,13 +19,20 @@ nsis:
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
 mac:
-  entitlementsInherit: build/entitlements.mac.plist
+  category: public.app-category.video # cosmetic (LSApplicationCategoryType)
+  hardenedRuntime: true # REQUIRED to notarize
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.inherit.plist
+  # Modern (notarytool) syntax. Only fires when the APPLE_API_* env vars are
+  # present (see scripts/build-mac-local.sh); otherwise the build is signed-only.
+  notarize:
+    teamId: K9TKC5GG76
   extendInfo:
-    - NSCameraUsageDescription: Application requests access to the device's camera.
-    - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
-    - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
-    - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
-  notarize: false
+    NSMicrophoneUsageDescription: Kaipu Recorder usa el micrófono para grabar audio.
+    NSCameraUsageDescription: Kaipu Recorder usa la cámara para grabar video.
+    NSDocumentsFolderUsageDescription: Kaipu Recorder guarda tus grabaciones en la carpeta Documentos.
+    NSDownloadsFolderUsageDescription: Kaipu Recorder guarda tus grabaciones en la carpeta Descargas.
 dmg:
   artifactName: ${name}-${version}.${ext}
 linux:
