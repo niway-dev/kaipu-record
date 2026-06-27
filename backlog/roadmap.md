@@ -18,7 +18,8 @@ Status legend: ⬜ todo · 🔨 in progress · ✅ done
 | 4   | Feature flags via PostHog                   | Medium      | ✅     | — (base for #6)       |
 | 5   | Configurable quality (non-technical copy)   | Medium      | ✅     | —                     |
 | 6   | Watermark, free → paid (scalable plan)      | Medium      | ✅\*   | plans API for `isPaid` |
-| 7   | Builds + distribution                       | Medium      | ⬜     | — (parallel)          |
+| 7   | Builds + distribution                       | High        | ⬜     | Apple Developer acct  |
+| 8   | Version gate / forced update                | Medium      | ⬜     | #7 for auto-update    |
 
 ### Shipped beyond the kill order ✅
 
@@ -109,6 +110,17 @@ The hub resolves the recorded screen's `display_id` from the source id (one
 **Follow-up:** add a **telemetry opt-out toggle** in Settings (`posthog.optOut()/optIn()`,
 persisted in `AppSettings`). Currently no user-facing way to opt out.
 
+**⚠️ PostHog dashboard checklist (verify in the PostHog UI — the in-code defaults are only
+the OFFLINE/unresolved fallback; once online, the dashboard's rollout % wins):**
+
+- `watermark-enabled` — must **exist** and be rolled out to **100% / match-all** so the
+  watermark shows in production. If created at 0% rollout it would **hide** the watermark
+  online. To remotely kill the watermark on purpose: set 0%.
+- `bypass-login` — rollout % per intent (was at **0%** in the dashboard, i.e. resolves
+  `false` online; harmless today since there is no login UI).
+- Reading/managing flag config via the PostHog **API** (not just sending events) needs a
+  **personal API key**, separate from the public `phc_…` project key in `.env`.
+
 ## 5 — Configurable quality (non-technical copy) ✅ (shipped)
 
 Shipped: a **Recording quality** section in Settings. Pure model in
@@ -143,8 +155,72 @@ directly — the PostHog flag gates the watermark in production. **The one remai
 plans/entitlement API exists; nothing else changes. The definition of "paid" must stay a
 **configurable, scalable plan/entitlement**, not a hardcoded boolean.
 
-## 7 — Builds + distribution
+## 7 — Builds + distribution ⬜ (next up — blocked on Apple Developer account)
 
-electron-builder config, macOS **code signing + notarization**, an **auto-update** channel,
-and a release/distribution plan (where the app is hosted/served). Largely independent of
-the feature work; can run in parallel.
+**Current state in the repo (2026-06-27):**
+
+- `electron-updater@6.3.9` + `electron-builder@26` are **already dependencies**, but
+  electron-updater is **NOT wired** — zero `autoUpdater`/`checkForUpdates` usage in
+  `src/main`. Only declared.
+- `electron-builder.yml` has `publish: { provider: generic, url: https://example.com/auto-updates }`
+  — the URL is a **placeholder** that must be replaced with the real update feed.
+- App `version` is `1.0.0`.
+- No code signing / notarization configured.
+
+**What we need from you (Apple Developer parameters to gather):**
+
+- **Apple Developer Program** membership ($99/yr) → your **Team ID**.
+- **Developer ID Application** certificate (`.p12`) + its password — for signing the `.app`/`.dmg`.
+- For **notarization** (notarytool): an **App Store Connect API key** (Issuer ID + Key ID +
+  the `.p8` file) **or** an Apple ID + app-specific password.
+- A **bundle identifier** (e.g. `com.kaipu.record`).
+- **Hardened runtime + entitlements** (mic, camera, screen recording) for the signed build.
+- **Where updates are hosted** (the real `publish.url`): S3 / Cloudflare R2 / GitHub Releases /
+  a generic static host.
+
+**Plan once unblocked:** electron-builder mac config (sign + notarize), a release/CI pipeline,
+wire electron-updater (`checkForUpdatesAndNotify`) against the real feed, and the update channel
+strategy (stable/beta). Largely parallel to feature work but **gated on the Apple account**.
+
+## 8 — Version gate / forced update ⏸️ PAUSED (2026-06-27 — revisit with #7)
+
+**What the user asked for:** for a **beta** product, manage versions per release and a way to
+**force updates** — both a soft "actualiza para seguir usando" and a hard "esta versión ya no
+se puede usar, actualiza para continuar". (Note from user: do **not** copy `anonym-recorder`'s
+update flow — build from scratch to the standard top companies use.)
+
+**Paused because:** the full delivery side needs the **Apple Developer account** (same blocker
+as #7). We'll plan it together with #7's build/distribution.
+
+**Proposed design (industry-standard, two layers — kept separate on purpose):**
+
+- **Layer A — delivery** = `electron-updater` (download/install). This is #7 (needs signed
+  builds + a real feed + Apple account).
+- **Layer B — version gate / kill-switch** (this item) = a remote-config-driven
+  **minimum-supported-version** check. **Buildable now, no Apple account**, except the actual
+  install which falls back to a download link until #7 lands:
+  - **Source of truth:** a PostHog feature flag with a **JSON payload** (no new backend), e.g.
+    `version-gate` → `{ "minVersion": "1.2.0", "latestVersion": "1.4.0", "blocking": true, "message": "…" }`
+    read via `posthog.getFeatureFlagPayload(...)`.
+  - **Current version:** `app.getVersion()` (today `1.0.0`).
+  - **Pure semver compare (testable):**
+    - `current < minVersion` → **hard block**: full-screen blocker, app unusable.
+      *"Esta versión ya no se puede usar. Actualiza para continuar."*
+    - `current < latestVersion` (not blocking) → **soft nudge**: dismissible banner.
+      *"Hay una versión nueva. Actualiza para seguir con las últimas mejoras."*
+  - **Fail-open (critical):** if the flag is unresolved / offline → **never block** (no
+    lockout from a network blip or PostHog outage).
+  - **"Actualizar" button:** for now `shell.openExternal(downloadUrl)`; once #7 is signed, the
+    same button triggers `electron-updater` — no redesign.
+
+**Open questions to resolve when we resume (asked 2026-06-27):**
+
+1. **v1 scope:** gate-only (enforcement) · gate + wire electron-updater · or the full #7. (User
+   leaned: pause until the Apple account exists, then do it with #7.)
+2. Where the **"Actualizar"** button points before auto-update exists (a releases page? a site?).
+3. Hard-block **UX** (full-screen modal vs replacing the whole app shell).
+4. **Re-check cadence:** startup only, or also periodically / on focus.
+5. **Config shape:** confirm the PostHog-payload approach vs a dedicated remote JSON endpoint.
+6. Pick a tiny **semver** compare util (or hand-roll a pure comparator — no heavy dep).
+
+**When we resume:** brainstorm → spec → plan → subagent-driven build (same flow as #4 analytics).
