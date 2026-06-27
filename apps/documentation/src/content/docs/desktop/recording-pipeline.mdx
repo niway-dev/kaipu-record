@@ -255,7 +255,7 @@ incluido) no sabe de planes ni flags.
 - **Wiring:** `useWatermark()` → `use-recording-setup` (ref) → `StartInput.watermark` →
   `startEngine`. `EngineOptions.watermark` decide compositar o no; `stop()` corta el draw loop.
 - **Config** (`watermark.ts`, sets `as const`): variant (wordmark/mark), position, tint
-  (white/original), opacity, height/margin ratios. Default: wordmark · abajo-derecha · white.
+  (white/original), opacity, height/margin ratios. Default: wordmark · centro-derecha · white.
 
 **Pendiente (#6 real):** el `isPaid`/flag son stubs — el gating real depende de #4 (PostHog +
 entitlement). El seam ya está, así que enchufarlo no toca nada más.

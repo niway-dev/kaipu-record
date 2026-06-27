@@ -17,7 +17,7 @@ Status legend: ⬜ todo · 🔨 in progress · ✅ done
 | 3   | Floating bar on the recorded display (#7)   | High · easy | ✅     | —                     |
 | 4   | Feature flags via PostHog                   | Medium      | ⬜     | — (base for #6)       |
 | 5   | Configurable quality (non-technical copy)   | Medium      | ✅     | —                     |
-| 6   | Watermark, free → paid (scalable plan)      | Medium      | 🔨     | #4 + plan/entitlement |
+| 6   | Watermark, free → paid (scalable plan)      | Medium      | ✅\*   | #4 for live gating    |
 | 7   | Builds + distribution                       | Medium      | ⬜     | — (parallel)          |
 
 ### Shipped beyond the kill order ✅
@@ -108,22 +108,23 @@ threaded into `recorder-engine` (`width/height/frameRate/videoBitrate`, defaults
 **Follow-ups:** runtime GUI check on multi-DPI displays; a label for the 48 fps step (left as
 "48 fps" — user didn't want "Fluido"); optional estimate that also factors fps/resolution.
 
-## 6 — Watermark, free → paid (scalable plan) 🔨 (seam + draw-pass shipped)
+## 6 — Watermark, free → paid (scalable plan) ✅\* (shipped; live gating awaits #4)
 
-**Shipped:** the watermark itself + the gating **seam centralized in one hook**.
+**Shipped & closed:** the watermark itself + the gating **seam centralized in one hook**.
 `useWatermark()` (`features/watermark/use-watermark.ts`) composes `entitlement.isPaid` +
 `featureFlag` + a dev override → `{ enabled, config }`; pure `resolveWatermarkEnabled`. The
 draw-pass is a canvas compositor (`watermark-compositor.ts`): screen → `<canvas>` (frame +
-white-silhouette "Kaipu" wordmark, bottom-right) → `captureStream` → encoder; **zero cost
-when off** (raw screen track encoded directly). A **dev-only Settings toggle** ("simular plan
-pago", localStorage-backed in `features/watermark/dev-override.ts`) flips it and is stripped
-from prod builds (`import.meta.env.DEV` guard). Config in `watermark.ts` (`as const` sets).
-See [recording-pipeline](../apps/documentation) docs.
+white-silhouette "Kaipu" wordmark, **center-right**, ~0.059 height ratio) → `captureStream` →
+encoder; **zero cost when off** (raw screen track encoded directly). A **dev-only Settings
+toggle** ("simular plan pago", localStorage-backed in `features/watermark/dev-override.ts`)
+flips it and is stripped from prod builds (`import.meta.env.DEV` guard). Config in
+`watermark.ts` (`as const` sets — variant/position/tint/opacity/size). See
+[recording-pipeline](../apps/documentation) docs.
 
-**Pending (the "real" gating):** `isPaid` and the flag are **stubs**. The real plan/entitlement
-+ flag come from **#4 (PostHog)** — when it lands, only `useWatermark` changes (the seam).
-The definition of "paid" must stay a **configurable, scalable plan/entitlement**, not a
-hardcoded boolean.
+**\* The one remaining piece is not #6's — it's #4's:** `isPaid` and the flag are **stubs**.
+Live paid-detection is a **one-line swap inside `useWatermark`** once #4 (PostHog +
+entitlement) lands; nothing else changes. The definition of "paid" must stay a
+**configurable, scalable plan/entitlement**, not a hardcoded boolean.
 
 ## 7 — Builds + distribution
 

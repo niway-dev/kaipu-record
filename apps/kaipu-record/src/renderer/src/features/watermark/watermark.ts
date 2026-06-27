@@ -40,7 +40,7 @@ export const DEFAULT_WATERMARK_CONFIG: WatermarkConfig = {
   position: "middle-right",
   tint: "white",
   opacity: 0.9,
-  heightRatio: 0.054, // ~20% larger than the original 0.045 — readable past player chrome
+  heightRatio: 0.059, // tuned up ~30% from the original 0.045 for visibility
   marginRatio: 0.03,
 };
 
