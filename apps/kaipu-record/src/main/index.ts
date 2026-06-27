@@ -10,7 +10,9 @@ import { registerPermissionHandlers } from "./permissions";
 import { registerLibraryVaultHandlers } from "./library";
 import { registerMediaProtocol, registerMediaScheme } from "./media-protocol";
 import { registerRecordingHub } from "./recording/recording-hub";
-import { registerSettings } from "./infrastructure/settings-store";
+import { registerSettings, getDeviceId } from "./infrastructure/settings-store";
+import { initMainAnalytics, shutdownMainAnalytics } from "./services/analytics.service";
+import { registerAnalyticsIpc } from "./services/analytics-ipc";
 
 let mainWindow: BrowserWindow | null = null;
 let capturePanel: CapturePanelWindow | null = null;
@@ -91,6 +93,8 @@ app.whenReady().then(() => {
 
   // Persisted app settings (+ apply the Dock/switcher policy and launch-at-login).
   registerSettings();
+  initMainAnalytics(getDeviceId());
+  registerAnalyticsIpc();
 
   // Capture Panel → show the main window (the panel's "Open ↗" button).
   ipcMain.on("capture-panel:open-main", () => {
@@ -141,10 +145,12 @@ app.whenReady().then(() => {
 });
 
 // The app lives in the menu bar — keep the tray reference alive and release it
-// only on quit so the icon isn't garbage-collected.
+// only on quit so the icon isn't garbage-collected. Flush analytics best-effort
+// (fire-and-forget: client already flushes on every capture so nothing is lost).
 app.on("before-quit", () => {
   tray?.destroy();
   tray = null;
+  void shutdownMainAnalytics();
 });
 
 // Quit when all windows are closed, except on macOS. There, it's common

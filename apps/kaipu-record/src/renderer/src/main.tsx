@@ -6,6 +6,7 @@ import App from "./app/app";
 import { CapturePanel } from "./features/capture-panel/capture-panel";
 import { ControlBarWindowRoot } from "./features/control-bar/control-bar-window";
 import { CameraBubble } from "./features/camera-bubble/camera-bubble";
+import { installCrashForwarder } from "./features/analytics/crash-forwarder";
 
 // Same HTML entry, four render targets selected by query param:
 //   ?mode=capture         → the menu-bar tray's compact panel
@@ -25,6 +26,7 @@ if (isControlBar) {
   // scrolls (see the `[data-window="control-bar"]` rule in main.css).
   document.body.style.background = "transparent";
   document.body.dataset.window = "control-bar";
+  installCrashForwarder("control-bar");
   root.render(
     <StrictMode>
       <ControlBarWindowRoot />
@@ -34,6 +36,7 @@ if (isControlBar) {
   // Transparent window — only the round bubble paints, centered (see main.css).
   document.body.style.background = "transparent";
   document.body.dataset.window = "camera-bubble";
+  installCrashForwarder("camera-bubble");
   root.render(
     <StrictMode>
       <CameraBubble />
@@ -42,6 +45,7 @@ if (isControlBar) {
 } else if (isCapturePanel) {
   // The panel window is transparent — let its own rounded background show.
   document.body.style.background = "transparent";
+  installCrashForwarder("capture-panel");
   root.render(
     <StrictMode>
       <CapturePanel />
