@@ -5,6 +5,7 @@ import {
   type WatermarkConfig,
 } from "./watermark";
 import { readDevSimulatePaid } from "./dev-override";
+import { useFlag } from "@renderer/features/analytics/use-flag";
 
 export interface WatermarkState {
   enabled: boolean;
@@ -24,8 +25,9 @@ export interface WatermarkState {
 export function useWatermark(): WatermarkState {
   // TODO(backend): real entitlement from the user's plan. Free → watermark on.
   const isPaid = false;
-  // TODO(flags): PostHog flag. Defaults on so the watermark ships even offline.
-  const flagOn = true;
+  // Remote kill-switch for prod testing. Defaults on (offline/unresolved) so the
+  // watermark still ships — see FLAG_DEFAULTS.
+  const flagOn = useFlag("watermark-enabled");
   const devForce = readDevSimulatePaid() ? "paid" : null;
 
   const enabled = resolveWatermarkEnabled({ flagOn, isPaid, devForce });

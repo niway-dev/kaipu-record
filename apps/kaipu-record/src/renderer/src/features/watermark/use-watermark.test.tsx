@@ -1,10 +1,20 @@
 import { renderHook } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_WATERMARK_CONFIG } from "./watermark";
 import { writeDevSimulatePaid } from "./dev-override";
 import { useWatermark } from "./use-watermark";
 
+vi.mock("@renderer/features/analytics/use-flag", () => ({
+  useFlag: vi.fn(() => true),
+}));
+
+import { useFlag } from "@renderer/features/analytics/use-flag";
+
 describe("useWatermark", () => {
+  beforeEach(() => {
+    vi.mocked(useFlag).mockReturnValue(true);
+  });
+
   afterEach(() => {
     writeDevSimulatePaid(false);
   });
@@ -19,6 +29,12 @@ describe("useWatermark", () => {
     // Vitest runs in dev mode, so the dev override is honoured (it would be a no-op
     // in a production build).
     writeDevSimulatePaid(true);
+    const { result } = renderHook(() => useWatermark());
+    expect(result.current.enabled).toBe(false);
+  });
+
+  it("disables the watermark when the watermark-enabled flag is off", () => {
+    vi.mocked(useFlag).mockReturnValue(false);
     const { result } = renderHook(() => useWatermark());
     expect(result.current.enabled).toBe(false);
   });
