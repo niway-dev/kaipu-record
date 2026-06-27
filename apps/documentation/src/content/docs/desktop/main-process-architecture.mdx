@@ -24,15 +24,15 @@ Contraparte de [Renderer Architecture](/desktop/renderer-architecture): cómo es
 
 Cada subsistema es un módulo con una función `register*` que engancha sus handlers. El main no tiene un "god object": `index.ts` solo orquesta el registro.
 
-| Subsistema | Archivo | Qué hace |
-| --- | --- | --- |
-| Window management | `index.ts:19` | `mainWindow` 900×670 (min 720×560), `show` en `ready-to-show`, links externos al navegador del SO |
-| Capture Panel | `capture-panel-window.ts` | Ventana flotante frameless del tray (ver abajo) |
-| Tray | `tray.ts` | Ícono de menu bar: click izq = toggle panel, click der = menú (Open / Quit) |
-| Recording sources | `recording-sources.ts` | `desktopCapturer.getSources()` → thumbnails base64 320×200 |
-| Permissions | `permissions.ts` | Estado y prompts de screen/mic/camera por plataforma — ver [Permissions & Onboarding](/desktop/permissions-and-onboarding) |
-| Library vault | `library/` | Grabaciones en disco + sidecars — ver [Library Vault](/desktop/library-vault) |
-| Media protocol | `media-protocol.ts` | `kaipu-media://` para reproducir/posters desde el vault |
+| Subsistema        | Archivo                   | Qué hace                                                                                                                   |
+| ----------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Window management | `index.ts:19`             | `mainWindow` 900×670 (min 720×560), `show` en `ready-to-show`, links externos al navegador del SO                          |
+| Capture Panel     | `capture-panel-window.ts` | Ventana flotante frameless del tray (ver abajo)                                                                            |
+| Tray              | `tray.ts`                 | Ícono de menu bar: click izq = toggle panel, click der = menú (Open / Quit)                                                |
+| Recording sources | `recording-sources.ts`    | `desktopCapturer.getSources()` → thumbnails base64 320×200                                                                 |
+| Permissions       | `permissions.ts`          | Estado y prompts de screen/mic/camera por plataforma — ver [Permissions & Onboarding](/desktop/permissions-and-onboarding) |
+| Library vault     | `library/`                | Grabaciones en disco + sidecars — ver [Library Vault](/desktop/library-vault)                                              |
+| Media protocol    | `media-protocol.ts`       | `kaipu-media://` para reproducir/posters desde el vault                                                                    |
 
 El contrato IPC entre main y renderer está en [IPC Contract](/desktop/ipc-contract).
 

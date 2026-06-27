@@ -89,7 +89,7 @@ window rather than encoding in its own (transparent) renderer. See the
 - The legacy token `--accent-blue` maps to `--accent-primary` here.
 - **Primary CTAs share one glow.** The signature accent halo lives in the
   `--glow-accent` token; every primary/accent button applies `box-shadow:
-  var(--glow-accent)` (ui `Button[data-variant="primary"]`, `RecordButton`, the
+var(--glow-accent)` (ui `Button[data-variant="primary"]`, `RecordButton`, the
   Record-page Stop, the onboarding CTA). Drop it on `:disabled` and on dark/non-accent
   states — don't redefine the shadow per-component.
 - **Scrollbars are themed globally** in `assets/base.css` (a thin, rounded,

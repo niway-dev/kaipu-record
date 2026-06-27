@@ -7,11 +7,11 @@ description: Layer-first architecture for sharing business logic across multiple
 
 This monorepo serves multiple consumers that need the same business logic:
 
-| Consumer | How it calls business logic | Example |
-| --- | --- | --- |
-| **TanStack Start** (`apps/web-hono`) | `serverFn` — runs on the server, no HTTP hop | Direct function call |
-| **Hono + oRPC API** (`apps/server-hono`) | HTTP routes — for external/mobile clients | REST/oRPC endpoint |
-| **Cron jobs / workers** | Direct execution | Scheduled task |
+| Consumer                                 | How it calls business logic                  | Example              |
+| ---------------------------------------- | -------------------------------------------- | -------------------- |
+| **TanStack Start** (`apps/web-hono`)     | `serverFn` — runs on the server, no HTTP hop | Direct function call |
+| **Hono + oRPC API** (`apps/server-hono`) | HTTP routes — for external/mobile clients    | REST/oRPC endpoint   |
+| **Cron jobs / workers**                  | Direct execution                             | Scheduled task       |
 
 If a use case lived inside `apps/server-hono/src/modules/`, the web app couldn't reuse it without making an HTTP call to itself. Duplicating the logic across consumers leads to drift and bugs. So business logic lives in a **shared package**, and each consumer wires it to its own infrastructure.
 
@@ -187,9 +187,9 @@ Keep it inline in the handler when it's a trivial passthrough to the repository,
 
 ## Summary
 
-| Layer | Package | Client-safe? | Contains |
-| --- | --- | :---: | --- |
-| Domain | `@kaipu/domain` | Yes | Constants, schemas, types, interfaces |
-| Application | `@kaipu/application` | No | Use cases, business-logic orchestration |
-| Infrastructure | `@kaipu/infra-db` | No | Drizzle repos, mappers, DB client |
-| Consumers | `apps/web-hono`, `apps/server-hono` | N/A | Wiring: route/serverFn + repo + use case |
+| Layer          | Package                             | Client-safe? | Contains                                 |
+| -------------- | ----------------------------------- | :----------: | ---------------------------------------- |
+| Domain         | `@kaipu/domain`                     |     Yes      | Constants, schemas, types, interfaces    |
+| Application    | `@kaipu/application`                |      No      | Use cases, business-logic orchestration  |
+| Infrastructure | `@kaipu/infra-db`                   |      No      | Drizzle repos, mappers, DB client        |
+| Consumers      | `apps/web-hono`, `apps/server-hono` |     N/A      | Wiring: route/serverFn + repo + use case |

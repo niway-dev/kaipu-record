@@ -17,11 +17,11 @@ Para grabar, el recorder necesita permisos del SO (screen recording, micrófono,
 
 El principio: **click en "Grant" siempre hace algo visible.** Pero el SO no siempre deja:
 
-| Plataforma | Screen | Mic / Camera |
-| --- | --- | --- |
-| **macOS** | Sin API de prompt. Si está `not-determined`, se "empuja" con una enumeración 1×1 de `desktopCapturer`; si no, deep-link a System Settings | `askForMediaAccess` solo prompea en `not-determined`; si ya está denegado → deep-link |
-| **Windows** | No se gatea — siempre disponible | Sin `askForMediaAccess`; deep-link a `ms-settings:` |
-| **Otras** | No se gatea — todo lee como granted | igual |
+| Plataforma  | Screen                                                                                                                                    | Mic / Camera                                                                          |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| **macOS**   | Sin API de prompt. Si está `not-determined`, se "empuja" con una enumeración 1×1 de `desktopCapturer`; si no, deep-link a System Settings | `askForMediaAccess` solo prompea en `not-determined`; si ya está denegado → deep-link |
+| **Windows** | No se gatea — siempre disponible                                                                                                          | Sin `askForMediaAccess`; deep-link a `ms-settings:`                                   |
+| **Otras**   | No se gatea — todo lee como granted                                                                                                       | igual                                                                                 |
 
 `checkPermission()` refleja esto: screen solo se gatea en macOS; mic/camera usan `getMediaAccessStatus` en macOS y Windows; el resto lee granted (`permissions.ts:51`).
 

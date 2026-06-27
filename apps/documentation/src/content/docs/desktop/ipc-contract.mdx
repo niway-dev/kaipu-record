@@ -24,21 +24,21 @@ Centralizados en `IPC_CHANNELS` (`shared/types/ipc.ts:26`) para mantener main y 
 
 ## Canales
 
-| Canal | Tipo | Dirección | Firma (en `electronAPI`) | Handler |
-| --- | --- | --- | --- | --- |
-| `recording:get-screen-sources` | invoke | render→main | `getScreenSources(): Promise<ScreenSource[]>` | `recording-sources.ts:13` |
-| `capture-panel:resize` | send | render→main | `resizeCapturePanel(height): void` | `capture-panel-window.ts:97` |
-| `capture-panel:open-main` | send | render→main | `openMainWindow(): void` | `index.ts:88` |
-| `permissions:check` | invoke | render→main | `checkPermissions(): Promise<PermissionStatus>` | `permissions.ts:105` |
-| `permissions:request` | invoke | render→main | `requestPermission(kind): Promise<boolean>` | `permissions.ts:109` |
-| `permissions:open-settings` | invoke | render→main | `openSystemSettings(kind): Promise<void>` | `permissions.ts:116` |
-| `library:list-local` | invoke | render→main | `listLocalRecordings(): Promise<LocalRecording[]>` | `library/index.ts:24` |
-| `library:rename-local` | invoke | render→main | `renameLocalRecording(id, title): Promise<void>` | `library/index.ts:25` |
-| `library:delete-local` | invoke | render→main | `deleteLocalRecording(id): Promise<void>` | `library/index.ts:28` |
-| `library:reveal-local` | invoke | render→main | `revealLocalRecording(id): Promise<void>` | `library/index.ts:31` |
-| `library:get-vault-dir` | invoke | render→main | `getVaultDirectory(): Promise<VaultDirectory>` | `library/index.ts:35` |
-| `library:choose-vault-dir` | invoke | render→main | `chooseVaultDirectory(): Promise<VaultDirectory \| null>` | `library/index.ts:37` |
-| `library:reset-vault-dir` | invoke | render→main | `resetVaultDirectory(): Promise<VaultDirectory>` | `library/index.ts:58` |
+| Canal                          | Tipo   | Dirección   | Firma (en `electronAPI`)                                  | Handler                      |
+| ------------------------------ | ------ | ----------- | --------------------------------------------------------- | ---------------------------- |
+| `recording:get-screen-sources` | invoke | render→main | `getScreenSources(): Promise<ScreenSource[]>`             | `recording-sources.ts:13`    |
+| `capture-panel:resize`         | send   | render→main | `resizeCapturePanel(height): void`                        | `capture-panel-window.ts:97` |
+| `capture-panel:open-main`      | send   | render→main | `openMainWindow(): void`                                  | `index.ts:88`                |
+| `permissions:check`            | invoke | render→main | `checkPermissions(): Promise<PermissionStatus>`           | `permissions.ts:105`         |
+| `permissions:request`          | invoke | render→main | `requestPermission(kind): Promise<boolean>`               | `permissions.ts:109`         |
+| `permissions:open-settings`    | invoke | render→main | `openSystemSettings(kind): Promise<void>`                 | `permissions.ts:116`         |
+| `library:list-local`           | invoke | render→main | `listLocalRecordings(): Promise<LocalRecording[]>`        | `library/index.ts:24`        |
+| `library:rename-local`         | invoke | render→main | `renameLocalRecording(id, title): Promise<void>`          | `library/index.ts:25`        |
+| `library:delete-local`         | invoke | render→main | `deleteLocalRecording(id): Promise<void>`                 | `library/index.ts:28`        |
+| `library:reveal-local`         | invoke | render→main | `revealLocalRecording(id): Promise<void>`                 | `library/index.ts:31`        |
+| `library:get-vault-dir`        | invoke | render→main | `getVaultDirectory(): Promise<VaultDirectory>`            | `library/index.ts:35`        |
+| `library:choose-vault-dir`     | invoke | render→main | `chooseVaultDirectory(): Promise<VaultDirectory \| null>` | `library/index.ts:37`        |
+| `library:reset-vault-dir`      | invoke | render→main | `resetVaultDirectory(): Promise<VaultDirectory>`          | `library/index.ts:58`        |
 
 ## `invoke` vs `send`
 
@@ -49,13 +49,13 @@ Centralizados en `IPC_CHANNELS` (`shared/types/ipc.ts:26`) para mantener main y 
 
 Todos en `src/shared/types/`, puros (sin `electron`/`node:*`):
 
-| Tipo | Archivo | Qué describe |
-| --- | --- | --- |
-| `IPC_CHANNELS`, `IpcChannel` | `ipc.ts` | Nombres de canal + tipo unión |
-| `AppSettings`, `Theme`, `DEFAULT_SETTINGS` | `ipc.ts` | Settings de la app |
-| `KaipuElectronAPI` | `electron-api.ts` | La forma completa de `window.electronAPI` |
-| `ScreenSource`, `PermissionKind`, `PermissionStatus` | `electron-api.ts` | Captura y permisos |
-| `LocalRecording`, `VaultDirectory` | `library-storage.ts` | Vault |
+| Tipo                                                 | Archivo              | Qué describe                              |
+| ---------------------------------------------------- | -------------------- | ----------------------------------------- |
+| `IPC_CHANNELS`, `IpcChannel`                         | `ipc.ts`             | Nombres de canal + tipo unión             |
+| `AppSettings`, `Theme`, `DEFAULT_SETTINGS`           | `ipc.ts`             | Settings de la app                        |
+| `KaipuElectronAPI`                                   | `electron-api.ts`    | La forma completa de `window.electronAPI` |
+| `ScreenSource`, `PermissionKind`, `PermissionStatus` | `electron-api.ts`    | Captura y permisos                        |
+| `LocalRecording`, `VaultDirectory`                   | `library-storage.ts` | Vault                                     |
 
 ## Gotchas
 

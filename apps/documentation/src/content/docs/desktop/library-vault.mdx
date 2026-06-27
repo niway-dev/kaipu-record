@@ -38,12 +38,12 @@ El modelo de datos local-first del recorder. Las grabaciones son **archivos de v
 
 ## Operaciones
 
-| Op | Qué hace | Toca el video |
-| --- | --- | --- |
-| `list()` | readdir → filtra video exts → `describe` cada uno → ordena por `createdAt` desc | no |
-| `describe(id)` | `stat` + sidecar → `LocalRecording` (o `null` si no hay archivo) | no |
-| `rename(id, title)` | escribe `title` en el sidecar | **no** — el archivo no se renombra |
-| `remove(id)` | borra video + sidecar + thumbnail (best-effort, `allSettled`) | sí |
+| Op                  | Qué hace                                                                        | Toca el video                      |
+| ------------------- | ------------------------------------------------------------------------------- | ---------------------------------- |
+| `list()`            | readdir → filtra video exts → `describe` cada uno → ordena por `createdAt` desc | no                                 |
+| `describe(id)`      | `stat` + sidecar → `LocalRecording` (o `null` si no hay archivo)                | no                                 |
+| `rename(id, title)` | escribe `title` en el sidecar                                                   | **no** — el archivo no se renombra |
+| `remove(id)`        | borra video + sidecar + thumbnail (best-effort, `allSettled`)                   | sí                                 |
 
 `thumbnailUrl` apunta a `kaipu-media://thumb/<id>` solo si el `.jpg` existe.
 
