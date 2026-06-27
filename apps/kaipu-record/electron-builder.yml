@@ -1,5 +1,5 @@
 appId: com.niway.kaipu-record
-productName: Kaipu Record
+productName: Kaipu Recorder
 directories:
   buildResources: build
 files:
