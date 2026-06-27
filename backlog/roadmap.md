@@ -20,6 +20,24 @@ Status legend: ⬜ todo · 🔨 in progress · ✅ done
 | 6 | Watermark, free → paid (scalable plan) | Medium | ⬜ | #4 + plan/entitlement |
 | 7 | Builds + distribution | Medium | ⬜ | — (parallel) |
 
+### Shipped beyond the kill order ✅
+
+Emergent work done while shipping #1–#3, not originally on the list:
+
+- **Single source of truth for recording settings** ✅ — source/toggles/mic live in the hub
+  (`RecordingSettings`), broadcast to every window; `useRecordingSettings` (query-on-mount +
+  subscribe + optimistic write). Record page ⇄ Capture Panel stay in sync. Replaced the old
+  per-window `camera:set`.
+- **Persisted app settings + Dock/app-switcher control** ✅ — first persistence layer
+  (`main/infrastructure/settings-store.ts`, `settings.json` + `settings:get/update` IPC +
+  OS side effects). `AppSettings.showInDock` toggle (`regular` vs `accessory`). **Fixes** the
+  app vanishing from the Dock & ⌘-Tab after a recording (hub re-asserts `applyDockPolicy()` +
+  `app.focus({steal:true})` on stop).
+- **Mid-recording failure recovery** ✅ — engine surfaces failures (source `errorPromise` +
+  screen track `ended`) via `onError`, routed to the robust `stop()` (finalize-or-abort +
+  always restore window/Dock/bar); `stoppingRef` prevents double-teardown. App never gets
+  stuck. _Follow-up: user-visible error toast (recovers silently to console today)._
+
 ---
 
 ## 1 — Camera bubble ✅ (shipped)
