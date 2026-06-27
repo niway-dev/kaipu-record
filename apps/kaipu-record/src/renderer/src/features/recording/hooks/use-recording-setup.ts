@@ -6,6 +6,7 @@ import {
   sanitizeQuality,
   type RecordingQuality,
 } from "@shared/recording-quality";
+import { useWatermark } from "@renderer/features/watermark/use-watermark";
 import { useMicrophones } from "@renderer/features/recording/hooks/use-microphones";
 import { useRecordingSettings } from "@renderer/features/recording/hooks/use-recording-settings";
 import {
@@ -99,6 +100,12 @@ export function useRecordingSetup(options: RecordingSetupOptions = {}): Recordin
     });
   }, []);
 
+  // Watermark decision (free → on, paid/forced → off) — the single seam. Kept in a
+  // ref so the start callback reads the latest without re-subscribing.
+  const watermark = useWatermark();
+  const watermarkRef = useRef(watermark);
+  watermarkRef.current = watermark;
+
   // Default the mic to the first device once enumerated, into the shared settings
   // (idempotent — only when nothing is selected yet).
   useEffect(() => {
@@ -128,6 +135,7 @@ export function useRecordingSetup(options: RecordingSetupOptions = {}): Recordin
       if (remaining <= 0) {
         clearCountdown();
         const engineQuality = qualityToEngine(qualityRef.current);
+        const wm = watermarkRef.current;
         void recorder.start({
           sourceId: selectedSource.id,
           sourceName: selectedSource.name,
@@ -137,6 +145,7 @@ export function useRecordingSetup(options: RecordingSetupOptions = {}): Recordin
           height: engineQuality.height,
           frameRate: engineQuality.frameRate,
           videoBitrate: engineQuality.videoBitrate,
+          watermark: wm.enabled ? wm.config : null,
         });
       } else {
         setCountdown(remaining);

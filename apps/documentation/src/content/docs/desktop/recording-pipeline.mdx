@@ -230,6 +230,33 @@ imports de electron/node/react), compartido por main (validación) y renderer (U
   cambia por preset + tres sliders discretos con label semántico (Cine/Estándar/Muy fluido,
   ≈MB/min) y un **ⓘ** (popover) por slider. Copy en español neutro, orientado al beneficio.
 
+### Watermark (free → paid)
+
+Un watermark (wordmark "Kaipu") **quemado en el video** solo para usuarios free; pagar lo
+quita. La decisión está **centralizada en un solo hook** — el resto de la app (engine
+incluido) no sabe de planes ni flags.
+
+- **`useWatermark()`** (`features/watermark/use-watermark.ts`) es el único seam. Compone tres
+  inputs, hoy stubs: `entitlement.isPaid` (TODO backend), `featureFlag` (TODO PostHog) y un
+  **override de dev**. La regla pura `resolveWatermarkEnabled({flagOn, isPaid, devForce})` =
+  `flagOn && !paid`. Devuelve `{ enabled, config }`.
+- **Override de dev que NUNCA llega a prod:** `VITE_WATERMARK_FORCE=free|paid` flipea el
+  watermark mientras desarrollás. Se lee **solo** bajo `import.meta.env.DEV`; como ese guard
+  se reemplaza por un literal en build, toda la rama (y la lectura de la env var) se
+  **elimina del bundle de producción** por dead-code removal.
+- **Draw-pass (canvas compositor)** `watermark-compositor.ts`: el screen track va a un
+  `<canvas>` (frame + el asset re-teñido a **silueta blanca** con sombra suave, en la esquina
+  vía `watermarkRect`), y se re-captura con `canvas.captureStream(frameRate)`. Ese track va al
+  encoder. **Costo cero cuando está apagado:** si `enabled === false` se encodea el screen
+  track directo (sin canvas). La detección de fallas sigue mirando el `screenTrack` original.
+- **Wiring:** `useWatermark()` → `use-recording-setup` (ref) → `StartInput.watermark` →
+  `startEngine`. `EngineOptions.watermark` decide compositar o no; `stop()` corta el draw loop.
+- **Config** (`watermark.ts`, sets `as const`): variant (wordmark/mark), position, tint
+  (white/original), opacity, height/margin ratios. Default: wordmark · abajo-derecha · white.
+
+**Pendiente (#6 real):** el `isPaid`/flag son stubs — el gating real depende de #4 (PostHog +
+entitlement). El seam ya está, así que enchufarlo no toca nada más.
+
 ### Recuperación de fallas (no quedar trabado)
 
 Las rutas de error restauran **siempre** el estado de la app:

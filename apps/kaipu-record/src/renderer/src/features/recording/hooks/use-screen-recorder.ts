@@ -8,6 +8,7 @@ import {
   type ElapsedState,
 } from "@renderer/features/recording/elapsed";
 import { startEngine, type EngineHandle } from "@renderer/features/recording/recorder-engine";
+import type { WatermarkConfig } from "@renderer/features/watermark/watermark";
 
 export type RecorderStatus = "idle" | "starting" | "recording" | "paused" | "finalizing" | "error";
 
@@ -21,6 +22,8 @@ export interface StartInput {
   height?: number;
   frameRate?: number;
   videoBitrate?: number;
+  /** Watermark to burn in, or `null` to encode the raw screen (decided by `useWatermark`). */
+  watermark?: WatermarkConfig | null;
 }
 
 export interface ScreenRecorderOptions {
@@ -81,6 +84,7 @@ export function useScreenRecorder(options: ScreenRecorderOptions = {}): ScreenRe
         height: input.height,
         frameRate: input.frameRate,
         videoBitrate: input.videoBitrate,
+        watermark: input.watermark,
         onChunk: (data, position) => window.electronAPI.recordingWrite(sessionId, data, position),
         // A failure mid-recording (encoder error or the screen capture ending)
         // runs the same robust stop — finalize-or-abort + always restore the

@@ -7,6 +7,8 @@ import {
   type StreamTargetChunk,
 } from "mediabunny";
 import { AUDIO_BITRATE_BPS, DEFAULT_QUALITY, qualityToEngine } from "@shared/recording-quality";
+import type { WatermarkConfig } from "@renderer/features/watermark/watermark";
+import { startWatermarkCompositor, type WatermarkCompositor } from "./watermark-compositor";
 import { levelsFromTimeDomain } from "./audio-levels";
 
 export interface EngineHandle {
@@ -34,6 +36,11 @@ export interface EngineOptions {
   height?: number;
   frameRate?: number;
   videoBitrate?: number;
+  /**
+   * When set, the screen is composited with this watermark before encoding.
+   * `null`/omitted → the raw screen track is encoded directly (zero added cost).
+   */
+  watermark?: WatermarkConfig | null;
   /** Receives each StreamTarget chunk to forward to the main-process writer. */
   onChunk(data: ArrayBuffer, position: number): void;
   /**
@@ -78,6 +85,16 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
   });
   const screenTrack = screenStream.getVideoTracks()[0];
 
+  // 1b. Watermark (optional): composite the screen through a canvas and encode
+  // THAT track. Failure detection still watches the original `screenTrack` (the
+  // canvas track never "ends" when the user stops sharing).
+  let compositor: WatermarkCompositor | null = null;
+  let encodeTrack = screenTrack;
+  if (options.watermark) {
+    compositor = await startWatermarkCompositor(screenStream, options.watermark, frameRate);
+    encodeTrack = compositor.track;
+  }
+
   // 2. Mic (best-effort) + system-audio (best-effort) → mixed single track.
   // Every acquired stream is tracked so stop() releases the OS devices (closing
   // the AudioContext alone does NOT stop the underlying tracks — the mic light
@@ -121,7 +138,7 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
     format: new Mp4OutputFormat({ fastStart: "in-memory" }),
     target: new StreamTarget(writable),
   });
-  const videoSource = new MediaStreamVideoTrackSource(screenTrack, {
+  const videoSource = new MediaStreamVideoTrackSource(encodeTrack, {
     codec: "avc",
     bitrate: videoBitrate,
     // Nudge Chromium toward the platform encoder (VideoToolbox on macOS) instead
@@ -188,6 +205,7 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
     async stop() {
       teardownStarted = true; // stopping the tracks below would otherwise fire onError
       await output.finalize();
+      compositor?.stop(); // cancel the draw loop + release the canvas track
       for (const stream of inputStreams) stream.getTracks().forEach((t) => t.stop());
       destination.stream.getTracks().forEach((t) => t.stop());
       await audioContext.close();
