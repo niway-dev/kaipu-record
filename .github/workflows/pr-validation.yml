@@ -37,7 +37,7 @@ jobs:
       - name: Type check
         run: bun run check-types
 
-      - name: Build app
+      - name: Build web app
         working-directory: apps/web-hono
         env:
           VITE_SERVER_URL: https://placeholder.example.com
