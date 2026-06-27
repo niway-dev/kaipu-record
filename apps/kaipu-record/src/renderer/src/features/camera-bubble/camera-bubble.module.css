@@ -9,7 +9,11 @@
   overflow: hidden;
   background: var(--bg-card);
   border: 3px solid var(--accent-primary);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+  /* On a transparent floating window a box-shadow is CLIPPED to the window's
+     rectangular bounds — if it reaches the edge you get an ugly dark box. Keep it
+     small enough to fully fade within the window margin (window 224 − bubble 192 =
+     16px each side, so an 8px blur fades well before the edge). */
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   display: flex;
   align-items: center;
   justify-content: center;

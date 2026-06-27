@@ -230,14 +230,22 @@ en clips cortos). Luego dispara `onComplete(recording)` que navega a
 directo en el detalle del video (sin flash del Record page). El detalle tiene su
 propio "Loading…" mientras `useLocalLibrary` re-lista el vault.
 
-### La barra como ventana-widget
+### Ventanas flotantes transparentes (barra y burbuja)
 
-La barra es una `BrowserWindow` frameless/transparent/always-on-top. Detalles que
-costaron y conviene recordar:
+La barra y la burbuja son `BrowserWindow` frameless/transparent/always-on-top.
+Detalles que costaron y conviene recordar:
 
-- **`backgroundColor: "#00000000"`** es obligatorio junto con `transparent: true`;
-  sin él, la ventana pinta un fondo opaco que se ve como una caja oscura sobre
-  fondos claros.
+> **Dos causas de "caja oscura" sobre una ventana transparente** (ambas se ven
+> parecidas, pero la raíz es distinta — confundirlas hace perder tiempo):
+>
+> 1. **Falta `backgroundColor: "#00000000"`** (junto con `transparent: true`): la
+>    ventana pinta un fondo opaco que se ve como una caja oscura sobre fondos claros.
+>    Obligatorio en **toda** ventana transparente.
+> 2. **Un `box-shadow` de CSS más grande que el margen transparente de la ventana**:
+>    la sombra **se recorta contra los bordes (rectangulares) de la ventana** y queda
+>    una caja oscura. Regla: la sombra debe **desvanecerse por completo dentro del
+>    margen** (window − elemento). Ej. burbuja: window 224 − círculo 192 = 16px de
+>    margen, así que un blur de ~8px entra holgado; un blur de 18px se cortaba.
 - **No debe scrollear.** El renderer marca `body[data-window="control-bar"]` y
   `main.css` la fija al viewport con `overflow: hidden` y le da a `#root` un
   *block-formatting context*, evitando que el margen superior del pill colapse
