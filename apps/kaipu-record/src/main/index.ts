@@ -10,6 +10,7 @@ import { registerPermissionHandlers } from "./permissions";
 import { registerLibraryVaultHandlers } from "./library";
 import { registerMediaProtocol, registerMediaScheme } from "./media-protocol";
 import { registerRecordingHub } from "./recording/recording-hub";
+import { registerSettings } from "./infrastructure/settings-store";
 
 let mainWindow: BrowserWindow | null = null;
 let capturePanel: CapturePanelWindow | null = null;
@@ -87,6 +88,9 @@ app.whenReady().then(() => {
 
   // IPC test
   ipcMain.on("ping", () => console.log("pong"));
+
+  // Persisted app settings (+ apply the Dock/switcher policy and launch-at-login).
+  registerSettings();
 
   // Capture Panel → show the main window (the panel's "Open ↗" button).
   ipcMain.on("capture-panel:open-main", () => {

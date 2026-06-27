@@ -24,5 +24,7 @@ export function mergeSettings(stored: Partial<AppSettings> | null | undefined): 
     theme: isValidTheme(safe.theme) ? safe.theme : DEFAULT_SETTINGS.theme,
     launchAtLogin:
       typeof safe.launchAtLogin === "boolean" ? safe.launchAtLogin : DEFAULT_SETTINGS.launchAtLogin,
+    showInDock:
+      typeof safe.showInDock === "boolean" ? safe.showInDock : DEFAULT_SETTINGS.showInDock,
   };
 }

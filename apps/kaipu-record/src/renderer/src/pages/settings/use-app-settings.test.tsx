@@ -1,0 +1,32 @@
+import { renderHook, waitFor, act } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { AppSettings } from "@shared/types";
+import { useAppSettings } from "./use-app-settings";
+
+const SETTINGS: AppSettings = { theme: "system", launchAtLogin: false, showInDock: true };
+
+describe("useAppSettings", () => {
+  beforeEach(() => {
+    window.electronAPI.getSettings = vi.fn(async () => SETTINGS);
+    window.electronAPI.updateSettings = vi.fn(
+      async (patch: Partial<AppSettings>): Promise<AppSettings> => ({ ...SETTINGS, ...patch }),
+    );
+  });
+
+  it("loads the persisted settings on mount", async () => {
+    const { result } = renderHook(() => useAppSettings());
+    await waitFor(() => expect(result.current.settings).toEqual(SETTINGS));
+  });
+
+  it("sends an update and adopts the returned settings", async () => {
+    const { result } = renderHook(() => useAppSettings());
+    await waitFor(() => expect(result.current.settings).not.toBeNull());
+
+    await act(async () => {
+      await result.current.update({ showInDock: false });
+    });
+
+    expect(window.electronAPI.updateSettings).toHaveBeenCalledWith({ showInDock: false });
+    expect(result.current.settings?.showInDock).toBe(false);
+  });
+});

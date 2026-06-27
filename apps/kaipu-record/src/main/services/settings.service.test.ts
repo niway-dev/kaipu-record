@@ -23,15 +23,25 @@ describe("mergeSettings", () => {
   });
 
   it("keeps valid stored values", () => {
-    expect(mergeSettings({ theme: "dark", launchAtLogin: true })).toEqual({
+    expect(mergeSettings({ theme: "dark", launchAtLogin: true, showInDock: false })).toEqual({
       theme: "dark",
       launchAtLogin: true,
+      showInDock: false,
     });
   });
 
+  it("defaults showInDock to true when absent or invalid", () => {
+    expect(mergeSettings({ theme: "dark" }).showInDock).toBe(true);
+    expect(mergeSettings({ showInDock: "no" as never }).showInDock).toBe(true);
+  });
+
   it("falls back to defaults for invalid fields", () => {
-    expect(mergeSettings({ theme: "neon" as never, launchAtLogin: "yes" as never })).toEqual(
-      DEFAULT_SETTINGS,
-    );
+    expect(
+      mergeSettings({
+        theme: "neon" as never,
+        launchAtLogin: "yes" as never,
+        showInDock: 1 as never,
+      }),
+    ).toEqual(DEFAULT_SETTINGS);
   });
 });

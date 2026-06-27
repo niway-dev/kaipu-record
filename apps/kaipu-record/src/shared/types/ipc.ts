@@ -12,11 +12,17 @@ export type Theme = "light" | "dark" | "system";
 export interface AppSettings {
   theme: Theme;
   launchAtLogin: boolean;
+  /**
+   * macOS: show the app in the Dock + Cmd+Tab switcher (`regular` activation
+   * policy). Off = menu-bar/tray-only (`accessory`) — no Dock, no switcher.
+   */
+  showInDock: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
   theme: "system",
   launchAtLogin: false,
+  showInDock: true,
 };
 
 /**

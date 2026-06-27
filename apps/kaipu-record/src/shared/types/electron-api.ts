@@ -3,6 +3,7 @@
  * `src/preload`, typed for the renderer via `src/preload/index.d.ts`). Pure types.
  */
 
+import type { AppSettings } from "./ipc";
 import type { LocalRecording, VaultDirectory } from "./library-storage";
 import type {
   ControlCommand,
@@ -28,6 +29,11 @@ export type PermissionKind = "screen" | "microphone" | "camera";
 export type PermissionStatus = Record<PermissionKind, boolean>;
 
 export interface KaipuElectronAPI {
+  /** Read persisted app settings. */
+  getSettings(): Promise<AppSettings>;
+  /** Merge a partial settings change; persists + applies OS side effects; returns the result. */
+  updateSettings(patch: Partial<AppSettings>): Promise<AppSettings>;
+
   /** Enumerate available screens and windows via the main-process desktopCapturer. */
   getScreenSources(): Promise<ScreenSource[]>;
 

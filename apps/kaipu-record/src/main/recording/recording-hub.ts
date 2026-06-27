@@ -1,4 +1,4 @@
-import { BrowserWindow, desktopCapturer, ipcMain } from "electron";
+import { app, BrowserWindow, desktopCapturer, ipcMain } from "electron";
 import { IPC_CHANNELS } from "@shared/types";
 import type {
   ControlCommand,
@@ -12,6 +12,7 @@ import { ControlBarWindow } from "./control-bar-window";
 import { CameraBubbleWindow } from "./camera-bubble-window";
 import { RecordingWriter, timestampId } from "./recording-writer";
 import { vaultDirectory } from "../library/vault-location";
+import { applyDockPolicy } from "../infrastructure/settings-store";
 
 /**
  * The single stateful coordinator for a recording. Owns the control-bar window
@@ -102,6 +103,11 @@ export function registerRecordingHub(getMainWindow: () => BrowserWindow | null):
     const main = getMainWindow();
     main?.show();
     main?.focus();
+    // Hiding the main window for the recording can drop the app from the Dock /
+    // Cmd+Tab on macOS; re-assert the policy and bring the app forward so it's
+    // back in the switcher (respects the "show in Dock" setting).
+    applyDockPolicy();
+    app.focus({ steal: true });
     broadcastActivity();
   });
 

@@ -12,6 +12,8 @@ afterEach(() => {
 // Minimal `window.electronAPI` stub so renderer code that talks to the preload
 // bridge (e.g. usePermissions) works under jsdom. Individual tests can override.
 window.electronAPI = {
+  getSettings: async () => ({ theme: "system", launchAtLogin: false, showInDock: true }),
+  updateSettings: async () => ({ theme: "system", launchAtLogin: false, showInDock: true }),
   getScreenSources: async () => [],
   resizeCapturePanel: () => {},
   openMainWindow: () => {},

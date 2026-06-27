@@ -3,9 +3,11 @@ import { Mic, Video, Monitor, FolderOpen } from "lucide-react";
 import { Card } from "@renderer/ui/card";
 import { Row } from "@renderer/ui/row";
 import { Button } from "@renderer/ui/button";
+import { Toggle } from "@renderer/ui/toggle";
 import { useOnboarding } from "@renderer/features/onboarding";
 import { usePermissions } from "@renderer/features/permissions";
 import { useVaultDirectory } from "@renderer/features/library/hooks/use-vault-directory";
+import { useAppSettings } from "./use-app-settings";
 import type { PermissionKind } from "@shared/types";
 import styles from "./settings-page.module.css";
 
@@ -52,6 +54,7 @@ export function SettingsPage(): React.JSX.Element {
   const { open: openOnboarding } = useOnboarding();
   const { status: permissionStatus, request: requestPermission } = usePermissions();
   const vault = useVaultDirectory();
+  const { settings, update } = useAppSettings();
 
   return (
     <div className={styles.page}>
@@ -110,6 +113,16 @@ export function SettingsPage(): React.JSX.Element {
         </Section>
 
         <Section title="App">
+          <Row
+            label="Show in Dock & app switcher"
+            description="Off keeps Kaipu in the menu bar only — no Dock icon, hidden from ⌘-Tab (macOS)"
+            action={
+              <Toggle
+                checked={settings?.showInDock ?? true}
+                onChange={(checked) => void update({ showInDock: checked })}
+              />
+            }
+          />
           <Row
             label="Onboarding"
             description="Replay the first-run setup & permissions"
