@@ -1,15 +1,14 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, FolderOpen, Trash2, Pencil, Check, X, VideoOff } from "lucide-react";
+import { ArrowLeft, FolderOpen, Trash2, VideoOff } from "lucide-react";
 import { useLocalLibrary } from "@renderer/features/library/hooks/use-local-library";
 import { StorageMeta } from "@renderer/features/library/components/storage-meta";
 import { DeleteConfirmDialog } from "@renderer/features/library/components/delete-confirm-dialog";
+import { RecordingPlayer } from "@renderer/features/library/components/recording-player";
+import { RecordingTitle } from "@renderer/features/library/components/recording-title";
 import { formatDuration, formatSize, relativeDate } from "@renderer/features/library/format";
 import { Button } from "@renderer/ui/button";
 import styles from "./library-detail-page.module.css";
-
-/** Playable URL for a vault recording, served by the main-process media protocol. */
-const mediaUrl = (id: string): string => `kaipu-media://recording/${encodeURIComponent(id)}`;
 
 export function LibraryDetailPage(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
@@ -18,10 +17,7 @@ export function LibraryDetailPage(): React.JSX.Element {
 
   const video = videos.find((v) => v.id === id);
 
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [playable, setPlayable] = useState(true);
 
   const back = (): void => {
     navigate("/library");
@@ -43,17 +39,6 @@ export function LibraryDetailPage(): React.JSX.Element {
     );
   }
 
-  const startEdit = (): void => {
-    setDraft(video.title);
-    setEditing(true);
-  };
-
-  const commitEdit = (): void => {
-    const next = draft.trim();
-    if (next && next !== video.title) void rename(id, next);
-    setEditing(false);
-  };
-
   const doDelete = (): void => {
     void remove(id);
     setConfirmingDelete(false);
@@ -67,63 +52,11 @@ export function LibraryDetailPage(): React.JSX.Element {
         Library
       </button>
 
-      <div className={styles.player}>
-        {playable ? (
-          <video
-            className={styles.video}
-            src={mediaUrl(id)}
-            poster={video.thumbnailUrl ?? undefined}
-            controls
-            autoPlay
-            onError={() => setPlayable(false)}
-          />
-        ) : (
-          <div className={styles.unavailable}>
-            <VideoOff size={32} strokeWidth={1.5} />
-            <span>Video unavailable</span>
-          </div>
-        )}
-      </div>
+      <RecordingPlayer id={id} poster={video.thumbnailUrl} />
 
       <div className={styles.bar}>
         <div className={styles.titleBlock}>
-          {editing ? (
-            <div className={styles.titleEdit}>
-              <input
-                className={styles.titleInput}
-                value={draft}
-                autoFocus
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") commitEdit();
-                  if (e.key === "Escape") setEditing(false);
-                }}
-              />
-              <button type="button" className={styles.iconButton} onClick={commitEdit} title="Save">
-                <Check size={16} strokeWidth={2} />
-              </button>
-              <button
-                type="button"
-                className={styles.iconButton}
-                onClick={() => setEditing(false)}
-                title="Cancel"
-              >
-                <X size={16} strokeWidth={2} />
-              </button>
-            </div>
-          ) : (
-            <div className={styles.titleRow}>
-              <h1 className={styles.title}>{video.title || "Untitled recording"}</h1>
-              <button
-                type="button"
-                className={styles.iconButton}
-                onClick={startEdit}
-                title="Rename"
-              >
-                <Pencil size={15} strokeWidth={1.8} />
-              </button>
-            </div>
-          )}
+          <RecordingTitle title={video.title} onRename={(title) => void rename(id, title)} />
           <div className={styles.meta}>
             <StorageMeta video={video} />
             <span className={styles.dot}>·</span>
