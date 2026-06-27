@@ -33,7 +33,10 @@ describe("selectVisibleVideos", () => {
   });
 
   it("sorts oldest-first", () => {
-    const result = selectVisibleVideos([newest, oldest, middle], { ...criteria, sortKey: "oldest" });
+    const result = selectVisibleVideos([newest, oldest, middle], {
+      ...criteria,
+      sortKey: "oldest",
+    });
     expect(result.map((v) => v.id)).toEqual(["c", "b", "a"]);
   });
 
