@@ -39,13 +39,6 @@ export function RecordPage(): React.JSX.Element {
   const isMicrophoneDenied = permissionsChecked && !permissionStatus.microphone;
   const isCameraDenied = permissionsChecked && !permissionStatus.camera;
 
-  // The live camera now lives in its own floating bubble window (captured into the
-  // recording). Drive it from the Camera toggle; hide it when leaving the page.
-  useEffect(() => {
-    window.electronAPI.setCameraBubble(setup.isCameraEnabled && !isCameraDenied);
-  }, [setup.isCameraEnabled, isCameraDenied]);
-  useEffect(() => () => window.electronAPI.setCameraBubble(false), []);
-
   // A "Start" from the Capture Panel runs our normal start here (countdown + record).
   // Read the latest handler through a ref so the listener never goes stale.
   const startRef = useRef(setup.startRecording);

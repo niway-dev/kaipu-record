@@ -8,6 +8,7 @@ import type {
   ControlCommand,
   RecordingActivity,
   RecordingFinalizeMeta,
+  RecordingSettings,
   RecordingStartInfo,
   RecordingTick,
 } from "./ipc";
@@ -92,9 +93,13 @@ export interface KaipuElectronAPI {
   /** Subscribe to recording activity changes (start/stop/pause/resume). */
   onRecordingState(callback: (state: RecordingActivity) => void): () => void;
 
-  // ── Camera bubble ─────────────────────────────────────────────────────
-  /** Show/hide the floating webcam bubble (follows the Camera toggle). */
-  setCameraBubble(enabled: boolean): void;
+  // ── Shared recording settings (any window) ────────────────────────────
+  /** Current shared settings — query on mount. */
+  getRecordingSettings(): Promise<RecordingSettings>;
+  /** Merge a partial settings change (broadcast to every window; drives the bubble). */
+  updateRecordingSettings(patch: Partial<RecordingSettings>): void;
+  /** Subscribe to settings changes from any window. */
+  onRecordingSettingsChanged(callback: (settings: RecordingSettings) => void): () => void;
 
   // ── Start from the Capture Panel ──────────────────────────────────────
   /** Capture Panel → main: open the main window and start recording there. */

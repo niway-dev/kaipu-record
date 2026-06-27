@@ -2,7 +2,12 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 import { electronAPI } from "@electron-toolkit/preload";
 import { IPC_CHANNELS } from "@shared/types";
 import type { KaipuElectronAPI } from "@shared/types/electron-api";
-import type { ControlCommand, RecordingActivity, RecordingTick } from "@shared/types/ipc";
+import type {
+  ControlCommand,
+  RecordingActivity,
+  RecordingSettings,
+  RecordingTick,
+} from "@shared/types/ipc";
 
 // Custom Kaipu bridge. Only methods with a live main-process handler are exposed.
 const kaipuApi: KaipuElectronAPI = {
@@ -46,7 +51,14 @@ const kaipuApi: KaipuElectronAPI = {
     ipcRenderer.on(IPC_CHANNELS.recordingState, listener);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.recordingState, listener);
   },
-  setCameraBubble: (enabled) => ipcRenderer.send(IPC_CHANNELS.cameraBubbleSet, enabled),
+  getRecordingSettings: () => ipcRenderer.invoke(IPC_CHANNELS.recordingSettingsGet),
+  updateRecordingSettings: (patch) => ipcRenderer.send(IPC_CHANNELS.recordingSettingsUpdate, patch),
+  onRecordingSettingsChanged: (callback) => {
+    const listener = (_e: IpcRendererEvent, settings: RecordingSettings): void =>
+      callback(settings);
+    ipcRenderer.on(IPC_CHANNELS.recordingSettingsChanged, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.recordingSettingsChanged, listener);
+  },
   requestStartRecording: () => ipcRenderer.send(IPC_CHANNELS.recordingRequestStart),
   onRequestStartRecording: (callback) => {
     const listener = (): void => callback();

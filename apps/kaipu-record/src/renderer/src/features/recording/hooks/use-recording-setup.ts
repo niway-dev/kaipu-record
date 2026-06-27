@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { LocalRecording } from "@shared/types";
 import { useMicrophones } from "@renderer/features/recording/hooks/use-microphones";
+import { useRecordingSettings } from "@renderer/features/recording/hooks/use-recording-settings";
 import {
   useScreenRecorder,
   type RecorderStatus,
@@ -60,27 +61,34 @@ export interface RecordingSetup {
 }
 
 export function useRecordingSetup(options: RecordingSetupOptions = {}): RecordingSetup {
-  const [selectedSource, setSelectedSource] = useState<SelectedSource | null>(null);
+  // Shared across windows (the main process is the source of truth), so toggling
+  // a control in the Record page or the Capture Panel updates both.
+  const settings = useRecordingSettings();
+  const {
+    selectedSource,
+    selectedMicrophone,
+    isMicrophoneEnabled,
+    isSystemAudioEnabled,
+    isCameraEnabled,
+    update,
+  } = settings;
+
+  // Per-window UI + recording lifecycle (NOT shared).
   const [isSourcePickerOpen, setSourcePickerOpen] = useState(false);
-  const [isMicrophoneEnabled, setMicrophoneEnabled] = useState(true);
-  const [isSystemAudioEnabled, setSystemAudioEnabled] = useState(false);
-  const [isCameraEnabled, setCameraEnabled] = useState(false);
-
-  const microphones = useMicrophones();
-  const recorder = useScreenRecorder({ onComplete: options.onRecordingComplete });
-  const [selectedMicrophone, setSelectedMicrophone] = useState<Microphone | null>(null);
-  // Default to the first device once enumerated; keep the choice valid as
-  // devices are plugged/unplugged.
-  useEffect(() => {
-    setSelectedMicrophone((current) => {
-      if (current && microphones.some((m) => m.deviceId === current.deviceId)) return current;
-      return microphones[0] ?? null;
-    });
-  }, [microphones]);
-
   const [isMicrophoneMenuOpen, setMicrophoneMenuOpen] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const countdownTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const microphones = useMicrophones();
+  const recorder = useScreenRecorder({ onComplete: options.onRecordingComplete });
+
+  // Default the mic to the first device once enumerated, into the shared settings
+  // (idempotent — only when nothing is selected yet).
+  useEffect(() => {
+    if (!selectedMicrophone && microphones.length > 0) {
+      update({ selectedMicrophone: microphones[0] });
+    }
+  }, [microphones, selectedMicrophone, update]);
 
   // Recording lives in the real engine; "recording" and "paused" both count as
   // an active session for the UI.
@@ -137,7 +145,7 @@ export function useRecordingSetup(options: RecordingSetupOptions = {}): Recordin
 
   return {
     selectedSource,
-    selectSource: setSelectedSource,
+    selectSource: (source) => update({ selectedSource: source }),
     isSourcePickerOpen,
     openSourcePicker: () => setSourcePickerOpen(true),
     closeSourcePicker: () => setSourcePickerOpen(false),
@@ -145,16 +153,16 @@ export function useRecordingSetup(options: RecordingSetupOptions = {}): Recordin
     isMicrophoneEnabled,
     isSystemAudioEnabled,
     isCameraEnabled,
-    toggleMicrophone: () => setMicrophoneEnabled((on) => !on),
-    toggleSystemAudio: () => setSystemAudioEnabled((on) => !on),
-    toggleCamera: () => setCameraEnabled((on) => !on),
+    toggleMicrophone: () => update({ isMicrophoneEnabled: !isMicrophoneEnabled }),
+    toggleSystemAudio: () => update({ isSystemAudioEnabled: !isSystemAudioEnabled }),
+    toggleCamera: () => update({ isCameraEnabled: !isCameraEnabled }),
 
     microphones,
     selectedMicrophone,
     isMicrophoneMenuOpen,
     toggleMicrophoneMenu: () => setMicrophoneMenuOpen((open) => !open),
     selectMicrophone: (microphone) => {
-      setSelectedMicrophone(microphone);
+      update({ selectedMicrophone: microphone });
       setMicrophoneMenuOpen(false);
     },
 

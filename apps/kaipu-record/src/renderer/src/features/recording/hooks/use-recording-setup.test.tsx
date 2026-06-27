@@ -1,17 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
+import type { RecordingSettings } from "@shared/types";
 
-// Mock the device-enumeration hook so useRecordingSetup never touches
-// navigator.mediaDevices (absent in jsdom). Stable array via vi.hoisted.
-const { MICS } = vi.hoisted(() => ({
-  MICS: [{ deviceId: "m1", label: "Mic One" }],
-}));
+// Device enumeration mocked (no navigator.mediaDevices in jsdom).
+const { MICS } = vi.hoisted(() => ({ MICS: [{ deviceId: "m1", label: "Mic One" }] }));
 vi.mock("@renderer/features/recording/hooks/use-microphones", () => ({
   useMicrophones: () => MICS,
 }));
 
-// The real recording engine is mocked: status stays "idle" so the hook never
-// reports an active session, and we assert the hook delegates to start/stop/pause.
+// The real recording engine is mocked: status "idle" + delegation spies.
 const recorderStart = vi.fn();
 const recorderStop = vi.fn();
 const recorderPause = vi.fn();
@@ -26,30 +23,60 @@ vi.mock("@renderer/features/recording/hooks/use-screen-recorder", () => ({
   }),
 }));
 
+// Shared settings mocked deterministically: set `mockSettings` before rendering,
+// assert writes through `mockUpdate`. Read at call time (no TDZ).
+const mockUpdate = vi.fn();
+let mockSettings: RecordingSettings;
+vi.mock("@renderer/features/recording/hooks/use-recording-settings", () => ({
+  useRecordingSettings: () => ({ ...mockSettings, update: mockUpdate }),
+}));
+
 import { useRecordingSetup } from "./use-recording-setup";
+
+const SETTINGS = (over: Partial<RecordingSettings> = {}): RecordingSettings => ({
+  selectedSource: null,
+  selectedMicrophone: { deviceId: "m1", label: "Mic One" },
+  isMicrophoneEnabled: true,
+  isSystemAudioEnabled: false,
+  isCameraEnabled: false,
+  ...over,
+});
+
+const SCREEN = { id: "s1", name: "Display 1", type: "screen" as const };
 
 describe("useRecordingSetup", () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    recorderStart.mockClear();
-    recorderStop.mockClear();
-    recorderPause.mockClear();
-    recorderResume.mockClear();
+    mockSettings = SETTINGS();
+    for (const spy of [recorderStart, recorderStop, recorderPause, recorderResume, mockUpdate]) {
+      spy.mockClear();
+    }
   });
   afterEach(() => vi.useRealTimers());
 
-  it("defaults the selected microphone to the first device", () => {
-    const { result } = renderHook(() => useRecordingSetup());
-    expect(result.current.selectedMicrophone).toEqual({ deviceId: "m1", label: "Mic One" });
-    expect(result.current.isRecording).toBe(false);
-    expect(result.current.countdown).toBeNull();
+  it("can-start reflects the shared selected source", () => {
+    const idle = renderHook(() => useRecordingSetup());
+    expect(idle.result.current.canStartRecording).toBe(false);
+
+    mockSettings = SETTINGS({ selectedSource: SCREEN });
+    const ready = renderHook(() => useRecordingSetup());
+    expect(ready.result.current.canStartRecording).toBe(true);
   });
 
-  it("can-start only once a source is selected", () => {
+  it("delegates capture toggles to the shared settings", () => {
     const { result } = renderHook(() => useRecordingSetup());
-    expect(result.current.canStartRecording).toBe(false);
-    act(() => result.current.selectSource({ id: "s1", name: "Display 1", type: "screen" }));
-    expect(result.current.canStartRecording).toBe(true);
+    act(() => result.current.toggleMicrophone());
+    expect(mockUpdate).toHaveBeenCalledWith({ isMicrophoneEnabled: false });
+    act(() => result.current.toggleCamera());
+    expect(mockUpdate).toHaveBeenCalledWith({ isCameraEnabled: true });
+  });
+
+  it("defaults the mic into shared settings when none is selected", () => {
+    mockSettings = SETTINGS({ selectedMicrophone: null });
+    renderHook(() => useRecordingSetup());
+    expect(mockUpdate).toHaveBeenCalledWith({
+      selectedMicrophone: { deviceId: "m1", label: "Mic One" },
+    });
   });
 
   it("exposes the recorder status and delegates pause/resume", () => {
@@ -61,36 +88,29 @@ describe("useRecordingSetup", () => {
     expect(recorderResume).toHaveBeenCalledTimes(1);
   });
 
-  it("toggles capture flags", () => {
-    const { result } = renderHook(() => useRecordingSetup());
-    expect(result.current.isMicrophoneEnabled).toBe(true);
-    act(() => result.current.toggleMicrophone());
-    expect(result.current.isMicrophoneEnabled).toBe(false);
-  });
-
-  it("counts down 3 → 2 → 1 and then starts the engine", () => {
+  it("counts down 3 → 2 → 1 then starts with the shared source/mic", () => {
+    mockSettings = SETTINGS({ selectedSource: SCREEN });
     const { result } = renderHook(() => useRecordingSetup());
 
-    act(() => result.current.selectSource({ id: "s1", name: "Display 1", type: "screen" }));
     act(() => result.current.startRecording());
     expect(result.current.countdown).toBe(3);
     expect(recorderStart).not.toHaveBeenCalled();
 
     act(() => vi.advanceTimersByTime(1000));
     expect(result.current.countdown).toBe(2);
-
     act(() => vi.advanceTimersByTime(1000));
     expect(result.current.countdown).toBe(1);
-
     act(() => vi.advanceTimersByTime(1000));
     expect(result.current.countdown).toBeNull();
-    expect(recorderStart).toHaveBeenCalledWith(expect.objectContaining({ sourceId: "s1" }));
+    expect(recorderStart).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceId: "s1", microphoneDeviceId: "m1" }),
+    );
   });
 
   it("stopRecording cancels an in-progress countdown", () => {
+    mockSettings = SETTINGS({ selectedSource: SCREEN });
     const { result } = renderHook(() => useRecordingSetup());
 
-    act(() => result.current.selectSource({ id: "s1", name: "Display 1", type: "screen" }));
     act(() => result.current.startRecording());
     expect(result.current.countdown).toBe(3);
 
@@ -98,7 +118,6 @@ describe("useRecordingSetup", () => {
     expect(result.current.countdown).toBeNull();
     expect(recorderStop).toHaveBeenCalledTimes(1);
 
-    // A cancelled countdown must never reach the engine.
     act(() => vi.advanceTimersByTime(5000));
     expect(recorderStart).not.toHaveBeenCalled();
   });

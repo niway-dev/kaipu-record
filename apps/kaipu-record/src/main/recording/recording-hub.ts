@@ -4,6 +4,7 @@ import type {
   ControlCommand,
   RecordingActivity,
   RecordingFinalizeMeta,
+  RecordingSettings,
   RecordingStartInfo,
   RecordingTick,
 } from "@shared/types/ipc";
@@ -40,6 +41,34 @@ export function registerRecordingHub(getMainWindow: () => BrowserWindow | null):
     }
   };
   ipcMain.handle(IPC_CHANNELS.recordingGetState, (): RecordingActivity => activity);
+
+  // Shared recording settings — single source of truth, mirrored to every window.
+  const settings: RecordingSettings = {
+    selectedSource: null,
+    selectedMicrophone: null,
+    isMicrophoneEnabled: true,
+    isSystemAudioEnabled: false,
+    isCameraEnabled: false,
+  };
+  const broadcastSettings = (): void => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) {
+        window.webContents.send(IPC_CHANNELS.recordingSettingsChanged, settings);
+      }
+    }
+  };
+  ipcMain.handle(IPC_CHANNELS.recordingSettingsGet, (): RecordingSettings => settings);
+  ipcMain.on(IPC_CHANNELS.recordingSettingsUpdate, (_e, patch: Partial<RecordingSettings>) => {
+    const cameraWasOn = settings.isCameraEnabled;
+    Object.assign(settings, patch);
+    broadcastSettings();
+    // The camera bubble follows the (now global) Camera toggle, so it works no
+    // matter which window flipped it.
+    if (settings.isCameraEnabled !== cameraWasOn) {
+      if (settings.isCameraEnabled) cameraBubble.show();
+      else cameraBubble.hide();
+    }
+  });
 
   // ── Disk writer ──────────────────────────────────────────────────────
   ipcMain.handle(IPC_CHANNELS.recordingCreate, (_e, sessionId: string) => writer.create(sessionId));
@@ -90,12 +119,6 @@ export function registerRecordingHub(getMainWindow: () => BrowserWindow | null):
   });
   ipcMain.on(IPC_CHANNELS.controlCommand, (_e, command: ControlCommand) => {
     getMainWindow()?.webContents.send(IPC_CHANNELS.recordingCommand, command);
-  });
-
-  // ── Camera bubble ────────────────────────────────────────────────────
-  ipcMain.on(IPC_CHANNELS.cameraBubbleSet, (_e, enabled: boolean) => {
-    if (enabled) cameraBubble.show();
-    else cameraBubble.hide();
   });
 }
 

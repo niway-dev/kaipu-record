@@ -52,8 +52,12 @@ export const IPC_CHANNELS = {
   // (Record page when reopened, Capture Panel) reflect an in-progress recording.
   recordingState: "recording:state",
   recordingGetState: "recording:get-state",
-  // Show/hide the floating camera bubble (driven by the Camera toggle).
-  cameraBubbleSet: "camera:set",
+  // Shared recording settings (source/toggles/mic) — single source of truth in main,
+  // so the Record page and Capture Panel stay in sync. The hub also drives the camera
+  // bubble from `isCameraEnabled`.
+  recordingSettingsGet: "recording-settings:get",
+  recordingSettingsUpdate: "recording-settings:update",
+  recordingSettingsChanged: "recording-settings:changed",
   // Capture Panel asks the main window to start recording (panel → main → Record page).
   recordingRequestStart: "recording:request-start",
 } as const;
@@ -88,4 +92,17 @@ export interface RecordingFinalizeMeta {
 export interface RecordingStartInfo {
   sourceId: string;
   sourceName: string;
+}
+
+/**
+ * Recording settings shared across windows (main is the source of truth). Pure
+ * shapes so this file stays import-free; structurally compatible with the
+ * renderer's `SelectedSource` / `Microphone`.
+ */
+export interface RecordingSettings {
+  selectedSource: { id: string; name: string; type: "screen" | "window" } | null;
+  selectedMicrophone: { deviceId: string; label: string } | null;
+  isMicrophoneEnabled: boolean;
+  isSystemAudioEnabled: boolean;
+  isCameraEnabled: boolean;
 }

@@ -39,7 +39,15 @@ window.electronAPI = {
   controlCommand: () => {},
   getRecordingState: async () => ({ active: false, status: "recording", elapsedSeconds: 0 }),
   onRecordingState: () => () => {},
-  setCameraBubble: () => {},
+  getRecordingSettings: async () => ({
+    selectedSource: null,
+    selectedMicrophone: null,
+    isMicrophoneEnabled: true,
+    isSystemAudioEnabled: false,
+    isCameraEnabled: false,
+  }),
+  updateRecordingSettings: () => {},
+  onRecordingSettingsChanged: () => () => {},
   requestStartRecording: () => {},
   onRequestStartRecording: () => () => {},
 };

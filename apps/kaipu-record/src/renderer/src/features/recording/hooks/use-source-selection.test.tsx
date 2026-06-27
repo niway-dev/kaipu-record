@@ -1,12 +1,35 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import type { ScreenSource } from "@shared/types";
+import type { RecordingSettings, ScreenSource } from "@shared/types";
 
 // useRecordingSetup pulls in device enumeration; stub it so the harness never
 // touches navigator.mediaDevices (absent in jsdom).
 vi.mock("@renderer/features/recording/hooks/use-microphones", () => ({
   useMicrophones: () => [],
 }));
+
+// Shared settings as real in-memory state (no IPC). This is what the hub provides
+// in production; here it keeps the default-selection logic deterministic without
+// the async query/optimistic timing of the real cross-window hook.
+vi.mock("@renderer/features/recording/hooks/use-recording-settings", async () => {
+  const React = await vi.importActual<typeof import("react")>("react");
+  return {
+    useRecordingSettings: () => {
+      const [settings, setSettings] = React.useState<RecordingSettings>({
+        selectedSource: null,
+        selectedMicrophone: null,
+        isMicrophoneEnabled: true,
+        isSystemAudioEnabled: false,
+        isCameraEnabled: false,
+      });
+      const update = React.useCallback(
+        (patch: Partial<RecordingSettings>) => setSettings((current) => ({ ...current, ...patch })),
+        [],
+      );
+      return { ...settings, update };
+    },
+  };
+});
 
 import { useRecordingSetup } from "./use-recording-setup";
 import { useSourceSelection } from "./use-source-selection";
