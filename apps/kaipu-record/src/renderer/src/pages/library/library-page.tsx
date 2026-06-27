@@ -1,144 +1,35 @@
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  Library,
-  Check,
-  LayoutGrid,
-  LayoutList,
-  ArrowUpDown,
-  ChevronDown,
-  AlertTriangle,
-  RefreshCw,
-} from "lucide-react";
+import { Library, LayoutGrid, LayoutList, AlertTriangle, RefreshCw } from "lucide-react";
 import { SearchInput } from "@renderer/ui/search-input";
 import { Button } from "@renderer/ui/button";
 import { VideoCard } from "@renderer/features/library/components/video-card";
 import { VideoRow } from "@renderer/features/library/components/video-row";
 import { DeleteConfirmDialog } from "@renderer/features/library/components/delete-confirm-dialog";
+import { SortMenu } from "@renderer/features/library/components/sort-menu";
+import { FilterChip } from "@renderer/features/library/components/filter-chip";
 import { useLocalLibrary } from "@renderer/features/library/hooks/use-local-library";
-import type { StorageState } from "@renderer/features/library/types";
+import { useLibraryFilters } from "@renderer/features/library/hooks/use-library-filters";
 import styles from "./library-page.module.css";
-
-type StorageFilter = "all" | StorageState;
-type SortKey = "newest" | "oldest" | "largest";
-
-const SORT_OPTIONS: Array<{ key: SortKey; label: string }> = [
-  { key: "newest", label: "Newest" },
-  { key: "oldest", label: "Oldest" },
-  { key: "largest", label: "Largest" },
-];
-
-/* ── SortMenu ─────────────────────────────────────────────────────── */
-
-function SortMenu({
-  sort,
-  onChange,
-}: {
-  sort: SortKey;
-  onChange: (k: SortKey) => void;
-}): React.JSX.Element {
-  const [open, setOpen] = useState(false);
-  const current = SORT_OPTIONS.find((o) => o.key === sort) ?? SORT_OPTIONS[0];
-  return (
-    <div style={{ position: "relative", flexShrink: 0 }}>
-      <button className={styles.sortButton} onClick={() => setOpen((o) => !o)} type="button">
-        <ArrowUpDown size={14} strokeWidth={1.8} />
-        {current.label}
-        <ChevronDown size={14} strokeWidth={1.8} />
-      </button>
-      {open && (
-        <>
-          <div className={styles.sortBackdrop} onClick={() => setOpen(false)} />
-          <div className={styles.sortDropdown}>
-            {SORT_OPTIONS.map((o) => (
-              <button
-                key={o.key}
-                className={styles.sortOption}
-                data-active={o.key === sort}
-                onClick={() => {
-                  onChange(o.key);
-                  setOpen(false);
-                }}
-                type="button"
-              >
-                {o.key === sort && <Check size={13} />}
-                {o.label}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-/* ── FilterChip ───────────────────────────────────────────────────── */
-
-interface FilterChipProps {
-  active: boolean;
-  empty?: boolean;
-  tone?: "default" | "alert";
-  onClick: () => void;
-  children: React.ReactNode;
-}
-
-function FilterChip({
-  active,
-  empty,
-  tone = "default",
-  onClick,
-  children,
-}: FilterChipProps): React.JSX.Element {
-  return (
-    <button
-      className={styles.filterChip}
-      data-active={active}
-      data-empty={!active && empty}
-      data-tone={tone}
-      onClick={onClick}
-      type="button"
-    >
-      {children}
-    </button>
-  );
-}
-
-/* ── LibraryPage ──────────────────────────────────────────────────── */
 
 export function LibraryPage(): React.JSX.Element {
   const navigate = useNavigate();
   const { videos, isLoading, refresh, remove } = useLocalLibrary();
+  const {
+    storageFilter,
+    sortKey,
+    searchTerm,
+    setStorageFilter,
+    setSortKey,
+    setSearchTerm,
+    visibleItems,
+    counts,
+    hasActiveFilters,
+    clearFilters,
+  } = useLibraryFilters(videos);
 
   const [view, setView] = useState<"grid" | "list">("grid");
-  const [storageFilter, setStorageFilter] = useState<StorageFilter>("all");
-  const [sortKey, setSortKey] = useState<SortKey>("newest");
-  const [searchTerm, setSearchTerm] = useState("");
   const [pendingDelete, setPendingDelete] = useState<{ id: string; title: string } | null>(null);
-
-  const localCount = useMemo(() => videos.filter((v) => v.storage === "local").length, [videos]);
-  const cloudCount = useMemo(() => videos.filter((v) => v.storage === "cloud").length, [videos]);
-  const failedCount = useMemo(() => videos.filter((v) => v.storage === "failed").length, [videos]);
-
-  const visibleItems = useMemo(() => {
-    const term = searchTerm.trim().toLowerCase();
-    const filtered = videos.filter((v) => {
-      if (storageFilter !== "all" && v.storage !== storageFilter) return false;
-      if (term && !v.title.toLowerCase().includes(term)) return false;
-      return true;
-    });
-    return [...filtered].sort((a, b) => {
-      if (sortKey === "newest") return b.createdAt - a.createdAt;
-      if (sortKey === "oldest") return a.createdAt - b.createdAt;
-      return b.fileSizeBytes - a.fileSizeBytes;
-    });
-  }, [videos, storageFilter, sortKey, searchTerm]);
-
-  const hasActiveFilters = storageFilter !== "all" || searchTerm.trim().length > 0;
-
-  const clearFilters = (): void => {
-    setStorageFilter("all");
-    setSearchTerm("");
-  };
 
   const confirmDelete = (): void => {
     if (!pendingDelete) return;
@@ -204,7 +95,7 @@ export function LibraryPage(): React.JSX.Element {
         </FilterChip>
         <FilterChip
           active={storageFilter === "local"}
-          empty={localCount === 0}
+          empty={counts.local === 0}
           onClick={() => setStorageFilter("local")}
         >
           <span className={styles.storageDotChip} data-cloud="false" />
@@ -212,20 +103,20 @@ export function LibraryPage(): React.JSX.Element {
         </FilterChip>
         <FilterChip
           active={storageFilter === "cloud"}
-          empty={cloudCount === 0}
+          empty={counts.cloud === 0}
           onClick={() => setStorageFilter("cloud")}
         >
           <span className={styles.storageDotChip} data-cloud="true" />
           Cloud
         </FilterChip>
-        {failedCount > 0 && (
+        {counts.failed > 0 && (
           <FilterChip
             tone="alert"
             active={storageFilter === "failed"}
             onClick={() => setStorageFilter(storageFilter === "failed" ? "all" : "failed")}
           >
             <AlertTriangle size={12} strokeWidth={2} />
-            Failed ({failedCount})
+            Failed ({counts.failed})
           </FilterChip>
         )}
       </div>
