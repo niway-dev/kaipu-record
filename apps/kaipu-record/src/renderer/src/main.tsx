@@ -31,8 +31,9 @@ if (isControlBar) {
     </StrictMode>,
   );
 } else if (isCameraBubble) {
-  // Transparent window — only the round bubble paints.
+  // Transparent window — only the round bubble paints, centered (see main.css).
   document.body.style.background = "transparent";
+  document.body.dataset.window = "camera-bubble";
   root.render(
     <StrictMode>
       <CameraBubble />

@@ -26,3 +26,18 @@ body[data-window="control-bar"] #root {
   align-items: center;
   justify-content: center;
 }
+
+/* The camera-bubble window: pin to the viewport and center the round bubble so
+   its drop-shadow shows in the surrounding margin. */
+body[data-window="camera-bubble"],
+body[data-window="camera-bubble"] #root {
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+body[data-window="camera-bubble"] #root {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

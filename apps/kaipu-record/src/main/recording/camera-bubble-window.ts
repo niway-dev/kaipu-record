@@ -2,7 +2,8 @@ import { BrowserWindow, screen } from "electron";
 import { join } from "path";
 import { is } from "@electron-toolkit/utils";
 
-const BUBBLE_SIZE = 200;
+// Window is a bit bigger than the circle so its drop-shadow isn't clipped.
+const BUBBLE_SIZE = 224;
 const SCREEN_MARGIN = 40;
 
 /**
