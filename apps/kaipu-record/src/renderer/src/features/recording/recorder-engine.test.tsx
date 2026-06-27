@@ -31,7 +31,10 @@ vi.mock("mediabunny", () => ({
 }));
 
 /** A media track that records when it is stopped, so we can assert hardware release. */
-function fakeTrack(): { stop: ReturnType<typeof vi.fn>; addEventListener: ReturnType<typeof vi.fn> } {
+function fakeTrack(): {
+  stop: ReturnType<typeof vi.fn>;
+  addEventListener: ReturnType<typeof vi.fn>;
+} {
   return { stop: vi.fn(), addEventListener: vi.fn() };
 }
 

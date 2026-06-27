@@ -9,8 +9,9 @@ afterEach(() => {
 
 describe("installCrashForwarder", () => {
   it("forwards window errors as serialized exceptions tagged with origin", () => {
-    (globalThis as unknown as { electronAPI: { reportException: typeof reportException } }).electronAPI =
-      { reportException };
+    (
+      globalThis as unknown as { electronAPI: { reportException: typeof reportException } }
+    ).electronAPI = { reportException };
     installCrashForwarder("control-bar");
     window.dispatchEvent(new ErrorEvent("error", { error: new Error("kaboom") }));
     expect(reportException).toHaveBeenCalledWith(

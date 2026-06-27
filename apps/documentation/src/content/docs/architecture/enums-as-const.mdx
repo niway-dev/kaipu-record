@@ -29,20 +29,20 @@ export type BitrateStep = "light" | "medium" | "high" | "max";
 
 ## Why not the TypeScript `enum`
 
-1. **It emits runtime code.** A `enum` compiles to a JS object/IIFE — it is *not*
+1. **It emits runtime code.** A `enum` compiles to a JS object/IIFE — it is _not_
    type-only, so it can't be erased. It ships in the bundle and exists at runtime even
    when all you wanted was the type. An `as const` array is plain data you were going to
    ship anyway; the derived type costs nothing.
 2. **`const enum` is not an escape hatch here.** It would inline, but it is banned under
    `isolatedModules` and single-file transpilers (Vite / esbuild / electron-vite — exactly
    our toolchain). So the "lighter" enum isn't even available.
-3. **Numeric enums are unsafe.** `enum E { A, B }` lets *any* `number` be assigned to `E`
+3. **Numeric enums are unsafe.** `enum E { A, B }` lets _any_ `number` be assigned to `E`
    and creates reverse mappings (`E[0] === "A"`) that pollute the object. A union literal
    rejects anything outside the set.
 4. **No free iteration.** You usually need the list of values (render options, validate,
    map to labels). With an enum you must `Object.values(E)` and filter out the numeric
    reverse-mappings. With the `as const` array, the array **is** the list.
-5. **String enums are nominal.** A string-enum member is *not* assignable from a plain
+5. **String enums are nominal.** A string-enum member is _not_ assignable from a plain
    matching string literal, which creates friction at every boundary (JSON, IPC, props).
    Union literals are structural — a matching string just works.
 
@@ -77,7 +77,7 @@ export type Currency = (typeof CURRENCIES)[keyof typeof CURRENCIES];
 
 ## Corollary: derive, don't restate
 
-The same single-source-of-truth principle applies *across files* — never copy a value
+The same single-source-of-truth principle applies _across files_ — never copy a value
 into a second module; derive it. In the recorder, the engine's fallback targets are
 **derived from the default preset**, not retyped:
 

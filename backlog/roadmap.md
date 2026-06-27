@@ -10,16 +10,16 @@ Status legend: ⬜ todo · 🔨 in progress · ✅ done
 
 ## Kill order
 
-| #   | Feature                                     | Priority    | Status | Depends on            |
-| --- | ------------------------------------------- | ----------- | ------ | --------------------- |
-| 1   | Camera bubble (floating window)             | High        | ✅     | —                     |
-| 2   | Start recording from the Capture Panel (#4) | High · easy | ✅     | —                     |
-| 3   | Floating bar on the recorded display (#7)   | High · easy | ✅     | —                     |
-| 4   | Feature flags via PostHog                   | Medium      | ✅     | — (base for #6)       |
-| 5   | Configurable quality (non-technical copy)   | Medium      | ✅     | —                     |
+| #   | Feature                                     | Priority    | Status | Depends on             |
+| --- | ------------------------------------------- | ----------- | ------ | ---------------------- |
+| 1   | Camera bubble (floating window)             | High        | ✅     | —                      |
+| 2   | Start recording from the Capture Panel (#4) | High · easy | ✅     | —                      |
+| 3   | Floating bar on the recorded display (#7)   | High · easy | ✅     | —                      |
+| 4   | Feature flags via PostHog                   | Medium      | ✅     | — (base for #6)        |
+| 5   | Configurable quality (non-technical copy)   | Medium      | ✅     | —                      |
 | 6   | Watermark, free → paid (scalable plan)      | Medium      | ✅\*   | plans API for `isPaid` |
-| 7   | Builds + distribution                       | High        | ⬜     | Apple Developer acct  |
-| 8   | Version gate / forced update                | Medium      | ⬜     | #7 for auto-update    |
+| 7   | Builds + distribution                       | High        | ⬜     | Apple Developer acct   |
+| 8   | Version gate / forced update                | Medium      | ⬜     | #7 for auto-update     |
 
 ### Shipped beyond the kill order ✅
 
@@ -99,7 +99,7 @@ The hub resolves the recorded screen's `display_id` from the source id (one
   treated as bypassed).
 - **Identity:** a stable `deviceId` UUID minted once per install (persisted in
   `AppSettings`), used for `posthog.identify()`. Super-properties `product=kaipu-recorder`
-  + `surface=desktop` tag every event and error.
+  - `surface=desktop` tag every event and error.
 - **Offline-safe:** missing `VITE_POSTHOG_KEY` or no network → SDKs no-op; flag defaults
   apply; app runs normally.
 - **Main-process sink** (`src/main/services/analytics.service.ts` + `analytics-ipc.ts`):
@@ -205,9 +205,9 @@ as #7). We'll plan it together with #7's build/distribution.
   - **Current version:** `app.getVersion()` (today `1.0.0`).
   - **Pure semver compare (testable):**
     - `current < minVersion` → **hard block**: full-screen blocker, app unusable.
-      *"Esta versión ya no se puede usar. Actualiza para continuar."*
+      _"Esta versión ya no se puede usar. Actualiza para continuar."_
     - `current < latestVersion` (not blocking) → **soft nudge**: dismissible banner.
-      *"Hay una versión nueva. Actualiza para seguir con las últimas mejoras."*
+      _"Hay una versión nueva. Actualiza para seguir con las últimas mejoras."_
   - **Fail-open (critical):** if the flag is unresolved / offline → **never block** (no
     lockout from a network blip or PostHog outage).
   - **"Actualizar" button:** for now `shell.openExternal(downloadUrl)`; once #7 is signed, the

@@ -7,7 +7,11 @@ import { serializeError } from "@shared/analytics";
  */
 export function installCrashForwarder(origin: string): void {
   window.addEventListener("error", (event) => {
-    window.electronAPI.reportException(serializeError(event.error ?? event.message), origin, undefined);
+    window.electronAPI.reportException(
+      serializeError(event.error ?? event.message),
+      origin,
+      undefined,
+    );
   });
   window.addEventListener("unhandledrejection", (event) => {
     window.electronAPI.reportException(serializeError(event.reason), origin, undefined);

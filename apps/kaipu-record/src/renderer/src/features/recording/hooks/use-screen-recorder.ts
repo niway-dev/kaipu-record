@@ -93,17 +93,13 @@ export function useScreenRecorder(options: ScreenRecorderOptions = {}): ScreenRe
         // runs the same robust stop — finalize-or-abort + always restore the
         // window/Dock/bar — so the app never gets stuck.
         onError: (error) => {
-          reportError(
-            "La grabación se detuvo por un error. Guardamos lo que se pudo.",
-            error,
-            {
-              context: { sourceId: input.sourceId, phase: "mid-recording" },
-              retry: () => {
-                const i = lastInputRef.current;
-                if (i) void startRef.current(i);
-              },
+          reportError("La grabación se detuvo por un error. Guardamos lo que se pudo.", error, {
+            context: { sourceId: input.sourceId, phase: "mid-recording" },
+            retry: () => {
+              const i = lastInputRef.current;
+              if (i) void startRef.current(i);
             },
-          );
+          });
           void stopRef.current();
         },
       });

@@ -51,10 +51,10 @@ Ventana principal          Ventanas secundarias
 
 ### Flags definidos
 
-| Nombre             | Tipo    | Default | Propósito                                                                                      |
-| ------------------ | ------- | ------- | ---------------------------------------------------------------------------------------------- |
+| Nombre              | Tipo    | Default | Propósito                                                                                                                            |
+| ------------------- | ------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | `watermark-enabled` | boolean | `true`  | Kill-switch remoto del watermark. Default `true` → el watermark sale en prod aunque no haya red. `useWatermark` lo lee directamente. |
-| `bypass-login`      | boolean | `true`  | Seam para la futura pantalla de login. No existe UI de login aún; el default lo trata como bypassed. |
+| `bypass-login`      | boolean | `true`  | Seam para la futura pantalla de login. No existe UI de login aún; el default lo trata como bypassed.                                 |
 
 ### Comportamiento offline
 
@@ -68,10 +68,10 @@ Al primer arranque, el settings-store acuña un `deviceId` (UUID v4) y lo persis
 
 La ventana principal llama a `posthog.identify(deviceId)` al iniciar. Dos super-propiedades se añaden a cada evento y error:
 
-| Propiedad   | Valor              | Uso                                              |
-| ----------- | ------------------ | ------------------------------------------------ |
-| `product`   | `kaipu-recorder`   | Filtra eventos de este producto en dashboards multi-superficie |
-| `surface`   | `desktop`          | Distingue desktop de futuras superficies (web, mobile) |
+| Propiedad | Valor            | Uso                                                            |
+| --------- | ---------------- | -------------------------------------------------------------- |
+| `product` | `kaipu-recorder` | Filtra eventos de este producto en dashboards multi-superficie |
+| `surface` | `desktop`        | Distingue desktop de futuras superficies (web, mobile)         |
 
 ---
 
@@ -79,14 +79,15 @@ La ventana principal llama a `posthog.identify(deviceId)` al iniciar. Dos super-
 
 `reportError(userMessage, error, { context, retry })` (`src/shared/analytics.ts`) implementa una regla estricta: el canal de usuario y el canal de desarrollador **nunca se mezclan**.
 
-| Canal        | Qué recibe                                      | Cómo                                   |
-| ------------ | ----------------------------------------------- | -------------------------------------- |
-| Usuario      | Mensaje en español, legible, orientado a acción | Toast visible con opción Reintentar    |
+| Canal         | Qué recibe                                      | Cómo                                           |
+| ------------- | ----------------------------------------------- | ---------------------------------------------- |
+| Usuario       | Mensaje en español, legible, orientado a acción | Toast visible con opción Reintentar            |
 | Desarrollador | Stack completo, contexto técnico, origen        | `posthog.captureException(error, { context })` |
 
 El toast muestra solo el `userMessage` — nunca el stack, nunca el nombre de clase del error. PostHog recibe solo el payload técnico — nunca el texto que ve el usuario.
 
 Los tres puntos de falla de grabación usan esta función:
+
 - Falla al iniciar (`start`)
 - Falla a mitad de grabación (`mid-recording`)
 - Falla al finalizar (`finalize`)
@@ -116,14 +117,14 @@ El usuario ve un mensaje de error genérico en español, no una traza de stack.
 
 El foco en la privacidad no es opcional para una app de grabación de pantalla. La configuración de `posthog-js` desactiva explícitamente los canales invasivos:
 
-| Capacidad           | Estado      | Motivo                                                      |
-| ------------------- | ----------- | ----------------------------------------------------------- |
-| Session replay      | ❌ Desactivado | Grabaría la pantalla del usuario dentro de la app de grabación — inaceptable |
-| DOM autocapture     | ❌ Desactivado | Captura texto e interacciones sin contexto — privacidad y ruido |
-| Click autocapture   | ❌ Desactivado | Idem                                                        |
-| Exception autocapture | ✅ Activo  | Solo stacks de error — sin PII                              |
-| Feature flag evaluation | ✅ Activo | Necesario para el comportamiento correcto de flags         |
-| Eventos explícitos  | ✅ Activo   | Solo los que el código llama explícitamente                 |
+| Capacidad               | Estado         | Motivo                                                                       |
+| ----------------------- | -------------- | ---------------------------------------------------------------------------- |
+| Session replay          | ❌ Desactivado | Grabaría la pantalla del usuario dentro de la app de grabación — inaceptable |
+| DOM autocapture         | ❌ Desactivado | Captura texto e interacciones sin contexto — privacidad y ruido              |
+| Click autocapture       | ❌ Desactivado | Idem                                                                         |
+| Exception autocapture   | ✅ Activo      | Solo stacks de error — sin PII                                               |
+| Feature flag evaluation | ✅ Activo      | Necesario para el comportamiento correcto de flags                           |
+| Eventos explícitos      | ✅ Activo      | Solo los que el código llama explícitamente                                  |
 
 ---
 

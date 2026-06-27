@@ -1,6 +1,10 @@
 import wordmarkUrl from "@renderer/assets/brand/kaipu-wordmark.svg";
 import markUrl from "@renderer/assets/brand/kaipu-mark-mono.svg";
-import { watermarkRect, type WatermarkConfig, type WatermarkVariant } from "@renderer/features/watermark/watermark";
+import {
+  watermarkRect,
+  type WatermarkConfig,
+  type WatermarkVariant,
+} from "@renderer/features/watermark/watermark";
 
 const ASSET_URL: Record<WatermarkVariant, string> = {
   wordmark: wordmarkUrl,

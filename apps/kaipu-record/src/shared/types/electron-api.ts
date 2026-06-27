@@ -116,5 +116,9 @@ export interface KaipuElectronAPI {
 
   // ── Analytics ─────────────────────────────────────────────────────────
   /** Forward a serialized exception (+ origin/context) to the main-process sink. */
-  reportException(payload: SerializedError, origin: string, context?: Record<string, unknown>): void;
+  reportException(
+    payload: SerializedError,
+    origin: string,
+    context?: Record<string, unknown>,
+  ): void;
 }

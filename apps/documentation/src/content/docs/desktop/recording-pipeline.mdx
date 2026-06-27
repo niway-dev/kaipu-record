@@ -215,7 +215,7 @@ imports de electron/node/react), compartido por main (validación) y renderer (U
 - **Persistencia:** vive en `AppSettings.recordingQuality` (reusa el `settings-store` +
   `settings:get/update`), validado por `sanitizeQuality` en `mergeSettings`.
 - **Wiring al encoder:** `qualityToEngine(quality)` → `{ width, height, frameRate,
-  videoBitrate }`. `use-recording-setup` lo lee en mount (ref) y lo pasa por `StartInput` →
+videoBitrate }`. `use-recording-setup` lo lee en mount (ref) y lo pasa por `StartInput` →
   `useScreenRecorder` → `startEngine`. El engine usa esos valores en las constraints
   `maxWidth/maxHeight/maxFrameRate` y en el bitrate del track. **El `maxWidth/Height` es un
   techo: no upscalea** sobre la resolución nativa de la pantalla.
