@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
-import { usePermissions } from "./use-permissions";
+import { usePermissions } from "@renderer/features/permissions";
 import { requiredPermissionsMet } from "./permissions";
 import { WelcomeStep } from "./steps/welcome-step";
 import { PermissionsStep } from "./steps/permissions-step";

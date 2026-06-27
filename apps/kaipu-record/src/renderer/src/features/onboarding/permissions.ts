@@ -2,9 +2,10 @@ import { Monitor, Mic, Video, type LucideIcon } from "lucide-react";
 import type { PermissionKind, PermissionStatus } from "@shared/types";
 
 /**
- * Pure onboarding-permission logic + display metadata. Kept free of React and
- * Electron so it is trivially unit-testable; the side-effecting calls live in
- * `use-permissions.ts` and the main process.
+ * Onboarding-specific permission logic + display metadata: which permissions
+ * gate finishing setup, and the row metadata the permissions step renders. Kept
+ * free of React and Electron so it is trivially unit-testable. The generic
+ * permission bridge lives in `features/permissions/`.
  */
 
 /** Permissions that must be granted before the user can finish onboarding. */
@@ -47,9 +48,3 @@ export const PERMISSION_META: readonly PermissionMeta[] = [
     description: "Add a webcam bubble for demos and a personal touch.",
   },
 ];
-
-export const EMPTY_PERMISSION_STATUS: PermissionStatus = {
-  screen: false,
-  microphone: false,
-  camera: false,
-};

@@ -6,7 +6,7 @@ import { useRecordingSetup } from "@renderer/features/recording/hooks/use-record
 import { useRecordingActivity } from "@renderer/features/recording/hooks/use-recording-activity";
 import { useSourceSelection } from "@renderer/features/recording/hooks/use-source-selection";
 import { useCameraPreview } from "@renderer/features/recording/hooks/use-camera-preview";
-import { usePermissions } from "@renderer/features/onboarding/use-permissions";
+import { usePermissions } from "@renderer/features/permissions";
 import { SourceCard } from "@renderer/features/recording/components/source-card";
 import { RecordingToggles } from "@renderer/features/recording/components/recording-toggles";
 import { MicPicker } from "@renderer/features/recording/components/mic-picker";

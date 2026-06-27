@@ -4,7 +4,7 @@ import { Card } from "@renderer/ui/card";
 import { Row } from "@renderer/ui/row";
 import { Button } from "@renderer/ui/button";
 import { useOnboarding } from "@renderer/features/onboarding";
-import { usePermissions } from "@renderer/features/onboarding/use-permissions";
+import { usePermissions } from "@renderer/features/permissions";
 import { useVaultDirectory } from "@renderer/features/library/hooks/use-vault-directory";
 import type { PermissionKind } from "@shared/types";
 import styles from "./settings-page.module.css";
