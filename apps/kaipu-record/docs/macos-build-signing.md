@@ -9,15 +9,15 @@ aviso de Gatekeeper, distribuido **fuera de la Mac App Store** (descarga directa
 
 ## 0. Datos fijos del proyecto
 
-| Dato | Valor |
-|------|-------|
-| `appId` (CFBundleIdentifier) | `com.niway.kaipu-record` |
-| Product name (display) | `Kaipu Recorder` |
-| Team ID | `K9TKC5GG76` |
-| Signing identity | `Developer ID Application: Cristian Sotomayor (K9TKC5GG76)` |
-| Tipo de certificado | **Developer ID Application** (NO Apple Distribution / NO MAS) |
-| Notarización | App Store Connect **API Key** (`.p8`), método notarytool |
-| Key ID | `QWXC4HC43K` |
+| Dato                         | Valor                                                         |
+| ---------------------------- | ------------------------------------------------------------- |
+| `appId` (CFBundleIdentifier) | `com.niway.kaipu-record`                                      |
+| Product name (display)       | `Kaipu Recorder`                                              |
+| Team ID                      | `K9TKC5GG76`                                                  |
+| Signing identity             | `Developer ID Application: Cristian Sotomayor (K9TKC5GG76)`   |
+| Tipo de certificado          | **Developer ID Application** (NO Apple Distribution / NO MAS) |
+| Notarización                 | App Store Connect **API Key** (`.p8`), método notarytool      |
+| Key ID                       | `QWXC4HC43K`                                                  |
 
 > La firma dirá `Cristian Sotomayor (K9TKC5GG76)` porque la cuenta Apple es **Individual**,
 > no Organization. Es **esperado**, no es un bug. Para descarga directa el usuario casi nunca
@@ -74,8 +74,8 @@ APPLE_API_ISSUER=<UUID del Issuer ID>   # App Store Connect → Users and Access
 > `CSC_KEY_PASSWORD` es la contraseña del `.p12` (la que elegiste al exportarlo), **no** la
 > de tu Mac ni la de tu Apple ID.
 >
-> Es una **Team Key** (creada en *Integrations*), por eso `APPLE_API_ISSUER` es **obligatorio**.
-> Si algún día usaras una *Individual Key* (Xcode 26+), hay que **omitir** el issuer o Apple
+> Es una **Team Key** (creada en _Integrations_), por eso `APPLE_API_ISSUER` es **obligatorio**.
+> Si algún día usaras una _Individual Key_ (Xcode 26+), hay que **omitir** el issuer o Apple
 > devuelve `401 Unauthorized`.
 
 ---
@@ -101,6 +101,7 @@ segundos. Cuando el firmado esté ok, reponelas y corré una vez completo para v
 notarización + staple end-to-end.
 
 **Artefactos** (en `apps/kaipu-record/dist/`):
+
 - `.app` → `dist/mac-arm64/Kaipu Recorder.app` (en Apple Silicon; build arm64 por defecto)
 - `.dmg` → `dist/kaipu-record-<version>-<arch>.dmg` (el `${arch}` evita colisión arm64/x64)
 
@@ -132,14 +133,14 @@ luego `Notarization complete`, luego el staple.
 
 ## 5. Dónde vive cada cosa
 
-| Archivo | Rol |
-|---------|-----|
-| `electron-builder.yml` (`mac:`) | `hardenedRuntime`, `notarize: true`, entitlements, usage descriptions |
-| `build/entitlements.mac.plist` | entitlements de la app (allow-jit + audio-input + camera) |
-| `build/entitlements.mac.inherit.plist` | entitlements heredados por helpers/renderer |
-| `scripts/build-mac-local.sh` | wrapper: inyecta `.env.signing` y corre el build |
-| `.env.signing` | secretos locales (**gitignored**) |
-| `.env.signing.example` | plantilla versionada |
+| Archivo                                | Rol                                                                   |
+| -------------------------------------- | --------------------------------------------------------------------- |
+| `electron-builder.yml` (`mac:`)        | `hardenedRuntime`, `notarize: true`, entitlements, usage descriptions |
+| `build/entitlements.mac.plist`         | entitlements de la app (allow-jit + audio-input + camera)             |
+| `build/entitlements.mac.inherit.plist` | entitlements heredados por helpers/renderer                           |
+| `scripts/build-mac-local.sh`           | wrapper: inyecta `.env.signing` y corre el build                      |
+| `.env.signing`                         | secretos locales (**gitignored**)                                     |
+| `.env.signing.example`                 | plantilla versionada                                                  |
 
 ---
 
@@ -175,13 +176,13 @@ los DMG firmados+notarizados (arm64 + x64) a un **GitHub Release** (draft).
 - **Secrets requeridos** — en el **Environment `production`** (Settings → Environments →
   production), por eso el job declara `environment: production`:
 
-  | Secret | Valor |
-  |--------|-------|
-  | `CSC_LINK` | **base64** del `.p12` (`base64 -i …/kaipu-record-signing-Certificates.p12`) |
-  | `CSC_KEY_PASSWORD` | contraseña del `.p12` |
-  | `APPLE_API_KEY` | **base64** del `.p8` (`base64 -i …/kaipu-AuthKey_QWXC4HC43K.p8`) |
-  | `APPLE_API_KEY_ID` | `QWXC4HC43K` |
-  | `APPLE_API_ISSUER` | UUID del Issuer |
+  | Secret             | Valor                                                                       |
+  | ------------------ | --------------------------------------------------------------------------- |
+  | `CSC_LINK`         | **base64** del `.p12` (`base64 -i …/kaipu-record-signing-Certificates.p12`) |
+  | `CSC_KEY_PASSWORD` | contraseña del `.p12`                                                       |
+  | `APPLE_API_KEY`    | **base64** del `.p8` (`base64 -i …/kaipu-AuthKey_QWXC4HC43K.p8`)            |
+  | `APPLE_API_KEY_ID` | `QWXC4HC43K`                                                                |
+  | `APPLE_API_ISSUER` | UUID del Issuer                                                             |
 
   > ⚠️ `CSC_LINK` y `APPLE_API_KEY` deben contener el **base64 de los archivos**, no las
   > rutas locales de `.env.signing` (esas rutas no existen en el runner).
