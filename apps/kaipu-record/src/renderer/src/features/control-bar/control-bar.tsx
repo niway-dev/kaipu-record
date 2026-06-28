@@ -10,6 +10,8 @@ interface ControlBarProps {
   onPause(): void;
   onResume(): void;
   onStop(): void;
+  /** The real (rebindable) Stop shortcut label, e.g. "⌃⌘S". */
+  stopShortcut?: string;
 }
 
 /** Floating recording HUD: dot · timer · separator · live mic level · pause/resume · stop · shortcut. */
@@ -18,6 +20,7 @@ export function ControlBar({
   onPause,
   onResume,
   onStop,
+  stopShortcut,
 }: ControlBarProps): React.JSX.Element {
   if (tick.status === "saving") {
     return (
@@ -55,7 +58,7 @@ export function ControlBar({
         <Square size={14} fill="currentColor" />
       </button>
 
-      {!paused && <kbd className={styles.shortcut}>⌘⇧P</kbd>}
+      {!paused && stopShortcut && <kbd className={styles.shortcut}>{stopShortcut}</kbd>}
     </div>
   );
 }
