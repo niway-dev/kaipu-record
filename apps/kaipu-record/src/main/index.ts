@@ -10,7 +10,19 @@ import { registerPermissionHandlers } from "./permissions";
 import { registerLibraryVaultHandlers } from "./library";
 import { registerMediaProtocol, registerMediaScheme } from "./media-protocol";
 import { registerRecordingHub } from "./recording/recording-hub";
-import { registerSettings, getDeviceId } from "./infrastructure/settings-store";
+import {
+  registerSettings,
+  getDeviceId,
+  getAppSettings,
+  applyDockPolicy,
+  onSettingsChanged,
+} from "./infrastructure/settings-store";
+import {
+  registerGlobalShortcuts,
+  applyGlobalShortcuts,
+  getShortcutStatus,
+  unregisterGlobalShortcuts,
+} from "./shortcuts/global-shortcuts";
 import { initMainAnalytics, shutdownMainAnalytics } from "./services/analytics.service";
 import { registerAnalyticsIpc } from "./services/analytics-ipc";
 
@@ -74,6 +86,31 @@ function showMainWindow(): void {
   mainWindow.focus();
 }
 
+/**
+ * Open the main window and tell its Record page to start (recording runs in the
+ * main renderer, not the transparent panels). Shared by the Capture Panel's
+ * Start button and the global "Start recording" shortcut. The Record page's
+ * `startRecording` guards on a selected source / not-already-recording.
+ */
+function triggerStartRecording(): void {
+  capturePanel?.hide();
+  showMainWindow();
+  const contents = mainWindow?.webContents;
+  if (!contents) return;
+  if (contents.isLoading()) {
+    contents.once("did-finish-load", () => contents.send(IPC_CHANNELS.recordingRequestStart));
+  } else {
+    contents.send(IPC_CHANNELS.recordingRequestStart);
+  }
+}
+
+/** Bring the app back to the foreground from any state (the rescue shortcut). */
+function bringAppToFront(): void {
+  showMainWindow();
+  applyDockPolicy();
+  app.focus({ steal: true });
+}
+
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
@@ -102,25 +139,33 @@ app.whenReady().then(() => {
     showMainWindow();
   });
 
-  // Capture Panel "Start" → open the main window and tell its Record page to
-  // start (recording runs in the main renderer, not the transparent panel).
-  ipcMain.on(IPC_CHANNELS.recordingRequestStart, () => {
-    capturePanel?.hide();
-    showMainWindow();
-    const contents = mainWindow?.webContents;
-    if (!contents) return;
-    if (contents.isLoading()) {
-      contents.once("did-finish-load", () => contents.send(IPC_CHANNELS.recordingRequestStart));
-    } else {
-      contents.send(IPC_CHANNELS.recordingRequestStart);
-    }
-  });
+  // Capture Panel "Start" → open the main window and tell its Record page to start.
+  ipcMain.on(IPC_CHANNELS.recordingRequestStart, triggerStartRecording);
+
+  // Per-action registration state of the global shortcuts (for the Settings UI).
+  ipcMain.handle(IPC_CHANNELS.shortcutsGetStatus, () => getShortcutStatus());
+  // While the Settings UI captures a new binding, release the global shortcuts so
+  // the combo reaches the renderer (and doesn't fire the action being rebound).
+  ipcMain.on(IPC_CHANNELS.shortcutsSuspend, () => unregisterGlobalShortcuts());
+  ipcMain.on(IPC_CHANNELS.shortcutsResume, () => applyGlobalShortcuts());
 
   // Recording: screen/window source enumeration.
   registerRecordingSourceHandlers();
 
   // Recording engine: disk writer, control-bar window, state relay.
   registerRecordingHub(() => mainWindow);
+
+  // Global (system-wide) shortcuts. Reuse the existing start/stop paths so the
+  // recorder logic stays in one place. Re-register when the bindings change.
+  registerGlobalShortcuts({
+    getShortcuts: () => getAppSettings().shortcuts,
+    handlers: {
+      startRecording: triggerStartRecording,
+      stopRecording: () => mainWindow?.webContents.send(IPC_CHANNELS.recordingCommand, "stop"),
+      bringToFront: bringAppToFront,
+    },
+  });
+  onSettingsChanged(() => applyGlobalShortcuts());
 
   // Library: local recordings vault.
   registerLibraryVaultHandlers();
@@ -148,6 +193,7 @@ app.whenReady().then(() => {
 // only on quit so the icon isn't garbage-collected. Flush analytics best-effort
 // (fire-and-forget: client already flushes on every capture so nothing is lost).
 app.on("before-quit", () => {
+  unregisterGlobalShortcuts();
   tray?.destroy();
   tray = null;
   void shutdownMainAnalytics();

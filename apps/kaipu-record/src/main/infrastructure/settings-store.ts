@@ -45,15 +45,42 @@ export function getDeviceId(): string {
   return settings.deviceId;
 }
 
+/** Current persisted settings (read-only snapshot for other main modules). */
+export function getAppSettings(): AppSettings {
+  return settings;
+}
+
 /**
  * macOS Dock + Cmd+Tab visibility from the current settings. Exported so the
  * recording hub can re-assert it after hiding/showing the main window (hide/show
- * cycles can otherwise drop the app from the switcher).
+ * cycles, and showing a floating panel, can otherwise drop the app from the
+ * switcher).
  */
 export function applyDockPolicy(): void {
   if (process.platform !== "darwin") return;
   app.setActivationPolicy(settings.showInDock ? "regular" : "accessory");
   if (settings.showInDock) app.dock?.show();
+}
+
+/**
+ * Force `regular` activation (Dock + Cmd+Tab) regardless of the user's
+ * preference. Used while recording: the main window is hidden, so without this
+ * the app could vanish from the switcher with only the floating panels visible.
+ * Pair with `applyDockPolicy()` to restore the preference afterwards.
+ */
+export function forceRegularPolicy(): void {
+  if (process.platform !== "darwin") return;
+  app.setActivationPolicy("regular");
+  app.dock?.show();
+}
+
+// Listeners notified after every persisted settings change (e.g. to re-register
+// global shortcuts when their bindings change).
+const settingsListeners = new Set<(settings: AppSettings) => void>();
+
+/** Subscribe to persisted settings changes. */
+export function onSettingsChanged(listener: (settings: AppSettings) => void): void {
+  settingsListeners.add(listener);
 }
 
 function applySideEffects(): void {
@@ -76,6 +103,7 @@ export function registerSettings(): void {
     settings = mergeSettings({ ...settings, ...patch });
     persist();
     applySideEffects();
+    for (const listener of settingsListeners) listener(settings);
     return settings;
   });
 }

@@ -1,0 +1,35 @@
+.input {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 64px;
+  height: 28px;
+  padding: 0 var(--space-sm);
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    border-color var(--transition),
+    background var(--transition),
+    color var(--transition);
+}
+
+.input:hover {
+  background: var(--bg-card-hover);
+}
+
+.input[data-listening] {
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+.input[data-unavailable] {
+  color: var(--accent-red, #e5484d);
+  border-color: var(--accent-red, #e5484d);
+}

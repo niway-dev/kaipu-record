@@ -40,6 +40,34 @@ The dependency rule is strict: domain <- application <- infra, and only apps wir
 - When business logic exceeds ~15 lines in a route handler
 - When the feature is stable and tested
 
+## Documentation
+
+All design, planning, and feature documentation lives in the **docs site** at
+`apps/documentation/` (Astro Starlight, `src/content/docs/`). That site is the single
+source of truth for docs — not scattered `docs/` folders or app-local notes.
+
+Rules:
+
+- **Every new feature gets a doc.** Before/while building, add one under
+  `apps/documentation/src/content/docs/`:
+  - `backlog/` — proposed or in-flight work, and shipped-but-unvalidated features.
+    Start it with a status banner and add a row to `backlog/index.mdx`.
+  - `specs/` and `plans/` — design specs and implementation plans (including those the
+    superpowers brainstorming / writing-plans skills produce). **Do not leave them in
+    `docs/superpowers/` — migrate them here** (add Starlight frontmatter `title` +
+    `description`, keep the body).
+  - `desktop/`, `features/`, `architecture/`, … — stable reference docs once a feature
+    has shipped and been validated.
+- **Status legend** (use in backlog docs + `backlog/index.mdx`):
+  🔵 Proposed · 🟡 In progress · 🟢 Ready to validate (prod review pending) · ✅ Done.
+  When a backlog feature ships, flip it to 🟢; after prod validation, fold the lasting
+  knowledge into a `desktop/`/`features/` reference doc and drop the backlog row.
+- **Sidebar:** `apps/documentation/astro.config.mjs`. `specs/`, `plans/`, `features/`,
+  `architecture/`, `backend/`, `frontend/` autogenerate from their directory; `backlog/`
+  and `desktop/` pages are listed manually — add new pages there.
+- **Language:** doc bodies are English (repo content rule). Legacy Spanish docs are tech
+  debt to translate; don't add new Spanish docs.
+
 ## Architecture
 
 This project uses DDD + Hexagonal Architecture with layer-first package structure:

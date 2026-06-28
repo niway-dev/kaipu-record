@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { Video, Library, Settings, User } from "lucide-react";
+import { Video, Library, Keyboard, Settings, User } from "lucide-react";
 import { KaipuMark } from "./kaipu-mark";
 import { cx } from "@renderer/ui/cx";
 import styles from "./sidebar.module.css";
@@ -18,6 +18,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { to: "/", label: "Record", Icon: Video, end: true },
   { to: "/library", label: "Library", Icon: Library },
+  { to: "/shortcuts", label: "Shortcuts", Icon: Keyboard },
   { to: "/settings", label: "Settings", Icon: Settings },
 ];
 

@@ -1,3 +1,8 @@
+---
+title: Kaipu Record — Master backlog (kill order)
+description: The living kill-order backlog — shipped features with their lasting notes, plus the two open items (builds/distribution and the version gate). Offline-only until the first prod upload.
+---
+
 # Kaipu Record — Backlog
 
 Living backlog. We kill these **one by one**; each is marked done when shipped
@@ -82,6 +87,9 @@ tells its Record page to run the normal start (countdown + record). The main win
 current settings apply. **v1 limitation:** if the main window is on a non-Record route, the
 start signal is missed (no listener) — fine for the common case.
 
+> Update: this limitation was later fixed — the start listener moved up to `AppShell`, so a
+> start request works from any route. See [shortcuts](./shortcuts).
+
 ## 3 — Floating bar on the recorded display (#7) ✅ (shipped)
 
 The hub resolves the recorded screen's `display_id` from the source id (one
@@ -147,7 +155,7 @@ encoder; **zero cost when off** (raw screen track encoded directly). A **dev-onl
 toggle** ("simular plan pago", localStorage-backed in `features/watermark/dev-override.ts`)
 flips it and is stripped from prod builds (`import.meta.env.DEV` guard). Config in
 `watermark.ts` (`as const` sets — variant/position/tint/opacity/size). See
-[recording-pipeline](../apps/documentation) docs.
+[recording-pipeline](/desktop/recording-pipeline) docs.
 
 **\* The flag wiring is done (#4 shipped):** `useWatermark` now reads `watermark-enabled`
 directly — the PostHog flag gates the watermark in production. **The one remaining piece is

@@ -62,6 +62,9 @@ const kaipuApi: KaipuElectronAPI = {
     return () => ipcRenderer.removeListener(IPC_CHANNELS.recordingSettingsChanged, listener);
   },
   requestStartRecording: () => ipcRenderer.send(IPC_CHANNELS.recordingRequestStart),
+  getShortcutStatus: () => ipcRenderer.invoke(IPC_CHANNELS.shortcutsGetStatus),
+  suspendShortcuts: () => ipcRenderer.send(IPC_CHANNELS.shortcutsSuspend),
+  resumeShortcuts: () => ipcRenderer.send(IPC_CHANNELS.shortcutsResume),
   onRequestStartRecording: (callback) => {
     const listener = (): void => callback();
     ipcRenderer.on(IPC_CHANNELS.recordingRequestStart, listener);

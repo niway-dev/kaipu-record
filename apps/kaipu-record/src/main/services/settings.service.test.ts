@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_SETTINGS } from "@shared/types";
+import { DEFAULT_SETTINGS, DEFAULT_SHORTCUTS } from "@shared/types";
 import { DEFAULT_QUALITY, QUALITY_PRESETS } from "@shared/recording-quality";
-import { isValidTheme, mergeSettings } from "./settings.service";
+import { isValidTheme, mergeSettings, mergeShortcuts } from "./settings.service";
 
 describe("isValidTheme", () => {
   it("accepts the known themes", () => {
@@ -24,12 +24,19 @@ describe("mergeSettings", () => {
   });
 
   it("keeps valid stored values", () => {
+    const shortcuts = {
+      startRecording: "Command+Control+1",
+      stopRecording: "Command+Control+2",
+      bringToFront: "Command+Control+3",
+    };
     expect(
       mergeSettings({
         theme: "dark",
         launchAtLogin: true,
         showInDock: false,
         recordingQuality: QUALITY_PRESETS.max,
+        showBarInRecording: true,
+        shortcuts,
         deviceId: "stored-id",
       }),
     ).toEqual({
@@ -37,8 +44,19 @@ describe("mergeSettings", () => {
       launchAtLogin: true,
       showInDock: false,
       recordingQuality: QUALITY_PRESETS.max,
+      showBarInRecording: true,
+      shortcuts,
       deviceId: "stored-id",
     });
+  });
+
+  it("defaults showBarInRecording to false when absent or invalid", () => {
+    expect(mergeSettings({}).showBarInRecording).toBe(false);
+    expect(mergeSettings({ showBarInRecording: "yes" as never }).showBarInRecording).toBe(false);
+  });
+
+  it("fills in default shortcuts when absent", () => {
+    expect(mergeSettings({}).shortcuts).toEqual(DEFAULT_SHORTCUTS);
   });
 
   it("defaults showInDock to true when absent or invalid", () => {
@@ -64,6 +82,26 @@ describe("mergeSettings", () => {
         showInDock: 1 as never,
       }),
     ).toEqual(DEFAULT_SETTINGS);
+  });
+});
+
+describe("mergeShortcuts", () => {
+  it("returns the defaults when nothing is stored", () => {
+    expect(mergeShortcuts(null)).toEqual(DEFAULT_SHORTCUTS);
+    expect(mergeShortcuts(undefined)).toEqual(DEFAULT_SHORTCUTS);
+    expect(mergeShortcuts("garbage")).toEqual(DEFAULT_SHORTCUTS);
+  });
+
+  it("keeps valid per-action bindings and defaults the rest", () => {
+    expect(mergeShortcuts({ startRecording: "Command+Control+G", stopRecording: "" })).toEqual({
+      startRecording: "Command+Control+G",
+      stopRecording: DEFAULT_SHORTCUTS.stopRecording,
+      bringToFront: DEFAULT_SHORTCUTS.bringToFront,
+    });
+  });
+
+  it("ignores non-string bindings", () => {
+    expect(mergeShortcuts({ bringToFront: 42 }).bringToFront).toBe(DEFAULT_SHORTCUTS.bringToFront);
   });
 });
 

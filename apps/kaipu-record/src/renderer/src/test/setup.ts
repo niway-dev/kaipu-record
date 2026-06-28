@@ -2,12 +2,15 @@ import "@testing-library/jest-dom/vitest";
 import { afterEach } from "vitest";
 import { cleanup } from "@testing-library/react";
 import { DEFAULT_QUALITY } from "@shared/recording-quality";
+import { DEFAULT_SHORTCUTS } from "@shared/types";
 
 const STUB_SETTINGS = {
   theme: "system",
   launchAtLogin: false,
   showInDock: true,
   recordingQuality: DEFAULT_QUALITY,
+  showBarInRecording: false,
+  shortcuts: DEFAULT_SHORTCUTS,
   deviceId: "",
 } as const;
 
@@ -61,5 +64,12 @@ window.electronAPI = {
   onRecordingSettingsChanged: () => () => {},
   requestStartRecording: () => {},
   onRequestStartRecording: () => () => {},
+  getShortcutStatus: async () => ({
+    startRecording: true,
+    stopRecording: true,
+    bringToFront: true,
+  }),
+  suspendShortcuts: () => {},
+  resumeShortcuts: () => {},
   reportException: () => {},
 };

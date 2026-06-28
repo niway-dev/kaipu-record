@@ -12,14 +12,25 @@ const BOTTOM_MARGIN = 40;
  * over every other app — including fullscreen — so the user keeps control while
  * working in the app they're recording.
  */
+export interface ControlBarOptions {
+  /** Include the bar in the screen recording (default false → content-protected). */
+  includeInRecording?: boolean;
+}
+
 export class ControlBarWindow {
   private window: BrowserWindow | null = null;
   /** The display being recorded, so the bar appears there (multi-monitor). */
   private displayId: string | undefined;
+  /** Whether the bar is left capturable (mirrors `AppSettings.showBarInRecording`). */
+  private includeInRecording = false;
 
-  show(displayId?: string): void {
+  show(displayId?: string, options?: ControlBarOptions): void {
     this.displayId = displayId;
+    if (options?.includeInRecording !== undefined) {
+      this.includeInRecording = options.includeInRecording;
+    }
     if (this.window && !this.window.isDestroyed()) {
+      this.applyContentProtection();
       this.position();
       this.window.showInactive();
       return;
@@ -49,9 +60,7 @@ export class ControlBarWindow {
     });
     this.window.setAlwaysOnTop(true, "screen-saver");
     this.window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-    // Keep the user's own controls out of the recording (the camera bubble, by
-    // contrast, is left capturable on purpose). macOS: NSWindowSharingNone.
-    this.window.setContentProtection(true);
+    this.applyContentProtection();
 
     if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
       void this.window.loadURL(`${process.env["ELECTRON_RENDERER_URL"]}/?window=control-bar`);
@@ -68,6 +77,15 @@ export class ControlBarWindow {
     this.window.on("closed", () => {
       this.window = null;
     });
+  }
+
+  /**
+   * Apply content protection from `includeInRecording`. On = keep the bar out of
+   * the recording (macOS `NSWindowSharingNone`); off = leave it capturable. The
+   * camera bubble, by contrast, is always capturable on purpose.
+   */
+  private applyContentProtection(): void {
+    this.window?.setContentProtection(!this.includeInRecording);
   }
 
   /** Push a message to the bar renderer. */
