@@ -24,9 +24,10 @@ import styles from "./settings-page.module.css";
  *   • Files             → real on-disk recordings vault
  *   • App / Onboarding  → Dock policy, replay the first-run flow
  *
- * Device pickers, configurable keyboard shortcuts and theme switching are still
- * absent because no backend wiring exists for them yet — they were inert local
- * state. They are tracked as concepts to build in the backlog:
+ * Configurable keyboard shortcuts now ship as their own sidebar page (Shortcuts).
+ * Device pickers and theme switching are still absent because no backend wiring
+ * exists for them yet — they were inert local state.
+ * They are tracked as concepts to build in the backlog:
  *   apps/documentation/src/content/docs/backlog/settings-roadmap.mdx
  * Re-add each control here only once its IPC + persistence is implemented.
  */
