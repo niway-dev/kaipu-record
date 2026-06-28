@@ -2,6 +2,7 @@
 title: "Feature Flags + Error Handling — Design"
 description: "Design for a PostHog analytics foundation: feature flags, broad error reporting, and a defensive two-channel error layer."
 ---
+
 **Date:** 2026-06-27
 **App:** `apps/kaipu-record` (desktop, Electron multi-window)
 **Status:** Approved — ready for implementation plan
@@ -63,6 +64,7 @@ Two viable shapes for a multi-window Electron app (4 renderer windows: `main`,
 `control-bar`, `camera-bubble`, `capture-panel`; plus the Node `main` process):
 
 **A) Renderer-primary + sink in main (CHOSEN).**
+
 - `posthog-js` initialized once in the **main window** renderer — it owns flags,
   exception autocapture, and `identify`.
 - A small **`posthog-node`** client in the **main process** captures Node-level
@@ -72,6 +74,7 @@ Two viable shapes for a multi-window Electron app (4 renderer windows: `main`,
   main process (no full `posthog-js` per window).
 
 **B) Everything centralized in main (`posthog-node` only).**
+
 - One client in main; renderers forward all errors and request all flags over IPC.
 
 **Why A:** PostHog Error Tracking is purpose-built for the browser/renderer (better

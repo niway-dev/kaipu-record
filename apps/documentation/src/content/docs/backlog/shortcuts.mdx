@@ -14,25 +14,25 @@ the control bar showing up in recordings, and the camera green light staying on)
 
 ## Summary
 
-| Item | What it does |
-| --- | --- |
-| Global keyboard shortcuts | 🟢 Ready to validate — system-wide Start / Stop / Bring-to-front, rebindable |
-| App reachability (Bug 1) | 🟢 Ready to validate — the app never falls out of the Dock / Cmd+Tab |
-| Control-bar capture toggle (Bug 2) | 🟢 Ready to validate — choose whether the floating bar appears in the recording |
-| Camera release / green light (Bug 3) | 🟢 Ready to validate — turning the camera off releases the device |
-| Real shortcut hints | 🟢 Ready to validate — every hint shows the user's actual binding |
-| Shortcuts page | 🟢 Ready to validate — dedicated page to view and rebind shortcuts |
+| Item                                 | What it does                                                                    |
+| ------------------------------------ | ------------------------------------------------------------------------------- |
+| Global keyboard shortcuts            | 🟢 Ready to validate — system-wide Start / Stop / Bring-to-front, rebindable    |
+| App reachability (Bug 1)             | 🟢 Ready to validate — the app never falls out of the Dock / Cmd+Tab            |
+| Control-bar capture toggle (Bug 2)   | 🟢 Ready to validate — choose whether the floating bar appears in the recording |
+| Camera release / green light (Bug 3) | 🟢 Ready to validate — turning the camera off releases the device               |
+| Real shortcut hints                  | 🟢 Ready to validate — every hint shows the user's actual binding               |
+| Shortcuts page                       | 🟢 Ready to validate — dedicated page to view and rebind shortcuts              |
 
 ## Global keyboard shortcuts
 
 Three system-wide shortcuts, registered with Electron's `globalShortcut` in
 `src/main/shortcuts/global-shortcuts.ts` from `AppSettings.shortcuts`:
 
-| Action | Default | Mnemonic |
-| --- | --- | --- |
-| Start / Capture | `⌘⌃C` | Capture |
-| Stop | `⌘⌃S` | Stop |
-| Bring app to front | `⌘⌃O` | Open |
+| Action             | Default | Mnemonic |
+| ------------------ | ------- | -------- |
+| Start / Capture    | `⌘⌃C`   | Capture  |
+| Stop               | `⌘⌃S`   | Stop     |
+| Bring app to front | `⌘⌃O`   | Open     |
 
 The defaults sit on a low-conflict `⌘⌃` (Command+Control) base — distinctive,
 not a macOS reserved combo, and unlikely to collide with browser/editor

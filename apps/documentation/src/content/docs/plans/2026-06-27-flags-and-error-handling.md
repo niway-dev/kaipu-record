@@ -2,6 +2,7 @@
 title: "Feature Flags + Error Handling — Implementation Plan"
 description: "Implementation plan for the PostHog analytics foundation: feature flags, broad error reporting, and a defensive two-channel error layer."
 ---
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a PostHog-backed analytics foundation to the desktop recorder that delivers feature flags (`bypass-login`, `watermark-enabled`), maximum-coverage error reporting (renderer + main), and a defensive layer (ErrorBoundary + `ui/toast`) so the app never hard-crashes and every error has a human-readable face for users plus a full stack trace for us.
@@ -29,6 +30,7 @@ description: "Implementation plan for the PostHog analytics foundation: feature 
 ## Task 1: Dependencies + environment variables
 
 **Files:**
+
 - Modify: `apps/kaipu-record/package.json` (deps)
 - Modify: `apps/kaipu-record/.env` and `apps/kaipu-record/.env.example` (add main-layer vars)
 - Modify: `apps/kaipu-record/src/renderer/src/env.d.ts` (renderer env typing)
@@ -119,6 +121,7 @@ git commit --no-verify -m "build(kaipu-record): add posthog-js + posthog-node an
 The one place flag names, defaults, identity constants, and the error-serialization helper live. Pure (no `electron`/`node`/DOM imports), so both processes import it and it's tested in the node project.
 
 **Files:**
+
 - Create: `apps/kaipu-record/src/shared/analytics.ts`
 - Test: `apps/kaipu-record/src/shared/analytics.test.ts`
 
@@ -243,6 +246,7 @@ git commit --no-verify -m "feat(kaipu-record): add pure analytics model (flags +
 `posthog.identify(deviceId)` needs a stable per-install id. It rides in `AppSettings` (so the renderer reads it via the existing `getSettings()` — no new IPC) and is generated once by the settings-store infrastructure.
 
 **Files:**
+
 - Modify: `apps/kaipu-record/src/shared/types/ipc.ts` (add `deviceId` to `AppSettings` + `DEFAULT_SETTINGS`)
 - Modify: `apps/kaipu-record/src/main/services/settings.service.ts` (preserve `deviceId` in `mergeSettings`)
 - Modify: `apps/kaipu-record/src/main/infrastructure/settings-store.ts` (generate if empty + `getDeviceId()`)
@@ -372,6 +376,7 @@ git commit --no-verify -m "feat(kaipu-record): mint a stable device id in settin
 `posthog-js` wrapper for the main window: privacy-locked init, identify, super-properties, exception capture, and flag reads. The init **config** is a pure function so it's unit-tested; the thin SDK calls are smoke-tested in the GUI.
 
 **Files:**
+
 - Create: `apps/kaipu-record/src/renderer/src/features/analytics/analytics-client.ts`
 - Test: `apps/kaipu-record/src/renderer/src/features/analytics/analytics-client.test.ts`
 
@@ -486,6 +491,7 @@ git commit --no-verify -m "feat(kaipu-record): add renderer posthog client (priv
 `posthog-node` in the main process: captures `uncaughtException`/`unhandledRejection`, and is the sink for serialized exceptions forwarded from secondary windows (Task 10). The super-property builder is pure + tested.
 
 **Files:**
+
 - Create: `apps/kaipu-record/src/main/services/analytics.service.ts`
 - Test: `apps/kaipu-record/src/main/services/analytics.service.test.ts`
 
@@ -622,6 +628,7 @@ git commit --no-verify -m "feat(kaipu-record): add main posthog-node service (cr
 ## Task 6: `useFlag` hook
 
 **Files:**
+
 - Create: `apps/kaipu-record/src/renderer/src/features/analytics/use-flag.ts`
 - Test: `apps/kaipu-record/src/renderer/src/features/analytics/use-flag.test.tsx`
 
@@ -703,6 +710,7 @@ git commit --no-verify -m "feat(kaipu-record): add useFlag hook with offline-saf
 ## Task 7: Feed `useWatermark` from the flag (the promised one-line swap)
 
 **Files:**
+
 - Modify: `apps/kaipu-record/src/renderer/src/features/watermark/use-watermark.ts`
 - Test: `apps/kaipu-record/src/renderer/src/features/watermark/use-watermark.test.tsx` (update)
 
@@ -779,6 +787,7 @@ git commit --no-verify -m "feat(kaipu-record): gate watermark on the watermark-e
 A module-singleton store so plain (non-React) code like `reportError` can surface a toast. React reads it via `useSyncExternalStore`.
 
 **Files:**
+
 - Create: `apps/kaipu-record/src/renderer/src/ui/toast-store.ts`
 - Test: `apps/kaipu-record/src/renderer/src/ui/toast-store.test.ts`
 
@@ -917,6 +926,7 @@ git commit --no-verify -m "feat(kaipu-record): add toast store (imperative, fram
 ## Task 9: Toast component (`ToastHost` + `Toast`)
 
 **Files:**
+
 - Create: `apps/kaipu-record/src/renderer/src/ui/toast.tsx`
 - Create: `apps/kaipu-record/src/renderer/src/ui/toast.module.css`
 - Modify: `apps/kaipu-record/src/renderer/src/ui/index.ts` (export)
@@ -1107,6 +1117,7 @@ git commit --no-verify -m "feat(kaipu-record): add ui/toast (ToastHost + retry/c
 Lets secondary windows (control-bar, camera-bubble, capture-panel) ship their errors to the main process's `posthog-node` without each running `posthog-js`.
 
 **Files:**
+
 - Modify: `apps/kaipu-record/src/shared/types/ipc.ts` (channel)
 - Modify: `apps/kaipu-record/src/shared/types/electron-api.ts` (method type)
 - Modify: `apps/kaipu-record/src/preload/index.ts` (bridge method)
@@ -1249,6 +1260,7 @@ git commit --no-verify -m "feat(kaipu-record): forward secondary-window crashes 
 The core rule made concrete: one call shows a human-readable toast (user channel) **and** captures the full technical payload to PostHog (developer channel).
 
 **Files:**
+
 - Create: `apps/kaipu-record/src/renderer/src/features/analytics/report-error.ts`
 - Test: `apps/kaipu-record/src/renderer/src/features/analytics/report-error.test.ts`
 
@@ -1349,6 +1361,7 @@ git commit --no-verify -m "feat(kaipu-record): add reportError two-channel helpe
 No white screen: a child crash renders a calm fallback and reports the exception.
 
 **Files:**
+
 - Create: `apps/kaipu-record/src/renderer/src/features/analytics/error-boundary.tsx`
 - Create: `apps/kaipu-record/src/renderer/src/features/analytics/error-boundary.module.css`
 - Test: `apps/kaipu-record/src/renderer/src/features/analytics/error-boundary.test.tsx`
@@ -1509,6 +1522,7 @@ git commit --no-verify -m "feat(kaipu-record): add ErrorBoundary (no white scree
 Bring the pieces online: full analytics in the main window; crash forwarders in secondary windows; `posthog-node` + the IPC sink in the main process.
 
 **Files:**
+
 - Create: `apps/kaipu-record/src/renderer/src/features/analytics/index.ts` (barrel)
 - Create: `apps/kaipu-record/src/renderer/src/features/analytics/use-init-analytics.ts`
 - Modify: `apps/kaipu-record/src/renderer/src/app/app.tsx` (boundary + host + init)
@@ -1640,6 +1654,7 @@ git commit --no-verify -m "feat(kaipu-record): wire analytics init, ErrorBoundar
 Replace the three `console.error` dead-ends in `use-screen-recorder.ts` with `reportError` (human-readable toast + full stack to PostHog) and a safe **Reintentar** that re-runs the start. Retry is safe because starting is fully local (no API call).
 
 **Files:**
+
 - Modify: `apps/kaipu-record/src/renderer/src/features/recording/hooks/use-screen-recorder.ts`
 - Test: `apps/kaipu-record/src/renderer/src/features/recording/hooks/use-screen-recorder.test.tsx` (update)
 
@@ -1775,6 +1790,7 @@ git commit --no-verify -m "feat(kaipu-record): surface recording failures as toa
 ## Task 15: Docs + backlog + manual smoke test
 
 **Files:**
+
 - Modify: `apps/documentation/src/content/docs/changelog.mdx`
 - Create: `apps/documentation/src/content/docs/desktop/analytics-and-flags.mdx`
 - Modify: `backlog/roadmap.md` (mark #4 done; note watermark live-gating now active)
@@ -1796,6 +1812,7 @@ In `backlog/roadmap.md`, flip **#4 Feature flags via PostHog** to ✅ and update
 Run: `cd apps/kaipu-record && bun run dev`
 
 Verify:
+
 1. App launches normally. With the real key in `.env`, events appear in PostHog (Activity); confirm they carry `product=kaipu-recorder` + `surface=desktop`.
 2. Toggle the `watermark-enabled` flag OFF in PostHog → on the next app start (or flag refresh) a recording has **no** watermark; ON → watermark returns. (Dev Settings toggle still works independently.)
 3. Force a failure (e.g., revoke screen permission, or temporarily `throw` in the start path) → a Spanish toast appears with **Reintentar**, the app does not freeze, and the exception shows in PostHog → Error tracking with a full stack + `origin`/`phase` context.

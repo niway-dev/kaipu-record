@@ -2,6 +2,7 @@
 title: "Screen Recording Pipeline + Floating Control Bar — Design"
 description: "Design for the end-to-end recording engine and the floating control bar that drives it while recording."
 ---
+
 **Date:** 2026-06-26
 **App:** `apps/kaipu-record` (Electron desktop, renderer = React 19 + TS, CSS Modules)
 **Status:** Approved design — ready for implementation plan
@@ -20,20 +21,20 @@ Capture Panel + tray. The "heavy" middle — capture → encode → write → fi
 plus the floating control bar are what's missing.
 
 The reference app (`workspace-temp/legacy-kaipu-recorder`) is **comparison-only**. We
-reproduce the *behavior*, not the code: new architecture, new IPC contract, new UI built
+reproduce the _behavior_, not the code: new architecture, new IPC contract, new UI built
 on our design system. Specifically we improve on the legacy in three ways it did badly.
 
 ### Decisions (locked)
 
-| Decision | Choice |
-| --- | --- |
-| Architecture | **Option A** — record in the (hidden) main window renderer; floating bar is a separate always-on-top window; main process is the message hub |
-| Encoder | **mediabunny** — `MediaStreamVideoTrackSource` + `MediaStreamAudioTrackSource` → `Output({ format: Mp4OutputFormat, target: StreamTarget })` |
-| Output format | **MP4, H.264 (`avc`) video + AAC audio**, fixed defaults (1080p / 30fps / auto bitrate). Documented fallback to Opus-in-MP4 if AAC encode is unavailable in the runtime |
-| Pause/resume | **In scope** — full Recording + Paused control bar |
-| Camera in recording | **Out of scope this pass** (screen + audio only). Architected as an additive step — flagged important |
-| Watermark | **Out of scope** — future option. Shares the same extension seam as camera |
-| Quality settings UI | Not wired to Settings yet — hardcoded defaults |
+| Decision            | Choice                                                                                                                                                                  |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Architecture        | **Option A** — record in the (hidden) main window renderer; floating bar is a separate always-on-top window; main process is the message hub                            |
+| Encoder             | **mediabunny** — `MediaStreamVideoTrackSource` + `MediaStreamAudioTrackSource` → `Output({ format: Mp4OutputFormat, target: StreamTarget })`                            |
+| Output format       | **MP4, H.264 (`avc`) video + AAC audio**, fixed defaults (1080p / 30fps / auto bitrate). Documented fallback to Opus-in-MP4 if AAC encode is unavailable in the runtime |
+| Pause/resume        | **In scope** — full Recording + Paused control bar                                                                                                                      |
+| Camera in recording | **Out of scope this pass** (screen + audio only). Architected as an additive step — flagged important                                                                   |
+| Watermark           | **Out of scope** — future option. Shares the same extension seam as camera                                                                                              |
+| Quality settings UI | Not wired to Settings yet — hardcoded defaults                                                                                                                          |
 
 ### Why MP4/H.264+AAC over the legacy's WebM/VP9+Opus
 
@@ -41,7 +42,7 @@ The only axis WebM/VP9 wins is file size at equal quality (~20–40% smaller), r
 by tuning bitrate. MP4/H.264+AAC wins everywhere that matters for this product:
 
 - **Hardware encode on macOS** (VideoToolbox) — low CPU/heat/battery, no dropped frames
-  on long recordings. VP9 has no hardware *encoder* on Apple Silicon → the legacy
+  on long recordings. VP9 has no hardware _encoder_ on Apple Silicon → the legacy
   software-encoded VP9, which is hot and drop-prone.
 - **Exports** — MP4/H.264 opens in QuickTime, Quick Look, Final Cut, Premiere, iOS,
   Keynote, everything. WebM opens in almost none of the Apple/editor ecosystem.
@@ -160,12 +161,12 @@ to main (`recording:report-tick`), relayed to the bar.
 
 Session-based IPC. A `Map<sessionId, fileHandle>` of open temp files in `os.tmpdir()`.
 
-| Channel | Args | Returns / effect |
-| --- | --- | --- |
-| `recording:create` | `(suggestedName?)` | opens a temp file, returns `{ sessionId, tempPath }` |
-| `recording:write` | `(sessionId, data: ArrayBuffer, position: number)` | `fd.write(Buffer.from(data), 0, data.byteLength, position)` — **positional, not append** |
+| Channel              | Args                                                        | Returns / effect                                                                                                                            |
+| -------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `recording:create`   | `(suggestedName?)`                                          | opens a temp file, returns `{ sessionId, tempPath }`                                                                                        |
+| `recording:write`    | `(sessionId, data: ArrayBuffer, position: number)`          | `fd.write(Buffer.from(data), 0, data.byteLength, position)` — **positional, not append**                                                    |
 | `recording:finalize` | `(sessionId, meta: { title, durationSeconds, thumbnail? })` | close fd → generate vault id → move temp → `<vault>/<id>.mp4` → write `.kaipu/<id>.json` sidecar (+ `.jpg` thumb) → return `LocalRecording` |
-| `recording:abort` | `(sessionId)` | close fd, delete temp |
+| `recording:abort`    | `(sessionId)`                                               | close fd, delete temp                                                                                                                       |
 
 Mirrors the existing `library-vault` test style: pure-ish, tempdir-testable.
 
@@ -179,6 +180,7 @@ new BrowserWindow({
   webPreferences: { preload, sandbox: false, backgroundThrottling: false },
 })
 ```
+
 - `alwaysOnTop` at `"screen-saver"` level so it floats over fullscreen apps.
 - Positioned **bottom-center of the recorded display** (derive from the picked source's
   `display_id` when available; else the primary display). Bottom margin ~40px.
@@ -189,6 +191,7 @@ new BrowserWindow({
 
 The only stateful glue. Owns: the control-bar window instance, main-window show/hide on
 record, and bidirectional relay:
+
 - recorder → `recording:report-tick` → **hub** → `control:tick` → bar
 - bar buttons → `control:pause|resume|stop` → **hub** → `recording:command` → recorder
 
@@ -225,7 +228,7 @@ produce real MP4 with correct duration, we clean this up as part of the work:
   (`.mp4`, `.webm`), resolve a given id to whichever file exists, store the recording as
   `<id>.mp4`. `list()` scans for any known ext; `filePath(id)` resolves the real file.
 - **Sidecar gains duration + thumbnail** — finalize writes `{ title, createdAt,
-  durationSeconds }`; `describe()` surfaces `thumbnailUrl` when `.kaipu/<id>.jpg` exists.
+durationSeconds }`; `describe()` surfaces `thumbnailUrl` when `.kaipu/<id>.jpg` exists.
 - **Media protocol** — `media-protocol.ts` resolves the real extension via the vault (not a
   hardcoded `.webm`) and serves the correct content type. Add a thumb route (e.g.
   `kaipu-media://thumb/<id>`) or equivalent so the Library can render posters.
@@ -247,6 +250,7 @@ produce real MP4 with correct duration, we clean this up as part of the work:
 ## 12. Renderer window-mode entry
 
 The renderer entry (`main.tsx` / `app/`) inspects the window marker:
+
 - default → mount `<AppShell />` + hash router (existing).
 - `?window=control-bar` → mount a bare `<ControlBar />` (no shell, no sidebar, transparent
   background).
@@ -256,8 +260,8 @@ The renderer entry (`main.tsx` / `app/`) inspects the window marker:
 Extend `shared/types/electron-api.ts` + `preload/index.ts`:
 
 - `recording.create() / write(sessionId, data, position) / finalize(sessionId, meta) / abort(sessionId)`
-- `recording.reportTick(tick)`  (recorder → main)
-- `recording.start(meta) / stop()`  (window show/hide orchestration via hub)
+- `recording.reportTick(tick)` (recorder → main)
+- `recording.start(meta) / stop()` (window show/hide orchestration via hub)
 - control bar: `onControlTick(cb)`, `controlBar.pause() / resume() / stop()`, and a
   recorder-side `onRecordingCommand(cb)`.
 
@@ -289,11 +293,13 @@ Channel names centralized in `shared/types/ipc.ts` (`IPC_CHANNELS`) like the res
 ## 16. File-by-file change list
 
 **New — main**
+
 - `src/main/recording/recording-writer.ts` (+ test)
 - `src/main/recording/control-bar-window.ts`
 - `src/main/recording/recording-hub.ts`
 
 **New — renderer**
+
 - `features/recording/hooks/use-screen-recorder.ts` (+ provider seam helpers)
 - `features/recording/hooks/use-mic-level.ts` (+ pure RMS helper + test)
 - `features/recording/elapsed.ts` (+ test)
@@ -301,6 +307,7 @@ Channel names centralized in `shared/types/ipc.ts` (`IPC_CHANNELS`) like the res
 - control-bar window-mode wiring in the renderer entry
 
 **Modified**
+
 - `shared/types/electron-api.ts`, `shared/types/ipc.ts` — new contract + channels
 - `preload/index.ts` — new bridge methods
 - `src/main/index.ts` — register writer/hub, wire start/stop window orchestration

@@ -2,6 +2,7 @@
 title: "Onboarding Flow — Design"
 description: "First-run onboarding that introduces Kaipu Recorder and requests the macOS permissions it needs, replayable from Settings."
 ---
+
 Date: 2026-06-15
 App: `apps/kaipu-record`
 

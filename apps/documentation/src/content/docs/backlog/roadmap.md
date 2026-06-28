@@ -107,7 +107,7 @@ The hub resolves the recorded screen's `display_id` from the source id (one
   treated as bypassed).
 - **Identity:** a stable `deviceId` UUID minted once per install (persisted in
   `AppSettings`), used for `posthog.identify()`. Super-properties `product=kaipu-recorder`
-  + `surface=desktop` tag every event and error.
+  - `surface=desktop` tag every event and error.
 - **Offline-safe:** missing `VITE_POSTHOG_KEY` or no network → SDKs no-op; flag defaults
   apply; app runs normally.
 - **Main-process sink** (`src/main/services/analytics.service.ts` + `analytics-ipc.ts`):

@@ -2,6 +2,7 @@
 title: "Screen Recording Pipeline + Floating Control Bar — Implementation Plan"
 description: "End-to-end implementation plan for the recording engine (capture, encode, write, finalize to vault) and the floating control bar that drives it."
 ---
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make the recorder actually record — capture screen + mic to a real MP4 (mediabunny, H.264/AAC), stream it to disk, finalize into the Library vault, all driven by a floating always-on-top control bar (timer, live mic level, pause/resume, stop).
@@ -26,11 +27,13 @@ description: "End-to-end implementation plan for the recording engine (capture, 
 ## File structure (what gets created / changed)
 
 **New — main**
+
 - `src/main/recording/recording-writer.ts` + `.test.ts` — positional disk writer + finalize-to-vault.
 - `src/main/recording/control-bar-window.ts` — the floating BrowserWindow factory.
 - `src/main/recording/recording-hub.ts` — relay + window show/hide orchestration.
 
 **New — renderer**
+
 - `src/renderer/src/features/recording/elapsed.ts` + `.test.ts` — pure timer-with-pause + format.
 - `src/renderer/src/features/recording/audio-levels.ts` + `.test.ts` — pure RMS → 5 bars.
 - `src/renderer/src/features/recording/hooks/use-mic-level.ts` — AnalyserNode → bars (wraps the pure helper).
@@ -40,6 +43,7 @@ description: "End-to-end implementation plan for the recording engine (capture, 
 - `src/renderer/src/features/control-bar/control-bar-window.tsx` — the window-mode root (listens to ticks).
 
 **Modified**
+
 - `src/shared/types/ipc.ts` — new channel names.
 - `src/shared/types/electron-api.ts` — new bridge methods + tick/command types.
 - `src/preload/index.ts` — new bridge wiring.
@@ -85,6 +89,7 @@ git commit -m "build(kaipu-record): add mediabunny for MP4 encoding"
 ## Task 1: Pure elapsed-with-pause timer
 
 **Files:**
+
 - Create: `src/renderer/src/features/recording/elapsed.ts`
 - Test: `src/renderer/src/features/recording/elapsed.test.ts`
 
@@ -205,6 +210,7 @@ git commit -m "feat(kaipu-record): pure elapsed-with-pause recording clock"
 ## Task 2: Pure mic-level RMS → 5 bars
 
 **Files:**
+
 - Create: `src/renderer/src/features/recording/audio-levels.ts`
 - Test: `src/renderer/src/features/recording/audio-levels.test.ts`
 
@@ -291,6 +297,7 @@ git commit -m "feat(kaipu-record): pure RMS-to-bars mic level helper"
 ## Task 3: Make the vault extension-aware (MP4) + thumbnails
 
 **Files:**
+
 - Modify: `src/main/library/library-vault.ts`
 - Modify: `src/main/library/index.ts`
 - Test: `src/main/library/library-vault.test.ts` (extend existing)
@@ -519,6 +526,7 @@ git commit -m "feat(kaipu-record): make the vault extension-aware (mp4) with thu
 ## Task 4: Media protocol — real extension + thumbnail route
 
 **Files:**
+
 - Modify: `src/main/media-protocol.ts`
 
 - [ ] **Step 1: Rewrite the handler to resolve the real file and serve thumbnails**
@@ -580,6 +588,7 @@ git commit -m "feat(kaipu-record): serve real extension + thumbnails over kaipu-
 ## Task 5: Positional recording writer (main)
 
 **Files:**
+
 - Create: `src/main/recording/recording-writer.ts`
 - Test: `src/main/recording/recording-writer.test.ts`
 
@@ -781,6 +790,7 @@ git commit -m "feat(kaipu-record): positional MP4 disk writer + finalize to vaul
 ## Task 6: IPC contract — channels, types, preload bridge
 
 **Files:**
+
 - Modify: `src/shared/types/ipc.ts`
 - Modify: `src/shared/types/electron-api.ts`
 - Modify: `src/preload/index.ts`
@@ -924,6 +934,7 @@ git commit -m "feat(kaipu-record): IPC contract for recording engine + control b
 ## Task 7: Control bar window factory (main)
 
 **Files:**
+
 - Create: `src/main/recording/control-bar-window.ts`
 
 - [ ] **Step 1: Implement (no unit test — BrowserWindow integration; verified manually in Task 14)**
@@ -1040,6 +1051,7 @@ git commit -m "feat(kaipu-record): floating control-bar window factory"
 ## Task 8: Recording hub (main) — relay + window orchestration
 
 **Files:**
+
 - Create: `src/main/recording/recording-hub.ts`
 - Modify: `src/main/index.ts`
 
@@ -1150,6 +1162,7 @@ git commit -m "feat(kaipu-record): recording hub relays state + drives the bar w
 ## Task 9: Recorder engine (renderer) — provider seam + mediabunny
 
 **Files:**
+
 - Create: `src/renderer/src/features/recording/recorder-engine.ts`
 
 > This module isolates all device/mediabunny calls behind one async factory, so
@@ -1327,6 +1340,7 @@ git commit -m "feat(kaipu-record): mediabunny MP4 recorder engine (capture + enc
 ## Task 10: `useScreenRecorder` hook
 
 **Files:**
+
 - Create: `src/renderer/src/features/recording/hooks/use-screen-recorder.ts`
 
 > Thin orchestration over the engine + IPC. Manual-verified in Task 14; the
@@ -1515,6 +1529,7 @@ git commit -m "feat(kaipu-record): useScreenRecorder orchestrates capture, ticks
 ## Task 11: Control bar UI component
 
 **Files:**
+
 - Create: `src/renderer/src/features/control-bar/control-bar.tsx`
 - Create: `src/renderer/src/features/control-bar/control-bar.module.css`
 - Test: `src/renderer/src/features/control-bar/control-bar.test.tsx`
@@ -1747,6 +1762,7 @@ git commit -m "feat(kaipu-record): floating control bar UI (timer, mic meter, pa
 ## Task 12: Control bar window root + renderer window-mode switch
 
 **Files:**
+
 - Create: `src/renderer/src/features/control-bar/control-bar-window.tsx`
 - Modify: `src/renderer/src/main.tsx` (renderer entry)
 
@@ -1823,6 +1839,7 @@ git commit -m "feat(kaipu-record): mount the control bar in its own window mode"
 ## Task 13: Wire the Start button to the real engine
 
 **Files:**
+
 - Modify: `src/renderer/src/features/recording/hooks/use-recording-setup.ts`
 - Modify: `src/renderer/src/pages/record/record-page.tsx`
 - Modify: `src/renderer/src/features/capture-panel/capture-panel.tsx`
@@ -1915,6 +1932,7 @@ Expected: PASS.
 
 Run: `bun run dev`
 Verify, in order:
+
 1. Record page shows the selected screen; **Start Recording** is enabled.
 2. Click Start → 3-2-1 countdown → main window hides, the floating bar appears bottom-center, timer counts up, mic bars move when you speak.
 3. Pause → dot turns amber, "Paused", timer freezes. Resume → continues.
@@ -1934,6 +1952,7 @@ git commit -m "feat(kaipu-record): wire Start Recording to the real engine"
 ## Task 14: Documentation + changelog
 
 **Files:**
+
 - Create: `apps/documentation/src/content/docs/desktop/recording-pipeline.mdx`
 - Modify: `apps/documentation/src/content/docs/desktop/renderer-architecture.mdx`
 - Modify: `apps/documentation/src/content/docs/changelog.mdx`

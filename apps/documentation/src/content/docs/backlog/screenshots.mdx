@@ -60,11 +60,11 @@ screencapture -i -o <tempPath>.png
 
 Then the main process reads the temp PNG and hands it to the editor.
 
-| Pros | Cons |
-| --- | --- |
-| Simplest to ship | Selection chrome is Apple's, not our branded box |
+| Pros                                                   | Cons                                                             |
+| ------------------------------------------------------ | ---------------------------------------------------------------- |
+| Simplest to ship                                       | Selection chrome is Apple's, not our branded box                 |
 | Pixel-perfect, handles Retina + multi-monitor for free | Less control over the selection UX (no custom toolbar/magnifier) |
-| Screenshot-only — zero recording surface | Shells out to a CLI (acceptable; mac-only app) |
+| Screenshot-only — zero recording surface               | Shells out to a CLI (acceptable; mac-only app)                   |
 
 ### Path B — custom overlay (phase 2 upgrade)
 
@@ -73,16 +73,16 @@ own dashed selection rectangle (+ optional live dimensions / magnifier). On
 release, capture the display via `desktopCapturer.getSources({ types: ["screen"],
 thumbnailSize: <display size> })` and crop the selection in a canvas.
 
-| Pros | Cons |
-| --- | --- |
-| Full brand control, custom in-selection toolbar | Much more work |
-| Consistent with the app's look | Retina scaling + multi-monitor cropping edge cases |
-| | Reuses Screen Recording permission (already granted) but more moving parts |
+| Pros                                            | Cons                                                                       |
+| ----------------------------------------------- | -------------------------------------------------------------------------- |
+| Full brand control, custom in-selection toolbar | Much more work                                                             |
+| Consistent with the app's look                  | Retina scaling + multi-monitor cropping edge cases                         |
+|                                                 | Reuses Screen Recording permission (already granted) but more moving parts |
 
 ### Portability & the capture-provider seam
 
-The capture engine and the editor are **decoupled**: both paths produce *an
-image* that flows into the same editor. Put capture behind a thin provider:
+The capture engine and the editor are **decoupled**: both paths produce _an
+image_ that flows into the same editor. Put capture behind a thin provider:
 
 ```ts
 // One method, platform-agnostic return. The editor never knows which ran.
