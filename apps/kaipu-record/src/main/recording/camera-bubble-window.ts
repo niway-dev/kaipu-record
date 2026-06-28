@@ -63,10 +63,11 @@ export class CameraBubbleWindow {
     });
   }
 
-  hide(): void {
-    this.window?.hide();
-  }
-
+  /**
+   * Destroy the bubble window. Unlike the control bar we never just `hide()` it:
+   * the renderer holds the camera via getUserMedia, so the window must be torn
+   * down to release the device (and turn the macOS green in-use light off).
+   */
   destroy(): void {
     this.window?.destroy();
     this.window = null;

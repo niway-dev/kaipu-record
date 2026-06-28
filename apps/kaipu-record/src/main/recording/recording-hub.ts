@@ -76,7 +76,10 @@ export function registerRecordingHub(getMainWindow: () => BrowserWindow | null):
         // macOS; re-assert the policy so the app stays reachable.
         applyDockPolicy();
       } else {
-        cameraBubble.hide();
+        // Destroy (not hide): the bubble holds the camera via getUserMedia, so
+        // tearing down its window releases the device and turns the green
+        // in-use light off. Hiding alone would keep the camera held.
+        cameraBubble.destroy();
       }
     }
   });
