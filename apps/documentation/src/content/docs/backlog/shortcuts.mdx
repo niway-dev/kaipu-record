@@ -1,0 +1,119 @@
+---
+title: Global shortcuts + window reachability
+description: Shipped global keyboard shortcuts (start, stop, bring-to-front), rebindable from a dedicated Shortcuts page, plus the window-reachability and camera-release fixes that ship with them.
+---
+
+# Global shortcuts + window reachability
+
+> **Status: 🟢 Ready to validate** — implemented and unit/lint/build-green; prod review pending (validate via `npm run build:mac`).
+
+System-wide keyboard shortcuts to start, stop, and resurface the recorder from
+any app, rebindable from a dedicated **Shortcuts page** — plus three reachability
+and device fixes that ship alongside them (app falling out of the Dock/switcher,
+the control bar showing up in recordings, and the camera green light staying on).
+
+## Summary
+
+| Item | What it does |
+| --- | --- |
+| Global keyboard shortcuts | 🟢 Ready to validate — system-wide Start / Stop / Bring-to-front, rebindable |
+| App reachability (Bug 1) | 🟢 Ready to validate — the app never falls out of the Dock / Cmd+Tab |
+| Control-bar capture toggle (Bug 2) | 🟢 Ready to validate — choose whether the floating bar appears in the recording |
+| Camera release / green light (Bug 3) | 🟢 Ready to validate — turning the camera off releases the device |
+| Real shortcut hints | 🟢 Ready to validate — every hint shows the user's actual binding |
+| Shortcuts page | 🟢 Ready to validate — dedicated page to view and rebind shortcuts |
+
+## Global keyboard shortcuts
+
+Three system-wide shortcuts, registered with Electron's `globalShortcut` in
+`src/main/shortcuts/global-shortcuts.ts` from `AppSettings.shortcuts`:
+
+| Action | Default | Mnemonic |
+| --- | --- | --- |
+| Start / Capture | `⌘⌃C` | Capture |
+| Stop | `⌘⌃S` | Stop |
+| Bring app to front | `⌘⌃O` | Open |
+
+The defaults sit on a low-conflict `⌘⌃` (Command+Control) base — distinctive,
+not a macOS reserved combo, and unlikely to collide with browser/editor
+shortcuts while recording. They are **rebindable** from the dedicated Shortcuts
+page.
+
+- While the user is capturing a new rebind, the global shortcuts are
+  **suspended** so the combo reaches the renderer instead of firing the action.
+- `shortcuts:get-status` reports registration results so the UI can flag a
+  binding that another app already owns.
+- `globalShortcut.unregisterAll()` runs on quit.
+
+## Start / stop from any route
+
+The recorder engine lives in the Record page, but you can start from anywhere:
+
+- The `onRequestStartRecording` listener was lifted up to `AppShell` (which is
+  always mounted). On a start request it does
+  `navigate("/", { state: { startAt } })`, and the Record page **auto-starts**
+  once a source is ready. The request fires once per invocation.
+- **Stop** works from any route because the Record page stays mounted for the
+  duration of a recording — the main window is just hidden, not unmounted.
+
+## Real shortcut hints
+
+A new `useShortcutLabels` hook reads the actual bindings from settings and
+formats them with `formatAccelerator`, refreshing on window focus. It replaced
+the previously hardcoded (and by then incorrect) hints — `⌘R` / `⌘L` / `⌘,` in
+the status bar, `⌘⇧6` in the capture panel, and `⌘⇧P` on the record button and
+the floating control bar.
+
+Now the **status bar**, the **Record button**, the **Capture Panel** button, and
+the **floating control bar** all show the real Start / Stop shortcuts.
+
+## Window reachability (Bug 1)
+
+The app's Dock / Cmd+Tab presence must never depend on which window is visible.
+
+- `applyDockPolicy()` is re-asserted after showing the camera bubble or the
+  control bar, so opening a floating panel can't orphan the app.
+- `forceRegularPolicy()` keeps the app in the switcher while recording (when the
+  main window is hidden); the user's preference is restored via
+  `applyDockPolicy()` on stop.
+- The `⌘⌃O` "bring to front" rescue is the guaranteed backstop.
+
+Honest note: the camera-on-without-recording case is handled on a best-effort
+basis.
+
+## Control-bar capture toggle (Bug 2)
+
+`AppSettings.showBarInRecording` controls whether the floating control bar shows
+up in the recording. Default **off** → the bar is created with
+`setContentProtection(true)` (`NSWindowSharingNone`), excluding it from screen
+capture. It is exposed as a **Settings → Recording** toggle.
+
+## Camera release / green light (Bug 3)
+
+Toggling the camera off now `destroy()`s the camera bubble window (it used to
+just `hide()` it). Destroying the window releases the capture device, so the
+macOS green in-use light turns off.
+
+## Shortcuts page
+
+A new dedicated page joins the sidebar alongside the others: **Record / Library /
+Shortcuts / Settings**. It is where the three global shortcuts are viewed and
+rebound.
+
+## Validate (prod build)
+
+Run `npm run build:mac` and verify, in the packaged app:
+
+- [ ] Start a recording from **any** route via `⌘⌃C`.
+- [ ] `⌘⌃S` stops the recording.
+- [ ] `⌘⌃O` brings the app forward from anywhere.
+- [ ] Turning the camera off makes the green in-use light turn off.
+- [ ] The control-bar toggle shows / hides the bar in the recording.
+- [ ] Rebinding works on the Shortcuts page.
+- [ ] All hints (status bar, Record button, Capture Panel, control bar) show the
+      real combos.
+
+---
+
+This page is the home for this work — it replaced the former app-local design
+note that lived under `apps/kaipu-record/docs/` (now removed).

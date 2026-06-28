@@ -24,10 +24,13 @@ Regla: un control vuelve a la UI **solo** cuando su IPC + persistencia existan y
 | ------------------------------- | --------- | --------------------------------------------------------------------------------------- | -------- |
 | Selección de micrófono/cámara   | Devices   | Enumerar dispositivos reales (`navigator.mediaDevices.enumerateDevices`) + persistir id | Medio    |
 | Resolución / frame rate         | Recording | Wire a la config del pipeline de captura (`getDisplayMedia` constraints / encode)       | Medio    |
-| Atajos de teclado configurables | Shortcuts | Registrar `globalShortcut` en main + editor de binding + persistencia                   | Alto     |
 | Countdown on/off                | App       | Hoy el countdown es fijo (3s, `use-recording-setup.ts`); exponer toggle persistido      | Bajo     |
 | Minimizar a system tray         | App       | Wire a comportamiento de ventana en main (`win.hide()` + tray ya existe)                | Bajo     |
 | Tema claro/oscuro/system        | App       | La app es dark-only; falta tema claro en tokens + aplicar `theme` en renderer           | Medio    |
+
+> **Atajos de teclado configurables — listo.** Ya no están en este catálogo: los
+> **atajos de teclado configurables** se implementaron y tienen su propia página.
+> Estado 🟢 Listo para validar. Ver [Atajos globales + reachability de ventana](./shortcuts).
 
 ## Groundwork ya existente
 

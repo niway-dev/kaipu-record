@@ -39,8 +39,22 @@ export default defineConfig({
           autogenerate: { directory: "features" },
         },
         {
+          label: "Specs",
+          autogenerate: { directory: "specs" },
+        },
+        {
+          label: "Plans",
+          autogenerate: { directory: "plans" },
+        },
+        {
           label: "Backlog",
-          items: [{ slug: "backlog" }, { slug: "backlog/playwright-e2e" }],
+          items: [
+            { slug: "backlog" },
+            { slug: "backlog/playwright-e2e" },
+            { slug: "backlog/settings-roadmap" },
+            { slug: "backlog/shortcuts" },
+            { slug: "backlog/screenshots" },
+          ],
         },
         {
           label: "Architecture",

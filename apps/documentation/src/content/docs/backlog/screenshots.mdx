@@ -1,0 +1,304 @@
+---
+title: Screenshots — capture, annotate, beautify, share
+description: Full design brief for the Screenshots feature — a native screenshot capture flow that opens an in-app editor (annotations + beautify), copies to the clipboard or saves into the unified library. Everything needed to start building.
+---
+
+# Screenshots — capture, annotate, beautify, share
+
+> **Status: 🔵 Proposed.** This is the design brief, not yet built. It captures
+> the agreed scope, the technical approach, the data model, and a phased plan so
+> implementation can start without re-deciding the fundamentals.
+
+## 1. Vision
+
+Press a hotkey (or click **Capture** on the Screenshots page), drag a selection
+over the screen, and the capture opens instantly in an editor where you can:
+
+- **Annotate** — arrow, rectangle, ellipse, text on top of the shot.
+- **Beautify** — drop the shot on a gradient/solid background with padding,
+  rounded corners and a shadow (the "make it look nice for sharing" panel).
+- **Copy** (`⌘C`) the result to the clipboard to paste anywhere, or **Save** it
+  into the library.
+
+The end state is a fast `capture → annotate/beautify → copy/save` loop that feels
+like the macOS screenshot widget but lands in our own editor.
+
+## 2. User flows
+
+**Capture → edit → share (primary)**
+
+1. User triggers capture (global hotkey or the Screenshots page button).
+2. The native selection UI appears; user drags a region (or presses `Esc` to
+   cancel — no file, no editor).
+3. The captured PNG opens in the **editor** (a route/window in the app).
+4. User annotates and/or beautifies.
+5. User hits **Copy** (`⌘C`) → image on the clipboard, or **Save** → PNG written
+   into the unified vault and listed in the Library.
+
+**Re-edit from the Library (phase 2)**
+
+- A saved screenshot in the Library opens back in the editor (annotations are
+  re-editable if we persist the edit document; otherwise it opens the flat PNG).
+
+## 3. Capture engine
+
+macOS exposes screenshots and recording as **separate** capabilities. The
+`Cmd+Shift+5` panel offers both, but we never invoke that panel — we call the
+screenshot path directly, so there is **no recording involved**.
+
+### Path A — native `screencapture -i` (recommended for v1)
+
+Run the macOS CLI from the main process:
+
+```
+screencapture -i -o <tempPath>.png
+```
+
+- `-i` = interactive region selection (the crosshair + rectangle the user wants).
+- `-o` = no window shadow when capturing a window.
+- Blocks until the user finishes the selection or cancels (`Esc` → no file).
+
+Then the main process reads the temp PNG and hands it to the editor.
+
+| Pros | Cons |
+| --- | --- |
+| Simplest to ship | Selection chrome is Apple's, not our branded box |
+| Pixel-perfect, handles Retina + multi-monitor for free | Less control over the selection UX (no custom toolbar/magnifier) |
+| Screenshot-only — zero recording surface | Shells out to a CLI (acceptable; mac-only app) |
+
+### Path B — custom overlay (phase 2 upgrade)
+
+A transparent, full-screen, always-on-top window dims the desktop and draws our
+own dashed selection rectangle (+ optional live dimensions / magnifier). On
+release, capture the display via `desktopCapturer.getSources({ types: ["screen"],
+thumbnailSize: <display size> })` and crop the selection in a canvas.
+
+| Pros | Cons |
+| --- | --- |
+| Full brand control, custom in-selection toolbar | Much more work |
+| Consistent with the app's look | Retina scaling + multi-monitor cropping edge cases |
+| | Reuses Screen Recording permission (already granted) but more moving parts |
+
+### Portability & the capture-provider seam
+
+The capture engine and the editor are **decoupled**: both paths produce *an
+image* that flows into the same editor. Put capture behind a thin provider:
+
+```ts
+// One method, platform-agnostic return. The editor never knows which ran.
+interface ScreenshotCaptureProvider {
+  // Resolves to the captured PNG buffer, or null if the user cancelled.
+  captureInteractive(): Promise<Buffer | null>;
+}
+```
+
+- **macOS** → `MacNativeProvider` (Path A, `screencapture -i`).
+- **Windows / Linux** (and optionally a branded mac path) → `OverlayProvider`
+  (Path B, transparent window + `desktopCapturer` + crop) — one codebase for all
+  three OSes.
+
+This is the key de-risking move: **Path A is not lock-in.** The capture module is
+small (~50 lines) and isolated behind the interface, while the editor + storage +
+copy/save + hotkey — where ~90% of the effort goes — are fully portable. Adopting
+Path A now costs almost nothing if Windows arrives later; the mac provider just
+stays as the nicer-on-mac option (or is retired).
+
+> **Implementation note:** return a `Buffer` (or temp-file path) across IPC rather
+> than a base64 data URL — large captures make data URLs heavy to copy.
+
+**Recommendation** — driven by the **Windows timeline**, not by the paths
+themselves:
+
+- **Mac-only for now** → ship Path A behind the provider seam. Fastest,
+  pixel-perfect, matches today's mac-only build/distribution. Add Path B when
+  Windows is concrete.
+- **Windows committed / near** → consider building Path B first: one
+  cross-platform codebase **and** the custom dashed-box UX, with no throwaway mac
+  engine.
+
+> **Decided (mac-only for now):** Path A (`screencapture -i`) behind the
+> `ScreenshotCaptureProvider` seam. Add the cross-platform `OverlayProvider`
+> (Path B) when Windows is concrete — no editor changes needed.
+
+## 4. The editor
+
+A canvas-backed editor with a top toolbar (tools + Copy/Save) and a right panel
+(beautify controls), mirroring the reference mockup.
+
+### Annotations (v1)
+
+- **Arrow**, **Rectangle**, **Ellipse**, **Text**.
+- Each shape: color, stroke width; text: color, size.
+- Select / move / resize / delete; undo/redo.
+- Phase 2 tools: line, highlighter, blur/pixelate (redaction), numbered step
+  badges, crop.
+
+### Beautify (v1)
+
+- **Background**: solid or gradient swatches (a curated palette), plus
+  transparent/none.
+- **Padding**: slider (inset of the shot within the background).
+- **Rounded corners**: slider (shot corner radius).
+- **Shadow**: slider (drop shadow intensity).
+
+### Rendering approach
+
+The editor composites layers: `background → padded shot (rounded, shadowed) →
+annotation layer`. Two viable tech choices — pick at implementation time:
+
+- **`<canvas>` + a small scene model** (plain 2D context). Full control, no deps;
+  more manual hit-testing for selectable shapes.
+- **`react-konva` (Konva)** — a canvas scene graph with built-in
+  drag/resize/transform handles. Faster to build the interactive annotations;
+  adds a dependency.
+
+Recommendation: **react-konva** for the annotation layer (it gives selection
+handles and transforms for free), with the final export composited to a single
+canvas/PNG. Re-evaluate if we want to stay dependency-free.
+
+## 5. Copy & save
+
+- **Copy (`⌘C`)**: render the composited result to a PNG buffer, hand it to the
+  main process, and write it to the clipboard via Electron
+  `clipboard.writeImage(nativeImage.createFromBuffer(...))`. Works while the
+  editor is focused.
+- **Save**: write the composited PNG into the unified vault (see §6) with sidecar
+  metadata; it then appears in the Library.
+- **Export (phase 2)**: "Save as…" to an arbitrary path; copy as different
+  formats; share targets.
+
+## 6. Storage & Library (unified)
+
+**One vault, one Library** — screenshots and recordings live together. No second
+library.
+
+### Data model
+
+Generalize the current `LocalRecording`
+(`apps/kaipu-record/src/shared/types/library-storage.ts`) into a tagged item:
+
+```ts
+// One stored capture — a recording or a screenshot.
+export interface LocalItem {
+  id: string;
+  kind: "recording" | "screenshot"; // NEW — the discriminator
+  title: string;
+  filePath: string;        // .mp4 for recordings, .png for screenshots
+  createdAt: number;
+  sizeBytes: number;
+  thumbnailUrl?: string | null;
+  durationSeconds?: number; // recordings only
+  // Phase 2: editDocPath?: string — the re-editable annotation/beautify document
+}
+```
+
+`LocalRecording` can stay as a `kind: "recording"` alias during the migration to
+avoid a big-bang rename.
+
+### Vault layout
+
+- Keep the single vault root (the user's chosen folder).
+- Screenshots in a `screenshots/` subfolder (recordings stay where they are) for
+  tidiness on disk — but **both surface in the same Library list**.
+- Sidecar metadata per item, same mechanism recordings already use.
+
+### Library integration
+
+- The Library already has a toolbar filter (`use-library-filters.ts`,
+  `library-filters.ts` with `StorageFilter`/counts). Add a **type filter**
+  (All / Videos / Screenshots) alongside it (or fold `kind` into the existing
+  filter model).
+- A screenshot item opens the editor (phase 2: re-editable) or a detail view; a
+  recording opens the player as today.
+- The `kaipu-media://` protocol already streams vault files for playback; reuse
+  it (or a plain `file://`/data URL) to show screenshots.
+
+### The Screenshots page
+
+- Its own sidebar entry (icon: e.g. `Crop`/`Camera`), route `/screenshots`,
+  following the same page chrome as the other pages.
+- Content: a prominent **Capture** button, the capture hotkey hint, and
+  (optionally) a recent-screenshots strip. The **full gallery is the unified
+  Library** filtered to Screenshots — we do not rebuild a gallery here.
+
+## 7. Entry points
+
+- **Global hotkey** — reuse the global-shortcuts infrastructure just built
+  (`apps/kaipu-record/src/main/shortcuts/global-shortcuts.ts`). Add a new
+  `captureScreenshot` action to `SHORTCUT_ACTIONS` / `ShortcutSettings`, default
+  `⌘⌃4` (mnemonic: macOS `Cmd+Shift+4`), rebindable from the **Shortcuts page**.
+- **Screenshots page** — the Capture button calls the same capture path.
+- **Menu bar / tray (phase 2)** — a "Capture screenshot" item in the existing
+  tray menu.
+
+## 8. Permissions
+
+- **Screen Recording** (TCC) — already requested/handled for the recorder; the
+  same grant covers screen capture. Path A's `screencapture` and Path B's
+  `desktopCapturer` both rely on it.
+- **Clipboard** — no special permission for `clipboard.writeImage`.
+- Surface a clear notice if Screen Recording is denied (reuse the existing
+  permission notice components).
+
+## 9. Architecture / where code lives
+
+Following the app's main/preload/renderer split:
+
+- **Main**
+  - `src/main/screenshots/screenshot-capture.ts` — runs Path A (`screencapture`)
+    or Path B (`desktopCapturer`), returns the captured PNG (temp path or buffer).
+  - `src/main/screenshots/screenshot-ipc.ts` — IPC: `screenshot:capture`,
+    `screenshot:copy` (clipboard), `screenshot:save` (into the vault).
+  - Extend the library vault writer to accept screenshots.
+  - Extend `global-shortcuts.ts` with the `captureScreenshot` action.
+- **Preload** — bridge methods: `captureScreenshot()`, `copyImageToClipboard(buf)`,
+  `saveScreenshot(buf, meta)`.
+- **Shared** — `LocalItem`/`kind` in `library-storage.ts`; new IPC channels in
+  `ipc.ts`; bridge types in `electron-api.ts`.
+- **Renderer**
+  - `src/renderer/src/pages/screenshots/screenshots-page.tsx` — launcher.
+  - `src/renderer/src/features/screenshot-editor/` — the editor (canvas/Konva
+    scene, toolbar, beautify panel, export).
+  - Library filter + item rendering updates for the `screenshot` kind.
+
+## 10. Phasing
+
+**Phase 1 — MVP (the agreed scope: annotations + beautify)**
+
+1. Native capture (Path A) → temp PNG.
+2. Editor: arrow / rectangle / ellipse / text; beautify (background, padding,
+   rounded corners, shadow); undo/redo.
+3. Copy (`⌘C`) + Save to the unified vault.
+4. Unified storage model (`kind`) + Library type filter.
+5. Global capture hotkey (`captureScreenshot`, default `⌘⌃4`) + Screenshots page.
+
+**Phase 2 — polish & power**
+
+- Custom selection overlay (Path B) with branded chrome.
+- More tools: blur/redaction, highlighter, numbered steps, crop.
+- Re-editable saved screenshots (persist the edit document).
+- Tray entry; export targets; format options.
+
+## 11. Open questions
+
+- **Capture engine for v1**: ✅ **Decided** — Path A (`screencapture -i`) behind
+  `ScreenshotCaptureProvider`, mac-only for now. Path B (`OverlayProvider`) is the
+  cross-platform follow-up when Windows lands; the editor is untouched either way.
+- **Editor tech**: react-konva (recommended) vs dependency-free `<canvas>`.
+- **Editor surface**: a route inside the main window vs a dedicated editor window
+  (a separate window may feel more like a tool; a route is simpler).
+- **Default capture hotkey**: `⌘⌃4` proposed; confirm it doesn't clash with the
+  user's setup (rebindable regardless).
+- **Re-edit**: persist a re-editable edit document in v1, or save flat PNGs and
+  add re-edit in phase 2 (leaning phase 2).
+
+## 12. Risks / notes
+
+- `screencapture` shelling out is mac-only — fine (the app is mac-only), but keep
+  it behind a platform guard.
+- Retina scaling: Path A is handled by macOS; Path B must account for
+  `scaleFactor` when cropping `desktopCapturer` output.
+- The annotation/beautify export must be deterministic (same pixels copied and
+  saved) — composite once, use for both Copy and Save.
+- Large captures on the clipboard: PNG buffers can be big; that's expected for
+  screenshots.
