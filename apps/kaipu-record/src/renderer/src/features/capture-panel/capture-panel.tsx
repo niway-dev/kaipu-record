@@ -3,6 +3,7 @@ import { RecordingIndicator } from "@renderer/features/recording/components/reco
 import { useRecordingSetup } from "@renderer/features/recording/hooks/use-recording-setup";
 import { useRecordingActivity } from "@renderer/features/recording/hooks/use-recording-activity";
 import { useSourceSelection } from "@renderer/features/recording/hooks/use-source-selection";
+import { useShortcutLabels } from "@renderer/features/shortcuts/use-shortcut-labels";
 import { SourceCard } from "@renderer/features/recording/components/source-card";
 import { RecordingToggles } from "@renderer/features/recording/components/recording-toggles";
 import { MicPicker } from "@renderer/features/recording/components/mic-picker";
@@ -15,6 +16,7 @@ import styles from "./capture-panel.module.css";
 export function CapturePanel(): React.JSX.Element {
   const rootRef = useRef<HTMLDivElement>(null);
   const setup = useRecordingSetup();
+  const shortcuts = useShortcutLabels();
   // Same source loading/default-selection as the Record page, so both windows
   // show the same screen instead of a hardcoded placeholder.
   useSourceSelection(setup);
@@ -92,7 +94,7 @@ export function CapturePanel(): React.JSX.Element {
       <RecordButton
         variant="compact"
         isRecording={isBusy}
-        shortcut="⌘⇧6"
+        shortcut={shortcuts?.startRecording}
         onClick={isBusy ? stopRecording : requestStart}
       />
     </div>

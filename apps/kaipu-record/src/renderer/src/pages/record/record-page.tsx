@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Pause, Play, Square } from "lucide-react";
 import { useRecordingSetup } from "@renderer/features/recording/hooks/use-recording-setup";
+import { useShortcutLabels } from "@renderer/features/shortcuts/use-shortcut-labels";
 import { useRecordingActivity } from "@renderer/features/recording/hooks/use-recording-activity";
 import { useSourceSelection } from "@renderer/features/recording/hooks/use-source-selection";
 import { usePermissions } from "@renderer/features/permissions";
@@ -18,6 +19,8 @@ import styles from "./record-page.module.css";
 // Composition only. State lives in the hooks; this wires them to dumb components.
 export function RecordPage(): React.JSX.Element {
   const navigate = useNavigate();
+  const location = useLocation();
+  const shortcuts = useShortcutLabels();
   // After a recording saves, jump straight to its detail page to see the output.
   const setup = useRecordingSetup({
     onRecordingComplete: (recording) => navigate(`/library/${recording.id}`),
@@ -39,16 +42,23 @@ export function RecordPage(): React.JSX.Element {
   const isMicrophoneDenied = permissionsChecked && !permissionStatus.microphone;
   const isCameraDenied = permissionsChecked && !permissionStatus.camera;
 
-  // A "Start" from the Capture Panel runs our normal start here (countdown + record).
-  // Read the latest handler through a ref so the listener never goes stale.
-  const startRef = useRef(setup.startRecording);
-  startRef.current = setup.startRecording;
-  useEffect(() => window.electronAPI.onRequestStartRecording(() => startRef.current()), []);
-
   // Recording runs in this window; reflect it in the heading and lock the
   // setup controls so the user can't fiddle with (or re-trigger) it mid-record.
   const activity = useRecordingActivity();
-  const isRecording = setup.isRecording;
+  const { startRecording, selectedSource, isRecording } = setup;
+
+  // A global "start" (hotkey or Capture Panel) navigates here with a `startAt`
+  // flag (see AppShell). Auto-start once per flag, after a source is ready and
+  // we're not already recording. `startedForRef` makes it fire exactly once.
+  const startedForRef = useRef<number | null>(null);
+  useEffect(() => {
+    const startAt = (location.state as { startAt?: number } | null)?.startAt;
+    if (startAt && startedForRef.current !== startAt && selectedSource && !isRecording) {
+      startedForRef.current = startAt;
+      startRecording();
+    }
+  }, [location.state, selectedSource, isRecording, startRecording]);
+
   const isPaused = isRecording && activity.status === "paused";
   // The gap between the countdown ending and the window handing off to the bar:
   // streams are acquiring, isRecording is still false. Keep the overlay up.
@@ -137,7 +147,7 @@ export function RecordPage(): React.JSX.Element {
         <RecordButton
           isRecording={false}
           disabled={!setup.canStartRecording || isStarting || setup.countdown !== null}
-          shortcut="⌘⇧P"
+          shortcut={shortcuts?.startRecording}
           onClick={setup.startRecording}
         />
       )}
