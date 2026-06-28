@@ -1,5 +1,5 @@
 appId: com.niway.kaipu-record
-productName: Kaipu Record
+productName: Kaipu Recorder
 directories:
   buildResources: build
 files:
@@ -19,15 +19,24 @@ nsis:
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
 mac:
-  entitlementsInherit: build/entitlements.mac.plist
+  category: public.app-category.video # cosmetic (LSApplicationCategoryType)
+  hardenedRuntime: true # REQUIRED to notarize
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.inherit.plist
+  # electron-builder@26: notarize is a boolean (the older {teamId} object is
+  # rejected by the schema). Notarization activates only when the APPLE_API_*
+  # env vars are present (see scripts/build-mac-local.sh) — the API key carries
+  # the team, so no teamId is needed here. Without the vars the build is signed-only.
+  notarize: true
   extendInfo:
-    - NSCameraUsageDescription: Application requests access to the device's camera.
-    - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
-    - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
-    - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
-  notarize: false
+    NSMicrophoneUsageDescription: Kaipu Recorder usa el micrófono para grabar audio.
+    NSCameraUsageDescription: Kaipu Recorder usa la cámara para grabar video.
+    NSDocumentsFolderUsageDescription: Kaipu Recorder guarda tus grabaciones en la carpeta Documentos.
+    NSDownloadsFolderUsageDescription: Kaipu Recorder guarda tus grabaciones en la carpeta Descargas.
 dmg:
-  artifactName: ${name}-${version}.${ext}
+  # ${arch} is required: arm64 + x64 builds would otherwise collide on one name.
+  artifactName: ${name}-${version}-${arch}.${ext}
 linux:
   target:
     - AppImage

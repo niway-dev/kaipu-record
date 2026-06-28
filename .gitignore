@@ -14,8 +14,15 @@ build
 .env
 .env*.local
 .env.keys
+.env.signing
 !.env.example
+!.env.signing.example
 !.env.x
+
+# Code signing / notarization secrets (never commit these)
+*.p12
+*.p8
+*.certSigningRequest
 
 # IDEs and editors
 .vscode/*

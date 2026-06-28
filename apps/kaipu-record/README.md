@@ -32,3 +32,7 @@ $ npm run build:mac
 # For Linux
 $ npm run build:linux
 ```
+
+> **macOS firmado + notarizado (descarga directa):** `build:mac` produce un `.app`/`.dmg`
+> firmado con Developer ID y notarizado. Requiere configurar `.env.signing` una sola vez —
+> ver el runbook [`docs/macos-build-signing.md`](docs/macos-build-signing.md).
