@@ -64,6 +64,9 @@ jobs:
           bunx electron-builder --mac --arm64 --x64 --publish never
 
       - name: Upload artifacts to GitHub Release
+        # Only on tag pushes — a manual dispatch has no tag to release against,
+        # so it just exercises the build/sign/notarize path.
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           # Draft so a human reviews/writes notes before it reaches testers.
