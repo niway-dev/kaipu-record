@@ -75,6 +75,18 @@ jobs:
           bun run build
           bunx electron-builder --mac --arm64 --x64 --publish never
 
+      - name: Upload build as workflow artifact
+        # Always downloadable from the run page — including manual dispatch runs
+        # that don't create a Release. Lets you grab the DMG to test right away.
+        uses: actions/upload-artifact@v4
+        with:
+          name: kaipu-recorder-macos
+          path: |
+            apps/kaipu-record/dist/*.dmg
+            apps/kaipu-record/dist/*.zip
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Upload artifacts to GitHub Release
         # Only on tag pushes — a manual dispatch has no tag to release against,
         # so it just exercises the build/sign/notarize path.
