@@ -35,7 +35,8 @@ mac:
     NSDocumentsFolderUsageDescription: Kaipu Recorder guarda tus grabaciones en la carpeta Documentos.
     NSDownloadsFolderUsageDescription: Kaipu Recorder guarda tus grabaciones en la carpeta Descargas.
 dmg:
-  artifactName: ${name}-${version}.${ext}
+  # ${arch} is required: arm64 + x64 builds would otherwise collide on one name.
+  artifactName: ${name}-${version}-${arch}.${ext}
 linux:
   target:
     - AppImage

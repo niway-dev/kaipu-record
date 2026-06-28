@@ -102,7 +102,7 @@ notarización + staple end-to-end.
 
 **Artefactos** (en `apps/kaipu-record/dist/`):
 - `.app` → `dist/mac-arm64/Kaipu Recorder.app` (en Apple Silicon; build arm64 por defecto)
-- `.dmg` → `dist/kaipu-record-<version>.dmg`
+- `.dmg` → `dist/kaipu-record-<version>-<arch>.dmg` (el `${arch}` evita colisión arm64/x64)
 
 ---
 
@@ -164,10 +164,27 @@ luego `Notarization complete`, luego el staple.
 
 ---
 
-## 7. Siguiente paso: CI (GitHub Actions)
+## 7. CI (GitHub Actions) — `release.yml`
 
-Cuando el build local firme + notarice ok, mover a `.github/workflows/release.yml`:
-runner macOS, decodificar `CSC_LINK` y `APPLE_API_KEY` desde **base64** (secrets → archivos
-temporales en `$RUNNER_TEMP`), exportar las 5 vars apuntando a esas rutas, `npm run build` +
-`electron-builder --mac --publish ...`, y subir el DMG/ZIP al release. Los 5 valores van como
-**repository secrets**, nunca en el repo.
+El workflow `.github/workflows/release.yml` reproduce este build en un runner macOS y adjunta
+los DMG firmados+notarizados (arm64 + x64) a un **GitHub Release** (draft).
+
+- **Disparador:** push de un tag `v*.*.*` (ej. `v1.0.1`), o `workflow_dispatch` manual.
+- **Credenciales:** el `.p8` se decodifica desde base64 a `$RUNNER_TEMP`; el `.p12` va como
+  base64 directo en `CSC_LINK` (electron-builder lo acepta). Nunca tocan el repo.
+- **Secrets requeridos** (Settings → Secrets and variables → Actions):
+
+  | Secret | Valor |
+  |--------|-------|
+  | `MAC_CSC_LINK_BASE64` | `base64 -i …/kaipu-record-signing-Certificates.p12` |
+  | `MAC_CSC_KEY_PASSWORD` | contraseña del `.p12` |
+  | `APPLE_API_KEY_BASE64` | `base64 -i …/kaipu-AuthKey_QWXC4HC43K.p8` |
+  | `APPLE_API_KEY_ID` | `QWXC4HC43K` |
+  | `APPLE_API_ISSUER` | UUID del Issuer |
+
+- **Release en draft:** el workflow crea el release como borrador para revisarlo/escribir notas
+  antes de compartirlo. Pasar a `draft: false` en el workflow cuando el pipeline esté de confianza.
+
+> **Auto-update (pendiente):** el repo es privado, así que electron-updater no puede bajar de sus
+> releases sin auth. Falta decidir un host público (repo público solo-releases o Cloudflare R2/S3)
+> y wirear `electron-updater` en el main process. Encaja con el forced-update (#8).
