@@ -12,7 +12,11 @@ import { ControlBarWindow } from "./control-bar-window";
 import { CameraBubbleWindow } from "./camera-bubble-window";
 import { RecordingWriter, timestampId } from "./recording-writer";
 import { vaultDirectory } from "../library/vault-location";
-import { applyDockPolicy } from "../infrastructure/settings-store";
+import {
+  applyDockPolicy,
+  forceRegularPolicy,
+  getAppSettings,
+} from "../infrastructure/settings-store";
 
 /**
  * The single stateful coordinator for a recording. Owns the control-bar window
@@ -66,8 +70,14 @@ export function registerRecordingHub(getMainWindow: () => BrowserWindow | null):
     // The camera bubble follows the (now global) Camera toggle, so it works no
     // matter which window flipped it.
     if (settings.isCameraEnabled !== cameraWasOn) {
-      if (settings.isCameraEnabled) cameraBubble.show();
-      else cameraBubble.hide();
+      if (settings.isCameraEnabled) {
+        cameraBubble.show();
+        // Showing a floating panel can drop the app from the Dock/Cmd+Tab on
+        // macOS; re-assert the policy so the app stays reachable.
+        applyDockPolicy();
+      } else {
+        cameraBubble.hide();
+      }
     }
   });
 
@@ -93,9 +103,15 @@ export function registerRecordingHub(getMainWindow: () => BrowserWindow | null):
     activity.status = "recording";
     activity.elapsedSeconds = 0;
     getMainWindow()?.hide();
+    // The main window is now hidden; force the app to stay in the Dock/Cmd+Tab so
+    // it isn't lost while only the floating panels are visible. Restored on stop.
+    forceRegularPolicy();
     broadcastActivity();
     // Place the bar on the screen being recorded (resolved from the source id).
-    void displayIdForSource(info.sourceId).then((displayId) => bar.show(displayId));
+    const includeInRecording = getAppSettings().showBarInRecording;
+    void displayIdForSource(info.sourceId).then((displayId) =>
+      bar.show(displayId, { includeInRecording }),
+    );
   });
   ipcMain.on(IPC_CHANNELS.recordingStop, () => {
     activity.active = false;

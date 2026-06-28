@@ -11,6 +11,25 @@ import { DEFAULT_QUALITY, type RecordingQuality } from "../recording-quality";
 
 export type Theme = "light" | "dark" | "system";
 
+/** Actions that can be bound to a global keyboard shortcut. */
+export const SHORTCUT_ACTIONS = ["startRecording", "stopRecording", "bringToFront"] as const;
+export type ShortcutAction = (typeof SHORTCUT_ACTIONS)[number];
+
+/** Electron accelerator string per action (e.g. "Command+Control+C"). */
+export type ShortcutSettings = Record<ShortcutAction, string>;
+
+/**
+ * Default global shortcuts. The `Command+Control` base is distinctive: it avoids
+ * macOS reserved combos (screenshots, VoiceOver's Control+Option) and the
+ * crowded Command+Shift space that browsers/editors lean on — important because
+ * a global shortcut overrides the focused (recorded) app.
+ */
+export const DEFAULT_SHORTCUTS: ShortcutSettings = {
+  startRecording: "Command+Control+C", // Capture
+  stopRecording: "Command+Control+S", // Stop
+  bringToFront: "Command+Control+O", // Open
+};
+
 export interface AppSettings {
   theme: Theme;
   launchAtLogin: boolean;
@@ -21,6 +40,13 @@ export interface AppSettings {
   showInDock: boolean;
   /** Resolution/fps/bitrate the encoder targets (a preset or a custom combo). */
   recordingQuality: RecordingQuality;
+  /**
+   * Include the floating control bar in the captured video. Off (default) keeps
+   * it out via content protection (`NSWindowSharingNone`).
+   */
+  showBarInRecording: boolean;
+  /** User-rebindable global keyboard shortcuts (Electron accelerator strings). */
+  shortcuts: ShortcutSettings;
   /**
    * Stable per-install id for analytics identity. Empty until the settings-store
    * mints one on first load; never shown in the UI.
@@ -33,6 +59,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   launchAtLogin: false,
   showInDock: true,
   recordingQuality: DEFAULT_QUALITY,
+  showBarInRecording: false,
+  shortcuts: DEFAULT_SHORTCUTS,
   deviceId: "",
 };
 
@@ -77,6 +105,12 @@ export const IPC_CHANNELS = {
   recordingSettingsChanged: "recording-settings:changed",
   // Capture Panel asks the main window to start recording (panel → main → Record page).
   recordingRequestStart: "recording:request-start",
+  // Per-action registration state of the global shortcuts (false = another app owns it).
+  shortcutsGetStatus: "shortcuts:get-status",
+  // Suspend/resume the global shortcuts while the user is capturing a new binding,
+  // so the combo reaches the renderer instead of firing the (still-registered) action.
+  shortcutsSuspend: "shortcuts:suspend",
+  shortcutsResume: "shortcuts:resume",
   // Analytics: secondary windows forward serialized exceptions to the main-process sink.
   analyticsCaptureException: "analytics:capture-exception",
 } as const;

@@ -4,7 +4,7 @@
  */
 
 import type { SerializedError } from "../analytics";
-import type { AppSettings } from "./ipc";
+import type { AppSettings, ShortcutAction } from "./ipc";
 import type { LocalRecording, VaultDirectory } from "./library-storage";
 import type {
   ControlCommand,
@@ -113,6 +113,14 @@ export interface KaipuElectronAPI {
   requestStartRecording(): void;
   /** Record page subscribes so a panel request triggers its start. */
   onRequestStartRecording(callback: () => void): () => void;
+
+  // ── Global shortcuts ──────────────────────────────────────────────────
+  /** Per-action registration state of the global shortcuts (false = unavailable). */
+  getShortcutStatus(): Promise<Record<ShortcutAction, boolean>>;
+  /** Pause global shortcuts so a combo reaches the renderer while rebinding. */
+  suspendShortcuts(): void;
+  /** Resume (re-register) global shortcuts after rebinding. */
+  resumeShortcuts(): void;
 
   // ── Analytics ─────────────────────────────────────────────────────────
   /** Forward a serialized exception (+ origin/context) to the main-process sink. */
