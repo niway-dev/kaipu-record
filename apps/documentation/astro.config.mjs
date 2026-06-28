@@ -50,6 +50,7 @@ export default defineConfig({
           label: "Backlog",
           items: [
             { slug: "backlog" },
+            { slug: "backlog/roadmap" },
             { slug: "backlog/playwright-e2e" },
             { slug: "backlog/settings-roadmap" },
             { slug: "backlog/shortcuts" },
