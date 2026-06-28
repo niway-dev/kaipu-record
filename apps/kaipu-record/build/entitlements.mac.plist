@@ -2,17 +2,17 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <!-- V8 / JIT de Electron: REQUERIDO -->
+  <!-- Electron V8 / JIT: REQUIRED -->
   <key>com.apple.security.cs.allow-jit</key>
   <true/>
 
-  <!-- Captura: dejar solo lo que la app use -->
+  <!-- Capture: keep only what the app uses -->
   <key>com.apple.security.device.audio-input</key>
   <true/>
   <key>com.apple.security.device.camera</key>
   <true/>
 
-  <!-- OPCIONALES (agregar SOLO si hay crashes al lanzar o errores de library validation):
+  <!-- OPTIONAL (add ONLY if the app crashes on launch or hits library-validation errors):
   <key>com.apple.security.cs.allow-unsigned-executable-memory</key><true/>
   <key>com.apple.security.cs.disable-library-validation</key><true/>
   -->

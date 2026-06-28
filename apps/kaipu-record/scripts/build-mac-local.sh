@@ -9,11 +9,11 @@ set -a
 source "$(dirname "$0")/../.env.signing"
 set +a
 
-echo "→ Identidad de firma disponible:"
+echo "→ Signing identities available:"
 security find-identity -v -p codesigning | grep "Developer ID Application" || true
 
-# 1) build de renderer + main con electron-vite (incluye typecheck)
+# 1) build renderer + main with electron-vite (includes typecheck)
 npm run build
 
-# 2) empaquetar + firmar (+ notarizar + staple si están las APPLE_API_*)
+# 2) package + sign (+ notarize + staple when the APPLE_API_* vars are set)
 npx electron-builder --mac --publish never

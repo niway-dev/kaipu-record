@@ -1,195 +1,195 @@
-# Build local de macOS — firma + notarización (Developer ID)
+# Local macOS build — signing + notarization (Developer ID)
 
-Runbook para producir un `.app`/`.dmg` **firmado y notarizado** que se instale sin el
-aviso de Gatekeeper, distribuido **fuera de la Mac App Store** (descarga directa del DMG).
+Runbook to produce a **signed and notarized** `.app`/`.dmg` that installs without the
+Gatekeeper warning, distributed **outside the Mac App Store** (direct DMG download).
 
-> Estrategia: validar primero en **local**; recién después mover a CI (GitHub Actions).
-
----
-
-## 0. Datos fijos del proyecto
-
-| Dato                         | Valor                                                         |
-| ---------------------------- | ------------------------------------------------------------- |
-| `appId` (CFBundleIdentifier) | `com.niway.kaipu-record`                                      |
-| Product name (display)       | `Kaipu Recorder`                                              |
-| Team ID                      | `K9TKC5GG76`                                                  |
-| Signing identity             | `Developer ID Application: Cristian Sotomayor (K9TKC5GG76)`   |
-| Tipo de certificado          | **Developer ID Application** (NO Apple Distribution / NO MAS) |
-| Notarización                 | App Store Connect **API Key** (`.p8`), método notarytool      |
-| Key ID                       | `QWXC4HC43K`                                                  |
-
-> La firma dirá `Cristian Sotomayor (K9TKC5GG76)` porque la cuenta Apple es **Individual**,
-> no Organization. Es **esperado**, no es un bug. Para descarga directa el usuario casi nunca
-> ve el nombre del firmante.
+> Strategy: validate locally first; only then move to CI (GitHub Actions).
 
 ---
 
-## 1. Requisitos (una sola vez)
+## 0. Fixed project values
 
-1. **Cuenta Apple Developer** activa (pagada).
-2. **Certificado Developer ID Application + clave privada** instalados en el **Keychain** del Mac.
-   Verificar:
+| Field                        | Value                                                       |
+| ---------------------------- | ----------------------------------------------------------- |
+| `appId` (CFBundleIdentifier) | `com.niway.kaipu-record`                                    |
+| Product name (display)       | `Kaipu Recorder`                                            |
+| Team ID                      | `K9TKC5GG76`                                                |
+| Signing identity             | `Developer ID Application: Cristian Sotomayor (K9TKC5GG76)` |
+| Certificate type             | **Developer ID Application** (NOT Apple Distribution / MAS) |
+| Notarization                 | App Store Connect **API Key** (`.p8`), notarytool method    |
+| Key ID                       | `QWXC4HC43K`                                                |
+
+> The signature will read `Cristian Sotomayor (K9TKC5GG76)` because the Apple account is
+> **Individual**, not Organization. This is **expected**, not a bug. For direct download the
+> user almost never sees the signer's name.
+
+---
+
+## 1. Prerequisites (one time)
+
+1. **Active Apple Developer account** (paid).
+2. **Developer ID Application certificate + private key** installed in the Mac **Keychain**.
+   Verify:
    ```bash
    security find-identity -v -p codesigning | grep "Developer ID Application"
    ```
-   Debe listar la identidad `... Cristian Sotomayor (K9TKC5GG76)`.
-3. **Xcode + Command Line Tools** (notarytool necesita Xcode 13+):
+   It must list the identity `... Cristian Sotomayor (K9TKC5GG76)`.
+3. **Xcode + Command Line Tools** (notarytool needs Xcode 13+):
    ```bash
-   xcode-select -p   # debe apuntar a un Xcode válido
+   xcode-select -p   # must point to a valid Xcode
    ```
-4. **Credenciales en una carpeta SIN espacios**, fuera del repo. Un espacio en la ruta
-   rompe el build, así que **no** dejarlas en carpetas tipo `apple important`:
+4. **Credentials in a folder WITHOUT spaces**, outside the repo. A space in the path breaks
+   the build, so do **not** keep them in folders like `apple important`:
    ```bash
    mkdir -p ~/.secrets/kaipu
-   mv "<ruta>/kaipu-record-signing-Certificates.p12" ~/.secrets/kaipu/
-   mv "<ruta>/kaipu-AuthKey_QWXC4HC43K.p8"            ~/.secrets/kaipu/
+   mv "<path>/kaipu-record-signing-Certificates.p12" ~/.secrets/kaipu/
+   mv "<path>/kaipu-AuthKey_QWXC4HC43K.p8"            ~/.secrets/kaipu/
    ```
 
 ---
 
-## 2. Configurar `.env.signing` (una sola vez)
+## 2. Configure `.env.signing` (one time)
 
-electron-builder lee `process.env`, **no** carga archivos `.env*` por sí solo — por eso
-`scripts/build-mac-local.sh` lo inyecta. El archivo está **gitignored** (nunca se commitea);
-la plantilla versionada es `.env.signing.example`.
+electron-builder reads `process.env` but does **not** load `.env*` files on its own — that's
+why `scripts/build-mac-local.sh` injects them. The file is **gitignored** (never committed);
+the tracked template is `.env.signing.example`.
 
 ```bash
-cp .env.signing.example .env.signing   # si aún no existe
+cp .env.signing.example .env.signing   # if it doesn't exist yet
 ```
 
-Rellenar (rutas absolutas, sin espacios):
+Fill it in (absolute paths, no spaces):
 
 ```dotenv
-# --- Firma ---
-CSC_LINK=/Users/<usuario>/.secrets/kaipu/kaipu-record-signing-Certificates.p12
-CSC_KEY_PASSWORD=<contraseña que pusiste al EXPORTAR el .p12>
+# --- Signing ---
+CSC_LINK=/Users/<user>/.secrets/kaipu/kaipu-record-signing-Certificates.p12
+CSC_KEY_PASSWORD=<password you set when EXPORTING the .p12>
 
-# --- Notarización (App Store Connect API Key — Team Key) ---
-APPLE_API_KEY=/Users/<usuario>/.secrets/kaipu/kaipu-AuthKey_QWXC4HC43K.p8
+# --- Notarization (App Store Connect API Key — Team Key) ---
+APPLE_API_KEY=/Users/<user>/.secrets/kaipu/kaipu-AuthKey_QWXC4HC43K.p8
 APPLE_API_KEY_ID=QWXC4HC43K
-APPLE_API_ISSUER=<UUID del Issuer ID>   # App Store Connect → Users and Access → Integrations
+APPLE_API_ISSUER=<Issuer ID UUID>   # App Store Connect → Users and Access → Integrations
 ```
 
-> `CSC_KEY_PASSWORD` es la contraseña del `.p12` (la que elegiste al exportarlo), **no** la
-> de tu Mac ni la de tu Apple ID.
+> `CSC_KEY_PASSWORD` is the `.p12` password (the one you chose when exporting it), **not** your
+> Mac password nor your Apple ID password.
 >
-> Es una **Team Key** (creada en _Integrations_), por eso `APPLE_API_ISSUER` es **obligatorio**.
-> Si algún día usaras una _Individual Key_ (Xcode 26+), hay que **omitir** el issuer o Apple
-> devuelve `401 Unauthorized`.
+> It is a **Team Key** (created under _Integrations_), so `APPLE_API_ISSUER` is **required**.
+> If you ever use an _Individual Key_ (Xcode 26+), you must **omit** the issuer or Apple returns
+> `401 Unauthorized`.
 
 ---
 
-## 3. Buildear
+## 3. Build
 
 ```bash
 cd apps/kaipu-record
 npm run build:mac
 ```
 
-Eso corre `scripts/build-mac-local.sh`, que:
+That runs `scripts/build-mac-local.sh`, which:
 
 ```
-carga .env.signing → npm run build (electron-vite + typecheck)
-                   → electron-builder --mac --publish never
-                   → firma (CSC_LINK) → notariza (APPLE_API_*) → staple → DMG/ZIP
+load .env.signing → npm run build (electron-vite + typecheck)
+                  → electron-builder --mac --publish never
+                  → sign (CSC_LINK) → notarize (APPLE_API_*) → staple → DMG/ZIP
 ```
 
-**Iteración rápida (solo firma, sin esperar a Apple):** comentá las 3 líneas `APPLE_API_*`
-en `.env.signing`. Sin esas vars el bloque `notarize` no se dispara → build firmado en
-segundos. Cuando el firmado esté ok, reponelas y corré una vez completo para validar
-notarización + staple end-to-end.
+**Fast iteration (sign only, no waiting on Apple):** comment out the 3 `APPLE_API_*` lines in
+`.env.signing`. Without those vars the `notarize` block doesn't fire → a signed build in
+seconds. Once signing is OK, restore them and run once end-to-end to validate notarization +
+staple.
 
-**Artefactos** (en `apps/kaipu-record/dist/`):
+**Artifacts** (in `apps/kaipu-record/dist/`):
 
-- `.app` → `dist/mac-arm64/Kaipu Recorder.app` (en Apple Silicon; build arm64 por defecto)
-- `.dmg` → `dist/kaipu-record-<version>-<arch>.dmg` (el `${arch}` evita colisión arm64/x64)
+- `.app` → `dist/mac-arm64/Kaipu Recorder.app` (on Apple Silicon; arm64 build by default)
+- `.dmg` → `dist/kaipu-record-<version>-<arch>.dmg` (the `${arch}` avoids arm64/x64 collision)
 
 ---
 
-## 4. Verificar el resultado
+## 4. Verify the result
 
 ```bash
 APP="dist/mac-arm64/Kaipu Recorder.app"
 
-# Identidad presente
+# Identity present
 security find-identity -v -p codesigning
 
-# Firma válida + hardened runtime habilitado
+# Valid signature + hardened runtime enabled
 codesign -dv --verbose=4 "$APP"
 
-# Gatekeeper: debe decir "accepted" / "source=Notarized Developer ID"
+# Gatekeeper: should say "accepted" / "source=Notarized Developer ID"
 spctl -a -vvv --type exec "$APP"
 
-# Ticket de notarización pegado (stapled)
+# Notarization ticket stapled
 xcrun stapler validate "$APP"
 ```
 
-En los logs de electron-builder esperás ver:
+In the electron-builder logs you should see:
 `signing ... identity=Developer ID Application: Cristian Sotomayor (K9TKC5GG76)`,
-luego `Notarization complete`, luego el staple.
+then `Notarization complete`, then the staple.
 
 ---
 
-## 5. Dónde vive cada cosa
+## 5. Where each thing lives
 
-| Archivo                                | Rol                                                                   |
+| File                                   | Role                                                                  |
 | -------------------------------------- | --------------------------------------------------------------------- |
 | `electron-builder.yml` (`mac:`)        | `hardenedRuntime`, `notarize: true`, entitlements, usage descriptions |
-| `build/entitlements.mac.plist`         | entitlements de la app (allow-jit + audio-input + camera)             |
-| `build/entitlements.mac.inherit.plist` | entitlements heredados por helpers/renderer                           |
-| `scripts/build-mac-local.sh`           | wrapper: inyecta `.env.signing` y corre el build                      |
-| `.env.signing`                         | secretos locales (**gitignored**)                                     |
-| `.env.signing.example`                 | plantilla versionada                                                  |
+| `build/entitlements.mac.plist`         | app entitlements (allow-jit + audio-input + camera)                   |
+| `build/entitlements.mac.inherit.plist` | entitlements inherited by helpers/renderer                            |
+| `scripts/build-mac-local.sh`           | wrapper: injects `.env.signing` and runs the build                    |
+| `.env.signing`                         | local secrets (**gitignored**)                                        |
+| `.env.signing.example`                 | tracked template                                                      |
 
 ---
 
 ## 6. Troubleshooting / gotchas
 
-1. **`configuration.mac.notarize should be a boolean`** → en `electron-builder@26` el schema
-   de `notarize` es un **boolean**, no el objeto `{teamId}`. Usar `notarize: true` y pasar las
-   credenciales por env (`APPLE_API_*`); el API key ya identifica el team. (El error suele venir
-   acompañado de `configuration.mac should be a null`, que es solo el efecto cascada.)
-2. **`401 Unauthorized` al notarizar** → falta `APPLE_API_ISSUER` (requerido para Team Keys),
-   o estás usando una Individual Key con issuer puesto (en ese caso, quitarlo).
-3. **El `.app` notarizado crashea al abrir / error de library validation** → activá en
-   `build/entitlements.mac.plist` las claves opcionales comentadas
-   (`allow-unsigned-executable-memory`, `disable-library-validation`), una a la vez.
-4. **El build falla por una ruta con espacios** → mové las credenciales a `~/.secrets/kaipu/`
-   (sección 1.4) y ajustá las rutas en `.env.signing`.
-5. **Permiso de grabación de pantalla** → en macOS se concede en runtime vía
-   System Settings → Privacy (TCC); no lleva clave en Info.plist, pero la app debe estar
-   firmada/notarizada para pedirlo de forma confiable.
-6. **`.cer` / `.csr` no se usan en el build** → solo el `.p12` (firma) y el `.p8`
-   (notarización). El `.cer`/`.certSigningRequest` ya cumplieron su rol al generar el `.p12`.
+1. **`configuration.mac.notarize should be a boolean`** → in `electron-builder@26` the
+   `notarize` schema is a **boolean**, not the `{teamId}` object. Use `notarize: true` and pass
+   the credentials via env (`APPLE_API_*`); the API key already identifies the team. (The error
+   usually comes with `configuration.mac should be a null`, which is just the cascade effect.)
+2. **`401 Unauthorized` when notarizing** → `APPLE_API_ISSUER` is missing (required for Team
+   Keys), or you're using an Individual Key with an issuer set (remove it in that case).
+3. **The notarized `.app` crashes on launch / library-validation error** → enable the commented
+   optional keys in `build/entitlements.mac.plist`
+   (`allow-unsigned-executable-memory`, `disable-library-validation`), one at a time.
+4. **The build fails because of a path with spaces** → move the credentials to `~/.secrets/kaipu/`
+   (section 1.4) and update the paths in `.env.signing`.
+5. **Screen-recording permission** → on macOS it's granted at runtime via
+   System Settings → Privacy (TCC); it has no Info.plist key, but the app must be
+   signed/notarized to request it reliably.
+6. **`.cer` / `.csr` are not used in the build** → only the `.p12` (signing) and the `.p8`
+   (notarization). The `.cer`/`.certSigningRequest` already did their job when generating the `.p12`.
 
 ---
 
-## 7. CI (GitHub Actions) — `release.yml`
+## 7. CI (GitHub Actions) — `release-desktop.yml`
 
-El workflow `.github/workflows/release.yml` reproduce este build en un runner macOS y adjunta
-los DMG firmados+notarizados (arm64 + x64) a un **GitHub Release** (draft).
+The `.github/workflows/release-desktop.yml` workflow reproduces this build on a macOS runner and
+attaches the signed+notarized DMGs (arm64 + x64) to a **GitHub Release** (draft).
 
-- **Disparador:** push de un tag `v*.*.*` (ej. `v1.0.1`), o `workflow_dispatch` manual.
-- **Credenciales:** el `.p8` se decodifica desde base64 a `$RUNNER_TEMP`; el `.p12` va como
-  base64 directo en `CSC_LINK` (electron-builder lo acepta). Nunca tocan el repo.
-- **Secrets requeridos** — en el **Environment `production`** (Settings → Environments →
-  production), por eso el job declara `environment: production`:
+- **Trigger:** push a `v*.*.*` tag (e.g. `v1.0.1`), or a manual `workflow_dispatch`.
+- **Credentials:** the `.p8` is decoded from base64 into `$RUNNER_TEMP`; the `.p12` is passed as
+  base64 directly in `CSC_LINK` (electron-builder accepts it). They never touch the repo.
+- **Required secrets** — in the **`production` Environment** (Settings → Environments →
+  production), which is why the job declares `environment: production`:
 
-  | Secret             | Valor                                                                       |
-  | ------------------ | --------------------------------------------------------------------------- |
-  | `CSC_LINK`         | **base64** del `.p12` (`base64 -i …/kaipu-record-signing-Certificates.p12`) |
-  | `CSC_KEY_PASSWORD` | contraseña del `.p12`                                                       |
-  | `APPLE_API_KEY`    | **base64** del `.p8` (`base64 -i …/kaipu-AuthKey_QWXC4HC43K.p8`)            |
-  | `APPLE_API_KEY_ID` | `QWXC4HC43K`                                                                |
-  | `APPLE_API_ISSUER` | UUID del Issuer                                                             |
+  | Secret             | Value                                                                          |
+  | ------------------ | ------------------------------------------------------------------------------ |
+  | `CSC_LINK`         | **base64** of the `.p12` (`base64 -i …/kaipu-record-signing-Certificates.p12`) |
+  | `CSC_KEY_PASSWORD` | the `.p12` password                                                            |
+  | `APPLE_API_KEY`    | **base64** of the `.p8` (`base64 -i …/kaipu-AuthKey_QWXC4HC43K.p8`)            |
+  | `APPLE_API_KEY_ID` | `QWXC4HC43K`                                                                   |
+  | `APPLE_API_ISSUER` | Issuer UUID                                                                    |
 
-  > ⚠️ `CSC_LINK` y `APPLE_API_KEY` deben contener el **base64 de los archivos**, no las
-  > rutas locales de `.env.signing` (esas rutas no existen en el runner).
+  > ⚠️ `CSC_LINK` and `APPLE_API_KEY` must hold the **base64 of the files**, not the local
+  > paths from `.env.signing` (those paths don't exist on the runner).
 
-- **Release en draft:** el workflow crea el release como borrador para revisarlo/escribir notas
-  antes de compartirlo. Pasar a `draft: false` en el workflow cuando el pipeline esté de confianza.
+- **Draft release:** the workflow creates the release as a draft so a human can review it / write
+  notes before sharing. Flip to `draft: false` in the workflow once the pipeline is trusted.
 
-> **Auto-update (pendiente):** el repo es privado, así que electron-updater no puede bajar de sus
-> releases sin auth. Falta decidir un host público (repo público solo-releases o Cloudflare R2/S3)
-> y wirear `electron-updater` en el main process. Encaja con el forced-update (#8).
+> **Auto-update (pending):** the repo is private, so electron-updater can't download from its
+> releases without auth. We still need to pick a public host (a public releases-only repo or
+> Cloudflare R2/S3) and wire `electron-updater` into the main process. Pairs with forced-update (#8).
