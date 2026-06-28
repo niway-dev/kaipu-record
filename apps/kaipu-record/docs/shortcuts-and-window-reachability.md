@@ -60,8 +60,13 @@ Wiring reuses existing paths:
   command the control bar's Stop button relays.
 - **Bring to front** → `showMainWindow()` + `applyDockPolicy()` + `app.focus`.
 
-Bindings are rebound from Settings → Shortcuts. The renderer captures a combo
+Bindings are rebound from the dedicated **Shortcuts page** (its own sidebar
+entry, alongside Record/Library/Settings). The renderer captures a combo
 (`keyboard-accelerator.ts`, requires Command/Control + a letter/digit), persists
 it, and the main process re-registers. Registration results are exposed via
-`shortcuts:get-status` so the UI can flag a binding another app already owns.
+`shortcuts:get-status` so the UI can flag a binding another app already owns
+(guarded so a stale preload degrades gracefully instead of crashing the page).
 `globalShortcut.unregisterAll()` runs on quit.
+
+The "Show control bar in recording" toggle stays in **Settings → Recording**
+(it's recording configuration, not a shortcut).

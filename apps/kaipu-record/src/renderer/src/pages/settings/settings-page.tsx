@@ -14,8 +14,7 @@ import {
   readDevSimulatePaid,
   writeDevSimulatePaid,
 } from "@renderer/features/watermark/dev-override";
-import { ShortcutInput } from "@renderer/features/shortcuts/shortcut-input";
-import { DEFAULT_SHORTCUTS, type PermissionKind, type ShortcutAction } from "@shared/types";
+import type { PermissionKind } from "@shared/types";
 import styles from "./settings-page.module.css";
 
 /*
@@ -57,28 +56,6 @@ const PERMISSION_ROWS: ReadonlyArray<{
   { kind: "camera", label: "Camera", icon: <Video size={16} /> },
 ];
 
-const SHORTCUT_ROWS: ReadonlyArray<{
-  action: ShortcutAction;
-  label: string;
-  description: string;
-}> = [
-  {
-    action: "startRecording",
-    label: "Start recording",
-    description: "Begin a screen recording from anywhere",
-  },
-  {
-    action: "stopRecording",
-    label: "Stop recording",
-    description: "End the current recording from anywhere",
-  },
-  {
-    action: "bringToFront",
-    label: "Bring Kaipu to front",
-    description: "Show the app window if it slips behind or out of reach",
-  },
-];
-
 export function SettingsPage(): React.JSX.Element {
   const { open: openOnboarding } = useOnboarding();
   const { status: permissionStatus, request: requestPermission } = usePermissions();
@@ -87,17 +64,6 @@ export function SettingsPage(): React.JSX.Element {
   // Dev-only watermark bypass. `import.meta.env.DEV` is a build-time literal, so
   // this state + the section below are stripped from production bundles.
   const [simulatePaid, setSimulatePaid] = React.useState(() => readDevSimulatePaid());
-
-  const shortcuts = settings?.shortcuts ?? DEFAULT_SHORTCUTS;
-  // Which global shortcuts actually registered (false = another app owns it).
-  // Re-query whenever the bindings change (main re-registers on update).
-  const [shortcutStatus, setShortcutStatus] = React.useState<Record<
-    ShortcutAction,
-    boolean
-  > | null>(null);
-  React.useEffect(() => {
-    void window.electronAPI.getShortcutStatus().then(setShortcutStatus);
-  }, [settings?.shortcuts]);
 
   return (
     <div className={styles.page}>
@@ -148,30 +114,6 @@ export function SettingsPage(): React.JSX.Element {
               />
             }
           />
-        </Section>
-
-        <Section title="Shortcuts">
-          {SHORTCUT_ROWS.map(({ action, label, description }) => {
-            const unavailable = shortcutStatus ? !shortcutStatus[action] : false;
-            return (
-              <Row
-                key={action}
-                label={label}
-                description={
-                  unavailable ? `${description} · in use by another app` : description
-                }
-                action={
-                  <ShortcutInput
-                    value={shortcuts[action]}
-                    unavailable={unavailable}
-                    onChange={(accelerator) =>
-                      void update({ shortcuts: { ...shortcuts, [action]: accelerator } })
-                    }
-                  />
-                }
-              />
-            );
-          })}
         </Section>
 
         <Section title="Files">
