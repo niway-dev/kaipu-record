@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { captureShortcut, formatAccelerator } from "./keyboard-accelerator";
 
-function event(over: Partial<Parameters<typeof captureShortcut>[0]>): Parameters<
-  typeof captureShortcut
->[0] {
+function event(
+  over: Partial<Parameters<typeof captureShortcut>[0]>,
+): Parameters<typeof captureShortcut>[0] {
   return {
     code: "KeyC",
     key: "c",

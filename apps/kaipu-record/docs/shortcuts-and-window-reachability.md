@@ -15,7 +15,7 @@ in the video.
   and applies `setContentProtection(!includeInRecording)`.
 - The value flows main → bar from the recording hub (`getAppSettings()`), so the
   bar window never imports the settings store (keeps the layering clean).
-- Limitation (v1): applied when the bar is shown. Toggling it *during* an active
+- Limitation (v1): applied when the bar is shown. Toggling it _during_ an active
   recording is not live — documented follow-up.
 
 ## 2. App reachability invariant (Bug 1)

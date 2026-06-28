@@ -93,9 +93,7 @@ describe("mergeShortcuts", () => {
   });
 
   it("keeps valid per-action bindings and defaults the rest", () => {
-    expect(
-      mergeShortcuts({ startRecording: "Command+Control+G", stopRecording: "" }),
-    ).toEqual({
+    expect(mergeShortcuts({ startRecording: "Command+Control+G", stopRecording: "" })).toEqual({
       startRecording: "Command+Control+G",
       stopRecording: DEFAULT_SHORTCUTS.stopRecording,
       bringToFront: DEFAULT_SHORTCUTS.bringToFront,
