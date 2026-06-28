@@ -1,4 +1,4 @@
-name: Release (desktop)
+name: Release Desktop
 
 # Builds the macOS desktop app (arm64 + x64), signs with Developer ID and
 # notarizes it, then attaches the DMGs to a GitHub Release.
