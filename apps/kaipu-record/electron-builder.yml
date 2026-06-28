@@ -24,10 +24,11 @@ mac:
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.inherit.plist
-  # Modern (notarytool) syntax. Only fires when the APPLE_API_* env vars are
-  # present (see scripts/build-mac-local.sh); otherwise the build is signed-only.
-  notarize:
-    teamId: K9TKC5GG76
+  # electron-builder@26: notarize is a boolean (the older {teamId} object is
+  # rejected by the schema). Notarization activates only when the APPLE_API_*
+  # env vars are present (see scripts/build-mac-local.sh) — the API key carries
+  # the team, so no teamId is needed here. Without the vars the build is signed-only.
+  notarize: true
   extendInfo:
     NSMicrophoneUsageDescription: Kaipu Recorder usa el micrófono para grabar audio.
     NSCameraUsageDescription: Kaipu Recorder usa la cámara para grabar video.

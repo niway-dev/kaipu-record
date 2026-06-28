@@ -134,7 +134,7 @@ luego `Notarization complete`, luego el staple.
 
 | Archivo | Rol |
 |---------|-----|
-| `electron-builder.yml` (`mac:`) | `hardenedRuntime`, `notarize:{teamId}`, entitlements, usage descriptions |
+| `electron-builder.yml` (`mac:`) | `hardenedRuntime`, `notarize: true`, entitlements, usage descriptions |
 | `build/entitlements.mac.plist` | entitlements de la app (allow-jit + audio-input + camera) |
 | `build/entitlements.mac.inherit.plist` | entitlements heredados por helpers/renderer |
 | `scripts/build-mac-local.sh` | wrapper: inyecta `.env.signing` y corre el build |
@@ -145,9 +145,10 @@ luego `Notarization complete`, luego el staple.
 
 ## 6. Troubleshooting / gotchas
 
-1. **`mac.notarize has an unknown property 'teamId'`** → la versión de electron-builder usa
-   otro schema. Verificá `npx electron-builder --version` y la doc de notarización de **esa**
-   versión. (Probado OK con `electron-builder@26`.)
+1. **`configuration.mac.notarize should be a boolean`** → en `electron-builder@26` el schema
+   de `notarize` es un **boolean**, no el objeto `{teamId}`. Usar `notarize: true` y pasar las
+   credenciales por env (`APPLE_API_*`); el API key ya identifica el team. (El error suele venir
+   acompañado de `configuration.mac should be a null`, que es solo el efecto cascada.)
 2. **`401 Unauthorized` al notarizar** → falta `APPLE_API_ISSUER` (requerido para Team Keys),
    o estás usando una Individual Key con issuer puesto (en ese caso, quitarlo).
 3. **El `.app` notarizado crashea al abrir / error de library validation** → activá en
