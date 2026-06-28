@@ -172,15 +172,19 @@ los DMG firmados+notarizados (arm64 + x64) a un **GitHub Release** (draft).
 - **Disparador:** push de un tag `v*.*.*` (ej. `v1.0.1`), o `workflow_dispatch` manual.
 - **Credenciales:** el `.p8` se decodifica desde base64 a `$RUNNER_TEMP`; el `.p12` va como
   base64 directo en `CSC_LINK` (electron-builder lo acepta). Nunca tocan el repo.
-- **Secrets requeridos** (Settings → Secrets and variables → Actions):
+- **Secrets requeridos** — en el **Environment `production`** (Settings → Environments →
+  production), por eso el job declara `environment: production`:
 
   | Secret | Valor |
   |--------|-------|
-  | `MAC_CSC_LINK_BASE64` | `base64 -i …/kaipu-record-signing-Certificates.p12` |
-  | `MAC_CSC_KEY_PASSWORD` | contraseña del `.p12` |
-  | `APPLE_API_KEY_BASE64` | `base64 -i …/kaipu-AuthKey_QWXC4HC43K.p8` |
+  | `CSC_LINK` | **base64** del `.p12` (`base64 -i …/kaipu-record-signing-Certificates.p12`) |
+  | `CSC_KEY_PASSWORD` | contraseña del `.p12` |
+  | `APPLE_API_KEY` | **base64** del `.p8` (`base64 -i …/kaipu-AuthKey_QWXC4HC43K.p8`) |
   | `APPLE_API_KEY_ID` | `QWXC4HC43K` |
   | `APPLE_API_ISSUER` | UUID del Issuer |
+
+  > ⚠️ `CSC_LINK` y `APPLE_API_KEY` deben contener el **base64 de los archivos**, no las
+  > rutas locales de `.env.signing` (esas rutas no existen en el runner).
 
 - **Release en draft:** el workflow crea el release como borrador para revisarlo/escribir notas
   antes de compartirlo. Pasar a `draft: false` en el workflow cuando el pipeline esté de confianza.
