@@ -98,7 +98,7 @@ Deploys read from the repo's **`production`** Environment:
 | `CORS_ORIGIN`                                                                           | variable | api Worker                       |
 | `VITE_SERVER_URL`                                                                       | variable | web build + Worker               |
 | `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER` | secrets  | desktop sign/notarize            |
-| `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`                                              | secrets  | desktop → R2 upload (S3 token)    |
+| `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`                                              | secrets  | desktop → R2 upload (S3 token)   |
 
 > The web app proxies auth/CORS to the backend and never runs Better Auth, so its env is only
 > `DATABASE_URL` + `VITE_SERVER_URL` (+ the build-time `VITE_PUBLIC_DOWNLOAD_URL`). `BETTER_AUTH_*` /

@@ -12,12 +12,12 @@ description: How to lay out Kaipu's R2 storage so app installers stay public whi
 
 A home for everything the product stores, with **per-content access rules**:
 
-| Content | Access |
-| --- | --- |
-| App installers (desktop DMGs + update feed) | **Public** (anyone clicks download) |
-| Uploaded videos | **Private** (per-user, not public) |
-| Uploaded images | **Private** (per-user) |
-| Web-app images (used by the marketing/app UI) | "Public, but only from our app" |
+| Content                                       | Access                              |
+| --------------------------------------------- | ----------------------------------- |
+| App installers (desktop DMGs + update feed)   | **Public** (anyone clicks download) |
+| Uploaded videos                               | **Private** (per-user, not public)  |
+| Uploaded images                               | **Private** (per-user)              |
+| Web-app images (used by the marketing/app UI) | "Public, but only from our app"     |
 
 ## The R2 reality (why "one bucket, mixed folders" doesn't work)
 
@@ -68,10 +68,10 @@ browser still makes the request and `Referer` is spoofable. Practical answers:
 
 Going with **Option B (split buckets)**:
 
-| Bucket | Public access | Custom domain | Holds |
-| --- | --- | --- | --- |
-| `kaipu-bucket` | **ON** | `updates.kaipu.app` | installers, update feed, public assets |
-| `kaipu-private-bucket` | **OFF** | **none** | uploaded videos, private images |
+| Bucket                 | Public access | Custom domain       | Holds                                  |
+| ---------------------- | ------------- | ------------------- | -------------------------------------- |
+| `kaipu-bucket`         | **ON**        | `updates.kaipu.app` | installers, update feed, public assets |
+| `kaipu-private-bucket` | **OFF**       | **none**            | uploaded videos, private images        |
 
 **Hard rule: the private bucket gets NO custom domain.** A custom domain on R2 makes the whole
 bucket publicly readable — attaching one to `kaipu-private-bucket` would defeat its purpose. Keep
