@@ -5,8 +5,11 @@ description: Recordings on MacBook (and any non-16:9 display) come out horizonta
 
 # Recording aspect-ratio distortion (non-16:9 screens)
 
-> **Status: 🔵 Proposed — PRIORITY.** Root cause confirmed with evidence (below). Deferred only
-> because a consolidation pass is in flight; pick this up right after. Effort: Medium.
+> **Status: 🟢 Ready to validate.** Implemented on `fix/recording-aspect-ratio` (approach B —
+> capture native, re-frame to the real AR via `fitToCap`). Root cause confirmed with evidence
+> (below); unit + engine tests green; **output confirmed visibly correct and sharper on a 14"
+> MacBook**. Remaining: an `ffprobe` spot-check across screen / window / external-monitor sources
+> (expect e.g. **1662×1080**, AR 1.540, not a stretched 1920×1080). Effort: Medium.
 
 ## Symptom
 
@@ -91,43 +94,37 @@ computed `targetW × targetH` preserving AR. No main↔renderer plumbing, no per
 (works for windows, not just screens). Cost is one `drawImage` per frame, which the watermark path
 already pays today.
 
-## Implementation plan
+## What we shipped (approach B)
 
-1. **`recording-quality.ts` — kill the 16:9 assumption.**
-   - Reinterpret `RESOLUTION_DIMENSIONS` as a **height cap only** (keep the heights 720/1080/1440/
-     2160; the widths are no longer the source of truth for the frame).
-   - Add a helper, e.g. `fitToCap(sourceW, sourceH, capHeight) → { width, height }`, that applies
-     the formula above with even-number rounding and a never-upscale guard. This is the single
-     source of truth for output dimensions.
-   - Update `qualityToEngine` / `EngineQuality` so the engine receives the cap (height + a
-     `maxWidth` ceiling for very wide sources) rather than a fixed 1920×1080.
+1. **`recording-quality.ts` — killed the 16:9 assumption.** Added the pure helper
+   `fitToCap(sourceW, sourceH, capHeight) → { width, height }`: the resolution preset is now a
+   **height cap**, the width follows the source's real AR, it **never upscales**, and it always
+   returns **even** dimensions (H.264). This is the single source of truth for output size.
+   `RESOLUTION_DIMENSIONS` (16:9) is kept only for the file-weight estimate, no longer for the
+   frame. Unit-tested: Mac 14" (3024×1964 → 1662×1080), 16:10 Air (2560×1600 → 1728×1080), 16:9
+   untouched, never-upscale, ultrawide, portrait, even-dimensions.
 
-2. **`recorder-engine.ts` — measure, then size.**
-   - Acquire the screen without a distorting box (request native, or a generous AR-safe cap), read
-     `screenTrack.getSettings().width/height` to learn the real `sourceW × sourceH`.
-   - Compute `target = fitToCap(sourceW, sourceH, capHeight)`.
-   - Route **every** recording through the (generalized) compositor at `target`, encoding that
-     track — not the raw screen track.
+2. **`recorder-engine.ts` — measure, then size.** Capture now requests a **native ceiling**
+   (`7680×4320`) so Chromium returns undistorted native frames instead of squeezing them into a box.
+   The engine reads `screenTrack.getSettings()` for the real size, computes `target = fitToCap(...)`,
+   and only routes through the compositor when a **resize is needed OR a watermark is set** — a
+   native 16:9 source with no watermark still encodes the raw track at zero added cost. Two engine
+   tests lock this in (Mac → compositor at 1662×1080; 16:9 → no compositor).
 
-3. **`watermark-compositor.ts` — generalize to a reframe compositor.**
-   - Accept a `target { width, height }` and size the canvas to it (instead of to the raw track
-     settings).
-   - Draw the source frame into `target` preserving AR (with the watermark stamp when enabled,
-     plain `drawImage` when not). Letterbox only if a target AR is ever forced (normally
-     `target` AR == source AR, so no bars).
-   - Rename/clarify so it reads as "the recording compositor" rather than "watermark only".
+3. **`watermark-compositor.ts` → `recording-compositor.ts`.** Generalized from "watermark only" to
+   a reframe compositor: sizes the canvas to `target`, draws the native frame into it (uniform
+   scale, since `target` keeps the source AR → no stretch), and stamps the watermark only when
+   present. Uses `imageSmoothingQuality: "high"` for a sharper native→target downscale.
 
-4. **Sharpness pass (same change, since scope = AR + sharpness).**
-   - Decide the capture resolution: capturing nearer native (then downscaling preserving AR)
-     yields crisper text than capturing pre-shrunk. Cap by the preset to control file size.
-   - Verify the encoder honors the bitrate target (`onEncoderConfig` already logs it — add an
-     actual-vs-target check), and confirm `prefer-hardware` VideoToolbox isn't silently
-     downgrading quality.
+4. **Thumbnail** is captured at `target` too, so the poster has the correct AR and size.
 
-5. **Verify with ffprobe + eyeball.**
-   - After the fix, a 14" 1080p recording must be **1664 × 1080** (AR 1.540), no SAR hack, and a
-     circle on screen must stay a circle. Re-probe across screen / window / external-monitor /
-     ultrawide sources.
+**Validation:** user-confirmed the output is visibly correct (no more stretch) and sharper. A
+quick `ffprobe` spot-check is still worth doing across screen / window / external-monitor sources
+(expect e.g. `1662×1080`, AR 1.540, no SAR hack). Bitrate honouring (~1.5 vs 8 Mbps on static
+content) is tracked as a separate follow-up — measure on a clip with motion before assuming a bug.
+
+The performance trade-off of routing non-16:9 screens through the canvas is tracked as a living
+indicator in [recording-compositor-perf](./recording-compositor-perf).
 
 ## Open questions (resolve when picked up)
 
