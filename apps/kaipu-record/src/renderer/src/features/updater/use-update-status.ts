@@ -6,10 +6,12 @@ export function useUpdateStatus(): UpdateStatus {
   const [status, setStatus] = useState<UpdateStatus>({ state: "idle" });
   useEffect(() => {
     let active = true;
-    void window.electronAPI.getUpdateStatus().then((s) => {
-      if (active) setStatus(s);
-    });
+    // Subscribe first, then seed — and let the seed only fill an as-yet-idle state,
+    // so a `ready` event that lands before the seed resolves is never clobbered.
     const unsubscribe = window.electronAPI.onUpdateStatus(setStatus);
+    void window.electronAPI.getUpdateStatus().then((s) => {
+      if (active) setStatus((prev) => (prev.state === "idle" ? s : prev));
+    });
     return () => {
       active = false;
       unsubscribe();
