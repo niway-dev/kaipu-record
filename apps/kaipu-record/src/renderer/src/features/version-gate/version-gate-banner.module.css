@@ -1,0 +1,30 @@
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  background: var(--accent-muted, #2a2f4a);
+  font-size: 0.875rem;
+}
+
+.message {
+  flex: 1;
+}
+
+.action {
+  padding: 0.3rem 0.75rem;
+  border: 0;
+  border-radius: 6px;
+  background: var(--accent, #5b7cfa);
+  color: white;
+  cursor: pointer;
+}
+
+.close {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
