@@ -37,6 +37,7 @@ registerMediaScheme();
 function createWindow(): void {
   // Create the browser window.
   mainWindow = new BrowserWindow({
+    title: "Kaipu Record",
     width: 900,
     height: 670,
     // Floor the size so neither the main UI nor the onboarding overlay can be
