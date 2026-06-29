@@ -75,6 +75,29 @@ jobs:
           bun run build
           bunx electron-builder --mac --arm64 --x64 --publish never
 
+      - name: Publish update feed + installers to R2
+        if: startsWith(github.ref, 'refs/tags/')
+        working-directory: apps/kaipu-record
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          VERSION="${GITHUB_REF_NAME#v}"
+          # Update feed (zip + blockmap + latest-mac.yml) -> updates/
+          aws s3 cp dist/ "s3://${R2_BUCKET}/updates/" --recursive \
+            --exclude "*" --include "*-mac.zip" --include "*-mac.zip.blockmap" --include "latest-mac.yml" \
+            --endpoint-url "$ENDPOINT"
+          # Installers -> download/<version>/ and download/latest/
+          for arch in arm64 x64; do
+            SRC="dist/kaipu-record-${VERSION}-${arch}.dmg"
+            aws s3 cp "$SRC" "s3://${R2_BUCKET}/download/${VERSION}/kaipu-${arch}.dmg" --endpoint-url "$ENDPOINT"
+            aws s3 cp "$SRC" "s3://${R2_BUCKET}/download/latest/kaipu-${arch}.dmg" --endpoint-url "$ENDPOINT"
+          done
+
       - name: Upload build as workflow artifact
         # Always downloadable from the run page — including manual dispatch runs
         # that don't create a Release. Lets you grab the DMG to test right away.
