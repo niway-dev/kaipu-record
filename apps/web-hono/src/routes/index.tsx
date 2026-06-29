@@ -11,7 +11,7 @@ export const Route = createFileRoute("/")({
 
 function LandingPage() {
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100">
+    <div className="min-h-screen bg-[var(--kaipu-bg-app)] text-[var(--kaipu-text-primary)]">
       <LandingNav />
       <Hero />
       <Features />

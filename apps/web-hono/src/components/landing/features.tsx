@@ -28,10 +28,13 @@ export function Features() {
     <section className="mx-auto max-w-5xl px-6 py-16">
       <div className="grid gap-6 sm:grid-cols-2">
         {FEATURES.map(({ icon: Icon, title, body }) => (
-          <div key={title} className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-6">
-            <Icon className="h-6 w-6 text-emerald-400" />
-            <h3 className="mt-4 font-semibold text-zinc-100">{title}</h3>
-            <p className="mt-2 text-sm text-zinc-400">{body}</p>
+          <div
+            key={title}
+            className="rounded-xl border border-[var(--kaipu-border)] bg-[var(--kaipu-bg-card)] p-6"
+          >
+            <Icon className="h-6 w-6 text-[var(--kaipu-accent)]" />
+            <h3 className="mt-4 font-semibold text-[var(--kaipu-text-primary)]">{title}</h3>
+            <p className="mt-2 text-sm text-[var(--kaipu-text-secondary)]">{body}</p>
           </div>
         ))}
       </div>

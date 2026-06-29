@@ -1,1 +1,21 @@
 @import "@kaipu/web-ui/styles.css";
+
+/*
+ * Kaipu Record desktop design tokens, mirrored here so the marketing landing uses
+ * the exact same palette as the Electron app (source of truth:
+ * apps/kaipu-record/src/renderer/src/assets/base.css). Prefixed with `--kaipu-` so
+ * they never clash with web-ui's shadcn tokens (--border, --primary, …) used by the
+ * app/auth routes.
+ */
+:root {
+  --kaipu-bg-app: #0f0f11;
+  --kaipu-bg-card: #171719;
+  --kaipu-bg-card-hover: #1e1e21;
+  --kaipu-border: #26262a;
+  --kaipu-border-light: #32323a;
+  --kaipu-text-primary: #e5e5e7;
+  --kaipu-text-secondary: #a1a1aa;
+  --kaipu-text-muted: #6b7280;
+  --kaipu-accent: #f6055c;
+  --kaipu-accent-hover: #d4044f;
+}
