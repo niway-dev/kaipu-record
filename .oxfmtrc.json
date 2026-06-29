@@ -9,6 +9,9 @@
     "**/.source/**",
     "**/convex/_generated/**",
     "**/workspace-temp/**",
-    "**/node_modules/**"
+    "**/node_modules/**",
+    "**/.astro/**",
+    "**/out/**",
+    "**/dist/**"
   ]
 }

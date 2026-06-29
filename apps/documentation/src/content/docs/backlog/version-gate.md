@@ -16,13 +16,13 @@ no infra failure can lock a user out.
 
 ## What shipped
 
-| Piece | What it does |
-| --- | --- |
+| Piece                                     | What it does                                                                                         |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | Pure model (`src/shared/version-gate.ts`) | `compareSemver`, `evaluateGate` (min→hard, latest→soft), `parseVersionGateConfig` (malformed → null) |
-| `app:get-version` IPC | exposes `app.getVersion()` to the renderer |
-| `fetchVersionGateConfig` | fetch + parse the remote config; null on any failure |
-| `useVersionGate` hook | startup + throttled (10 min) focus checks; caches last-good config; fail-open |
-| Overlay (hard) + banner (soft) | full-screen non-dismissible block / slim dismissible nudge, mounted in `AppShell` |
+| `app:get-version` IPC                     | exposes `app.getVersion()` to the renderer                                                           |
+| `fetchVersionGateConfig`                  | fetch + parse the remote config; null on any failure                                                 |
+| `useVersionGate` hook                     | startup + throttled (10 min) focus checks; caches last-good config; fail-open                        |
+| Overlay (hard) + banner (soft)            | full-screen non-dismissible block / slim dismissible nudge, mounted in `AppShell`                    |
 
 ## Config (hosted on Cloudflare, set `VITE_VERSION_GATE_URL` to its URL)
 

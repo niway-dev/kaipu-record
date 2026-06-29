@@ -16,6 +16,7 @@ description: Task-by-task TDD plan to build the fail-open remote-config version 
 **Spec:** `/specs/2026-06-28-version-gate-design`
 
 **Conventions (read before starting):**
+
 - Repo content (code, comments) is **English**; only end-user copy is Spanish.
 - **No TS enums** — `as const` + derived types.
 - Commit kaipu-record with `git commit --no-verify` (oxfmt churn hold).
@@ -47,6 +48,7 @@ All paths are relative to `apps/kaipu-record/`.
 ### Task 1: Pure model — types, constants, `compareSemver`
 
 **Files:**
+
 - Create: `src/shared/version-gate.ts`
 - Test: `src/shared/version-gate.test.ts`
 
@@ -147,6 +149,7 @@ git commit --no-verify -m "feat(version-gate): pure semver comparator + model ty
 ### Task 2: Pure model — `evaluateGate` + `parseVersionGateConfig`
 
 **Files:**
+
 - Modify: `src/shared/version-gate.ts`
 - Modify: `src/shared/version-gate.test.ts`
 
@@ -267,6 +270,7 @@ git commit --no-verify -m "feat(version-gate): evaluateGate + config parsing (fa
 ### Task 3: `app:get-version` IPC (plumbing)
 
 **Files:**
+
 - Modify: `src/shared/types/ipc.ts`
 - Modify: `src/main/index.ts`
 - Modify: `src/preload/index.ts`
@@ -328,6 +332,7 @@ git commit --no-verify -m "feat(version-gate): expose app.getVersion() over IPC"
 ### Task 4: `fetchVersionGateConfig`
 
 **Files:**
+
 - Create: `src/renderer/src/features/version-gate/fetch-version-gate-config.ts`
 - Test: `src/renderer/src/features/version-gate/fetch-version-gate-config.test.ts`
 
@@ -422,6 +427,7 @@ git commit --no-verify -m "feat(version-gate): fail-open remote config fetcher"
 ### Task 5: `useVersionGate` hook
 
 **Files:**
+
 - Create: `src/renderer/src/features/version-gate/use-version-gate.ts`
 - Test: `src/renderer/src/features/version-gate/use-version-gate.test.tsx`
 
@@ -572,6 +578,7 @@ git commit --no-verify -m "feat(version-gate): useVersionGate hook (throttled, f
 ### Task 6: Overlay + banner components
 
 **Files:**
+
 - Create: `src/renderer/src/features/version-gate/version-gate-overlay.tsx` + `.module.css`
 - Create: `src/renderer/src/features/version-gate/version-gate-banner.tsx` + `.module.css`
 - Test: `src/renderer/src/features/version-gate/version-gate-ui.test.tsx`
@@ -761,6 +768,7 @@ git commit --no-verify -m "feat(version-gate): overlay (hard) + banner (soft) UI
 ### Task 7: Barrel + wire into `AppShell` + env example
 
 **Files:**
+
 - Create: `src/renderer/src/features/version-gate/index.ts`
 - Modify: `src/renderer/src/shell/app-shell.tsx`
 - Modify: `.env.example`

@@ -105,7 +105,7 @@ Copy: use `config.message` when present, else a built-in default per kind. `down
 back to `DEFAULT_DOWNLOAD_URL`.
 
 > Simplification vs the original roadmap proposal: drop the separate `blocking` boolean — it is
-> redundant with `minVersion`. A hard block *is* "current < minVersion".
+> redundant with `minVersion`. A hard block _is_ "current < minVersion".
 
 ### 2. Fetch + hook — `src/renderer/src/features/version-gate/`
 
@@ -130,10 +130,10 @@ Hook behavior:
 - On mount: read the app version once (`getAppVersion()`); read `VITE_VERSION_GATE_URL`. If the
   env URL is absent → permanently `ok` (gate disabled, e.g. local dev).
 - Fetch on mount, then on every window `focus` **only if** `Date.now() - lastCheckedAt >
-  VERSION_GATE_THROTTLE_MS`. Update `lastCheckedAt` only on an actual fetch attempt.
+VERSION_GATE_THROTTLE_MS`. Update `lastCheckedAt` only on an actual fetch attempt.
 - Keep the **last-good** `VersionGateConfig` in a ref. A failed/throttled check reuses it; it is
-  never cleared by a failure (fail-open never *removes* a real hard block once seen, and never
-  *adds* one from a network blip).
+  never cleared by a failure (fail-open never _removes_ a real hard block once seen, and never
+  _adds_ one from a network blip).
 
 ### 3. UI — mounted in `AppShell`
 
@@ -141,7 +141,7 @@ Hook behavior:
   **non-dismissible** (no close button, no backdrop dismiss, swallows Escape). Message + an
   **Actualizar** button.
 - `version-gate-banner.tsx` — `kind: "soft"`: a slim dismissible banner. Message + **Actualizar**
-  + dismiss (dismissal is per-session, in component state; a later session/check shows it again).
+  - dismiss (dismissal is per-session, in component state; a later session/check shows it again).
 - The **Actualizar** button calls `window.open(downloadUrl, "_blank")`. The main process's
   existing `setWindowOpenHandler` (`src/main/index.ts`) routes it to `shell.openExternal` and
   denies the in-app window — so no new IPC for the link.
@@ -191,16 +191,16 @@ secondary).
 The central safety property: **a build is never locked out by an infra failure.** Every failure
 path resolves to `ok` (or the last-good config):
 
-| Failure | Result |
-| --- | --- |
-| `VITE_VERSION_GATE_URL` absent | `ok` (gate disabled) |
-| Network error / offline | last-good config, else `ok` |
-| Non-2xx response | last-good config, else `ok` |
+| Failure                                                    | Result                      |
+| ---------------------------------------------------------- | --------------------------- |
+| `VITE_VERSION_GATE_URL` absent                             | `ok` (gate disabled)        |
+| Network error / offline                                    | last-good config, else `ok` |
+| Non-2xx response                                           | last-good config, else `ok` |
 | Malformed / partial JSON (`parseVersionGateConfig` → null) | last-good config, else `ok` |
-| `app.getVersion()` unexpectedly empty | `ok` (cannot evaluate) |
+| `app.getVersion()` unexpectedly empty                      | `ok` (cannot evaluate)      |
 
 A real `hard` state, once fetched, persists across throttled/failed focus checks (last-good ref) —
-so a momentary blip can't *clear* a legitimate block, and can't *create* one.
+so a momentary blip can't _clear_ a legitimate block, and can't _create_ one.
 
 ---
 

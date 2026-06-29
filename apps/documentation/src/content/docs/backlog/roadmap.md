@@ -15,15 +15,15 @@ Status legend: ⬜ todo · 🔨 in progress · ✅ done
 
 ## Kill order
 
-| #   | Feature                                     | Priority    | Status | Depends on             |
-| --- | ------------------------------------------- | ----------- | ------ | ---------------------- |
-| 1   | Camera bubble (floating window)             | High        | ✅     | —                      |
-| 2   | Start recording from the Capture Panel (#4) | High · easy | ✅     | —                      |
-| 3   | Floating bar on the recorded display (#7)   | High · easy | ✅     | —                      |
-| 4   | Feature flags via PostHog                   | Medium      | ✅     | — (base for #6)        |
-| 5   | Configurable quality (non-technical copy)   | Medium      | ✅     | —                      |
-| 6   | Watermark, free → paid (scalable plan)      | Medium      | ✅\*   | plans API for `isPaid` |
-| 7   | Builds + distribution                       | High        | ✅†    | — (auto-update split)  |
+| #   | Feature                                     | Priority    | Status | Depends on              |
+| --- | ------------------------------------------- | ----------- | ------ | ----------------------- |
+| 1   | Camera bubble (floating window)             | High        | ✅     | —                       |
+| 2   | Start recording from the Capture Panel (#4) | High · easy | ✅     | —                       |
+| 3   | Floating bar on the recorded display (#7)   | High · easy | ✅     | —                       |
+| 4   | Feature flags via PostHog                   | Medium      | ✅     | — (base for #6)         |
+| 5   | Configurable quality (non-technical copy)   | Medium      | ✅     | —                       |
+| 6   | Watermark, free → paid (scalable plan)      | Medium      | ✅\*   | plans API for `isPaid`  |
+| 7   | Builds + distribution                       | High        | ✅†    | — (auto-update split)   |
 | 8   | Version gate / forced update                | Medium      | 🔨     | — (built independently) |
 
 > † #7's build → sign → notarize → GitHub Release path is **shipped & working**. The only
