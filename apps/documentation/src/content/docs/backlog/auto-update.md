@@ -5,8 +5,11 @@ description: Wire electron-updater against the real GitHub Releases feed so inst
 
 # Auto-update (electron-updater)
 
-> **Status: 🔵 Proposed** — split out of backlog #7 (builds + distribution). Its own branch
-> when we pick it up; captured here so nothing is lost.
+> **Status: 🟢 Ready to validate** — built on `feat/auto-update` (electron-updater + R2 feed +
+> dark landing page). Typecheck/lint/test green; prod review pending — needs the R2 bucket + the
+> four `R2_*` GitHub Secrets + the real `publish.url`/`VITE_PUBLIC_DOWNLOAD_URL` before a tagged
+> release exercises it. Spec: [/specs/2026-06-28-auto-update-design](/specs/2026-06-28-auto-update-design) ·
+> Plan: [/plans/2026-06-28-auto-update](/plans/2026-06-28-auto-update).
 
 The signed + notarized release pipeline already works (see
 [roadmap → #7](./roadmap#7--builds--distribution--shipped-auto-update-split-out)). What's
