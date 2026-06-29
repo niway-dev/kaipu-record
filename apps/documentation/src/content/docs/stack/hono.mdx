@@ -63,7 +63,7 @@ apps/server-hono/
 │       └── response-helpers.ts     # successBody, errorBody helpers (kept)
 ├── package.json                    # name: "server-hono"
 ├── tsconfig.json
-└── wrangler.jsonc                  # name: "server-hono-api"
+└── wrangler.jsonc                  # name: "kaipu-api"
 ```
 
 ### Web (`apps/web-hono/`)
@@ -102,7 +102,7 @@ apps/web-hono/
 ├── package.json                    # name: "web-hono"
 ├── tsconfig.json
 ├── vite.config.ts
-└── wrangler.jsonc                  # name: "web-hono", service: "server-hono-api"
+└── wrangler.jsonc                  # name: "kaipu-web", service: "kaipu-api"
 ```
 
 ## Key Patterns
@@ -366,9 +366,9 @@ onSuccess: async () => {
 
 - **Server port**: 3000 (inspector: 9229)
 - **Web port**: 3001 (inspector: 9230)
-- **Server wrangler name**: `server-hono-api`
-- **Web wrangler name**: `web-hono`
-- **Service Binding**: `API_SERVICE` → `server-hono-api`
+- **Server wrangler name**: `kaipu-api`
+- **Web wrangler name**: `kaipu-web`
+- **Service Binding**: `API_SERVICE` → `kaipu-api`
 
 ## Dev Commands
 

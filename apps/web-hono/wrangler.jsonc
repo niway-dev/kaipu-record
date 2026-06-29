@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "web-hono",
+  "name": "kaipu-web",
   "compatibility_date": "2025-10-04",
   "compatibility_flags": ["nodejs_compat"],
   "main": "@tanstack/react-start/server-entry",
@@ -22,7 +22,7 @@
   "services": [
     {
       "binding": "API_SERVICE",
-      "service": "server-hono-api",
+      "service": "kaipu-api",
     },
   ],
 }

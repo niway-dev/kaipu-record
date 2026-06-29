@@ -12,8 +12,8 @@ the matching GitHub Actions workflow runs.
 | Component                 | Tag pattern      | Workflow                                | Target                                                  |
 | ------------------------- | ---------------- | --------------------------------------- | ------------------------------------------------------- |
 | **Desktop** (Electron)    | `desktop-v*.*.*` | `.github/workflows/release-desktop.yml` | Signed macOS DMG/zip → Cloudflare R2 + a GitHub Release |
-| **Web** (landing + proxy) | `web-v*.*.*`     | `.github/workflows/deploy-web.yml`      | Cloudflare Worker (`web-hono`) → `kaipu.app`            |
-| **API** (backend)         | `api-v*.*.*`     | `.github/workflows/deploy-api.yml`      | Cloudflare Worker (`server-hono-api`)                   |
+| **Web** (landing + proxy) | `web-v*.*.*`     | `.github/workflows/deploy-web.yml`      | Cloudflare Worker (`kaipu-web`) → `kaipu.app`           |
+| **API** (backend)         | `api-v*.*.*`     | `.github/workflows/deploy-api.yml`      | Cloudflare Worker (`kaipu-api`)                         |
 
 Each also has a `workflow_dispatch` trigger, so you can run any of them manually from the **Actions**
 tab without cutting a tag.
@@ -74,7 +74,7 @@ buttons point at the R2 installers.
 ## First-deploy order (one-time)
 
 Deploy the **API first**, then the **web**. The web Worker reaches the API through a Cloudflare
-**Service Binding** (`API_SERVICE` → `server-hono-api`), so that Worker must already exist. After the
+**Service Binding** (`API_SERVICE` → `kaipu-api`), so that Worker must already exist. After the
 first deploy of each, they ship independently in any order.
 
 ## Domains
