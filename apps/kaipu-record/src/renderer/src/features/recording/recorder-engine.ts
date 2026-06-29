@@ -6,9 +6,14 @@ import {
   StreamTarget,
   type StreamTargetChunk,
 } from "mediabunny";
-import { AUDIO_BITRATE_BPS, DEFAULT_QUALITY, qualityToEngine } from "@shared/recording-quality";
+import {
+  AUDIO_BITRATE_BPS,
+  DEFAULT_QUALITY,
+  fitToCap,
+  qualityToEngine,
+} from "@shared/recording-quality";
 import type { WatermarkConfig } from "@renderer/features/watermark/watermark";
-import { startWatermarkCompositor, type WatermarkCompositor } from "./watermark-compositor";
+import { startRecordingCompositor, type RecordingCompositor } from "./recording-compositor";
 import { levelsFromTimeDomain } from "./audio-levels";
 
 export interface EngineHandle {
@@ -56,18 +61,29 @@ export interface EngineOptions {
 // restated here; the single source of truth is `shared/recording-quality.ts`.
 const ENGINE_DEFAULTS = qualityToEngine(DEFAULT_QUALITY);
 
+// Capture ceiling — sits above any real display (8K). Passing a box LARGER than
+// the screen makes Chromium return native frames untouched; passing a smaller,
+// non-matching box (the old 1920×1080) is what squeezed non-16:9 panels into
+// 16:9. The real output size is derived from the measured native dimensions
+// (`fitToCap`) and applied, undistorted, by the compositor.
+const CAPTURE_CEILING = { width: 7680, height: 4320 } as const;
+
 /**
  * Acquire screen + mic, mix audio, and start encoding to MP4 (H.264/AAC) via
  * mediabunny, streaming chunks out through `onChunk`. Returns a handle for
  * pause/resume/stop and live levels.
  */
 export async function startEngine(options: EngineOptions): Promise<EngineHandle> {
-  const width = options.width ?? ENGINE_DEFAULTS.width;
-  const height = options.height ?? ENGINE_DEFAULTS.height;
+  // The resolution preset is a HEIGHT CAP, not a fixed 16:9 box. Width is only a
+  // fallback for the source aspect ratio when the track can't report its size.
+  const capHeight = options.height ?? ENGINE_DEFAULTS.height;
+  const fallbackWidth = options.width ?? ENGINE_DEFAULTS.width;
   const frameRate = options.frameRate ?? ENGINE_DEFAULTS.frameRate;
   const videoBitrate = options.videoBitrate ?? ENGINE_DEFAULTS.videoBitrate;
 
-  // 1. Screen (deterministic Electron desktop capture by source id).
+  // 1. Screen (deterministic Electron desktop capture by source id). Capture at
+  // the display's NATIVE resolution (ceiling above any real screen) so frames are
+  // never squeezed into a non-matching box.
   const screenStream = await navigator.mediaDevices.getUserMedia({
     audio: options.systemAudio
       ? ({ mandatory: { chromeMediaSource: "desktop" } } as MediaTrackConstraints)
@@ -77,21 +93,37 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
       mandatory: {
         chromeMediaSource: "desktop",
         chromeMediaSourceId: options.sourceId,
-        maxWidth: width,
-        maxHeight: height,
+        maxWidth: CAPTURE_CEILING.width,
+        maxHeight: CAPTURE_CEILING.height,
         maxFrameRate: frameRate,
       },
     },
   });
   const screenTrack = screenStream.getVideoTracks()[0];
 
-  // 1b. Watermark (optional): composite the screen through a canvas and encode
-  // THAT track. Failure detection still watches the original `screenTrack` (the
-  // canvas track never "ends" when the user stops sharing).
-  let compositor: WatermarkCompositor | null = null;
+  // 1b. Derive the real output size from the MEASURED native dimensions, keeping
+  // the screen's true aspect ratio (so a 3024×1964 MacBook records as 1662×1080,
+  // not a stretched 1920×1080).
+  const captured = screenTrack.getSettings();
+  const sourceW = captured.width ?? fallbackWidth;
+  const sourceH = captured.height ?? capHeight;
+  const target = fitToCap(sourceW, sourceH, capHeight);
+
+  // 1c. Composite through a canvas only when we must downscale to the target OR
+  // burn a watermark; a native frame already at the target with no watermark is
+  // encoded raw (zero added cost). The downscale is uniform — `target` keeps the
+  // source AR — so nothing is stretched. Failure detection still watches the
+  // original `screenTrack` (the canvas track never "ends" when sharing stops).
+  const needsResize = target.width !== sourceW || target.height !== sourceH;
+  let compositor: RecordingCompositor | null = null;
   let encodeTrack = screenTrack;
-  if (options.watermark) {
-    compositor = await startWatermarkCompositor(screenStream, options.watermark, frameRate);
+  if (options.watermark || needsResize) {
+    compositor = await startRecordingCompositor(
+      screenStream,
+      target,
+      options.watermark ?? null,
+      frameRate,
+    );
     encodeTrack = compositor.track;
   }
 
@@ -185,8 +217,8 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
   audioSource?.errorPromise.catch(notifyError);
   screenTrack.addEventListener("ended", () => notifyError(new Error("screen capture ended")));
 
-  // 5. Poster thumbnail from the first screen frame.
-  const thumbnail = await captureThumbnail(screenStream);
+  // 5. Poster thumbnail from the first screen frame, at the real output size.
+  const thumbnail = await captureThumbnail(screenStream, target);
 
   return {
     pause: () => {
@@ -213,7 +245,10 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
   };
 }
 
-async function captureThumbnail(stream: MediaStream): Promise<ArrayBuffer | null> {
+async function captureThumbnail(
+  stream: MediaStream,
+  target: { width: number; height: number },
+): Promise<ArrayBuffer | null> {
   try {
     const video = document.createElement("video");
     video.srcObject = stream;
@@ -221,8 +256,9 @@ async function captureThumbnail(stream: MediaStream): Promise<ArrayBuffer | null
     await video.play();
     await new Promise((r) => setTimeout(r, 150));
     const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth || 1280;
-    canvas.height = video.videoHeight || 720;
+    // Draw at the real output size — uniform scale (target keeps the source AR).
+    canvas.width = target.width || video.videoWidth || 1280;
+    canvas.height = target.height || video.videoHeight || 720;
     canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
     video.pause();
     const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, "image/jpeg", 0.7));
