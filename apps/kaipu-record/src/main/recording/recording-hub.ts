@@ -11,6 +11,7 @@ import type {
 import { ControlBarWindow } from "./control-bar-window";
 import { CameraBubbleWindow } from "./camera-bubble-window";
 import { RecordingWriter, timestampId } from "./recording-writer";
+import { IDLE_ACTIVITY, applyTick, startedActivity, stoppedActivity } from "./recording-activity";
 import { vaultDirectory } from "../library/vault-location";
 import {
   applyDockPolicy,
@@ -36,8 +37,9 @@ export function registerRecordingHub(getMainWindow: () => BrowserWindow | null):
 
   // Single source of truth for "is a recording happening", broadcast to every
   // window so non-recorder windows (reopened Record page, Capture Panel) can
-  // reflect it and refuse to start a second recording.
-  const activity: RecordingActivity = { active: false, status: "recording", elapsedSeconds: 0 };
+  // reflect it and refuse to start a second recording. Transitions live in the
+  // pure `recording-activity` module; the hub only owns the broadcast.
+  let activity: RecordingActivity = IDLE_ACTIVITY;
   const broadcastActivity = (): void => {
     for (const window of BrowserWindow.getAllWindows()) {
       if (!window.isDestroyed()) {
@@ -102,9 +104,7 @@ export function registerRecordingHub(getMainWindow: () => BrowserWindow | null):
 
   // ── Window orchestration ────────────────────────────────────────────
   ipcMain.on(IPC_CHANNELS.recordingStart, (_e, info: RecordingStartInfo) => {
-    activity.active = true;
-    activity.status = "recording";
-    activity.elapsedSeconds = 0;
+    activity = startedActivity();
     getMainWindow()?.hide();
     // The main window is now hidden; force the app to stay in the Dock/Cmd+Tab so
     // it isn't lost while only the floating panels are visible. Restored on stop.
@@ -117,7 +117,7 @@ export function registerRecordingHub(getMainWindow: () => BrowserWindow | null):
     );
   });
   ipcMain.on(IPC_CHANNELS.recordingStop, () => {
-    activity.active = false;
+    activity = stoppedActivity(activity);
     bar.hide();
     const main = getMainWindow();
     main?.show();
@@ -133,14 +133,9 @@ export function registerRecordingHub(getMainWindow: () => BrowserWindow | null):
   // ── Relay ────────────────────────────────────────────────────────────
   ipcMain.on(IPC_CHANNELS.recordingReportTick, (_e, tick: RecordingTick) => {
     bar.send(IPC_CHANNELS.controlTick, tick);
-    if (!activity.active) return;
-    // Re-broadcast global activity when the status changes (pause/resume/saving)
-    // or the whole-second timer advances — never on every 10/s tick.
-    if (tick.status !== activity.status || tick.elapsedSeconds !== activity.elapsedSeconds) {
-      activity.status = tick.status;
-      activity.elapsedSeconds = tick.elapsedSeconds;
-      broadcastActivity();
-    }
+    const next = applyTick(activity, tick);
+    activity = next.activity;
+    if (next.changed) broadcastActivity();
   });
   ipcMain.on(IPC_CHANNELS.controlCommand, (_e, command: ControlCommand) => {
     getMainWindow()?.webContents.send(IPC_CHANNELS.recordingCommand, command);
