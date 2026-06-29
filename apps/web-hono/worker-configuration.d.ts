@@ -4,12 +4,8 @@
 declare namespace Cloudflare {
   interface Env {
     DATABASE_URL: string;
-    DATABASE_URL_DIRECT: string;
     VITE_SERVER_URL: string;
     ENVIRONMENT: string;
-    BETTER_AUTH_SECRET: string;
-    BETTER_AUTH_URL: string;
-    CORS_ORIGIN: string;
     API_SERVICE: Fetcher /* server-hono-api */;
     ASSETS: Fetcher;
   }
@@ -20,16 +16,7 @@ type StringifyValues<EnvType extends Record<string, unknown>> = {
 };
 declare namespace NodeJS {
   interface ProcessEnv extends StringifyValues<
-    Pick<
-      Cloudflare.Env,
-      | "DATABASE_URL"
-      | "DATABASE_URL_DIRECT"
-      | "VITE_SERVER_URL"
-      | "ENVIRONMENT"
-      | "BETTER_AUTH_SECRET"
-      | "BETTER_AUTH_URL"
-      | "CORS_ORIGIN"
-    >
+    Pick<Cloudflare.Env, "DATABASE_URL" | "VITE_SERVER_URL" | "ENVIRONMENT">
   > {}
 }
 

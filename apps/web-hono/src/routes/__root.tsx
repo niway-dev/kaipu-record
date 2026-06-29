@@ -1,7 +1,13 @@
 import type { QueryClient } from "@tanstack/react-query";
 
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
-import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from "@tanstack/react-router";
+import {
+  HeadContent,
+  Outlet,
+  Scripts,
+  createRootRouteWithContext,
+  useRouterState,
+} from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 
 import { Toaster } from "@kaipu/web-ui";
@@ -28,7 +34,7 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
         content: "width=device-width, initial-scale=1",
       },
       {
-        title: "Monorepo Template",
+        title: "Kaipu Record — Grabá tu pantalla, sin complicaciones",
       },
     ],
     links: [
@@ -63,6 +69,9 @@ function RootDocument() {
   const context = Route.useRouteContext();
   const { isAuthenticated, session } = context;
 
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const isLanding = pathname === "/";
+
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
       <head>
@@ -71,12 +80,14 @@ function RootDocument() {
       </head>
       <body suppressHydrationWarning>
         <div className="min-h-svh">
-          <Header
-            isAuthenticated={isAuthenticated}
-            userName={session?.user?.name ?? ""}
-            userEmail={session?.user?.email ?? ""}
-          />
-          <main className="pt-12">
+          {!isLanding && (
+            <Header
+              isAuthenticated={isAuthenticated}
+              userName={session?.user?.name ?? ""}
+              userEmail={session?.user?.email ?? ""}
+            />
+          )}
+          <main className={isLanding ? "" : "pt-12"}>
             <Outlet />
           </main>
         </div>

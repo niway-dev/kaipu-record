@@ -1,9 +1,9 @@
 {
   "name": "kaipu-record",
-  "version": "1.0.0",
-  "description": "An Electron application with React and TypeScript",
-  "homepage": "https://electron-vite.org",
-  "author": "example.com",
+  "version": "0.1.0",
+  "description": "Kaipu Record — local-first screen + camera recorder for macOS.",
+  "homepage": "https://kaipu.app",
+  "author": "Niway",
   "main": "./out/main/index.js",
   "scripts": {
     "format": "oxfmt --write .",

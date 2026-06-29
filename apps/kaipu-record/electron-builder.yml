@@ -1,5 +1,5 @@
 appId: com.niway.kaipu-record
-productName: Kaipu Recorder
+productName: Kaipu Record
 directories:
   buildResources: build
 files:
@@ -30,10 +30,10 @@ mac:
   # the team, so no teamId is needed here. Without the vars the build is signed-only.
   notarize: true
   extendInfo:
-    NSMicrophoneUsageDescription: Kaipu Recorder usa el micrófono para grabar audio.
-    NSCameraUsageDescription: Kaipu Recorder usa la cámara para grabar video.
-    NSDocumentsFolderUsageDescription: Kaipu Recorder guarda tus grabaciones en la carpeta Documentos.
-    NSDownloadsFolderUsageDescription: Kaipu Recorder guarda tus grabaciones en la carpeta Descargas.
+    NSMicrophoneUsageDescription: Kaipu Record usa el micrófono para grabar audio.
+    NSCameraUsageDescription: Kaipu Record usa la cámara para grabar video.
+    NSDocumentsFolderUsageDescription: Kaipu Record guarda tus grabaciones en la carpeta Documentos.
+    NSDownloadsFolderUsageDescription: Kaipu Record guarda tus grabaciones en la carpeta Descargas.
 dmg:
   # ${arch} is required: arm64 + x64 builds would otherwise collide on one name.
   artifactName: ${name}-${version}-${arch}.${ext}
@@ -49,6 +49,6 @@ appImage:
 npmRebuild: false
 publish:
   provider: generic
-  url: https://example.com/auto-updates
+  url: https://updates.kaipu.app/updates/ # public R2 custom domain — must be bound to the bucket before the first release
 electronDownload:
   mirror: https://npmmirror.com/mirrors/electron/

@@ -53,6 +53,7 @@ export default defineConfig({
             { slug: "backlog/roadmap" },
             { slug: "backlog/version-gate" },
             { slug: "backlog/auto-update" },
+            { slug: "backlog/shared-tokens-package" },
             { slug: "backlog/playwright-e2e" },
             { slug: "backlog/settings-roadmap" },
             { slug: "backlog/shortcuts" },
@@ -62,6 +63,10 @@ export default defineConfig({
         {
           label: "Architecture",
           autogenerate: { directory: "architecture" },
+        },
+        {
+          label: "Deployment",
+          autogenerate: { directory: "deployment" },
         },
         {
           label: "Authentication",

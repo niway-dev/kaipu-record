@@ -10,6 +10,7 @@ import { registerPermissionHandlers } from "./permissions";
 import { registerLibraryVaultHandlers } from "./library";
 import { registerMediaProtocol, registerMediaScheme } from "./media-protocol";
 import { registerRecordingHub } from "./recording/recording-hub";
+import { initAutoUpdater, getUpdateStatus, installDownloadedUpdate } from "./updater/auto-updater";
 import {
   registerSettings,
   getDeviceId,
@@ -36,6 +37,7 @@ registerMediaScheme();
 function createWindow(): void {
   // Create the browser window.
   mainWindow = new BrowserWindow({
+    title: "Kaipu Record",
     width: 900,
     height: 670,
     // Floor the size so neither the main UI nor the onboarding overlay can be
@@ -172,6 +174,11 @@ app.whenReady().then(() => {
 
   // Library: local recordings vault.
   registerLibraryVaultHandlers();
+
+  // Auto-update (packaged builds only). Silent download; renderer shows a restart banner.
+  initAutoUpdater(() => mainWindow);
+  ipcMain.handle(IPC_CHANNELS.updateGetStatus, () => getUpdateStatus());
+  ipcMain.on(IPC_CHANNELS.updateInstall, () => installDownloadedUpdate());
 
   // macOS media permissions (onboarding + settings).
   registerPermissionHandlers();
