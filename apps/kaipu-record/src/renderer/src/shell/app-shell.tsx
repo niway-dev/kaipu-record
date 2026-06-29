@@ -2,6 +2,11 @@ import { useEffect } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
 import { Sidebar } from "./sidebar";
 import { useShortcutLabels } from "@renderer/features/shortcuts/use-shortcut-labels";
+import {
+  useVersionGate,
+  VersionGateOverlay,
+  VersionGateBanner,
+} from "@renderer/features/version-gate";
 import styles from "./app-shell.module.css";
 
 /**
@@ -12,6 +17,7 @@ import styles from "./app-shell.module.css";
 export function AppShell(): React.JSX.Element {
   const navigate = useNavigate();
   const shortcuts = useShortcutLabels();
+  const gate = useVersionGate();
 
   // A global "start recording" (the hotkey or the Capture Panel) can arrive on any
   // route — the recorder lives on the Record page, so bring the user there and
@@ -27,6 +33,9 @@ export function AppShell(): React.JSX.Element {
 
   return (
     <div className={styles.shell}>
+      {gate.kind === "soft" && (
+        <VersionGateBanner message={gate.message} downloadUrl={gate.downloadUrl} />
+      )}
       <div className={styles.body}>
         <Sidebar />
         <main className={styles.content}>
@@ -47,6 +56,9 @@ export function AppShell(): React.JSX.Element {
             <kbd>{shortcuts.bringToFront}</kbd> show app
           </span>
         </div>
+      )}
+      {gate.kind === "hard" && (
+        <VersionGateOverlay message={gate.message} downloadUrl={gate.downloadUrl} />
       )}
     </div>
   );

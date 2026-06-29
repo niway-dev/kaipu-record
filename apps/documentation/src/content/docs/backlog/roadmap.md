@@ -15,16 +15,20 @@ Status legend: ⬜ todo · 🔨 in progress · ✅ done
 
 ## Kill order
 
-| #   | Feature                                     | Priority    | Status | Depends on             |
-| --- | ------------------------------------------- | ----------- | ------ | ---------------------- |
-| 1   | Camera bubble (floating window)             | High        | ✅     | —                      |
-| 2   | Start recording from the Capture Panel (#4) | High · easy | ✅     | —                      |
-| 3   | Floating bar on the recorded display (#7)   | High · easy | ✅     | —                      |
-| 4   | Feature flags via PostHog                   | Medium      | ✅     | — (base for #6)        |
-| 5   | Configurable quality (non-technical copy)   | Medium      | ✅     | —                      |
-| 6   | Watermark, free → paid (scalable plan)      | Medium      | ✅\*   | plans API for `isPaid` |
-| 7   | Builds + distribution                       | High        | ⬜     | Apple Developer acct   |
-| 8   | Version gate / forced update                | Medium      | ⬜     | #7 for auto-update     |
+| #   | Feature                                     | Priority    | Status | Depends on              |
+| --- | ------------------------------------------- | ----------- | ------ | ----------------------- |
+| 1   | Camera bubble (floating window)             | High        | ✅     | —                       |
+| 2   | Start recording from the Capture Panel (#4) | High · easy | ✅     | —                       |
+| 3   | Floating bar on the recorded display (#7)   | High · easy | ✅     | —                       |
+| 4   | Feature flags via PostHog                   | Medium      | ✅     | — (base for #6)         |
+| 5   | Configurable quality (non-technical copy)   | Medium      | ✅     | —                       |
+| 6   | Watermark, free → paid (scalable plan)      | Medium      | ✅\*   | plans API for `isPaid`  |
+| 7   | Builds + distribution                       | High        | ✅†    | — (auto-update split)   |
+| 8   | Version gate / forced update                | Medium      | 🔨     | — (built independently) |
+
+> † #7's build → sign → notarize → GitHub Release path is **shipped & working**. The only
+> remaining piece, **auto-update** (`electron-updater` + a real feed), is split into its own
+> backlog item — see [auto-update](./auto-update).
 
 ### Shipped beyond the kill order ✅
 
@@ -163,34 +167,34 @@ directly — the PostHog flag gates the watermark in production. **The one remai
 plans/entitlement API exists; nothing else changes. The definition of "paid" must stay a
 **configurable, scalable plan/entitlement**, not a hardcoded boolean.
 
-## 7 — Builds + distribution ⬜ (next up — blocked on Apple Developer account)
+## 7 — Builds + distribution ✅ (shipped; auto-update split out)
 
-**Current state in the repo (2026-06-27):**
+**Shipped & working (verified by installing a released build):**
 
-- `electron-updater@6.3.9` + `electron-builder@26` are **already dependencies**, but
-  electron-updater is **NOT wired** — zero `autoUpdater`/`checkForUpdates` usage in
-  `src/main`. Only declared.
-- `electron-builder.yml` has `publish: { provider: generic, url: https://example.com/auto-updates }`
-  — the URL is a **placeholder** that must be replaced with the real update feed.
-- App `version` is `1.0.0`.
-- No code signing / notarization configured.
+- The **Apple Developer account is set up** — signing + notarization secrets live in the
+  `production` GitHub Environment (`CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_API_KEY` +
+  `APPLE_API_KEY_ID` + `APPLE_API_ISSUER`).
+- **`.github/workflows/release-desktop.yml`** builds macOS (arm64 + x64), **signs with
+  Developer ID + notarizes**, and attaches the DMG/zip (+ `latest-mac.yml` + `.blockmap`) to
+  a **draft GitHub Release** on a `v*.*.*` tag push. Manual `workflow_dispatch` also uploads a
+  workflow artifact for quick testing.
+- End-to-end confirmed: **tag → notarized DMG → download → install** works.
 
-**What we need from you (Apple Developer parameters to gather):**
+**The one remaining piece — auto-update — is split into its own item:** `electron-updater`
+is **not wired** (zero `autoUpdater`/`checkForUpdates` in `src/main`), and
+`electron-builder.yml` still has the placeholder `publish.url`
+(`https://example.com/auto-updates`). The release already ships the exact feed assets the
+updater needs (`latest-mac.yml` + `.blockmap`). See [auto-update](./auto-update).
 
-- **Apple Developer Program** membership ($99/yr) → your **Team ID**.
-- **Developer ID Application** certificate (`.p12`) + its password — for signing the `.app`/`.dmg`.
-- For **notarization** (notarytool): an **App Store Connect API key** (Issuer ID + Key ID +
-  the `.p8` file) **or** an Apple ID + app-specific password.
-- A **bundle identifier** (e.g. `com.kaipu.record`).
-- **Hardened runtime + entitlements** (mic, camera, screen recording) for the signed build.
-- **Where updates are hosted** (the real `publish.url`): S3 / Cloudflare R2 / GitHub Releases /
-  a generic static host.
+## 8 — Version gate / forced update 🟢 READY TO VALIDATE (branch `feat/version-gate`)
 
-**Plan once unblocked:** electron-builder mac config (sign + notarize), a release/CI pipeline,
-wire electron-updater (`checkForUpdatesAndNotify`) against the real feed, and the update channel
-strategy (stable/beta). Largely parallel to feature work but **gated on the Apple account**.
-
-## 8 — Version gate / forced update ⏸️ PAUSED (2026-06-27 — revisit with #7)
+> **Built & decoupled from #7.** Ships without auto-update: the "Actualizar" button opens the
+> GitHub Releases page until `electron-updater` lands. Renderer-only logic; config from a
+> **dedicated remote JSON on Cloudflare** (URL via `VITE_VERSION_GATE_URL`); check on **startup +
+> window focus, throttled to 10 min**, fail-open with last-good cache; **full-screen
+> non-dismissible overlay** for a hard block, dismissible banner for a soft nudge. See the
+> [version-gate backlog doc](./version-gate), the [spec](/specs/2026-06-28-version-gate-design)
+> and the [plan](/plans/2026-06-28-version-gate). The original proposal below is kept for context.
 
 **What the user asked for:** for a **beta** product, manage versions per release and a way to
 **force updates** — both a soft "actualiza para seguir usando" and a hard "esta versión ya no

@@ -51,6 +51,8 @@ export default defineConfig({
           items: [
             { slug: "backlog" },
             { slug: "backlog/roadmap" },
+            { slug: "backlog/version-gate" },
+            { slug: "backlog/auto-update" },
             { slug: "backlog/playwright-e2e" },
             { slug: "backlog/settings-roadmap" },
             { slug: "backlog/shortcuts" },

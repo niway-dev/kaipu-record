@@ -5,6 +5,7 @@ interface ImportMetaEnv {
   readonly VITE_POSTHOG_HOST?: string;
   readonly VITE_POSTHOG_PRODUCT?: string;
   readonly VITE_POSTHOG_SURFACE?: string;
+  readonly VITE_VERSION_GATE_URL?: string;
 }
 
 interface ImportMeta {

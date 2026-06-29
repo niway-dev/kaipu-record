@@ -142,6 +142,9 @@ app.whenReady().then(() => {
   // Capture Panel "Start" → open the main window and tell its Record page to start.
   ipcMain.on(IPC_CHANNELS.recordingRequestStart, triggerStartRecording);
 
+  // App version for the renderer-side version gate.
+  ipcMain.handle(IPC_CHANNELS.getAppVersion, () => app.getVersion());
+
   // Per-action registration state of the global shortcuts (for the Settings UI).
   ipcMain.handle(IPC_CHANNELS.shortcutsGetStatus, () => getShortcutStatus());
   // While the Settings UI captures a new binding, release the global shortcuts so
