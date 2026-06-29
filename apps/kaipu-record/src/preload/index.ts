@@ -7,11 +7,19 @@ import type {
   RecordingActivity,
   RecordingSettings,
   RecordingTick,
+  UpdateStatus,
 } from "@shared/types/ipc";
 
 // Custom Kaipu bridge. Only methods with a live main-process handler are exposed.
 const kaipuApi: KaipuElectronAPI = {
   getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.getAppVersion),
+  getUpdateStatus: () => ipcRenderer.invoke(IPC_CHANNELS.updateGetStatus),
+  onUpdateStatus: (callback) => {
+    const listener = (_e: IpcRendererEvent, status: UpdateStatus): void => callback(status);
+    ipcRenderer.on(IPC_CHANNELS.updateStatus, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.updateStatus, listener);
+  },
+  installUpdate: () => ipcRenderer.send(IPC_CHANNELS.updateInstall),
   getSettings: () => ipcRenderer.invoke(IPC_CHANNELS.getSettings),
   updateSettings: (patch) => ipcRenderer.invoke(IPC_CHANNELS.updateSettings, patch),
   getScreenSources: () => ipcRenderer.invoke("recording:get-screen-sources"),

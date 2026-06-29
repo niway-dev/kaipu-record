@@ -70,6 +70,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
  */
 export const IPC_CHANNELS = {
   getAppVersion: "app:get-version",
+  updateGetStatus: "update:get-status",
+  updateStatus: "update:status",
+  updateInstall: "update:install",
   getSettings: "settings:get",
   updateSettings: "settings:update",
   checkPermissions: "permissions:check",
@@ -120,6 +123,9 @@ export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
 
 /** `saving` covers the brief finalize/encode-flush window after Stop. */
 export type RecordingStatus = "recording" | "paused" | "saving";
+
+/** Auto-update state surfaced to the renderer. `ready` = a build is downloaded and installable. */
+export type UpdateStatus = { state: "idle" } | { state: "ready"; version: string };
 
 export interface RecordingTick {
   elapsedSeconds: number;

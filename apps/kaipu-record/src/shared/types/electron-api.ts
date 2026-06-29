@@ -4,7 +4,7 @@
  */
 
 import type { SerializedError } from "../analytics";
-import type { AppSettings, ShortcutAction } from "./ipc";
+import type { AppSettings, ShortcutAction, UpdateStatus } from "./ipc";
 import type { LocalRecording, VaultDirectory } from "./library-storage";
 import type {
   ControlCommand,
@@ -32,6 +32,12 @@ export type PermissionStatus = Record<PermissionKind, boolean>;
 export interface KaipuElectronAPI {
   /** The running app version (`app.getVersion()`), used by the version gate. */
   getAppVersion(): Promise<string>;
+  /** Current auto-update status (for UI that mounts after the event fired). */
+  getUpdateStatus(): Promise<UpdateStatus>;
+  /** Subscribe to auto-update status changes. Returns an unsubscribe fn. */
+  onUpdateStatus(callback: (status: UpdateStatus) => void): () => void;
+  /** Quit and install a downloaded update (the "Reiniciar" button). */
+  installUpdate(): void;
   /** Read persisted app settings. */
   getSettings(): Promise<AppSettings>;
   /** Merge a partial settings change; persists + applies OS side effects; returns the result. */
