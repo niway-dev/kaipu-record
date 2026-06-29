@@ -10,6 +10,7 @@ import { registerPermissionHandlers } from "./permissions";
 import { registerLibraryVaultHandlers } from "./library";
 import { registerMediaProtocol, registerMediaScheme } from "./media-protocol";
 import { registerRecordingHub } from "./recording/recording-hub";
+import { initAutoUpdater, getUpdateStatus, installDownloadedUpdate } from "./updater/auto-updater";
 import {
   registerSettings,
   getDeviceId,
@@ -172,6 +173,11 @@ app.whenReady().then(() => {
 
   // Library: local recordings vault.
   registerLibraryVaultHandlers();
+
+  // Auto-update (packaged builds only). Silent download; renderer shows a restart banner.
+  initAutoUpdater(() => mainWindow);
+  ipcMain.handle(IPC_CHANNELS.updateGetStatus, () => getUpdateStatus());
+  ipcMain.on(IPC_CHANNELS.updateInstall, () => installDownloadedUpdate());
 
   // macOS media permissions (onboarding + settings).
   registerPermissionHandlers();
