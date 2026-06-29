@@ -42,7 +42,6 @@ jobs:
         env:
           VITE_SERVER_URL: https://placeholder.example.com
           DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
-          BETTER_AUTH_SECRET: placeholder-secret-for-build-validation
         run: bun run build
 
       - name: Build backend

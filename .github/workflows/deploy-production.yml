@@ -34,7 +34,6 @@ jobs:
         env:
           VITE_SERVER_URL: ${{ vars.VITE_SERVER_URL }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
         run: bun run build
 
       - name: Deploy to Cloudflare Workers
@@ -48,14 +47,12 @@ jobs:
             CLOUDFLARE_API_TOKEN
             CLOUDFLARE_ACCOUNT_ID
             DATABASE_URL
-            BETTER_AUTH_SECRET
         env:
           ENVIRONMENT: production
           VITE_SERVER_URL: ${{ vars.VITE_SERVER_URL }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
 
       - name: Deploy Backend to Cloudflare Workers
         uses: cloudflare/wrangler-action@v3.14.1
@@ -65,11 +62,9 @@ jobs:
           workingDirectory: apps/server-hono
           secrets: |
             DATABASE_URL
-            DATABASE_URL_DIRECT
             BETTER_AUTH_SECRET
             CORS_ORIGIN
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DATABASE_URL_DIRECT: ${{ secrets.DATABASE_URL_DIRECT }}
           CORS_ORIGIN: ${{ vars.CORS_ORIGIN }}
           BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
