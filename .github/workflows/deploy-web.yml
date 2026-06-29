@@ -1,15 +1,24 @@
-name: Deploy to Production
+name: Deploy Web
+
+# Deploys the web app (landing + proxy) to its Cloudflare Worker.
+# Trigger: push a `web-v*` tag (e.g. `web-v1.2.0`) so the web versions
+# independently from desktop and api.
 
 on:
   push:
-    branches:
-      - production
+    tags:
+      - "web-v*.*.*"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
 
 jobs:
-  deploy-production:
-    name: Deploy to production
+  deploy-web:
+    name: Build & deploy web
     runs-on: ubuntu-latest
-    environment: production
+    environment: production # Cloudflare + build secrets live here
 
     steps:
       - name: Checkout code
@@ -34,6 +43,8 @@ jobs:
         env:
           VITE_SERVER_URL: ${{ vars.VITE_SERVER_URL }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # Public R2 base for the landing's download buttons.
+          VITE_PUBLIC_DOWNLOAD_URL: https://updates.kaipu.app
         run: bun run build
 
       - name: Deploy to Cloudflare Workers
@@ -44,27 +55,8 @@ jobs:
           workingDirectory: apps/web-hono
           secrets: |
             VITE_SERVER_URL
-            CLOUDFLARE_API_TOKEN
-            CLOUDFLARE_ACCOUNT_ID
             DATABASE_URL
         env:
           ENVIRONMENT: production
           VITE_SERVER_URL: ${{ vars.VITE_SERVER_URL }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-
-      - name: Deploy Backend to Cloudflare Workers
-        uses: cloudflare/wrangler-action@v3.14.1
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: apps/server-hono
-          secrets: |
-            DATABASE_URL
-            BETTER_AUTH_SECRET
-            CORS_ORIGIN
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          CORS_ORIGIN: ${{ vars.CORS_ORIGIN }}
-          BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}

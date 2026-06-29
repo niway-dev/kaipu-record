@@ -19,7 +19,8 @@ name: Release Desktop
 on:
   push:
     tags:
-      - "v*.*.*"
+      # Component-prefixed tags so desktop/web/api version independently.
+      - "desktop-v*.*.*"
   workflow_dispatch:
 
 concurrency:
@@ -86,7 +87,7 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
         run: |
           ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${GITHUB_REF_NAME#desktop-v}"
           # Update feed (zip + blockmap + latest-mac.yml) -> updates/
           aws s3 cp dist/ "s3://${R2_BUCKET}/updates/" --recursive \
             --exclude "*" --include "*-mac.zip" --include "*-mac.zip.blockmap" --include "latest-mac.yml" \

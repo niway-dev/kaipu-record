@@ -1,0 +1,54 @@
+name: Deploy API
+
+# Deploys the backend API to its Cloudflare Worker.
+# Trigger: push an `api-v*` tag (e.g. `api-v1.2.0`) so the api versions
+# independently from desktop and web.
+
+on:
+  push:
+    tags:
+      - "api-v*.*.*"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  deploy-api:
+    name: Deploy API
+    runs-on: ubuntu-latest
+    environment: production # Cloudflare + runtime secrets live here
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.4
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install Wrangler
+        run: bun add -g wrangler
+
+      - name: Build packages only
+        run: bun run build --filter='@kaipu/*'
+
+      - name: Deploy Backend to Cloudflare Workers
+        uses: cloudflare/wrangler-action@v3.14.1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/server-hono
+          secrets: |
+            DATABASE_URL
+            BETTER_AUTH_SECRET
+            CORS_ORIGIN
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          CORS_ORIGIN: ${{ vars.CORS_ORIGIN }}
+          BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
