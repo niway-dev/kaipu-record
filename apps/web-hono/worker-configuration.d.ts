@@ -6,7 +6,7 @@ declare namespace Cloudflare {
     DATABASE_URL: string;
     VITE_SERVER_URL: string;
     ENVIRONMENT: string;
-    API_SERVICE: Fetcher /* server-hono-api */;
+    API_SERVICE: Fetcher /* kaipu-api */;
     ASSETS: Fetcher;
   }
 }
