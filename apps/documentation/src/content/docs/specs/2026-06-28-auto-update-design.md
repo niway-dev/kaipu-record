@@ -38,7 +38,8 @@ Developer ID** — is already met by `release-desktop.yml`.
 1. **macOS auto-update** — `electron-updater` wired in main; silent download; "restart to apply"
    banner in the renderer; check on startup + every 6h.
 2. **Publish to R2** — a CI step uploads the feed + installers to the bucket on each tagged release.
-3. **Web download page** — a `/download` route on `apps/web-hono` with a CTA per macOS arch.
+3. **Web landing page** — a full product landing on `apps/web-hono` (dark/premium) with the
+   download CTAs integrated (per macOS arch).
 
 **Out of scope (separate items):**
 
@@ -187,16 +188,42 @@ that uploads to R2 via the AWS CLI against R2's S3-compatible endpoint:
 
 ---
 
-## Component 6 — web download page (`apps/web-hono/src/routes/download.tsx`)
+## Component 6 — web landing page (`apps/web-hono`)
 
-- New TanStack Router route `/download`. A small `<DownloadCta>` with two buttons —
-  **Descargar para Mac (Apple Silicon)** → `${PUBLIC_R2_URL}/download/latest/kaipu-arm64.dmg`,
-  **Mac (Intel)** → `…/kaipu-x64.dmg` — plus a disabled **Windows (próximamente)**.
-- `PUBLIC_R2_URL` comes from a build-time env (`VITE_PUBLIC_DOWNLOAD_URL`), so the URLs aren't
-  hardcoded across files. Add it to `apps/web-hono`'s env declaration + `.env.example`.
-- Add a CTA link on the home route (`routes/index.tsx`) pointing to `/download` (light touch — one
-  button/section, matching the existing page style).
-- Copy in neutral Spanish (end-user facing).
+A full product landing for Kaipu Record, **dark / premium** (background `#0c0c0f`, light text, a
+single accent color, large type — coherent with the dark desktop app; vibe à la Linear/Raycast).
+The landing **replaces the template home** at `routes/index.tsx` (the current page is leftover
+scaffolding). Copy is **neutral Spanish**, friendly and benefit-first (emoji ok) — house copy rule.
+
+**Route & structure:**
+
+- `routes/index.tsx` becomes the landing (the marketing home).
+- The landing is composed of small, focused section components under
+  `apps/web-hono/src/components/landing/`, each one responsibility:
+  - `landing-nav.tsx` — minimal top bar: wordmark + a "Descargar" button (scrolls to / links the
+    download section).
+  - `hero.tsx` — headline ("Grabá tu pantalla, sin complicaciones."), subhead (one benefit line),
+    the primary `DownloadButtons`, and an app-preview image placeholder.
+  - `features.tsx` — a 3–4 card grid of benefits drawn from what actually shipped: graba pantalla +
+    cámara (burbuja flotante), local-first / privado (nada sale de tu equipo), calidad configurable,
+    atajos globales. (Copy only — no new product claims.)
+  - `download-section.tsx` — the anchored `#download` block with `DownloadButtons` + a one-line note
+    ("macOS 11+. Windows próximamente.").
+  - `footer.tsx` — wordmark, year, minimal links.
+- `download-buttons.tsx` — the shared CTA unit (used by hero + download section + nav). Two buttons:
+  **Mac (Apple Silicon)** → `${PUBLIC_DOWNLOAD_URL}/download/latest/kaipu-arm64.dmg`,
+  **Mac (Intel)** → `…/kaipu-x64.dmg`, plus a disabled **Windows (próximamente)**.
+
+**Styling:** keep it self-contained — a `landing.module.css` (or co-located module CSS per section)
+with the dark palette + accent as CSS variables. Don't pull in a new UI framework; match the repo's
+existing styling approach in `web-hono`.
+
+**Config:** `PUBLIC_DOWNLOAD_URL` (the R2 public base) comes from a build-time env
+`VITE_PUBLIC_DOWNLOAD_URL`, so URLs aren't hardcoded across files. Add it to `apps/web-hono`'s env
+declaration + `.env.example`.
+
+> Auth/todos template routes are out of scope — leave them; we only replace the home and add the
+> landing components.
 
 ---
 
@@ -226,8 +253,9 @@ web page links are static, so a missing artifact is a normal 404 from R2 (no app
   with the rest of `src/main` (global-shortcuts, windows). Validated in prod (see checklist).
 - **Renderer** — `useUpdateStatus` (mock `getUpdateStatus`/`onUpdateStatus`: idle → ready on event)
   and `UpdateBanner` (renders on ready; **Reiniciar** calls `installUpdate`; dismiss hides).
-- **Web** — `DownloadCta` renders the two arch links from `VITE_PUBLIC_DOWNLOAD_URL` and the disabled
-  Windows button.
+- **Web** — `DownloadButtons` renders the two arch links from `VITE_PUBLIC_DOWNLOAD_URL` and the
+  disabled Windows button; the landing renders its sections (hero/features/download/footer) without
+  crashing. (Marketing copy isn't asserted verbatim — too brittle.)
 
 ---
 
@@ -246,4 +274,5 @@ web page links are static, so a missing artifact is a normal 404 from R2 (no app
 - [ ] Install version N, publish N+1 to R2, reopen the app → it downloads silently and shows the
       "Reiniciá" banner; **Reiniciar** relaunches into N+1.
 - [ ] Kill the network / point the feed at a bad URL → app runs normally, no error UI.
-- [ ] `/download` page: each button downloads the right DMG; it installs and runs.
+- [ ] Landing page: renders dark/premium; each download button pulls the right DMG; it installs and
+      runs.
