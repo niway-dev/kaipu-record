@@ -98,7 +98,7 @@ Deploys read from the repo's **`production`** Environment:
 | `CORS_ORIGIN`                                                                           | variable | api Worker                       |
 | `VITE_SERVER_URL`                                                                       | variable | web build + Worker               |
 | `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER` | secrets  | desktop sign/notarize            |
-| `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`                                 | secrets  | desktop → R2 upload              |
+| `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`                                              | secrets  | desktop → R2 upload (S3 token)    |
 
 > The web app proxies auth/CORS to the backend and never runs Better Auth, so its env is only
 > `DATABASE_URL` + `VITE_SERVER_URL` (+ the build-time `VITE_PUBLIC_DOWNLOAD_URL`). `BETTER_AUTH_*` /
@@ -106,8 +106,8 @@ Deploys read from the repo's **`production`** Environment:
 
 > **R2 credentials:** the upload uses R2's S3-compatible API, which needs **R2-specific** keys
 > (`R2_ACCESS_KEY_ID` + `R2_SECRET_ACCESS_KEY`, created in **R2 → Manage R2 API Tokens**) — the
-> Cloudflare API token does **not** work for it. The R2 account id is the same as
-> `CLOUDFLARE_ACCOUNT_ID`, so the workflow reuses that (no separate `R2_ACCOUNT_ID` needed).
+> Cloudflare API token does **not** work for it. The R2 account id reuses `CLOUDFLARE_ACCOUNT_ID`,
+> and the bucket name is a plain constant in the workflow (`kaipu-bucket`) — neither is a secret.
 
 ## PR validation
 
