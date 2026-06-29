@@ -11,6 +11,7 @@ import type {
 
 // Custom Kaipu bridge. Only methods with a live main-process handler are exposed.
 const kaipuApi: KaipuElectronAPI = {
+  getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.getAppVersion),
   getSettings: () => ipcRenderer.invoke(IPC_CHANNELS.getSettings),
   updateSettings: (patch) => ipcRenderer.invoke(IPC_CHANNELS.updateSettings, patch),
   getScreenSources: () => ipcRenderer.invoke("recording:get-screen-sources"),

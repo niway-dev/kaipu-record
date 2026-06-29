@@ -69,6 +69,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
  * Using a const map keeps main and renderer in sync.
  */
 export const IPC_CHANNELS = {
+  getAppVersion: "app:get-version",
   getSettings: "settings:get",
   updateSettings: "settings:update",
   checkPermissions: "permissions:check",

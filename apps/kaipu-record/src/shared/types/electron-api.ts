@@ -30,6 +30,8 @@ export type PermissionKind = "screen" | "microphone" | "camera";
 export type PermissionStatus = Record<PermissionKind, boolean>;
 
 export interface KaipuElectronAPI {
+  /** The running app version (`app.getVersion()`), used by the version gate. */
+  getAppVersion(): Promise<string>;
   /** Read persisted app settings. */
   getSettings(): Promise<AppSettings>;
   /** Merge a partial settings change; persists + applies OS side effects; returns the result. */
