@@ -21,6 +21,7 @@
 }
 
 .statusBar {
+  position: relative;
   flex-shrink: 0;
   height: 28px;
   background: var(--bg-sidebar);
@@ -45,4 +46,11 @@
 .statusDot {
   color: var(--accent-primary);
   opacity: 0.6;
+}
+
+/* App version, pinned to the right so the shortcuts stay visually centered. */
+.statusVersion {
+  position: absolute;
+  right: 12px;
+  color: var(--text-muted);
 }
