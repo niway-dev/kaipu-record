@@ -5,10 +5,11 @@ description: Wire electron-updater against the real GitHub Releases feed so inst
 
 # Auto-update (electron-updater)
 
-> **Status: 🟢 Ready to validate** — built on `feat/auto-update` (electron-updater + R2 feed +
-> dark landing page). Typecheck/lint/test green; prod review pending — needs the R2 bucket + the
-> four `R2_*` GitHub Secrets + the real `publish.url`/`VITE_PUBLIC_DOWNLOAD_URL` before a tagged
-> release exercises it. Spec: [/specs/2026-06-28-auto-update-design](/specs/2026-06-28-auto-update-design) ·
+> **Status: 🟢 Shipped to prod — partial validation.** Deployed: the landing (`kaipu.app`), the
+> R2 feed/installers, and the **download button works** (a real signed DMG downloads from
+> `updates.kaipu.app`). ✅ validated: distribution + download. ⏳ pending: the **in-app
+> self-update** flow — only provable with a **second release** (`desktop-v0.2.0`) that an installed
+> `0.1.0` picks up. Spec: [/specs/2026-06-28-auto-update-design](/specs/2026-06-28-auto-update-design) ·
 > Plan: [/plans/2026-06-28-auto-update](/plans/2026-06-28-auto-update).
 
 The signed + notarized release pipeline already works (see

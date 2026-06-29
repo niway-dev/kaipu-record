@@ -5,9 +5,10 @@ description: A fail-open remote-config version gate — a hard kill-switch for b
 
 # Version gate
 
-> **Status: 🟢 Ready to validate** — implemented and unit/typecheck/lint-green on
-> `feat/version-gate`; prod review pending (validate via a packaged build with
-> `VITE_VERSION_GATE_URL` set). Design: [/specs/2026-06-28-version-gate-design](/specs/2026-06-28-version-gate-design) ·
+> **Status: 🟢 Shipped, not yet activated.** The code is in the released build, but the gate is
+> **fail-open and dormant** until a `version-gate.json` is uploaded to R2 (`VITE_VERSION_GATE_URL`).
+> ⏳ pending: upload a test config and confirm the soft banner + hard overlay actually trigger on a
+> packaged build. Design: [/specs/2026-06-28-version-gate-design](/specs/2026-06-28-version-gate-design) ·
 > Plan: [/plans/2026-06-28-version-gate](/plans/2026-06-28-version-gate).
 
 Stops unsupported builds from being used and nudges outdated-but-usable ones to update, driven
