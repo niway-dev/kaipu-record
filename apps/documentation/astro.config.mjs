@@ -50,6 +50,7 @@ export default defineConfig({
           label: "Backlog",
           items: [
             { slug: "backlog" },
+            { slug: "backlog/aspect-ratio-distortion" },
             { slug: "backlog/roadmap" },
             { slug: "backlog/version-gate" },
             { slug: "backlog/auto-update" },
