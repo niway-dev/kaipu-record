@@ -186,15 +186,15 @@ is **not wired** (zero `autoUpdater`/`checkForUpdates` in `src/main`), and
 (`https://example.com/auto-updates`). The release already ships the exact feed assets the
 updater needs (`latest-mac.yml` + `.blockmap`). See [auto-update](./auto-update).
 
-## 8 — Version gate / forced update 🔨 IN PROGRESS (branch `feat/version-gate`)
+## 8 — Version gate / forced update 🟢 READY TO VALIDATE (branch `feat/version-gate`)
 
-> **Decoupled from #7.** We confirmed the gate can ship without auto-update: the "Actualizar"
-> button opens the GitHub Releases page until `electron-updater` lands. Locked decisions:
-> renderer-only logic; config from a **dedicated remote JSON on Cloudflare** (URL via
-> `VITE_VERSION_GATE_URL`); check on **startup + window focus, throttled to 10 min**, fail-open
-> with last-good cache; **full-screen non-dismissible overlay** for a hard block, dismissible
-> banner for a soft nudge. The design below is the original proposal; the active spec lives in
-> `docs/superpowers/specs/` and ships with its own backlog doc.
+> **Built & decoupled from #7.** Ships without auto-update: the "Actualizar" button opens the
+> GitHub Releases page until `electron-updater` lands. Renderer-only logic; config from a
+> **dedicated remote JSON on Cloudflare** (URL via `VITE_VERSION_GATE_URL`); check on **startup +
+> window focus, throttled to 10 min**, fail-open with last-good cache; **full-screen
+> non-dismissible overlay** for a hard block, dismissible banner for a soft nudge. See the
+> [version-gate backlog doc](./version-gate), the [spec](/specs/2026-06-28-version-gate-design)
+> and the [plan](/plans/2026-06-28-version-gate). The original proposal below is kept for context.
 
 **What the user asked for:** for a **beta** product, manage versions per release and a way to
 **force updates** — both a soft "actualiza para seguir usando" and a hard "esta versión ya no
