@@ -14,10 +14,19 @@ export function UpdateBanner({ version }: Props): React.JSX.Element | null {
       <span className={styles.message}>
         Hay una versión nueva lista 🎉 (v{version}). Reiniciá para aplicarla.
       </span>
-      <button className={styles.action} onClick={() => window.electronAPI.installUpdate()}>
+      <button
+        type="button"
+        className={styles.action}
+        onClick={() => window.electronAPI.installUpdate()}
+      >
         Reiniciar
       </button>
-      <button className={styles.close} aria-label="Cerrar" onClick={() => setDismissed(true)}>
+      <button
+        type="button"
+        className={styles.close}
+        aria-label="Cerrar"
+        onClick={() => setDismissed(true)}
+      >
         ×
       </button>
     </div>

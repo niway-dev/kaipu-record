@@ -87,7 +87,7 @@ function RootDocument() {
               userEmail={session?.user?.email ?? ""}
             />
           )}
-          <main className="pt-12">
+          <main className={isLanding ? "" : "pt-12"}>
             <Outlet />
           </main>
         </div>
