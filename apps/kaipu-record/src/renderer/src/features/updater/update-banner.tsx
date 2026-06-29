@@ -11,7 +11,9 @@ export function UpdateBanner({ version }: Props): React.JSX.Element | null {
   if (dismissed) return null;
   return (
     <div className={styles.banner}>
-      <span className={styles.message}>Hay una versión nueva lista 🎉 (v{version}). Reiniciá para aplicarla.</span>
+      <span className={styles.message}>
+        Hay una versión nueva lista 🎉 (v{version}). Reiniciá para aplicarla.
+      </span>
       <button className={styles.action} onClick={() => window.electronAPI.installUpdate()}>
         Reiniciar
       </button>

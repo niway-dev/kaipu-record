@@ -1,10 +1,26 @@
 import { Monitor, Shield, SlidersHorizontal, Keyboard } from "lucide-react";
 
 const FEATURES = [
-  { icon: Monitor, title: "Pantalla + cámara", body: "Grabá tu pantalla con una burbuja de cámara flotante, lista para tutoriales y demos." },
-  { icon: Shield, title: "Local-first y privado", body: "Todo se procesa y guarda en tu equipo. Nada sale a la nube sin que vos quieras." },
-  { icon: SlidersHorizontal, title: "Calidad configurable", body: "Elegí resolución, fluidez y peso con presets claros — de liviano a máxima calidad." },
-  { icon: Keyboard, title: "Atajos globales", body: "Iniciá, detené y traé la app al frente desde cualquier lado con atajos rebindeables." },
+  {
+    icon: Monitor,
+    title: "Pantalla + cámara",
+    body: "Grabá tu pantalla con una burbuja de cámara flotante, lista para tutoriales y demos.",
+  },
+  {
+    icon: Shield,
+    title: "Local-first y privado",
+    body: "Todo se procesa y guarda en tu equipo. Nada sale a la nube sin que vos quieras.",
+  },
+  {
+    icon: SlidersHorizontal,
+    title: "Calidad configurable",
+    body: "Elegí resolución, fluidez y peso con presets claros — de liviano a máxima calidad.",
+  },
+  {
+    icon: Keyboard,
+    title: "Atajos globales",
+    body: "Iniciá, detené y traé la app al frente desde cualquier lado con atajos rebindeables.",
+  },
 ];
 
 export function Features() {

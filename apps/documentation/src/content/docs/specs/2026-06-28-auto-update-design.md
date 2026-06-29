@@ -45,7 +45,7 @@ Developer ID** — is already met by `release-desktop.yml`.
 
 - **Windows** — `electron-builder.yml` has NSIS config, but CI only builds `--mac` and Windows needs
   its own code-signing cert. Future task.
-- **In-app delta/auto-install-without-prompt** — we do silent *download* but ask the user to restart.
+- **In-app delta/auto-install-without-prompt** — we do silent _download_ but ask the user to restart.
 - Triggering the update from the version-gate "Actualizar" button — a one-line follow-up once this
   ships (the gate keeps opening the download page until then).
 - Removing GitHub Releases — the release job still attaches assets there for archival; end-user
@@ -55,9 +55,9 @@ Developer ID** — is already met by `release-desktop.yml`.
 
 ## Artifacts: `.dmg` vs `.zip` (they are not interchangeable)
 
-| Artifact | Purpose | Consumer |
-| --- | --- | --- |
-| `.dmg` (per arch) | Manual installer (drag to Applications) | A human, via the web CTA |
+| Artifact                                | Purpose                                      | Consumer                     |
+| --------------------------------------- | -------------------------------------------- | ---------------------------- |
+| `.dmg` (per arch)                       | Manual installer (drag to Applications)      | A human, via the web CTA     |
 | `.zip` + `.blockmap` + `latest-mac.yml` | Auto-update feed (Squirrel.Mac requires zip) | `electron-updater`, silently |
 
 The pipeline already produces both per arch (`…-arm64.dmg`, `…-x64.dmg`, `…-arm64-mac.zip`,

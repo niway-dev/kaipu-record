@@ -16,6 +16,7 @@ description: Task-by-task plan to wire macOS electron-updater against a Cloudfla
 **Spec:** `/specs/2026-06-28-auto-update-design`
 
 **Conventions:**
+
 - Code/comments English; end-user copy neutral Spanish (emoji ok).
 - No TS enums — `as const` + derived types.
 - Desktop: commit with `git commit --no-verify` (oxfmt churn hold); tests from `apps/kaipu-record` via `bunx vitest run <path>`.
@@ -26,6 +27,7 @@ description: Task-by-task plan to wire macOS electron-updater against a Cloudfla
 ## File Structure
 
 **Part A — desktop (`apps/kaipu-record/`):**
+
 - **Modify** `src/shared/types/ipc.ts` — 3 update channels + `UpdateStatus` type + `ElectronAPI` methods.
 - **Create** `src/main/updater/auto-updater.ts` — `initAutoUpdater`, `installDownloadedUpdate`.
 - **Modify** `src/main/index.ts` — wire `initAutoUpdater` + the 3 IPC handlers.
@@ -39,6 +41,7 @@ description: Task-by-task plan to wire macOS electron-updater against a Cloudfla
 - **Modify** `.github/workflows/release-desktop.yml` — R2 upload step.
 
 **Part B — web (`apps/web-hono/`):**
+
 - **Create** `src/lib/download.ts` — resolve the per-arch DMG URLs from env.
 - **Create** `src/vite-env.d.ts` (if absent) — type `VITE_PUBLIC_DOWNLOAD_URL`.
 - **Create** `src/components/landing/download-buttons.tsx`.
@@ -54,6 +57,7 @@ description: Task-by-task plan to wire macOS electron-updater against a Cloudfla
 ### Task A1: IPC channels + UpdateStatus type
 
 **Files:**
+
 - Modify: `src/shared/types/ipc.ts`
 - Modify: `src/shared/types/electron-api.ts`
 
@@ -101,6 +105,7 @@ git commit --no-verify -m "feat(updater): IPC channels + UpdateStatus type"
 ### Task A2: main updater module
 
 **Files:**
+
 - Create: `src/main/updater/auto-updater.ts`
 - Modify: `src/main/index.ts`
 
@@ -187,6 +192,7 @@ git commit --no-verify -m "feat(updater): electron-updater main module (silent d
 ### Task A3: preload + test stub
 
 **Files:**
+
 - Modify: `src/preload/index.ts`
 - Modify: `src/renderer/src/test/setup.ts`
 
@@ -228,6 +234,7 @@ git commit --no-verify -m "feat(updater): preload bridge + test stub"
 ### Task A4: `useUpdateStatus` hook
 
 **Files:**
+
 - Create: `src/renderer/src/features/updater/use-update-status.ts`
 - Test: `src/renderer/src/features/updater/use-update-status.test.tsx`
 
@@ -309,6 +316,7 @@ git commit --no-verify -m "feat(updater): useUpdateStatus hook"
 ### Task A5: `UpdateBanner` + mount in AppShell
 
 **Files:**
+
 - Create: `src/renderer/src/features/updater/update-banner.tsx` + `.module.css`
 - Create: `src/renderer/src/features/updater/index.ts`
 - Test: `src/renderer/src/features/updater/update-banner.test.tsx`
@@ -450,6 +458,7 @@ git commit --no-verify -m "feat(updater): restart banner mounted in AppShell"
 ### Task A6: electron-builder feed URL + CI upload to R2
 
 **Files:**
+
 - Modify: `electron-builder.yml`
 - Modify: `.github/workflows/release-desktop.yml`
 
@@ -517,6 +526,7 @@ git commit --no-verify -m "ci(updater): point feed at R2 + upload feed/installer
 ### Task B1: download URL helper + env
 
 **Files:**
+
 - Create: `apps/web-hono/src/lib/download.ts`
 - Create/Modify: `apps/web-hono/src/vite-env.d.ts`
 - Modify: `apps/web-hono/.env.example`
@@ -575,6 +585,7 @@ git commit --no-verify -m "feat(web): download URL helper + VITE_PUBLIC_DOWNLOAD
 ### Task B2: DownloadButtons
 
 **Files:**
+
 - Create: `apps/web-hono/src/components/landing/download-buttons.tsx`
 
 - [ ] **Step 1: Write the component**
@@ -622,6 +633,7 @@ git commit --no-verify -m "feat(web): download buttons (per-arch macOS CTAs)"
 ### Task B3: landing sections
 
 **Files:**
+
 - Create: `apps/web-hono/src/components/landing/landing-nav.tsx`, `hero.tsx`, `features.tsx`, `download-section.tsx`, `footer.tsx`
 
 - [ ] **Step 1: Nav**
@@ -747,6 +759,7 @@ git commit --no-verify -m "feat(web): dark landing sections (nav, hero, features
 ### Task B4: render the landing + hide template header on home
 
 **Files:**
+
 - Modify: `apps/web-hono/src/routes/index.tsx`
 - Modify: `apps/web-hono/src/routes/__root.tsx`
 
@@ -805,6 +818,7 @@ Also update the root `head()` title from `"Monorepo Template"` to `"Kaipu Record
 - [ ] **Step 3: Typecheck + build**
 
 Run (from `apps/web-hono`):
+
 - `bun run typecheck` — expected: no errors.
 - `bun run build` — expected: builds successfully.
 

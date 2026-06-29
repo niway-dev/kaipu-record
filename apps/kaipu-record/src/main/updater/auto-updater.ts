@@ -37,8 +37,12 @@ export function initAutoUpdater(getMainWindow: () => BrowserWindow | null): void
     console.error("[auto-updater] error", err);
   });
 
-  void autoUpdater.checkForUpdates().catch((err) => console.error("[auto-updater] check failed", err));
+  void autoUpdater
+    .checkForUpdates()
+    .catch((err) => console.error("[auto-updater] check failed", err));
   setInterval(() => {
-    void autoUpdater.checkForUpdates().catch((err) => console.error("[auto-updater] check failed", err));
+    void autoUpdater
+      .checkForUpdates()
+      .catch((err) => console.error("[auto-updater] check failed", err));
   }, CHECK_INTERVAL_MS);
 }
