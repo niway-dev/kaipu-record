@@ -22,13 +22,14 @@ export function useVersionGate(): GateState {
   useEffect(() => {
     const url = import.meta.env.VITE_VERSION_GATE_URL;
     if (!url) return; // gate disabled (e.g. local dev) — stay ok
+    const gateUrl: string = url; // narrowed; closures below capture this
 
     let cancelled = false;
 
     async function check(): Promise<void> {
       lastCheckedAt.current = Date.now();
       if (!versionRef.current) versionRef.current = await window.electronAPI.getAppVersion();
-      const fetched = await fetchVersionGateConfig(url);
+      const fetched = await fetchVersionGateConfig(gateUrl);
       const config = fetched ?? lastGood.current;
       if (cancelled || !config || !versionRef.current) return;
       lastGood.current = config;
