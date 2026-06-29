@@ -11,6 +11,14 @@
     "directory": "dist/client",
     "binding": "ASSETS",
   },
+  // Custom domains for the public site. Requires the `kaipu.app` zone to live in
+  // the same Cloudflare account; on deploy, Wrangler provisions the proxied DNS
+  // records + SSL automatically. The API is reached via the Service Binding below
+  // (same-origin proxy), so it needs no public domain of its own.
+  "routes": [
+    { "pattern": "kaipu.app", "custom_domain": true },
+    { "pattern": "www.kaipu.app", "custom_domain": true },
+  ],
   "services": [
     {
       "binding": "API_SERVICE",
