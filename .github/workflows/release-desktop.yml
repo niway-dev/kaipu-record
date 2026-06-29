@@ -80,11 +80,15 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         working-directory: apps/kaipu-record
         env:
+          # R2's S3 API needs its own Access Key + Secret (created in R2 → Manage
+          # R2 API Tokens) — the Cloudflare API token does NOT work here. The
+          # account id is the same one used everywhere, so reuse CLOUDFLARE_ACCOUNT_ID.
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: auto
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # Bucket name is not sensitive — keep it as a plain constant, not a secret.
+          R2_BUCKET: kaipu-bucket
         run: |
           ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
           # Derive from package.json (same source electron-builder names the dmg from),
