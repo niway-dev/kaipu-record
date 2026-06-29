@@ -7,6 +7,7 @@ import {
   VersionGateOverlay,
   VersionGateBanner,
 } from "@renderer/features/version-gate";
+import { useUpdateStatus, UpdateBanner } from "@renderer/features/updater";
 import styles from "./app-shell.module.css";
 
 /**
@@ -18,6 +19,7 @@ export function AppShell(): React.JSX.Element {
   const navigate = useNavigate();
   const shortcuts = useShortcutLabels();
   const gate = useVersionGate();
+  const update = useUpdateStatus();
 
   // A global "start recording" (the hotkey or the Capture Panel) can arrive on any
   // route — the recorder lives on the Record page, so bring the user there and
@@ -36,6 +38,7 @@ export function AppShell(): React.JSX.Element {
       {gate.kind === "soft" && (
         <VersionGateBanner message={gate.message} downloadUrl={gate.downloadUrl} />
       )}
+      {update.state === "ready" && <UpdateBanner version={update.version} />}
       <div className={styles.body}>
         <Sidebar />
         <main className={styles.content}>
