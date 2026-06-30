@@ -62,11 +62,13 @@ export function VideoCard({
           </div>
         )}
 
-        <div className={styles.playLayer} aria-hidden>
-          <span className={styles.playButton}>
-            <Play size={18} fill="#fff" strokeWidth={0} />
-          </span>
-        </div>
+        {video.kind !== "screenshot" && (
+          <div className={styles.playLayer} aria-hidden>
+            <span className={styles.playButton}>
+              <Play size={18} fill="#fff" strokeWidth={0} />
+            </span>
+          </div>
+        )}
       </div>
 
       <div className={styles.footer}>
@@ -75,7 +77,8 @@ export function VideoCard({
           <StorageMeta video={video} />
         </div>
         <span className={styles.specs}>
-          {formatSize(video.fileSizeBytes)} · {formatDuration(video.durationSeconds)}
+          {formatSize(video.fileSizeBytes)}
+          {video.kind !== "screenshot" && ` · ${formatDuration(video.durationSeconds)}`}
         </span>
 
         <div className={styles.actions} onClick={(e) => e.stopPropagation()}>

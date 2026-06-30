@@ -55,7 +55,8 @@ export function VideoRow({
           <KindBadge kind={video.kind} />
           <StorageMeta video={video} />
           <span className={styles.specs}>
-            {formatSize(video.fileSizeBytes)} · {formatDuration(video.durationSeconds)}
+            {formatSize(video.fileSizeBytes)}
+            {video.kind !== "screenshot" && ` · ${formatDuration(video.durationSeconds)}`}
           </span>
         </div>
       </div>

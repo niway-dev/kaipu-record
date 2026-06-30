@@ -76,4 +76,11 @@ describe("VideoRow", () => {
     renderRow({ video: makeVideo({ title: "" }) });
     expect(screen.getByText("Untitled recording")).toBeInTheDocument();
   });
+
+  it("hides the duration for screenshots (no bogus 0:00)", () => {
+    const { container } = renderRow({
+      video: makeVideo({ kind: "screenshot", durationSeconds: 0 }),
+    });
+    expect(container.textContent).not.toMatch(/\d:\d\d/);
+  });
 });

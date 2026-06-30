@@ -31,4 +31,22 @@ describe("VideoCard", () => {
     expect(onDelete).toHaveBeenCalledOnce();
     expect(onNavigate).not.toHaveBeenCalled();
   });
+
+  it("renders a duration for recordings", () => {
+    const { container } = render(
+      <VideoCard video={video} onNavigate={vi.fn()} onDelete={vi.fn()} />,
+    );
+    expect(container.textContent).toMatch(/\d:\d\d/); // e.g. 1:35
+  });
+
+  it("hides the duration for screenshots (no bogus 0:00)", () => {
+    const { container } = render(
+      <VideoCard
+        video={{ ...video, kind: "screenshot", durationSeconds: 0 }}
+        onNavigate={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    expect(container.textContent).not.toMatch(/\d:\d\d/);
+  });
 });
