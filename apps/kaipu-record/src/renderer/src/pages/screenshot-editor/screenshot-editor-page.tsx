@@ -5,6 +5,7 @@ import { useImageSource, type ImageSource } from "@renderer/features/screenshots
 import { BeautifiedFrame, BeautifyPanel } from "@renderer/features/screenshots/beautify";
 import {
   AnnotationLayer,
+  AnnotationOptions,
   AnnotationToolbar,
   compositeScene,
   useAnnotationTools,
@@ -56,7 +57,7 @@ export function ScreenshotEditorPage(): React.JSX.Element {
   return (
     <div className={styles.editor}>
       <div className={styles.toolbar}>
-        <AnnotationToolbar tools={tools} scene={scene} />
+        <AnnotationToolbar tools={tools} />
         <div className={styles.actions}>
           <button
             type="button"
@@ -76,36 +77,6 @@ export function ScreenshotEditorPage(): React.JSX.Element {
           >
             <Redo2 size={18} />
           </button>
-          <span className={styles.divider} />
-          <div className={styles.zoomGroup}>
-            <button
-              type="button"
-              className={styles.iconBtn}
-              title="Alejar"
-              disabled={zoom <= ZOOM_MIN}
-              onClick={() => zoomBy(-ZOOM_STEP)}
-            >
-              <ZoomOut size={18} />
-            </button>
-            <button
-              type="button"
-              className={styles.zoomLabel}
-              title="Restablecer zoom"
-              disabled={zoom === 1}
-              onClick={() => setZoom(1)}
-            >
-              {Math.round(zoom * 100)}%
-            </button>
-            <button
-              type="button"
-              className={styles.iconBtn}
-              title="Acercar"
-              disabled={zoom >= ZOOM_MAX}
-              onClick={() => zoomBy(ZOOM_STEP)}
-            >
-              <ZoomIn size={18} />
-            </button>
-          </div>
           <span className={styles.divider} />
           <button
             type="button"
@@ -131,14 +102,52 @@ export function ScreenshotEditorPage(): React.JSX.Element {
         </div>
       </div>
       <div className={styles.body}>
-        <div className={styles.canvas}>
-          <BeautifiedFrame
-            src={image.displayUrl}
-            beautify={scene.beautify.state}
-            overlay={<AnnotationLayer scene={scene} tools={tools} />}
-            imgRef={imgRef}
-            zoom={zoom}
-          />
+        <div className={styles.canvasArea}>
+          <div className={styles.canvas}>
+            <BeautifiedFrame
+              src={image.displayUrl}
+              beautify={scene.beautify.state}
+              overlay={<AnnotationLayer scene={scene} tools={tools} />}
+              imgRef={imgRef}
+              zoom={zoom}
+            />
+          </div>
+
+          {/* Floating per-tool options (Excalidraw-style), only when there's something to edit. */}
+          <div className={styles.optionsFloat}>
+            <AnnotationOptions tools={tools} scene={scene} />
+          </div>
+
+          {/* Zoom pinned at the foot of the canvas — a familiar editor convention. */}
+          <div className={styles.zoomFloat}>
+            <button
+              type="button"
+              className={styles.zoomBtn}
+              title="Alejar"
+              disabled={zoom <= ZOOM_MIN}
+              onClick={() => zoomBy(-ZOOM_STEP)}
+            >
+              <ZoomOut size={16} />
+            </button>
+            <button
+              type="button"
+              className={styles.zoomLabel}
+              title="Restablecer zoom"
+              disabled={zoom === 1}
+              onClick={() => setZoom(1)}
+            >
+              {Math.round(zoom * 100)}%
+            </button>
+            <button
+              type="button"
+              className={styles.zoomBtn}
+              title="Acercar"
+              disabled={zoom >= ZOOM_MAX}
+              onClick={() => zoomBy(ZOOM_STEP)}
+            >
+              <ZoomIn size={16} />
+            </button>
+          </div>
         </div>
         <BeautifyPanel beautify={scene.beautify} />
       </div>

@@ -64,15 +64,52 @@
   margin: 0 var(--space-xs);
 }
 
-.zoomGroup {
+/* ── Floating zoom pill (foot of the canvas) ─────── */
+
+.zoomFloat {
+  position: absolute;
+  bottom: var(--space-md);
+  left: var(--space-md);
+  z-index: 2;
   display: inline-flex;
   align-items: center;
   gap: 2px;
+  padding: 3px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg, 0 8px 24px -8px rgba(0, 0, 0, 0.55));
+}
+
+.zoomBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 28px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.zoomBtn:hover:not(:disabled) {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.zoomBtn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .zoomLabel {
-  min-width: 48px;
-  height: 34px;
+  min-width: 46px;
+  height: 28px;
   padding: 0 var(--space-xs);
   background: transparent;
   border: none;
@@ -151,6 +188,15 @@
   overflow: hidden;
 }
 
+/* The non-scrolling anchor for the floating panels; the canvas scrolls inside it. */
+.canvasArea {
+  position: relative;
+  flex: 1;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+
 .canvas {
   flex: 1;
   display: flex;
@@ -159,10 +205,18 @@
   align-items: safe center;
   justify-content: safe center;
   padding: var(--space-xl);
-  /* `auto`, not `hidden`: the shot fits at zoom 1 (no spurious scroll), and a
-     future view-zoom can overflow → scroll/pan the view when needed. */
+  /* `auto`, not `hidden`: the shot fits at zoom 1 (no spurious scroll), and the
+     view-zoom can overflow → scroll/pan the view when needed. */
   overflow: auto;
   min-width: 0;
   min-height: 0;
   background: var(--bg-app);
+}
+
+/* Floating per-tool options panel, pinned to the canvas (doesn't scroll away). */
+.optionsFloat {
+  position: absolute;
+  top: var(--space-md);
+  left: var(--space-md);
+  z-index: 2;
 }
