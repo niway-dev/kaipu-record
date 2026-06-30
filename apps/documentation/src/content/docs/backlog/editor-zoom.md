@@ -5,9 +5,12 @@ description: "Analysis of the screenshot editor's zoom feature. Untangles view-z
 
 # Editor zoom — view vs crop vs export resolution
 
-> **Status: 🔵 Proposed.** The editor toolbar has a disabled "Zoom (próximamente)"
-> placeholder. Before building it, decide what "zoom" actually means here — the word
-> conflates 2–3 distinct features with very different export/resolution consequences.
+> **Status: 🟢 View-zoom shipped** (on `feat/screenshots`). The toolbar now has a real
+> `−/%/+` control (50–300%) that scales the beautify frame via CSS `transform`; the
+> annotation layer keeps measuring its layout size, so annotations stay aligned, and
+> export reads the image's layout pixels so zoom is view-only (never baked in). The
+> other two meanings below — **crop-to-region** and **export-resolution** — remain 🔵
+> proposed. This doc still untangles all three so we don't conflate them later.
 
 ## The core confusion
 
