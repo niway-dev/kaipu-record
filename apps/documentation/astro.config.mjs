@@ -61,6 +61,7 @@ export default defineConfig({
             { slug: "backlog/settings-roadmap" },
             { slug: "backlog/shortcuts" },
             { slug: "backlog/screenshots" },
+            { slug: "backlog/editor-toolbar-responsive" },
             { slug: "backlog/export-formats" },
           ],
         },
