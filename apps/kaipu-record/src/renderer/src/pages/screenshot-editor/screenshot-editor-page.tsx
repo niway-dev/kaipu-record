@@ -7,6 +7,7 @@ import {
   BeautifyPanel,
   useBeautify,
 } from "@renderer/features/screenshots/beautify";
+import { AnnotationToolbar, useAnnotationTools } from "@renderer/features/screenshots/annotations";
 import styles from "./screenshot-editor-page.module.css";
 
 export function ScreenshotEditorPage(): React.JSX.Element {
@@ -14,6 +15,7 @@ export function ScreenshotEditorPage(): React.JSX.Element {
   const source = useLocation().state as ImageSource | null;
   const image = useImageSource(source);
   const beautify = useBeautify();
+  const annotationTools = useAnnotationTools();
   const [saved, setSaved] = useState(false);
 
   // Guard: no source means we arrived without data — navigate back.
@@ -28,7 +30,7 @@ export function ScreenshotEditorPage(): React.JSX.Element {
   return (
     <div className={styles.editor}>
       <div className={styles.toolbar}>
-        <span className={styles.title}>EDITANDO CAPTURA</span>
+        <AnnotationToolbar tools={annotationTools} />
         <div className={styles.actions}>
           <button
             type="button"
