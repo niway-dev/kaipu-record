@@ -1,4 +1,5 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import { useRecentScreenshots } from "./use-recent-screenshots";
 import styles from "./recent-screenshots.module.css";
 
@@ -18,9 +19,11 @@ function formatShotMeta(createdAt: number): string {
   return `${day} · PNG`;
 }
 
-/** Strip of recent screenshots shown under the capture card. Hidden when empty. */
+/** Strip of recent screenshots shown under the capture card. Hidden when empty.
+ *  Each opens the library detail for that screenshot. */
 export function RecentScreenshots(): React.JSX.Element | null {
-  const { shots } = useRecentScreenshots();
+  const navigate = useNavigate();
+  const { shots } = useRecentScreenshots(4);
   if (shots.length === 0) return null;
 
   return (
@@ -28,15 +31,21 @@ export function RecentScreenshots(): React.JSX.Element | null {
       <h2 className={styles.heading}>Recientes</h2>
       <div className={styles.grid}>
         {shots.map((shot) => (
-          <figure key={shot.id} className={styles.card}>
+          <button
+            key={shot.id}
+            type="button"
+            className={styles.card}
+            title={shot.title}
+            onClick={() => navigate(`/library/${shot.id}`)}
+          >
             <div className={styles.poster}>
               {shot.thumbnailUrl && <img src={shot.thumbnailUrl} alt={shot.title} />}
             </div>
-            <figcaption className={styles.meta}>
+            <div className={styles.meta}>
               <span className={styles.cardTitle}>{shot.title}</span>
               <span className={styles.cardSub}>{formatShotMeta(shot.createdAt)}</span>
-            </figcaption>
-          </figure>
+            </div>
+          </button>
         ))}
       </div>
     </section>

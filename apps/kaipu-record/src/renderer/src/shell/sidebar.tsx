@@ -17,8 +17,8 @@ interface NavItem {
 // Record is the index route (`/`), so it uses `end` to avoid matching everything.
 const NAV: NavItem[] = [
   { to: "/", label: "Record", Icon: Video, end: true },
+  { to: "/screenshots", label: "Screenshot", Icon: Camera },
   { to: "/library", label: "Library", Icon: Library },
-  { to: "/screenshots", label: "Capturas", Icon: Camera },
   { to: "/shortcuts", label: "Shortcuts", Icon: Keyboard },
   { to: "/settings", label: "Settings", Icon: Settings },
 ];
