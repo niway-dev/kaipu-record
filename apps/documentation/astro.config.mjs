@@ -64,6 +64,8 @@ export default defineConfig({
             { slug: "backlog/screenshots" },
             { slug: "backlog/editor-toolbar-responsive" },
             { slug: "backlog/screenshot-save-strategy" },
+            { slug: "backlog/screenshot-scene-doc" },
+            { slug: "backlog/screenshot-redaction" },
             { slug: "backlog/export-formats" },
           ],
         },
