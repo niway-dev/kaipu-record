@@ -17,6 +17,9 @@ const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3;
 const ZOOM_STEP = 0.25;
 
+const clampZoom = (z: number): number =>
+  Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 100) / 100));
+
 export function ScreenshotEditorPage(): React.JSX.Element {
   const navigate = useNavigate();
   const source = useLocation().state as ImageSource | null;
@@ -24,6 +27,7 @@ export function ScreenshotEditorPage(): React.JSX.Element {
   const scene = useEditorScene();
   const tools = useAnnotationTools();
   const imgRef = useRef<HTMLImageElement>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
   const [saved, setSaved] = useState(false);
   const [zoom, setZoom] = useState(1);
 
@@ -34,8 +38,22 @@ export function ScreenshotEditorPage(): React.JSX.Element {
     return () => window.electronAPI.setEditorWindowMode(false);
   }, []);
 
-  const zoomBy = (delta: number): void =>
-    setZoom((z) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round((z + delta) * 100) / 100)));
+  // ⌘/Ctrl + wheel (and trackpad pinch, which arrives as ctrlKey wheel) zooms the
+  // view. Non-passive so we can preventDefault Electron's own page zoom. Re-runs
+  // when the canvas mounts (image resolves). Plain scroll still pans.
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent): void => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      setZoom((z) => clampZoom(z * Math.exp(-e.deltaY * 0.0015)));
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [image]);
+
+  const zoomBy = (delta: number): void => setZoom((z) => clampZoom(z + delta));
 
   // Guard: no source means we arrived without data — navigate back.
   if (!source) {
@@ -103,7 +121,7 @@ export function ScreenshotEditorPage(): React.JSX.Element {
       </div>
       <div className={styles.body}>
         <div className={styles.canvasArea}>
-          <div className={styles.canvas}>
+          <div ref={canvasRef} className={styles.canvas} data-zoomed={zoom > 1}>
             <BeautifiedFrame
               src={image.displayUrl}
               beautify={scene.beautify.state}

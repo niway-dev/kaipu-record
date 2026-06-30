@@ -200,17 +200,23 @@
 .canvas {
   flex: 1;
   display: flex;
-  /* `safe`: when a zoomed shot is larger than the viewport, centring would clip
-     the top/left out of scroll reach — safe-center falls back to start instead. */
+  /* Centred while it fits (zoom ≤ 1). */
   align-items: safe center;
   justify-content: safe center;
   padding: var(--space-xl);
-  /* `auto`, not `hidden`: the shot fits at zoom 1 (no spurious scroll), and the
-     view-zoom can overflow → scroll/pan the view when needed. */
+  /* `auto`, not `hidden`: the shot fits at zoom 1 (no spurious scroll); the
+     view-zoom overflows → scroll/pan the view. */
   overflow: auto;
   min-width: 0;
   min-height: 0;
   background: var(--bg-app);
+}
+
+/* Once zoomed in, anchor the shot to the top-left so it lines up with the frame's
+   top-left transform origin and every part stays reachable by scrolling. */
+.canvas[data-zoomed="true"] {
+  align-items: flex-start;
+  justify-content: flex-start;
 }
 
 /* Floating per-tool options panel, pinned to the canvas (doesn't scroll away). */

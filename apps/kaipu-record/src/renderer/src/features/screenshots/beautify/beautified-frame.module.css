@@ -16,7 +16,9 @@
   min-width: 0;
   min-height: 0;
   box-sizing: border-box;
-  transform-origin: center;
+  /* Top-left origin so a zoomed shot overflows only down/right — both directions
+     a scroll container can reach. Centre origin left the left/top unreachable. */
+  transform-origin: top left;
   transition:
     padding 0.12s ease,
     border-radius 0.12s ease,
