@@ -35,3 +35,11 @@ export const TEXT_SIZES = ["XS", "S", "M", "L"] as const;
  * because a fresh label defaulting to a large size felt oversized.
  */
 export const TEXT_PX = [14, 19, 27, 37] as const;
+
+/**
+ * The hand-drawn font stack for text annotations — single source for the live
+ * preview and the export compositor so they never diverge. Single-quoted family
+ * names are valid in CSS, a React `style`, and a double-quoted SVG `font-family`
+ * attribute alike.
+ */
+export const HAND_FONT = "Caveat, 'Comic Sans MS', 'Segoe Print', cursive";

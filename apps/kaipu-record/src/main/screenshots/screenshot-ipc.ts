@@ -85,7 +85,9 @@ export function registerScreenshotHandlers(windows: CaptureWindowHooks): void {
         id,
         meta.overwriteId ? { title: meta.title } : { title: meta.title, createdAt: Date.now() },
       );
-      return (await vault.describe(id))!;
+      const saved = await vault.describe(id);
+      if (!saved) throw new Error(`screenshot save: could not describe ${id} after writing`);
+      return saved;
     },
   );
 }

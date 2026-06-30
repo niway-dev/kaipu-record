@@ -1,11 +1,7 @@
-import { backgroundPaint } from "../beautify/backgrounds";
+import { backgroundPaint, frameRadius } from "../beautify/backgrounds";
 import { roughArrow, roughRect } from "./rough";
-import { STROKE_WIDTHS, TEXT_PX } from "./tools";
+import { HAND_FONT, STROKE_WIDTHS, TEXT_PX } from "./tools";
 import type { Annotation, Scene } from "./scene";
-
-// Single-quoted family names so the string is safe to embed in a double-quoted
-// SVG `font-family` attribute (the live preview uses the same families via CSS).
-const HAND_FONT = "Caveat, 'Comic Sans MS', 'Segoe Print', cursive";
 
 /**
  * Composite the editor scene (beautify frame + annotations) to a PNG, at the
@@ -80,8 +76,13 @@ function buildSvg(scene: Scene, g: Geom): string {
     `<clipPath id="rc"><rect x="${g.pad}" y="${g.pad}" width="${g.naturalW}" height="${g.naturalH}" rx="${g.radius}"/></clipPath>`,
   );
 
+  // Round the outer frame to match the live preview (BeautifiedFrame applies
+  // frameRadius to the bg div) — a square rect here made exports differ.
+  const outerR = Math.round(frameRadius(scene.beautify.bg, scene.beautify.radius) * g.scale);
   const bg =
-    bgFill === "none" ? "" : `<rect width="${g.frameW}" height="${g.frameH}" fill="${bgFill}"/>`;
+    bgFill === "none"
+      ? ""
+      : `<rect width="${g.frameW}" height="${g.frameH}" rx="${outerR}" fill="${bgFill}"/>`;
   const shadow =
     sv > 0
       ? `<rect x="${g.pad}" y="${g.pad}" width="${g.naturalW}" height="${g.naturalH}" rx="${g.radius}" fill="#000" filter="url(#sh)"/>`

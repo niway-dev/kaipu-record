@@ -10,6 +10,7 @@ export function BeautifiedFrame({
   overlay,
   imgRef,
   zoom = 1,
+  onImageLoad,
 }: {
   src: string;
   beautify: BeautifyState;
@@ -21,6 +22,8 @@ export function BeautifiedFrame({
    * reads the image's layout pixels, so zoom is view-only (never bakes in).
    */
   zoom?: number;
+  /** Fires once the shot has loaded and laid out (export needs its displayed size). */
+  onImageLoad?: () => void;
 }): React.JSX.Element {
   return (
     <div
@@ -39,6 +42,7 @@ export function BeautifiedFrame({
           alt="Screenshot"
           className={styles.shot}
           style={{ borderRadius: `${beautify.radius}px`, boxShadow: shadowCss(beautify.shadow) }}
+          onLoad={onImageLoad}
         />
         {overlay}
       </div>

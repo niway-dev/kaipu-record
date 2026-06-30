@@ -51,7 +51,13 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
   const [zoom, setZoom] = useState(1);
   const [copied, setCopied] = useState(false);
   const [savedName, setSavedName] = useState<string | null>(null);
+  // Export needs the displayed <img> size to scale beautify/annotations to the
+  // shot's native (Retina) pixels — gate Copy/Save until the image has laid out.
+  const [imageReady, setImageReady] = useState(false);
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Guards against a double-click firing two exports/saves (the second Save of a
+  // fresh shot would create a duplicate library entry).
+  const busy = useRef(false);
   // The vault id this editor is bound to: set when re-opening a saved shot, and
   // after the first save. While set, Save asks overwrite-or-copy.
   const [savedId, setSavedId] = useState<string | null>(source.kind === "local" ? source.id : null);
@@ -110,28 +116,41 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
   };
 
   const onCopy = async (): Promise<void> => {
-    await window.electronAPI.copyImageToClipboard(await exportPng());
-    flashFeedback(() => {
-      setSavedName(null);
-      setCopied(true);
-    });
+    if (busy.current || !imageReady) return;
+    busy.current = true;
+    try {
+      await window.electronAPI.copyImageToClipboard(await exportPng());
+      flashFeedback(() => {
+        setSavedName(null);
+        setCopied(true);
+      });
+    } finally {
+      busy.current = false;
+    }
   };
 
   const persist = async (opts: { overwriteId?: string; title?: string }): Promise<void> => {
-    const saved = await window.electronAPI.saveScreenshot(await exportPng(), {
-      title: opts.title ?? baseTitle,
-      overwriteId: opts.overwriteId,
-    });
-    setSavedId(saved.id);
-    flashFeedback(() => {
-      setCopied(false);
-      setSavedName(saved.title);
-    });
+    if (busy.current) return;
+    busy.current = true;
+    try {
+      const saved = await window.electronAPI.saveScreenshot(await exportPng(), {
+        title: opts.title ?? baseTitle,
+        overwriteId: opts.overwriteId,
+      });
+      setSavedId(saved.id);
+      flashFeedback(() => {
+        setCopied(false);
+        setSavedName(saved.title);
+      });
+    } finally {
+      busy.current = false;
+    }
   };
 
   // First save just writes; a subsequent save (or a re-opened shot) asks whether to
   // overwrite the existing item or branch off a copy.
   const onSave = (): void => {
+    if (!imageReady || busy.current) return;
     if (savedId) setAskSave(true);
     else void persist({});
   };
@@ -172,6 +191,7 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
             type="button"
             className={styles.secondary}
             data-done={copied}
+            disabled={!imageReady}
             title={copied ? "Copied to clipboard" : "Copy to clipboard"}
             onClick={onCopy}
           >
@@ -181,6 +201,7 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
             type="button"
             className={styles.save}
             data-done={savedName !== null}
+            disabled={!imageReady}
             title={savedName ? `Saved as “${savedName}”` : "Save to your library"}
             onClick={onSave}
           >
@@ -198,6 +219,7 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
               overlay={<AnnotationLayer scene={scene} tools={tools} />}
               imgRef={imgRef}
               zoom={zoom}
+              onImageLoad={() => setImageReady(true)}
             />
           </div>
 
