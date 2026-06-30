@@ -6,13 +6,17 @@ import { LibraryVault } from "./library-vault";
 import { resetVaultDirectory, setVaultDirectory, vaultDirectory } from "./vault-location";
 
 /** A fresh vault bound to the *current* recordings folder (which can change). */
-function currentVault(): LibraryVault {
+export function currentVault(): LibraryVault {
   return new LibraryVault(vaultDirectory().path);
 }
 
 /** Absolute path to a recording's real video file in the current vault. */
 export async function recordingFilePath(id: string): Promise<string> {
   return currentVault().filePath(id);
+}
+
+export async function screenshotFilePath(id: string): Promise<string> {
+  return currentVault().filePath(id); // resolves <id>.png
 }
 
 /** Absolute path to a recording's thumbnail jpg (may not exist). */

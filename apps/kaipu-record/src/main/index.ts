@@ -26,6 +26,7 @@ import {
 } from "./shortcuts/global-shortcuts";
 import { initMainAnalytics, shutdownMainAnalytics } from "./services/analytics.service";
 import { registerAnalyticsIpc } from "./services/analytics-ipc";
+import { registerScreenshotHandlers } from "./screenshots/screenshot-ipc";
 
 let mainWindow: BrowserWindow | null = null;
 let capturePanel: CapturePanelWindow | null = null;
@@ -175,6 +176,9 @@ app.whenReady().then(() => {
 
   // Library: local recordings vault.
   registerLibraryVaultHandlers();
+
+  // Screenshots: capture/copy/save IPC handlers.
+  registerScreenshotHandlers();
 
   // Auto-update (packaged builds only). Silent download; renderer shows a restart banner.
   initAutoUpdater(() => mainWindow);

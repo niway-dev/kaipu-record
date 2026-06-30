@@ -1,6 +1,6 @@
 import { net, protocol } from "electron";
 import { pathToFileURL } from "node:url";
-import { recordingFilePath, thumbnailFilePath } from "./library";
+import { recordingFilePath, screenshotFilePath, thumbnailFilePath } from "./library";
 
 /**
  * Privileged, streamable protocol for local vault media.
@@ -29,7 +29,12 @@ export function registerMediaProtocol(): void {
     const id = decodeURIComponent(url.pathname.replace(/^\/+/, ""));
     if (isUnsafeId(id)) return new Response("Invalid recording id", { status: 400 });
 
-    const target = url.hostname === "thumb" ? thumbnailFilePath(id) : await recordingFilePath(id);
+    const { hostname } = url;
+    if (hostname === "screenshot") {
+      const target = await screenshotFilePath(id);
+      return net.fetch(pathToFileURL(target).toString());
+    }
+    const target = hostname === "thumb" ? thumbnailFilePath(id) : await recordingFilePath(id);
     return net.fetch(pathToFileURL(target).toString());
   });
 }
