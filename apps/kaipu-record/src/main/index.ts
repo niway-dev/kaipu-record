@@ -127,6 +127,11 @@ function bringAppToFront(): void {
  * (see `captureWindowHooks`). The window comes back via `revealAfterCapture`.
  */
 function triggerCaptureScreenshot(): void {
+  // The capture flow runs in the renderer, so the window must exist. If it was
+  // closed (macOS keeps the app alive in the tray), recreate it — but never just
+  // show a hidden one: the capture handler hides the window anyway, and bringing
+  // it forward here would put the app back in the shot.
+  if (!mainWindow || mainWindow.isDestroyed()) createWindow();
   const contents = mainWindow?.webContents;
   if (!contents) return;
   if (contents.isLoading()) {

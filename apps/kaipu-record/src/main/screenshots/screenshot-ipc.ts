@@ -26,13 +26,20 @@ export interface CaptureWindowHooks {
 }
 
 export function registerScreenshotHandlers(windows: CaptureWindowHooks): void {
+  // Re-entrancy guard: a second capture while one is in flight would stack native
+  // overlays and clobber the saved window-visibility state (leaving the app stuck
+  // hidden on cancel). Ignore captures until the current one settles.
+  let capturing = false;
+
   ipcMain.handle(IPC_CHANNELS.screenshotCapture, async () => {
-    if (process.platform !== "darwin") return null;
+    if (process.platform !== "darwin" || capturing) return null;
+    capturing = true;
     windows.beforeCapture();
     let png: Buffer | null = null;
     try {
       png = await provider.captureInteractive();
     } finally {
+      capturing = false;
       windows.afterCapture(Boolean(png));
     }
     if (!png) return null;
