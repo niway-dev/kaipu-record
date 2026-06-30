@@ -23,6 +23,7 @@ const status: Record<ShortcutAction, boolean> = {
   startRecording: false,
   stopRecording: false,
   bringToFront: false,
+  captureScreenshot: false,
 };
 
 function tryRegister(accelerator: string, handler: () => void): boolean {

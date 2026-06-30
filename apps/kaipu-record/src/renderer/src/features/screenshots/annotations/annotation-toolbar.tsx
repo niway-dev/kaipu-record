@@ -1,0 +1,43 @@
+import React from "react";
+import { ArrowUpRight, MousePointer2, Square, Type } from "lucide-react";
+import { ANNOTATION_TOOLS, type AnnotationTool } from "./tools";
+import type { AnnotationToolsController } from "./use-annotation-tools";
+import styles from "./annotation-toolbar.module.css";
+
+const TOOL_META: Record<AnnotationTool, { label: string; Icon: typeof Square }> = {
+  select: { label: "Select", Icon: MousePointer2 },
+  box: { label: "Box", Icon: Square },
+  arrow: { label: "Arrow", Icon: ArrowUpRight },
+  text: { label: "Text", Icon: Type },
+};
+
+/**
+ * Just the tool group (select / box / arrow / text). The per-tool controls
+ * (colour, stroke, size) live in the floating `AnnotationOptions` panel over the
+ * canvas — Excalidraw-style — so the top bar stays compact.
+ */
+export function AnnotationToolbar({
+  tools,
+}: {
+  tools: AnnotationToolsController;
+}): React.JSX.Element {
+  return (
+    <div className={styles.toolGroup}>
+      {ANNOTATION_TOOLS.map((t) => {
+        const { label, Icon } = TOOL_META[t];
+        return (
+          <button
+            key={t}
+            type="button"
+            title={label}
+            aria-label={label}
+            className={`${styles.tool} ${tools.tool === t ? styles.toolActive : ""}`}
+            onClick={() => tools.setTool(t)}
+          >
+            <Icon size={19} />
+          </button>
+        );
+      })}
+    </div>
+  );
+}

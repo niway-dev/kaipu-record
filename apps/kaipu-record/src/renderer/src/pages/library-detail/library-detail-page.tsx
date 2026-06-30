@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, FolderOpen, Trash2, VideoOff } from "lucide-react";
+import { ArrowLeft, Check, Copy, FileX2, FolderOpen, Pencil, Trash2 } from "lucide-react";
+import type { ImageSource } from "@renderer/features/screenshots/image-source";
+import { useTransientValue } from "@renderer/ui/use-transient-value";
 import { useLocalLibrary } from "@renderer/features/library/hooks/use-local-library";
 import { StorageMeta } from "@renderer/features/library/components/storage-meta";
 import { DeleteConfirmDialog } from "@renderer/features/library/components/delete-confirm-dialog";
 import { RecordingPlayer } from "@renderer/features/library/components/recording-player";
+import { ScreenshotViewer } from "@renderer/features/library/components/screenshot-viewer";
 import { RecordingTitle } from "@renderer/features/library/components/recording-title";
 import { formatDuration, formatSize, relativeDate } from "@renderer/features/library/format";
 import { Button } from "@renderer/ui/button";
@@ -18,6 +21,7 @@ export function LibraryDetailPage(): React.JSX.Element {
   const video = videos.find((v) => v.id === id);
 
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [copied, showCopied] = useTransientValue<true>(2200);
 
   const back = (): void => {
     navigate("/library");
@@ -30,8 +34,8 @@ export function LibraryDetailPage(): React.JSX.Element {
   if (!video || !id) {
     return (
       <div className={styles.centered}>
-        <VideoOff size={40} strokeWidth={1.5} className={styles.missingIcon} />
-        <h2 className={styles.missingTitle}>Recording not found</h2>
+        <FileX2 size={40} strokeWidth={1.5} className={styles.missingIcon} />
+        <h2 className={styles.missingTitle}>File not found</h2>
         <Button variant="ghost" onClick={back}>
           Back to Library
         </Button>
@@ -39,10 +43,33 @@ export function LibraryDetailPage(): React.JSX.Element {
     );
   }
 
+  const isScreenshot = video.kind === "screenshot";
+
   const doDelete = (): void => {
     void remove(id);
     setConfirmingDelete(false);
     back();
+  };
+
+  // Copy a saved screenshot to the clipboard — main reads the vault file by id
+  // (fetch on the kaipu-media:// scheme doesn't return bytes in the renderer).
+  const copyScreenshot = async (): Promise<void> => {
+    await window.electronAPI.copyScreenshotById(video.id);
+    showCopied(true);
+  };
+
+  // Re-open a saved screenshot in the editor. It's a flat PNG, so the editor treats
+  // it as a new base image (the local source starts with no beautify re-frame). Carry
+  // the `?v=` token from the thumbnail URL so the editor loads the current bytes.
+  const editScreenshot = (): void => {
+    const v = video.thumbnailUrl ? Number(new URL(video.thumbnailUrl).searchParams.get("v")) : NaN;
+    const source: ImageSource = {
+      kind: "local",
+      id: video.id,
+      title: video.title,
+      version: Number.isFinite(v) ? v : undefined,
+    };
+    navigate("/screenshot-editor", { state: source });
   };
 
   return (
@@ -52,7 +79,11 @@ export function LibraryDetailPage(): React.JSX.Element {
         Library
       </button>
 
-      <RecordingPlayer id={id} poster={video.thumbnailUrl} />
+      {isScreenshot ? (
+        <ScreenshotViewer src={video.thumbnailUrl} />
+      ) : (
+        <RecordingPlayer id={id} poster={video.thumbnailUrl} />
+      )}
 
       <div className={styles.bar}>
         <div className={styles.titleBlock}>
@@ -61,14 +92,34 @@ export function LibraryDetailPage(): React.JSX.Element {
             <StorageMeta video={video} />
             <span className={styles.dot}>·</span>
             <span className={styles.metaItem}>{relativeDate(video.createdAt)}</span>
-            <span className={styles.dot}>·</span>
-            <span className={styles.metaItem}>{formatDuration(video.durationSeconds)}</span>
+            {!isScreenshot && (
+              <>
+                <span className={styles.dot}>·</span>
+                <span className={styles.metaItem}>{formatDuration(video.durationSeconds)}</span>
+              </>
+            )}
             <span className={styles.dot}>·</span>
             <span className={styles.metaItem}>{formatSize(video.fileSizeBytes)}</span>
           </div>
         </div>
 
         <div className={styles.actions}>
+          {isScreenshot && (
+            <>
+              <Button variant="outline" size="sm" onClick={editScreenshot}>
+                <Pencil size={15} strokeWidth={1.8} />
+                Edit
+              </Button>
+              <Button variant="outline" size="sm" onClick={copyScreenshot}>
+                {copied ? (
+                  <Check size={15} strokeWidth={1.8} />
+                ) : (
+                  <Copy size={15} strokeWidth={1.8} />
+                )}
+                {copied ? "Copied" : "Copy"}
+              </Button>
+            </>
+          )}
           <Button variant="outline" size="sm" onClick={() => reveal(id)}>
             <FolderOpen size={15} strokeWidth={1.8} />
             Reveal

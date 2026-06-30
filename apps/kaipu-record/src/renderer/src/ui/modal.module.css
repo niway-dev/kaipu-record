@@ -13,7 +13,7 @@
 
 .dialog {
   width: 100%;
-  max-width: 360px;
+  max-width: 380px;
   background: var(--bg-modal);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
@@ -30,10 +30,19 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  margin-bottom: 14px;
+}
+
+.icon[data-tone="danger"] {
   background: rgba(239, 68, 68, 0.12);
   border: 1px solid rgba(239, 68, 68, 0.4);
   color: var(--accent-red);
-  margin-bottom: 14px;
+}
+
+.icon[data-tone="accent"] {
+  background: rgba(246, 5, 92, 0.12);
+  border: 1px solid rgba(246, 5, 92, 0.4);
+  color: var(--accent-primary);
 }
 
 .title {
@@ -60,43 +69,55 @@
   gap: var(--space-sm);
 }
 
-.cancel,
-.confirm {
+.btn {
   flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   height: 36px;
   border-radius: var(--radius-md);
   font-family: var(--font-family);
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-medium);
   cursor: pointer;
+  border: 1px solid transparent;
   transition:
     background var(--transition),
     border-color var(--transition),
     opacity var(--transition);
 }
 
-.cancel {
+.btn[data-variant="ghost"] {
   background: transparent;
-  border: 1px solid var(--border-light);
+  border-color: var(--border-light);
   color: var(--text-secondary);
 }
 
-.cancel:hover {
+.btn[data-variant="ghost"]:hover {
   background: var(--bg-card-hover);
   color: var(--text-primary);
 }
 
-.confirm {
-  background: var(--accent-red);
-  border: 1px solid transparent;
+.btn[data-variant="primary"] {
+  background: var(--accent-primary);
   color: #fff;
 }
 
-.confirm:hover:not(:disabled) {
+.btn[data-variant="primary"]:hover:not(:disabled) {
+  background: var(--accent-primary-hover);
+}
+
+.btn[data-variant="danger"] {
+  background: var(--accent-red);
+  color: #fff;
+}
+
+.btn[data-variant="danger"]:hover:not(:disabled) {
   background: var(--accent-red-hover);
 }
 
-.confirm:disabled {
+.btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }

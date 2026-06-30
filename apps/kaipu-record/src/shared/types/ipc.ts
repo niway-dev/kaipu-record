@@ -12,23 +12,84 @@ import { DEFAULT_QUALITY, type RecordingQuality } from "../recording-quality";
 export type Theme = "light" | "dark" | "system";
 
 /** Actions that can be bound to a global keyboard shortcut. */
-export const SHORTCUT_ACTIONS = ["startRecording", "stopRecording", "bringToFront"] as const;
+export const SHORTCUT_ACTIONS = [
+  "startRecording",
+  "stopRecording",
+  "bringToFront",
+  "captureScreenshot",
+] as const;
 export type ShortcutAction = (typeof SHORTCUT_ACTIONS)[number];
 
 /** Electron accelerator string per action (e.g. "Command+Control+C"). */
 export type ShortcutSettings = Record<ShortcutAction, string>;
 
+/** Which on-screen group a shortcut belongs to (drives the Shortcuts page sections). */
+export type ShortcutGroup = "recording" | "app";
+
 /**
- * Default global shortcuts. The `Command+Control` base is distinctive: it avoids
- * macOS reserved combos (screenshots, VoiceOver's Control+Option) and the
- * crowded Command+Shift space that browsers/editors lean on — important because
- * a global shortcut overrides the focused (recorded) app.
+ * The single source of truth for every shortcut: its default accelerator plus all
+ * the human-readable copy. The Shortcuts page, the status bar, and the default
+ * settings all derive from this array — change a label or default here and every
+ * surface updates. (Keep this in sync with the handlers wired in `main/index.ts`.)
  */
-export const DEFAULT_SHORTCUTS: ShortcutSettings = {
-  startRecording: "Command+Control+C", // Capture
-  stopRecording: "Command+Control+S", // Stop
-  bringToFront: "Command+Control+O", // Open
-};
+export interface ShortcutDefinition {
+  action: ShortcutAction;
+  /** Electron accelerator used when the user hasn't rebound the action. */
+  defaultAccelerator: string;
+  group: ShortcutGroup;
+  /** Title shown on the Shortcuts page (e.g. "Start recording"). */
+  label: string;
+  /** One-line explanation shown under the label. */
+  description: string;
+  /** Terse word for the compact status bar (e.g. "start"). */
+  statusWord: string;
+}
+
+/**
+ * The `Command+Control` base is distinctive: it avoids macOS reserved combos
+ * (screenshots, VoiceOver's Control+Option) and the crowded Command+Shift space
+ * that browsers/editors lean on — important because a global shortcut overrides
+ * the focused (recorded) app.
+ */
+export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
+  {
+    action: "startRecording",
+    defaultAccelerator: "Command+Control+C",
+    group: "recording",
+    label: "Start recording",
+    description: "Begin a screen recording from anywhere",
+    statusWord: "start",
+  },
+  {
+    action: "stopRecording",
+    defaultAccelerator: "Command+Control+S",
+    group: "recording",
+    label: "Stop recording",
+    description: "End the current recording from anywhere",
+    statusWord: "stop",
+  },
+  {
+    action: "bringToFront",
+    defaultAccelerator: "Command+Control+O",
+    group: "app",
+    label: "Bring Kaipu to front",
+    description: "Show the app window if it slips behind or out of reach",
+    statusWord: "show app",
+  },
+  {
+    action: "captureScreenshot",
+    defaultAccelerator: "Command+Control+X",
+    group: "app",
+    label: "Capture screenshot",
+    description: "Open the area selection to take a screenshot",
+    statusWord: "capture",
+  },
+];
+
+/** Default accelerators, derived so they can never drift from the definitions. */
+export const DEFAULT_SHORTCUTS: ShortcutSettings = Object.fromEntries(
+  SHORTCUT_DEFINITIONS.map((d) => [d.action, d.defaultAccelerator]),
+) as ShortcutSettings;
 
 export interface AppSettings {
   theme: Theme;
@@ -70,6 +131,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
  */
 export const IPC_CHANNELS = {
   getAppVersion: "app:get-version",
+  // Renderer → main: grow/reset the window for the screenshot editor.
+  windowSetEditorMode: "window:set-editor-mode",
   updateGetStatus: "update:get-status",
   updateStatus: "update:status",
   updateInstall: "update:install",
@@ -85,6 +148,19 @@ export const IPC_CHANNELS = {
   getVaultDirectory: "library:get-vault-dir",
   chooseVaultDirectory: "library:choose-vault-dir",
   resetVaultDirectory: "library:reset-vault-dir",
+  // Screenshots (renderer ↔ main)
+  screenshotCapture: "screenshot:capture",
+  screenshotCopy: "screenshot:copy",
+  // Copy a saved screenshot to the clipboard by id (main reads the file — fetch on
+  // the kaipu-media:// scheme doesn't return bytes in the renderer).
+  screenshotCopyById: "screenshot:copy-by-id",
+  // Read a saved screenshot's PNG bytes by id (for re-opening it in the editor).
+  screenshotReadBytes: "screenshot:read-bytes",
+  screenshotSave: "screenshot:save",
+  // Renderer → main: capture done + navigated to the editor, bring the app back.
+  screenshotReveal: "screenshot:reveal",
+  // Main → renderer: global hotkey fired, run the region capture flow.
+  screenshotHotkey: "screenshot:hotkey",
   // Recording engine (renderer ↔ main)
   recordingCreate: "recording:create",
   recordingWrite: "recording:write",

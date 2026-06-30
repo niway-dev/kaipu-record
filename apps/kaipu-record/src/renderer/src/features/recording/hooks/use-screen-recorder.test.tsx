@@ -34,6 +34,7 @@ const RECORDING: LocalRecording = {
   sizeBytes: 10,
   durationSeconds: 5,
   thumbnailUrl: null,
+  kind: "recording",
 };
 
 const input = {

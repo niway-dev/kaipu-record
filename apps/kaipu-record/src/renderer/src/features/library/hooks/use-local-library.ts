@@ -5,6 +5,7 @@ import type { LibraryVideo } from "@renderer/features/library/types";
 function toLibraryVideo(recording: LocalRecording): LibraryVideo {
   return {
     id: recording.id,
+    kind: recording.kind,
     title: recording.title,
     createdAt: recording.createdAt,
     durationSeconds: recording.durationSeconds,

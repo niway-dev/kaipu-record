@@ -16,14 +16,17 @@ export function LibraryPage(): React.JSX.Element {
   const navigate = useNavigate();
   const { videos, isLoading, refresh, remove } = useLocalLibrary();
   const {
+    kindFilter,
     storageFilter,
     sortKey,
     searchTerm,
+    setKindFilter,
     setStorageFilter,
     setSortKey,
     setSearchTerm,
     visibleItems,
     counts,
+    kindCounts,
     hasActiveFilters,
     clearFilters,
   } = useLibraryFilters(videos);
@@ -90,6 +93,26 @@ export function LibraryPage(): React.JSX.Element {
       </div>
 
       <div className={styles.chipRow}>
+        <FilterChip active={kindFilter === "all"} onClick={() => setKindFilter("all")}>
+          All ({kindCounts.all})
+        </FilterChip>
+        <FilterChip
+          active={kindFilter === "recording"}
+          empty={kindCounts.recording === 0}
+          onClick={() => setKindFilter("recording")}
+        >
+          Recordings ({kindCounts.recording})
+        </FilterChip>
+        <FilterChip
+          active={kindFilter === "screenshot"}
+          empty={kindCounts.screenshot === 0}
+          onClick={() => setKindFilter("screenshot")}
+        >
+          Screenshots ({kindCounts.screenshot})
+        </FilterChip>
+
+        <span className={styles.chipDivider} aria-hidden />
+
         <FilterChip active={storageFilter === "all"} onClick={() => setStorageFilter("all")}>
           All
         </FilterChip>
@@ -124,7 +147,7 @@ export function LibraryPage(): React.JSX.Element {
       {videos.length > 0 && (
         <div className={styles.summaryBar}>
           <span>
-            {visibleItems.length} RECORDING{visibleItems.length !== 1 ? "S" : ""}
+            {visibleItems.length} FILE{visibleItems.length !== 1 ? "S" : ""}
           </span>
           {hasActiveFilters && (
             <button className={styles.clearFiltersButton} onClick={clearFilters} type="button">

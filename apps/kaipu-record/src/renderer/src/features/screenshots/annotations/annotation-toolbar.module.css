@@ -1,0 +1,39 @@
+/*
+ * Annotation tool group (top bar). The per-tool controls live in the floating
+ * AnnotationOptions panel (annotation-options.module.css).
+ */
+
+.toolGroup {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  background: var(--bg-modal);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+
+.tool {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 34px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.tool:hover {
+  color: var(--text-primary);
+}
+
+.toolActive,
+.toolActive:hover {
+  background: var(--accent-primary);
+  color: #fff;
+}

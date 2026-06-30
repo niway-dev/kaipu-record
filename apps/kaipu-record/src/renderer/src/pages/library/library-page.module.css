@@ -133,6 +133,13 @@
   margin-top: var(--space-md);
 }
 
+.chipDivider {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px var(--space-xs);
+  background: var(--border);
+}
+
 .storageDotChip {
   width: 7px;
   height: 7px;

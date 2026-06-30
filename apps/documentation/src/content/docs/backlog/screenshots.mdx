@@ -5,9 +5,89 @@ description: Full design brief for the Screenshots feature — a native screensh
 
 # Screenshots — capture, annotate, beautify, share
 
-> **Status: 🔵 Proposed.** This is the design brief, not yet built. It captures
-> the agreed scope, the technical approach, the data model, and a phased plan so
-> implementation can start without re-deciding the fundamentals.
+> **Status: 🟢 Built locally — pending prod validation** (on `feat/screenshots`).
+> The capture → annotate → beautify → copy/save loop, library integration, and
+> re-edit are implemented and unit-tested locally; not yet validated in a packaged
+> build. This doc remains the design brief / source of truth. The checklist below
+> tracks exactly what shipped to the branch.
+
+## 0. What's built (local, pending prod validation)
+
+Everything below works in dev on `feat/screenshots`. ✅ = done locally; validate in
+a packaged build before folding into a `desktop/` reference doc.
+
+**Capture flow**
+
+- ✅ Global `⌘⌃X` hotkey + the Capture page button run the native macOS region
+  selector (`screencapture -i`).
+- ✅ The app **gets out of the way** during capture: main hides the window (and the
+  tray panel) for the shot, then the renderer reveals it on the editor after a
+  successful capture (no flash of the previous page). Cancel restores prior
+  visibility. Re-entrancy guard prevents stacked overlays; the window is recreated
+  if it was closed.
+
+**Editor — annotate**
+
+- ✅ Tools: select, box, arrow, text (hand-drawn "rough" style). The text tool uses
+  an inline input (Electron blocks `window.prompt`), robust against the opening
+  click's blur; tools stay active to place several in a row.
+- ✅ **Selection-aware options**: selecting an annotation lets you re-edit its
+  colour and stroke/size (one undoable change each, via `commitAnnotation`).
+- ✅ Text sizes **XS / S / M / L** (single-source `TEXT_PX`); smaller default.
+- ✅ Hit-testing scales with font size + layer pixel size (fixed selecting small
+  text on short/wide shots).
+
+**Editor — layout & view**
+
+- ✅ Excalidraw-style layout: top bar = tool group + actions; a **floating options
+  panel** over the canvas (only when there's something to edit); **zoom pinned at
+  the foot**.
+- ✅ **View zoom** (50–300%): `−/%/+` control **and** ⌘/Ctrl + wheel / trackpad
+  pinch. Pannable when zoomed (top-left transform origin + scroll); annotations
+  stay aligned; export stays at native resolution (zoom is view-only).
+- ✅ The window **grows + raises its minimum** while editing, and restores on exit.
+- ✅ Editor **resets to initial state on each new capture** (keyed remount).
+
+**Beautify**
+
+- ✅ Background presets (none/dark/carbon/magenta/purple/ocean/sunset/forest/
+  graphite) + padding / corners / shadow sliders, with one undo/redo history.
+- ✅ Export compositor mirrors the live preview (rough paths, gradient/shadow,
+  text) at the shot's natural resolution. Text sizes match the editor (shared
+  `TEXT_PX`).
+
+**Copy / Save**
+
+- ✅ **Copy** to clipboard and **Save** to the vault, with button feedback
+  ("Copied"/"Saved" + check) and a sonner-style **toast** showing the saved name.
+- ✅ Default title **`Screenshot — <date/time>`** (stamped at capture, mirrors
+  recordings) so saves are told apart by when taken.
+- ✅ **Save options**: a new shot saves directly; a re-opened (or already-saved)
+  shot prompts **Overwrite** (in place, keeps `createdAt`) or **Save copy** (new
+  id). Overwritten media is served `no-store` so the new bytes show immediately.
+
+**Library**
+
+- ✅ **Kind filter** (All / Recordings / Screenshots, with counts) + a per-item
+  **kind badge** (Recording / Screenshot).
+- ✅ Detail page **branches by kind** on the single `/library/:id` route:
+  recordings get the player, screenshots get a `ScreenshotViewer` (checker
+  backdrop) with **Edit / Copy / Reveal / Delete**.
+- ✅ **Re-edit**: Edit re-opens a saved shot in the editor as a `local` source,
+  starting **unframed** (`FLAT_BEAUTIFY`) so an already-flattened PNG isn't
+  beautified twice.
+- ✅ Reliable copy + byte reads go **through main by id** (the `kaipu-media://`
+  scheme renders in `<img>` but `fetch` doesn't return a usable body).
+
+**Polish**
+
+- ✅ Editor UI copy is English (i18n later); background ids are English code.
+
+**Known follow-ups / not yet built:** auto-save vs explicit save
+([save strategy](./screenshot-save-strategy)); crop-to-region & export-resolution
+zoom ([editor zoom](./editor-zoom)); PDF/other export formats
+([export formats](./export-formats)); persisting a re-editable scene doc (re-edit
+is destructive today — it flattens); screenshot dimensions in the detail meta.
 
 ## 1. Vision
 

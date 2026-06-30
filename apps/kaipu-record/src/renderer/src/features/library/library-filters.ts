@@ -1,11 +1,15 @@
-import type { LibraryVideo, StorageState } from "./types";
+import type { LibraryKind, LibraryVideo, StorageState } from "./types";
 
 /** The storage chip selection — every storage state, plus the "all" pass-through. */
 export type StorageFilter = "all" | StorageState;
 
+/** The kind chip selection — recording / screenshot, plus the "all" pass-through. */
+export type KindFilter = "all" | LibraryKind;
+
 export type SortKey = "newest" | "oldest" | "largest";
 
 export interface FilterCriteria {
+  kindFilter: KindFilter;
   storageFilter: StorageFilter;
   sortKey: SortKey;
   searchTerm: string;
@@ -15,6 +19,12 @@ export interface StorageCounts {
   local: number;
   cloud: number;
   failed: number;
+}
+
+export interface KindCounts {
+  all: number;
+  recording: number;
+  screenshot: number;
 }
 
 /**
@@ -29,6 +39,7 @@ export function selectVisibleVideos(
 ): LibraryVideo[] {
   const term = criteria.searchTerm.trim().toLowerCase();
   const filtered = videos.filter((video) => {
+    if (criteria.kindFilter !== "all" && video.kind !== criteria.kindFilter) return false;
     if (criteria.storageFilter !== "all" && video.storage !== criteria.storageFilter) return false;
     if (term && !video.title.toLowerCase().includes(term)) return false;
     return true;
@@ -40,11 +51,20 @@ export function selectVisibleVideos(
   });
 }
 
-/** Tally recordings by storage state for the filter chips. */
+/** Tally items by storage state for the filter chips. */
 export function countByStorage(videos: LibraryVideo[]): StorageCounts {
   return {
     local: videos.filter((v) => v.storage === "local").length,
     cloud: videos.filter((v) => v.storage === "cloud").length,
     failed: videos.filter((v) => v.storage === "failed").length,
+  };
+}
+
+/** Tally items by kind (recording vs screenshot) for the kind filter chips. */
+export function countByKind(videos: LibraryVideo[]): KindCounts {
+  return {
+    all: videos.length,
+    recording: videos.filter((v) => v.kind === "recording").length,
+    screenshot: videos.filter((v) => v.kind === "screenshot").length,
   };
 }

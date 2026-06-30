@@ -6,6 +6,7 @@ import { useLibraryFilters } from "./use-library-filters";
 const videos: LibraryVideo[] = [
   {
     id: "a",
+    kind: "recording",
     title: "Alpha",
     createdAt: 200,
     durationSeconds: 5,
@@ -14,6 +15,7 @@ const videos: LibraryVideo[] = [
   },
   {
     id: "b",
+    kind: "screenshot",
     title: "Bravo",
     createdAt: 100,
     durationSeconds: 5,
@@ -23,11 +25,19 @@ const videos: LibraryVideo[] = [
 ];
 
 describe("useLibraryFilters", () => {
-  it("starts unfiltered with newest-first ordering and storage counts", () => {
+  it("starts unfiltered with newest-first ordering and storage + kind counts", () => {
     const { result } = renderHook(() => useLibraryFilters(videos));
     expect(result.current.hasActiveFilters).toBe(false);
     expect(result.current.visibleItems.map((v) => v.id)).toEqual(["a", "b"]);
     expect(result.current.counts).toEqual({ local: 1, cloud: 1, failed: 0 });
+    expect(result.current.kindCounts).toEqual({ all: 2, recording: 1, screenshot: 1 });
+  });
+
+  it("filters by kind and flags active filters", () => {
+    const { result } = renderHook(() => useLibraryFilters(videos));
+    act(() => result.current.setKindFilter("screenshot"));
+    expect(result.current.hasActiveFilters).toBe(true);
+    expect(result.current.visibleItems.map((v) => v.id)).toEqual(["b"]);
   });
 
   it("flags active filters and reflects them in the visible items", () => {

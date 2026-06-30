@@ -1,5 +1,6 @@
-import { useEffect } from "react";
+import React, { useEffect } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
+import { SHORTCUT_DEFINITIONS } from "@shared/types";
 import { Sidebar } from "./sidebar";
 import { useShortcutLabels } from "@renderer/features/shortcuts/use-shortcut-labels";
 import {
@@ -9,6 +10,7 @@ import {
 } from "@renderer/features/version-gate";
 import { useUpdateStatus, UpdateBanner } from "@renderer/features/updater";
 import { useAppVersion } from "./use-app-version";
+import { useScreenshotCapture } from "@renderer/features/screenshots/use-screenshot-capture";
 import styles from "./app-shell.module.css";
 
 /**
@@ -22,6 +24,7 @@ export function AppShell(): React.JSX.Element {
   const gate = useVersionGate();
   const update = useUpdateStatus();
   const version = useAppVersion();
+  const { capture } = useScreenshotCapture();
 
   // A global "start recording" (the hotkey or the Capture Panel) can arrive on any
   // route — the recorder lives on the Record page, so bring the user there and
@@ -34,6 +37,10 @@ export function AppShell(): React.JSX.Element {
       }),
     [navigate],
   );
+
+  // Global ⌘⌃X hotkey: main brings the window to front and broadcasts this event;
+  // we run the region-capture flow here so navigation (useNavigate) is available.
+  useEffect(() => window.electronAPI.onCaptureScreenshotHotkey(capture), [capture]);
 
   return (
     <div className={styles.shell}>
@@ -48,21 +55,15 @@ export function AppShell(): React.JSX.Element {
         </main>
       </div>
       <div className={styles.statusBar}>
-        {shortcuts && (
-          <>
-            <span>
-              <kbd>{shortcuts.startRecording}</kbd> start
-            </span>
-            <span className={styles.statusDot}>·</span>
-            <span>
-              <kbd>{shortcuts.stopRecording}</kbd> stop
-            </span>
-            <span className={styles.statusDot}>·</span>
-            <span>
-              <kbd>{shortcuts.bringToFront}</kbd> show app
-            </span>
-          </>
-        )}
+        {shortcuts &&
+          SHORTCUT_DEFINITIONS.map((def, i) => (
+            <React.Fragment key={def.action}>
+              {i > 0 && <span className={styles.statusDot}>·</span>}
+              <span>
+                <kbd>{shortcuts[def.action]}</kbd> {def.statusWord}
+              </span>
+            </React.Fragment>
+          ))}
         {version && <span className={styles.statusVersion}>v{version}</span>}
       </div>
       {gate.kind === "hard" && (

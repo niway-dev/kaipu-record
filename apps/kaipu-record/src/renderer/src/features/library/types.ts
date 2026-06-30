@@ -2,8 +2,12 @@
 
 export type StorageState = "local" | "cloud" | "uploading" | "failed";
 
+/** What kind of asset a library item is — a screen recording or a screenshot. */
+export type LibraryKind = "recording" | "screenshot";
+
 export interface LibraryVideo {
   id: string;
+  kind: LibraryKind;
   title: string;
   /** Epoch milliseconds. */
   createdAt: number;

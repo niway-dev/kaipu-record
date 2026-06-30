@@ -130,6 +130,44 @@ export interface KaipuElectronAPI {
   /** Resume (re-register) global shortcuts after rebinding. */
   resumeShortcuts(): void;
 
+  // ── Screenshots ───────────────────────────────────────────────────────
+  /** Run the interactive region capture; resolves null if the user cancelled. */
+  captureScreenshot(): Promise<{ png: ArrayBuffer; width: number; height: number } | null>;
+  /**
+   * Subscribe to the global `⌘⌃X` hotkey broadcast from main. Returns an
+   * unsubscribe fn. The renderer owns navigation so it runs the capture flow.
+   */
+  onCaptureScreenshotHotkey(callback: () => void): () => void;
+  /**
+   * Bring the app back to the front after a successful capture. The renderer
+   * calls this *after* it has navigated to the editor, so the window reappears
+   * already showing the result (no flash of the previous page). Main hides the
+   * window for the duration of the capture so the app isn't in the shot.
+   */
+  revealAfterCapture(): void;
+  /**
+   * Toggle "editor mode" window sizing: when active, main raises the minimum
+   * size and grows the window so the screenshot editor has room; inactive
+   * restores the normal minimum. The renderer calls true on editor mount, false
+   * on unmount.
+   */
+  setEditorWindowMode(active: boolean): void;
+  /** Put a PNG on the system clipboard. */
+  copyImageToClipboard(png: ArrayBuffer): Promise<void>;
+  /** Copy a saved screenshot to the clipboard by id (main reads the vault file). */
+  copyScreenshotById(id: string): Promise<void>;
+  /** Read a saved screenshot's PNG bytes by id (re-opening it in the editor). */
+  readScreenshotBytes(id: string): Promise<ArrayBuffer>;
+  /**
+   * Write a PNG into the vault and return the stored item. With `overwriteId` it
+   * replaces that existing screenshot (keeping its createdAt); without, it creates
+   * a new timestamped item.
+   */
+  saveScreenshot(
+    png: ArrayBuffer,
+    meta: { title: string; overwriteId?: string },
+  ): Promise<LocalRecording>;
+
   // ── Analytics ─────────────────────────────────────────────────────────
   /** Forward a serialized exception (+ origin/context) to the main-process sink. */
   reportException(

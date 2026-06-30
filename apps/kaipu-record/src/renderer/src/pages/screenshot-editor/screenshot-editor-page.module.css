@@ -1,0 +1,298 @@
+/*
+ * Screenshot editor.
+ * All colors, spacing, and radii use design tokens from base.css.
+ * Exception: color: #fff on .save — matches the project's established
+ * button.module.css convention for text on --accent-primary.
+ */
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: var(--space-md);
+}
+
+/* ── Toolbar ─────────────────────────────────────── */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  flex-shrink: 0;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.iconBtn:hover:not(:disabled) {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.iconBtn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.divider {
+  width: 1px;
+  height: 24px;
+  background: var(--border);
+  margin: 0 var(--space-xs);
+}
+
+/* ── Floating zoom pill (foot of the canvas) ─────── */
+
+.zoomFloat {
+  position: absolute;
+  bottom: var(--space-md);
+  left: var(--space-md);
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg, 0 8px 24px -8px rgba(0, 0, 0, 0.55));
+}
+
+.zoomBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 28px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.zoomBtn:hover:not(:disabled) {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.zoomBtn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.zoomLabel {
+  min-width: 46px;
+  height: 28px;
+  padding: 0 var(--space-xs);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.zoomLabel:hover:not(:disabled) {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.zoomLabel:disabled {
+  cursor: default;
+}
+
+.secondary,
+.save {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  height: 34px;
+  padding: 0 var(--space-lg);
+  border-radius: var(--radius-md);
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+
+.secondary {
+  background: transparent;
+  border: 1px solid var(--border-light);
+  color: var(--text-primary);
+  transition:
+    background var(--transition),
+    border-color var(--transition);
+}
+
+.secondary:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--text-muted);
+}
+
+.save {
+  background: var(--accent-primary);
+  border: none;
+  color: #fff;
+  font-weight: var(--font-weight-semibold);
+  box-shadow: var(--glow-accent);
+  transition:
+    background var(--transition),
+    box-shadow var(--transition);
+}
+
+.save:hover {
+  background: var(--accent-primary-hover);
+}
+
+/* ── Copy / Save success feedback ────────────────── */
+
+.secondary[data-done="true"] {
+  border-color: var(--accent-green);
+  color: var(--accent-green);
+}
+
+.save[data-done="true"],
+.save[data-done="true"]:hover {
+  background: var(--accent-green);
+  box-shadow: none;
+}
+
+/* Sonner-style toast pinned to the bottom of the editor (clear of the right panel). */
+.savedToast {
+  position: fixed;
+  bottom: 60px;
+  left: 50%;
+  z-index: 60;
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 16px 10px 11px;
+  background: var(--bg-modal);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  box-shadow: 0 14px 36px -10px rgba(0, 0, 0, 0.65);
+  animation: toastIn 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.savedToastIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.savedToastText {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.savedToastTitle {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.savedToastName {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 10px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/* ── Body: canvas + beautify panel ───────────────── */
+
+.body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+/* The non-scrolling anchor for the floating panels; the canvas scrolls inside it. */
+.canvasArea {
+  position: relative;
+  flex: 1;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+
+.canvas {
+  flex: 1;
+  display: flex;
+  /* Centred while it fits (zoom ≤ 1). */
+  align-items: safe center;
+  justify-content: safe center;
+  padding: var(--space-xl);
+  /* `auto`, not `hidden`: the shot fits at zoom 1 (no spurious scroll); the
+     view-zoom overflows → scroll/pan the view. */
+  overflow: auto;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg-app);
+}
+
+/* Once zoomed in, anchor the shot to the top-left so it lines up with the frame's
+   top-left transform origin and every part stays reachable by scrolling. */
+.canvas[data-zoomed="true"] {
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+/* Floating per-tool options panel, pinned to the canvas (doesn't scroll away). */
+.optionsFloat {
+  position: absolute;
+  top: var(--space-md);
+  left: var(--space-md);
+  z-index: 2;
+}

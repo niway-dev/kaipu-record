@@ -1,6 +1,6 @@
 import { net, protocol } from "electron";
 import { pathToFileURL } from "node:url";
-import { recordingFilePath, thumbnailFilePath } from "./library";
+import { recordingFilePath, screenshotFilePath, thumbnailFilePath } from "./library";
 
 /**
  * Privileged, streamable protocol for local vault media.
@@ -29,7 +29,15 @@ export function registerMediaProtocol(): void {
     const id = decodeURIComponent(url.pathname.replace(/^\/+/, ""));
     if (isUnsafeId(id)) return new Response("Invalid recording id", { status: 400 });
 
-    const target = url.hostname === "thumb" ? thumbnailFilePath(id) : await recordingFilePath(id);
+    // Screenshots are overwritten in place; freshness is handled by the `?v=<mtime>`
+    // version token on the URL (see LibraryVault.describe), so normal caching is fine.
+    const { hostname } = url;
+    const target =
+      hostname === "screenshot"
+        ? await screenshotFilePath(id)
+        : hostname === "thumb"
+          ? thumbnailFilePath(id)
+          : await recordingFilePath(id);
     return net.fetch(pathToFileURL(target).toString());
   });
 }

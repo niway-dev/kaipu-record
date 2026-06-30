@@ -12,6 +12,7 @@ const recordings: LocalRecording[] = [
     sizeBytes: 100,
     durationSeconds: 10,
     thumbnailUrl: null,
+    kind: "recording",
   },
   {
     id: "b",
@@ -21,6 +22,7 @@ const recordings: LocalRecording[] = [
     sizeBytes: 200,
     durationSeconds: 20,
     thumbnailUrl: null,
+    kind: "recording",
   },
 ];
 

@@ -6,6 +6,7 @@ import { VideoRow } from "./video-row";
 function makeVideo(overrides: Partial<LibraryVideo> = {}): LibraryVideo {
   return {
     id: "v1",
+    kind: "recording",
     title: "My Recording",
     createdAt: 1_700_000_000_000,
     durationSeconds: 65,
@@ -74,5 +75,12 @@ describe("VideoRow", () => {
   it("falls back to 'Untitled recording' for an empty title", () => {
     renderRow({ video: makeVideo({ title: "" }) });
     expect(screen.getByText("Untitled recording")).toBeInTheDocument();
+  });
+
+  it("hides the duration for screenshots (no bogus 0:00)", () => {
+    const { container } = renderRow({
+      video: makeVideo({ kind: "screenshot", durationSeconds: 0 }),
+    });
+    expect(container.textContent).not.toMatch(/\d:\d\d/);
   });
 });

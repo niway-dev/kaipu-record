@@ -26,6 +26,7 @@ import {
 } from "./shortcuts/global-shortcuts";
 import { initMainAnalytics, shutdownMainAnalytics } from "./services/analytics.service";
 import { registerAnalyticsIpc } from "./services/analytics-ipc";
+import { registerScreenshotHandlers } from "./screenshots/screenshot-ipc";
 
 let mainWindow: BrowserWindow | null = null;
 let capturePanel: CapturePanelWindow | null = null;
@@ -34,16 +35,26 @@ let tray: Tray | null = null;
 // Must run before `app.whenReady` — privileged scheme registration.
 registerMediaScheme();
 
-function createWindow(): void {
+/** Normal window minimums; floored so the main UI / onboarding never break. */
+const BASE_MIN_WIDTH = 720;
+const BASE_MIN_HEIGHT = 560;
+/** The screenshot editor (toolbar + canvas + beautify panel) needs more room. */
+const EDITOR_MIN_WIDTH = 1040;
+const EDITOR_MIN_HEIGHT = 720;
+
+/**
+ * Create the main window. `showOnReady` defaults to true; pass false when
+ * recreating it solely to run the capture flow (the renderer reveals it after a
+ * successful shot), so the app doesn't flash to the front and into the capture.
+ */
+function createWindow(showOnReady = true): void {
   // Create the browser window.
   mainWindow = new BrowserWindow({
     title: "Kaipu Record",
     width: 900,
     height: 670,
-    // Floor the size so neither the main UI nor the onboarding overlay can be
-    // squeezed into a broken layout.
-    minWidth: 720,
-    minHeight: 560,
+    minWidth: BASE_MIN_WIDTH,
+    minHeight: BASE_MIN_HEIGHT,
     show: false,
     autoHideMenuBar: true,
     ...(process.platform === "linux" ? { icon } : {}),
@@ -56,7 +67,7 @@ function createWindow(): void {
   mainWindow.webContents.setBackgroundThrottling(false);
 
   mainWindow.on("ready-to-show", () => {
-    mainWindow?.show();
+    if (showOnReady) mainWindow?.show();
   });
 
   mainWindow.on("closed", () => {
@@ -113,6 +124,47 @@ function bringAppToFront(): void {
   app.focus({ steal: true });
 }
 
+/**
+ * Triggered by the global `⌘⌃X` hotkey. Just broadcasts `screenshot:hotkey` so the
+ * AppShell runs `useScreenshotCapture().capture()`. It deliberately does NOT bring
+ * the window forward: the native `screencapture` region selector floats above
+ * everything, and `screenshotCapture` then hides the app so it isn't in the shot
+ * (see `captureWindowHooks`). The window comes back via `revealAfterCapture`.
+ */
+function triggerCaptureScreenshot(): void {
+  // The capture flow runs in the renderer, so the window must exist. If it was
+  // closed (macOS keeps the app alive in the tray), recreate it HIDDEN — never
+  // show a hidden one: the capture handler hides the window anyway, and bringing
+  // it forward here would put the app back in the shot. The renderer reveals it
+  // after a successful capture.
+  if (!mainWindow || mainWindow.isDestroyed()) createWindow(false);
+  const contents = mainWindow?.webContents;
+  if (!contents) return;
+  if (contents.isLoading()) {
+    contents.once("did-finish-load", () => contents.send(IPC_CHANNELS.screenshotHotkey));
+  } else {
+    contents.send(IPC_CHANNELS.screenshotHotkey);
+  }
+}
+
+/** Remembers whether the app was visible before a capture, to restore on cancel. */
+let captureWasVisible = false;
+
+/** Window orchestration handed to the screenshot IPC (hide for the shot, reveal after). */
+const captureWindowHooks = {
+  beforeCapture: (): void => {
+    captureWasVisible = mainWindow?.isVisible() ?? false;
+    capturePanel?.hide();
+    mainWindow?.hide();
+  },
+  afterCapture: (captured: boolean): void => {
+    // On success the renderer reveals the window once it shows the editor; here we
+    // only need to undo the hide when the user cancelled with the app previously up.
+    if (!captured && captureWasVisible) showMainWindow();
+  },
+  reveal: (): void => bringAppToFront(),
+};
+
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
@@ -168,12 +220,30 @@ app.whenReady().then(() => {
       startRecording: triggerStartRecording,
       stopRecording: () => mainWindow?.webContents.send(IPC_CHANNELS.recordingCommand, "stop"),
       bringToFront: bringAppToFront,
+      captureScreenshot: triggerCaptureScreenshot,
     },
   });
   onSettingsChanged(() => applyGlobalShortcuts());
 
   // Library: local recordings vault.
   registerLibraryVaultHandlers();
+
+  // Screenshots: capture/copy/save IPC handlers.
+  registerScreenshotHandlers(captureWindowHooks);
+
+  // Editor mode: give the screenshot editor more room, restore the floor on exit.
+  ipcMain.on(IPC_CHANNELS.windowSetEditorMode, (_event, active: boolean) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (active) {
+      mainWindow.setMinimumSize(EDITOR_MIN_WIDTH, EDITOR_MIN_HEIGHT);
+      const [w, h] = mainWindow.getSize();
+      if (w < EDITOR_MIN_WIDTH || h < EDITOR_MIN_HEIGHT) {
+        mainWindow.setSize(Math.max(w, EDITOR_MIN_WIDTH), Math.max(h, EDITOR_MIN_HEIGHT), true);
+      }
+    } else {
+      mainWindow.setMinimumSize(BASE_MIN_WIDTH, BASE_MIN_HEIGHT);
+    }
+  });
 
   // Auto-update (packaged builds only). Silent download; renderer shows a restart banner.
   initAutoUpdater(() => mainWindow);

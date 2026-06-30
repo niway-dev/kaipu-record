@@ -4,6 +4,16 @@ import { cleanup } from "@testing-library/react";
 import { DEFAULT_QUALITY } from "@shared/recording-quality";
 import { DEFAULT_SHORTCUTS } from "@shared/types";
 
+// jsdom has no ResizeObserver; components that observe their size (the annotation
+// layer) need a no-op so they can render under test.
+if (!("ResizeObserver" in globalThis)) {
+  globalThis.ResizeObserver = class {
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+  } as unknown as typeof ResizeObserver;
+}
+
 const STUB_SETTINGS = {
   theme: "system",
   launchAtLogin: false,
@@ -72,8 +82,19 @@ window.electronAPI = {
     startRecording: true,
     stopRecording: true,
     bringToFront: true,
+    captureScreenshot: true,
   }),
   suspendShortcuts: () => {},
   resumeShortcuts: () => {},
   reportException: () => {},
+  captureScreenshot: async () => null,
+  revealAfterCapture: () => {},
+  setEditorWindowMode: () => {},
+  copyImageToClipboard: async () => {},
+  copyScreenshotById: async () => {},
+  readScreenshotBytes: async () => new ArrayBuffer(0),
+  saveScreenshot: async () => {
+    throw new Error("not implemented in test stub");
+  },
+  onCaptureScreenshotHotkey: () => () => {},
 };
