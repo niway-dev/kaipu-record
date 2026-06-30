@@ -80,6 +80,26 @@ describe("LibraryVault", () => {
   });
 });
 
+describe("LibraryVault — screenshots", () => {
+  const dirs: string[] = [];
+
+  afterEach(async () => {
+    await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  });
+
+  it("lists a saved screenshot as kind=screenshot", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "vault-"));        // reuse existing helpers/imports
+    dirs.push(dir);
+    const vault = new LibraryVault(dir);
+    await vault.writeImage("shot-1", Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    const items = await vault.list();
+    const shot = items.find((i) => i.id === "shot-1");
+    expect(shot?.kind).toBe("screenshot");
+    expect(shot?.filePath.endsWith("shot-1.png")).toBe(true);
+    expect(shot?.thumbnailUrl).toBe("kaipu-media://screenshot/shot-1");
+  });
+});
+
 describe("LibraryVault — mp4 + thumbnails", () => {
   const dirs: string[] = [];
 

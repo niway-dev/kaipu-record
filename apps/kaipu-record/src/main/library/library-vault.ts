@@ -5,6 +5,8 @@ import type { LocalRecording } from "@shared/types/library-storage";
 const META_DIR = ".kaipu";
 /** Known video containers, in preference order — `.mp4` is what we now write. */
 const VIDEO_EXTS = [".mp4", ".webm"] as const;
+const IMAGE_EXTS = [".png"] as const;
+const ALL_EXTS = [...VIDEO_EXTS, ...IMAGE_EXTS] as const;
 
 interface Sidecar {
   title?: string;
@@ -32,7 +34,7 @@ export class LibraryVault {
 
   /** Resolve an id to its real file; if none exists yet, default to `.mp4`. */
   async filePath(id: string): Promise<string> {
-    for (const ext of VIDEO_EXTS) {
+    for (const ext of ALL_EXTS) {
       const candidate = join(this.directory, `${id}${ext}`);
       if (await exists(candidate)) return candidate;
     }
@@ -60,8 +62,8 @@ export class LibraryVault {
       return [];
     }
     const ids = entries
-      .filter((f) => VIDEO_EXTS.some((ext) => f.endsWith(ext)))
-      .map((f) => basename(f, VIDEO_EXTS.find((ext) => f.endsWith(ext))!));
+      .filter((f) => ALL_EXTS.some((ext) => f.endsWith(ext)))
+      .map((f) => basename(f, ALL_EXTS.find((ext) => f.endsWith(ext))!));
     const described = await Promise.all(ids.map((id) => this.describe(id)));
     return described
       .filter((r): r is LocalRecording => r !== null)
@@ -76,15 +78,19 @@ export class LibraryVault {
     } catch {
       return null;
     }
+    const isImage = IMAGE_EXTS.some((ext) => filePath.endsWith(ext));
     const meta = await this.readSidecar(id);
     return {
       id,
+      kind: isImage ? "screenshot" : "recording",
       title: meta.title ?? humanizeId(id),
       filePath,
       createdAt: meta.createdAt ?? info.birthtimeMs,
       sizeBytes: info.size,
       durationSeconds: meta.durationSeconds ?? 0,
-      thumbnailUrl: (await exists(this.thumbnailPath(id))) ? `kaipu-media://thumb/${id}` : null,
+      thumbnailUrl: isImage
+        ? `kaipu-media://screenshot/${id}`
+        : (await exists(this.thumbnailPath(id))) ? `kaipu-media://thumb/${id}` : null,
     };
   }
 
@@ -106,6 +112,12 @@ export class LibraryVault {
   async writeThumbnail(id: string, jpg: Buffer): Promise<void> {
     await mkdir(this.metaDirectory(), { recursive: true });
     await writeFile(this.thumbnailPath(id), jpg);
+  }
+
+  /** Writes a screenshot PNG as `<id>.png` in the vault root. */
+  async writeImage(id: string, png: Buffer): Promise<void> {
+    await mkdir(this.directory, { recursive: true });
+    await writeFile(join(this.directory, `${id}.png`), png);
   }
 
   /** Updates the user-facing title without touching the video file. */
