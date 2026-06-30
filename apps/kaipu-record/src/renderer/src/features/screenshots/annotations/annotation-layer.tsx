@@ -194,7 +194,7 @@ export function AnnotationLayer({
         <input
           ref={textInputRef}
           className={styles.textInput}
-          placeholder="Escribe…"
+          placeholder="Type…"
           style={{
             left: editing.x * size.w,
             top: editing.y * size.h,

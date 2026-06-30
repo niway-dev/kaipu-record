@@ -14,13 +14,13 @@ export interface AnnotationColor {
 }
 
 export const ANNOTATION_COLORS: AnnotationColor[] = [
-  { name: "Negro", value: "#1a1a1a" },
-  { name: "Blanco", value: "#f5f5f5" },
-  { name: "Rosa", value: "#f6055c" },
-  { name: "Amarillo", value: "#eab308" },
-  { name: "Rojo", value: "#ef4444" },
-  { name: "Verde", value: "#22c55e" },
-  { name: "Púrpura", value: "#a855f7" },
+  { name: "Black", value: "#1a1a1a" },
+  { name: "White", value: "#f5f5f5" },
+  { name: "Pink", value: "#f6055c" },
+  { name: "Yellow", value: "#eab308" },
+  { name: "Red", value: "#ef4444" },
+  { name: "Green", value: "#22c55e" },
+  { name: "Purple", value: "#a855f7" },
 ];
 
 /** Stroke widths in px; the array index is the stored stroke level (0–2). */

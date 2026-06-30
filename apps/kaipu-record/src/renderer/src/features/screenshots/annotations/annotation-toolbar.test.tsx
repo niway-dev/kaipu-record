@@ -22,16 +22,16 @@ describe("AnnotationToolbar", () => {
   it("renders the four tools and switches tool on click", () => {
     const tools = makeTools();
     render(<AnnotationToolbar tools={tools} />);
-    for (const name of ["Seleccionar", "Caja", "Flecha", "Texto"]) {
+    for (const name of ["Select", "Box", "Arrow", "Text"]) {
       expect(screen.getByRole("button", { name })).toBeInTheDocument();
     }
-    fireEvent.click(screen.getByRole("button", { name: "Texto" }));
+    fireEvent.click(screen.getByRole("button", { name: "Text" }));
     expect(tools.setTool).toHaveBeenCalledWith("text");
   });
 
   it("does not render the contextual controls (those live in the options panel)", () => {
     render(<AnnotationToolbar tools={makeTools({ tool: "box" })} />);
     expect(screen.queryByText("Color")).toBeNull();
-    expect(screen.queryByText("Trazo")).toBeNull();
+    expect(screen.queryByText("Stroke")).toBeNull();
   });
 });

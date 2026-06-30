@@ -5,10 +5,10 @@ import type { AnnotationToolsController } from "./use-annotation-tools";
 import styles from "./annotation-toolbar.module.css";
 
 const TOOL_META: Record<AnnotationTool, { label: string; Icon: typeof Square }> = {
-  select: { label: "Seleccionar", Icon: MousePointer2 },
-  box: { label: "Caja", Icon: Square },
-  arrow: { label: "Flecha", Icon: ArrowUpRight },
-  text: { label: "Texto", Icon: Type },
+  select: { label: "Select", Icon: MousePointer2 },
+  box: { label: "Box", Icon: Square },
+  arrow: { label: "Arrow", Icon: ArrowUpRight },
+  text: { label: "Text", Icon: Type },
 };
 
 /**

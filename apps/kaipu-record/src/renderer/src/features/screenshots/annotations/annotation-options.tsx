@@ -96,13 +96,13 @@ export function AnnotationOptions({
 
       {controls.mode === "size" ? (
         <>
-          <span className={styles.label}>Tamaño</span>
+          <span className={styles.label}>Size</span>
           <div className={styles.picker}>
             {TEXT_SIZES.map((label, i) => (
               <button
                 key={label}
                 type="button"
-                aria-label={`Tamaño ${label}`}
+                aria-label={`Size ${label}`}
                 className={`${styles.pickerItem} ${styles.sizeItem} ${controls.level === i ? styles.pickerOn : ""}`}
                 onClick={() => controls.setLevel(i)}
               >
@@ -113,13 +113,13 @@ export function AnnotationOptions({
         </>
       ) : (
         <>
-          <span className={styles.label}>Trazo</span>
+          <span className={styles.label}>Stroke</span>
           <div className={styles.picker}>
             {STROKE_WIDTHS.map((_, i) => (
               <button
                 key={i}
                 type="button"
-                aria-label={`Trazo ${i + 1}`}
+                aria-label={`Stroke ${i + 1}`}
                 className={`${styles.pickerItem} ${controls.level === i ? styles.pickerOn : ""}`}
                 onClick={() => controls.setLevel(i)}
               >

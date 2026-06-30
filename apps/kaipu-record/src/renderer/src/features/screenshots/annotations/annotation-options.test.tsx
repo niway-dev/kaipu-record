@@ -71,7 +71,7 @@ describe("AnnotationOptions", () => {
   it("shows colour + stroke controls when a drawing tool is active", () => {
     render(<AnnotationOptions tools={makeTools({ tool: "box" })} scene={makeScene([], null)} />);
     expect(screen.getByText("Color")).toBeInTheDocument();
-    expect(screen.getByText("Trazo")).toBeInTheDocument();
+    expect(screen.getByText("Stroke")).toBeInTheDocument();
   });
 
   it("edits the selected box's colour via commitAnnotation (not the tool default)", () => {
@@ -81,7 +81,7 @@ describe("AnnotationOptions", () => {
 
     // Selection-aware: controls appear even though the active tool is "select".
     expect(screen.getByText("Color")).toBeInTheDocument();
-    expect(screen.getByText("Trazo")).toBeInTheDocument();
+    expect(screen.getByText("Stroke")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: ANNOTATION_COLORS[2].name }));
     expect(scene.commitAnnotation).toHaveBeenCalledWith("b1", {
@@ -94,10 +94,10 @@ describe("AnnotationOptions", () => {
     const scene = makeScene([text], "t1");
     render(<AnnotationOptions tools={makeTools()} scene={scene} />);
 
-    expect(screen.getByText("Tamaño")).toBeInTheDocument();
-    expect(screen.queryByText("Trazo")).toBeNull();
+    expect(screen.getByText("Size")).toBeInTheDocument();
+    expect(screen.queryByText("Stroke")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Tamaño L" }));
+    fireEvent.click(screen.getByRole("button", { name: "Size L" }));
     expect(scene.commitAnnotation).toHaveBeenCalledWith("t1", { size: 3 });
   });
 });

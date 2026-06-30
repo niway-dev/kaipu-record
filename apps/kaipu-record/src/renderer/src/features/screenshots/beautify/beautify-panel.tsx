@@ -9,15 +9,15 @@ import {
 import type { BeautifyController } from "./use-beautify";
 import styles from "./beautify-panel.module.css";
 
-/** The right-side "EMBELLECER" panel: background swatches + the three sliders. */
+/** The right-side "Beautify" panel: background swatches + the three sliders. */
 export function BeautifyPanel({ beautify }: { beautify: BeautifyController }): React.JSX.Element {
   const { state, commit, beginEdit, setLive, endEdit } = beautify;
 
   return (
     <aside className={styles.panel}>
-      <p className={styles.heading}>EMBELLECER</p>
+      <p className={styles.heading}>BEAUTIFY</p>
 
-      <p className={styles.label}>Fondo</p>
+      <p className={styles.label}>Background</p>
       <div className={styles.swatches}>
         {BACKGROUNDS.map((bg) => (
           <button
@@ -33,7 +33,7 @@ export function BeautifyPanel({ beautify }: { beautify: BeautifyController }): R
       </div>
 
       <Slider
-        label="Relleno"
+        label="Padding"
         suffix=" px"
         value={state.padding}
         range={PADDING_RANGE}
@@ -42,7 +42,7 @@ export function BeautifyPanel({ beautify }: { beautify: BeautifyController }): R
         onEnd={endEdit}
       />
       <Slider
-        label="Esquinas"
+        label="Corners"
         suffix=" px"
         value={state.radius}
         range={RADIUS_RANGE}
@@ -51,7 +51,7 @@ export function BeautifyPanel({ beautify }: { beautify: BeautifyController }): R
         onEnd={endEdit}
       />
       <Slider
-        label="Sombra"
+        label="Shadow"
         suffix="%"
         value={state.shadow}
         range={SHADOW_RANGE}
@@ -61,7 +61,7 @@ export function BeautifyPanel({ beautify }: { beautify: BeautifyController }): R
       />
 
       <p className={styles.tip}>
-        Tip: las anotaciones se dibujan a mano. El marco queda limpio y nítido.
+        Tip: annotations are drawn by hand. The frame stays clean and crisp.
       </p>
     </aside>
   );

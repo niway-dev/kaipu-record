@@ -36,7 +36,7 @@ export function BeautifiedFrame({
         <img
           ref={imgRef}
           src={src}
-          alt="Captura"
+          alt="Screenshot"
           className={styles.shot}
           style={{ borderRadius: `${beautify.radius}px`, boxShadow: shadowCss(beautify.shadow) }}
         />
