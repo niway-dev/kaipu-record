@@ -1,10 +1,11 @@
 import { backgroundPaint } from "../beautify/backgrounds";
 import { roughArrow, roughRect } from "./rough";
-import { STROKE_WIDTHS } from "./tools";
+import { STROKE_WIDTHS, TEXT_PX } from "./tools";
 import type { Annotation, Scene } from "./scene";
 
-const TEXT_PX = [20, 28, 38];
-const HAND_FONT = "Caveat, 'Comic Sans MS', cursive";
+// Single-quoted family names so the string is safe to embed in a double-quoted
+// SVG `font-family` attribute (the live preview uses the same families via CSS).
+const HAND_FONT = "Caveat, 'Comic Sans MS', 'Segoe Print', cursive";
 
 /**
  * Composite the editor scene (beautify frame + annotations) to a PNG, at the
@@ -79,7 +80,8 @@ function buildSvg(scene: Scene, g: Geom): string {
     `<clipPath id="rc"><rect x="${g.pad}" y="${g.pad}" width="${g.naturalW}" height="${g.naturalH}" rx="${g.radius}"/></clipPath>`,
   );
 
-  const bg = bgFill === "none" ? "" : `<rect width="${g.frameW}" height="${g.frameH}" fill="${bgFill}"/>`;
+  const bg =
+    bgFill === "none" ? "" : `<rect width="${g.frameW}" height="${g.frameH}" fill="${bgFill}"/>`;
   const shadow =
     sv > 0
       ? `<rect x="${g.pad}" y="${g.pad}" width="${g.naturalW}" height="${g.naturalH}" rx="${g.radius}" fill="#000" filter="url(#sh)"/>`
