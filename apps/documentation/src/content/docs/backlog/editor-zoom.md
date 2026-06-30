@@ -50,6 +50,26 @@ pixel width.** Pushing a crop to a bigger "full width" canvas resamples *up* →
   much as I want" *at view time* without baking a resolution choice into a PNG — worth pairing
   with this.
 
+## How other tools handle this (and why)
+
+The pattern is near-universal: **zoom is navigation, never an output decision; keeping
+"only a section" is a separate Crop tool.** Nobody ships "save the currently-zoomed
+view" — because the zoomed view is the *same pixels enlarged*, so saving it would crop
+to the viewport **and upscale** → a blurry partial image.
+
+- **macOS Screenshot / Preview** — zoom (⌘+/pinch) is a magnifier; **Crop** is its own
+  tool (drag a marquee → trim to it). Distinct, never linked.
+- **CleanShot X / Snagit / Skitch** — zoom is a loupe to work precisely; **Crop / Cut**
+  are separate edit tools. Export is always the (cropped) image at its real pixels.
+- **Figma / Excalidraw** — zoom is pure canvas navigation; "export" targets a
+  *selection / frame / slice*, not "what's visible." Zoom can't change an export.
+
+Takeaway: our **view zoom is correct as-is** — the analysis above matches every tool.
+What the owner is asking for ("keep this section, save only that") is the **Crop tool
+(#2)**, not "save the zoomed view." Build it as its own tool; export the cropped region
+at **native pixels** (crisp), and only offer an upscale-to-width option with a clear
+softness warning.
+
 ## Recommendation & phasing
 
 - **Phase 1 — view zoom + pan (editor-only).** Ships the "nice view to add text" need with
