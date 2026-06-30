@@ -1,6 +1,6 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Copy, Download, Redo2, Undo2, ZoomIn } from "lucide-react";
+import { Copy, Download, Redo2, Undo2, ZoomIn, ZoomOut } from "lucide-react";
 import { useImageSource, type ImageSource } from "@renderer/features/screenshots/image-source";
 import { BeautifiedFrame, BeautifyPanel } from "@renderer/features/screenshots/beautify";
 import {
@@ -12,6 +12,10 @@ import {
 } from "@renderer/features/screenshots/annotations";
 import styles from "./screenshot-editor-page.module.css";
 
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 3;
+const ZOOM_STEP = 0.25;
+
 export function ScreenshotEditorPage(): React.JSX.Element {
   const navigate = useNavigate();
   const source = useLocation().state as ImageSource | null;
@@ -20,6 +24,17 @@ export function ScreenshotEditorPage(): React.JSX.Element {
   const tools = useAnnotationTools();
   const imgRef = useRef<HTMLImageElement>(null);
   const [saved, setSaved] = useState(false);
+  const [zoom, setZoom] = useState(1);
+
+  // The editor needs more room than the rest of the app — ask main to grow the
+  // window (and raise its minimum) while we're here, and restore it on the way out.
+  useEffect(() => {
+    window.electronAPI.setEditorWindowMode(true);
+    return () => window.electronAPI.setEditorWindowMode(false);
+  }, []);
+
+  const zoomBy = (delta: number): void =>
+    setZoom((z) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round((z + delta) * 100) / 100)));
 
   // Guard: no source means we arrived without data — navigate back.
   if (!source) {
@@ -61,9 +76,36 @@ export function ScreenshotEditorPage(): React.JSX.Element {
           >
             <Redo2 size={18} />
           </button>
-          <button type="button" className={styles.iconBtn} title="Zoom (próximamente)" disabled>
-            <ZoomIn size={18} />
-          </button>
+          <span className={styles.divider} />
+          <div className={styles.zoomGroup}>
+            <button
+              type="button"
+              className={styles.iconBtn}
+              title="Alejar"
+              disabled={zoom <= ZOOM_MIN}
+              onClick={() => zoomBy(-ZOOM_STEP)}
+            >
+              <ZoomOut size={18} />
+            </button>
+            <button
+              type="button"
+              className={styles.zoomLabel}
+              title="Restablecer zoom"
+              disabled={zoom === 1}
+              onClick={() => setZoom(1)}
+            >
+              {Math.round(zoom * 100)}%
+            </button>
+            <button
+              type="button"
+              className={styles.iconBtn}
+              title="Acercar"
+              disabled={zoom >= ZOOM_MAX}
+              onClick={() => zoomBy(ZOOM_STEP)}
+            >
+              <ZoomIn size={18} />
+            </button>
+          </div>
           <span className={styles.divider} />
           <button
             type="button"
@@ -95,6 +137,7 @@ export function ScreenshotEditorPage(): React.JSX.Element {
             beautify={scene.beautify.state}
             overlay={<AnnotationLayer scene={scene} tools={tools} />}
             imgRef={imgRef}
+            zoom={zoom}
           />
         </div>
         <BeautifyPanel beautify={scene.beautify} />

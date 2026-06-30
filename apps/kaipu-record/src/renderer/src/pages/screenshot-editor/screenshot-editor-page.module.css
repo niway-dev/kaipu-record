@@ -64,6 +64,38 @@
   margin: 0 var(--space-xs);
 }
 
+.zoomGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.zoomLabel {
+  min-width: 48px;
+  height: 34px;
+  padding: 0 var(--space-xs);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.zoomLabel:hover:not(:disabled) {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.zoomLabel:disabled {
+  cursor: default;
+}
+
 .secondary,
 .save {
   display: inline-flex;
@@ -122,8 +154,10 @@
 .canvas {
   flex: 1;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  /* `safe`: when a zoomed shot is larger than the viewport, centring would clip
+     the top/left out of scroll reach — safe-center falls back to start instead. */
+  align-items: safe center;
+  justify-content: safe center;
   padding: var(--space-xl);
   /* `auto`, not `hidden`: the shot fits at zoom 1 (no spurious scroll), and a
      future view-zoom can overflow → scroll/pan the view when needed. */

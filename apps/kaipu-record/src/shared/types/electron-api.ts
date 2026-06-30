@@ -145,6 +145,13 @@ export interface KaipuElectronAPI {
    * window for the duration of the capture so the app isn't in the shot.
    */
   revealAfterCapture(): void;
+  /**
+   * Toggle "editor mode" window sizing: when active, main raises the minimum
+   * size and grows the window so the screenshot editor has room; inactive
+   * restores the normal minimum. The renderer calls true on editor mount, false
+   * on unmount.
+   */
+  setEditorWindowMode(active: boolean): void;
   /** Put a PNG on the system clipboard. */
   copyImageToClipboard(png: ArrayBuffer): Promise<void>;
   /** Write a PNG into the vault and return the stored item. */

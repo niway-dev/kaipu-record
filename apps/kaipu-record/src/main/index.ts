@@ -35,16 +35,21 @@ let tray: Tray | null = null;
 // Must run before `app.whenReady` — privileged scheme registration.
 registerMediaScheme();
 
+/** Normal window minimums; floored so the main UI / onboarding never break. */
+const BASE_MIN_WIDTH = 720;
+const BASE_MIN_HEIGHT = 560;
+/** The screenshot editor (toolbar + canvas + beautify panel) needs more room. */
+const EDITOR_MIN_WIDTH = 1040;
+const EDITOR_MIN_HEIGHT = 720;
+
 function createWindow(): void {
   // Create the browser window.
   mainWindow = new BrowserWindow({
     title: "Kaipu Record",
     width: 900,
     height: 670,
-    // Floor the size so neither the main UI nor the onboarding overlay can be
-    // squeezed into a broken layout.
-    minWidth: 720,
-    minHeight: 560,
+    minWidth: BASE_MIN_WIDTH,
+    minHeight: BASE_MIN_HEIGHT,
     show: false,
     autoHideMenuBar: true,
     ...(process.platform === "linux" ? { icon } : {}),
@@ -214,6 +219,20 @@ app.whenReady().then(() => {
 
   // Screenshots: capture/copy/save IPC handlers.
   registerScreenshotHandlers(captureWindowHooks);
+
+  // Editor mode: give the screenshot editor more room, restore the floor on exit.
+  ipcMain.on(IPC_CHANNELS.windowSetEditorMode, (_event, active: boolean) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (active) {
+      mainWindow.setMinimumSize(EDITOR_MIN_WIDTH, EDITOR_MIN_HEIGHT);
+      const [w, h] = mainWindow.getSize();
+      if (w < EDITOR_MIN_WIDTH || h < EDITOR_MIN_HEIGHT) {
+        mainWindow.setSize(Math.max(w, EDITOR_MIN_WIDTH), Math.max(h, EDITOR_MIN_HEIGHT), true);
+      }
+    } else {
+      mainWindow.setMinimumSize(BASE_MIN_WIDTH, BASE_MIN_HEIGHT);
+    }
+  });
 
   // Auto-update (packaged builds only). Silent download; renderer shows a restart banner.
   initAutoUpdater(() => mainWindow);

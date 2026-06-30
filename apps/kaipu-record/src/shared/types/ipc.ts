@@ -131,6 +131,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
  */
 export const IPC_CHANNELS = {
   getAppVersion: "app:get-version",
+  // Renderer → main: grow/reset the window for the screenshot editor.
+  windowSetEditorMode: "window:set-editor-mode",
   updateGetStatus: "update:get-status",
   updateStatus: "update:status",
   updateInstall: "update:install",
