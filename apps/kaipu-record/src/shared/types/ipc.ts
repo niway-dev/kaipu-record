@@ -95,6 +95,8 @@ export const IPC_CHANNELS = {
   screenshotCapture: "screenshot:capture",
   screenshotCopy: "screenshot:copy",
   screenshotSave: "screenshot:save",
+  // Main → renderer: global hotkey fired, run the region capture flow.
+  screenshotHotkey: "screenshot:hotkey",
   // Recording engine (renderer ↔ main)
   recordingCreate: "recording:create",
   recordingWrite: "recording:write",

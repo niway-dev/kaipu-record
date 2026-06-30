@@ -133,6 +133,11 @@ export interface KaipuElectronAPI {
   // ── Screenshots ───────────────────────────────────────────────────────
   /** Run the interactive region capture; resolves null if the user cancelled. */
   captureScreenshot(): Promise<{ png: ArrayBuffer; width: number; height: number } | null>;
+  /**
+   * Subscribe to the global `⌘⌃4` hotkey broadcast from main. Returns an
+   * unsubscribe fn. The renderer owns navigation so it runs the capture flow.
+   */
+  onCaptureScreenshotHotkey(callback: () => void): () => void;
   /** Put a PNG on the system clipboard. */
   copyImageToClipboard(png: ArrayBuffer): Promise<void>;
   /** Write a PNG into the vault and return the stored item. */

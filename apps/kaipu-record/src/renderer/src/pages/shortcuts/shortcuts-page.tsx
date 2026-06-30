@@ -46,6 +46,11 @@ const APP_SHORTCUTS: ReadonlyArray<ShortcutRow> = [
     label: "Bring Kaipu to front",
     description: "Show the app window if it slips behind or out of reach",
   },
+  {
+    action: "captureScreenshot",
+    label: "Capturar pantalla",
+    description: "Abre la selección de área para una captura.",
+  },
 ];
 
 /**

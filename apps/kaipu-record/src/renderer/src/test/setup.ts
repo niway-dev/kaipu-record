@@ -82,4 +82,5 @@ window.electronAPI = {
   saveScreenshot: async () => {
     throw new Error("not implemented in test stub");
   },
+  onCaptureScreenshotHotkey: () => () => {},
 };

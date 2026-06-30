@@ -114,6 +114,22 @@ function bringAppToFront(): void {
   app.focus({ steal: true });
 }
 
+/**
+ * Triggered by the global `⌘⌃4` hotkey. Brings the main window to front so the
+ * renderer can show the native region selector, then broadcasts a `screenshot:hotkey`
+ * event so the AppShell picks it up and runs `useScreenshotCapture().capture()`.
+ */
+function triggerCaptureScreenshot(): void {
+  showMainWindow();
+  const contents = mainWindow?.webContents;
+  if (!contents) return;
+  if (contents.isLoading()) {
+    contents.once("did-finish-load", () => contents.send(IPC_CHANNELS.screenshotHotkey));
+  } else {
+    contents.send(IPC_CHANNELS.screenshotHotkey);
+  }
+}
+
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
@@ -169,7 +185,7 @@ app.whenReady().then(() => {
       startRecording: triggerStartRecording,
       stopRecording: () => mainWindow?.webContents.send(IPC_CHANNELS.recordingCommand, "stop"),
       bringToFront: bringAppToFront,
-      captureScreenshot: () => {}, // wired in screenshot task
+      captureScreenshot: triggerCaptureScreenshot,
     },
   });
   onSettingsChanged(() => applyGlobalShortcuts());

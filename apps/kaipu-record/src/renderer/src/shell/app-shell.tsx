@@ -9,6 +9,7 @@ import {
 } from "@renderer/features/version-gate";
 import { useUpdateStatus, UpdateBanner } from "@renderer/features/updater";
 import { useAppVersion } from "./use-app-version";
+import { useScreenshotCapture } from "@renderer/features/screenshots/use-screenshot-capture";
 import styles from "./app-shell.module.css";
 
 /**
@@ -22,6 +23,7 @@ export function AppShell(): React.JSX.Element {
   const gate = useVersionGate();
   const update = useUpdateStatus();
   const version = useAppVersion();
+  const { capture } = useScreenshotCapture();
 
   // A global "start recording" (the hotkey or the Capture Panel) can arrive on any
   // route — the recorder lives on the Record page, so bring the user there and
@@ -34,6 +36,10 @@ export function AppShell(): React.JSX.Element {
       }),
     [navigate],
   );
+
+  // Global ⌘⌃4 hotkey: main brings the window to front and broadcasts this event;
+  // we run the region-capture flow here so navigation (useNavigate) is available.
+  useEffect(() => window.electronAPI.onCaptureScreenshotHotkey(capture), [capture]);
 
   return (
     <div className={styles.shell}>
