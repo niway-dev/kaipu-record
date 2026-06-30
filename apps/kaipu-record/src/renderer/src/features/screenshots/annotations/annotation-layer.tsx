@@ -85,7 +85,7 @@ export function AnnotationLayer({
   const onPointerDown = (e: React.PointerEvent): void => {
     const p = toNorm(e);
     if (tools.tool === "select") {
-      const hit = hitTest(scene.annotations, p);
+      const hit = hitTest(scene.annotations, p, size);
       scene.select(hit?.id ?? null);
       if (hit) {
         scene.beginInteract();
@@ -342,7 +342,7 @@ function moveBy(a: Annotation, dx: number, dy: number): Partial<Annotation> {
   return { x: a.x + dx, y: a.y + dy } as Partial<Annotation>;
 }
 
-function hitTest(annotations: Annotation[], p: Pt): Annotation | null {
+function hitTest(annotations: Annotation[], p: Pt, size: Size): Annotation | null {
   for (let i = annotations.length - 1; i >= 0; i -= 1) {
     const a = annotations[i];
     if (a.kind === "box") {
@@ -355,8 +355,23 @@ function hitTest(annotations: Annotation[], p: Pt): Annotation | null {
         return a;
       }
     } else if (a.kind === "text") {
-      const w = a.text.length * 0.012 + 0.04;
-      if (p.x >= a.x - 0.01 && p.x <= a.x + w && p.y >= a.y - 0.01 && p.y <= a.y + 0.06) return a;
+      // The text renders in px (TEXT_PX[size]) but lives in normalized space, so the
+      // hit box must derive from the font size AND the layer's pixel size — a fixed
+      // normalized height broke on short/wide shots (the box was shorter than the
+      // glyphs). Match the rendered bounds (see Shape) plus an 8px click margin.
+      const fs = TEXT_PX[a.size];
+      const padX = 8 / (size.w || 1);
+      const padY = 8 / (size.h || 1);
+      const w = (a.text.length * fs * 0.55) / (size.w || 1);
+      const h = (fs * 1.3) / (size.h || 1);
+      if (
+        p.x >= a.x - padX &&
+        p.x <= a.x + w + padX &&
+        p.y >= a.y - padY &&
+        p.y <= a.y + h + padY
+      ) {
+        return a;
+      }
     } else if (distToSegment(p, { x: a.x1, y: a.y1 }, { x: a.x2, y: a.y2 }) < 0.02) {
       return a;
     }
