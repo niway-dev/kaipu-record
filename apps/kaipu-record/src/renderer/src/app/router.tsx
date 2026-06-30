@@ -6,6 +6,7 @@ import { LibraryPage } from "@renderer/pages/library/library-page";
 import { LibraryDetailPage } from "@renderer/pages/library-detail/library-detail-page";
 import { SettingsPage } from "@renderer/pages/settings/settings-page";
 import { ShortcutsPage } from "@renderer/pages/shortcuts/shortcuts-page";
+import { ScreenshotsPage } from "@renderer/pages/screenshots/screenshots-page";
 
 /**
  * Route tree for the app.
@@ -31,6 +32,7 @@ const router = createHashRouter([
       { index: true, element: <RecordPage /> },
       { path: "/library", element: <LibraryPage /> },
       { path: "/library/:id", element: <LibraryDetailPage /> },
+      { path: "/screenshots", element: <ScreenshotsPage /> },
       { path: "/shortcuts", element: <ShortcutsPage /> },
       { path: "/settings", element: <SettingsPage /> },
       { path: "*", element: <NotFound /> },
