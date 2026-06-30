@@ -130,6 +130,14 @@ export interface KaipuElectronAPI {
   /** Resume (re-register) global shortcuts after rebinding. */
   resumeShortcuts(): void;
 
+  // ── Screenshots ───────────────────────────────────────────────────────
+  /** Run the interactive region capture; resolves null if the user cancelled. */
+  captureScreenshot(): Promise<{ png: ArrayBuffer; width: number; height: number } | null>;
+  /** Put a PNG on the system clipboard. */
+  copyImageToClipboard(png: ArrayBuffer): Promise<void>;
+  /** Write a PNG into the vault and return the stored item. */
+  saveScreenshot(png: ArrayBuffer, meta: { title: string }): Promise<LocalRecording>;
+
   // ── Analytics ─────────────────────────────────────────────────────────
   /** Forward a serialized exception (+ origin/context) to the main-process sink. */
   reportException(

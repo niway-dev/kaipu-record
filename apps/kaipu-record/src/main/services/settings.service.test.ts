@@ -28,6 +28,7 @@ describe("mergeSettings", () => {
       startRecording: "Command+Control+1",
       stopRecording: "Command+Control+2",
       bringToFront: "Command+Control+3",
+      captureScreenshot: "Command+Control+4",
     };
     expect(
       mergeSettings({
@@ -97,6 +98,7 @@ describe("mergeShortcuts", () => {
       startRecording: "Command+Control+G",
       stopRecording: DEFAULT_SHORTCUTS.stopRecording,
       bringToFront: DEFAULT_SHORTCUTS.bringToFront,
+      captureScreenshot: DEFAULT_SHORTCUTS.captureScreenshot,
     });
   });
 

@@ -12,7 +12,12 @@ import { DEFAULT_QUALITY, type RecordingQuality } from "../recording-quality";
 export type Theme = "light" | "dark" | "system";
 
 /** Actions that can be bound to a global keyboard shortcut. */
-export const SHORTCUT_ACTIONS = ["startRecording", "stopRecording", "bringToFront"] as const;
+export const SHORTCUT_ACTIONS = [
+  "startRecording",
+  "stopRecording",
+  "bringToFront",
+  "captureScreenshot",
+] as const;
 export type ShortcutAction = (typeof SHORTCUT_ACTIONS)[number];
 
 /** Electron accelerator string per action (e.g. "Command+Control+C"). */
@@ -25,9 +30,10 @@ export type ShortcutSettings = Record<ShortcutAction, string>;
  * a global shortcut overrides the focused (recorded) app.
  */
 export const DEFAULT_SHORTCUTS: ShortcutSettings = {
-  startRecording: "Command+Control+C", // Capture
-  stopRecording: "Command+Control+S", // Stop
-  bringToFront: "Command+Control+O", // Open
+  startRecording: "Command+Control+C",
+  stopRecording: "Command+Control+S",
+  bringToFront: "Command+Control+O",
+  captureScreenshot: "Command+Control+4", // ⌘⌃4 — mnemonic of macOS Cmd+Shift+4
 };
 
 export interface AppSettings {
@@ -85,6 +91,10 @@ export const IPC_CHANNELS = {
   getVaultDirectory: "library:get-vault-dir",
   chooseVaultDirectory: "library:choose-vault-dir",
   resetVaultDirectory: "library:reset-vault-dir",
+  // Screenshots (renderer ↔ main)
+  screenshotCapture: "screenshot:capture",
+  screenshotCopy: "screenshot:copy",
+  screenshotSave: "screenshot:save",
   // Recording engine (renderer ↔ main)
   recordingCreate: "recording:create",
   recordingWrite: "recording:write",

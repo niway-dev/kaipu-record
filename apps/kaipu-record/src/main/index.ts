@@ -168,6 +168,7 @@ app.whenReady().then(() => {
       startRecording: triggerStartRecording,
       stopRecording: () => mainWindow?.webContents.send(IPC_CHANNELS.recordingCommand, "stop"),
       bringToFront: bringAppToFront,
+      captureScreenshot: () => {}, // wired in screenshot task
     },
   });
   onSettingsChanged(() => applyGlobalShortcuts());

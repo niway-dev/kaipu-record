@@ -4,6 +4,8 @@
  */
 export interface LocalRecording {
   id: string;
+  /** Discriminates a video recording from a screenshot in the unified vault. */
+  kind: "recording" | "screenshot";
   title: string;
   /** Absolute path to the video file on disk. */
   filePath: string;
