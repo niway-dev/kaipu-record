@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Copy, Download, Redo2, Undo2, ZoomIn } from "lucide-react";
 import { useImageSource, type ImageSource } from "@renderer/features/screenshots/image-source";
@@ -6,6 +6,7 @@ import { BeautifiedFrame, BeautifyPanel } from "@renderer/features/screenshots/b
 import {
   AnnotationLayer,
   AnnotationToolbar,
+  compositeScene,
   useAnnotationTools,
   useEditorScene,
 } from "@renderer/features/screenshots/annotations";
@@ -17,6 +18,7 @@ export function ScreenshotEditorPage(): React.JSX.Element {
   const image = useImageSource(source);
   const scene = useEditorScene();
   const tools = useAnnotationTools();
+  const imgRef = useRef<HTMLImageElement>(null);
   const [saved, setSaved] = useState(false);
 
   // Guard: no source means we arrived without data — navigate back.
@@ -27,6 +29,16 @@ export function ScreenshotEditorPage(): React.JSX.Element {
 
   // `image` is null on the first render while the reader resolves — render nothing.
   if (!image) return <></>;
+
+  // Composite the beautify frame + annotations to a PNG — what Copy and Save export.
+  const exportPng = async (): Promise<ArrayBuffer> =>
+    compositeScene(
+      { beautify: scene.beautify.state, annotations: scene.annotations },
+      await image.getBytes(),
+      source.width,
+      source.height,
+      imgRef.current?.clientWidth ?? source.width,
+    );
 
   return (
     <div className={styles.editor}>
@@ -59,7 +71,7 @@ export function ScreenshotEditorPage(): React.JSX.Element {
             type="button"
             className={styles.secondary}
             onClick={async () => {
-              await window.electronAPI.copyImageToClipboard(await image.getBytes());
+              await window.electronAPI.copyImageToClipboard(await exportPng());
             }}
           >
             <Copy size={16} /> Copiar
@@ -68,7 +80,7 @@ export function ScreenshotEditorPage(): React.JSX.Element {
             type="button"
             className={styles.save}
             onClick={async () => {
-              await window.electronAPI.saveScreenshot(await image.getBytes(), {
+              await window.electronAPI.saveScreenshot(await exportPng(), {
                 title: source.title ?? "Captura",
               });
               setSaved(true);
@@ -84,6 +96,7 @@ export function ScreenshotEditorPage(): React.JSX.Element {
             src={image.displayUrl}
             beautify={scene.beautify.state}
             overlay={<AnnotationLayer scene={scene} tools={tools} />}
+            imgRef={imgRef}
           />
         </div>
         <BeautifyPanel beautify={scene.beautify} />

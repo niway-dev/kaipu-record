@@ -18,27 +18,39 @@ export const BACKGROUND_IDS = [
 ] as const;
 export type BackgroundId = (typeof BACKGROUND_IDS)[number];
 
+/** Canvas-drawable form of a background (the CSS `var()`/gradient can't be drawn). */
+export type BackgroundPaint =
+  | { kind: "none" }
+  | { kind: "solid"; color: string }
+  | { kind: "gradient"; from: string; to: string };
+
 export interface Background {
   id: BackgroundId;
   name: string;
-  /** A CSS `background` value (gradient, solid, or token var). */
+  /** A CSS `background` value (gradient, solid, or token var) for the live preview. */
   css: string;
+  /** Concrete colours for compositing the export to a canvas. */
+  paint: BackgroundPaint;
 }
 
 export const BACKGROUNDS: Background[] = [
-  { id: "ninguno", name: "Ninguno", css: "repeating-conic-gradient(#2a2a2e 0% 25%, #232327 0% 50%) 50% / 16px 16px" },
-  { id: "oscuro", name: "Oscuro", css: "var(--bg-app)" },
-  { id: "carbon", name: "Carbón", css: "var(--bg-card)" },
-  { id: "magenta", name: "Magenta", css: "linear-gradient(135deg, #ff2d6e, #a3044a)" },
-  { id: "purpura", name: "Púrpura", css: "linear-gradient(135deg, #a855f7, #6d28d9)" },
-  { id: "oceano", name: "Océano", css: "linear-gradient(135deg, #2563eb, #06b6d4)" },
-  { id: "atardecer", name: "Atardecer", css: "linear-gradient(135deg, #f59e0b, #ef4444)" },
-  { id: "bosque", name: "Bosque", css: "linear-gradient(135deg, #22c55e, #0ea5e9)" },
-  { id: "grafito", name: "Grafito", css: "linear-gradient(135deg, #3f3f46, #18181b)" },
+  { id: "ninguno", name: "Ninguno", css: "repeating-conic-gradient(#2a2a2e 0% 25%, #232327 0% 50%) 50% / 16px 16px", paint: { kind: "none" } },
+  { id: "oscuro", name: "Oscuro", css: "var(--bg-app)", paint: { kind: "solid", color: "#0f0f11" } },
+  { id: "carbon", name: "Carbón", css: "var(--bg-card)", paint: { kind: "solid", color: "#171719" } },
+  { id: "magenta", name: "Magenta", css: "linear-gradient(135deg, #ff2d6e, #a3044a)", paint: { kind: "gradient", from: "#ff2d6e", to: "#a3044a" } },
+  { id: "purpura", name: "Púrpura", css: "linear-gradient(135deg, #a855f7, #6d28d9)", paint: { kind: "gradient", from: "#a855f7", to: "#6d28d9" } },
+  { id: "oceano", name: "Océano", css: "linear-gradient(135deg, #2563eb, #06b6d4)", paint: { kind: "gradient", from: "#2563eb", to: "#06b6d4" } },
+  { id: "atardecer", name: "Atardecer", css: "linear-gradient(135deg, #f59e0b, #ef4444)", paint: { kind: "gradient", from: "#f59e0b", to: "#ef4444" } },
+  { id: "bosque", name: "Bosque", css: "linear-gradient(135deg, #22c55e, #0ea5e9)", paint: { kind: "gradient", from: "#22c55e", to: "#0ea5e9" } },
+  { id: "grafito", name: "Grafito", css: "linear-gradient(135deg, #3f3f46, #18181b)", paint: { kind: "gradient", from: "#3f3f46", to: "#18181b" } },
 ];
 
 export function backgroundCss(id: BackgroundId): string {
   return BACKGROUNDS.find((b) => b.id === id)?.css ?? BACKGROUNDS[0].css;
+}
+
+export function backgroundPaint(id: BackgroundId): BackgroundPaint {
+  return BACKGROUNDS.find((b) => b.id === id)?.paint ?? { kind: "none" };
 }
 
 /** Drop-shadow CSS from the 0–100 "Sombra" slider (formula from the design). */

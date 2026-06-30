@@ -8,10 +8,12 @@ export function BeautifiedFrame({
   src,
   beautify,
   overlay,
+  imgRef,
 }: {
   src: string;
   beautify: BeautifyState;
   overlay?: React.ReactNode;
+  imgRef?: React.Ref<HTMLImageElement>;
 }): React.JSX.Element {
   return (
     <div
@@ -24,6 +26,7 @@ export function BeautifiedFrame({
     >
       <div className={styles.shotWrap}>
         <img
+          ref={imgRef}
           src={src}
           alt="Captura"
           className={styles.shot}
