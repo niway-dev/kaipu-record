@@ -81,6 +81,9 @@ const kaipuApi: KaipuElectronAPI = {
   },
   reportException: (payload, origin, context) =>
     ipcRenderer.send(IPC_CHANNELS.analyticsCaptureException, payload, origin, context),
+  captureScreenshot: () => ipcRenderer.invoke(IPC_CHANNELS.screenshotCapture),
+  copyImageToClipboard: (png) => ipcRenderer.invoke(IPC_CHANNELS.screenshotCopy, png),
+  saveScreenshot: (png, meta) => ipcRenderer.invoke(IPC_CHANNELS.screenshotSave, png, meta),
 };
 
 // Use `contextBridge` APIs to expose Electron APIs to
