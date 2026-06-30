@@ -32,7 +32,12 @@ export function registerMediaProtocol(): void {
     const { hostname } = url;
     if (hostname === "screenshot") {
       const target = await screenshotFilePath(id);
-      return net.fetch(pathToFileURL(target).toString());
+      const res = await net.fetch(pathToFileURL(target).toString());
+      // Screenshots are overwritten in place (same id/URL on re-edit). Without this
+      // the renderer caches the old bytes and an overwrite appears to do nothing.
+      const headers = new Headers(res.headers);
+      headers.set("cache-control", "no-store");
+      return new Response(res.body, { status: res.status, headers });
     }
     const target = hostname === "thumb" ? thumbnailFilePath(id) : await recordingFilePath(id);
     return net.fetch(pathToFileURL(target).toString());
