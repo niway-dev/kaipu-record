@@ -39,7 +39,7 @@ function imageSize(url: string): Promise<{ width: number; height: number }> {
   });
 }
 
-interface Geom {
+export interface Geom {
   href: string;
   naturalW: number;
   naturalH: number;
@@ -50,7 +50,8 @@ interface Geom {
   scale: number;
 }
 
-function buildSvg(scene: Scene, g: Geom): string {
+/** Pure: builds the export SVG string from the scene + geometry. Exported for tests. */
+export function buildSvg(scene: Scene, g: Geom): string {
   const paint = backgroundPaint(scene.beautify.bg);
   const sv = scene.beautify.shadow;
   const shY = Math.round(sv * 0.45 * g.scale);
