@@ -1,0 +1,18 @@
+.layer {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+}
+
+.svg {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+
+.selOutline {
+  fill: none;
+  stroke: var(--accent-primary);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+}

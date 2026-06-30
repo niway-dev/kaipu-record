@@ -2,20 +2,21 @@ import React, { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Copy, Download, Redo2, Undo2, ZoomIn } from "lucide-react";
 import { useImageSource, type ImageSource } from "@renderer/features/screenshots/image-source";
+import { BeautifiedFrame, BeautifyPanel } from "@renderer/features/screenshots/beautify";
 import {
-  BeautifiedFrame,
-  BeautifyPanel,
-  useBeautify,
-} from "@renderer/features/screenshots/beautify";
-import { AnnotationToolbar, useAnnotationTools } from "@renderer/features/screenshots/annotations";
+  AnnotationLayer,
+  AnnotationToolbar,
+  useAnnotationTools,
+  useEditorScene,
+} from "@renderer/features/screenshots/annotations";
 import styles from "./screenshot-editor-page.module.css";
 
 export function ScreenshotEditorPage(): React.JSX.Element {
   const navigate = useNavigate();
   const source = useLocation().state as ImageSource | null;
   const image = useImageSource(source);
-  const beautify = useBeautify();
-  const annotationTools = useAnnotationTools();
+  const scene = useEditorScene();
+  const tools = useAnnotationTools();
   const [saved, setSaved] = useState(false);
 
   // Guard: no source means we arrived without data — navigate back.
@@ -30,14 +31,14 @@ export function ScreenshotEditorPage(): React.JSX.Element {
   return (
     <div className={styles.editor}>
       <div className={styles.toolbar}>
-        <AnnotationToolbar tools={annotationTools} />
+        <AnnotationToolbar tools={tools} />
         <div className={styles.actions}>
           <button
             type="button"
             className={styles.iconBtn}
             title="Atrás"
-            disabled={!beautify.canUndo}
-            onClick={beautify.undo}
+            disabled={!scene.canUndo}
+            onClick={scene.undo}
           >
             <Undo2 size={18} />
           </button>
@@ -45,8 +46,8 @@ export function ScreenshotEditorPage(): React.JSX.Element {
             type="button"
             className={styles.iconBtn}
             title="Adelante"
-            disabled={!beautify.canRedo}
-            onClick={beautify.redo}
+            disabled={!scene.canRedo}
+            onClick={scene.redo}
           >
             <Redo2 size={18} />
           </button>
@@ -79,9 +80,13 @@ export function ScreenshotEditorPage(): React.JSX.Element {
       </div>
       <div className={styles.body}>
         <div className={styles.canvas}>
-          <BeautifiedFrame src={image.displayUrl} beautify={beautify.state} />
+          <BeautifiedFrame
+            src={image.displayUrl}
+            beautify={scene.beautify.state}
+            overlay={<AnnotationLayer scene={scene} tools={tools} />}
+          />
         </div>
-        <BeautifyPanel beautify={beautify} />
+        <BeautifyPanel beautify={scene.beautify} />
       </div>
     </div>
   );

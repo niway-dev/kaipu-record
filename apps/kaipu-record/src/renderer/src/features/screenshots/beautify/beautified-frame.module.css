@@ -9,6 +9,13 @@
     background 0.12s ease;
 }
 
+.shotWrap {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  line-height: 0;
+}
+
 .shot {
   display: block;
   max-width: 100%;
