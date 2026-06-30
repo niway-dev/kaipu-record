@@ -42,7 +42,12 @@ const BASE_MIN_HEIGHT = 560;
 const EDITOR_MIN_WIDTH = 1040;
 const EDITOR_MIN_HEIGHT = 720;
 
-function createWindow(): void {
+/**
+ * Create the main window. `showOnReady` defaults to true; pass false when
+ * recreating it solely to run the capture flow (the renderer reveals it after a
+ * successful shot), so the app doesn't flash to the front and into the capture.
+ */
+function createWindow(showOnReady = true): void {
   // Create the browser window.
   mainWindow = new BrowserWindow({
     title: "Kaipu Record",
@@ -62,7 +67,7 @@ function createWindow(): void {
   mainWindow.webContents.setBackgroundThrottling(false);
 
   mainWindow.on("ready-to-show", () => {
-    mainWindow?.show();
+    if (showOnReady) mainWindow?.show();
   });
 
   mainWindow.on("closed", () => {
@@ -128,10 +133,11 @@ function bringAppToFront(): void {
  */
 function triggerCaptureScreenshot(): void {
   // The capture flow runs in the renderer, so the window must exist. If it was
-  // closed (macOS keeps the app alive in the tray), recreate it — but never just
+  // closed (macOS keeps the app alive in the tray), recreate it HIDDEN — never
   // show a hidden one: the capture handler hides the window anyway, and bringing
-  // it forward here would put the app back in the shot.
-  if (!mainWindow || mainWindow.isDestroyed()) createWindow();
+  // it forward here would put the app back in the shot. The renderer reveals it
+  // after a successful capture.
+  if (!mainWindow || mainWindow.isDestroyed()) createWindow(false);
   const contents = mainWindow?.webContents;
   if (!contents) return;
   if (contents.isLoading()) {
