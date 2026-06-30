@@ -3,7 +3,13 @@ import { Card } from "@renderer/ui/card";
 import { Row } from "@renderer/ui/row";
 import { useAppSettings } from "@renderer/pages/settings/use-app-settings";
 import { ShortcutInput } from "@renderer/features/shortcuts/shortcut-input";
-import { DEFAULT_SHORTCUTS, type ShortcutAction } from "@shared/types";
+import {
+  DEFAULT_SHORTCUTS,
+  SHORTCUT_DEFINITIONS,
+  type ShortcutAction,
+  type ShortcutDefinition,
+  type ShortcutGroup,
+} from "@shared/types";
 import styles from "./shortcuts-page.module.css";
 
 function Section({
@@ -21,37 +27,14 @@ function Section({
   );
 }
 
-interface ShortcutRow {
-  action: ShortcutAction;
-  label: string;
-  description: string;
-}
-
-const RECORDING_SHORTCUTS: ReadonlyArray<ShortcutRow> = [
-  {
-    action: "startRecording",
-    label: "Start recording",
-    description: "Begin a screen recording from anywhere",
-  },
-  {
-    action: "stopRecording",
-    label: "Stop recording",
-    description: "End the current recording from anywhere",
-  },
+/** On-screen sections, in order. Their rows come from SHORTCUT_DEFINITIONS. */
+const GROUPS: ReadonlyArray<{ key: ShortcutGroup; title: string }> = [
+  { key: "recording", title: "Recording" },
+  { key: "app", title: "App" },
 ];
 
-const APP_SHORTCUTS: ReadonlyArray<ShortcutRow> = [
-  {
-    action: "bringToFront",
-    label: "Bring Kaipu to front",
-    description: "Show the app window if it slips behind or out of reach",
-  },
-  {
-    action: "captureScreenshot",
-    label: "Capturar pantalla",
-    description: "Abre la selección de área para una captura.",
-  },
-];
+const shortcutsInGroup = (group: ShortcutGroup): ShortcutDefinition[] =>
+  SHORTCUT_DEFINITIONS.filter((def) => def.group === group);
 
 /**
  * Dedicated page for the global keyboard shortcuts. Each binding is rebindable
@@ -75,7 +58,7 @@ export function ShortcutsPage(): React.JSX.Element {
     void window.electronAPI.getShortcutStatus().then(setShortcutStatus);
   }, [settings?.shortcuts]);
 
-  const renderRow = ({ action, label, description }: ShortcutRow): React.JSX.Element => {
+  const renderRow = ({ action, label, description }: ShortcutDefinition): React.JSX.Element => {
     const unavailable = shortcutStatus ? !shortcutStatus[action] : false;
     return (
       <Row
@@ -106,8 +89,11 @@ export function ShortcutsPage(): React.JSX.Element {
       </div>
 
       <div className={styles.sections}>
-        <Section title="Recording">{RECORDING_SHORTCUTS.map(renderRow)}</Section>
-        <Section title="App">{APP_SHORTCUTS.map(renderRow)}</Section>
+        {GROUPS.map(({ key, title }) => (
+          <Section key={key} title={title}>
+            {shortcutsInGroup(key).map(renderRow)}
+          </Section>
+        ))}
       </div>
     </div>
   );

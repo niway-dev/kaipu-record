@@ -1,5 +1,6 @@
-import { useEffect } from "react";
+import React, { useEffect } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
+import { SHORTCUT_DEFINITIONS } from "@shared/types";
 import { Sidebar } from "./sidebar";
 import { useShortcutLabels } from "@renderer/features/shortcuts/use-shortcut-labels";
 import {
@@ -54,25 +55,15 @@ export function AppShell(): React.JSX.Element {
         </main>
       </div>
       <div className={styles.statusBar}>
-        {shortcuts && (
-          <>
-            <span>
-              <kbd>{shortcuts.startRecording}</kbd> start
-            </span>
-            <span className={styles.statusDot}>·</span>
-            <span>
-              <kbd>{shortcuts.stopRecording}</kbd> stop
-            </span>
-            <span className={styles.statusDot}>·</span>
-            <span>
-              <kbd>{shortcuts.bringToFront}</kbd> show app
-            </span>
-            <span className={styles.statusDot}>·</span>
-            <span>
-              <kbd>{shortcuts.captureScreenshot}</kbd> capture
-            </span>
-          </>
-        )}
+        {shortcuts &&
+          SHORTCUT_DEFINITIONS.map((def, i) => (
+            <React.Fragment key={def.action}>
+              {i > 0 && <span className={styles.statusDot}>·</span>}
+              <span>
+                <kbd>{shortcuts[def.action]}</kbd> {def.statusWord}
+              </span>
+            </React.Fragment>
+          ))}
         {version && <span className={styles.statusVersion}>v{version}</span>}
       </div>
       {gate.kind === "hard" && (
