@@ -39,12 +39,15 @@
 .card {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-sm);
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-md);
   padding: var(--space-xl);
+  min-height: 260px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
+  text-align: center;
 }
 
 /* ── Capture button ─────────────────────────── */
@@ -53,15 +56,15 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-sm);
-  height: 38px;
-  padding: 0 var(--space-lg);
+  height: 50px;
+  padding: 0 var(--space-xl);
   background: var(--accent-primary);
   border: none;
   border-radius: var(--radius-md);
   color: #fff;
   font-family: var(--font-family);
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
   cursor: pointer;
   transition: background var(--transition);
   box-shadow: var(--glow-accent);
@@ -80,6 +83,12 @@
 }
 
 .shortcut {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);
   color: var(--text-muted);

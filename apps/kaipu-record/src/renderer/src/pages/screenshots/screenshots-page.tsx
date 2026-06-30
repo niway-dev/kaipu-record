@@ -18,7 +18,7 @@ export function ScreenshotsPage(): React.JSX.Element {
       </p>
       <div className={styles.card}>
         <button className={styles.capture} onClick={() => void capture()} type="button">
-          <Camera size={18} /> Capturar pantalla
+          <Camera size={20} /> Capturar pantalla
         </button>
         <p className={styles.hint}>Selecciona un área de la pantalla para empezar.</p>
         <span className={styles.shortcut}>Atajo global {labels?.captureScreenshot ?? "⌃⌘X"}</span>
