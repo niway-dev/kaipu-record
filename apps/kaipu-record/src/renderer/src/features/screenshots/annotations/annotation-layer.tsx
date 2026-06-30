@@ -1,12 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
-import { STROKE_WIDTHS, TEXT_PX } from "./tools";
+import { HAND_FONT, STROKE_WIDTHS, TEXT_PX } from "./tools";
 import { roughArrow, roughRect } from "./rough";
 import { nextAnnotationId, type Annotation } from "./scene";
 import type { EditorScene } from "./use-editor-scene";
 import type { AnnotationToolsController } from "./use-annotation-tools";
 import styles from "./annotation-layer.module.css";
-
-const HAND_FONT = '"Caveat", "Comic Sans MS", "Segoe Print", cursive';
 
 interface Size {
   w: number;
@@ -42,6 +40,10 @@ export function AnnotationLayer({
   // Blur-to-commit is "armed" only after the input has settled, so the click
   // that opened it can't immediately blur-cancel it before the user can type.
   const textArmed = useRef(false);
+  // Set once a text edit is resolved (commit or cancel), so the trailing blur
+  // fired when the input unmounts can't re-commit — which would duplicate the
+  // label (after Enter) or save a cancelled one (after Escape).
+  const editDone = useRef(false);
 
   useEffect(() => {
     const el = ref.current;
@@ -55,6 +57,9 @@ export function AnnotationLayer({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
+      // Don't hijack Delete/Backspace while the user is typing in a field or a
+      // modal is open — only when the canvas owns the key.
+      if (isEditingText(e.target) || document.querySelector('[aria-modal="true"]')) return;
       if ((e.key === "Delete" || e.key === "Backspace") && scene.selectedId) {
         e.preventDefault();
         scene.removeSelected();
@@ -97,6 +102,7 @@ export function AnnotationLayer({
     if (tools.tool === "text") {
       // window.prompt() is disabled in Electron — show an inline input instead.
       scene.select(null); // editing a fresh label, not the previously selected one
+      editDone.current = false;
       setEditing({ x: p.x, y: p.y });
       return;
     }
@@ -156,6 +162,8 @@ export function AnnotationLayer({
   };
 
   const commitText = (value: string): void => {
+    if (editDone.current) return; // a trailing unmount-blur after Enter/Escape
+    editDone.current = true;
     const text = value.trim();
     if (editing && text) {
       const { id } = nextAnnotationId();
@@ -209,6 +217,7 @@ export function AnnotationLayer({
               commitText((e.target as HTMLInputElement).value);
             } else if (e.key === "Escape") {
               e.preventDefault();
+              editDone.current = true; // cancel — the unmount blur must not commit
               setEditing(null);
             }
           }}
@@ -327,6 +336,12 @@ function Shape({
       )}
     </g>
   );
+}
+
+/** True when the keyboard event originated in a text field (so the canvas shouldn't grab it). */
+function isEditingText(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable;
 }
 
 function isBigEnough(a: Annotation): boolean {
