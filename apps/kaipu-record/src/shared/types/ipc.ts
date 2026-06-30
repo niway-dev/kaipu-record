@@ -151,6 +151,11 @@ export const IPC_CHANNELS = {
   // Screenshots (renderer ↔ main)
   screenshotCapture: "screenshot:capture",
   screenshotCopy: "screenshot:copy",
+  // Copy a saved screenshot to the clipboard by id (main reads the file — fetch on
+  // the kaipu-media:// scheme doesn't return bytes in the renderer).
+  screenshotCopyById: "screenshot:copy-by-id",
+  // Read a saved screenshot's PNG bytes by id (for re-opening it in the editor).
+  screenshotReadBytes: "screenshot:read-bytes",
   screenshotSave: "screenshot:save",
   // Renderer → main: capture done + navigated to the editor, bring the app back.
   screenshotReveal: "screenshot:reveal",

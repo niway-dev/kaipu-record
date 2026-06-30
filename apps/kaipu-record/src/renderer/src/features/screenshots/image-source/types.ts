@@ -7,8 +7,9 @@
 
 /** Properties every image source carries, regardless of where its bytes live. */
 export interface ImageSourceBase {
-  width: number;
-  height: number;
+  /** Natural pixel size when known (a fresh capture has it; a re-opened item may not). */
+  width?: number;
+  height?: number;
   /** Optional human title (used when saving). */
   title?: string;
 }

@@ -12,7 +12,7 @@ describe("beautify helpers", () => {
   });
 
   it("frameRadius keeps the shot radius when the background is transparent", () => {
-    expect(frameRadius("ninguno", 12)).toBe(12);
+    expect(frameRadius("none", 12)).toBe(12);
   });
 
   it("frameRadius enlarges the frame for a real background (min 8)", () => {
@@ -22,6 +22,6 @@ describe("beautify helpers", () => {
 
   it("backgroundCss resolves a known id and falls back to the first", () => {
     expect(backgroundCss("magenta")).toContain("linear-gradient");
-    expect(backgroundCss("oscuro")).toBe("var(--bg-app)");
+    expect(backgroundCss("dark")).toBe("var(--bg-app)");
   });
 });

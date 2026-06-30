@@ -21,12 +21,12 @@ describe("image-source readers", () => {
     expect(cloudReader.resolve({ kind: "cloud", url, width: 10, height: 10 }).displayUrl).toBe(url);
   });
 
-  it("localReader fetches bytes through the media protocol", async () => {
+  it("localReader reads bytes through the main bridge (not fetch)", async () => {
     const buf = new Uint8Array([9]).buffer;
-    const fetchMock = vi.fn(async () => ({ arrayBuffer: async () => buf }) as unknown as Response);
-    vi.stubGlobal("fetch", fetchMock);
+    const readMock = vi.fn(async () => buf);
+    window.electronAPI.readScreenshotBytes = readMock;
     const bytes = await localReader.getBytes({ kind: "local", id: "shot-2", width: 1, height: 1 });
     expect(bytes).toBe(buf);
-    expect(fetchMock).toHaveBeenCalledWith("kaipu-media://screenshot/shot-2");
+    expect(readMock).toHaveBeenCalledWith("shot-2");
   });
 });

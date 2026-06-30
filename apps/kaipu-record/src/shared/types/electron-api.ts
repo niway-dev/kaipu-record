@@ -154,8 +154,19 @@ export interface KaipuElectronAPI {
   setEditorWindowMode(active: boolean): void;
   /** Put a PNG on the system clipboard. */
   copyImageToClipboard(png: ArrayBuffer): Promise<void>;
-  /** Write a PNG into the vault and return the stored item. */
-  saveScreenshot(png: ArrayBuffer, meta: { title: string }): Promise<LocalRecording>;
+  /** Copy a saved screenshot to the clipboard by id (main reads the vault file). */
+  copyScreenshotById(id: string): Promise<void>;
+  /** Read a saved screenshot's PNG bytes by id (re-opening it in the editor). */
+  readScreenshotBytes(id: string): Promise<ArrayBuffer>;
+  /**
+   * Write a PNG into the vault and return the stored item. With `overwriteId` it
+   * replaces that existing screenshot (keeping its createdAt); without, it creates
+   * a new timestamped item.
+   */
+  saveScreenshot(
+    png: ArrayBuffer,
+    meta: { title: string; overwriteId?: string },
+  ): Promise<LocalRecording>;
 
   // ── Analytics ─────────────────────────────────────────────────────────
   /** Forward a serialized exception (+ origin/context) to the main-process sink. */

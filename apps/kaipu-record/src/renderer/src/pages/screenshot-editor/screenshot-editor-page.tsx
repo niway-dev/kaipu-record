@@ -2,7 +2,13 @@ import React, { useEffect, useRef, useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { Check, Copy, Download, Redo2, Undo2, ZoomIn, ZoomOut } from "lucide-react";
 import { useImageSource, type ImageSource } from "@renderer/features/screenshots/image-source";
-import { BeautifiedFrame, BeautifyPanel } from "@renderer/features/screenshots/beautify";
+import {
+  BeautifiedFrame,
+  BeautifyPanel,
+  DEFAULT_BEAUTIFY,
+  FLAT_BEAUTIFY,
+} from "@renderer/features/screenshots/beautify";
+import { SaveOptionsDialog } from "@renderer/features/screenshots/save-options-dialog";
 import {
   AnnotationLayer,
   AnnotationOptions,
@@ -36,7 +42,9 @@ export function ScreenshotEditorPage(): React.JSX.Element {
 
 function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Element {
   const image = useImageSource(source);
-  const scene = useEditorScene();
+  // A re-opened saved shot is already framed/flattened — start it unframed so the
+  // editor doesn't beautify it twice; a fresh capture gets the default frame.
+  const scene = useEditorScene(source.kind === "local" ? FLAT_BEAUTIFY : DEFAULT_BEAUTIFY);
   const tools = useAnnotationTools();
   const imgRef = useRef<HTMLImageElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -44,6 +52,11 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
   const [copied, setCopied] = useState(false);
   const [savedName, setSavedName] = useState<string | null>(null);
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The vault id this editor is bound to: set when re-opening a saved shot, and
+  // after the first save. While set, Save asks overwrite-or-copy.
+  const [savedId, setSavedId] = useState<string | null>(source.kind === "local" ? source.id : null);
+  const [askSave, setAskSave] = useState(false);
+  const [baseTitle] = useState(() => source.title ?? `Screenshot — ${new Date().toLocaleString()}`);
 
   // The editor needs more room than the rest of the app — ask main to grow the
   // window (and raise its minimum) while we're here, and restore it on the way out.
@@ -104,14 +117,31 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
     });
   };
 
-  const onSave = async (): Promise<void> => {
+  const persist = async (opts: { overwriteId?: string; title?: string }): Promise<void> => {
     const saved = await window.electronAPI.saveScreenshot(await exportPng(), {
-      title: source.title ?? `Screenshot — ${new Date().toLocaleString()}`,
+      title: opts.title ?? baseTitle,
+      overwriteId: opts.overwriteId,
     });
+    setSavedId(saved.id);
     flashFeedback(() => {
       setCopied(false);
       setSavedName(saved.title);
     });
+  };
+
+  // First save just writes; a subsequent save (or a re-opened shot) asks whether to
+  // overwrite the existing item or branch off a copy.
+  const onSave = (): void => {
+    if (savedId) setAskSave(true);
+    else void persist({});
+  };
+  const onOverwrite = (): void => {
+    setAskSave(false);
+    if (savedId) void persist({ overwriteId: savedId });
+  };
+  const onSaveCopy = (): void => {
+    setAskSave(false);
+    void persist({ title: `${baseTitle} (copy)` });
   };
 
   return (
@@ -122,7 +152,7 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
           <button
             type="button"
             className={styles.iconBtn}
-            title="Atrás"
+            title="Undo"
             disabled={!scene.canUndo}
             onClick={scene.undo}
           >
@@ -131,7 +161,7 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
           <button
             type="button"
             className={styles.iconBtn}
-            title="Adelante"
+            title="Redo"
             disabled={!scene.canRedo}
             onClick={scene.redo}
           >
@@ -142,28 +172,21 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
             type="button"
             className={styles.secondary}
             data-done={copied}
-            title={copied ? "Imagen copiada al portapapeles" : "Copiar al portapapeles"}
+            title={copied ? "Copied to clipboard" : "Copy to clipboard"}
             onClick={onCopy}
           >
-            {copied ? <Check size={16} /> : <Copy size={16} />} {copied ? "Copiado" : "Copiar"}
+            {copied ? <Check size={16} /> : <Copy size={16} />} {copied ? "Copied" : "Copy"}
           </button>
-          <div className={styles.saveWrap}>
-            {savedName && (
-              <span className={styles.savedToast} role="status">
-                Guardado como “{savedName}”
-              </span>
-            )}
-            <button
-              type="button"
-              className={styles.save}
-              data-done={savedName !== null}
-              title={savedName ? `Guardado como “${savedName}”` : "Guardar en la librería"}
-              onClick={onSave}
-            >
-              {savedName ? <Check size={16} /> : <Download size={16} />}{" "}
-              {savedName ? "Guardado" : "Guardar"}
-            </button>
-          </div>
+          <button
+            type="button"
+            className={styles.save}
+            data-done={savedName !== null}
+            title={savedName ? `Saved as “${savedName}”` : "Save to your library"}
+            onClick={onSave}
+          >
+            {savedName ? <Check size={16} /> : <Download size={16} />}{" "}
+            {savedName ? "Saved" : "Save"}
+          </button>
         </div>
       </div>
       <div className={styles.body}>
@@ -216,6 +239,27 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
         </div>
         <BeautifyPanel beautify={scene.beautify} />
       </div>
+
+      {savedName && (
+        <div className={styles.savedToast} role="status">
+          <span className={styles.savedToastIcon}>
+            <Check size={14} strokeWidth={3} />
+          </span>
+          <span className={styles.savedToastText}>
+            <span className={styles.savedToastTitle}>Saved to your library</span>
+            <span className={styles.savedToastName}>{savedName}</span>
+          </span>
+        </div>
+      )}
+
+      {askSave && (
+        <SaveOptionsDialog
+          title={baseTitle}
+          onOverwrite={onOverwrite}
+          onSaveCopy={onSaveCopy}
+          onCancel={() => setAskSave(false)}
+        />
+      )}
     </div>
   );
 }

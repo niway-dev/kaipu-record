@@ -6,15 +6,15 @@
  */
 
 export const BACKGROUND_IDS = [
-  "ninguno",
-  "oscuro",
+  "none",
+  "dark",
   "carbon",
   "magenta",
-  "purpura",
-  "oceano",
-  "atardecer",
-  "bosque",
-  "grafito",
+  "purple",
+  "ocean",
+  "sunset",
+  "forest",
+  "graphite",
 ] as const;
 export type BackgroundId = (typeof BACKGROUND_IDS)[number];
 
@@ -34,15 +34,55 @@ export interface Background {
 }
 
 export const BACKGROUNDS: Background[] = [
-  { id: "ninguno", name: "Ninguno", css: "repeating-conic-gradient(#2a2a2e 0% 25%, #232327 0% 50%) 50% / 16px 16px", paint: { kind: "none" } },
-  { id: "oscuro", name: "Oscuro", css: "var(--bg-app)", paint: { kind: "solid", color: "#0f0f11" } },
-  { id: "carbon", name: "Carbón", css: "var(--bg-card)", paint: { kind: "solid", color: "#171719" } },
-  { id: "magenta", name: "Magenta", css: "linear-gradient(135deg, #ff2d6e, #a3044a)", paint: { kind: "gradient", from: "#ff2d6e", to: "#a3044a" } },
-  { id: "purpura", name: "Púrpura", css: "linear-gradient(135deg, #a855f7, #6d28d9)", paint: { kind: "gradient", from: "#a855f7", to: "#6d28d9" } },
-  { id: "oceano", name: "Océano", css: "linear-gradient(135deg, #2563eb, #06b6d4)", paint: { kind: "gradient", from: "#2563eb", to: "#06b6d4" } },
-  { id: "atardecer", name: "Atardecer", css: "linear-gradient(135deg, #f59e0b, #ef4444)", paint: { kind: "gradient", from: "#f59e0b", to: "#ef4444" } },
-  { id: "bosque", name: "Bosque", css: "linear-gradient(135deg, #22c55e, #0ea5e9)", paint: { kind: "gradient", from: "#22c55e", to: "#0ea5e9" } },
-  { id: "grafito", name: "Grafito", css: "linear-gradient(135deg, #3f3f46, #18181b)", paint: { kind: "gradient", from: "#3f3f46", to: "#18181b" } },
+  {
+    id: "none",
+    name: "None",
+    css: "repeating-conic-gradient(#2a2a2e 0% 25%, #232327 0% 50%) 50% / 16px 16px",
+    paint: { kind: "none" },
+  },
+  { id: "dark", name: "Dark", css: "var(--bg-app)", paint: { kind: "solid", color: "#0f0f11" } },
+  {
+    id: "carbon",
+    name: "Carbon",
+    css: "var(--bg-card)",
+    paint: { kind: "solid", color: "#171719" },
+  },
+  {
+    id: "magenta",
+    name: "Magenta",
+    css: "linear-gradient(135deg, #ff2d6e, #a3044a)",
+    paint: { kind: "gradient", from: "#ff2d6e", to: "#a3044a" },
+  },
+  {
+    id: "purple",
+    name: "Purple",
+    css: "linear-gradient(135deg, #a855f7, #6d28d9)",
+    paint: { kind: "gradient", from: "#a855f7", to: "#6d28d9" },
+  },
+  {
+    id: "ocean",
+    name: "Ocean",
+    css: "linear-gradient(135deg, #2563eb, #06b6d4)",
+    paint: { kind: "gradient", from: "#2563eb", to: "#06b6d4" },
+  },
+  {
+    id: "sunset",
+    name: "Sunset",
+    css: "linear-gradient(135deg, #f59e0b, #ef4444)",
+    paint: { kind: "gradient", from: "#f59e0b", to: "#ef4444" },
+  },
+  {
+    id: "forest",
+    name: "Forest",
+    css: "linear-gradient(135deg, #22c55e, #0ea5e9)",
+    paint: { kind: "gradient", from: "#22c55e", to: "#0ea5e9" },
+  },
+  {
+    id: "graphite",
+    name: "Graphite",
+    css: "linear-gradient(135deg, #3f3f46, #18181b)",
+    paint: { kind: "gradient", from: "#3f3f46", to: "#18181b" },
+  },
 ];
 
 export function backgroundCss(id: BackgroundId): string {
@@ -65,7 +105,7 @@ export function shadowCss(value: number): string {
 
 /** The frame's outer radius: a touch larger than the shot, unless transparent. */
 export function frameRadius(bg: BackgroundId, radius: number): number {
-  return bg === "ninguno" ? radius : Math.max(8, radius + 4);
+  return bg === "none" ? radius : Math.max(8, radius + 4);
 }
 
 /** Slider bounds + defaults (from the design). */
@@ -85,4 +125,15 @@ export const DEFAULT_BEAUTIFY: BeautifyState = {
   padding: PADDING_RANGE.default,
   radius: RADIUS_RANGE.default,
   shadow: SHADOW_RANGE.default,
+};
+
+/**
+ * Unframed beautify: no background/padding/radius/shadow. Used when re-opening an
+ * already-composited screenshot so the editor doesn't frame an already-framed shot.
+ */
+export const FLAT_BEAUTIFY: BeautifyState = {
+  bg: "none",
+  padding: 0,
+  radius: 0,
+  shadow: 0,
 };

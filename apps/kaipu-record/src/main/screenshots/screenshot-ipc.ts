@@ -1,8 +1,9 @@
+import { readFile } from "node:fs/promises";
 import { clipboard, ipcMain, nativeImage } from "electron";
 import { IPC_CHANNELS } from "@shared/types/ipc";
 import type { LocalRecording } from "@shared/types/library-storage";
 import { createScreenshotProvider } from "./screenshot-capture";
-import { currentVault } from "../library";
+import { currentVault, screenshotFilePath } from "../library";
 
 const provider = createScreenshotProvider();
 
@@ -59,13 +60,31 @@ export function registerScreenshotHandlers(windows: CaptureWindowHooks): void {
     clipboard.writeImage(nativeImage.createFromBuffer(Buffer.from(png)));
   });
 
+  ipcMain.handle(IPC_CHANNELS.screenshotCopyById, async (_e, id: string) => {
+    const buf = await readFile(await screenshotFilePath(id));
+    clipboard.writeImage(nativeImage.createFromBuffer(buf));
+  });
+
+  ipcMain.handle(IPC_CHANNELS.screenshotReadBytes, async (_e, id: string): Promise<ArrayBuffer> => {
+    const buf = await readFile(await screenshotFilePath(id));
+    return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+  });
+
   ipcMain.handle(
     IPC_CHANNELS.screenshotSave,
-    async (_e, png: ArrayBuffer, meta: { title: string }): Promise<LocalRecording> => {
-      const id = screenshotId();
+    async (
+      _e,
+      png: ArrayBuffer,
+      meta: { title: string; overwriteId?: string },
+    ): Promise<LocalRecording> => {
+      const id = meta.overwriteId ?? screenshotId();
       const vault = currentVault();
       await vault.writeImage(id, Buffer.from(png));
-      await vault.writeMeta(id, { title: meta.title, createdAt: Date.now() });
+      // Preserve the original createdAt when overwriting; stamp it for a new item.
+      await vault.writeMeta(
+        id,
+        meta.overwriteId ? { title: meta.title } : { title: meta.title, createdAt: Date.now() },
+      );
       return (await vault.describe(id))!;
     },
   );

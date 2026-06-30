@@ -85,6 +85,8 @@ const kaipuApi: KaipuElectronAPI = {
   revealAfterCapture: () => ipcRenderer.send(IPC_CHANNELS.screenshotReveal),
   setEditorWindowMode: (active) => ipcRenderer.send(IPC_CHANNELS.windowSetEditorMode, active),
   copyImageToClipboard: (png) => ipcRenderer.invoke(IPC_CHANNELS.screenshotCopy, png),
+  copyScreenshotById: (id) => ipcRenderer.invoke(IPC_CHANNELS.screenshotCopyById, id),
+  readScreenshotBytes: (id) => ipcRenderer.invoke(IPC_CHANNELS.screenshotReadBytes, id),
   saveScreenshot: (png, meta) => ipcRenderer.invoke(IPC_CHANNELS.screenshotSave, png, meta),
   onCaptureScreenshotHotkey: (callback) => {
     const listener = (): void => callback();

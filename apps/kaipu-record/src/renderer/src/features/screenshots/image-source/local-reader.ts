@@ -10,7 +10,8 @@ export const localReader: ImageSourceReader<LocalSource> = {
     return { displayUrl: mediaUrl(source.id) };
   },
   async getBytes(source) {
-    const res = await fetch(mediaUrl(source.id));
-    return res.arrayBuffer();
+    // Bytes come through main, not `fetch`: the kaipu-media:// scheme renders in an
+    // <img> but doesn't hand a usable body to renderer fetch.
+    return window.electronAPI.readScreenshotBytes(source.id);
   },
 };

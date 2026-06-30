@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Check, Copy, FileX2, FolderOpen, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, Copy, FileX2, FolderOpen, Pencil, Trash2 } from "lucide-react";
+import type { ImageSource } from "@renderer/features/screenshots/image-source";
 import { useLocalLibrary } from "@renderer/features/library/hooks/use-local-library";
 import { StorageMeta } from "@renderer/features/library/components/storage-meta";
 import { DeleteConfirmDialog } from "@renderer/features/library/components/delete-confirm-dialog";
@@ -57,15 +58,20 @@ export function LibraryDetailPage(): React.JSX.Element {
     back();
   };
 
-  // Copy a saved screenshot: pull its bytes from the media protocol (same path the
-  // editor's local reader uses) and hand them to the clipboard.
+  // Copy a saved screenshot to the clipboard — main reads the vault file by id
+  // (fetch on the kaipu-media:// scheme doesn't return bytes in the renderer).
   const copyScreenshot = async (): Promise<void> => {
-    if (!video.thumbnailUrl) return;
-    const bytes = await fetch(video.thumbnailUrl).then((r) => r.arrayBuffer());
-    await window.electronAPI.copyImageToClipboard(bytes);
+    await window.electronAPI.copyScreenshotById(video.id);
     setCopied(true);
     if (copyTimer.current) clearTimeout(copyTimer.current);
     copyTimer.current = setTimeout(() => setCopied(false), 2200);
+  };
+
+  // Re-open a saved screenshot in the editor. It's a flat PNG, so the editor treats
+  // it as a new base image (the local source starts with no beautify re-frame).
+  const editScreenshot = (): void => {
+    const source: ImageSource = { kind: "local", id: video.id, title: video.title };
+    navigate("/screenshot-editor", { state: source });
   };
 
   return (
@@ -101,14 +107,20 @@ export function LibraryDetailPage(): React.JSX.Element {
 
         <div className={styles.actions}>
           {isScreenshot && (
-            <Button variant="outline" size="sm" onClick={copyScreenshot}>
-              {copied ? (
-                <Check size={15} strokeWidth={1.8} />
-              ) : (
-                <Copy size={15} strokeWidth={1.8} />
-              )}
-              {copied ? "Copied" : "Copy"}
-            </Button>
+            <>
+              <Button variant="outline" size="sm" onClick={editScreenshot}>
+                <Pencil size={15} strokeWidth={1.8} />
+                Edit
+              </Button>
+              <Button variant="outline" size="sm" onClick={copyScreenshot}>
+                {copied ? (
+                  <Check size={15} strokeWidth={1.8} />
+                ) : (
+                  <Copy size={15} strokeWidth={1.8} />
+                )}
+                {copied ? "Copied" : "Copy"}
+              </Button>
+            </>
           )}
           <Button variant="outline" size="sm" onClick={() => reveal(id)}>
             <FolderOpen size={15} strokeWidth={1.8} />

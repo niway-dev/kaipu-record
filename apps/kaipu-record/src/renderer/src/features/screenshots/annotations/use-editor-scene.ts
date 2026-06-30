@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { DEFAULT_BEAUTIFY } from "../beautify/backgrounds";
+import { DEFAULT_BEAUTIFY, type BeautifyState } from "../beautify/backgrounds";
 import type { BeautifyController } from "../beautify/use-beautify";
 import { sameScene, type Annotation, type Scene } from "./scene";
 
@@ -25,11 +25,13 @@ export interface EditorScene {
   canRedo: boolean;
 }
 
-const INITIAL: Scene = { beautify: DEFAULT_BEAUTIFY, annotations: [] };
-
-/** Unified editor scene (beautify + annotations) with one undo/redo history. */
-export function useEditorScene(): EditorScene {
-  const [scene, setScene] = useState<Scene>(INITIAL);
+/** Unified editor scene (beautify + annotations) with one undo/redo history. The
+ *  initial beautify can be overridden (a re-opened flat screenshot starts unframed). */
+export function useEditorScene(initialBeautify: BeautifyState = DEFAULT_BEAUTIFY): EditorScene {
+  const [scene, setScene] = useState<Scene>(() => ({
+    beautify: initialBeautify,
+    annotations: [],
+  }));
   const [past, setPast] = useState<Scene[]>([]);
   const [future, setFuture] = useState<Scene[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
