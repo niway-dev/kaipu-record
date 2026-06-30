@@ -18,7 +18,12 @@ describe("MacNativeProvider", () => {
   afterEach(() => vi.restoreAllMocks());
 
   it("returns the captured PNG buffer", async () => {
-    const provider = new MacNativeProvider({ runCli, readPng, fileExists, tempPath: () => "/tmp/x.png" });
+    const provider = new MacNativeProvider({
+      runCli,
+      readPng,
+      fileExists,
+      tempPath: () => "/tmp/x.png",
+    });
     const out = await provider.captureInteractive();
     expect(runCli).toHaveBeenCalledWith("screencapture", ["-i", "-o", "/tmp/x.png"]);
     expect(out).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
@@ -26,7 +31,12 @@ describe("MacNativeProvider", () => {
 
   it("returns null when the user cancels (no file written)", async () => {
     fileExists = vi.fn(async () => false);
-    const provider = new MacNativeProvider({ runCli, readPng, fileExists, tempPath: () => "/tmp/x.png" });
+    const provider = new MacNativeProvider({
+      runCli,
+      readPng,
+      fileExists,
+      tempPath: () => "/tmp/x.png",
+    });
     expect(await provider.captureInteractive()).toBeNull();
     expect(readPng).not.toHaveBeenCalled();
   });

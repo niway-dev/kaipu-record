@@ -30,11 +30,11 @@ the editor grows a tool.
 Today we store **only** the flattened `<id>.png`. Non-destructive re-edit needs
 **three** artifacts per screenshot:
 
-| Artifact | Purpose | Where (local) |
-| --- | --- | --- |
-| `<id>.png` (flattened) | Library thumbnail, Copy, share — the "output" | vault root |
-| base PNG (original capture) | the un-annotated pixels to edit on | `.kaipu/<id>.base.png` |
-| `<id>.scene.json` | beautify + editable annotations | `.kaipu/<id>.scene.json` |
+| Artifact                    | Purpose                                       | Where (local)            |
+| --------------------------- | --------------------------------------------- | ------------------------ |
+| `<id>.png` (flattened)      | Library thumbnail, Copy, share — the "output" | vault root               |
+| base PNG (original capture) | the un-annotated pixels to edit on            | `.kaipu/<id>.base.png`   |
+| `<id>.scene.json`           | beautify + editable annotations               | `.kaipu/<id>.scene.json` |
 
 Flow: **Save** → write all three. **Edit** → load base + scene, hydrate the editor
 (annotations already editable). **Re-save** → re-flatten → overwrite `<id>.png` +
@@ -63,8 +63,8 @@ The lasting cost is (b)/(c), not the storage or the cloud transport.
 
 Whatever we do, **keep `<id>.png` flattened** as the always-valid artifact. If a
 scene fails to parse (corrupt, newer schema, missing base), the editor falls back to
-**editing on the flattened PNG** (today's behaviour). So the scene doc is a *best-
-effort enhancement layered on top* — it can never make a screenshot un-openable.
+**editing on the flattened PNG** (today's behaviour). So the scene doc is a _best-
+effort enhancement layered on top_ — it can never make a screenshot un-openable.
 
 ## ⚠️ Security tension with redaction (read before building)
 

@@ -56,6 +56,6 @@ recolor) is already there. Smaller than the text tool.
 
 ## Note vs redaction
 
-A thick opaque scribble can *visually* scratch something out, but it is **not** secure
+A thick opaque scribble can _visually_ scratch something out, but it is **not** secure
 redaction — edges leak and it's a stroke, not a fill. For hiding sensitive data use the
 [blur box](./screenshot-redaction), which destroys the pixels.

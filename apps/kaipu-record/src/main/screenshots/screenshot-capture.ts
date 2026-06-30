@@ -19,9 +19,18 @@ interface Deps {
 }
 
 const realDeps: Deps = {
-  runCli: async (cmd, args) => { await execFileAsync(cmd, args); },
+  runCli: async (cmd, args) => {
+    await execFileAsync(cmd, args);
+  },
   readPng: (path) => readFile(path),
-  fileExists: async (path) => { try { await access(path); return true; } catch { return false; } },
+  fileExists: async (path) => {
+    try {
+      await access(path);
+      return true;
+    } catch {
+      return false;
+    }
+  },
   // Note: no Date.now()/Math.random() in plan code is fine here — this is runtime, not a workflow.
   tempPath: () => join(tmpdir(), `kaipu-shot-${process.hrtime.bigint()}.png`),
 };

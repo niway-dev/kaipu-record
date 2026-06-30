@@ -5,12 +5,13 @@ import { localReader } from "./local-reader";
 import { cloudReader } from "./cloud-reader";
 
 /** Reader registry, keyed by the source discriminator. Add a kind → add an entry. */
-const READERS: { [K in ImageSource["kind"]]: ImageSourceReader<Extract<ImageSource, { kind: K }>> } =
-  {
-    blob: blobReader,
-    local: localReader,
-    cloud: cloudReader,
-  };
+const READERS: {
+  [K in ImageSource["kind"]]: ImageSourceReader<Extract<ImageSource, { kind: K }>>;
+} = {
+  blob: blobReader,
+  local: localReader,
+  cloud: cloudReader,
+};
 
 function readerFor(source: ImageSource): ImageSourceReader<ImageSource> {
   return READERS[source.kind] as ImageSourceReader<ImageSource>;

@@ -21,7 +21,7 @@ readable — better than a solid black bar that erases context. It's the v1.
 
 All reuse the existing box-tool pointer math and bake into the flattened export.
 
-1. **Blur / pixelate box** ✅ *(primary — the WhatsApp pattern)* — drag a rectangle; the
+1. **Blur / pixelate box** ✅ _(primary — the WhatsApp pattern)_ — drag a rectangle; the
    base pixels inside are blurred or pixelated. **Pixelate (mosaic) is the safer default**
    for true secrecy — a light gaussian blur can sometimes be reversed.
 2. **Solid fill box** — a filled opaque "black bar". Trivial fallback; reuses the box
@@ -64,7 +64,7 @@ movable layer.
 - It breaks if we adopt **non-destructive [scene docs](./screenshot-scene-doc)** that
   store the original **base** image: the sensitive pixels would still live in the base
   under the blur. **Rule:** a screenshot containing a redaction is **flatten-only** (no
-  re-editable base), *or* the redaction bakes the blur/mosaic into the stored base too.
+  re-editable base), _or_ the redaction bakes the blur/mosaic into the stored base too.
   Prefer flatten-only for v1 — simple and safe.
 - Prefer **pixelate with a large block** (or a strong blur) for anything that must truly
   disappear — weak blur can be partially reversed.

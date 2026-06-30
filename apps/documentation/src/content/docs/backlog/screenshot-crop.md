@@ -25,7 +25,7 @@ Why a scene field (non-destructive) rather than baking a smaller base image:
 
 - **Undoable** — crop joins the existing undo/redo history like any change.
 - **Re-adjustable** — drag the handles again; nothing is lost mid-session.
-- **No annotation re-normalization** — annotations stay normalized to the *original*
+- **No annotation re-normalization** — annotations stay normalized to the _original_
   image; the crop is just a viewport. Live layer and compositor both render "the image
   windowed to `crop`", so annotation coords never change.
 - The output dimensions become the crop's **native pixels** → crisp, never upscaled.

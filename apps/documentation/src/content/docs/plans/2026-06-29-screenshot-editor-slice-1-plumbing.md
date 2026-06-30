@@ -54,11 +54,13 @@ description: "Task-by-task plan for the end-to-end screenshot pipeline: capture 
 ## Task 1: Shared contract — types, channels, shortcut action
 
 **Files:**
+
 - Modify: `src/shared/types/ipc.ts`
 - Modify: `src/shared/types/library-storage.ts`
 - Modify: `src/shared/types/electron-api.ts`
 
 **Interfaces:**
+
 - Produces: `IPC_CHANNELS.screenshotCapture = "screenshot:capture"`, `.screenshotCopy = "screenshot:copy"`, `.screenshotSave = "screenshot:save"`; `SHORTCUT_ACTIONS` includes `"captureScreenshot"`; `LocalRecording.kind: "recording" | "screenshot"`; `KaipuElectronAPI` methods `captureScreenshot(): Promise<{ png: ArrayBuffer; width: number; height: number } | null>`, `copyImageToClipboard(png: ArrayBuffer): Promise<void>`, `saveScreenshot(png: ArrayBuffer, meta: { title: string }): Promise<LocalRecording>`.
 
 - [ ] **Step 1: Add the screenshot channels.** In `src/shared/types/ipc.ts`, inside `IPC_CHANNELS` (after the library block, before `recordingCreate`):
@@ -138,10 +140,12 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ## Task 2: Capture provider (Path A)
 
 **Files:**
+
 - Create: `src/main/screenshots/screenshot-capture.ts`
 - Test: `src/main/screenshots/screenshot-capture.test.ts`
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces: `interface ScreenshotCaptureProvider { captureInteractive(): Promise<Buffer | null> }`; `createScreenshotProvider(): ScreenshotCaptureProvider` (returns `MacNativeProvider`). The PNG is read from a temp file written by `screencapture -i -o`. A user cancel (`Esc`) leaves no file → resolves `null`.
 
@@ -255,10 +259,12 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ## Task 3: Vault — image support + `kind`
 
 **Files:**
+
 - Modify: `src/main/library/library-vault.ts`
 - Test: `src/main/library/library-vault.test.ts` (extend the existing suite)
 
 **Interfaces:**
+
 - Consumes: `LocalRecording.kind` (Task 1).
 - Produces: `LibraryVault.writeImage(id: string, png: Buffer): Promise<void>` (writes `<id>.png`); `list()`/`describe()` now also surface `.png` items with `kind: "screenshot"`; recordings get `kind: "recording"`. Screenshot thumbnail URL = `kaipu-media://screenshot/<id>` (the PNG itself).
 
@@ -368,12 +374,14 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ## Task 4: Main — IPC handlers + media protocol + wiring
 
 **Files:**
+
 - Create: `src/main/screenshots/screenshot-ipc.ts`
 - Modify: `src/main/library/index.ts`
 - Modify: `src/main/media-protocol.ts`
 - Modify: `src/main/index.ts`
 
 **Interfaces:**
+
 - Consumes: `createScreenshotProvider` (Task 2), `currentVault()` + `writeImage` (Task 3), `IPC_CHANNELS.screenshot*` (Task 1).
 - Produces: `registerScreenshotHandlers()`; a `screenshotFilePath(id)` resolver; the `kaipu-media://screenshot/<id>` route; a `triggerCaptureScreenshot()` main-side function used by the hotkey (Task 8).
 
@@ -466,9 +474,11 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ## Task 5: Preload bridge
 
 **Files:**
+
 - Modify: `src/preload/index.ts`
 
 **Interfaces:**
+
 - Consumes: `IPC_CHANNELS.screenshot*`, the `KaipuElectronAPI` methods (Task 1).
 - Produces: `window.electronAPI.captureScreenshot/copyImageToClipboard/saveScreenshot`.
 
@@ -499,12 +509,14 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ## Task 6: Renderer — Screenshots launcher page + route + nav
 
 **Files:**
+
 - Create: `src/renderer/src/pages/screenshots/screenshots-page.tsx` (+ `.module.css`)
 - Create: `src/renderer/src/features/screenshots/use-screenshot-capture.ts`
 - Modify: `src/renderer/src/app/router.tsx`
 - Modify: `src/renderer/src/shell/sidebar.tsx`
 
 **Interfaces:**
+
 - Consumes: `window.electronAPI.captureScreenshot`.
 - Produces: route `/screenshots`; `useScreenshotCapture()` returning `{ capture: () => Promise<void> }` that captures and navigates to `/screenshot-editor` with the PNG in router state.
 
@@ -588,10 +600,12 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ## Task 7: Renderer — editor route shell (show PNG + Copy/Save)
 
 **Files:**
+
 - Create: `src/renderer/src/pages/screenshot-editor/screenshot-editor-page.tsx` (+ `.module.css`)
 - Modify: `src/renderer/src/app/router.tsx`
 
 **Interfaces:**
+
 - Consumes: router `state` `{ png: ArrayBuffer; width; height }`; `window.electronAPI.copyImageToClipboard/saveScreenshot`.
 - Produces: route `/screenshot-editor`. (Slices 2–3 replace the body with the beautify/annotation canvas; the Copy/Save wiring stays.)
 
@@ -674,12 +688,14 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ## Task 8: Global hotkey `captureScreenshot`
 
 **Files:**
+
 - Modify: `src/main/shortcuts/global-shortcuts.ts`
 - Modify: `src/main/index.ts`
 - Modify: `src/renderer/src/pages/shortcuts/shortcuts-page.tsx`
 - Modify: `src/renderer/src/features/shortcuts/use-shortcut-labels.ts`
 
 **Interfaces:**
+
 - Consumes: `SHORTCUT_ACTIONS` now includes `captureScreenshot` (Task 1).
 - Produces: pressing `⌘⌃4` captures and opens the editor; the action is listed + rebindable on the Shortcuts page.
 
@@ -703,7 +719,7 @@ async function triggerCaptureScreenshot(): Promise<void> {
 }
 ```
 
-Add the matching broadcast channel `screenshotHotkey: "screenshot:hotkey"` to `IPC_CHANNELS` and a preload subscription `onCaptureScreenshotHotkey(cb)` (mirror `onUpdateStatus`); have the Screenshots/AppShell renderer subscribe and call `capture()`. *(If the team prefers the capture to run fully main-side, that's a valid alternative — but navigation lives in the renderer, so the broadcast keeps the flow in one place.)*
+Add the matching broadcast channel `screenshotHotkey: "screenshot:hotkey"` to `IPC_CHANNELS` and a preload subscription `onCaptureScreenshotHotkey(cb)` (mirror `onUpdateStatus`); have the Screenshots/AppShell renderer subscribe and call `capture()`. _(If the team prefers the capture to run fully main-side, that's a valid alternative — but navigation lives in the renderer, so the broadcast keeps the flow in one place.)_
 
 - [ ] **Step 3: Surface it on the Shortcuts page.** In `shortcuts-page.tsx`, add a row to the appropriate array (`APP_SHORTCUTS`):
 

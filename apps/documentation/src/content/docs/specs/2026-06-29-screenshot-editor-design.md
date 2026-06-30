@@ -21,6 +21,7 @@ This is the first slice of a larger media vision (owner's priority order): recor
 is built as a layered canvas so the future compositor is an extension, not a rewrite.
 
 **In v1**
+
 - Capture a region (Path A — `screencapture -i`, see §3).
 - Editor (route in the main window): beautify (background / padding / corners / shadow) + 3
   annotation tools (box, arrow, text) with select / move / resize / delete + undo/redo.
@@ -29,21 +30,22 @@ is built as a layered canvas so the future compositor is an extension, not a rew
 - Entry points: global hotkey `captureScreenshot` (default `⌘⌃X`) + a Screenshots page.
 
 **Out of v1 (later phases)**
+
 - Branded custom-overlay capture (Path B), video editing, multi-image compositor.
 - Re-editable saved screenshots (persist a scene doc) — v1 exports a flat PNG.
 - More tools (blur/redaction, highlighter, numbered steps, crop), tray entry, export formats.
 
 ## 2. Key decisions (resolved)
 
-| Topic | Decision | Why |
-| --- | --- | --- |
-| Capture engine (v1) | **Path A** `screencapture -i` behind a `ScreenshotCaptureProvider` seam | `-i` is interactive **region** select (not full-screen). Ships now, pixel-perfect, Retina/multi-monitor free. Branded overlay (Path B) is a later iteration; the editor is unchanged. |
-| Hand-drawn look | **Custom SVG "rough" helper (~30 lines), NOT the rough.js library** | The mockup proves a seeded-RNG double-stroke jitter reproduces the look exactly. Zero dependency. |
-| Annotation font | **Caveat** (Google Font, OFL) | The mockup's hand-drawn font. OFL → bundle legally. |
-| Editor rendering | **React + SVG scene** (matches the mockup 1:1), hand-rolled interaction layer | The design is SVG; the rough helper emits SVG paths. No Konva dependency for v1. **Fallback:** if the interaction layer (drag/resize/hit-test) proves too heavy during the annotations slice, swap the annotation *renderer* to Konva — keep the scene model renderer-agnostic so this is localized. |
-| Editor surface | **Route in the main window** (`/screenshot-editor`) | Simpler; reuses routing/chrome. |
-| Storage | **Unified vault**, `kind: "recording" \| "screenshot"` | One Library, one vault. |
-| Tokens | **Use the existing design-system CSS variables**; new tokens only for genuinely feature-specific values, defined once | See §7 — hard rule. |
+| Topic               | Decision                                                                                                              | Why                                                                                                                                                                                                                                                                                                  |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Capture engine (v1) | **Path A** `screencapture -i` behind a `ScreenshotCaptureProvider` seam                                               | `-i` is interactive **region** select (not full-screen). Ships now, pixel-perfect, Retina/multi-monitor free. Branded overlay (Path B) is a later iteration; the editor is unchanged.                                                                                                                |
+| Hand-drawn look     | **Custom SVG "rough" helper (~30 lines), NOT the rough.js library**                                                   | The mockup proves a seeded-RNG double-stroke jitter reproduces the look exactly. Zero dependency.                                                                                                                                                                                                    |
+| Annotation font     | **Caveat** (Google Font, OFL)                                                                                         | The mockup's hand-drawn font. OFL → bundle legally.                                                                                                                                                                                                                                                  |
+| Editor rendering    | **React + SVG scene** (matches the mockup 1:1), hand-rolled interaction layer                                         | The design is SVG; the rough helper emits SVG paths. No Konva dependency for v1. **Fallback:** if the interaction layer (drag/resize/hit-test) proves too heavy during the annotations slice, swap the annotation _renderer_ to Konva — keep the scene model renderer-agnostic so this is localized. |
+| Editor surface      | **Route in the main window** (`/screenshot-editor`)                                                                   | Simpler; reuses routing/chrome.                                                                                                                                                                                                                                                                      |
+| Storage             | **Unified vault**, `kind: "recording" \| "screenshot"`                                                                | One Library, one vault.                                                                                                                                                                                                                                                                              |
+| Tokens              | **Use the existing design-system CSS variables**; new tokens only for genuinely feature-specific values, defined once | See §7 — hard rule.                                                                                                                                                                                                                                                                                  |
 
 ## 3. Capture (Path A, seam for B)
 
@@ -139,7 +141,7 @@ Stroke widths: `[2, 3.4, 5.4]`. Text: Caveat, sizes S/M/L, slight `rotate(-5deg)
 ### 4.4 Beautify panel — exact values
 
 - **Background** — 5-col swatch grid, 9 presets (selected ring = `0 0 0 2px var(--bg-sidebar),
-  0 0 0 3.5px var(--accent-primary)`):
+0 0 0 3.5px var(--accent-primary)`):
   `Ninguno` (transparent checker) · `Oscuro` (`--bg-app`) · `Carbón` (`--bg-card`) · `Magenta`
   `linear-gradient(135deg,#ff2d6e,#a3044a)` · `Púrpura` `#a855f7→#6d28d9` · `Océano`
   `#2563eb→#06b6d4` · `Atardecer` `#f59e0b→#ef4444` · `Bosque` `#22c55e→#0ea5e9` · `Grafito`
@@ -156,6 +158,7 @@ Stroke widths: `[2, 3.4, 5.4]`. Text: Caveat, sizes S/M/L, slight `rotate(-5deg)
 Composite the scene **once** to an offscreen canvas at the framed size, then use that single PNG for
 **both** Copy and Save (identical pixels). Draw order = background → shot (padding/radius/shadow) →
 annotations (rough paths rasterized; Caveat must be loaded before export — `document.fonts.ready`).
+
 - **Copy:** PNG buffer → main → `clipboard.writeImage(nativeImage.createFromBuffer(buf))`.
 - **Save:** PNG buffer → vault writer (§6) → appears in Library.
 
@@ -205,6 +208,7 @@ Already covered by existing tokens (use the variable, not the hex): `#f6055c`→
 
 New feature tokens (define once, e.g. in `base.css` or a feature token module — follow the
 shared-tokens-package direction):
+
 - **Beautify backgrounds:** `--shot-bg-magenta|purpura|oceano|atardecer|bosque|grafito` (the
   gradients above), plus `oscuro`/`carbon` reuse `--bg-app`/`--bg-card`.
 - **Annotation neutrals:** `--anno-ink: #1a1a1a` and `--anno-on-light: #f5f5f5` (intentionally
@@ -248,7 +252,7 @@ Following the existing main/preload/renderer split (from the integration map):
 1. **Plumbing slice:** capture provider (Path A) + IPC + preload + `kind` storage model + media
    protocol branch + `/screenshots` page (Capture button) + `/screenshot-editor` route that shows
    the raw PNG + **Copy/Save** (flat, no beautify/annotations) + the `captureScreenshot` hotkey.
-   *Proves the whole pipeline end-to-end.*
+   _Proves the whole pipeline end-to-end._
 2. **Beautify slice:** background swatches + padding/corners/shadow + the framed composite for
    export.
 3. **Annotations slice:** rough helper + Caveat + box/arrow/text + select/move/resize/delete +
