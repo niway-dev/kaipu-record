@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import styles from "./screenshot-editor-page.module.css";
 
@@ -12,16 +12,24 @@ export function ScreenshotEditorPage(): React.JSX.Element {
   const navigate = useNavigate();
   const shot = useLocation().state as ShotState | null;
   const [saved, setSaved] = useState(false);
+  const [url, setUrl] = useState<string | null>(null);
 
-  const url = useMemo(
-    () => (shot ? URL.createObjectURL(new Blob([shot.png], { type: "image/png" })) : null),
-    [shot],
-  );
+  // Create an object URL for the PNG and revoke it on cleanup to avoid memory leaks.
+  useEffect(() => {
+    if (!shot) return;
+    const objectUrl = URL.createObjectURL(new Blob([shot.png], { type: "image/png" }));
+    setUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [shot]);
 
-  if (!shot || !url) {
+  // Guard: no shot state means we arrived without data — navigate back.
+  if (!shot) {
     navigate("/screenshots");
     return <></>;
   }
+
+  // url is null on the first render while the effect runs; render nothing until ready.
+  if (!url) return <></>;
 
   return (
     <div className={styles.editor}>
