@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { HAND_FONT, STROKE_WIDTHS, TEXT_PX } from "./tools";
+import { BLUR_STD, HAND_FONT, STROKE_WIDTHS, TEXT_PX } from "./tools";
 import { roughArrow, roughRect } from "./rough";
 import { smoothPath } from "./smooth";
 import { nextAnnotationId, type Annotation } from "./scene";
@@ -16,7 +16,7 @@ interface Pt {
   y: number;
 }
 type Drag =
-  | { mode: "draw-box" | "draw-arrow" | "draw-pen"; start: Pt }
+  | { mode: "draw-box" | "draw-arrow" | "draw-pen" | "draw-blur"; start: Pt }
   | { mode: "move"; id: string; start: Pt; orig: Annotation };
 
 /**
@@ -28,9 +28,12 @@ type Drag =
 export function AnnotationLayer({
   scene,
   tools,
+  src,
 }: {
   scene: EditorScene;
   tools: AnnotationToolsController;
+  /** The shot's display URL — a blur box re-draws a blurred copy of it under the rect. */
+  src: string;
 }): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<Size>({ w: 0, h: 0 });
@@ -124,7 +127,9 @@ export function AnnotationLayer({
       (e.target as Element).setPointerCapture?.(e.pointerId);
       return;
     }
-    drag.current = { mode: tools.tool === "box" ? "draw-box" : "draw-arrow", start: p };
+    const mode =
+      tools.tool === "box" ? "draw-box" : tools.tool === "blur" ? "draw-blur" : "draw-arrow";
+    drag.current = { mode, start: p };
     (e.target as Element).setPointerCapture?.(e.pointerId);
   };
 
@@ -143,6 +148,17 @@ export function AnnotationLayer({
         // Throttle: drop points too close to the last so the path stays light + smooth.
         if (last && Math.hypot(p.x - last.x, p.y - last.y) < 0.004) return prev;
         return { ...prev, points: [...prev.points, p] };
+      });
+      return;
+    }
+    if (d.mode === "draw-blur") {
+      setDraft({
+        id: "draft",
+        kind: "blur",
+        x: Math.min(d.start.x, p.x),
+        y: Math.min(d.start.y, p.y),
+        w: Math.abs(p.x - d.start.x),
+        h: Math.abs(p.y - d.start.y),
       });
       return;
     }
@@ -183,8 +199,9 @@ export function AnnotationLayer({
     }
     if (draft && isBigEnough(draft)) {
       const { id, seed } = nextAnnotationId();
-      // Paths carry the user's real stroke (no rough jitter), so they need no seed.
-      const committed = draft.kind === "path" ? { ...draft, id } : { ...draft, id, seed };
+      // Paths/blurs carry no rough jitter, so they need no seed.
+      const seedless = draft.kind === "path" || draft.kind === "blur";
+      const committed = seedless ? { ...draft, id } : { ...draft, id, seed };
       scene.addAnnotation(committed as Annotation);
       // Stay in the tool so the user can draw several in a row.
     }
@@ -224,9 +241,9 @@ export function AnnotationLayer({
     >
       <svg className={styles.svg} width={size.w} height={size.h}>
         {scene.annotations.map((a) => (
-          <Shape key={a.id} a={a} size={size} selected={scene.selectedId === a.id} />
+          <Shape key={a.id} a={a} size={size} selected={scene.selectedId === a.id} src={src} />
         ))}
-        {draft && <Shape a={draft} size={size} selected={false} />}
+        {draft && <Shape a={draft} size={size} selected={false} src={src} />}
       </svg>
       {editing && (
         <input
@@ -269,12 +286,46 @@ function Shape({
   a,
   size,
   selected,
+  src,
 }: {
   a: Annotation;
   size: Size;
   selected: boolean;
+  src: string;
 }): React.JSX.Element {
   const { w: W, h: H } = size;
+
+  if (a.kind === "blur") {
+    const bx = a.x * W;
+    const by = a.y * H;
+    const bw = a.w * W;
+    const bh = a.h * H;
+    // Re-draw a blurred copy of the shot, clipped to the rect — sits over the sharp
+    // image so the region reads as blurred. Baked into the export (see compositor).
+    return (
+      <g>
+        <defs>
+          <clipPath id={`bclip-${a.id}`}>
+            <rect x={bx} y={by} width={bw} height={bh} />
+          </clipPath>
+          <filter id={`bfilter-${a.id}`}>
+            <feGaussianBlur stdDeviation={BLUR_STD} />
+          </filter>
+        </defs>
+        <image
+          href={src}
+          x={0}
+          y={0}
+          width={W}
+          height={H}
+          preserveAspectRatio="none"
+          clipPath={`url(#bclip-${a.id})`}
+          filter={`url(#bfilter-${a.id})`}
+        />
+        {selected && <rect className={styles.selOutline} x={bx} y={by} width={bw} height={bh} />}
+      </g>
+    );
+  }
 
   if (a.kind === "box") {
     const bw = a.w * W;
@@ -393,7 +444,7 @@ function isEditingText(target: EventTarget | null): boolean {
 }
 
 function isBigEnough(a: Annotation): boolean {
-  if (a.kind === "box") return a.w > 0.01 && a.h > 0.01;
+  if (a.kind === "box" || a.kind === "blur") return a.w > 0.01 && a.h > 0.01;
   if (a.kind === "arrow") return Math.hypot(a.x2 - a.x1, a.y2 - a.y1) > 0.02;
   if (a.kind === "path") return a.points.length > 1;
   return true;
@@ -414,7 +465,7 @@ function moveBy(a: Annotation, dx: number, dy: number): Partial<Annotation> {
 function hitTest(annotations: Annotation[], p: Pt, size: Size): Annotation | null {
   for (let i = annotations.length - 1; i >= 0; i -= 1) {
     const a = annotations[i];
-    if (a.kind === "box") {
+    if (a.kind === "box" || a.kind === "blur") {
       if (
         p.x >= a.x - 0.01 &&
         p.x <= a.x + a.w + 0.01 &&

@@ -204,7 +204,7 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
             <BeautifiedFrame
               src={image.displayUrl}
               beautify={scene.beautify.state}
-              overlay={<AnnotationLayer scene={scene} tools={tools} />}
+              overlay={<AnnotationLayer scene={scene} tools={tools} src={image.displayUrl} />}
               imgRef={imgRef}
               zoom={zoom}
               onImageLoad={() => setImageReady(true)}

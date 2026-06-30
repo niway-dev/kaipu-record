@@ -80,4 +80,12 @@ describe("compositor buildSvg", () => {
     expect(svg).toContain('stroke="#0ff"');
     expect(svg).not.toContain("NaN");
   });
+
+  it("bakes a blur box as a clipped, blurred copy of the base image", () => {
+    const annotations: Annotation[] = [{ id: "x", kind: "blur", x: 0.1, y: 0.1, w: 0.3, h: 0.2 }];
+    const svg = buildSvg(scene(annotations), geom);
+    expect(svg).toContain("<feGaussianBlur");
+    expect(svg).toMatch(/<image href="data:image\/png;base64,AAAA"[^>]*filter="url\(#bfilter-x\)"/);
+    expect(svg).not.toContain("NaN");
+  });
 });

@@ -24,8 +24,10 @@ function resolveControls(
   scene: EditorScene,
   selected: Annotation | null,
 ): ContextualControls | null {
-  // A selected annotation → edit it (single undoable change per click).
+  // A selected annotation → edit it (single undoable change per click). A blur box
+  // has no colour/stroke, so there's nothing to edit.
   if (selected) {
+    if (selected.kind === "blur") return null;
     return selected.kind === "text"
       ? {
           mode: "size",
@@ -42,8 +44,8 @@ function resolveControls(
           setLevel: (stroke) => scene.commitAnnotation(selected.id, { stroke }),
         };
   }
-  // Nothing selected + the select tool → nothing to edit, hide the panel.
-  if (tools.tool === "select") return null;
+  // Nothing selected + select/blur tool → nothing to set (blur has no colour/stroke).
+  if (tools.tool === "select" || tools.tool === "blur") return null;
   // A drawing tool is active → set the defaults for the next shape.
   return tools.tool === "text"
     ? {

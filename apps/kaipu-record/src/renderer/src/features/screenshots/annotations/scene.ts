@@ -41,7 +41,21 @@ export interface PathAnnotation {
   color: string;
   stroke: number;
 }
-export type Annotation = BoxAnnotation | ArrowAnnotation | TextAnnotation | PathAnnotation;
+/** A redaction box: the base image under this rect is blurred (baked into the export). */
+export interface BlurAnnotation {
+  id: string;
+  kind: "blur";
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+export type Annotation =
+  | BoxAnnotation
+  | ArrowAnnotation
+  | TextAnnotation
+  | PathAnnotation
+  | BlurAnnotation;
 
 /** The full editing document: beautify settings + the annotation layer. */
 export interface Scene {

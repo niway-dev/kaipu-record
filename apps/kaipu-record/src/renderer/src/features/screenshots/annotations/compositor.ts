@@ -1,7 +1,7 @@
 import { backgroundPaint, frameRadius } from "../beautify/backgrounds";
 import { roughArrow, roughRect } from "./rough";
 import { smoothPath } from "./smooth";
-import { HAND_FONT, STROKE_WIDTHS, TEXT_PX } from "./tools";
+import { BLUR_STD, HAND_FONT, STROKE_WIDTHS, TEXT_PX } from "./tools";
 import type { Annotation, Scene } from "./scene";
 
 /**
@@ -91,13 +91,22 @@ export function buildSvg(scene: Scene, g: Geom): string {
       : "";
   const image = `<image href="${g.href}" x="${g.pad}" y="${g.pad}" width="${g.naturalW}" height="${g.naturalH}" clip-path="url(#rc)"/>`;
   const anno = `<g transform="translate(${g.pad},${g.pad})">${scene.annotations
-    .map((a) => annotationSvg(a, g.naturalW, g.naturalH, g.scale))
+    .map((a) => annotationSvg(a, g.naturalW, g.naturalH, g.scale, g.href))
     .join("")}</g>`;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${g.frameW}" height="${g.frameH}" viewBox="0 0 ${g.frameW} ${g.frameH}"><defs>${defs.join("")}</defs>${bg}${shadow}${image}${anno}</svg>`;
 }
 
-function annotationSvg(a: Annotation, W: number, H: number, scale: number): string {
+function annotationSvg(a: Annotation, W: number, H: number, scale: number, href: string): string {
+  if (a.kind === "blur") {
+    // Bake the redaction: a blurred, clipped copy of the base image over the rect.
+    const std = BLUR_STD * scale;
+    return (
+      `<defs><clipPath id="bclip-${a.id}"><rect x="${a.x * W}" y="${a.y * H}" width="${a.w * W}" height="${a.h * H}"/></clipPath>` +
+      `<filter id="bfilter-${a.id}"><feGaussianBlur stdDeviation="${std}"/></filter></defs>` +
+      `<image href="${href}" x="0" y="0" width="${W}" height="${H}" preserveAspectRatio="none" clip-path="url(#bclip-${a.id})" filter="url(#bfilter-${a.id})"/>`
+    );
+  }
   if (a.kind === "box") {
     const bw = a.w * W;
     const bh = a.h * H;

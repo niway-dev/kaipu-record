@@ -74,6 +74,13 @@ describe("AnnotationOptions", () => {
     expect(screen.getByText("Stroke")).toBeInTheDocument();
   });
 
+  it("renders nothing for the blur tool (no colour or stroke)", () => {
+    const { container } = render(
+      <AnnotationOptions tools={makeTools({ tool: "blur" })} scene={makeScene([], null)} />,
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
+
   it("edits the selected box's colour via commitAnnotation (not the tool default)", () => {
     const scene = makeScene([box], "b1");
     const tools = makeTools();

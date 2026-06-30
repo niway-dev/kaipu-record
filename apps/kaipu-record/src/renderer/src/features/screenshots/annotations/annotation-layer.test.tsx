@@ -54,7 +54,7 @@ const box: BoxAnnotation = {
 describe("AnnotationLayer — keyboard", () => {
   it("deletes the selected annotation on Backspace", () => {
     const scene = makeScene([box], "b1");
-    render(<AnnotationLayer scene={scene} tools={makeTools()} />);
+    render(<AnnotationLayer scene={scene} tools={makeTools()} src="" />);
     fireEvent.keyDown(window, { key: "Backspace" });
     expect(scene.removeSelected).toHaveBeenCalledTimes(1);
   });
@@ -64,7 +64,7 @@ describe("AnnotationLayer — keyboard", () => {
     render(
       <>
         <input data-testid="field" />
-        <AnnotationLayer scene={scene} tools={makeTools()} />
+        <AnnotationLayer scene={scene} tools={makeTools()} src="" />
       </>,
     );
     fireEvent.keyDown(screen.getByTestId("field"), { key: "Backspace" });
@@ -76,7 +76,7 @@ describe("AnnotationLayer — keyboard", () => {
     render(
       <>
         <div aria-modal="true" />
-        <AnnotationLayer scene={scene} tools={makeTools()} />
+        <AnnotationLayer scene={scene} tools={makeTools()} src="" />
       </>,
     );
     fireEvent.keyDown(window, { key: "Backspace" });
@@ -87,7 +87,7 @@ describe("AnnotationLayer — keyboard", () => {
 describe("AnnotationLayer — text tool", () => {
   function openTextInput(scene: EditorScene): HTMLElement {
     const { container } = render(
-      <AnnotationLayer scene={scene} tools={makeTools({ tool: "text" })} />,
+      <AnnotationLayer scene={scene} tools={makeTools({ tool: "text" })} src="" />,
     );
     fireEvent.pointerDown(container.firstChild as HTMLElement, { clientX: 10, clientY: 10 });
     return screen.getByPlaceholderText("Type…");
@@ -115,7 +115,7 @@ describe("AnnotationLayer — pen tool", () => {
     const scene = makeScene([], null);
     const addAnnotation = scene.addAnnotation as ReturnType<typeof vi.fn>;
     const { container } = render(
-      <AnnotationLayer scene={scene} tools={makeTools({ tool: "pen" })} />,
+      <AnnotationLayer scene={scene} tools={makeTools({ tool: "pen" })} src="" />,
     );
     const layer = container.firstChild as HTMLElement;
     fireEvent.pointerDown(layer, { clientX: 10, clientY: 10 });
