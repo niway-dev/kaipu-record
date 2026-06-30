@@ -133,8 +133,7 @@ export function AnnotationLayer({
     if (draft && isBigEnough(draft)) {
       const { id, seed } = nextAnnotationId();
       scene.addAnnotation({ ...draft, id, seed } as Annotation);
-      scene.select(id);
-      tools.setTool("select");
+      // Stay in the box/arrow tool so the user can draw several in a row.
     }
     setDraft(null);
   };
