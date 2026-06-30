@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { Copy, Download, Redo2, Undo2, ZoomIn, ZoomOut } from "lucide-react";
+import { Navigate, useLocation } from "react-router-dom";
+import { Check, Copy, Download, Redo2, Undo2, ZoomIn, ZoomOut } from "lucide-react";
 import { useImageSource, type ImageSource } from "@renderer/features/screenshots/image-source";
 import { BeautifiedFrame, BeautifyPanel } from "@renderer/features/screenshots/beautify";
 import {
@@ -16,20 +16,34 @@ import styles from "./screenshot-editor-page.module.css";
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3;
 const ZOOM_STEP = 0.25;
+/** How long the Copy/Save buttons stay in their "done" state. */
+const FEEDBACK_MS = 2600;
 
 const clampZoom = (z: number): number =>
   Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 100) / 100));
 
+/**
+ * Route wrapper: guards on a missing source and, crucially, keys the editor by
+ * the navigation entry so every fresh capture remounts it — resetting zoom,
+ * annotations, and the beautify panel to their initial state.
+ */
 export function ScreenshotEditorPage(): React.JSX.Element {
-  const navigate = useNavigate();
-  const source = useLocation().state as ImageSource | null;
+  const location = useLocation();
+  const source = location.state as ImageSource | null;
+  if (!source) return <Navigate to="/screenshots" replace />;
+  return <ScreenshotEditor key={location.key} source={source} />;
+}
+
+function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Element {
   const image = useImageSource(source);
   const scene = useEditorScene();
   const tools = useAnnotationTools();
   const imgRef = useRef<HTMLImageElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
-  const [saved, setSaved] = useState(false);
   const [zoom, setZoom] = useState(1);
+  const [copied, setCopied] = useState(false);
+  const [savedName, setSavedName] = useState<string | null>(null);
+  const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // The editor needs more room than the rest of the app — ask main to grow the
   // window (and raise its minimum) while we're here, and restore it on the way out.
@@ -53,13 +67,14 @@ export function ScreenshotEditorPage(): React.JSX.Element {
     return () => el.removeEventListener("wheel", onWheel);
   }, [image]);
 
-  const zoomBy = (delta: number): void => setZoom((z) => clampZoom(z + delta));
+  useEffect(
+    () => () => {
+      if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+    },
+    [],
+  );
 
-  // Guard: no source means we arrived without data — navigate back.
-  if (!source) {
-    navigate("/screenshots");
-    return <></>;
-  }
+  const zoomBy = (delta: number): void => setZoom((z) => clampZoom(z + delta));
 
   // `image` is null on the first render while the reader resolves — render nothing.
   if (!image) return <></>;
@@ -71,6 +86,33 @@ export function ScreenshotEditorPage(): React.JSX.Element {
       await image.getBytes(),
       imgRef.current?.clientWidth ?? 0,
     );
+
+  const flashFeedback = (apply: () => void): void => {
+    apply();
+    if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+    feedbackTimer.current = setTimeout(() => {
+      setCopied(false);
+      setSavedName(null);
+    }, FEEDBACK_MS);
+  };
+
+  const onCopy = async (): Promise<void> => {
+    await window.electronAPI.copyImageToClipboard(await exportPng());
+    flashFeedback(() => {
+      setSavedName(null);
+      setCopied(true);
+    });
+  };
+
+  const onSave = async (): Promise<void> => {
+    const saved = await window.electronAPI.saveScreenshot(await exportPng(), {
+      title: source.title ?? "Captura",
+    });
+    flashFeedback(() => {
+      setCopied(false);
+      setSavedName(saved.title);
+    });
+  };
 
   return (
     <div className={styles.editor}>
@@ -99,24 +141,29 @@ export function ScreenshotEditorPage(): React.JSX.Element {
           <button
             type="button"
             className={styles.secondary}
-            onClick={async () => {
-              await window.electronAPI.copyImageToClipboard(await exportPng());
-            }}
+            data-done={copied}
+            title={copied ? "Imagen copiada al portapapeles" : "Copiar al portapapeles"}
+            onClick={onCopy}
           >
-            <Copy size={16} /> Copiar
+            {copied ? <Check size={16} /> : <Copy size={16} />} {copied ? "Copiado" : "Copiar"}
           </button>
-          <button
-            type="button"
-            className={styles.save}
-            onClick={async () => {
-              await window.electronAPI.saveScreenshot(await exportPng(), {
-                title: source.title ?? "Captura",
-              });
-              setSaved(true);
-            }}
-          >
-            <Download size={16} /> {saved ? "Guardado" : "Guardar"}
-          </button>
+          <div className={styles.saveWrap}>
+            {savedName && (
+              <span className={styles.savedToast} role="status">
+                Guardado como “{savedName}”
+              </span>
+            )}
+            <button
+              type="button"
+              className={styles.save}
+              data-done={savedName !== null}
+              title={savedName ? `Guardado como “${savedName}”` : "Guardar en la librería"}
+              onClick={onSave}
+            >
+              {savedName ? <Check size={16} /> : <Download size={16} />}{" "}
+              {savedName ? "Guardado" : "Guardar"}
+            </button>
+          </div>
         </div>
       </div>
       <div className={styles.body}>
