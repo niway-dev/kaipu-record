@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Check, Copy, FileX2, FolderOpen, Pencil, Trash2 } from "lucide-react";
 import type { ImageSource } from "@renderer/features/screenshots/image-source";
+import { useTransientValue } from "@renderer/ui/use-transient-value";
 import { useLocalLibrary } from "@renderer/features/library/hooks/use-local-library";
 import { StorageMeta } from "@renderer/features/library/components/storage-meta";
 import { DeleteConfirmDialog } from "@renderer/features/library/components/delete-confirm-dialog";
@@ -20,15 +21,7 @@ export function LibraryDetailPage(): React.JSX.Element {
   const video = videos.find((v) => v.id === id);
 
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(
-    () => () => {
-      if (copyTimer.current) clearTimeout(copyTimer.current);
-    },
-    [],
-  );
+  const [copied, showCopied] = useTransientValue<true>(2200);
 
   const back = (): void => {
     navigate("/library");
@@ -62,9 +55,7 @@ export function LibraryDetailPage(): React.JSX.Element {
   // (fetch on the kaipu-media:// scheme doesn't return bytes in the renderer).
   const copyScreenshot = async (): Promise<void> => {
     await window.electronAPI.copyScreenshotById(video.id);
-    setCopied(true);
-    if (copyTimer.current) clearTimeout(copyTimer.current);
-    copyTimer.current = setTimeout(() => setCopied(false), 2200);
+    showCopied(true);
   };
 
   // Re-open a saved screenshot in the editor. It's a flat PNG, so the editor treats

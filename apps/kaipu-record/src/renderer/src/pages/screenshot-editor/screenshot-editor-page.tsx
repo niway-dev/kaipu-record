@@ -17,6 +17,7 @@ import {
   useAnnotationTools,
   useEditorScene,
 } from "@renderer/features/screenshots/annotations";
+import { useTransientValue } from "@renderer/ui/use-transient-value";
 import styles from "./screenshot-editor-page.module.css";
 
 const ZOOM_MIN = 0.5;
@@ -24,6 +25,9 @@ const ZOOM_MAX = 3;
 const ZOOM_STEP = 0.25;
 /** How long the Copy/Save buttons stay in their "done" state. */
 const FEEDBACK_MS = 2600;
+
+/** The editor's transient success indicator. */
+type Feedback = { kind: "copied" } | { kind: "saved"; name: string };
 
 const clampZoom = (z: number): number =>
   Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 100) / 100));
@@ -49,12 +53,12 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
   const imgRef = useRef<HTMLImageElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(1);
-  const [copied, setCopied] = useState(false);
-  const [savedName, setSavedName] = useState<string | null>(null);
+  // One transient "last action" indicator — copied or saved-with-name — that
+  // auto-clears; avoids the illegal "both shown" state two flags allowed.
+  const [feedback, showFeedback] = useTransientValue<Feedback>(FEEDBACK_MS);
   // Export needs the displayed <img> size to scale beautify/annotations to the
   // shot's native (Retina) pixels — gate Copy/Save until the image has laid out.
   const [imageReady, setImageReady] = useState(false);
-  const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Guards against a double-click firing two exports/saves (the second Save of a
   // fresh shot would create a duplicate library entry).
   const busy = useRef(false);
@@ -72,8 +76,11 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
   }, []);
 
   // ⌘/Ctrl + wheel (and trackpad pinch, which arrives as ctrlKey wheel) zooms the
-  // view. Non-passive so we can preventDefault Electron's own page zoom. Re-runs
-  // when the canvas mounts (image resolves). Plain scroll still pans.
+  // view. Non-passive so we can preventDefault Electron's own page zoom. Attaches
+  // once the canvas mounts (image resolves) — keyed on a stable boolean, not the
+  // `image` object (which is fresh each render), so it doesn't re-subscribe. Plain
+  // scroll still pans.
+  const hasImage = image != null;
   useEffect(() => {
     const el = canvasRef.current;
     if (!el) return;
@@ -84,14 +91,7 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
-  }, [image]);
-
-  useEffect(
-    () => () => {
-      if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
-    },
-    [],
-  );
+  }, [hasImage]);
 
   const zoomBy = (delta: number): void => setZoom((z) => clampZoom(z + delta));
 
@@ -106,24 +106,12 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
       imgRef.current?.clientWidth ?? 0,
     );
 
-  const flashFeedback = (apply: () => void): void => {
-    apply();
-    if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
-    feedbackTimer.current = setTimeout(() => {
-      setCopied(false);
-      setSavedName(null);
-    }, FEEDBACK_MS);
-  };
-
   const onCopy = async (): Promise<void> => {
     if (busy.current || !imageReady) return;
     busy.current = true;
     try {
       await window.electronAPI.copyImageToClipboard(await exportPng());
-      flashFeedback(() => {
-        setSavedName(null);
-        setCopied(true);
-      });
+      showFeedback({ kind: "copied" });
     } finally {
       busy.current = false;
     }
@@ -138,10 +126,7 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
         overwriteId: opts.overwriteId,
       });
       setSavedId(saved.id);
-      flashFeedback(() => {
-        setCopied(false);
-        setSavedName(saved.title);
-      });
+      showFeedback({ kind: "saved", name: saved.title });
     } finally {
       busy.current = false;
     }
@@ -162,6 +147,9 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
     setAskSave(false);
     void persist({ title: `${baseTitle} (copy)` });
   };
+
+  const copied = feedback?.kind === "copied";
+  const savedName = feedback?.kind === "saved" ? feedback.name : null;
 
   return (
     <div className={styles.editor}>

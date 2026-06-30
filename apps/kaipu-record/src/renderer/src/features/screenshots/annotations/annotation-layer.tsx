@@ -44,6 +44,10 @@ export function AnnotationLayer({
   // fired when the input unmounts can't re-commit — which would duplicate the
   // label (after Enter) or save a cancelled one (after Escape).
   const editDone = useRef(false);
+  // Latest scene for the window keydown handler, so it reads fresh state without
+  // re-subscribing on every render (scene is a new object each render).
+  const sceneRef = useRef(scene);
+  sceneRef.current = scene;
 
   useEffect(() => {
     const el = ref.current;
@@ -60,14 +64,15 @@ export function AnnotationLayer({
       // Don't hijack Delete/Backspace while the user is typing in a field or a
       // modal is open — only when the canvas owns the key.
       if (isEditingText(e.target) || document.querySelector('[aria-modal="true"]')) return;
-      if ((e.key === "Delete" || e.key === "Backspace") && scene.selectedId) {
+      const scn = sceneRef.current;
+      if ((e.key === "Delete" || e.key === "Backspace") && scn.selectedId) {
         e.preventDefault();
-        scene.removeSelected();
+        scn.removeSelected();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [scene]);
+  }, []);
 
   // Focus the text input when it opens and arm blur-to-commit on the next frame.
   useEffect(() => {
