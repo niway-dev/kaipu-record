@@ -41,7 +41,7 @@ export function ScreenshotEditorPage(): React.JSX.Element {
   return (
     <div className={styles.editor}>
       <div className={styles.toolbar}>
-        <AnnotationToolbar tools={tools} />
+        <AnnotationToolbar tools={tools} scene={scene} />
         <div className={styles.actions}>
           <button
             type="button"

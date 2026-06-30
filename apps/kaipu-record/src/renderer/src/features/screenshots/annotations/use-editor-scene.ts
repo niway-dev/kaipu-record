@@ -10,6 +10,8 @@ export interface EditorScene {
   selectedId: string | null;
   select(id: string | null): void;
   addAnnotation(annotation: Annotation): void;
+  /** Edit an existing annotation as a single, undoable change (e.g. recolor). */
+  commitAnnotation(id: string, patch: Partial<Annotation>): void;
   /** Snapshot the scene before a continuous interaction (move/draw). */
   beginInteract(): void;
   /** Live-update an annotation during an interaction (no history yet). */
@@ -70,9 +72,12 @@ export function useEditorScene(): EditorScene {
     setSelectedId(null);
   }, [future]);
 
-  const addAnnotation = useCallback((annotation: Annotation) => {
-    commit({ ...sceneRef.current, annotations: [...sceneRef.current.annotations, annotation] });
-  }, [commit]);
+  const addAnnotation = useCallback(
+    (annotation: Annotation) => {
+      commit({ ...sceneRef.current, annotations: [...sceneRef.current.annotations, annotation] });
+    },
+    [commit],
+  );
 
   const updateAnnotation = useCallback((id: string, patch: Partial<Annotation>) => {
     setScene((s) => ({
@@ -80,6 +85,18 @@ export function useEditorScene(): EditorScene {
       annotations: s.annotations.map((a) => (a.id === id ? ({ ...a, ...patch } as Annotation) : a)),
     }));
   }, []);
+
+  const commitAnnotation = useCallback(
+    (id: string, patch: Partial<Annotation>) => {
+      commit({
+        ...sceneRef.current,
+        annotations: sceneRef.current.annotations.map((a) =>
+          a.id === id ? ({ ...a, ...patch } as Annotation) : a,
+        ),
+      });
+    },
+    [commit],
+  );
 
   const removeSelected = useCallback(() => {
     if (!selectedId) return;
@@ -109,6 +126,7 @@ export function useEditorScene(): EditorScene {
     selectedId,
     select: setSelectedId,
     addAnnotation,
+    commitAnnotation,
     beginInteract,
     updateAnnotation,
     endInteract,

@@ -39,6 +39,10 @@ export function AnnotationLayer({
   const [draft, setDraft] = useState<Annotation | null>(null);
   const [editing, setEditing] = useState<{ x: number; y: number } | null>(null);
   const drag = useRef<Drag | null>(null);
+  const textInputRef = useRef<HTMLInputElement>(null);
+  // Blur-to-commit is "armed" only after the input has settled, so the click
+  // that opened it can't immediately blur-cancel it before the user can type.
+  const textArmed = useRef(false);
 
   useEffect(() => {
     const el = ref.current;
@@ -61,6 +65,19 @@ export function AnnotationLayer({
     return () => window.removeEventListener("keydown", onKey);
   }, [scene]);
 
+  // Focus the text input when it opens and arm blur-to-commit on the next frame.
+  useEffect(() => {
+    if (!editing) {
+      textArmed.current = false;
+      return;
+    }
+    textInputRef.current?.focus();
+    const raf = requestAnimationFrame(() => {
+      textArmed.current = true;
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [editing]);
+
   const toNorm = (e: React.PointerEvent): Pt => {
     const r = ref.current!.getBoundingClientRect();
     return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
@@ -80,6 +97,7 @@ export function AnnotationLayer({
     }
     if (tools.tool === "text") {
       // window.prompt() is disabled in Electron — show an inline input instead.
+      scene.select(null); // editing a fresh label, not the previously selected one
       setEditing({ x: p.x, y: p.y });
       return;
     }
@@ -154,7 +172,8 @@ export function AnnotationLayer({
       scene.select(id);
     }
     setEditing(null);
-    tools.setTool("select");
+    // Stay in the text tool so the user can place several labels in a row
+    // (matches box/arrow); switching to select on cancel was the bug.
   };
 
   return (
@@ -174,7 +193,7 @@ export function AnnotationLayer({
       </svg>
       {editing && (
         <input
-          autoFocus
+          ref={textInputRef}
           className={styles.textInput}
           placeholder="Escribe…"
           style={{
@@ -186,13 +205,22 @@ export function AnnotationLayer({
           }}
           onPointerDown={(e) => e.stopPropagation()}
           onKeyDown={(e) => {
-            if (e.key === "Enter") commitText((e.target as HTMLInputElement).value);
-            else if (e.key === "Escape") {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commitText((e.target as HTMLInputElement).value);
+            } else if (e.key === "Escape") {
+              e.preventDefault();
               setEditing(null);
-              tools.setTool("select");
             }
           }}
-          onBlur={(e) => commitText(e.target.value)}
+          onBlur={(e) => {
+            // Ignore the opening click's spurious blur — refocus and keep typing.
+            if (!textArmed.current) {
+              e.currentTarget.focus();
+              return;
+            }
+            commitText(e.target.value);
+          }}
         />
       )}
     </div>
@@ -218,7 +246,14 @@ function Shape({
     return (
       <g transform={`translate(${a.x * W},${a.y * H})`}>
         <path d={path} fill={`${a.color}2e`} stroke="none" />
-        <path d={path} fill="none" stroke={a.color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
+        <path
+          d={path}
+          fill="none"
+          stroke={a.color}
+          strokeWidth={sw}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
         <path
           d={roughRect(bw, bh, 14, a.seed + 19)}
           fill="none"
@@ -243,7 +278,14 @@ function Shape({
     const sw = STROKE_WIDTHS[a.stroke];
     return (
       <g>
-        <path d={roughArrow(x1, y1, x2, y2, a.seed)} fill="none" stroke={a.color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
+        <path
+          d={roughArrow(x1, y1, x2, y2, a.seed)}
+          fill="none"
+          stroke={a.color}
+          strokeWidth={sw}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
         <path
           d={roughArrow(x1, y1, x2, y2, a.seed + 19)}
           fill="none"
@@ -305,7 +347,12 @@ function hitTest(annotations: Annotation[], p: Pt): Annotation | null {
   for (let i = annotations.length - 1; i >= 0; i -= 1) {
     const a = annotations[i];
     if (a.kind === "box") {
-      if (p.x >= a.x - 0.01 && p.x <= a.x + a.w + 0.01 && p.y >= a.y - 0.01 && p.y <= a.y + a.h + 0.01) {
+      if (
+        p.x >= a.x - 0.01 &&
+        p.x <= a.x + a.w + 0.01 &&
+        p.y >= a.y - 0.01 &&
+        p.y <= a.y + a.h + 0.01
+      ) {
         return a;
       }
     } else if (a.kind === "text") {
