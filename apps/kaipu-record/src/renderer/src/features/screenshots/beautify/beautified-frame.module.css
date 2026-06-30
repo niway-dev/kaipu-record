@@ -1,7 +1,21 @@
 /* The beautify frame: background + padding + rounded/shadowed shot. */
 
+/*
+ * Flex (not inline-block): a row of inline-blocks leaves a baseline descender
+ * gap below the image (looked like padding at the bottom even at relleno 0).
+ * Flex items have no baseline gap, and `max-width/height: 100%` resolve against
+ * the flex canvas (a definite size), so the shot fits without overflow/scroll
+ * and keeps its aspect ratio.
+ */
 .frame {
-  display: inline-block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  max-height: 100%;
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
   transition:
     padding 0.12s ease,
     border-radius 0.12s ease,
@@ -10,22 +24,18 @@
 
 .shotWrap {
   position: relative;
-  display: inline-block;
-  line-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 0;
 }
 
-/*
- * Constrain the shot with VIEWPORT units (definite), not `%` — `%` here resolves
- * against the two shrink-wrapping inline-blocks above (a circular reference that
- * makes the browser size width and height independently → horizontal stretch).
- * With viewport bounds + auto width/height, the intrinsic aspect ratio is kept.
- */
 .shot {
   display: block;
-  width: auto;
-  height: auto;
-  max-width: calc(100vw - 430px);
-  max-height: 64vh;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
   transition:
     border-radius 0.12s ease,
     box-shadow 0.12s ease;
