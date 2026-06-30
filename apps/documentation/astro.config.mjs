@@ -62,6 +62,7 @@ export default defineConfig({
             { slug: "backlog/shortcuts" },
             { slug: "backlog/screenshots" },
             { slug: "backlog/editor-toolbar-responsive" },
+            { slug: "backlog/screenshot-save-strategy" },
             { slug: "backlog/export-formats" },
           ],
         },
