@@ -5,7 +5,12 @@ description: Tradeoff analysis for how the screenshot editor persists captures t
 
 # Screenshot save strategy (auto-save, naming, re-save)
 
-> **Status: 🔵 Proposed.**
+> **Status: 🟡 Partially shipped** (on `feat/screenshots`). **Naming** is decided and live:
+> saved shots are titled `Screenshot — <locale date/time>`, stamped at capture time (mirrors
+> recordings' `Recording — <date>`), so they're told apart by when they were taken; the file id
+> stays `screenshot-<iso>`. **Library detail** now branches by `kind` on the single `/library/:id`
+> route — recordings get the player, screenshots get a `ScreenshotViewer` (+ Copy/Reveal/Delete).
+> Still 🔵: auto-save vs explicit save, and overwrite-vs-copy on re-edit (below).
 
 ## Problem / context
 
