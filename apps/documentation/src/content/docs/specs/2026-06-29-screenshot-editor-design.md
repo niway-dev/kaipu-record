@@ -64,6 +64,31 @@ interface ScreenshotCaptureProvider {
 
 ## 4. The editor
 
+### 4.0 Image source (origin-agnostic)
+
+The editor never assumes its image is an in-memory blob — it consumes a generic, **discriminated**
+`ImageSource`, so the same editor opens a fresh capture, a saved screenshot, or (later) a
+cloud-hosted one. Each `kind` is resolved by its own reader behind a common `ResolvedImage`
+interface; adding an origin is a new reader + union member, the editor untouched.
+
+```ts
+type ImageSource =
+  | { kind: "blob";  bytes: ArrayBuffer; width; height; title? } // fresh capture (in-memory)
+  | { kind: "local"; id: string;         width; height; title? } // saved in the vault
+  | { kind: "cloud"; url: string;         width; height; title? } // uploaded to cloud
+
+interface ResolvedImage { displayUrl: string; getBytes(): Promise<ArrayBuffer> }
+```
+
+- **Readers** (`features/screenshots/image-source/`): `blobReader` (`blob:` URL, revoked on
+  cleanup), `localReader` (`kaipu-media://screenshot/<id>` — bypasses CSP), `cloudReader` (remote
+  URL + `fetch`). `useImageSource(source)` dispatches by `kind` and owns the lifecycle.
+- The editor uses `displayUrl` for `<img>`/canvas and `getBytes()` for Copy / Save / export —
+  never the raw bytes. Capture produces a `blob` source; re-edit from the Library will produce
+  `local`; cloud produces `cloud`.
+- **CSP note:** a `blob:` display URL needs `img-src blob:` in the renderer CSP (added). Cloud will
+  additionally need the storage origin in `img-src` / `connect-src`.
+
 ### 4.1 Scene model (renderer-agnostic)
 
 A plain data model in React state, so the renderer (SVG now, possibly Konva later) is swappable and
