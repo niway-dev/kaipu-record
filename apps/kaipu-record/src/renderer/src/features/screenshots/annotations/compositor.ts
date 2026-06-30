@@ -1,5 +1,6 @@
 import { backgroundPaint, frameRadius } from "../beautify/backgrounds";
 import { roughArrow, roughRect } from "./rough";
+import { smoothPath } from "./smooth";
 import { HAND_FONT, STROKE_WIDTHS, TEXT_PX } from "./tools";
 import type { Annotation, Scene } from "./scene";
 
@@ -121,6 +122,11 @@ function annotationSvg(a: Annotation, W: number, H: number, scale: number): stri
       `<path d="${roughArrow(x1, y1, x2, y2, a.seed)}" fill="none" stroke="${a.color}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/>` +
       `<path d="${roughArrow(x1, y1, x2, y2, a.seed + 19)}" fill="none" stroke="${a.color}" stroke-width="${sw * 0.7}" stroke-linecap="round" stroke-linejoin="round" opacity="0.5"/>`
     );
+  }
+  if (a.kind === "path") {
+    const sw = STROKE_WIDTHS[a.stroke] * scale;
+    const d = smoothPath(a.points.map((pt) => ({ x: pt.x * W, y: pt.y * H })));
+    return `<path d="${d}" fill="none" stroke="${a.color}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/>`;
   }
   const fs = TEXT_PX[a.size] * scale;
   return `<text x="${a.x * W}" y="${a.y * H}" fill="${a.color}" font-family="${HAND_FONT}" font-size="${fs}" font-weight="600" dominant-baseline="hanging">${escapeXml(a.text)}</text>`;

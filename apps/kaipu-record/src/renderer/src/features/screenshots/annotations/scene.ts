@@ -32,7 +32,16 @@ export interface TextAnnotation {
   color: string;
   size: number;
 }
-export type Annotation = BoxAnnotation | ArrowAnnotation | TextAnnotation;
+/** A freehand pen stroke: the user's captured path, smoothed at render time. */
+export interface PathAnnotation {
+  id: string;
+  kind: "path";
+  /** Normalized (0–1) points in capture order. */
+  points: { x: number; y: number }[];
+  color: string;
+  stroke: number;
+}
+export type Annotation = BoxAnnotation | ArrowAnnotation | TextAnnotation | PathAnnotation;
 
 /** The full editing document: beautify settings + the annotation layer. */
 export interface Scene {

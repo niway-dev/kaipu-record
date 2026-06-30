@@ -109,3 +109,20 @@ describe("AnnotationLayer — text tool", () => {
     expect(scene.addAnnotation).not.toHaveBeenCalled();
   });
 });
+
+describe("AnnotationLayer — pen tool", () => {
+  it("commits one path on a down → move → up freehand stroke", () => {
+    const scene = makeScene([], null);
+    const addAnnotation = scene.addAnnotation as ReturnType<typeof vi.fn>;
+    const { container } = render(
+      <AnnotationLayer scene={scene} tools={makeTools({ tool: "pen" })} />,
+    );
+    const layer = container.firstChild as HTMLElement;
+    fireEvent.pointerDown(layer, { clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(layer, { clientX: 20, clientY: 30 });
+    fireEvent.pointerMove(layer, { clientX: 40, clientY: 50 });
+    fireEvent.pointerUp(layer);
+    expect(addAnnotation).toHaveBeenCalledTimes(1);
+    expect(addAnnotation.mock.calls[0][0].kind).toBe("path");
+  });
+});

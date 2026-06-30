@@ -60,4 +60,24 @@ describe("compositor buildSvg", () => {
     expect(svg).not.toContain("NaN");
     expect(svg).toContain("stroke-width=");
   });
+
+  it("renders a freehand path as a stroked, smoothed SVG path", () => {
+    const annotations: Annotation[] = [
+      {
+        id: "p",
+        kind: "path",
+        points: [
+          { x: 0.1, y: 0.1 },
+          { x: 0.3, y: 0.4 },
+          { x: 0.6, y: 0.2 },
+        ],
+        color: "#0ff",
+        stroke: 2,
+      },
+    ];
+    const svg = buildSvg(scene(annotations), geom);
+    expect(svg).toMatch(/<path d="M [\d.]+ [\d.]+ C/); // smoothed bézier path
+    expect(svg).toContain('stroke="#0ff"');
+    expect(svg).not.toContain("NaN");
+  });
 });

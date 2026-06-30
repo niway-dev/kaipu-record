@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { HAND_FONT, STROKE_WIDTHS, TEXT_PX } from "./tools";
 import { roughArrow, roughRect } from "./rough";
+import { smoothPath } from "./smooth";
 import { nextAnnotationId, type Annotation } from "./scene";
 import type { EditorScene } from "./use-editor-scene";
 import type { AnnotationToolsController } from "./use-annotation-tools";
@@ -15,7 +16,7 @@ interface Pt {
   y: number;
 }
 type Drag =
-  | { mode: "draw-box" | "draw-arrow"; start: Pt }
+  | { mode: "draw-box" | "draw-arrow" | "draw-pen"; start: Pt }
   | { mode: "move"; id: string; start: Pt; orig: Annotation };
 
 /**
@@ -111,6 +112,18 @@ export function AnnotationLayer({
       setEditing({ x: p.x, y: p.y });
       return;
     }
+    if (tools.tool === "pen") {
+      drag.current = { mode: "draw-pen", start: p };
+      setDraft({
+        id: "draft",
+        kind: "path",
+        points: [p],
+        color: tools.color,
+        stroke: tools.stroke,
+      });
+      (e.target as Element).setPointerCapture?.(e.pointerId);
+      return;
+    }
     drag.current = { mode: tools.tool === "box" ? "draw-box" : "draw-arrow", start: p };
     (e.target as Element).setPointerCapture?.(e.pointerId);
   };
@@ -121,6 +134,16 @@ export function AnnotationLayer({
     const p = toNorm(e);
     if (d.mode === "move") {
       scene.updateAnnotation(d.id, moveBy(d.orig, p.x - d.start.x, p.y - d.start.y));
+      return;
+    }
+    if (d.mode === "draw-pen") {
+      setDraft((prev) => {
+        if (!prev || prev.kind !== "path") return prev;
+        const last = prev.points[prev.points.length - 1];
+        // Throttle: drop points too close to the last so the path stays light + smooth.
+        if (last && Math.hypot(p.x - last.x, p.y - last.y) < 0.004) return prev;
+        return { ...prev, points: [...prev.points, p] };
+      });
       return;
     }
     if (d.mode === "draw-box") {
@@ -160,8 +183,10 @@ export function AnnotationLayer({
     }
     if (draft && isBigEnough(draft)) {
       const { id, seed } = nextAnnotationId();
-      scene.addAnnotation({ ...draft, id, seed } as Annotation);
-      // Stay in the box/arrow tool so the user can draw several in a row.
+      // Paths carry the user's real stroke (no rough jitter), so they need no seed.
+      const committed = draft.kind === "path" ? { ...draft, id } : { ...draft, id, seed };
+      scene.addAnnotation(committed as Annotation);
+      // Stay in the tool so the user can draw several in a row.
     }
     setDraft(null);
   };
@@ -313,6 +338,24 @@ function Shape({
     );
   }
 
+  if (a.kind === "path") {
+    const sw = STROKE_WIDTHS[a.stroke];
+    const d = smoothPath(a.points.map((pt) => ({ x: pt.x * W, y: pt.y * H })));
+    return (
+      <g>
+        <path
+          d={d}
+          fill="none"
+          stroke={a.color}
+          strokeWidth={sw}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        {selected && <path className={styles.selOutline} d={d} fill="none" />}
+      </g>
+    );
+  }
+
   const tx = a.x * W;
   const ty = a.y * H;
   const fs = TEXT_PX[a.size];
@@ -352,12 +395,18 @@ function isEditingText(target: EventTarget | null): boolean {
 function isBigEnough(a: Annotation): boolean {
   if (a.kind === "box") return a.w > 0.01 && a.h > 0.01;
   if (a.kind === "arrow") return Math.hypot(a.x2 - a.x1, a.y2 - a.y1) > 0.02;
+  if (a.kind === "path") return a.points.length > 1;
   return true;
 }
 
 function moveBy(a: Annotation, dx: number, dy: number): Partial<Annotation> {
   if (a.kind === "arrow") {
     return { x1: a.x1 + dx, y1: a.y1 + dy, x2: a.x2 + dx, y2: a.y2 + dy } as Partial<Annotation>;
+  }
+  if (a.kind === "path") {
+    return {
+      points: a.points.map((pt) => ({ x: pt.x + dx, y: pt.y + dy })),
+    } as Partial<Annotation>;
   }
   return { x: a.x + dx, y: a.y + dy } as Partial<Annotation>;
 }
@@ -391,6 +440,10 @@ function hitTest(annotations: Annotation[], p: Pt, size: Size): Annotation | nul
         p.y <= a.y + h + padY
       ) {
         return a;
+      }
+    } else if (a.kind === "path") {
+      for (let j = 0; j < a.points.length - 1; j += 1) {
+        if (distToSegment(p, a.points[j], a.points[j + 1]) < 0.02) return a;
       }
     } else if (distToSegment(p, { x: a.x1, y: a.y1 }, { x: a.x2, y: a.y2 }) < 0.02) {
       return a;
