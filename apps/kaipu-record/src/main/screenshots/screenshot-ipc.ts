@@ -13,6 +13,7 @@ function screenshotId(): string {
 
 export function registerScreenshotHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.screenshotCapture, async () => {
+    if (process.platform !== "darwin") return null;
     const png = await provider.captureInteractive();
     if (!png) return null;
     const img = nativeImage.createFromBuffer(png);
