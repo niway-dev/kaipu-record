@@ -106,7 +106,7 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
 
   const onSave = async (): Promise<void> => {
     const saved = await window.electronAPI.saveScreenshot(await exportPng(), {
-      title: source.title ?? "Captura",
+      title: source.title ?? `Screenshot — ${new Date().toLocaleString()}`,
     });
     flashFeedback(() => {
       setCopied(false);
