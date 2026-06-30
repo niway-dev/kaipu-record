@@ -125,7 +125,9 @@
   align-items: center;
   justify-content: center;
   padding: var(--space-xl);
-  overflow: hidden;
+  /* `auto`, not `hidden`: the shot fits at zoom 1 (no spurious scroll), and a
+     future view-zoom can overflow → scroll/pan the view when needed. */
+  overflow: auto;
   min-width: 0;
   min-height: 0;
   background: var(--bg-app);
