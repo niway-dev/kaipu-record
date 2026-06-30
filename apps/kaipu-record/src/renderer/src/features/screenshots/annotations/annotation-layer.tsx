@@ -1,12 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
-import { STROKE_WIDTHS } from "./tools";
+import { STROKE_WIDTHS, TEXT_PX } from "./tools";
 import { roughArrow, roughRect } from "./rough";
 import { nextAnnotationId, type Annotation } from "./scene";
 import type { EditorScene } from "./use-editor-scene";
 import type { AnnotationToolsController } from "./use-annotation-tools";
 import styles from "./annotation-layer.module.css";
 
-const TEXT_PX = [20, 28, 38];
 const HAND_FONT = '"Caveat", "Comic Sans MS", "Segoe Print", cursive';
 
 interface Size {

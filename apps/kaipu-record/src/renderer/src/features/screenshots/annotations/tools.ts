@@ -26,5 +26,12 @@ export const ANNOTATION_COLORS: AnnotationColor[] = [
 /** Stroke widths in px; the array index is the stored stroke level (0–2). */
 export const STROKE_WIDTHS = [2, 3.4, 5.4] as const;
 
-/** Text-size labels; the array index is the stored size level (0–2). */
-export const TEXT_SIZES = ["S", "M", "L"] as const;
+/** Text-size labels; the array index is the stored size level (0–3). */
+export const TEXT_SIZES = ["XS", "S", "M", "L"] as const;
+
+/**
+ * Text pixel size per size index — the single source for both the inline input
+ * and the rendered SVG text. Index lines up with TEXT_SIZES. Starts small (XS/S)
+ * because a fresh label defaulting to a large size felt oversized.
+ */
+export const TEXT_PX = [14, 19, 27, 37] as const;

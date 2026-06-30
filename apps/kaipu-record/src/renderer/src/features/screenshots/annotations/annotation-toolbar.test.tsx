@@ -102,6 +102,6 @@ describe("AnnotationToolbar", () => {
     expect(screen.queryByText("TRAZO")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Tamaño L" }));
-    expect(scene.commitAnnotation).toHaveBeenCalledWith("t1", { size: 2 });
+    expect(scene.commitAnnotation).toHaveBeenCalledWith("t1", { size: 3 });
   });
 });
