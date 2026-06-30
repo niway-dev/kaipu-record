@@ -5,12 +5,16 @@ description: "Analysis of the screenshot editor's zoom feature. Untangles view-z
 
 # Editor zoom — view vs crop vs export resolution
 
-> **Status: 🟢 View-zoom shipped** (on `feat/screenshots`). The toolbar now has a real
-> `−/%/+` control (50–300%) that scales the beautify frame via CSS `transform`; the
-> annotation layer keeps measuring its layout size, so annotations stay aligned, and
-> export reads the image's layout pixels so zoom is view-only (never baked in). The
-> other two meanings below — **crop-to-region** and **export-resolution** — remain 🔵
-> proposed. This doc still untangles all three so we don't conflate them later.
+> **Status: ✅ Decided & closed.** **View-zoom is shipped and final** (on
+> `feat/screenshots`): a `−/%/+` control + ⌘/pinch-wheel that scales the canvas via CSS
+> `transform`; annotations stay aligned; **export ignores zoom** (native resolution).
+>
+> **Final decision — zoom never determines the output.** We will *not* "save the zoomed
+> view": the zoomed view is the same pixels enlarged, so saving it would crop to the
+> viewport **and upscale** → a blurry partial image (the table + app analysis below show
+> why, and that every tool keeps them separate). "Keep only a section" is a **separate
+> Crop tool** → see [editor tools: crop / freehand / blur](./screenshot-crop). This doc
+> stays as the rationale; no further zoom work is planned.
 
 ## The core confusion
 

@@ -5,50 +5,71 @@ description: "A redaction tool for the screenshot editor: cover or scribble over
 
 # Screenshot redaction (hide sensitive info)
 
-> **Status: 🔵 Proposed.** Requested: be able to **write/scribble over** parts of a
-> screenshot to black out sensitive information before copying or saving (e.g. a
-> token, an email, a face). A common, practical need when sharing captures.
+> **Status: 🔵 Proposed.** Requested: hide sensitive information (a token, an email, a
+> face) before copying or saving. The agreed direction is a **blur box** — drag a
+> rectangle and the pixels under it are blurred/pixelated — exactly like **WhatsApp's
+> image editor** (practical, not professional). You hide the secret while keeping the
+> surrounding context legible.
 
-## Approaches
+## Why a blur box (not a black box)
 
-All three reuse the existing annotation pipeline (normalized coords, baked into the
-flattened export):
+WhatsApp's editor is the reference: a single **blur rectangle** that you drag and resize
+over the UI. It reads as "this part is hidden" while the rest of the screenshot stays
+readable — better than a solid black bar that erases context. It's the v1.
 
-1. **Solid fill box** — a filled opaque rectangle (the "black bar"). Simplest,
-   unmistakable, reliable. Reuses the box tool with `fill: solid` instead of stroke.
-2. **Freehand opaque marker** — drag to scribble an opaque thick stroke (matches
-   "garabatear/tachar"). New freehand-path annotation; opaque, fixed dark colour
-   (or a couple of presets).
-3. **Pixelate / blur region** — drag a region; the underlying pixels are pixelated
-   or blurred. Fancier and more "designed", but needs reading the base pixels and
-   running a filter on the canvas — more work than 1 & 2.
+## Approaches (in order of preference)
 
-**Recommendation:** ship **solid box + freehand opaque marker** first (cheap, reuse
-the annotation model). Add **pixelate/blur** later as an enhancement.
+All reuse the existing box-tool pointer math and bake into the flattened export.
+
+1. **Blur / pixelate box** ✅ *(primary — the WhatsApp pattern)* — drag a rectangle; the
+   base pixels inside are blurred or pixelated. **Pixelate (mosaic) is the safer default**
+   for true secrecy — a light gaussian blur can sometimes be reversed.
+2. **Solid fill box** — a filled opaque "black bar". Trivial fallback; reuses the box
+   tool with a solid fill. Keep as an option for "fully erase".
+3. **Freehand opaque marker** — see [freehand pen](./screenshot-freehand); scratches
+   visually but is **not** secure redaction (edges leak).
+
+## How to build the blur box (our editor)
+
+A new `blur` annotation kind (a rect + amount), rendered as a clipped, blurred copy of
+the base image at the rect — the same in the live layer and the export, so it's WYSIWYG:
+
+```ts
+interface BlurAnnotation {
+  id: string; kind: "blur";
+  x: number; y: number; w: number; h: number; // normalized
+  amount: number; // blur strength / mosaic block size
+}
+```
+
+- **Gaussian blur** is the easy path: an SVG `<filter><feGaussianBlur/></filter>` applied
+  to a clipped `<image href={base}>` positioned at the rect. `feGaussianBlur` rasterizes
+  correctly when the compositor turns its SVG into a PNG, so live and export match with
+  one code path.
+- **Pixelate (mosaic)** is more secure but harder in pure SVG. Do it at the **canvas
+  raster** step the compositor already runs: draw the region downscaled then back up with
+  `imageSmoothingEnabled = false` (nearest-neighbour) → blocky mosaic. Live preview can
+  approximate with CSS, export does the real mosaic on the canvas.
+- Interaction is the box tool: drag a rect, resize handles, move. The options panel shows
+  a single **strength** slider instead of colour/stroke.
 
 ## ⚠️ The security requirement (non-negotiable)
 
-Redaction must **destroy** the information in the shared artifact, not just cover it
-visually in a movable layer.
+Redaction must **destroy** the information in the shared artifact, not just cover it in a
+movable layer.
 
-- Today this is satisfied **by accident**: we export a **flattened** PNG, so a black
-  box is permanently painted over the pixels — the secret is gone from the output.
-- It breaks the moment we adopt **non-destructive [scene docs](./screenshot-scene-doc)**:
-  if we also store the original **base** image for re-editing, the sensitive pixels
-  still exist under the box in that base file. See that doc's security section.
+- Today this holds **by construction**: we export a **flattened** PNG, so the blur/mosaic
+  is permanently painted into the output — the original pixels are gone from what you
+  share.
+- It breaks if we adopt **non-destructive [scene docs](./screenshot-scene-doc)** that
+  store the original **base** image: the sensitive pixels would still live in the base
+  under the blur. **Rule:** a screenshot containing a redaction is **flatten-only** (no
+  re-editable base), *or* the redaction bakes the blur/mosaic into the stored base too.
+  Prefer flatten-only for v1 — simple and safe.
+- Prefer **pixelate with a large block** (or a strong blur) for anything that must truly
+  disappear — weak blur can be partially reversed.
 
-**Rule:** a screenshot containing a redaction is **flatten-only** (no re-editable
-base stored), *or* the redaction destructively bakes/pixelates the base pixels too.
-Prefer flatten-only for v1 — simple and safe.
+## Effort
 
-Also: pixelate/blur with a small radius can sometimes be **reversed**; use a strong
-radius (or a solid fill) for anything that must truly disappear.
-
-## Sketch of the work
-
-- New tool(s) in the annotation tool group: a **Redact box** (solid fill) and a
-  **Marker** (freehand opaque). Both are annotation kinds with opaque paint.
-- Freehand needs a new `path` annotation kind (list of normalized points) + its
-  rough/smooth render in the live layer and the compositor.
-- Wire the flatten-only rule into Save once scene docs exist.
-- Effort: **Low–Medium** for box + marker; **Medium** to add pixelate/blur.
+**Medium.** Gaussian-blur box via SVG filter is the cheapest start; pixelate adds a
+canvas raster step. Solid box is a near-free fallback.
