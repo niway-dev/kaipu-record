@@ -11,6 +11,7 @@ describe("useShortcutLabels", () => {
         startRecording: "⌃⌘C",
         stopRecording: "⌃⌘S",
         bringToFront: "⌃⌘O",
+        captureScreenshot: "⌃⌘4",
       }),
     );
   });
@@ -21,6 +22,7 @@ describe("useShortcutLabels", () => {
         startRecording,
         stopRecording: "Command+Control+S",
         bringToFront: "Command+Control+O",
+        captureScreenshot: "Command+Control+4",
       },
     });
     const getSettings = vi
