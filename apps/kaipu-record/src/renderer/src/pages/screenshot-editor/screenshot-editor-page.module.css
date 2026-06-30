@@ -1,11 +1,9 @@
 /*
- * Screenshot editor shell.
+ * Screenshot editor.
  * All colors, spacing, and radii use design tokens from base.css.
  * Exception: color: #fff on .save — matches the project's established
  * button.module.css convention for text on --accent-primary.
  */
-
-/* ── Layout ──────────────────────────────────────── */
 
 .editor {
   display: flex;
@@ -35,28 +33,63 @@
   user-select: none;
 }
 
-/* ── Action buttons ──────────────────────────────── */
-
 .actions {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
 }
 
-.secondary {
+.iconBtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 34px;
+  height: 34px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.iconBtn:hover:not(:disabled) {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.iconBtn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.divider {
+  width: 1px;
+  height: 24px;
+  background: var(--border);
+  margin: 0 var(--space-xs);
+}
+
+.secondary,
+.save {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
   height: 34px;
   padding: 0 var(--space-lg);
-  background: transparent;
-  border: 1px solid var(--border-light);
   border-radius: var(--radius-md);
-  color: var(--text-primary);
   font-family: var(--font-family);
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-medium);
   cursor: pointer;
+}
+
+.secondary {
+  background: transparent;
+  border: 1px solid var(--border-light);
+  color: var(--text-primary);
   transition:
     background var(--transition),
     border-color var(--transition);
@@ -68,19 +101,10 @@
 }
 
 .save {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 34px;
-  padding: 0 var(--space-lg);
   background: var(--accent-primary);
   border: none;
-  border-radius: var(--radius-md);
   color: #fff;
-  font-family: var(--font-family);
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-medium);
-  cursor: pointer;
+  font-weight: var(--font-weight-semibold);
   box-shadow: var(--glow-accent);
   transition:
     background var(--transition),
@@ -91,23 +115,25 @@
   background: var(--accent-primary-hover);
 }
 
-/* ── Canvas area ─────────────────────────────────── */
+/* ── Body: canvas + beautify panel ───────────────── */
+
+.body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
 
 .canvas {
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
+  padding: var(--space-xl);
+  overflow: auto;
   min-height: 0;
-}
-
-.shot {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-  border-radius: var(--radius-sm);
+  background: var(--bg-app);
 }

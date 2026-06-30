@@ -1,0 +1,20 @@
+/* The beautify frame: background + padding + rounded/shadowed shot. */
+
+.frame {
+  display: inline-block;
+  max-width: 100%;
+  transition:
+    padding 0.12s ease,
+    border-radius 0.12s ease,
+    background 0.12s ease;
+}
+
+.shot {
+  display: block;
+  max-width: 100%;
+  max-height: 64vh;
+  object-fit: contain;
+  transition:
+    border-radius 0.12s ease,
+    box-shadow 0.12s ease;
+}

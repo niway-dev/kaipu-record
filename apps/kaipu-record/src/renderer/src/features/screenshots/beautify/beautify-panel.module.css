@@ -1,0 +1,111 @@
+/*
+ * The EMBELLECER panel. Colors/spacing use base.css tokens; the only literals
+ * are the background gradients (feature-specific, defined once in backgrounds.ts).
+ */
+
+.panel {
+  width: 280px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--border);
+  background: var(--bg-sidebar);
+  padding: var(--space-lg) var(--space-md);
+  overflow-y: auto;
+}
+
+.heading {
+  margin: 0 0 var(--space-lg);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.16em;
+  color: var(--text-muted);
+}
+
+.label {
+  margin: 0 0 var(--space-sm);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.swatches {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--space-sm);
+  margin-bottom: var(--space-xl);
+}
+
+.swatch {
+  aspect-ratio: 1 / 1;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  transition: transform 0.1s ease;
+}
+
+.swatch:hover {
+  transform: translateY(-1px);
+}
+
+.selected {
+  box-shadow:
+    0 0 0 2px var(--bg-sidebar),
+    0 0 0 3.5px var(--accent-primary);
+}
+
+/* ── Sliders ────────────────────────────────── */
+
+.control {
+  margin-bottom: var(--space-xl);
+}
+
+.controlHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: var(--space-sm);
+}
+
+.controlLabel {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.controlValue {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
+.range {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  outline: none;
+  cursor: pointer;
+  accent-color: var(--accent-primary);
+}
+
+.range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--accent-primary);
+  cursor: pointer;
+}
+
+.tip {
+  margin: var(--space-md) 0 0;
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--border);
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  line-height: 1.5;
+}
