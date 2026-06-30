@@ -52,6 +52,7 @@ export default defineConfig({
             { slug: "backlog" },
             { slug: "backlog/code-quality-audit" },
             { slug: "backlog/aspect-ratio-distortion" },
+            { slug: "backlog/editor-zoom" },
             { slug: "backlog/roadmap" },
             { slug: "backlog/version-gate" },
             { slug: "backlog/auto-update" },
