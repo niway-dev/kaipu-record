@@ -16,6 +16,11 @@ describe("image-source readers", () => {
     expect(resolved.displayUrl).toBe("kaipu-media://screenshot/shot-1");
   });
 
+  it("localReader appends the version token so an overwrite busts the cache", () => {
+    const resolved = localReader.resolve({ kind: "local", id: "shot-1", version: 42 });
+    expect(resolved.displayUrl).toBe("kaipu-media://screenshot/shot-1?v=42");
+  });
+
   it("cloudReader resolves to the remote URL as-is", () => {
     const url = "https://cdn.example/x.png";
     expect(cloudReader.resolve({ kind: "cloud", url, width: 10, height: 10 }).displayUrl).toBe(url);

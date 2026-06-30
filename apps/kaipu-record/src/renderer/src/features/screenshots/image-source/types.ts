@@ -22,7 +22,7 @@ export interface ImageSourceBase {
  */
 export type ImageSource =
   | (ImageSourceBase & { kind: "blob"; bytes: ArrayBuffer })
-  | (ImageSourceBase & { kind: "local"; id: string })
+  | (ImageSourceBase & { kind: "local"; id: string; version?: number })
   | (ImageSourceBase & { kind: "cloud"; url: string });
 
 /** What every reader resolves a source into, for the generic editor to consume. */

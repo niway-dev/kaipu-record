@@ -88,7 +88,7 @@ describe("LibraryVault — screenshots", () => {
   });
 
   it("lists a saved screenshot as kind=screenshot", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "vault-"));        // reuse existing helpers/imports
+    const dir = await mkdtemp(join(tmpdir(), "vault-")); // reuse existing helpers/imports
     dirs.push(dir);
     const vault = new LibraryVault(dir);
     await vault.writeImage("shot-1", Buffer.from([0x89, 0x50, 0x4e, 0x47]));
@@ -96,7 +96,8 @@ describe("LibraryVault — screenshots", () => {
     const shot = items.find((i) => i.id === "shot-1");
     expect(shot?.kind).toBe("screenshot");
     expect(shot?.filePath.endsWith("shot-1.png")).toBe(true);
-    expect(shot?.thumbnailUrl).toBe("kaipu-media://screenshot/shot-1");
+    // URL carries a `?v=<mtime>` cache-bust token so an in-place overwrite refreshes.
+    expect(shot?.thumbnailUrl).toMatch(/^kaipu-media:\/\/screenshot\/shot-1\?v=\d+$/);
   });
 });
 

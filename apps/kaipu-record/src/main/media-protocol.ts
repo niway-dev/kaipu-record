@@ -29,17 +29,15 @@ export function registerMediaProtocol(): void {
     const id = decodeURIComponent(url.pathname.replace(/^\/+/, ""));
     if (isUnsafeId(id)) return new Response("Invalid recording id", { status: 400 });
 
+    // Screenshots are overwritten in place; freshness is handled by the `?v=<mtime>`
+    // version token on the URL (see LibraryVault.describe), so normal caching is fine.
     const { hostname } = url;
-    if (hostname === "screenshot") {
-      const target = await screenshotFilePath(id);
-      const res = await net.fetch(pathToFileURL(target).toString());
-      // Screenshots are overwritten in place (same id/URL on re-edit). Without this
-      // the renderer caches the old bytes and an overwrite appears to do nothing.
-      const headers = new Headers(res.headers);
-      headers.set("cache-control", "no-store");
-      return new Response(res.body, { status: res.status, headers });
-    }
-    const target = hostname === "thumb" ? thumbnailFilePath(id) : await recordingFilePath(id);
+    const target =
+      hostname === "screenshot"
+        ? await screenshotFilePath(id)
+        : hostname === "thumb"
+          ? thumbnailFilePath(id)
+          : await recordingFilePath(id);
     return net.fetch(pathToFileURL(target).toString());
   });
 }

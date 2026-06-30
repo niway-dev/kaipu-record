@@ -68,9 +68,16 @@ export function LibraryDetailPage(): React.JSX.Element {
   };
 
   // Re-open a saved screenshot in the editor. It's a flat PNG, so the editor treats
-  // it as a new base image (the local source starts with no beautify re-frame).
+  // it as a new base image (the local source starts with no beautify re-frame). Carry
+  // the `?v=` token from the thumbnail URL so the editor loads the current bytes.
   const editScreenshot = (): void => {
-    const source: ImageSource = { kind: "local", id: video.id, title: video.title };
+    const v = video.thumbnailUrl ? Number(new URL(video.thumbnailUrl).searchParams.get("v")) : NaN;
+    const source: ImageSource = {
+      kind: "local",
+      id: video.id,
+      title: video.title,
+      version: Number.isFinite(v) ? v : undefined,
+    };
     navigate("/screenshot-editor", { state: source });
   };
 

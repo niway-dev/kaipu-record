@@ -89,8 +89,13 @@ export class LibraryVault {
       sizeBytes: info.size,
       durationSeconds: meta.durationSeconds ?? 0,
       thumbnailUrl: isImage
-        ? `kaipu-media://screenshot/${id}`
-        : (await exists(this.thumbnailPath(id))) ? `kaipu-media://thumb/${id}` : null,
+        ? // `?v=<mtime>` busts the renderer image cache when a screenshot is
+          // overwritten in place (same id/URL) — only the changed item, so the
+          // rest stay cacheable.
+          `kaipu-media://screenshot/${id}?v=${Math.round(info.mtimeMs)}`
+        : (await exists(this.thumbnailPath(id)))
+          ? `kaipu-media://thumb/${id}`
+          : null,
     };
   }
 
