@@ -33,7 +33,7 @@ export const DEFAULT_SHORTCUTS: ShortcutSettings = {
   startRecording: "Command+Control+C",
   stopRecording: "Command+Control+S",
   bringToFront: "Command+Control+O",
-  captureScreenshot: "Command+Control+4", // ⌘⌃4 — mnemonic of macOS Cmd+Shift+4
+  captureScreenshot: "Command+Control+X", // ⌘⌃X — screen capture
 };
 
 export interface AppSettings {

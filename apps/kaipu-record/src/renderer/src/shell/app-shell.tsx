@@ -37,7 +37,7 @@ export function AppShell(): React.JSX.Element {
     [navigate],
   );
 
-  // Global ⌘⌃4 hotkey: main brings the window to front and broadcasts this event;
+  // Global ⌘⌃X hotkey: main brings the window to front and broadcasts this event;
   // we run the region-capture flow here so navigation (useNavigate) is available.
   useEffect(() => window.electronAPI.onCaptureScreenshotHotkey(capture), [capture]);
 
@@ -66,6 +66,10 @@ export function AppShell(): React.JSX.Element {
             <span className={styles.statusDot}>·</span>
             <span>
               <kbd>{shortcuts.bringToFront}</kbd> show app
+            </span>
+            <span className={styles.statusDot}>·</span>
+            <span>
+              <kbd>{shortcuts.captureScreenshot}</kbd> capture
             </span>
           </>
         )}

@@ -26,7 +26,7 @@ is built as a layered canvas so the future compositor is an extension, not a rew
   annotation tools (box, arrow, text) with select / move / resize / delete + undo/redo.
 - Export: composite once → PNG; **Copy** to clipboard + **Save** to the unified vault.
 - Unified storage: a `kind` discriminator; screenshots appear in the Library with a type filter.
-- Entry points: global hotkey `captureScreenshot` (default `⌘⌃4`) + a Screenshots page.
+- Entry points: global hotkey `captureScreenshot` (default `⌘⌃X`) + a Screenshots page.
 
 **Out of v1 (later phases)**
 - Branded custom-overlay capture (Path B), video editing, multi-image compositor.
@@ -144,7 +144,7 @@ Undo/Redo + **Copiar** (outline `--border-light`) + **Guardar** (`--accent-prima
 `--border`). The full mockup HTML is the visual reference; all spacing/radii match the tokens in §7.
 
 The **Screenshots launcher page** (`/screenshots`): overline "CAPTURAS", H1 "Captura y documenta",
-subtitle, a card with a primary **Capturar pantalla** button + `⌘⌃4` hint chip, and a **Recientes**
+subtitle, a card with a primary **Capturar pantalla** button + `⌘⌃X` hint chip, and a **Recientes**
 strip (the Library filtered to screenshots) with an empty state. (Copy is **neutral Spanish, no
 voseo** — the project copy rule overrides the voseo in the original mockups.)
 
@@ -190,7 +190,7 @@ shared-tokens-package direction):
 ## 8. Entry points
 
 - **Global hotkey** — add `"captureScreenshot"` to `SHORTCUT_ACTIONS` + `DEFAULT_SHORTCUTS`
-  (default `⌘⌃4`), the `status` map in `global-shortcuts.ts`, the `handlers` map in `main/index.ts`,
+  (default `⌘⌃X`), the `status` map in `global-shortcuts.ts`, the `handlers` map in `main/index.ts`,
   and the two UI lists (`shortcuts-page.tsx`, `use-shortcut-labels.ts`). Rebindable.
 - **Screenshots page** — the **Capturar pantalla** button calls the same capture path.
 

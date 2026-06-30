@@ -115,7 +115,7 @@ function bringAppToFront(): void {
 }
 
 /**
- * Triggered by the global `⌘⌃4` hotkey. Brings the main window to front so the
+ * Triggered by the global `⌘⌃X` hotkey. Brings the main window to front so the
  * renderer can show the native region selector, then broadcasts a `screenshot:hotkey`
  * event so the AppShell picks it up and runs `useScreenshotCapture().capture()`.
  */
