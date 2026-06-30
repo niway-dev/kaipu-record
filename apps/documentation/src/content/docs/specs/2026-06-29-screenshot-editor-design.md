@@ -143,9 +143,10 @@ Undo/Redo + **Copiar** (outline `--border-light`) + **Guardar** (`--accent-prima
 `--bg-app`, padding 38, centered framed shot. **Beautify panel** 280px (`--bg-sidebar`, left border
 `--border`). The full mockup HTML is the visual reference; all spacing/radii match the tokens in §7.
 
-The **Screenshots launcher page** (`/screenshots`): overline "CAPTURAS", H1 "Capturá y documentá",
+The **Screenshots launcher page** (`/screenshots`): overline "CAPTURAS", H1 "Captura y documenta",
 subtitle, a card with a primary **Capturar pantalla** button + `⌘⌃4` hint chip, and a **Recientes**
-strip (the Library filtered to screenshots) with an empty state.
+strip (the Library filtered to screenshots) with an empty state. (Copy is **neutral Spanish, no
+voseo** — the project copy rule overrides the voseo in the original mockups.)
 
 ## 6. Storage & Library (unified)
 
