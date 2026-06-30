@@ -20,6 +20,7 @@ export function useShortcutLabels(): ShortcutLabels | null {
           startRecording: formatAccelerator(settings.shortcuts.startRecording),
           stopRecording: formatAccelerator(settings.shortcuts.stopRecording),
           bringToFront: formatAccelerator(settings.shortcuts.bringToFront),
+          captureScreenshot: formatAccelerator(settings.shortcuts.captureScreenshot),
         }),
       );
     };
