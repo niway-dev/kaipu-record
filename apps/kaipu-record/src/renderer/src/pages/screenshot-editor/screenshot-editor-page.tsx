@@ -35,9 +35,7 @@ export function ScreenshotEditorPage(): React.JSX.Element {
     compositeScene(
       { beautify: scene.beautify.state, annotations: scene.annotations },
       await image.getBytes(),
-      source.width,
-      source.height,
-      imgRef.current?.clientWidth ?? source.width,
+      imgRef.current?.clientWidth ?? 0,
     );
 
   return (

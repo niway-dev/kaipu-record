@@ -19,18 +19,27 @@ const HAND_FONT = "Caveat, 'Comic Sans MS', cursive";
 export async function compositeScene(
   scene: Scene,
   bytes: ArrayBuffer,
-  naturalW: number,
-  naturalH: number,
   displayedW: number,
 ): Promise<ArrayBuffer> {
+  const href = await bytesToDataUrl(bytes);
+  // Decode the PNG for its TRUE pixel size (Retina-safe — `getSize` can differ).
+  const { width: naturalW, height: naturalH } = await imageSize(href);
   const scale = displayedW > 0 ? naturalW / displayedW : 1;
   const pad = Math.round(scene.beautify.padding * scale);
   const radius = Math.round(scene.beautify.radius * scale);
   const frameW = naturalW + pad * 2;
   const frameH = naturalH + pad * 2;
-  const href = await bytesToDataUrl(bytes);
   const svg = buildSvg(scene, { href, naturalW, naturalH, pad, radius, frameW, frameH, scale });
   return rasterize(svg, frameW, frameH);
+}
+
+function imageSize(url: string): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    img.onerror = () => reject(new Error("compositor: image decode failed"));
+    img.src = url;
+  });
 }
 
 interface Geom {
@@ -75,7 +84,7 @@ function buildSvg(scene: Scene, g: Geom): string {
     sv > 0
       ? `<rect x="${g.pad}" y="${g.pad}" width="${g.naturalW}" height="${g.naturalH}" rx="${g.radius}" fill="#000" filter="url(#sh)"/>`
       : "";
-  const image = `<image href="${g.href}" x="${g.pad}" y="${g.pad}" width="${g.naturalW}" height="${g.naturalH}" clip-path="url(#rc)" preserveAspectRatio="none"/>`;
+  const image = `<image href="${g.href}" x="${g.pad}" y="${g.pad}" width="${g.naturalW}" height="${g.naturalH}" clip-path="url(#rc)"/>`;
   const anno = `<g transform="translate(${g.pad},${g.pad})">${scene.annotations
     .map((a) => annotationSvg(a, g.naturalW, g.naturalH, g.scale))
     .join("")}</g>`;

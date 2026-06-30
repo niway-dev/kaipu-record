@@ -2,7 +2,6 @@
 
 .frame {
   display: inline-block;
-  max-width: 100%;
   transition:
     padding 0.12s ease,
     border-radius 0.12s ease,
@@ -12,15 +11,21 @@
 .shotWrap {
   position: relative;
   display: inline-block;
-  max-width: 100%;
   line-height: 0;
 }
 
+/*
+ * Constrain the shot with VIEWPORT units (definite), not `%` — `%` here resolves
+ * against the two shrink-wrapping inline-blocks above (a circular reference that
+ * makes the browser size width and height independently → horizontal stretch).
+ * With viewport bounds + auto width/height, the intrinsic aspect ratio is kept.
+ */
 .shot {
   display: block;
-  max-width: 100%;
+  width: auto;
+  height: auto;
+  max-width: calc(100vw - 430px);
   max-height: 64vh;
-  object-fit: contain;
   transition:
     border-radius 0.12s ease,
     box-shadow 0.12s ease;
