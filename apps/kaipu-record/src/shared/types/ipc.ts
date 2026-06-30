@@ -150,6 +150,8 @@ export const IPC_CHANNELS = {
   screenshotCapture: "screenshot:capture",
   screenshotCopy: "screenshot:copy",
   screenshotSave: "screenshot:save",
+  // Renderer → main: capture done + navigated to the editor, bring the app back.
+  screenshotReveal: "screenshot:reveal",
   // Main → renderer: global hotkey fired, run the region capture flow.
   screenshotHotkey: "screenshot:hotkey",
   // Recording engine (renderer ↔ main)

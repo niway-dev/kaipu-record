@@ -138,6 +138,13 @@ export interface KaipuElectronAPI {
    * unsubscribe fn. The renderer owns navigation so it runs the capture flow.
    */
   onCaptureScreenshotHotkey(callback: () => void): () => void;
+  /**
+   * Bring the app back to the front after a successful capture. The renderer
+   * calls this *after* it has navigated to the editor, so the window reappears
+   * already showing the result (no flash of the previous page). Main hides the
+   * window for the duration of the capture so the app isn't in the shot.
+   */
+  revealAfterCapture(): void;
   /** Put a PNG on the system clipboard. */
   copyImageToClipboard(png: ArrayBuffer): Promise<void>;
   /** Write a PNG into the vault and return the stored item. */

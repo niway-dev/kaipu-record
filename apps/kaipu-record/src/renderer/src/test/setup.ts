@@ -78,6 +78,7 @@ window.electronAPI = {
   resumeShortcuts: () => {},
   reportException: () => {},
   captureScreenshot: async () => null,
+  revealAfterCapture: () => {},
   copyImageToClipboard: async () => {},
   saveScreenshot: async () => {
     throw new Error("not implemented in test stub");

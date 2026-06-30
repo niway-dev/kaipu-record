@@ -115,12 +115,13 @@ function bringAppToFront(): void {
 }
 
 /**
- * Triggered by the global `⌘⌃X` hotkey. Brings the main window to front so the
- * renderer can show the native region selector, then broadcasts a `screenshot:hotkey`
- * event so the AppShell picks it up and runs `useScreenshotCapture().capture()`.
+ * Triggered by the global `⌘⌃X` hotkey. Just broadcasts `screenshot:hotkey` so the
+ * AppShell runs `useScreenshotCapture().capture()`. It deliberately does NOT bring
+ * the window forward: the native `screencapture` region selector floats above
+ * everything, and `screenshotCapture` then hides the app so it isn't in the shot
+ * (see `captureWindowHooks`). The window comes back via `revealAfterCapture`.
  */
 function triggerCaptureScreenshot(): void {
-  showMainWindow();
   const contents = mainWindow?.webContents;
   if (!contents) return;
   if (contents.isLoading()) {
@@ -129,6 +130,24 @@ function triggerCaptureScreenshot(): void {
     contents.send(IPC_CHANNELS.screenshotHotkey);
   }
 }
+
+/** Remembers whether the app was visible before a capture, to restore on cancel. */
+let captureWasVisible = false;
+
+/** Window orchestration handed to the screenshot IPC (hide for the shot, reveal after). */
+const captureWindowHooks = {
+  beforeCapture: (): void => {
+    captureWasVisible = mainWindow?.isVisible() ?? false;
+    capturePanel?.hide();
+    mainWindow?.hide();
+  },
+  afterCapture: (captured: boolean): void => {
+    // On success the renderer reveals the window once it shows the editor; here we
+    // only need to undo the hide when the user cancelled with the app previously up.
+    if (!captured && captureWasVisible) showMainWindow();
+  },
+  reveal: (): void => bringAppToFront(),
+};
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
@@ -194,7 +213,7 @@ app.whenReady().then(() => {
   registerLibraryVaultHandlers();
 
   // Screenshots: capture/copy/save IPC handlers.
-  registerScreenshotHandlers();
+  registerScreenshotHandlers(captureWindowHooks);
 
   // Auto-update (packaged builds only). Silent download; renderer shows a restart banner.
   initAutoUpdater(() => mainWindow);
