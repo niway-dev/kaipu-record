@@ -37,6 +37,7 @@ export function AnnotationLayer({
   const ref = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<Size>({ w: 0, h: 0 });
   const [draft, setDraft] = useState<Annotation | null>(null);
+  const [editing, setEditing] = useState<{ x: number; y: number } | null>(null);
   const drag = useRef<Drag | null>(null);
 
   useEffect(() => {
@@ -78,21 +79,8 @@ export function AnnotationLayer({
       return;
     }
     if (tools.tool === "text") {
-      const text = window.prompt("Texto de la anotación");
-      if (text) {
-        const { id } = nextAnnotationId();
-        scene.addAnnotation({
-          id,
-          kind: "text",
-          x: p.x,
-          y: p.y,
-          text,
-          color: tools.color,
-          size: tools.textSize,
-        });
-        scene.select(id);
-        tools.setTool("select");
-      }
+      // window.prompt() is disabled in Electron — show an inline input instead.
+      setEditing({ x: p.x, y: p.y });
       return;
     }
     drag.current = { mode: tools.tool === "box" ? "draw-box" : "draw-arrow", start: p };
@@ -151,6 +139,25 @@ export function AnnotationLayer({
     setDraft(null);
   };
 
+  const commitText = (value: string): void => {
+    const text = value.trim();
+    if (editing && text) {
+      const { id } = nextAnnotationId();
+      scene.addAnnotation({
+        id,
+        kind: "text",
+        x: editing.x,
+        y: editing.y,
+        text,
+        color: tools.color,
+        size: tools.textSize,
+      });
+      scene.select(id);
+    }
+    setEditing(null);
+    tools.setTool("select");
+  };
+
   return (
     <div
       ref={ref}
@@ -166,6 +173,29 @@ export function AnnotationLayer({
         ))}
         {draft && <Shape a={draft} size={size} selected={false} />}
       </svg>
+      {editing && (
+        <input
+          autoFocus
+          className={styles.textInput}
+          placeholder="Escribe…"
+          style={{
+            left: editing.x * size.w,
+            top: editing.y * size.h,
+            color: tools.color,
+            fontFamily: HAND_FONT,
+            fontSize: TEXT_PX[tools.textSize],
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commitText((e.target as HTMLInputElement).value);
+            else if (e.key === "Escape") {
+              setEditing(null);
+              tools.setTool("select");
+            }
+          }}
+          onBlur={(e) => commitText(e.target.value)}
+        />
+      )}
     </div>
   );
 }
