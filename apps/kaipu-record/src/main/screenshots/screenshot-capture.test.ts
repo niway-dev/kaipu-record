@@ -4,9 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MacNativeProvider } from "./screenshot-capture";
 
 describe("MacNativeProvider", () => {
-  let runCli: ReturnType<typeof vi.fn>;
-  let readPng: ReturnType<typeof vi.fn>;
-  let fileExists: ReturnType<typeof vi.fn>;
+  // Typed with the Deps signatures so the injected object is assignable (vi.fn's
+  // loose Mock type otherwise fails `npm run typecheck` even though it runs fine).
+  let runCli: (cmd: string, args: string[]) => Promise<void>;
+  let readPng: (path: string) => Promise<Buffer>;
+  let fileExists: (path: string) => Promise<boolean>;
 
   beforeEach(() => {
     runCli = vi.fn(async () => {});
