@@ -2,6 +2,7 @@ import { Film, Upload, Trash2, Play } from "lucide-react";
 import { formatDuration, formatSize } from "@renderer/features/library/format";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import { StorageMeta } from "./storage-meta";
+import { KindBadge } from "./kind-badge";
 import { cx } from "@renderer/ui/cx";
 import styles from "./video-card.module.css";
 
@@ -43,6 +44,10 @@ export function VideoCard({
         )}
 
         <div className={styles.scrim} aria-hidden />
+
+        <span className={styles.kindBadge}>
+          <KindBadge kind={video.kind} />
+        </span>
 
         {video.durationSeconds > 0 && (
           <span className={styles.duration}>{formatDuration(video.durationSeconds)}</span>

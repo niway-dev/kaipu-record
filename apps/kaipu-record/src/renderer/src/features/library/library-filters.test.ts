@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { LibraryVideo } from "./types";
-import { countByStorage, selectVisibleVideos } from "./library-filters";
+import { countByKind, countByStorage, selectVisibleVideos } from "./library-filters";
 
 function video(overrides: Partial<LibraryVideo> = {}): LibraryVideo {
   return {
     id: "id",
+    kind: "recording",
     title: "Recording",
     createdAt: 0,
     durationSeconds: 10,
@@ -19,8 +20,10 @@ const middle = video({ id: "b", title: "Bravo", createdAt: 200, fileSizeBytes: 9
 const oldest = video({ id: "c", title: "Charlie", createdAt: 100, fileSizeBytes: 500 });
 const cloud = video({ id: "d", title: "Delta", createdAt: 250, storage: "cloud" });
 const failed = video({ id: "e", title: "Echo", createdAt: 150, storage: "failed" });
+const shot = video({ id: "s", title: "Shot", createdAt: 175, kind: "screenshot" });
 
 const criteria = {
+  kindFilter: "all" as const,
   storageFilter: "all" as const,
   sortKey: "newest" as const,
   searchTerm: "",
@@ -56,6 +59,27 @@ describe("selectVisibleVideos", () => {
     ).toEqual(["d"]);
   });
 
+  it("filters by kind, leaving 'all' untouched", () => {
+    const videos = [newest, shot, middle];
+    expect(selectVisibleVideos(videos, { ...criteria, kindFilter: "all" })).toHaveLength(3);
+    expect(
+      selectVisibleVideos(videos, { ...criteria, kindFilter: "screenshot" }).map((v) => v.id),
+    ).toEqual(["s"]);
+    expect(
+      selectVisibleVideos(videos, { ...criteria, kindFilter: "recording" }).map((v) => v.id),
+    ).toEqual(["a", "b"]);
+  });
+
+  it("combines the kind and storage filters", () => {
+    const cloudShot = video({ id: "cs", kind: "screenshot", storage: "cloud", createdAt: 5 });
+    const result = selectVisibleVideos([newest, shot, cloudShot], {
+      ...criteria,
+      kindFilter: "screenshot",
+      storageFilter: "cloud",
+    });
+    expect(result.map((v) => v.id)).toEqual(["cs"]);
+  });
+
   it("filters by search term, case-insensitively and trimmed, matching the title", () => {
     const result = selectVisibleVideos([newest, middle, oldest], {
       ...criteria,
@@ -69,6 +93,7 @@ describe("selectVisibleVideos", () => {
     const localBeta = video({ id: "y", title: "Report draft", createdAt: 20, storage: "local" });
     const cloudReport = video({ id: "z", title: "Report cloud", storage: "cloud" });
     const result = selectVisibleVideos([localAlpha, localBeta, cloudReport], {
+      kindFilter: "all",
       storageFilter: "local",
       sortKey: "oldest",
       searchTerm: "report",
@@ -91,5 +116,19 @@ describe("countByStorage", () => {
 
   it("returns zeros for an empty library", () => {
     expect(countByStorage([])).toEqual({ local: 0, cloud: 0, failed: 0 });
+  });
+});
+
+describe("countByKind", () => {
+  it("counts items per kind plus the total", () => {
+    expect(countByKind([newest, middle, shot])).toEqual({
+      all: 3,
+      recording: 2,
+      screenshot: 1,
+    });
+  });
+
+  it("returns zeros for an empty library", () => {
+    expect(countByKind([])).toEqual({ all: 0, recording: 0, screenshot: 0 });
   });
 });

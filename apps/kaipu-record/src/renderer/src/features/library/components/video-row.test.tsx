@@ -6,6 +6,7 @@ import { VideoRow } from "./video-row";
 function makeVideo(overrides: Partial<LibraryVideo> = {}): LibraryVideo {
   return {
     id: "v1",
+    kind: "recording",
     title: "My Recording",
     createdAt: 1_700_000_000_000,
     durationSeconds: 65,

@@ -2,6 +2,7 @@ import { Film, Upload, Trash2 } from "lucide-react";
 import { formatDuration, formatSize } from "@renderer/features/library/format";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import { StorageMeta } from "./storage-meta";
+import { KindBadge } from "./kind-badge";
 import { cx } from "@renderer/ui/cx";
 import styles from "./video-row.module.css";
 
@@ -51,6 +52,7 @@ export function VideoRow({
       <div className={styles.info}>
         <p className={styles.title}>{video.title || "Untitled recording"}</p>
         <div className={styles.metaLine}>
+          <KindBadge kind={video.kind} />
           <StorageMeta video={video} />
           <span className={styles.specs}>
             {formatSize(video.fileSizeBytes)} · {formatDuration(video.durationSeconds)}

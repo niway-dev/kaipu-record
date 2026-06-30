@@ -6,6 +6,7 @@ import type { LibraryVideo } from "../types";
 
 const video: LibraryVideo = {
   id: "x",
+  kind: "recording",
   title: "My Recording",
   createdAt: Date.now() - 3_600_000,
   durationSeconds: 95,

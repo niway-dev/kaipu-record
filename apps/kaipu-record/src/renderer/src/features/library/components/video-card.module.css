@@ -50,6 +50,13 @@
   background: linear-gradient(to top, rgba(0, 0, 0, 0.45), transparent 55%);
 }
 
+.kindBadge {
+  position: absolute;
+  top: 9px;
+  left: 9px;
+  z-index: 1;
+}
+
 .duration {
   position: absolute;
   bottom: 9px;
