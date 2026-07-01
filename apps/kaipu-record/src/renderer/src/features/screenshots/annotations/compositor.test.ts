@@ -9,8 +9,6 @@ const geom: Geom = {
   naturalH: 600,
   pad: 40,
   radius: 12,
-  frameW: 1080,
-  frameH: 680,
   scale: 2,
 };
 
@@ -102,20 +100,43 @@ describe("compositor buildSvg", () => {
     expect(svg.match(/<use href="#shot"/g)?.length).toBe(3); // base + 2 blurs
   });
 
-  it("windows the export to the crop at native pixels", () => {
-    // crop = middle half in each axis of a 1000x600 image
+  it("windows the export to a crop of the composed FRAME via viewBox", () => {
+    // Frame = naturalW+2pad x naturalH+2pad = 1080 x 680. Crop = middle half in each axis.
     const cropped = { ...scene([]), crop: { x: 0.25, y: 0.25, w: 0.5, h: 0.5 } };
     const svg = buildSvg(cropped, geom);
-    // frame = cw+2pad x ch+2pad = 500+80 x 300+80 = 580 x 380
-    expect(svg).toContain('width="580" height="380"');
-    // base is shifted left/up by crop offset (0.25*1000=250, 0.25*600=150), plus pad(40)
-    expect(svg).toContain('<use href="#shot" x="-210" y="-110"');
+    // Output size = window in frame px = 0.5*1080 x 0.5*680 = 540 x 340.
+    expect(svg).toContain('width="540" height="340"');
+    // viewBox selects the sub-rect: origin 0.25*1080=270, 0.25*680=170.
+    expect(svg).toContain('viewBox="270 170 540 340"');
+    // The frame is composed once at full size — the shot still sits at (pad,pad), unshifted.
+    expect(svg).toContain('<use href="#shot" x="40" y="40"');
+  });
+
+  it("lets a crop span into the padding/background (no re-added padding)", () => {
+    // Left half, full height: x:0,y:0,w:0.5,h:1 with padding>0.
+    const cropped = { ...scene([]), crop: { x: 0, y: 0, w: 0.5, h: 1 } };
+    const svg = buildSvg(cropped, geom);
+    // viewBox starts at the frame origin (0,0), so the left padding strip is INCLUDED.
+    expect(svg).toContain('viewBox="0 0 540 680"');
+    // Shot still at (pad,pad): the 40px padding strip on the left is inside the window.
+    expect(svg).toContain('<use href="#shot" x="40" y="40"');
+  });
+
+  it("crops a 3:4 shot to a SQUARE by including padding (the headline use case)", () => {
+    // 3:4 shot (600x800) + 100px padding → frame 800x1000. A full-width crop of height
+    // 0.8 (0.8*1000=800) yields an 800x800 square that includes the padding.
+    const g34: Geom = { ...geom, naturalW: 600, naturalH: 800, pad: 100 };
+    const cropped = { ...scene([]), crop: { x: 0, y: 0, w: 1, h: 0.8 } };
+    const svg = buildSvg(cropped, g34);
+    expect(svg).toContain('width="800" height="800"');
+    expect(svg).toContain('viewBox="0 0 800 800"');
   });
 
   it("leaves the export unchanged when there is no crop", () => {
     const svg = buildSvg(scene([]), geom);
     // full frame 1080x680, base at (pad,pad)=(40,40)
     expect(svg).toContain('width="1080" height="680"');
+    expect(svg).toContain('viewBox="0 0 1080 680"');
     expect(svg).toContain('<use href="#shot" x="40" y="40"');
   });
 });

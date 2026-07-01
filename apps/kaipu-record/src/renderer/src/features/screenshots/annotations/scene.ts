@@ -57,7 +57,11 @@ export type Annotation =
   | PathAnnotation
   | BlurAnnotation;
 
-/** A crop window over the base image, normalized 0–1. Undefined = full image. */
+/**
+ * A crop window over the beautified **frame** (background + padding + shot), normalized
+ * 0–1 of that frame — NOT the base image. Undefined = the whole frame. This lets a crop
+ * span into the padding/background (e.g. crop a padded 3:4 shot to a square).
+ */
 export interface CropRect {
   x: number;
   y: number;

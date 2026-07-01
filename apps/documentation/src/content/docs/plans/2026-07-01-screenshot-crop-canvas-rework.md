@@ -20,8 +20,8 @@ on the **whole canvas** (background + padding + shot). **Rework it to canvas/fra
 **Confirmed with the owner (do not re-ask):**
 
 1. **Model = crop over the CANVAS** (bg + padding + shot), not the capture. This enables the
-   headline use case: *capture a 3:4 shot, add padding to make room, crop it to a square
-   including the padding.*
+   headline use case: _capture a 3:4 shot, add padding to make room, crop it to a square
+   including the padding._
 2. **Implement now, with tests** (module by module, typecheck + vitest green each step), the
    owner validates in the running build.
 
@@ -35,15 +35,15 @@ the **shot**, not the padding/background. Consequences the owner reproduced:
 
 - **The crop rect can't reach the padding/background** — the handles stop at the shot edges.
   ("nuestra herramienta debería ir sobre el canvas no sobre la captura.")
-- **Crop + padding export breaks** — the export takes a slice of the *image* (`cropW =
-  crop.w * naturalW`) and then **re-adds `2·pad` around it**. If you then re-open a shot that
+- **Crop + padding export breaks** — the export takes a slice of the _image_ (`cropW =
+crop.w * naturalW`) and then **re-adds `2·pad` around it**. If you then re-open a shot that
   already had padding baked in and add padding again, it **compounds** → the saved PNG is
   mostly background with a sliver of image (owner's imgs 101–102), and in the worst case
   effectively transparent.
 - **The earlier "all transparent on the 2nd overwrite"** is the same chain: image-relative
   crop + re-added padding over an already-cropped/padded base.
 
-The compositor's crop *math is internally consistent* (no-crop path is byte-identical, verified),
+The compositor's crop _math is internally consistent_ (no-crop path is byte-identical, verified),
 and the SVG clip coords are correct (local group space, consistent with the validated v2 blur).
 The problem is the **model**, not a compositor arithmetic bug. The rework replaces the model.
 
@@ -67,26 +67,29 @@ sub-rectangle of that composed output.
 - **Annotations stay shot-relative** (unchanged: `a.x*naturalW`, `translate(pad,pad)`). Only
   `crop` changes coordinate space (to frame-relative). Two independent spaces — fine.
 
-This is *simpler* than the current base-offset approach: revert the `baseX/baseY/offX/offY`
+This is _simpler_ than the current base-offset approach: revert the `baseX/baseY/offX/offY`
 shifting and the `rc`/`rcLocal` crop-window rects back to their no-crop forms, and add the
 viewBox window instead.
 
 ## 3. Rework plan (module by module, TDD)
 
 ### 3.1 `annotations/scene.ts`
+
 - `CropRect` stays `{x,y,w,h}`. Update the JSDoc: "normalized 0–1 of the beautified **frame**
   (bg+padding+shot), not the base image." `FULL_CROP`, `sameScene` unchanged.
 
 ### 3.2 `annotations/crop.ts` (pure helpers) — mostly unchanged
+
 - `clampCrop`, `moveCrop`, `isFullCrop`, `cropHandles`, `hitCropHandle`, `resizeCrop` still
   operate on a normalized box — they don't care whether it's image- or frame-normalized. Keep.
 - These are unit-tested in `crop.test.ts` (keep).
 
 ### 3.3 `annotations/compositor.ts` (+ `compositor.test.ts`) — the core change
+
 - In `buildSvg`: **remove** the crop-window base-offset logic (`offX/offY/baseX/baseY`, the
   crop-sized `rc`/`rcLocal`/shadow/bg). Restore the base `<use href="#shot" x="pad" y="pad"
-  clip-path="url(#rc)"/>`, `rc = rect(pad,pad,naturalW,naturalH,rx)`, `rcLocal =
-  rect(0,0,naturalW,naturalH,rx)`, shadow/bg at full `fullW/fullH` — i.e. the **pre-crop** frame.
+clip-path="url(#rc)"/>`, `rc = rect(pad,pad,naturalW,naturalH,rx)`, `rcLocal =
+rect(0,0,naturalW,naturalH,rx)`, shadow/bg at full `fullW/fullH` — i.e. the **pre-crop** frame.
 - Compute `fullW = naturalW + 2*pad`, `fullH = naturalH + 2*pad`.
 - Derive the window from `scene.crop`:
   ```ts
@@ -107,6 +110,7 @@ viewBox window instead.
   (`w*fullW == h*fullH`) yields a square output.
 
 ### 3.4 `beautify/beautified-frame.tsx` (+ `.module.css`) — window the FRAME, not the shot
+
 - Current code windows the **shot** via an image-plane inside `.shotWrap`. Change it to window
   the **whole `.frame`**: the `.frame` (bg+padding+shot+overlay) becomes the "plane"; wrap it in
   a viewport that clips to the crop sub-rect of the frame.
@@ -123,6 +127,7 @@ viewBox window instead.
   hit it, but the frame-level viewport must get a definite size — measure-based sizing is safest).
 
 ### 3.5 Crop overlay + interaction — MOVE from `AnnotationLayer` to a frame-level overlay
+
 - **Remove** all crop code from `annotations/annotation-layer.tsx`: the `Drag` crop modes
   (`crop-draw/move/resize`), the `onPointerDown/Move/Up`/abort crop branches, the Esc-crop
   handler, `CropOverlay`, `cropRect`, `toolRef`, and the crop imports. AnnotationLayer goes back
@@ -143,6 +148,7 @@ viewBox window instead.
   math is identical; only the measured element (frame vs shot) changes.
 
 ### 3.6 `pages/screenshot-editor/screenshot-editor-page.tsx`
+
 - `exportPng`: keep passing `crop: scene.crop` (now frame-relative) to `compositeScene`.
 - Pass the applied crop to `BeautifiedFrame` only when the crop tool is inactive:
   `crop={tools.tool === "crop" ? undefined : scene.crop}` (already there).
@@ -150,6 +156,7 @@ viewBox window instead.
   `scene`/`beginInteract`/`setCropLive`/`endInteract`/`setCrop`).
 
 ### 3.7 Tests
+
 - `crop.test.ts` — keep.
 - `compositor.test.ts` — no-crop unchanged; add frame-relative viewBox cases + 3:4→square + a
   crop that includes padding.

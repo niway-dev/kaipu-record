@@ -25,11 +25,15 @@ export async function compositeScene(
   const scale = displayedW > 0 ? naturalW / displayedW : 1;
   const pad = Math.round(scene.beautify.padding * scale);
   const radius = Math.round(scene.beautify.radius * scale);
+  // The crop is a window of the fully-composed frame (bg + padding + shot), normalized
+  // 0–1 of that frame. The raster size is that window in native px; no crop = the whole frame.
+  const fullW = naturalW + pad * 2;
+  const fullH = naturalH + pad * 2;
   const c = scene.crop ?? { x: 0, y: 0, w: 1, h: 1 };
-  const frameW = Math.round(c.w * naturalW) + pad * 2;
-  const frameH = Math.round(c.h * naturalH) + pad * 2;
-  const svg = buildSvg(scene, { href, naturalW, naturalH, pad, radius, frameW, frameH, scale });
-  return rasterize(svg, frameW, frameH);
+  const outW = Math.round(c.w * fullW);
+  const outH = Math.round(c.h * fullH);
+  const svg = buildSvg(scene, { href, naturalW, naturalH, pad, radius, scale });
+  return rasterize(svg, outW, outH);
 }
 
 function imageSize(url: string): Promise<{ width: number; height: number }> {
@@ -47,8 +51,6 @@ export interface Geom {
   naturalH: number;
   pad: number;
   radius: number;
-  frameW: number;
-  frameH: number;
   scale: number;
 }
 
@@ -75,18 +77,20 @@ export function buildSvg(scene: Scene, g: Geom): string {
       `<filter id="sh" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="${shY}" stdDeviation="${shBlur / 2}" flood-color="#000" flood-opacity="${shAlpha}"/></filter>`,
     );
   }
+  // The frame is composed ONCE at full size (bg + padding + shot). The crop is a viewBox
+  // window over that frame — normalized 0–1 of the FRAME (not the base image), undefined =
+  // whole frame. Padding is never re-added around the crop; the crop is a window of the
+  // already-padded frame, so it can span into the background/padding.
+  const fullW = g.naturalW + g.pad * 2;
+  const fullH = g.naturalH + g.pad * 2;
   const c = scene.crop ?? { x: 0, y: 0, w: 1, h: 1 };
-  const cropW = Math.round(c.w * g.naturalW);
-  const cropH = Math.round(c.h * g.naturalH);
-  const offX = Math.round(c.x * g.naturalW);
-  const offY = Math.round(c.y * g.naturalH);
-  const frameW = cropW + g.pad * 2; // computed here (ignores g.frameW), stays consistent
-  const frameH = cropH + g.pad * 2;
-  const baseX = g.pad - offX; // shift the shared image so the crop window sits at (pad,pad)
-  const baseY = g.pad - offY;
+  const vbX = Math.round(c.x * fullW);
+  const vbY = Math.round(c.y * fullH);
+  const outW = Math.round(c.w * fullW);
+  const outH = Math.round(c.h * fullH);
 
   defs.push(
-    `<clipPath id="rc"><rect x="${g.pad}" y="${g.pad}" width="${cropW}" height="${cropH}" rx="${g.radius}"/></clipPath>`,
+    `<clipPath id="rc"><rect x="${g.pad}" y="${g.pad}" width="${g.naturalW}" height="${g.naturalH}" rx="${g.radius}"/></clipPath>`,
   );
   // The base image, defined ONCE and referenced by <use> for the base + every blur box,
   // so a redacted export doesn't re-embed the (huge) data URL per blur (which blew up
@@ -97,7 +101,7 @@ export function buildSvg(scene: Scene, g: Geom): string {
   // Rounded-shot clip in the annotation group's local coords, so a blur near a rounded
   // corner can't spill past the frame.
   defs.push(
-    `<clipPath id="rcLocal"><rect x="${offX}" y="${offY}" width="${cropW}" height="${cropH}" rx="${g.radius}"/></clipPath>`,
+    `<clipPath id="rcLocal"><rect x="0" y="0" width="${g.naturalW}" height="${g.naturalH}" rx="${g.radius}"/></clipPath>`,
   );
 
   // Round the outer frame to match the live preview (BeautifiedFrame applies
@@ -106,17 +110,19 @@ export function buildSvg(scene: Scene, g: Geom): string {
   const bg =
     bgFill === "none"
       ? ""
-      : `<rect width="${frameW}" height="${frameH}" rx="${outerR}" fill="${bgFill}"/>`;
+      : `<rect width="${fullW}" height="${fullH}" rx="${outerR}" fill="${bgFill}"/>`;
   const shadow =
     sv > 0
-      ? `<rect x="${g.pad}" y="${g.pad}" width="${cropW}" height="${cropH}" rx="${g.radius}" fill="#000" filter="url(#sh)"/>`
+      ? `<rect x="${g.pad}" y="${g.pad}" width="${g.naturalW}" height="${g.naturalH}" rx="${g.radius}" fill="#000" filter="url(#sh)"/>`
       : "";
-  const image = `<use href="#shot" x="${baseX}" y="${baseY}" clip-path="url(#rc)"/>`;
-  const anno = `<g transform="translate(${baseX},${baseY})" clip-path="url(#rcLocal)">${scene.annotations
+  const image = `<use href="#shot" x="${g.pad}" y="${g.pad}" clip-path="url(#rc)"/>`;
+  const anno = `<g transform="translate(${g.pad},${g.pad})" clip-path="url(#rcLocal)">${scene.annotations
     .map((a) => annotationSvg(a, g.naturalW, g.naturalH, g.scale))
     .join("")}</g>`;
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${frameW}" height="${frameH}" viewBox="0 0 ${frameW} ${frameH}"><defs>${defs.join("")}</defs>${bg}${shadow}${image}${anno}</svg>`;
+  // The output SVG selects the crop sub-rectangle via viewBox; width/height are the
+  // window in native px, so it rasterizes 1:1 (no scaling).
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${outW}" height="${outH}" viewBox="${vbX} ${vbY} ${outW} ${outH}"><defs>${defs.join("")}</defs>${bg}${shadow}${image}${anno}</svg>`;
 }
 
 function annotationSvg(a: Annotation, W: number, H: number, scale: number): string {
