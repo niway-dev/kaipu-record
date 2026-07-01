@@ -137,6 +137,11 @@
   font-size: var(--font-size-xs);
 }
 
-.reset:hover {
+.reset:hover:not(:disabled) {
   border-color: var(--accent-primary);
+}
+
+.reset:disabled {
+  opacity: 0.45;
+  cursor: default;
 }

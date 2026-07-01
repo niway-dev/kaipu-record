@@ -61,6 +61,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  /* Allow the flex item to shrink below the image's intrinsic size (default min-width:auto
+   * would keep a large shot from fitting the editor canvas in the non-windowed path). */
+  min-width: 0;
+  min-height: 0;
 }
 
 /* In the windowed case the img fills the plane; in the full case it keeps max-100% fit. */

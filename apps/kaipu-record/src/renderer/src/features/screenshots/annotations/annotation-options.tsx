@@ -104,9 +104,9 @@ export function AnnotationOptions({
           <span className={styles.label}>Recorte</span>
           <button
             type="button"
-            aria-label="Reset crop"
             title="Volver a la imagen completa"
             className={styles.reset}
+            disabled={!scene.crop}
             onClick={() => scene.setCrop(undefined)}
           >
             Restablecer

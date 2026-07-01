@@ -3,7 +3,7 @@ import { BLUR_STD, HAND_FONT, STROKE_WIDTHS, TEXT_PX } from "./tools";
 import { roughArrow, roughRect } from "./rough";
 import { smoothPath } from "./smooth";
 import { FULL_CROP, nextAnnotationId, type Annotation, type CropRect } from "./scene";
-import { clampCrop, cropHandles, hitCropHandle, moveCrop, resizeCrop } from "./crop";
+import { clampCrop, cropHandles, hitCropHandle, isFullCrop, moveCrop, resizeCrop } from "./crop";
 import { handleCursor, handlesFor, hitHandle, resizeAnnotation, type HandleId } from "./handles";
 import type { EditorScene } from "./use-editor-scene";
 import type { AnnotationToolsController } from "./use-annotation-tools";
@@ -28,6 +28,9 @@ type Drag =
 /** Side of a resize handle in px, and the click tolerance around it. */
 const HANDLE_PX = 10;
 const HANDLE_HIT_PX = 12;
+/** Minimum drag (normalized) before a crop-draw starts a rect — below this a click/twitch
+ *  commits nothing. */
+const CROP_DRAW_MIN = 0.01;
 
 /**
  * Interactive annotation overlay. Annotations are stored in normalized (0–1)
@@ -86,9 +89,11 @@ export function AnnotationLayer({
       // modal is open — only when the canvas owns the key.
       if (isEditingText(e.target) || document.querySelector('[aria-modal="true"]')) return;
       const scn = sceneRef.current;
-      // Esc resets the crop to full while the crop tool is active.
+      // Esc resets the crop to full while the crop tool is active. Abort any in-progress
+      // crop drag first so the trailing pointerup can't commit a second history entry.
       if (e.key === "Escape" && toolRef.current === "crop" && scn.crop) {
         e.preventDefault();
+        if (drag.current?.mode.startsWith("crop-")) drag.current = null;
         scn.setCrop(undefined);
         return;
       }
@@ -125,14 +130,17 @@ export function AnnotationLayer({
       const tol = { x: HANDLE_HIT_PX / (size.w || 1), y: HANDLE_HIT_PX / (size.h || 1) };
       const handle = hitCropHandle(cropRect, p, tol, size);
       scene.beginInteract();
-      if (handle) {
-        drag.current = { mode: "crop-resize", handle, orig: cropRect };
-      } else if (
+      // Move only an EXISTING sub-crop; with no crop yet, `cropRect` is FULL_CROP (covers
+      // everything), so an interior press must draw a fresh rect, not no-op move it.
+      const insideExisting =
+        scene.crop != null &&
         p.x >= cropRect.x &&
         p.x <= cropRect.x + cropRect.w &&
         p.y >= cropRect.y &&
-        p.y <= cropRect.y + cropRect.h
-      ) {
+        p.y <= cropRect.y + cropRect.h;
+      if (handle) {
+        drag.current = { mode: "crop-resize", handle, orig: cropRect };
+      } else if (insideExisting) {
         drag.current = { mode: "crop-move", start: p, orig: cropRect };
       } else {
         drag.current = { mode: "crop-draw", start: p };
@@ -210,13 +218,15 @@ export function AnnotationLayer({
       return;
     }
     if (d.mode === "crop-draw") {
+      const dw = Math.abs(p.x - d.start.x);
+      const dh = Math.abs(p.y - d.start.y);
+      // Ignore a click / tiny twitch: don't set a crop until the drag is meaningful, so a
+      // plain click commits nothing (endInteract sees no change → no phantom history).
+      if (dw < CROP_DRAW_MIN && dh < CROP_DRAW_MIN) return;
       const x = Math.min(d.start.x, p.x);
       const y = Math.min(d.start.y, p.y);
-      // Clamp so a pointer dragged past the edge (or a tiny drag) can't produce a crop
-      // outside [0,1] or below the minimum size.
-      scene.setCropLive(
-        clampCrop({ x, y, w: Math.abs(p.x - d.start.x), h: Math.abs(p.y - d.start.y) }),
-      );
+      // Clamp so a pointer dragged past the edge can't produce a crop outside [0,1].
+      scene.setCropLive(clampCrop({ x, y, w: dw, h: dh }));
       return;
     }
     if (d.mode === "draw-pen") {
@@ -271,13 +281,15 @@ export function AnnotationLayer({
     const d = drag.current;
     drag.current = null;
     if (!d) return;
-    if (
-      d.mode === "move" ||
-      d.mode === "resize" ||
-      d.mode === "crop-resize" ||
-      d.mode === "crop-move" ||
-      d.mode === "crop-draw"
-    ) {
+    if (d.mode === "crop-resize" || d.mode === "crop-move" || d.mode === "crop-draw") {
+      // A crop that ended up covering the whole image is "no crop" — normalize it back to
+      // undefined so it doesn't render through the windowed path or leave a phantom entry.
+      const c = sceneRef.current.crop;
+      if (c && isFullCrop(c)) scene.setCropLive(undefined);
+      scene.endInteract();
+      return;
+    }
+    if (d.mode === "move" || d.mode === "resize") {
       scene.endInteract();
       return;
     }

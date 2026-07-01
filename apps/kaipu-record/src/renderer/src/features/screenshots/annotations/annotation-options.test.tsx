@@ -138,7 +138,13 @@ describe("AnnotationOptions", () => {
     scene.crop = { x: 0.1, y: 0.1, w: 0.5, h: 0.5 };
     scene.setCrop = vi.fn();
     render(<AnnotationOptions tools={makeTools({ tool: "crop" })} scene={scene} />);
-    fireEvent.click(screen.getByRole("button", { name: "Reset crop" }));
+    fireEvent.click(screen.getByRole("button", { name: "Restablecer" }));
     expect(scene.setCrop).toHaveBeenCalledWith(undefined);
+  });
+
+  it("disables the reset control when there is no crop to reset", () => {
+    const scene = makeScene([], null); // crop is undefined
+    render(<AnnotationOptions tools={makeTools({ tool: "crop" })} scene={scene} />);
+    expect(screen.getByRole("button", { name: "Restablecer" })).toBeDisabled();
   });
 });
