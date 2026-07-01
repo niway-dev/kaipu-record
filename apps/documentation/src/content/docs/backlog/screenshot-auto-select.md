@@ -5,9 +5,11 @@ description: "After drawing a box/arrow/text/etc., auto-switch to the select too
 
 # Editor — auto-select after creating a shape
 
-> **Status: 🔵 Proposed.** Today, finishing a shape keeps the drawing tool active (so
-> you can draw several in a row). Requested: finish a shape → it becomes **selected**,
-> ready to move/resize — no need to grab it again.
+> **Status: 🟡 Phase 1 built locally** (on `feat/screenshot-editor-tools`). Finishing a
+> box / arrow / text / blur now **auto-switches to the select tool and selects the new
+> shape**, so it can be **moved** right away. The **pen is excluded** (it stays active for
+> scribbling several strokes). **Phase 2 — resize handles** (below) is still 🔵 proposed;
+> until it lands, a selected shape can be moved but not resized.
 
 ## The behavior (two references)
 
@@ -21,11 +23,11 @@ auto-selects so it can be **resized or at least moved** immediately.
 
 ## Current vs desired
 
-| | Now | Desired |
-| --- | --- | --- |
-| After a shape commits | stays in the tool (draw more) | switch to `select`, select the new shape |
-| The new shape | not selected | selected, showing handles |
-| Resize | ✗ (only move, via select-drag) | ✓ drag handles |
+|                       | Now                            | Desired                                  |
+| --------------------- | ------------------------------ | ---------------------------------------- |
+| After a shape commits | stays in the tool (draw more)  | switch to `select`, select the new shape |
+| The new shape         | not selected                   | selected, showing handles                |
+| Resize                | ✗ (only move, via select-drag) | ✓ drag handles                           |
 
 ## Two parts — very different cost
 
@@ -40,8 +42,8 @@ auto-selects so it can be **resized or at least moved** immediately.
    - text: a font-size handle (or corner scales `size`).
    - path: scale/translate all points within the bounding box (or skip resize for paths
      — move only).
-   Add a hit-test for handles (before the shape hit-test) and a `resize` drag mode. Commit
-   to history via `beginInteract`/`endInteract` like move.
+     Add a hit-test for handles (before the shape hit-test) and a `resize` drag mode. Commit
+     to history via `beginInteract`/`endInteract` like move.
 
 ## Tradeoff to decide
 

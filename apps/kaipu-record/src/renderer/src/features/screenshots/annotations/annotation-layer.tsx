@@ -203,7 +203,12 @@ export function AnnotationLayer({
       const seedless = draft.kind === "path" || draft.kind === "blur";
       const committed = seedless ? { ...draft, id } : { ...draft, id, seed };
       scene.addAnnotation(committed as Annotation);
-      // Stay in the tool so the user can draw several in a row.
+      // Auto-select the finished shape (Excalidraw-style) so it can be moved/resized
+      // right away — except the pen, which stays active for scribbling several strokes.
+      if (draft.kind !== "path") {
+        tools.setTool("select");
+        scene.select(id);
+      }
     }
     setDraft(null);
   };
@@ -224,10 +229,9 @@ export function AnnotationLayer({
         size: tools.textSize,
       });
       scene.select(id);
+      tools.setTool("select"); // auto-select the new label so it can be moved right away
     }
     setEditing(null);
-    // Stay in the text tool so the user can place several labels in a row
-    // (matches box/arrow); switching to select on cancel was the bug.
   };
 
   return (

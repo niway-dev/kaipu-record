@@ -108,6 +108,18 @@ describe("AnnotationLayer — text tool", () => {
     fireEvent.keyDown(input, { key: "Escape" });
     expect(scene.addAnnotation).not.toHaveBeenCalled();
   });
+
+  it("auto-selects after committing text (switches to the select tool)", () => {
+    const scene = makeScene([], null);
+    const tools = makeTools({ tool: "text" });
+    const { container } = render(<AnnotationLayer scene={scene} tools={tools} src="" />);
+    fireEvent.pointerDown(container.firstChild as HTMLElement, { clientX: 10, clientY: 10 });
+    const input = screen.getByPlaceholderText("Type…");
+    fireEvent.change(input, { target: { value: "hi" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(tools.setTool).toHaveBeenCalledWith("select");
+    expect(scene.select).toHaveBeenCalled();
+  });
 });
 
 describe("AnnotationLayer — pen tool", () => {
