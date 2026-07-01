@@ -101,4 +101,21 @@ describe("compositor buildSvg", () => {
     expect(svg.match(/href="data:image\/png/g)?.length).toBe(1);
     expect(svg.match(/<use href="#shot"/g)?.length).toBe(3); // base + 2 blurs
   });
+
+  it("windows the export to the crop at native pixels", () => {
+    // crop = middle half in each axis of a 1000x600 image
+    const cropped = { ...scene([]), crop: { x: 0.25, y: 0.25, w: 0.5, h: 0.5 } };
+    const svg = buildSvg(cropped, geom);
+    // frame = cw+2pad x ch+2pad = 500+80 x 300+80 = 580 x 380
+    expect(svg).toContain('width="580" height="380"');
+    // base is shifted left/up by crop offset (0.25*1000=250, 0.25*600=150), plus pad(40)
+    expect(svg).toContain('<use href="#shot" x="-210" y="-110"');
+  });
+
+  it("leaves the export unchanged when there is no crop", () => {
+    const svg = buildSvg(scene([]), geom);
+    // full frame 1080x680, base at (pad,pad)=(40,40)
+    expect(svg).toContain('width="1080" height="680"');
+    expect(svg).toContain('<use href="#shot" x="40" y="40"');
+  });
 });
