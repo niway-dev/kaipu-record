@@ -57,15 +57,27 @@ export type Annotation =
   | PathAnnotation
   | BlurAnnotation;
 
+/** A crop window over the base image, normalized 0–1. Undefined = full image. */
+export interface CropRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 /** The full editing document: beautify settings + the annotation layer. */
 export interface Scene {
   beautify: BeautifyState;
   annotations: Annotation[];
+  crop?: CropRect;
 }
 
 export function sameScene(a: Scene, b: Scene): boolean {
-  return a.beautify === b.beautify && a.annotations === b.annotations;
+  return a.beautify === b.beautify && a.annotations === b.annotations && a.crop === b.crop;
 }
+
+/** The default crop: the whole image (used as the starting rect for the crop tool). */
+export const FULL_CROP: CropRect = { x: 0, y: 0, w: 1, h: 1 };
 
 let counter = 0;
 /** A unique-enough id + stable jitter seed for a new annotation. */
