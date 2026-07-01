@@ -68,6 +68,7 @@ export default defineConfig({
             { slug: "backlog/screenshot-redaction" },
             { slug: "backlog/screenshot-crop" },
             { slug: "backlog/screenshot-freehand" },
+            { slug: "backlog/screenshot-auto-select" },
             { slug: "backlog/export-formats" },
           ],
         },
