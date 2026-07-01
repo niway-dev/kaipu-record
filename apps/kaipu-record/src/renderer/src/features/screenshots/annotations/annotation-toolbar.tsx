@@ -1,5 +1,5 @@
 import React from "react";
-import { ArrowUpRight, Droplet, MousePointer2, Pencil, Square, Type } from "lucide-react";
+import { ArrowUpRight, Crop, Droplet, MousePointer2, Pencil, Square, Type } from "lucide-react";
 import { ANNOTATION_TOOLS, type AnnotationTool } from "./tools";
 import type { AnnotationToolsController } from "./use-annotation-tools";
 import styles from "./annotation-toolbar.module.css";
@@ -11,6 +11,7 @@ const TOOL_META: Record<AnnotationTool, { label: string; Icon: typeof Square }> 
   arrow: { label: "Arrow", Icon: ArrowUpRight },
   text: { label: "Text", Icon: Type },
   blur: { label: "Blur", Icon: Droplet },
+  crop: { label: "Crop", Icon: Crop },
 };
 
 /**

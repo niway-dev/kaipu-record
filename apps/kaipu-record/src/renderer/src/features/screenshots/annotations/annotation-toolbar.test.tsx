@@ -29,6 +29,11 @@ describe("AnnotationToolbar", () => {
     expect(tools.setTool).toHaveBeenCalledWith("text");
   });
 
+  it("renders every tool including crop", () => {
+    render(<AnnotationToolbar tools={makeTools()} />);
+    expect(screen.getByRole("button", { name: "Crop" })).toBeInTheDocument();
+  });
+
   it("does not render the contextual controls (those live in the options panel)", () => {
     render(<AnnotationToolbar tools={makeTools({ tool: "box" })} />);
     expect(screen.queryByText("Color")).toBeNull();

@@ -5,7 +5,7 @@
  * accent colours intentionally mirror the brand accents).
  */
 
-export const ANNOTATION_TOOLS = ["select", "pen", "box", "arrow", "text", "blur"] as const;
+export const ANNOTATION_TOOLS = ["select", "pen", "box", "arrow", "text", "blur", "crop"] as const;
 export type AnnotationTool = (typeof ANNOTATION_TOOLS)[number];
 
 /**
