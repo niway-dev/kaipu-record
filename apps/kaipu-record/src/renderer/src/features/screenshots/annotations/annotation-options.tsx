@@ -59,8 +59,8 @@ function resolveControls(
           },
         };
   }
-  // Nothing selected + select/blur tool → nothing to set (blur has no colour/stroke).
-  if (tools.tool === "select" || tools.tool === "blur") return null;
+  // Nothing selected + select/blur/crop tool → nothing to set for colour/stroke.
+  if (tools.tool === "select" || tools.tool === "blur" || tools.tool === "crop") return null;
   // A drawing tool is active → set the defaults for the next shape.
   return tools.tool === "text"
     ? {
@@ -92,12 +92,28 @@ export function AnnotationOptions({
 }): React.JSX.Element | null {
   const selected = scene.annotations.find((a) => a.id === scene.selectedId) ?? null;
   const controls = resolveControls(tools, scene, selected);
+  const isCrop = tools.tool === "crop";
   // A selected blur has no colour/stroke controls, but should still be deletable —
-  // so the panel shows whenever there are controls OR something is selected.
-  if (!controls && !selected) return null;
+  // so the panel shows whenever there are controls OR something is selected OR crop is active.
+  if (!controls && !selected && !isCrop) return null;
 
   return (
     <div className={styles.panel}>
+      {isCrop && (
+        <>
+          <span className={styles.label}>Recorte</span>
+          <button
+            type="button"
+            aria-label="Reset crop"
+            title="Volver a la imagen completa"
+            className={styles.reset}
+            onClick={() => scene.setCrop(undefined)}
+          >
+            Restablecer
+          </button>
+        </>
+      )}
+
       {controls && (
         <>
           <span className={styles.label}>Color</span>

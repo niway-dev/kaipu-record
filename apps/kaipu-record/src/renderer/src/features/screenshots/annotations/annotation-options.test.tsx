@@ -132,4 +132,13 @@ describe("AnnotationOptions", () => {
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(scene.removeSelected).toHaveBeenCalled();
   });
+
+  it("shows a reset control for the crop tool and clears the crop on click", () => {
+    const scene = makeScene([], null);
+    scene.crop = { x: 0.1, y: 0.1, w: 0.5, h: 0.5 };
+    scene.setCrop = vi.fn();
+    render(<AnnotationOptions tools={makeTools({ tool: "crop" })} scene={scene} />);
+    fireEvent.click(screen.getByRole("button", { name: "Reset crop" }));
+    expect(scene.setCrop).toHaveBeenCalledWith(undefined);
+  });
 });

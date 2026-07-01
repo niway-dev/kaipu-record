@@ -123,3 +123,20 @@
   background: var(--danger, #ef4444);
   border-color: var(--danger, #ef4444);
 }
+
+/* ── Reset (crop) ────────────────────────────── */
+
+.reset {
+  height: 30px;
+  padding: 0 var(--space-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-modal);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+}
+
+.reset:hover {
+  border-color: var(--accent-primary);
+}
