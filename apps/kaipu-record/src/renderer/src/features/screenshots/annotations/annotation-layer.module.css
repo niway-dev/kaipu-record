@@ -35,3 +35,13 @@
   font-weight: 600;
   line-height: 1;
 }
+
+.cropDim {
+  fill: rgba(0, 0, 0, 0.5);
+}
+
+.cropRect {
+  fill: none;
+  stroke: var(--accent-primary);
+  stroke-width: 1.5;
+}
