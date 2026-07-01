@@ -5,11 +5,13 @@ description: "After drawing a box/arrow/text/etc., auto-switch to the select too
 
 # Editor — auto-select after creating a shape
 
-> **Status: 🟡 Phase 1 built locally** (on `feat/screenshot-editor-tools`). Finishing a
+> **Status: 🟢 Built locally** (on `feat/screenshot-editor-tools`). Finishing a
 > box / arrow / text / blur / **pen** now **auto-switches to the select tool and selects
 > the new shape**, so it can be **moved** right away — every tool behaves the same on
-> release. **Phase 2 — resize handles** (below) is still 🔵 proposed; until it lands, a
-> selected shape can be moved but not resized.
+> release. **Phase 2 — resize handles** is now done too: a selected shape shows drag
+> handles and can be **resized** (box/blur/path via an 8-handle bounding box, arrow via
+> its two endpoints, text via a corner that snaps to the nearest size level). The
+> geometry math lives in `handles.ts` (pure, unit-tested).
 
 ## The behavior (two references)
 
@@ -23,11 +25,11 @@ auto-selects so it can be **resized or at least moved** immediately.
 
 ## Current vs desired
 
-|                       | Now                            | Desired                                  |
-| --------------------- | ------------------------------ | ---------------------------------------- |
-| After a shape commits | stays in the tool (draw more)  | switch to `select`, select the new shape |
-| The new shape         | not selected                   | selected, showing handles                |
-| Resize                | ✗ (only move, via select-drag) | ✓ drag handles                           |
+|                       | Now                           | Desired                                  |
+| --------------------- | ----------------------------- | ---------------------------------------- |
+| After a shape commits | stays in the tool (draw more) | switch to `select`, select the new shape |
+| The new shape         | not selected                  | selected, showing handles                |
+| Resize                | ✓ drag handles                | ✓ drag handles                           |
 
 ## Two parts — very different cost
 
@@ -36,16 +38,20 @@ auto-selects so it can be **resized or at least moved** immediately.
    selected and movable (move already works). ~a few lines. Applies to **every tool
    including the pen** — a finished stroke auto-selects like the rest (draw another by
    re-picking the pen).
-2. **Resize handles (the real work).** Selection currently only supports **move**. To
-   resize, render 8 handles on the selected shape's bounding box and handle
-   pointer-drag on each to update the annotation's geometry:
-   - box/blur: adjust `x/y/w/h` per handle (corner + edge).
+2. **Resize handles (done).** A selected shape shows drag handles; grabbing one starts a
+   `resize` drag that updates the annotation's geometry:
+   - box/blur: 8 handles (4 corners + 4 edges) move the corresponding edges (`x/y/w/h`).
    - arrow: two endpoint handles (`x1,y1` / `x2,y2`).
-   - text: a font-size handle (or corner scales `size`).
-   - path: scale/translate all points within the bounding box (or skip resize for paths
-     — move only).
-     Add a hit-test for handles (before the shape hit-test) and a `resize` drag mode. Commit
-     to history via `beginInteract`/`endInteract` like move.
+   - path: the same 8 handles, scaling every point into the new bounding box (a flat
+     stroke keeps its coordinate on the zero axis, so it can't collapse to `NaN`).
+   - text: one corner handle that snaps to the nearest discrete size level (font-based,
+     so it scales uniformly rather than stretching).
+
+   The math is a pure module — `handles.ts` (`annotationBox` / `handlesFor` /
+   `resizeAnnotation` / `hitHandle`) — unit-tested in `handles.test.ts`. The layer
+   hit-tests handles **before** the shape hit-test (so grabbing a corner resizes instead
+   of moving) and commits to history via `beginInteract`/`endInteract` like move. Resize
+   runs from the **original** geometry each frame, so fixed edges don't drift.
 
 ## Tradeoff to decide
 
@@ -53,9 +59,8 @@ Auto-select **removes** the "draw several in a row" flow. Excalidraw keeps a **t
 toggle for repeated drawing; we could add a small lock later. For v1, matching Excalidraw
 (auto-select, no lock) is fine — drawing a second shape is one tool click away.
 
-## Suggested phasing
+## Phasing (both shipped)
 
-- **Phase 1:** auto-select on commit (cheap) → the shape is selected and movable. Ships the
-  core of the ask.
-- **Phase 2:** resize handles (box/blur/arrow first; text size; path move-only) — the
-  substantial part; do it as its own slice with tests for the geometry math.
+- **Phase 1:** auto-select on commit → the shape is selected and movable. ✅
+- **Phase 2:** resize handles (box/blur/arrow/path bbox + text size), geometry in a pure,
+  tested module. ✅

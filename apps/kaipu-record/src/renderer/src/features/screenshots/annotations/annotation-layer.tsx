@@ -3,6 +3,7 @@ import { BLUR_STD, HAND_FONT, STROKE_WIDTHS, TEXT_PX } from "./tools";
 import { roughArrow, roughRect } from "./rough";
 import { smoothPath } from "./smooth";
 import { nextAnnotationId, type Annotation } from "./scene";
+import { handleCursor, handlesFor, hitHandle, resizeAnnotation, type HandleId } from "./handles";
 import type { EditorScene } from "./use-editor-scene";
 import type { AnnotationToolsController } from "./use-annotation-tools";
 import styles from "./annotation-layer.module.css";
@@ -17,7 +18,12 @@ interface Pt {
 }
 type Drag =
   | { mode: "draw-box" | "draw-arrow" | "draw-pen" | "draw-blur"; start: Pt }
-  | { mode: "move"; id: string; start: Pt; orig: Annotation };
+  | { mode: "move"; id: string; start: Pt; orig: Annotation }
+  | { mode: "resize"; id: string; handle: HandleId; orig: Annotation };
+
+/** Side of a resize handle in px, and the click tolerance around it. */
+const HANDLE_PX = 10;
+const HANDLE_HIT_PX = 12;
 
 /**
  * Interactive annotation overlay. Annotations are stored in normalized (0–1)
@@ -99,6 +105,19 @@ export function AnnotationLayer({
   const onPointerDown = (e: React.PointerEvent): void => {
     const p = toNorm(e);
     if (tools.tool === "select") {
+      // A selected shape's resize handles take priority over the shape hit-test, so
+      // grabbing a corner resizes instead of moving.
+      const sel = scene.annotations.find((a) => a.id === scene.selectedId) ?? null;
+      if (sel) {
+        const tol = { x: HANDLE_HIT_PX / (size.w || 1), y: HANDLE_HIT_PX / (size.h || 1) };
+        const handle = hitHandle(handlesFor(sel, size), p, tol);
+        if (handle) {
+          scene.beginInteract();
+          drag.current = { mode: "resize", id: sel.id, handle, orig: sel };
+          ref.current?.setPointerCapture(e.pointerId);
+          return;
+        }
+      }
       const hit = hitTest(scene.annotations, p, size);
       scene.select(hit?.id ?? null);
       if (hit) {
@@ -139,6 +158,11 @@ export function AnnotationLayer({
     const p = toNorm(e);
     if (d.mode === "move") {
       scene.updateAnnotation(d.id, moveBy(d.orig, p.x - d.start.x, p.y - d.start.y));
+      return;
+    }
+    if (d.mode === "resize") {
+      // Resize from the ORIGINAL geometry each frame (fixed edges stay put, no drift).
+      scene.updateAnnotation(d.id, resizeAnnotation(d.orig, d.handle, p, size));
       return;
     }
     if (d.mode === "draw-pen") {
@@ -193,7 +217,7 @@ export function AnnotationLayer({
     const d = drag.current;
     drag.current = null;
     if (!d) return;
-    if (d.mode === "move") {
+    if (d.mode === "move" || d.mode === "resize") {
       scene.endInteract();
       return;
     }
@@ -216,7 +240,7 @@ export function AnnotationLayer({
   const onPointerAbort = (): void => {
     const d = drag.current;
     drag.current = null;
-    if (d?.mode === "move") scene.endInteract();
+    if (d?.mode === "move" || d?.mode === "resize") scene.endInteract();
     setDraft(null);
   };
 
@@ -241,6 +265,12 @@ export function AnnotationLayer({
     setEditing(null);
   };
 
+  // Resize handles show for the selected shape while the select tool is active.
+  const selectedAnnotation =
+    tools.tool === "select"
+      ? (scene.annotations.find((a) => a.id === scene.selectedId) ?? null)
+      : null;
+
   return (
     <div
       ref={ref}
@@ -257,6 +287,7 @@ export function AnnotationLayer({
           <Shape key={a.id} a={a} size={size} selected={scene.selectedId === a.id} src={src} />
         ))}
         {draft && <Shape a={draft} size={size} selected={false} src={src} />}
+        {selectedAnnotation && <Handles a={selectedAnnotation} size={size} />}
       </svg>
       {editing && (
         <input
@@ -292,6 +323,28 @@ export function AnnotationLayer({
         />
       )}
     </div>
+  );
+}
+
+/** Resize handles drawn over the selected shape. Hit-testing is geometric (in the
+ *  layer's onPointerDown), so these are purely visual + carry the resize cursor. */
+function Handles({ a, size }: { a: Annotation; size: Size }): React.JSX.Element {
+  const { w: W, h: H } = size;
+  return (
+    <g>
+      {handlesFor(a, size).map((h) => (
+        <rect
+          key={h.id}
+          className={styles.handle}
+          x={h.x * W - HANDLE_PX / 2}
+          y={h.y * H - HANDLE_PX / 2}
+          width={HANDLE_PX}
+          height={HANDLE_PX}
+          rx={2}
+          style={{ cursor: handleCursor(h.id) }}
+        />
+      ))}
+    </g>
   );
 }
 
