@@ -3,7 +3,7 @@ import { BLUR_STD, HAND_FONT, STROKE_WIDTHS, TEXT_PX } from "./tools";
 import { roughArrow, roughRect } from "./rough";
 import { smoothPath } from "./smooth";
 import { FULL_CROP, nextAnnotationId, type Annotation, type CropRect } from "./scene";
-import { cropHandles, hitCropHandle, moveCrop, resizeCrop } from "./crop";
+import { clampCrop, cropHandles, hitCropHandle, moveCrop, resizeCrop } from "./crop";
 import { handleCursor, handlesFor, hitHandle, resizeAnnotation, type HandleId } from "./handles";
 import type { EditorScene } from "./use-editor-scene";
 import type { AnnotationToolsController } from "./use-annotation-tools";
@@ -212,7 +212,11 @@ export function AnnotationLayer({
     if (d.mode === "crop-draw") {
       const x = Math.min(d.start.x, p.x);
       const y = Math.min(d.start.y, p.y);
-      scene.setCropLive({ x, y, w: Math.abs(p.x - d.start.x), h: Math.abs(p.y - d.start.y) });
+      // Clamp so a pointer dragged past the edge (or a tiny drag) can't produce a crop
+      // outside [0,1] or below the minimum size.
+      scene.setCropLive(
+        clampCrop({ x, y, w: Math.abs(p.x - d.start.x), h: Math.abs(p.y - d.start.y) }),
+      );
       return;
     }
     if (d.mode === "draw-pen") {
