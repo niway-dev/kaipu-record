@@ -204,11 +204,9 @@ export function AnnotationLayer({
       const committed = seedless ? { ...draft, id } : { ...draft, id, seed };
       scene.addAnnotation(committed as Annotation);
       // Auto-select the finished shape (Excalidraw-style) so it can be moved/resized
-      // right away — except the pen, which stays active for scribbling several strokes.
-      if (draft.kind !== "path") {
-        tools.setTool("select");
-        scene.select(id);
-      }
+      // right away — the pen included, so every tool behaves the same on release.
+      tools.setTool("select");
+      scene.select(id);
     }
     setDraft(null);
   };

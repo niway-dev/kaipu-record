@@ -6,10 +6,10 @@ description: "After drawing a box/arrow/text/etc., auto-switch to the select too
 # Editor — auto-select after creating a shape
 
 > **Status: 🟡 Phase 1 built locally** (on `feat/screenshot-editor-tools`). Finishing a
-> box / arrow / text / blur now **auto-switches to the select tool and selects the new
-> shape**, so it can be **moved** right away. The **pen is excluded** (it stays active for
-> scribbling several strokes). **Phase 2 — resize handles** (below) is still 🔵 proposed;
-> until it lands, a selected shape can be moved but not resized.
+> box / arrow / text / blur / **pen** now **auto-switches to the select tool and selects
+> the new shape**, so it can be **moved** right away — every tool behaves the same on
+> release. **Phase 2 — resize handles** (below) is still 🔵 proposed; until it lands, a
+> selected shape can be moved but not resized.
 
 ## The behavior (two references)
 
@@ -33,7 +33,9 @@ auto-selects so it can be **resized or at least moved** immediately.
 
 1. **Auto-select (cheap).** On commit (`onPointerUp` → `addAnnotation`, and `commitText`
    for text), also `tools.setTool("select")` + `scene.select(newId)`. The shape is then
-   selected and movable (move already works). ~a few lines.
+   selected and movable (move already works). ~a few lines. Applies to **every tool
+   including the pen** — a finished stroke auto-selects like the rest (draw another by
+   re-picking the pen).
 2. **Resize handles (the real work).** Selection currently only supports **move**. To
    resize, render 8 handles on the selected shape's bounding box and handle
    pointer-drag on each to update the annotation's geometry:
