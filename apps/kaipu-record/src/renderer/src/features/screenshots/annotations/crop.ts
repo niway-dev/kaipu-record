@@ -1,7 +1,8 @@
 /**
  * Pure crop-rect helpers. A crop is a normalized box; its editing (resize/move) reuses
  * the annotation resize geometry in `handles.ts` through a box adapter, so there's one
- * source of truth for handle math. All values are 0–1 of the base image.
+ * source of truth for handle math. All values are 0–1 of the beautified frame
+ * (background + padding + shot) — see `CropRect` in `scene.ts`.
  */
 
 import {
@@ -15,9 +16,9 @@ import {
 } from "./handles";
 import { FULL_CROP, type CropRect } from "./scene";
 
-const MIN = 0.02; // smallest crop side (2% of the image) so it can't collapse
+const MIN = 0.02; // smallest crop side (2% of the frame) so it can't collapse
 
-/** True when the crop covers (essentially) the whole image. */
+/** True when the crop covers (essentially) the whole frame. */
 export function isFullCrop(c: CropRect): boolean {
   const e = 0.001;
   return c.x <= e && c.y <= e && c.w >= 1 - e && c.h >= 1 - e;

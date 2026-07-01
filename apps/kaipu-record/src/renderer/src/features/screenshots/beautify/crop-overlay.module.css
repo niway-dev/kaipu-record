@@ -1,7 +1,9 @@
-.layer {
+/* The crop tool overlay: covers the whole beautify frame (bg + padding + shot). */
+.overlay {
   position: absolute;
   inset: 0;
   touch-action: none;
+  cursor: crosshair;
 }
 
 .svg {
@@ -10,11 +12,14 @@
   overflow: visible;
 }
 
-.selOutline {
+.dim {
+  fill: rgba(0, 0, 0, 0.5);
+}
+
+.rect {
   fill: none;
   stroke: var(--accent-primary);
-  stroke-width: 1;
-  stroke-dasharray: 4 4;
+  stroke-width: 1.5;
 }
 
 .handle {
@@ -22,16 +27,4 @@
   stroke: var(--accent-primary);
   stroke-width: 1.5;
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
-}
-
-.textInput {
-  position: absolute;
-  min-width: 60px;
-  padding: 2px 4px;
-  background: rgba(0, 0, 0, 0.04);
-  border: none;
-  outline: 1px dashed var(--accent-primary);
-  border-radius: 2px;
-  font-weight: 600;
-  line-height: 1;
 }

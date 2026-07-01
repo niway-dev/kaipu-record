@@ -2,8 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { BLUR_STD, HAND_FONT, STROKE_WIDTHS, TEXT_PX } from "./tools";
 import { roughArrow, roughRect } from "./rough";
 import { smoothPath } from "./smooth";
-import { FULL_CROP, nextAnnotationId, type Annotation, type CropRect } from "./scene";
-import { clampCrop, cropHandles, hitCropHandle, isFullCrop, moveCrop, resizeCrop } from "./crop";
+import { nextAnnotationId, type Annotation } from "./scene";
 import { handleCursor, handlesFor, hitHandle, resizeAnnotation, type HandleId } from "./handles";
 import type { EditorScene } from "./use-editor-scene";
 import type { AnnotationToolsController } from "./use-annotation-tools";
@@ -20,17 +19,11 @@ interface Pt {
 type Drag =
   | { mode: "draw-box" | "draw-arrow" | "draw-pen" | "draw-blur"; start: Pt }
   | { mode: "move"; id: string; start: Pt; orig: Annotation }
-  | { mode: "resize"; id: string; handle: HandleId; orig: Annotation }
-  | { mode: "crop-draw"; start: Pt }
-  | { mode: "crop-move"; start: Pt; orig: CropRect }
-  | { mode: "crop-resize"; handle: HandleId; orig: CropRect };
+  | { mode: "resize"; id: string; handle: HandleId; orig: Annotation };
 
 /** Side of a resize handle in px, and the click tolerance around it. */
 const HANDLE_PX = 10;
 const HANDLE_HIT_PX = 12;
-/** Minimum drag (normalized) before a crop-draw starts a rect — below this a click/twitch
- *  commits nothing. */
-const CROP_DRAW_MIN = 0.01;
 
 /**
  * Interactive annotation overlay. Annotations are stored in normalized (0–1)
@@ -65,13 +58,6 @@ export function AnnotationLayer({
   // re-subscribing on every render (scene is a new object each render).
   const sceneRef = useRef(scene);
   sceneRef.current = scene;
-  // Mirror the active tool into a ref so the window keydown handler reads fresh
-  // state without re-subscribing on every render.
-  const toolRef = useRef(tools.tool);
-  toolRef.current = tools.tool;
-
-  // The crop rect being edited = the scene crop, or the full image if none yet.
-  const cropRect = scene.crop ?? FULL_CROP;
 
   useEffect(() => {
     const el = ref.current;
@@ -89,14 +75,6 @@ export function AnnotationLayer({
       // modal is open — only when the canvas owns the key.
       if (isEditingText(e.target) || document.querySelector('[aria-modal="true"]')) return;
       const scn = sceneRef.current;
-      // Esc resets the crop to full while the crop tool is active. Abort any in-progress
-      // crop drag first so the trailing pointerup can't commit a second history entry.
-      if (e.key === "Escape" && toolRef.current === "crop" && scn.crop) {
-        e.preventDefault();
-        if (drag.current?.mode.startsWith("crop-")) drag.current = null;
-        scn.setCrop(undefined);
-        return;
-      }
       if ((e.key === "Delete" || e.key === "Backspace") && scn.selectedId) {
         e.preventDefault();
         scn.removeSelected();
@@ -126,28 +104,6 @@ export function AnnotationLayer({
 
   const onPointerDown = (e: React.PointerEvent): void => {
     const p = toNorm(e);
-    if (tools.tool === "crop") {
-      const tol = { x: HANDLE_HIT_PX / (size.w || 1), y: HANDLE_HIT_PX / (size.h || 1) };
-      const handle = hitCropHandle(cropRect, p, tol, size);
-      scene.beginInteract();
-      // Move only an EXISTING sub-crop; with no crop yet, `cropRect` is FULL_CROP (covers
-      // everything), so an interior press must draw a fresh rect, not no-op move it.
-      const insideExisting =
-        scene.crop != null &&
-        p.x >= cropRect.x &&
-        p.x <= cropRect.x + cropRect.w &&
-        p.y >= cropRect.y &&
-        p.y <= cropRect.y + cropRect.h;
-      if (handle) {
-        drag.current = { mode: "crop-resize", handle, orig: cropRect };
-      } else if (insideExisting) {
-        drag.current = { mode: "crop-move", start: p, orig: cropRect };
-      } else {
-        drag.current = { mode: "crop-draw", start: p };
-      }
-      ref.current?.setPointerCapture(e.pointerId);
-      return;
-    }
     if (tools.tool === "select") {
       // A selected shape's resize handles take priority over the shape hit-test, so
       // grabbing a corner resizes instead of moving.
@@ -209,26 +165,6 @@ export function AnnotationLayer({
       scene.updateAnnotation(d.id, resizeAnnotation(d.orig, d.handle, p, size));
       return;
     }
-    if (d.mode === "crop-resize") {
-      scene.setCropLive(resizeCrop(d.orig, d.handle, p, size));
-      return;
-    }
-    if (d.mode === "crop-move") {
-      scene.setCropLive(moveCrop(d.orig, p.x - d.start.x, p.y - d.start.y));
-      return;
-    }
-    if (d.mode === "crop-draw") {
-      const dw = Math.abs(p.x - d.start.x);
-      const dh = Math.abs(p.y - d.start.y);
-      // Ignore a click / tiny twitch: don't set a crop until the drag is meaningful, so a
-      // plain click commits nothing (endInteract sees no change → no phantom history).
-      if (dw < CROP_DRAW_MIN && dh < CROP_DRAW_MIN) return;
-      const x = Math.min(d.start.x, p.x);
-      const y = Math.min(d.start.y, p.y);
-      // Clamp so a pointer dragged past the edge can't produce a crop outside [0,1].
-      scene.setCropLive(clampCrop({ x, y, w: dw, h: dh }));
-      return;
-    }
     if (d.mode === "draw-pen") {
       setDraft((prev) => {
         if (!prev || prev.kind !== "path") return prev;
@@ -281,14 +217,6 @@ export function AnnotationLayer({
     const d = drag.current;
     drag.current = null;
     if (!d) return;
-    if (d.mode === "crop-resize" || d.mode === "crop-move" || d.mode === "crop-draw") {
-      // A crop that ended up covering the whole image is "no crop" — normalize it back to
-      // undefined so it doesn't render through the windowed path or leave a phantom entry.
-      const c = sceneRef.current.crop;
-      if (c && isFullCrop(c)) scene.setCropLive(undefined);
-      scene.endInteract();
-      return;
-    }
     if (d.mode === "move" || d.mode === "resize") {
       scene.endInteract();
       return;
@@ -312,8 +240,7 @@ export function AnnotationLayer({
   const onPointerAbort = (): void => {
     const d = drag.current;
     drag.current = null;
-    if (d?.mode === "move" || d?.mode === "resize" || d?.mode?.startsWith("crop-"))
-      scene.endInteract();
+    if (d?.mode === "move" || d?.mode === "resize") scene.endInteract();
     setDraft(null);
   };
 
@@ -361,7 +288,6 @@ export function AnnotationLayer({
         ))}
         {draft && <Shape a={draft} size={size} selected={false} src={src} />}
         {selectedAnnotation && <Handles a={selectedAnnotation} size={size} />}
-        {tools.tool === "crop" && <CropOverlay crop={cropRect} size={size} />}
       </svg>
       {editing && (
         <input
@@ -397,48 +323,6 @@ export function AnnotationLayer({
         />
       )}
     </div>
-  );
-}
-
-/** Dim mask outside the crop rect + the rect outline + 8 resize handles (crop tool). */
-function CropOverlay({ crop, size }: { crop: CropRect; size: Size }): React.JSX.Element {
-  const { w: W, h: H } = size;
-  const x = crop.x * W;
-  const y = crop.y * H;
-  const w = crop.w * W;
-  const h = crop.h * H;
-  return (
-    <g>
-      <rect className={styles.cropDim} x={0} y={0} width={W} height={y} />
-      <rect
-        className={styles.cropDim}
-        x={0}
-        y={y + h}
-        width={W}
-        height={Math.max(0, H - (y + h))}
-      />
-      <rect className={styles.cropDim} x={0} y={y} width={x} height={h} />
-      <rect
-        className={styles.cropDim}
-        x={x + w}
-        y={y}
-        width={Math.max(0, W - (x + w))}
-        height={h}
-      />
-      <rect className={styles.cropRect} x={x} y={y} width={w} height={h} />
-      {cropHandles(crop, size).map((hd) => (
-        <rect
-          key={hd.id}
-          className={styles.handle}
-          x={hd.x * W - HANDLE_PX / 2}
-          y={hd.y * H - HANDLE_PX / 2}
-          width={HANDLE_PX}
-          height={HANDLE_PX}
-          rx={2}
-          style={{ cursor: handleCursor(hd.id) }}
-        />
-      ))}
-    </g>
   );
 }
 
