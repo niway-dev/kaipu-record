@@ -8,6 +8,7 @@
  * and keeps its aspect ratio.
  */
 .frame {
+  position: relative; /* anchors the frame-level crop overlay (inset:0 → whole frame) */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -45,30 +46,12 @@
     box-shadow 0.12s ease;
 }
 
-/* Crop windowing: the viewport clips to the crop's aspect; the plane holds the full
- * image (and the annotation overlay) scaled + offset so only the crop shows. The
- * annotation layer measures the plane, so its coordinates stay full-image-normalized. */
+/* Crop windowing: the viewport clips to the crop window (in natural frame px); the frame
+ * inside is rendered at its fixed natural size and panned via transform so only the crop
+ * sub-rect shows. A pure pan (no re-layout) keeps the preview pixel-accurate to the export
+ * and keeps the shot's layout size — hence the export scale — stable when cropped. */
 .viewport {
   position: relative;
   overflow: hidden;
-  max-width: 100%;
-  max-height: 100%;
-  min-width: 0;
-  min-height: 0;
-}
-
-.plane {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  /* Allow the flex item to shrink below the image's intrinsic size (default min-width:auto
-   * would keep a large shot from fitting the editor canvas in the non-windowed path). */
-  min-width: 0;
-  min-height: 0;
-}
-
-/* In the windowed case the img fills the plane; in the full case it keeps max-100% fit. */
-.viewport .plane .shot {
-  width: 100%;
-  height: 100%;
+  transform-origin: top left;
 }

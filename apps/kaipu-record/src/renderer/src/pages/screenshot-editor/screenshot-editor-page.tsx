@@ -5,6 +5,7 @@ import { useImageSource, type ImageSource } from "@renderer/features/screenshots
 import {
   BeautifiedFrame,
   BeautifyPanel,
+  CropOverlay,
   DEFAULT_BEAUTIFY,
   FLAT_BEAUTIFY,
 } from "@renderer/features/screenshots/beautify";
@@ -206,6 +207,7 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
               beautify={scene.beautify.state}
               crop={tools.tool === "crop" ? undefined : scene.crop}
               overlay={<AnnotationLayer scene={scene} tools={tools} src={image.displayUrl} />}
+              frameOverlay={tools.tool === "crop" ? <CropOverlay scene={scene} /> : undefined}
               imgRef={imgRef}
               zoom={zoom}
               onImageLoad={() => setImageReady(true)}
