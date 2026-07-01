@@ -213,6 +213,15 @@ export function AnnotationLayer({
     setDraft(null);
   };
 
+  // A pointer gesture can end without a pointerup (system gesture, capture stolen).
+  // Abort cleanly so a half-drawn draft or an open move-interaction isn't stranded.
+  const onPointerAbort = (): void => {
+    const d = drag.current;
+    drag.current = null;
+    if (d?.mode === "move") scene.endInteract();
+    setDraft(null);
+  };
+
   const commitText = (value: string): void => {
     if (editDone.current) return; // a trailing unmount-blur after Enter/Escape
     editDone.current = true;
@@ -242,6 +251,8 @@ export function AnnotationLayer({
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
+      onPointerCancel={onPointerAbort}
+      onLostPointerCapture={onPointerAbort}
     >
       <svg className={styles.svg} width={size.w} height={size.h}>
         {scene.annotations.map((a) => (
@@ -306,13 +317,23 @@ function Shape({
     const bh = a.h * H;
     // Re-draw a blurred copy of the shot, clipped to the rect — sits over the sharp
     // image so the region reads as blurred. Baked into the export (see compositor).
+    // The filter region is bounded to the rect + margin, so the blur only processes
+    // those pixels (not the whole shot) and doesn't fade at the rect's edge.
+    const m = BLUR_STD * 3;
     return (
       <g>
         <defs>
           <clipPath id={`bclip-${a.id}`}>
             <rect x={bx} y={by} width={bw} height={bh} />
           </clipPath>
-          <filter id={`bfilter-${a.id}`}>
+          <filter
+            id={`bfilter-${a.id}`}
+            filterUnits="userSpaceOnUse"
+            x={bx - m}
+            y={by - m}
+            width={bw + 2 * m}
+            height={bh + 2 * m}
+          >
             <feGaussianBlur stdDeviation={BLUR_STD} />
           </filter>
         </defs>
@@ -450,7 +471,7 @@ function isEditingText(target: EventTarget | null): boolean {
 function isBigEnough(a: Annotation): boolean {
   if (a.kind === "box" || a.kind === "blur") return a.w > 0.01 && a.h > 0.01;
   if (a.kind === "arrow") return Math.hypot(a.x2 - a.x1, a.y2 - a.y1) > 0.02;
-  if (a.kind === "path") return a.points.length > 1;
+  if (a.kind === "path") return a.points.length >= 1;
   return true;
 }
 

@@ -13,6 +13,14 @@ description: "A redaction tool for the screenshot editor: cover or scribble over
 > (secure by flattening). Fixed strong radius (`BLUR_STD`), no options panel — WhatsApp
 > has no strength control either. Tested (export bakes the blur; the panel stays empty
 > for the tool). **Pixelate (mosaic)** and a strength slider remain future enhancements.
+>
+> **Post-review hardening (code review, this branch):** the export now embeds the base
+> image **once** (an SVG `<use href="#shot">` instead of re-embedding the data URL per
+> blur — multiple blurs no longer bloat the SVG or fail rasterization); the annotation
+> group is **clipped to the rounded frame** so a blur near a corner can't spill outside;
+> and each blur's `feGaussianBlur` runs in a **bounded filter region** (the rect + margin
+> in `userSpaceOnUse`) instead of processing the whole image. The blur being **reversible**
+> is still the open security gap → the **mosaic** below is the documented secure follow-up.
 
 ## Why a blur box (not a black box)
 

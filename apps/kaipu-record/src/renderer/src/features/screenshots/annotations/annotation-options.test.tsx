@@ -59,6 +59,7 @@ const text: Annotation = {
   color: ANNOTATION_COLORS[0].value,
   size: 1,
 };
+const blur: Annotation = { id: "bl1", kind: "blur", x: 0.1, y: 0.1, w: 0.2, h: 0.2 };
 
 describe("AnnotationOptions", () => {
   it("renders nothing with the select tool and no selection", () => {
@@ -107,5 +108,25 @@ describe("AnnotationOptions", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Size L" }));
     expect(scene.commitAnnotation).toHaveBeenCalledWith("t1", { size: 3 });
+  });
+
+  it("offers a delete button for a selected shape and removes it on click", () => {
+    const scene = makeScene([box], "b1");
+    render(<AnnotationOptions tools={makeTools()} scene={scene} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(scene.removeSelected).toHaveBeenCalled();
+  });
+
+  it("shows a delete button for a selected blur even though it has no colour/stroke", () => {
+    const scene = makeScene([blur], "bl1");
+    render(<AnnotationOptions tools={makeTools()} scene={scene} />);
+
+    // No colour/stroke controls for a blur…
+    expect(screen.queryByText("Color")).toBeNull();
+    expect(screen.queryByText("Stroke")).toBeNull();
+    // …but it can still be deleted.
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(scene.removeSelected).toHaveBeenCalled();
   });
 });

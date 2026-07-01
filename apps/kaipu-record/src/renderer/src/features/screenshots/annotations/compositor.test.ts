@@ -85,7 +85,20 @@ describe("compositor buildSvg", () => {
     const annotations: Annotation[] = [{ id: "x", kind: "blur", x: 0.1, y: 0.1, w: 0.3, h: 0.2 }];
     const svg = buildSvg(scene(annotations), geom);
     expect(svg).toContain("<feGaussianBlur");
-    expect(svg).toMatch(/<image href="data:image\/png;base64,AAAA"[^>]*filter="url\(#bfilter-x\)"/);
+    // The base data URL is embedded once (as #shot); the blur references it via <use>.
+    expect(svg).toContain('<image id="shot" href="data:image/png;base64,AAAA"');
+    expect(svg).toMatch(/<use href="#shot"[^>]*filter="url\(#bfilter-x\)"/);
     expect(svg).not.toContain("NaN");
+  });
+
+  it("embeds the base image only once even with multiple blur boxes", () => {
+    const annotations: Annotation[] = [
+      { id: "a", kind: "blur", x: 0.1, y: 0.1, w: 0.2, h: 0.2 },
+      { id: "b", kind: "blur", x: 0.5, y: 0.5, w: 0.2, h: 0.2 },
+    ];
+    const svg = buildSvg(scene(annotations), geom);
+    // The (potentially huge) data URL appears once, not once per blur.
+    expect(svg.match(/href="data:image\/png/g)?.length).toBe(1);
+    expect(svg.match(/<use href="#shot"/g)?.length).toBe(3); // base + 2 blurs
   });
 });

@@ -154,7 +154,7 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
   return (
     <div className={styles.editor}>
       <div className={styles.toolbar}>
-        <AnnotationToolbar tools={tools} />
+        <AnnotationToolbar tools={tools} onPick={() => scene.select(null)} />
         <div className={styles.actions}>
           <button
             type="button"

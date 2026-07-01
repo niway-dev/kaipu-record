@@ -20,8 +20,12 @@ const TOOL_META: Record<AnnotationTool, { label: string; Icon: typeof Square }> 
  */
 export function AnnotationToolbar({
   tools,
+  onPick,
 }: {
   tools: AnnotationToolsController;
+  /** Fired when the user manually picks a tool — used to deselect the current shape
+   *  so the freshly-picked tool starts clean (auto-select otherwise leaves one selected). */
+  onPick?: () => void;
 }): React.JSX.Element {
   return (
     <div className={styles.toolGroup}>
@@ -34,7 +38,10 @@ export function AnnotationToolbar({
             title={label}
             aria-label={label}
             className={`${styles.tool} ${tools.tool === t ? styles.toolActive : ""}`}
-            onClick={() => tools.setTool(t)}
+            onClick={() => {
+              tools.setTool(t);
+              onPick?.();
+            }}
           >
             <Icon size={19} />
           </button>

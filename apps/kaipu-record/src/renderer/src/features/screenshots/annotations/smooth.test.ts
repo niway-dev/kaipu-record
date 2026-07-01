@@ -11,11 +11,21 @@ describe("smoothPath", () => {
   });
 
   it("draws a straight line for two points", () => {
-    expect(smoothPath([{ x: 0, y: 0 }, { x: 10, y: 4 }])).toBe("M 0 0 L 10 4");
+    expect(
+      smoothPath([
+        { x: 0, y: 0 },
+        { x: 10, y: 4 },
+      ]),
+    ).toBe("M 0 0 L 10 4");
   });
 
   it("emits cubic Béziers for 3+ points and never NaN", () => {
-    const d = smoothPath([{ x: 0, y: 0 }, { x: 5, y: 8 }, { x: 12, y: 3 }, { x: 18, y: 9 }]);
+    const d = smoothPath([
+      { x: 0, y: 0 },
+      { x: 5, y: 8 },
+      { x: 12, y: 3 },
+      { x: 18, y: 9 },
+    ]);
     expect(d.startsWith("M 0 0")).toBe(true);
     expect(d).toContain(" C ");
     expect(d).not.toContain("NaN");
