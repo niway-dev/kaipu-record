@@ -1,6 +1,7 @@
 import { backgroundPaint, frameRadius } from "../beautify/backgrounds";
 import { roughArrow, roughRect } from "./rough";
-import { HAND_FONT, STROKE_WIDTHS, TEXT_PX } from "./tools";
+import { smoothPath } from "./smooth";
+import { BLUR_STD, HAND_FONT, STROKE_WIDTHS, TEXT_PX } from "./tools";
 import type { Annotation, Scene } from "./scene";
 
 /**
@@ -76,6 +77,17 @@ export function buildSvg(scene: Scene, g: Geom): string {
   defs.push(
     `<clipPath id="rc"><rect x="${g.pad}" y="${g.pad}" width="${g.naturalW}" height="${g.naturalH}" rx="${g.radius}"/></clipPath>`,
   );
+  // The base image, defined ONCE and referenced by <use> for the base + every blur box,
+  // so a redacted export doesn't re-embed the (huge) data URL per blur (which blew up
+  // the SVG and could fail rasterization with a few blurs).
+  defs.push(
+    `<image id="shot" href="${g.href}" width="${g.naturalW}" height="${g.naturalH}" preserveAspectRatio="none"/>`,
+  );
+  // Rounded-shot clip in the annotation group's local coords, so a blur near a rounded
+  // corner can't spill past the frame.
+  defs.push(
+    `<clipPath id="rcLocal"><rect x="0" y="0" width="${g.naturalW}" height="${g.naturalH}" rx="${g.radius}"/></clipPath>`,
+  );
 
   // Round the outer frame to match the live preview (BeautifiedFrame applies
   // frameRadius to the bg div) — a square rect here made exports differ.
@@ -88,8 +100,8 @@ export function buildSvg(scene: Scene, g: Geom): string {
     sv > 0
       ? `<rect x="${g.pad}" y="${g.pad}" width="${g.naturalW}" height="${g.naturalH}" rx="${g.radius}" fill="#000" filter="url(#sh)"/>`
       : "";
-  const image = `<image href="${g.href}" x="${g.pad}" y="${g.pad}" width="${g.naturalW}" height="${g.naturalH}" clip-path="url(#rc)"/>`;
-  const anno = `<g transform="translate(${g.pad},${g.pad})">${scene.annotations
+  const image = `<use href="#shot" x="${g.pad}" y="${g.pad}" clip-path="url(#rc)"/>`;
+  const anno = `<g transform="translate(${g.pad},${g.pad})" clip-path="url(#rcLocal)">${scene.annotations
     .map((a) => annotationSvg(a, g.naturalW, g.naturalH, g.scale))
     .join("")}</g>`;
 
@@ -97,6 +109,22 @@ export function buildSvg(scene: Scene, g: Geom): string {
 }
 
 function annotationSvg(a: Annotation, W: number, H: number, scale: number): string {
+  if (a.kind === "blur") {
+    // Bake the redaction: a blurred, clipped copy of the shared #shot image over the
+    // rect. The filter region is the rect + margin, so it only processes those pixels
+    // (not the whole image) and samples neighbours so the blur doesn't fade at the edge.
+    const std = BLUR_STD * scale;
+    const bx = a.x * W;
+    const by = a.y * H;
+    const bw = a.w * W;
+    const bh = a.h * H;
+    const m = std * 3;
+    return (
+      `<defs><clipPath id="bclip-${a.id}"><rect x="${bx}" y="${by}" width="${bw}" height="${bh}"/></clipPath>` +
+      `<filter id="bfilter-${a.id}" filterUnits="userSpaceOnUse" x="${bx - m}" y="${by - m}" width="${bw + 2 * m}" height="${bh + 2 * m}"><feGaussianBlur stdDeviation="${std}"/></filter></defs>` +
+      `<use href="#shot" clip-path="url(#bclip-${a.id})" filter="url(#bfilter-${a.id})"/>`
+    );
+  }
   if (a.kind === "box") {
     const bw = a.w * W;
     const bh = a.h * H;
@@ -121,6 +149,11 @@ function annotationSvg(a: Annotation, W: number, H: number, scale: number): stri
       `<path d="${roughArrow(x1, y1, x2, y2, a.seed)}" fill="none" stroke="${a.color}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/>` +
       `<path d="${roughArrow(x1, y1, x2, y2, a.seed + 19)}" fill="none" stroke="${a.color}" stroke-width="${sw * 0.7}" stroke-linecap="round" stroke-linejoin="round" opacity="0.5"/>`
     );
+  }
+  if (a.kind === "path") {
+    const sw = STROKE_WIDTHS[a.stroke] * scale;
+    const d = smoothPath(a.points.map((pt) => ({ x: pt.x * W, y: pt.y * H })));
+    return `<path d="${d}" fill="none" stroke="${a.color}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/>`;
   }
   const fs = TEXT_PX[a.size] * scale;
   return `<text x="${a.x * W}" y="${a.y * H}" fill="${a.color}" font-family="${HAND_FONT}" font-size="${fs}" font-weight="600" dominant-baseline="hanging">${escapeXml(a.text)}</text>`;

@@ -32,7 +32,30 @@ export interface TextAnnotation {
   color: string;
   size: number;
 }
-export type Annotation = BoxAnnotation | ArrowAnnotation | TextAnnotation;
+/** A freehand pen stroke: the user's captured path, smoothed at render time. */
+export interface PathAnnotation {
+  id: string;
+  kind: "path";
+  /** Normalized (0–1) points in capture order. */
+  points: { x: number; y: number }[];
+  color: string;
+  stroke: number;
+}
+/** A redaction box: the base image under this rect is blurred (baked into the export). */
+export interface BlurAnnotation {
+  id: string;
+  kind: "blur";
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+export type Annotation =
+  | BoxAnnotation
+  | ArrowAnnotation
+  | TextAnnotation
+  | PathAnnotation
+  | BlurAnnotation;
 
 /** The full editing document: beautify settings + the annotation layer. */
 export interface Scene {

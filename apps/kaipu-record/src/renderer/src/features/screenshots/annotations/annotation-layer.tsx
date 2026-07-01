@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
-import { HAND_FONT, STROKE_WIDTHS, TEXT_PX } from "./tools";
+import { BLUR_STD, HAND_FONT, STROKE_WIDTHS, TEXT_PX } from "./tools";
 import { roughArrow, roughRect } from "./rough";
+import { smoothPath } from "./smooth";
 import { nextAnnotationId, type Annotation } from "./scene";
+import { handleCursor, handlesFor, hitHandle, resizeAnnotation, type HandleId } from "./handles";
 import type { EditorScene } from "./use-editor-scene";
 import type { AnnotationToolsController } from "./use-annotation-tools";
 import styles from "./annotation-layer.module.css";
@@ -15,8 +17,13 @@ interface Pt {
   y: number;
 }
 type Drag =
-  | { mode: "draw-box" | "draw-arrow"; start: Pt }
-  | { mode: "move"; id: string; start: Pt; orig: Annotation };
+  | { mode: "draw-box" | "draw-arrow" | "draw-pen" | "draw-blur"; start: Pt }
+  | { mode: "move"; id: string; start: Pt; orig: Annotation }
+  | { mode: "resize"; id: string; handle: HandleId; orig: Annotation };
+
+/** Side of a resize handle in px, and the click tolerance around it. */
+const HANDLE_PX = 10;
+const HANDLE_HIT_PX = 12;
 
 /**
  * Interactive annotation overlay. Annotations are stored in normalized (0–1)
@@ -27,9 +34,12 @@ type Drag =
 export function AnnotationLayer({
   scene,
   tools,
+  src,
 }: {
   scene: EditorScene;
   tools: AnnotationToolsController;
+  /** The shot's display URL — a blur box re-draws a blurred copy of it under the rect. */
+  src: string;
 }): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<Size>({ w: 0, h: 0 });
@@ -95,6 +105,19 @@ export function AnnotationLayer({
   const onPointerDown = (e: React.PointerEvent): void => {
     const p = toNorm(e);
     if (tools.tool === "select") {
+      // A selected shape's resize handles take priority over the shape hit-test, so
+      // grabbing a corner resizes instead of moving.
+      const sel = scene.annotations.find((a) => a.id === scene.selectedId) ?? null;
+      if (sel) {
+        const tol = { x: HANDLE_HIT_PX / (size.w || 1), y: HANDLE_HIT_PX / (size.h || 1) };
+        const handle = hitHandle(handlesFor(sel, size), p, tol);
+        if (handle) {
+          scene.beginInteract();
+          drag.current = { mode: "resize", id: sel.id, handle, orig: sel };
+          ref.current?.setPointerCapture(e.pointerId);
+          return;
+        }
+      }
       const hit = hitTest(scene.annotations, p, size);
       scene.select(hit?.id ?? null);
       if (hit) {
@@ -111,7 +134,21 @@ export function AnnotationLayer({
       setEditing({ x: p.x, y: p.y });
       return;
     }
-    drag.current = { mode: tools.tool === "box" ? "draw-box" : "draw-arrow", start: p };
+    if (tools.tool === "pen") {
+      drag.current = { mode: "draw-pen", start: p };
+      setDraft({
+        id: "draft",
+        kind: "path",
+        points: [p],
+        color: tools.color,
+        stroke: tools.stroke,
+      });
+      (e.target as Element).setPointerCapture?.(e.pointerId);
+      return;
+    }
+    const mode =
+      tools.tool === "box" ? "draw-box" : tools.tool === "blur" ? "draw-blur" : "draw-arrow";
+    drag.current = { mode, start: p };
     (e.target as Element).setPointerCapture?.(e.pointerId);
   };
 
@@ -121,6 +158,32 @@ export function AnnotationLayer({
     const p = toNorm(e);
     if (d.mode === "move") {
       scene.updateAnnotation(d.id, moveBy(d.orig, p.x - d.start.x, p.y - d.start.y));
+      return;
+    }
+    if (d.mode === "resize") {
+      // Resize from the ORIGINAL geometry each frame (fixed edges stay put, no drift).
+      scene.updateAnnotation(d.id, resizeAnnotation(d.orig, d.handle, p, size));
+      return;
+    }
+    if (d.mode === "draw-pen") {
+      setDraft((prev) => {
+        if (!prev || prev.kind !== "path") return prev;
+        const last = prev.points[prev.points.length - 1];
+        // Throttle: drop points too close to the last so the path stays light + smooth.
+        if (last && Math.hypot(p.x - last.x, p.y - last.y) < 0.004) return prev;
+        return { ...prev, points: [...prev.points, p] };
+      });
+      return;
+    }
+    if (d.mode === "draw-blur") {
+      setDraft({
+        id: "draft",
+        kind: "blur",
+        x: Math.min(d.start.x, p.x),
+        y: Math.min(d.start.y, p.y),
+        w: Math.abs(p.x - d.start.x),
+        h: Math.abs(p.y - d.start.y),
+      });
       return;
     }
     if (d.mode === "draw-box") {
@@ -154,15 +217,30 @@ export function AnnotationLayer({
     const d = drag.current;
     drag.current = null;
     if (!d) return;
-    if (d.mode === "move") {
+    if (d.mode === "move" || d.mode === "resize") {
       scene.endInteract();
       return;
     }
     if (draft && isBigEnough(draft)) {
       const { id, seed } = nextAnnotationId();
-      scene.addAnnotation({ ...draft, id, seed } as Annotation);
-      // Stay in the box/arrow tool so the user can draw several in a row.
+      // Paths/blurs carry no rough jitter, so they need no seed.
+      const seedless = draft.kind === "path" || draft.kind === "blur";
+      const committed = seedless ? { ...draft, id } : { ...draft, id, seed };
+      scene.addAnnotation(committed as Annotation);
+      // Auto-select the finished shape (Excalidraw-style) so it can be moved/resized
+      // right away — the pen included, so every tool behaves the same on release.
+      tools.setTool("select");
+      scene.select(id);
     }
+    setDraft(null);
+  };
+
+  // A pointer gesture can end without a pointerup (system gesture, capture stolen).
+  // Abort cleanly so a half-drawn draft or an open move-interaction isn't stranded.
+  const onPointerAbort = (): void => {
+    const d = drag.current;
+    drag.current = null;
+    if (d?.mode === "move" || d?.mode === "resize") scene.endInteract();
     setDraft(null);
   };
 
@@ -182,11 +260,16 @@ export function AnnotationLayer({
         size: tools.textSize,
       });
       scene.select(id);
+      tools.setTool("select"); // auto-select the new label so it can be moved right away
     }
     setEditing(null);
-    // Stay in the text tool so the user can place several labels in a row
-    // (matches box/arrow); switching to select on cancel was the bug.
   };
+
+  // Resize handles show for the selected shape while the select tool is active.
+  const selectedAnnotation =
+    tools.tool === "select"
+      ? (scene.annotations.find((a) => a.id === scene.selectedId) ?? null)
+      : null;
 
   return (
     <div
@@ -196,12 +279,15 @@ export function AnnotationLayer({
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
+      onPointerCancel={onPointerAbort}
+      onLostPointerCapture={onPointerAbort}
     >
       <svg className={styles.svg} width={size.w} height={size.h}>
         {scene.annotations.map((a) => (
-          <Shape key={a.id} a={a} size={size} selected={scene.selectedId === a.id} />
+          <Shape key={a.id} a={a} size={size} selected={scene.selectedId === a.id} src={src} />
         ))}
-        {draft && <Shape a={draft} size={size} selected={false} />}
+        {draft && <Shape a={draft} size={size} selected={false} src={src} />}
+        {selectedAnnotation && <Handles a={selectedAnnotation} size={size} />}
       </svg>
       {editing && (
         <input
@@ -240,16 +326,82 @@ export function AnnotationLayer({
   );
 }
 
+/** Resize handles drawn over the selected shape. Hit-testing is geometric (in the
+ *  layer's onPointerDown), so these are purely visual + carry the resize cursor. */
+function Handles({ a, size }: { a: Annotation; size: Size }): React.JSX.Element {
+  const { w: W, h: H } = size;
+  return (
+    <g>
+      {handlesFor(a, size).map((h) => (
+        <rect
+          key={h.id}
+          className={styles.handle}
+          x={h.x * W - HANDLE_PX / 2}
+          y={h.y * H - HANDLE_PX / 2}
+          width={HANDLE_PX}
+          height={HANDLE_PX}
+          rx={2}
+          style={{ cursor: handleCursor(h.id) }}
+        />
+      ))}
+    </g>
+  );
+}
+
 function Shape({
   a,
   size,
   selected,
+  src,
 }: {
   a: Annotation;
   size: Size;
   selected: boolean;
+  src: string;
 }): React.JSX.Element {
   const { w: W, h: H } = size;
+
+  if (a.kind === "blur") {
+    const bx = a.x * W;
+    const by = a.y * H;
+    const bw = a.w * W;
+    const bh = a.h * H;
+    // Re-draw a blurred copy of the shot, clipped to the rect — sits over the sharp
+    // image so the region reads as blurred. Baked into the export (see compositor).
+    // The filter region is bounded to the rect + margin, so the blur only processes
+    // those pixels (not the whole shot) and doesn't fade at the rect's edge.
+    const m = BLUR_STD * 3;
+    return (
+      <g>
+        <defs>
+          <clipPath id={`bclip-${a.id}`}>
+            <rect x={bx} y={by} width={bw} height={bh} />
+          </clipPath>
+          <filter
+            id={`bfilter-${a.id}`}
+            filterUnits="userSpaceOnUse"
+            x={bx - m}
+            y={by - m}
+            width={bw + 2 * m}
+            height={bh + 2 * m}
+          >
+            <feGaussianBlur stdDeviation={BLUR_STD} />
+          </filter>
+        </defs>
+        <image
+          href={src}
+          x={0}
+          y={0}
+          width={W}
+          height={H}
+          preserveAspectRatio="none"
+          clipPath={`url(#bclip-${a.id})`}
+          filter={`url(#bfilter-${a.id})`}
+        />
+        {selected && <rect className={styles.selOutline} x={bx} y={by} width={bw} height={bh} />}
+      </g>
+    );
+  }
 
   if (a.kind === "box") {
     const bw = a.w * W;
@@ -313,6 +465,24 @@ function Shape({
     );
   }
 
+  if (a.kind === "path") {
+    const sw = STROKE_WIDTHS[a.stroke];
+    const d = smoothPath(a.points.map((pt) => ({ x: pt.x * W, y: pt.y * H })));
+    return (
+      <g>
+        <path
+          d={d}
+          fill="none"
+          stroke={a.color}
+          strokeWidth={sw}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        {selected && <path className={styles.selOutline} d={d} fill="none" />}
+      </g>
+    );
+  }
+
   const tx = a.x * W;
   const ty = a.y * H;
   const fs = TEXT_PX[a.size];
@@ -350,8 +520,9 @@ function isEditingText(target: EventTarget | null): boolean {
 }
 
 function isBigEnough(a: Annotation): boolean {
-  if (a.kind === "box") return a.w > 0.01 && a.h > 0.01;
+  if (a.kind === "box" || a.kind === "blur") return a.w > 0.01 && a.h > 0.01;
   if (a.kind === "arrow") return Math.hypot(a.x2 - a.x1, a.y2 - a.y1) > 0.02;
+  if (a.kind === "path") return a.points.length >= 1;
   return true;
 }
 
@@ -359,13 +530,18 @@ function moveBy(a: Annotation, dx: number, dy: number): Partial<Annotation> {
   if (a.kind === "arrow") {
     return { x1: a.x1 + dx, y1: a.y1 + dy, x2: a.x2 + dx, y2: a.y2 + dy } as Partial<Annotation>;
   }
+  if (a.kind === "path") {
+    return {
+      points: a.points.map((pt) => ({ x: pt.x + dx, y: pt.y + dy })),
+    } as Partial<Annotation>;
+  }
   return { x: a.x + dx, y: a.y + dy } as Partial<Annotation>;
 }
 
 function hitTest(annotations: Annotation[], p: Pt, size: Size): Annotation | null {
   for (let i = annotations.length - 1; i >= 0; i -= 1) {
     const a = annotations[i];
-    if (a.kind === "box") {
+    if (a.kind === "box" || a.kind === "blur") {
       if (
         p.x >= a.x - 0.01 &&
         p.x <= a.x + a.w + 0.01 &&
@@ -391,6 +567,10 @@ function hitTest(annotations: Annotation[], p: Pt, size: Size): Annotation | nul
         p.y <= a.y + h + padY
       ) {
         return a;
+      }
+    } else if (a.kind === "path") {
+      for (let j = 0; j < a.points.length - 1; j += 1) {
+        if (distToSegment(p, a.points[j], a.points[j + 1]) < 0.02) return a;
       }
     } else if (distToSegment(p, { x: a.x1, y: a.y1 }, { x: a.x2, y: a.y2 }) < 0.02) {
       return a;

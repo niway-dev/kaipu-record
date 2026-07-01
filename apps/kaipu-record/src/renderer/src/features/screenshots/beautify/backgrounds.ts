@@ -109,8 +109,8 @@ export function frameRadius(bg: BackgroundId, radius: number): number {
 }
 
 /** Slider bounds + defaults (from the design). */
-export const PADDING_RANGE = { min: 0, max: 96, default: 40 } as const;
-export const RADIUS_RANGE = { min: 0, max: 28, default: 12 } as const;
+export const PADDING_RANGE = { min: 0, max: 96, default: 15 } as const;
+export const RADIUS_RANGE = { min: 0, max: 28, default: 0 } as const;
 export const SHADOW_RANGE = { min: 0, max: 100, default: 60 } as const;
 
 export interface BeautifyState {

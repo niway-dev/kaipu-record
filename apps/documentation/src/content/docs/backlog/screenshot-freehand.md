@@ -5,9 +5,12 @@ description: "A freehand pen/marker for the screenshot editor: drag to write or 
 
 # Screenshot freehand pen
 
-> **Status: 🔵 Proposed.** Drag to **write or scribble** on the shot — circle a thing,
-> hand-draw an arrow, scratch over a detail. WhatsApp-practical, drops straight into the
-> existing annotation pipeline.
+> **Status: 🟢 Built locally** (on `feat/screenshot-editor-tools`). Drag to **write or
+> scribble** on the shot — a Pen tool in the toolbar. New `path` annotation kind
+> (normalized points), smoothed via `smooth.ts` (Catmull-Rom → Bézier) in both the live
+> layer and the export compositor, reusing the colour + stroke options. Hit-test by
+> distance to the polyline. Tested (smooth builder, draw flow, export). Validate in a
+> packaged build.
 
 ## Model — a new `path` annotation kind
 

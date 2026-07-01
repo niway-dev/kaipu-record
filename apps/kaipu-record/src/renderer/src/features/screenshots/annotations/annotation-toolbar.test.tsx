@@ -22,7 +22,7 @@ describe("AnnotationToolbar", () => {
   it("renders the four tools and switches tool on click", () => {
     const tools = makeTools();
     render(<AnnotationToolbar tools={tools} />);
-    for (const name of ["Select", "Box", "Arrow", "Text"]) {
+    for (const name of ["Select", "Pen", "Box", "Arrow", "Text", "Blur"]) {
       expect(screen.getByRole("button", { name })).toBeInTheDocument();
     }
     fireEvent.click(screen.getByRole("button", { name: "Text" }));

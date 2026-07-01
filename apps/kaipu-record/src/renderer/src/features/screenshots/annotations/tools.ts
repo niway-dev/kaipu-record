@@ -5,18 +5,30 @@
  * accent colours intentionally mirror the brand accents).
  */
 
-export const ANNOTATION_TOOLS = ["select", "box", "arrow", "text"] as const;
+export const ANNOTATION_TOOLS = ["select", "pen", "box", "arrow", "text", "blur"] as const;
 export type AnnotationTool = (typeof ANNOTATION_TOOLS)[number];
+
+/**
+ * Gaussian blur radius (px, in the display coordinate space) for a redaction box —
+ * strong enough to make text unreadable while keeping the surrounding shape, which
+ * is the point of a blur vs a solid bar. The export scales it by the same factor as
+ * strokes so it matches the preview. NOTE: Gaussian blur is not cryptographically
+ * secure (reversible); a destructive mosaic is the documented follow-up for true
+ * redaction — see backlog/screenshot-redaction.
+ */
+export const BLUR_STD = 12;
 
 export interface AnnotationColor {
   name: string;
   value: string;
 }
 
+// Pink (the brand accent) leads, so it's the default swatch — a fresh annotation
+// uses ANNOTATION_COLORS[0] (see use-annotation-tools). Black-by-default felt dull.
 export const ANNOTATION_COLORS: AnnotationColor[] = [
+  { name: "Pink", value: "#f6055c" },
   { name: "Black", value: "#1a1a1a" },
   { name: "White", value: "#f5f5f5" },
-  { name: "Pink", value: "#f6055c" },
   { name: "Yellow", value: "#eab308" },
   { name: "Red", value: "#ef4444" },
   { name: "Green", value: "#22c55e" },

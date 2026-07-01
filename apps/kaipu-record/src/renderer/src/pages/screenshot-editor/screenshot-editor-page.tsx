@@ -154,7 +154,7 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
   return (
     <div className={styles.editor}>
       <div className={styles.toolbar}>
-        <AnnotationToolbar tools={tools} />
+        <AnnotationToolbar tools={tools} onPick={() => scene.select(null)} />
         <div className={styles.actions}>
           <button
             type="button"
@@ -204,7 +204,7 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
             <BeautifiedFrame
               src={image.displayUrl}
               beautify={scene.beautify.state}
-              overlay={<AnnotationLayer scene={scene} tools={tools} />}
+              overlay={<AnnotationLayer scene={scene} tools={tools} src={image.displayUrl} />}
               imgRef={imgRef}
               zoom={zoom}
               onImageLoad={() => setImageReady(true)}
