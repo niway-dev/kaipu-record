@@ -81,7 +81,7 @@ describe("AnnotationOptions", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("edits the selected box's colour via commitAnnotation (not the tool default)", () => {
+  it("recolours the selected box and makes that the current colour (sticks)", () => {
     const scene = makeScene([box], "b1");
     const tools = makeTools();
     render(<AnnotationOptions tools={tools} scene={scene} />);
@@ -91,10 +91,11 @@ describe("AnnotationOptions", () => {
     expect(screen.getByText("Stroke")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: ANNOTATION_COLORS[2].name }));
+    // Recolours the selection AND updates the tool default so the next shape matches.
     expect(scene.commitAnnotation).toHaveBeenCalledWith("b1", {
       color: ANNOTATION_COLORS[2].value,
     });
-    expect(tools.setColor).not.toHaveBeenCalled();
+    expect(tools.setColor).toHaveBeenCalledWith(ANNOTATION_COLORS[2].value);
   });
 
   it("shows the size control and edits a selected text annotation", () => {

@@ -25,23 +25,37 @@ function resolveControls(
   selected: Annotation | null,
 ): ContextualControls | null {
   // A selected annotation → edit it (single undoable change per click). A blur box
-  // has no colour/stroke, so there's nothing to edit.
+  // has no colour/stroke, so there's nothing to edit. Picking a value also updates
+  // the *current* tool default, so the choice "sticks" for the next annotation too
+  // (change colour on a selection → keep drawing in that colour, across tools).
   if (selected) {
     if (selected.kind === "blur") return null;
     return selected.kind === "text"
       ? {
           mode: "size",
           color: selected.color,
-          setColor: (color) => scene.commitAnnotation(selected.id, { color }),
+          setColor: (color) => {
+            scene.commitAnnotation(selected.id, { color });
+            tools.setColor(color);
+          },
           level: selected.size,
-          setLevel: (size) => scene.commitAnnotation(selected.id, { size }),
+          setLevel: (size) => {
+            scene.commitAnnotation(selected.id, { size });
+            tools.setTextSize(size);
+          },
         }
       : {
           mode: "stroke",
           color: selected.color,
-          setColor: (color) => scene.commitAnnotation(selected.id, { color }),
+          setColor: (color) => {
+            scene.commitAnnotation(selected.id, { color });
+            tools.setColor(color);
+          },
           level: selected.stroke,
-          setLevel: (stroke) => scene.commitAnnotation(selected.id, { stroke }),
+          setLevel: (stroke) => {
+            scene.commitAnnotation(selected.id, { stroke });
+            tools.setStroke(stroke);
+          },
         };
   }
   // Nothing selected + select/blur tool → nothing to set (blur has no colour/stroke).
