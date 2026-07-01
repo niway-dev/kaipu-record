@@ -5,9 +5,12 @@ description: "How to add a crop tool to the screenshot editor: a normalized crop
 
 # Screenshot crop tool
 
-> **Status: 🔵 Proposed.** "Keep only this section and save just that." This is the
-> real ask behind ["save the zoomed view"](./editor-zoom) — a **Crop tool**, separate
-> from view-zoom. WhatsApp-practical: drag a rectangle, done.
+> **Status: 🟢 Built locally** (on `feat/screenshot-crop`). A **Crop tool** in the editor:
+> drag a rectangle (reposition by dragging the interior, resize with 8 handles), leave the
+> tool to see the windowed result; Esc / Restablecer goes back to full. Non-destructive
+> (`scene.crop`), undoable, exports at native pixels. Aspect-ratio locks remain a follow-up.
+> See the design spec: [2026-06-30 screenshot crop design](../specs/2026-06-30-screenshot-crop-design)
+> and the [implementation plan](../plans/2026-07-01-screenshot-crop-tool).
 
 ## Model — crop is one scene field, not a destructive edit
 
