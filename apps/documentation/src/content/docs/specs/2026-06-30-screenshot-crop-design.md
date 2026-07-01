@@ -154,7 +154,7 @@ The one real pipeline change. Today the base draws at `(pad, pad)` sized
 - **Base image**: keep the shared `#shot` (`<use>`), but the base `<use>` and the rounded
   clip target the cropped window — draw the plane offset by `-c.x*naturalW`, `-c.y*naturalH`
   inside a clip of `(pad, pad, cw, ch)`. Concretely, the base becomes a `<use href="#shot"
-  x="pad - c.x*naturalW" y="pad - c.y*naturalH" .../>` clipped to the rounded crop rect.
+x="pad - c.x*naturalW" y="pad - c.y*naturalH" .../>` clipped to the rounded crop rect.
 - **Annotations**: the group is `translate(pad - c.x*naturalW, pad - c.y*naturalH)` and
   each annotation still renders with `a.x * naturalW` — so full-image coords land correctly
   inside the cropped window (same invariant as the live layer). The rounded clip

@@ -4,7 +4,15 @@
  * source of truth for handle math. All values are 0–1 of the base image.
  */
 
-import { handlesFor, hitHandle, resizeAnnotation, type Handle, type HandleId, type Pt, type Size } from "./handles";
+import {
+  handlesFor,
+  hitHandle,
+  resizeAnnotation,
+  type Handle,
+  type HandleId,
+  type Pt,
+  type Size,
+} from "./handles";
 import { FULL_CROP, type CropRect } from "./scene";
 
 const MIN = 0.02; // smallest crop side (2% of the image) so it can't collapse
@@ -33,7 +41,17 @@ export function moveCrop(c: CropRect, dx: number, dy: number): CropRect {
 
 /** Wrap a crop as a box-shaped annotation so `handles.ts` can operate on it. */
 function asBox(c: CropRect) {
-  return { id: "crop", kind: "box", x: c.x, y: c.y, w: c.w, h: c.h, color: "#000", stroke: 0, seed: 0 } as const;
+  return {
+    id: "crop",
+    kind: "box",
+    x: c.x,
+    y: c.y,
+    w: c.w,
+    h: c.h,
+    color: "#000",
+    stroke: 0,
+    seed: 0,
+  } as const;
 }
 
 /** The 8 resize handles for a crop rect. */

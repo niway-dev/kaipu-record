@@ -53,6 +53,7 @@ committed on it).
 ## Task 1: Scene model — `crop` field
 
 **Files:**
+
 - Modify: `src/renderer/src/features/screenshots/annotations/scene.ts`
 - Test: `src/renderer/src/features/screenshots/annotations/scene.test.ts` (create if absent)
 
@@ -142,6 +143,7 @@ Reuse `handles.ts` (already: `handlesFor`, `hitHandle`, `resizeAnnotation`, `typ
 `type Handle`, `type Pt`, `type Size`) through a box adapter, and add clamping.
 
 **Files:**
+
 - Create: `src/renderer/src/features/screenshots/annotations/crop.ts`
 - Test: `src/renderer/src/features/screenshots/annotations/crop.test.ts`
 
@@ -299,6 +301,7 @@ git commit --no-verify -m "feat(screenshots): pure crop-rect helpers reusing han
 ## Task 3: Scene controller — `crop`, `setCrop`, `setCropLive`
 
 **Files:**
+
 - Modify: `src/renderer/src/features/screenshots/annotations/use-editor-scene.ts`
 - Test: `src/renderer/src/features/screenshots/annotations/use-editor-scene.test.ts`
 
@@ -403,6 +406,7 @@ git commit --no-verify -m "feat(screenshots): crop state + setCrop/setCropLive i
 ## Task 4: Crop tool in the toolbar
 
 **Files:**
+
 - Modify: `annotations/tools.ts`
 - Modify: `annotations/annotation-toolbar.tsx`
 - Test: `annotations/annotation-toolbar.test.tsx`
@@ -465,6 +469,7 @@ git commit --no-verify -m "feat(screenshots): add the crop tool to the toolbar"
 The compositor must window the export. Keep the unset-crop path byte-identical.
 
 **Files:**
+
 - Modify: `annotations/compositor.ts`
 - Test: `annotations/compositor.test.ts`
 
@@ -597,6 +602,7 @@ annotation coordinate system invariant: the `<img>` + `overlay` live in a full-i
 "plane" scaled/offset inside a clipping "viewport".
 
 **Files:**
+
 - Modify: `beautify/beautified-frame.tsx`
 - Modify: `beautify/beautified-frame.module.css`
 
@@ -740,6 +746,7 @@ rect uses the live-commit pattern (beginInteract → setCropLive → endInteract
 step per drag. Esc resets to full.
 
 **Files:**
+
 - Modify: `annotations/annotation-layer.tsx`
 
 - [ ] **Step 1: Imports + the crop rect being edited**
@@ -947,6 +954,7 @@ git commit --no-verify -m "feat(screenshots): crop-tool interaction (dim overlay
 ## Task 8: Options panel — crop hint + Reset
 
 **Files:**
+
 - Modify: `annotations/annotation-options.tsx`
 - Modify: `annotations/annotation-options.module.css`
 - Test: `annotations/annotation-options.test.tsx`
@@ -1044,6 +1052,7 @@ Pass `crop` to the frame (windowed only when the crop tool is inactive) and incl
 in the export scene.
 
 **Files:**
+
 - Modify: `pages/screenshot-editor/screenshot-editor-page.tsx`
 
 - [ ] **Step 1: Include crop in the export scene**
@@ -1088,6 +1097,7 @@ git commit --no-verify -m "feat(screenshots): wire crop into the editor preview 
 ## Task 10: Docs
 
 **Files:**
+
 - Modify: `apps/documentation/src/content/docs/backlog/screenshot-crop.md`
 - Modify: `apps/documentation/src/content/docs/backlog/index.mdx`
 
@@ -1139,4 +1149,7 @@ git commit --no-verify -m "docs(backlog): mark the screenshot crop tool as built
   - Crop + a blur box: the blur stays clipped to the crop window in the export.
   - Crop + zoom: the windowed frame zooms correctly.
 - [ ] High-effort code review (`/code-review`), fix findings, then squash PR to `main`.
+
+```
+
 ```
