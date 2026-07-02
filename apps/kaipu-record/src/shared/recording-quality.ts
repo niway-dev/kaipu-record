@@ -36,13 +36,39 @@ export interface RecordingQuality {
   bitrate: BitrateStep;
 }
 
-/** 16:9 pixel dimensions for each resolution step (also the encoder cap). */
+/**
+ * 16:9 pixel dimensions for each resolution step. Used for the file-weight
+ * estimate and the 16:9 reference; the ACTUAL recorded frame is derived from the
+ * real screen aspect ratio via {@link fitToCap}, never forced to these.
+ */
 export const RESOLUTION_DIMENSIONS: Record<ResolutionStep, { width: number; height: number }> = {
   720: { width: 1280, height: 720 },
   1080: { width: 1920, height: 1080 },
   1440: { width: 2560, height: 1440 },
   2160: { width: 3840, height: 2160 },
 };
+
+/** Round to the nearest even integer — H.264 requires even frame dimensions. */
+function toEven(value: number): number {
+  return Math.round(value / 2) * 2;
+}
+
+/**
+ * Derive the real recorded dimensions from the source's TRUE pixel size,
+ * preserving its aspect ratio. The resolution step is a **height cap**, never a
+ * fixed 16:9 box — so a 3024×1964 MacBook panel records as 1662×1080 (its real
+ * 1.54 ratio), not stretched into 1920×1080. Never upscales (a source smaller
+ * than the cap stays native) and always returns even dimensions.
+ */
+export function fitToCap(
+  sourceW: number,
+  sourceH: number,
+  capHeight: number,
+): { width: number; height: number } {
+  const height = Math.min(capHeight, sourceH);
+  const width = (height * sourceW) / sourceH;
+  return { width: toEven(width), height: toEven(height) };
+}
 
 /** Encoder video bitrate (bits/s) for each tier. File weight ≈ this value. */
 export const BITRATE_BPS: Record<BitrateStep, number> = {

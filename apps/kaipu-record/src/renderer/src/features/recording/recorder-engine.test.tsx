@@ -6,6 +6,13 @@ import {
   StreamTarget,
 } from "mediabunny";
 import { startEngine, type EngineOptions } from "./recorder-engine";
+import { startRecordingCompositor } from "./recording-compositor";
+
+// The compositor touches a real <canvas>/captureStream (no-op in jsdom), so mock
+// it; we assert the engine hands it the right re-frame target instead.
+vi.mock("./recording-compositor", () => ({
+  startRecordingCompositor: vi.fn(async () => ({ track: { stop: vi.fn() }, stop: vi.fn() })),
+}));
 
 // mediabunny is mocked so the engine's wiring is observable without a real encoder.
 // The constructors use `function` (not arrows) so the engine's `new` calls work,
@@ -31,11 +38,12 @@ vi.mock("mediabunny", () => ({
 }));
 
 /** A media track that records when it is stopped, so we can assert hardware release. */
-function fakeTrack(): {
+function fakeTrack(settings: { width: number; height: number } = { width: 1920, height: 1080 }): {
   stop: ReturnType<typeof vi.fn>;
   addEventListener: ReturnType<typeof vi.fn>;
+  getSettings: ReturnType<typeof vi.fn>;
 } {
-  return { stop: vi.fn(), addEventListener: vi.fn() };
+  return { stop: vi.fn(), addEventListener: vi.fn(), getSettings: vi.fn(() => settings) };
 }
 
 function fakeStream(video: unknown[], audio: unknown[]): MediaStream {
@@ -54,6 +62,7 @@ let getUserMedia: ReturnType<typeof vi.fn>;
 let audioContextClose: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
+  vi.clearAllMocks(); // module-level mocks (compositor, mediabunny) accumulate across tests
   screenVideoTrack = fakeTrack();
   screenSystemAudioTrack = fakeTrack();
   micTrack = fakeTrack();
@@ -138,6 +147,36 @@ describe("startEngine", () => {
     expect(MediaStreamVideoTrackSource).toHaveBeenCalled();
     expect(lastOutput().addVideoTrack).toHaveBeenCalled();
     expect(lastOutput().start).toHaveBeenCalled();
+  });
+
+  it("derives output dimensions from the real screen aspect ratio (no 16:9 squeeze)", async () => {
+    // 14" MacBook Pro panel — 3024×1964, AR 1.54, NOT 16:9.
+    screenVideoTrack.getSettings = vi.fn(() => ({ width: 3024, height: 1964 }));
+
+    await startEngine(baseOptions());
+
+    // Captured at the native ceiling, never the 1920×1080 box that squeezed it.
+    const mandatory = (
+      getUserMedia.mock.calls[0][0] as {
+        video: { mandatory: { maxWidth: number; maxHeight: number } };
+      }
+    ).video.mandatory;
+    expect(mandatory.maxWidth).toBeGreaterThanOrEqual(3024);
+    expect(mandatory.maxHeight).toBeGreaterThanOrEqual(1964);
+
+    // Re-framed to the real AR at the 1080 height cap → 1662×1080, not 1920×1080.
+    expect(startRecordingCompositor).toHaveBeenCalledWith(
+      expect.anything(),
+      { width: 1662, height: 1080 },
+      null,
+      expect.any(Number),
+    );
+  });
+
+  it("encodes the raw track on a real 16:9 screen (no compositor)", async () => {
+    // Default fake screen is 1920×1080 → target equals source → no re-frame.
+    await startEngine(baseOptions());
+    expect(startRecordingCompositor).not.toHaveBeenCalled();
   });
 
   it("mixes microphone and system audio into a single AAC track", async () => {
