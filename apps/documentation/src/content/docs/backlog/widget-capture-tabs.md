@@ -58,6 +58,17 @@ it.
   copy (`Start Recording`, `Entire screen`, …).
 - **Lock, don't hide, the tabs while recording** — keeps the layout stable and the mode obvious.
 
+## Gotchas
+
+- ⚠️ **Blank screen thumbnails when the picker opens from the tray.** The panel's "Change"
+  opens the main window and immediately fetches sources; `desktopCapturer.getSources` returns
+  blank `0×0` thumbnails while the window is still coming to the foreground (the app path
+  fetches when already settled, so it never saw this). Fix: `useScreenSources` retries the
+  fetch (up to 4×250ms, loader shown) while the screen thumbnails are blank, and the selector
+  renders a monitor/window icon fallback for any still-blank thumbnail — never a broken `<img>`.
+  This is **not** a permission issue (confirmed by logging thumbnail sizes: screens captured
+  full once settled).
+
 ## Follow-ups
 
 - Screenshot **during** a recording (drop the tab lock; keep them non-blocking).
