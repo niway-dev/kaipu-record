@@ -24,7 +24,7 @@ security review and not a style pass.
 ## Model: Claude Fable 5 (`claude-fable-5`)
 
 Run this audit with **Claude Fable 5**, Anthropic's most capable widely-released model. It
-is meaningfully stronger at code review and debugging (higher recall *and* precision on real
+is meaningfully stronger at code review and debugging (higher recall _and_ precision on real
 bugs), repository-history search, and parallel sub-agent delegation — exactly the shape of
 this task.
 
@@ -65,7 +65,7 @@ The highest-stakes area; a bug here ruins every recording.
 - **`recorder-engine.ts`** — the newly merged aspect-ratio path: `fitToCap()` (height-cap +
   source-AR width, even rounding, never-upscale), the native-ceiling capture, the measured
   `getSettings()` source size, and the **compositor-vs-raw** decision (`needsResize ||
-  watermark`). Check: odd/edge source dimensions, missing `getSettings()` values (fallback
+watermark`). Check: odd/edge source dimensions, missing `getSettings()` values (fallback
   path), portrait/ultrawide/window sources, thumbnail sizing.
 - **`recording-compositor.ts`** (renamed from `watermark-compositor.ts`) — uniform reframe
   preserving AR, high-quality downscale, watermark-optional, per-frame cost, the canvas track

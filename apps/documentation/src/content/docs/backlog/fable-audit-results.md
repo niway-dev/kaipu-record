@@ -28,7 +28,7 @@ Most findings cluster around five root causes. Fixing the cluster fixes many fin
    violates the flow-isolation requirement (screenshot must never break recording). Fix once:
    lift the engine to an app-level owner (or hard-block navigation/close while active).
 2. **`fastStart: "in-memory"` defeats the streaming writer** (finding 3). Nothing hits disk
-   until stop, so every crash/quit/orphan above loses *everything*, and long recordings
+   until stop, so every crash/quit/orphan above loses _everything_, and long recordings
    OOM-crash the renderer on their own. This multiplies the severity of every other
    recording finding.
 3. **Unguarded exits.** Cmd+Q / tray-Quit mid-recording (finding 11), unsaved screenshot editor
@@ -37,11 +37,10 @@ Most findings cluster around five root causes. Fixing the cluster fixes many fin
 4. **Silent failures.** Save/Copy/export, chunk writes, screenshot capture, and library
    listing all swallow errors (console-only). The user believes work succeeded when it
    didn't. A single toast-on-error convention would cover most of these.
-5. **Cross-window state has two sources of truth.** The Record page guards on its *local*
+5. **Cross-window state has two sources of truth.** The Record page guards on its _local_
    engine status instead of the hub's `RecordingActivity`, settings have no renderer
    broadcast, and defaults are restated per process — the documented
    query-on-mount + subscribe pattern is only partially applied.
-
 
 ## Critical
 
@@ -86,7 +85,6 @@ exportPng() calls image.getBytes() on every export. For a kind:'local' source, l
 **Repro / scenario:** Library → open a saved screenshot → Edit → set background + padding 40 and draw an arrow → Save → Overwrite → now click Copy (or Save → Overwrite again). The clipboard/library image has a double frame (padding and background applied twice) and the arrow duplicated/shifted, while the editor preview still looks correct. The library item is silently corrupted on the second overwrite.
 
 **Suggested fix:** Resolve the source to immutable bytes once when the editor mounts (e.g. cache the ArrayBuffer in useImageSource/localReader on first getBytes) and export from that snapshot for the whole session; also bump the displayUrl version after an overwrite so the preview matches disk.
-
 
 ## High
 
@@ -190,8 +188,7 @@ annotationSvg for arrows calls roughArrow(x1..y2, seed) with coordinates convert
 
 **Repro / scenario:** On a Retina Mac, capture a full-screen shot (natural width ~2900px, displayed ~1000px, scale ~2.9), draw an arrow, Copy/Save. The exported arrow has an arrowhead ~3x smaller relative to the arrow and an almost flat curve, visibly different from the bowed, well-headed arrow in the editor.
 
-**Suggested fix:** Thread `scale` into roughArrow (multiply the -16 curve offset, jitter magnitudes, and ah=15 by scale), mirroring how STROKE_WIDTHS and the box radius (14*scale) are handled.
-
+**Suggested fix:** Thread `scale` into roughArrow (multiply the -16 curve offset, jitter magnitudes, and ah=15 by scale), mirroring how STROKE_WIDTHS and the box radius (14\*scale) are handled.
 
 ## Medium
 
@@ -323,11 +320,11 @@ The compositor computes `target` once from getSettings at start and every frame 
 
 **Medium · Bug · found by `screenshots`** — `apps/kaipu-record/src/renderer/src/features/screenshots/beautify/beautified-frame.tsx:51`
 
-In windowed (cropped) mode the frame is rendered at the fixed frameSize measured while un-windowed, and the ResizeObserver deliberately does not re-measure while windowed. The BeautifyPanel stays active, so moving the padding slider with a crop applied shrinks/grows the <img> inside the frozen frame (max-width/height:100% against the fixed content box), and because the image scales uniformly (object-fit) one axis gains centering slack — effective padding on that axis no longer equals `beautify.padding`. The export (compositor fullW/fullH = natural + 2*pad) always applies the exact new padding on both axes and composes a frame of a different size, so the normalized crop window selects different content than the preview shows. The preview frame also stops growing/shrinking with padding entirely, unlike the un-cropped state.
+In windowed (cropped) mode the frame is rendered at the fixed frameSize measured while un-windowed, and the ResizeObserver deliberately does not re-measure while windowed. The BeautifyPanel stays active, so moving the padding slider with a crop applied shrinks/grows the <img> inside the frozen frame (max-width/height:100% against the fixed content box), and because the image scales uniformly (object-fit) one axis gains centering slack — effective padding on that axis no longer equals `beautify.padding`. The export (compositor fullW/fullH = natural + 2\*pad) always applies the exact new padding on both axes and composes a frame of a different size, so the normalized crop window selects different content than the preview shows. The preview frame also stops growing/shrinking with padding entirely, unlike the un-cropped state.
 
 **Repro / scenario:** Capture a wide shot → crop to a sub-region (crop applied, windowed preview) → drag the padding slider from 0 to 96. The preview frame does not grow; the shot shrinks and recentres with uneven gaps. Export the image: the saved PNG's crop window shows a different composition (exact 96px-equivalent padding on all sides) than the on-screen preview.
 
-**Suggested fix:** Recompute the windowed frame size from the current beautify state (displayedShotW + 2*padding) instead of freezing the un-windowed measurement, or disable/apply-and-exit the beautify sliders while a crop is applied.
+**Suggested fix:** Recompute the windowed frame size from the current beautify state (displayedShotW + 2\*padding) instead of freezing the un-windowed measurement, or disable/apply-and-exit the beautify sliders while a crop is applied.
 
 ### 27. Clicking the Dock icon never reopens the main window once any hidden auxiliary window exists
 
@@ -374,7 +371,6 @@ chooseVaultDirectory just persists the chosen path. Every subsequent call (list,
 **Suggested fix:** On change, at minimum show a confirm dialog stating existing items stay in the old folder (with a 'move files' option), mkdir + writability-check the new path before persisting, and broadcast a library-changed event so open pages refresh.
 
 **Independently reported by:** `flow-improvements` — “Changing the recordings folder silently 'empties' the library — no migration, no explanation that existing files stay behind”
-
 
 ## Low
 
@@ -492,11 +488,11 @@ CameraBubbleWindow.position() uses `screen.getDisplayNearestPoint(screen.getCurs
 
 **Low · Bug · found by `screenshots`** — `apps/kaipu-record/src/renderer/src/features/screenshots/annotations/rough.ts:18`
 
-roughRect's jitter magnitude is hardcoded `m = 1.7` px. The compositor scales the corner radius (14*scale) and stroke width but the jitter stays 1.7 native px, versus 1.7 display px in the preview. At export scale 2–3x the jitter is 2–3x smaller relative to the shape, so the two offset strokes nearly coincide and the sketchy double-line look flattens into a plain rounded rect.
+roughRect's jitter magnitude is hardcoded `m = 1.7` px. The compositor scales the corner radius (14\*scale) and stroke width but the jitter stays 1.7 native px, versus 1.7 display px in the preview. At export scale 2–3x the jitter is 2–3x smaller relative to the shape, so the two offset strokes nearly coincide and the sketchy double-line look flattens into a plain rounded rect.
 
 **Repro / scenario:** Retina capture displayed at ~1/3 natural size → draw a box annotation (clearly sketchy in the preview) → Save. The exported box looks like a clean, non-hand-drawn rectangle with a faint double edge — visibly different style from the editor.
 
-**Suggested fix:** Add a jitter-scale parameter to roughRect (m = 1.7 * scale) and pass the compositor's scale, keeping the preview at scale 1.
+**Suggested fix:** Add a jitter-scale parameter to roughRect (m = 1.7 \* scale) and pass the compositor's scale, keeping the preview at scale 1.
 
 **Verifier note:** severity adjusted from medium to low. m = 1.7 is hardcoded in rough.ts:18 while compositor.ts:152-154 scales radius and stroke, so jitter is 2-3x smaller relative to the shape in Retina exports. However the double-stroke look (two seeds at opacity 0.55) persists with reduced amplitude, so this is a subtle cosmetic fidelity loss rather than the style disappearing — low, not medium.
 
@@ -552,7 +548,6 @@ main/index.ts never calls app.requestSingleInstanceLock(). A second instance (op
 
 **Suggested fix:** Call app.requestSingleInstanceLock() at startup; on failure app.quit(), and in the primary handle 'second-instance' by focusing the main window.
 
-
 ## Uncertain (verify by hand)
 
 - **System-audio toggle on macOS likely makes getUserMedia reject — recording fails to start at all** (`recording`, high) — `apps/kaipu-record/src/renderer/src/features/recording/recorder-engine.ts:89`. User flips the system-audio toggle on and presses record → countdown runs → 'No pudimos iniciar la grabación' every time (or, at best, recordings never contain system audio) on every macOS machine. _Verifier: recorder-engine.ts:87-101 does bundle audio:{mandatory:{chromeMediaSource:'desktop'}} into the same getUserMedia as video, so if macOS rejects the audio leg the whole start fails — but whether Electron 39 (Chromium ~142, which gained ScreenCaptureKit-based loopback paths) rejects, silently omits aud_
@@ -574,7 +569,7 @@ Areas the finders explicitly did not reach; a follow-up pass could cover them.
 - **screenshots**: Not inspected in depth: preload bridge definitions and shared/types/ipc channel wiring for screenshots (assumed correct since flows ship), cloud-reader.ts (unused placeholder), use-recent-screenshots polling, the library screenshots grid page, screenshot-capture cancel semantics on real macOS (whether `screencapture -i` exits non-zero on Esc, which would make the fileExists cancel path dead and surface as an unhandled rejection — could not be verified without an interactive run), smooth.ts numerical edge cases beyond 0/1/2-point paths, and the test suites' coverage gaps beyond compositor.test.ts. Minor items found but dropped to stay under the cap: ±1px crop-edge rounding from independent Math.round of viewBox origin vs size (compositor.ts:87-90), 'Caveat' leading the HAND_FONT stack without being bundled (silently falls back to Comic Sans on most machines, same in preview and export), and stale frameSize when the OS window is resized while a crop is applied.
 - **settings-ipc**: Inspected in depth: settings.service(+test), settings-store, full IPC contract cross-check (shared/types/ipc.ts + electron-api.ts vs preload/index.ts vs all main handlers vs renderer callers — all declared channels are wired; only the three raw-string channels drift), global-shortcuts + shortcut-input/keyboard-accelerator/shortcuts-page, permissions (main + use-permissions + onboarding store/provider), library-vault/vault-location/library index/media-protocol, recording-hub/recording-writer settings interplay, capture-panel-window, record-page/app-shell/use-recording-setup/use-screen-recorder for shortcut-vs-recording-state collisions. NOT inspected: tray.ts, camera-bubble-window.ts, auto-updater.ts, analytics.service.ts internals, screenshot-capture.ts provider, the recorder engine/compositor, version-gate/watermark features, onboarding overlay step components, library renderer hooks (use-local-library, use-vault-directory) beyond skimming, and the test suites other than settings.service.test.ts. Findings I dropped to stay under the cap (lower severity): renameLocalRecording creates orphan sidecars for nonexistent ids; capture-panel:resize does not guard non-finite heights (setContentSize would throw); LibraryVault.list produces duplicate rows if a user manually places <same-id>.mp4 and <same-id>.png in the vault; recording-writer timestampId is second-resolution (collision overwrite theoretically possible); the shortcuts page can revert a just-saved binding if two rebinds happen faster than the IPC round-trip (stale spread of settings state).
 - **flow-isolation**: Inspected the full cross-window flow set (main index/hub/tray/capture-panel-window/screenshot-ipc/global-shortcuts/recording-writer, renderer app-shell/router/record-page/editor/capture-panel/control-bar/onboarding/shortcut-input/preload). Not inspected in depth: recorder-engine.ts internals (stream-ended/system source-loss handling beyond the onError hook), control-bar-window.ts and camera-bubble-window.ts window-level flags (always-on-top level fights between the bar, bubble, capture panel, and the native screencapture overlay), the auto-updater's installDownloadedUpdate quitting during an active recording (same family as the unguarded-quit finding but not traced), library delete/rename while a detail page is playing the same file, vault-directory relocation mid-recording/mid-editor, and the beautify/crop tool internals. Also did not run the app to time the did-finish-load race empirically. Two low findings were cut for the 14-item budget: useRecordingActivity's brief idle flash before the async getRecordingState resolves (Capture Panel can momentarily show Start during a recording), and the CountdownOverlay lacking any cancel affordance (folded into the stop-ignored-during-countdown finding).
-- **design-conformance**: Not inspected in depth: onboarding feature (store/provider/steps), analytics feature internals (client, crash-forwarder, use-flag), version-gate and updater renderer features, watermark hooks, the screenshot annotations subsystem internals (scene/compositor/crop/handles/rough/smooth — they have co-located tests), beautify hooks, library filter/format helpers and components, camera-bubble renderer + use-camera-preview, main/permissions.ts and tray.ts, and whether existing tests assert behavior vs implementation details (only spot-checked: pure-module tests like recording-activity/library-vault look behavior-oriented). CSS-token/cx()/data-* styling conformance was only spot-checked (ui/ primitives conform). Cross-checked but not reported (benign): both windows racing the default-mic/default-source write into shared RecordingSettings; RecorderStatus vs RecordingStatus type overlap; control bar showing the previous recording's last tick for ~100ms on reshow.
+- **design-conformance**: Not inspected in depth: onboarding feature (store/provider/steps), analytics feature internals (client, crash-forwarder, use-flag), version-gate and updater renderer features, watermark hooks, the screenshot annotations subsystem internals (scene/compositor/crop/handles/rough/smooth — they have co-located tests), beautify hooks, library filter/format helpers and components, camera-bubble renderer + use-camera-preview, main/permissions.ts and tray.ts, and whether existing tests assert behavior vs implementation details (only spot-checked: pure-module tests like recording-activity/library-vault look behavior-oriented). CSS-token/cx()/data-\* styling conformance was only spot-checked (ui/ primitives conform). Cross-checked but not reported (benign): both windows racing the default-mic/default-source write into shared RecordingSettings; RecorderStatus vs RecordingStatus type overlap; control bar showing the previous recording's last tick for ~100ms on reshow.
 - **flow-improvements**: Inspected in depth: record + capture-panel + control-bar recording flow (use-recording-setup/use-screen-recorder/recorder-engine, recording-hub, recording-writer), screenshot capture/editor/save (screenshot-ipc, screenshot-capture, editor page, image-source, save dialog), library list/detail/vault, onboarding + permissions (renderer and main), settings/shortcuts pages, app-shell/router, toast-store/modal. Not inspected line-by-line: camera-bubble window and use-camera-preview, beautify internals (backgrounds, beautified-frame, crop-overlay math), annotations subsystem internals (scene/tools/compositor — covered by another audit per memory), updater/version-gate/analytics features, tray.ts, media-protocol.ts, and the microphone/audio-levels modules. Findings dropped for the 14-cap: unhandled rejection on library-detail Copy/rename (folded into findings 3/10 descriptions), raw Error.message shown in the source picker (use-screen-sources.ts:51), and capture panel not surfacing mic/camera permission notices that the Record page shows.
 
 ## Next steps
