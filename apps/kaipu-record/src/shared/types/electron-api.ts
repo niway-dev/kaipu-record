@@ -32,6 +32,9 @@ export type PermissionStatus = Record<PermissionKind, boolean>;
 export interface KaipuElectronAPI {
   /** The running app version (`app.getVersion()`), used by the version gate. */
   getAppVersion(): Promise<string>;
+  /** Tell main the app shell has mounted and its IPC listeners are registered,
+   *  so any window-triggered action queued during load can be flushed. */
+  notifyReady(): void;
   /** Current auto-update status (for UI that mounts after the event fired). */
   getUpdateStatus(): Promise<UpdateStatus>;
   /** Subscribe to auto-update status changes. Returns an unsubscribe fn. */

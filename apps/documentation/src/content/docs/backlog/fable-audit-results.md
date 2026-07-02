@@ -5,7 +5,7 @@ description: Confirmed findings from the pre-testers audit (Claude Fable 5) — 
 
 # Fable audit — results
 
-> **Status: 🟡 Fix in progress — 20 of 46 confirmed findings fixed.** Produced by the
+> **Status: 🟡 Fix in progress — 23 of 46 confirmed findings fixed.** Produced by the
 > [fable-audit](./fable-audit) method: 6 parallel finders (recording pipeline, screenshots,
 > settings/IPC, flow isolation, design conformance vs the docs guides, main-flow UX) with
 > adversarial verification of every candidate. Only findings that survived refutation are
@@ -13,9 +13,10 @@ description: Confirmed findings from the pre-testers audit (Claude Fable 5) — 
 >
 > **Fix plan (themed branches):** 1) recording engine lifetime & flow control — ✅ merged
 > (#17: findings 1,2,3,5,9,10,17,19,20,22,23,24,25 + incidentally 39); 2) unguarded exits —
-> ✅ merged (#18: findings 8, 11); 3) silent failures — ✅ done
-> (`fix/surface-silent-failures`, findings 6, 7, 18, 28); 4) cross-window state + docs (14, 15,
-> 16, 21, 27, 29, 30); 5) screenshot editor & export fidelity (4, 12, 13, 26). The 16
+> ✅ merged (#18: findings 8, 11); 3) silent failures — ✅ merged (#19: findings 6, 7, 18, 28); 4) cross-window state + docs, split into: 4a shortcuts & window reachability — ✅ done
+> (`fix/shortcuts-window-reachability`, findings 21, 27, 29 + the did-finish-load race), 4b
+> settings cross-window broadcast (14), 4c vault-folder change safety (30), 4d docs +
+> record-page tests (15, 16); 5) screenshot editor & export fidelity (4, 12, 13, 26). The 16
 > low-severity findings (31–46 minus the incidental 39) are deferred to a later pass.
 
 ## Read this first — the five themes
@@ -265,7 +266,7 @@ During 'finalizing' isRecording is false (only recording/paused count), and neit
 
 **Suggested fix:** Treat 'finalizing' as busy: include it in the isRecording/auto-start/RecordButton guards, and surface a 'Saving previous recording…' state instead of silently swallowing the start.
 
-### 21. Closing the window while rebinding a shortcut leaves ALL global shortcuts unregistered
+### 21. Closing the window while rebinding a shortcut leaves ALL global shortcuts unregistered — ✅ Fixed (`fix/shortcuts-window-reachability`)
 
 **Medium · Bug · found by `flow-isolation`** — `apps/kaipu-record/src/renderer/src/features/shortcuts/shortcut-input.tsx:30`
 
@@ -327,7 +328,7 @@ In windowed (cropped) mode the frame is rendered at the fixed frameSize measured
 
 **Suggested fix:** Recompute the windowed frame size from the current beautify state (displayedShotW + 2\*padding) instead of freezing the un-windowed measurement, or disable/apply-and-exit the beautify sliders while a crop is applied.
 
-### 27. Clicking the Dock icon never reopens the main window once any hidden auxiliary window exists
+### 27. Clicking the Dock icon never reopens the main window once any hidden auxiliary window exists — ✅ Fixed (`fix/shortcuts-window-reachability`)
 
 **Medium · Bug · found by `settings-ipc`** — `apps/kaipu-record/src/main/index.ts:297`
 
@@ -349,7 +350,7 @@ persist() does a direct writeFileSync to settings.json. A crash/power loss/full 
 
 **Suggested fix:** Write to settings.json.tmp then renameSync over the original (atomic on the same volume); apply the same to preferences.json and wrap its write in try/catch.
 
-### 29. Two actions can be bound to the same accelerator; one silently stops working and is mislabeled 'in use by another app'
+### 29. Two actions can be bound to the same accelerator; one silently stops working and is mislabeled 'in use by another app' — ✅ Fixed (`fix/shortcuts-window-reachability`)
 
 **Medium · Bug · found by `settings-ipc`** — `apps/kaipu-record/src/renderer/src/pages/shortcuts/shortcuts-page.tsx:73`
 
@@ -552,7 +553,7 @@ main/index.ts never calls app.requestSingleInstanceLock(). A second instance (op
 ## Uncertain (verify by hand)
 
 - **System-audio toggle on macOS likely makes getUserMedia reject — recording fails to start at all** (`recording`, high) — `apps/kaipu-record/src/renderer/src/features/recording/recorder-engine.ts:89`. User flips the system-audio toggle on and presses record → countdown runs → 'No pudimos iniciar la grabación' every time (or, at best, recordings never contain system audio) on every macOS machine. _Verifier: recorder-engine.ts:87-101 does bundle audio:{mandatory:{chromeMediaSource:'desktop'}} into the same getUserMedia as video, so if macOS rejects the audio leg the whole start fails — but whether Electron 39 (Chromium ~142, which gained ScreenCaptureKit-based loopback paths) rejects, silently omits aud_
-- **Shortcut actions sent on did-finish-load race the renderer's listener registration when the main window is recreated** (`flow-isolation`, medium) — `apps/kaipu-record/src/main/index.ts:162`. Close the main window with Cmd+W (app lives on in the tray). Press ⌘⌃X: no region selector appears, no window, no feedback — the shortcut appears broken. Pressing it a second time works (window now exists and is loaded). _Verifier: The mechanism is real — index.ts:162-166 sends on did-finish-load, listeners register in AppShell useEffects (app-shell.tsx:33-53) which flush asynchronously after commit, and an ipcRenderer message with no listener is silently dropped, with createWindow(false) at index.ts:159 leaving an invisible w_
+- **Shortcut actions sent on did-finish-load race the renderer's listener registration when the main window is recreated** — ✅ Verified real + Fixed (`fix/shortcuts-window-reachability`). Replaced the per-trigger `did-finish-load` sends with a renderer-ready handshake: the app shell sends `app:ready` after its IPC listeners mount, and main queues window-triggered actions (`sendToRenderer`) until then, so a shortcut fired right after the window is recreated is no longer dropped. (`flow-isolation`, medium) — `apps/kaipu-record/src/main/index.ts:162`. Close the main window with Cmd+W (app lives on in the tray). Press ⌘⌃X: no region selector appears, no window, no feedback — the shortcut appears broken. Pressing it a second time works (window now exists and is loaded). _Verifier: The mechanism is real — index.ts:162-166 sends on did-finish-load, listeners register in AppShell useEffects (app-shell.tsx:33-53) which flush asynchronously after commit, and an ipcRenderer message with no listener is silently dropped, with createWindow(false) at index.ts:159 leaving an invisible w_
 
 ## Refuted (checked, not real)
 

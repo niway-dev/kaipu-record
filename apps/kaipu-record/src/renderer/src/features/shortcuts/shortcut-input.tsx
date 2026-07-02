@@ -7,8 +7,11 @@ export interface ShortcutInputProps {
   value: string;
   /** Called with the new accelerator once a valid combo is captured. */
   onChange: (accelerator: string) => void;
-  /** True when this binding failed to register (another app owns it). */
+  /** True when this binding isn't active (another app owns it, or it duplicates
+   *  another Kaipu action) — styles the control to flag it. */
   unavailable?: boolean;
+  /** Hover title explaining why it's unavailable (the reason differs by case). */
+  title?: string;
 }
 
 /**
@@ -20,6 +23,7 @@ export function ShortcutInput({
   value,
   onChange,
   unavailable = false,
+  title,
 }: ShortcutInputProps): React.JSX.Element {
   const [listening, setListening] = React.useState(false);
 
@@ -57,7 +61,9 @@ export function ShortcutInput({
       data-listening={listening || undefined}
       data-unavailable={unavailable || undefined}
       aria-label="Change shortcut"
-      title={unavailable ? "In use by another app — pick a different combo" : undefined}
+      title={
+        title ?? (unavailable ? "This shortcut isn't active — pick a different combo" : undefined)
+      }
       onClick={() => setListening((on) => !on)}
       onBlur={() => setListening(false)}
     >

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { captureShortcut, formatAccelerator } from "./keyboard-accelerator";
+import { captureShortcut, conflictingAction, formatAccelerator } from "./keyboard-accelerator";
 
 function event(
   over: Partial<Parameters<typeof captureShortcut>[0]>,
@@ -54,5 +54,28 @@ describe("formatAccelerator", () => {
 
   it("understands the cross-platform aliases", () => {
     expect(formatAccelerator("CommandOrControl+Shift+1")).toBe("⇧⌘1");
+  });
+});
+
+describe("conflictingAction", () => {
+  const shortcuts = {
+    startRecording: "Command+Control+C",
+    stopRecording: "Command+Control+S",
+    captureScreenshot: "Command+Control+X",
+  };
+
+  it("finds another action already bound to the accelerator", () => {
+    // Rebinding stopRecording to startRecording's combo.
+    expect(conflictingAction(shortcuts, "stopRecording", "Command+Control+C")).toBe(
+      "startRecording",
+    );
+  });
+
+  it("ignores the action's own current binding (re-picking the same combo is fine)", () => {
+    expect(conflictingAction(shortcuts, "startRecording", "Command+Control+C")).toBeNull();
+  });
+
+  it("returns null when the accelerator is free", () => {
+    expect(conflictingAction(shortcuts, "stopRecording", "Command+Control+K")).toBeNull();
   });
 });

@@ -131,6 +131,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
  */
 export const IPC_CHANNELS = {
   getAppVersion: "app:get-version",
+  // Renderer → main: the app shell has mounted and registered its IPC listeners.
+  // Main defers window-triggered actions (start/capture/source-picker sent to a
+  // freshly-created window) until this arrives, so they aren't dropped by racing
+  // the listeners' registration against the page's did-finish-load.
+  appReady: "app:ready",
   // Renderer → main: grow/reset the window for the screenshot editor.
   windowSetEditorMode: "window:set-editor-mode",
   updateGetStatus: "update:get-status",

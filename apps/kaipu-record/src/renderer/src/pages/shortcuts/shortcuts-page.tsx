@@ -3,6 +3,7 @@ import { Card } from "@renderer/ui/card";
 import { Row } from "@renderer/ui/row";
 import { useAppSettings } from "@renderer/pages/settings/use-app-settings";
 import { ShortcutInput } from "@renderer/features/shortcuts/shortcut-input";
+import { conflictingAction } from "@renderer/features/shortcuts/keyboard-accelerator";
 import {
   DEFAULT_SHORTCUTS,
   SHORTCUT_DEFINITIONS,
@@ -58,20 +59,54 @@ export function ShortcutsPage(): React.JSX.Element {
     void window.electronAPI.getShortcutStatus().then(setShortcutStatus);
   }, [settings?.shortcuts]);
 
+  // A just-rejected rebind because the combo is already used by another Kaipu
+  // action. Cleared on the next successful change.
+  const [duplicate, setDuplicate] = React.useState<{
+    action: ShortcutAction;
+    withAction: ShortcutAction;
+  } | null>(null);
+
+  const handleChange = (action: ShortcutAction, accelerator: string): void => {
+    const clash = conflictingAction(shortcuts, action, accelerator);
+    if (clash) {
+      // Reject rather than save — saving would let one of the two bindings
+      // silently fail to register (and get mislabeled "in use by another app").
+      setDuplicate({ action, withAction: clash });
+      return;
+    }
+    setDuplicate(null);
+    void update({ shortcuts: { ...shortcuts, [action]: accelerator } });
+  };
+
+  const labelFor = (action: ShortcutAction): string =>
+    SHORTCUT_DEFINITIONS.find((d) => d.action === action)?.label ?? action;
+
   const renderRow = ({ action, label, description }: ShortcutDefinition): React.JSX.Element => {
-    const unavailable = shortcutStatus ? !shortcutStatus[action] : false;
+    const isDuplicate = duplicate?.action === action;
+    // Two distinct failure modes, distinct copy: a clash with another Kaipu
+    // action (detected here, at bind time) vs the combo being owned by another
+    // app (only known once registration fails).
+    const ownedByOtherApp = shortcutStatus ? !shortcutStatus[action] : false;
+    const note = isDuplicate
+      ? `${description} · already bound to “${labelFor(duplicate.withAction)}”`
+      : ownedByOtherApp
+        ? `${description} · in use by another app`
+        : description;
     return (
       <Row
         key={action}
         label={label}
-        description={unavailable ? `${description} · in use by another app` : description}
+        description={note}
         action={
           <ShortcutInput
             value={shortcuts[action]}
-            unavailable={unavailable}
-            onChange={(accelerator) =>
-              void update({ shortcuts: { ...shortcuts, [action]: accelerator } })
+            unavailable={ownedByOtherApp || isDuplicate}
+            title={
+              isDuplicate
+                ? `Already bound to “${labelFor(duplicate.withAction)}” — pick a different combo`
+                : undefined
             }
+            onChange={(accelerator) => handleChange(action, accelerator)}
           />
         }
       />

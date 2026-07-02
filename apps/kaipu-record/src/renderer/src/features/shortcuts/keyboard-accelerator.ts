@@ -48,6 +48,25 @@ export function captureShortcut(event: {
   return { accelerator: accelParts.join("+"), label: formatAccelerator(accelParts.join("+")) };
 }
 
+/**
+ * The action already bound to `accelerator` (other than `action` itself), or
+ * null. Lets the Shortcuts UI reject a duplicate *before* it saves — otherwise
+ * two actions share a combo, the second `globalShortcut.register` returns false,
+ * and that binding silently dies (mislabeled "in use by another app"). All
+ * bindings come from the same producer (defaults or `captureShortcut`), so plain
+ * string equality is a reliable duplicate check.
+ */
+export function conflictingAction<A extends string>(
+  shortcuts: Record<A, string>,
+  action: A,
+  accelerator: string,
+): A | null {
+  for (const key of Object.keys(shortcuts) as A[]) {
+    if (key !== action && shortcuts[key] === accelerator) return key;
+  }
+  return null;
+}
+
 // Accelerator token → symbol. Includes the cross-platform aliases for completeness.
 const TOKEN_SYMBOLS: Record<string, string> = {
   Command: "⌘",

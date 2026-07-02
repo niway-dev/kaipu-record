@@ -42,6 +42,25 @@ let closingWithRecording = false;
  *  guard — lets the second `before-quit` (after the recording finalizes) pass
  *  straight through instead of prompting again. */
 let quittingWithRecording = false;
+/** Set true when the renderer sends `appReady` (its IPC listeners are up), reset
+ *  to false whenever a new main window is created. */
+let rendererReady = false;
+/** Window-triggered actions (start/capture/source-picker) that arrived before the
+ *  renderer was ready, flushed on `appReady` so they aren't dropped. */
+let pendingRendererSends: string[] = [];
+
+/**
+ * Send a main → renderer channel, or queue it until the renderer signals ready.
+ * Fixes the race where a freshly-created window's `did-finish-load` fires before
+ * the app shell's React effects register the matching IPC listeners, so the
+ * message was silently dropped (the shortcut "did nothing" the first time).
+ */
+function sendToRenderer(channel: string): void {
+  const contents = mainWindow?.webContents;
+  if (!contents) return;
+  if (rendererReady) contents.send(channel);
+  else pendingRendererSends.push(channel);
+}
 
 // Must run before `app.whenReady` — privileged scheme registration.
 registerMediaScheme();
@@ -59,6 +78,9 @@ const EDITOR_MIN_HEIGHT = 720;
  * successful shot), so the app doesn't flash to the front and into the capture.
  */
 function createWindow(showOnReady = true): void {
+  // A fresh window's renderer hasn't registered its IPC listeners yet; block
+  // sends until it signals `appReady`.
+  rendererReady = false;
   // Create the browser window.
   mainWindow = new BrowserWindow({
     title: "Kaipu Record",
@@ -170,13 +192,7 @@ function triggerStartRecording(): void {
   }
   capturePanel?.hide();
   showMainWindow();
-  const contents = mainWindow?.webContents;
-  if (!contents) return;
-  if (contents.isLoading()) {
-    contents.once("did-finish-load", () => contents.send(IPC_CHANNELS.recordingRequestStart));
-  } else {
-    contents.send(IPC_CHANNELS.recordingRequestStart);
-  }
+  sendToRenderer(IPC_CHANNELS.recordingRequestStart);
 }
 
 /**
@@ -187,15 +203,7 @@ function triggerStartRecording(): void {
 function triggerChooseSource(): void {
   capturePanel?.hide();
   showMainWindow();
-  const contents = mainWindow?.webContents;
-  if (!contents) return;
-  if (contents.isLoading()) {
-    contents.once("did-finish-load", () =>
-      contents.send(IPC_CHANNELS.recordingRequestSourcePicker),
-    );
-  } else {
-    contents.send(IPC_CHANNELS.recordingRequestSourcePicker);
-  }
+  sendToRenderer(IPC_CHANNELS.recordingRequestSourcePicker);
 }
 
 /** Bring the app back to the foreground from any state (the rescue shortcut). */
@@ -219,13 +227,7 @@ function triggerCaptureScreenshot(): void {
   // it forward here would put the app back in the shot. The renderer reveals it
   // after a successful capture.
   if (!mainWindow || mainWindow.isDestroyed()) createWindow(false);
-  const contents = mainWindow?.webContents;
-  if (!contents) return;
-  if (contents.isLoading()) {
-    contents.once("did-finish-load", () => contents.send(IPC_CHANNELS.screenshotHotkey));
-  } else {
-    contents.send(IPC_CHANNELS.screenshotHotkey);
-  }
+  sendToRenderer(IPC_CHANNELS.screenshotHotkey);
 }
 
 /** Remembers whether the app was visible before a capture, to restore on cancel. */
@@ -268,6 +270,16 @@ app.whenReady().then(() => {
   // IPC test
   ipcMain.on("ping", () => console.log("pong"));
 
+  // The app shell finished mounting and registered its IPC listeners — flush any
+  // window-triggered actions that arrived while it was still loading.
+  ipcMain.on(IPC_CHANNELS.appReady, (event) => {
+    if (event.sender !== mainWindow?.webContents) return;
+    rendererReady = true;
+    const queued = pendingRendererSends;
+    pendingRendererSends = [];
+    for (const channel of queued) mainWindow?.webContents.send(channel);
+  });
+
   // Persisted app settings (+ apply the Dock/switcher policy and launch-at-login).
   registerSettings();
   initMainAnalytics(getDeviceId());
@@ -299,8 +311,27 @@ app.whenReady().then(() => {
   ipcMain.handle(IPC_CHANNELS.shortcutsGetStatus, () => getShortcutStatus());
   // While the Settings UI captures a new binding, release the global shortcuts so
   // the combo reaches the renderer (and doesn't fire the action being rebound).
-  ipcMain.on(IPC_CHANNELS.shortcutsSuspend, () => unregisterGlobalShortcuts());
-  ipcMain.on(IPC_CHANNELS.shortcutsResume, () => applyGlobalShortcuts());
+  // `resume` only arrives from the React effect cleanup — if the window is closed
+  // (Cmd+W) while still "listening", that cleanup never runs, so ALL global
+  // shortcuts (including the ⌘⌃O rescue) would stay dead until a settings change
+  // or relaunch. Re-register when the suspending window is destroyed as a backstop.
+  let shortcutsSuspendedBy: Electron.WebContents | null = null;
+  ipcMain.on(IPC_CHANNELS.shortcutsSuspend, (event) => {
+    unregisterGlobalShortcuts();
+    if (shortcutsSuspendedBy !== event.sender) {
+      shortcutsSuspendedBy = event.sender;
+      event.sender.once("destroyed", () => {
+        if (shortcutsSuspendedBy === event.sender) {
+          applyGlobalShortcuts();
+          shortcutsSuspendedBy = null;
+        }
+      });
+    }
+  });
+  ipcMain.on(IPC_CHANNELS.shortcutsResume, () => {
+    applyGlobalShortcuts();
+    shortcutsSuspendedBy = null;
+  });
 
   // Recording: screen/window source enumeration.
   registerRecordingSourceHandlers();
@@ -359,9 +390,12 @@ app.whenReady().then(() => {
   tray = createTray(capturePanel, showMainWindow);
 
   app.on("activate", function () {
-    // On macOS it's common to re-create a window in the app when the
-    // dock icon is clicked and there are no other windows open.
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    // Dock-icon click: bring the main window back (recreating it if it was
+    // closed). Keyed on the tracked mainWindow ref, NOT
+    // getAllWindows().length === 0 — the Capture Panel and control-bar windows
+    // persist hidden after their first use, so that count is never zero once
+    // either has been shown, which left the Dock icon doing nothing.
+    showMainWindow();
   });
 });
 
