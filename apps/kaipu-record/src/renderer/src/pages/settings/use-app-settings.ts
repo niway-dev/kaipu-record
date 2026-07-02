@@ -10,8 +10,11 @@ export interface AppSettingsStore {
 export function useAppSettings(): AppSettingsStore {
   const [settings, setSettings] = useState<AppSettings | null>(null);
 
+  // Query on mount + subscribe, so a change from another window (or another
+  // Settings surface) is reflected without a remount.
   useEffect(() => {
     void window.electronAPI.getSettings().then(setSettings);
+    return window.electronAPI.onSettingsChanged(setSettings);
   }, []);
 
   const update = useCallback(async (patch: Partial<AppSettings>) => {

@@ -45,6 +45,8 @@ export interface KaipuElectronAPI {
   getSettings(): Promise<AppSettings>;
   /** Merge a partial settings change; persists + applies OS side effects; returns the result. */
   updateSettings(patch: Partial<AppSettings>): Promise<AppSettings>;
+  /** Subscribe to persisted-settings changes from any window. Returns an unsubscribe fn. */
+  onSettingsChanged(callback: (settings: AppSettings) => void): () => void;
 
   /** Enumerate available screens and windows via the main-process desktopCapturer. */
   getScreenSources(): Promise<ScreenSource[]>;

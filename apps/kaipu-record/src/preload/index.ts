@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 import { electronAPI } from "@electron-toolkit/preload";
 import { IPC_CHANNELS } from "@shared/types";
+import type { AppSettings } from "@shared/types";
 import type { KaipuElectronAPI } from "@shared/types/electron-api";
 import type {
   ControlCommand,
@@ -23,6 +24,11 @@ const kaipuApi: KaipuElectronAPI = {
   installUpdate: () => ipcRenderer.send(IPC_CHANNELS.updateInstall),
   getSettings: () => ipcRenderer.invoke(IPC_CHANNELS.getSettings),
   updateSettings: (patch) => ipcRenderer.invoke(IPC_CHANNELS.updateSettings, patch),
+  onSettingsChanged: (callback) => {
+    const listener = (_e: IpcRendererEvent, settings: AppSettings): void => callback(settings);
+    ipcRenderer.on(IPC_CHANNELS.settingsChanged, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.settingsChanged, listener);
+  },
   getScreenSources: () => ipcRenderer.invoke("recording:get-screen-sources"),
   resizeCapturePanel: (height) => ipcRenderer.send("capture-panel:resize", height),
   openMainWindow: () => ipcRenderer.send("capture-panel:open-main"),

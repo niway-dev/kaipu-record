@@ -143,6 +143,11 @@ export const IPC_CHANNELS = {
   updateInstall: "update:install",
   getSettings: "settings:get",
   updateSettings: "settings:update",
+  // Main → every window: persisted AppSettings changed. Lets cross-window
+  // consumers (the control-bar's Stop-shortcut hint, useAppSettings) follow the
+  // documented query-on-mount + subscribe pattern instead of a focus/remount
+  // workaround the always-alive control-bar window never triggers.
+  settingsChanged: "settings:changed",
   checkPermissions: "permissions:check",
   requestPermission: "permissions:request",
   openSystemSettings: "permissions:open-settings",

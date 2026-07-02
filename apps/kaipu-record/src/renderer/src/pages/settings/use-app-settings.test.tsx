@@ -38,4 +38,18 @@ describe("useAppSettings", () => {
     expect(window.electronAPI.updateSettings).toHaveBeenCalledWith({ showInDock: false });
     expect(result.current.settings?.showInDock).toBe(false);
   });
+
+  it("adopts a settings-changed broadcast from another window", async () => {
+    let subscriber: ((settings: AppSettings) => void) | null = null;
+    window.electronAPI.onSettingsChanged = ((callback: (settings: AppSettings) => void) => {
+      subscriber = callback;
+      return () => {};
+    }) as unknown as typeof window.electronAPI.onSettingsChanged;
+
+    const { result } = renderHook(() => useAppSettings());
+    await waitFor(() => expect(result.current.settings).toEqual(SETTINGS));
+
+    act(() => subscriber?.({ ...SETTINGS, theme: "dark" }));
+    expect(result.current.settings?.theme).toBe("dark");
+  });
 });
