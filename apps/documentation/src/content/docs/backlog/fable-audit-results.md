@@ -5,7 +5,7 @@ description: Confirmed findings from the pre-testers audit (Claude Fable 5) — 
 
 # Fable audit — results
 
-> **Status: 🟡 Fix in progress — 16 of 46 confirmed findings fixed.** Produced by the
+> **Status: 🟡 Fix in progress — 20 of 46 confirmed findings fixed.** Produced by the
 > [fable-audit](./fable-audit) method: 6 parallel finders (recording pipeline, screenshots,
 > settings/IPC, flow isolation, design conformance vs the docs guides, main-flow UX) with
 > adversarial verification of every candidate. Only findings that survived refutation are
@@ -13,9 +13,10 @@ description: Confirmed findings from the pre-testers audit (Claude Fable 5) — 
 >
 > **Fix plan (themed branches):** 1) recording engine lifetime & flow control — ✅ merged
 > (#17: findings 1,2,3,5,9,10,17,19,20,22,23,24,25 + incidentally 39); 2) unguarded exits —
-> ✅ done (`fix/unguarded-exits`, findings 8, 11); 3) silent failures (6, 7, 18, 28); 4) cross-window state + docs (14, 15, 16, 21, 27, 29, 30); 5) screenshot editor & export
-> fidelity (4, 12, 13, 26). The 16 low-severity findings (31–46 minus the incidental 39) are
-> deferred to a later pass.
+> ✅ merged (#18: findings 8, 11); 3) silent failures — ✅ done
+> (`fix/surface-silent-failures`, findings 6, 7, 18, 28); 4) cross-window state + docs (14, 15,
+> 16, 21, 27, 29, 30); 5) screenshot editor & export fidelity (4, 12, 13, 26). The 16
+> low-severity findings (31–46 minus the incidental 39) are deferred to a later pass.
 
 ## Read this first — the five themes
 
@@ -100,7 +101,7 @@ recording-pipeline.mdx ('Estado global de grabación (entre ventanas)') document
 
 **Verifier note:** severity adjusted from critical to high. record-page.tsx:98,163 and use-recording-setup.ts:130,203 gate only on the local recorder (idle after a remount), while useRecordingActivity is used only for label/time (record-page.tsx:47,76); the scenario is reachable because bringAppToFront (main/index.ts:140-144, the ⌘⌃O handler) shows the hidden main window mid-recording and sidebar.tsx has no lock. This defeats the documented invariant (reco
 
-### 6. Screenshot editor Save and Copy swallow failures — a failed save gives zero feedback, user closes editor believing the shot is in the library
+### 6. Screenshot editor Save and Copy swallow failures — a failed save gives zero feedback, user closes editor believing the shot is in the library — ✅ Fixed (`fix/surface-silent-failures`)
 
 **High · Robustness · found by `flow-improvements`** — `apps/kaipu-record/src/renderer/src/pages/screenshot-editor/screenshot-editor-page.tsx:125`
 
@@ -112,7 +113,7 @@ persist() (line 121–134) and onCopy() (line 110–119) use try/finally with no
 
 **Independently reported by:** `screenshots` — “Copy/Save failures are swallowed: no user feedback and an unhandled promise rejection”
 
-### 7. Recording chunk write failures are only console.error'd — user can record for an hour onto a full disk and only discover the corrupt file afterwards
+### 7. Recording chunk write failures are only console.error'd — user can record for an hour onto a full disk and only discover the corrupt file afterwards — ✅ Fixed (`fix/surface-silent-failures`)
 
 **High · Robustness · found by `flow-improvements`** — `apps/kaipu-record/src/main/recording/recording-hub.ts:94`
 
@@ -232,7 +233,7 @@ Once startRecording begins the countdown, the full-screen CountdownOverlay cover
 
 **Suggested fix:** Add an Escape key handler and a visible "Cancel" affordance on CountdownOverlay wired to stopRecording() (which already clears the countdown); also route the stop command to clearCountdown when no engine exists yet.
 
-### 18. Library list failure is rendered as the 'No recordings yet' empty state instead of an error
+### 18. Library list failure is rendered as the 'No recordings yet' empty state instead of an error — ✅ Fixed (`fix/surface-silent-failures`)
 
 **Medium · Robustness · found by `flow-improvements`** — `apps/kaipu-record/src/renderer/src/features/library/hooks/use-local-library.ts:37`
 
@@ -338,7 +339,7 @@ The activate handler recreates the main window only when BrowserWindow.getAllWin
 
 **Verifier note:** Bug confirmed exactly as described, but severity is medium, not high: the app is deliberately tray-first (index.ts:301-303 comment: "The app lives in the menu bar"), the always-visible tray reopens the main window in one click via showMainWindow (index.ts:292), and the ⌘⌃O bringAppToFront rescue shortcut (index.ts:140-144) exists specifically for reachability. The Dock click silently doing nothing is a real, reachable defect in default config, but it is recoverable with no data loss or dead-end.
 
-### 28. settings.json is written non-atomically; a crash mid-write loses all settings and mints a new analytics deviceId
+### 28. settings.json is written non-atomically; a crash mid-write loses all settings and mints a new analytics deviceId — ✅ Fixed (`fix/surface-silent-failures`)
 
 **Medium · Robustness · found by `settings-ipc`** — `apps/kaipu-record/src/main/infrastructure/settings-store.ts:37`
 
