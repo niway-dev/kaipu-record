@@ -111,12 +111,28 @@ export function registerRecordingHub(
   });
 
   // ── Disk writer ──────────────────────────────────────────────────────
-  ipcMain.handle(IPC_CHANNELS.recordingCreate, (_e, sessionId: string) => writer.create(sessionId));
+  // Whether we've already told the renderer to stop for a failed write, so the
+  // "stop" is sent once per recording (writes are fire-and-forget and keep
+  // arriving after the first failure). Reset on each new session.
+  let stoppedForWriteFailure = false;
+  ipcMain.handle(IPC_CHANNELS.recordingCreate, (_e, sessionId: string) => {
+    stoppedForWriteFailure = false;
+    return writer.create(sessionId);
+  });
   ipcMain.on(
     IPC_CHANNELS.recordingWrite,
     (_e, sessionId: string, data: ArrayBuffer, position: number) => {
       void writer.write(sessionId, data, position).catch((error) => {
         console.error("recording write failed", error);
+        // Writes are fire-and-forget, so without this the engine keeps encoding
+        // and the bar keeps ticking while every chunk is dropped. Stop the
+        // recorder promptly on the first failure: its stop runs finalize, which
+        // now refuses success on a failed session → the user gets an error toast
+        // instead of a "saved" recording that won't play.
+        if (!stoppedForWriteFailure) {
+          stoppedForWriteFailure = true;
+          getMainWindow()?.webContents.send(IPC_CHANNELS.recordingCommand, "stop");
+        }
       });
     },
   );

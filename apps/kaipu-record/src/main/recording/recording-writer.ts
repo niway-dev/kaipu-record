@@ -26,6 +26,12 @@ interface Session {
    * Kept non-rejecting so one failed write doesn't drop the rest.
    */
   queue: Promise<void>;
+  /**
+   * Set to the first write error if any positional write fails (disk full,
+   * permissions, ejected drive). `finalize` refuses to present a truncated file
+   * as a saved recording once this is set.
+   */
+  failed?: Error;
 }
 
 /**
@@ -63,13 +69,37 @@ export class RecordingWriter {
       () => undefined,
       () => undefined,
     );
-    await op;
+    try {
+      await op;
+    } catch (error) {
+      // Remember the first failure so finalize can refuse to report success —
+      // otherwise a truncated/hole-filled .part gets renamed into the vault and
+      // presented as a saved recording that won't play.
+      session.failed ??= error instanceof Error ? error : new Error(String(error));
+      throw error;
+    }
+  }
+
+  /** Whether any write for this session has failed (used to stop early). */
+  hasFailed(sessionId: string): boolean {
+    return this.sessions.get(sessionId)?.failed !== undefined;
   }
 
   async finalize(sessionId: string, meta: RecordingFinalizeMeta): Promise<LocalRecording> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`No recording session "${sessionId}"`);
     await session.queue; // flush in-flight positional writes before closing
+
+    // A write failed mid-recording — the .part is truncated/holed. Refuse to move
+    // it into the vault as a "saved" recording; clean up and surface the original
+    // error so the renderer reports it instead of showing a corrupt file.
+    if (session.failed) {
+      await session.handle.close().catch(() => {});
+      await unlink(session.tempPath).catch(() => {});
+      this.sessions.delete(sessionId);
+      throw session.failed;
+    }
+
     await session.handle.close();
     this.sessions.delete(sessionId);
 
