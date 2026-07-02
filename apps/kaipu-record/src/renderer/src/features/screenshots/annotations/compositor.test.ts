@@ -150,4 +150,25 @@ describe("compositor buildSvg", () => {
     expect(svg).toContain('viewBox="0 0 1080 680"');
     expect(svg).toContain('<use href="#shot" x="40" y="40"');
   });
+
+  it("does NOT clip annotations to the shot rect (they may render over the padding, like the preview)", () => {
+    const annotations: Annotation[] = [
+      {
+        id: "a",
+        kind: "arrow",
+        x1: 0.9,
+        y1: 0.9,
+        x2: 1.1,
+        y2: 1.1,
+        color: "#f00",
+        stroke: 1,
+        seed: 2,
+      },
+    ];
+    const svg = buildSvg(scene(annotations), geom);
+    // The annotation group is translated into the frame but carries no shot clip,
+    // so an arrow head at 1.1 (past the shot edge, into the padding) isn't truncated.
+    expect(svg).toContain(`<g transform="translate(40,40)">`);
+    expect(svg).not.toContain("rcLocal");
+  });
 });

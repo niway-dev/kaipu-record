@@ -98,11 +98,6 @@ export function buildSvg(scene: Scene, g: Geom): string {
   defs.push(
     `<image id="shot" href="${g.href}" width="${g.naturalW}" height="${g.naturalH}" preserveAspectRatio="none"/>`,
   );
-  // Rounded-shot clip in the annotation group's local coords, so a blur near a rounded
-  // corner can't spill past the frame.
-  defs.push(
-    `<clipPath id="rcLocal"><rect x="0" y="0" width="${g.naturalW}" height="${g.naturalH}" rx="${g.radius}"/></clipPath>`,
-  );
 
   // Round the outer frame to match the live preview (BeautifiedFrame applies
   // frameRadius to the bg div) — a square rect here made exports differ.
@@ -120,7 +115,12 @@ export function buildSvg(scene: Scene, g: Geom): string {
   // (authored at (pad,pad)) would land at (2·pad,2·pad) and shear the shot's top-left off.
   // The group has no transform, so `rc` clips in root space where the shot actually is.
   const image = `<g clip-path="url(#rc)"><use href="#shot" x="${g.pad}" y="${g.pad}"/></g>`;
-  const anno = `<g transform="translate(${g.pad},${g.pad})" clip-path="url(#rcLocal)">${scene.annotations
+  // Annotations are NOT clipped to the shot rect: the live preview renders them
+  // with overflow visible, so an arrow head / pen stroke / text that lands in the
+  // beautify padding is shown there — clipping to the shot truncated it in the
+  // export only. The output viewBox (the crop window, or the whole frame) is the
+  // natural bound, so they render exactly as previewed.
+  const anno = `<g transform="translate(${g.pad},${g.pad})">${scene.annotations
     .map((a) => annotationSvg(a, g.naturalW, g.naturalH, g.scale))
     .join("")}</g>`;
 
@@ -167,8 +167,8 @@ function annotationSvg(a: Annotation, W: number, H: number, scale: number): stri
     const y2 = a.y2 * H;
     const sw = STROKE_WIDTHS[a.stroke] * scale;
     return (
-      `<path d="${roughArrow(x1, y1, x2, y2, a.seed)}" fill="none" stroke="${a.color}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/>` +
-      `<path d="${roughArrow(x1, y1, x2, y2, a.seed + 19)}" fill="none" stroke="${a.color}" stroke-width="${sw * 0.7}" stroke-linecap="round" stroke-linejoin="round" opacity="0.5"/>`
+      `<path d="${roughArrow(x1, y1, x2, y2, a.seed, scale)}" fill="none" stroke="${a.color}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/>` +
+      `<path d="${roughArrow(x1, y1, x2, y2, a.seed + 19, scale)}" fill="none" stroke="${a.color}" stroke-width="${sw * 0.7}" stroke-linecap="round" stroke-linejoin="round" opacity="0.5"/>`
     );
   }
   if (a.kind === "path") {
