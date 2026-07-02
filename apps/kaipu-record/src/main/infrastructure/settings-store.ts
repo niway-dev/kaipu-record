@@ -1,4 +1,4 @@
-import { app, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain } from "electron";
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -82,6 +82,14 @@ export function forceRegularPolicy(): void {
   app.dock?.show();
 }
 
+/** Push the current settings to every window so renderer consumers stay in sync
+ *  (query-on-mount + subscribe). Mirrors the recording-settings broadcast. */
+function broadcastSettings(): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) window.webContents.send(IPC_CHANNELS.settingsChanged, settings);
+  }
+}
+
 // Listeners notified after every persisted settings change (e.g. to re-register
 // global shortcuts when their bindings change).
 const settingsListeners = new Set<(settings: AppSettings) => void>();
@@ -112,6 +120,7 @@ export function registerSettings(): void {
     persist();
     applySideEffects();
     for (const listener of settingsListeners) listener(settings);
+    broadcastSettings();
     return settings;
   });
 }

@@ -5,7 +5,7 @@ description: Confirmed findings from the pre-testers audit (Claude Fable 5) — 
 
 # Fable audit — results
 
-> **Status: 🟡 Fix in progress — 23 of 46 confirmed findings fixed.** Produced by the
+> **Status: 🟡 Fix in progress — 24 of 46 confirmed findings fixed.** Produced by the
 > [fable-audit](./fable-audit) method: 6 parallel finders (recording pipeline, screenshots,
 > settings/IPC, flow isolation, design conformance vs the docs guides, main-flow UX) with
 > adversarial verification of every candidate. Only findings that survived refutation are
@@ -14,8 +14,8 @@ description: Confirmed findings from the pre-testers audit (Claude Fable 5) — 
 > **Fix plan (themed branches):** 1) recording engine lifetime & flow control — ✅ merged
 > (#17: findings 1,2,3,5,9,10,17,19,20,22,23,24,25 + incidentally 39); 2) unguarded exits —
 > ✅ merged (#18: findings 8, 11); 3) silent failures — ✅ merged (#19: findings 6, 7, 18, 28); 4) cross-window state + docs, split into: 4a shortcuts & window reachability — ✅ done
-> (`fix/shortcuts-window-reachability`, findings 21, 27, 29 + the did-finish-load race), 4b
-> settings cross-window broadcast (14), 4c vault-folder change safety (30), 4d docs +
+> (`fix/shortcuts-window-reachability`, findings 21, 27, 29 + the did-finish-load race), 4b settings
+> cross-window broadcast — ✅ done (`fix/settings-broadcast`, finding 14), 4c vault-folder change safety (30), 4d docs +
 > record-page tests (15, 16); 5) screenshot editor & export fidelity (4, 12, 13, 26). The 16
 > low-severity findings (31–46 minus the incidental 39) are deferred to a later pass.
 
@@ -194,7 +194,7 @@ annotationSvg for arrows calls roughArrow(x1..y2, seed) with coordinates convert
 
 ## Medium
 
-### 14. Persisted AppSettings has no renderer broadcast — cross-window consumers violate the documented query-on-mount + subscribe pattern (stale Stop-shortcut hint on the control bar)
+### 14. Persisted AppSettings has no renderer broadcast — cross-window consumers violate the documented query-on-mount + subscribe pattern (stale Stop-shortcut hint on the control bar) — ✅ Fixed (`fix/settings-broadcast`)
 
 **Medium · Design · found by `design-conformance`** — `apps/kaipu-record/src/main/infrastructure/settings-store.ts:106`
 

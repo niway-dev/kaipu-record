@@ -41,6 +41,7 @@ window.electronAPI = {
   installUpdate: () => {},
   getSettings: async () => STUB_SETTINGS,
   updateSettings: async () => STUB_SETTINGS,
+  onSettingsChanged: () => () => {},
   getScreenSources: async () => [],
   resizeCapturePanel: () => {},
   openMainWindow: () => {},
