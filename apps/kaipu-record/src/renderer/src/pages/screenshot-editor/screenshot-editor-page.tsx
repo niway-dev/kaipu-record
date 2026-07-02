@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Navigate, useLocation } from "react-router-dom";
+import { Navigate, useBlocker, useLocation } from "react-router-dom";
 import { Check, Copy, Download, Redo2, Undo2, ZoomIn, ZoomOut } from "lucide-react";
 import { useImageSource, type ImageSource } from "@renderer/features/screenshots/image-source";
+import { DiscardChangesDialog } from "@renderer/features/screenshots/discard-changes-dialog";
 import {
   BeautifiedFrame,
   BeautifyPanel,
@@ -69,6 +70,29 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
   const [askSave, setAskSave] = useState(false);
   const [baseTitle] = useState(() => source.title ?? `Screenshot — ${new Date().toLocaleString()}`);
 
+  // Unsaved-changes guard. A fresh capture (blob) lives ONLY in memory, so it's
+  // dirty from the moment it opens — leaving loses the only copy; a re-opened
+  // saved shot starts clean. Either way, any scene edit re-dirties it, and a
+  // successful save clears it.
+  const isFreshCapture = source.kind !== "local";
+  const [dirty, setDirty] = useState(isFreshCapture);
+  // `beautify.state`/`annotations`/`crop` are stable per-scene-state refs (they
+  // only change on an actual edit — see useEditorScene), so this fires exactly
+  // when the scene changes. Skip the initial run so a clean re-opened shot isn't
+  // marked dirty just by mounting.
+  const sceneSettled = useRef(false);
+  useEffect(() => {
+    if (!sceneSettled.current) {
+      sceneSettled.current = true;
+      return;
+    }
+    setDirty(true);
+  }, [scene.beautify.state, scene.annotations, scene.crop]);
+
+  // Block in-app navigation (sidebar clicks, ⌘⌃V start-recording, ⌘⌃X new
+  // capture — all go through the router) while there are unsaved changes.
+  const blocker = useBlocker(dirty);
+
   // The editor needs more room than the rest of the app — ask main to grow the
   // window (and raise its minimum) while we're here, and restore it on the way out.
   useEffect(() => {
@@ -127,6 +151,7 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
         overwriteId: opts.overwriteId,
       });
       setSavedId(saved.id);
+      setDirty(false); // now safely in the vault — leaving no longer loses work
       showFeedback({ kind: "saved", name: saved.title });
     } finally {
       busy.current = false;
@@ -271,6 +296,14 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
           onOverwrite={onOverwrite}
           onSaveCopy={onSaveCopy}
           onCancel={() => setAskSave(false)}
+        />
+      )}
+
+      {blocker.state === "blocked" && (
+        <DiscardChangesDialog
+          neverSaved={savedId === null}
+          onDiscard={() => blocker.proceed()}
+          onCancel={() => blocker.reset()}
         />
       )}
     </div>
