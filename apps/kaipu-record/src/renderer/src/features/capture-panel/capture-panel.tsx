@@ -1,4 +1,5 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { Camera } from "lucide-react";
 import { RecordingIndicator } from "@renderer/features/recording/components/recording-indicator";
 import { useRecordingSetup } from "@renderer/features/recording/hooks/use-recording-setup";
 import { useRecordingActivity } from "@renderer/features/recording/hooks/use-recording-activity";
@@ -9,6 +10,7 @@ import { RecordingToggles } from "@renderer/features/recording/components/record
 import { MicPicker } from "@renderer/features/recording/components/mic-picker";
 import { RecordButton } from "@renderer/features/recording/components/record-button";
 import { PanelHeader } from "./components/panel-header";
+import { PanelTabs, type PanelTab } from "./components/panel-tabs";
 import styles from "./capture-panel.module.css";
 
 // Compact composition of the recording controls, shown from the menu-bar tray.
@@ -27,6 +29,12 @@ export function CapturePanel(): React.JSX.Element {
   const isBusy = activity.active;
   const stopRecording = (): void => window.electronAPI?.controlCommand("stop");
 
+  // Two modes: recording controls and the screenshot action. A recording locks the
+  // tabs to Record — you can't switch mid-recording (screenshot-during-recording is a
+  // future idea). `activeTab` forces Record while busy regardless of the last pick.
+  const [tab, setTab] = useState<PanelTab>("record");
+  const activeTab: PanelTab = isBusy ? "record" : tab;
+
   // Keep the Electron window height matched to the content (mic menu, etc.).
   useEffect(() => {
     const el = rootRef.current;
@@ -44,59 +52,81 @@ export function CapturePanel(): React.JSX.Element {
   const openMain = (): void => window.electronAPI?.openMainWindow();
   // Start from the tray: open the main window and have its Record page start.
   const requestStart = (): void => window.electronAPI?.requestStartRecording();
+  // Capture from the tray: main dismisses the panel and runs the interactive region
+  // select (same flow as the ⌘⌃X hotkey), landing the user in the editor.
+  const requestCapture = (): void => window.electronAPI?.requestCaptureScreenshot();
 
   return (
     <div ref={rootRef} className={styles.panel}>
       <PanelHeader onOpenMainWindow={openMain} />
 
-      {isBusy && (
-        <RecordingIndicator
-          variant="banner"
-          paused={activity.status === "paused"}
-          elapsedSeconds={activity.elapsedSeconds}
-        />
-      )}
+      {/* Two modes: recording controls and the screenshot action. Locked to Record
+          while a recording is in progress. */}
+      <PanelTabs active={activeTab} onChange={setTab} disabled={isBusy} />
 
-      {/* While a recording is in progress its settings are locked — changing the
-          source/mic mid-recording does nothing, so the controls go inert. */}
-      <div
-        className={styles.lockable}
-        data-locked={isBusy || undefined}
-        inert={isBusy || undefined}
-      >
-        <SourceCard source={setup.selectedSource} variant="compact" onChoose={openMain} />
+      {activeTab === "record" ? (
+        <>
+          {isBusy && (
+            <RecordingIndicator
+              variant="banner"
+              paused={activity.status === "paused"}
+              elapsedSeconds={activity.elapsedSeconds}
+            />
+          )}
 
-        <RecordingToggles
-          variant="compact"
-          isMicrophoneEnabled={setup.isMicrophoneEnabled}
-          isSystemAudioEnabled={setup.isSystemAudioEnabled}
-          isCameraEnabled={setup.isCameraEnabled}
-          onToggleMicrophone={setup.toggleMicrophone}
-          onToggleSystemAudio={setup.toggleSystemAudio}
-          onToggleCamera={setup.toggleCamera}
-        />
+          {/* While a recording is in progress its settings are locked — changing the
+              source/mic mid-recording does nothing, so the controls go inert. */}
+          <div
+            className={styles.lockable}
+            data-locked={isBusy || undefined}
+            inert={isBusy || undefined}
+          >
+            <SourceCard source={setup.selectedSource} variant="compact" onChoose={openMain} />
 
-        {setup.isMicrophoneEnabled && setup.microphones.length > 0 && (
-          <MicPicker
+            <RecordingToggles
+              variant="compact"
+              isMicrophoneEnabled={setup.isMicrophoneEnabled}
+              isSystemAudioEnabled={setup.isSystemAudioEnabled}
+              isCameraEnabled={setup.isCameraEnabled}
+              onToggleMicrophone={setup.toggleMicrophone}
+              onToggleSystemAudio={setup.toggleSystemAudio}
+              onToggleCamera={setup.toggleCamera}
+            />
+
+            {setup.isMicrophoneEnabled && setup.microphones.length > 0 && (
+              <MicPicker
+                variant="compact"
+                microphones={setup.microphones}
+                selected={setup.selectedMicrophone}
+                isOpen={setup.isMicrophoneMenuOpen}
+                onToggle={setup.toggleMicrophoneMenu}
+                onSelect={setup.selectMicrophone}
+              />
+            )}
+          </div>
+
+          {/* Recording runs in the main window renderer (getDisplayMedia/WebCodecs
+              live there), not this transparent panel. While idle the button asks the
+              main window to start; while recording it stops via the hub command. */}
+          <RecordButton
             variant="compact"
-            microphones={setup.microphones}
-            selected={setup.selectedMicrophone}
-            isOpen={setup.isMicrophoneMenuOpen}
-            onToggle={setup.toggleMicrophoneMenu}
-            onSelect={setup.selectMicrophone}
+            isRecording={isBusy}
+            shortcut={shortcuts?.startRecording}
+            onClick={isBusy ? stopRecording : requestStart}
           />
-        )}
-      </div>
-
-      {/* Recording runs in the main window renderer (getDisplayMedia/WebCodecs
-          live there), not this transparent panel. While idle the button asks the
-          main window to start; while recording it stops via the hub command. */}
-      <RecordButton
-        variant="compact"
-        isRecording={isBusy}
-        shortcut={shortcuts?.startRecording}
-        onClick={isBusy ? stopRecording : requestStart}
-      />
+        </>
+      ) : (
+        // Screenshot mode: a single action that hands off to the native region select.
+        <button type="button" className={styles.captureButton} onClick={requestCapture}>
+          <span className={styles.captureLabel}>
+            <Camera size={16} />
+            Capture Screen
+          </span>
+          {shortcuts?.captureScreenshot && (
+            <kbd className={styles.captureShortcut}>{shortcuts.captureScreenshot}</kbd>
+          )}
+        </button>
+      )}
     </div>
   );
 }

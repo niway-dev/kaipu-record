@@ -10,6 +10,50 @@
   transition: opacity 140ms ease;
 }
 
+/* Screenshot-mode action. Mirrors the compact RecordButton (accent fill, centered
+ * label, shortcut pinned right) so both modes read as the panel's primary action. */
+.captureButton {
+  position: relative;
+  width: 100%;
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--accent-primary);
+  background: var(--accent-primary);
+  box-shadow: var(--glow-accent);
+  padding: 10px 12px;
+  font-family: var(--font-family);
+  font-size: 13px;
+  font-weight: var(--font-weight-semibold);
+  color: #fff;
+  cursor: pointer;
+  transition: filter 150ms ease;
+}
+
+.captureButton:hover {
+  filter: brightness(1.08);
+}
+
+.captureLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.captureShortcut {
+  position: absolute;
+  right: 12px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: var(--font-weight-normal);
+  opacity: 0.5;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
 .panel {
   width: 340px;
   box-sizing: border-box;

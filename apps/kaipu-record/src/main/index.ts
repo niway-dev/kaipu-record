@@ -196,6 +196,13 @@ app.whenReady().then(() => {
   // Capture Panel "Start" → open the main window and tell its Record page to start.
   ipcMain.on(IPC_CHANNELS.recordingRequestStart, triggerStartRecording);
 
+  // Capture Panel "Capture Screen" → dismiss the panel and run the same interactive
+  // region capture as the ⌘⌃X hotkey.
+  ipcMain.on(IPC_CHANNELS.screenshotRequestCapture, () => {
+    capturePanel?.hide();
+    triggerCaptureScreenshot();
+  });
+
   // App version for the renderer-side version gate.
   ipcMain.handle(IPC_CHANNELS.getAppVersion, () => app.getVersion());
 
