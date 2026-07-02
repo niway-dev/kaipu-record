@@ -1,5 +1,5 @@
 import { app, ipcMain } from "electron";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { IPC_CHANNELS } from "@shared/types";
@@ -34,7 +34,15 @@ function load(): void {
 
 function persist(): void {
   try {
-    writeFileSync(settingsPath(), JSON.stringify(settings, null, 2));
+    // Atomic write: a crash/power-loss mid-write to the real file would leave a
+    // truncated settings.json that fails JSON.parse on next launch — silently
+    // resetting theme/dock/quality/shortcuts AND minting a new analytics
+    // deviceId. Writing to a temp file then renaming over the original is atomic
+    // on the same volume, so the real file is always complete-or-untouched.
+    const path = settingsPath();
+    const tmp = `${path}.tmp`;
+    writeFileSync(tmp, JSON.stringify(settings, null, 2));
+    renameSync(tmp, path);
   } catch (error) {
     console.error("failed to persist settings", error);
   }
