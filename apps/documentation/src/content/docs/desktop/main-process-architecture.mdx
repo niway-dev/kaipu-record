@@ -11,28 +11,41 @@ Contraparte de [Renderer Architecture](/desktop/renderer-architecture): cómo es
 
 `src/main/index.ts` es el entry point. El orden importa:
 
-1. **Antes de `app.whenReady`** — `registerMediaScheme()` registra `kaipu-media://` como esquema privilegiado. Tiene que correr antes del ready o Electron no lo trata como streamable. (`media-protocol.ts:17`)
+1. **Antes de `app.whenReady`** — `registerMediaScheme()` registra `kaipu-media://` como esquema privilegiado. Tiene que correr antes del ready o Electron no lo trata como streamable. (`media-protocol.ts`)
 2. **En `app.whenReady`** — registra todos los handlers IPC y crea las ventanas:
+   - `registerSettings()` — settings persistidos (`settings.json`) + aplica Dock policy y launch-at-login
+   - `initMainAnalytics()` + `registerAnalyticsIpc()` — sink de excepciones desde ventanas secundarias
+   - handler `app:ready` — flush de acciones diferidas cuando el shell montó sus listeners
    - `registerRecordingSourceHandlers()` — enumeración de pantallas/ventanas
+   - `registerRecordingHub()` — writer a disco, ventana de la barra, relay de estado (devuelve el handle usado por los guards de cierre/quit)
+   - `registerGlobalShortcuts()` — atajos system-wide (start/stop/bring-to-front/capture)
    - `registerLibraryVaultHandlers()` — vault local
+   - `registerScreenshotHandlers()` — captura/copy/save + hooks de ventana
    - `registerPermissionHandlers()` — permisos macOS/Windows
    - `registerMediaProtocol()` — streaming de archivos del vault
+   - `initAutoUpdater()` — updates en builds empaquetadas
    - `createWindow()` + `new CapturePanelWindow()` + `createTray(...)`
-3. **Ciclo de vida** — `before-quit` destruye el tray; `window-all-closed` cierra la app salvo en macOS (donde vive en la menu bar).
+3. **Ciclo de vida** — `before-quit` (con guard de grabación activa) destruye el tray y desregistra atajos; `window-all-closed` cierra la app salvo en macOS (donde vive en la menu bar); `activate` (click en el Dock) reabre la ventana principal vía `showMainWindow()`.
 
 ## Subsistemas
 
 Cada subsistema es un módulo con una función `register*` que engancha sus handlers. El main no tiene un "god object": `index.ts` solo orquesta el registro.
 
-| Subsistema        | Archivo                   | Qué hace                                                                                                                   |
-| ----------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Window management | `index.ts:19`             | `mainWindow` 900×670 (min 720×560), `show` en `ready-to-show`, links externos al navegador del SO                          |
-| Capture Panel     | `capture-panel-window.ts` | Ventana flotante frameless del tray (ver abajo)                                                                            |
-| Tray              | `tray.ts`                 | Ícono de menu bar: click izq = toggle panel, click der = menú (Open / Quit)                                                |
-| Recording sources | `recording-sources.ts`    | `desktopCapturer.getSources()` → thumbnails base64 320×200                                                                 |
-| Permissions       | `permissions.ts`          | Estado y prompts de screen/mic/camera por plataforma — ver [Permissions & Onboarding](/desktop/permissions-and-onboarding) |
-| Library vault     | `library/`                | Grabaciones en disco + sidecars — ver [Library Vault](/desktop/library-vault)                                              |
-| Media protocol    | `media-protocol.ts`       | `kaipu-media://` para reproducir/posters desde el vault                                                                    |
+| Subsistema        | Archivo                            | Qué hace                                                                                                                              |
+| ----------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Window management | `index.ts`                         | `mainWindow` 900×670 (min 720×560), `show` en `ready-to-show`, guards de cierre/quit con grabación activa, links externos             |
+| Settings store    | `infrastructure/settings-store.ts` | `settings.json` (theme/dock/calidad/atajos/deviceId), Dock policy, launch-at-login, broadcast `settings:changed`                      |
+| Capture Panel     | `capture-panel-window.ts`          | Ventana flotante frameless del tray (ver abajo)                                                                                       |
+| Tray              | `tray.ts`                          | Ícono de menu bar: click izq = toggle panel, click der = menú (Open / Quit)                                                           |
+| Recording sources | `recording-sources.ts`             | `desktopCapturer.getSources()` → thumbnails base64 320×200                                                                            |
+| Recording hub     | `recording/recording-hub.ts`       | Writer a disco, ventana de la barra, burbuja de cámara, relay estado↔comandos — ver [Recording Pipeline](/desktop/recording-pipeline) |
+| Global shortcuts  | `shortcuts/global-shortcuts.ts`    | Atajos system-wide (start/stop/bring-to-front/capture), rebindables desde Settings                                                    |
+| Screenshots       | `screenshots/`                     | Captura interactiva, copy/save, re-open en el editor                                                                                  |
+| Permissions       | `permissions.ts`                   | Estado y prompts de screen/mic/camera por plataforma — ver [Permissions & Onboarding](/desktop/permissions-and-onboarding)            |
+| Library vault     | `library/`                         | Grabaciones en disco + sidecars, cambio de carpeta con validación — ver [Library Vault](/desktop/library-vault)                       |
+| Media protocol    | `media-protocol.ts`                | `kaipu-media://` para reproducir/posters desde el vault                                                                               |
+| Auto-updater      | `updater/auto-updater.ts`          | Descarga silenciosa en builds empaquetadas; el renderer muestra el banner de reinicio                                                 |
+| Analytics         | `services/analytics*.ts`           | Sink de excepciones (PostHog) + forwarding desde ventanas secundarias                                                                 |
 
 El contrato IPC entre main y renderer está en [IPC Contract](/desktop/ipc-contract).
 
