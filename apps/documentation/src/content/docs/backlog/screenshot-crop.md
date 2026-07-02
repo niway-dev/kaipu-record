@@ -5,10 +5,12 @@ description: "A crop tool in the screenshot editor: a normalized crop rect over 
 
 # Screenshot crop tool
 
-> **Status: 🟢 Built locally** (on `feat/screenshot-crop`, PR #15). A **Crop tool** in the
-> editor: drag a rectangle over the whole frame (reposition by dragging the interior, resize
-> with 8 handles), leave the tool to see the windowed result; Esc / Restablecer goes back to
-> full. Non-destructive (`scene.crop`), undoable, exports at native pixels.
+> **Status: 🟢 Built + owner-validated locally** (on `feat/screenshot-crop`, PR #15; prod
+> review pending). A **Crop tool** in the editor: drag a rectangle over the whole frame
+> (reposition by dragging the interior, resize with 8 handles), leave the tool to see the
+> windowed result; Esc / Restablecer goes back to full. Non-destructive (`scene.crop`),
+> undoable, exports at native pixels. Padded export + crop-into-padding + 3:4→square all
+> verified in the running build.
 >
 > **Crop is over the CANVAS/frame, not the capture** — the crop rect spans the background +
 > padding + shot, so you can capture a 3:4 shot, add padding to make room, and crop it to a
@@ -77,3 +79,20 @@ PNGs). Windowing the composed frame fixes both and enables the crop-into-padding
   [editor-zoom](./editor-zoom)). Offer later with an explicit warning if asked.
 - Applied-crop preview is shown 1:1 (the window at native relative size, centered); use the
   zoom control to magnify. Scale-to-fill is a possible follow-up.
+
+## Gotchas
+
+- ⚠️ **Never put `clip-path` on the shot's translated `<use>`.** A `clip-path` (userSpaceOnUse)
+  on an element that also carries an `x`/`y` translation resolves in the _translated_ space, so
+  the clip rect `rc` (authored at `(pad,pad)`) lands at `(2·pad,2·pad)` and shears the shot's
+  top/left `pad`-wide strip off — the shot exports shoved toward the bottom-right, worse the
+  larger the padding, on **every** padded export (crop or not). Fix: clip via a non-translated
+  wrapping group — `<g clip-path="url(#rc)"><use href="#shot" x=pad y=pad/></g>`. The annotation
+  group escapes this only because its clip `rcLocal` is authored at `(0,0)`, so its own
+  `translate(pad,pad)` lands it correctly (coincidence, not design). Regression test:
+  `compositor.test.ts` → "clips the base shot via a wrapping group". This was the single hardest
+  bug in the feature; it was found by decoding the exported PNG's actual pixel bounding box
+  (top-left sat at `2·pad`), not by reading the SVG.
+- ⚠️ The applied-crop preview keeps `img.clientWidth` stable by rendering the frame at its fixed
+  natural size and **panning via transform** (not re-laying-out). Don't "optimize" this to a
+  percentage-resize — the export scale (`naturalW / displayedW`) would then drift when cropped.
