@@ -71,6 +71,7 @@ const kaipuApi: KaipuElectronAPI = {
     return () => ipcRenderer.removeListener(IPC_CHANNELS.recordingSettingsChanged, listener);
   },
   requestStartRecording: () => ipcRenderer.send(IPC_CHANNELS.recordingRequestStart),
+  requestCaptureScreenshot: () => ipcRenderer.send(IPC_CHANNELS.screenshotRequestCapture),
   getShortcutStatus: () => ipcRenderer.invoke(IPC_CHANNELS.shortcutsGetStatus),
   suspendShortcuts: () => ipcRenderer.send(IPC_CHANNELS.shortcutsSuspend),
   resumeShortcuts: () => ipcRenderer.send(IPC_CHANNELS.shortcutsResume),
@@ -78,6 +79,12 @@ const kaipuApi: KaipuElectronAPI = {
     const listener = (): void => callback();
     ipcRenderer.on(IPC_CHANNELS.recordingRequestStart, listener);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.recordingRequestStart, listener);
+  },
+  requestChooseSource: () => ipcRenderer.send(IPC_CHANNELS.recordingRequestSourcePicker),
+  onRequestChooseSource: (callback) => {
+    const listener = (): void => callback();
+    ipcRenderer.on(IPC_CHANNELS.recordingRequestSourcePicker, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.recordingRequestSourcePicker, listener);
   },
   reportException: (payload, origin, context) =>
     ipcRenderer.send(IPC_CHANNELS.analyticsCaptureException, payload, origin, context),

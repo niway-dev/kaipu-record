@@ -1,0 +1,70 @@
+/* Segmented control: an inset track holding two equal-width pills. The active pill
+ * carries the brand accent as a soft tint + hairline + glow, so "selected" reads as
+ * on-brand without shouting over the accent-filled primary CTA. */
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.tabs[data-disabled] {
+  opacity: 0.5;
+}
+
+.tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  appearance: none;
+  border: 1px solid transparent;
+  background: none;
+  padding: 8px 10px;
+  border-radius: 7px;
+  font-family: var(--font-family);
+  font-size: 13px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.tab svg {
+  opacity: 0.85;
+  transition: opacity 160ms ease;
+}
+
+.tab:hover:not(:disabled):not([data-active]) {
+  color: var(--text-primary);
+}
+
+.tab:hover:not(:disabled):not([data-active]) svg {
+  opacity: 1;
+}
+
+/* Active = brand accent, tinted. Pink fill + hairline + a soft lift, accent-colored
+ * label so the current mode is unmistakable. */
+.tab[data-active] {
+  background: linear-gradient(180deg, rgba(246, 5, 92, 0.18), rgba(246, 5, 92, 0.1));
+  border-color: rgba(246, 5, 92, 0.55);
+  color: #ff5c93;
+  box-shadow:
+    0 2px 10px -4px rgba(246, 5, 92, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.tab[data-active] svg {
+  opacity: 1;
+}
+
+.tab:disabled {
+  cursor: not-allowed;
+}

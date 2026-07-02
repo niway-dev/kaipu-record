@@ -11,32 +11,34 @@ Trabajo planeado, propuestas y mejoras que **aún no** están implementadas. Cad
 
 ## Mapa
 
-| Ítem                                                         | Área      | Estado                                        | Esfuerzo   | Detalle                            |
-| ------------------------------------------------------------ | --------- | --------------------------------------------- | ---------- | ---------------------------------- |
-| **Deformación de aspect ratio** (pantallas no-16:9 / Mac)    | Pipeline  | 🔵 Propuesto · **prioritario**                | Medio      | [Ver](./aspect-ratio-distortion)   |
-| Zoom del editor (view-zoom)                                  | Editor    | ✅ Decidido y cerrado                         | —          | [Ver](./editor-zoom)               |
-| Editor — crop tool (quedarse con una sección)                | Editor    | 🟢 Validado en local (`feat/screenshot-crop`) | Medio      | [Ver](./screenshot-crop)           |
-| Editor — pluma libre (freehand)                              | Editor    | 🟢 En local (`feat/screenshot-editor-tools`)  | Bajo–Medio | [Ver](./screenshot-freehand)       |
-| Editor — auto-seleccionar al crear (+ resize handles)        | Editor    | 🟢 En local (auto-select + resize)            | Medio      | [Ver](./screenshot-auto-select)    |
-| **Kill order maestro** (features shipeadas + #7/#8)          | Producto  | Mixto                                         | —          | [Ver](./roadmap)                   |
-| Auto-update (electron-updater) + landing                     | Dist      | 🟢 En prod (validar self-update)              | Medio      | [Ver](./auto-update)               |
-| Version gate / forced update                                 | Dist      | 🟢 En prod (sin activar)                      | Medio      | [Ver](./version-gate)              |
-| Paquete de design tokens compartido (dark + light)           | Theming   | 🔵 Propuesto                                  | Medio      | [Ver](./shared-tokens-package)     |
-| Arquitectura de storage R2 (público vs privado)              | Infra     | 🔵 Propuesto                                  | Medio      | [Ver](./r2-storage-architecture)   |
-| Auditoría de calidad de código (playbook + backlog)          | DX        | 🔵 Living doc                                 | —          | [Ver](./code-quality-audit)        |
-| Atajos globales + reachability de ventana                    | Shortcuts | 🟢 Listo para validar                         | Alto       | [Ver](./shortcuts)                 |
-| Screenshots — captura + editor                               | Feature   | 🟢 Desarrollado en local (validar)            | Alto       | [Ver](./screenshots)               |
-| Toolbar del editor — layout responsive/escalable             | Feature   | 🔵 Propuesto                                  | Bajo–Medio | [Ver](./editor-toolbar-responsive) |
-| Screenshots — estrategia de guardado (auto-save, naming)     | Feature   | 🟢 Naming en local · resto 🔵                 | Bajo–Medio | [Ver](./screenshot-save-strategy)  |
-| Screenshots — re-edit no destructivo (scene doc)             | Feature   | 🔵 Propuesto (análisis)                       | Medio      | [Ver](./screenshot-scene-doc)      |
-| Screenshots — redacción (blur box, estilo WhatsApp)          | Feature   | 🟢 En local (`feat/screenshot-editor-tools`)  | Medio      | [Ver](./screenshot-redaction)      |
-| Formatos de export (PNG ya, PDF próximo)                     | Feature   | 🔵 Propuesto                                  | Medio      | [Ver](./export-formats)            |
-| E2E con Playwright                                           | Testing   | 🔵 Propuesto                                  | Medio      | [Ver](./playwright-e2e)            |
-| Settings — controles por cablear                             | Settings  | 🔵 Propuesto                                  | Variado    | [Ver](./settings-roadmap)          |
-| Encode por hardware (VideoToolbox/NVENC)                     | Pipeline  | ⚪ Idea                                       | Alto       | —                                  |
-| Captura nativa (ScreenCaptureKit / Windows.Graphics.Capture) | Pipeline  | ⚪ Idea                                       | Alto       | —                                  |
-| Output MP4/H.264 para screen-only vía FFmpeg                 | Pipeline  | 🔵 Propuesto                                  | Medio      | —                                  |
-| Benchmark propio (CPU/RAM/frames dropped)                    | Pipeline  | ⚪ Idea                                       | Medio      | —                                  |
+| Ítem                                                         | Área      | Estado                                        | Esfuerzo   | Detalle                               |
+| ------------------------------------------------------------ | --------- | --------------------------------------------- | ---------- | ------------------------------------- |
+| **Deformación de aspect ratio** (pantallas no-16:9 / Mac)    | Pipeline  | 🔵 Propuesto · **prioritario**                | Medio      | [Ver](./aspect-ratio-distortion)      |
+| Zoom del editor (view-zoom)                                  | Editor    | ✅ Decidido y cerrado                         | —          | [Ver](./editor-zoom)                  |
+| Editor — crop tool (quedarse con una sección)                | Editor    | 🟢 Validado en local (`feat/screenshot-crop`) | Medio      | [Ver](./screenshot-crop)              |
+| Editor — pluma libre (freehand)                              | Editor    | 🟢 En local (`feat/screenshot-editor-tools`)  | Bajo–Medio | [Ver](./screenshot-freehand)          |
+| Editor — auto-seleccionar al crear (+ resize handles)        | Editor    | 🟢 En local (auto-select + resize)            | Medio      | [Ver](./screenshot-auto-select)       |
+| Widget — tabs Record / Capture                               | Widget    | 🟢 En local (`feat/widget-capture-tabs`)      | Bajo       | [Ver](./widget-capture-tabs)          |
+| Screen picker — thumbnails retry vs event-based (perf)       | Perf      | 🔵 A revisar (perf)                           | Bajo–Medio | [Ver](./screen-picker-thumbnail-perf) |
+| **Kill order maestro** (features shipeadas + #7/#8)          | Producto  | Mixto                                         | —          | [Ver](./roadmap)                      |
+| Auto-update (electron-updater) + landing                     | Dist      | 🟢 En prod (validar self-update)              | Medio      | [Ver](./auto-update)                  |
+| Version gate / forced update                                 | Dist      | 🟢 En prod (sin activar)                      | Medio      | [Ver](./version-gate)                 |
+| Paquete de design tokens compartido (dark + light)           | Theming   | 🔵 Propuesto                                  | Medio      | [Ver](./shared-tokens-package)        |
+| Arquitectura de storage R2 (público vs privado)              | Infra     | 🔵 Propuesto                                  | Medio      | [Ver](./r2-storage-architecture)      |
+| Auditoría de calidad de código (playbook + backlog)          | DX        | 🔵 Living doc                                 | —          | [Ver](./code-quality-audit)           |
+| Atajos globales + reachability de ventana                    | Shortcuts | 🟢 Listo para validar                         | Alto       | [Ver](./shortcuts)                    |
+| Screenshots — captura + editor                               | Feature   | 🟢 Desarrollado en local (validar)            | Alto       | [Ver](./screenshots)                  |
+| Toolbar del editor — layout responsive/escalable             | Feature   | 🔵 Propuesto                                  | Bajo–Medio | [Ver](./editor-toolbar-responsive)    |
+| Screenshots — estrategia de guardado (auto-save, naming)     | Feature   | 🟢 Naming en local · resto 🔵                 | Bajo–Medio | [Ver](./screenshot-save-strategy)     |
+| Screenshots — re-edit no destructivo (scene doc)             | Feature   | 🔵 Propuesto (análisis)                       | Medio      | [Ver](./screenshot-scene-doc)         |
+| Screenshots — redacción (blur box, estilo WhatsApp)          | Feature   | 🟢 En local (`feat/screenshot-editor-tools`)  | Medio      | [Ver](./screenshot-redaction)         |
+| Formatos de export (PNG ya, PDF próximo)                     | Feature   | 🔵 Propuesto                                  | Medio      | [Ver](./export-formats)               |
+| E2E con Playwright                                           | Testing   | 🔵 Propuesto                                  | Medio      | [Ver](./playwright-e2e)               |
+| Settings — controles por cablear                             | Settings  | 🔵 Propuesto                                  | Variado    | [Ver](./settings-roadmap)             |
+| Encode por hardware (VideoToolbox/NVENC)                     | Pipeline  | ⚪ Idea                                       | Alto       | —                                     |
+| Captura nativa (ScreenCaptureKit / Windows.Graphics.Capture) | Pipeline  | ⚪ Idea                                       | Alto       | —                                     |
+| Output MP4/H.264 para screen-only vía FFmpeg                 | Pipeline  | 🔵 Propuesto                                  | Medio      | —                                     |
+| Benchmark propio (CPU/RAM/frames dropped)                    | Pipeline  | ⚪ Idea                                       | Medio      | —                                     |
 
 ## Detalle de ítems sin doc propio
 

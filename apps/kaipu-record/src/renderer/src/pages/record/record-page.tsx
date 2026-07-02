@@ -59,6 +59,20 @@ export function RecordPage(): React.JSX.Element {
     }
   }, [location.state, selectedSource, isRecording, startRecording]);
 
+  // The Capture Panel's "Change" navigates here with an `openPicker` flag (see
+  // AppShell) — open the source picker once per flag. `openSourcePicker` isn't
+  // memoized, so read it through a ref and key the effect only on the nav state.
+  const openPickerRef = useRef(setup.openSourcePicker);
+  openPickerRef.current = setup.openSourcePicker;
+  const pickerForRef = useRef<number | null>(null);
+  useEffect(() => {
+    const openPicker = (location.state as { openPicker?: number } | null)?.openPicker;
+    if (openPicker && pickerForRef.current !== openPicker) {
+      pickerForRef.current = openPicker;
+      openPickerRef.current();
+    }
+  }, [location.state]);
+
   const isPaused = isRecording && activity.status === "paused";
   // The gap between the countdown ending and the window handing off to the bar:
   // streams are acquiring, isRecording is still false. Keep the overlay up.

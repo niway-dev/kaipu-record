@@ -1,7 +1,24 @@
 import React, { useState } from "react";
+import { AppWindowMac, Monitor } from "lucide-react";
 import type { ScreenSource } from "@shared/types/electron-api";
 import { PermissionNotice } from "./permission-notice";
 import styles from "./screen-source-selector.module.css";
+
+/** The thumbnail, or a clean monitor/window icon when the capture came back blank
+ *  (or the image fails to load) — never a broken <img>. */
+function SourceThumbnail({ source }: { source: ScreenSource }): React.JSX.Element {
+  const [failed, setFailed] = useState(false);
+  const blank = !source.thumbnail || source.thumbnail.length < 64;
+  if (blank || failed) {
+    const Icon = source.type === "screen" ? Monitor : AppWindowMac;
+    return (
+      <div className={styles.thumbFallback} aria-hidden>
+        <Icon size={30} strokeWidth={1.75} />
+      </div>
+    );
+  }
+  return <img src={source.thumbnail} alt={source.name} onError={() => setFailed(true)} />;
+}
 
 type SourceKind = "screens" | "windows";
 
@@ -80,7 +97,7 @@ export function ScreenSourceSelector(props: ScreenSourceSelectorProps): React.JS
             data-active={source.id === currentSourceId || undefined}
             onClick={() => choose(source)}
           >
-            <img src={source.thumbnail} alt={source.name} />
+            <SourceThumbnail source={source} />
             <div className={styles.tileLabel}>
               <div className={styles.tileLabelText}>{source.name}</div>
             </div>
