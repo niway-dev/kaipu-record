@@ -63,6 +63,12 @@ export function AppShell(): React.JSX.Element {
     [navigate],
   );
 
+  // Signal main that our IPC listeners (above) are registered — LAST effect, so
+  // it runs after them. Main defers window-triggered actions (start/capture/
+  // source-picker sent to a freshly-created window) until this fires, so they're
+  // never dropped by racing the listeners against the page's did-finish-load.
+  useEffect(() => window.electronAPI.notifyReady(), []);
+
   return (
     <div className={styles.shell}>
       {gate.kind === "soft" && (

@@ -35,6 +35,7 @@ afterEach(() => {
 // bridge (e.g. usePermissions) works under jsdom. Individual tests can override.
 window.electronAPI = {
   getAppVersion: async () => "1.0.0",
+  notifyReady: () => {},
   getUpdateStatus: async () => ({ state: "idle" }),
   onUpdateStatus: () => () => {},
   installUpdate: () => {},
