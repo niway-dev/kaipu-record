@@ -55,6 +55,7 @@ window.electronAPI = {
   getVaultDirectory: async () => ({ path: "/tmp/vault", isCustom: false }),
   chooseVaultDirectory: async () => null,
   resetVaultDirectory: async () => ({ path: "/tmp/vault", isCustom: false }),
+  onLibraryChanged: () => () => {},
   recordingCreate: async () => ({ tempPath: "/tmp/session" }),
   recordingWrite: () => {},
   recordingFinalize: async () => {

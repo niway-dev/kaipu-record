@@ -35,6 +35,7 @@ describe("useLocalLibrary", () => {
     window.electronAPI.listLocalRecordings = vi.fn(async () => recordings);
     window.electronAPI.deleteLocalRecording = vi.fn(async () => {});
     window.electronAPI.renameLocalRecording = vi.fn(async () => {});
+    window.electronAPI.onLibraryChanged = () => () => {};
   });
 
   it("maps local recordings to library videos tagged as local", async () => {
@@ -114,5 +115,22 @@ describe("useLocalLibrary", () => {
       expect.any(Error),
       expect.anything(),
     );
+  });
+
+  it("re-lists when the vault folder changes", async () => {
+    let notify: (() => void) | null = null;
+    window.electronAPI.onLibraryChanged = (callback: () => void) => {
+      notify = callback;
+      return () => {};
+    };
+    const { result } = renderHook(() => useLocalLibrary());
+    await waitFor(() => expect(result.current.videos).toHaveLength(2));
+    expect(window.electronAPI.listLocalRecordings).toHaveBeenCalledTimes(1);
+
+    // Vault folder switched → the new folder is empty.
+    window.electronAPI.listLocalRecordings = vi.fn(async () => []);
+    await act(async () => notify?.());
+
+    await waitFor(() => expect(result.current.videos).toHaveLength(0));
   });
 });

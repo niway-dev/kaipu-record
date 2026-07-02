@@ -82,6 +82,8 @@ export interface KaipuElectronAPI {
   chooseVaultDirectory(): Promise<VaultDirectory | null>;
   /** Reset the recordings folder back to the platform default. */
   resetVaultDirectory(): Promise<VaultDirectory>;
+  /** Subscribe to vault-folder changes (so open library pages re-list). Returns an unsubscribe fn. */
+  onLibraryChanged(callback: () => void): () => void;
 
   // ── Recording engine (used by the main/recorder window) ───────────────
   /** Open a disk-writer session; returns the temp path. */

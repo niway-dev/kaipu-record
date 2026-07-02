@@ -77,6 +77,9 @@ export function useLocalLibrary(): LocalLibrary {
 
   useEffect(() => {
     void refresh();
+    // Re-list when the vault folder changes (Settings → Files), so an open
+    // Library page doesn't keep showing the old folder's contents.
+    return window.electronAPI.onLibraryChanged(() => void refresh());
   }, [refresh]);
 
   return { videos, isLoading, hasError, refresh, rename, remove, reveal };
