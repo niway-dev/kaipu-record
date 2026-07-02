@@ -45,16 +45,19 @@ function useHarness(): {
   return { setup, sources };
 }
 
+// Non-blank thumbnails (>64 chars) so useScreenSources' retry-on-blank path (which
+// waits for screen thumbnails to capture) doesn't engage in these selection tests.
+const THUMB = `data:image/png;base64,${"A".repeat(80)}`;
 const screen1: ScreenSource = {
   id: "screen:0",
   name: "Screen 1",
-  thumbnail: "data:,",
+  thumbnail: THUMB,
   type: "screen",
 };
 const screen2: ScreenSource = {
   id: "screen:1",
   name: "Screen 2",
-  thumbnail: "data:,",
+  thumbnail: THUMB,
   type: "screen",
 };
 const safari: ScreenSource = {
