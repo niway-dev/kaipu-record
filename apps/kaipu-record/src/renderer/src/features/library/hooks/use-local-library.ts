@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { LocalRecording } from "@shared/types";
 import type { LibraryVideo } from "@renderer/features/library/types";
+import { reportError } from "@renderer/features/analytics";
 
 function toLibraryVideo(recording: LocalRecording): LibraryVideo {
   return {
@@ -18,6 +19,8 @@ function toLibraryVideo(recording: LocalRecording): LibraryVideo {
 export interface LocalLibrary {
   videos: LibraryVideo[];
   isLoading: boolean;
+  /** True when the vault couldn't be read — distinct from "vault is empty". */
+  hasError: boolean;
   refresh(): Promise<void>;
   rename(id: string, title: string): Promise<void>;
   remove(id: string): Promise<void>;
@@ -28,27 +31,44 @@ export interface LocalLibrary {
 export function useLocalLibrary(): LocalLibrary {
   const [videos, setVideos] = useState<LibraryVideo[]>([]);
   const [isLoading, setLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
       const recordings = await window.electronAPI.listLocalRecordings();
       setVideos(recordings.map(toLibraryVideo));
-    } catch {
-      setVideos([]);
+      setHasError(false);
+    } catch (error) {
+      // Do NOT blank the list to [] — that renders as the "No recordings yet"
+      // empty state, indistinguishable from real data loss. Flag the error so the
+      // page can show a "couldn't read your folder — Retry" panel instead.
+      setHasError(true);
+      reportError("No pudimos leer tu carpeta de grabaciones.", error, {
+        context: { phase: "library-list" },
+        retry: () => void refresh(),
+      });
     } finally {
       setLoading(false);
     }
   }, []);
 
   const rename = useCallback(async (id: string, title: string) => {
-    await window.electronAPI.renameLocalRecording(id, title);
-    setVideos((prev) => prev.map((video) => (video.id === id ? { ...video, title } : video)));
+    try {
+      await window.electronAPI.renameLocalRecording(id, title);
+      setVideos((prev) => prev.map((video) => (video.id === id ? { ...video, title } : video)));
+    } catch (error) {
+      reportError("No pudimos renombrar la grabación.", error, { context: { id } });
+    }
   }, []);
 
   const remove = useCallback(async (id: string) => {
-    await window.electronAPI.deleteLocalRecording(id);
-    setVideos((prev) => prev.filter((video) => video.id !== id));
+    try {
+      await window.electronAPI.deleteLocalRecording(id);
+      setVideos((prev) => prev.filter((video) => video.id !== id));
+    } catch (error) {
+      reportError("No pudimos eliminar el archivo.", error, { context: { id } });
+    }
   }, []);
 
   const reveal = useCallback((id: string) => {
@@ -59,5 +79,5 @@ export function useLocalLibrary(): LocalLibrary {
     void refresh();
   }, [refresh]);
 
-  return { videos, isLoading, refresh, rename, remove, reveal };
+  return { videos, isLoading, hasError, refresh, rename, remove, reveal };
 }

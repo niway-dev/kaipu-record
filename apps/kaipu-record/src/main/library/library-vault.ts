@@ -55,12 +55,11 @@ export class LibraryVault {
 
   async list(): Promise<LocalRecording[]> {
     await mkdir(this.directory, { recursive: true });
-    let entries: string[];
-    try {
-      entries = await readdir(this.directory);
-    } catch {
-      return [];
-    }
+    // Let a readdir failure propagate (unreadable folder, unreachable network
+    // drive) instead of returning [] — an empty array is indistinguishable from
+    // "vault is empty" and gets rendered as the first-run empty state, which
+    // reads as data loss. The caller surfaces the real error.
+    const entries = await readdir(this.directory);
     const ids = entries
       .filter((f) => ALL_EXTS.some((ext) => f.endsWith(ext)))
       .map((f) => basename(f, ALL_EXTS.find((ext) => f.endsWith(ext))!));
@@ -130,13 +129,18 @@ export class LibraryVault {
     await this.writeMeta(id, { title });
   }
 
-  /** Removes the video plus its sidecar and thumbnail (best-effort). */
+  /**
+   * Removes the video plus its sidecar and thumbnail. The sidecar/thumbnail are
+   * best-effort (they may not exist), but a failure to delete the actual
+   * recording propagates so the UI can report it — `Promise.allSettled` over all
+   * three previously swallowed even a permission/locked-file error on the video.
+   */
   async remove(id: string): Promise<void> {
     await Promise.allSettled([
-      rm(await this.filePath(id), { force: true }),
       rm(this.sidecarPath(id), { force: true }),
       rm(this.thumbnailPath(id), { force: true }),
     ]);
+    await rm(await this.filePath(id), { force: true });
   }
 }
 
