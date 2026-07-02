@@ -41,13 +41,13 @@ it.
 
 ## Implementation
 
-| File | Change |
-| ---- | ------ |
-| `capture-panel/components/panel-tabs.tsx` (+ css, test) | New segmented `Record · Capture` tablist (presentational; `disabled` when locked) |
-| `capture-panel/capture-panel.tsx` (+ css, test) | Tab state, conditional Record vs Capture body, lock-to-Record while recording, Capture Screen button |
-| `shared/types/ipc.ts` | New `screenshotRequestCapture` channel |
-| `preload/index.ts` + `shared/types/electron-api.ts` | `requestCaptureScreenshot()` |
-| `main/index.ts` | Handler → `capturePanel.hide()` + `triggerCaptureScreenshot()` (mirrors `recordingRequestStart`) |
+| File                                                    | Change                                                                                               |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `capture-panel/components/panel-tabs.tsx` (+ css, test) | New segmented `Record · Capture` tablist (presentational; `disabled` when locked)                    |
+| `capture-panel/capture-panel.tsx` (+ css, test)         | Tab state, conditional Record vs Capture body, lock-to-Record while recording, Capture Screen button |
+| `shared/types/ipc.ts`                                   | New `screenshotRequestCapture` channel                                                               |
+| `preload/index.ts` + `shared/types/electron-api.ts`     | `requestCaptureScreenshot()`                                                                         |
+| `main/index.ts`                                         | Handler → `capturePanel.hide()` + `triggerCaptureScreenshot()` (mirrors `recordingRequestStart`)     |
 
 ## Decisions
 
