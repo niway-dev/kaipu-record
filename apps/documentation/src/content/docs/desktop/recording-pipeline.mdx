@@ -332,6 +332,11 @@ Las rutas de error restauran **siempre** el estado de la app:
   corre el stop normal (con timeout de 5s) antes de dejar cerrar — así el archivo se
   finaliza con lo grabado hasta ese momento en vez de perderse. Así la app **nunca queda
   trabada** con la ventana oculta, la barra colgada, o el Capture Panel bloqueado.
+- **Cmd+Q / Quit del tray a mitad de grabación** (`before-quit`): mismo patrón que el
+  cierre de ventana — si `hub.isActive()`, `preventDefault` + confirmación ("Detener y
+  salir"), se manda el comando `stop`, y recién cuando llega `recordingStop` (o pasa el
+  timeout de 5s) se hace `app.quit()`. Con el fastStart en disco (ya no en memoria) el
+  archivo queda finalizado con lo grabado hasta ese momento, en vez de descartarse entero.
 
 ### Gotcha: ocultar la ventana principal y el Dock/Cmd+Tab (macOS)
 
