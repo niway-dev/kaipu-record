@@ -78,6 +78,8 @@ window.electronAPI = {
   onRecordingSettingsChanged: () => () => {},
   requestStartRecording: () => {},
   onRequestStartRecording: () => () => {},
+  requestChooseSource: () => {},
+  onRequestChooseSource: () => () => {},
   requestCaptureScreenshot: () => {},
   getShortcutStatus: async () => ({
     startRecording: true,

@@ -185,6 +185,9 @@ export const IPC_CHANNELS = {
   recordingSettingsChanged: "recording-settings:changed",
   // Capture Panel asks the main window to start recording (panel → main → Record page).
   recordingRequestStart: "recording:request-start",
+  // Capture Panel "Change" asks the main window to open the screen picker (panel → main
+  // → Record page opens the source picker). Reused as the main → renderer broadcast too.
+  recordingRequestSourcePicker: "recording:request-source-picker",
   // Capture Panel asks main to run the interactive screenshot capture (panel → main →
   // same flow as the ⌘⌃X hotkey). Send-only; the capture result flows through the
   // existing screenshot channels.

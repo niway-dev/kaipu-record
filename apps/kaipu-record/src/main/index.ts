@@ -117,6 +117,25 @@ function triggerStartRecording(): void {
   }
 }
 
+/**
+ * Open the main window and tell its Record page to open the source picker — the
+ * Capture Panel's "Change" button (the panel can't pick a screen; the picker + source
+ * enumeration live in the main renderer). Mirrors `triggerStartRecording`.
+ */
+function triggerChooseSource(): void {
+  capturePanel?.hide();
+  showMainWindow();
+  const contents = mainWindow?.webContents;
+  if (!contents) return;
+  if (contents.isLoading()) {
+    contents.once("did-finish-load", () =>
+      contents.send(IPC_CHANNELS.recordingRequestSourcePicker),
+    );
+  } else {
+    contents.send(IPC_CHANNELS.recordingRequestSourcePicker);
+  }
+}
+
 /** Bring the app back to the foreground from any state (the rescue shortcut). */
 function bringAppToFront(): void {
   showMainWindow();
@@ -195,6 +214,9 @@ app.whenReady().then(() => {
 
   // Capture Panel "Start" → open the main window and tell its Record page to start.
   ipcMain.on(IPC_CHANNELS.recordingRequestStart, triggerStartRecording);
+
+  // Capture Panel "Change" → open the main window and open its source picker.
+  ipcMain.on(IPC_CHANNELS.recordingRequestSourcePicker, triggerChooseSource);
 
   // Capture Panel "Capture Screen" → dismiss the panel and run the same interactive
   // region capture as the ⌘⌃X hotkey.

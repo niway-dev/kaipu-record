@@ -80,6 +80,12 @@ const kaipuApi: KaipuElectronAPI = {
     ipcRenderer.on(IPC_CHANNELS.recordingRequestStart, listener);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.recordingRequestStart, listener);
   },
+  requestChooseSource: () => ipcRenderer.send(IPC_CHANNELS.recordingRequestSourcePicker),
+  onRequestChooseSource: (callback) => {
+    const listener = (): void => callback();
+    ipcRenderer.on(IPC_CHANNELS.recordingRequestSourcePicker, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.recordingRequestSourcePicker, listener);
+  },
   reportException: (payload, origin, context) =>
     ipcRenderer.send(IPC_CHANNELS.analyticsCaptureException, payload, origin, context),
   captureScreenshot: () => ipcRenderer.invoke(IPC_CHANNELS.screenshotCapture),

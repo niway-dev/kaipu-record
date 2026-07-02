@@ -121,6 +121,10 @@ export interface KaipuElectronAPI {
   requestStartRecording(): void;
   /** Record page subscribes so a panel request triggers its start. */
   onRequestStartRecording(callback: () => void): () => void;
+  /** Capture Panel "Change" → main: open the main window + Record page's source picker. */
+  requestChooseSource(): void;
+  /** Record page subscribes so a panel "Change" opens its source picker. */
+  onRequestChooseSource(callback: () => void): () => void;
   /** Capture Panel → main: run the interactive screenshot capture (same as ⌘⌃X). */
   requestCaptureScreenshot(): void;
 

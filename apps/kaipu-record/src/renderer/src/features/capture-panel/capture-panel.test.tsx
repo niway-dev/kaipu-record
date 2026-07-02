@@ -49,6 +49,15 @@ describe("CapturePanel — tabs", () => {
     expect(screen.queryByRole("button", { name: /Start Recording/ })).not.toBeInTheDocument();
   });
 
+  it("asks main to open the source picker when the source card's Choose/Change is clicked", () => {
+    const requestChooseSource = vi.fn();
+    window.electronAPI = { ...realApi, requestChooseSource };
+    render(<CapturePanel />);
+    // The mocked setup has no selected source, so the source card shows "Choose".
+    fireEvent.click(screen.getByRole("button", { name: "Choose" }));
+    expect(requestChooseSource).toHaveBeenCalledTimes(1);
+  });
+
   it("asks main to run the capture when the Capture Screen button is clicked", () => {
     const requestCaptureScreenshot = vi.fn();
     window.electronAPI = { ...realApi, requestCaptureScreenshot };

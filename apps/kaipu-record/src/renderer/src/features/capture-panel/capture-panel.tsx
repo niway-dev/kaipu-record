@@ -50,6 +50,9 @@ export function CapturePanel(): React.JSX.Element {
   }, []);
 
   const openMain = (): void => window.electronAPI?.openMainWindow();
+  // "Change" from the tray: the picker + source enumeration live in the main renderer,
+  // so open the main window and have its Record page open the source picker.
+  const chooseSource = (): void => window.electronAPI?.requestChooseSource();
   // Start from the tray: open the main window and have its Record page start.
   const requestStart = (): void => window.electronAPI?.requestStartRecording();
   // Capture from the tray: main dismisses the panel and runs the interactive region
@@ -81,7 +84,7 @@ export function CapturePanel(): React.JSX.Element {
             data-locked={isBusy || undefined}
             inert={isBusy || undefined}
           >
-            <SourceCard source={setup.selectedSource} variant="compact" onChoose={openMain} />
+            <SourceCard source={setup.selectedSource} variant="compact" onChoose={chooseSource} />
 
             <RecordingToggles
               variant="compact"

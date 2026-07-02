@@ -38,6 +38,16 @@ export function AppShell(): React.JSX.Element {
     [navigate],
   );
 
+  // The Capture Panel's "Change" opens the screen picker, which lives on the Record
+  // page — navigate there with an `openPicker` flag the Record page reads.
+  useEffect(
+    () =>
+      window.electronAPI.onRequestChooseSource(() => {
+        navigate("/", { state: { openPicker: Date.now() } });
+      }),
+    [navigate],
+  );
+
   // Global ⌘⌃X hotkey: main brings the window to front and broadcasts this event;
   // we run the region-capture flow here so navigation (useNavigate) is available.
   useEffect(() => window.electronAPI.onCaptureScreenshotHotkey(capture), [capture]);
