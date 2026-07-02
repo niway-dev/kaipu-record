@@ -5,17 +5,17 @@ description: Confirmed findings from the pre-testers audit (Claude Fable 5) — 
 
 # Fable audit — results
 
-> **Status: 🟡 Fix in progress — 14 of 46 confirmed findings fixed.** Produced by the
+> **Status: 🟡 Fix in progress — 16 of 46 confirmed findings fixed.** Produced by the
 > [fable-audit](./fable-audit) method: 6 parallel finders (recording pipeline, screenshots,
 > settings/IPC, flow isolation, design conformance vs the docs guides, main-flow UX) with
 > adversarial verification of every candidate. Only findings that survived refutation are
 > listed. **46 distinct confirmed findings (4 critical, 9 high, 17 medium, 16 low), 2 uncertain, 5 refuted.**
 >
-> **Fix plan (themed branches):** 1) recording engine lifetime & flow control — ✅ done
-> (`fix/recording-engine-lifetime`, findings 1,2,3,5,9,10,17,19,20,22,23,24,25 + incidentally
-> 39); 2) unguarded exits (8, 11); 3) silent failures (6, 7, 18, 28); 4) cross-window state +
-> docs (14, 15, 16, 21, 27, 29, 30); 5) screenshot editor & export fidelity (4, 12, 13, 26).
-> The 16 low-severity findings (31–46 minus the incidental 39) are deferred to a later pass.
+> **Fix plan (themed branches):** 1) recording engine lifetime & flow control — ✅ merged
+> (#17: findings 1,2,3,5,9,10,17,19,20,22,23,24,25 + incidentally 39); 2) unguarded exits —
+> ✅ done (`fix/unguarded-exits`, findings 8, 11); 3) silent failures (6, 7, 18, 28); 4) cross-window state + docs (14, 15, 16, 21, 27, 29, 30); 5) screenshot editor & export
+> fidelity (4, 12, 13, 26). The 16 low-severity findings (31–46 minus the incidental 39) are
+> deferred to a later pass.
 
 ## Read this first — the five themes
 
@@ -124,7 +124,7 @@ The recordingWrite IPC handler catches writer.write rejections with `console.err
 
 **Independently reported by:** `recording` — “Disk write failures are swallowed — finalize reports success and a truncated/corrupt file is presented as saved”
 
-### 8. Screenshot editor has no unsaved-changes guard — annotations and the unsaved capture are silently destroyed by any navigation
+### 8. Screenshot editor has no unsaved-changes guard — annotations and the unsaved capture are silently destroyed by any navigation — ✅ Fixed (`fix/unguarded-exits`)
 
 **High · Robustness · found by `flow-isolation`** — `apps/kaipu-record/src/renderer/src/pages/screenshot-editor/screenshot-editor-page.tsx:41`
 
@@ -158,7 +158,7 @@ The recording lives in the main window's renderer, but the main process has no `
 
 **Independently reported by:** `flow-improvements` — “Closing the main window mid-recording destroys the recorder renderer with no guard — control bar sticks on screen, recording lost, app deadlocked until relaunch”
 
-### 11. Cmd+Q mid-recording quits silently and discards the entire recording
+### 11. Cmd+Q mid-recording quits silently and discards the entire recording — ✅ Fixed (`fix/unguarded-exits`)
 
 **High · Robustness · found by `recording`** — `apps/kaipu-record/src/main/index.ts:304`
 

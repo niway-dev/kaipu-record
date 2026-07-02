@@ -38,6 +38,10 @@ let hub: RecordingHubHandle | null = null;
  *  "Stop and close" on the mid-recording close guard — lets the `close`
  *  listener below allow that specific close through without re-prompting. */
 let closingWithRecording = false;
+/** True once the user confirmed "Stop and quit" on the mid-recording quit
+ *  guard — lets the second `before-quit` (after the recording finalizes) pass
+ *  straight through instead of prompting again. */
+let quittingWithRecording = false;
 
 // Must run before `app.whenReady` — privileged scheme registration.
 registerMediaScheme();
@@ -361,10 +365,37 @@ app.whenReady().then(() => {
   });
 });
 
-// The app lives in the menu bar — keep the tray reference alive and release it
-// only on quit so the icon isn't garbage-collected. Flush analytics best-effort
-// (fire-and-forget: client already flushes on every capture so nothing is lost).
-app.on("before-quit", () => {
+// Cmd+Q / tray Quit mid-recording would otherwise leave an un-finalized .part in
+// tmpdir (no moov box → unplayable) with no recovery flow. Guard it: confirm,
+// then run the recorder's normal stop path so what's recorded so far is finalized
+// to the vault before the app actually quits. A timeout still quits if the
+// renderer is unresponsive, so the app is never wedged open.
+app.on("before-quit", (event) => {
+  if (!quittingWithRecording && hub?.isActive()) {
+    event.preventDefault();
+    const choice = dialog.showMessageBoxSync({
+      type: "warning",
+      buttons: ["Cancelar", "Detener y salir"],
+      defaultId: 0,
+      cancelId: 0,
+      message: "Hay una grabación en curso",
+      detail: "Salir ahora detiene la grabación. Kaipu guardará lo grabado hasta este momento.",
+    });
+    if (choice !== 1) return;
+    quittingWithRecording = true;
+    mainWindow?.webContents.send(IPC_CHANNELS.recordingCommand, "stop");
+    const finishQuit = (): void => app.quit();
+    const timeout = setTimeout(finishQuit, 5000);
+    ipcMain.once(IPC_CHANNELS.recordingStop, () => {
+      clearTimeout(timeout);
+      finishQuit();
+    });
+    return;
+  }
+
+  // The app lives in the menu bar — keep the tray reference alive and release it
+  // only on quit so the icon isn't garbage-collected. Flush analytics best-effort
+  // (fire-and-forget: client already flushes on every capture so nothing is lost).
   unregisterGlobalShortcuts();
   tray?.destroy();
   tray = null;
