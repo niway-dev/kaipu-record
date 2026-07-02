@@ -136,8 +136,9 @@ Ventana principal (oculta)                  Barra flotante (ventana aparte)
 
 **Piezas:**
 
+- `features/recording/recorder-store.ts` — **module-singleton** que posee el engine, la sesión del writer y el countdown 3-2-1. Deliberadamente vive fuera de React (mismo patrón que `ui/toast-store.ts`): sobrevive a navegación, remounts de página y desvíos al editor de screenshots. Ver [El engine ya no vive en la página](#el-engine-ya-no-vive-en-la-página) abajo.
+- `features/recording/hooks/use-screen-recorder.ts` — binding fino de React sobre el store vía `useSyncExternalStore`; ya no tiene lógica propia.
 - `features/recording/recorder-engine.ts` — captura + mezcla de audio + encode mediabunny (MP4 H.264/AAC). Seam `videoProvider`/`audioProvider` para meter cámara/watermark después sin tocar lo de abajo.
-- `features/recording/hooks/use-screen-recorder.ts` — ciclo start/pause/resume/stop, timer (descuenta la pausa), tick ~10/s al main.
 - `features/recording/elapsed.ts` + `audio-levels.ts` — lógica pura testeada (clock con pausa, RMS→5 barras).
 - `features/control-bar/` — barra flotante con nuestros tokens/`cx()`/`data-*`.
 - `main/recording/recording-writer.ts` — escritura **posicional** + finalize al vault. Drena los writes en vuelo antes de cerrar el handle (los chunks llegan fire-and-forget por IPC).
@@ -147,6 +148,44 @@ Ventana principal (oculta)                  Barra flotante (ventana aparte)
 **IPC nuevo:** `recording:create|write|finalize|abort` (writer) · `recording:report-tick` → `control:tick` (estado → barra) · `control:command` → `recording:command` (botones → grabador) · `recording:start|stop` (mostrar/ocultar ventanas).
 
 **Vault:** ahora es agnóstico de extensión (`.mp4`/`.webm`), con sidecar de duración + thumbnail; `kaipu-media://thumb/<id>` sirve el póster.
+
+### El engine ya no vive en la página
+
+**Problema (encontrado en la auditoría pre-testers, findings 1/2/5/9/10/20/23/24/25):**
+el engine, la sesión del writer y el countdown vivían en refs de React dentro de
+`useScreenRecorder`, instanciado por el Record page. Cualquier unmount de esa
+página — navegar, tomar un screenshot a mitad de grabación, el rescate
+`⌘⌃O` reabriendo la ventana y remontando el Record page — dejaba el engine
+huérfano: seguía grabando (o el listener de comandos moría con el unmount),
+pero Stop/Pause dejaban de tener efecto porque apuntaban a una instancia de
+hook que ya no existía.
+
+**Solución:** el engine + countdown ahora viven en `recorder-store.ts`, un
+**module-singleton** (mismo patrón que `ui/toast-store.ts`): funciones planas
+mutan estado de módulo y notifican suscriptores vía `useSyncExternalStore`. El
+listener `onRecordingCommand` (pause/resume/stop desde la barra o el atajo
+global) se registra **una sola vez, a nivel de módulo** — no dentro de un
+efecto de React atado al mount de una página — así que sobrevive a cualquier
+navegación. Con esto:
+
+- Remontar el Record page (p. ej. tras `⌘⌃O`) ya no resetea nada: todas las
+  instancias de `useScreenRecorder` en la misma ventana leen el mismo estado.
+- El **stop de la barra/atajo global cancela un countdown en curso** en vez de
+  ser ignorado — antes solo actuaba sobre un engine ya vivo.
+- La navegación al terminar (`/library/:id`) se dispara desde una suscripción
+  en `AppShell` (el layout que nunca se desmonta entre rutas), no desde un
+  callback pasado a `useRecordingSetup` por la página activa.
+- El screenshot (hotkey, botón del tray, o desde la página de Screenshots) se
+  **bloquea con un toast** si el store no está `idle` — cubre tanto una
+  grabación activa como el propio countdown/`starting`, donde antes el
+  selector nativo de región corría contra el arranque del engine.
+- La ventana principal se oculta (`recordingStart` IPC) **antes** de que el
+  engine adquiera streams, no después — antes se veía la propia app en los
+  primeros ~0.5-1s de cada grabación.
+- `fastStart: false` (antes `"in-memory"`) — mediabunny escribe a disco
+  progresivamente en vez de bufferear la grabación completa en RAM del
+  renderer hasta el stop (eso hacía OOM-crashear grabaciones largas y perder
+  todo si la app moría antes del stop).
 
 ### Estado global de grabación (entre ventanas)
 
@@ -198,6 +237,14 @@ deliberadamente no la usa. _(Verificar en runtime que el screen-capture respeta 
 La burbuja se maneja desde el **estado global de settings** (ver abajo): el hub la
 muestra/oculta según el toggle global de Cámara, así que **funciona prendiéndola desde la
 app o desde el Capture Panel**. Follow-ups: selector de dispositivo de cámara, resize/forma.
+
+**Se esconde durante un screenshot.** Como es always-on-top y no tiene content-protection
+(a propósito — para que la grabación la capture), quedaba dentro del selector nativo de
+región en cualquier captura de pantalla mientras la cámara estaba prendida. `beforeCapture`/
+`afterCapture` (`main/index.ts`) llaman a `hub.hideCameraBubbleForCapture()` /
+`restoreCameraBubbleAfterCapture()`, que usan `hide()`/`show()` (no `destroy()`) — la
+cámara sigue tomada por `getUserMedia` todo el tiempo, así que no hay parpadeo del punto
+verde de "en uso".
 
 ### Calidad configurable (presets + sliders)
 
@@ -264,17 +311,27 @@ entitlement). El seam ya está, así que enchufarlo no toca nada más.
 
 Las rutas de error restauran **siempre** el estado de la app:
 
-- **Falla al arrancar** (permiso denegado, `getDisplayMedia` falla): el `catch` corre
-  **antes** de ocultar la ventana (`recordingStart` va después de `startEngine`), así que
-  nunca deja la ventana oculta — aborta la sesión y queda en `error`.
-- **Falla al finalizar:** `recordingStop()` (mostrar ventana + restaurar Dock + esconder
-  barra) se llama **siempre**, fuera del try/catch.
+- **Falla al arrancar** (permiso denegado, `getDisplayMedia` falla): la ventana se oculta
+  optimistamente **antes** de que el engine adquiera streams (ver
+  [El engine ya no vive en la página](#el-engine-ya-no-vive-en-la-página)), así que el
+  `catch` de `beginEngine` debe deshacer ese hide explícitamente — llama a
+  `recordingStop()` (mostrar ventana + restaurar Dock + esconder barra) y aborta la
+  sesión — y vuelve a `idle` (no queda en un estado `error` separado), así el botón Start
+  es usable de inmediato.
+- **Falla al finalizar:** `recordingStop()` se llama **siempre**, fuera del try/catch.
 - **Falla a mitad de grabación** (encoder error, o el track de pantalla termina porque el
   usuario corta el screen-share): el engine la expone vía `onError` (el `errorPromise` de
   las sources + el evento `ended` del track de pantalla) → corre el mismo `stop()` robusto
-  (finaliza-o-aborta + restaura todo). Un `stoppingRef` evita doble-teardown si el usuario
-  toca Stop y la falla disparan a la vez. Así la app **nunca queda trabada** con la ventana
-  oculta y la barra colgada.
+  (finaliza-o-aborta + restaura todo). Un flag `stopping` en el store evita doble-teardown
+  si el usuario toca Stop y la falla disparan a la vez.
+- **El renderer principal muere o la ventana se cierra a mitad de grabación** (crash, OOM,
+  o Cmd+W/botón rojo): no llega `recordingStop` desde un renderer muerto, así que
+  `recording-hub.ts` expone `forceReset()` (reseteo best-effort de `activity` + Dock +
+  barra) llamado desde `render-process-gone` en main. Cerrar la ventana mientras
+  `activity.active` además dispara un diálogo de confirmación ("Detener y cerrar") que
+  corre el stop normal (con timeout de 5s) antes de dejar cerrar — así el archivo se
+  finaliza con lo grabado hasta ese momento en vez de perderse. Así la app **nunca queda
+  trabada** con la ventana oculta, la barra colgada, o el Capture Panel bloqueado.
 
 ### Gotcha: ocultar la ventana principal y el Dock/Cmd+Tab (macOS)
 
@@ -308,6 +365,13 @@ ventana **aún no se ocultó**, así que el botón Start quedaba visible y click
 
 `useRecordingSetup` expone `recordingStatus` (el `RecorderStatus` completo) para que
 el Record page distinga "starting". El número del countdown usa el color de acento.
+
+**Cancelable en todo momento.** `CountdownOverlay` tiene un botón "Cancel" visible y un
+handler de Escape, ambos wireados a `stopOrCancelRecording()` — la misma función que
+maneja el stop de la barra/atajo global. Es una sola rama de código para las tres fases:
+durante `"counting"` cancela el intervalo al instante; durante `"starting"` (el hueco de
+arriba, sin engine todavía) marca un flag que se consume apenas el engine resuelve, en
+vez de dejar que la grabación arranque igual; con un engine vivo, finaliza normalmente.
 
 ### Después de grabar: navegación + estado "Saving"
 

@@ -166,8 +166,14 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
       options.onChunk(copy, chunk.position);
     },
   });
+  // `fastStart: false` (moov box at the END of the file, written on finalize)
+  // keeps mediabunny writing chunks progressively to disk as they encode — the
+  // RecordingWriter below is a positional writer built exactly for this. The
+  // "in-memory" mode this replaces buffers the ENTIRE recording in renderer RAM
+  // until stop() (nothing hits disk meanwhile), so a long recording would OOM
+  // the renderer and a crash before stop would lose the whole session.
   const output = new Output({
-    format: new Mp4OutputFormat({ fastStart: "in-memory" }),
+    format: new Mp4OutputFormat({ fastStart: false }),
     target: new StreamTarget(writable),
   });
   const videoSource = new MediaStreamVideoTrackSource(encodeTrack, {

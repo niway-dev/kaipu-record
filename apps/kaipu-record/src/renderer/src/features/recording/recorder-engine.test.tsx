@@ -5,6 +5,7 @@ import {
   Output,
   StreamTarget,
 } from "mediabunny";
+import { Mp4OutputFormat } from "mediabunny";
 import { startEngine, type EngineOptions } from "./recorder-engine";
 import { startRecordingCompositor } from "./recording-compositor";
 
@@ -252,5 +253,10 @@ describe("startEngine", () => {
   it("reports five microphone level bars", async () => {
     const handle = await startEngine(baseOptions({ microphoneDeviceId: "mic-1" }));
     expect(handle.readLevels()).toHaveLength(5);
+  });
+
+  it("never buffers the recording in memory (fastStart: 'in-memory' would OOM long recordings)", async () => {
+    await startEngine(baseOptions());
+    expect(vi.mocked(Mp4OutputFormat).mock.calls.at(-1)![0]).toEqual({ fastStart: false });
   });
 });

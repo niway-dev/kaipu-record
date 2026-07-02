@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, Tray } from "electron";
+import { app, shell, dialog, BrowserWindow, ipcMain, Notification, Tray } from "electron";
 import { join } from "path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import { IPC_CHANNELS } from "@shared/types";
@@ -9,7 +9,7 @@ import { registerRecordingSourceHandlers } from "./recording-sources";
 import { registerPermissionHandlers } from "./permissions";
 import { registerLibraryVaultHandlers } from "./library";
 import { registerMediaProtocol, registerMediaScheme } from "./media-protocol";
-import { registerRecordingHub } from "./recording/recording-hub";
+import { registerRecordingHub, type RecordingHubHandle } from "./recording/recording-hub";
 import { initAutoUpdater, getUpdateStatus, installDownloadedUpdate } from "./updater/auto-updater";
 import {
   registerSettings,
@@ -31,6 +31,13 @@ import { registerScreenshotHandlers } from "./screenshots/screenshot-ipc";
 let mainWindow: BrowserWindow | null = null;
 let capturePanel: CapturePanelWindow | null = null;
 let tray: Tray | null = null;
+/** Assigned once `registerRecordingHub` runs inside `app.whenReady`; read
+ *  through this closure by handlers defined above that point in the file. */
+let hub: RecordingHubHandle | null = null;
+/** True while the main window is closing itself after the user confirmed
+ *  "Stop and close" on the mid-recording close guard — lets the `close`
+ *  listener below allow that specific close through without re-prompting. */
+let closingWithRecording = false;
 
 // Must run before `app.whenReady` — privileged scheme registration.
 registerMediaScheme();
@@ -72,6 +79,44 @@ function createWindow(showOnReady = true): void {
 
   mainWindow.on("closed", () => {
     mainWindow = null;
+    closingWithRecording = false;
+  });
+
+  // Closing the window mid-recording (the red button, or Cmd+W where the app
+  // stays alive in the tray) would otherwise orphan the recording: the bar
+  // sticks around with a frozen timer, the Dock policy is never restored, and
+  // the Capture Panel stays locked until app restart. Confirm, then run the
+  // recorder's normal stop path (finalizing what's on disk so far) before
+  // actually closing — with a timeout so the window is never stuck if the
+  // renderer is unresponsive.
+  mainWindow.on("close", (event) => {
+    if (closingWithRecording || !hub?.isActive()) return;
+    event.preventDefault();
+    const choice = dialog.showMessageBoxSync(mainWindow!, {
+      type: "warning",
+      buttons: ["Cancelar", "Detener y cerrar"],
+      defaultId: 0,
+      cancelId: 0,
+      message: "Hay una grabación en curso",
+      detail: "Cerrar ahora detiene la grabación. Kaipu guardará lo grabado hasta este momento.",
+    });
+    if (choice !== 1) return;
+    closingWithRecording = true;
+    mainWindow?.webContents.send(IPC_CHANNELS.recordingCommand, "stop");
+    const finishClose = (): void => mainWindow?.close();
+    const timeout = setTimeout(finishClose, 5000);
+    ipcMain.once(IPC_CHANNELS.recordingStop, () => {
+      clearTimeout(timeout);
+      finishClose();
+    });
+  });
+
+  // If the renderer crashes/OOMs mid-recording there is no `recordingStop` IPC
+  // coming — without this the hub's activity would stay "active" forever (bar
+  // stuck, Dock policy never restored, Capture Panel permanently locked).
+  mainWindow.webContents.on("render-process-gone", (_event, details) => {
+    console.error("main renderer process gone", details.reason);
+    hub?.forceReset();
   });
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -106,6 +151,19 @@ function showMainWindow(): void {
  * `startRecording` guards on a selected source / not-already-recording.
  */
 function triggerStartRecording(): void {
+  if (hub?.isActive()) {
+    // Don't un-hide the (deliberately hidden) main window into an active
+    // recording — it would get burned into the video with no explanation.
+    // Let the user know the shortcut landed instead of silently no-oping.
+    capturePanel?.hide();
+    if (Notification.isSupported()) {
+      new Notification({
+        title: "Ya hay una grabación en curso",
+        body: "Detenla desde la barra flotante antes de iniciar otra.",
+      }).show();
+    }
+    return;
+  }
   capturePanel?.hide();
   showMainWindow();
   const contents = mainWindow?.webContents;
@@ -175,11 +233,16 @@ const captureWindowHooks = {
     captureWasVisible = mainWindow?.isVisible() ?? false;
     capturePanel?.hide();
     mainWindow?.hide();
+    // The bubble is always-on-top and not content-protected (it's meant to be
+    // captured by a *recording*), so it would otherwise sit inside the native
+    // region-select and land in the screenshot too.
+    hub?.hideCameraBubbleForCapture();
   },
   afterCapture: (captured: boolean): void => {
     // On success the renderer reveals the window once it shows the editor; here we
     // only need to undo the hide when the user cancelled with the app previously up.
     if (!captured && captureWasVisible) showMainWindow();
+    hub?.restoreCameraBubbleAfterCapture();
   },
   reveal: (): void => bringAppToFront(),
 };
@@ -239,7 +302,7 @@ app.whenReady().then(() => {
   registerRecordingSourceHandlers();
 
   // Recording engine: disk writer, control-bar window, state relay.
-  registerRecordingHub(() => mainWindow);
+  hub = registerRecordingHub(() => mainWindow);
 
   // Global (system-wide) shortcuts. Reuse the existing start/stop paths so the
   // recorder logic stays in one place. Re-register when the bindings change.

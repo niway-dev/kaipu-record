@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { Loader2 } from "lucide-react";
+import { Button } from "@renderer/ui/button";
 import styles from "./countdown-overlay.module.css";
 
 interface CountdownOverlayProps {
@@ -9,10 +10,20 @@ interface CountdownOverlayProps {
    * the blocking overlay stays up until the window hands off to the floating bar.
    */
   value: number | null;
+  /** Cancels the pending start — wired to Escape and the visible Cancel button. */
+  onCancel: () => void;
 }
 
 /** Full-screen dimmed overlay: the large countdown number, or a starting spinner. */
-export function CountdownOverlay({ value }: CountdownOverlayProps): React.JSX.Element {
+export function CountdownOverlay({ value, onCancel }: CountdownOverlayProps): React.JSX.Element {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") onCancel();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onCancel]);
+
   return (
     <div className={styles.overlay} role="status" aria-live="assertive">
       {value !== null ? (
@@ -22,6 +33,9 @@ export function CountdownOverlay({ value }: CountdownOverlayProps): React.JSX.El
       ) : (
         <Loader2 className={styles.spinner} size={56} />
       )}
+      <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+        Cancel
+      </Button>
     </div>
   );
 }

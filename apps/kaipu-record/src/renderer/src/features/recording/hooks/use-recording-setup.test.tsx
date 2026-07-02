@@ -8,16 +8,22 @@ vi.mock("@renderer/features/recording/hooks/use-microphones", () => ({
   useMicrophones: () => MICS,
 }));
 
-// The real recording engine is mocked: status "idle" + delegation spies.
-const recorderStart = vi.fn();
-const recorderStop = vi.fn();
+// The recorder store is mocked: status "idle" + delegation spies, mirroring
+// the real module-singleton shape (see recorder-store.test.ts for the store's
+// own tests — this file only checks use-recording-setup's wiring on top).
+const recorderRequestStart = vi.fn();
+const recorderStopOrCancel = vi.fn();
 const recorderPause = vi.fn();
 const recorderResume = vi.fn();
+let mockRecorderStatus: "idle" | "counting" | "starting" | "recording" | "paused" | "finalizing" =
+  "idle";
+let mockCountdown: number | null = null;
 vi.mock("@renderer/features/recording/hooks/use-screen-recorder", () => ({
   useScreenRecorder: () => ({
-    status: "idle",
-    start: recorderStart,
-    stop: recorderStop,
+    status: mockRecorderStatus,
+    countdown: mockCountdown,
+    requestStart: recorderRequestStart,
+    stopOrCancel: recorderStopOrCancel,
     pause: recorderPause,
     resume: recorderResume,
   }),
@@ -48,19 +54,31 @@ describe("useRecordingSetup", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     mockSettings = SETTINGS();
-    for (const spy of [recorderStart, recorderStop, recorderPause, recorderResume, mockUpdate]) {
+    mockRecorderStatus = "idle";
+    mockCountdown = null;
+    for (const spy of [
+      recorderRequestStart,
+      recorderStopOrCancel,
+      recorderPause,
+      recorderResume,
+      mockUpdate,
+    ]) {
       spy.mockClear();
     }
   });
   afterEach(() => vi.useRealTimers());
 
-  it("can-start reflects the shared selected source", () => {
+  it("can-start reflects the shared selected source and the recorder being idle", () => {
     const idle = renderHook(() => useRecordingSetup());
     expect(idle.result.current.canStartRecording).toBe(false);
 
     mockSettings = SETTINGS({ selectedSource: SCREEN });
     const ready = renderHook(() => useRecordingSetup());
     expect(ready.result.current.canStartRecording).toBe(true);
+
+    mockRecorderStatus = "finalizing"; // a prior recording is still saving
+    const busy = renderHook(() => useRecordingSetup());
+    expect(busy.result.current.canStartRecording).toBe(false);
   });
 
   it("delegates capture toggles to the shared settings", () => {
@@ -79,7 +97,7 @@ describe("useRecordingSetup", () => {
     });
   });
 
-  it("exposes the recorder status and delegates pause/resume", () => {
+  it("exposes the recorder status/countdown and delegates pause/resume", () => {
     const { result } = renderHook(() => useRecordingSetup());
     expect(result.current.recordingStatus).toBe("idle");
     act(() => result.current.pauseRecording());
@@ -88,37 +106,28 @@ describe("useRecordingSetup", () => {
     expect(recorderResume).toHaveBeenCalledTimes(1);
   });
 
-  it("counts down 3 → 2 → 1 then starts with the shared source/mic", () => {
+  it("startRecording asks the recorder to start, resolving input from the shared source/mic", () => {
     mockSettings = SETTINGS({ selectedSource: SCREEN });
     const { result } = renderHook(() => useRecordingSetup());
 
     act(() => result.current.startRecording());
-    expect(result.current.countdown).toBe(3);
-    expect(recorderStart).not.toHaveBeenCalled();
 
-    act(() => vi.advanceTimersByTime(1000));
-    expect(result.current.countdown).toBe(2);
-    act(() => vi.advanceTimersByTime(1000));
-    expect(result.current.countdown).toBe(1);
-    act(() => vi.advanceTimersByTime(1000));
-    expect(result.current.countdown).toBeNull();
-    expect(recorderStart).toHaveBeenCalledWith(
+    expect(recorderRequestStart).toHaveBeenCalledOnce();
+    const resolveInput = recorderRequestStart.mock.calls[0][0] as () => unknown;
+    expect(resolveInput()).toEqual(
       expect.objectContaining({ sourceId: "s1", microphoneDeviceId: "m1" }),
     );
   });
 
-  it("stopRecording cancels an in-progress countdown", () => {
-    mockSettings = SETTINGS({ selectedSource: SCREEN });
+  it("startRecording is a no-op without a selected source", () => {
     const { result } = renderHook(() => useRecordingSetup());
-
     act(() => result.current.startRecording());
-    expect(result.current.countdown).toBe(3);
+    expect(recorderRequestStart).not.toHaveBeenCalled();
+  });
 
+  it("stopRecording delegates to the recorder's unified stop-or-cancel", () => {
+    const { result } = renderHook(() => useRecordingSetup());
     act(() => result.current.stopRecording());
-    expect(result.current.countdown).toBeNull();
-    expect(recorderStop).toHaveBeenCalledTimes(1);
-
-    act(() => vi.advanceTimersByTime(5000));
-    expect(recorderStart).not.toHaveBeenCalled();
+    expect(recorderStopOrCancel).toHaveBeenCalledTimes(1);
   });
 });
