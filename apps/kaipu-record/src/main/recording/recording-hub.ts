@@ -19,6 +19,28 @@ import {
   getAppSettings,
 } from "../infrastructure/settings-store";
 
+export interface RecordingHubHandle {
+  /** True while a recording is active or paused. */
+  isActive(): boolean;
+  /**
+   * Hide the camera bubble for the duration of a screenshot capture (it sits
+   * always-on-top, so it would otherwise land in the shot) without releasing
+   * the camera device. No-ops if the bubble isn't currently shown.
+   */
+  hideCameraBubbleForCapture(): void;
+  /** Restore the bubble after a capture, but only if it was actually hidden
+   *  for it AND the camera toggle is still on (it may have been turned off
+   *  mid-capture). */
+  restoreCameraBubbleAfterCapture(): void;
+  /**
+   * Best-effort recovery when the recorder renderer is gone (crash, or the
+   * main window destroyed) mid-recording: resets activity, hides the bar, and
+   * restores the Dock policy without waiting on IPC that will never arrive
+   * from a dead renderer. No-ops while idle.
+   */
+  forceReset(): void;
+}
+
 /**
  * The single stateful coordinator for a recording. Owns the control-bar window
  * and relays between the (hidden) recorder window and the bar:
@@ -27,7 +49,9 @@ import {
  * It also hides/restores the main window so only the bar is visible while
  * recording, and registers the disk-writer IPC handlers.
  */
-export function registerRecordingHub(getMainWindow: () => BrowserWindow | null): void {
+export function registerRecordingHub(
+  getMainWindow: () => BrowserWindow | null,
+): RecordingHubHandle {
   const bar = new ControlBarWindow();
   const cameraBubble = new CameraBubbleWindow();
   const writer = new RecordingWriter({
@@ -116,7 +140,7 @@ export function registerRecordingHub(getMainWindow: () => BrowserWindow | null):
       bar.show(displayId, { includeInRecording }),
     );
   });
-  ipcMain.on(IPC_CHANNELS.recordingStop, () => {
+  const applyStopWindowState = (): void => {
     activity = stoppedActivity(activity);
     bar.hide();
     const main = getMainWindow();
@@ -128,7 +152,8 @@ export function registerRecordingHub(getMainWindow: () => BrowserWindow | null):
     applyDockPolicy();
     app.focus({ steal: true });
     broadcastActivity();
-  });
+  };
+  ipcMain.on(IPC_CHANNELS.recordingStop, applyStopWindowState);
 
   // ── Relay ────────────────────────────────────────────────────────────
   ipcMain.on(IPC_CHANNELS.recordingReportTick, (_e, tick: RecordingTick) => {
@@ -140,6 +165,26 @@ export function registerRecordingHub(getMainWindow: () => BrowserWindow | null):
   ipcMain.on(IPC_CHANNELS.controlCommand, (_e, command: ControlCommand) => {
     getMainWindow()?.webContents.send(IPC_CHANNELS.recordingCommand, command);
   });
+
+  let cameraBubbleHiddenForCapture = false;
+
+  return {
+    isActive: () => activity.active,
+    hideCameraBubbleForCapture: () => {
+      if (!cameraBubble.isVisible()) return;
+      cameraBubbleHiddenForCapture = true;
+      cameraBubble.hide();
+    },
+    restoreCameraBubbleAfterCapture: () => {
+      if (!cameraBubbleHiddenForCapture) return;
+      cameraBubbleHiddenForCapture = false;
+      if (settings.isCameraEnabled) cameraBubble.show();
+    },
+    forceReset: () => {
+      if (!activity.active) return;
+      applyStopWindowState();
+    },
+  };
 }
 
 /** Resolve which display a screen source belongs to (windows have none). */

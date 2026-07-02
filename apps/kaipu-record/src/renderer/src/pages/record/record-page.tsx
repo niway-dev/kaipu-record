@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import { Pause, Play, Square } from "lucide-react";
 import { useRecordingSetup } from "@renderer/features/recording/hooks/use-recording-setup";
 import { useShortcutLabels } from "@renderer/features/shortcuts/use-shortcut-labels";
@@ -18,13 +18,12 @@ import styles from "./record-page.module.css";
 
 // Composition only. State lives in the hooks; this wires them to dumb components.
 export function RecordPage(): React.JSX.Element {
-  const navigate = useNavigate();
   const location = useLocation();
   const shortcuts = useShortcutLabels();
-  // After a recording saves, jump straight to its detail page to see the output.
-  const setup = useRecordingSetup({
-    onRecordingComplete: (recording) => navigate(`/library/${recording.id}`),
-  });
+  // Navigation to the finished recording's detail page happens at the app-shell
+  // level (see AppShell), not here — the engine (and its completion) now
+  // outlives this page's mount, so this page never needs to own that callback.
+  const setup = useRecordingSetup();
   const { sources, isLoading: isLoadingSources, error: sourcesError } = useSourceSelection(setup);
   const {
     status: permissionStatus,
@@ -160,7 +159,7 @@ export function RecordPage(): React.JSX.Element {
       ) : (
         <RecordButton
           isRecording={false}
-          disabled={!setup.canStartRecording || isStarting || setup.countdown !== null}
+          disabled={!setup.canStartRecording}
           shortcut={shortcuts?.startRecording}
           onClick={setup.startRecording}
         />
@@ -183,7 +182,9 @@ export function RecordPage(): React.JSX.Element {
         onGrantAccess={() => void openPermissionSettings("screen")}
       />
 
-      {(setup.countdown !== null || isStarting) && <CountdownOverlay value={setup.countdown} />}
+      {(setup.countdown !== null || isStarting) && (
+        <CountdownOverlay value={setup.countdown} onCancel={setup.stopRecording} />
+      )}
     </div>
   );
 }

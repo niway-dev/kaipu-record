@@ -3,6 +3,7 @@ import { Outlet, useNavigate } from "react-router-dom";
 import { SHORTCUT_DEFINITIONS } from "@shared/types";
 import { Sidebar } from "./sidebar";
 import { useShortcutLabels } from "@renderer/features/shortcuts/use-shortcut-labels";
+import { subscribeRecordingComplete } from "@renderer/features/recording/recorder-store";
 import {
   useVersionGate,
   VersionGateOverlay,
@@ -51,6 +52,16 @@ export function AppShell(): React.JSX.Element {
   // Global ⌘⌃X hotkey: main brings the window to front and broadcasts this event;
   // we run the region-capture flow here so navigation (useNavigate) is available.
   useEffect(() => window.electronAPI.onCaptureScreenshotHotkey(capture), [capture]);
+
+  // A recording finishing is reported by the module-singleton recorder store
+  // (see recorder-store.ts), not by whichever page happens to be mounted — the
+  // engine can outlive the Record page (navigation, screenshot detour, the
+  // bringToFront rescue). Subscribing here, on the shell that never unmounts
+  // across route changes, lands the navigation reliably every time.
+  useEffect(
+    () => subscribeRecordingComplete((recording) => navigate(`/library/${recording.id}`)),
+    [navigate],
+  );
 
   return (
     <div className={styles.shell}>

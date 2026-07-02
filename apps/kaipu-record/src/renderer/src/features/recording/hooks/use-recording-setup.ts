@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { LocalRecording } from "@shared/types";
 import {
   DEFAULT_QUALITY,
   qualityToEngine,
@@ -12,21 +11,16 @@ import { useRecordingSettings } from "@renderer/features/recording/hooks/use-rec
 import {
   useScreenRecorder,
   type RecorderStatus,
+  type StartInput,
 } from "@renderer/features/recording/hooks/use-screen-recorder";
 import type { Microphone, SelectedSource } from "@renderer/features/recording/types";
-
-export interface RecordingSetupOptions {
-  /** Fires when a recording finishes saving — the Record page uses it to navigate. */
-  onRecordingComplete?: (recording: LocalRecording) => void;
-}
-
-const COUNTDOWN_SECONDS = 3;
 
 /**
  * Smart container for the recording controls. Holds all the UI state the Record
  * page and the Capture Panel need, so both can render dumb components against the
  * same shape. Each consumer (separate windows) gets its own instance — this is
- * shared *code*, not shared *state*.
+ * shared *code*, not shared *state*. The recording lifecycle itself (countdown +
+ * engine) is NOT local to this hook — see `use-screen-recorder.ts`.
  */
 export interface RecordingSetup {
   // Source
@@ -60,6 +54,7 @@ export interface RecordingSetup {
   canStartRecording: boolean;
   /** Begin recording after a short countdown (used by the Record page). */
   startRecording(): void;
+  /** Cancel a pending start, or stop an active recording — whichever applies. */
   stopRecording(): void;
   /** Stop if recording, otherwise start (with the same countdown). */
   toggleRecording(): void;
@@ -67,7 +62,7 @@ export interface RecordingSetup {
   resumeRecording(): void;
 }
 
-export function useRecordingSetup(options: RecordingSetupOptions = {}): RecordingSetup {
+export function useRecordingSetup(): RecordingSetup {
   // Shared across windows (the main process is the source of truth), so toggling
   // a control in the Record page or the Capture Panel updates both.
   const settings = useRecordingSettings();
@@ -80,14 +75,12 @@ export function useRecordingSetup(options: RecordingSetupOptions = {}): Recordin
     update,
   } = settings;
 
-  // Per-window UI + recording lifecycle (NOT shared).
+  // Per-window UI state (NOT shared).
   const [isSourcePickerOpen, setSourcePickerOpen] = useState(false);
   const [isMicrophoneMenuOpen, setMicrophoneMenuOpen] = useState(false);
-  const [countdown, setCountdown] = useState<number | null>(null);
-  const countdownTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const microphones = useMicrophones();
-  const recorder = useScreenRecorder({ onComplete: options.onRecordingComplete });
+  const recorder = useScreenRecorder();
 
   // The encoder quality is a persisted app setting (Settings page). Read it on
   // mount so it's available synchronously at start; kept in a ref so the start
@@ -114,65 +107,45 @@ export function useRecordingSetup(options: RecordingSetupOptions = {}): Recordin
     }
   }, [microphones, selectedMicrophone, update]);
 
-  // Recording lives in the real engine; "recording" and "paused" both count as
-  // an active session for the UI.
+  // "Recording" and "paused" both count as an active session for the UI.
   const isRecording = recorder.status === "recording" || recorder.status === "paused";
 
-  const clearCountdown = useCallback(() => {
-    if (countdownTimer.current) {
-      clearInterval(countdownTimer.current);
-      countdownTimer.current = null;
-    }
-    setCountdown(null);
-  }, []);
+  const sourceRef = useRef(selectedSource);
+  sourceRef.current = selectedSource;
+  const micEnabledRef = useRef(isMicrophoneEnabled);
+  micEnabledRef.current = isMicrophoneEnabled;
+  const micRef = useRef(selectedMicrophone);
+  micRef.current = selectedMicrophone;
+  const systemAudioRef = useRef(isSystemAudioEnabled);
+  systemAudioRef.current = isSystemAudioEnabled;
 
   const startRecording = useCallback(() => {
-    if (countdownTimer.current || isRecording || !selectedSource) return;
-    let remaining = COUNTDOWN_SECONDS;
-    setCountdown(remaining);
-    countdownTimer.current = setInterval(() => {
-      remaining -= 1;
-      if (remaining <= 0) {
-        clearCountdown();
-        const engineQuality = qualityToEngine(qualityRef.current);
-        const wm = watermarkRef.current;
-        void recorder.start({
-          sourceId: selectedSource.id,
-          sourceName: selectedSource.name,
-          microphoneDeviceId: isMicrophoneEnabled ? (selectedMicrophone?.deviceId ?? null) : null,
-          systemAudio: isSystemAudioEnabled,
-          width: engineQuality.width,
-          height: engineQuality.height,
-          frameRate: engineQuality.frameRate,
-          videoBitrate: engineQuality.videoBitrate,
-          watermark: wm.enabled ? wm.config : null,
-        });
-      } else {
-        setCountdown(remaining);
-      }
-    }, 1000);
-  }, [
-    isRecording,
-    clearCountdown,
-    selectedSource,
-    isMicrophoneEnabled,
-    selectedMicrophone,
-    isSystemAudioEnabled,
-    recorder,
-  ]);
+    if (recorder.status !== "idle" || !sourceRef.current) return;
+    recorder.requestStart((): StartInput => {
+      const source = sourceRef.current;
+      if (!source) throw new Error("startRecording: no source selected");
+      const engineQuality = qualityToEngine(qualityRef.current);
+      const wm = watermarkRef.current;
+      return {
+        sourceId: source.id,
+        sourceName: source.name,
+        microphoneDeviceId: micEnabledRef.current ? (micRef.current?.deviceId ?? null) : null,
+        systemAudio: systemAudioRef.current,
+        width: engineQuality.width,
+        height: engineQuality.height,
+        frameRate: engineQuality.frameRate,
+        videoBitrate: engineQuality.videoBitrate,
+        watermark: wm.enabled ? wm.config : null,
+      };
+    });
+  }, [recorder]);
 
-  const stopRecording = useCallback(() => {
-    clearCountdown();
-    void recorder.stop();
-  }, [clearCountdown, recorder]);
+  const stopRecording = useCallback(() => recorder.stopOrCancel(), [recorder]);
 
   const toggleRecording = useCallback(() => {
-    if (isRecording) void recorder.stop();
+    if (isRecording) recorder.stopOrCancel();
     else startRecording();
   }, [isRecording, recorder, startRecording]);
-
-  // Stop the countdown if the consumer unmounts mid-count.
-  useEffect(() => () => clearCountdown(), [clearCountdown]);
 
   return {
     selectedSource,
@@ -199,8 +172,11 @@ export function useRecordingSetup(options: RecordingSetupOptions = {}): Recordin
 
     isRecording,
     recordingStatus: recorder.status,
-    countdown,
-    canStartRecording: Boolean(selectedSource),
+    countdown: recorder.countdown,
+    // "idle" excludes counting/starting/recording/paused/finalizing in one
+    // check, so a second start can never be requested while any phase of a
+    // prior one — including the post-stop "Saving…" window — is in flight.
+    canStartRecording: Boolean(selectedSource) && recorder.status === "idle",
     startRecording,
     stopRecording,
     toggleRecording,

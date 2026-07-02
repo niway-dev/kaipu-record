@@ -74,8 +74,20 @@ export async function startRecordingCompositor(
 
   let frame = 0;
   const draw = (): void => {
-    // Uniform scale (target keeps the source AR) → no distortion.
-    ctx.drawImage(video, 0, 0, target.width, target.height);
+    // Screen sources have a fixed AR, but WINDOW sources change dimensions
+    // whenever the user resizes the window — re-reading videoWidth/videoHeight
+    // and uniformly fitting (letterboxed, never stretched) every frame keeps the
+    // output correct even if the source's AR drifts from `target`'s mid-recording,
+    // instead of stretching the current frame into the fixed target box.
+    const vw = video.videoWidth || target.width;
+    const vh = video.videoHeight || target.height;
+    const fit = Math.min(target.width / vw, target.height / vh);
+    const dw = vw * fit;
+    const dh = vh * fit;
+    const dx = (target.width - dw) / 2;
+    const dy = (target.height - dh) / 2;
+    ctx.clearRect(0, 0, target.width, target.height);
+    ctx.drawImage(video, 0, 0, vw, vh, dx, dy, dw, dh);
     if (stamp && rect) {
       ctx.save();
       ctx.globalAlpha = opacity;

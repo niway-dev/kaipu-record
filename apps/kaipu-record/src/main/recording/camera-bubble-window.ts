@@ -63,6 +63,21 @@ export class CameraBubbleWindow {
     });
   }
 
+  /** True while the bubble has an active (non-destroyed) window and is visible. */
+  isVisible(): boolean {
+    return Boolean(this.window && !this.window.isDestroyed() && this.window.isVisible());
+  }
+
+  /**
+   * Temporarily hide the bubble without releasing the camera device — used
+   * while a screenshot region-select is on screen (the bubble sits above
+   * everything, so it would otherwise land in the shot). Call `show()` to
+   * bring it back; the device stays held the whole time, unlike `destroy()`.
+   */
+  hide(): void {
+    this.window?.hide();
+  }
+
   /**
    * Destroy the bubble window. Unlike the control bar we never just `hide()` it:
    * the renderer holds the camera via getUserMedia, so the window must be torn
