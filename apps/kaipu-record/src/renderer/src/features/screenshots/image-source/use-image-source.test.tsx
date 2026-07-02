@@ -44,4 +44,23 @@ describe("useImageSource", () => {
     );
     expect(typeof result.current?.getBytes).toBe("function");
   });
+
+  it("caches the first byte read so export never re-reads post-overwrite bytes", async () => {
+    // A local source re-reads the vault file each call; simulate the file changing
+    // (e.g. after a Save→Overwrite) between reads.
+    let readCount = 0;
+    window.electronAPI.readScreenshotBytes = vi.fn(async () => {
+      readCount += 1;
+      return new Uint8Array([readCount]).buffer;
+    });
+    const { result } = renderHook(() =>
+      useImageSource({ kind: "local", id: "shot-1", width: 1, height: 1 }),
+    );
+
+    const first = new Uint8Array((await result.current!.getBytes()) as ArrayBuffer);
+    const second = new Uint8Array((await result.current!.getBytes()) as ArrayBuffer);
+
+    expect(readCount).toBe(1); // only read once
+    expect(second).toEqual(first); // same immutable original both times
+  });
 });
