@@ -5,7 +5,7 @@ description: Confirmed findings from the pre-testers audit (Claude Fable 5) — 
 
 # Fable audit — results
 
-> **Status: 🟡 Fix in progress — 25 of 46 confirmed findings fixed.** Produced by the
+> **Status: 🟡 Fix in progress — 27 of 46 confirmed findings fixed.** Produced by the
 > [fable-audit](./fable-audit) method: 6 parallel finders (recording pipeline, screenshots,
 > settings/IPC, flow isolation, design conformance vs the docs guides, main-flow UX) with
 > adversarial verification of every candidate. Only findings that survived refutation are
@@ -16,7 +16,7 @@ description: Confirmed findings from the pre-testers audit (Claude Fable 5) — 
 > ✅ merged (#18: findings 8, 11); 3) silent failures — ✅ merged (#19: findings 6, 7, 18, 28); 4) cross-window state + docs, split into: 4a shortcuts & window reachability — ✅ done
 > (`fix/shortcuts-window-reachability`, findings 21, 27, 29 + the did-finish-load race), 4b settings
 > cross-window broadcast — ✅ done (`fix/settings-broadcast`, finding 14), 4c vault-folder change safety — ✅ done (`fix/vault-folder-change-safety`, finding 30), 4d docs +
-> record-page tests (15, 16); 5) screenshot editor & export fidelity (4, 12, 13, 26). The 16
+> record-page tests — ✅ done (`fix/ipc-docs-and-record-page-tests`, findings 15, 16); 5) screenshot editor & export fidelity (4, 12, 13, 26). The 16
 > low-severity findings (31–46 minus the incidental 39) are deferred to a later pass.
 
 ## Read this first — the five themes
@@ -204,7 +204,7 @@ recording-pipeline.mdx establishes the cross-window state pattern: 'consulta al 
 
 **Suggested fix:** Broadcast a `settings:changed` event to all windows from the update handler (mirroring recording-settings:changed), expose onSettingsChanged in the bridge, and have useShortcutLabels/useAppSettings subscribe instead of relying on focus/remount.
 
-### 15. Pages are untested, contradicting the renderer-architecture folder contract that pages get jsdom tests — record-page's auto-start logic has zero coverage
+### 15. Pages are untested, contradicting the renderer-architecture folder contract that pages get jsdom tests — record-page's auto-start logic has zero coverage — ✅ Fixed (`fix/ipc-docs-and-record-page-tests`)
 
 **Medium · Design · found by `design-conformance`** — `apps/kaipu-record/src/renderer/src/pages/record/record-page.tsx:54`
 
@@ -214,7 +214,7 @@ renderer-architecture.mdx's folder table (line 15-22) states pages/<page> are te
 
 **Suggested fix:** Add jsdom tests for record-page covering: auto-start fires exactly once per startAt flag, no start while activity.active, and openPicker opens the selector once.
 
-### 16. IPC Contract doc is materially wrong: it asserts settings:get/update have no handler and documents 13 of ~45 channels
+### 16. IPC Contract doc is materially wrong: it asserts settings:get/update have no handler and documents 13 of ~45 channels — ✅ Fixed (`fix/ipc-docs-and-record-page-tests`)
 
 **Medium · Design · found by `design-conformance`** — `apps/documentation/src/content/docs/desktop/ipc-contract.mdx:62`
 

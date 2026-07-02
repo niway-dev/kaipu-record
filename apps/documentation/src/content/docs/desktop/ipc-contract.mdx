@@ -16,52 +16,154 @@ renderer  →  window.electronAPI.foo()          (src/renderer)
           →  register*Handlers()                (src/main/*)
 ```
 
-El contrato está **tipado de punta a punta** por archivos puros en `src/shared/types/` que importan ambos procesos. No hay tests de runtime del bridge: si el tipo no cuadra, no compila (`shared/types/ipc.ts:1`).
+El contrato está **tipado de punta a punta** por archivos puros en `src/shared/types/` que importan ambos procesos. No hay tests de runtime del bridge: si el tipo no cuadra, no compila.
 
-## Nombres de canal
+## La fuente de verdad son los tipos, no este doc
 
-Centralizados en `IPC_CHANNELS` (`shared/types/ipc.ts:26`) para mantener main y renderer en sync. Dos canales del hot-path de captura/panel se nombran inline (no en el mapa).
+**`IPC_CHANNELS` (`shared/types/ipc.ts`) es la lista autoritativa de canales**, y `KaipuElectronAPI` (`shared/types/electron-api.ts`) es la forma completa de `window.electronAPI`. Este doc **agrupa** los canales por subsistema para orientarse; para el conteo exacto, mirá esos dos archivos (verificados por el compilador, así que no pueden desincronizarse del código). Al momento de escribir esto son ~49 canales en `IPC_CHANNELS` más 3 canales de string crudo (ver [Canales fuera del mapa](#canales-fuera-del-mapa)).
 
-## Canales
+## Canales por subsistema
 
-| Canal                          | Tipo   | Dirección   | Firma (en `electronAPI`)                                  | Handler                      |
-| ------------------------------ | ------ | ----------- | --------------------------------------------------------- | ---------------------------- |
-| `recording:get-screen-sources` | invoke | render→main | `getScreenSources(): Promise<ScreenSource[]>`             | `recording-sources.ts:13`    |
-| `capture-panel:resize`         | send   | render→main | `resizeCapturePanel(height): void`                        | `capture-panel-window.ts:97` |
-| `capture-panel:open-main`      | send   | render→main | `openMainWindow(): void`                                  | `index.ts:88`                |
-| `permissions:check`            | invoke | render→main | `checkPermissions(): Promise<PermissionStatus>`           | `permissions.ts:105`         |
-| `permissions:request`          | invoke | render→main | `requestPermission(kind): Promise<boolean>`               | `permissions.ts:109`         |
-| `permissions:open-settings`    | invoke | render→main | `openSystemSettings(kind): Promise<void>`                 | `permissions.ts:116`         |
-| `library:list-local`           | invoke | render→main | `listLocalRecordings(): Promise<LocalRecording[]>`        | `library/index.ts:24`        |
-| `library:rename-local`         | invoke | render→main | `renameLocalRecording(id, title): Promise<void>`          | `library/index.ts:25`        |
-| `library:delete-local`         | invoke | render→main | `deleteLocalRecording(id): Promise<void>`                 | `library/index.ts:28`        |
-| `library:reveal-local`         | invoke | render→main | `revealLocalRecording(id): Promise<void>`                 | `library/index.ts:31`        |
-| `library:get-vault-dir`        | invoke | render→main | `getVaultDirectory(): Promise<VaultDirectory>`            | `library/index.ts:35`        |
-| `library:choose-vault-dir`     | invoke | render→main | `chooseVaultDirectory(): Promise<VaultDirectory \| null>` | `library/index.ts:37`        |
-| `library:reset-vault-dir`      | invoke | render→main | `resetVaultDirectory(): Promise<VaultDirectory>`          | `library/index.ts:58`        |
+Dirección: **r→m** = renderer llama a main (`invoke`/`send`); **m→r** = main emite hacia el/los renderer (broadcast o dirigido).
+
+### App y ventana
+
+| Canal                    | Dir | En `electronAPI`              | Registrador |
+| ------------------------ | --- | ----------------------------- | ----------- |
+| `app:get-version`        | r→m | `getAppVersion()`             | `index.ts`  |
+| `app:ready`              | r→m | `notifyReady()`               | `index.ts`  |
+| `window:set-editor-mode` | r→m | `setEditorWindowMode(active)` | `index.ts`  |
+
+`app:ready` es el handshake que evita el race del `did-finish-load`: el shell avisa cuando montó sus listeners y main recién ahí manda las acciones diferidas (start/capture/source-picker).
+
+### Settings persistidos
+
+Sí existen y persisten: `settings-store.ts` registra ambos handlers, el preload expone `getSettings`/`updateSettings`, y `settings.json` (en `userData`) guarda theme, dock, launch-at-login, calidad de grabación, atajos y el `deviceId` de analytics.
+
+| Canal              | Dir | En `electronAPI`        | Registrador         |
+| ------------------ | --- | ----------------------- | ------------------- |
+| `settings:get`     | r→m | `getSettings()`         | `settings-store.ts` |
+| `settings:update`  | r→m | `updateSettings(patch)` | `settings-store.ts` |
+| `settings:changed` | m→r | `onSettingsChanged(cb)` | `settings-store.ts` |
+
+`settings:changed` se emite a **todas** las ventanas tras cada cambio (patrón consultar-al-montar + suscribir), para que consumidores como el hint de atajo de la barra flotante no queden stale.
+
+### Permisos
+
+| Canal                       | Dir | En `electronAPI`           | Registrador      |
+| --------------------------- | --- | -------------------------- | ---------------- |
+| `permissions:check`         | r→m | `checkPermissions()`       | `permissions.ts` |
+| `permissions:request`       | r→m | `requestPermission(kind)`  | `permissions.ts` |
+| `permissions:open-settings` | r→m | `openSystemSettings(kind)` | `permissions.ts` |
+
+### Library / vault
+
+| Canal                      | Dir | En `electronAPI`              | Registrador        |
+| -------------------------- | --- | ----------------------------- | ------------------ |
+| `library:list-local`       | r→m | `listLocalRecordings()`       | `library/index.ts` |
+| `library:rename-local`     | r→m | `renameLocalRecording(id, t)` | `library/index.ts` |
+| `library:delete-local`     | r→m | `deleteLocalRecording(id)`    | `library/index.ts` |
+| `library:reveal-local`     | r→m | `revealLocalRecording(id)`    | `library/index.ts` |
+| `library:get-vault-dir`    | r→m | `getVaultDirectory()`         | `library/index.ts` |
+| `library:choose-vault-dir` | r→m | `chooseVaultDirectory()`      | `library/index.ts` |
+| `library:reset-vault-dir`  | r→m | `resetVaultDirectory()`       | `library/index.ts` |
+| `library:changed`          | m→r | `onLibraryChanged(cb)`        | `library/index.ts` |
+
+### Screenshots
+
+| Canal                        | Dir | En `electronAPI`                | Registrador    |
+| ---------------------------- | --- | ------------------------------- | -------------- |
+| `screenshot:capture`         | r→m | `captureScreenshot()`           | `screenshots/` |
+| `screenshot:copy`            | r→m | `copyImageToClipboard(bytes)`   | `screenshots/` |
+| `screenshot:copy-by-id`      | r→m | `copyScreenshotById(id)`        | `screenshots/` |
+| `screenshot:read-bytes`      | r→m | `readScreenshotBytes(id)`       | `screenshots/` |
+| `screenshot:save`            | r→m | `saveScreenshot(bytes, meta)`   | `screenshots/` |
+| `screenshot:reveal`          | r→m | `revealAfterCapture()`          | `screenshots/` |
+| `screenshot:hotkey`          | m→r | `onCaptureScreenshotHotkey(cb)` | `index.ts`     |
+| `screenshot:request-capture` | r→m | `requestCaptureScreenshot()`    | `index.ts`     |
+
+### Recording — writer (hot path a disco)
+
+| Canal                | Dir | En `electronAPI`                | Registrador        |
+| -------------------- | --- | ------------------------------- | ------------------ |
+| `recording:create`   | r→m | `recordingCreate(sessionId)`    | `recording-hub.ts` |
+| `recording:write`    | r→m | `recordingWrite(id, data, pos)` | `recording-hub.ts` |
+| `recording:finalize` | r→m | `recordingFinalize(id, meta)`   | `recording-hub.ts` |
+| `recording:abort`    | r→m | `recordingAbort(id)`            | `recording-hub.ts` |
+
+### Recording — barra y estado (cross-window)
+
+| Canal                        | Dir | En `electronAPI`                 | Registrador        |
+| ---------------------------- | --- | -------------------------------- | ------------------ |
+| `recording:report-tick`      | r→m | `recordingReportTick(tick)`      | `recording-hub.ts` |
+| `recording:start`            | r→m | `recordingStart(info)`           | `recording-hub.ts` |
+| `recording:stop`             | r→m | `recordingStop()`                | `recording-hub.ts` |
+| `control:tick`               | m→r | `onControlTick(cb)`              | `recording-hub.ts` |
+| `control:command`            | r→m | `controlCommand(cmd)`            | `recording-hub.ts` |
+| `recording:command`          | m→r | `onRecordingCommand(cb)`         | `recording-hub.ts` |
+| `recording:state`            | m→r | `onRecordingState(cb)`           | `recording-hub.ts` |
+| `recording:get-state`        | r→m | `getRecordingState()`            | `recording-hub.ts` |
+| `recording-settings:get`     | r→m | `getRecordingSettings()`         | `recording-hub.ts` |
+| `recording-settings:update`  | r→m | `updateRecordingSettings(p)`     | `recording-hub.ts` |
+| `recording-settings:changed` | m→r | `onRecordingSettingsChanged(cb)` | `recording-hub.ts` |
+
+### Cross-window triggers (panel/atajo → Record page)
+
+| Canal                             | Dir       | En `electronAPI`                                          | Registrador |
+| --------------------------------- | --------- | --------------------------------------------------------- | ----------- |
+| `recording:request-start`         | r→m / m→r | `requestStartRecording()` / `onRequestStartRecording(cb)` | `index.ts`  |
+| `recording:request-source-picker` | r→m / m→r | `requestChooseSource()` / `onRequestChooseSource(cb)`     | `index.ts`  |
+
+### Shortcuts
+
+| Canal                  | Dir | En `electronAPI`      | Registrador |
+| ---------------------- | --- | --------------------- | ----------- |
+| `shortcuts:get-status` | r→m | `getShortcutStatus()` | `index.ts`  |
+| `shortcuts:suspend`    | r→m | `suspendShortcuts()`  | `index.ts`  |
+| `shortcuts:resume`     | r→m | `resumeShortcuts()`   | `index.ts`  |
+
+### Auto-update y analytics
+
+| Canal                         | Dir | En `electronAPI`       | Registrador        |
+| ----------------------------- | --- | ---------------------- | ------------------ |
+| `update:get-status`           | r→m | `getUpdateStatus()`    | `index.ts`         |
+| `update:status`               | m→r | `onUpdateStatus(cb)`   | `auto-updater.ts`  |
+| `update:install`              | r→m | `installUpdate()`      | `index.ts`         |
+| `analytics:capture-exception` | r→m | `reportException(err)` | `analytics-ipc.ts` |
+
+## Canales fuera del mapa
+
+Tres canales usan strings crudos en vez de `IPC_CHANNELS` (los dos lados los repiten a mano — si se renombra uno solo, falla en runtime sin error de compilación). Centralizarlos es un follow-up:
+
+- `recording:get-screen-sources` — `getScreenSources()` (`recording-sources.ts`)
+- `capture-panel:resize` — `resizeCapturePanel(height)` (`capture-panel-window.ts`)
+- `capture-panel:open-main` — `openMainWindow()` (`index.ts`)
+
+(El handler `ping` en `index.ts` es un leftover de test, sin uso.)
 
 ## `invoke` vs `send`
 
-- **`invoke`** (request/response) — para cualquier cosa que devuelve un valor o donde el renderer espera confirmación. Es lo normal acá.
-- **`send`** (fire-and-forget) — solo los dos canales del Capture Panel (`resize`, `open-main`), que son imperativos puros y no necesitan respuesta.
+- **`invoke`** (request/response) — cualquier cosa que devuelve un valor o necesita confirmación (settings, library, permisos, `recording:create/finalize/abort`, `recording:get-state`).
+- **`send`** (fire-and-forget) — el hot path y los eventos sin respuesta: `recording:write`, `recording:report-tick`, `recording:start/stop`, `control:command`, los broadcasts main→render (`settings:changed`, `recording:state`, `library:changed`, `control:tick`, `recording:command`, `screenshot:hotkey`), y los imperativos del panel.
 
 ## Tipos compartidos
 
 Todos en `src/shared/types/`, puros (sin `electron`/`node:*`):
 
-| Tipo                                                 | Archivo              | Qué describe                              |
-| ---------------------------------------------------- | -------------------- | ----------------------------------------- |
-| `IPC_CHANNELS`, `IpcChannel`                         | `ipc.ts`             | Nombres de canal + tipo unión             |
-| `AppSettings`, `Theme`, `DEFAULT_SETTINGS`           | `ipc.ts`             | Settings de la app                        |
-| `KaipuElectronAPI`                                   | `electron-api.ts`    | La forma completa de `window.electronAPI` |
-| `ScreenSource`, `PermissionKind`, `PermissionStatus` | `electron-api.ts`    | Captura y permisos                        |
-| `LocalRecording`, `VaultDirectory`                   | `library-storage.ts` | Vault                                     |
+| Tipo                                                      | Archivo              | Qué describe                                 |
+| --------------------------------------------------------- | -------------------- | -------------------------------------------- |
+| `IPC_CHANNELS`, `IpcChannel`                              | `ipc.ts`             | Nombres de canal + tipo unión (autoritativo) |
+| `AppSettings`, `Theme`, `DEFAULT_SETTINGS`                | `ipc.ts`             | Settings de la app                           |
+| `RecordingActivity`, `RecordingSettings`, `RecordingTick` | `ipc.ts`             | Estado de grabación cross-window             |
+| `KaipuElectronAPI`                                        | `electron-api.ts`    | La forma completa de `window.electronAPI`    |
+| `ScreenSource`, `PermissionKind`, `PermissionStatus`      | `electron-api.ts`    | Captura y permisos                           |
+| `LocalRecording`, `VaultDirectory`                        | `library-storage.ts` | Vault                                        |
 
 ## Gotchas
 
-- ⚠️ **`IPC_CHANNELS` define `settings:get` y `settings:update`, pero el bridge NO los expone** (no hay método `getSettings`/`updateSettings` en `preload/index.ts`, ni handler en main). Son un placeholder para persistencia futura de settings — hoy lo único persistido es el vault directory en `preferences.json`. No asumir que existen.
-- ⚠️ El bridge solo expone métodos con un handler vivo en main (comentario en `preload/index.ts:6`). Agregar un método a `KaipuElectronAPI` sin registrar su handler compila pero falla en runtime.
-- ⚠️ `recording:get-screen-sources` está hardcodeado (no en `IPC_CHANNELS`). Si se centraliza, cambiar ambos lados a la vez.
+- ⚠️ El bridge solo expone métodos con un handler vivo en main (comentario en `preload/index.ts`). Agregar un método a `KaipuElectronAPI` sin registrar su handler compila pero falla en runtime.
+- ⚠️ Los tres [canales fuera del mapa](#canales-fuera-del-mapa) están hardcodeados como strings en ambos lados. Si se centralizan en `IPC_CHANNELS`, cambiar los dos lados a la vez.
+- ⚠️ Este doc agrupa para orientar, pero **la lista exacta vive en `IPC_CHANNELS`/`KaipuElectronAPI`** — al agregar un canal, agregalo ahí (lo verifica el compilador) y sumalo a la tabla del subsistema que corresponda.
 
 ## Related
 
