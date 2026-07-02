@@ -71,7 +71,7 @@ export function AnnotationLayer({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      // Don't hijack Delete/Backspace while the user is typing in a field or a
+      // Don't hijack keys while the user is typing in a field or a
       // modal is open — only when the canvas owns the key.
       if (isEditingText(e.target) || document.querySelector('[aria-modal="true"]')) return;
       const scn = sceneRef.current;

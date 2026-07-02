@@ -20,17 +20,23 @@ Regla: un control vuelve a la UI **solo** cuando su IPC + persistencia existan y
 
 ## Catálogo de controles
 
-| Control                       | Área      | Qué falta para cablearlo                                                                | Esfuerzo |
-| ----------------------------- | --------- | --------------------------------------------------------------------------------------- | -------- |
-| Selección de micrófono/cámara | Devices   | Enumerar dispositivos reales (`navigator.mediaDevices.enumerateDevices`) + persistir id | Medio    |
-| Resolución / frame rate       | Recording | Wire a la config del pipeline de captura (`getDisplayMedia` constraints / encode)       | Medio    |
-| Countdown on/off              | App       | Hoy el countdown es fijo (3s, `use-recording-setup.ts`); exponer toggle persistido      | Bajo     |
-| Minimizar a system tray       | App       | Wire a comportamiento de ventana en main (`win.hide()` + tray ya existe)                | Bajo     |
-| Tema claro/oscuro/system      | App       | La app es dark-only; falta tema claro en tokens + aplicar `theme` en renderer           | Medio    |
+| Control                       | Área    | Qué falta para cablearlo                                                                | Esfuerzo |
+| ----------------------------- | ------- | --------------------------------------------------------------------------------------- | -------- |
+| Selección de micrófono/cámara | Devices | Enumerar dispositivos reales (`navigator.mediaDevices.enumerateDevices`) + persistir id | Medio    |
+| Countdown on/off              | App     | Hoy el countdown es fijo (3s, `use-recording-setup.ts`); exponer toggle persistido      | Bajo     |
+| Minimizar a system tray       | App     | Wire a comportamiento de ventana en main (`win.hide()` + tray ya existe)                | Bajo     |
+| Tema claro/oscuro/system      | App     | La app es dark-only; falta tema claro en tokens + aplicar `theme` en renderer           | Medio    |
 
 > **Atajos de teclado configurables — listo.** Ya no están en este catálogo: los
 > **atajos de teclado configurables** se implementaron y tienen su propia página.
 > Estado 🟢 Listo para validar. Ver [Atajos globales + reachability de ventana](./shortcuts).
+
+> **Calidad de grabación — listo.** Resolución + FPS + bitrate están cableados de punta a
+> punta: presets (Liviano / Equilibrado / Máxima) + "Personalizado" derivado, con la
+> fuente única en `src/shared/recording-quality.ts`, consumidos por el encoder mediabunny
+> (`use-recording-setup.ts` → `recorder-engine.ts`) y persistidos en `settings.json` con
+> validación (`sanitizeQuality`). Opcionales que quedan: bitrate de audio como perilla,
+> elección de códec/contenedor, y un hint de "se ajusta a tu resolución de pantalla".
 
 ## Groundwork ya existente
 

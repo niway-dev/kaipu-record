@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { DEFAULT_BEAUTIFY, type BeautifyState } from "../beautify/backgrounds";
 import type { BeautifyController } from "../beautify/use-beautify";
-import { sameScene, type Annotation, type Scene } from "./scene";
+import { sameScene, type Annotation, type CropRect, type Scene } from "./scene";
 
 export interface EditorScene {
   /** Beautify controls, shaped like BeautifyController so the panel is unchanged. */
@@ -19,6 +19,11 @@ export interface EditorScene {
   /** Commit the interaction to history if the scene changed. */
   endInteract(): void;
   removeSelected(): void;
+  crop?: CropRect;
+  /** Set the crop as one undoable change (Reset/Esc, or an external set). */
+  setCrop(crop: CropRect | undefined): void;
+  /** Live crop update during a drag (no history); pair with beginInteract/endInteract. */
+  setCropLive(crop: CropRect | undefined): void;
   undo(): void;
   redo(): void;
   canUndo: boolean;
@@ -100,6 +105,19 @@ export function useEditorScene(initialBeautify: BeautifyState = DEFAULT_BEAUTIFY
     [commit],
   );
 
+  const setCrop = useCallback(
+    (crop: CropRect | undefined) => {
+      commit({ ...sceneRef.current, crop });
+    },
+    [commit],
+  );
+
+  const setCropLive = useCallback((crop: CropRect | undefined) => {
+    setScene((s) => ({ ...s, crop }));
+    // Keep the ref in sync so endInteract can compare correctly within the same tick.
+    sceneRef.current = { ...sceneRef.current, crop };
+  }, []);
+
   const removeSelected = useCallback(() => {
     if (!selectedId) return;
     commit({
@@ -133,6 +151,9 @@ export function useEditorScene(initialBeautify: BeautifyState = DEFAULT_BEAUTIFY
     updateAnnotation,
     endInteract,
     removeSelected,
+    crop: scene.crop,
+    setCrop,
+    setCropLive,
     undo,
     redo,
     canUndo: past.length > 0,

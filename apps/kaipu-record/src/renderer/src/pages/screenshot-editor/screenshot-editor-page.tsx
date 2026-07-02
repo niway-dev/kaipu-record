@@ -5,6 +5,7 @@ import { useImageSource, type ImageSource } from "@renderer/features/screenshots
 import {
   BeautifiedFrame,
   BeautifyPanel,
+  CropOverlay,
   DEFAULT_BEAUTIFY,
   FLAT_BEAUTIFY,
 } from "@renderer/features/screenshots/beautify";
@@ -101,7 +102,7 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
   // Composite the beautify frame + annotations to a PNG — what Copy and Save export.
   const exportPng = async (): Promise<ArrayBuffer> =>
     compositeScene(
-      { beautify: scene.beautify.state, annotations: scene.annotations },
+      { beautify: scene.beautify.state, annotations: scene.annotations, crop: scene.crop },
       await image.getBytes(),
       imgRef.current?.clientWidth ?? 0,
     );
@@ -204,7 +205,9 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
             <BeautifiedFrame
               src={image.displayUrl}
               beautify={scene.beautify.state}
+              crop={tools.tool === "crop" ? undefined : scene.crop}
               overlay={<AnnotationLayer scene={scene} tools={tools} src={image.displayUrl} />}
+              frameOverlay={tools.tool === "crop" ? <CropOverlay scene={scene} /> : undefined}
               imgRef={imgRef}
               zoom={zoom}
               onImageLoad={() => setImageReady(true)}

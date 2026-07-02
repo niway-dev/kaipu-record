@@ -32,6 +32,9 @@ function makeScene(annotations: Annotation[], selectedId: string | null): Editor
     updateAnnotation: vi.fn(),
     endInteract: vi.fn(),
     removeSelected: vi.fn(),
+    crop: undefined,
+    setCrop: vi.fn(),
+    setCropLive: vi.fn(),
     undo: vi.fn(),
     redo: vi.fn(),
     canUndo: false,
@@ -128,5 +131,20 @@ describe("AnnotationOptions", () => {
     // …but it can still be deleted.
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(scene.removeSelected).toHaveBeenCalled();
+  });
+
+  it("shows a reset control for the crop tool and clears the crop on click", () => {
+    const scene = makeScene([], null);
+    scene.crop = { x: 0.1, y: 0.1, w: 0.5, h: 0.5 };
+    scene.setCrop = vi.fn();
+    render(<AnnotationOptions tools={makeTools({ tool: "crop" })} scene={scene} />);
+    fireEvent.click(screen.getByRole("button", { name: "Restablecer" }));
+    expect(scene.setCrop).toHaveBeenCalledWith(undefined);
+  });
+
+  it("disables the reset control when there is no crop to reset", () => {
+    const scene = makeScene([], null); // crop is undefined
+    render(<AnnotationOptions tools={makeTools({ tool: "crop" })} scene={scene} />);
+    expect(screen.getByRole("button", { name: "Restablecer" })).toBeDisabled();
   });
 });

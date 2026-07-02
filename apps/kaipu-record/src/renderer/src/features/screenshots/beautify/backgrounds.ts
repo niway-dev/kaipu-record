@@ -108,10 +108,14 @@ export function frameRadius(bg: BackgroundId, radius: number): number {
   return bg === "none" ? radius : Math.max(8, radius + 4);
 }
 
-/** Slider bounds + defaults (from the design). */
-export const PADDING_RANGE = { min: 0, max: 96, default: 15 } as const;
+/**
+ * Slider bounds + defaults. Defaults are 0 so a fresh capture opens as the plain
+ * screenshot (no frame): the user sees exactly what they captured and adds beautify
+ * only if they want it — friendlier than landing on an already-decorated image.
+ */
+export const PADDING_RANGE = { min: 0, max: 96, default: 0 } as const;
 export const RADIUS_RANGE = { min: 0, max: 28, default: 0 } as const;
-export const SHADOW_RANGE = { min: 0, max: 100, default: 60 } as const;
+export const SHADOW_RANGE = { min: 0, max: 100, default: 0 } as const;
 
 export interface BeautifyState {
   bg: BackgroundId;
@@ -120,8 +124,12 @@ export interface BeautifyState {
   shadow: number;
 }
 
+/**
+ * A fresh capture opens plain — transparent background, no padding/radius/shadow — so
+ * the user starts from the raw screenshot and layers beautify on top only if they want.
+ */
 export const DEFAULT_BEAUTIFY: BeautifyState = {
-  bg: "magenta",
+  bg: "none",
   padding: PADDING_RANGE.default,
   radius: RADIUS_RANGE.default,
   shadow: SHADOW_RANGE.default,

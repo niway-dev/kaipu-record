@@ -8,6 +8,7 @@
  * and keeps its aspect ratio.
  */
 .frame {
+  position: relative; /* anchors the frame-level crop overlay (inset:0 → whole frame) */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -43,4 +44,14 @@
   transition:
     border-radius 0.12s ease,
     box-shadow 0.12s ease;
+}
+
+/* Crop windowing: the viewport clips to the crop window (in natural frame px); the frame
+ * inside is rendered at its fixed natural size and panned via transform so only the crop
+ * sub-rect shows. A pure pan (no re-layout) keeps the preview pixel-accurate to the export
+ * and keeps the shot's layout size — hence the export scale — stable when cropped. */
+.viewport {
+  position: relative;
+  overflow: hidden;
+  transform-origin: top left;
 }
