@@ -115,7 +115,11 @@ export function buildSvg(scene: Scene, g: Geom): string {
     sv > 0
       ? `<rect x="${g.pad}" y="${g.pad}" width="${g.naturalW}" height="${g.naturalH}" rx="${g.radius}" fill="#000" filter="url(#sh)"/>`
       : "";
-  const image = `<use href="#shot" x="${g.pad}" y="${g.pad}" clip-path="url(#rc)"/>`;
+  // Clip via a wrapping <g>, NOT on the translated <use>: a clip-path on an element that
+  // also carries an x/y translation is resolved in the translated user space, so `rc`
+  // (authored at (pad,pad)) would land at (2·pad,2·pad) and shear the shot's top-left off.
+  // The group has no transform, so `rc` clips in root space where the shot actually is.
+  const image = `<g clip-path="url(#rc)"><use href="#shot" x="${g.pad}" y="${g.pad}"/></g>`;
   const anno = `<g transform="translate(${g.pad},${g.pad})" clip-path="url(#rcLocal)">${scene.annotations
     .map((a) => annotationSvg(a, g.naturalW, g.naturalH, g.scale))
     .join("")}</g>`;

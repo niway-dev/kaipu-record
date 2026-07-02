@@ -132,6 +132,17 @@ describe("compositor buildSvg", () => {
     expect(svg).toContain('viewBox="0 0 800 800"');
   });
 
+  it("clips the base shot via a wrapping group, not the translated <use> (padding shear bug)", () => {
+    // A clip-path on an element that also carries an x/y translation resolves in the
+    // translated space, landing `rc` (authored at pad,pad) at (2·pad,2·pad) and shearing
+    // the shot's top-left `pad` strip off — the padded-export bug. The clip must live on a
+    // non-translated wrapping <g> so it clips where the shot actually is.
+    const svg = buildSvg(scene([]), geom);
+    expect(svg).toContain('<g clip-path="url(#rc)"><use href="#shot" x="40" y="40"/></g>');
+    // The <use> itself must NOT carry the clip (that's the shearing form).
+    expect(svg).not.toMatch(/<use href="#shot"[^>]*clip-path/);
+  });
+
   it("leaves the export unchanged when there is no crop", () => {
     const svg = buildSvg(scene([]), geom);
     // full frame 1080x680, base at (pad,pad)=(40,40)
