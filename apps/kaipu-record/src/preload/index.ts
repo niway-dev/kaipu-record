@@ -43,6 +43,11 @@ const kaipuApi: KaipuElectronAPI = {
   getVaultDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.getVaultDirectory),
   chooseVaultDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.chooseVaultDirectory),
   resetVaultDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.resetVaultDirectory),
+  onLibraryChanged: (callback) => {
+    const listener = (): void => callback();
+    ipcRenderer.on(IPC_CHANNELS.libraryChanged, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.libraryChanged, listener);
+  },
   recordingCreate: (sessionId) => ipcRenderer.invoke(IPC_CHANNELS.recordingCreate, sessionId),
   recordingWrite: (sessionId, data, position) =>
     ipcRenderer.send(IPC_CHANNELS.recordingWrite, sessionId, data, position),

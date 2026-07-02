@@ -158,6 +158,8 @@ export const IPC_CHANNELS = {
   getVaultDirectory: "library:get-vault-dir",
   chooseVaultDirectory: "library:choose-vault-dir",
   resetVaultDirectory: "library:reset-vault-dir",
+  // Main → every window: the vault folder changed, so open pages should re-list.
+  libraryChanged: "library:changed",
   // Screenshots (renderer ↔ main)
   screenshotCapture: "screenshot:capture",
   screenshotCopy: "screenshot:copy",
