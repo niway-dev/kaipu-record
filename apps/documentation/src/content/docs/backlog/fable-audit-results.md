@@ -13,8 +13,7 @@ description: Confirmed findings from the pre-testers audit (Claude Fable 5) — 
 >
 > **Fix plan (themed branches):** 1) recording engine lifetime & flow control — ✅ merged
 > (#17: findings 1,2,3,5,9,10,17,19,20,22,23,24,25 + incidentally 39); 2) unguarded exits —
-> ✅ done (`fix/unguarded-exits`, findings 8, 11); 3) silent failures (6, 7, 18, 28);
-> 4) cross-window state + docs (14, 15, 16, 21, 27, 29, 30); 5) screenshot editor & export
+> ✅ done (`fix/unguarded-exits`, findings 8, 11); 3) silent failures (6, 7, 18, 28); 4) cross-window state + docs (14, 15, 16, 21, 27, 29, 30); 5) screenshot editor & export
 > fidelity (4, 12, 13, 26). The 16 low-severity findings (31–46 minus the incidental 39) are
 > deferred to a later pass.
 
