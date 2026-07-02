@@ -1,5 +1,5 @@
 import { app } from "electron";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { VaultDirectory } from "@shared/types";
@@ -24,7 +24,14 @@ function read(): StoredPreferences {
 }
 
 function write(preferences: StoredPreferences): void {
-  writeFileSync(preferencesFile(), JSON.stringify(preferences, null, 2));
+  // Atomic write (temp + rename) so a crash mid-write can't truncate
+  // preferences.json and lose the user's custom vault folder. Errors propagate
+  // on purpose — a failed folder change should reject its IPC and surface to the
+  // user, not be swallowed.
+  const path = preferencesFile();
+  const tmp = `${path}.tmp`;
+  writeFileSync(tmp, JSON.stringify(preferences, null, 2));
+  renameSync(tmp, path);
 }
 
 /** Platform default: Videos folder + "Kaipu Record". */

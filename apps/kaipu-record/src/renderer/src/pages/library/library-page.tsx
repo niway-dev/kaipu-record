@@ -14,7 +14,7 @@ import styles from "./library-page.module.css";
 
 export function LibraryPage(): React.JSX.Element {
   const navigate = useNavigate();
-  const { videos, isLoading, refresh, remove } = useLocalLibrary();
+  const { videos, isLoading, hasError, refresh, remove } = useLocalLibrary();
   const {
     kindFilter,
     storageFilter,
@@ -157,7 +157,19 @@ export function LibraryPage(): React.JSX.Element {
         </div>
       )}
 
-      {visibleItems.length === 0 ? (
+      {hasError ? (
+        <div className={styles.empty}>
+          <AlertTriangle size={48} className={styles.emptyIcon} />
+          <h3 className={styles.emptyTitle}>Cannot read your recordings folder</h3>
+          <p className={styles.emptySubtitle}>
+            The folder may be on a drive that is disconnected or unreadable — your files are safe.
+          </p>
+          <Button variant="primary" onClick={() => void refresh()}>
+            <RefreshCw size={15} strokeWidth={1.8} />
+            Retry
+          </Button>
+        </div>
+      ) : visibleItems.length === 0 ? (
         <div className={styles.empty}>
           <Library size={48} className={styles.emptyIcon} />
           {videos.length === 0 ? (
