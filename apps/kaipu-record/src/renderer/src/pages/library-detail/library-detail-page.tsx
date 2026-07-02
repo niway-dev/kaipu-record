@@ -4,6 +4,7 @@ import { ArrowLeft, Check, Copy, FileX2, FolderOpen, Pencil, Trash2 } from "luci
 import type { ImageSource } from "@renderer/features/screenshots/image-source";
 import { useTransientValue } from "@renderer/ui/use-transient-value";
 import { useLocalLibrary } from "@renderer/features/library/hooks/use-local-library";
+import { reportError } from "@renderer/features/analytics";
 import { StorageMeta } from "@renderer/features/library/components/storage-meta";
 import { DeleteConfirmDialog } from "@renderer/features/library/components/delete-confirm-dialog";
 import { RecordingPlayer } from "@renderer/features/library/components/recording-player";
@@ -54,8 +55,15 @@ export function LibraryDetailPage(): React.JSX.Element {
   // Copy a saved screenshot to the clipboard — main reads the vault file by id
   // (fetch on the kaipu-media:// scheme doesn't return bytes in the renderer).
   const copyScreenshot = async (): Promise<void> => {
-    await window.electronAPI.copyScreenshotById(video.id);
-    showCopied(true);
+    try {
+      await window.electronAPI.copyScreenshotById(video.id);
+      showCopied(true);
+    } catch (error) {
+      reportError("No pudimos copiar la captura al portapapeles.", error, {
+        context: { id: video.id, phase: "copy-by-id" },
+        retry: () => void copyScreenshot(),
+      });
+    }
   };
 
   // Re-open a saved screenshot in the editor. It's a flat PNG, so the editor treats

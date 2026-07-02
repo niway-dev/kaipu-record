@@ -3,6 +3,7 @@ import { Navigate, useBlocker, useLocation } from "react-router-dom";
 import { Check, Copy, Download, Redo2, Undo2, ZoomIn, ZoomOut } from "lucide-react";
 import { useImageSource, type ImageSource } from "@renderer/features/screenshots/image-source";
 import { DiscardChangesDialog } from "@renderer/features/screenshots/discard-changes-dialog";
+import { reportError } from "@renderer/features/analytics";
 import {
   BeautifiedFrame,
   BeautifyPanel,
@@ -137,6 +138,13 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
     try {
       await window.electronAPI.copyImageToClipboard(await exportPng());
       showFeedback({ kind: "copied" });
+    } catch (error) {
+      // Without this the button just never flips to "Copied" and the rejection is
+      // unhandled — the user has no idea the copy failed.
+      reportError("No pudimos copiar la captura al portapapeles.", error, {
+        context: { phase: "copy" },
+        retry: () => void onCopy(),
+      });
     } finally {
       busy.current = false;
     }
@@ -153,6 +161,14 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
       setSavedId(saved.id);
       setDirty(false); // now safely in the vault — leaving no longer loses work
       showFeedback({ kind: "saved", name: saved.title });
+    } catch (error) {
+      // A swallowed save (vault on a disconnected drive, disk full, composite
+      // failure) let the user close the editor believing the shot was saved.
+      // Surface it with a retry so the work isn't silently lost.
+      reportError("No pudimos guardar la captura.", error, {
+        context: { phase: "save", overwrite: opts.overwriteId !== undefined },
+        retry: () => void persist(opts),
+      });
     } finally {
       busy.current = false;
     }
