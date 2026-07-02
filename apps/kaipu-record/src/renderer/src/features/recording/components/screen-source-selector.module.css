@@ -153,13 +153,7 @@
   align-items: center;
   justify-content: center;
   color: var(--text-secondary);
-  background: repeating-linear-gradient(
-    45deg,
-    #101013,
-    #101013 10px,
-    #131316 10px,
-    #131316 20px
-  );
+  background: repeating-linear-gradient(45deg, #101013, #101013 10px, #131316 10px, #131316 20px);
 }
 
 .tileLabel {
