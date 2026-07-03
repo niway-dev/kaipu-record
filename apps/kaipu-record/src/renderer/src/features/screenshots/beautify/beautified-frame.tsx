@@ -36,19 +36,28 @@ export function BeautifiedFrame({
   onImageLoad?: () => void;
 }): React.JSX.Element {
   const frameRef = useRef<HTMLDivElement>(null);
-  const [frameSize, setFrameSize] = useState<{ w: number; h: number } | null>(null);
+  // The frame's border-box AND the padding it was measured at. We derive the shot's
+  // displayed size (border-box − 2·padding) so the windowed frame can be recomposed
+  // at the *current* padding — see the windowed branch.
+  const [measured, setMeasured] = useState<{ w: number; h: number; pad: number } | null>(null);
 
-  const windowed = crop != null && frameSize != null;
+  const windowed = crop != null && measured != null;
+
+  // Read the live padding without re-subscribing the observer each slider step: a
+  // padding change resizes the frame, so the ResizeObserver fires and re-measures
+  // anyway, reading the fresh padding through this ref.
+  const padRef = useRef(beautify.padding);
+  padRef.current = beautify.padding;
 
   // Measure the frame's natural border-box while un-windowed, so the crop window can be
-  // expressed in real px. Windowing renders the frame at this fixed size and pans it via
-  // transform (layout size unchanged), so the shot's clientWidth — and thus the export
-  // scale — stays identical cropped or not. Sampling while windowed would re-measure the
-  // fixed size, so only observe un-windowed.
+  // expressed in real px. Windowing renders the frame at a derived size and pans it via
+  // transform (the shot's layout size — and thus the export scale — stays constant).
+  // Sampling while windowed would re-measure the forced size, so only observe un-windowed.
   useEffect(() => {
     const el = frameRef.current;
     if (!el || windowed) return;
-    const measure = (): void => setFrameSize({ w: el.offsetWidth, h: el.offsetHeight });
+    const measure = (): void =>
+      setMeasured({ w: el.offsetWidth, h: el.offsetHeight, pad: padRef.current });
     const obs = new ResizeObserver(measure);
     obs.observe(el);
     measure();
@@ -76,12 +85,18 @@ export function BeautifiedFrame({
   );
 
   if (windowed) {
-    // Show only the crop sub-rect: the viewport clips to the window (natural frame px),
-    // and the frame — rendered at its fixed natural size — is panned so the crop's
-    // top-left sits at the viewport origin. A uniform pan (no re-layout) keeps padding/
-    // shadow proportions pixel-identical to the export (compose-then-window).
-    const winW = crop.w * frameSize.w;
-    const winH = crop.h * frameSize.h;
+    // Recompose the frame from the shot's (constant) displayed size + the CURRENT
+    // padding, instead of freezing the measured border-box. The shot keeps its
+    // size — so the export scale stays constant — while moving the padding slider
+    // grows/shrinks the frame live, exactly as the export composes it (fullW =
+    // shot + 2·pad). Freezing the border-box let the shot resize inside a stale
+    // frame, so the crop window then selected different content than the export.
+    const shotW = measured.w - 2 * measured.pad;
+    const shotH = measured.h - 2 * measured.pad;
+    const frameW = shotW + 2 * beautify.padding;
+    const frameH = shotH + 2 * beautify.padding;
+    const winW = crop.w * frameW;
+    const winH = crop.h * frameH;
     return (
       <div
         className={styles.viewport}
@@ -99,11 +114,11 @@ export function BeautifiedFrame({
             position: "absolute",
             top: 0,
             left: 0,
-            width: `${frameSize.w}px`,
-            height: `${frameSize.h}px`,
+            width: `${frameW}px`,
+            height: `${frameH}px`,
             maxWidth: "none",
             maxHeight: "none",
-            transform: `translate(${-crop.x * frameSize.w}px, ${-crop.y * frameSize.h}px)`,
+            transform: `translate(${-crop.x * frameW}px, ${-crop.y * frameH}px)`,
           }}
         >
           {inner}

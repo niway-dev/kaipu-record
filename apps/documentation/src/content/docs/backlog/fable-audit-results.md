@@ -5,7 +5,7 @@ description: Confirmed findings from the pre-testers audit (Claude Fable 5) — 
 
 # Fable audit — results
 
-> **Status: 🟡 Fix in progress — 27 of 46 confirmed findings fixed.** Produced by the
+> **Status: 🟡 Fix in progress — 31 of 46 confirmed findings fixed.** Produced by the
 > [fable-audit](./fable-audit) method: 6 parallel finders (recording pipeline, screenshots,
 > settings/IPC, flow isolation, design conformance vs the docs guides, main-flow UX) with
 > adversarial verification of every candidate. Only findings that survived refutation are
@@ -16,7 +16,7 @@ description: Confirmed findings from the pre-testers audit (Claude Fable 5) — 
 > ✅ merged (#18: findings 8, 11); 3) silent failures — ✅ merged (#19: findings 6, 7, 18, 28); 4) cross-window state + docs, split into: 4a shortcuts & window reachability — ✅ done
 > (`fix/shortcuts-window-reachability`, findings 21, 27, 29 + the did-finish-load race), 4b settings
 > cross-window broadcast — ✅ done (`fix/settings-broadcast`, finding 14), 4c vault-folder change safety — ✅ done (`fix/vault-folder-change-safety`, finding 30), 4d docs +
-> record-page tests — ✅ done (`fix/ipc-docs-and-record-page-tests`, findings 15, 16); 5) screenshot editor & export fidelity (4, 12, 13, 26). The 16
+> record-page tests — ✅ done (`fix/ipc-docs-and-record-page-tests`, findings 15, 16); 5) screenshot editor & export fidelity — ✅ done (`fix/screenshot-editor-export-fidelity`, findings 4, 12, 13, 26). The 16
 > low-severity findings (31–46 minus the incidental 39) are deferred to a later pass.
 
 ## Read this first — the five themes
@@ -78,7 +78,7 @@ The Output uses `new Mp4OutputFormat({ fastStart: "in-memory" })`. Per mediabunn
 
 **Suggested fix:** Use `fastStart: false` (moov at end, progressive positional writes — exactly what RecordingWriter was built for) or `fastStart: 'fragmented'` (fMP4, monotonic writes, crash-salvageable). If fast-start MP4 is required, post-process the file in the main process after finalize instead of buffering in the renderer.
 
-### 4. Re-edited screenshot: Copy or second Overwrite after 'Save → Overwrite' composites the scene onto the already-flattened file, doubling frame and annotations
+### 4. Re-edited screenshot: Copy or second Overwrite after 'Save → Overwrite' composites the scene onto the already-flattened file, doubling frame and annotations — ✅ Fixed (`fix/screenshot-editor-export-fidelity`)
 
 **Critical · Bug · found by `screenshots`** — `apps/kaipu-record/src/renderer/src/pages/screenshot-editor/screenshot-editor-page.tsx:106`
 
@@ -172,7 +172,7 @@ The recording lives in the main window's renderer, but the main process has no `
 
 **Independently reported by:** `flow-isolation` — “Quit paths (tray Quit, Cmd+Q) are unguarded during an active recording — recording discarded without confirmation”
 
-### 12. Export clips annotations to the shot rectangle while the live preview shows them overflowing into the padding
+### 12. Export clips annotations to the shot rectangle while the live preview shows them overflowing into the padding — ✅ Fixed (`fix/screenshot-editor-export-fidelity`)
 
 **High · Bug · found by `screenshots`** — `apps/kaipu-record/src/renderer/src/features/screenshots/annotations/compositor.ts:123`
 
@@ -182,7 +182,7 @@ The export wraps all annotations in <g transform=translate(pad,pad) clip-path=ur
 
 **Suggested fix:** Make preview and export agree: either clip the live annotation SVG to the shot (overflow hidden / clip-path on .layer) or clip the export annotation group to the full frame instead of rcLocal. Clamp move/draw coordinates if the shot-only semantics are kept.
 
-### 13. Arrow curvature and arrowhead are fixed-pixel in rough.ts and never scaled in the export, so exported arrows differ from the preview on Retina
+### 13. Arrow curvature and arrowhead are fixed-pixel in rough.ts and never scaled in the export, so exported arrows differ from the preview on Retina — ✅ Fixed (`fix/screenshot-editor-export-fidelity`)
 
 **High · Bug · found by `screenshots`** — `apps/kaipu-record/src/renderer/src/features/screenshots/annotations/compositor.ts:170`
 
@@ -318,7 +318,7 @@ The compositor computes `target` once from getSettings at start and every frame 
 
 **Suggested fix:** Per frame, read video.videoWidth/videoHeight and letterbox/uniform-fit into the canvas (or recompute a uniform scale each frame), rather than stretching into the fixed target rect.
 
-### 26. Changing beautify padding while a crop is applied desynchronizes preview and export (frame frozen at stale measured size)
+### 26. Changing beautify padding while a crop is applied desynchronizes preview and export (frame frozen at stale measured size) — ✅ Fixed (`fix/screenshot-editor-export-fidelity`)
 
 **Medium · Bug · found by `screenshots`** — `apps/kaipu-record/src/renderer/src/features/screenshots/beautify/beautified-frame.tsx:51`
 

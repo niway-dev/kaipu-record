@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ImageSource, ImageSourceReader, ResolvedImage } from "./types";
 import { blobReader } from "./blob-reader";
 import { localReader } from "./local-reader";
@@ -36,9 +36,29 @@ export function useImageSource(source: ImageSource | null): ResolvedImage | null
     return resolved.cleanup;
   }, [source]);
 
+  // Cache the FIRST byte read for the whole editor session. Export composites the
+  // live scene ONTO these bytes, so they must stay the immutable *original*: a
+  // `local` source re-reads the vault file each call, so after a Save→Overwrite
+  // (which writes the composited PNG back to the same id) a re-read would return
+  // the already-flattened image and the next Copy/Overwrite would double the
+  // frame + annotations. Reset when the source changes; drop a failed read so a
+  // retry re-fetches.
+  const bytesRef = useRef<Promise<ArrayBuffer> | null>(null);
+  useEffect(() => {
+    bytesRef.current = null;
+  }, [source]);
+
   const getBytes = useCallback(async (): Promise<ArrayBuffer> => {
     if (!source) throw new Error("useImageSource: no source");
-    return readerFor(source).getBytes(source);
+    if (!bytesRef.current) {
+      bytesRef.current = readerFor(source)
+        .getBytes(source)
+        .catch((error: unknown) => {
+          bytesRef.current = null;
+          throw error;
+        });
+    }
+    return bytesRef.current;
   }, [source]);
 
   if (!source || !displayUrl) return null;
