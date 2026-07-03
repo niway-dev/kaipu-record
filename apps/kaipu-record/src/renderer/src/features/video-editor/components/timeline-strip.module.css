@@ -57,6 +57,17 @@
   pointer-events: none;
 }
 
+.trimHandle {
+  position: absolute;
+  top: 0;
+  width: 8px;
+  height: 100%;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent-primary) 60%, transparent);
+  cursor: ew-resize;
+  touch-action: none;
+}
+
 .playhead {
   position: absolute;
   top: -4px;

@@ -19,12 +19,21 @@ export function TimelineStrip({
   thumbnails,
   selectedItemId,
   onSelectItem,
+  onTrim,
 }: {
   layout: LayoutEntry[];
   playback: PreviewPlayback;
   thumbnails: SourceThumbnail[];
   selectedItemId: string | null;
   onSelectItem: (id: string | null) => void;
+  /** Fired while dragging a trim handle. `phase` tracks the drag lifecycle so the
+   *  page can collapse the whole drag into a single undo step. */
+  onTrim?: (
+    itemId: string,
+    edge: "start" | "end",
+    sourceTime: number,
+    phase: "start" | "move" | "end",
+  ) => void;
 }): React.JSX.Element {
   const trackRef = useRef<HTMLDivElement | null>(null);
   const playheadRef = useRef<HTMLDivElement | null>(null);
@@ -98,6 +107,8 @@ export function TimelineStrip({
             thumbnails={thumbnails}
             selected={entry.itemId === selectedItemId}
             onSelect={() => onSelectItem(entry.itemId)}
+            timeFromPointer={timeFromPointer}
+            onTrim={onTrim}
           />
         ))}
         <div ref={playheadRef} className={styles.playhead} />
@@ -112,12 +123,21 @@ function TrackBlock({
   thumbnails,
   selected,
   onSelect,
+  timeFromPointer,
+  onTrim,
 }: {
   entry: LayoutEntry;
   duration: number;
   thumbnails: SourceThumbnail[];
   selected: boolean;
   onSelect: () => void;
+  timeFromPointer: (event: { clientX: number }) => number;
+  onTrim?: (
+    itemId: string,
+    edge: "start" | "end",
+    sourceTime: number,
+    phase: "start" | "move" | "end",
+  ) => void;
 }): React.JSX.Element {
   const blockRef = useRef<HTMLButtonElement | null>(null);
   const left = timeToFraction(entry.timelineStart, duration) * 100;
@@ -133,25 +153,76 @@ function TrackBlock({
         )
       : [];
 
+  // The pointer moves in timeline space; the handle drags in SOURCE space for this
+  // entry — convert via the entry's own timeline↔source offset (see timeline.ts).
+  const sourceTimeFromPointer = (event: { clientX: number }): number =>
+    entry.sourceStart + (timeFromPointer(event) - entry.timelineStart);
+
+  // One handler factory for both edges — pointerdown seeds the drag with the edge's
+  // current source time, move reports the live source time, up ends the drag. The
+  // page maps these three phases to beginInteract/updateLive+trimClip/endInteract.
+  const trimHandlers = (
+    edge: "start" | "end",
+  ): {
+    onPointerDown: React.PointerEventHandler<HTMLDivElement>;
+    onPointerMove: React.PointerEventHandler<HTMLDivElement>;
+    onPointerUp: React.PointerEventHandler<HTMLDivElement>;
+  } => ({
+    onPointerDown: (event) => {
+      // Neither scrub the track nor re-select the block underneath.
+      event.stopPropagation();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      onTrim?.(entry.itemId, edge, edge === "start" ? entry.sourceStart : entry.sourceEnd, "start");
+    },
+    onPointerMove: (event) => {
+      event.stopPropagation();
+      if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+      onTrim?.(entry.itemId, edge, sourceTimeFromPointer(event), "move");
+    },
+    onPointerUp: (event) => {
+      event.stopPropagation();
+      onTrim?.(entry.itemId, edge, sourceTimeFromPointer(event), "end");
+    },
+  });
+
   return (
-    <button
-      ref={blockRef}
-      type="button"
-      className={selected ? `${styles.block} ${styles.blockSelected}` : styles.block}
-      style={{ left: `${left}%`, width: `${width}%` }}
-      onPointerDown={(event) => {
-        // Stop the pointerdown from bubbling to the track handler, which pauses
-        // and scrubs on pointerdown — stopping on click alone is too late.
-        event.stopPropagation();
-      }}
-      onClick={(event) => {
-        event.stopPropagation(); // a block click selects; it must not also scrub
-        onSelect();
-      }}
-    >
-      {tiles.map((tile, i) => (
-        <img key={i} src={tile.url} alt="" className={styles.tile} draggable={false} />
-      ))}
-    </button>
+    <>
+      <button
+        ref={blockRef}
+        type="button"
+        className={selected ? `${styles.block} ${styles.blockSelected}` : styles.block}
+        style={{ left: `${left}%`, width: `${width}%` }}
+        onPointerDown={(event) => {
+          // Stop the pointerdown from bubbling to the track handler, which pauses
+          // and scrubs on pointerdown — stopping on click alone is too late.
+          event.stopPropagation();
+        }}
+        onClick={(event) => {
+          event.stopPropagation(); // a block click selects; it must not also scrub
+          onSelect();
+        }}
+      >
+        {tiles.map((tile, i) => (
+          <img key={i} src={tile.url} alt="" className={styles.tile} draggable={false} />
+        ))}
+      </button>
+      {/* Rendered as siblings, not children of the button: the button clips its
+          thumbnails with overflow:hidden, which would also clip a handle sitting
+          half outside the block's edge. */}
+      {selected && entry.kind === "clip" && (
+        <>
+          <div
+            className={styles.trimHandle}
+            style={{ left: `calc(${left}% - 4px)` }}
+            {...trimHandlers("start")}
+          />
+          <div
+            className={styles.trimHandle}
+            style={{ left: `calc(${left + width}% - 4px)` }}
+            {...trimHandlers("end")}
+          />
+        </>
+      )}
+    </>
   );
 }

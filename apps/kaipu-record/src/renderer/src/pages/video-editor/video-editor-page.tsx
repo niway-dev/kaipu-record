@@ -9,6 +9,7 @@ import {
   removeItem,
   splitClipAt,
   toLayout,
+  trimClip,
 } from "@renderer/features/video-editor/timeline";
 import { usePreviewPlayback } from "@renderer/features/video-editor/use-preview-playback";
 import { useSourceThumbnails } from "@renderer/features/video-editor/use-source-thumbnails";
@@ -106,6 +107,30 @@ function VideoEditor({ source }: { source: VideoEditorSource }): React.JSX.Eleme
     playback.seek(Math.min(playback.timelineTime, duration));
   }, [scene, controller, selectedItemId, playback]);
 
+  // Trim drags don't go through commit(): a continuous drag must collapse into one
+  // undo step, so "move" only updates the live scene and "start"/"end" own history.
+  const handleTrim = useCallback(
+    (
+      itemId: string,
+      edge: "start" | "end",
+      sourceTime: number,
+      phase: "start" | "move" | "end",
+    ) => {
+      if (phase === "start") controller.beginInteract();
+      if (phase === "move") {
+        const items = trimClip(controller.scene.items, itemId, edge, sourceTime);
+        const duration = layoutDuration(toLayout(items));
+        controller.updateLive({
+          ...controller.scene,
+          items,
+          overlays: clampOverlays(controller.scene.overlays, duration),
+        });
+      }
+      if (phase === "end") controller.endInteract();
+    },
+    [controller],
+  );
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (isEditingTarget(e.target)) return;
@@ -176,6 +201,7 @@ function VideoEditor({ source }: { source: VideoEditorSource }): React.JSX.Eleme
           thumbnails={thumbnails}
           selectedItemId={selectedItemId}
           onSelectItem={setSelectedItemId}
+          onTrim={handleTrim}
         />
       </footer>
     </div>
