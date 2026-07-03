@@ -84,21 +84,42 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
   // 1. Screen (deterministic Electron desktop capture by source id). Capture at
   // the display's NATIVE resolution (ceiling above any real screen) so frames are
   // never squeezed into a non-matching box.
-  const screenStream = await navigator.mediaDevices.getUserMedia({
-    audio: options.systemAudio
-      ? ({ mandatory: { chromeMediaSource: "desktop" } } as MediaTrackConstraints)
-      : false,
-    video: {
-      // @ts-expect-error Electron desktop-capture constraints are non-standard.
-      mandatory: {
-        chromeMediaSource: "desktop",
-        chromeMediaSourceId: options.sourceId,
-        maxWidth: CAPTURE_CEILING.width,
-        maxHeight: CAPTURE_CEILING.height,
-        maxFrameRate: frameRate,
-      },
+  // Electron desktop-capture constraints are non-standard (the legacy `mandatory`
+  // shape), hence the cast.
+  const videoConstraints = {
+    mandatory: {
+      chromeMediaSource: "desktop",
+      chromeMediaSourceId: options.sourceId,
+      maxWidth: CAPTURE_CEILING.width,
+      maxHeight: CAPTURE_CEILING.height,
+      maxFrameRate: frameRate,
     },
-  });
+  } as unknown as MediaTrackConstraints;
+
+  // System (loopback) audio can only be captured *alongside* desktop video in the
+  // same getUserMedia call (a Chromium quirk), and only on platforms that support
+  // it — Windows does, macOS does NOT via this legacy constraint, where the whole
+  // call rejects. So when system audio is requested, try the bundled audio+video
+  // call first and FALL BACK to video-only if it rejects: the recording always
+  // starts (just without system audio on macOS) instead of failing outright. This
+  // is why system audio is genuinely best-effort, matching the mic below.
+  let screenStream: MediaStream | null = null;
+  if (options.systemAudio) {
+    try {
+      screenStream = await navigator.mediaDevices.getUserMedia({
+        audio: { mandatory: { chromeMediaSource: "desktop" } } as MediaTrackConstraints,
+        video: videoConstraints,
+      });
+    } catch (error) {
+      console.warn("system audio capture unavailable — recording without it", error);
+    }
+  }
+  if (!screenStream) {
+    screenStream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: videoConstraints,
+    });
+  }
   const screenTrack = screenStream.getVideoTracks()[0];
 
   // 1b. Derive the real output size from the MEASURED native dimensions, keeping
