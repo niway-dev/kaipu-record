@@ -1,0 +1,67 @@
+/*
+ * Timeline strip. Colors, spacing, and radii use the design tokens from
+ * base.css — same convention as the screenshot editor.
+ */
+
+.strip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  height: 100%;
+  padding: var(--space-sm) var(--space-lg) var(--space-md);
+}
+
+.ruler {
+  position: relative;
+  height: 16px;
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}
+
+.tick {
+  position: absolute;
+  transform: translateX(-50%);
+  user-select: none;
+}
+
+.track {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  border-radius: var(--radius-lg);
+  background: var(--bg-input);
+  cursor: pointer;
+}
+
+.block {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  display: flex;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  padding: 0;
+  background: var(--bg-card-hover);
+}
+
+.blockSelected {
+  border-color: var(--accent-primary);
+}
+
+.tile {
+  height: 100%;
+  flex: 1 1 0;
+  object-fit: cover;
+  min-width: 0;
+  pointer-events: none;
+}
+
+.playhead {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  background: var(--accent-primary);
+  pointer-events: none;
+}

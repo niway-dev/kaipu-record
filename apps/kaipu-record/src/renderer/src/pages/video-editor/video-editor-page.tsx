@@ -1,10 +1,12 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { Pause, Play } from "lucide-react";
 import { initialScene } from "@renderer/features/video-editor/scene";
 import { toLayout } from "@renderer/features/video-editor/timeline";
 import { usePreviewPlayback } from "@renderer/features/video-editor/use-preview-playback";
+import { useSourceThumbnails } from "@renderer/features/video-editor/use-source-thumbnails";
 import { PreviewStage } from "@renderer/features/video-editor/components/preview-stage";
+import { TimelineStrip } from "@renderer/features/video-editor/components/timeline-strip";
 import styles from "./video-editor-page.module.css";
 
 export interface VideoEditorSource {
@@ -56,6 +58,8 @@ function VideoEditor({ source }: { source: VideoEditorSource }): React.JSX.Eleme
   const layout = useMemo(() => toLayout(scene.items), [scene.items]);
   const playback = usePreviewPlayback(layout);
   const mediaUrl = `kaipu-media://recording/${source.id}`;
+  const thumbnails = useSourceThumbnails(mediaUrl, source.durationSeconds);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -92,7 +96,15 @@ function VideoEditor({ source }: { source: VideoEditorSource }): React.JSX.Eleme
           </div>
         </div>
       </main>
-      <footer className={styles.timeline}>{/* timeline lands in plan 02 */}</footer>
+      <footer className={styles.timeline}>
+        <TimelineStrip
+          layout={layout}
+          playback={playback}
+          thumbnails={thumbnails}
+          selectedItemId={selectedItemId}
+          onSelectItem={setSelectedItemId}
+        />
+      </footer>
     </div>
   );
 }
