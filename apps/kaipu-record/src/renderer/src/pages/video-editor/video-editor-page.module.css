@@ -1,0 +1,41 @@
+/*
+ * Video editor page shell. Colors, spacing, and radii use the design tokens
+ * from base.css — same convention as the screenshot editor.
+ */
+
+.page {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  height: 100%;
+}
+
+.header {
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  flex-shrink: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.stage {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--bg-app);
+}
+
+.timeline {
+  height: 160px;
+  flex-shrink: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
