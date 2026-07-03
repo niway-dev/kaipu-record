@@ -205,6 +205,27 @@ describe("startEngine", () => {
     expect(lastOutput().addVideoTrack).toHaveBeenCalled();
   });
 
+  it("falls back to a video-only recording when system-audio capture is rejected (macOS)", async () => {
+    // macOS rejects `getUserMedia({audio:{mandatory:{chromeMediaSource:'desktop'}}})`,
+    // which previously failed the WHOLE recording. Now the bundled audio+video call
+    // is attempted first, then retried video-only.
+    getUserMedia.mockImplementation(async (constraints: MediaStreamConstraints) => {
+      if (constraints.video && constraints.audio) throw new Error("NotSupportedError");
+      if (constraints.video) return fakeStream([screenVideoTrack], []);
+      return fakeStream([], [micTrack]);
+    });
+
+    const handle = await startEngine(baseOptions({ systemAudio: true }));
+
+    expect(handle).toBeTruthy(); // recording still starts
+    const calls = getUserMedia.mock.calls.map((c) => c[0] as MediaStreamConstraints);
+    // It attempted the bundled desktop audio+video call...
+    expect(calls.some((c) => Boolean(c.video) && Boolean(c.audio))).toBe(true);
+    // ...then fell back to video-only after it rejected.
+    expect(calls.some((c) => Boolean(c.video) && !c.audio)).toBe(true);
+    expect(lastOutput().addVideoTrack).toHaveBeenCalled();
+  });
+
   it("forwards each encoded chunk to onChunk with its byte position", async () => {
     const onChunk = vi.fn();
     await startEngine(baseOptions({ onChunk }));
