@@ -7,6 +7,11 @@ export interface VideoSceneController {
   dirty: boolean;
   canUndo: boolean;
   canRedo: boolean;
+  /** True between beginInteract() and endInteract() — a drag currently owns the scene.
+   *  Callers (e.g. delete/split) must check this before mutating: commit()/undo()/redo()
+   *  already no-op mid-drag, but a stray delete during a drag would still cause phantom
+   *  side effects (clearing selection, queuing a seek) for a change that never lands. */
+  interacting: boolean;
   undo(): void;
   redo(): void;
   /** One undoable step; no-op if `next` is reference-equal to the current scene. */
@@ -32,6 +37,9 @@ export function useVideoScene(initial: VideoScene): VideoSceneController {
   const sceneRef = useRef(scene);
   sceneRef.current = scene;
   const snapshot = useRef<VideoScene | null>(null);
+  // Mirrors `snapshot.current !== null` as state so consumers re-render / read a fresh
+  // value when a drag starts or ends (a ref alone wouldn't notify the page).
+  const [interacting, setInteracting] = useState(false);
 
   const commit = useCallback((next: VideoScene) => {
     // A drag owns history via begin/updateLive/endInteract — a stray commit mid-drag
@@ -46,6 +54,7 @@ export function useVideoScene(initial: VideoScene): VideoSceneController {
 
   const beginInteract = useCallback(() => {
     snapshot.current = sceneRef.current;
+    setInteracting(true);
   }, []);
 
   const updateLive = useCallback((next: VideoScene) => {
@@ -57,6 +66,7 @@ export function useVideoScene(initial: VideoScene): VideoSceneController {
   const endInteract = useCallback(() => {
     const snap = snapshot.current;
     snapshot.current = null;
+    setInteracting(false);
     if (snap && snap !== sceneRef.current) {
       setPast((p) => [...p, snap]);
       setFuture([]);
@@ -86,6 +96,7 @@ export function useVideoScene(initial: VideoScene): VideoSceneController {
     dirty: past.length > 0,
     canUndo: past.length > 0,
     canRedo: future.length > 0,
+    interacting,
     undo,
     redo,
     commit,

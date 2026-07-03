@@ -47,6 +47,13 @@
 
 .blockSelected {
   border-color: var(--accent-primary);
+  /* Layout entries are contiguous with no gaps, so a selected clip's right handle
+     sits half inside the next block's bounds. Both blocks and handles are absolutely
+     positioned siblings inside .track (which is position:relative, establishing the
+     shared stacking context) — lift the selected block above its unselected
+     neighbors, and lift handles above every block, so the handle always wins hit
+     testing regardless of DOM order. */
+  z-index: 1;
 }
 
 .tile {
@@ -66,6 +73,9 @@
   background: color-mix(in srgb, var(--accent-primary) 60%, transparent);
   cursor: ew-resize;
   touch-action: none;
+  /* Always above every block (see .blockSelected) — otherwise the outer half of the
+     right handle falls under the next block's button and loses hit-testing. */
+  z-index: 2;
 }
 
 .playhead {

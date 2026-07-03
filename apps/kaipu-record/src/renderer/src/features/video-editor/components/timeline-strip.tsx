@@ -214,11 +214,13 @@ function TrackBlock({
           <div
             className={styles.trimHandle}
             style={{ left: `calc(${left}% - 4px)` }}
+            data-trim-handle="start"
             {...trimHandlers("start")}
           />
           <div
             className={styles.trimHandle}
             style={{ left: `calc(${left + width}% - 4px)` }}
+            data-trim-handle="end"
             {...trimHandlers("end")}
           />
         </>

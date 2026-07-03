@@ -32,23 +32,41 @@ describe("useVideoScene", () => {
     expect(result.current.canUndo).toBe(false);
   });
 
-  it("undo/redo/commit no-op while an interact is in progress (mid-drag ⌘Z guard)", () => {
+  it("undo/redo/commit no-op while an interact is in progress (mid-drag ⌘Z guard), and a completed drag produces exactly one history entry", () => {
     const { result } = renderHook(() => useVideoScene(initialScene(10)));
     const base = result.current.scene;
-    act(() => result.current.beginInteract());
-    act(() => result.current.updateLive({ ...base, items: [] }));
-    // A stray undo/redo/commit while the drag is still open must not touch history —
-    // the live value stays and no undo step exists yet.
-    act(() => result.current.undo());
-    act(() => result.current.redo());
-    act(() => result.current.commit({ ...base, items: [] }));
-    expect(result.current.scene.items).toHaveLength(0);
-    expect(result.current.canUndo).toBe(false);
-    expect(result.current.canRedo).toBe(false);
-    // Ending the drag collapses it into exactly one undo step, restoring the
-    // pre-drag scene on undo.
-    act(() => result.current.endInteract());
+
+    // Seed a real, undo-able commit before the drag starts — the guard must protect
+    // this pre-existing history, not just an empty stack.
+    act(() => result.current.commit({ ...base, overlays: [] }));
+    const preDrag = result.current.scene;
     expect(result.current.canUndo).toBe(true);
+
+    expect(result.current.interacting).toBe(false);
+    act(() => result.current.beginInteract());
+    expect(result.current.interacting).toBe(true);
+
+    // A stray undo mid-drag must be a total no-op: scene AND canUndo stay exactly as
+    // they were before the drag — the drag's own snapshot is still pending.
+    act(() => result.current.undo());
+    expect(result.current.scene).toBe(preDrag);
+    expect(result.current.canUndo).toBe(true);
+    act(() => result.current.redo());
+    expect(result.current.scene).toBe(preDrag);
+    expect(result.current.canRedo).toBe(false);
+    act(() => result.current.commit({ ...preDrag, items: [] }));
+    expect(result.current.scene).toBe(preDrag);
+
+    act(() => result.current.updateLive({ ...preDrag, items: [] }));
+    act(() => result.current.endInteract());
+    expect(result.current.interacting).toBe(false);
+    expect(result.current.scene.items).toHaveLength(0);
+
+    // The drag collapsed into exactly one new undo step on top of the earlier commit:
+    // one undo restores pre-drag, a second restores the original scene, a third is a
+    // no-op (nothing left to undo).
+    act(() => result.current.undo());
+    expect(result.current.scene).toBe(preDrag);
     act(() => result.current.undo());
     expect(result.current.scene).toBe(base);
     expect(result.current.canUndo).toBe(false);

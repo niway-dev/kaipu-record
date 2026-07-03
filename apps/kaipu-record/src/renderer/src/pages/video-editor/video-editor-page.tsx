@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useBlocker, useLocation } from "react-router-dom";
 import { Pause, Play, Trash2, TriangleAlert } from "lucide-react";
 import { initialScene } from "@renderer/features/video-editor/scene";
@@ -86,6 +86,12 @@ function VideoEditor({ source }: { source: VideoEditorSource }): React.JSX.Eleme
   const mediaUrl = `kaipu-media://recording/${source.id}`;
   const thumbnails = useSourceThumbnails(mediaUrl, source.durationSeconds);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  // A delete must clamp the playhead into the new (shorter) timeline, but the preview
+  // hook's layoutRef only picks up the new layout on the NEXT render — seeking
+  // synchronously here would map the target time through the stale, pre-delete layout.
+  // Queue it and let the effect below (keyed on `layout`) fire the actual seek once
+  // layoutRef has caught up.
+  const pendingSeekRef = useRef<number | null>(null);
 
   // A selection can outlive its item: undo/redo may restore a scene where the id is
   // gone, and split replaces the original item with two fresh ids. Clear it so
@@ -102,21 +108,37 @@ function VideoEditor({ source }: { source: VideoEditorSource }): React.JSX.Eleme
   const deleteDisabled = selectedItemId === null || scene.items.length <= 1;
 
   const handleSplit = useCallback(() => {
+    // A live trim drag owns the scene via begin/updateLive/endInteract; commit() would
+    // silently no-op mid-drag but we'd still race the drag by reading a stale `scene`.
+    if (controller.interacting) return;
     const items = splitClipAt(scene.items, playback.timelineTime);
     if (items === scene.items) return; // no-op split (slide, boundary) — no history entry
     controller.commit({ ...scene, items });
   }, [scene, controller, playback.timelineTime]);
 
   const handleDeleteSelected = useCallback(() => {
+    // Same rationale as handleSplit: don't clear the selection or queue a seek for a
+    // commit that would no-op while a trim drag is in progress.
+    if (controller.interacting) return;
     if (!selectedItemId || scene.items.length <= 1) return;
     const items = removeItem(scene.items, selectedItemId);
     const duration = layoutDuration(toLayout(items));
     controller.commit({ ...scene, items, overlays: clampOverlays(scene.overlays, duration) });
     setSelectedItemId(null);
     // Deleting the segment under the playhead leaves the playhead past the ripple —
-    // clamp it back into the new timeline.
-    playback.seek(Math.min(playback.timelineTime, duration));
+    // clamp it back into the new timeline (deferred; see pendingSeekRef above).
+    pendingSeekRef.current = Math.min(playback.timelineTime, duration);
   }, [scene, controller, selectedItemId, playback]);
+
+  // Fires the deferred seek queued by handleDeleteSelected once `layout` (and therefore
+  // the preview hook's layoutRef, which is assigned during render) reflects the post-
+  // delete items.
+  useEffect(() => {
+    if (pendingSeekRef.current === null) return;
+    const target = pendingSeekRef.current;
+    pendingSeekRef.current = null;
+    playback.seek(target);
+  }, [layout, playback]);
 
   // Trim drags don't go through commit(): a continuous drag must collapse into one
   // undo step, so "move" only updates the live scene and "start"/"end" own history.
@@ -163,8 +185,9 @@ function VideoEditor({ source }: { source: VideoEditorSource }): React.JSX.Eleme
       }
       // Plan 04 adds annotation selection, which takes precedence over segment
       // deletion for Delete/Backspace — not implemented yet, so segment delete owns
-      // the key for now.
-      if (e.key === "Delete" || e.key === "Backspace") {
+      // the key for now. Cmd/Ctrl+Backspace is a common "delete line/word" chord in
+      // text contexts — require !isMod so it doesn't also delete a segment.
+      if (!isMod && (e.key === "Delete" || e.key === "Backspace")) {
         if (!deleteDisabled) handleDeleteSelected();
       }
     };
