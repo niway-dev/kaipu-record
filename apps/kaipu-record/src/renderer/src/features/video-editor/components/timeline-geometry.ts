@@ -15,7 +15,7 @@ function formatTick(seconds: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-const TICK_STEPS = [1, 5, 10, 30, 60, 120, 300] as const;
+const TICK_STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 300] as const;
 
 export function rulerTicks(duration: number): { time: number; label: string }[] {
   const step = TICK_STEPS.find((s) => duration / s <= 10) ?? 600;

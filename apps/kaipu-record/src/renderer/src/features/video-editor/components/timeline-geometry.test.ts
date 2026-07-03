@@ -24,6 +24,15 @@ describe("rulerTicks", () => {
     expect(ticks.length).toBeLessThanOrEqual(11);
     expect(ticks.at(-1)!.time).toBeLessThanOrEqual(90);
   });
+
+  it.each([10.5, 15, 101])(
+    "keeps a reasonable tick count for short/edge durations (%s)",
+    (duration) => {
+      const ticks = rulerTicks(duration);
+      expect(ticks.length).toBeGreaterThanOrEqual(5);
+      expect(ticks.length).toBeLessThanOrEqual(11);
+    },
+  );
 });
 
 describe("thumbnailsForRange", () => {

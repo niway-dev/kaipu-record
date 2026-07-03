@@ -139,6 +139,11 @@ function TrackBlock({
       type="button"
       className={selected ? `${styles.block} ${styles.blockSelected}` : styles.block}
       style={{ left: `${left}%`, width: `${width}%` }}
+      onPointerDown={(event) => {
+        // Stop the pointerdown from bubbling to the track handler, which pauses
+        // and scrubs on pointerdown — stopping on click alone is too late.
+        event.stopPropagation();
+      }}
       onClick={(event) => {
         event.stopPropagation(); // a block click selects; it must not also scrub
         onSelect();

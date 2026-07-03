@@ -35,15 +35,21 @@ export function useSourceThumbnails(mediaUrl: string, durationSeconds: number): 
         );
         const out: SourceThumbnail[] = [];
         for await (const wrapped of sink.canvasesAtTimestamps(timestamps)) {
-          if (cancelled || !wrapped) continue;
+          if (cancelled) break; // cancelled mid-stream: stop decoding further frames
+          if (!wrapped) continue;
           const canvas = wrapped.canvas as HTMLCanvasElement;
           const url = await new Promise<string | null>((resolve) =>
             canvas.toBlob((b) => resolve(b ? URL.createObjectURL(b) : null), "image/jpeg", 0.6),
           );
-          if (url) {
-            urls.push(url);
-            out.push({ sourceTime: wrapped.timestamp, url });
+          if (!url) continue;
+          if (cancelled) {
+            // Cancelled while toBlob was pending — this URL was never handed to
+            // the cleanup effect's `urls` list, so revoke it here to avoid a leak.
+            URL.revokeObjectURL(url);
+            break;
           }
+          urls.push(url);
+          out.push({ sourceTime: wrapped.timestamp, url });
         }
         if (!cancelled) setThumbnails(out);
       } catch {

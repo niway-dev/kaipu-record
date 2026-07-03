@@ -54,7 +54,9 @@ function VideoEditor({ source }: { source: VideoEditorSource }): React.JSX.Eleme
     return () => window.electronAPI.setEditorWindowMode(false);
   }, []);
 
-  const scene = initialScene(source.durationSeconds);
+  // Memoized so item ids stay stable across re-renders — otherwise layout entry
+  // ids churn every render, breaking selection matching and remounting blocks.
+  const scene = useMemo(() => initialScene(source.durationSeconds), [source.durationSeconds]);
   const layout = useMemo(() => toLayout(scene.items), [scene.items]);
   const playback = usePreviewPlayback(layout);
   const mediaUrl = `kaipu-media://recording/${source.id}`;
