@@ -33,27 +33,29 @@ export function usePreviewPlayback(layout: LayoutEntry[]): PreviewPlayback {
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
 
-  const currentTimelineTime = useCallback((): number => {
-    const video = videoRef.current;
-    if (!video) return 0;
-    return sourceToTimeline(layoutRef.current, video.currentTime) ?? 0;
-  }, []);
-
   const emitTime = useCallback((t: number) => {
     for (const listener of listenersRef.current) listener(t);
   }, []);
+
+  // Between the video crossing a cut boundary and onVideoTimeUpdate reseeking it,
+  // sourceToTimeline briefly returns null. Hold the last valid time instead of emitting
+  // a garbage value, or the playhead visibly jumps to 100% for a frame.
+  const lastValidTimeRef = useRef(0);
 
   // rAF loop feeds high-frequency listeners (playhead) without re-rendering React.
   useEffect(() => {
     if (!playing) return;
     let raf = 0;
     const tick = () => {
-      emitTime(currentTimelineTime());
+      const video = videoRef.current;
+      const mapped = video ? sourceToTimeline(layoutRef.current, video.currentTime) : null;
+      if (mapped !== null) lastValidTimeRef.current = mapped;
+      emitTime(lastValidTimeRef.current);
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [playing, currentTimelineTime, emitTime]);
+  }, [playing, emitTime]);
 
   const seekVideoToSource = useCallback((sourceTime: number) => {
     const video = videoRef.current;
@@ -96,22 +98,47 @@ export function usePreviewPlayback(layout: LayoutEntry[]): PreviewPlayback {
       return;
     }
     const layoutNow = layoutRef.current;
-    const t = sourceToTimeline(layoutNow, video.currentTime);
+    const sourceT = video.currentTime;
+    const t = sourceToTimeline(layoutNow, sourceT);
+
+    const advanceFrom = (timelineEnd: number) => {
+      const next = entryAt(layoutNow, timelineEnd + END_EPSILON);
+      if (!next || next.timelineEnd <= timelineEnd + END_EPSILON) {
+        pause();
+        setTimelineTime(layoutDuration(layoutNow));
+        return;
+      }
+      // Slides pause the video (plan 05 renders the image); clips reseek and keep playing.
+      if (next.kind === "clip") {
+        seekVideoToSource(next.sourceStart);
+      }
+      setTimelineTime(next.timelineStart);
+    };
+
     if (t === null) {
-      // Inside deleted footage — plan 03 advances to the next entry here. With a
-      // single full clip this cannot happen; snap to the nearest kept position.
-      const entry = entryAt(layoutNow, timelineTime);
-      if (entry) seekVideoToSource(entry.sourceStart);
+      // The <video> drifted into deleted footage (native playback ran past a cut, or a
+      // native control seeked). Snap forward to the first kept entry after this source
+      // time, or stop at the end.
+      const target = layoutNow.find(
+        (e) => e.kind === "clip" && e.sourceStart >= sourceT - END_EPSILON,
+      );
+      if (target) {
+        seekVideoToSource(target.sourceStart);
+        setTimelineTime(target.timelineStart);
+      } else {
+        pause();
+        setTimelineTime(layoutDuration(layoutNow));
+      }
       return;
     }
+
     const entry = entryAt(layoutNow, t);
-    if (entry && video.currentTime >= entry.sourceEnd - END_EPSILON) {
-      // Reached the end of this entry: plan 03 jumps to the next one. Single-clip
-      // case: stop at the end.
-      if (entry.timelineEnd >= layoutDuration(layoutNow) - END_EPSILON) pause();
+    if (entry && sourceT >= entry.sourceEnd - END_EPSILON) {
+      advanceFrom(entry.timelineEnd);
+      return;
     }
     setTimelineTime(t);
-  }, [pause, seekVideoToSource, timelineTime]);
+  }, [pause, seekVideoToSource]);
 
   const onVideoEnded = useCallback(() => {
     setPlaying(false);
