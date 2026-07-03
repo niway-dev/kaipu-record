@@ -1,6 +1,20 @@
 import { describe, expect, it } from "vitest";
-import type { TrackItem } from "./scene";
-import { entryAt, layoutDuration, sourceToTimeline, timelineToSource, toLayout } from "./timeline";
+import type { TrackItem, VideoOverlay } from "./scene";
+import {
+  boundaryIndexAt,
+  clampOverlays,
+  entryAt,
+  insertItemAt,
+  layoutDuration,
+  MIN_ITEM_DURATION,
+  removeItem,
+  setSlideDuration,
+  sourceToTimeline,
+  splitClipAt,
+  timelineToSource,
+  toLayout,
+  trimClip,
+} from "./timeline";
 
 const clip = (id: string, sourceStart: number, sourceEnd: number): TrackItem => ({
   id,
@@ -99,5 +113,89 @@ describe("sourceToTimeline", () => {
 
   it("returns null for deleted footage", () => {
     expect(sourceToTimeline(layout, 15)).toBeNull();
+  });
+});
+
+describe("splitClipAt", () => {
+  it("splits a clip into two at the timeline time, preserving source coverage", () => {
+    const items = [clip("a", 20, 30)];
+    const result = splitClipAt(items, 4); // 4s into the timeline = source 24
+    expect(result).toHaveLength(2);
+    expect(result[0]).toMatchObject({ kind: "clip", sourceStart: 20, sourceEnd: 24 });
+    expect(result[1]).toMatchObject({ kind: "clip", sourceStart: 24, sourceEnd: 30 });
+    expect(result[0].id).not.toBe(result[1].id);
+  });
+
+  it("is a no-op (same reference) on slides and near boundaries", () => {
+    const withSlide = [slide("s1", 3), clip("a", 0, 10)];
+    expect(splitClipAt(withSlide, 1)).toBe(withSlide); // inside the slide
+    const items = [clip("a", 0, 10)];
+    expect(splitClipAt(items, MIN_ITEM_DURATION / 2)).toBe(items); // sliver
+    expect(splitClipAt(items, 10 - MIN_ITEM_DURATION / 2)).toBe(items);
+  });
+});
+
+describe("removeItem / insertItemAt / boundaryIndexAt", () => {
+  it("removes by id", () => {
+    expect(removeItem(ITEMS, "a").map((i) => i.id)).toEqual(["s1", "b"]);
+  });
+
+  it("inserts at an index", () => {
+    const s = slide("s2", 2);
+    expect(insertItemAt(ITEMS, 1, s).map((i) => i.id)).toEqual(["s1", "s2", "a", "b"]);
+  });
+
+  it("finds the nearest boundary for a timeline time", () => {
+    const layout = toLayout(ITEMS); // boundaries at 0, 3, 13, 18
+    expect(boundaryIndexAt(layout, 0.4)).toBe(0);
+    expect(boundaryIndexAt(layout, 2.9)).toBe(1);
+    expect(boundaryIndexAt(layout, 14)).toBe(2);
+    expect(boundaryIndexAt(layout, 18)).toBe(3);
+  });
+});
+
+describe("trimClip", () => {
+  it("moves an edge in source time, respecting MIN_ITEM_DURATION", () => {
+    const items = [clip("a", 2, 10)];
+    expect(trimClip(items, "a", "start", 4)[0]).toMatchObject({ sourceStart: 4 });
+    expect(trimClip(items, "a", "end", 8)[0]).toMatchObject({ sourceEnd: 8 });
+    // collapsing beyond the minimum clamps instead of inverting
+    expect(trimClip(items, "a", "start", 99)[0]).toMatchObject({
+      sourceStart: 10 - MIN_ITEM_DURATION,
+    });
+    expect(trimClip(items, "a", "start", -5)[0]).toMatchObject({ sourceStart: 0 });
+  });
+});
+
+describe("setSlideDuration", () => {
+  it("clamps to the minimum duration", () => {
+    const items = [slide("s1", 3)];
+    expect(setSlideDuration(items, "s1", 0)[0]).toMatchObject({
+      duration: MIN_ITEM_DURATION,
+    });
+    expect(setSlideDuration(items, "s1", 7.5)[0]).toMatchObject({ duration: 7.5 });
+  });
+});
+
+describe("clampOverlays", () => {
+  const overlay = (id: string, start: number, end: number): VideoOverlay => ({
+    id,
+    kind: "text",
+    x: 0.1,
+    y: 0.1,
+    text: "hola",
+    size: 19,
+    color: "#000",
+    start,
+    end,
+  });
+
+  it("clamps overlay windows into the new duration and drops orphans", () => {
+    const result = clampOverlays(
+      [overlay("keep", 1, 5), overlay("clip", 8, 15), overlay("drop", 12, 14)],
+      10,
+    );
+    expect(result.map((o) => o.id)).toEqual(["keep", "clip"]);
+    expect(result[1]).toMatchObject({ start: 8, end: 10 });
   });
 });
