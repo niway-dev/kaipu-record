@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Navigate, useLocation } from "react-router-dom";
-import { Pause, Play } from "lucide-react";
+import { Navigate, useBlocker, useLocation } from "react-router-dom";
+import { Pause, Play, Trash2, TriangleAlert } from "lucide-react";
 import { initialScene } from "@renderer/features/video-editor/scene";
+import {
+  ModalActions,
+  ModalButton,
+  ModalIcon,
+  ModalOverlay,
+  ModalText,
+  ModalTitle,
+} from "@renderer/ui/modal";
 import {
   clampOverlays,
   entryAt,
@@ -71,6 +79,9 @@ function VideoEditor({ source }: { source: VideoEditorSource }): React.JSX.Eleme
   );
   const { scene } = controller;
   const layout = useMemo(() => toLayout(scene.items), [scene.items]);
+  // Blocks in-app navigation (e.g. the sidebar) while there's an edit that would be
+  // lost — same useBlocker pattern as the screenshot editor.
+  const blocker = useBlocker(controller.dirty);
   const playback = usePreviewPlayback(layout);
   const mediaUrl = `kaipu-media://recording/${source.id}`;
   const thumbnails = useSourceThumbnails(mediaUrl, source.durationSeconds);
@@ -204,6 +215,24 @@ function VideoEditor({ source }: { source: VideoEditorSource }): React.JSX.Eleme
           onTrim={handleTrim}
         />
       </footer>
+      {blocker.state === "blocked" && (
+        <ModalOverlay onCancel={() => blocker.reset()} labelledBy="discard-video-dialog-title">
+          <ModalIcon tone="danger">
+            <TriangleAlert size={20} strokeWidth={1.8} />
+          </ModalIcon>
+          <ModalTitle id="discard-video-dialog-title">¿Descartar los cambios del video?</ModalTitle>
+          <ModalText>Tienes ediciones sin guardar. Si sales ahora, se pierden.</ModalText>
+          <ModalActions>
+            <ModalButton variant="ghost" onClick={() => blocker.reset()}>
+              Seguir editando
+            </ModalButton>
+            <ModalButton variant="danger" onClick={() => blocker.proceed()}>
+              <Trash2 size={15} strokeWidth={1.8} />
+              Descartar
+            </ModalButton>
+          </ModalActions>
+        </ModalOverlay>
+      )}
     </div>
   );
 }
