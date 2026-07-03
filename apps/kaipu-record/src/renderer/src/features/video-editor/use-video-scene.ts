@@ -34,6 +34,10 @@ export function useVideoScene(initial: VideoScene): VideoSceneController {
   const snapshot = useRef<VideoScene | null>(null);
 
   const commit = useCallback((next: VideoScene) => {
+    // A drag owns history via begin/updateLive/endInteract — a stray commit mid-drag
+    // (e.g. a keyboard shortcut firing while a pointer is still down) would fork the
+    // in-progress interaction into its own undo step and corrupt the snapshot base.
+    if (snapshot.current !== null) return;
     if (next === sceneRef.current) return;
     setPast((p) => [...p, sceneRef.current]);
     setFuture([]);
@@ -60,6 +64,9 @@ export function useVideoScene(initial: VideoScene): VideoSceneController {
   }, []);
 
   const undo = useCallback(() => {
+    // Same rationale as commit(): a ⌘Z fired mid-drag must not touch history — the
+    // drag's own snapshot is still pending in endInteract.
+    if (snapshot.current !== null) return;
     if (past.length === 0) return;
     setFuture((f) => [sceneRef.current, ...f]);
     setScene(past[past.length - 1]);
@@ -67,6 +74,7 @@ export function useVideoScene(initial: VideoScene): VideoSceneController {
   }, [past]);
 
   const redo = useCallback(() => {
+    if (snapshot.current !== null) return;
     if (future.length === 0) return;
     setPast((p) => [...p, sceneRef.current]);
     setScene(future[0]);

@@ -32,6 +32,28 @@ describe("useVideoScene", () => {
     expect(result.current.canUndo).toBe(false);
   });
 
+  it("undo/redo/commit no-op while an interact is in progress (mid-drag ⌘Z guard)", () => {
+    const { result } = renderHook(() => useVideoScene(initialScene(10)));
+    const base = result.current.scene;
+    act(() => result.current.beginInteract());
+    act(() => result.current.updateLive({ ...base, items: [] }));
+    // A stray undo/redo/commit while the drag is still open must not touch history —
+    // the live value stays and no undo step exists yet.
+    act(() => result.current.undo());
+    act(() => result.current.redo());
+    act(() => result.current.commit({ ...base, items: [] }));
+    expect(result.current.scene.items).toHaveLength(0);
+    expect(result.current.canUndo).toBe(false);
+    expect(result.current.canRedo).toBe(false);
+    // Ending the drag collapses it into exactly one undo step, restoring the
+    // pre-drag scene on undo.
+    act(() => result.current.endInteract());
+    expect(result.current.canUndo).toBe(true);
+    act(() => result.current.undo());
+    expect(result.current.scene).toBe(base);
+    expect(result.current.canUndo).toBe(false);
+  });
+
   it("tracks dirty", () => {
     const { result } = renderHook(() => useVideoScene(initialScene(10)));
     expect(result.current.dirty).toBe(false);
