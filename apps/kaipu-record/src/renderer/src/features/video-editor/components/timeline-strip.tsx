@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef } from "react";
 import type { PreviewPlayback } from "../use-preview-playback";
 import type { LayoutEntry } from "../timeline";
 import { layoutDuration } from "../timeline";
+import type { VideoOverlay } from "../scene";
 import type { SourceThumbnail } from "../use-source-thumbnails";
+import { OverlayLane, type WindowChangePhase } from "./overlay-lane";
 import {
   fractionToTime,
   rulerTicks,
@@ -20,6 +22,10 @@ export function TimelineStrip({
   selectedItemId,
   onSelectItem,
   onTrim,
+  overlays,
+  selectedOverlayId,
+  onSelectOverlay,
+  onWindowChange,
 }: {
   layout: LayoutEntry[];
   playback: PreviewPlayback;
@@ -34,6 +40,11 @@ export function TimelineStrip({
     sourceTime: number,
     phase: "start" | "move" | "end",
   ) => void;
+  /** Annotation overlays shown as pills on the lane above the main track. */
+  overlays: VideoOverlay[];
+  selectedOverlayId: string | null;
+  onSelectOverlay: (id: string | null) => void;
+  onWindowChange?: (id: string, start: number, end: number, phase: WindowChangePhase) => void;
 }): React.JSX.Element {
   const trackRef = useRef<HTMLDivElement | null>(null);
   const playheadRef = useRef<HTMLDivElement | null>(null);
@@ -93,6 +104,13 @@ export function TimelineStrip({
           </span>
         ))}
       </div>
+      <OverlayLane
+        overlays={overlays}
+        duration={duration}
+        selectedOverlayId={selectedOverlayId}
+        onSelectOverlay={onSelectOverlay}
+        onWindowChange={(id, start, end, phase) => onWindowChange?.(id, start, end, phase)}
+      />
       <div
         ref={trackRef}
         className={styles.track}

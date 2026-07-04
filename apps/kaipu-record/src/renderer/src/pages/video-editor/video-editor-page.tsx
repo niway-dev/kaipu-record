@@ -200,6 +200,24 @@ function VideoEditor({ source }: { source: VideoEditorSource }): React.JSX.Eleme
     [controller],
   );
 
+  // Same begin/live/end contract as handleTrim, driving the overlay lane's pill
+  // body-drag (move) and end-handle (resize) interactions.
+  const handleWindowChange = useCallback(
+    (id: string, start: number, end: number, phase: "start" | "move" | "end") => {
+      if (phase === "start") controller.beginInteract();
+      if (phase === "move") {
+        controller.updateLive({
+          ...controller.scene,
+          overlays: controller.scene.overlays.map((o) =>
+            o.id === id ? ({ ...o, start, end } as VideoOverlay) : o,
+          ),
+        });
+      }
+      if (phase === "end") controller.endInteract();
+    },
+    [controller],
+  );
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (isEditingTarget(e.target)) return;
@@ -319,6 +337,10 @@ function VideoEditor({ source }: { source: VideoEditorSource }): React.JSX.Eleme
           selectedItemId={selectedItemId}
           onSelectItem={setSelectedItemId}
           onTrim={handleTrim}
+          overlays={scene.overlays}
+          selectedOverlayId={selectedOverlayId}
+          onSelectOverlay={setSelectedOverlayId}
+          onWindowChange={handleWindowChange}
         />
       </footer>
       {blocker.state === "blocked" && (

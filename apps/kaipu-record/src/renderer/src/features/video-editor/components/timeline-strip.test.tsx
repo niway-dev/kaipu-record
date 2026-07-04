@@ -37,6 +37,9 @@ describe("TimelineStrip trim handles", () => {
         selectedItemId="a"
         onSelectItem={vi.fn()}
         onTrim={vi.fn()}
+        overlays={[]}
+        selectedOverlayId={null}
+        onSelectOverlay={vi.fn()}
       />,
     );
     const handles = container.querySelectorAll("[data-trim-handle]");
@@ -55,6 +58,9 @@ describe("TimelineStrip trim handles", () => {
         selectedItemId={null}
         onSelectItem={vi.fn()}
         onTrim={vi.fn()}
+        overlays={[]}
+        selectedOverlayId={null}
+        onSelectOverlay={vi.fn()}
       />,
     );
     expect(container.querySelectorAll("[data-trim-handle]")).toHaveLength(0);
@@ -69,6 +75,9 @@ describe("TimelineStrip trim handles", () => {
         selectedItemId="a"
         onSelectItem={vi.fn()}
         onTrim={vi.fn()}
+        overlays={[]}
+        selectedOverlayId={null}
+        onSelectOverlay={vi.fn()}
       />,
     );
     expect(container.querySelectorAll("[data-trim-handle]")).toHaveLength(2);
@@ -81,6 +90,9 @@ describe("TimelineStrip trim handles", () => {
         selectedItemId="b"
         onSelectItem={vi.fn()}
         onTrim={vi.fn()}
+        overlays={[]}
+        selectedOverlayId={null}
+        onSelectOverlay={vi.fn()}
       />,
     );
     expect(container.querySelectorAll("[data-trim-handle]")).toHaveLength(2);
