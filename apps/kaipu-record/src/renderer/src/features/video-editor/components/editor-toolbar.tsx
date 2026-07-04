@@ -1,5 +1,22 @@
-import { Redo2, Scissors, Trash2, Undo2 } from "lucide-react";
+import {
+  ArrowUpRight,
+  MousePointer2,
+  Redo2,
+  Scissors,
+  Square,
+  Trash2,
+  Type,
+  Undo2,
+} from "lucide-react";
+import { VIDEO_TOOLS, type VideoTool } from "../annotations/video-tools";
 import styles from "./editor-toolbar.module.css";
+
+const TOOL_META: Record<VideoTool, { label: string; Icon: typeof Square }> = {
+  select: { label: "Seleccionar", Icon: MousePointer2 },
+  box: { label: "Cuadro", Icon: Square },
+  arrow: { label: "Flecha", Icon: ArrowUpRight },
+  text: { label: "Texto", Icon: Type },
+};
 
 export interface EditorToolbarProps {
   canUndo: boolean;
@@ -12,13 +29,16 @@ export interface EditorToolbarProps {
   /** Delete the selected segment. Disabled when nothing is selected. */
   onDeleteSelected(): void;
   deleteDisabled: boolean;
+  /** Current annotation tool. */
+  tool: VideoTool;
+  onToolChange(tool: VideoTool): void;
 }
 
 /**
- * Undo/redo + split/delete actions for the video editor. Structure mirrors the
- * screenshot editor's toolbar (AnnotationToolbar on the left, action icons on the
- * right) — see screenshot-editor-page.tsx. The left side is intentionally empty: plan
- * 04 adds an annotation tool group there.
+ * Undo/redo + split/delete actions for the video editor, plus the annotation tool
+ * group (select/box/arrow/text — see video-tools.ts) on the left. Structure and
+ * active-tool styling mirror the screenshot editor's toolbar (AnnotationToolbar on
+ * the left, action icons on the right) — see annotation-toolbar.tsx.
  */
 export function EditorToolbar({
   canUndo,
@@ -29,10 +49,28 @@ export function EditorToolbar({
   splitDisabled,
   onDeleteSelected,
   deleteDisabled,
+  tool,
+  onToolChange,
 }: EditorToolbarProps): React.JSX.Element {
   return (
     <div className={styles.toolbar}>
-      <div className={styles.toolGroup} />
+      <div className={styles.toolGroup}>
+        {VIDEO_TOOLS.map((t) => {
+          const { label, Icon } = TOOL_META[t];
+          return (
+            <button
+              key={t}
+              type="button"
+              title={label}
+              aria-label={label}
+              className={`${styles.tool} ${tool === t ? styles.toolActive : ""}`}
+              onClick={() => onToolChange(t)}
+            >
+              <Icon size={19} />
+            </button>
+          );
+        })}
+      </div>
       <div className={styles.actions}>
         <button
           type="button"

@@ -15,10 +15,43 @@
   flex-shrink: 0;
 }
 
-/* Reserved for a future tool group (plan 04 adds annotation tools here) — keeping
-   an empty flex child means that addition won't shift .actions or resize the bar. */
+/* Annotation tool group (select/box/arrow/text) — same tokens as the screenshot
+   editor's AnnotationToolbar (annotation-toolbar.module.css) so both editors read
+   as the same product. .toolbar's justify-content: space-between keeps this on the
+   left and .actions on the right without needing an explicit flex-grow here. */
 .toolGroup {
-  flex: 1;
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  background: var(--bg-modal);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+
+.tool {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 34px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.tool:hover {
+  color: var(--text-primary);
+}
+
+.toolActive,
+.toolActive:hover {
+  background: var(--accent-primary);
+  color: #fff;
 }
 
 .actions {

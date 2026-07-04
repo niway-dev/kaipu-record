@@ -12,6 +12,8 @@ function renderToolbar(overrides: Partial<EditorToolbarProps> = {}): EditorToolb
     splitDisabled: false,
     onDeleteSelected: vi.fn(),
     deleteDisabled: false,
+    tool: "select",
+    onToolChange: vi.fn(),
     ...overrides,
   };
   render(<EditorToolbar {...props} />);
@@ -24,6 +26,21 @@ describe("EditorToolbar", () => {
     for (const name of ["Deshacer", "Rehacer", "Cortar aquí", "Eliminar segmento"]) {
       expect(screen.getByRole("button", { name })).toBeInTheDocument();
     }
+  });
+
+  it("renders the four annotation tools and highlights the active one", () => {
+    renderToolbar({ tool: "box" });
+    for (const name of ["Seleccionar", "Cuadro", "Flecha", "Texto"]) {
+      expect(screen.getByRole("button", { name })).toBeInTheDocument();
+    }
+    expect(screen.getByRole("button", { name: "Cuadro" }).className).toMatch(/toolActive/);
+    expect(screen.getByRole("button", { name: "Seleccionar" }).className).not.toMatch(/toolActive/);
+  });
+
+  it("fires onToolChange with the picked tool", () => {
+    const props = renderToolbar();
+    fireEvent.click(screen.getByRole("button", { name: "Flecha" }));
+    expect(props.onToolChange).toHaveBeenCalledWith("arrow");
   });
 
   it("fires the matching callback on click", () => {

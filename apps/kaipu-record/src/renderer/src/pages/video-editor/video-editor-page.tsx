@@ -22,6 +22,7 @@ import {
 import { usePreviewPlayback } from "@renderer/features/video-editor/use-preview-playback";
 import { useSourceThumbnails } from "@renderer/features/video-editor/use-source-thumbnails";
 import { useVideoScene } from "@renderer/features/video-editor/use-video-scene";
+import { useVideoTools } from "@renderer/features/video-editor/annotations/video-tools";
 import { EditorToolbar } from "@renderer/features/video-editor/components/editor-toolbar";
 import { PreviewStage } from "@renderer/features/video-editor/components/preview-stage";
 import { TimelineStrip } from "@renderer/features/video-editor/components/timeline-strip";
@@ -83,6 +84,7 @@ function VideoEditor({ source }: { source: VideoEditorSource }): React.JSX.Eleme
   // lost — same useBlocker pattern as the screenshot editor.
   const blocker = useBlocker(controller.dirty);
   const playback = usePreviewPlayback(layout);
+  const videoTools = useVideoTools();
   const mediaUrl = `kaipu-media://recording/${source.id}`;
   const thumbnails = useSourceThumbnails(mediaUrl, source.durationSeconds);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
@@ -209,6 +211,8 @@ function VideoEditor({ source }: { source: VideoEditorSource }): React.JSX.Eleme
         splitDisabled={splitDisabled}
         onDeleteSelected={handleDeleteSelected}
         deleteDisabled={deleteDisabled}
+        tool={videoTools.tool}
+        onToolChange={videoTools.setTool}
       />
       <main className={styles.stage}>
         <div className={styles.stageContent}>
