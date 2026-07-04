@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useBlocker, useLocation } from "react-router-dom";
 import { Pause, Play, Trash2, TriangleAlert } from "lucide-react";
-import { initialScene } from "@renderer/features/video-editor/scene";
+import { initialScene, type VideoOverlay } from "@renderer/features/video-editor/scene";
 import {
   ModalActions,
   ModalButton,
@@ -23,6 +23,7 @@ import { usePreviewPlayback } from "@renderer/features/video-editor/use-preview-
 import { useSourceThumbnails } from "@renderer/features/video-editor/use-source-thumbnails";
 import { useVideoScene } from "@renderer/features/video-editor/use-video-scene";
 import { useVideoTools } from "@renderer/features/video-editor/annotations/video-tools";
+import { VideoAnnotationLayer } from "@renderer/features/video-editor/annotations/video-annotation-layer";
 import { EditorToolbar } from "@renderer/features/video-editor/components/editor-toolbar";
 import { PreviewStage } from "@renderer/features/video-editor/components/preview-stage";
 import { TimelineStrip } from "@renderer/features/video-editor/components/timeline-strip";
@@ -56,6 +57,13 @@ function formatTime(seconds: number): string {
   const m = Math.floor(total / 60);
   const s = total % 60;
   return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+/** Replace the overlay with the same id, or append it if none exists yet — used to
+ *  reflect a live move/resize (VideoAnnotationLayer's onDraft) into the scene. */
+function upsertOverlay(overlays: VideoOverlay[], next: VideoOverlay): VideoOverlay[] {
+  const i = overlays.findIndex((o) => o.id === next.id);
+  return i === -1 ? [...overlays, next] : overlays.map((o, idx) => (idx === i ? next : o));
 }
 
 export function VideoEditorPage(): React.JSX.Element {
@@ -94,6 +102,7 @@ function VideoEditor({ source }: { source: VideoEditorSource }): React.JSX.Eleme
   // Queue it and let the effect below (keyed on `layout`) fire the actual seek once
   // layoutRef has caught up.
   const pendingSeekRef = useRef<number | null>(null);
+  const [selectedOverlayId, setSelectedOverlayId] = useState<string | null>(null);
 
   // A selection can outlive its item: undo/redo may restore a scene where the id is
   // gone, and split replaces the original item with two fresh ids. Clear it so
@@ -103,6 +112,21 @@ function VideoEditor({ source }: { source: VideoEditorSource }): React.JSX.Eleme
       setSelectedItemId(null);
     }
   }, [scene.items, selectedItemId]);
+
+  // Same rationale for the annotation selection: undo/redo or a timeline edit that
+  // clamps overlays (clampOverlays) can drop the selected overlay out from under it.
+  useEffect(() => {
+    if (selectedOverlayId && !scene.overlays.some((o) => o.id === selectedOverlayId)) {
+      setSelectedOverlayId(null);
+    }
+  }, [scene.overlays, selectedOverlayId]);
+
+  // Which overlays the playhead currently falls inside — the annotation layer only
+  // draws these (plus the selected one, dimmed, so it stays editable off-window).
+  const visibleIds = useMemo(() => {
+    const t = playback.timelineTime;
+    return new Set(scene.overlays.filter((o) => t >= o.start && t <= o.end).map((o) => o.id));
+  }, [scene.overlays, playback.timelineTime]);
 
   const splitDisabled = entryAt(layout, playback.timelineTime)?.kind !== "clip";
   // An empty timeline has nothing to export and nothing to click — never let delete
@@ -131,6 +155,16 @@ function VideoEditor({ source }: { source: VideoEditorSource }): React.JSX.Eleme
     // clamp it back into the new timeline (deferred; see pendingSeekRef above).
     pendingSeekRef.current = Math.min(playback.timelineTime, duration);
   }, [scene, controller, selectedItemId, playback]);
+
+  const handleDeleteOverlay = useCallback(() => {
+    // Same rationale as handleDeleteSelected: don't touch scene/selection while a
+    // move/resize drag owns it via begin/updateLive/endInteract.
+    if (controller.interacting) return;
+    if (!selectedOverlayId) return;
+    const overlays = scene.overlays.filter((o) => o.id !== selectedOverlayId);
+    controller.commit({ ...scene, overlays });
+    setSelectedOverlayId(null);
+  }, [scene, controller, selectedOverlayId]);
 
   // Fires the deferred seek queued by handleDeleteSelected once `layout` (and therefore
   // the preview hook's layoutRef, which is assigned during render) reflects the post-
@@ -185,17 +219,27 @@ function VideoEditor({ source }: { source: VideoEditorSource }): React.JSX.Eleme
         if (!splitDisabled) handleSplit();
         return;
       }
-      // Plan 04 adds annotation selection, which takes precedence over segment
-      // deletion for Delete/Backspace — not implemented yet, so segment delete owns
-      // the key for now. Cmd/Ctrl+Backspace is a common "delete line/word" chord in
-      // text contexts — require !isMod so it doesn't also delete a segment.
+      // Annotation selection takes precedence over segment deletion when both exist —
+      // an annotation is almost always the more "local" thing the user just touched.
+      // Cmd/Ctrl+Backspace is a common "delete line/word" chord in text contexts —
+      // require !isMod so it doesn't also delete an overlay or a segment.
       if (!isMod && (e.key === "Delete" || e.key === "Backspace")) {
-        if (!deleteDisabled) handleDeleteSelected();
+        if (selectedOverlayId) handleDeleteOverlay();
+        else if (!deleteDisabled) handleDeleteSelected();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [playback, controller, splitDisabled, deleteDisabled, handleSplit, handleDeleteSelected]);
+  }, [
+    playback,
+    controller,
+    splitDisabled,
+    deleteDisabled,
+    handleSplit,
+    handleDeleteSelected,
+    selectedOverlayId,
+    handleDeleteOverlay,
+  ]);
 
   return (
     <div className={styles.page}>
@@ -216,7 +260,41 @@ function VideoEditor({ source }: { source: VideoEditorSource }): React.JSX.Eleme
       />
       <main className={styles.stage}>
         <div className={styles.stageContent}>
-          <PreviewStage playback={playback} mediaUrl={mediaUrl} />
+          <PreviewStage
+            playback={playback}
+            mediaUrl={mediaUrl}
+            overlay={
+              <VideoAnnotationLayer
+                overlays={scene.overlays}
+                visibleIds={visibleIds}
+                selectedId={selectedOverlayId}
+                onSelect={setSelectedOverlayId}
+                tool={videoTools.tool}
+                toolState={{
+                  color: videoTools.color,
+                  stroke: videoTools.stroke,
+                  textSize: videoTools.textSize,
+                }}
+                playheadTime={playback.timelineTime}
+                timelineDuration={playback.duration}
+                onDraft={(draft) =>
+                  controller.updateLive({
+                    ...scene,
+                    overlays: upsertOverlay(scene.overlays, draft),
+                  })
+                }
+                onCommit={(overlays) => {
+                  controller.commit({ ...scene, overlays });
+                  // Every onCommit call is a just-finished draw or text label (moves/
+                  // resizes finalize through onInteractEnd only) — auto-switch back to
+                  // select so the new overlay can be adjusted right away.
+                  videoTools.setTool("select");
+                }}
+                onInteractStart={controller.beginInteract}
+                onInteractEnd={controller.endInteract}
+              />
+            }
+          />
           <div className={styles.transport}>
             <button
               type="button"
