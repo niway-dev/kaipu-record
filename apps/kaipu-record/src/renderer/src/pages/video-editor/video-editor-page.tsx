@@ -25,6 +25,7 @@ import { useVideoScene } from "@renderer/features/video-editor/use-video-scene";
 import { useVideoTools } from "@renderer/features/video-editor/annotations/video-tools";
 import { VideoAnnotationLayer } from "@renderer/features/video-editor/annotations/video-annotation-layer";
 import { EditorToolbar } from "@renderer/features/video-editor/components/editor-toolbar";
+import { OverlayOptions } from "@renderer/features/video-editor/components/overlay-options";
 import { PreviewStage } from "@renderer/features/video-editor/components/preview-stage";
 import { TimelineStrip } from "@renderer/features/video-editor/components/timeline-strip";
 import styles from "./video-editor-page.module.css";
@@ -166,6 +167,21 @@ function VideoEditor({ source }: { source: VideoEditorSource }): React.JSX.Eleme
     setSelectedOverlayId(null);
   }, [scene, controller, selectedOverlayId]);
 
+  // Options-panel edits (colour/stroke/text-size) on the selected overlay — one
+  // undoable commit per change, same contract as the screenshot editor's
+  // scene.commitAnnotation.
+  const handleCommitOverlay = useCallback(
+    (id: string, patch: Partial<VideoOverlay>) => {
+      controller.commit({
+        ...scene,
+        overlays: scene.overlays.map((o) =>
+          o.id === id ? ({ ...o, ...patch } as VideoOverlay) : o,
+        ),
+      });
+    },
+    [scene, controller],
+  );
+
   // Fires the deferred seek queued by handleDeleteSelected once `layout` (and therefore
   // the preview hook's layoutRef, which is assigned during render) reflects the post-
   // delete items.
@@ -277,6 +293,17 @@ function VideoEditor({ source }: { source: VideoEditorSource }): React.JSX.Eleme
         onToolChange={videoTools.setTool}
       />
       <main className={styles.stage}>
+        {/* Floating per-tool options (Excalidraw-style), pinned to the stage so it
+            doesn't shift with the video's own size. */}
+        <div className={styles.optionsFloat}>
+          <OverlayOptions
+            tools={videoTools}
+            overlays={scene.overlays}
+            selectedId={selectedOverlayId}
+            onCommitOverlay={handleCommitOverlay}
+            onDeleteSelected={handleDeleteOverlay}
+          />
+        </div>
         <div className={styles.stageContent}>
           <PreviewStage
             playback={playback}

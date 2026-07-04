@@ -26,10 +26,20 @@
 }
 
 .stage {
+  position: relative;
   display: grid;
   place-items: center;
   overflow: hidden;
   background: var(--bg-app);
+}
+
+/* Floating options panel, pinned to the stage (doesn't move with the video's own
+   size) — same convention as the screenshot editor's .optionsFloat. */
+.optionsFloat {
+  position: absolute;
+  top: var(--space-md);
+  left: var(--space-md);
+  z-index: 2;
 }
 
 .stageContent {
