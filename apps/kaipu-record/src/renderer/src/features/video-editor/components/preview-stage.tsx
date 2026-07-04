@@ -21,6 +21,10 @@ export function PreviewStage({
         src={mediaUrl}
         onTimeUpdate={playback.onVideoTimeUpdate}
         onEnded={playback.onVideoEnded}
+        // Dead in practice — the overlay above is a full-cover sibling that always
+        // wins the hit-test, so this click never reaches the video. Kept as a
+        // harmless fallback for any future render path without an overlay; the real
+        // toggle-on-click now comes from VideoAnnotationLayer's onBackgroundClick.
         onClick={playback.toggle}
       />
       {overlay}

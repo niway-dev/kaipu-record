@@ -212,6 +212,52 @@ describe("VideoAnnotationLayer — select tool", () => {
     expect(props.onSelect).toHaveBeenCalledWith(null);
     expect(props.onInteractStart).not.toHaveBeenCalled();
   });
+
+  it("forwards a plain click on empty space to onBackgroundClick (dead <video onClick> fix)", () => {
+    const onBackgroundClick = vi.fn();
+    const { layer } = renderLayer({ tool: "select", onBackgroundClick });
+    fireEvent.pointerDown(layer, { clientX: 350, clientY: 280 });
+    fireEvent.pointerUp(layer, { clientX: 350, clientY: 280 });
+
+    expect(onBackgroundClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not fire onBackgroundClick when the click hits a shape", () => {
+    const onBackgroundClick = vi.fn();
+    const { layer } = renderLayer({
+      tool: "select",
+      overlays: [box],
+      visibleIds: new Set(["b1"]),
+      onBackgroundClick,
+    });
+    // Same click that hits the box in the "selects an overlay" test above.
+    fireEvent.pointerDown(layer, { clientX: 80, clientY: 60 });
+    fireEvent.pointerUp(layer, { clientX: 80, clientY: 60 });
+
+    expect(onBackgroundClick).not.toHaveBeenCalled();
+  });
+
+  it("does not fire onBackgroundClick when the pointer drags past the click tolerance", () => {
+    const onBackgroundClick = vi.fn();
+    const { layer } = renderLayer({ tool: "select", onBackgroundClick });
+    fireEvent.pointerDown(layer, { clientX: 350, clientY: 280 });
+    fireEvent.pointerMove(layer, { clientX: 250, clientY: 200 });
+    fireEvent.pointerUp(layer, { clientX: 250, clientY: 200 });
+
+    expect(onBackgroundClick).not.toHaveBeenCalled();
+  });
+});
+
+describe("VideoAnnotationLayer — onBackgroundClick, non-select tools", () => {
+  it("does not fire onBackgroundClick while a drawing tool is active", () => {
+    const onBackgroundClick = vi.fn();
+    const { layer } = renderLayer({ tool: "box", onBackgroundClick });
+    fireEvent.pointerDown(layer, { clientX: 350, clientY: 280 });
+    fireEvent.pointerMove(layer, { clientX: 351, clientY: 281 });
+    fireEvent.pointerUp(layer);
+
+    expect(onBackgroundClick).not.toHaveBeenCalled();
+  });
 });
 
 describe("VideoAnnotationLayer — visibility rendering", () => {

@@ -62,6 +62,11 @@ type Drag =
  *  for the smaller VISUAL handle size). */
 const HANDLE_HIT_PX = 12;
 
+/** Movement tolerance (px) for telling a plain click on empty space apart from a
+ *  drag that merely didn't land on a shape (e.g. an aborted rubber-band-like drag).
+ *  Only a click within this tolerance forwards to onBackgroundClick. */
+const CLICK_MOVE_TOL_PX = 4;
+
 export interface VideoAnnotationLayerProps {
   overlays: VideoOverlay[];
   /** Overlay ids whose visibility window currently contains the playhead. */
@@ -79,6 +84,11 @@ export interface VideoAnnotationLayerProps {
   onCommit(overlays: VideoOverlay[]): void;
   onInteractStart(): void;
   onInteractEnd(): void;
+  /** Fired when the SELECT tool is active and a plain click (no drag) lands on empty
+   *  space — no shape and no resize handle hit. Lets the video underneath still
+   *  toggle play/pause even though this layer sits on top of it and swallows the
+   *  click (see preview-stage.tsx: the layer is a full-cover sibling of <video>). */
+  onBackgroundClick?(): void;
 }
 
 /** The visibility window for a freshly created overlay — clamped so a 0-length
@@ -102,12 +112,17 @@ export function VideoAnnotationLayer({
   onCommit,
   onInteractStart,
   onInteractEnd,
+  onBackgroundClick,
 }: VideoAnnotationLayerProps): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<Size>({ w: 0, h: 0 });
   const [draft, setDraft] = useState<VideoOverlay | null>(null);
   const [editingText, setEditingText] = useState<{ x: number; y: number } | null>(null);
   const drag = useRef<Drag | null>(null);
+  // Armed on a select-tool pointerdown that hit neither a handle nor a shape; cleared
+  // the moment the pointer moves past CLICK_MOVE_TOL_PX so a drag from empty space
+  // (which does nothing here, but still isn't a "click") never fires onBackgroundClick.
+  const clickCandidate = useRef<Pt | null>(null);
   const textInputRef = useRef<HTMLInputElement>(null);
   // Same arming trick as the screenshot layer: blur-to-commit only fires once the
   // input has settled, so the click that opened it can't immediately cancel it.
@@ -171,6 +186,10 @@ export function VideoAnnotationLayer({
         onInteractStart();
         drag.current = { mode: "move", id: hit.id, start: p, orig: hit };
         (e.target as Element).setPointerCapture?.(e.pointerId);
+      } else {
+        // Empty space, select tool: arm a background-click candidate — confirmed on
+        // pointerup unless the pointer drifts past CLICK_MOVE_TOL_PX first.
+        clickCandidate.current = p;
       }
       return;
     }
@@ -193,9 +212,18 @@ export function VideoAnnotationLayer({
   };
 
   const onPointerMove = (e: React.PointerEvent): void => {
+    const p = toNorm(e);
+    if (clickCandidate.current) {
+      const tol = { x: CLICK_MOVE_TOL_PX / (size.w || 1), y: CLICK_MOVE_TOL_PX / (size.h || 1) };
+      if (
+        Math.abs(p.x - clickCandidate.current.x) > tol.x ||
+        Math.abs(p.y - clickCandidate.current.y) > tol.y
+      ) {
+        clickCandidate.current = null;
+      }
+    }
     const d = drag.current;
     if (!d) return;
-    const p = toNorm(e);
     if (d.mode === "move") {
       const patch = moveBy(d.orig, p.x - d.start.x, p.y - d.start.y);
       onDraft({ ...d.orig, ...patch } as VideoOverlay);
@@ -242,7 +270,15 @@ export function VideoAnnotationLayer({
   const onPointerUp = (): void => {
     const d = drag.current;
     drag.current = null;
-    if (!d) return;
+    const wasBackgroundClick = clickCandidate.current !== null;
+    clickCandidate.current = null;
+    if (!d) {
+      // Confirmed empty-space click in select mode: nothing was hit and the pointer
+      // never drifted past tolerance — forward it as the play/pause toggle the video
+      // underneath would otherwise have handled (see onBackgroundClick prop doc).
+      if (wasBackgroundClick && tool === "select") onBackgroundClick?.();
+      return;
+    }
     if (d.mode === "move" || d.mode === "resize") {
       onInteractEnd();
       return;
@@ -260,6 +296,7 @@ export function VideoAnnotationLayer({
   const onPointerAbort = (): void => {
     const d = drag.current;
     drag.current = null;
+    clickCandidate.current = null; // an aborted gesture is never a completed click
     if (d?.mode === "move" || d?.mode === "resize") onInteractEnd();
     setDraft(null);
   };

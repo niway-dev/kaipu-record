@@ -292,6 +292,7 @@ function VideoEditor({ source }: { source: VideoEditorSource }): React.JSX.Eleme
                 }}
                 onInteractStart={controller.beginInteract}
                 onInteractEnd={controller.endInteract}
+                onBackgroundClick={playback.toggle}
               />
             }
           />
