@@ -166,4 +166,28 @@ describe("OverlayLane — handle drag (resize)", () => {
     fireEvent.pointerDown(endHandle, { clientX: 500, clientY: 10 });
     expect(props.onSelectOverlay).toHaveBeenCalledWith("o1");
   });
+
+  it("ignores a hover pointermove over the handle with no preceding pointerdown", () => {
+    const { props, container } = renderLane();
+    const endHandle = container.querySelector('[data-overlay-handle="end"]')!;
+    // No pointerDown — this is what a mere mouse hover over the handle looks like.
+    fireEvent.pointerMove(endHandle, { clientX: 210, clientY: 10 });
+    expect(props.onWindowChange).not.toHaveBeenCalled();
+  });
+
+  it("still resizes with exactly one undo step across a full pointerDown->move->up", () => {
+    const { props, container } = renderLane();
+    const endHandle = container.querySelector('[data-overlay-handle="end"]')!;
+    fireEvent.pointerDown(endHandle, { clientX: 500, clientY: 10 });
+    fireEvent.pointerMove(endHandle, { clientX: 210, clientY: 10 }); // drag start-ward
+    fireEvent.pointerUp(endHandle);
+
+    const calls = (props.onWindowChange as ReturnType<typeof vi.fn>).mock.calls;
+    expect(calls).toHaveLength(3);
+    expect(calls[0]).toEqual(["o1", 2, 5, "start"]);
+    expect(calls[1][1]).toBeCloseTo(2, 1); // start unchanged
+    expect(calls[1][2]).toBeCloseTo(2.2, 1); // end clamps to the 0.2s minimum
+    expect(calls[1][3]).toBe("move");
+    expect(calls[2]).toEqual(["o1", 2, 5, "end"]);
+  });
 });

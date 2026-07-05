@@ -118,6 +118,13 @@ function Pill({
 
   // End handles resize by setting the dragged edge directly to the pointer's time
   // (no delta math needed — the opposite edge stays put, read live off `overlay`).
+  // `resizeEdge` gates onPointerMove exactly like `bodyOrigin` gates the body drag
+  // above: set to the dragged edge on pointerdown, cleared on pointerup. Without it,
+  // a plain hover over the handle (pointermove firing with no button pressed) would
+  // reach `onWindowChange(..., "move")` and silently snap the window — the page's
+  // "move" phase maps straight to `updateLive`, which has no active-interaction guard.
+  const resizeEdge = useRef<"start" | "end" | null>(null);
+
   const handleHandlers = (
     edge: "start" | "end",
   ): {
@@ -130,10 +137,12 @@ function Pill({
       event.stopPropagation();
       event.currentTarget.setPointerCapture?.(event.pointerId);
       onSelect();
+      resizeEdge.current = edge;
       onWindowChange(overlay.id, overlay.start, overlay.end, "start");
     },
     onPointerMove: (event) => {
       event.stopPropagation();
+      if (resizeEdge.current !== edge) return; // hover with no active drag — ignore
       const t = timeFromPointer(event);
       if (edge === "start") {
         const start = Math.max(0, Math.min(t, overlay.end - MIN_WINDOW_SECONDS));
@@ -145,6 +154,7 @@ function Pill({
     },
     onPointerUp: (event) => {
       event.stopPropagation();
+      resizeEdge.current = null;
       onWindowChange(overlay.id, overlay.start, overlay.end, "end");
     },
   });

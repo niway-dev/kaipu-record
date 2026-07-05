@@ -176,4 +176,20 @@ describe("OverlayOptions", () => {
     expect(onCommitOverlay).toHaveBeenCalledWith("a1", { stroke: 1 });
     expect(tools.setStroke).toHaveBeenCalledWith(1);
   });
+
+  it("sets the arrow tool default stroke when no overlay is selected", () => {
+    const tools = makeTools({ tool: "arrow" });
+    render(
+      <OverlayOptions
+        tools={tools}
+        overlays={[]}
+        selectedId={null}
+        onCommitOverlay={vi.fn()}
+        onDeleteSelected={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Stroke 2" }));
+    expect(tools.setStroke).toHaveBeenCalledWith(1);
+  });
 });
