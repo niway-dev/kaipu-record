@@ -170,6 +170,56 @@ describe("useVideoExport", () => {
     expect(result.current.status).toBe("idle");
   });
 
+  it("does not call onSaved when cancel() runs during the done→finalize window", async () => {
+    // captureExportThumbnail is mocked to resolve immediately (see module mock at the
+    // top), so by the time `done` fires the thumbnailPromise has already settled —
+    // the await inside the done handler's IIFE still yields a microtask, which is the
+    // exact window cancel() races against. recordingFinalize is made to hang so we can
+    // land cancel() squarely inside that second await too.
+    let resolveFinalize!: (recording: LocalRecording) => void;
+    window.electronAPI.recordingFinalize = vi.fn(
+      () =>
+        new Promise<LocalRecording>((resolve) => {
+          resolveFinalize = resolve;
+        }),
+    );
+    const onSaved = vi.fn();
+    const { result } = renderHook(() => useVideoExport());
+    await act(async () => {
+      await result.current.start(startArgs({ onSaved }));
+    });
+    const sessionId = (window.electronAPI.recordingCreate as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as string;
+    const worker = createdWorkers[0];
+
+    act(() => worker.onmessage?.({ data: { type: "done" } } as MessageEvent));
+    // Wait for the done handler's IIFE to actually reach recordingFinalize (it awaits
+    // thumbnailPromise first) before racing cancel() against it.
+    await waitFor(() => expect(window.electronAPI.recordingFinalize).toHaveBeenCalled());
+    // Cancel while still awaiting the (still-pending) recordingFinalize call.
+    act(() => result.current.cancel());
+    expect(worker.terminate).toHaveBeenCalledOnce();
+    expect(window.electronAPI.recordingAbort).toHaveBeenCalledWith(sessionId);
+
+    // Now let the stale finalize resolve — the done handler's post-await guard must
+    // bail instead of resurrecting the cancelled export.
+    await act(async () => {
+      resolveFinalize({
+        id: "new-rec",
+        kind: "recording",
+        title: "My recording (editado)",
+        filePath: "/vault/new-rec.mp4",
+        createdAt: 1_700_000_000_000,
+        sizeBytes: 100,
+        durationSeconds: 10,
+        thumbnailUrl: null,
+      });
+    });
+
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(result.current.status).toBe("idle");
+  });
+
   it("on done, finalizes with the (editado) title + plan duration and calls onSaved", async () => {
     const onSaved = vi.fn();
     const { result } = renderHook(() => useVideoExport());

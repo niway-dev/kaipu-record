@@ -164,12 +164,19 @@ export function useVideoExport(): VideoExportController {
           } else if (msg.type === "done") {
             void (async () => {
               const thumbnail = await thumbnailPromise;
+              // cancel() may have run while awaiting the thumbnail (worker terminated,
+              // writer session aborted, activeRef flipped false) — finalizing or calling
+              // onSaved past that point would resurrect a cancelled export (navigating
+              // to it, or racing cancel()'s own reset with this callback's).
+              if (!activeRef.current) return;
               try {
                 const recording = await window.electronAPI.recordingFinalize(sessionId, {
                   title: `${args.title} (editado)`,
                   durationSeconds: plan.totalDuration,
                   thumbnail,
                 });
+                // Re-check again: cancel() could have run during the finalize await too.
+                if (!activeRef.current) return;
                 workerRef.current?.terminate();
                 workerRef.current = null;
                 sessionIdRef.current = null;
@@ -177,6 +184,7 @@ export function useVideoExport(): VideoExportController {
                 setState(IDLE_STATE);
                 args.onSaved(recording);
               } catch (error) {
+                if (!activeRef.current) return;
                 fail(GENERIC_ERROR, error);
               }
             })();

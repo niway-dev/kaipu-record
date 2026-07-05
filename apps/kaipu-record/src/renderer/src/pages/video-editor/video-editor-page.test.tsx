@@ -1,7 +1,37 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { LocalRecording } from "@shared/types/library-storage";
 import { VideoEditorPage, type VideoEditorSource } from "./video-editor-page";
+
+// `useVideoExport`'s own worker/IPC pipeline is exercised in its own test suite
+// (use-video-export.test.ts). Here we only care about the page's wiring around it —
+// specifically that a successful export's onSaved doesn't trip the dirty-edit
+// useBlocker — so the hook is replaced with a controllable stub whose `start` drives
+// onSaved directly, without spinning up a fake Worker.
+const startExport = vi.fn(
+  async (args: { onSaved: (recording: LocalRecording) => void | Promise<void> }) => {
+    await args.onSaved({
+      id: "new-rec",
+      kind: "recording",
+      title: "My recording (editado)",
+      filePath: "/vault/new-rec.mp4",
+      createdAt: 1_700_000_000_000,
+      sizeBytes: 100,
+      durationSeconds: 10,
+      thumbnailUrl: null,
+    });
+  },
+);
+vi.mock("@renderer/features/video-editor/export/use-video-export", () => ({
+  useVideoExport: () => ({
+    status: "idle",
+    fraction: 0,
+    error: null,
+    start: startExport,
+    cancel: vi.fn(),
+  }),
+}));
 
 // jsdom's Image never fires onload for blob: URLs (no real image decoding) — the
 // slide asset store's put() would hang forever without a controllable fake. Same
@@ -32,11 +62,40 @@ class FakeImage {
 
 const SOURCE: VideoEditorSource = { id: "rec-1", title: "My recording", durationSeconds: 30 };
 
-function renderEditor(): void {
-  const router = createMemoryRouter([{ path: "/", element: <VideoEditorPage /> }], {
-    initialEntries: [{ pathname: "/", state: SOURCE }],
-  });
+function renderEditor() {
+  const router = createMemoryRouter(
+    [
+      { path: "/", element: <VideoEditorPage /> },
+      { path: "/library/:id", element: <div>library-detail</div> },
+    ],
+    { initialEntries: [{ pathname: "/", state: SOURCE }] },
+  );
   render(<RouterProvider router={router} />);
+  return router;
+}
+
+async function waitForEditorLoaded(): Promise<HTMLElement> {
+  // VideoEditorLoader runs an async session IPC call before rendering the real editor —
+  // wait for the footer (which only appears after the load resolves) rather than
+  // querying it synchronously, which would race the Promise.
+  await waitFor(() => {
+    expect(document.querySelector("footer")).not.toBeNull();
+  });
+  return document.querySelector("footer")!;
+}
+
+/** Adds an image slide via the toolbar — the simplest way to produce one undoable
+ *  commit, which is what makes `controller.dirty` true. */
+async function makeDirty(footer: HTMLElement): Promise<void> {
+  fireEvent.click(screen.getByRole("button", { name: "Agregar imagen" }));
+  const input = screen.getByTestId("slide-image-input") as HTMLInputElement;
+  const file = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], "x.png", {
+    type: "image/png",
+  });
+  fireEvent.change(input, { target: { files: [file] } });
+  await waitFor(() => {
+    expect(footer.querySelectorAll("button")).toHaveLength(2);
+  });
 }
 
 describe("VideoEditorPage — add-image wiring", () => {
@@ -50,33 +109,14 @@ describe("VideoEditorPage — add-image wiring", () => {
 
   it("inserts a new image slide at the boundary nearest the playhead (index 0 at t=0)", async () => {
     renderEditor();
-
-    // VideoEditorLoader runs an async session IPC call before rendering the real editor —
-    // wait for the footer (which only appears after the load resolves) rather than
-    // querying it synchronously, which would race the Promise.
-    await waitFor(() => {
-      expect(document.querySelector("footer")).not.toBeNull();
-    });
+    const footer = await waitForEditorLoaded();
 
     // Starting scene is a single clip covering the whole recording — one track block.
-    const footer = document.querySelector("footer");
-    expect(footer).not.toBeNull();
-    expect(footer!.querySelectorAll("button")).toHaveLength(1);
+    expect(footer.querySelectorAll("button")).toHaveLength(1);
 
-    fireEvent.click(screen.getByRole("button", { name: "Agregar imagen" }));
-    const input = screen.getByTestId("slide-image-input") as HTMLInputElement;
-    const file = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], "x.png", {
-      type: "image/png",
-    });
-    fireEvent.change(input, { target: { files: [file] } });
+    await makeDirty(footer);
 
-    // handleAddImage is async (file.arrayBuffer() -> store.put() -> commit()); wait
-    // for the new track block to land in the DOM.
-    await waitFor(() => {
-      expect(footer!.querySelectorAll("button")).toHaveLength(2);
-    });
-
-    const blocks = footer!.querySelectorAll("button");
+    const blocks = footer.querySelectorAll("button");
     // Playhead is at 0, so boundaryIndexAt lands the slide at index 0 — the first
     // block. Only a slide block renders an <img> (its picture) and the ImagePlus
     // badge icon; a plain clip block with no decoded thumbnails renders neither.
@@ -84,5 +124,64 @@ describe("VideoEditorPage — add-image wiring", () => {
     expect(blocks[0].querySelector("svg")).not.toBeNull();
     expect(blocks[1].querySelector("img")).toBeNull();
     expect(blocks[1].querySelector("svg")).toBeNull();
+  });
+});
+
+describe("VideoEditorPage — post-export navigation vs. useBlocker", () => {
+  beforeEach(() => {
+    vi.stubGlobal("Image", FakeImage);
+    startExport.mockClear();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const DISCARD_DIALOG_TITLE = "¿Descartar los cambios del video?";
+
+  it("a successful export's onSaved navigates straight to the library item, without the discard-changes dialog", async () => {
+    renderEditor();
+    const footer = await waitForEditorLoaded();
+    await makeDirty(footer); // controller.dirty === true, same as right before a real export
+
+    fireEvent.click(screen.getByRole("button", { name: "Exportar" }));
+
+    // startExport's onSaved awaits saveVideoEditSession (mocked, resolves), calls
+    // markClean(), flips the bypass ref, then navigates — all async, so wait for the
+    // target route's element to land.
+    await waitFor(() => {
+      expect(screen.getByText("library-detail")).toBeInTheDocument();
+    });
+    expect(startExport).toHaveBeenCalledOnce();
+    // The critical regression: if the blocker predicate still read stale `dirty`
+    // state at navigate-time, this dialog would render instead of the route change.
+    expect(screen.queryByText(DISCARD_DIALOG_TITLE)).toBeNull();
+  });
+
+  it("blocks a normal (non-export) navigation while dirty", async () => {
+    const router = renderEditor();
+    const footer = await waitForEditorLoaded();
+    await makeDirty(footer);
+
+    await act(async () => {
+      await router.navigate("/library/rec-1");
+    });
+
+    expect(await screen.findByText(DISCARD_DIALOG_TITLE)).toBeInTheDocument();
+    // Navigation is paused mid-flight: still on the editor, not the target route.
+    expect(screen.queryByText("library-detail")).toBeNull();
+    expect(startExport).not.toHaveBeenCalled();
+  });
+
+  it("never blocks navigation when the editor is clean", async () => {
+    const router = renderEditor();
+    await waitForEditorLoaded(); // no edits made — controller.dirty stays false
+
+    await act(async () => {
+      await router.navigate("/library/rec-1");
+    });
+
+    expect(await screen.findByText("library-detail")).toBeInTheDocument();
+    expect(screen.queryByText(DISCARD_DIALOG_TITLE)).toBeNull();
   });
 });

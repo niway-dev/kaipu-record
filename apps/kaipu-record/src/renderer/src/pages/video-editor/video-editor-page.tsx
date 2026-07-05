@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useBlocker, useLocation, useNavigate } from "react-router-dom";
 import { Pause, Play, Trash2, TriangleAlert } from "lucide-react";
+import { captureException } from "@renderer/features/analytics";
 import {
   initialScene,
   newId,
@@ -187,14 +188,30 @@ function VideoEditor({
     return () => window.electronAPI.setEditorWindowMode(false);
   }, []);
 
-  // Memoized so item ids stay stable across re-renders — otherwise layout entry
-  // ids churn every render, breaking selection matching and remounting blocks.
-  const controller = useVideoScene(useMemo(() => resolvedScene, [resolvedScene]));
+  const controller = useVideoScene(resolvedScene);
   const { scene } = controller;
   const layout = useMemo(() => toLayout(scene.items), [scene.items]);
   // Blocks in-app navigation (e.g. the sidebar) while there's an edit that would be
   // lost — same useBlocker pattern as the screenshot editor.
-  const blocker = useBlocker(controller.dirty);
+  //
+  // The predicate reads refs instead of closing over `controller.dirty`/a plain
+  // boolean: react-router's data router consults the predicate SYNCHRONOUSLY inside
+  // `navigate()`, before React has re-rendered. handleExport's onSaved callback calls
+  // `controller.markClean()` (which schedules setPast([])/setFuture([])) immediately
+  // followed by `navigate(...)` — React 19 batches those state updates, so a boolean
+  // `dirty` value closed over at render time would still read `true` at navigate-time
+  // and the "discard changes" dialog would pop on every successful export. Refs
+  // sidestep the batching entirely: they're updated synchronously and read
+  // synchronously by the predicate.
+  const dirtyRef = useRef(controller.dirty);
+  dirtyRef.current = controller.dirty;
+  // Set to true right before the post-export `navigate()` so that programmatic
+  // navigation always proceeds, regardless of batching timing. Normal in-app
+  // navigation (e.g. the sidebar) never touches this ref, so it still blocks while
+  // dirty.
+  const bypassBlockerRef = useRef(false);
+  const shouldBlock = useCallback(() => dirtyRef.current && !bypassBlockerRef.current, []);
+  const blocker = useBlocker(shouldBlock);
   const playback = usePreviewPlayback(layout);
   const videoTools = useVideoTools();
   const videoExport = useVideoExport();
@@ -319,10 +336,16 @@ function VideoEditor({
             .entries()
             .map((a) => ({ assetId: a.assetId, bytes: a.bytes }));
           await window.electronAPI.saveVideoEditSession(source.id, sessionJson, assets);
-        } catch {
-          // Session save failure is non-fatal.
+        } catch (error) {
+          // Session save failure is non-fatal — the export already succeeded.
+          captureException(error, { context: "video-edit-session-save" });
         }
         controller.markClean();
+        // Set BEFORE navigate(): react-router calls the blocker predicate
+        // synchronously inside navigate(), ahead of React re-rendering — the ref
+        // guarantees the predicate observes the bypass regardless of how
+        // markClean()'s state updates get batched.
+        bypassBlockerRef.current = true;
         navigate(`/library/${recording.id}`);
       },
     });
