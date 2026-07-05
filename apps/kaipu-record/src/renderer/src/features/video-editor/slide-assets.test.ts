@@ -60,6 +60,17 @@ describe("createSlideAssetStore", () => {
     expect(store.get("nope")).toBeNull();
   });
 
+  it("restoreAsset() preserves the given assetId (unlike put(), which mints a fresh one)", async () => {
+    const store = createSlideAssetStore();
+    const asset = await store.restoreAsset("asset-from-session", pngBytes(), "image/png");
+
+    expect(asset.assetId).toBe("asset-from-session");
+    expect(asset.naturalWidth).toBe(FIXTURE_W);
+    expect(asset.naturalHeight).toBe(FIXTURE_H);
+    expect(store.get("asset-from-session")).toEqual(asset);
+    expect(store.entries()).toEqual([asset]);
+  });
+
   it("assigns a fresh assetId per put(), even for identical bytes", async () => {
     const store = createSlideAssetStore();
     const bytes = pngBytes();
