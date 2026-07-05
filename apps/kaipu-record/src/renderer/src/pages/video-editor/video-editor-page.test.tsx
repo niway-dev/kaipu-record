@@ -153,6 +153,13 @@ describe("VideoEditorPage — transport bar", () => {
       expect(screen.getByRole("button", { name: "Silenciar" })).not.toBeNull();
     });
   });
+
+  it("renders the fullscreen button with aria-label 'Pantalla completa' by default", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+
+    expect(screen.getByRole("button", { name: "Pantalla completa" })).not.toBeNull();
+  });
 });
 
 describe("VideoEditorPage — add-image wiring", () => {

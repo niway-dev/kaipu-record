@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useBlocker, useLocation, useNavigate } from "react-router-dom";
-import { Pause, Play, Trash2, TriangleAlert, Volume2, VolumeX } from "lucide-react";
+import {
+  Maximize2,
+  Minimize2,
+  Pause,
+  Play,
+  Trash2,
+  TriangleAlert,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
 import { captureException } from "@renderer/features/analytics";
 import {
   initialScene,
@@ -226,6 +235,10 @@ function VideoEditor({
   // layoutRef has caught up.
   const pendingSeekRef = useRef<number | null>(null);
   const [selectedOverlayId, setSelectedOverlayId] = useState<string | null>(null);
+  // Fullscreen state — true while document.fullscreenElement is this page's <main> stage.
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  // Ref for the stage <main> element, used to request fullscreen on it directly.
+  const stageRef = useRef<HTMLElement | null>(null);
 
   // A selection can outlive its item: undo/redo may restore a scene where the id is
   // gone, and split replaces the original item with two fresh ids. Clear it so
@@ -243,6 +256,28 @@ function VideoEditor({
       setSelectedOverlayId(null);
     }
   }, [scene.overlays, selectedOverlayId]);
+
+  // Track fullscreen state via the fullscreenchange event so pressing Esc (which the
+  // browser handles natively) still syncs isFullscreen back to false.
+  useEffect(() => {
+    const onFsChange = (): void => {
+      setIsFullscreen(document.fullscreenElement === stageRef.current);
+    };
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () => document.removeEventListener("fullscreenchange", onFsChange);
+  }, []);
+
+  // Toggle the browser's native fullscreen on the stage <main> element. Guard for
+  // environments where requestFullscreen may be unavailable (Electron can restrict it).
+  const handleFullscreen = useCallback(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    if (document.fullscreenElement) {
+      void document.exitFullscreen();
+    } else if ("requestFullscreen" in el) {
+      void el.requestFullscreen();
+    }
+  }, []);
 
   // Which overlays the playhead currently falls inside — the annotation layer only
   // draws these (plus the selected one, dimmed, so it stays editable off-window).
@@ -532,7 +567,7 @@ function VideoEditor({
         onExport={handleExport}
         exportDisabled={videoExport.status === "exporting" || scene.items.length === 0}
       />
-      <main className={styles.stage}>
+      <main className={styles.stage} ref={stageRef}>
         {/* Floating per-tool options (Excalidraw-style), pinned to the stage so it
             doesn't shift with the video's own size. */}
         <div className={styles.optionsFloat}>
@@ -545,8 +580,12 @@ function VideoEditor({
           />
         </div>
         {/* Video region: 1fr grid row — centers PreviewStage and constrains its height
-            so the transport bar below is never clipped regardless of video aspect ratio. */}
-        <div className={styles.videoRegion}>
+            so the transport bar below is never clipped regardless of video aspect ratio.
+            In fullscreen mode the 50 vh cap is lifted via an inline style override. */}
+        <div
+          className={styles.videoRegion}
+          style={isFullscreen ? { maxHeight: "none" } : undefined}
+        >
           <PreviewStage
             playback={playback}
             mediaUrl={mediaUrl}
@@ -607,6 +646,14 @@ function VideoEditor({
           <span className={styles.timeDisplay}>
             {formatTime(playback.timelineTime)} / {formatTime(playback.duration)}
           </span>
+          <button
+            type="button"
+            className={styles.fullscreenButton}
+            aria-label={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
+            onClick={handleFullscreen}
+          >
+            {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+          </button>
         </div>
       </main>
       <footer className={styles.timeline}>

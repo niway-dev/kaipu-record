@@ -44,13 +44,18 @@
   z-index: 2;
 }
 
-/* Video region: fills the 1fr row and centers PreviewStage within it. min-height: 0
-   prevents the grid row from growing beyond its allocated fraction of the stage. */
+/* Video region: centers PreviewStage and caps it at 50 vh so the video is a
+   contained "player" window (CapCut-style) rather than filling the whole stage.
+   The 50 vh cap keeps the toolbar, transport, and timeline all comfortably visible
+   on a normal window without the video eating the screen. In fullscreen mode the
+   page lifts this cap via an inline style (isFullscreen ? { maxHeight: "none" } : …).
+   min-height: 0 prevents the grid row from growing beyond its allocated fraction. */
 .videoRegion {
   display: grid;
   place-items: center;
   min-height: 0;
   overflow: hidden;
+  max-height: 50vh;
 }
 
 /* Transport bar: always-visible auto row below the video region. */
@@ -110,6 +115,29 @@
 }
 
 .muteButton:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+/* Fullscreen toggle — secondary transport action matching the mute button style,
+   placed at the right of the transport bar to match common player conventions. */
+.fullscreenButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.fullscreenButton:hover {
   background: var(--bg-card-hover);
   color: var(--text-primary);
 }
