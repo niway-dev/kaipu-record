@@ -100,6 +100,9 @@ const kaipuApi: KaipuElectronAPI = {
   },
   reportException: (payload, origin, context) =>
     ipcRenderer.send(IPC_CHANNELS.analyticsCaptureException, payload, origin, context),
+  saveVideoEditSession: (id, sessionJson, assets) =>
+    ipcRenderer.invoke(IPC_CHANNELS.videoEditSaveSession, id, sessionJson, assets),
+  loadVideoEditSession: (id) => ipcRenderer.invoke(IPC_CHANNELS.videoEditLoadSession, id),
   captureScreenshot: () => ipcRenderer.invoke(IPC_CHANNELS.screenshotCapture),
   revealAfterCapture: () => ipcRenderer.send(IPC_CHANNELS.screenshotReveal),
   setEditorWindowMode: (active) => ipcRenderer.send(IPC_CHANNELS.windowSetEditorMode, active),

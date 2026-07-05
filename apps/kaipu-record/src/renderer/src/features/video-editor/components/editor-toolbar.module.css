@@ -98,3 +98,33 @@
 .hiddenInput {
   display: none;
 }
+
+/* Primary export CTA — filled accent button (vs. the ghost .iconBtn group), so it
+   reads as the toolbar's main action rather than another utility icon. */
+.exportBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 var(--space-md);
+  background: var(--accent-primary);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: #fff;
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    opacity var(--transition);
+}
+
+.exportBtn:hover:not(:disabled) {
+  background: var(--accent-primary-hover);
+}
+
+.exportBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Navigate, useBlocker, useLocation } from "react-router-dom";
+import { Navigate, useBlocker, useLocation, useNavigate } from "react-router-dom";
 import { Pause, Play, Trash2, TriangleAlert } from "lucide-react";
 import {
   initialScene,
   newId,
   type SlideItem,
   type VideoOverlay,
+  type VideoScene,
 } from "@renderer/features/video-editor/scene";
 import {
   ModalActions,
@@ -27,16 +28,23 @@ import {
   toLayout,
   trimClip,
 } from "@renderer/features/video-editor/timeline";
-import { createSlideAssetStore } from "@renderer/features/video-editor/slide-assets";
+import {
+  createSlideAssetStore,
+  type SlideAssetStore,
+} from "@renderer/features/video-editor/slide-assets";
+import { parseSession, serializeSession } from "@renderer/features/video-editor/session";
 import { usePreviewPlayback } from "@renderer/features/video-editor/use-preview-playback";
 import { useSourceThumbnails } from "@renderer/features/video-editor/use-source-thumbnails";
 import { useVideoScene } from "@renderer/features/video-editor/use-video-scene";
 import { useVideoTools } from "@renderer/features/video-editor/annotations/video-tools";
+import { useVideoExport } from "@renderer/features/video-editor/export/use-video-export";
 import { VideoAnnotationLayer } from "@renderer/features/video-editor/annotations/video-annotation-layer";
 import { EditorToolbar } from "@renderer/features/video-editor/components/editor-toolbar";
+import { ExportDialog } from "@renderer/features/video-editor/components/export-dialog";
 import { OverlayOptions } from "@renderer/features/video-editor/components/overlay-options";
 import { PreviewStage } from "@renderer/features/video-editor/components/preview-stage";
 import { TimelineStrip } from "@renderer/features/video-editor/components/timeline-strip";
+import { showToast } from "@renderer/ui/toast-store";
 import styles from "./video-editor-page.module.css";
 
 export interface VideoEditorSource {
@@ -81,10 +89,88 @@ export function VideoEditorPage(): React.JSX.Element {
   const source = location.state;
   if (!isVideoEditorSource(source)) return <Navigate to="/library" replace />;
   // Remount per navigation so a different recording never inherits editor state.
-  return <VideoEditor key={location.key} source={source} />;
+  return <VideoEditorLoader key={location.key} source={source} />;
 }
 
-function VideoEditor({ source }: { source: VideoEditorSource }): React.JSX.Element {
+/**
+ * Async loading wrapper: loads any saved edit session before rendering the actual
+ * editor, so `useVideoScene` always gets the correct initial scene on first render.
+ * Without this split, `useVideoScene` would receive the fresh fallback scene before
+ * the session IPC returns, and re-initializing a hook with a different value isn't
+ * possible in React.
+ */
+function VideoEditorLoader({ source }: { source: VideoEditorSource }): React.JSX.Element {
+  // Asset store lives here so it can be populated by the session loader and passed
+  // down to the editor without being torn down between the two renders.
+  const assetStoreRef = useRef<SlideAssetStore>(createSlideAssetStore());
+  useEffect(() => {
+    return () => assetStoreRef.current.dispose();
+  }, []);
+
+  const [resolvedScene, setResolvedScene] = useState<VideoScene | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const saved = await window.electronAPI.loadVideoEditSession(source.id);
+        if (saved !== null) {
+          const session = parseSession(saved.sessionJson);
+          if (session !== null) {
+            // Hydrate the asset store with the known assetIds so restored slide items
+            // can still reference them by id. All assets come back as raw bytes
+            // (written as PNG by the main handler).
+            const loadedIds = new Set<string>();
+            for (const { assetId, bytes } of saved.assets) {
+              await assetStoreRef.current.restoreAsset(assetId, bytes, "image/png");
+              loadedIds.add(assetId);
+            }
+            // Drop slide items whose asset wasn't returned (e.g. file was deleted on
+            // disk) rather than leaving broken references that the worker can't render.
+            const filteredScene: VideoScene = {
+              ...session.scene,
+              items: session.scene.items.filter(
+                (item) => item.kind !== "slide" || loadedIds.has(item.assetId),
+              ),
+            };
+            showToast({ message: "Se restauró tu edición anterior" });
+            setResolvedScene(filteredScene);
+          } else {
+            // Session file exists but is invalid (schema changed, corruption, etc.).
+            showToast({ message: "No se pudo restaurar la edición anterior" });
+            setResolvedScene(initialScene(source.durationSeconds));
+          }
+        } else {
+          // No saved session — fresh start, no toast.
+          setResolvedScene(initialScene(source.durationSeconds));
+        }
+      } catch {
+        // IPC failure is non-fatal; open a fresh editor without surfacing the error.
+        setResolvedScene(initialScene(source.durationSeconds));
+      }
+    })();
+  }, []); // [] correct: source is stable per VideoEditorPage's key={location.key}
+
+  if (resolvedScene === null) {
+    // Brief loading state while the session IPC resolves. The editor grows the window
+    // on mount; showing a blank page here avoids a visible size jump.
+    return <div className={styles.page} />;
+  }
+
+  return (
+    <VideoEditor source={source} resolvedScene={resolvedScene} assetStoreRef={assetStoreRef} />
+  );
+}
+
+function VideoEditor({
+  source,
+  resolvedScene,
+  assetStoreRef,
+}: {
+  source: VideoEditorSource;
+  resolvedScene: VideoScene;
+  assetStoreRef: React.MutableRefObject<SlideAssetStore>;
+}): React.JSX.Element {
+  const navigate = useNavigate();
   useEffect(() => {
     // Same window growth the screenshot editor uses; restored on unmount.
     window.electronAPI.setEditorWindowMode(true);
@@ -93,25 +179,15 @@ function VideoEditor({ source }: { source: VideoEditorSource }): React.JSX.Eleme
 
   // Memoized so item ids stay stable across re-renders — otherwise layout entry
   // ids churn every render, breaking selection matching and remounting blocks.
-  const controller = useVideoScene(
-    useMemo(() => initialScene(source.durationSeconds), [source.durationSeconds]),
-  );
+  const controller = useVideoScene(useMemo(() => resolvedScene, [resolvedScene]));
   const { scene } = controller;
   const layout = useMemo(() => toLayout(scene.items), [scene.items]);
-  // Plain factory (not a hook) held in a ref so slide assets survive scene undo/redo —
-  // an undone slide's image must still be available if the user redoes it. The
-  // factory itself is side-effect-free (just an empty Map), so re-evaluating the
-  // initializer expression on every render and keeping only the first result (React's
-  // useRef contract) is harmless — no object URLs are created until put() is called.
-  const assetStoreRef = useRef(createSlideAssetStore());
-  useEffect(() => {
-    return () => assetStoreRef.current.dispose();
-  }, []);
   // Blocks in-app navigation (e.g. the sidebar) while there's an edit that would be
   // lost — same useBlocker pattern as the screenshot editor.
   const blocker = useBlocker(controller.dirty);
   const playback = usePreviewPlayback(layout);
   const videoTools = useVideoTools();
+  const videoExport = useVideoExport();
   const mediaUrl = `kaipu-media://recording/${source.id}`;
   const thumbnails = useSourceThumbnails(mediaUrl, source.durationSeconds);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
@@ -207,6 +283,40 @@ function VideoEditor({ source }: { source: VideoEditorSource }): React.JSX.Eleme
     },
     [scene, controller, playback.timelineTime],
   );
+
+  // Reads the live preview <video>'s native/displayed size at click time (not
+  // memoized — the box can resize between renders) and hands off to the export
+  // hook, which owns the whole worker/writer pipeline. `markClean` runs before
+  // navigating so `useBlocker` doesn't intercept this programmatic navigation.
+  const handleExport = useCallback(() => {
+    const video = playback.videoRef.current;
+    if (!video) return;
+    void videoExport.start({
+      scene,
+      sourceId: source.id,
+      title: source.title,
+      videoWidth: video.videoWidth,
+      videoHeight: video.videoHeight,
+      previewWidth: video.clientWidth,
+      slideAssets: assetStoreRef.current,
+      onSaved: async (recording) => {
+        // Persist the session before navigating away so reopening the editor on the
+        // original recording restores cuts/overlays/slides. Non-fatal if it fails —
+        // the export already succeeded and the user lands on the new recording.
+        try {
+          const sessionJson = serializeSession(scene);
+          const assets = assetStoreRef.current
+            .entries()
+            .map((a) => ({ assetId: a.assetId, bytes: a.bytes }));
+          await window.electronAPI.saveVideoEditSession(source.id, sessionJson, assets);
+        } catch {
+          // Session save failure is non-fatal.
+        }
+        controller.markClean();
+        navigate(`/library/${recording.id}`);
+      },
+    });
+  }, [playback, videoExport, scene, source, controller, navigate, assetStoreRef]);
 
   const handleDeleteOverlay = useCallback(() => {
     // Same rationale as handleDeleteSelected: don't touch scene/selection while a
@@ -362,6 +472,8 @@ function VideoEditor({ source }: { source: VideoEditorSource }): React.JSX.Eleme
         onAddImage={handleAddImage}
         tool={videoTools.tool}
         onToolChange={videoTools.setTool}
+        onExport={handleExport}
+        exportDisabled={videoExport.status === "exporting" || scene.items.length === 0}
       />
       <main className={styles.stage}>
         {/* Floating per-tool options (Excalidraw-style), pinned to the stage so it
@@ -461,6 +573,15 @@ function VideoEditor({ source }: { source: VideoEditorSource }): React.JSX.Eleme
             </ModalButton>
           </ModalActions>
         </ModalOverlay>
+      )}
+      {videoExport.status !== "idle" && (
+        <ExportDialog
+          status={videoExport.status}
+          fraction={videoExport.fraction}
+          error={videoExport.error}
+          onCancel={videoExport.cancel}
+          onRetry={handleExport}
+        />
       )}
     </div>
   );

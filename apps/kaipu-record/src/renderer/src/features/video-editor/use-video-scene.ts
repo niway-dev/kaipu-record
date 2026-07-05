@@ -22,6 +22,13 @@ export interface VideoSceneController {
   updateLive(next: VideoScene): void;
   /** Collapse the interaction into one undo step, if the scene actually changed. */
   endInteract(): void;
+  /**
+   * Clear undo/redo history around the CURRENT scene, resetting `dirty` to false
+   * without touching the scene itself. Used right after a successful export: the
+   * page navigates away programmatically, and `useBlocker` would otherwise treat
+   * that navigation as one it should intercept.
+   */
+  markClean(): void;
 }
 
 /**
@@ -91,6 +98,11 @@ export function useVideoScene(initial: VideoScene): VideoSceneController {
     setFuture((f) => f.slice(1));
   }, [future]);
 
+  const markClean = useCallback(() => {
+    setPast([]);
+    setFuture([]);
+  }, []);
+
   return {
     scene,
     dirty: past.length > 0,
@@ -103,5 +115,6 @@ export function useVideoScene(initial: VideoScene): VideoSceneController {
     beginInteract,
     updateLive,
     endInteract,
+    markClean,
   };
 }

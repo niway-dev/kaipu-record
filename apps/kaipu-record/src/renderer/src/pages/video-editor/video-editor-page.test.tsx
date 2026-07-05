@@ -51,6 +51,13 @@ describe("VideoEditorPage — add-image wiring", () => {
   it("inserts a new image slide at the boundary nearest the playhead (index 0 at t=0)", async () => {
     renderEditor();
 
+    // VideoEditorLoader runs an async session IPC call before rendering the real editor —
+    // wait for the footer (which only appears after the load resolves) rather than
+    // querying it synchronously, which would race the Promise.
+    await waitFor(() => {
+      expect(document.querySelector("footer")).not.toBeNull();
+    });
+
     // Starting scene is a single clip covering the whole recording — one track block.
     const footer = document.querySelector("footer");
     expect(footer).not.toBeNull();

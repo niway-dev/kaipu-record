@@ -15,6 +15,8 @@ function renderToolbar(overrides: Partial<EditorToolbarProps> = {}): EditorToolb
     onAddImage: vi.fn(),
     tool: "select",
     onToolChange: vi.fn(),
+    onExport: vi.fn(),
+    exportDisabled: false,
     ...overrides,
   };
   render(<EditorToolbar {...props} />);
@@ -22,7 +24,7 @@ function renderToolbar(overrides: Partial<EditorToolbarProps> = {}): EditorToolb
 }
 
 describe("EditorToolbar", () => {
-  it("renders the five actions", () => {
+  it("renders the six actions", () => {
     renderToolbar();
     for (const name of [
       "Deshacer",
@@ -30,9 +32,20 @@ describe("EditorToolbar", () => {
       "Agregar imagen",
       "Cortar aquí",
       "Eliminar segmento",
+      "Exportar",
     ]) {
       expect(screen.getByRole("button", { name })).toBeInTheDocument();
     }
+  });
+
+  it("fires onExport on click, and is disabled per exportDisabled", () => {
+    const props = renderToolbar();
+    fireEvent.click(screen.getByRole("button", { name: "Exportar" }));
+    expect(props.onExport).toHaveBeenCalledOnce();
+
+    renderToolbar({ exportDisabled: true });
+    const exportButtons = screen.getAllByRole("button", { name: "Exportar" });
+    expect(exportButtons[exportButtons.length - 1]).toBeDisabled();
   });
 
   it("renders the four annotation tools and highlights the active one", () => {

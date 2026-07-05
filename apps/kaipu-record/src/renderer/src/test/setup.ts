@@ -103,4 +103,6 @@ window.electronAPI = {
     throw new Error("not implemented in test stub");
   },
   onCaptureScreenshotHotkey: () => () => {},
+  saveVideoEditSession: async () => {},
+  loadVideoEditSession: async () => null,
 };

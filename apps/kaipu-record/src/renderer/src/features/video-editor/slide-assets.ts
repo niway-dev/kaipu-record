@@ -20,6 +20,13 @@ export interface SlideAssetStore {
   get(assetId: string): SlideAsset | null;
   /** Decodes `bytes` to measure natural size, then stores the asset. */
   put(bytes: ArrayBuffer, mimeType: string): Promise<SlideAsset>;
+  /**
+   * Re-insert an asset recovered from a saved session, preserving its original
+   * `assetId` so slide items in the restored scene can still reference it. The
+   * regular `put()` always mints a fresh UUID, which would break the restored
+   * scene's slide→asset links.
+   */
+  restoreAsset(assetId: string, bytes: ArrayBuffer, mimeType: string): Promise<SlideAsset>;
   entries(): SlideAsset[];
   /** Revokes every object URL — call on editor unmount. */
   dispose(): void;
@@ -57,6 +64,14 @@ export function createSlideAssetStore(): SlideAssetStore {
         naturalHeight,
       };
       assets.set(asset.assetId, asset);
+      return asset;
+    },
+
+    async restoreAsset(assetId, bytes, mimeType) {
+      const url = URL.createObjectURL(new Blob([bytes], { type: mimeType }));
+      const { naturalWidth, naturalHeight } = await measureNaturalSize(url);
+      const asset: SlideAsset = { assetId, bytes, mimeType, url, naturalWidth, naturalHeight };
+      assets.set(assetId, asset);
       return asset;
     },
 

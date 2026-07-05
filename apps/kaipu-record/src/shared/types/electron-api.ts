@@ -188,4 +188,24 @@ export interface KaipuElectronAPI {
     origin: string,
     context?: Record<string, unknown>,
   ): void;
+
+  // ── Video-editor session persistence ──────────────────────────────────────
+  /**
+   * Persist an edit session next to the recording's existing vault sidecars.
+   * Called once on export (not on every edit — saves are intentionally sparse).
+   * Slide asset bytes are written as individual `.png` files; assets no longer
+   * referenced in `assets` are pruned so the vault doesn't accumulate orphans.
+   */
+  saveVideoEditSession(
+    id: string,
+    sessionJson: string,
+    assets: { assetId: string; bytes: ArrayBuffer }[],
+  ): Promise<void>;
+  /**
+   * Load a previously saved edit session for `id`. Returns `null` when no session
+   * file exists (first open, or after the session was purged by a delete).
+   */
+  loadVideoEditSession(
+    id: string,
+  ): Promise<{ sessionJson: string; assets: { assetId: string; bytes: ArrayBuffer }[] } | null>;
 }

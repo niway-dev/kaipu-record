@@ -80,4 +80,21 @@ describe("useVideoScene", () => {
     act(() => result.current.undo());
     expect(result.current.dirty).toBe(false);
   });
+
+  it("markClean resets dirty/undo/redo without touching the current scene", () => {
+    const { result } = renderHook(() => useVideoScene(initialScene(10)));
+    act(() => result.current.commit({ ...result.current.scene, items: [] }));
+    const afterCommit = result.current.scene;
+    expect(result.current.dirty).toBe(true);
+
+    act(() => result.current.markClean());
+    expect(result.current.scene).toBe(afterCommit);
+    expect(result.current.dirty).toBe(false);
+    expect(result.current.canUndo).toBe(false);
+    expect(result.current.canRedo).toBe(false);
+
+    // Undo has nothing left to walk back to — the scene stays exactly as it was.
+    act(() => result.current.undo());
+    expect(result.current.scene).toBe(afterCommit);
+  });
 });

@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import {
   ArrowUpRight,
+  Download,
   ImagePlus,
   MousePointer2,
   Redo2,
@@ -39,6 +40,9 @@ export interface EditorToolbarProps {
   /** Current annotation tool. */
   tool: VideoTool;
   onToolChange(tool: VideoTool): void;
+  /** Run the export pipeline. Disabled while exporting or when the timeline is empty. */
+  onExport(): void;
+  exportDisabled: boolean;
 }
 
 /**
@@ -59,6 +63,8 @@ export function EditorToolbar({
   onAddImage,
   tool,
   onToolChange,
+  onExport,
+  exportDisabled,
 }: EditorToolbarProps): React.JSX.Element {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -144,6 +150,16 @@ export function EditorToolbar({
           onClick={onDeleteSelected}
         >
           <Trash2 size={18} />
+        </button>
+        <span className={styles.divider} />
+        <button
+          type="button"
+          className={styles.exportBtn}
+          disabled={exportDisabled}
+          onClick={onExport}
+        >
+          <Download size={16} />
+          Exportar
         </button>
       </div>
     </div>
