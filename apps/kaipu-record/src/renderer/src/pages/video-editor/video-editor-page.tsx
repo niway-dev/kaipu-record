@@ -110,9 +110,14 @@ function VideoEditorLoader({ source }: { source: VideoEditorSource }): React.JSX
   const [resolvedScene, setResolvedScene] = useState<VideoScene | null>(null);
 
   useEffect(() => {
+    // Guards against calling restoreAsset or setting state after unmount —
+    // without this, a mid-load unmount would run dispose() (other effect) and
+    // then restoreAsset would recreate object URLs that are never revoked.
+    let cancelled = false;
     void (async () => {
       try {
         const saved = await window.electronAPI.loadVideoEditSession(source.id);
+        if (cancelled) return;
         if (saved !== null) {
           const session = parseSession(saved.sessionJson);
           if (session !== null) {
@@ -121,9 +126,11 @@ function VideoEditorLoader({ source }: { source: VideoEditorSource }): React.JSX
             // (written as PNG by the main handler).
             const loadedIds = new Set<string>();
             for (const { assetId, bytes } of saved.assets) {
+              if (cancelled) return; // bail before creating a URL that would leak
               await assetStoreRef.current.restoreAsset(assetId, bytes, "image/png");
               loadedIds.add(assetId);
             }
+            if (cancelled) return;
             // Drop slide items whose asset wasn't returned (e.g. file was deleted on
             // disk) rather than leaving broken references that the worker can't render.
             const filteredScene: VideoScene = {
@@ -137,17 +144,20 @@ function VideoEditorLoader({ source }: { source: VideoEditorSource }): React.JSX
           } else {
             // Session file exists but is invalid (schema changed, corruption, etc.).
             showToast({ message: "No se pudo restaurar la edición anterior" });
-            setResolvedScene(initialScene(source.durationSeconds));
+            if (!cancelled) setResolvedScene(initialScene(source.durationSeconds));
           }
         } else {
           // No saved session — fresh start, no toast.
-          setResolvedScene(initialScene(source.durationSeconds));
+          if (!cancelled) setResolvedScene(initialScene(source.durationSeconds));
         }
       } catch {
         // IPC failure is non-fatal; open a fresh editor without surfacing the error.
-        setResolvedScene(initialScene(source.durationSeconds));
+        if (!cancelled) setResolvedScene(initialScene(source.durationSeconds));
       }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, []); // [] correct: source is stable per VideoEditorPage's key={location.key}
 
   if (resolvedScene === null) {

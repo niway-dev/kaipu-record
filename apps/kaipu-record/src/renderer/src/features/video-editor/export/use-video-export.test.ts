@@ -65,7 +65,7 @@ beforeEach(() => {
       kind: "recording",
       title: "My recording (editado)",
       filePath: "/vault/new-rec.mp4",
-      createdAt: Date.now(),
+      createdAt: 1_700_000_000_000,
       sizeBytes: 100,
       durationSeconds: 10,
       thumbnailUrl: null,
