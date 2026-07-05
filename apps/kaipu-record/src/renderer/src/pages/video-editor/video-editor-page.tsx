@@ -22,6 +22,7 @@ import {
   insertItemAt,
   layoutDuration,
   removeItem,
+  setSlideDuration,
   splitClipAt,
   toLayout,
   trimClip,
@@ -266,6 +267,25 @@ function VideoEditor({ source }: { source: VideoEditorSource }): React.JSX.Eleme
     [controller],
   );
 
+  // A slide's right-edge duration drag. Same begin/live/end contract as handleTrim so a
+  // continuous drag collapses into one undo step; setSlideDuration clamps to the minimum.
+  const handleSlideDuration = useCallback(
+    (itemId: string, nextDuration: number, phase: "start" | "move" | "end") => {
+      if (phase === "start") controller.beginInteract();
+      if (phase === "move") {
+        const items = setSlideDuration(controller.scene.items, itemId, nextDuration);
+        const duration = layoutDuration(toLayout(items));
+        controller.updateLive({
+          ...controller.scene,
+          items,
+          overlays: clampOverlays(controller.scene.overlays, duration),
+        });
+      }
+      if (phase === "end") controller.endInteract();
+    },
+    [controller],
+  );
+
   // Same begin/live/end contract as handleTrim, driving the overlay lane's pill
   // body-drag (move) and end-handle (resize) interactions.
   const handleWindowChange = useCallback(
@@ -416,6 +436,8 @@ function VideoEditor({ source }: { source: VideoEditorSource }): React.JSX.Eleme
           selectedItemId={selectedItemId}
           onSelectItem={setSelectedItemId}
           onTrim={handleTrim}
+          slideUrlFor={(assetId) => assetStoreRef.current.get(assetId)?.url ?? null}
+          onSlideDuration={handleSlideDuration}
           overlays={scene.overlays}
           selectedOverlayId={selectedOverlayId}
           onSelectOverlay={setSelectedOverlayId}

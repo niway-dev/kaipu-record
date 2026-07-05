@@ -15,6 +15,8 @@ export interface LayoutEntry {
   /** Clips: position in the source recording. Slides: 0..duration local clock. */
   sourceStart: number;
   sourceEnd: number;
+  /** Slides only: the image asset this entry renders (timeline block + export). */
+  assetId?: string;
 }
 
 export function itemDuration(item: TrackItem): number {
@@ -27,14 +29,18 @@ export function toLayout(items: TrackItem[]): LayoutEntry[] {
   for (const item of items) {
     const duration = itemDuration(item);
     if (duration <= 0) continue;
-    layout.push({
+    const entry: LayoutEntry = {
       itemId: item.id,
       kind: item.kind,
       timelineStart: cursor,
       timelineEnd: cursor + duration,
       sourceStart: item.kind === "clip" ? item.sourceStart : 0,
       sourceEnd: item.kind === "clip" ? item.sourceEnd : duration,
-    });
+    };
+    // Only slides carry an asset; leave the key absent on clips so their layout shape
+    // stays unchanged.
+    if (item.kind === "slide") entry.assetId = item.assetId;
+    layout.push(entry);
     cursor += duration;
   }
   return layout;

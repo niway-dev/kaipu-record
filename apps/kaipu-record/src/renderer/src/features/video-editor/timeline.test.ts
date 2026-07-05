@@ -45,6 +45,7 @@ describe("toLayout", () => {
         timelineEnd: 3,
         sourceStart: 0,
         sourceEnd: 3,
+        assetId: "asset-s1",
       },
       {
         itemId: "a",

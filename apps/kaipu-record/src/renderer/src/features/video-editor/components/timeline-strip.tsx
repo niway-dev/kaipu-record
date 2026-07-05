@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
+import { ImagePlus } from "lucide-react";
 import type { PreviewPlayback } from "../use-preview-playback";
 import type { LayoutEntry } from "../timeline";
 import { layoutDuration } from "../timeline";
@@ -22,6 +23,8 @@ export function TimelineStrip({
   selectedItemId,
   onSelectItem,
   onTrim,
+  slideUrlFor,
+  onSlideDuration,
   overlays,
   selectedOverlayId,
   onSelectOverlay,
@@ -40,6 +43,11 @@ export function TimelineStrip({
     sourceTime: number,
     phase: "start" | "move" | "end",
   ) => void;
+  /** Resolves a slide's image URL from its asset id so blocks can show their picture. */
+  slideUrlFor?: (assetId: string) => string | null;
+  /** Fired while dragging a slide's right-edge duration handle — same phase contract
+   *  as onTrim so a whole drag collapses into one undo step. */
+  onSlideDuration?: (itemId: string, duration: number, phase: "start" | "move" | "end") => void;
   /** Annotation overlays shown as pills on the lane above the main track. */
   overlays: VideoOverlay[];
   selectedOverlayId: string | null;
@@ -127,6 +135,8 @@ export function TimelineStrip({
             onSelect={() => onSelectItem(entry.itemId)}
             timeFromPointer={timeFromPointer}
             onTrim={onTrim}
+            slideUrlFor={slideUrlFor}
+            onSlideDuration={onSlideDuration}
           />
         ))}
         <div ref={playheadRef} className={styles.playhead} />
@@ -143,6 +153,8 @@ function TrackBlock({
   onSelect,
   timeFromPointer,
   onTrim,
+  slideUrlFor,
+  onSlideDuration,
 }: {
   entry: LayoutEntry;
   duration: number;
@@ -156,11 +168,15 @@ function TrackBlock({
     sourceTime: number,
     phase: "start" | "move" | "end",
   ) => void;
+  slideUrlFor?: (assetId: string) => string | null;
+  onSlideDuration?: (itemId: string, duration: number, phase: "start" | "move" | "end") => void;
 }): React.JSX.Element {
   const blockRef = useRef<HTMLButtonElement | null>(null);
   const left = timeToFraction(entry.timelineStart, duration) * 100;
   const width = timeToFraction(entry.timelineEnd - entry.timelineStart, duration) * 100;
   const approxWidthPx = (width / 100) * (blockRef.current?.parentElement?.clientWidth ?? 800);
+  const isSlide = entry.kind === "slide";
+  const slideUrl = isSlide && entry.assetId ? (slideUrlFor?.(entry.assetId) ?? null) : null;
   const tiles =
     entry.kind === "clip"
       ? thumbnailsForRange(
@@ -203,12 +219,42 @@ function TrackBlock({
     },
   });
 
+  // A slide has no source range to trim — its right handle sets the hold DURATION, so
+  // it drags in timeline space: duration = pointer time − the slide's start. Same three
+  // phases as trimHandlers so the page collapses the drag into one undo step.
+  const slideDurationHandlers = (): {
+    onPointerDown: React.PointerEventHandler<HTMLDivElement>;
+    onPointerMove: React.PointerEventHandler<HTMLDivElement>;
+    onPointerUp: React.PointerEventHandler<HTMLDivElement>;
+  } => {
+    const durationFromPointer = (event: { clientX: number }): number =>
+      timeFromPointer(event) - entry.timelineStart;
+    return {
+      onPointerDown: (event) => {
+        event.stopPropagation();
+        event.currentTarget.setPointerCapture(event.pointerId);
+        onSlideDuration?.(entry.itemId, entry.timelineEnd - entry.timelineStart, "start");
+      },
+      onPointerMove: (event) => {
+        event.stopPropagation();
+        if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+        onSlideDuration?.(entry.itemId, durationFromPointer(event), "move");
+      },
+      onPointerUp: (event) => {
+        event.stopPropagation();
+        onSlideDuration?.(entry.itemId, durationFromPointer(event), "end");
+      },
+    };
+  };
+
   return (
     <>
       <button
         ref={blockRef}
         type="button"
-        className={selected ? `${styles.block} ${styles.blockSelected}` : styles.block}
+        className={[styles.block, isSlide && styles.slideBlock, selected && styles.blockSelected]
+          .filter(Boolean)
+          .join(" ")}
         style={{ left: `${left}%`, width: `${width}%` }}
         onPointerDown={(event) => {
           // Stop the pointerdown from bubbling to the track handler, which pauses
@@ -220,9 +266,20 @@ function TrackBlock({
           onSelect();
         }}
       >
-        {tiles.map((tile, i) => (
-          <img key={i} src={tile.url} alt="" className={styles.tile} draggable={false} />
-        ))}
+        {isSlide ? (
+          <>
+            {slideUrl && (
+              <img src={slideUrl} alt="" className={styles.slideTile} draggable={false} />
+            )}
+            <span className={styles.slideBadge}>
+              <ImagePlus size={14} />
+            </span>
+          </>
+        ) : (
+          tiles.map((tile, i) => (
+            <img key={i} src={tile.url} alt="" className={styles.tile} draggable={false} />
+          ))
+        )}
       </button>
       {/* Rendered as siblings, not children of the button: the button clips its
           thumbnails with overflow:hidden, which would also clip a handle sitting
@@ -242,6 +299,15 @@ function TrackBlock({
             {...trimHandlers("end")}
           />
         </>
+      )}
+      {/* Slides expose a single right-edge handle — the duration control. */}
+      {selected && isSlide && (
+        <div
+          className={styles.trimHandle}
+          style={{ left: `calc(${left + width}% - 4px)` }}
+          data-slide-handle="end"
+          {...slideDurationHandlers()}
+        />
       )}
     </>
   );
