@@ -4,8 +4,7 @@
  * Pipeline:
  *   1. Open the source recording with mediabunny.
  *   2. For each ClipSegment: decode frames → composite overlays → encode.
- *   3. For each SlideSegment: draw the slide bitmap at outputFps (source-derived,
- *      floored at plan.slideFps) → composite overlays → encode.
+ *   3. For each SlideSegment: draw the slide bitmap at plan.slideFps → composite overlays → encode.
  *   4. Audio (if present): per-clip decoded AudioBuffers, trimmed to the exact
  *      source range → re-encode; silence for slides.
  *   5. Finalize the MP4 and notify the renderer.
@@ -94,18 +93,6 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
   // Audio is optional: screen-only recordings produce no audio track.
   const audioTrack = await input.getPrimaryAudioTrack();
 
-  // Derive the output frame rate from the source track instead of hardcoding
-  // slideFps, so clip frames from a >30fps source aren't snapped/collided onto
-  // a coarser 30fps grid. `computePacketStats(100)` samples only a prefix of
-  // packets — its docstring calls this out as the intended way to get "a great
-  // estimate of video frame rate without having to scan through the entire
-  // file" — and `averagePacketRate` is documented to equal average FPS for
-  // video tracks. Slides are synthesized at this same rate so their fixed
-  // cadence still matches the track's grid; `plan.slideFps` remains a floor
-  // (a source with a bogus/zero estimate still gets a sane fps).
-  const sourceStats = await videoTrack.computePacketStats(100);
-  const outputFps = Math.max(sourceStats.averagePacketRate || 0, plan.slideFps);
-
   // OffscreenCanvas — the only canvas type available in workers.
   const canvas = new OffscreenCanvas(size.width, size.height);
   const ctx = canvas.getContext("2d");
@@ -134,10 +121,14 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
     bitrate: QUALITY_HIGH,
     hardwareAcceleration: "prefer-hardware",
   });
-  // frameRate in the track metadata snaps timestamps to the fixed grid; both
-  // clip frames (native source cadence) and slide frames (synthesized below
-  // at the same `outputFps`) must share this grid.
-  out.addVideoTrack(videoSource, { frameRate: outputFps });
+  // Omit frameRate from VideoTrackMetadata so mediabunny does NOT snap all
+  // timestamps to a track-wide grid. Timing is driven entirely by the explicit
+  // timestamp+duration pairs passed to videoSource.add(...): clip frames keep
+  // the source's native cadence (wrapped.duration from CanvasSink), and slide
+  // frames are synthesized at plan.slideFps. A track-wide frameRate hint would
+  // collapse high-fps clip frame pairs onto a coarser grid, producing
+  // zero-duration or duplicate frames in the encoder.
+  out.addVideoTrack(videoSource);
 
   const audioSource = audioTrack
     ? new AudioBufferSource({ codec: "aac", bitrate: QUALITY_HIGH })
@@ -176,95 +167,103 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
     }
   };
 
-  // ---------------------------------------------------------------------------
-  // Video pass — clips then slides in timeline order.
-  // ---------------------------------------------------------------------------
-  for (const segment of plan.segments) {
-    if (segment.kind === "clip") {
-      const sink = new CanvasSink(videoTrack, {
-        width: size.width,
-        height: size.height,
-        // 'contain' letterboxes so the aspect ratio is never distorted.
-        fit: "contain",
-      });
-
-      // prevOutTs is used to derive each frame's duration from the gap to the
-      // next frame, giving precise durations without relying on packet metadata.
-      let prevOutTs: number | null = null;
-
-      for await (const wrapped of sink.canvases(segment.sourceStart, segment.sourceEnd)) {
-        // Remap the source timestamp to the output (collapsed) timeline.
-        const outTs = segment.timelineStart + (wrapped.timestamp - segment.sourceStart);
-        ctx.fillStyle = "#000";
-        ctx.fillRect(0, 0, size.width, size.height);
-        ctx.drawImage(wrapped.canvas, 0, 0);
-        stampOverlays(outTs);
-
-        // Use the inter-frame gap as duration for all but the first frame (which
-        // falls back to the wrapped duration so the very first frame isn't 0 s).
-        const duration = prevOutTs !== null ? Math.max(0, outTs - prevOutTs) : wrapped.duration;
-        await videoSource.add(outTs, duration);
-        prevOutTs = outTs;
-        reportProgress(outTs);
-      }
-    } else {
-      // Slide segment: emit fixed-cadence frames at outputFps (matches the
-      // track's frameRate grid — see `outputFps` derivation above).
-      const bitmap = slideBitmaps.get(segment.assetId);
-      const frameDuration = 1 / outputFps;
-      const frameCount = Math.round(segment.duration * outputFps);
-
-      for (let i = 0; i < frameCount; i++) {
-        const outTs = segment.timelineStart + i * frameDuration;
-        ctx.fillStyle = "#000";
-        ctx.fillRect(0, 0, size.width, size.height);
-        if (bitmap) drawContained(ctx, bitmap, size.width, size.height);
-        stampOverlays(outTs);
-        await videoSource.add(outTs, frameDuration);
-        reportProgress(outTs);
-      }
-    }
-  }
-
-  // Signal no more video frames — improves encoder flush latency.
-  videoSource.close();
-
-  // ---------------------------------------------------------------------------
-  // Audio pass — separate second pass; two-pass is fine because audio decode
-  // is cheap relative to encode, and mediabunny accepts interleaved or separate
-  // feeding without backpressure issues.
-  // ---------------------------------------------------------------------------
-  if (audioTrack && audioSource) {
+  // Release Output encoders on any error path. Do NOT cancel on the success
+  // path — finalize already seals the output and canceling after is an error.
+  let finalized = false;
+  try {
+    // ---------------------------------------------------------------------------
+    // Video pass — clips then slides in timeline order.
+    // ---------------------------------------------------------------------------
     for (const segment of plan.segments) {
       if (segment.kind === "clip") {
-        const sink = new AudioBufferSink(audioTrack);
-        for await (const wrapped of sink.buffers(segment.sourceStart, segment.sourceEnd)) {
-          // Clip each decoded frame to the segment's exact source range — see
-          // the "Audio trimming" header comment for why this is needed.
-          const trimmed = trimAudioBuffer(wrapped, segment.sourceStart, segment.sourceEnd);
-          if (!trimmed) continue;
-          // AudioBufferSource.add auto-advances timestamps: first buffer at 0,
-          // each subsequent immediately following the prior. Matches the clip order.
-          await audioSource.add(trimmed);
+        const sink = new CanvasSink(videoTrack, {
+          width: size.width,
+          height: size.height,
+          // 'contain' letterboxes so the aspect ratio is never distorted.
+          fit: "contain",
+        });
+
+        for await (const wrapped of sink.canvases(segment.sourceStart, segment.sourceEnd)) {
+          // Remap the source timestamp to the output (collapsed) timeline.
+          const outTs = segment.timelineStart + (wrapped.timestamp - segment.sourceStart);
+          ctx.fillStyle = "#000";
+          ctx.fillRect(0, 0, size.width, size.height);
+          ctx.drawImage(wrapped.canvas, 0, 0);
+          stampOverlays(outTs);
+          // Use the frame's own decoded duration so clip frames preserve the
+          // source's native cadence without rounding to a fixed grid.
+          await videoSource.add(outTs, wrapped.duration);
+          reportProgress(outTs);
         }
       } else {
-        // Slides are silent. A zeroed AudioBuffer keeps A/V durations aligned
-        // so the MP4 muxer doesn't produce a track-length mismatch.
-        const silence = new AudioBuffer({
-          length: Math.ceil(segment.duration * silenceSampleRate),
-          numberOfChannels: silenceChannelCount,
-          sampleRate: silenceSampleRate,
-        });
-        await audioSource.add(silence);
+        // Slide segment: synthesize fixed-cadence frames at plan.slideFps.
+        const bitmap = slideBitmaps.get(segment.assetId);
+        const frameDuration = 1 / plan.slideFps;
+        const frameCount = Math.round(segment.duration * plan.slideFps);
+
+        for (let i = 0; i < frameCount; i++) {
+          const outTs = segment.timelineStart + i * frameDuration;
+          ctx.fillStyle = "#000";
+          ctx.fillRect(0, 0, size.width, size.height);
+          if (bitmap) drawContained(ctx, bitmap, size.width, size.height);
+          stampOverlays(outTs);
+          await videoSource.add(outTs, frameDuration);
+          reportProgress(outTs);
+        }
       }
     }
-    audioSource.close();
+
+    // Signal no more video frames — improves encoder flush latency.
+    videoSource.close();
+
+    // ---------------------------------------------------------------------------
+    // Audio pass — separate second pass; two-pass is fine because audio decode
+    // is cheap relative to encode, and mediabunny accepts interleaved or separate
+    // feeding without backpressure issues.
+    // ---------------------------------------------------------------------------
+    if (audioTrack && audioSource) {
+      for (const segment of plan.segments) {
+        if (segment.kind === "clip") {
+          const sink = new AudioBufferSink(audioTrack);
+          for await (const wrapped of sink.buffers(segment.sourceStart, segment.sourceEnd)) {
+            // Clip each decoded frame to the segment's exact source range — see
+            // the "Audio trimming" header comment for why this is needed.
+            const trimmed = trimAudioBuffer(wrapped, segment.sourceStart, segment.sourceEnd);
+            if (!trimmed) continue;
+            // AudioBufferSource.add auto-advances timestamps: first buffer at 0,
+            // each subsequent immediately following the prior. Matches the clip order.
+            await audioSource.add(trimmed);
+          }
+        } else {
+          // Slides are silent. A zeroed AudioBuffer keeps A/V durations aligned
+          // so the MP4 muxer doesn't produce a track-length mismatch.
+          const silence = new AudioBuffer({
+            length: Math.ceil(segment.duration * silenceSampleRate),
+            numberOfChannels: silenceChannelCount,
+            sampleRate: silenceSampleRate,
+          });
+          await audioSource.add(silence);
+        }
+      }
+      audioSource.close();
+    }
+
+    await out.finalize();
+    finalized = true;
+
+    post({ type: "progress", fraction: 1 });
+    post({ type: "done" });
+  } finally {
+    if (!finalized) {
+      // Cancel releases Output encoders and the muxer on any error path;
+      // Input decoders are freed by input.dispose() in the outer runExport finally.
+      try {
+        await out.cancel();
+      } catch {
+        /* already tearing down */
+      }
+    }
   }
-
-  await out.finalize();
-
-  post({ type: "progress", fraction: 1 });
-  post({ type: "done" });
 }
 
 // ---------------------------------------------------------------------------

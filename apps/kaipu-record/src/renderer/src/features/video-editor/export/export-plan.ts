@@ -59,7 +59,7 @@ export function buildExportPlan(scene: VideoScene): ExportPlan {
           timelineStart: entry.timelineStart,
           duration: entry.timelineEnd - entry.timelineStart,
           // Layout guarantees `assetId` is set on every slide entry.
-          assetId: entry.assetId as string,
+          assetId: entry.assetId!,
         },
   );
 
