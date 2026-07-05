@@ -31,6 +31,7 @@ import {
 } from "@renderer/features/video-editor/timeline";
 import {
   createSlideAssetStore,
+  type SlideAsset,
   type SlideAssetStore,
 } from "@renderer/features/video-editor/slide-assets";
 import { parseSession, serializeSession } from "@renderer/features/video-editor/session";
@@ -295,8 +296,19 @@ function VideoEditor({
   // discrete action here.
   const handleAddImage = useCallback(
     async (file: File) => {
+      // Same guard as every other discrete action: don't mutate the scene while a
+      // trim or overlay drag owns it via begin/updateLive/endInteract.
+      if (controller.interacting) return;
       const bytes = await file.arrayBuffer();
-      const asset = await assetStoreRef.current.put(bytes, file.type);
+      // Wrap the image decode in a try/catch so a corrupt or unsupported file
+      // surfaces a clear toast rather than an unhandled rejection.
+      let asset: SlideAsset;
+      try {
+        asset = await assetStoreRef.current.put(bytes, file.type);
+      } catch {
+        showToast({ message: "No se pudo cargar la imagen. Probá con otro archivo." });
+        return;
+      }
       const slide: SlideItem = {
         id: newId(),
         kind: "slide",
@@ -318,6 +330,13 @@ function VideoEditor({
   const handleExport = useCallback(() => {
     const video = playback.videoRef.current;
     if (!video) return;
+    // videoWidth/videoHeight are 0 until the browser has decoded the stream's
+    // metadata (loadedmetadata). Starting the export before that hands the worker
+    // a 0×0 OffscreenCanvas, which produces a corrupt file — refuse early.
+    if (video.videoWidth === 0 || video.videoHeight === 0) {
+      showToast({ message: "El video todavía se está cargando. Probá de nuevo en un momento." });
+      return;
+    }
     void videoExport.start({
       scene,
       sourceId: source.id,
@@ -450,6 +469,9 @@ function VideoEditor({
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (isEditingTarget(e.target)) return;
+      // Don't fire editor shortcuts behind the discard-changes modal or the export
+      // dialog — both block the scene from being safely mutated or played while open.
+      if (blocker.state === "blocked" || videoExport.status !== "idle") return;
       if (e.key === " ") {
         e.preventDefault();
         playback.toggle();
@@ -480,6 +502,8 @@ function VideoEditor({
   }, [
     playback,
     controller,
+    blocker.state,
+    videoExport.status,
     splitDisabled,
     deleteDisabled,
     handleSplit,

@@ -54,7 +54,16 @@ export function createSlideAssetStore(): SlideAssetStore {
 
     async put(bytes, mimeType) {
       const url = URL.createObjectURL(new Blob([bytes], { type: mimeType }));
-      const { naturalWidth, naturalHeight } = await measureNaturalSize(url);
+      // measureNaturalSize rejects on an undecodable file — revoke before rethrowing
+      // so a corrupt/unsupported image never leaks its object URL.
+      let naturalWidth: number;
+      let naturalHeight: number;
+      try {
+        ({ naturalWidth, naturalHeight } = await measureNaturalSize(url));
+      } catch (error) {
+        URL.revokeObjectURL(url);
+        throw error;
+      }
       const asset: SlideAsset = {
         assetId: crypto.randomUUID(),
         bytes,
@@ -69,7 +78,15 @@ export function createSlideAssetStore(): SlideAssetStore {
 
     async restoreAsset(assetId, bytes, mimeType) {
       const url = URL.createObjectURL(new Blob([bytes], { type: mimeType }));
-      const { naturalWidth, naturalHeight } = await measureNaturalSize(url);
+      // Same leak guard as put() above — a restored asset can be just as corrupt.
+      let naturalWidth: number;
+      let naturalHeight: number;
+      try {
+        ({ naturalWidth, naturalHeight } = await measureNaturalSize(url));
+      } catch (error) {
+        URL.revokeObjectURL(url);
+        throw error;
+      }
       const asset: SlideAsset = { assetId, bytes, mimeType, url, naturalWidth, naturalHeight };
       assets.set(assetId, asset);
       return asset;

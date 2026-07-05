@@ -117,4 +117,52 @@ describe("createSlideAssetStore", () => {
     const store = createSlideAssetStore();
     await expect(store.put(pngBytes(), "image/png")).rejects.toThrow();
   });
+
+  it("revokes the object URL it created and leaves no partial asset when decoding fails", async () => {
+    class FailingImage {
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      naturalWidth = 0;
+      naturalHeight = 0;
+      set src(_value: string) {
+        queueMicrotask(() => this.onerror?.());
+      }
+    }
+    vi.stubGlobal("Image", FailingImage);
+    // Capture the exact URL put() creates so the assertion below isn't confused by
+    // revokeObjectURL calls from other tests sharing this spied global.
+    const createSpy = vi.spyOn(URL, "createObjectURL");
+    const revoke = vi.spyOn(URL, "revokeObjectURL");
+
+    const store = createSlideAssetStore();
+    await expect(store.put(pngBytes(), "image/png")).rejects.toThrow();
+
+    const createdUrl = createSpy.mock.results[0]!.value as string;
+    expect(revoke).toHaveBeenCalledWith(createdUrl);
+    expect(store.entries()).toHaveLength(0);
+  });
+
+  it("restoreAsset() also revokes the object URL on a failed decode", async () => {
+    class FailingImage {
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      naturalWidth = 0;
+      naturalHeight = 0;
+      set src(_value: string) {
+        queueMicrotask(() => this.onerror?.());
+      }
+    }
+    vi.stubGlobal("Image", FailingImage);
+    const createSpy = vi.spyOn(URL, "createObjectURL");
+    const revoke = vi.spyOn(URL, "revokeObjectURL");
+
+    const store = createSlideAssetStore();
+    await expect(
+      store.restoreAsset("asset-from-session", pngBytes(), "image/png"),
+    ).rejects.toThrow();
+
+    const createdUrl = createSpy.mock.results[0]!.value as string;
+    expect(revoke).toHaveBeenCalledWith(createdUrl);
+    expect(store.get("asset-from-session")).toBeNull();
+  });
 });

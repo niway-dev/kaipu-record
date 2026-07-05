@@ -30,6 +30,17 @@
  * Known: `AudioBuffer` constructor is available in Electron's Chromium workers.
  * If it throws in a future Electron version, build silence via AudioSampleSource
  * with a zeroed Float32Array and explicit timestamps instead.
+ *
+ * Video timestamp rebasing: `CanvasSink.canvases(start, end)` yields the sample
+ * STRADDLING `start` as its first frame, whose own timestamp is usually before
+ * `start` for a non-frame-aligned trim/cut. Naively rebasing that onto the output
+ * timeline can go negative (a first segment with `timelineStart=0`) or regress
+ * below the previous segment's last emitted timestamp (any cut boundary) — both of
+ * which `CanvasSource.add` rejects or would hand the muxer non-monotonic data.
+ * `rebaseVideoTimestamp` (rebase-timestamp.ts) clamps to the segment's
+ * `timelineStart` and drops (skips) any frame that would not strictly advance past
+ * the previous emitted timestamp; `prevOutTs` is threaded across ALL segments (not
+ * reset per segment) so cut boundaries stay monotonic.
  */
 
 import {
@@ -47,6 +58,7 @@ import {
 } from "mediabunny";
 import type { StreamTargetChunk, WrappedAudioBuffer } from "mediabunny";
 import type { ExportStartMessage, ExportWorkerMessage } from "./export-messages";
+import { rebaseVideoTimestamp } from "./rebase-timestamp";
 
 // ---------------------------------------------------------------------------
 // Typing helper: TypeScript doesn't expose `Worker` on `self` in module workers.
@@ -172,8 +184,11 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
   let finalized = false;
   try {
     // ---------------------------------------------------------------------------
-    // Video pass — clips then slides in timeline order.
+    // Video pass — clips then slides in timeline order. `prevOutTs` is threaded
+    // across every segment (not reset per segment) so rebaseVideoTimestamp can
+    // detect and drop a straddling frame that would regress across a cut boundary.
     // ---------------------------------------------------------------------------
+    let prevOutTs: number | null = null;
     for (const segment of plan.segments) {
       if (segment.kind === "clip") {
         const sink = new CanvasSink(videoTrack, {
@@ -184,8 +199,16 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
         });
 
         for await (const wrapped of sink.canvases(segment.sourceStart, segment.sourceEnd)) {
-          // Remap the source timestamp to the output (collapsed) timeline.
-          const outTs = segment.timelineStart + (wrapped.timestamp - segment.sourceStart);
+          // Remap the source timestamp to the output (collapsed) timeline, clamped
+          // to never go negative or regress — see the header comment and
+          // rebase-timestamp.ts for why the straddling first frame needs this.
+          const outTs = rebaseVideoTimestamp(
+            segment.timelineStart,
+            segment.sourceStart,
+            wrapped.timestamp,
+            prevOutTs,
+          );
+          if (outTs === null) continue; // straddle/duplicate frame — skip, don't advance prevOutTs
           ctx.fillStyle = "#000";
           ctx.fillRect(0, 0, size.width, size.height);
           ctx.drawImage(wrapped.canvas, 0, 0);
@@ -194,9 +217,13 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
           // source's native cadence without rounding to a fixed grid.
           await videoSource.add(outTs, wrapped.duration);
           reportProgress(outTs);
+          prevOutTs = outTs;
         }
       } else {
-        // Slide segment: synthesize fixed-cadence frames at plan.slideFps.
+        // Slide segment: synthesize fixed-cadence frames at plan.slideFps. These are
+        // already monotonic by construction (fixed cadence from segment.timelineStart),
+        // so they don't need rebaseVideoTimestamp's clamp/skip — just keep prevOutTs
+        // current so a following clip segment's boundary check has the right value.
         const bitmap = slideBitmaps.get(segment.assetId);
         const frameDuration = 1 / plan.slideFps;
         const frameCount = Math.round(segment.duration * plan.slideFps);
@@ -209,6 +236,7 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
           stampOverlays(outTs);
           await videoSource.add(outTs, frameDuration);
           reportProgress(outTs);
+          prevOutTs = outTs;
         }
       }
     }
