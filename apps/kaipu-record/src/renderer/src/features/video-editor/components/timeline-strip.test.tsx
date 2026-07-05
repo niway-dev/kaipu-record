@@ -10,6 +10,7 @@ function makePlayback(overrides: Partial<PreviewPlayback> = {}): PreviewPlayback
     playing: false,
     duration: 10,
     timelineTime: 0,
+    activeSlideId: null,
     play: vi.fn(),
     pause: vi.fn(),
     toggle: vi.fn(),

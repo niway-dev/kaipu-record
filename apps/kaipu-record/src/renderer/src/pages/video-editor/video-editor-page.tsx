@@ -146,6 +146,16 @@ function VideoEditor({ source }: { source: VideoEditorSource }): React.JSX.Eleme
     return new Set(scene.overlays.filter((o) => t >= o.start && t <= o.end).map((o) => o.id));
   }, [scene.overlays, playback.timelineTime]);
 
+  // The image for the slide under the playhead, resolved from the in-memory store — the
+  // preview stage draws it over the (paused) video while a slide is active.
+  const activeSlide = playback.activeSlideId
+    ? scene.items.find((item) => item.id === playback.activeSlideId)
+    : null;
+  const slideUrl =
+    activeSlide?.kind === "slide"
+      ? (assetStoreRef.current.get(activeSlide.assetId)?.url ?? null)
+      : null;
+
   const splitDisabled = entryAt(layout, playback.timelineTime)?.kind !== "clip";
   // An empty timeline has nothing to export and nothing to click — never let delete
   // remove the last remaining item.
@@ -349,6 +359,7 @@ function VideoEditor({ source }: { source: VideoEditorSource }): React.JSX.Eleme
           <PreviewStage
             playback={playback}
             mediaUrl={mediaUrl}
+            slideUrl={slideUrl}
             overlay={
               <VideoAnnotationLayer
                 overlays={scene.overlays}

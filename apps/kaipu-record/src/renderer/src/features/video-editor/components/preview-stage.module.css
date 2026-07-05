@@ -11,3 +11,15 @@
   max-height: 100%;
   object-fit: contain;
 }
+
+/* Slide image: covers the video's rendered box exactly (the .stage wrapper shrinks to
+   it). Black backdrop + object-fit: contain so any aspect ratio letterboxes cleanly
+   without distorting. The annotation layer is a later sibling, so it stays on top. */
+.slide {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
