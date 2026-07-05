@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useBlocker, useLocation, useNavigate } from "react-router-dom";
-import { Pause, Play, Trash2, TriangleAlert } from "lucide-react";
+import { Pause, Play, Trash2, TriangleAlert, Volume2, VolumeX } from "lucide-react";
 import { captureException } from "@renderer/features/analytics";
 import {
   initialScene,
@@ -520,7 +520,9 @@ function VideoEditor({
             onDeleteSelected={handleDeleteOverlay}
           />
         </div>
-        <div className={styles.stageContent}>
+        {/* Video region: 1fr grid row — centers PreviewStage and constrains its height
+            so the transport bar below is never clipped regardless of video aspect ratio. */}
+        <div className={styles.videoRegion}>
           <PreviewStage
             playback={playback}
             mediaUrl={mediaUrl}
@@ -558,19 +560,29 @@ function VideoEditor({
               />
             }
           />
-          <div className={styles.transport}>
-            <button
-              type="button"
-              className={styles.playButton}
-              aria-label={playback.playing ? "Pausar" : "Reproducir"}
-              onClick={playback.toggle}
-            >
-              {playback.playing ? <Pause size={18} /> : <Play size={18} />}
-            </button>
-            <span className={styles.timeDisplay}>
-              {formatTime(playback.timelineTime)} / {formatTime(playback.duration)}
-            </span>
-          </div>
+        </div>
+        {/* Transport bar lives outside the overflow:hidden video region so it is always
+            visible even when the video fills the full available height. */}
+        <div className={styles.transport}>
+          <button
+            type="button"
+            className={styles.muteButton}
+            aria-label={playback.muted ? "Activar sonido" : "Silenciar"}
+            onClick={playback.toggleMute}
+          >
+            {playback.muted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+          </button>
+          <button
+            type="button"
+            className={styles.playButton}
+            aria-label={playback.playing ? "Pausar" : "Reproducir"}
+            onClick={playback.toggle}
+          >
+            {playback.playing ? <Pause size={20} /> : <Play size={20} />}
+          </button>
+          <span className={styles.timeDisplay}>
+            {formatTime(playback.timelineTime)} / {formatTime(playback.duration)}
+          </span>
         </div>
       </main>
       <footer className={styles.timeline}>

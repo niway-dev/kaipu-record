@@ -32,6 +32,7 @@ function makeVideo(): HTMLVideoElement {
   return {
     currentTime: 0,
     paused: true,
+    muted: false,
     play: vi.fn(() => Promise.resolve()),
     pause: vi.fn(),
   } as unknown as HTMLVideoElement;
@@ -151,5 +152,35 @@ describe("usePreviewPlayback — slide clock", () => {
 
     expect(video.currentTime).toBe(20); // snapped forward to clip b's sourceStart
     expect(result.current.timelineTime).toBe(8); // clip b's timelineStart
+  });
+});
+
+describe("usePreviewPlayback — mute", () => {
+  it("starts unmuted by default", () => {
+    const { result } = renderHook(() => usePreviewPlayback(layout));
+    expect(result.current.muted).toBe(false);
+  });
+
+  it("toggleMute flips muted state", () => {
+    const { result } = renderHook(() => usePreviewPlayback(layout));
+
+    act(() => result.current.toggleMute());
+    expect(result.current.muted).toBe(true);
+
+    act(() => result.current.toggleMute());
+    expect(result.current.muted).toBe(false);
+  });
+
+  it("toggleMute sets video.muted imperatively via the videoRef", () => {
+    const { result } = renderHook(() => usePreviewPlayback(layout));
+    const video = makeVideo();
+    // Attach the mock video element before toggling so the effect can write to it.
+    result.current.videoRef.current = video;
+
+    act(() => result.current.toggleMute());
+    expect(video.muted).toBe(true);
+
+    act(() => result.current.toggleMute());
+    expect(video.muted).toBe(false);
   });
 });

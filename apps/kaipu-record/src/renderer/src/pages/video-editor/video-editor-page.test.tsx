@@ -98,6 +98,46 @@ async function makeDirty(footer: HTMLElement): Promise<void> {
   });
 }
 
+describe("VideoEditorPage — transport bar", () => {
+  it("renders the play/pause button with aria-label Reproducir by default", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+
+    expect(screen.getByRole("button", { name: "Reproducir" })).not.toBeNull();
+  });
+
+  it("renders the mute button with aria-label Silenciar by default (unmuted)", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+
+    expect(screen.getByRole("button", { name: "Silenciar" })).not.toBeNull();
+  });
+
+  it("clicking the mute button toggles aria-label to Activar sonido", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+
+    fireEvent.click(screen.getByRole("button", { name: "Silenciar" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Activar sonido" })).not.toBeNull();
+    });
+  });
+
+  it("clicking Activar sonido toggles back to Silenciar", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+
+    fireEvent.click(screen.getByRole("button", { name: "Silenciar" }));
+    await waitFor(() => screen.getByRole("button", { name: "Activar sonido" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Activar sonido" }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Silenciar" })).not.toBeNull();
+    });
+  });
+});
+
 describe("VideoEditorPage — add-image wiring", () => {
   beforeEach(() => {
     vi.stubGlobal("Image", FakeImage);

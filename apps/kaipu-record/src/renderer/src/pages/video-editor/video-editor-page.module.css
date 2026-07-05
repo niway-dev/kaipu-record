@@ -27,8 +27,10 @@
 
 .stage {
   position: relative;
+  /* Two rows: video region takes all available space, transport bar is always visible.
+     This prevents the transport from being clipped when the video fills the full height. */
   display: grid;
-  place-items: center;
+  grid-template-rows: 1fr auto;
   overflow: hidden;
   background: var(--bg-app);
 }
@@ -42,39 +44,74 @@
   z-index: 2;
 }
 
-.stageContent {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-md);
-  max-width: 100%;
-  max-height: 100%;
+/* Video region: fills the 1fr row and centers PreviewStage within it. min-height: 0
+   prevents the grid row from growing beyond its allocated fraction of the stage. */
+.videoRegion {
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  overflow: hidden;
 }
 
+/* Transport bar: always-visible auto row below the video region. */
 .transport {
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
+  justify-content: center;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-lg);
+  border-top: 1px solid var(--border);
+  background: var(--bg-card);
+  flex-shrink: 0;
 }
 
+/* Prominent accent circular play/pause button — the primary transport action. */
 .playButton {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 44px;
+  height: 44px;
+  background: var(--accent-primary);
+  border: none;
+  border-radius: 50%;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: var(--glow-accent);
+  transition:
+    background var(--transition),
+    transform var(--transition);
+}
+
+.playButton:hover {
+  background: var(--accent-primary-hover);
+  transform: scale(1.05);
+}
+
+.playButton:active {
+  transform: scale(0.97);
+}
+
+/* Secondary transport action — subtle to not compete with the play button. */
+.muteButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
   background: transparent;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  color: var(--text-primary);
+  color: var(--text-secondary);
   cursor: pointer;
   transition:
     background var(--transition),
     color var(--transition);
 }
 
-.playButton:hover {
+.muteButton:hover {
   background: var(--bg-card-hover);
+  color: var(--text-primary);
 }
 
 .timeDisplay {

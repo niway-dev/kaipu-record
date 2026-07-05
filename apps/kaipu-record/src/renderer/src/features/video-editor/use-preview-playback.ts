@@ -10,6 +10,8 @@ import {
 export interface PreviewPlayback {
   videoRef: React.RefObject<HTMLVideoElement | null>;
   playing: boolean;
+  /** Whether the preview audio is silenced (preview-only; export always includes audio). */
+  muted: boolean;
   duration: number;
   timelineTime: number;
   /** Slide entry under the playhead, else null — the page maps this to the image URL. */
@@ -17,6 +19,8 @@ export interface PreviewPlayback {
   play(): void;
   pause(): void;
   toggle(): void;
+  /** Toggle preview audio mute — does NOT affect the exported file. */
+  toggleMute(): void;
   seek(t: number): void;
   onVideoTimeUpdate(): void;
   onVideoEnded(): void;
@@ -47,6 +51,7 @@ export function usePreviewPlayback(layout: LayoutEntry[]): PreviewPlayback {
   const internalSeekRef = useRef(false);
   const listenersRef = useRef(new Set<(t: number) => void>());
   const [playing, setPlaying] = useState(false);
+  const [muted, setMuted] = useState(false);
   const [timelineTime, setTimelineTime] = useState(0);
   const [activeSlideId, setActiveSlideId] = useState<string | null>(null);
   const duration = useMemo(() => layoutDuration(layout), [layout]);
@@ -246,6 +251,19 @@ export function usePreviewPlayback(layout: LayoutEntry[]): PreviewPlayback {
     playingRef.current ? pause() : play();
   }, [play, pause]);
 
+  const toggleMute = useCallback(() => {
+    setMuted((prev) => !prev);
+  }, []);
+
+  // Apply muted state imperatively: React's JSX `muted` attribute is only read during
+  // initial mount and is not reflected back to the DOM property on updates. Setting
+  // `video.muted` directly via the ref ensures the audio state stays consistent with
+  // the UI toggle across re-renders and source changes.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (video) video.muted = muted;
+  }, [muted]);
+
   const onVideoTimeUpdate = useCallback(() => {
     // While a slide owns the clock the video is paused; ignore any trailing timeupdate.
     if (slideRef.current !== null) return;
@@ -298,12 +316,14 @@ export function usePreviewPlayback(layout: LayoutEntry[]): PreviewPlayback {
   return {
     videoRef,
     playing,
+    muted,
     duration,
     timelineTime,
     activeSlideId,
     play,
     pause,
     toggle,
+    toggleMute,
     seek,
     onVideoTimeUpdate,
     onVideoEnded,
