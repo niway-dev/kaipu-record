@@ -190,3 +190,132 @@ describe("TimelineStrip slide blocks", () => {
     expect(onSlideDuration).toHaveBeenLastCalledWith("s1", expect.any(Number), "end");
   });
 });
+
+describe("TimelineStrip ruler scrubber", () => {
+  // Helper: mock a rect on an element so jsdom (which has no layout engine) returns
+  // a known pixel grid. clientX=500 on a 1000px-wide ruler with duration=10 → 5s.
+  function mockRect(el: HTMLElement): void {
+    el.getBoundingClientRect = vi.fn(() => ({
+      left: 0,
+      right: 1000,
+      width: 1000,
+      top: 0,
+      bottom: 20,
+      height: 20,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    }));
+  }
+
+  it("ruler pointerDown calls seek with the mapped time and does NOT call pause", () => {
+    // Ruler scrubbing keeps playback running — the user chose to reposition without
+    // stopping. The old track-background handler called pause() before seeking; the
+    // ruler intentionally omits it so the video keeps playing from the new point.
+    const playback = makePlayback({ duration: 10 });
+    const { getByTestId } = render(
+      <TimelineStrip
+        layout={twoClipLayout}
+        playback={playback}
+        thumbnails={[]}
+        selectedItemId={null}
+        onSelectItem={vi.fn()}
+        onTrim={vi.fn()}
+        overlays={[]}
+        selectedOverlayId={null}
+        onSelectOverlay={vi.fn()}
+      />,
+    );
+
+    const ruler = getByTestId("ruler");
+    mockRect(ruler);
+    ruler.setPointerCapture = vi.fn();
+
+    fireEvent.pointerDown(ruler, { pointerId: 1, clientX: 500 });
+
+    // 500px / 1000px * 10s = 5s
+    expect(playback.seek).toHaveBeenCalledWith(5);
+    expect(playback.pause).not.toHaveBeenCalled();
+  });
+
+  it("ruler pointerMove with pointer capture continues scrubbing to the new position", () => {
+    const playback = makePlayback({ duration: 10 });
+    const { getByTestId } = render(
+      <TimelineStrip
+        layout={twoClipLayout}
+        playback={playback}
+        thumbnails={[]}
+        selectedItemId={null}
+        onSelectItem={vi.fn()}
+        onTrim={vi.fn()}
+        overlays={[]}
+        selectedOverlayId={null}
+        onSelectOverlay={vi.fn()}
+      />,
+    );
+
+    const ruler = getByTestId("ruler");
+    mockRect(ruler);
+    ruler.setPointerCapture = vi.fn();
+    ruler.hasPointerCapture = vi.fn(() => true);
+
+    fireEvent.pointerDown(ruler, { pointerId: 1, clientX: 200 });
+    fireEvent.pointerMove(ruler, { pointerId: 1, clientX: 700 });
+
+    // Last seek call: 700px / 1000px * 10s = 7s
+    expect(playback.seek).toHaveBeenLastCalledWith(7);
+    expect(playback.pause).not.toHaveBeenCalled();
+  });
+
+  it("ruler pointerMove without capture is ignored (guard prevents phantom scrubs)", () => {
+    const playback = makePlayback({ duration: 10 });
+    const { getByTestId } = render(
+      <TimelineStrip
+        layout={twoClipLayout}
+        playback={playback}
+        thumbnails={[]}
+        selectedItemId={null}
+        onSelectItem={vi.fn()}
+        onTrim={vi.fn()}
+        overlays={[]}
+        selectedOverlayId={null}
+        onSelectOverlay={vi.fn()}
+      />,
+    );
+
+    const ruler = getByTestId("ruler");
+    mockRect(ruler);
+    // hasPointerCapture returns false → move must be a no-op
+    ruler.hasPointerCapture = vi.fn(() => false);
+
+    fireEvent.pointerMove(ruler, { pointerId: 1, clientX: 700 });
+
+    expect(playback.seek).not.toHaveBeenCalled();
+  });
+
+  it("a clip block click calls onSelectItem and does NOT call playback.seek", () => {
+    // Clip blocks call stopPropagation on pointerdown and click — they are select-only.
+    // The ruler is the only surface responsible for scrubbing.
+    const playback = makePlayback({ duration: 10 });
+    const onSelectItem = vi.fn();
+    const { container } = render(
+      <TimelineStrip
+        layout={twoClipLayout}
+        playback={playback}
+        thumbnails={[]}
+        selectedItemId={null}
+        onSelectItem={onSelectItem}
+        onTrim={vi.fn()}
+        overlays={[]}
+        selectedOverlayId={null}
+        onSelectOverlay={vi.fn()}
+      />,
+    );
+
+    const firstBlock = container.querySelector("button") as HTMLElement;
+    fireEvent.click(firstBlock);
+
+    expect(onSelectItem).toHaveBeenCalledWith("a");
+    expect(playback.seek).not.toHaveBeenCalled();
+  });
+});
