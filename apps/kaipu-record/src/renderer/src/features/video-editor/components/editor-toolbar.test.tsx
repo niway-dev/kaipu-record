@@ -12,6 +12,7 @@ function renderToolbar(overrides: Partial<EditorToolbarProps> = {}): EditorToolb
     splitDisabled: false,
     onDeleteSelected: vi.fn(),
     deleteDisabled: false,
+    onAddImage: vi.fn(),
     tool: "select",
     onToolChange: vi.fn(),
     ...overrides,
@@ -21,9 +22,15 @@ function renderToolbar(overrides: Partial<EditorToolbarProps> = {}): EditorToolb
 }
 
 describe("EditorToolbar", () => {
-  it("renders the four actions", () => {
+  it("renders the five actions", () => {
     renderToolbar();
-    for (const name of ["Deshacer", "Rehacer", "Cortar aquí", "Eliminar segmento"]) {
+    for (const name of [
+      "Deshacer",
+      "Rehacer",
+      "Agregar imagen",
+      "Cortar aquí",
+      "Eliminar segmento",
+    ]) {
       expect(screen.getByRole("button", { name })).toBeInTheDocument();
     }
   });
@@ -53,6 +60,20 @@ describe("EditorToolbar", () => {
     expect(props.onSplit).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole("button", { name: "Eliminar segmento" }));
     expect(props.onDeleteSelected).toHaveBeenCalledOnce();
+  });
+
+  it("clicking Agregar imagen opens the hidden file input, and picking a file fires onAddImage", () => {
+    const props = renderToolbar();
+    const input = screen.getByTestId("slide-image-input") as HTMLInputElement;
+    const clickSpy = vi.spyOn(input, "click");
+
+    fireEvent.click(screen.getByRole("button", { name: "Agregar imagen" }));
+    expect(clickSpy).toHaveBeenCalledOnce();
+
+    const file = new File(["fake-bytes"], "slide.png", { type: "image/png" });
+    fireEvent.change(input, { target: { files: [file] } });
+    expect(props.onAddImage).toHaveBeenCalledWith(file);
+    expect(input.value).toBe("");
   });
 
   it("disables buttons per props, and a disabled button fires no callback", () => {

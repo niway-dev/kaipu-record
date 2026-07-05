@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useBlocker, useLocation } from "react-router-dom";
 import { Pause, Play, Trash2, TriangleAlert } from "lucide-react";
-import { initialScene, type VideoOverlay } from "@renderer/features/video-editor/scene";
+import {
+  initialScene,
+  newId,
+  type SlideItem,
+  type VideoOverlay,
+} from "@renderer/features/video-editor/scene";
 import {
   ModalActions,
   ModalButton,
@@ -11,14 +16,17 @@ import {
   ModalTitle,
 } from "@renderer/ui/modal";
 import {
+  boundaryIndexAt,
   clampOverlays,
   entryAt,
+  insertItemAt,
   layoutDuration,
   removeItem,
   splitClipAt,
   toLayout,
   trimClip,
 } from "@renderer/features/video-editor/timeline";
+import { createSlideAssetStore } from "@renderer/features/video-editor/slide-assets";
 import { usePreviewPlayback } from "@renderer/features/video-editor/use-preview-playback";
 import { useSourceThumbnails } from "@renderer/features/video-editor/use-source-thumbnails";
 import { useVideoScene } from "@renderer/features/video-editor/use-video-scene";
@@ -89,6 +97,15 @@ function VideoEditor({ source }: { source: VideoEditorSource }): React.JSX.Eleme
   );
   const { scene } = controller;
   const layout = useMemo(() => toLayout(scene.items), [scene.items]);
+  // Plain factory (not a hook) held in a ref so slide assets survive scene undo/redo —
+  // an undone slide's image must still be available if the user redoes it. The
+  // factory itself is side-effect-free (just an empty Map), so re-evaluating the
+  // initializer expression on every render and keeping only the first result (React's
+  // useRef contract) is harmless — no object URLs are created until put() is called.
+  const assetStoreRef = useRef(createSlideAssetStore());
+  useEffect(() => {
+    return () => assetStoreRef.current.dispose();
+  }, []);
   // Blocks in-app navigation (e.g. the sidebar) while there's an edit that would be
   // lost — same useBlocker pattern as the screenshot editor.
   const blocker = useBlocker(controller.dirty);
@@ -156,6 +173,29 @@ function VideoEditor({ source }: { source: VideoEditorSource }): React.JSX.Eleme
     // clamp it back into the new timeline (deferred; see pendingSeekRef above).
     pendingSeekRef.current = Math.min(playback.timelineTime, duration);
   }, [scene, controller, selectedItemId, playback]);
+
+  // Inserts a new image slide at the item boundary nearest the playhead — playhead at
+  // 0 lands before everything (the intro-card case); mid-clip lands at the closest cut
+  // point. Placing a slide mid-clip requires splitting first (predictable, no
+  // auto-split). `controller.commit` already no-ops mid-drag, same as every other
+  // discrete action here.
+  const handleAddImage = useCallback(
+    async (file: File) => {
+      const bytes = await file.arrayBuffer();
+      const asset = await assetStoreRef.current.put(bytes, file.type);
+      const slide: SlideItem = {
+        id: newId(),
+        kind: "slide",
+        assetId: asset.assetId,
+        duration: 3,
+        naturalWidth: asset.naturalWidth,
+        naturalHeight: asset.naturalHeight,
+      };
+      const index = boundaryIndexAt(toLayout(scene.items), playback.timelineTime);
+      controller.commit({ ...scene, items: insertItemAt(scene.items, index, slide) });
+    },
+    [scene, controller, playback.timelineTime],
+  );
 
   const handleDeleteOverlay = useCallback(() => {
     // Same rationale as handleDeleteSelected: don't touch scene/selection while a
@@ -289,6 +329,7 @@ function VideoEditor({ source }: { source: VideoEditorSource }): React.JSX.Eleme
         splitDisabled={splitDisabled}
         onDeleteSelected={handleDeleteSelected}
         deleteDisabled={deleteDisabled}
+        onAddImage={handleAddImage}
         tool={videoTools.tool}
         onToolChange={videoTools.setTool}
       />

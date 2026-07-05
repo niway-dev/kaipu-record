@@ -92,3 +92,9 @@
   background: var(--border);
   margin: 0 var(--space-xs);
 }
+
+/* The native file picker is triggered programmatically from the ImagePlus button —
+   the <input> itself never renders. */
+.hiddenInput {
+  display: none;
+}

@@ -1,5 +1,7 @@
+import { useRef } from "react";
 import {
   ArrowUpRight,
+  ImagePlus,
   MousePointer2,
   Redo2,
   Scissors,
@@ -10,6 +12,9 @@ import {
 } from "lucide-react";
 import { VIDEO_TOOLS, type VideoTool } from "../annotations/video-tools";
 import styles from "./editor-toolbar.module.css";
+
+/** Accepted image types for "Agregar imagen" — matches SlideAssetStore's decode path. */
+const SLIDE_IMAGE_TYPES = "image/png,image/jpeg,image/webp";
 
 const TOOL_META: Record<VideoTool, { label: string; Icon: typeof Square }> = {
   select: { label: "Seleccionar", Icon: MousePointer2 },
@@ -29,6 +34,8 @@ export interface EditorToolbarProps {
   /** Delete the selected segment. Disabled when nothing is selected. */
   onDeleteSelected(): void;
   deleteDisabled: boolean;
+  /** Insert an image slide at the playhead's nearest item boundary. */
+  onAddImage(file: File): void;
   /** Current annotation tool. */
   tool: VideoTool;
   onToolChange(tool: VideoTool): void;
@@ -49,9 +56,12 @@ export function EditorToolbar({
   splitDisabled,
   onDeleteSelected,
   deleteDisabled,
+  onAddImage,
   tool,
   onToolChange,
 }: EditorToolbarProps): React.JSX.Element {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   return (
     <div className={styles.toolbar}>
       <div className={styles.toolGroup}>
@@ -93,6 +103,28 @@ export function EditorToolbar({
           <Redo2 size={18} />
         </button>
         <span className={styles.divider} />
+        <input
+          ref={fileInputRef}
+          type="file"
+          data-testid="slide-image-input"
+          accept={SLIDE_IMAGE_TYPES}
+          className={styles.hiddenInput}
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            // Reset so choosing the same file again still fires a change event.
+            event.target.value = "";
+            if (file) onAddImage(file);
+          }}
+        />
+        <button
+          type="button"
+          className={styles.iconBtn}
+          title="Agregar imagen"
+          aria-label="Agregar imagen"
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <ImagePlus size={18} />
+        </button>
         <button
           type="button"
           className={styles.iconBtn}
