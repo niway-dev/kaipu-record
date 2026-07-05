@@ -4,8 +4,10 @@
  * Pipeline:
  *   1. Open the source recording with mediabunny.
  *   2. For each ClipSegment: decode frames → composite overlays → encode.
- *   3. For each SlideSegment: draw the slide bitmap at slideFps → composite overlays → encode.
- *   4. Audio (if present): per-clip decoded AudioBuffers → re-encode; silence for slides.
+ *   3. For each SlideSegment: draw the slide bitmap at outputFps (source-derived,
+ *      floored at plan.slideFps) → composite overlays → encode.
+ *   4. Audio (if present): per-clip decoded AudioBuffers, trimmed to the exact
+ *      source range → re-encode; silence for slides.
  *   5. Finalize the MP4 and notify the renderer.
  *
  * Chunks are posted via transferable ArrayBuffers so the renderer can write them to
@@ -15,6 +17,16 @@
  *
  * Audio timestamps: `AudioBufferSource.add` self-advances (first buffer at 0,
  * each subsequent at prior cumulative duration) — no explicit timestamps needed.
+ *
+ * Audio trimming: `AudioBufferSink.buffers(start, end)` yields whole decoder
+ * frames gated on each frame's OWN timestamp (mediabunny's
+ * `BaseMediaSampleSink.mediaSamplesInRange` keeps the last frame with
+ * timestamp <= start, then everything up to the first frame with
+ * timestamp >= end) — it does not clip a frame's PCM content to the range.
+ * Left as-is, the first frame of a clip carries pre-roll before `start` and
+ * the last trails past `end`, drifting audio out of sync with the
+ * frame-accurate video across cuts. `trimAudioBuffer` below clips each
+ * frame's sample data to the segment's exact [sourceStart, sourceEnd).
  *
  * Known: `AudioBuffer` constructor is available in Electron's Chromium workers.
  * If it throws in a future Electron version, build silence via AudioSampleSource
@@ -34,7 +46,7 @@ import {
   QUALITY_HIGH,
   StreamTarget,
 } from "mediabunny";
-import type { StreamTargetChunk } from "mediabunny";
+import type { StreamTargetChunk, WrappedAudioBuffer } from "mediabunny";
 import type { ExportStartMessage, ExportWorkerMessage } from "./export-messages";
 
 // ---------------------------------------------------------------------------
@@ -61,13 +73,38 @@ workerSelf.onmessage = (event: MessageEvent<ExportStartMessage>) => {
 // ---------------------------------------------------------------------------
 
 async function runExport(msg: ExportStartMessage): Promise<void> {
+  const input = new Input({ source: new BlobSource(msg.sourceBlob), formats: ALL_FORMATS });
+  try {
+    await runExportWithInput(msg, input);
+  } finally {
+    // `Input` is the only Disposable handle mediabunny exposes here — neither
+    // CanvasSink nor AudioBufferSink implement Disposable/close in the .d.ts,
+    // and disposing the Input already cancels their in-flight decode
+    // operations and closes their decoders (per Input.dispose()'s docs), so
+    // there is nothing else to release per-segment.
+    input.dispose();
+  }
+}
+
+async function runExportWithInput(msg: ExportStartMessage, input: Input): Promise<void> {
   const { plan, output: size } = msg;
 
-  const input = new Input({ source: new BlobSource(msg.sourceBlob), formats: ALL_FORMATS });
   const videoTrack = await input.getPrimaryVideoTrack();
   if (!videoTrack) throw new Error("source has no video track");
   // Audio is optional: screen-only recordings produce no audio track.
   const audioTrack = await input.getPrimaryAudioTrack();
+
+  // Derive the output frame rate from the source track instead of hardcoding
+  // slideFps, so clip frames from a >30fps source aren't snapped/collided onto
+  // a coarser 30fps grid. `computePacketStats(100)` samples only a prefix of
+  // packets — its docstring calls this out as the intended way to get "a great
+  // estimate of video frame rate without having to scan through the entire
+  // file" — and `averagePacketRate` is documented to equal average FPS for
+  // video tracks. Slides are synthesized at this same rate so their fixed
+  // cadence still matches the track's grid; `plan.slideFps` remains a floor
+  // (a source with a bogus/zero estimate still gets a sane fps).
+  const sourceStats = await videoTrack.computePacketStats(100);
+  const outputFps = Math.max(sourceStats.averagePacketRate || 0, plan.slideFps);
 
   // OffscreenCanvas — the only canvas type available in workers.
   const canvas = new OffscreenCanvas(size.width, size.height);
@@ -97,14 +134,21 @@ async function runExport(msg: ExportStartMessage): Promise<void> {
     bitrate: QUALITY_HIGH,
     hardwareAcceleration: "prefer-hardware",
   });
-  // frameRate in the track metadata snaps timestamps to the fixed grid;
-  // slide segments emit exactly slideFps frames/s, so the grid must match.
-  out.addVideoTrack(videoSource, { frameRate: plan.slideFps });
+  // frameRate in the track metadata snaps timestamps to the fixed grid; both
+  // clip frames (native source cadence) and slide frames (synthesized below
+  // at the same `outputFps`) must share this grid.
+  out.addVideoTrack(videoSource, { frameRate: outputFps });
 
   const audioSource = audioTrack
     ? new AudioBufferSource({ codec: "aac", bitrate: QUALITY_HIGH })
     : null;
   if (audioSource) out.addAudioTrack(audioSource);
+
+  // Sample rate / channel count for synthesized slide silence — derived from
+  // the source track so it matches the real audio instead of assuming a
+  // fixed layout; 48000/2 is only a fallback if the track ever reports 0.
+  const silenceSampleRate = audioTrack ? (await audioTrack.getSampleRate()) || 48000 : 48000;
+  const silenceChannelCount = audioTrack ? (await audioTrack.getNumberOfChannels()) || 2 : 2;
 
   await out.start();
 
@@ -164,10 +208,11 @@ async function runExport(msg: ExportStartMessage): Promise<void> {
         reportProgress(outTs);
       }
     } else {
-      // Slide segment: emit fixed-cadence frames at slideFps.
+      // Slide segment: emit fixed-cadence frames at outputFps (matches the
+      // track's frameRate grid — see `outputFps` derivation above).
       const bitmap = slideBitmaps.get(segment.assetId);
-      const frameDuration = 1 / plan.slideFps;
-      const frameCount = Math.round(segment.duration * plan.slideFps);
+      const frameDuration = 1 / outputFps;
+      const frameCount = Math.round(segment.duration * outputFps);
 
       for (let i = 0; i < frameCount; i++) {
         const outTs = segment.timelineStart + i * frameDuration;
@@ -194,18 +239,21 @@ async function runExport(msg: ExportStartMessage): Promise<void> {
       if (segment.kind === "clip") {
         const sink = new AudioBufferSink(audioTrack);
         for await (const wrapped of sink.buffers(segment.sourceStart, segment.sourceEnd)) {
+          // Clip each decoded frame to the segment's exact source range — see
+          // the "Audio trimming" header comment for why this is needed.
+          const trimmed = trimAudioBuffer(wrapped, segment.sourceStart, segment.sourceEnd);
+          if (!trimmed) continue;
           // AudioBufferSource.add auto-advances timestamps: first buffer at 0,
           // each subsequent immediately following the prior. Matches the clip order.
-          await audioSource.add(wrapped.buffer);
+          await audioSource.add(trimmed);
         }
       } else {
         // Slides are silent. A zeroed AudioBuffer keeps A/V durations aligned
         // so the MP4 muxer doesn't produce a track-length mismatch.
-        const sampleRate = 48000;
         const silence = new AudioBuffer({
-          length: Math.ceil(segment.duration * sampleRate),
-          numberOfChannels: 2,
-          sampleRate,
+          length: Math.ceil(segment.duration * silenceSampleRate),
+          numberOfChannels: silenceChannelCount,
+          sampleRate: silenceSampleRate,
         });
         await audioSource.add(silence);
       }
@@ -222,6 +270,50 @@ async function runExport(msg: ExportStartMessage): Promise<void> {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Clips a decoded audio frame's sample data to `[rangeStart, rangeEnd)`.
+ * `wrapped.timestamp` is the frame's own start time, which per the "Audio
+ * trimming" header comment may fall before `rangeStart` (pre-roll) or extend
+ * past `rangeEnd` (trailing samples) — both need to be dropped so the encoded
+ * duration matches the segment's exact source range.
+ *
+ * Returns the original `AudioBuffer` unchanged when it needs no trimming
+ * (the common case for interior frames), a new trimmed `AudioBuffer` when it
+ * does, or `null` if trimming leaves nothing to encode.
+ */
+function trimAudioBuffer(
+  wrapped: WrappedAudioBuffer,
+  rangeStart: number,
+  rangeEnd: number,
+): AudioBuffer | null {
+  const { buffer, timestamp } = wrapped;
+  const sampleRate = buffer.sampleRate;
+  const bufferEnd = timestamp + buffer.length / sampleRate;
+
+  const leadTrim = Math.min(
+    buffer.length,
+    Math.max(0, Math.round((rangeStart - timestamp) * sampleRate)),
+  );
+  const trailTrim = Math.min(
+    buffer.length - leadTrim,
+    Math.max(0, Math.round((bufferEnd - rangeEnd) * sampleRate)),
+  );
+  const keepLength = buffer.length - leadTrim - trailTrim;
+  if (keepLength <= 0) return null;
+  if (leadTrim === 0 && trailTrim === 0) return buffer;
+
+  const trimmed = new AudioBuffer({
+    length: keepLength,
+    numberOfChannels: buffer.numberOfChannels,
+    sampleRate,
+  });
+  for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+    const channelData = buffer.getChannelData(channel).subarray(leadTrim, leadTrim + keepLength);
+    trimmed.copyToChannel(channelData, channel);
+  }
+  return trimmed;
+}
 
 /**
  * Draw `bitmap` into `(w × h)` with letterboxing (contain), centred, on a

@@ -10,6 +10,7 @@
 import {
   HAND_FONT,
   STROKE_WIDTHS,
+  TEXT_PX,
   roughArrow,
   roughRect,
 } from "@renderer/features/screenshots/annotations";
@@ -81,9 +82,11 @@ function shapeSvg(o: VideoOverlay, W: number, H: number, scale: number): string 
     );
   }
 
-  // text — `size` is already a display-px value (see TextOverlay.size), so scale
-  // it the same way strokes are scaled, no TEXT_PX lookup needed here.
-  const fs = o.size * scale;
+  // text — `size` is an index into TEXT_PX (see TextOverlay.size and
+  // TEXT_SIZES/TEXT_PX in tools.ts), not a display-px value. Look up the px
+  // size first, then scale it the same way strokes are scaled — mirrors the
+  // screenshot compositor's `TEXT_PX[a.size] * scale`.
+  const fs = TEXT_PX[o.size] * scale;
   return `<text x="${o.x * W}" y="${o.y * H}" fill="${o.color}" font-family="${HAND_FONT}" font-size="${fs}" font-weight="600" dominant-baseline="hanging">${escapeXml(o.text)}</text>`;
 }
 
