@@ -45,7 +45,7 @@ professional NLE) that covers the explainer-video jobs:
 | 03  | [Cut & trim](/plans/2026-07-03-video-editor-03-cut-trim/)      | split/delete/trim, gap-skipping preview, undo/redo, unsaved guard                           | 🔵  |
 | 04  | [Annotations](/plans/2026-07-03-video-editor-04-annotations/)  | time-ranged text/box/arrow, overlay lane, options panel                                     | 🔵  |
 | 05  | [Slides](/plans/2026-07-03-video-editor-05-slides/)            | image items on the main track, slide playback, duration handle                              | 🔵  |
-| 06  | [Export & sessions](/plans/2026-07-03-video-editor-06-export/) | worker export pipeline, progress dialog, session persistence                                | 🔵  |
+| 06  | [Export & sessions](/plans/2026-07-03-video-editor-06-export/) | worker export pipeline, progress dialog, session persistence                                | 🟢  |
 
 Each plan ends with its own manual-verification checklist and stops for owner review —
 flip its PR column (🔵 → 🟡 in progress → 🟢 merged) as work advances.
@@ -68,5 +68,24 @@ per-segment audio controls, transitions, export quality picker.
 
 ## Gotchas
 
-(Fill in during implementation — playback boundary behavior, mediabunny API surprises,
-worker transfer costs.)
+- **Export hook has no live `<video>` element to draw a thumbnail from.** Its public
+  args are plain numbers (`videoWidth`/`videoHeight`/`previewWidth`), not a ref, so
+  the poster thumbnail is decoded independently from the already-fetched source
+  `Blob` (an off-DOM `<video>`, seek to 0, draw to canvas) rather than reusing the
+  preview's own frame — see `export/export-thumbnail.ts`.
+- **`useVideoScene`'s initial scene is fixed at first mount** — you can't hand it a
+  fresher scene after an async session load resolves. Restoring a saved session on
+  open requires gating the whole editor behind a loader component (`VideoEditorLoader`
+  in `video-editor-page.tsx`) that resolves the initial scene (and hydrates the slide
+  asset store) _before_ the real editor (and its `useVideoScene` call) ever mounts.
+- **Session slide assets are always written/read as `.png`** regardless of the
+  original upload's mimeType (jpeg/webp slides get bytes saved under `<assetId>.png`)
+  — the IPC payload deliberately has no mimeType field. Restoring hardcodes
+  `"image/png"` when rebuilding the Blob; this works because browsers sniff real
+  image bytes rather than trusting the asserted Blob type, but hasn't been manually
+  verified against a real non-PNG slide end to end.
+- **`cancel()` on the export hook does double duty**: dismissing the empty-timeline
+  error dialog and aborting a genuinely in-flight worker/writer session both go
+  through the same function — every step in it (`worker.terminate()`,
+  `recordingAbort`) is written to be a no-op when there's nothing to tear down, so
+  one function safely covers both call sites.
