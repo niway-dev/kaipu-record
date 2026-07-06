@@ -75,7 +75,7 @@ test("seeking on the ruler then pressing play resumes playback", async () => {
     expect((await videoState(page))?.error).toBeNull();
 
     // Press Play and assert currentTime actually advances (the bug: it never did).
-    await page.getByRole("button", { name: "Reproducir" }).click();
+    await page.getByRole("button", { name: "Play" }).click();
     const t0 = (await videoState(page))!.currentTime;
     await expect
       .poll(async () => (await videoState(page))?.currentTime, { timeout: 10_000 })

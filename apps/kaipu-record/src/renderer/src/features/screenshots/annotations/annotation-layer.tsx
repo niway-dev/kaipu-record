@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { useTranslations } from "@kaipu/i18n";
 import { BLUR_STD, HAND_FONT, STROKE_WIDTHS, TEXT_PX } from "./tools";
 import { roughArrow, roughRect } from "./rough";
 import { smoothPath } from "./smooth";
@@ -41,6 +42,7 @@ export function AnnotationLayer({
   /** The shot's display URL — a blur box re-draws a blurred copy of it under the rect. */
   src: string;
 }): React.JSX.Element {
+  const t = useTranslations("screenshots");
   const ref = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<Size>({ w: 0, h: 0 });
   const [draft, setDraft] = useState<Annotation | null>(null);
@@ -293,7 +295,7 @@ export function AnnotationLayer({
         <input
           ref={textInputRef}
           className={styles.textInput}
-          placeholder="Type…"
+          placeholder={t("typePlaceholder")}
           style={{
             left: editing.x * size.w,
             top: editing.y * size.h,

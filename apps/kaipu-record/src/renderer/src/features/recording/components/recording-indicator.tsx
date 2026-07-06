@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslations } from "@kaipu/i18n";
 import { formatElapsed } from "@renderer/features/recording/elapsed";
 import styles from "./recording-indicator.module.css";
 
@@ -21,10 +22,11 @@ export function RecordingIndicator({
   elapsedSeconds,
   variant,
 }: RecordingIndicatorProps): React.JSX.Element {
+  const t = useTranslations("record");
   return (
     <div className={styles[variant]} data-paused={paused || undefined}>
       <span className={styles.dot} data-paused={paused || undefined} />
-      <span className={styles.label}>{paused ? "Paused" : "Recording"}</span>
+      <span className={styles.label}>{paused ? t("pausedState") : t("recordingState")}</span>
       <span className={styles.timer}>{formatElapsed(elapsedSeconds * 1000)}</span>
     </div>
   );

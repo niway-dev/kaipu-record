@@ -7,16 +7,16 @@ describe("RecordingQualitySettings", () => {
   it("highlights the matching preset and shows its caption", () => {
     render(<RecordingQualitySettings quality={DEFAULT_QUALITY} onChange={vi.fn()} />);
 
-    const balanced = screen.getByRole("button", { name: /Equilibrado/ });
+    const balanced = screen.getByRole("button", { name: /Balanced/ });
     expect(balanced).toHaveAttribute("data-active", "true");
-    expect(screen.getByText(/La mejor relación entre nitidez y tamaño/)).toBeInTheDocument();
+    expect(screen.getByText(/The best balance of sharpness and size/)).toBeInTheDocument();
   });
 
   it("applies a preset's full combo when its chip is clicked", () => {
     const onChange = vi.fn();
     render(<RecordingQualitySettings quality={DEFAULT_QUALITY} onChange={onChange} />);
 
-    screen.getByRole("button", { name: /Máxima calidad/ }).click();
+    screen.getByRole("button", { name: /Maximum quality/ }).click();
 
     expect(onChange).toHaveBeenCalledWith(QUALITY_PRESETS.max);
   });
@@ -25,7 +25,7 @@ describe("RecordingQualitySettings", () => {
     const onChange = vi.fn();
     render(<RecordingQualitySettings quality={DEFAULT_QUALITY} onChange={onChange} />);
 
-    screen.getByRole("button", { name: "Resolución 4K" }).click();
+    screen.getByRole("button", { name: "Resolution 4K" }).click();
 
     expect(onChange).toHaveBeenCalledWith({ ...DEFAULT_QUALITY, resolution: 2160 });
   });
@@ -34,10 +34,7 @@ describe("RecordingQualitySettings", () => {
     const custom = { ...DEFAULT_QUALITY, resolution: 2160 } as const;
     render(<RecordingQualitySettings quality={custom} onChange={vi.fn()} />);
 
-    expect(screen.getByRole("button", { name: /Personalizado/ })).toHaveAttribute(
-      "data-active",
-      "true",
-    );
-    expect(screen.getByText(/Ajusta cada control a tu gusto/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Custom/ })).toHaveAttribute("data-active", "true");
+    expect(screen.getByText(/Tune each control to taste/)).toBeInTheDocument();
   });
 });

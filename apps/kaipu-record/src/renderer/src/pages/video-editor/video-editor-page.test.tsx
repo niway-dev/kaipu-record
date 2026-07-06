@@ -104,7 +104,7 @@ async function waitForEditorLoaded(): Promise<HTMLElement> {
 /** Adds an image slide via the toolbar — the simplest way to produce one undoable
  *  commit, which is what makes `controller.dirty` true. */
 async function makeDirty(footer: HTMLElement): Promise<void> {
-  fireEvent.click(screen.getByRole("button", { name: "Agregar imagen" }));
+  fireEvent.click(screen.getByRole("button", { name: "Add image" }));
   const input = screen.getByTestId("slide-image-input") as HTMLInputElement;
   const file = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], "x.png", {
     type: "image/png",
@@ -116,49 +116,49 @@ async function makeDirty(footer: HTMLElement): Promise<void> {
 }
 
 describe("VideoEditorPage — transport bar", () => {
-  it("renders the play/pause button with aria-label Reproducir by default", async () => {
+  it("renders the play/pause button with aria-label Play by default", async () => {
     renderEditor();
     await waitForEditorLoaded();
 
-    expect(screen.getByRole("button", { name: "Reproducir" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Play" })).not.toBeNull();
   });
 
-  it("renders the mute button with aria-label Silenciar by default (unmuted)", async () => {
+  it("renders the mute button with aria-label Mute by default (unmuted)", async () => {
     renderEditor();
     await waitForEditorLoaded();
 
-    expect(screen.getByRole("button", { name: "Silenciar" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Mute" })).not.toBeNull();
   });
 
-  it("clicking the mute button toggles aria-label to Activar sonido", async () => {
+  it("clicking the mute button toggles aria-label to Unmute", async () => {
     renderEditor();
     await waitForEditorLoaded();
 
-    fireEvent.click(screen.getByRole("button", { name: "Silenciar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Mute" }));
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Activar sonido" })).not.toBeNull();
+      expect(screen.getByRole("button", { name: "Unmute" })).not.toBeNull();
     });
   });
 
-  it("clicking Activar sonido toggles back to Silenciar", async () => {
+  it("clicking Unmute toggles back to Mute", async () => {
     renderEditor();
     await waitForEditorLoaded();
 
-    fireEvent.click(screen.getByRole("button", { name: "Silenciar" }));
-    await waitFor(() => screen.getByRole("button", { name: "Activar sonido" }));
+    fireEvent.click(screen.getByRole("button", { name: "Mute" }));
+    await waitFor(() => screen.getByRole("button", { name: "Unmute" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Activar sonido" }));
+    fireEvent.click(screen.getByRole("button", { name: "Unmute" }));
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Silenciar" })).not.toBeNull();
+      expect(screen.getByRole("button", { name: "Mute" })).not.toBeNull();
     });
   });
 
-  it("renders the fullscreen button with aria-label 'Pantalla completa' by default", async () => {
+  it("renders the fullscreen button with aria-label 'Fullscreen' by default", async () => {
     renderEditor();
     await waitForEditorLoaded();
 
-    expect(screen.getByRole("button", { name: "Pantalla completa" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Fullscreen" })).not.toBeNull();
   });
 });
 
@@ -205,14 +205,14 @@ describe("VideoEditorPage — post-export navigation vs. useBlocker", () => {
     stubDecodedVideoSize(0, 0); // restore jsdom's undecoded default for other suites
   });
 
-  const DISCARD_DIALOG_TITLE = "¿Descartar los cambios del video?";
+  const DISCARD_DIALOG_TITLE = "Discard the video changes?";
 
   it("a successful export's onSaved navigates straight to the library item, without the discard-changes dialog", async () => {
     renderEditor();
     const footer = await waitForEditorLoaded();
     await makeDirty(footer); // controller.dirty === true, same as right before a real export
 
-    fireEvent.click(screen.getByRole("button", { name: "Exportar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Export" }));
 
     // startExport's onSaved awaits saveVideoEditSession (mocked, resolves), calls
     // markClean(), flips the bypass ref, then navigates — all async, so wait for the
@@ -272,12 +272,12 @@ describe("VideoEditorPage — handleExport metadata guard", () => {
 
     // Initial scene has one clip so the export button is enabled (not disabled by
     // the empty-timeline guard) — clicking it hits the videoWidth === 0 guard instead.
-    fireEvent.click(screen.getByRole("button", { name: "Exportar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Export" }));
 
     expect(startExport).not.toHaveBeenCalled();
     expect(getToasts()).toContainEqual(
       expect.objectContaining({
-        message: "El video todavía se está cargando. Probá de nuevo en un momento.",
+        message: "The video is still loading. Try again in a moment.",
       }),
     );
   });
@@ -287,7 +287,7 @@ describe("VideoEditorPage — handleExport metadata guard", () => {
     renderEditor();
     await waitForEditorLoaded();
 
-    fireEvent.click(screen.getByRole("button", { name: "Exportar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Export" }));
 
     expect(startExport).not.toHaveBeenCalled();
     stubDecodedVideoSize(0, 0); // restore the undecoded default for other suites
@@ -298,7 +298,7 @@ describe("VideoEditorPage — handleExport metadata guard", () => {
     renderEditor();
     await waitForEditorLoaded();
 
-    fireEvent.click(screen.getByRole("button", { name: "Exportar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Export" }));
 
     expect(startExport).toHaveBeenCalledOnce();
     stubDecodedVideoSize(0, 0); // restore the undecoded default for other suites
@@ -330,7 +330,7 @@ describe("VideoEditorPage — add-image decode failure", () => {
     renderEditor();
     const footer = await waitForEditorLoaded();
 
-    fireEvent.click(screen.getByRole("button", { name: "Agregar imagen" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add image" }));
     const input = screen.getByTestId("slide-image-input") as HTMLInputElement;
     const file = new File([new Uint8Array([0x00, 0x01])], "corrupt.png", {
       type: "image/png",
@@ -340,7 +340,7 @@ describe("VideoEditorPage — add-image decode failure", () => {
     await waitFor(() => {
       expect(getToasts()).toContainEqual(
         expect.objectContaining({
-          message: "No se pudo cargar la imagen. Probá con otro archivo.",
+          message: "Couldn't load the image. Try another file.",
         }),
       );
     });
@@ -352,7 +352,7 @@ describe("VideoEditorPage — add-image decode failure", () => {
     renderEditor();
     await waitForEditorLoaded();
 
-    fireEvent.click(screen.getByRole("button", { name: "Agregar imagen" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add image" }));
     const input = screen.getByTestId("slide-image-input") as HTMLInputElement;
     const file = new File([new Uint8Array([0x00, 0x01])], "corrupt.png", {
       type: "image/png",
@@ -396,7 +396,7 @@ describe("VideoEditorPage — keydown gate behind open modals", () => {
     await act(async () => {
       await router.navigate("/library/rec-1");
     });
-    expect(await screen.findByText("¿Descartar los cambios del video?")).toBeInTheDocument();
+    expect(await screen.findByText("Discard the video changes?")).toBeInTheDocument();
 
     fireEvent.keyDown(window, { key: " " });
 

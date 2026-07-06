@@ -1,11 +1,14 @@
 import { Monitor, Mic, Volume2, Video, type LucideIcon } from "lucide-react";
+import { useTranslations } from "@kaipu/i18n";
 import styles from "./welcome-step.module.css";
 
-const FEATURES: { icon: LucideIcon; label: string }[] = [
-  { icon: Monitor, label: "SCREEN" },
-  { icon: Mic, label: "VOICE" },
-  { icon: Volume2, label: "AUDIO" },
-  { icon: Video, label: "CAMERA" },
+type FeatureLabelKey = "featScreen" | "featVoice" | "featAudio" | "featCamera";
+
+const FEATURES: { icon: LucideIcon; labelKey: FeatureLabelKey }[] = [
+  { icon: Monitor, labelKey: "featScreen" },
+  { icon: Mic, labelKey: "featVoice" },
+  { icon: Volume2, labelKey: "featAudio" },
+  { icon: Video, labelKey: "featCamera" },
 ];
 
 function KaipuMark(): React.JSX.Element {
@@ -24,21 +27,19 @@ function KaipuMark(): React.JSX.Element {
 }
 
 export function WelcomeStep(): React.JSX.Element {
+  const t = useTranslations("onboarding");
   return (
     <div className={styles.step}>
       <div className={styles.mark}>
         <KaipuMark />
       </div>
-      <h1 className={styles.title}>Welcome to Kaipu</h1>
-      <p className={styles.subtitle}>
-        The simple recorder that does what macOS doesn&apos;t — capture your screen with your voice,
-        system audio and meetings.
-      </p>
+      <h1 className={styles.title}>{t("welcomeTitle")}</h1>
+      <p className={styles.subtitle}>{t("welcomeSubtitle")}</p>
       <div className={styles.features}>
-        {FEATURES.map(({ icon: Icon, label }) => (
-          <div key={label} className={styles.feature}>
+        {FEATURES.map(({ icon: Icon, labelKey }) => (
+          <div key={labelKey} className={styles.feature}>
             <Icon size={23} strokeWidth={1.7} className={styles.featureIcon} />
-            <span className={styles.featureLabel}>{label}</span>
+            <span className={styles.featureLabel}>{t(labelKey)}</span>
           </div>
         ))}
       </div>

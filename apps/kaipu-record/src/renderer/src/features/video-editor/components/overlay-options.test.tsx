@@ -104,7 +104,7 @@ describe("OverlayOptions", () => {
     expect(screen.getByText("Color")).toBeInTheDocument();
     expect(screen.getByText("Stroke")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: ANNOTATION_COLORS[2].name }));
+    fireEvent.click(screen.getByRole("button", { name: "White" }));
     expect(onCommitOverlay).toHaveBeenCalledWith("b1", { color: ANNOTATION_COLORS[2].value });
     expect(tools.setColor).toHaveBeenCalledWith(ANNOTATION_COLORS[2].value);
   });
@@ -130,7 +130,7 @@ describe("OverlayOptions", () => {
     expect(tools.setTextSize).toHaveBeenCalledWith(3);
   });
 
-  it("offers an Eliminar button for a selected overlay and removes it on click", () => {
+  it("offers an Delete button for a selected overlay and removes it on click", () => {
     const onDeleteSelected = vi.fn();
     render(
       <OverlayOptions
@@ -142,7 +142,7 @@ describe("OverlayOptions", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Eliminar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(onDeleteSelected).toHaveBeenCalled();
   });
 

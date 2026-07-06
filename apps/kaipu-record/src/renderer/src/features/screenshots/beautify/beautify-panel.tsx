@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslations } from "@kaipu/i18n";
 import {
   BACKGROUNDS,
   backgroundCss,
@@ -11,20 +12,21 @@ import styles from "./beautify-panel.module.css";
 
 /** The right-side "Beautify" panel: background swatches + the three sliders. */
 export function BeautifyPanel({ beautify }: { beautify: BeautifyController }): React.JSX.Element {
+  const t = useTranslations("screenshots");
   const { state, commit, beginEdit, setLive, endEdit } = beautify;
 
   return (
     <aside className={styles.panel}>
-      <p className={styles.heading}>BEAUTIFY</p>
+      <p className={styles.heading}>{t("beautifyHeading")}</p>
 
-      <p className={styles.label}>Background</p>
+      <p className={styles.label}>{t("background")}</p>
       <div className={styles.swatches}>
         {BACKGROUNDS.map((bg) => (
           <button
             key={bg.id}
             type="button"
-            title={bg.name}
-            aria-label={bg.name}
+            title={t(bg.nameKey)}
+            aria-label={t(bg.nameKey)}
             className={`${styles.swatch} ${state.bg === bg.id ? styles.selected : ""}`}
             style={{ background: backgroundCss(bg.id) }}
             onClick={() => commit({ bg: bg.id })}
@@ -33,7 +35,7 @@ export function BeautifyPanel({ beautify }: { beautify: BeautifyController }): R
       </div>
 
       <Slider
-        label="Padding"
+        label={t("padding")}
         suffix=" px"
         value={state.padding}
         range={PADDING_RANGE}
@@ -42,7 +44,7 @@ export function BeautifyPanel({ beautify }: { beautify: BeautifyController }): R
         onEnd={endEdit}
       />
       <Slider
-        label="Corners"
+        label={t("corners")}
         suffix=" px"
         value={state.radius}
         range={RADIUS_RANGE}
@@ -51,7 +53,7 @@ export function BeautifyPanel({ beautify }: { beautify: BeautifyController }): R
         onEnd={endEdit}
       />
       <Slider
-        label="Shadow"
+        label={t("shadow")}
         suffix="%"
         value={state.shadow}
         range={SHADOW_RANGE}
@@ -60,9 +62,7 @@ export function BeautifyPanel({ beautify }: { beautify: BeautifyController }): R
         onEnd={endEdit}
       />
 
-      <p className={styles.tip}>
-        Tip: annotations are drawn by hand. The frame stays clean and crisp.
-      </p>
+      <p className={styles.tip}>{t("beautifyTip")}</p>
     </aside>
   );
 }

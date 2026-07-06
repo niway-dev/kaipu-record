@@ -1,17 +1,27 @@
 import React from "react";
 import { ArrowUpRight, Crop, Droplet, MousePointer2, Pencil, Square, Type } from "lucide-react";
+import { useTranslations } from "@kaipu/i18n";
 import { ANNOTATION_TOOLS, type AnnotationTool } from "./tools";
 import type { AnnotationToolsController } from "./use-annotation-tools";
 import styles from "./annotation-toolbar.module.css";
 
-const TOOL_META: Record<AnnotationTool, { label: string; Icon: typeof Square }> = {
-  select: { label: "Select", Icon: MousePointer2 },
-  pen: { label: "Pen", Icon: Pencil },
-  box: { label: "Box", Icon: Square },
-  arrow: { label: "Arrow", Icon: ArrowUpRight },
-  text: { label: "Text", Icon: Type },
-  blur: { label: "Blur", Icon: Droplet },
-  crop: { label: "Crop", Icon: Crop },
+type ToolLabelKey =
+  | "toolSelect"
+  | "toolPen"
+  | "toolBox"
+  | "toolArrow"
+  | "toolText"
+  | "toolBlur"
+  | "toolCrop";
+
+const TOOL_META: Record<AnnotationTool, { labelKey: ToolLabelKey; Icon: typeof Square }> = {
+  select: { labelKey: "toolSelect", Icon: MousePointer2 },
+  pen: { labelKey: "toolPen", Icon: Pencil },
+  box: { labelKey: "toolBox", Icon: Square },
+  arrow: { labelKey: "toolArrow", Icon: ArrowUpRight },
+  text: { labelKey: "toolText", Icon: Type },
+  blur: { labelKey: "toolBlur", Icon: Droplet },
+  crop: { labelKey: "toolCrop", Icon: Crop },
 };
 
 /**
@@ -28,19 +38,21 @@ export function AnnotationToolbar({
    *  so the freshly-picked tool starts clean (auto-select otherwise leaves one selected). */
   onPick?: () => void;
 }): React.JSX.Element {
+  const t = useTranslations("screenshots");
   return (
     <div className={styles.toolGroup}>
-      {ANNOTATION_TOOLS.map((t) => {
-        const { label, Icon } = TOOL_META[t];
+      {ANNOTATION_TOOLS.map((tool) => {
+        const { labelKey, Icon } = TOOL_META[tool];
+        const label = t(labelKey);
         return (
           <button
-            key={t}
+            key={tool}
             type="button"
             title={label}
             aria-label={label}
-            className={`${styles.tool} ${tools.tool === t ? styles.toolActive : ""}`}
+            className={`${styles.tool} ${tools.tool === tool ? styles.toolActive : ""}`}
             onClick={() => {
-              tools.setTool(t);
+              tools.setTool(tool);
               onPick?.();
             }}
           >

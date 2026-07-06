@@ -1,4 +1,5 @@
 import { TriangleAlert } from "lucide-react";
+import { useTranslations } from "@kaipu/i18n";
 import {
   ModalActions,
   ModalButton,
@@ -32,6 +33,7 @@ export function ExportDialog({
   onCancel,
   onRetry,
 }: ExportDialogProps): React.JSX.Element {
+  const t = useTranslations("videoEditor");
   const percent = Math.round(Math.min(1, Math.max(0, fraction)) * 100);
 
   if (status === "error") {
@@ -40,14 +42,14 @@ export function ExportDialog({
         <ModalIcon tone="danger">
           <TriangleAlert size={20} strokeWidth={1.8} />
         </ModalIcon>
-        <ModalTitle id="export-dialog-title">No pudimos exportar el video</ModalTitle>
+        <ModalTitle id="export-dialog-title">{t("exportError")}</ModalTitle>
         <ModalText>{error}</ModalText>
         <ModalActions>
           <ModalButton variant="ghost" onClick={onCancel}>
-            Cerrar
+            {t("close")}
           </ModalButton>
           <ModalButton variant="primary" onClick={onRetry}>
-            Reintentar
+            {t("retry")}
           </ModalButton>
         </ModalActions>
       </ModalOverlay>
@@ -56,7 +58,7 @@ export function ExportDialog({
 
   return (
     <ModalOverlay onCancel={onCancel} labelledBy="export-dialog-title">
-      <ModalTitle id="export-dialog-title">Exportando video…</ModalTitle>
+      <ModalTitle id="export-dialog-title">{t("exporting")}</ModalTitle>
       <div
         className={styles.progressTrack}
         role="progressbar"
@@ -69,7 +71,7 @@ export function ExportDialog({
       <ModalText>{percent}%</ModalText>
       <ModalActions>
         <ModalButton variant="ghost" onClick={onCancel}>
-          Cancelar
+          {t("cancel")}
         </ModalButton>
       </ModalActions>
     </ModalOverlay>

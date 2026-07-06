@@ -3,6 +3,8 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { IPC_CHANNELS } from "@shared/types";
 import type { VaultDirectory } from "@shared/types";
+import { createMainTranslator } from "@kaipu/i18n/main";
+import { getAppSettings } from "../infrastructure/settings-store";
 import { LibraryVault } from "./library-vault";
 import { resetVaultDirectory, setVaultDirectory, vaultDirectory } from "./vault-location";
 import { deleteVideoEditSession, registerVideoEditSessionHandlers } from "./video-edit-session";
@@ -66,8 +68,9 @@ export function registerLibraryVaultHandlers(): void {
     IPC_CHANNELS.chooseVaultDirectory,
     async (event): Promise<VaultDirectory | null> => {
       const window = BrowserWindow.fromWebContents(event.sender);
+      const t = createMainTranslator(getAppSettings().locale);
       const options: Electron.OpenDialogOptions = {
-        title: "Choose recordings folder",
+        title: t("dialogs.chooseFolder"),
         properties: ["openDirectory", "createDirectory"],
         defaultPath: vaultDirectory().path,
       };
@@ -83,8 +86,8 @@ export function registerLibraryVaultHandlers(): void {
       // Validate before committing: a folder we can't write into would make every
       // future recording/screenshot fail with no obvious cause.
       if (!(await isWritableDirectory(chosen))) {
-        const message = { type: "error" as const, message: "No pudimos usar esa carpeta" };
-        const detail = "Kaipu no puede escribir ahí. Elegí otra carpeta.";
+        const message = { type: "error" as const, message: t("dialogs.folderUnusable") };
+        const detail = t("dialogs.folderUnusableDetail");
         await (window
           ? dialog.showMessageBox(window, { ...message, detail })
           : dialog.showMessageBox({ ...message, detail }));
@@ -95,12 +98,11 @@ export function registerLibraryVaultHandlers(): void {
       // contents, which otherwise reads as "my recordings vanished".
       const confirm = {
         type: "question" as const,
-        buttons: ["Cancelar", "Cambiar carpeta"],
+        buttons: [t("dialogs.cancel"), t("dialogs.changeFolder")],
         defaultId: 1,
         cancelId: 0,
-        message: "Cambiar la carpeta de grabaciones",
-        detail:
-          "Tus grabaciones actuales se quedan en la carpeta anterior; desde ahora Kaipu guarda y muestra las de la carpeta nueva. Podés volver a la anterior cuando quieras.",
+        message: t("dialogs.changeFolderTitle"),
+        detail: t("dialogs.changeFolderDetail"),
       };
       const choice = await (window
         ? dialog.showMessageBox(window, confirm)

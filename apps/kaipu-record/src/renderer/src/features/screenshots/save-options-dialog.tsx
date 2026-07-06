@@ -1,4 +1,5 @@
 import { Copy, Save } from "lucide-react";
+import { useTranslations } from "@kaipu/i18n";
 import {
   ModalActions,
   ModalButton,
@@ -24,26 +25,27 @@ export function SaveOptionsDialog({
   onSaveCopy,
   onCancel,
 }: SaveOptionsDialogProps): React.JSX.Element {
+  const t = useTranslations("screenshots");
   return (
     <ModalOverlay onCancel={onCancel} labelledBy="save-dialog-title">
       <ModalIcon tone="accent">
         <Save size={20} strokeWidth={1.8} />
       </ModalIcon>
-      <ModalTitle id="save-dialog-title">Save changes</ModalTitle>
+      <ModalTitle id="save-dialog-title">{t("saveChangesTitle")}</ModalTitle>
       <ModalText>
-        <ModalName>{title}</ModalName> already exists. Overwrite it, or keep it and save a copy?
+        <ModalName>{title}</ModalName> {t("saveOptionsBody")}
       </ModalText>
       <ModalActions>
         <ModalButton variant="ghost" onClick={onCancel}>
-          Cancel
+          {t("cancel")}
         </ModalButton>
         <ModalButton variant="ghost" onClick={onSaveCopy}>
           <Copy size={15} strokeWidth={1.8} />
-          Save copy
+          {t("saveCopy")}
         </ModalButton>
         <ModalButton variant="primary" onClick={onOverwrite}>
           <Save size={15} strokeWidth={1.8} />
-          Overwrite
+          {t("overwrite")}
         </ModalButton>
       </ModalActions>
     </ModalOverlay>

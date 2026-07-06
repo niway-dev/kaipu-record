@@ -15,6 +15,7 @@ import {
   Skeleton,
 } from "@kaipu/web-ui";
 import { Plus, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { useTranslations } from "@kaipu/i18n";
 import { useState } from "react";
 import {
   useTodos,
@@ -33,6 +34,7 @@ export const Route = createFileRoute("/_authenticated/todos/")({
 });
 
 function TodosPage() {
+  const t = useTranslations("todos");
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: DEFAULT_PAGE_SIZE });
   const page = pagination.pageIndex + 1;
 
@@ -63,10 +65,10 @@ function TodosPage() {
       {
         onSuccess: () => {
           setNewTitle("");
-          toast.success("Todo created");
+          toast.success(t("created"));
         },
         onError: () => {
-          toast.error("Failed to create todo");
+          toast.error(t("createError"));
         },
       },
     );
@@ -77,7 +79,7 @@ function TodosPage() {
       { id, completed: !completed },
       {
         onError: () => {
-          toast.error("Failed to update todo");
+          toast.error(t("updateError"));
         },
       },
     );
@@ -88,10 +90,10 @@ function TodosPage() {
       { id },
       {
         onSuccess: () => {
-          toast.success("Todo deleted");
+          toast.success(t("deleteSuccess"));
         },
         onError: () => {
-          toast.error("Failed to delete todo");
+          toast.error(t("deleteError"));
         },
       },
     );
@@ -100,21 +102,21 @@ function TodosPage() {
   return (
     <div className="container mx-auto px-4 py-8 max-w-3xl">
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold">Todos</h1>
+        <h1 className="text-3xl font-bold">{t("title")}</h1>
       </div>
 
       <Card className="mb-8">
         <CardContent className="p-4">
           <form onSubmit={handleCreate} className="flex gap-3">
             <Input
-              placeholder="What needs to be done?"
+              placeholder={t("placeholder")}
               value={newTitle}
               onChange={(e) => setNewTitle(e.target.value)}
               className="flex-1"
             />
             <Button type="submit" disabled={createTodo.isPending || !newTitle.trim()}>
               <Plus className="h-4 w-4 mr-2" />
-              Add
+              {t("add")}
             </Button>
           </form>
         </CardContent>
@@ -134,13 +136,13 @@ function TodosPage() {
       ) : error ? (
         <Card>
           <CardContent className="p-8 text-center">
-            <p className="text-destructive">Failed to load todos</p>
+            <p className="text-destructive">{t("failedLoad")}</p>
           </CardContent>
         </Card>
       ) : todos.length === 0 ? (
         <Card>
           <CardContent className="p-8 text-center">
-            <p className="text-muted-foreground">No todos yet. Create one above!</p>
+            <p className="text-muted-foreground">{t("empty")}</p>
           </CardContent>
         </Card>
       ) : (
@@ -149,8 +151,8 @@ function TodosPage() {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-12" />
-                <TableHead>Title</TableHead>
-                <TableHead className="w-20 text-right">Actions</TableHead>
+                <TableHead>{t("colTitle")}</TableHead>
+                <TableHead className="w-20 text-right">{t("colActions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -187,7 +189,7 @@ function TodosPage() {
       {totalPages > 1 && (
         <div className="flex items-center justify-between mt-4">
           <p className="text-sm text-muted-foreground">
-            Page {page} of {totalPages} ({paginationMeta?.total ?? 0} total)
+            {t("pageInfo", { page, totalPages, total: paginationMeta?.total ?? 0 })}
           </p>
           <div className="flex gap-2">
             <Button
@@ -197,7 +199,7 @@ function TodosPage() {
               disabled={pagination.pageIndex === 0}
             >
               <ChevronLeft className="h-4 w-4 mr-1" />
-              Previous
+              {t("previous")}
             </Button>
             <Button
               variant="outline"
@@ -205,7 +207,7 @@ function TodosPage() {
               onClick={() => setPagination((prev) => ({ ...prev, pageIndex: prev.pageIndex + 1 }))}
               disabled={page >= totalPages || isPlaceholderData}
             >
-              Next
+              {t("next")}
               <ChevronRight className="h-4 w-4 ml-1" />
             </Button>
           </div>

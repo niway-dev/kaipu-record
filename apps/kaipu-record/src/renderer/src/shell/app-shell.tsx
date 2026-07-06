@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
-import { SHORTCUT_DEFINITIONS } from "@shared/types";
+import { SHORTCUT_DEFINITIONS, type ShortcutAction } from "@shared/types";
+import { useTranslations } from "@kaipu/i18n";
 import { Sidebar } from "./sidebar";
 import { useShortcutLabels } from "@renderer/features/shortcuts/use-shortcut-labels";
 import { subscribeRecordingComplete } from "@renderer/features/recording/recorder-store";
@@ -14,6 +15,17 @@ import { useAppVersion } from "./use-app-version";
 import { useScreenshotCapture } from "@renderer/features/screenshots/use-screenshot-capture";
 import styles from "./app-shell.module.css";
 
+/** action → `shortcuts` namespace status-word keys for the status bar. */
+const STATUS_KEY: Record<
+  ShortcutAction,
+  "statusStart" | "statusStop" | "statusShowApp" | "statusCapture"
+> = {
+  startRecording: "statusStart",
+  stopRecording: "statusStop",
+  bringToFront: "statusShowApp",
+  captureScreenshot: "statusCapture",
+};
+
 /**
  * App layout: a fixed icon sidebar plus the active page rendered into <Outlet />,
  * with a status bar showing the real (global, rebindable) recording shortcuts.
@@ -21,6 +33,7 @@ import styles from "./app-shell.module.css";
  */
 export function AppShell(): React.JSX.Element {
   const navigate = useNavigate();
+  const t = useTranslations("shortcuts");
   const shortcuts = useShortcutLabels();
   const gate = useVersionGate();
   const update = useUpdateStatus();
@@ -87,7 +100,7 @@ export function AppShell(): React.JSX.Element {
             <React.Fragment key={def.action}>
               {i > 0 && <span className={styles.statusDot}>·</span>}
               <span>
-                <kbd>{shortcuts[def.action]}</kbd> {def.statusWord}
+                <kbd>{shortcuts[def.action]}</kbd> {t(STATUS_KEY[def.action])}
               </span>
             </React.Fragment>
           ))}

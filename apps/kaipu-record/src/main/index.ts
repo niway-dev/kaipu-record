@@ -4,6 +4,7 @@ import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import { IPC_CHANNELS } from "@shared/types";
 import icon from "../../resources/icon.png?asset";
 import { CapturePanelWindow } from "./capture-panel-window";
+import { createMainTranslator } from "@kaipu/i18n/main";
 import { createTray, rebuildTrayMenu } from "./tray";
 import { registerRecordingSourceHandlers } from "./recording-sources";
 import { registerPermissionHandlers } from "./permissions";
@@ -118,13 +119,14 @@ function createWindow(showOnReady = true): void {
   mainWindow.on("close", (event) => {
     if (closingWithRecording || !hub?.isActive()) return;
     event.preventDefault();
+    const t = createMainTranslator(getAppSettings().locale);
     const choice = dialog.showMessageBoxSync(mainWindow!, {
       type: "warning",
-      buttons: ["Cancelar", "Detener y cerrar"],
+      buttons: [t("dialogs.cancel"), t("dialogs.stopAndClose")],
       defaultId: 0,
       cancelId: 0,
-      message: "Hay una grabación en curso",
-      detail: "Cerrar ahora detiene la grabación. Kaipu guardará lo grabado hasta este momento.",
+      message: t("dialogs.recordingInProgress"),
+      detail: t("dialogs.closeStopsDetail"),
     });
     if (choice !== 1) return;
     closingWithRecording = true;
@@ -183,9 +185,10 @@ function triggerStartRecording(): void {
     // Let the user know the shortcut landed instead of silently no-oping.
     capturePanel?.hide();
     if (Notification.isSupported()) {
+      const t = createMainTranslator(getAppSettings().locale);
       new Notification({
-        title: "Ya hay una grabación en curso",
-        body: "Detenla desde la barra flotante antes de iniciar otra.",
+        title: t("dialogs.alreadyRecordingTitle"),
+        body: t("dialogs.alreadyRecordingBody"),
       }).show();
     }
     return;
@@ -409,13 +412,14 @@ app.whenReady().then(() => {
 app.on("before-quit", (event) => {
   if (!quittingWithRecording && hub?.isActive()) {
     event.preventDefault();
+    const t = createMainTranslator(getAppSettings().locale);
     const choice = dialog.showMessageBoxSync({
       type: "warning",
-      buttons: ["Cancelar", "Detener y salir"],
+      buttons: [t("dialogs.cancel"), t("dialogs.stopAndQuit")],
       defaultId: 0,
       cancelId: 0,
-      message: "Hay una grabación en curso",
-      detail: "Salir ahora detiene la grabación. Kaipu guardará lo grabado hasta este momento.",
+      message: t("dialogs.recordingInProgress"),
+      detail: t("dialogs.quitStopsDetail"),
     });
     if (choice !== 1) return;
     quittingWithRecording = true;

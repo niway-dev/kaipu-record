@@ -13,9 +13,16 @@ vi.mock("@kaipu/i18n", async (importOriginal) => {
   return {
     ...actual,
     I18nProvider: ({ children }: { children: unknown }) => children,
-    useTranslations: (namespace?: string) => (key: string) => {
+    useTranslations: (namespace?: string) => (key: string, values?: Record<string, unknown>) => {
       const value = namespace ? messages[namespace]?.[key] : undefined;
-      return typeof value === "string" ? value : namespace ? `${namespace}.${key}` : key;
+      let str = typeof value === "string" ? value : namespace ? `${namespace}.${key}` : key;
+      // Substitute simple ICU `{param}` placeholders so assertions match rendered copy.
+      if (values) {
+        for (const [k, v] of Object.entries(values)) {
+          str = str.replace(new RegExp(`\\{${k}\\}`, "g"), String(v));
+        }
+      }
+      return str;
     },
     useLocale: () => "en",
     useSetLocale: () => () => {},

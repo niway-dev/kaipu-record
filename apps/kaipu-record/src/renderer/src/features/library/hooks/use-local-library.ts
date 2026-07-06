@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useTranslations } from "@kaipu/i18n";
 import type { LocalRecording } from "@shared/types";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import { reportError } from "@renderer/features/analytics";
@@ -29,6 +30,7 @@ export interface LocalLibrary {
 
 /** Loads + manages the local recordings vault via the main process. */
 export function useLocalLibrary(): LocalLibrary {
+  const t = useTranslations("library");
   const [videos, setVideos] = useState<LibraryVideo[]>([]);
   const [isLoading, setLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
@@ -44,7 +46,7 @@ export function useLocalLibrary(): LocalLibrary {
       // empty state, indistinguishable from real data loss. Flag the error so the
       // page can show a "couldn't read your folder — Retry" panel instead.
       setHasError(true);
-      reportError("No pudimos leer tu carpeta de grabaciones.", error, {
+      reportError(t("errorRead"), error, {
         context: { phase: "library-list" },
         retry: () => void refresh(),
       });
@@ -58,7 +60,7 @@ export function useLocalLibrary(): LocalLibrary {
       await window.electronAPI.renameLocalRecording(id, title);
       setVideos((prev) => prev.map((video) => (video.id === id ? { ...video, title } : video)));
     } catch (error) {
-      reportError("No pudimos renombrar la grabación.", error, { context: { id } });
+      reportError(t("errorRename"), error, { context: { id } });
     }
   }, []);
 
@@ -67,7 +69,7 @@ export function useLocalLibrary(): LocalLibrary {
       await window.electronAPI.deleteLocalRecording(id);
       setVideos((prev) => prev.filter((video) => video.id !== id));
     } catch (error) {
-      reportError("No pudimos eliminar el archivo.", error, { context: { id } });
+      reportError(t("errorDelete"), error, { context: { id } });
     }
   }, []);
 

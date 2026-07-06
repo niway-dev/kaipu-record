@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Navigate, useBlocker, useLocation } from "react-router-dom";
 import { Check, Copy, Download, Redo2, Undo2, ZoomIn, ZoomOut } from "lucide-react";
+import { useTranslations } from "@kaipu/i18n";
 import { useImageSource, type ImageSource } from "@renderer/features/screenshots/image-source";
 import { DiscardChangesDialog } from "@renderer/features/screenshots/discard-changes-dialog";
 import { reportError } from "@renderer/features/analytics";
@@ -48,6 +49,7 @@ export function ScreenshotEditorPage(): React.JSX.Element {
 }
 
 function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Element {
+  const t = useTranslations("screenshots");
   const image = useImageSource(source);
   // A re-opened saved shot is already framed/flattened — start it unframed so the
   // editor doesn't beautify it twice; a fresh capture gets the default frame.
@@ -69,7 +71,9 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
   // after the first save. While set, Save asks overwrite-or-copy.
   const [savedId, setSavedId] = useState<string | null>(source.kind === "local" ? source.id : null);
   const [askSave, setAskSave] = useState(false);
-  const [baseTitle] = useState(() => source.title ?? `Screenshot — ${new Date().toLocaleString()}`);
+  const [baseTitle] = useState(
+    () => source.title ?? `${t("screenshotPrefix")} — ${new Date().toLocaleString()}`,
+  );
 
   // Unsaved-changes guard. A fresh capture (blob) lives ONLY in memory, so it's
   // dirty from the moment it opens — leaving loses the only copy; a re-opened
@@ -141,7 +145,7 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
     } catch (error) {
       // Without this the button just never flips to "Copied" and the rejection is
       // unhandled — the user has no idea the copy failed.
-      reportError("No pudimos copiar la captura al portapapeles.", error, {
+      reportError(t("copyError"), error, {
         context: { phase: "copy" },
         retry: () => void onCopy(),
       });
@@ -165,7 +169,7 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
       // A swallowed save (vault on a disconnected drive, disk full, composite
       // failure) let the user close the editor believing the shot was saved.
       // Surface it with a retry so the work isn't silently lost.
-      reportError("No pudimos guardar la captura.", error, {
+      reportError(t("saveError"), error, {
         context: { phase: "save", overwrite: opts.overwriteId !== undefined },
         retry: () => void persist(opts),
       });
@@ -187,7 +191,7 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
   };
   const onSaveCopy = (): void => {
     setAskSave(false);
-    void persist({ title: `${baseTitle} (copy)` });
+    void persist({ title: `${baseTitle} (${t("copySuffix")})` });
   };
 
   const copied = feedback?.kind === "copied";
@@ -201,7 +205,7 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
           <button
             type="button"
             className={styles.iconBtn}
-            title="Undo"
+            title={t("undo")}
             disabled={!scene.canUndo}
             onClick={scene.undo}
           >
@@ -210,7 +214,7 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
           <button
             type="button"
             className={styles.iconBtn}
-            title="Redo"
+            title={t("redo")}
             disabled={!scene.canRedo}
             onClick={scene.redo}
           >
@@ -222,21 +226,21 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
             className={styles.secondary}
             data-done={copied}
             disabled={!imageReady}
-            title={copied ? "Copied to clipboard" : "Copy to clipboard"}
+            title={copied ? t("copiedTitle") : t("copyTitle")}
             onClick={onCopy}
           >
-            {copied ? <Check size={16} /> : <Copy size={16} />} {copied ? "Copied" : "Copy"}
+            {copied ? <Check size={16} /> : <Copy size={16} />} {copied ? t("copied") : t("copy")}
           </button>
           <button
             type="button"
             className={styles.save}
             data-done={savedName !== null}
             disabled={!imageReady}
-            title={savedName ? `Saved as “${savedName}”` : "Save to your library"}
+            title={savedName ? t("savedAsTitle", { name: savedName }) : t("saveTitle")}
             onClick={onSave}
           >
             {savedName ? <Check size={16} /> : <Download size={16} />}{" "}
-            {savedName ? "Saved" : "Save"}
+            {savedName ? t("saved") : t("save")}
           </button>
         </div>
       </div>
@@ -265,7 +269,7 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
             <button
               type="button"
               className={styles.zoomBtn}
-              title="Alejar"
+              title={t("zoomOut")}
               disabled={zoom <= ZOOM_MIN}
               onClick={() => zoomBy(-ZOOM_STEP)}
             >
@@ -274,7 +278,7 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
             <button
               type="button"
               className={styles.zoomLabel}
-              title="Restablecer zoom"
+              title={t("zoomReset")}
               disabled={zoom === 1}
               onClick={() => setZoom(1)}
             >
@@ -283,7 +287,7 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
             <button
               type="button"
               className={styles.zoomBtn}
-              title="Acercar"
+              title={t("zoomIn")}
               disabled={zoom >= ZOOM_MAX}
               onClick={() => zoomBy(ZOOM_STEP)}
             >
@@ -300,7 +304,7 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
             <Check size={14} strokeWidth={3} />
           </span>
           <span className={styles.savedToastText}>
-            <span className={styles.savedToastTitle}>Saved to your library</span>
+            <span className={styles.savedToastTitle}>{t("savedToast")}</span>
             <span className={styles.savedToastName}>{savedName}</span>
           </span>
         </div>

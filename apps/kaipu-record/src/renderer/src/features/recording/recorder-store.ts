@@ -9,6 +9,7 @@ import {
 import { startEngine, type EngineHandle } from "@renderer/features/recording/recorder-engine";
 import type { WatermarkConfig } from "@renderer/features/watermark/watermark";
 import { reportError } from "@renderer/features/analytics";
+import { runtimeT } from "@renderer/lib/runtime-i18n";
 
 export type RecorderStatus =
   | "idle"
@@ -174,7 +175,7 @@ async function beginEngine(input: StartInput): Promise<void> {
       // runs the same robust stop — finalize-or-abort + always restore the
       // window/Dock/bar — so the app never gets stuck.
       onError: (error) => {
-        reportError("La grabación se detuvo por un error. Guardamos lo que se pudo.", error, {
+        reportError(runtimeT()("record.errorStopped"), error, {
           context: { sourceId: input.sourceId, phase: "mid-recording" },
           retry: () => {
             if (lastResolveInput) requestStartRecording(lastResolveInput);
@@ -209,7 +210,7 @@ async function beginEngine(input: StartInput): Promise<void> {
     }, 100);
   } catch (error) {
     cancelRequested = false;
-    reportError("No pudimos iniciar la grabación. Vuelve a intentarlo.", error, {
+    reportError(runtimeT()("record.errorStart"), error, {
       context: { sourceId: input.sourceId, phase: "start" },
       retry: () => {
         if (lastResolveInput) requestStartRecording(lastResolveInput);
@@ -275,7 +276,7 @@ async function stopRecording(): Promise<void> {
       delay(MIN_SAVING_MS),
     ]);
   } catch (error) {
-    reportError("No pudimos guardar la grabación.", error, {
+    reportError(runtimeT()("record.errorSave"), error, {
       context: { sessionId: activeSessionId, phase: "finalize" },
       retry: () => {
         if (lastResolveInput) requestStartRecording(lastResolveInput);

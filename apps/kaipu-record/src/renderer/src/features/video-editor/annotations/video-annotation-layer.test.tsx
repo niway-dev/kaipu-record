@@ -129,7 +129,7 @@ describe("VideoAnnotationLayer — text tool", () => {
   it("opens an inline input and commits exactly once on Enter", () => {
     const { props, layer } = renderLayer({ tool: "text" });
     fireEvent.pointerDown(layer, { clientX: 40, clientY: 30 });
-    const input = screen.getByPlaceholderText("Escribe…");
+    const input = screen.getByPlaceholderText("Type…");
     fireEvent.change(input, { target: { value: "hola" } });
     fireEvent.keyDown(input, { key: "Enter" });
 
@@ -143,7 +143,7 @@ describe("VideoAnnotationLayer — text tool", () => {
   it("does not commit on Escape (cancel)", () => {
     const { props, layer } = renderLayer({ tool: "text" });
     fireEvent.pointerDown(layer, { clientX: 40, clientY: 30 });
-    const input = screen.getByPlaceholderText("Escribe…");
+    const input = screen.getByPlaceholderText("Type…");
     fireEvent.change(input, { target: { value: "hola" } });
     fireEvent.keyDown(input, { key: "Escape" });
 

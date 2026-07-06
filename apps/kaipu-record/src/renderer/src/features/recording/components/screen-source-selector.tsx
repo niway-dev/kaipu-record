@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { AppWindowMac, Monitor } from "lucide-react";
+import { useTranslations } from "@kaipu/i18n";
 import type { ScreenSource } from "@shared/types/electron-api";
 import { PermissionNotice } from "./permission-notice";
 import styles from "./screen-source-selector.module.css";
@@ -22,9 +23,13 @@ function SourceThumbnail({ source }: { source: ScreenSource }): React.JSX.Elemen
 
 type SourceKind = "screens" | "windows";
 
-const KINDS: { id: SourceKind; label: string; match: ScreenSource["type"] }[] = [
-  { id: "screens", label: "Screens", match: "screen" },
-  { id: "windows", label: "Windows", match: "window" },
+const KINDS: {
+  id: SourceKind;
+  labelKey: "screensTab" | "windowsTab";
+  match: ScreenSource["type"];
+}[] = [
+  { id: "screens", labelKey: "screensTab", match: "screen" },
+  { id: "windows", labelKey: "windowsTab", match: "window" },
 ];
 
 interface ScreenSourceSelectorProps {
@@ -41,6 +46,7 @@ interface ScreenSourceSelectorProps {
 
 /** Dumb screen/window picker. The source list is provided by `useScreenSources`. */
 export function ScreenSourceSelector(props: ScreenSourceSelectorProps): React.JSX.Element | null {
+  const t = useTranslations("record");
   const { isOpen, sources, isLoading, error, isAccessGranted = true, currentSourceId } = props;
   const [kind, setKind] = useState<SourceKind>("screens");
 
@@ -60,7 +66,7 @@ export function ScreenSourceSelector(props: ScreenSourceSelectorProps): React.JS
       return (
         <div className={styles.placeholder}>
           <PermissionNotice
-            label="Screen Recording access is off"
+            label={t("screenAccessOff")}
             onOpenSettings={() => props.onGrantAccess?.()}
           />
         </div>
@@ -70,7 +76,7 @@ export function ScreenSourceSelector(props: ScreenSourceSelectorProps): React.JS
       return (
         <div className={styles.pending}>
           <div className={styles.loader} />
-          <p>Loading sources…</p>
+          <p>{t("loadingSources")}</p>
         </div>
       );
     }
@@ -84,7 +90,7 @@ export function ScreenSourceSelector(props: ScreenSourceSelectorProps): React.JS
     if (tiles.length === 0) {
       return (
         <div className={styles.placeholder}>
-          <p>No {tab.label.toLowerCase()} found</p>
+          <p>{kind === "screens" ? t("noScreens") : t("noWindows")}</p>
         </div>
       );
     }
@@ -116,7 +122,7 @@ export function ScreenSourceSelector(props: ScreenSourceSelectorProps): React.JS
     >
       <div className={styles.modal}>
         <div className={styles.header}>
-          <h3>Select a Screen or Window</h3>
+          <h3>{t("selectScreenOrWindow")}</h3>
           <button className={styles.closeButton} onClick={props.onClose}>
             ✕
           </button>
@@ -130,7 +136,7 @@ export function ScreenSourceSelector(props: ScreenSourceSelectorProps): React.JS
               data-active={k.id === kind || undefined}
               onClick={() => setKind(k.id)}
             >
-              {k.label}
+              {t(k.labelKey)}
             </button>
           ))}
         </div>

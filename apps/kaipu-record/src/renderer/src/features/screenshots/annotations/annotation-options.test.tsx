@@ -94,7 +94,7 @@ describe("AnnotationOptions", () => {
     expect(screen.getByText("Color")).toBeInTheDocument();
     expect(screen.getByText("Stroke")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: ANNOTATION_COLORS[2].name }));
+    fireEvent.click(screen.getByRole("button", { name: "White" }));
     // Recolours the selection AND updates the tool default so the next shape matches.
     expect(scene.commitAnnotation).toHaveBeenCalledWith("b1", {
       color: ANNOTATION_COLORS[2].value,
@@ -138,13 +138,13 @@ describe("AnnotationOptions", () => {
     scene.crop = { x: 0.1, y: 0.1, w: 0.5, h: 0.5 };
     scene.setCrop = vi.fn();
     render(<AnnotationOptions tools={makeTools({ tool: "crop" })} scene={scene} />);
-    fireEvent.click(screen.getByRole("button", { name: "Restablecer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
     expect(scene.setCrop).toHaveBeenCalledWith(undefined);
   });
 
   it("disables the reset control when there is no crop to reset", () => {
     const scene = makeScene([], null); // crop is undefined
     render(<AnnotationOptions tools={makeTools({ tool: "crop" })} scene={scene} />);
-    expect(screen.getByRole("button", { name: "Restablecer" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Reset" })).toBeDisabled();
   });
 });

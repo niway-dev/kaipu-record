@@ -11,7 +11,7 @@ describe("VersionGateOverlay", () => {
     vi.stubGlobal("open", open);
     render(<VersionGateOverlay message="Actualizá" downloadUrl="https://x.test" />);
     expect(screen.getByText("Actualizá")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /actualizar/i }));
+    fireEvent.click(screen.getByRole("button", { name: /update/i }));
     expect(open).toHaveBeenCalledWith("https://x.test", "_blank");
   });
 
@@ -25,7 +25,7 @@ describe("VersionGateBanner", () => {
   it("renders and can be dismissed", () => {
     render(<VersionGateBanner message="Nueva versión" downloadUrl="https://x.test" />);
     expect(screen.getByText("Nueva versión")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /cerrar/i }));
+    fireEvent.click(screen.getByRole("button", { name: /close/i }));
     expect(screen.queryByText("Nueva versión")).toBeNull();
   });
 });

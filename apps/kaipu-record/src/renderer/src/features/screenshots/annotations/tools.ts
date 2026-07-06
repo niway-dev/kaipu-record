@@ -18,21 +18,31 @@ export type AnnotationTool = (typeof ANNOTATION_TOOLS)[number];
  */
 export const BLUR_STD = 12;
 
+export type ColorNameKey =
+  | "colorPink"
+  | "colorBlack"
+  | "colorWhite"
+  | "colorYellow"
+  | "colorRed"
+  | "colorGreen"
+  | "colorPurple";
+
 export interface AnnotationColor {
-  name: string;
+  /** i18n key (under the `screenshots` namespace) for this swatch's a11y name. */
+  nameKey: ColorNameKey;
   value: string;
 }
 
 // Pink (the brand accent) leads, so it's the default swatch — a fresh annotation
 // uses ANNOTATION_COLORS[0] (see use-annotation-tools). Black-by-default felt dull.
 export const ANNOTATION_COLORS: AnnotationColor[] = [
-  { name: "Pink", value: "#f6055c" },
-  { name: "Black", value: "#1a1a1a" },
-  { name: "White", value: "#f5f5f5" },
-  { name: "Yellow", value: "#eab308" },
-  { name: "Red", value: "#ef4444" },
-  { name: "Green", value: "#22c55e" },
-  { name: "Purple", value: "#a855f7" },
+  { nameKey: "colorPink", value: "#f6055c" },
+  { nameKey: "colorBlack", value: "#1a1a1a" },
+  { nameKey: "colorWhite", value: "#f5f5f5" },
+  { nameKey: "colorYellow", value: "#eab308" },
+  { nameKey: "colorRed", value: "#ef4444" },
+  { nameKey: "colorGreen", value: "#22c55e" },
+  { nameKey: "colorPurple", value: "#a855f7" },
 ];
 
 /** Stroke widths in px; the array index is the stored stroke level (0–2). */

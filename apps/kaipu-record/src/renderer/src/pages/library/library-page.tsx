@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Library, LayoutGrid, LayoutList, AlertTriangle, RefreshCw } from "lucide-react";
+import { useTranslations } from "@kaipu/i18n";
 import { SearchInput } from "@renderer/ui/search-input";
 import { Button } from "@renderer/ui/button";
 import { VideoCard } from "@renderer/features/library/components/video-card";
@@ -13,6 +14,7 @@ import { useLibraryFilters } from "@renderer/features/library/hooks/use-library-
 import styles from "./library-page.module.css";
 
 export function LibraryPage(): React.JSX.Element {
+  const t = useTranslations("library");
   const navigate = useNavigate();
   const { videos, isLoading, hasError, refresh, remove } = useLocalLibrary();
   const {
@@ -44,12 +46,12 @@ export function LibraryPage(): React.JSX.Element {
     <div className={styles.page}>
       <div className={styles.pageHeader}>
         <div className={styles.pageHeaderText}>
-          <h1 className={styles.pageTitle}>Library</h1>
-          <p className={styles.pageSubtitle}>Manage your recordings and perform actions.</p>
+          <h1 className={styles.pageTitle}>{t("title")}</h1>
+          <p className={styles.pageSubtitle}>{t("subtitle")}</p>
         </div>
         <button
           className={styles.headerSyncButton}
-          title="Rescan local vault"
+          title={t("rescan")}
           type="button"
           onClick={() => void refresh()}
         >
@@ -58,13 +60,13 @@ export function LibraryPage(): React.JSX.Element {
             strokeWidth={1.8}
             className={isLoading ? styles.spinning : undefined}
           />
-          Sync
+          {t("sync")}
         </button>
       </div>
 
       <div className={styles.toolbar}>
         <SearchInput
-          placeholder="Search recordings…"
+          placeholder={t("searchPlaceholder")}
           value={searchTerm}
           onSearch={setSearchTerm}
           className={styles.search}
@@ -75,7 +77,7 @@ export function LibraryPage(): React.JSX.Element {
             className={styles.viewToggleButton}
             data-active={view === "grid"}
             onClick={() => setView("grid")}
-            title="Gallery view"
+            title={t("galleryView")}
             type="button"
           >
             <LayoutGrid size={15} strokeWidth={1.8} />
@@ -84,7 +86,7 @@ export function LibraryPage(): React.JSX.Element {
             className={styles.viewToggleButton}
             data-active={view === "list"}
             onClick={() => setView("list")}
-            title="List view"
+            title={t("listView")}
             type="button"
           >
             <LayoutList size={15} strokeWidth={1.8} />
@@ -94,27 +96,27 @@ export function LibraryPage(): React.JSX.Element {
 
       <div className={styles.chipRow}>
         <FilterChip active={kindFilter === "all"} onClick={() => setKindFilter("all")}>
-          All ({kindCounts.all})
+          {t("kindAll", { count: kindCounts.all })}
         </FilterChip>
         <FilterChip
           active={kindFilter === "recording"}
           empty={kindCounts.recording === 0}
           onClick={() => setKindFilter("recording")}
         >
-          Recordings ({kindCounts.recording})
+          {t("kindRecordings", { count: kindCounts.recording })}
         </FilterChip>
         <FilterChip
           active={kindFilter === "screenshot"}
           empty={kindCounts.screenshot === 0}
           onClick={() => setKindFilter("screenshot")}
         >
-          Screenshots ({kindCounts.screenshot})
+          {t("kindScreenshots", { count: kindCounts.screenshot })}
         </FilterChip>
 
         <span className={styles.chipDivider} aria-hidden />
 
         <FilterChip active={storageFilter === "all"} onClick={() => setStorageFilter("all")}>
-          All
+          {t("storageAll")}
         </FilterChip>
         <FilterChip
           active={storageFilter === "local"}
@@ -122,7 +124,7 @@ export function LibraryPage(): React.JSX.Element {
           onClick={() => setStorageFilter("local")}
         >
           <span className={styles.storageDotChip} data-cloud="false" />
-          Local
+          {t("storageLocal")}
         </FilterChip>
         <FilterChip
           active={storageFilter === "cloud"}
@@ -130,7 +132,7 @@ export function LibraryPage(): React.JSX.Element {
           onClick={() => setStorageFilter("cloud")}
         >
           <span className={styles.storageDotChip} data-cloud="true" />
-          Cloud
+          {t("storageCloud")}
         </FilterChip>
         {counts.failed > 0 && (
           <FilterChip
@@ -139,19 +141,17 @@ export function LibraryPage(): React.JSX.Element {
             onClick={() => setStorageFilter(storageFilter === "failed" ? "all" : "failed")}
           >
             <AlertTriangle size={12} strokeWidth={2} />
-            Failed ({counts.failed})
+            {t("filterFailed", { count: counts.failed })}
           </FilterChip>
         )}
       </div>
 
       {videos.length > 0 && (
         <div className={styles.summaryBar}>
-          <span>
-            {visibleItems.length} FILE{visibleItems.length !== 1 ? "S" : ""}
-          </span>
+          <span>{t("fileCount", { count: visibleItems.length })}</span>
           {hasActiveFilters && (
             <button className={styles.clearFiltersButton} onClick={clearFilters} type="button">
-              Clear filters
+              {t("clearFilters")}
             </button>
           )}
         </div>
@@ -160,13 +160,11 @@ export function LibraryPage(): React.JSX.Element {
       {hasError ? (
         <div className={styles.empty}>
           <AlertTriangle size={48} className={styles.emptyIcon} />
-          <h3 className={styles.emptyTitle}>Cannot read your recordings folder</h3>
-          <p className={styles.emptySubtitle}>
-            The folder may be on a drive that is disconnected or unreadable — your files are safe.
-          </p>
+          <h3 className={styles.emptyTitle}>{t("errorTitle")}</h3>
+          <p className={styles.emptySubtitle}>{t("errorSubtitle")}</p>
           <Button variant="primary" onClick={() => void refresh()}>
             <RefreshCw size={15} strokeWidth={1.8} />
-            Retry
+            {t("retry")}
           </Button>
         </div>
       ) : visibleItems.length === 0 ? (
@@ -174,24 +172,22 @@ export function LibraryPage(): React.JSX.Element {
           <Library size={48} className={styles.emptyIcon} />
           {videos.length === 0 ? (
             <>
-              <h3 className={styles.emptyTitle}>
-                {isLoading ? "Loading recordings…" : "No recordings yet"}
-              </h3>
+              <h3 className={styles.emptyTitle}>{isLoading ? t("loadingList") : t("empty")}</h3>
               {!isLoading && (
                 <>
-                  <p className={styles.emptySubtitle}>Your recorded videos will appear here</p>
+                  <p className={styles.emptySubtitle}>{t("emptySubtitle")}</p>
                   <Button variant="primary" onClick={() => navigate("/")}>
-                    Go record something
+                    {t("goRecord")}
                   </Button>
                 </>
               )}
             </>
           ) : (
             <>
-              <h3 className={styles.emptyTitle}>No recordings match these filters</h3>
-              <p className={styles.emptySubtitle}>Try a different search or filter.</p>
+              <h3 className={styles.emptyTitle}>{t("noMatch")}</h3>
+              <p className={styles.emptySubtitle}>{t("noMatchSubtitle")}</p>
               <Button variant="ghost" onClick={clearFilters}>
-                Clear filters
+                {t("clearFilters")}
               </Button>
             </>
           )}

@@ -1,5 +1,6 @@
 import React from "react";
 import { Mic, ChevronDown, ChevronUp, Check } from "lucide-react";
+import { useTranslations } from "@kaipu/i18n";
 import { getMicrophoneType } from "@renderer/features/recording/microphone";
 import type { Microphone } from "@renderer/features/recording/types";
 import { cx } from "@renderer/ui/cx";
@@ -23,6 +24,7 @@ export function MicPicker({
   onToggle,
   onSelect,
 }: MicPickerProps): React.JSX.Element {
+  const t = useTranslations("record");
   const compact = variant === "compact";
   const iconSize = compact ? 12 : 13;
   const affordanceSize = compact ? 11 : 13;
@@ -34,8 +36,8 @@ export function MicPicker({
           <Mic size={iconSize} />
         </span>
         <div className={styles.triggerText}>
-          <span className={styles.triggerLabel}>MICROPHONE</span>
-          <span className={styles.triggerName}>{selected?.label ?? "Select microphone"}</span>
+          <span className={styles.triggerLabel}>{t("micTitle")}</span>
+          <span className={styles.triggerName}>{selected?.label ?? t("selectMic")}</span>
         </div>
         {isOpen ? (
           <ChevronUp size={affordanceSize} className={styles.chevron} />
@@ -57,7 +59,9 @@ export function MicPicker({
               >
                 <div className={styles.optionInfo}>
                   <span className={styles.optionName}>{microphone.label}</span>
-                  <span className={styles.optionType}>{getMicrophoneType(microphone.label)}</span>
+                  <span className={styles.optionType}>
+                    {t(getMicrophoneType(microphone.label))}
+                  </span>
                 </div>
                 {isActive && <Check size={affordanceSize} className={styles.check} />}
               </button>

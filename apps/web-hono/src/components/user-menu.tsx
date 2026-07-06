@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
   Button,
 } from "@kaipu/web-ui";
+import { useTranslations } from "@kaipu/i18n";
 import { useSignOut } from "@/hooks/use-session";
 import type { AuthSession } from "@/lib/auth/types";
 
@@ -21,11 +22,12 @@ interface UserMenuProps {
 
 export default function UserMenu({ userName, userEmail, isAuthenticated }: UserMenuProps) {
   const signOut = useSignOut();
+  const t = useTranslations("auth");
 
   if (!isAuthenticated) {
     return (
       <Link to="/auth/login">
-        <Button variant="outline">Sign In</Button>
+        <Button variant="outline">{t("signIn")}</Button>
       </Link>
     );
   }
@@ -35,11 +37,11 @@ export default function UserMenu({ userName, userEmail, isAuthenticated }: UserM
       <DropdownMenuTrigger render={<Button variant="outline" />}>{userName}</DropdownMenuTrigger>
       <DropdownMenuContent className="bg-card min-w-[240px]">
         <DropdownMenuGroup>
-          <DropdownMenuLabel>My Account</DropdownMenuLabel>
+          <DropdownMenuLabel>{t("myAccount")}</DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem>{userEmail}</DropdownMenuItem>
           <DropdownMenuItem variant="destructive" onClick={() => signOut.mutate()}>
-            Sign Out
+            {t("signOut")}
           </DropdownMenuItem>
         </DropdownMenuGroup>
       </DropdownMenuContent>

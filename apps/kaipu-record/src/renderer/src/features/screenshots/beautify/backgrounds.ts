@@ -24,9 +24,21 @@ export type BackgroundPaint =
   | { kind: "solid"; color: string }
   | { kind: "gradient"; from: string; to: string };
 
+export type BackgroundNameKey =
+  | "bgNone"
+  | "bgDark"
+  | "bgCarbon"
+  | "bgMagenta"
+  | "bgPurple"
+  | "bgOcean"
+  | "bgSunset"
+  | "bgForest"
+  | "bgGraphite";
+
 export interface Background {
   id: BackgroundId;
-  name: string;
+  /** i18n key (under the `screenshots` namespace) for this preset's a11y name. */
+  nameKey: BackgroundNameKey;
   /** A CSS `background` value (gradient, solid, or token var) for the live preview. */
   css: string;
   /** Concrete colours for compositing the export to a canvas. */
@@ -36,50 +48,55 @@ export interface Background {
 export const BACKGROUNDS: Background[] = [
   {
     id: "none",
-    name: "None",
+    nameKey: "bgNone",
     css: "repeating-conic-gradient(#2a2a2e 0% 25%, #232327 0% 50%) 50% / 16px 16px",
     paint: { kind: "none" },
   },
-  { id: "dark", name: "Dark", css: "var(--bg-app)", paint: { kind: "solid", color: "#0f0f11" } },
+  {
+    id: "dark",
+    nameKey: "bgDark",
+    css: "var(--bg-app)",
+    paint: { kind: "solid", color: "#0f0f11" },
+  },
   {
     id: "carbon",
-    name: "Carbon",
+    nameKey: "bgCarbon",
     css: "var(--bg-card)",
     paint: { kind: "solid", color: "#171719" },
   },
   {
     id: "magenta",
-    name: "Magenta",
+    nameKey: "bgMagenta",
     css: "linear-gradient(135deg, #ff2d6e, #a3044a)",
     paint: { kind: "gradient", from: "#ff2d6e", to: "#a3044a" },
   },
   {
     id: "purple",
-    name: "Purple",
+    nameKey: "bgPurple",
     css: "linear-gradient(135deg, #a855f7, #6d28d9)",
     paint: { kind: "gradient", from: "#a855f7", to: "#6d28d9" },
   },
   {
     id: "ocean",
-    name: "Ocean",
+    nameKey: "bgOcean",
     css: "linear-gradient(135deg, #2563eb, #06b6d4)",
     paint: { kind: "gradient", from: "#2563eb", to: "#06b6d4" },
   },
   {
     id: "sunset",
-    name: "Sunset",
+    nameKey: "bgSunset",
     css: "linear-gradient(135deg, #f59e0b, #ef4444)",
     paint: { kind: "gradient", from: "#f59e0b", to: "#ef4444" },
   },
   {
     id: "forest",
-    name: "Forest",
+    nameKey: "bgForest",
     css: "linear-gradient(135deg, #22c55e, #0ea5e9)",
     paint: { kind: "gradient", from: "#22c55e", to: "#0ea5e9" },
   },
   {
     id: "graphite",
-    name: "Graphite",
+    nameKey: "bgGraphite",
     css: "linear-gradient(135deg, #3f3f46, #18181b)",
     paint: { kind: "gradient", from: "#3f3f46", to: "#18181b" },
   },

@@ -1,4 +1,5 @@
 import { Film, Upload, Trash2 } from "lucide-react";
+import { useTranslations } from "@kaipu/i18n";
 import { formatDuration, formatSize } from "@renderer/features/library/format";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import { StorageMeta } from "./storage-meta";
@@ -21,6 +22,7 @@ export function VideoRow({
   onDelete,
   onUpload,
 }: VideoRowProps): React.JSX.Element {
+  const t = useTranslations("library");
   const canUpload = video.storage === "local" && Boolean(onUpload);
 
   return (
@@ -50,7 +52,7 @@ export function VideoRow({
       </div>
 
       <div className={styles.info}>
-        <p className={styles.title}>{video.title || "Untitled recording"}</p>
+        <p className={styles.title}>{video.title || t("untitled")}</p>
         <div className={styles.metaLine}>
           <KindBadge kind={video.kind} />
           <StorageMeta video={video} />
@@ -63,11 +65,11 @@ export function VideoRow({
 
       <div className={styles.actions} onClick={(e) => e.stopPropagation()}>
         {canUpload && (
-          <button className={styles.action} onClick={onUpload} title="Upload to cloud">
+          <button className={styles.action} onClick={onUpload} title={t("uploadCloud")}>
             <Upload size={15} strokeWidth={1.8} />
           </button>
         )}
-        <button className={cx(styles.action, styles.delete)} onClick={onDelete} title="Delete">
+        <button className={cx(styles.action, styles.delete)} onClick={onDelete} title={t("delete")}>
           <Trash2 size={15} strokeWidth={1.8} />
         </button>
       </div>

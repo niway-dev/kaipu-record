@@ -29,7 +29,7 @@ test("export produces a valid MP4 with in-sync video and audio", async () => {
       .toBeGreaterThan(0);
 
     // Start the export from the toolbar.
-    await page.getByRole("button", { name: "Exportar" }).click();
+    await page.getByRole("button", { name: "Export" }).click();
 
     // Success = the app navigates to the newly saved recording's detail route. The router
     // is a hash router, so poll location.hash (a bare hash change does not reliably fire

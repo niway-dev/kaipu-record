@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslations } from "@kaipu/i18n";
 import { cx } from "@renderer/ui/cx";
 import styles from "./record-button.module.css";
 
@@ -18,6 +19,7 @@ export function RecordButton({
   variant = "full",
   onClick,
 }: RecordButtonProps): React.JSX.Element {
+  const t = useTranslations("record");
   const compact = variant === "compact";
   return (
     <button
@@ -29,7 +31,7 @@ export function RecordButton({
     >
       <span className={styles.label}>
         <span>{isRecording ? "■" : "●"}</span>
-        {isRecording ? "Stop Recording" : "Start Recording"}
+        {isRecording ? t("stopRecordingBtn") : t("startRecordingBtn")}
       </span>
       {!isRecording && shortcut && <kbd className={styles.shortcut}>{shortcut}</kbd>}
     </button>

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Camera } from "lucide-react";
+import { useTranslations } from "@kaipu/i18n";
 import { RecordingIndicator } from "@renderer/features/recording/components/recording-indicator";
 import { useRecordingSetup } from "@renderer/features/recording/hooks/use-recording-setup";
 import { useRecordingActivity } from "@renderer/features/recording/hooks/use-recording-activity";
@@ -16,6 +17,7 @@ import styles from "./capture-panel.module.css";
 // Compact composition of the recording controls, shown from the menu-bar tray.
 // Reuses the same dumb components + useRecordingSetup hook as the Record page.
 export function CapturePanel(): React.JSX.Element {
+  const t = useTranslations("panel");
   const rootRef = useRef<HTMLDivElement>(null);
   const setup = useRecordingSetup();
   const shortcuts = useShortcutLabels();
@@ -123,7 +125,7 @@ export function CapturePanel(): React.JSX.Element {
         <button type="button" className={styles.captureButton} onClick={requestCapture}>
           <span className={styles.captureLabel}>
             <Camera size={16} />
-            Capture Screen
+            {t("captureScreen")}
           </span>
           {shortcuts?.captureScreenshot && (
             <kbd className={styles.captureShortcut}>{shortcuts.captureScreenshot}</kbd>

@@ -1,4 +1,5 @@
 import { Trash2, TriangleAlert } from "lucide-react";
+import { useTranslations } from "@kaipu/i18n";
 import {
   ModalActions,
   ModalButton,
@@ -22,24 +23,21 @@ export function DiscardChangesDialog({
   onDiscard,
   onCancel,
 }: DiscardChangesDialogProps): React.JSX.Element {
+  const t = useTranslations("screenshots");
   return (
     <ModalOverlay onCancel={onCancel} labelledBy="discard-dialog-title">
       <ModalIcon tone="danger">
         <TriangleAlert size={20} strokeWidth={1.8} />
       </ModalIcon>
-      <ModalTitle id="discard-dialog-title">Descartar cambios sin guardar</ModalTitle>
-      <ModalText>
-        {neverSaved
-          ? "Esta captura no está guardada en tu biblioteca. Si sales ahora, se pierde."
-          : "Tienes ediciones sin guardar. Si sales ahora, se pierden."}
-      </ModalText>
+      <ModalTitle id="discard-dialog-title">{t("discardTitle")}</ModalTitle>
+      <ModalText>{neverSaved ? t("discardBodyNeverSaved") : t("discardBody")}</ModalText>
       <ModalActions>
         <ModalButton variant="ghost" onClick={onCancel}>
-          Seguir editando
+          {t("keepEditing")}
         </ModalButton>
         <ModalButton variant="danger" onClick={onDiscard}>
           <Trash2 size={15} strokeWidth={1.8} />
-          Descartar
+          {t("discard")}
         </ModalButton>
       </ModalActions>
     </ModalOverlay>

@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslations } from "@kaipu/i18n";
 import styles from "./update-banner.module.css";
 
 interface Props {
@@ -7,24 +8,23 @@ interface Props {
 
 /** Slim dismissible banner shown when an update is downloaded and ready to apply. */
 export function UpdateBanner({ version }: Props): React.JSX.Element | null {
+  const t = useTranslations("updates");
   const [dismissed, setDismissed] = React.useState(false);
   if (dismissed) return null;
   return (
     <div className={styles.banner}>
-      <span className={styles.message}>
-        Hay una versión nueva lista 🎉 (v{version}). Reiniciá para aplicarla.
-      </span>
+      <span className={styles.message}>{t("ready", { version })}</span>
       <button
         type="button"
         className={styles.action}
         onClick={() => window.electronAPI.installUpdate()}
       >
-        Reiniciar
+        {t("restart")}
       </button>
       <button
         type="button"
         className={styles.close}
-        aria-label="Cerrar"
+        aria-label={t("close")}
         onClick={() => setDismissed(true)}
       >
         ×
