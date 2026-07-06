@@ -10,6 +10,7 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
+import { useTranslations } from "@kaipu/i18n";
 import { captureException } from "@renderer/features/analytics";
 import {
   initialScene,
@@ -111,6 +112,7 @@ export function VideoEditorPage(): React.JSX.Element {
  * possible in React.
  */
 function VideoEditorLoader({ source }: { source: VideoEditorSource }): React.JSX.Element {
+  const t = useTranslations("videoEditor");
   // Asset store lives here so it can be populated by the session loader and passed
   // down to the editor without being torn down between the two renders.
   const assetStoreRef = useRef<SlideAssetStore>(createSlideAssetStore());
@@ -150,11 +152,11 @@ function VideoEditorLoader({ source }: { source: VideoEditorSource }): React.JSX
                 (item) => item.kind !== "slide" || loadedIds.has(item.assetId),
               ),
             };
-            showToast({ message: "Se restauró tu edición anterior" });
+            showToast({ message: t("restored") });
             setResolvedScene(filteredScene);
           } else {
             // Session file exists but is invalid (schema changed, corruption, etc.).
-            showToast({ message: "No se pudo restaurar la edición anterior" });
+            showToast({ message: t("restoreError") });
             if (!cancelled) setResolvedScene(initialScene(source.durationSeconds));
           }
         } else {
@@ -191,6 +193,7 @@ function VideoEditor({
   resolvedScene: VideoScene;
   assetStoreRef: React.MutableRefObject<SlideAssetStore>;
 }): React.JSX.Element {
+  const t = useTranslations("videoEditor");
   const navigate = useNavigate();
   useEffect(() => {
     // Same window growth the screenshot editor uses; restored on unmount.
@@ -631,7 +634,7 @@ function VideoEditor({
           <button
             type="button"
             className={styles.muteButton}
-            aria-label={playback.muted ? "Activar sonido" : "Silenciar"}
+            aria-label={playback.muted ? t("unmute") : t("mute")}
             onClick={playback.toggleMute}
           >
             {playback.muted ? <VolumeX size={16} /> : <Volume2 size={16} />}
@@ -639,7 +642,7 @@ function VideoEditor({
           <button
             type="button"
             className={styles.playButton}
-            aria-label={playback.playing ? "Pausar" : "Reproducir"}
+            aria-label={playback.playing ? t("pause") : t("play")}
             onClick={playback.toggle}
           >
             {playback.playing ? <Pause size={20} /> : <Play size={20} />}
@@ -650,7 +653,7 @@ function VideoEditor({
           <button
             type="button"
             className={styles.fullscreenButton}
-            aria-label={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
+            aria-label={isFullscreen ? t("exitFullscreen") : t("fullscreen")}
             onClick={handleFullscreen}
           >
             {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
@@ -678,15 +681,15 @@ function VideoEditor({
           <ModalIcon tone="danger">
             <TriangleAlert size={20} strokeWidth={1.8} />
           </ModalIcon>
-          <ModalTitle id="discard-video-dialog-title">¿Descartar los cambios del video?</ModalTitle>
-          <ModalText>Tienes ediciones sin guardar. Si sales ahora, se pierden.</ModalText>
+          <ModalTitle id="discard-video-dialog-title">{t("discardTitle")}</ModalTitle>
+          <ModalText>{t("discardBody")}</ModalText>
           <ModalActions>
             <ModalButton variant="ghost" onClick={() => blocker.reset()}>
-              Seguir editando
+              {t("keepEditing")}
             </ModalButton>
             <ModalButton variant="danger" onClick={() => blocker.proceed()}>
               <Trash2 size={15} strokeWidth={1.8} />
-              Descartar
+              {t("discard")}
             </ModalButton>
           </ModalActions>
         </ModalOverlay>

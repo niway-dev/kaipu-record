@@ -1,4 +1,5 @@
 import { Trash2 } from "lucide-react";
+import { useTranslations } from "@kaipu/i18n";
 import {
   ANNOTATION_COLORS,
   STROKE_WIDTHS,
@@ -105,13 +106,14 @@ export function OverlayOptions({
   onCommitOverlay,
   onDeleteSelected,
 }: OverlayOptionsProps): React.JSX.Element | null {
+  const t = useTranslations("videoEditor");
   const selected = selectedId ? (overlays.find((o) => o.id === selectedId) ?? null) : null;
   const controls = resolveControls(tools, overlays, selectedId, onCommitOverlay);
   if (!controls) return null;
 
   return (
     <div className={styles.panel}>
-      <span className={styles.label}>Color</span>
+      <span className={styles.label}>{t("colorLabel")}</span>
       <div className={styles.palette}>
         {ANNOTATION_COLORS.map((c) => (
           <button
@@ -128,13 +130,13 @@ export function OverlayOptions({
 
       {controls.mode === "size" ? (
         <>
-          <span className={styles.label}>Size</span>
+          <span className={styles.label}>{t("sizeLabel")}</span>
           <div className={styles.picker}>
             {TEXT_SIZES.map((label, i) => (
               <button
                 key={label}
                 type="button"
-                aria-label={`Size ${label}`}
+                aria-label={t("sizeAria", { label })}
                 className={`${styles.pickerItem} ${styles.sizeItem} ${controls.level === i ? styles.pickerOn : ""}`}
                 onClick={() => controls.setLevel(i)}
               >
@@ -145,13 +147,13 @@ export function OverlayOptions({
         </>
       ) : (
         <>
-          <span className={styles.label}>Stroke</span>
+          <span className={styles.label}>{t("strokeLabel")}</span>
           <div className={styles.picker}>
             {STROKE_WIDTHS.map((_, i) => (
               <button
                 key={i}
                 type="button"
-                aria-label={`Stroke ${i + 1}`}
+                aria-label={t("strokeAria", { n: i + 1 })}
                 className={`${styles.pickerItem} ${controls.level === i ? styles.pickerOn : ""}`}
                 onClick={() => controls.setLevel(i)}
               >
@@ -165,8 +167,8 @@ export function OverlayOptions({
       {selected && (
         <button
           type="button"
-          aria-label="Eliminar"
-          title="Eliminar (⌫)"
+          aria-label={t("deleteAria")}
+          title={t("deleteTitle")}
           className={styles.delete}
           onClick={onDeleteSelected}
         >

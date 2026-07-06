@@ -11,17 +11,20 @@ import {
   Type,
   Undo2,
 } from "lucide-react";
+import { useTranslations } from "@kaipu/i18n";
 import { VIDEO_TOOLS, type VideoTool } from "../annotations/video-tools";
 import styles from "./editor-toolbar.module.css";
 
-/** Accepted image types for "Agregar imagen" — matches SlideAssetStore's decode path. */
+/** Accepted image types for the "Add image" tool — matches SlideAssetStore's decode path. */
 const SLIDE_IMAGE_TYPES = "image/png,image/jpeg,image/webp";
 
-const TOOL_META: Record<VideoTool, { label: string; Icon: typeof Square }> = {
-  select: { label: "Seleccionar", Icon: MousePointer2 },
-  box: { label: "Cuadro", Icon: Square },
-  arrow: { label: "Flecha", Icon: ArrowUpRight },
-  text: { label: "Texto", Icon: Type },
+type ToolLabelKey = "toolSelect" | "toolBox" | "toolArrow" | "toolText";
+
+const TOOL_META: Record<VideoTool, { labelKey: ToolLabelKey; Icon: typeof Square }> = {
+  select: { labelKey: "toolSelect", Icon: MousePointer2 },
+  box: { labelKey: "toolBox", Icon: Square },
+  arrow: { labelKey: "toolArrow", Icon: ArrowUpRight },
+  text: { labelKey: "toolText", Icon: Type },
 };
 
 export interface EditorToolbarProps {
@@ -66,21 +69,23 @@ export function EditorToolbar({
   onExport,
   exportDisabled,
 }: EditorToolbarProps): React.JSX.Element {
+  const t = useTranslations("videoEditor");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   return (
     <div className={styles.toolbar}>
       <div className={styles.toolGroup}>
-        {VIDEO_TOOLS.map((t) => {
-          const { label, Icon } = TOOL_META[t];
+        {VIDEO_TOOLS.map((toolKey) => {
+          const { labelKey, Icon } = TOOL_META[toolKey];
+          const label = t(labelKey);
           return (
             <button
-              key={t}
+              key={toolKey}
               type="button"
               title={label}
               aria-label={label}
-              className={`${styles.tool} ${tool === t ? styles.toolActive : ""}`}
-              onClick={() => onToolChange(t)}
+              className={`${styles.tool} ${tool === toolKey ? styles.toolActive : ""}`}
+              onClick={() => onToolChange(toolKey)}
             >
               <Icon size={19} />
             </button>
@@ -91,8 +96,8 @@ export function EditorToolbar({
         <button
           type="button"
           className={styles.iconBtn}
-          title="Deshacer"
-          aria-label="Deshacer"
+          title={t("undo")}
+          aria-label={t("undo")}
           disabled={!canUndo}
           onClick={onUndo}
         >
@@ -101,8 +106,8 @@ export function EditorToolbar({
         <button
           type="button"
           className={styles.iconBtn}
-          title="Rehacer"
-          aria-label="Rehacer"
+          title={t("redo")}
+          aria-label={t("redo")}
           disabled={!canRedo}
           onClick={onRedo}
         >
@@ -125,8 +130,8 @@ export function EditorToolbar({
         <button
           type="button"
           className={styles.iconBtn}
-          title="Agregar imagen"
-          aria-label="Agregar imagen"
+          title={t("addImage")}
+          aria-label={t("addImage")}
           onClick={() => fileInputRef.current?.click()}
         >
           <ImagePlus size={18} />
@@ -134,8 +139,8 @@ export function EditorToolbar({
         <button
           type="button"
           className={styles.iconBtn}
-          title="Cortar aquí"
-          aria-label="Cortar aquí"
+          title={t("splitHere")}
+          aria-label={t("splitHere")}
           disabled={splitDisabled}
           onClick={onSplit}
         >
@@ -144,8 +149,8 @@ export function EditorToolbar({
         <button
           type="button"
           className={styles.iconBtn}
-          title="Eliminar segmento"
-          aria-label="Eliminar segmento"
+          title={t("deleteSegment")}
+          aria-label={t("deleteSegment")}
           disabled={deleteDisabled}
           onClick={onDeleteSelected}
         >
@@ -159,7 +164,7 @@ export function EditorToolbar({
           onClick={onExport}
         >
           <Download size={16} />
-          Exportar
+          {t("export")}
         </button>
       </div>
     </div>

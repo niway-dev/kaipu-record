@@ -26,61 +26,54 @@ function renderToolbar(overrides: Partial<EditorToolbarProps> = {}): EditorToolb
 describe("EditorToolbar", () => {
   it("renders the six actions", () => {
     renderToolbar();
-    for (const name of [
-      "Deshacer",
-      "Rehacer",
-      "Agregar imagen",
-      "Cortar aquí",
-      "Eliminar segmento",
-      "Exportar",
-    ]) {
+    for (const name of ["Undo", "Redo", "Add image", "Split here", "Delete segment", "Export"]) {
       expect(screen.getByRole("button", { name })).toBeInTheDocument();
     }
   });
 
   it("fires onExport on click, and is disabled per exportDisabled", () => {
     const props = renderToolbar();
-    fireEvent.click(screen.getByRole("button", { name: "Exportar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Export" }));
     expect(props.onExport).toHaveBeenCalledOnce();
 
     renderToolbar({ exportDisabled: true });
-    const exportButtons = screen.getAllByRole("button", { name: "Exportar" });
+    const exportButtons = screen.getAllByRole("button", { name: "Export" });
     expect(exportButtons[exportButtons.length - 1]).toBeDisabled();
   });
 
   it("renders the four annotation tools and highlights the active one", () => {
     renderToolbar({ tool: "box" });
-    for (const name of ["Seleccionar", "Cuadro", "Flecha", "Texto"]) {
+    for (const name of ["Select", "Box", "Arrow", "Text"]) {
       expect(screen.getByRole("button", { name })).toBeInTheDocument();
     }
-    expect(screen.getByRole("button", { name: "Cuadro" }).className).toMatch(/toolActive/);
-    expect(screen.getByRole("button", { name: "Seleccionar" }).className).not.toMatch(/toolActive/);
+    expect(screen.getByRole("button", { name: "Box" }).className).toMatch(/toolActive/);
+    expect(screen.getByRole("button", { name: "Select" }).className).not.toMatch(/toolActive/);
   });
 
   it("fires onToolChange with the picked tool", () => {
     const props = renderToolbar();
-    fireEvent.click(screen.getByRole("button", { name: "Flecha" }));
+    fireEvent.click(screen.getByRole("button", { name: "Arrow" }));
     expect(props.onToolChange).toHaveBeenCalledWith("arrow");
   });
 
   it("fires the matching callback on click", () => {
     const props = renderToolbar();
-    fireEvent.click(screen.getByRole("button", { name: "Deshacer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
     expect(props.onUndo).toHaveBeenCalledOnce();
-    fireEvent.click(screen.getByRole("button", { name: "Rehacer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Redo" }));
     expect(props.onRedo).toHaveBeenCalledOnce();
-    fireEvent.click(screen.getByRole("button", { name: "Cortar aquí" }));
+    fireEvent.click(screen.getByRole("button", { name: "Split here" }));
     expect(props.onSplit).toHaveBeenCalledOnce();
-    fireEvent.click(screen.getByRole("button", { name: "Eliminar segmento" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete segment" }));
     expect(props.onDeleteSelected).toHaveBeenCalledOnce();
   });
 
-  it("clicking Agregar imagen opens the hidden file input, and picking a file fires onAddImage", () => {
+  it("clicking Add image opens the hidden file input, and picking a file fires onAddImage", () => {
     const props = renderToolbar();
     const input = screen.getByTestId("slide-image-input") as HTMLInputElement;
     const clickSpy = vi.spyOn(input, "click");
 
-    fireEvent.click(screen.getByRole("button", { name: "Agregar imagen" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add image" }));
     expect(clickSpy).toHaveBeenCalledOnce();
 
     const file = new File(["fake-bytes"], "slide.png", { type: "image/png" });
@@ -96,10 +89,10 @@ describe("EditorToolbar", () => {
       splitDisabled: true,
       deleteDisabled: true,
     });
-    const undoBtn = screen.getByRole("button", { name: "Deshacer" });
-    const redoBtn = screen.getByRole("button", { name: "Rehacer" });
-    const splitBtn = screen.getByRole("button", { name: "Cortar aquí" });
-    const deleteBtn = screen.getByRole("button", { name: "Eliminar segmento" });
+    const undoBtn = screen.getByRole("button", { name: "Undo" });
+    const redoBtn = screen.getByRole("button", { name: "Redo" });
+    const splitBtn = screen.getByRole("button", { name: "Split here" });
+    const deleteBtn = screen.getByRole("button", { name: "Delete segment" });
 
     expect(undoBtn).toBeDisabled();
     expect(redoBtn).toBeDisabled();

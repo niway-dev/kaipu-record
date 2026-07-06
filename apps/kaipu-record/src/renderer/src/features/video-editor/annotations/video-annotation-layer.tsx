@@ -30,6 +30,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "@kaipu/i18n";
 import {
   HAND_FONT,
   TEXT_PX,
@@ -114,6 +115,7 @@ export function VideoAnnotationLayer({
   onInteractEnd,
   onBackgroundClick,
 }: VideoAnnotationLayerProps): React.JSX.Element {
+  const t = useTranslations("videoEditor");
   const ref = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<Size>({ w: 0, h: 0 });
   const [draft, setDraft] = useState<VideoOverlay | null>(null);
@@ -363,7 +365,7 @@ export function VideoAnnotationLayer({
         <input
           ref={textInputRef}
           className={styles.textInput}
-          placeholder="Escribe…"
+          placeholder={t("typePlaceholder")}
           style={{
             left: editingText.x * size.w,
             top: editingText.y * size.h,
