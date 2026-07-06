@@ -6,6 +6,7 @@ export function PreviewStage({
   mediaUrl,
   slideUrl,
   overlay,
+  expanded = false,
 }: {
   playback: PreviewPlayback;
   mediaUrl: string;
@@ -17,15 +18,23 @@ export function PreviewStage({
    *  position:relative wrapper, which (per preview-stage.module.css) shrinks to
    *  exactly the video's own rendered box, so the overlay covers it exactly. */
   overlay?: React.ReactNode;
+  /** In fullscreen the bounded (contained-player) size caps are lifted so the video
+   *  fills the screen. Off by default — normal editing keeps the compact player. */
+  expanded?: boolean;
 }): React.JSX.Element {
   return (
     <div className={styles.stage}>
       <video
         ref={playback.videoRef}
-        className={styles.video}
+        className={expanded ? `${styles.video} ${styles.videoExpanded}` : styles.video}
         src={mediaUrl}
         onTimeUpdate={playback.onVideoTimeUpdate}
         onEnded={playback.onVideoEnded}
+        // Keep `playing` in sync with what the element actually does — a rejected play()
+        // (e.g. interrupted by a seek) leaves it paused, and these events stop the
+        // transport from getting stuck showing "pause" while nothing plays.
+        onPlay={playback.onVideoPlay}
+        onPause={playback.onVideoPause}
         // Dead in practice — the overlay above is a full-cover sibling that always
         // wins the hit-test, so this click never reaches the video. Kept as a
         // harmless fallback for any future render path without an overlay; the real

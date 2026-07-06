@@ -24,6 +24,11 @@ export interface PreviewPlayback {
   seek(t: number): void;
   onVideoTimeUpdate(): void;
   onVideoEnded(): void;
+  /** Wire to the <video>'s `play` event — keeps `playing` honest with the real element. */
+  onVideoPlay(): void;
+  /** Wire to the <video>'s `pause` event — so an element that pauses on its own (or a
+   *  rejected play() that never started) can't leave the transport stuck showing "pause". */
+  onVideoPause(): void;
   subscribeTime(listener: (t: number) => void): () => void;
 }
 
@@ -237,7 +242,17 @@ export function usePreviewPlayback(layout: LayoutEntry[]): PreviewPlayback {
       }
     } else {
       if (slideRef.current) exitSlide();
-      void videoRef.current?.play().catch(() => {});
+      const video = videoRef.current;
+      if (video) {
+        void video.play().catch(() => {
+          // The element refused to play (commonly an in-flight seek interrupting the
+          // request). Never leave a stuck playing=true over a paused element — reset so
+          // the transport shows "play" and the next click cleanly retries. onVideoPlay
+          // flips it back to true once playback actually starts.
+          playingRef.current = false;
+          setPlaying(false);
+        });
+      }
     }
     setPlaying(true);
   }, [enterSlide, exitSlide]);
@@ -316,6 +331,23 @@ export function usePreviewPlayback(layout: LayoutEntry[]): PreviewPlayback {
     setTimelineTime(layoutDuration(layoutRef.current));
   }, []);
 
+  // The <video>'s own play/pause events are the source of truth for clip playback. If a
+  // play() request is rejected the element stays paused; syncing from these events keeps
+  // `playing` matching reality, so the transport button can never get stuck showing
+  // "pause" while nothing plays. A slide intentionally pauses the video while its wall
+  // clock runs, so video events are ignored whenever a slide owns the clock.
+  const onVideoPlay = useCallback(() => {
+    if (slideRef.current !== null) return;
+    playingRef.current = true;
+    setPlaying(true);
+  }, []);
+
+  const onVideoPause = useCallback(() => {
+    if (slideRef.current !== null) return;
+    playingRef.current = false;
+    setPlaying(false);
+  }, []);
+
   const subscribeTime = useCallback((listener: (t: number) => void) => {
     listenersRef.current.add(listener);
     return () => listenersRef.current.delete(listener);
@@ -335,6 +367,8 @@ export function usePreviewPlayback(layout: LayoutEntry[]): PreviewPlayback {
     seek,
     onVideoTimeUpdate,
     onVideoEnded,
+    onVideoPlay,
+    onVideoPause,
     subscribeTime,
   };
 }

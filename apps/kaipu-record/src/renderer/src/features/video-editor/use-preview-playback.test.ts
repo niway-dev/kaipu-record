@@ -265,3 +265,53 @@ describe("usePreviewPlayback — scrubbing keeps playback alive", () => {
     expect(video.paused).toBe(false);
   });
 });
+
+describe("usePreviewPlayback — play/pause stays in sync with the element", () => {
+  it("resets to paused when the element rejects play(), so the button can retry", async () => {
+    const { result } = renderHook(() => usePreviewPlayback(layout));
+    // A <video> that refuses to start (e.g. a play() interrupted by an in-flight seek).
+    const video = {
+      currentTime: 0,
+      paused: true,
+      muted: false,
+      play: vi.fn(() => Promise.reject(new DOMException("interrupted", "AbortError"))),
+      pause: vi.fn(),
+    } as unknown as HTMLVideoElement;
+    result.current.videoRef.current = video;
+
+    await act(async () => {
+      result.current.play();
+      await Promise.resolve(); // flush the play() promise rejection
+    });
+
+    // The reported freeze: a rejected play() must NOT leave a stuck playing=true state —
+    // it resets so the transport shows "play" and the next click cleanly retries.
+    expect(result.current.playing).toBe(false);
+  });
+
+  it("onVideoPlay / onVideoPause mirror the element's real state", () => {
+    const { result } = renderHook(() => usePreviewPlayback(layout));
+    const video = makePlayableVideo();
+    result.current.videoRef.current = video;
+
+    act(() => result.current.onVideoPlay());
+    expect(result.current.playing).toBe(true);
+
+    act(() => result.current.onVideoPause()); // element paused on its own
+    expect(result.current.playing).toBe(false);
+  });
+
+  it("ignores video pause events while a slide owns the clock", () => {
+    const { result } = renderHook(() => usePreviewPlayback(layout));
+    const video = makePlayableVideo();
+    result.current.videoRef.current = video;
+
+    act(() => result.current.seek(5)); // land at the slide start
+    act(() => result.current.play()); // slide playing; the video is paused underneath
+    expect(result.current.playing).toBe(true);
+
+    // enterSlide paused the <video>, which fires 'pause' — it must NOT stop the slide.
+    act(() => result.current.onVideoPause());
+    expect(result.current.playing).toBe(true);
+  });
+});

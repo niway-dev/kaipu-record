@@ -590,6 +590,7 @@ function VideoEditor({
             playback={playback}
             mediaUrl={mediaUrl}
             slideUrl={slideUrl}
+            expanded={isFullscreen}
             overlay={
               <VideoAnnotationLayer
                 overlays={scene.overlays}

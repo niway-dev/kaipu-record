@@ -19,6 +19,8 @@ function makePlayback(overrides: Partial<PreviewPlayback> = {}): PreviewPlayback
     seek: vi.fn(),
     onVideoTimeUpdate: vi.fn(),
     onVideoEnded: vi.fn(),
+    onVideoPlay: vi.fn(),
+    onVideoPause: vi.fn(),
     subscribeTime: vi.fn(() => () => {}),
     ...overrides,
   };
