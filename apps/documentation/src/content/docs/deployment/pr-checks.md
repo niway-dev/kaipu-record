@@ -48,10 +48,12 @@ platform-specific"**, which is a natural seam.
 
 1. **Different setup needs.** Only E2E needs `ffmpeg`, `xvfb`, and Chromium system libs.
    Keeping them apart keeps the always-on validation gate lean.
-2. **Independent triggers.** E2E should eventually run only when desktop code changes
-   (`on.pull_request.paths: ['apps/kaipu-record/**']`) — no reason to boot Electron + xvfb for
-   a docs typo or a web-only change. A separate workflow makes that a one-line change; merged,
-   every change everywhere pays the E2E cost.
+2. **Independent triggers.** E2E runs only when desktop code changes — it is `paths`-filtered
+   to `apps/kaipu-record/**`, the workflow file, and `bun.lock` — so a docs typo or a web-only
+   change never boots Electron + xvfb. This is only possible because it is its own workflow;
+   folded into the universal gate, every change everywhere would pay the E2E cost. (For
+   `pull_request`, GitHub evaluates the filter against the PR's whole diff, so a PR that touches
+   the desktop still runs E2E on every push.)
 3. **Clear, parallel signal.** They run concurrently and report as two checks. A flaky E2E
    run does not hide the lint/typecheck result, and vice versa.
 4. **Independent required-status.** Branch protection is configured per check — you can make
@@ -65,8 +67,9 @@ platform-specific"**, which is a natural seam.
 The only downside of separation is a duplicated `bun install` (each workflow checks out and
 installs). **Merging does not fix this** — separate _jobs_ run on separate machines and do not
 share a filesystem either, and collapsing into one _job_ loses the parallelism and the
-per-workflow trigger. The right fix is **dependency caching** (setup-bun cache or
-`actions/cache`), not merging.
+per-workflow trigger. The right fix is **dependency caching** — both workflows cache bun's
+global install cache (`~/.bun/install/cache`) via `actions/cache`, keyed on `bun.lock` — not
+merging.
 
 The design axis to keep straight:
 
@@ -110,10 +113,19 @@ vault**. See the design [spec](/specs/2026-07-06-e2e-testing-harness-design) and
   not lose the root-cause coverage: the `corsEnabled` and `Range` fixes are still guarded on
   Linux by the playback Range-fetch test.
 
-## Recommended follow-ups
+## Follow-ups
 
-- **`paths:` filter on E2E Desktop** so it only runs when `apps/kaipu-record/**` changes.
-- **Dependency caching** in both workflows to remove the duplicate-install cost.
+**Done:** the `paths:` filter on E2E Desktop and bun dependency caching in both workflows.
+
+**Still open:**
+
 - **A `macos-latest` job** (per-PR if the minute budget allows, otherwise nightly or
   `paths`-gated) to run the export test with a real H.264 encoder — the honest way to get
   full export coverage in CI, since macOS is the production platform.
+
+> **Gotcha — `paths` filters and _required_ checks.** A `paths`-filtered workflow that does not
+> run reports **no status**, and GitHub treats a required-but-absent check as perpetually
+> pending — which would **block merge** on any PR that doesn't touch the filtered paths. So a
+> `paths`-filtered check must stay **non-required**, or you add an always-runs sentinel job
+> (same check name) that trivially passes when the paths don't match. Today E2E Desktop is not a
+> required check, so this is fine; keep it in mind before enabling branch protection on it.
