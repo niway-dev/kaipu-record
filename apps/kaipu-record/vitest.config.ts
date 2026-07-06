@@ -35,8 +35,14 @@ export default defineConfig({
         test: {
           name: "main",
           environment: "node",
-          // Pure `shared/` logic (no DOM) is exercised here in the node project.
-          include: ["src/main/**/*.{test,spec}.ts", "src/shared/**/*.{test,spec}.ts"],
+          // Pure, DOM-free logic runs in the node project: main-process code, `shared/`,
+          // and the Node-only E2E helpers (e.g. the ffprobe output parser). The `.e2e.ts`
+          // Playwright specs are NOT matched here — they run under Playwright, not vitest.
+          include: [
+            "src/main/**/*.{test,spec}.ts",
+            "src/shared/**/*.{test,spec}.ts",
+            "e2e/helpers/**/*.{test,spec}.ts",
+          ],
         },
       },
       {
