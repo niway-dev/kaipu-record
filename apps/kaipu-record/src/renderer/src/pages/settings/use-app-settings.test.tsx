@@ -6,6 +6,7 @@ import { useAppSettings } from "./use-app-settings";
 
 const SETTINGS: AppSettings = {
   theme: "system",
+  locale: "es",
   launchAtLogin: false,
   showInDock: true,
   recordingQuality: DEFAULT_QUALITY,

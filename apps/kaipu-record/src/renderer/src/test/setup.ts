@@ -16,6 +16,7 @@ if (!("ResizeObserver" in globalThis)) {
 
 const STUB_SETTINGS = {
   theme: "system",
+  locale: "es",
   launchAtLogin: false,
   showInDock: true,
   recordingQuality: DEFAULT_QUALITY,

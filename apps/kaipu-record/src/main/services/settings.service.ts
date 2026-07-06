@@ -8,6 +8,7 @@ import {
   type Theme,
 } from "@shared/types";
 import { sanitizeQuality } from "@shared/recording-quality";
+import { DEFAULT_LOCALE, isLocale } from "@kaipu/i18n";
 
 /**
  * Pure settings logic — the kind of code that lives in the `main` process but
@@ -49,6 +50,7 @@ export function mergeSettings(stored: Partial<AppSettings> | null | undefined): 
   const safe = stored ?? {};
   return {
     theme: isValidTheme(safe.theme) ? safe.theme : DEFAULT_SETTINGS.theme,
+    locale: isLocale(safe.locale) ? safe.locale : DEFAULT_LOCALE,
     launchAtLogin:
       typeof safe.launchAtLogin === "boolean" ? safe.launchAtLogin : DEFAULT_SETTINGS.launchAtLogin,
     showInDock:

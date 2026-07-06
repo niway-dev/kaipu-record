@@ -4,7 +4,7 @@ import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import { IPC_CHANNELS } from "@shared/types";
 import icon from "../../resources/icon.png?asset";
 import { CapturePanelWindow } from "./capture-panel-window";
-import { createTray } from "./tray";
+import { createTray, rebuildTrayMenu } from "./tray";
 import { registerRecordingSourceHandlers } from "./recording-sources";
 import { registerPermissionHandlers } from "./permissions";
 import { registerLibraryVaultHandlers } from "./library";
@@ -351,6 +351,8 @@ app.whenReady().then(() => {
     },
   });
   onSettingsChanged(() => applyGlobalShortcuts());
+  // Rebuild the native tray menu when the language changes.
+  onSettingsChanged((settings) => rebuildTrayMenu(settings.locale));
 
   // Library: local recordings vault.
   registerLibraryVaultHandlers();
@@ -387,7 +389,7 @@ app.whenReady().then(() => {
 
   // Menu-bar tray + its Capture Panel.
   capturePanel = new CapturePanelWindow();
-  tray = createTray(capturePanel, showMainWindow);
+  tray = createTray(capturePanel, showMainWindow, getAppSettings().locale);
 
   app.on("activate", function () {
     // Dock-icon click: bring the main window back (recreating it if it was
