@@ -1,6 +1,10 @@
-import { net, protocol } from "electron";
-import { pathToFileURL } from "node:url";
+import { protocol } from "electron";
+import { createReadStream } from "node:fs";
+import { stat } from "node:fs/promises";
+import { extname } from "node:path";
+import { Readable } from "node:stream";
 import { recordingFilePath, screenshotFilePath, thumbnailFilePath } from "./library";
+import { parseByteRange } from "./media-range";
 
 /**
  * Privileged, streamable protocol for local vault media.
@@ -23,6 +27,47 @@ export function registerMediaScheme(): void {
   ]);
 }
 
+const MIME_BY_EXTENSION: Record<string, string> = {
+  ".mp4": "video/mp4",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".png": "image/png",
+};
+
+/**
+ * Serve a vault file honoring the request's Range header. Delegating to
+ * `net.fetch(file://…)` is NOT enough here: it ignores Range and answers 200 with the
+ * full body, which Chromium's media stack accepts for the initial `bytes=0-` load but
+ * treats as a fatal resource error for the `bytes=<offset>-` request it issues when
+ * seeking outside the buffered range — leaving the <video> permanently stuck in
+ * `seeking` (the "timeline scrub kills playback" bug).
+ */
+async function streamFile(target: string, rangeHeader: string | null): Promise<Response> {
+  const { size } = await stat(target);
+  const range = parseByteRange(rangeHeader, size);
+  if (range === "unsatisfiable") {
+    return new Response(null, { status: 416, headers: { "content-range": `bytes */${size}` } });
+  }
+  const headers: Record<string, string> = {
+    "content-type": MIME_BY_EXTENSION[extname(target).toLowerCase()] ?? "application/octet-stream",
+    "accept-ranges": "bytes",
+  };
+  const body = (stream: Readable): BodyInit =>
+    // Node's web-stream type and the DOM ReadableStream type are structurally
+    // compatible but nominally distinct — bridge them for Response.
+    Readable.toWeb(stream) as unknown as BodyInit;
+  if (!range) {
+    headers["content-length"] = String(size);
+    return new Response(body(createReadStream(target)), { status: 200, headers });
+  }
+  headers["content-length"] = String(range.end - range.start + 1);
+  headers["content-range"] = `bytes ${range.start}-${range.end}/${size}`;
+  return new Response(body(createReadStream(target, { start: range.start, end: range.end })), {
+    status: 206,
+    headers,
+  });
+}
+
 export function registerMediaProtocol(): void {
   protocol.handle(MEDIA_SCHEME, async (request) => {
     const url = new URL(request.url);
@@ -38,6 +83,11 @@ export function registerMediaProtocol(): void {
         : hostname === "thumb"
           ? thumbnailFilePath(id)
           : await recordingFilePath(id);
-    return net.fetch(pathToFileURL(target).toString());
+    try {
+      return await streamFile(target, request.headers.get("range"));
+    } catch {
+      // stat/read failure — the file is gone or unreadable.
+      return new Response("Not found", { status: 404 });
+    }
   });
 }
