@@ -109,7 +109,10 @@ Deploys read from the repo's **`production`** Environment:
 > Cloudflare API token does **not** work for it. The R2 account id reuses `CLOUDFLARE_ACCOUNT_ID`,
 > and the bucket name is a plain constant in the workflow (`kaipu-bucket`) — neither is a secret.
 
-## PR validation
+## PR checks
 
-`.github/workflows/pr-validation.yml` runs on PRs into `main`: lint, format check, typecheck, build
-the packages/web/api, and run the desktop test suite. It does **not** deploy.
+Two workflows run on PRs into `main` (neither deploys): `pr-validation.yml` (lint, format
+check, typecheck, build the packages/web/api, desktop unit suite) and `e2e-desktop.yml` (the
+Playwright + Electron E2E suite for the desktop app). They are kept **separate on purpose** — a
+cheap monorepo-wide gate vs an expensive desktop-only one. See
+[PR checks — validation & E2E](/deployment/pr-checks) for what each does and why the split.

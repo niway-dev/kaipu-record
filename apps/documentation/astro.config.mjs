@@ -87,6 +87,10 @@ export default defineConfig({
           autogenerate: { directory: "deployment" },
         },
         {
+          label: "Testing",
+          autogenerate: { directory: "testing" },
+        },
+        {
           label: "Authentication",
           items: [
             { slug: "authentication" },

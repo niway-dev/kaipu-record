@@ -55,6 +55,12 @@ lerna-debug.log*
 coverage
 .nyc_output
 
+# Playwright E2E generated artifacts (traces/screenshots/videos + last-run marker)
+test-results
+playwright-report
+blob-report
+playwright/.cache
+
 # Misc
 *.tgz
 .cache
@@ -68,3 +74,4 @@ workspace-temp
 # Brainstorming / planning tool output (superpowers plugin)
 docs/superpowers/
 docs/specs
+.superpowers/
