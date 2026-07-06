@@ -6,10 +6,12 @@ import z from "zod";
 import { authClient } from "@/lib/auth/auth-client";
 
 import { Button, Input, Label } from "@kaipu/web-ui";
+import { useTranslations } from "@kaipu/i18n";
 
 export default function SignUpForm() {
   const navigate = useNavigate();
   const router = useRouter();
+  const t = useTranslations("auth");
 
   const form = useForm({
     defaultValues: {
@@ -28,7 +30,7 @@ export default function SignUpForm() {
           onSuccess: async () => {
             await router.invalidate();
             navigate({ to: "/todos" });
-            toast.success("Sign up successful");
+            toast.success(t("signUpSuccess"));
           },
           onError: (error) => {
             toast.error(error.error.message || error.error.statusText);
@@ -38,16 +40,16 @@ export default function SignUpForm() {
     },
     validators: {
       onSubmit: z.object({
-        name: z.string().min(2, "Name must be at least 2 characters"),
-        email: z.email("Invalid email address"),
-        password: z.string().min(8, "Password must be at least 8 characters"),
+        name: z.string().min(2, t("nameMin")),
+        email: z.email(t("invalidEmail")),
+        password: z.string().min(8, t("passwordMin")),
       }),
     },
   });
 
   return (
     <>
-      <h1 className="mb-6 text-center text-3xl font-bold">Create Account</h1>
+      <h1 className="mb-6 text-center text-3xl font-bold">{t("createAccount")}</h1>
 
       <form
         onSubmit={(e) => {
@@ -61,7 +63,7 @@ export default function SignUpForm() {
           <form.Field name="name">
             {(field) => (
               <div className="space-y-2">
-                <Label htmlFor={field.name}>Name</Label>
+                <Label htmlFor={field.name}>{t("name")}</Label>
                 <Input
                   id={field.name}
                   name={field.name}
@@ -83,7 +85,7 @@ export default function SignUpForm() {
           <form.Field name="email">
             {(field) => (
               <div className="space-y-2">
-                <Label htmlFor={field.name}>Email</Label>
+                <Label htmlFor={field.name}>{t("email")}</Label>
                 <Input
                   id={field.name}
                   name={field.name}
@@ -106,7 +108,7 @@ export default function SignUpForm() {
           <form.Field name="password">
             {(field) => (
               <div className="space-y-2">
-                <Label htmlFor={field.name}>Password</Label>
+                <Label htmlFor={field.name}>{t("password")}</Label>
                 <Input
                   id={field.name}
                   name={field.name}
@@ -132,7 +134,7 @@ export default function SignUpForm() {
               className="w-full"
               disabled={!state.canSubmit || state.isSubmitting}
             >
-              {state.isSubmitting ? "Submitting..." : "Sign Up"}
+              {state.isSubmitting ? t("submitting") : t("signUp")}
             </Button>
           )}
         </form.Subscribe>

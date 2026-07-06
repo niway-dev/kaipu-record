@@ -85,5 +85,41 @@
     "downloadMacIntel": "Mac (Intel)",
     "downloadWindows": "Windows (coming soon)",
     "footerTagline": "Record. Share. No fuss."
+  },
+  "auth": {
+    "welcomeBack": "Welcome Back",
+    "createAccount": "Create Account",
+    "email": "Email",
+    "password": "Password",
+    "name": "Name",
+    "signIn": "Sign In",
+    "signUp": "Sign Up",
+    "submitting": "Submitting…",
+    "needAccount": "Need an account?",
+    "haveAccount": "Already have an account?",
+    "signOut": "Sign Out",
+    "myAccount": "My Account",
+    "invalidEmail": "Invalid email address",
+    "passwordMin": "Password must be at least 8 characters",
+    "nameMin": "Name must be at least 2 characters",
+    "signInSuccess": "Sign in successful",
+    "signUpSuccess": "Sign up successful"
+  },
+  "todos": {
+    "title": "Todos",
+    "placeholder": "What needs to be done?",
+    "add": "Add",
+    "failedLoad": "Failed to load todos",
+    "empty": "No todos yet. Create one above!",
+    "colTitle": "Title",
+    "colActions": "Actions",
+    "pageInfo": "Page {page} of {totalPages} ({total} total)",
+    "previous": "Previous",
+    "next": "Next",
+    "created": "Todo created",
+    "deleteSuccess": "Todo deleted",
+    "createError": "Failed to create todo",
+    "updateError": "Failed to update todo",
+    "deleteError": "Failed to delete todo"
   }
 }

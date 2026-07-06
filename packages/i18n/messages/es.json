@@ -85,5 +85,41 @@
     "downloadMacIntel": "Mac (Intel)",
     "downloadWindows": "Windows (próximamente)",
     "footerTagline": "Graba. Comparte. Sin vueltas."
+  },
+  "auth": {
+    "welcomeBack": "Bienvenido de nuevo",
+    "createAccount": "Crear cuenta",
+    "email": "Correo",
+    "password": "Contraseña",
+    "name": "Nombre",
+    "signIn": "Iniciar sesión",
+    "signUp": "Crear cuenta",
+    "submitting": "Enviando…",
+    "needAccount": "¿No tienes cuenta?",
+    "haveAccount": "¿Ya tienes cuenta?",
+    "signOut": "Cerrar sesión",
+    "myAccount": "Mi cuenta",
+    "invalidEmail": "Correo inválido",
+    "passwordMin": "La contraseña debe tener al menos 8 caracteres",
+    "nameMin": "El nombre debe tener al menos 2 caracteres",
+    "signInSuccess": "Sesión iniciada",
+    "signUpSuccess": "Cuenta creada"
+  },
+  "todos": {
+    "title": "Tareas",
+    "placeholder": "¿Qué hay que hacer?",
+    "add": "Agregar",
+    "failedLoad": "No se pudieron cargar las tareas",
+    "empty": "Aún no hay tareas. ¡Crea una arriba!",
+    "colTitle": "Título",
+    "colActions": "Acciones",
+    "pageInfo": "Página {page} de {totalPages} ({total} en total)",
+    "previous": "Anterior",
+    "next": "Siguiente",
+    "created": "Tarea creada",
+    "deleteSuccess": "Tarea eliminada",
+    "createError": "No se pudo crear la tarea",
+    "updateError": "No se pudo actualizar la tarea",
+    "deleteError": "No se pudo eliminar la tarea"
   }
 }

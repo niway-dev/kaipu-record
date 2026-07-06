@@ -3,11 +3,13 @@ import { useNavigate, useRouter } from "@tanstack/react-router";
 import { toast } from "sonner";
 import z from "zod";
 import { Button, Input, Label } from "@kaipu/web-ui";
+import { useTranslations } from "@kaipu/i18n";
 import { authClient } from "@/lib/auth/auth-client";
 
 export default function SignInForm() {
   const navigate = useNavigate();
   const router = useRouter();
+  const t = useTranslations("auth");
 
   const form = useForm({
     defaultValues: {
@@ -24,7 +26,7 @@ export default function SignInForm() {
           onSuccess: async () => {
             await router.invalidate();
             navigate({ to: "/todos" });
-            toast.success("Sign in successful");
+            toast.success(t("signInSuccess"));
           },
           onError: (error) => {
             toast.error(error.error.message || error.error.statusText);
@@ -34,15 +36,15 @@ export default function SignInForm() {
     },
     validators: {
       onSubmit: z.object({
-        email: z.email("Invalid email address"),
-        password: z.string().min(8, "Password must be at least 8 characters"),
+        email: z.email(t("invalidEmail")),
+        password: z.string().min(8, t("passwordMin")),
       }),
     },
   });
 
   return (
     <>
-      <h1 className="mb-6 text-center text-3xl font-bold">Welcome Back</h1>
+      <h1 className="mb-6 text-center text-3xl font-bold">{t("welcomeBack")}</h1>
 
       <form
         onSubmit={(e) => {
@@ -56,7 +58,7 @@ export default function SignInForm() {
           <form.Field name="email">
             {(field) => (
               <div className="space-y-2">
-                <Label htmlFor={field.name}>Email</Label>
+                <Label htmlFor={field.name}>{t("email")}</Label>
                 <Input
                   id={field.name}
                   name={field.name}
@@ -79,7 +81,7 @@ export default function SignInForm() {
           <form.Field name="password">
             {(field) => (
               <div className="space-y-2">
-                <Label htmlFor={field.name}>Password</Label>
+                <Label htmlFor={field.name}>{t("password")}</Label>
                 <Input
                   id={field.name}
                   name={field.name}
@@ -105,7 +107,7 @@ export default function SignInForm() {
               className="w-full"
               disabled={!state.canSubmit || state.isSubmitting}
             >
-              {state.isSubmitting ? "Submitting..." : "Sign In"}
+              {state.isSubmitting ? t("submitting") : t("signIn")}
             </Button>
           )}
         </form.Subscribe>
