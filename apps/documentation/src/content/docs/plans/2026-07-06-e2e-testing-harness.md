@@ -26,9 +26,9 @@ output via `ffprobe`.
 
 ## Global Constraints
 
-- **Prerequisite branch base:** the regression tests assert FIXED behavior. Implement on a
-  branch based on `feat/video-editor` (PR #28, commits `f41706f` + `5a2af0e`), NOT on `main`.
-  On `main` these tests correctly fail because the fixes are absent.
+- **Prerequisite branch base:** the regression tests assert FIXED behavior, which now lives
+  in `main` (PR #28 merged, commits `f41706f` Range/seeking + `5a2af0e` export CORS + worker
+  audio). Implement on a branch based on `main`; the fixes are present so the tests pass green.
 - **Package manager:** Bun. Install with `bun add -D`, run with `bunx`. CI uses bun 1.3.4.
 - **Language:** English for all code, comments, file names. Comments explain _why_, not the
   next line. Kebab-case file names.
@@ -39,8 +39,13 @@ output via `ffprobe`.
   `~/Movies/Kaipu Record`. All state lives in per-run temp dirs that teardown removes.
 - **No fixed sleeps** in test logic — waits are condition-based. The one exception is the
   export's single generous timeout with polling.
-- **Scope:** only the two flows below. Native-capture flows (recording, camera, shortcuts,
-  tray, permissions) are explicitly out of scope this iteration.
+- **Scope:** the two renderer-only flows below (playback, export), **plus** a CI job that
+  runs them on Linux (Task 6). Native-capture flows (recording, camera, shortcuts, tray,
+  permissions) remain out of scope — they need real macOS APIs/permissions and IPC mocking.
+- **CI is Linux, not macOS:** both flows are Chromium + a file + ffprobe, so they run headless
+  on `ubuntu-latest` under `xvfb`. No macOS runner is needed (those cost 10× the minutes and
+  still could not exercise native capture headless). This matches the existing
+  `pr-validation.yml`, which already runs on `ubuntu-latest`.
 
 ---
 
@@ -666,6 +671,116 @@ git commit -m "test(e2e): export produces a valid in-sync MP4"
 
 ---
 
+### Task 6: CI job — run E2E on Linux (xvfb + ffmpeg)
+
+**Files:**
+
+- Create: `.github/workflows/e2e-desktop.yml`
+
+**Interfaces:**
+
+- Consumes: the `test:e2e` script (Task 1) and the committed fixture (Task 2).
+- Produces: a PR check that builds `kaipu-record` and runs the Playwright suite headless on
+  `ubuntu-latest`, uploading Playwright artifacts on failure.
+
+**Why a separate workflow (not a step in `pr-validation.yml`):** the E2E job needs a display
+(`xvfb`), system libraries, and an app build — it is heavier and slower than the lint/type
+job. Keeping it a distinct workflow lets it run in parallel and fail independently without
+blocking the fast checks, and keeps `pr-validation.yml` cheap.
+
+- [ ] **Step 1: Create the workflow**
+
+Create `.github/workflows/e2e-desktop.yml`. `xvfb-run` provides the virtual display Electron
+needs; `ffmpeg` provides `ffprobe` for the export codec assertion; `playwright install-deps`
+installs the Chromium shared libraries Electron also links against. `test:e2e` builds the app
+first (see Task 1), so no separate build step is required.
+
+```yaml
+name: E2E Desktop
+
+on:
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: E2E (kaipu-record)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.4
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # ffprobe (from ffmpeg) validates the exported MP4's streams; the export test
+      # requires it in CI (locally it is optional and the assertion self-skips).
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      # Electron's renderer is Chromium; it needs the same system libraries Playwright's
+      # Chromium does. install-deps pulls them (libnss3, libgbm, etc.). No browser download
+      # is needed — the tests launch the app's own electron binary.
+      - name: Install Electron/Chromium system libraries
+        working-directory: apps/kaipu-record
+        run: bunx playwright install-deps chromium
+
+      # xvfb-run gives Electron a virtual X display so the window can open headless.
+      - name: Run E2E suite
+        working-directory: apps/kaipu-record
+        run: xvfb-run --auto-servernum bun run test:e2e
+
+      - name: Upload Playwright artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            apps/kaipu-record/playwright-report
+            apps/kaipu-record/test-results
+          retention-days: 7
+          if-no-files-found: ignore
+```
+
+- [ ] **Step 2: Validate the workflow locally**
+
+There is no full local GitHub Actions runner requirement, but sanity-check the YAML parses
+and the referenced script exists:
+
+```bash
+bunx --yes js-yaml .github/workflows/e2e-desktop.yml > /dev/null && echo "yaml ok"
+grep -q '"test:e2e"' apps/kaipu-record/package.json && echo "script present"
+```
+
+Expected: `yaml ok` and `script present`.
+
+- [ ] **Step 3: Format + commit**
+
+```bash
+cd ../.. 2>/dev/null; bunx oxfmt --check .
+git add .github/workflows/e2e-desktop.yml
+git commit -m "ci(e2e): run desktop Playwright suite on Linux with xvfb"
+```
+
+- [ ] **Step 4: Verify on the PR**
+
+After pushing, confirm the `E2E Desktop` check appears on the PR and goes green. If Electron
+fails to launch for a missing library, read the job log for the exact `error while loading
+shared libraries` line and add that package to the `apt-get install` list (defense in depth:
+`libnss3 libatk-bridge2.0-0 libgtk-3-0 libgbm1 libasound2` are the usual suspects).
+
+---
+
 ## Notes for the implementer
 
 - **Playwright browser download:** `_electron.launch` uses the app's own `electron` binary,
@@ -676,6 +791,7 @@ git commit -m "test(e2e): export produces a valid in-sync MP4"
   same guard before other navigations.
 - **macOS non-fatal errors:** the main process logs `recording:get-screen-sources` failures
   on launch — expected and harmless in a headless/no-permission test environment.
-- **CI (future, out of scope):** wiring into `pr-validation.yml` needs a display (macOS
-  runner, or Linux + `xvfb-run`) and `ffmpeg`/`ffprobe` installed. The renderer-only flows
-  (playback, export) run headless because they are just Chromium + a file. Defer per the spec.
+- **CI (Task 6):** wired into a dedicated `e2e-desktop` job on `ubuntu-latest`. It needs a
+  virtual display (`xvfb`), `ffmpeg`/`ffprobe`, and Electron's headless system libraries
+  (`playwright install-deps` covers the Chromium shared libs Electron also uses). The
+  renderer-only flows run headless because they are just Chromium + a file.
