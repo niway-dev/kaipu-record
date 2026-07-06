@@ -496,40 +496,76 @@ git commit -m "test(e2e): ffprobe stream-summary helper"
 
 - [ ] **Step 1: Write the regression test**
 
-This is the `f41706f` regression: seek on the timeline ruler, press Play, and the video
-must advance without wedging. Create `apps/kaipu-record/e2e/playback.e2e.ts`:
+This guards the `f41706f` regression with **two** tests. The primary, deterministic guard
+asserts the media protocol directly: a `Range` fetch must return `206` + `Content-Range`
+(the bug returns `200`/full, which wedges Chromium's media stack on seek). A small committed
+fixture buffers whole on first load, so a real `<video>` seek stays in-buffer and never
+issues the offset request that reproduces the wedge — which is why the protocol assertion,
+not the seek, is the true guard. The second test is the realistic user-flow smoke (seek on
+the ruler → Play → `currentTime` advances). Create `apps/kaipu-record/e2e/playback.e2e.ts`:
 
 ```ts
-import { test, expect } from "@playwright/test";
-import { launchApp, openEditor } from "./helpers/launch";
+import { test, expect, type Page } from "@playwright/test";
+import { launchApp, openEditor, RECORDING_ID } from "./helpers/launch";
 
 /** Read the live <video> element's playback state from the renderer. */
-async function videoState(page: import("@playwright/test").Page) {
+async function videoState(page: Page) {
   return page.evaluate(() => {
     const v = document.querySelector("video");
     if (!v) return null;
-    return { currentTime: v.currentTime, paused: v.paused, seeking: v.seeking, error: v.error?.code ?? null };
+    return {
+      currentTime: v.currentTime,
+      paused: v.paused,
+      seeking: v.seeking,
+      error: v.error?.code ?? null,
+    };
   });
 }
 
-test("seeking then pressing play resumes playback (does not wedge the video)", async () => {
+// Primary guard: the protocol must answer a Range request with 206 + Content-Range. The bug
+// returned 200/full, which Chromium treats as a fatal error for the bytes=<offset>- request
+// it issues while seeking, wedging the <video>. Deterministic — no reliance on buffering.
+test("media protocol serves Range requests as 206 (seeking stays alive)", async () => {
+  const { page, teardown } = await launchApp();
+  try {
+    const res = await page.evaluate(async (id) => {
+      const r = await fetch(`kaipu-media://recording/${id}`, {
+        headers: { Range: "bytes=1000-" },
+      });
+      const body = await r.arrayBuffer();
+      return {
+        status: r.status,
+        contentRange: r.headers.get("content-range"),
+        acceptRanges: r.headers.get("accept-ranges"),
+        byteLength: body.byteLength,
+      };
+    }, RECORDING_ID);
+
+    expect(res.status).toBe(206);
+    expect(res.contentRange).toMatch(/^bytes 1000-\d+\/\d+$/);
+    expect(res.acceptRanges).toBe("bytes");
+    expect(res.byteLength).toBeGreaterThan(0);
+  } finally {
+    await teardown();
+  }
+});
+
+// Realistic smoke: after seeking on the ruler, pressing Play advances the <video>.
+test("seeking on the ruler then pressing play resumes playback", async () => {
   const { page, teardown } = await launchApp();
   try {
     await openEditor(page);
 
-    // Click the timeline ruler ~60% across to seek there.
     const ruler = page.getByTestId("ruler");
     const box = await ruler.boundingBox();
     if (!box) throw new Error("ruler not found");
     await page.mouse.click(box.x + box.width * 0.6, box.y + box.height / 2);
 
-    // The seek must settle: not stuck seeking, no media error.
     await expect
       .poll(async () => (await videoState(page))?.seeking, { timeout: 10_000 })
       .toBe(false);
     expect((await videoState(page))?.error).toBeNull();
 
-    // Press Play and assert currentTime actually advances (the bug: it never did).
     await page.getByRole("button", { name: "Reproducir" }).click();
     const t0 = (await videoState(page))!.currentTime;
     await expect
@@ -554,10 +590,13 @@ Expected: 1 passed. (Requires the branch to include `f41706f` — see Global Con
 
 - [ ] **Step 3: Red-green proof (manual, do not commit the revert)**
 
-Confirm the test actually guards the bug: temporarily `git stash` is not enough — instead,
-in `src/main/media-protocol.ts` revert `streamFile` to `return net.fetch(...)` (ignoring
-Range), rebuild, and run `bunx playwright test playback`. Expected: FAIL (video wedges on
-seek). Then `git checkout -- src/main/media-protocol.ts` and rebuild to restore green.
+Confirm the test actually guards the bug: in `src/main/media-protocol.ts`, force `streamFile`
+to always take the `200`/full-body branch (e.g. change `if (!range)` to `if (true || !range)`),
+rebuild, and run `bunx playwright test playback`. Expected: the **Range-guard** test FAILS
+(`Expected 206, Received 200`). Note the `<video>` seek smoke still PASSES — a small committed
+fixture buffers whole, so a real seek stays in-buffer and never issues the offset request that
+wedges; that is exactly why the deterministic protocol assertion is the true guard. Then
+`git checkout -- src/main/media-protocol.ts` and rebuild to restore green.
 
 - [ ] **Step 4: Format + commit**
 
