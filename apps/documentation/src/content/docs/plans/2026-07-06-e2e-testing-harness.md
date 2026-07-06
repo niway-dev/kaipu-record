@@ -830,6 +830,12 @@ shared libraries` line and add that package to the `apt-get install` list (defen
   same guard before other navigations.
 - **macOS non-fatal errors:** the main process logs `recording:get-screen-sources` failures
   on launch — expected and harmless in a headless/no-permission test environment.
+- **Export skips on Linux CI (H.264 encode):** the export encodes H.264 via WebCodecs
+  (`codec: "avc"`). Headless Linux Chromium ships an H.264 *decoder* but no *encoder*, so the
+  export test gates on `VideoEncoder.isConfigSupported` (High@4.0, 720p) and **skips visibly**
+  when unsupported — it runs in full on macOS/dev machines. The `corsEnabled` and Range fixes
+  are still guarded in CI by the playback Range-fetch test (that cross-origin fetch requires
+  `corsEnabled`); only the worker-audio path and full encode are macOS-only coverage.
 - **CI (Task 6):** wired into a dedicated `e2e-desktop` job on `ubuntu-latest`. It needs a
   virtual display (`xvfb`), `ffmpeg`/`ffprobe`, and Electron's headless system libraries
   (`playwright install-deps` covers the Chromium shared libs Electron also uses). The
