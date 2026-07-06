@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Check, Copy, FileX2, FolderOpen, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, Copy, FileX2, FolderOpen, Pencil, Scissors, Trash2 } from "lucide-react";
 import type { ImageSource } from "@renderer/features/screenshots/image-source";
 import { useTransientValue } from "@renderer/ui/use-transient-value";
 import { useLocalLibrary } from "@renderer/features/library/hooks/use-local-library";
@@ -80,6 +80,16 @@ export function LibraryDetailPage(): React.JSX.Element {
     navigate("/screenshot-editor", { state: source });
   };
 
+  // The editor builds its initial scene from the recording's duration — an older
+  // vault item without one (pre-duration-tracking capture) can't be opened.
+  const canEditVideo = video.durationSeconds > 0;
+  const editVideo = (): void => {
+    if (!canEditVideo) return;
+    navigate("/video-editor", {
+      state: { id: video.id, title: video.title, durationSeconds: video.durationSeconds },
+    });
+  };
+
   return (
     <div className={styles.page}>
       <button type="button" className={styles.back} onClick={back}>
@@ -127,6 +137,18 @@ export function LibraryDetailPage(): React.JSX.Element {
                 {copied ? "Copied" : "Copy"}
               </Button>
             </>
+          )}
+          {!isScreenshot && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={editVideo}
+              disabled={!canEditVideo}
+              title={canEditVideo ? undefined : "No se pudo leer la duración de este video"}
+            >
+              <Scissors size={15} strokeWidth={1.8} />
+              Editar video
+            </Button>
           )}
           <Button variant="outline" size="sm" onClick={() => reveal(id)}>
             <FolderOpen size={15} strokeWidth={1.8} />

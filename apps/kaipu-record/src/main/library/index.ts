@@ -5,6 +5,7 @@ import { IPC_CHANNELS } from "@shared/types";
 import type { VaultDirectory } from "@shared/types";
 import { LibraryVault } from "./library-vault";
 import { resetVaultDirectory, setVaultDirectory, vaultDirectory } from "./vault-location";
+import { deleteVideoEditSession, registerVideoEditSessionHandlers } from "./video-edit-session";
 
 /** Tell every window the vault folder changed so open pages re-list. */
 function broadcastLibraryChanged(): void {
@@ -50,9 +51,11 @@ export function registerLibraryVaultHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.renameLocalRecording, (_event, id: string, title: string) =>
     currentVault().rename(id, title),
   );
-  ipcMain.handle(IPC_CHANNELS.deleteLocalRecording, (_event, id: string) =>
-    currentVault().remove(id),
-  );
+  ipcMain.handle(IPC_CHANNELS.deleteLocalRecording, async (_event, id: string) => {
+    await currentVault().remove(id);
+    // Best-effort: a missing session must never block the delete.
+    await deleteVideoEditSession(id).catch(() => {});
+  });
   ipcMain.handle(IPC_CHANNELS.revealLocalRecording, async (_event, id: string) =>
     shell.showItemInFolder(await currentVault().filePath(id)),
   );
@@ -115,4 +118,7 @@ export function registerLibraryVaultHandlers(): void {
     broadcastLibraryChanged();
     return vaultDirectory();
   });
+
+  // Video-editor session persistence (save on export, load on editor mount).
+  registerVideoEditSessionHandlers();
 }

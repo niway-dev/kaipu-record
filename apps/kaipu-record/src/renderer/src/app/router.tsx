@@ -8,6 +8,7 @@ import { SettingsPage } from "@renderer/pages/settings/settings-page";
 import { ShortcutsPage } from "@renderer/pages/shortcuts/shortcuts-page";
 import { ScreenshotsPage } from "@renderer/pages/screenshots/screenshots-page";
 import { ScreenshotEditorPage } from "@renderer/pages/screenshot-editor/screenshot-editor-page";
+import { VideoEditorPage } from "@renderer/pages/video-editor/video-editor-page";
 
 /**
  * Route tree for the app.
@@ -35,6 +36,7 @@ const router = createHashRouter([
       { path: "/library/:id", element: <LibraryDetailPage /> },
       { path: "/screenshots", element: <ScreenshotsPage /> },
       { path: "/screenshot-editor", element: <ScreenshotEditorPage /> },
+      { path: "/video-editor", element: <VideoEditorPage /> },
       { path: "/shortcuts", element: <ShortcutsPage /> },
       { path: "/settings", element: <SettingsPage /> },
       { path: "*", element: <NotFound /> },

@@ -1,0 +1,130 @@
+/*
+ * Video-editor toolbar. Structure and tokens mirror the screenshot editor's
+ * top bar (screenshot-editor-page.module.css: .toolbar/.actions/.iconBtn/.divider)
+ * so both editors read as the same product.
+ */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  flex-shrink: 0;
+}
+
+/* Annotation tool group (select/box/arrow/text) — same tokens as the screenshot
+   editor's AnnotationToolbar (annotation-toolbar.module.css) so both editors read
+   as the same product. .toolbar's justify-content: space-between keeps this on the
+   left and .actions on the right without needing an explicit flex-grow here. */
+.toolGroup {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  background: var(--bg-modal);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+
+.tool {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 34px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.tool:hover {
+  color: var(--text-primary);
+}
+
+.toolActive,
+.toolActive:hover {
+  background: var(--accent-primary);
+  color: #fff;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.iconBtn:hover:not(:disabled) {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.iconBtn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.divider {
+  width: 1px;
+  height: 24px;
+  background: var(--border);
+  margin: 0 var(--space-xs);
+}
+
+/* The native file picker is triggered programmatically from the ImagePlus button —
+   the <input> itself never renders. */
+.hiddenInput {
+  display: none;
+}
+
+/* Primary export CTA — filled accent button (vs. the ghost .iconBtn group), so it
+   reads as the toolbar's main action rather than another utility icon. */
+.exportBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 var(--space-md);
+  background: var(--accent-primary);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: #fff;
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    opacity var(--transition);
+}
+
+.exportBtn:hover:not(:disabled) {
+  background: var(--accent-primary-hover);
+}
+
+.exportBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

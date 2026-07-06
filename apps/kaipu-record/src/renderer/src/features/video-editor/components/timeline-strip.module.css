@@ -1,0 +1,142 @@
+/*
+ * Timeline strip. Colors, spacing, and radii use the design tokens from
+ * base.css — same convention as the screenshot editor.
+ */
+
+.strip {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: var(--space-sm) var(--space-lg) var(--space-md);
+}
+
+/* Shared stacking context for ruler, overlay lane, and track so the playhead
+   can span all three rows as one continuous vertical line. */
+.timelineBody {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  flex: 1;
+  min-height: 0;
+}
+
+.ruler {
+  position: relative;
+  height: 20px;
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  /* Scrubber affordance: pointer cursor signals click-to-seek; touch-action none
+     lets pointer capture handle touch drags without browser scroll intervention;
+     user-select none prevents text selection during drag. */
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  border-radius: var(--radius-sm);
+  transition: background 0.12s;
+}
+
+.ruler:hover {
+  background: color-mix(in srgb, var(--text-muted) 10%, transparent);
+}
+
+.tick {
+  position: absolute;
+  transform: translateX(-50%);
+  user-select: none;
+}
+
+.track {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  border-radius: var(--radius-lg);
+  background: var(--bg-input);
+  cursor: pointer;
+}
+
+.block {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  display: flex;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  padding: 0;
+  background: var(--bg-card-hover);
+}
+
+.blockSelected {
+  border-color: var(--accent-primary);
+  /* Layout entries are contiguous with no gaps, so a selected clip's right handle
+     sits half inside the next block's bounds. Both blocks and handles are absolutely
+     positioned siblings inside .track (which is position:relative, establishing the
+     shared stacking context) — lift the selected block above its unselected
+     neighbors, and lift handles above every block, so the handle always wins hit
+     testing regardless of DOM order. */
+  z-index: 1;
+}
+
+.tile {
+  height: 100%;
+  flex: 1 1 0;
+  object-fit: cover;
+  min-width: 0;
+  pointer-events: none;
+}
+
+/* Slides read differently from footage: a distinct accent tint behind the image and a
+   badge marking them as inserted stills rather than recorded frames. */
+.slideBlock {
+  position: relative;
+  background: color-mix(in srgb, var(--accent-primary) 22%, var(--bg-card-hover));
+}
+
+.slideTile {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+.slideBadge {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--bg-modal) 70%, transparent);
+  color: #fff;
+  pointer-events: none;
+}
+
+.trimHandle {
+  position: absolute;
+  top: 0;
+  width: 8px;
+  height: 100%;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent-primary) 60%, transparent);
+  cursor: ew-resize;
+  touch-action: none;
+  /* Always above every block (see .blockSelected) — otherwise the outer half of the
+     right handle falls under the next block's button and loses hit-testing. */
+  z-index: 2;
+}
+
+.playhead {
+  /* Positioned in .timelineBody (not .track) so it spans ruler → overlay lane → track
+     as one unbroken vertical line — the user sees a single scrub indicator. */
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--accent-primary);
+  pointer-events: none;
+  /* Above trim handles (z-index 2) and selected blocks (z-index 1). */
+  z-index: 3;
+}

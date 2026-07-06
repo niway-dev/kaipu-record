@@ -212,6 +212,13 @@ export const IPC_CHANNELS = {
   shortcutsResume: "shortcuts:resume",
   // Analytics: secondary windows forward serialized exceptions to the main-process sink.
   analyticsCaptureException: "analytics:capture-exception",
+  // Video-editor session persistence. Save/load the edit session JSON + slide asset
+  // bytes for a given recording id — called on export (save) and on editor mount
+  // (load). Sessions live in `.kaipu/<id>.edit.json` beside existing metadata sidecars;
+  // slide assets in `.kaipu/<id>.assets/<assetId>.png` so a recording delete can clean
+  // them all up in one directory removal.
+  videoEditSaveSession: "videoEdit:save-session",
+  videoEditLoadSession: "videoEdit:load-session",
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
