@@ -1,0 +1,89 @@
+{
+  "common": {
+    "appName": "Kaipu Record",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "loading": "Cargando…",
+    "error": "Algo salió mal",
+    "retry": "Reintentar"
+  },
+  "tray": {
+    "open": "Abrir Kaipu Record",
+    "quit": "Salir"
+  },
+  "nav": {
+    "record": "Grabar",
+    "screenshots": "Captura",
+    "library": "Biblioteca",
+    "shortcuts": "Atajos",
+    "settings": "Ajustes",
+    "account": "Cuenta"
+  },
+  "settings": {
+    "title": "Ajustes",
+    "subtitle": "Permisos, almacenamiento e introducción para Kaipu Record.",
+    "language": "Idioma",
+    "languageDescription": "Elige el idioma de la aplicación.",
+    "spanish": "Español",
+    "english": "Inglés",
+    "permissions": "Permisos",
+    "permissionScreen": "Grabación de pantalla",
+    "permissionMic": "Micrófono",
+    "permissionCamera": "Cámara",
+    "granted": "Concedido",
+    "notGranted": "No concedido",
+    "request": "Solicitar",
+    "reRequest": "Volver a solicitar",
+    "recordingQuality": "Calidad de grabación",
+    "recording": "Grabación",
+    "showControlBar": "Mostrar la barra de control en la grabación",
+    "showControlBarDescription": "Incluye la barra flotante en el video capturado. Desactivado la mantiene oculta (por defecto).",
+    "files": "Archivos",
+    "recordingsFolder": "Carpeta de grabaciones",
+    "folderLoading": "Cargando…",
+    "folderCustom": "Personalizada",
+    "folderDefault": "Por defecto",
+    "reset": "Restablecer",
+    "browse": "Explorar",
+    "app": "Aplicación",
+    "showInDock": "Mostrar en el Dock y el selector de apps",
+    "showInDockDescription": "Desactivado mantiene Kaipu solo en la barra de menú — sin ícono en el Dock, oculto de ⌘-Tab (macOS).",
+    "onboarding": "Introducción",
+    "onboardingDescription": "Vuelve a ver la configuración inicial y los permisos.",
+    "replay": "Repetir"
+  },
+  "record": {
+    "readyToRecord": "Todo listo para grabar",
+    "micAccessOff": "El acceso al micrófono está desactivado",
+    "cameraAccessOff": "El acceso a la cámara está desactivado",
+    "pause": "Pausar",
+    "resume": "Reanudar",
+    "stopRecording": "Detener grabación",
+    "stopHint": "Detén desde aquí o desde la barra flotante"
+  },
+  "header": {
+    "brand": "Kaipu Record",
+    "dashboard": "Panel"
+  },
+  "landing": {
+    "navBrand": "Kaipu",
+    "navDownload": "Descargar",
+    "heroTitleLine1": "Graba tu pantalla,",
+    "heroTitleLine2": "sin complicaciones.",
+    "heroSubtitle": "Kaipu Record graba tu pantalla y tu cámara en alta calidad, directo en tu equipo. Privado, rápido y sin cuentas.",
+    "featureScreenTitle": "Pantalla + cámara",
+    "featureScreenBody": "Graba tu pantalla con una burbuja de cámara flotante, lista para tutoriales y demos.",
+    "featurePrivateTitle": "Local-first y privado",
+    "featurePrivateBody": "Todo se procesa y guarda en tu equipo. Nada sale a la nube sin que lo quieras.",
+    "featureQualityTitle": "Calidad configurable",
+    "featureQualityBody": "Elige resolución, fluidez y peso con presets claros — de liviano a máxima calidad.",
+    "featureShortcutsTitle": "Atajos globales",
+    "featureShortcutsBody": "Inicia, detén y trae la app al frente desde cualquier lado con atajos reconfigurables.",
+    "downloadTitle": "Descarga Kaipu Record",
+    "downloadSubtitle": "Gratis para macOS 11+. Windows próximamente.",
+    "downloadMacArm": "Descargar para Mac (Apple Silicon)",
+    "downloadMacIntel": "Mac (Intel)",
+    "downloadWindows": "Windows (próximamente)",
+    "footerTagline": "Graba. Comparte. Sin vueltas."
+  }
+}

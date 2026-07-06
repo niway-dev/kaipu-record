@@ -7,7 +7,9 @@ import { Toggle } from "@renderer/ui/toggle";
 import { useOnboarding } from "@renderer/features/onboarding";
 import { usePermissions } from "@renderer/features/permissions";
 import { useVaultDirectory } from "@renderer/features/library/hooks/use-vault-directory";
+import { useTranslations } from "@kaipu/i18n";
 import { useAppSettings } from "./use-app-settings";
+import { LanguageSettings } from "./language-settings";
 import { RecordingQualitySettings } from "./recording-quality-settings";
 import { DEFAULT_QUALITY } from "@shared/recording-quality";
 import {
@@ -49,15 +51,16 @@ function Section({
 
 const PERMISSION_ROWS: ReadonlyArray<{
   kind: PermissionKind;
-  label: string;
+  labelKey: "permissionScreen" | "permissionMic" | "permissionCamera";
   icon: React.ReactNode;
 }> = [
-  { kind: "screen", label: "Screen recording", icon: <Monitor size={16} /> },
-  { kind: "microphone", label: "Microphone", icon: <Mic size={16} /> },
-  { kind: "camera", label: "Camera", icon: <Video size={16} /> },
+  { kind: "screen", labelKey: "permissionScreen", icon: <Monitor size={16} /> },
+  { kind: "microphone", labelKey: "permissionMic", icon: <Mic size={16} /> },
+  { kind: "camera", labelKey: "permissionCamera", icon: <Video size={16} /> },
 ];
 
 export function SettingsPage(): React.JSX.Element {
+  const t = useTranslations("settings");
   const { open: openOnboarding } = useOnboarding();
   const { status: permissionStatus, request: requestPermission } = usePermissions();
   const vault = useVaultDirectory();
@@ -69,27 +72,31 @@ export function SettingsPage(): React.JSX.Element {
   return (
     <div className={styles.page}>
       <div className={styles.pageHeader}>
-        <h1 className={styles.pageTitle}>Settings</h1>
-        <p className={styles.pageSubtitle}>Permissions, storage and onboarding for Kaipu Record.</p>
+        <h1 className={styles.pageTitle}>{t("title")}</h1>
+        <p className={styles.pageSubtitle}>{t("subtitle")}</p>
       </div>
 
       <div className={styles.sections}>
-        <Section title="Permissions">
-          {PERMISSION_ROWS.map(({ kind, label, icon }) => {
+        <Section title={t("language")}>
+          <LanguageSettings />
+        </Section>
+
+        <Section title={t("permissions")}>
+          {PERMISSION_ROWS.map(({ kind, labelKey, icon }) => {
             const granted = permissionStatus[kind];
             return (
               <Row
                 key={kind}
                 icon={icon}
-                label={label}
+                label={t(labelKey)}
                 description={
                   <span className={granted ? styles.statusGranted : styles.statusDenied}>
-                    {granted ? "Granted" : "Not granted"}
+                    {granted ? t("granted") : t("notGranted")}
                   </span>
                 }
                 action={
                   <Button variant="outline" size="sm" onClick={() => void requestPermission(kind)}>
-                    {granted ? "Re-request" : "Request"}
+                    {granted ? t("reRequest") : t("request")}
                   </Button>
                 }
               />
@@ -97,17 +104,17 @@ export function SettingsPage(): React.JSX.Element {
           })}
         </Section>
 
-        <Section title="Recording quality">
+        <Section title={t("recordingQuality")}>
           <RecordingQualitySettings
             quality={settings?.recordingQuality ?? DEFAULT_QUALITY}
             onChange={(recordingQuality) => void update({ recordingQuality })}
           />
         </Section>
 
-        <Section title="Recording">
+        <Section title={t("recording")}>
           <Row
-            label="Show control bar in recording"
-            description="Include the floating control bar in the captured video. Off keeps it hidden (default)"
+            label={t("showControlBar")}
+            description={t("showControlBarDescription")}
             action={
               <Toggle
                 checked={settings?.showBarInRecording ?? false}
@@ -117,35 +124,37 @@ export function SettingsPage(): React.JSX.Element {
           />
         </Section>
 
-        <Section title="Files">
+        <Section title={t("files")}>
           <Row
             icon={<FolderOpen size={16} />}
-            label="Recordings folder"
+            label={t("recordingsFolder")}
             description={
               <span className={styles.pathValue} title={vault.directory?.path}>
-                {vault.directory ? vault.directory.path : "Loading…"}
-                {vault.directory ? (vault.directory.isCustom ? " · Custom" : " · Default") : ""}
+                {vault.directory ? vault.directory.path : t("folderLoading")}
+                {vault.directory
+                  ? ` · ${vault.directory.isCustom ? t("folderCustom") : t("folderDefault")}`
+                  : ""}
               </span>
             }
             action={
               <>
                 {vault.directory?.isCustom && (
                   <Button variant="ghost" size="sm" onClick={() => void vault.reset()}>
-                    Reset
+                    {t("reset")}
                   </Button>
                 )}
                 <Button variant="outline" size="sm" onClick={() => void vault.choose()}>
-                  Browse
+                  {t("browse")}
                 </Button>
               </>
             }
           />
         </Section>
 
-        <Section title="App">
+        <Section title={t("app")}>
           <Row
-            label="Show in Dock & app switcher"
-            description="Off keeps Kaipu in the menu bar only — no Dock icon, hidden from ⌘-Tab (macOS)"
+            label={t("showInDock")}
+            description={t("showInDockDescription")}
             action={
               <Toggle
                 checked={settings?.showInDock ?? true}
@@ -154,11 +163,11 @@ export function SettingsPage(): React.JSX.Element {
             }
           />
           <Row
-            label="Onboarding"
-            description="Replay the first-run setup & permissions"
+            label={t("onboarding")}
+            description={t("onboardingDescription")}
             action={
               <Button variant="outline" size="sm" onClick={openOnboarding}>
-                Replay
+                {t("replay")}
               </Button>
             }
           />

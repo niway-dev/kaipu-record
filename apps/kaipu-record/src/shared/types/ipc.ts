@@ -8,6 +8,7 @@
  */
 
 import { DEFAULT_QUALITY, type RecordingQuality } from "../recording-quality";
+import type { Locale } from "@kaipu/i18n";
 
 export type Theme = "light" | "dark" | "system";
 
@@ -93,6 +94,8 @@ export const DEFAULT_SHORTCUTS: ShortcutSettings = Object.fromEntries(
 
 export interface AppSettings {
   theme: Theme;
+  /** UI language for every renderer window + the native tray. */
+  locale: Locale;
   launchAtLogin: boolean;
   /**
    * macOS: show the app in the Dock + Cmd+Tab switcher (`regular` activation
@@ -117,6 +120,7 @@ export interface AppSettings {
 
 export const DEFAULT_SETTINGS: AppSettings = {
   theme: "system",
+  locale: "es",
   launchAtLogin: false,
   showInDock: true,
   recordingQuality: DEFAULT_QUALITY,

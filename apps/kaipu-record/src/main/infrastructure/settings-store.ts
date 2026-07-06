@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { IPC_CHANNELS } from "@shared/types";
 import type { AppSettings } from "@shared/types";
+import { normalizeLocale } from "@kaipu/i18n";
 import { mergeSettings } from "../services/settings.service";
 
 /**
@@ -19,17 +20,28 @@ function settingsPath(): string {
 }
 
 function load(): void {
+  let parsed: Partial<AppSettings> | null = null;
   try {
-    settings = mergeSettings(
-      JSON.parse(readFileSync(settingsPath(), "utf-8")) as Partial<AppSettings>,
-    );
+    parsed = JSON.parse(readFileSync(settingsPath(), "utf-8")) as Partial<AppSettings>;
   } catch {
-    settings = mergeSettings(null);
+    parsed = null;
+  }
+  settings = mergeSettings(parsed);
+
+  let dirty = false;
+  // First run (or a settings file predating i18n): seed the locale from the OS
+  // so the app opens in the user's language instead of the hardcoded default.
+  // `app.getLocale()` is only valid after `app.whenReady()`, which is where
+  // `registerSettings()` (our only caller) runs.
+  if (!parsed || !("locale" in parsed)) {
+    settings = { ...settings, locale: normalizeLocale(app.getLocale()) };
+    dirty = true;
   }
   if (!settings.deviceId) {
     settings = { ...settings, deviceId: randomUUID() };
-    persist();
+    dirty = true;
   }
+  if (dirty) persist();
 }
 
 function persist(): void {

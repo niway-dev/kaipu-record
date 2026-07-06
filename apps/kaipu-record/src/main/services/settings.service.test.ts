@@ -33,6 +33,7 @@ describe("mergeSettings", () => {
     expect(
       mergeSettings({
         theme: "dark",
+        locale: "en",
         launchAtLogin: true,
         showInDock: false,
         recordingQuality: QUALITY_PRESETS.max,
@@ -42,6 +43,7 @@ describe("mergeSettings", () => {
       }),
     ).toEqual({
       theme: "dark",
+      locale: "en",
       launchAtLogin: true,
       showInDock: false,
       recordingQuality: QUALITY_PRESETS.max,
@@ -49,6 +51,12 @@ describe("mergeSettings", () => {
       shortcuts,
       deviceId: "stored-id",
     });
+  });
+
+  it("keeps a valid persisted locale and defaults an invalid one", () => {
+    expect(mergeSettings({ locale: "en" }).locale).toBe("en");
+    expect(mergeSettings({ locale: "fr" as never }).locale).toBe("es");
+    expect(mergeSettings({}).locale).toBe("es");
   });
 
   it("defaults showBarInRecording to false when absent or invalid", () => {

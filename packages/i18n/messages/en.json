@@ -1,0 +1,89 @@
+{
+  "common": {
+    "appName": "Kaipu Record",
+    "save": "Save",
+    "cancel": "Cancel",
+    "loading": "Loading…",
+    "error": "Something went wrong",
+    "retry": "Retry"
+  },
+  "tray": {
+    "open": "Open Kaipu Record",
+    "quit": "Quit"
+  },
+  "nav": {
+    "record": "Record",
+    "screenshots": "Screenshot",
+    "library": "Library",
+    "shortcuts": "Shortcuts",
+    "settings": "Settings",
+    "account": "Account"
+  },
+  "settings": {
+    "title": "Settings",
+    "subtitle": "Permissions, storage and onboarding for Kaipu Record.",
+    "language": "Language",
+    "languageDescription": "Choose the app language.",
+    "spanish": "Spanish",
+    "english": "English",
+    "permissions": "Permissions",
+    "permissionScreen": "Screen recording",
+    "permissionMic": "Microphone",
+    "permissionCamera": "Camera",
+    "granted": "Granted",
+    "notGranted": "Not granted",
+    "request": "Request",
+    "reRequest": "Re-request",
+    "recordingQuality": "Recording quality",
+    "recording": "Recording",
+    "showControlBar": "Show control bar in recording",
+    "showControlBarDescription": "Include the floating control bar in the captured video. Off keeps it hidden (default).",
+    "files": "Files",
+    "recordingsFolder": "Recordings folder",
+    "folderLoading": "Loading…",
+    "folderCustom": "Custom",
+    "folderDefault": "Default",
+    "reset": "Reset",
+    "browse": "Browse",
+    "app": "App",
+    "showInDock": "Show in Dock & app switcher",
+    "showInDockDescription": "Off keeps Kaipu in the menu bar only — no Dock icon, hidden from ⌘-Tab (macOS).",
+    "onboarding": "Onboarding",
+    "onboardingDescription": "Replay the first-run setup & permissions.",
+    "replay": "Replay"
+  },
+  "record": {
+    "readyToRecord": "Ready to record",
+    "micAccessOff": "Microphone access is off",
+    "cameraAccessOff": "Camera access is off",
+    "pause": "Pause",
+    "resume": "Resume",
+    "stopRecording": "Stop recording",
+    "stopHint": "Stop from here or the floating bar"
+  },
+  "header": {
+    "brand": "Kaipu Record",
+    "dashboard": "Dashboard"
+  },
+  "landing": {
+    "navBrand": "Kaipu",
+    "navDownload": "Download",
+    "heroTitleLine1": "Record your screen,",
+    "heroTitleLine2": "without the hassle.",
+    "heroSubtitle": "Kaipu Record captures your screen and camera in high quality, right on your machine. Private, fast, and account-free.",
+    "featureScreenTitle": "Screen + camera",
+    "featureScreenBody": "Record your screen with a floating camera bubble, ready for tutorials and demos.",
+    "featurePrivateTitle": "Local-first and private",
+    "featurePrivateBody": "Everything is processed and stored on your machine. Nothing leaves for the cloud unless you want it to.",
+    "featureQualityTitle": "Configurable quality",
+    "featureQualityBody": "Pick resolution, smoothness, and file size with clear presets — from light to maximum quality.",
+    "featureShortcutsTitle": "Global shortcuts",
+    "featureShortcutsBody": "Start, stop, and bring the app to the front from anywhere with rebindable shortcuts.",
+    "downloadTitle": "Download Kaipu Record",
+    "downloadSubtitle": "Free for macOS 11+. Windows coming soon.",
+    "downloadMacArm": "Download for Mac (Apple Silicon)",
+    "downloadMacIntel": "Mac (Intel)",
+    "downloadWindows": "Windows (coming soon)",
+    "footerTagline": "Record. Share. No fuss."
+  }
+}

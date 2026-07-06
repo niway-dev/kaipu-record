@@ -1,0 +1,52 @@
+{
+  "name": "@kaipu/i18n",
+  "version": "1.0.0",
+  "description": "Shared i18n (use-intl v4): messages, provider, config for web + desktop",
+  "files": [
+    "dist",
+    "messages",
+    "src"
+  ],
+  "type": "module",
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./main": "./src/main.ts",
+    "./web": "./src/web.ts",
+    "./package.json": "./package.json",
+    "./messages/es": "./messages/es.json",
+    "./messages/en": "./messages/en.json"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": "./dist/index.mjs",
+      "./main": "./dist/main.mjs",
+      "./web": "./dist/web.mjs",
+      "./package.json": "./package.json",
+      "./messages/es": "./messages/es.json",
+      "./messages/en": "./messages/en.json"
+    }
+  },
+  "scripts": {
+    "build": "tsdown",
+    "check-types": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "oxlint src"
+  },
+  "dependencies": {
+    "use-intl": "^4.11.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.1",
+    "@types/react": "^19",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "^4.1.9"
+  },
+  "peerDependencies": {
+    "react": "^19"
+  },
+  "packageManager": "bun@1.3.4"
+}

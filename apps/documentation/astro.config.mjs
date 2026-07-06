@@ -62,6 +62,7 @@ export default defineConfig({
             { slug: "backlog/shared-tokens-package" },
             { slug: "backlog/r2-storage-architecture" },
             { slug: "backlog/playwright-e2e" },
+            { slug: "backlog/i18n" },
             { slug: "backlog/settings-roadmap" },
             { slug: "backlog/shortcuts" },
             { slug: "backlog/screenshots" },
