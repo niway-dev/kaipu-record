@@ -12,22 +12,28 @@ import { setRuntimeLocale } from "@renderer/lib/runtime-i18n";
  * Async: it awaits the settings once so the provider mounts already in the right
  * language (no flash). `main.tsx` resolves it before `root.render`.
  */
+/** Keep non-React code (recorder-store) + the document's `lang` (screen-reader
+ *  pronunciation of the translated a11y text) in sync with the active locale. */
+function syncLocale(locale: Locale): void {
+  setRuntimeLocale(locale);
+  document.documentElement.lang = locale;
+}
+
 export async function I18nRoot({ children }: { children: ReactNode }): Promise<React.JSX.Element> {
   const settings = await window.electronAPI.getSettings();
-  // Keep non-React code (module singletons like recorder-store) in sync too.
-  setRuntimeLocale(settings.locale);
+  syncLocale(settings.locale);
 
   return (
     <I18nProvider
       initialLocale={settings.locale}
       messagesByLocale={{ es, en }}
       onLocaleChange={(locale: Locale) => {
-        setRuntimeLocale(locale);
+        syncLocale(locale);
         void window.electronAPI.updateSettings({ locale });
       }}
       subscribeExternal={(apply) =>
         window.electronAPI.onSettingsChanged((s) => {
-          setRuntimeLocale(s.locale);
+          syncLocale(s.locale);
           apply(s.locale);
         })
       }
