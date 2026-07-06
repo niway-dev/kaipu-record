@@ -1,6 +1,20 @@
 import "@testing-library/jest-dom/vitest";
-import { afterEach } from "vitest";
+import { afterEach, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
+
+// Component tests render without the <I18nProvider>, so stub the i18n hooks to
+// echo namespaced keys and pass children through. Config helpers stay real.
+vi.mock("@kaipu/i18n", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@kaipu/i18n")>();
+  return {
+    ...actual,
+    I18nProvider: ({ children }: { children: unknown }) => children,
+    useTranslations: (namespace?: string) => (key: string) =>
+      namespace ? `${namespace}.${key}` : key,
+    useLocale: () => "es",
+    useSetLocale: () => () => {},
+  };
+});
 import { DEFAULT_QUALITY } from "@shared/recording-quality";
 import { DEFAULT_SHORTCUTS } from "@shared/types";
 

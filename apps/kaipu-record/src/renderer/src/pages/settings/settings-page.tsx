@@ -7,7 +7,9 @@ import { Toggle } from "@renderer/ui/toggle";
 import { useOnboarding } from "@renderer/features/onboarding";
 import { usePermissions } from "@renderer/features/permissions";
 import { useVaultDirectory } from "@renderer/features/library/hooks/use-vault-directory";
+import { useTranslations } from "@kaipu/i18n";
 import { useAppSettings } from "./use-app-settings";
+import { LanguageSettings } from "./language-settings";
 import { RecordingQualitySettings } from "./recording-quality-settings";
 import { DEFAULT_QUALITY } from "@shared/recording-quality";
 import {
@@ -58,6 +60,7 @@ const PERMISSION_ROWS: ReadonlyArray<{
 ];
 
 export function SettingsPage(): React.JSX.Element {
+  const t = useTranslations("settings");
   const { open: openOnboarding } = useOnboarding();
   const { status: permissionStatus, request: requestPermission } = usePermissions();
   const vault = useVaultDirectory();
@@ -74,6 +77,10 @@ export function SettingsPage(): React.JSX.Element {
       </div>
 
       <div className={styles.sections}>
+        <Section title={t("language")}>
+          <LanguageSettings />
+        </Section>
+
         <Section title="Permissions">
           {PERMISSION_ROWS.map(({ kind, label, icon }) => {
             const granted = permissionStatus[kind];
