@@ -1,5 +1,6 @@
 import React from "react";
 import { Camera, Video, type LucideIcon } from "lucide-react";
+import { useTranslations } from "@kaipu/i18n";
 import styles from "./panel-tabs.module.css";
 
 /** The two modes the Capture Panel can show. `as const` (no TS enum) so the values
@@ -7,9 +8,9 @@ import styles from "./panel-tabs.module.css";
 export const PANEL_TABS = ["record", "capture"] as const;
 export type PanelTab = (typeof PANEL_TABS)[number];
 
-const META: Record<PanelTab, { label: string; Icon: LucideIcon }> = {
-  record: { label: "Record", Icon: Video },
-  capture: { label: "Capture", Icon: Camera },
+const META: Record<PanelTab, { labelKey: "tabRecord" | "tabCapture"; Icon: LucideIcon }> = {
+  record: { labelKey: "tabRecord", Icon: Video },
+  capture: { labelKey: "tabCapture", Icon: Camera },
 };
 
 /**
@@ -28,15 +29,16 @@ export function PanelTabs({
   onChange: (tab: PanelTab) => void;
   disabled?: boolean;
 }): React.JSX.Element {
+  const t = useTranslations("panel");
   return (
     <div
       className={styles.tabs}
       role="tablist"
-      aria-label="Panel mode"
+      aria-label={t("panelMode")}
       data-disabled={disabled || undefined}
     >
       {PANEL_TABS.map((tab) => {
-        const { label, Icon } = META[tab];
+        const { labelKey, Icon } = META[tab];
         return (
           <button
             key={tab}
@@ -49,7 +51,7 @@ export function PanelTabs({
             onClick={() => onChange(tab)}
           >
             <Icon size={15} strokeWidth={2.25} aria-hidden />
-            {label}
+            {t(labelKey)}
           </button>
         );
       })}

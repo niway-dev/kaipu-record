@@ -298,5 +298,16 @@
     "deleteAria": "Eliminar",
     "deleteTitle": "Eliminar (⌫)",
     "typePlaceholder": "Escribe…"
+  },
+  "panel": {
+    "saving": "Guardando…",
+    "paused": "Pausado",
+    "resume": "Reanudar",
+    "pause": "Pausar",
+    "stop": "Detener",
+    "open": "Abrir ↗",
+    "tabRecord": "Grabar",
+    "tabCapture": "Captura",
+    "panelMode": "Modo del panel"
   }
 }

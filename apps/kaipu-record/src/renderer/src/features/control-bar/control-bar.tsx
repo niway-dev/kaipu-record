@@ -1,5 +1,6 @@
 import React from "react";
 import { Loader2, Pause, Play, Square } from "lucide-react";
+import { useTranslations } from "@kaipu/i18n";
 import { formatElapsed } from "@renderer/features/recording/elapsed";
 import { cx } from "@renderer/ui/cx";
 import type { RecordingTick } from "@shared/types/ipc";
@@ -22,11 +23,12 @@ export function ControlBar({
   onStop,
   stopShortcut,
 }: ControlBarProps): React.JSX.Element {
+  const t = useTranslations("panel");
   if (tick.status === "saving") {
     return (
       <div className={styles.bar}>
         <Loader2 size={16} className={styles.spinner} />
-        <span className={styles.savingLabel}>Saving…</span>
+        <span className={styles.savingLabel}>{t("saving")}</span>
       </div>
     );
   }
@@ -35,7 +37,7 @@ export function ControlBar({
   return (
     <div className={styles.bar} data-paused={paused || undefined}>
       <span className={styles.dot} data-paused={paused || undefined} />
-      {paused && <span className={styles.pausedLabel}>Paused</span>}
+      {paused && <span className={styles.pausedLabel}>{t("paused")}</span>}
       <span className={styles.time}>{formatElapsed(tick.elapsedSeconds * 1000)}</span>
 
       {!paused && (
@@ -46,15 +48,20 @@ export function ControlBar({
       )}
 
       {paused ? (
-        <button className={styles.control} type="button" aria-label="Resume" onClick={onResume}>
+        <button
+          className={styles.control}
+          type="button"
+          aria-label={t("resume")}
+          onClick={onResume}
+        >
           <Play size={17} />
         </button>
       ) : (
-        <button className={styles.control} type="button" aria-label="Pause" onClick={onPause}>
+        <button className={styles.control} type="button" aria-label={t("pause")} onClick={onPause}>
           <Pause size={17} />
         </button>
       )}
-      <button className={styles.stop} type="button" aria-label="Stop" onClick={onStop}>
+      <button className={styles.stop} type="button" aria-label={t("stop")} onClick={onStop}>
         <Square size={14} fill="currentColor" />
       </button>
 

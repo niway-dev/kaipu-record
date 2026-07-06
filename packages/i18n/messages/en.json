@@ -298,5 +298,16 @@
     "deleteAria": "Delete",
     "deleteTitle": "Delete (⌫)",
     "typePlaceholder": "Type…"
+  },
+  "panel": {
+    "saving": "Saving…",
+    "paused": "Paused",
+    "resume": "Resume",
+    "pause": "Pause",
+    "stop": "Stop",
+    "open": "Open ↗",
+    "tabRecord": "Record",
+    "tabCapture": "Capture",
+    "panelMode": "Panel mode"
   }
 }
