@@ -64,6 +64,12 @@ export async function launchApp(): Promise<{
     path.join(userDataDir, "preferences.json"),
     JSON.stringify({ vaultDirectory: vaultDir }),
   );
+  // Pin the UI locale so assertions are deterministic. A fresh profile otherwise
+  // seeds its locale from `app.getLocale()` (settings-store.ts) — English on CI
+  // runners, Spanish on a local machine — which would flip every user-facing
+  // string. Seeding settings.json with `locale: "en"` (the language these tests
+  // assert in) makes the suite independent of the runner's OS locale.
+  await writeFile(path.join(userDataDir, "settings.json"), JSON.stringify({ locale: "en" }));
 
   // Electron's Chromium sandbox needs a SUID helper that headless CI runners lack, so the
   // app fails to launch there without --no-sandbox. Disable it only under CI, never locally.
@@ -105,15 +111,15 @@ export async function dismissOnboarding(page: Page): Promise<void> {
 
 /**
  * Enter the video editor for the seeded recording: dismiss onboarding, hash-navigate to the
- * recording's detail page (the app uses createHashRouter), then click the real "Editar
- * video" button so the flow is genuinely end-to-end.
+ * recording's detail page (the app uses createHashRouter), then click the real "Edit video"
+ * button so the flow is genuinely end-to-end.
  */
 export async function openEditor(page: Page): Promise<void> {
   await dismissOnboarding(page);
   await page.evaluate((id) => {
     location.hash = `#/library/${id}`;
   }, RECORDING_ID);
-  await page.getByRole("button", { name: "Editar video" }).click();
+  await page.getByRole("button", { name: "Edit video" }).click();
   await page.waitForSelector("video");
 }
 
