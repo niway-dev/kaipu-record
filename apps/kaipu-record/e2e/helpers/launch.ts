@@ -49,9 +49,12 @@ export async function launchApp(): Promise<{
     JSON.stringify({ vaultDirectory: vaultDir }),
   );
 
-  const app = await electron.launch({
-    args: [MAIN_ENTRY, `--user-data-dir=${userDataDir}`],
-  });
+  // Electron's Chromium sandbox needs a SUID helper that headless CI runners lack, so the
+  // app fails to launch there without --no-sandbox. Disable it only under CI, never locally.
+  const args = [MAIN_ENTRY, `--user-data-dir=${userDataDir}`];
+  if (process.env.CI) args.push("--no-sandbox");
+
+  const app = await electron.launch({ args });
   const page = await app.firstWindow();
 
   return {
@@ -67,16 +70,33 @@ export async function launchApp(): Promise<{
 }
 
 /**
- * Enter the video editor for the seeded recording. Hash-navigate to its detail page (the
- * app uses createHashRouter), dismiss the onboarding takeover if it is showing, then click
- * the real "Editar video" button so the flow is genuinely end-to-end.
+ * A fresh profile opens with the onboarding takeover — a full-window `aria-modal` dialog
+ * that intercepts pointer events over the whole app, so it must be dismissed before any
+ * interaction. The window can resolve before React mounts it, so wait for its "Skip setup"
+ * button (rather than an immediate isVisible check that races the mount), click it, and wait
+ * for the dialog to detach. If it never appears (already dismissed), proceed.
+ */
+export async function dismissOnboarding(page: Page): Promise<void> {
+  const skip = page.getByRole("button", { name: "Skip setup" });
+  try {
+    await skip.waitFor({ state: "visible", timeout: 10_000 });
+  } catch {
+    return;
+  }
+  await skip.click();
+  await page.getByRole("dialog", { name: "Onboarding" }).waitFor({ state: "detached" });
+}
+
+/**
+ * Enter the video editor for the seeded recording: dismiss onboarding, hash-navigate to the
+ * recording's detail page (the app uses createHashRouter), then click the real "Editar
+ * video" button so the flow is genuinely end-to-end.
  */
 export async function openEditor(page: Page): Promise<void> {
+  await dismissOnboarding(page);
   await page.evaluate((id) => {
     location.hash = `#/library/${id}`;
   }, RECORDING_ID);
-  const skip = page.getByRole("button", { name: "Skip setup" });
-  if (await skip.isVisible().catch(() => false)) await skip.click();
   await page.getByRole("button", { name: "Editar video" }).click();
   await page.waitForSelector("video");
 }
