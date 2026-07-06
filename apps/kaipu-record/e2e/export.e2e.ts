@@ -4,33 +4,21 @@ import { launchApp, openEditor, RECORDING_DURATION } from "./helpers/launch";
 import { ffprobeAvailable, probeMedia } from "./helpers/ffprobe";
 
 test("export produces a valid MP4 with in-sync video and audio", async () => {
+  // The export encodes H.264 + AAC via WebCodecs (mediabunny). Headless Linux CI runners
+  // (GitHub `ubuntu-latest`) have no working WebCodecs H.264 encoder — the export throws at
+  // runtime ("No pudimos exportar el video"), confirmed empirically. `isConfigSupported`
+  // there falsely reports support, so we gate on the environment, not the config. Skip
+  // visibly (never a silent pass); the export runs in full on macOS/dev machines, where the
+  // regression it guards was fixed. The `corsEnabled` + Range fixes stay guarded in CI by the
+  // playback Range-fetch test (that cross-origin fetch requires `corsEnabled`).
+  test.skip(
+    process.platform === "linux" && !!process.env.CI,
+    "WebCodecs H.264/AAC encoding unavailable on headless Linux CI",
+  );
+
   const { page, vaultDir, teardown } = await launchApp();
   try {
     await openEditor(page);
-
-    // The export encodes H.264 via WebCodecs (mediabunny CanvasSource `codec: "avc"`).
-    // Headless Linux Chromium ships an H.264 decoder but no encoder, so the export cannot
-    // run there — skip visibly (never a silent pass) when the app's own encoder config is
-    // unsupported. This gates on the ACTUAL config: where H.264 encoding IS available
-    // (macOS, dev machines) the test still runs in full and would fail on a regression.
-    const canEncodeH264 = await page.evaluate(async () => {
-      if (typeof VideoEncoder === "undefined") return false;
-      try {
-        // High@4.0 comfortably covers the fixture's 720p; a lower level (e.g. 3.0) reports
-        // unsupported for 720p even where H.264 encoding works, so it must not be used here.
-        const support = await VideoEncoder.isConfigSupported({
-          codec: "avc1.640028",
-          width: 1280,
-          height: 720,
-          bitrate: 1_000_000,
-          framerate: 30,
-        });
-        return support.supported === true;
-      } catch {
-        return false;
-      }
-    });
-    test.skip(!canEncodeH264, "WebCodecs H.264 encoding unavailable on this platform");
 
     // handleExport no-ops with a toast if videoWidth is still 0 (metadata not decoded).
     // Wait for real dimensions before clicking, or the export silently never starts.
