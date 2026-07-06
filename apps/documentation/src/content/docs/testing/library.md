@@ -86,6 +86,9 @@ points its `<video src>` at `kaipu-media://recording/<id>` (`recording-player.ts
 
 ## Testability
 
+✅ **Implemented** — `e2e/library-actions.e2e.ts` (rename, delete, reveal); the seeded-list
+open is covered by `e2e/library.e2e.ts`.
+
 **🟢 Fully E2E-able** (with two native exceptions asserted at the IPC boundary, not the OS
 effect). The whole flow is renderer + a local temp vault, exactly what `launchApp()` seeds,
 so listing, opening, `<video>` playback, rename, and delete all run headless on Linux CI

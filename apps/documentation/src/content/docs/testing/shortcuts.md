@@ -82,6 +82,10 @@ event, so in-page keyboard input never triggers it.
 
 🟡 **Partial (page fully E2E-able; global firing not headless-testable).**
 
+✅ **Implemented (the page slice)** — `e2e/shortcuts.e2e.ts` rebinds _Start recording_ to a new
+accelerator and asserts persistence via a `getSettings()` round-trip. The actual OS-level
+accelerator firing stays manual.
+
 Two clearly distinct concerns:
 
 - **The page — config, validation, persistence:** renderer-only, driven entirely through

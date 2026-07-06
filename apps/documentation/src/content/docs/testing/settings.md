@@ -81,6 +81,10 @@ dev watermark toggle writes `localStorage["kaipu:dev:simulate-paid"]`
 
 🟡 Partial (needs IPC mocking)
 
+✅ **Implemented (the deterministic slice)** — `e2e/settings.e2e.ts` flips the native-free
+`showBarInRecording` toggle and asserts persistence via a `getSettings()` round-trip. The
+native folder picker and permission request stay manual.
+
 Deterministic and fully E2E-able without any mocking:
 
 - _Recording quality_ — clicking preset chips / slider dots calls `updateSettings`, which

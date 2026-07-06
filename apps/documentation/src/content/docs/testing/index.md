@@ -76,10 +76,15 @@ additions — do these once, reuse everywhere:
    PNG, enters via the real _Edit_ button, saves a copy, and asserts a valid PNG lands in the
    vault. It also added the reusable harness bits (screenshot fixture + `seedVault` screenshot +
    `openScreenshotEditor`). This was the pattern-setter for the rest.
-2. **Library additions (🟢)** — extend the existing `library.e2e.ts`: list-browse, rename
-   (assert sidecar), delete (assert file gone + nav back), reveal (assert IPC).
-3. **Settings + Shortcuts (🟡)** — page-level persistence via real IPC, after the
-   `userDataDir` / `getSettings` tweak. No stubs required.
+2. ✅ **Library additions (🟢) — done.** `e2e/library-actions.e2e.ts`: rename (assert the
+   sidecar `title` changed), delete (assert the vault file is gone + navigated back to
+   `/library`), and reveal (spy on `shell.showItemInFolder` in the main process via
+   `app.evaluate` and assert the path).
+3. ✅ **Settings + Shortcuts (🟡) — done.** `e2e/settings.e2e.ts` flips a native-free toggle
+   (`showBarInRecording`) and `e2e/shortcuts.e2e.ts` rebinds a global accelerator; both assert
+   persistence via a `window.electronAPI.getSettings()` round-trip (no `userDataDir` tweak
+   needed after all — the IPC round-trip is the boundary). Only the native effects (folder
+   picker, permission prompt, OS-level accelerator firing) stay manual.
 4. **Screenshot capture + Recording options (🟡)** — require the IPC-stub pattern; more setup,
    still valuable for the post-capture and options paths.
 5. **Live capture + global-shortcut firing (🔴)** — manual on macOS, or a future
