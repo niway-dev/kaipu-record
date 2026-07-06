@@ -9,6 +9,9 @@ This section documents each **user flow** in `kaipu-record` and — grounded in 
 — how far it can be tested **end-to-end**. It exists to guide where to grow the E2E harness
 next, and to be honest about what a headless test genuinely _cannot_ cover.
 
+For the sharper, priority-driven view — which flows are _existential_ and how much of each we
+can actually guarantee — see [Vital flows — what to secure and how](/testing/vital-flows).
+
 The harness itself (Playwright + Electron, isolated vault) is described in
 [PR checks — validation & E2E](/deployment/pr-checks); its rationale is in the
 [E2E design spec](/specs/2026-07-06-e2e-testing-harness-design).
