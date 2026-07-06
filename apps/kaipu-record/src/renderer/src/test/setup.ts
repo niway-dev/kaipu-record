@@ -2,16 +2,22 @@ import "@testing-library/jest-dom/vitest";
 import { afterEach, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
 
-// Component tests render without the <I18nProvider>, so stub the i18n hooks to
-// echo namespaced keys and pass children through. Config helpers stay real.
+// Component tests render without the <I18nProvider>, so stub the i18n hooks and
+// pass children through. `useTranslations` resolves keys against the real English
+// catalog so assertions can match rendered copy; unknown keys fall back to the
+// namespaced key. Config helpers stay real.
 vi.mock("@kaipu/i18n", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@kaipu/i18n")>();
+  const { default: en } = await import("@kaipu/i18n/messages/en");
+  const messages = en as Record<string, Record<string, string>>;
   return {
     ...actual,
     I18nProvider: ({ children }: { children: unknown }) => children,
-    useTranslations: (namespace?: string) => (key: string) =>
-      namespace ? `${namespace}.${key}` : key,
-    useLocale: () => "es",
+    useTranslations: (namespace?: string) => (key: string) => {
+      const value = namespace ? messages[namespace]?.[key] : undefined;
+      return typeof value === "string" ? value : namespace ? `${namespace}.${key}` : key;
+    },
+    useLocale: () => "en",
     useSetLocale: () => () => {},
   };
 });
