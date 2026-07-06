@@ -1,5 +1,6 @@
 import React from "react";
 import { Mic, Volume2, Camera } from "lucide-react";
+import { useTranslations } from "@kaipu/i18n";
 import { cx } from "@renderer/ui/cx";
 import styles from "./recording-toggles.module.css";
 
@@ -50,11 +51,12 @@ export function RecordingToggles({
   onToggleSystemAudio,
   onToggleCamera,
 }: RecordingTogglesProps): React.JSX.Element {
+  const t = useTranslations("record");
   const compact = variant === "compact";
   const iconSize = compact ? 15 : 20;
   const labels = compact
     ? { mic: undefined, audio: undefined, camera: undefined }
-    : { mic: "Mic", audio: "Audio", camera: "Camera" };
+    : { mic: t("micLabel"), audio: t("audioLabel"), camera: t("cameraLabel") };
 
   return (
     <div className={cx(styles.row, compact && styles.compact)}>
