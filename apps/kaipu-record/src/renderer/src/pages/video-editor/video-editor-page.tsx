@@ -344,7 +344,7 @@ function VideoEditor({
       try {
         asset = await assetStoreRef.current.put(bytes, file.type);
       } catch {
-        showToast({ message: "No se pudo cargar la imagen. Probá con otro archivo." });
+        showToast({ message: t("imageLoadError") });
         return;
       }
       const slide: SlideItem = {
@@ -372,7 +372,7 @@ function VideoEditor({
     // metadata (loadedmetadata). Starting the export before that hands the worker
     // a 0×0 OffscreenCanvas, which produces a corrupt file — refuse early.
     if (video.videoWidth === 0 || video.videoHeight === 0) {
-      showToast({ message: "El video todavía se está cargando. Probá de nuevo en un momento." });
+      showToast({ message: t("videoStillLoading") });
       return;
     }
     void videoExport.start({

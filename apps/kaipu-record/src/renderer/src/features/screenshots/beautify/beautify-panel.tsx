@@ -25,8 +25,8 @@ export function BeautifyPanel({ beautify }: { beautify: BeautifyController }): R
           <button
             key={bg.id}
             type="button"
-            title={bg.name}
-            aria-label={bg.name}
+            title={t(bg.nameKey)}
+            aria-label={t(bg.nameKey)}
             className={`${styles.swatch} ${state.bg === bg.id ? styles.selected : ""}`}
             style={{ background: backgroundCss(bg.id) }}
             onClick={() => commit({ bg: bg.id })}

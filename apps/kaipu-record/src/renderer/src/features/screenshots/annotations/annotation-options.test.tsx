@@ -94,7 +94,7 @@ describe("AnnotationOptions", () => {
     expect(screen.getByText("Color")).toBeInTheDocument();
     expect(screen.getByText("Stroke")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: ANNOTATION_COLORS[2].name }));
+    fireEvent.click(screen.getByRole("button", { name: "White" }));
     // Recolours the selection AND updates the tool default so the next shape matches.
     expect(scene.commitAnnotation).toHaveBeenCalledWith("b1", {
       color: ANNOTATION_COLORS[2].value,

@@ -277,7 +277,7 @@ describe("VideoEditorPage — handleExport metadata guard", () => {
     expect(startExport).not.toHaveBeenCalled();
     expect(getToasts()).toContainEqual(
       expect.objectContaining({
-        message: "El video todavía se está cargando. Probá de nuevo en un momento.",
+        message: "The video is still loading. Try again in a moment.",
       }),
     );
   });
@@ -340,7 +340,7 @@ describe("VideoEditorPage — add-image decode failure", () => {
     await waitFor(() => {
       expect(getToasts()).toContainEqual(
         expect.objectContaining({
-          message: "No se pudo cargar la imagen. Probá con otro archivo.",
+          message: "Couldn't load the image. Try another file.",
         }),
       );
     });

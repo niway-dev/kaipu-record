@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { useTranslations } from "@kaipu/i18n";
 import { backgroundCss, frameRadius, shadowCss, type BeautifyState } from "./backgrounds";
 import type { CropRect } from "../annotations/scene";
 import styles from "./beautified-frame.module.css";
@@ -35,6 +36,7 @@ export function BeautifiedFrame({
   /** Fires once the shot has loaded and laid out (export needs its displayed size). */
   onImageLoad?: () => void;
 }): React.JSX.Element {
+  const t = useTranslations("screenshots");
   const frameRef = useRef<HTMLDivElement>(null);
   // The frame's border-box AND the padding it was measured at. We derive the shot's
   // displayed size (border-box − 2·padding) so the windowed frame can be recomposed
@@ -75,7 +77,7 @@ export function BeautifiedFrame({
       <img
         ref={imgRef}
         src={src}
-        alt="Screenshot"
+        alt={t("imageAlt")}
         className={styles.shot}
         style={{ borderRadius: `${beautify.radius}px`, boxShadow: shadowCss(beautify.shadow) }}
         onLoad={onImageLoad}

@@ -40,6 +40,22 @@
     "open": "Open Kaipu Record",
     "quit": "Quit"
   },
+  "dialogs": {
+    "cancel": "Cancel",
+    "stopAndClose": "Stop and close",
+    "stopAndQuit": "Stop and quit",
+    "recordingInProgress": "A recording is in progress",
+    "closeStopsDetail": "Closing now stops the recording. Kaipu will save what's captured so far.",
+    "quitStopsDetail": "Quitting now stops the recording. Kaipu will save what's captured so far.",
+    "alreadyRecordingTitle": "A recording is already in progress",
+    "alreadyRecordingBody": "Stop it from the floating bar before starting another.",
+    "chooseFolder": "Choose recordings folder",
+    "folderUnusable": "We couldn't use that folder",
+    "folderUnusableDetail": "Kaipu can't write there. Pick another folder.",
+    "changeFolder": "Change folder",
+    "changeFolderTitle": "Change the recordings folder",
+    "changeFolderDetail": "Your current recordings stay in the old folder; from now on Kaipu saves and shows the new folder's contents. You can switch back anytime."
+  },
   "nav": {
     "record": "Record",
     "screenshots": "Screenshot",
@@ -115,7 +131,10 @@
     "loadingSources": "Loading sources…",
     "noScreens": "No screens found",
     "noWindows": "No windows found",
-    "selectScreenOrWindow": "Select a Screen or Window"
+    "selectScreenOrWindow": "Select a Screen or Window",
+    "errorStopped": "The recording stopped due to an error. We saved what we could.",
+    "errorStart": "We couldn't start the recording. Please try again.",
+    "errorSave": "We couldn't save the recording."
   },
   "header": {
     "brand": "Kaipu Record",
@@ -230,7 +249,10 @@
     "uploading": "Uploading",
     "sortNewest": "Newest",
     "sortOldest": "Oldest",
-    "sortLargest": "Largest"
+    "sortLargest": "Largest",
+    "errorRead": "We couldn't read your recordings folder.",
+    "errorRename": "We couldn't rename the recording.",
+    "errorDelete": "We couldn't delete the file."
   },
   "screenshots": {
     "overline": "SCREENSHOTS",
@@ -293,7 +315,25 @@
     "corners": "Corners",
     "shadow": "Shadow",
     "beautifyTip": "Tip: annotations are drawn by hand. The frame stays clean and crisp.",
-    "typePlaceholder": "Type…"
+    "typePlaceholder": "Type…",
+    "captureWhileRecording": "Finish the recording before taking a screenshot.",
+    "imageAlt": "Screenshot",
+    "colorPink": "Pink",
+    "colorBlack": "Black",
+    "colorWhite": "White",
+    "colorYellow": "Yellow",
+    "colorRed": "Red",
+    "colorGreen": "Green",
+    "colorPurple": "Purple",
+    "bgNone": "None",
+    "bgDark": "Dark",
+    "bgCarbon": "Carbon",
+    "bgMagenta": "Magenta",
+    "bgPurple": "Purple",
+    "bgOcean": "Ocean",
+    "bgSunset": "Sunset",
+    "bgForest": "Forest",
+    "bgGraphite": "Graphite"
   },
   "videoEditor": {
     "restored": "Restored your previous edit",
@@ -330,7 +370,9 @@
     "strokeAria": "Stroke {n}",
     "deleteAria": "Delete",
     "deleteTitle": "Delete (⌫)",
-    "typePlaceholder": "Type…"
+    "typePlaceholder": "Type…",
+    "imageLoadError": "Couldn't load the image. Try another file.",
+    "videoStillLoading": "The video is still loading. Try again in a moment."
   },
   "panel": {
     "saving": "Saving…",
@@ -405,5 +447,15 @@
     "close": "Close",
     "update": "Update",
     "updateRequired": "Update required"
+  },
+  "routeError": {
+    "notFound": "Page not found",
+    "notFoundDetail": "This page doesn't exist or has moved.",
+    "notFoundDetailApp": "The page you're looking for doesn't exist.",
+    "requestError": "Request error",
+    "routeError": "Something went wrong handling this route.",
+    "unexpected": "Unexpected error",
+    "unknownError": "An unknown error occurred.",
+    "backToRecord": "Back to Record"
   }
 }

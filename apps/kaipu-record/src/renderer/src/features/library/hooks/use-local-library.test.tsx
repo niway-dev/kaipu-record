@@ -73,7 +73,7 @@ describe("useLocalLibrary", () => {
 
     expect(result.current.hasError).toBe(true);
     expect(reportError).toHaveBeenCalledWith(
-      expect.stringMatching(/carpeta/i),
+      expect.stringMatching(/folder/i),
       expect.any(Error),
       expect.objectContaining({ retry: expect.any(Function) }),
     );
@@ -91,7 +91,7 @@ describe("useLocalLibrary", () => {
     });
 
     expect(reportError).toHaveBeenCalledWith(
-      expect.stringMatching(/eliminar/i),
+      expect.stringMatching(/delete/i),
       expect.any(Error),
       expect.anything(),
     );
@@ -111,7 +111,7 @@ describe("useLocalLibrary", () => {
     });
 
     expect(reportError).toHaveBeenCalledWith(
-      expect.stringMatching(/renombrar/i),
+      expect.stringMatching(/rename/i),
       expect.any(Error),
       expect.anything(),
     );

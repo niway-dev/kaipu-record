@@ -124,8 +124,8 @@ export function AnnotationOptions({
               <button
                 key={c.value}
                 type="button"
-                title={c.name}
-                aria-label={c.name}
+                title={t(c.nameKey)}
+                aria-label={t(c.nameKey)}
                 className={`${styles.swatch} ${controls.color === c.value ? styles.swatchOn : ""}`}
                 style={{ background: c.value }}
                 onClick={() => controls.setColor(c.value)}

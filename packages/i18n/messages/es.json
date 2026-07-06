@@ -40,6 +40,22 @@
     "open": "Abrir Kaipu Record",
     "quit": "Salir"
   },
+  "dialogs": {
+    "cancel": "Cancelar",
+    "stopAndClose": "Detener y cerrar",
+    "stopAndQuit": "Detener y salir",
+    "recordingInProgress": "Hay una grabación en curso",
+    "closeStopsDetail": "Cerrar ahora detiene la grabación. Kaipu guardará lo grabado hasta este momento.",
+    "quitStopsDetail": "Salir ahora detiene la grabación. Kaipu guardará lo grabado hasta este momento.",
+    "alreadyRecordingTitle": "Ya hay una grabación en curso",
+    "alreadyRecordingBody": "Deténla desde la barra flotante antes de iniciar otra.",
+    "chooseFolder": "Elegir carpeta de grabaciones",
+    "folderUnusable": "No pudimos usar esa carpeta",
+    "folderUnusableDetail": "Kaipu no puede escribir ahí. Elige otra carpeta.",
+    "changeFolder": "Cambiar carpeta",
+    "changeFolderTitle": "Cambiar la carpeta de grabaciones",
+    "changeFolderDetail": "Tus grabaciones actuales se quedan en la carpeta anterior; desde ahora Kaipu guarda y muestra las de la carpeta nueva. Puedes volver a la anterior cuando quieras."
+  },
   "nav": {
     "record": "Grabar",
     "screenshots": "Captura",
@@ -115,7 +131,10 @@
     "loadingSources": "Cargando fuentes…",
     "noScreens": "No hay pantallas",
     "noWindows": "No hay ventanas",
-    "selectScreenOrWindow": "Elige una pantalla o ventana"
+    "selectScreenOrWindow": "Elige una pantalla o ventana",
+    "errorStopped": "La grabación se detuvo por un error. Guardamos lo que se pudo.",
+    "errorStart": "No pudimos iniciar la grabación. Vuelve a intentarlo.",
+    "errorSave": "No pudimos guardar la grabación."
   },
   "header": {
     "brand": "Kaipu Record",
@@ -230,7 +249,10 @@
     "uploading": "Subiendo",
     "sortNewest": "Más recientes",
     "sortOldest": "Más antiguas",
-    "sortLargest": "Más grandes"
+    "sortLargest": "Más grandes",
+    "errorRead": "No pudimos leer tu carpeta de grabaciones.",
+    "errorRename": "No pudimos renombrar la grabación.",
+    "errorDelete": "No pudimos eliminar el archivo."
   },
   "screenshots": {
     "overline": "CAPTURAS",
@@ -293,7 +315,25 @@
     "corners": "Esquinas",
     "shadow": "Sombra",
     "beautifyTip": "Tip: las anotaciones se dibujan a mano. El marco queda limpio y nítido.",
-    "typePlaceholder": "Escribe…"
+    "typePlaceholder": "Escribe…",
+    "captureWhileRecording": "Termina la grabación antes de tomar una captura.",
+    "imageAlt": "Captura",
+    "colorPink": "Rosa",
+    "colorBlack": "Negro",
+    "colorWhite": "Blanco",
+    "colorYellow": "Amarillo",
+    "colorRed": "Rojo",
+    "colorGreen": "Verde",
+    "colorPurple": "Púrpura",
+    "bgNone": "Ninguno",
+    "bgDark": "Oscuro",
+    "bgCarbon": "Carbón",
+    "bgMagenta": "Magenta",
+    "bgPurple": "Púrpura",
+    "bgOcean": "Océano",
+    "bgSunset": "Atardecer",
+    "bgForest": "Bosque",
+    "bgGraphite": "Grafito"
   },
   "videoEditor": {
     "restored": "Se restauró tu edición anterior",
@@ -330,7 +370,9 @@
     "strokeAria": "Trazo {n}",
     "deleteAria": "Eliminar",
     "deleteTitle": "Eliminar (⌫)",
-    "typePlaceholder": "Escribe…"
+    "typePlaceholder": "Escribe…",
+    "imageLoadError": "No se pudo cargar la imagen. Prueba con otro archivo.",
+    "videoStillLoading": "El video todavía se está cargando. Prueba de nuevo en un momento."
   },
   "panel": {
     "saving": "Guardando…",
@@ -405,5 +447,15 @@
     "close": "Cerrar",
     "update": "Actualizar",
     "updateRequired": "Actualización requerida"
+  },
+  "routeError": {
+    "notFound": "Página no encontrada",
+    "notFoundDetail": "Esta página no existe o se movió.",
+    "notFoundDetailApp": "La página que buscas no existe.",
+    "requestError": "Error de solicitud",
+    "routeError": "Algo salió mal al manejar esta ruta.",
+    "unexpected": "Error inesperado",
+    "unknownError": "Ocurrió un error desconocido.",
+    "backToRecord": "Volver a Grabar"
   }
 }

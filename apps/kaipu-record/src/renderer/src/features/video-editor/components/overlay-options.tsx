@@ -107,6 +107,7 @@ export function OverlayOptions({
   onDeleteSelected,
 }: OverlayOptionsProps): React.JSX.Element | null {
   const t = useTranslations("videoEditor");
+  const tc = useTranslations("screenshots");
   const selected = selectedId ? (overlays.find((o) => o.id === selectedId) ?? null) : null;
   const controls = resolveControls(tools, overlays, selectedId, onCommitOverlay);
   if (!controls) return null;
@@ -119,8 +120,8 @@ export function OverlayOptions({
           <button
             key={c.value}
             type="button"
-            title={c.name}
-            aria-label={c.name}
+            title={tc(c.nameKey)}
+            aria-label={tc(c.nameKey)}
             className={`${styles.swatch} ${controls.color === c.value ? styles.swatchOn : ""}`}
             style={{ background: c.value }}
             onClick={() => controls.setColor(c.value)}

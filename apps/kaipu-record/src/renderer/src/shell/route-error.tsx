@@ -1,4 +1,5 @@
 import { isRouteErrorResponse, useNavigate, useRouteError } from "react-router-dom";
+import { useTranslations } from "@kaipu/i18n";
 import styles from "./route-error.module.css";
 
 interface ErrorInfo {
@@ -7,30 +8,36 @@ interface ErrorInfo {
   detail: string;
 }
 
-function describe(error: unknown): ErrorInfo {
+type Translate = (
+  key:
+    | "notFound"
+    | "notFoundDetail"
+    | "requestError"
+    | "routeError"
+    | "unexpected"
+    | "unknownError",
+) => string;
+
+function describe(error: unknown, t: Translate): ErrorInfo {
   if (isRouteErrorResponse(error)) {
     if (error.status === 404) {
-      return {
-        code: "404",
-        title: "Page not found",
-        detail: "This page doesn’t exist or has moved.",
-      };
+      return { code: "404", title: t("notFound"), detail: t("notFoundDetail") };
     }
     return {
       code: String(error.status),
-      title: error.statusText || "Request error",
-      detail:
-        typeof error.data === "string" ? error.data : "Something went wrong handling this route.",
+      title: error.statusText || t("requestError"),
+      detail: typeof error.data === "string" ? error.data : t("routeError"),
     };
   }
   if (error instanceof Error) {
-    return { title: "Unexpected error", detail: error.message };
+    return { title: t("unexpected"), detail: error.message };
   }
-  return { title: "Unexpected error", detail: "An unknown error occurred." };
+  return { title: t("unexpected"), detail: t("unknownError") };
 }
 
 function ErrorCard({ info, screen }: { info: ErrorInfo; screen?: boolean }): React.JSX.Element {
   const navigate = useNavigate();
+  const t = useTranslations("routeError");
   return (
     <div className={screen ? styles.screen : styles.wrap}>
       <div className={styles.box}>
@@ -38,7 +45,7 @@ function ErrorCard({ info, screen }: { info: ErrorInfo; screen?: boolean }): Rea
         <h1 className={styles.title}>{info.title}</h1>
         <p className={styles.detail}>{info.detail}</p>
         <button type="button" className={styles.btn} onClick={() => navigate("/")}>
-          Back to Record
+          {t("backToRecord")}
         </button>
       </div>
     </div>
@@ -51,18 +58,12 @@ function ErrorCard({ info, screen }: { info: ErrorInfo; screen?: boolean }): Rea
  */
 export function RouteErrorBoundary(): React.JSX.Element {
   const error = useRouteError();
-  return <ErrorCard info={describe(error)} screen />;
+  const t = useTranslations("routeError");
+  return <ErrorCard info={describe(error, t)} screen />;
 }
 
 /** In-shell catch-all (`path: "*"`) for unknown app paths — keeps the sidebar. */
 export function NotFound(): React.JSX.Element {
-  return (
-    <ErrorCard
-      info={{
-        code: "404",
-        title: "Page not found",
-        detail: "The page you’re looking for doesn’t exist.",
-      }}
-    />
-  );
+  const t = useTranslations("routeError");
+  return <ErrorCard info={{ code: "404", title: t("notFound"), detail: t("notFoundDetailApp") }} />;
 }
