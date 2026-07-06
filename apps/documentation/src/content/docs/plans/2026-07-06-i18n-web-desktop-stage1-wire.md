@@ -31,6 +31,7 @@ description: "Task-by-task plan to build the shared @kaipu/i18n package and wire
 ## File Structure
 
 **New package `packages/i18n/`:**
+
 - `package.json` — `@kaipu/i18n`, `use-intl` dep, `react` peer, subpath exports to `src`/`messages`.
 - `tsconfig.json` — bundler resolution, `jsx: react-jsx`, `resolveJsonModule`.
 - `vitest.config.ts` — run the parity test.
@@ -44,11 +45,13 @@ description: "Task-by-task plan to build the shared @kaipu/i18n package and wire
 - `src/__tests__/parity.test.ts` — es/en key parity + no-empty-values.
 
 **Web (`apps/web-hono/`):**
+
 - Create `src/server-functions/get-locale.ts`, `src/server-functions/set-locale.ts`, `src/components/locale-switcher.tsx`, `src/server-functions/__tests__/locale.test.ts`.
 - Modify `src/routes/__root.tsx` (provider + context + `<html lang>`), `src/router.tsx` (context defaults), `src/components/header.tsx` (switcher), `package.json` (dep).
 - Extract copy in `src/components/landing/*`, `src/components/header.tsx`, `src/components/sign-in-form.tsx`, `src/components/sign-up-form.tsx`.
 
 **Desktop (`apps/kaipu-record/`):**
+
 - Modify `src/shared/types/ipc.ts` (`AppSettings.locale`, `DEFAULT_SETTINGS`), `src/main/services/settings.service.ts` (validate locale), `src/main/infrastructure/settings-store.ts` (seed from OS locale), `src/main/tray.ts` (translate + rebuild), `src/main/index.ts` (tray rebuild subscription), `src/renderer/src/main.tsx` (provider wrap), `src/renderer/src/pages/settings/settings-page.tsx` (switcher), `package.json` (dep).
 - Create `src/renderer/src/app/i18n-root.tsx` (bootstrap + provider wiring), `src/renderer/src/pages/settings/language-settings.tsx`.
 - Extract copy in `src/renderer/src/shell/sidebar.tsx`, `src/renderer/src/pages/settings/settings-page.tsx`, `src/renderer/src/pages/record/record-page.tsx`.
@@ -58,10 +61,12 @@ description: "Task-by-task plan to build the shared @kaipu/i18n package and wire
 ## Task 1: Scaffold the `@kaipu/i18n` package (engine + parity test)
 
 **Files:**
+
 - Create: `packages/i18n/package.json`, `packages/i18n/tsconfig.json`, `packages/i18n/vitest.config.ts`, `packages/i18n/messages/es.json`, `packages/i18n/messages/en.json`, `packages/i18n/src/config.ts`, `packages/i18n/src/app-config.ts`, `packages/i18n/src/provider.tsx`, `packages/i18n/src/index.ts`, `packages/i18n/src/web.ts`, `packages/i18n/src/main.ts`
 - Test: `packages/i18n/src/__tests__/parity.test.ts`
 
 **Interfaces:**
+
 - Produces:
   - `config.ts`: `SUPPORTED_LOCALES: readonly ["es","en"]`, `type Locale = "es"|"en"`, `DEFAULT_LOCALE: Locale`, `TIME_ZONE: string`, `normalizeLocale(input?: string|null): Locale`, `isLocale(v: unknown): v is Locale`
   - `provider.tsx`: `I18nProvider(props)`, `useLocale(): Locale`, `useSetLocale(): (l: Locale) => void`
@@ -498,10 +503,12 @@ git commit -m "feat(i18n): scaffold @kaipu/i18n package (use-intl v4, provider, 
 ## Task 2: Web wiring + landing/header/auth extraction (`apps/web-hono`)
 
 **Files:**
+
 - Create: `apps/web-hono/src/server-functions/get-locale.ts`, `apps/web-hono/src/server-functions/set-locale.ts`, `apps/web-hono/src/components/locale-switcher.tsx`, `apps/web-hono/src/server-functions/__tests__/locale.test.ts`
 - Modify: `apps/web-hono/package.json`, `apps/web-hono/src/router.tsx`, `apps/web-hono/src/routes/__root.tsx`, `apps/web-hono/src/components/header.tsx`, and the copy files `apps/web-hono/src/components/landing/{hero,features,download-section,footer,landing-nav,download-buttons}.tsx`, `apps/web-hono/src/components/{sign-in-form,sign-up-form}.tsx`
 
 **Interfaces:**
+
 - Consumes: `@kaipu/i18n` (`I18nProvider`, `useTranslations`, `useLocale`, `useSetLocale`, `type Locale`, `SUPPORTED_LOCALES`), `@kaipu/i18n/web` (`detectLocaleFromRequest`, `LOCALE_COOKIE`), `@kaipu/i18n/messages/{es,en}`
 - Produces: `getLocale()` server fn → `{ locale: Locale, messages: Record<string, unknown> }`; `setLocale({ data: Locale })` server fn; router context fields `locale`, `messages`
 
@@ -737,6 +744,7 @@ Import `LocaleSwitcher` and render it in the header's action area (next to the u
 - [ ] **Step 11: Extract web copy into the catalog**
 
 Add `landing`, `header`, and `auth` namespaces to `packages/i18n/messages/es.json` and `en.json` (keep them in parity). Then, in each of these files, replace every user-facing string with `const t = useTranslations("<namespace>")` + `t("<key>")`:
+
 - `landing/hero.tsx`, `landing/features.tsx`, `landing/download-section.tsx`, `landing/footer.tsx`, `landing/landing-nav.tsx`, `landing/download-buttons.tsx` → `landing.*`
 - `header.tsx` → `header.*`
 - `sign-in-form.tsx`, `sign-up-form.tsx` → `auth.*`
@@ -765,10 +773,12 @@ git commit -m "feat(i18n): wire web (cookie + SSR) + translate landing/header/au
 ## Task 3: Desktop settings + tray translation (`apps/kaipu-record` main)
 
 **Files:**
+
 - Modify: `apps/kaipu-record/package.json`, `apps/kaipu-record/src/shared/types/ipc.ts`, `apps/kaipu-record/src/main/services/settings.service.ts`, `apps/kaipu-record/src/main/infrastructure/settings-store.ts`, `apps/kaipu-record/src/main/tray.ts`, `apps/kaipu-record/src/main/index.ts`
 - Test: `apps/kaipu-record/src/main/services/settings.service.test.ts` (extend existing)
 
 **Interfaces:**
+
 - Consumes: `@kaipu/i18n` (`type Locale`, `isLocale`, `normalizeLocale`, `DEFAULT_LOCALE`), `@kaipu/i18n/main` (`createMainTranslator`)
 - Produces: `AppSettings.locale: Locale`; `createTray(panel, showMainWindow, getLocale)` reads locale via a getter; a tray-rebuild function `rebuildTrayMenu(locale)`
 
@@ -917,10 +927,12 @@ git commit -m "feat(i18n): desktop locale in AppSettings + translated tray (rebu
 ## Task 4: Desktop renderer provider wiring + settings switcher
 
 **Files:**
+
 - Create: `apps/kaipu-record/src/renderer/src/app/i18n-root.tsx`, `apps/kaipu-record/src/renderer/src/pages/settings/language-settings.tsx`
 - Modify: `apps/kaipu-record/src/renderer/src/main.tsx`, `apps/kaipu-record/src/renderer/src/pages/settings/settings-page.tsx`
 
 **Interfaces:**
+
 - Consumes: `@kaipu/i18n` (`I18nProvider`, `useTranslations`, `useLocale`, `useSetLocale`, `type Locale`), `@kaipu/i18n/messages/{es,en}`, `window.electronAPI` (`getSettings`, `updateSettings`, `onSettingsChanged`), `useAppSettings`
 - Produces: `renderWithI18n(node: ReactNode): Promise<void>`; `<LanguageSettings />`
 
@@ -1065,10 +1077,12 @@ git commit -m "feat(i18n): wrap all renderer roots + language switch in Settings
 ## Task 5: Desktop principal-surface extraction (sidebar, settings, record)
 
 **Files:**
+
 - Modify: `apps/kaipu-record/src/renderer/src/shell/sidebar.tsx`, `apps/kaipu-record/src/renderer/src/pages/settings/settings-page.tsx`, `apps/kaipu-record/src/renderer/src/pages/record/record-page.tsx`
 - Modify: `packages/i18n/messages/es.json`, `packages/i18n/messages/en.json`
 
 **Interfaces:**
+
 - Consumes: `@kaipu/i18n` (`useTranslations`)
 
 - [ ] **Step 1: Add the `record` namespace + extend `nav`/`settings`**
@@ -1146,6 +1160,7 @@ Then open the PR from `feat/i18n-web-desktop` per the repo's one-PR-at-a-time wo
 ## Self-Review
 
 **Spec coverage:**
+
 - Shared package w/ subpath exports, `es` source of truth, `AppConfig` augmentation, parity test → Task 1. ✅
 - Web cookie + SSR, `__root` wiring, `<html lang>`, switcher, landing extraction → Task 2. ✅
 - Desktop `AppSettings.locale` (no electron-store/IPC), OS seed, tray translate + rebuild → Task 3. ✅
