@@ -5,7 +5,7 @@
  *   1. Open the source recording with mediabunny.
  *   2. For each ClipSegment: decode frames → composite overlays → encode.
  *   3. For each SlideSegment: draw the slide bitmap at plan.slideFps → composite overlays → encode.
- *   4. Audio (if present): per-clip decoded AudioBuffers, trimmed to the exact
+ *   4. Audio (if present): per-clip decoded AudioSamples, trimmed to the exact
  *      source range → re-encode; silence for slides.
  *   5. Finalize the MP4 and notify the renderer.
  *
@@ -14,22 +14,25 @@
  * the moov box at the END of the file and then seeks back to patch the ftyp offset —
  * hence `StreamTarget` (positional) is required instead of `AppendOnlyStreamTarget`.
  *
- * Audio timestamps: `AudioBufferSource.add` self-advances (first buffer at 0,
- * each subsequent at prior cumulative duration) — no explicit timestamps needed.
+ * Audio API choice: the WebCodecs-backed `AudioSample`/`AudioSampleSink`/
+ * `AudioSampleSource` path is used, NOT the Web-Audio `AudioBuffer` one. The DOM
+ * `AudioBuffer` constructor is not defined in a Web Worker (Web Audio is main-thread
+ * only), so `AudioBufferSink`/`AudioBufferSource` throw "AudioBuffer is not defined"
+ * here; `AudioSample` wraps `AudioData` and works in workers.
  *
- * Audio trimming: `AudioBufferSink.buffers(start, end)` yields whole decoder
- * frames gated on each frame's OWN timestamp (mediabunny's
- * `BaseMediaSampleSink.mediaSamplesInRange` keeps the last frame with
- * timestamp <= start, then everything up to the first frame with
- * timestamp >= end) — it does not clip a frame's PCM content to the range.
- * Left as-is, the first frame of a clip carries pre-roll before `start` and
+ * Audio timestamps: `AudioSampleSource.add` honors each sample's OWN timestamp (it
+ * does NOT auto-advance like `AudioBufferSource`). Every emitted sample is rebased
+ * onto a single contiguous `audioCursor` so cuts stay gapless and monotonic.
+ *
+ * Audio trimming: `AudioSampleSink.samples(start, end)` yields whole decoder samples
+ * gated on each sample's OWN timestamp (mediabunny's
+ * `BaseMediaSampleSink.mediaSamplesInRange` keeps the last sample with
+ * timestamp <= start, then everything up to the first sample with
+ * timestamp >= end) — it does not clip a sample's PCM content to the range.
+ * Left as-is, the first sample of a clip carries pre-roll before `start` and
  * the last trails past `end`, drifting audio out of sync with the
- * frame-accurate video across cuts. `trimAudioBuffer` below clips each
- * frame's sample data to the segment's exact [sourceStart, sourceEnd).
- *
- * Known: `AudioBuffer` constructor is available in Electron's Chromium workers.
- * If it throws in a future Electron version, build silence via AudioSampleSource
- * with a zeroed Float32Array and explicit timestamps instead.
+ * frame-accurate video across cuts. `trimAudioSample` below clips each
+ * sample to the segment's exact [sourceStart, sourceEnd).
  *
  * Video timestamp rebasing: `CanvasSink.canvases(start, end)` yields the sample
  * STRADDLING `start` as its first frame, whose own timestamp is usually before
@@ -45,8 +48,9 @@
 
 import {
   ALL_FORMATS,
-  AudioBufferSink,
-  AudioBufferSource,
+  AudioSample,
+  AudioSampleSink,
+  AudioSampleSource,
   BlobSource,
   CanvasSink,
   CanvasSource,
@@ -56,7 +60,7 @@ import {
   QUALITY_HIGH,
   StreamTarget,
 } from "mediabunny";
-import type { StreamTargetChunk, WrappedAudioBuffer } from "mediabunny";
+import type { StreamTargetChunk } from "mediabunny";
 import type { ExportStartMessage, ExportWorkerMessage } from "./export-messages";
 import { rebaseVideoTimestamp } from "./rebase-timestamp";
 
@@ -143,7 +147,7 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
   out.addVideoTrack(videoSource);
 
   const audioSource = audioTrack
-    ? new AudioBufferSource({ codec: "aac", bitrate: QUALITY_HIGH })
+    ? new AudioSampleSource({ codec: "aac", bitrate: QUALITY_HIGH })
     : null;
   if (audioSource) out.addAudioTrack(audioSource);
 
@@ -250,27 +254,40 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
     // feeding without backpressure issues.
     // ---------------------------------------------------------------------------
     if (audioTrack && audioSource) {
+      // AudioSampleSource honors each sample's OWN timestamp (unlike AudioBufferSource,
+      // which auto-advances). Rebase every emitted sample onto a single contiguous
+      // output cursor so cut boundaries stay gapless and monotonic — the audio analogue
+      // of `prevOutTs` on the video pass.
+      let audioCursor = 0;
       for (const segment of plan.segments) {
         if (segment.kind === "clip") {
-          const sink = new AudioBufferSink(audioTrack);
-          for await (const wrapped of sink.buffers(segment.sourceStart, segment.sourceEnd)) {
-            // Clip each decoded frame to the segment's exact source range — see
-            // the "Audio trimming" header comment for why this is needed.
-            const trimmed = trimAudioBuffer(wrapped, segment.sourceStart, segment.sourceEnd);
-            if (!trimmed) continue;
-            // AudioBufferSource.add auto-advances timestamps: first buffer at 0,
-            // each subsequent immediately following the prior. Matches the clip order.
-            await audioSource.add(trimmed);
+          const sink = new AudioSampleSink(audioTrack);
+          for await (const sample of sink.samples(segment.sourceStart, segment.sourceEnd)) {
+            // Clip each decoded sample to the segment's exact source range — see the
+            // "Audio trimming" header comment for why this is needed.
+            const trimmed = trimAudioSample(sample, segment.sourceStart, segment.sourceEnd);
+            if (trimmed) {
+              trimmed.setTimestamp(audioCursor);
+              audioCursor += trimmed.duration;
+              await audioSource.add(trimmed);
+              if (trimmed !== sample) trimmed.close();
+            }
+            sample.close();
           }
         } else {
-          // Slides are silent. A zeroed AudioBuffer keeps A/V durations aligned
-          // so the MP4 muxer doesn't produce a track-length mismatch.
-          const silence = new AudioBuffer({
-            length: Math.ceil(segment.duration * silenceSampleRate),
+          // Slides are silent. A zeroed interleaved-f32 sample keeps A/V durations
+          // aligned so the MP4 muxer doesn't produce a track-length mismatch.
+          const frames = Math.ceil(segment.duration * silenceSampleRate);
+          const silence = new AudioSample({
+            data: new Float32Array(frames * silenceChannelCount),
+            format: "f32",
             numberOfChannels: silenceChannelCount,
             sampleRate: silenceSampleRate,
+            timestamp: audioCursor,
           });
+          audioCursor += silence.duration;
           await audioSource.add(silence);
+          silence.close();
         }
       }
       audioSource.close();
@@ -299,47 +316,39 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
 // ---------------------------------------------------------------------------
 
 /**
- * Clips a decoded audio frame's sample data to `[rangeStart, rangeEnd)`.
- * `wrapped.timestamp` is the frame's own start time, which per the "Audio
+ * Clips a decoded audio sample's data to `[rangeStart, rangeEnd)`.
+ * `sample.timestamp` is the sample's own start time, which per the "Audio
  * trimming" header comment may fall before `rangeStart` (pre-roll) or extend
- * past `rangeEnd` (trailing samples) — both need to be dropped so the encoded
+ * past `rangeEnd` (trailing frames) — both need to be dropped so the encoded
  * duration matches the segment's exact source range.
  *
- * Returns the original `AudioBuffer` unchanged when it needs no trimming
- * (the common case for interior frames), a new trimmed `AudioBuffer` when it
- * does, or `null` if trimming leaves nothing to encode.
+ * Returns the original `AudioSample` unchanged when it needs no trimming (the
+ * common case for interior samples), a new trimmed `AudioSample` when it does
+ * (the caller closes it), or `null` if trimming leaves nothing to encode.
  */
-function trimAudioBuffer(
-  wrapped: WrappedAudioBuffer,
+function trimAudioSample(
+  sample: AudioSample,
   rangeStart: number,
   rangeEnd: number,
-): AudioBuffer | null {
-  const { buffer, timestamp } = wrapped;
-  const sampleRate = buffer.sampleRate;
-  const bufferEnd = timestamp + buffer.length / sampleRate;
+): AudioSample | null {
+  const { sampleRate, numberOfFrames, timestamp } = sample;
+  const sampleEnd = timestamp + numberOfFrames / sampleRate;
 
   const leadTrim = Math.min(
-    buffer.length,
+    numberOfFrames,
     Math.max(0, Math.round((rangeStart - timestamp) * sampleRate)),
   );
   const trailTrim = Math.min(
-    buffer.length - leadTrim,
-    Math.max(0, Math.round((bufferEnd - rangeEnd) * sampleRate)),
+    numberOfFrames - leadTrim,
+    Math.max(0, Math.round((sampleEnd - rangeEnd) * sampleRate)),
   );
-  const keepLength = buffer.length - leadTrim - trailTrim;
+  const keepLength = numberOfFrames - leadTrim - trailTrim;
   if (keepLength <= 0) return null;
-  if (leadTrim === 0 && trailTrim === 0) return buffer;
+  if (leadTrim === 0 && trailTrim === 0) return sample;
 
-  const trimmed = new AudioBuffer({
-    length: keepLength,
-    numberOfChannels: buffer.numberOfChannels,
-    sampleRate,
-  });
-  for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
-    const channelData = buffer.getChannelData(channel).subarray(leadTrim, leadTrim + keepLength);
-    trimmed.copyToChannel(channelData, channel);
-  }
-  return trimmed;
+  // AudioSample.trim takes a [startFrame, endFrame) half-open range and returns a new
+  // sample; the caller is responsible for closing it (and the untrimmed original).
+  return sample.trim(leadTrim, leadTrim + keepLength);
 }
 
 /**

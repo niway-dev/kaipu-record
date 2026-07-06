@@ -22,7 +22,17 @@ export function registerMediaScheme(): void {
   protocol.registerSchemesAsPrivileged([
     {
       scheme: MEDIA_SCHEME,
-      privileges: { standard: true, stream: true, supportFetchAPI: true, bypassCSP: true },
+      privileges: {
+        standard: true,
+        stream: true,
+        supportFetchAPI: true,
+        bypassCSP: true,
+        // The renderer reads the source video with `fetch()` for export (a cross-origin
+        // request: the page origin is not kaipu-media://). Without corsEnabled the fetch
+        // is refused before it reaches the handler ("Failed to fetch"); element loads
+        // (<video>/<img>) are unaffected. streamFile echoes Access-Control-Allow-Origin.
+        corsEnabled: true,
+      },
     },
   ]);
 }
@@ -51,6 +61,10 @@ async function streamFile(target: string, rangeHeader: string | null): Promise<R
   const headers: Record<string, string> = {
     "content-type": MIME_BY_EXTENSION[extname(target).toLowerCase()] ?? "application/octet-stream",
     "accept-ranges": "bytes",
+    // The export path reads the source with a cross-origin `fetch()` (page origin is not
+    // kaipu-media://). Paired with the scheme's `corsEnabled` privilege, this lets the
+    // renderer read the response body; element loads (<video>/<img>) don't need it.
+    "access-control-allow-origin": "*",
   };
   const body = (stream: Readable): BodyInit =>
     // Node's web-stream type and the DOM ReadableStream type are structurally
