@@ -38,6 +38,24 @@ function makeVideo(): HTMLVideoElement {
   } as unknown as HTMLVideoElement;
 }
 
+/** A fake <video> whose play()/pause() actually flip `paused`, so tests can assert
+ *  the real "is it playing?" state after a seek (makeVideo's play/pause don't). */
+function makePlayableVideo(): HTMLVideoElement {
+  const video = {
+    currentTime: 0,
+    paused: true,
+    muted: false,
+    play: vi.fn(() => {
+      video.paused = false;
+      return Promise.resolve();
+    }),
+    pause: vi.fn(() => {
+      video.paused = true;
+    }),
+  };
+  return video as unknown as HTMLVideoElement;
+}
+
 // A controllable wall clock: `now` stands in for performance.now() (ms). `advance`
 // moves it forward and flushes vitest's fake timers, which drive both the rAF loop
 // and the slide's low-frequency setInterval — so both read the same, final `now`
@@ -182,5 +200,68 @@ describe("usePreviewPlayback — mute", () => {
 
     act(() => result.current.toggleMute());
     expect(video.muted).toBe(false);
+  });
+});
+
+describe("usePreviewPlayback — scrubbing keeps playback alive", () => {
+  it("seeking within a clip while playing keeps it playing WITHOUT re-invoking play()", () => {
+    const { result } = renderHook(() => usePreviewPlayback(layout));
+    const video = makePlayableVideo();
+    result.current.videoRef.current = video;
+
+    act(() => result.current.play()); // playing clip a (paused -> false)
+    expect(video.paused).toBe(false);
+    (video.play as ReturnType<typeof vi.fn>).mockClear();
+
+    act(() => result.current.seek(3)); // scrub within clip a while playing
+
+    // Setting currentTime on an already-playing <video> keeps it playing; calling
+    // play() again here is what spammed interrupted (AbortError) plays during a ruler
+    // drag and froze playback. So: no play() call, still playing, at the new position.
+    expect(video.currentTime).toBe(3);
+    expect(video.paused).toBe(false);
+    expect(video.play).not.toHaveBeenCalled();
+  });
+
+  it("play() reliably resumes after scrubbing far while playing (the reported freeze)", () => {
+    const { result } = renderHook(() => usePreviewPlayback(layout));
+    const video = makePlayableVideo();
+    result.current.videoRef.current = video;
+
+    act(() => result.current.play());
+    act(() => result.current.seek(4)); // scrub while playing
+    expect(video.paused).toBe(false); // still playing, not frozen
+    act(() => result.current.pause());
+    expect(video.paused).toBe(true);
+    act(() => result.current.play()); // resume
+    expect(video.paused).toBe(false); // recovers — pause/play works after a scrub
+  });
+
+  it("seeking while paused does not start playback", () => {
+    const { result } = renderHook(() => usePreviewPlayback(layout));
+    const video = makePlayableVideo();
+    result.current.videoRef.current = video;
+
+    act(() => result.current.seek(3)); // paused the whole time
+    expect(video.currentTime).toBe(3);
+    expect(video.paused).toBe(true);
+    expect(video.play).not.toHaveBeenCalled();
+  });
+
+  it("seeking from a slide to a clip while playing resumes the paused video", () => {
+    const { result } = renderHook(() => usePreviewPlayback(layout));
+    const video = makePlayableVideo();
+    result.current.videoRef.current = video;
+
+    act(() => result.current.seek(6)); // into slide s1 (timeline 5..8) — video paused
+    act(() => result.current.play()); // slide plays on its own clock; video stays paused
+    expect(video.paused).toBe(true);
+    (video.play as ReturnType<typeof vi.fn>).mockClear();
+
+    act(() => result.current.seek(2)); // scrub back onto clip a while playing
+
+    expect(video.currentTime).toBe(2);
+    expect(video.play).toHaveBeenCalled(); // came off a slide (paused) → explicit resume
+    expect(video.paused).toBe(false);
   });
 });

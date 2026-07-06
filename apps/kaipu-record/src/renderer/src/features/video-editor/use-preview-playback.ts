@@ -130,7 +130,7 @@ export function usePreviewPlayback(layout: LayoutEntry[]): PreviewPlayback {
         exitSlide();
         seekVideoToSource(next.sourceStart);
         // Coming off a slide the video was paused — resume it if we're still playing.
-        if (playingRef.current) void videoRef.current?.play();
+        if (playingRef.current) void videoRef.current?.play().catch(() => {});
       }
       setTimelineTime(next.timelineStart);
     },
@@ -208,7 +208,15 @@ export function usePreviewPlayback(layout: LayoutEntry[]): PreviewPlayback {
       } else {
         if (slideRef.current) exitSlide();
         seekVideoToSource(hit.sourceTime);
-        if (playingRef.current) void videoRef.current?.play();
+        // Setting currentTime on an already-playing <video> keeps it playing at the new
+        // position, so a normal scrub needs no play() call. The ruler scrubber fires
+        // seek() on every pointermove; calling play() each time interrupts the previous
+        // play() promise (AbortError) and can leave the element paused while `playing`
+        // stays true — the freeze the user hit. Only resume when the element is actually
+        // paused (coming off a slide, or self-healing a desync).
+        if (playingRef.current && videoRef.current?.paused) {
+          void videoRef.current.play().catch(() => {});
+        }
       }
       setTimelineTime(clamped);
       emitTime(clamped);
@@ -229,7 +237,7 @@ export function usePreviewPlayback(layout: LayoutEntry[]): PreviewPlayback {
       }
     } else {
       if (slideRef.current) exitSlide();
-      void videoRef.current?.play();
+      void videoRef.current?.play().catch(() => {});
     }
     setPlaying(true);
   }, [enterSlide, exitSlide]);
