@@ -364,5 +364,12 @@
     "statusCapture": "capturar",
     "shortcutInactive": "Este atajo no está activo — elige otra combinación",
     "pressKeys": "Presiona teclas…"
+  },
+  "updates": {
+    "ready": "Hay una versión nueva lista 🎉 (v{version}). Reinicia para aplicarla.",
+    "restart": "Reiniciar",
+    "close": "Cerrar",
+    "update": "Actualizar",
+    "updateRequired": "Actualización requerida"
   }
 }

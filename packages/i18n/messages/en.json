@@ -364,5 +364,12 @@
     "statusCapture": "capture",
     "shortcutInactive": "This shortcut isn't active — pick a different combo",
     "pressKeys": "Press keys…"
+  },
+  "updates": {
+    "ready": "A new version is ready 🎉 (v{version}). Restart to apply it.",
+    "restart": "Restart",
+    "close": "Close",
+    "update": "Update",
+    "updateRequired": "Update required"
   }
 }
