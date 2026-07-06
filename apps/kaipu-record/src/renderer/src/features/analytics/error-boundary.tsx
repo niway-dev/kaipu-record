@@ -1,6 +1,21 @@
 import React from "react";
+import { useTranslations } from "@kaipu/i18n";
 import { captureException } from "./analytics-client";
 import styles from "./error-boundary.module.css";
+
+/** Functional fallback so the crash UI can use the i18n hooks the class can't. */
+function ErrorFallback({ onReload }: { onReload: () => void }): React.JSX.Element {
+  const t = useTranslations("common");
+  return (
+    <div className={styles.fallback} role="alert">
+      <h1 className={styles.title}>{t("error")}</h1>
+      <p className={styles.body}>{t("unexpectedError")}</p>
+      <button type="button" className={styles.button} onClick={onReload}>
+        {t("reload")}
+      </button>
+    </div>
+  );
+}
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
@@ -32,16 +47,6 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 
   render(): React.ReactNode {
     if (!this.state.hasError) return this.props.children;
-    return (
-      <div className={styles.fallback} role="alert">
-        <h1 className={styles.title}>Algo salió mal</h1>
-        <p className={styles.body}>
-          Tuvimos un problema inesperado. Ya lo registramos. Puedes recargar para seguir.
-        </p>
-        <button type="button" className={styles.button} onClick={this.handleReload}>
-          Recargar
-        </button>
-      </div>
-    );
+    return <ErrorFallback onReload={this.handleReload} />;
   }
 }

@@ -59,7 +59,9 @@ export function MicPicker({
               >
                 <div className={styles.optionInfo}>
                   <span className={styles.optionName}>{microphone.label}</span>
-                  <span className={styles.optionType}>{getMicrophoneType(microphone.label)}</span>
+                  <span className={styles.optionType}>
+                    {t(getMicrophoneType(microphone.label))}
+                  </span>
                 </div>
                 {isActive && <Check size={affordanceSize} className={styles.check} />}
               </button>

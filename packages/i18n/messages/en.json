@@ -5,7 +5,36 @@
     "cancel": "Cancel",
     "loading": "Loading…",
     "error": "Something went wrong",
-    "retry": "Retry"
+    "retry": "Retry",
+    "close": "Close",
+    "reload": "Reload",
+    "unexpectedError": "Something unexpected happened. We've logged it. You can reload to continue."
+  },
+  "quality": {
+    "group": "Recording quality",
+    "resolution": "Resolution",
+    "fps": "Smoothness",
+    "bitrate": "Bitrate",
+    "whatIs": "What is {label}",
+    "presetLightLabel": "Light",
+    "presetLightCaption": "Takes little space. Perfect for quick sharing or uploads.",
+    "presetBalancedLabel": "Balanced",
+    "presetBalancedCaption": "The best balance of sharpness and size. Great for almost everything.",
+    "presetMaxLabel": "Maximum quality",
+    "presetMaxCaption": "The sharpest, smoothest result. Built for editing or presenting.",
+    "presetCustomLabel": "Custom",
+    "presetCustomCaption": "Tune each control to taste. File size is computed live.",
+    "infoResolution": "Pixel count: higher looks sharper but weighs more. 1080p is ideal for almost everything. It never exceeds your screen's real resolution.",
+    "infoFps": "Frames per second: more fps make motion smoother and increase size. 30 is perfect for screen recording; 60 for fast motion.",
+    "infoBitrate": "Data per second: this affects file size the most. Higher = cleaner image; lower = light file that can pixelate in motion-heavy scenes.",
+    "bitrateLight": "Light",
+    "bitrateMedium": "Medium",
+    "bitrateHigh": "High",
+    "bitrateMax": "Maximum",
+    "fpsCine": "Cinema",
+    "fpsStandard": "Standard",
+    "fps48": "48 fps",
+    "fpsVerySmooth": "Very smooth"
   },
   "tray": {
     "open": "Open Kaipu Record",
@@ -76,6 +105,10 @@
     "cameraLabel": "Camera",
     "micTitle": "MICROPHONE",
     "selectMic": "Select microphone",
+    "micBuiltIn": "BUILT-IN",
+    "micBluetooth": "BLUETOOTH",
+    "micUsb": "USB",
+    "micExternal": "EXTERNAL",
     "screensTab": "Screens",
     "windowsTab": "Windows",
     "screenAccessOff": "Screen Recording access is off",
@@ -308,7 +341,8 @@
     "open": "Open ↗",
     "tabRecord": "Record",
     "tabCapture": "Capture",
-    "panelMode": "Panel mode"
+    "panelMode": "Panel mode",
+    "captureScreen": "Capture Screen"
   },
   "onboarding": {
     "ctaGetStarted": "Get started",

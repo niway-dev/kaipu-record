@@ -19,7 +19,7 @@ describe("ErrorBoundary", () => {
         <Boom />
       </ErrorBoundary>,
     );
-    expect(screen.getByText(/algo salió mal/i)).toBeInTheDocument();
+    expect(screen.getByText(/something went wrong/i)).toBeInTheDocument();
     expect(captureException).toHaveBeenCalled();
     spy.mockRestore();
   });

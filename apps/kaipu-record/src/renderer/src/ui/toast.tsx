@@ -1,9 +1,11 @@
 import React, { useSyncExternalStore } from "react";
+import { useTranslations } from "@kaipu/i18n";
 import { cx } from "./cx";
 import { dismissToast, getToasts, subscribeToasts, type ToastSpec } from "./toast-store";
 import styles from "./toast.module.css";
 
 function Toast({ toast }: { toast: ToastSpec }): React.JSX.Element {
+  const t = useTranslations("common");
   return (
     <div className={styles.toast} role="alert">
       <span className={styles.message}>{toast.message}</span>
@@ -22,7 +24,7 @@ function Toast({ toast }: { toast: ToastSpec }): React.JSX.Element {
       <button
         type="button"
         className={styles.close}
-        aria-label="Cerrar"
+        aria-label={t("close")}
         onClick={() => dismissToast(toast.id)}
       >
         ×

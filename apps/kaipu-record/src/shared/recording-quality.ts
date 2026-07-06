@@ -96,11 +96,14 @@ export const RESOLUTION_STEP_LABELS: Record<ResolutionStep, string> = {
  * Right-side word describing the fps "feel". 48 keeps the plain number (the user
  * only wanted Cine / Estándar / Muy fluido — no invented word for 48).
  */
-export const FPS_VALUE_LABELS: Record<FpsStep, string> = {
-  24: "Cine",
-  30: "Estándar",
-  48: "48 fps",
-  60: "Muy fluido",
+export const FPS_VALUE_LABELS: Record<
+  FpsStep,
+  "fpsCine" | "fpsStandard" | "fps48" | "fpsVerySmooth"
+> = {
+  24: "fpsCine",
+  30: "fpsStandard",
+  48: "fps48",
+  60: "fpsVerySmooth",
 };
 
 export const FPS_STEP_LABELS: Record<FpsStep, string> = {
@@ -110,11 +113,14 @@ export const FPS_STEP_LABELS: Record<FpsStep, string> = {
   60: "60",
 };
 
-export const BITRATE_STEP_LABELS: Record<BitrateStep, string> = {
-  light: "Ligero",
-  medium: "Medio",
-  high: "Alto",
-  max: "Máximo",
+export const BITRATE_STEP_LABELS: Record<
+  BitrateStep,
+  "bitrateLight" | "bitrateMedium" | "bitrateHigh" | "bitrateMax"
+> = {
+  light: "bitrateLight",
+  medium: "bitrateMedium",
+  high: "bitrateHigh",
+  max: "bitrateMax",
 };
 
 /**
@@ -133,46 +139,49 @@ export const DEFAULT_QUALITY: RecordingQuality = QUALITY_PRESETS.balanced;
 export interface PresetMeta {
   id: QualityPresetId;
   emoji: string;
-  label: string;
-  /** One-line caption shown under the chips, explaining where this preset is headed. */
-  caption: string;
+  /** i18n key (under the `quality` namespace) for this preset's chip label. */
+  labelKey: "presetLightLabel" | "presetBalancedLabel" | "presetMaxLabel" | "presetCustomLabel";
+  /** i18n key for the one-line caption shown under the chips. */
+  captionKey:
+    | "presetLightCaption"
+    | "presetBalancedCaption"
+    | "presetMaxCaption"
+    | "presetCustomCaption";
 }
 
-/** Chip emoji/label + the caption that swaps in below the chips. */
+/** Chip emoji + i18n keys for the label + the caption that swaps in below the chips. */
 export const PRESET_META: Record<QualityPresetId, PresetMeta> = {
   light: {
     id: "light",
     emoji: "🚀",
-    label: "Liviano",
-    caption: "Ocupa poco espacio. Perfecto para compartir o subir rápido.",
+    labelKey: "presetLightLabel",
+    captionKey: "presetLightCaption",
   },
   balanced: {
     id: "balanced",
     emoji: "🎯",
-    label: "Equilibrado",
-    caption: "La mejor relación entre nitidez y tamaño. Ideal para casi todo.",
+    labelKey: "presetBalancedLabel",
+    captionKey: "presetBalancedCaption",
   },
   max: {
     id: "max",
     emoji: "✨",
-    label: "Máxima calidad",
-    caption: "La mayor nitidez y fluidez. Pensado para editar o presentar.",
+    labelKey: "presetMaxLabel",
+    captionKey: "presetMaxCaption",
   },
   custom: {
     id: "custom",
     emoji: "🎛️",
-    label: "Personalizado",
-    caption: "Ajusta cada control a tu gusto. El peso se calcula en vivo.",
+    labelKey: "presetCustomLabel",
+    captionKey: "presetCustomCaption",
   },
 };
 
-/** Deep-dive copy behind each ⓘ icon, for the curious. */
+/** i18n keys for the deep-dive copy behind each ⓘ icon, for the curious. */
 export const QUALITY_INFO = {
-  resolution:
-    "Cantidad de píxeles: más alta se ve más nítida pero pesa más. 1080p es ideal para casi todo. No supera la resolución real de tu pantalla.",
-  fps: "Cuadros por segundo: más fps hacen el movimiento más suave y aumentan el peso. 30 va perfecto para grabar pantalla; 60 para movimiento rápido.",
-  bitrate:
-    "Datos por segundo: es lo que más afecta el peso del archivo. Más alto = imagen más limpia; más bajo = archivo liviano que puede pixelarse en escenas con movimiento.",
+  resolution: "infoResolution",
+  fps: "infoFps",
+  bitrate: "infoBitrate",
 } as const;
 
 /** Which preset a combo matches; "custom" when it matches none. */
