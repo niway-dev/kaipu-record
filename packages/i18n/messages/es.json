@@ -340,5 +340,29 @@
     "doneTitle": "¡Todo listo!",
     "donePressPre": "Presiona",
     "donePressPost": "en cualquier lugar — incluso desde la barra de menú — para grabar."
+  },
+  "shortcuts": {
+    "title": "Atajos",
+    "subtitle": "Atajos de teclado globales — funcionan desde cualquier app mientras grabas. Haz clic en un atajo para reasignarlo.",
+    "groupRecording": "Grabación",
+    "groupApp": "Aplicación",
+    "changeShortcut": "Cambiar atajo",
+    "noteAlreadyBound": "{description} · ya asignado a «{label}»",
+    "noteInUse": "{description} · en uso por otra app",
+    "alreadyBoundTitle": "Ya asignado a «{label}» — elige otra combinación",
+    "startRecordingLabel": "Iniciar grabación",
+    "startRecordingDesc": "Empieza una grabación de pantalla desde cualquier lugar",
+    "stopRecordingLabel": "Detener grabación",
+    "stopRecordingDesc": "Termina la grabación actual desde cualquier lugar",
+    "bringToFrontLabel": "Traer Kaipu al frente",
+    "bringToFrontDesc": "Muestra la ventana si queda detrás o fuera de alcance",
+    "captureScreenshotLabel": "Capturar pantalla",
+    "captureScreenshotDesc": "Abre la selección de área para tomar una captura",
+    "statusStart": "grabar",
+    "statusStop": "detener",
+    "statusShowApp": "mostrar app",
+    "statusCapture": "capturar",
+    "shortcutInactive": "Este atajo no está activo — elige otra combinación",
+    "pressKeys": "Presiona teclas…"
   }
 }

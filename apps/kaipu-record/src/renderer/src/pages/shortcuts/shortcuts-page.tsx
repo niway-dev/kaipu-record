@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslations } from "@kaipu/i18n";
 import { Card } from "@renderer/ui/card";
 import { Row } from "@renderer/ui/row";
 import { useAppSettings } from "@renderer/pages/settings/use-app-settings";
@@ -12,6 +13,20 @@ import {
   type ShortcutGroup,
 } from "@shared/types";
 import styles from "./shortcuts-page.module.css";
+
+/** action → `shortcuts` namespace keys (labels/descriptions live in i18n, not the shared defs). */
+const LABEL_KEY = {
+  startRecording: "startRecordingLabel",
+  stopRecording: "stopRecordingLabel",
+  bringToFront: "bringToFrontLabel",
+  captureScreenshot: "captureScreenshotLabel",
+} as const;
+const DESC_KEY = {
+  startRecording: "startRecordingDesc",
+  stopRecording: "stopRecordingDesc",
+  bringToFront: "bringToFrontDesc",
+  captureScreenshot: "captureScreenshotDesc",
+} as const;
 
 function Section({
   title,
@@ -28,12 +43,6 @@ function Section({
   );
 }
 
-/** On-screen sections, in order. Their rows come from SHORTCUT_DEFINITIONS. */
-const GROUPS: ReadonlyArray<{ key: ShortcutGroup; title: string }> = [
-  { key: "recording", title: "Recording" },
-  { key: "app", title: "App" },
-];
-
 const shortcutsInGroup = (group: ShortcutGroup): ShortcutDefinition[] =>
   SHORTCUT_DEFINITIONS.filter((def) => def.group === group);
 
@@ -43,8 +52,15 @@ const shortcutsInGroup = (group: ShortcutGroup): ShortcutDefinition[] =>
  * via `getShortcutStatus`, any that another app already owns.
  */
 export function ShortcutsPage(): React.JSX.Element {
+  const t = useTranslations("shortcuts");
   const { settings, update } = useAppSettings();
   const shortcuts = settings?.shortcuts ?? DEFAULT_SHORTCUTS;
+
+  // On-screen sections, in order. Their rows come from SHORTCUT_DEFINITIONS.
+  const GROUPS: ReadonlyArray<{ key: ShortcutGroup; title: string }> = [
+    { key: "recording", title: t("groupRecording") },
+    { key: "app", title: t("groupApp") },
+  ];
 
   // Which global shortcuts actually registered (false = another app owns it).
   // Re-query whenever the bindings change (main re-registers on update).
@@ -78,19 +94,20 @@ export function ShortcutsPage(): React.JSX.Element {
     void update({ shortcuts: { ...shortcuts, [action]: accelerator } });
   };
 
-  const labelFor = (action: ShortcutAction): string =>
-    SHORTCUT_DEFINITIONS.find((d) => d.action === action)?.label ?? action;
+  const labelFor = (action: ShortcutAction): string => t(LABEL_KEY[action]);
 
-  const renderRow = ({ action, label, description }: ShortcutDefinition): React.JSX.Element => {
+  const renderRow = ({ action }: ShortcutDefinition): React.JSX.Element => {
+    const label = t(LABEL_KEY[action]);
+    const description = t(DESC_KEY[action]);
     const isDuplicate = duplicate?.action === action;
     // Two distinct failure modes, distinct copy: a clash with another Kaipu
     // action (detected here, at bind time) vs the combo being owned by another
     // app (only known once registration fails).
     const ownedByOtherApp = shortcutStatus ? !shortcutStatus[action] : false;
     const note = isDuplicate
-      ? `${description} · already bound to “${labelFor(duplicate.withAction)}”`
+      ? t("noteAlreadyBound", { description, label: labelFor(duplicate.withAction) })
       : ownedByOtherApp
-        ? `${description} · in use by another app`
+        ? t("noteInUse", { description })
         : description;
     return (
       <Row
@@ -103,7 +120,7 @@ export function ShortcutsPage(): React.JSX.Element {
             unavailable={ownedByOtherApp || isDuplicate}
             title={
               isDuplicate
-                ? `Already bound to “${labelFor(duplicate.withAction)}” — pick a different combo`
+                ? t("alreadyBoundTitle", { label: labelFor(duplicate.withAction) })
                 : undefined
             }
             onChange={(accelerator) => handleChange(action, accelerator)}
@@ -116,11 +133,8 @@ export function ShortcutsPage(): React.JSX.Element {
   return (
     <div className={styles.page}>
       <div className={styles.pageHeader}>
-        <h1 className={styles.pageTitle}>Shortcuts</h1>
-        <p className={styles.pageSubtitle}>
-          Global keyboard shortcuts — they work from any app while you record. Click a shortcut to
-          rebind it.
-        </p>
+        <h1 className={styles.pageTitle}>{t("title")}</h1>
+        <p className={styles.pageSubtitle}>{t("subtitle")}</p>
       </div>
 
       <div className={styles.sections}>

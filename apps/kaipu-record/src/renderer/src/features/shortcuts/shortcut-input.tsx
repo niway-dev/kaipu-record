@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslations } from "@kaipu/i18n";
 import { captureShortcut, formatAccelerator } from "./keyboard-accelerator";
 import styles from "./shortcut-input.module.css";
 
@@ -25,6 +26,7 @@ export function ShortcutInput({
   unavailable = false,
   title,
 }: ShortcutInputProps): React.JSX.Element {
+  const t = useTranslations("shortcuts");
   const [listening, setListening] = React.useState(false);
 
   React.useEffect(() => {
@@ -60,14 +62,12 @@ export function ShortcutInput({
       className={styles.input}
       data-listening={listening || undefined}
       data-unavailable={unavailable || undefined}
-      aria-label="Change shortcut"
-      title={
-        title ?? (unavailable ? "This shortcut isn't active — pick a different combo" : undefined)
-      }
+      aria-label={t("changeShortcut")}
+      title={title ?? (unavailable ? t("shortcutInactive") : undefined)}
       onClick={() => setListening((on) => !on)}
       onBlur={() => setListening(false)}
     >
-      {listening ? "Press keys…" : formatAccelerator(value)}
+      {listening ? t("pressKeys") : formatAccelerator(value)}
     </button>
   );
 }

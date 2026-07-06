@@ -340,5 +340,29 @@
     "doneTitle": "You're all set",
     "donePressPre": "Press",
     "donePressPost": "anywhere — even from the menu bar — to start recording."
+  },
+  "shortcuts": {
+    "title": "Shortcuts",
+    "subtitle": "Global keyboard shortcuts — they work from any app while you record. Click a shortcut to rebind it.",
+    "groupRecording": "Recording",
+    "groupApp": "App",
+    "changeShortcut": "Change shortcut",
+    "noteAlreadyBound": "{description} · already bound to “{label}”",
+    "noteInUse": "{description} · in use by another app",
+    "alreadyBoundTitle": "Already bound to “{label}” — pick a different combo",
+    "startRecordingLabel": "Start recording",
+    "startRecordingDesc": "Begin a screen recording from anywhere",
+    "stopRecordingLabel": "Stop recording",
+    "stopRecordingDesc": "End the current recording from anywhere",
+    "bringToFrontLabel": "Bring Kaipu to front",
+    "bringToFrontDesc": "Show the app window if it slips behind or out of reach",
+    "captureScreenshotLabel": "Capture screenshot",
+    "captureScreenshotDesc": "Open the area selection to take a screenshot",
+    "statusStart": "start",
+    "statusStop": "stop",
+    "statusShowApp": "show app",
+    "statusCapture": "capture",
+    "shortcutInactive": "This shortcut isn't active — pick a different combo",
+    "pressKeys": "Press keys…"
   }
 }
