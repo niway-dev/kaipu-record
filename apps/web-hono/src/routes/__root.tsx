@@ -6,21 +6,29 @@ import {
   Outlet,
   Scripts,
   createRootRouteWithContext,
+  useRouter,
   useRouterState,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 
 import { Toaster } from "@kaipu/web-ui";
+import { I18nProvider, type Locale, type Messages } from "@kaipu/i18n";
+import es from "@kaipu/i18n/messages/es";
+import en from "@kaipu/i18n/messages/en";
 
 import Header from "../components/header";
 import appCss from "../index.css?url";
 import { getAuthSession } from "@/lib/auth/get-auth-session";
+import { getLocale } from "@/server-functions/get-locale";
+import { setLocale as setLocaleFn } from "@/server-functions/set-locale";
 import type { AuthSession } from "@/lib/auth/types";
 
 export interface RouterAppContext {
   queryClient: QueryClient;
   isAuthenticated: boolean;
   session: AuthSession | null;
+  locale: Locale;
+  messages: Messages;
 }
 
 export const Route = createRootRouteWithContext<RouterAppContext>()({
@@ -47,10 +55,12 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
   component: RootDocument,
   staleTime: 10 * 60 * 1000, // 10 minutes
   beforeLoad: async () => {
-    const session = await getAuthSession();
+    const [session, i18n] = await Promise.all([getAuthSession(), getLocale()]);
     return {
       session: session ?? null,
       isAuthenticated: !!session,
+      locale: i18n.locale,
+      messages: i18n.messages,
     };
   },
 });
@@ -67,30 +77,44 @@ const criticalStyles = `
 
 function RootDocument() {
   const context = Route.useRouteContext();
-  const { isAuthenticated, session } = context;
+  const router = useRouter();
+  const { isAuthenticated, session, locale } = context;
 
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isLanding = pathname === "/";
 
+  // Persist to the cookie, then re-run beforeLoad so the whole tree re-renders
+  // with the new messages (resolved server-side — no flash).
+  const handleSetLocale = async (next: Locale) => {
+    await setLocaleFn({ data: next });
+    await router.invalidate();
+  };
+
   return (
-    <html lang="en" className="dark" suppressHydrationWarning>
+    <html lang={locale} className="dark" suppressHydrationWarning>
       <head>
         <style dangerouslySetInnerHTML={{ __html: criticalStyles }} />
         <HeadContent />
       </head>
       <body suppressHydrationWarning>
-        <div className="min-h-svh">
-          {!isLanding && (
-            <Header
-              isAuthenticated={isAuthenticated}
-              userName={session?.user?.name ?? ""}
-              userEmail={session?.user?.email ?? ""}
-            />
-          )}
-          <main className={isLanding ? "" : "pt-12"}>
-            <Outlet />
-          </main>
-        </div>
+        <I18nProvider
+          initialLocale={locale}
+          messagesByLocale={{ es, en }}
+          onLocaleChange={(next) => void handleSetLocale(next)}
+        >
+          <div className="min-h-svh">
+            {!isLanding && (
+              <Header
+                isAuthenticated={isAuthenticated}
+                userName={session?.user?.name ?? ""}
+                userEmail={session?.user?.email ?? ""}
+              />
+            )}
+            <main className={isLanding ? "" : "pt-12"}>
+              <Outlet />
+            </main>
+          </div>
+        </I18nProvider>
         <Toaster richColors />
         <TanStackRouterDevtools position="bottom-left" />
         <ReactQueryDevtools position="bottom" buttonPosition="bottom-right" />

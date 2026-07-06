@@ -21,8 +21,33 @@
   "settings": {
     "title": "Ajustes",
     "language": "Idioma",
-    "languageDescription": "Elegí el idioma de la aplicación.",
+    "languageDescription": "Elige el idioma de la aplicación.",
     "spanish": "Español",
     "english": "Inglés"
+  },
+  "header": {
+    "brand": "Kaipu Record",
+    "dashboard": "Panel"
+  },
+  "landing": {
+    "navBrand": "Kaipu",
+    "navDownload": "Descargar",
+    "heroTitleLine1": "Graba tu pantalla,",
+    "heroTitleLine2": "sin complicaciones.",
+    "heroSubtitle": "Kaipu Record graba tu pantalla y tu cámara en alta calidad, directo en tu equipo. Privado, rápido y sin cuentas.",
+    "featureScreenTitle": "Pantalla + cámara",
+    "featureScreenBody": "Graba tu pantalla con una burbuja de cámara flotante, lista para tutoriales y demos.",
+    "featurePrivateTitle": "Local-first y privado",
+    "featurePrivateBody": "Todo se procesa y guarda en tu equipo. Nada sale a la nube sin que lo quieras.",
+    "featureQualityTitle": "Calidad configurable",
+    "featureQualityBody": "Elige resolución, fluidez y peso con presets claros — de liviano a máxima calidad.",
+    "featureShortcutsTitle": "Atajos globales",
+    "featureShortcutsBody": "Inicia, detén y trae la app al frente desde cualquier lado con atajos reconfigurables.",
+    "downloadTitle": "Descarga Kaipu Record",
+    "downloadSubtitle": "Gratis para macOS 11+. Windows próximamente.",
+    "downloadMacArm": "Descargar para Mac (Apple Silicon)",
+    "downloadMacIntel": "Mac (Intel)",
+    "downloadWindows": "Windows (próximamente)",
+    "footerTagline": "Graba. Comparte. Sin vueltas."
   }
 }

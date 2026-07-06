@@ -24,5 +24,30 @@
     "languageDescription": "Choose the app language.",
     "spanish": "Spanish",
     "english": "English"
+  },
+  "header": {
+    "brand": "Kaipu Record",
+    "dashboard": "Dashboard"
+  },
+  "landing": {
+    "navBrand": "Kaipu",
+    "navDownload": "Download",
+    "heroTitleLine1": "Record your screen,",
+    "heroTitleLine2": "without the hassle.",
+    "heroSubtitle": "Kaipu Record captures your screen and camera in high quality, right on your machine. Private, fast, and account-free.",
+    "featureScreenTitle": "Screen + camera",
+    "featureScreenBody": "Record your screen with a floating camera bubble, ready for tutorials and demos.",
+    "featurePrivateTitle": "Local-first and private",
+    "featurePrivateBody": "Everything is processed and stored on your machine. Nothing leaves for the cloud unless you want it to.",
+    "featureQualityTitle": "Configurable quality",
+    "featureQualityBody": "Pick resolution, smoothness, and file size with clear presets — from light to maximum quality.",
+    "featureShortcutsTitle": "Global shortcuts",
+    "featureShortcutsBody": "Start, stop, and bring the app to the front from anywhere with rebindable shortcuts.",
+    "downloadTitle": "Download Kaipu Record",
+    "downloadSubtitle": "Free for macOS 11+. Windows coming soon.",
+    "downloadMacArm": "Download for Mac (Apple Silicon)",
+    "downloadMacIntel": "Mac (Intel)",
+    "downloadWindows": "Windows (coming soon)",
+    "footerTagline": "Record. Share. No fuss."
   }
 }
