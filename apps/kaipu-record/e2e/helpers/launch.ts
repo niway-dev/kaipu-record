@@ -5,20 +5,30 @@ import path from "node:path";
 
 const APP_ROOT = path.resolve(__dirname, "..", "..");
 const MAIN_ENTRY = path.join(APP_ROOT, "out", "main", "index.js");
-const FIXTURE = path.join(APP_ROOT, "e2e", "fixtures", "sample.mp4");
+const VIDEO_FIXTURE = path.join(APP_ROOT, "e2e", "fixtures", "sample.mp4");
+const IMAGE_FIXTURE = path.join(APP_ROOT, "e2e", "fixtures", "sample.png");
 
 /** The seeded recording's id (its filename stem) and known duration (seconds). */
 export const RECORDING_ID = "e2e-sample";
 export const RECORDING_DURATION = 3;
 
+/** The seeded screenshot's id (its filename stem). A `.png` classifies as `kind: "screenshot"`. */
+export const SCREENSHOT_ID = "e2e-shot";
+
 /**
- * Seed a temp vault with the fixture recording so it lists and opens in the editor:
- * `<id>.mp4` in the root, and a `.kaipu/<id>.json` sidecar carrying a positive
- * durationSeconds (what makes a recording editable — see LibraryDetailPage) plus a title.
+ * Seed a temp vault with both fixtures so they list and open:
+ *   - `<recording>.mp4` + a `.kaipu/<id>.json` sidecar with a positive durationSeconds
+ *     (what makes a recording editable — see LibraryDetailPage).
+ *   - `<screenshot>.png` + a `.kaipu/<id>.json` sidecar. `.png` files classify as
+ *     `kind: "screenshot"` in the vault (LibraryVault.describe), so the detail page shows the
+ *     "Edit"/"Copy" screenshot actions.
+ * Seeding both at launch (rather than after) avoids any list-refresh race: the library reads
+ * the vault fresh on mount.
  */
 async function seedVault(vaultDir: string): Promise<void> {
-  await copyFile(FIXTURE, path.join(vaultDir, `${RECORDING_ID}.mp4`));
   await mkdir(path.join(vaultDir, ".kaipu"), { recursive: true });
+
+  await copyFile(VIDEO_FIXTURE, path.join(vaultDir, `${RECORDING_ID}.mp4`));
   await writeFile(
     path.join(vaultDir, ".kaipu", `${RECORDING_ID}.json`),
     JSON.stringify({
@@ -26,6 +36,12 @@ async function seedVault(vaultDir: string): Promise<void> {
       durationSeconds: RECORDING_DURATION,
       createdAt: 1_700_000_000_000,
     }),
+  );
+
+  await copyFile(IMAGE_FIXTURE, path.join(vaultDir, `${SCREENSHOT_ID}.png`));
+  await writeFile(
+    path.join(vaultDir, ".kaipu", `${SCREENSHOT_ID}.json`),
+    JSON.stringify({ title: "E2E Shot", createdAt: 1_700_000_000_000 }),
   );
 }
 
@@ -99,4 +115,20 @@ export async function openEditor(page: Page): Promise<void> {
   }, RECORDING_ID);
   await page.getByRole("button", { name: "Editar video" }).click();
   await page.waitForSelector("video");
+}
+
+/**
+ * Enter the screenshot editor for the seeded screenshot. The editor reads its image from
+ * react-router `state` (an ImageSource); a bare hash navigation to `/screenshot-editor`
+ * arrives stateless and redirects away, so the only reliable entry is the real "Edit" button
+ * on the screenshot's detail page (which passes the state). Waits until the editor's Save
+ * control is present (the toolbar has rendered).
+ */
+export async function openScreenshotEditor(page: Page): Promise<void> {
+  await dismissOnboarding(page);
+  await page.evaluate((id) => {
+    location.hash = `#/library/${id}`;
+  }, SCREENSHOT_ID);
+  await page.getByRole("button", { name: "Edit" }).click();
+  await page.getByRole("button", { name: /^Save/ }).waitFor({ state: "visible" });
 }

@@ -80,7 +80,10 @@ be validating exactly this fix; magic-byte/size assertions won't.
 
 ## Testability
 
-🟢 **Fully E2E-able** (headless, no IPC mocking).
+🟢 **Fully E2E-able** (headless, no IPC mocking). ✅ **Implemented** —
+`e2e/screenshot-editor.e2e.ts` (seed a `.png`, enter via the real _Edit_ button, Save →
+assert a valid PNG lands in the vault). This was the first flow test built on top of the
+harness.
 
 Unlike the _video_ editor export — which needs a WebCodecs H.264 encoder that is
 unavailable on headless Linux CI — this flow's export is **canvas → PNG**
@@ -134,19 +137,19 @@ sidecar; `describe()` classifies any `IMAGE_EXTS` file as `kind: "screenshot"`
    the export path; a fuller test toggles one beautify control to prove the
    scene→SVG→canvas pipeline ran.
 
-4. **Save → assert at the vault boundary.** Click **Save** (first save writes
-   directly, no dialog — `screenshot-editor-page.tsx:179-182`). Then assert on
-   the filesystem in Node (not pixels):
-   - a new `*.png` appears in `vaultDir` (a fresh timestamp-id file if you edited
-     a `blob`; the same `e2e-shot.png` if you overwrote), and
-   - it is a **valid, non-empty PNG**: first 8 bytes are
-     `89 50 4E 47 0D 0A 1A 0A` and `size > 0`.
-     Optionally assert the in-app "Saved" toast (`role="status"`,
-     `screenshot-editor-page.tsx:297-307`) as the UI-side confirmation.
+4. **Save → assert at the vault boundary.** A screenshot opened via **Edit** carries its
+   existing vault id, so `savedId` is already set and clicking **Save** opens the
+   `SaveOptionsDialog` (Overwrite / Save copy / Cancel — `screenshot-editor-page.tsx:179-191`),
+   it does _not_ write directly. (Writing directly only happens for a brand-new capture that
+   has no id yet.) The implemented test clicks **Save copy** to get an unambiguous new file,
+   then asserts on the filesystem in Node (not pixels):
+   - a new `*.png` (distinct from the seeded `e2e-shot.png`) appears in `vaultDir`, and
+   - it is a **valid, non-empty PNG**: first 8 bytes are `89 50 4E 47 0D 0A 1A 0A`, `size > 0`.
 
-   To exercise **overwrite**, enter via **Edit** on the seeded `local` shot,
-   Save, choose **overwrite** in `SaveOptionsDialog`, and assert the same
-   `e2e-shot.png` changed on disk (mtime/size differs).
+   To exercise **overwrite** instead, choose **Overwrite** in the dialog and assert the same
+   `e2e-shot.png` changed on disk (mtime/size differs). The in-app "Saved" toast
+   (`role="status"`, `screenshot-editor-page.tsx:297-307`) is transient; prefer the filesystem
+   assertion as the deterministic boundary.
 
 A **Copy** variant is also viable but harder to assert headlessly (it writes to
 the system clipboard via `nativeImage`); prefer asserting the Save path.

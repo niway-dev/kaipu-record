@@ -72,9 +72,10 @@ additions — do these once, reuse everywhere:
 
 ## Suggested rollout order
 
-1. **Screenshot editor (🟢)** — mirrors the existing `openEditor()` path; seed a PNG, enter via
-   the real _Edit_ button, apply an edit, assert a valid PNG lands in the vault. Highest value,
-   lowest effort.
+1. ✅ **Screenshot editor (🟢) — done.** Implemented in `e2e/screenshot-editor.e2e.ts`: seeds a
+   PNG, enters via the real _Edit_ button, saves a copy, and asserts a valid PNG lands in the
+   vault. It also added the reusable harness bits (screenshot fixture + `seedVault` screenshot +
+   `openScreenshotEditor`). This was the pattern-setter for the rest.
 2. **Library additions (🟢)** — extend the existing `library.e2e.ts`: list-browse, rename
    (assert sidecar), delete (assert file gone + nav back), reveal (assert IPC).
 3. **Settings + Shortcuts (🟡)** — page-level persistence via real IPC, after the
