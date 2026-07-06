@@ -1,0 +1,28 @@
+{
+  "common": {
+    "appName": "Kaipu Record",
+    "save": "Save",
+    "cancel": "Cancel",
+    "loading": "Loading…",
+    "error": "Something went wrong",
+    "retry": "Retry"
+  },
+  "tray": {
+    "open": "Open Kaipu Record",
+    "quit": "Quit"
+  },
+  "nav": {
+    "record": "Record",
+    "library": "Library",
+    "screenshots": "Screenshots",
+    "shortcuts": "Shortcuts",
+    "settings": "Settings"
+  },
+  "settings": {
+    "title": "Settings",
+    "language": "Language",
+    "languageDescription": "Choose the app language.",
+    "spanish": "Spanish",
+    "english": "English"
+  }
+}

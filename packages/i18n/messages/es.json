@@ -1,0 +1,28 @@
+{
+  "common": {
+    "appName": "Kaipu Record",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "loading": "Cargando…",
+    "error": "Algo salió mal",
+    "retry": "Reintentar"
+  },
+  "tray": {
+    "open": "Abrir Kaipu Record",
+    "quit": "Salir"
+  },
+  "nav": {
+    "record": "Grabar",
+    "library": "Biblioteca",
+    "screenshots": "Capturas",
+    "shortcuts": "Atajos",
+    "settings": "Ajustes"
+  },
+  "settings": {
+    "title": "Ajustes",
+    "language": "Idioma",
+    "languageDescription": "Elegí el idioma de la aplicación.",
+    "spanish": "Español",
+    "english": "Inglés"
+  }
+}
