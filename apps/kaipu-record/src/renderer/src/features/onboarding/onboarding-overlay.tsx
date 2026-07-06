@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
+import { useTranslations } from "@kaipu/i18n";
 import { usePermissions } from "@renderer/features/permissions";
 import { requiredPermissionsMet } from "./permissions";
 import { WelcomeStep } from "./steps/welcome-step";
@@ -9,7 +10,7 @@ import styles from "./onboarding-overlay.module.css";
 
 const STEP_COUNT = 3;
 const PERMISSIONS_STEP = 1;
-const CTA_LABELS = ["Get started", "Continue", "Start recording"];
+const CTA_LABEL_KEYS = ["ctaGetStarted", "ctaContinue", "ctaStartRecording"] as const;
 
 interface OnboardingOverlayProps {
   /** Called when the user finishes the flow or skips it. */
@@ -23,6 +24,7 @@ interface OnboardingOverlayProps {
  * permissions (screen + microphone) are granted.
  */
 export function OnboardingOverlay({ onClose }: OnboardingOverlayProps): React.JSX.Element {
+  const t = useTranslations("onboarding");
   const [step, setStep] = useState(0);
   const { status, denied, request, openSettings } = usePermissions();
 
@@ -55,7 +57,12 @@ export function OnboardingOverlay({ onClose }: OnboardingOverlayProps): React.JS
   }, [advance, back, canAdvance, isLastStep, onClose]);
 
   return (
-    <div className={styles.overlay} role="dialog" aria-modal="true" aria-label="Onboarding">
+    <div
+      className={styles.overlay}
+      role="dialog"
+      aria-modal="true"
+      aria-label={t("ariaOnboarding")}
+    >
       <div className={styles.stage}>
         <div className={styles.content}>
           {step === 0 && <WelcomeStep />}
@@ -77,7 +84,7 @@ export function OnboardingOverlay({ onClose }: OnboardingOverlayProps): React.JS
             onClick={back}
             style={{ visibility: step === 0 ? "hidden" : "visible" }}
           >
-            <ArrowLeft size={17} strokeWidth={2} /> Back
+            <ArrowLeft size={17} strokeWidth={2} /> {t("back")}
           </button>
 
           <div className={styles.dots}>
@@ -88,19 +95,17 @@ export function OnboardingOverlay({ onClose }: OnboardingOverlayProps): React.JS
 
           <div className={styles.advance}>
             <button type="button" className={styles.cta} onClick={advance} disabled={!canAdvance}>
-              {CTA_LABELS[step]} <ArrowRight size={18} strokeWidth={2} />
+              {t(CTA_LABEL_KEYS[step])} <ArrowRight size={18} strokeWidth={2} />
             </button>
             {!isLastStep && (
               <button type="button" className={styles.skip} onClick={onClose}>
-                Skip setup
+                {t("skip")}
               </button>
             )}
           </div>
         </div>
 
-        <div className={styles.hint}>
-          PRESS ↵ TO CONTINUE&nbsp;&nbsp;·&nbsp;&nbsp;← → TO NAVIGATE
-        </div>
+        <div className={styles.hint}>{t("hint")}</div>
       </div>
     </div>
   );

@@ -19,9 +19,11 @@ export function requiredPermissionsMet(status: PermissionStatus): boolean {
 export interface PermissionMeta {
   kind: PermissionKind;
   icon: LucideIcon;
-  name: string;
+  /** i18n key under the `onboarding` namespace for this permission's display name. */
+  nameKey: "permScreenName" | "permMicName" | "permCameraName";
   required: boolean;
-  description: string;
+  /** i18n key under the `onboarding` namespace for this permission's description. */
+  descriptionKey: "permScreenDesc" | "permMicDesc" | "permCameraDesc";
 }
 
 /** Row metadata for the permissions step, in display order. */
@@ -29,22 +31,22 @@ export const PERMISSION_META: readonly PermissionMeta[] = [
   {
     kind: "screen",
     icon: Monitor,
-    name: "Screen Recording",
+    nameKey: "permScreenName",
     required: true,
-    description: "Capture your full display or a single window in crisp detail.",
+    descriptionKey: "permScreenDesc",
   },
   {
     kind: "microphone",
     icon: Mic,
-    name: "Microphone",
+    nameKey: "permMicName",
     required: true,
-    description: "Record your narration and voice alongside the screen.",
+    descriptionKey: "permMicDesc",
   },
   {
     kind: "camera",
     icon: Video,
-    name: "Camera",
+    nameKey: "permCameraName",
     required: false,
-    description: "Add a webcam bubble for demos and a personal touch.",
+    descriptionKey: "permCameraDesc",
   },
 ];

@@ -1,5 +1,6 @@
 import { Shield, Check } from "lucide-react";
 import type { PermissionKind, PermissionStatus } from "@shared/types";
+import { useTranslations } from "@kaipu/i18n";
 import { Badge } from "@renderer/ui/badge";
 import { Button } from "@renderer/ui/button";
 import { PERMISSION_META } from "../permissions";
@@ -18,19 +19,17 @@ export function PermissionsStep({
   onRequest,
   onOpenSettings,
 }: PermissionsStepProps): React.JSX.Element {
+  const t = useTranslations("onboarding");
   return (
     <div className={styles.step}>
       <span className={styles.shield}>
         <Shield size={26} strokeWidth={1.8} />
       </span>
-      <h1 className={styles.title}>Grant permissions</h1>
-      <p className={styles.subtitle}>
-        Kaipu needs a few permissions to record your screen, voice and meetings. You can change
-        these later in Settings.
-      </p>
+      <h1 className={styles.title}>{t("permTitle")}</h1>
+      <p className={styles.subtitle}>{t("permSubtitle")}</p>
 
       <div className={styles.rows}>
-        {PERMISSION_META.map(({ kind, icon: Icon, name, required, description }) => {
+        {PERMISSION_META.map(({ kind, icon: Icon, nameKey, required, descriptionKey }) => {
           const granted = status[kind];
           const wasDenied = denied[kind] && !granted;
           return (
@@ -40,25 +39,25 @@ export function PermissionsStep({
               </span>
               <div className={styles.info}>
                 <div className={styles.nameRow}>
-                  <span className={styles.name}>{name}</span>
+                  <span className={styles.name}>{t(nameKey)}</span>
                   <Badge variant={required ? "info" : "neutral"}>
-                    {required ? "REQUIRED" : "OPTIONAL"}
+                    {required ? t("required") : t("optional")}
                   </Badge>
                 </div>
-                <p className={styles.description}>{description}</p>
+                <p className={styles.description}>{t(descriptionKey)}</p>
               </div>
               <div className={styles.action}>
                 {granted ? (
                   <Badge variant="success" className={styles.granted}>
-                    <Check size={14} strokeWidth={2.4} /> GRANTED
+                    <Check size={14} strokeWidth={2.4} /> {t("granted")}
                   </Badge>
                 ) : wasDenied ? (
                   <Button variant="outline" size="sm" onClick={() => onOpenSettings(kind)}>
-                    Open Settings
+                    {t("openSettings")}
                   </Button>
                 ) : (
                   <Button variant="primary" size="sm" onClick={() => onRequest(kind)}>
-                    Grant
+                    {t("grant")}
                   </Button>
                 )}
               </div>
