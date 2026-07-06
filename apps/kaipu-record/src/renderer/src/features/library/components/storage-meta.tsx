@@ -1,4 +1,5 @@
 import { AlertTriangle } from "lucide-react";
+import { useTranslations } from "@kaipu/i18n";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import { relativeDate } from "@renderer/features/library/format";
 import styles from "./storage-meta.module.css";
@@ -9,11 +10,13 @@ import styles from "./storage-meta.module.css";
  * stops the card and row drifting apart.
  */
 export function StorageMeta({ video }: { video: LibraryVideo }): React.JSX.Element {
+  const t = useTranslations("library");
+
   if (video.storage === "failed") {
     return (
       <span className={styles.failed}>
         <AlertTriangle size={12} strokeWidth={2} />
-        Upload failed
+        {t("uploadFailed")}
       </span>
     );
   }
@@ -23,7 +26,8 @@ export function StorageMeta({ video }: { video: LibraryVideo }): React.JSX.Eleme
     return (
       <span className={styles.uploading}>
         <span className={styles.pulse} />
-        Uploading{pct > 0 ? ` ${pct}%` : "…"}
+        {t("uploading")}
+        {pct > 0 ? ` ${pct}%` : "…"}
       </span>
     );
   }

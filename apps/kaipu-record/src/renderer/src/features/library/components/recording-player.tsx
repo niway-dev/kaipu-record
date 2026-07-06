@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { VideoOff } from "lucide-react";
+import { useTranslations } from "@kaipu/i18n";
 import styles from "./recording-player.module.css";
 
 /** Playable URL for a vault recording, served by the main-process media protocol. */
@@ -15,6 +16,7 @@ interface RecordingPlayerProps {
  * media protocol can't serve the file (deleted on disk, codec error, etc.).
  */
 export function RecordingPlayer({ id, poster }: RecordingPlayerProps): React.JSX.Element {
+  const t = useTranslations("library");
   const [playable, setPlayable] = useState(true);
   return (
     <div className={styles.player}>
@@ -30,7 +32,7 @@ export function RecordingPlayer({ id, poster }: RecordingPlayerProps): React.JSX
       ) : (
         <div className={styles.unavailable}>
           <VideoOff size={32} strokeWidth={1.5} />
-          <span>Video unavailable</span>
+          <span>{t("videoUnavailable")}</span>
         </div>
       )}
     </div>

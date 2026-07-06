@@ -1,4 +1,5 @@
 import { Film, Upload, Trash2, Play } from "lucide-react";
+import { useTranslations } from "@kaipu/i18n";
 import { formatDuration, formatSize } from "@renderer/features/library/format";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import { StorageMeta } from "./storage-meta";
@@ -19,6 +20,7 @@ export function VideoCard({
   onDelete,
   onUpload,
 }: VideoCardProps): React.JSX.Element {
+  const t = useTranslations("library");
   const canUpload = video.storage === "local" && Boolean(onUpload);
 
   return (
@@ -72,7 +74,7 @@ export function VideoCard({
       </div>
 
       <div className={styles.footer}>
-        <p className={styles.title}>{video.title || "Untitled recording"}</p>
+        <p className={styles.title}>{video.title || t("untitled")}</p>
         <div className={styles.metaLine}>
           <StorageMeta video={video} />
         </div>
@@ -83,11 +85,15 @@ export function VideoCard({
 
         <div className={styles.actions} onClick={(e) => e.stopPropagation()}>
           {canUpload && (
-            <button className={styles.action} onClick={onUpload} title="Upload to cloud">
+            <button className={styles.action} onClick={onUpload} title={t("uploadCloud")}>
               <Upload size={14} strokeWidth={1.8} />
             </button>
           )}
-          <button className={cx(styles.action, styles.delete)} onClick={onDelete} title="Delete">
+          <button
+            className={cx(styles.action, styles.delete)}
+            onClick={onDelete}
+            title={t("delete")}
+          >
             <Trash2 size={14} strokeWidth={1.8} />
           </button>
         </div>

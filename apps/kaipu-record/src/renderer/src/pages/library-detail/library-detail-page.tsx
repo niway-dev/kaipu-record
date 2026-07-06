@@ -12,9 +12,11 @@ import { ScreenshotViewer } from "@renderer/features/library/components/screensh
 import { RecordingTitle } from "@renderer/features/library/components/recording-title";
 import { formatDuration, formatSize, relativeDate } from "@renderer/features/library/format";
 import { Button } from "@renderer/ui/button";
+import { useTranslations } from "@kaipu/i18n";
 import styles from "./library-detail-page.module.css";
 
 export function LibraryDetailPage(): React.JSX.Element {
+  const t = useTranslations("library");
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { videos, isLoading, rename, remove, reveal } = useLocalLibrary();
@@ -29,16 +31,16 @@ export function LibraryDetailPage(): React.JSX.Element {
   };
 
   if (isLoading) {
-    return <div className={styles.centered}>Loading…</div>;
+    return <div className={styles.centered}>{t("loading")}</div>;
   }
 
   if (!video || !id) {
     return (
       <div className={styles.centered}>
         <FileX2 size={40} strokeWidth={1.5} className={styles.missingIcon} />
-        <h2 className={styles.missingTitle}>File not found</h2>
+        <h2 className={styles.missingTitle}>{t("fileNotFound")}</h2>
         <Button variant="ghost" onClick={back}>
-          Back to Library
+          {t("backToLibrary")}
         </Button>
       </div>
     );
@@ -59,7 +61,7 @@ export function LibraryDetailPage(): React.JSX.Element {
       await window.electronAPI.copyScreenshotById(video.id);
       showCopied(true);
     } catch (error) {
-      reportError("No pudimos copiar la captura al portapapeles.", error, {
+      reportError(t("copyError"), error, {
         context: { id: video.id, phase: "copy-by-id" },
         retry: () => void copyScreenshot(),
       });
@@ -94,7 +96,7 @@ export function LibraryDetailPage(): React.JSX.Element {
     <div className={styles.page}>
       <button type="button" className={styles.back} onClick={back}>
         <ArrowLeft size={16} strokeWidth={1.8} />
-        Library
+        {t("title")}
       </button>
 
       {isScreenshot ? (
@@ -126,7 +128,7 @@ export function LibraryDetailPage(): React.JSX.Element {
             <>
               <Button variant="outline" size="sm" onClick={editScreenshot}>
                 <Pencil size={15} strokeWidth={1.8} />
-                Edit
+                {t("edit")}
               </Button>
               <Button variant="outline" size="sm" onClick={copyScreenshot}>
                 {copied ? (
@@ -134,7 +136,7 @@ export function LibraryDetailPage(): React.JSX.Element {
                 ) : (
                   <Copy size={15} strokeWidth={1.8} />
                 )}
-                {copied ? "Copied" : "Copy"}
+                {copied ? t("copied") : t("copy")}
               </Button>
             </>
           )}
@@ -144,19 +146,19 @@ export function LibraryDetailPage(): React.JSX.Element {
               size="sm"
               onClick={editVideo}
               disabled={!canEditVideo}
-              title={canEditVideo ? undefined : "No se pudo leer la duración de este video"}
+              title={canEditVideo ? undefined : t("durationUnreadable")}
             >
               <Scissors size={15} strokeWidth={1.8} />
-              Editar video
+              {t("editVideo")}
             </Button>
           )}
           <Button variant="outline" size="sm" onClick={() => reveal(id)}>
             <FolderOpen size={15} strokeWidth={1.8} />
-            Reveal
+            {t("reveal")}
           </Button>
           <Button variant="outline" size="sm" onClick={() => setConfirmingDelete(true)}>
             <Trash2 size={15} strokeWidth={1.8} />
-            Delete
+            {t("delete")}
           </Button>
         </div>
       </div>

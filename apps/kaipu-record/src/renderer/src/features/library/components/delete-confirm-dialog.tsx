@@ -1,4 +1,5 @@
 import { Trash2 } from "lucide-react";
+import { useTranslations } from "@kaipu/i18n";
 import {
   ModalActions,
   ModalButton,
@@ -22,22 +23,22 @@ export function DeleteConfirmDialog({
   onCancel,
   onConfirm,
 }: DeleteConfirmDialogProps): React.JSX.Element {
+  const t = useTranslations("library");
   return (
     <ModalOverlay onCancel={onCancel} labelledBy="delete-dialog-title">
       <ModalIcon tone="danger">
         <Trash2 size={20} strokeWidth={1.8} />
       </ModalIcon>
-      <ModalTitle id="delete-dialog-title">Delete recording?</ModalTitle>
+      <ModalTitle id="delete-dialog-title">{t("deleteTitle")}</ModalTitle>
       <ModalText>
-        <ModalName>{title || "Untitled recording"}</ModalName> will be permanently removed from your
-        vault. This can&apos;t be undone.
+        <ModalName>{title || t("untitled")}</ModalName> {t("deleteBody")}
       </ModalText>
       <ModalActions>
         <ModalButton variant="ghost" onClick={onCancel}>
-          Cancel
+          {t("cancel")}
         </ModalButton>
         <ModalButton variant="danger" onClick={onConfirm} disabled={isDeleting}>
-          {isDeleting ? "Deleting…" : "Delete"}
+          {isDeleting ? t("deleting") : t("delete")}
         </ModalButton>
       </ModalActions>
     </ModalOverlay>
