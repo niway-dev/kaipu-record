@@ -1,5 +1,6 @@
 import React from "react";
 import { Trash2 } from "lucide-react";
+import { useTranslations } from "@kaipu/i18n";
 import { ANNOTATION_COLORS, STROKE_WIDTHS, TEXT_SIZES } from "./tools";
 import type { Annotation } from "./scene";
 import type { EditorScene } from "./use-editor-scene";
@@ -90,6 +91,7 @@ export function AnnotationOptions({
   tools: AnnotationToolsController;
   scene: EditorScene;
 }): React.JSX.Element | null {
+  const t = useTranslations("screenshots");
   const selected = scene.annotations.find((a) => a.id === scene.selectedId) ?? null;
   const controls = resolveControls(tools, scene, selected);
   const isCrop = tools.tool === "crop";
@@ -101,22 +103,22 @@ export function AnnotationOptions({
     <div className={styles.panel}>
       {isCrop && (
         <>
-          <span className={styles.label}>Recorte</span>
+          <span className={styles.label}>{t("cropLabel")}</span>
           <button
             type="button"
-            title="Volver a la imagen completa"
+            title={t("cropResetTitle")}
             className={styles.reset}
             disabled={!scene.crop}
             onClick={() => scene.setCrop(undefined)}
           >
-            Restablecer
+            {t("reset")}
           </button>
         </>
       )}
 
       {controls && (
         <>
-          <span className={styles.label}>Color</span>
+          <span className={styles.label}>{t("colorLabel")}</span>
           <div className={styles.palette}>
             {ANNOTATION_COLORS.map((c) => (
               <button
@@ -133,13 +135,13 @@ export function AnnotationOptions({
 
           {controls.mode === "size" ? (
             <>
-              <span className={styles.label}>Size</span>
+              <span className={styles.label}>{t("sizeLabel")}</span>
               <div className={styles.picker}>
                 {TEXT_SIZES.map((label, i) => (
                   <button
                     key={label}
                     type="button"
-                    aria-label={`Size ${label}`}
+                    aria-label={t("sizeAria", { label })}
                     className={`${styles.pickerItem} ${styles.sizeItem} ${controls.level === i ? styles.pickerOn : ""}`}
                     onClick={() => controls.setLevel(i)}
                   >
@@ -150,13 +152,13 @@ export function AnnotationOptions({
             </>
           ) : (
             <>
-              <span className={styles.label}>Stroke</span>
+              <span className={styles.label}>{t("strokeLabel")}</span>
               <div className={styles.picker}>
                 {STROKE_WIDTHS.map((_, i) => (
                   <button
                     key={i}
                     type="button"
-                    aria-label={`Stroke ${i + 1}`}
+                    aria-label={t("strokeAria", { n: i + 1 })}
                     className={`${styles.pickerItem} ${controls.level === i ? styles.pickerOn : ""}`}
                     onClick={() => controls.setLevel(i)}
                   >
@@ -175,8 +177,8 @@ export function AnnotationOptions({
       {selected && (
         <button
           type="button"
-          aria-label="Delete"
-          title="Delete (⌫)"
+          aria-label={t("deleteAria")}
+          title={t("deleteTitle")}
           className={styles.delete}
           onClick={() => scene.removeSelected()}
         >
