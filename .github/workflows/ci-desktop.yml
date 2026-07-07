@@ -43,8 +43,8 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      # kaipu-record's only workspace dep is @kaipu/i18n, resolved from source
-      # (tsdown devExports), so the vitest suite needs no package build first.
+      # kaipu-record's workspace deps (@kaipu/i18n, @kaipu/tokens) resolve from
+      # source (tsdown devExports) + committed CSS — no package build needed.
       - name: Run unit tests
         working-directory: apps/kaipu-record
         run: bun run test
