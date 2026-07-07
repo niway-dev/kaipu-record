@@ -3,7 +3,7 @@ name: CI
 # Universal fast check on every PR: does everything still lint, format, build and
 # type-check? NO tests here — those live in the per-project test workflows
 # (ci-desktop / ci-web / ci-api), path-filtered so a project's (slow) suite only runs
-# when that project changes. Skips docs-only PRs and release-please chore PRs.
+# when that project changes. Skips docs-only PRs and release-please chore PRs. (Exception: the design-tokens drift guard, a build-integrity check.)
 
 on:
   pull_request:

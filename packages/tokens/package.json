@@ -16,16 +16,16 @@
   "types": "./dist/index.d.mts",
   "exports": {
     ".": "./src/index.ts",
+    "./package.json": "./package.json",
     "./css": "./css/tokens.css",
-    "./css/kaipu": "./css/tokens.kaipu.css",
-    "./package.json": "./package.json"
+    "./css/kaipu": "./css/tokens.kaipu.css"
   },
   "publishConfig": {
     "exports": {
       ".": "./dist/index.mjs",
+      "./package.json": "./package.json",
       "./css": "./css/tokens.css",
-      "./css/kaipu": "./css/tokens.kaipu.css",
-      "./package.json": "./package.json"
+      "./css/kaipu": "./css/tokens.kaipu.css"
     }
   },
   "scripts": {
