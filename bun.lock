@@ -34,7 +34,7 @@
     },
     "apps/kaipu-record": {
       "name": "kaipu-record",
-      "version": "0.1.0",
+      "version": "0.3.0",
       "dependencies": {
         "@electron-toolkit/preload": "^3.0.2",
         "@electron-toolkit/utils": "^4.0.0",
@@ -96,7 +96,7 @@
     },
     "apps/web-hono": {
       "name": "web-hono",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@base-ui/react": "^1.0.0",
         "@kaipu/application": "workspace:*",
@@ -249,6 +249,16 @@
         "@kaipu/config": "workspace:*",
         "tsdown": "catalog:",
         "typescript": "catalog:",
+      },
+    },
+    "packages/tokens": {
+      "name": "@kaipu/tokens",
+      "version": "1.0.0",
+      "devDependencies": {
+        "@types/node": "^22.14.1",
+        "tsdown": "catalog:",
+        "typescript": "catalog:",
+        "vitest": "^4.1.9",
       },
     },
     "packages/web-ui": {
@@ -762,6 +772,8 @@
     "@kaipu/infra-db": ["@kaipu/infra-db@workspace:packages/infra-db"],
 
     "@kaipu/infra-env": ["@kaipu/infra-env@workspace:packages/infra-env"],
+
+    "@kaipu/tokens": ["@kaipu/tokens@workspace:packages/tokens"],
 
     "@kaipu/web-ui": ["@kaipu/web-ui@workspace:packages/web-ui"],
 
