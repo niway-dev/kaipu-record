@@ -3,7 +3,7 @@ name: release-please
 # Maintains one rolling "release PR" per app (desktop / web / api). Merging a
 # release PR bumps that app's package.json, writes its CHANGELOG, creates the
 # component-prefixed tag (desktop-v* / web-v* / api-v*) and a GitHub Release —
-# which in turn triggers the existing release-desktop / deploy-web / deploy-api
+# which in turn triggers the existing release-desktop / release-web / release-api
 # workflows. See specs/release-automation-release-please for the full design.
 #
 # Token note: the tag MUST be created by a non-default token, otherwise the

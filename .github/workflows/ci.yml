@@ -1,18 +1,28 @@
-name: PR Validation
+name: CI
+
+# Universal fast check on every PR: does everything still lint, format, build and
+# type-check? NO tests here — those live in the per-project test workflows
+# (ci-desktop / ci-web / ci-api), path-filtered so a project's (slow) suite only runs
+# when that project changes. Skips docs-only PRs and release-please chore PRs.
 
 on:
   pull_request:
     branches:
       - main
+    paths-ignore:
+      - "**/*.md"
+      - "apps/documentation/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  validate:
-    name: Validate PR
+  build:
+    name: Lint, build & type-check
     runs-on: ubuntu-latest
+    # release-please PRs only bump version + CHANGELOG of already-validated code.
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -58,14 +68,6 @@ jobs:
         working-directory: apps/server-hono
         run: bun run build
 
-      # kaipu-record (desktop) — turbo's check-types/build filters skip it, and
-      # nothing else runs its test suite. Validate it in the SAME job so we reuse
-      # the single install above (no duplicate setup). The platform/distribution
-      # build is its own next task (#7 — needs the Apple Developer account).
       - name: Type check desktop app
         working-directory: apps/kaipu-record
         run: bun run typecheck
-
-      - name: Test desktop app
-        working-directory: apps/kaipu-record
-        run: bun run test

@@ -1,4 +1,4 @@
-name: Deploy Web
+name: Release Web
 
 # Deploys the web app (landing + proxy) to its Cloudflare Worker.
 # Trigger: push a `web-v*` tag (e.g. `web-v1.2.0`) so the web versions
@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  deploy-web:
+  release-web:
     name: Build & deploy web
     runs-on: ubuntu-latest
     environment: production # Cloudflare + build secrets live here
