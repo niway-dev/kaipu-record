@@ -9,7 +9,7 @@ export function DownloadButtons() {
     <div className="flex flex-wrap items-center justify-center gap-3">
       <a
         href={downloadUrls.macArm64}
-        className="inline-flex items-center gap-2 rounded-lg bg-[var(--kaipu-accent)] px-5 py-3 font-semibold text-white transition hover:bg-[var(--kaipu-accent-hover)]"
+        className="inline-flex items-center gap-2 rounded-lg bg-[var(--kaipu-accent-primary)] px-5 py-3 font-semibold text-white transition hover:bg-[var(--kaipu-accent-primary-hover)]"
       >
         <Apple className="h-5 w-5" /> {t("downloadMacArm")}
       </a>

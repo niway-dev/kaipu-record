@@ -18,7 +18,7 @@ export function Features() {
             key={titleKey}
             className="rounded-xl border border-[var(--kaipu-border)] bg-[var(--kaipu-bg-card)] p-6"
           >
-            <Icon className="h-6 w-6 text-[var(--kaipu-accent)]" />
+            <Icon className="h-6 w-6 text-[var(--kaipu-accent-primary)]" />
             <h3 className="mt-4 font-semibold text-[var(--kaipu-text-primary)]">{t(titleKey)}</h3>
             <p className="mt-2 text-sm text-[var(--kaipu-text-secondary)]">{t(bodyKey)}</p>
           </div>

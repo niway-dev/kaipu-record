@@ -105,6 +105,7 @@
         "@kaipu/infra-cloudflare": "workspace:*",
         "@kaipu/infra-db": "workspace:*",
         "@kaipu/infra-env": "workspace:*",
+        "@kaipu/tokens": "workspace:*",
         "@orpc/client": "catalog:",
         "@orpc/contract": "catalog:",
         "@orpc/openapi-client": "catalog:",
