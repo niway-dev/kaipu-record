@@ -54,6 +54,10 @@ jobs:
       - name: Build packages
         run: bun run build --filter='@kaipu/*'
 
+      - name: Design-tokens drift check
+        working-directory: packages/tokens
+        run: bun run test
+
       - name: Type check
         run: bun run check-types
 
