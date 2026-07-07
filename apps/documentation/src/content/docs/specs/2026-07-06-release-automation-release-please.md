@@ -128,17 +128,19 @@ and nothing would build.
 Fix: run the release-please action with a **non-default token** so the tag push is
 attributed to a real identity and the `on: push: tags` workflows fire normally.
 
-- **Chosen approach:** a fine-grained **PAT** stored as `secrets.RELEASE_PLEASE_TOKEN`
-  (permissions: Contents = read/write, Pull requests = read/write). One-time setup;
-  it keeps the existing `release-desktop.yml` / `deploy-web.yml` / `deploy-api.yml`
-  completely unchanged.
+- **Chosen approach:** a **PAT** (fine-grained with Contents + Pull requests
+  read/write, or classic with `repo`) stored as `RELEASE_PLEASE_TOKEN` in the
+  **`production` environment** — where this repo already keeps all its secrets. The
+  release-please job therefore declares `environment: production` so it can read it
+  (`production` has no protection rules, so this does not gate the run). Keeps the
+  existing `release-desktop.yml` / `deploy-web.yml` / `deploy-api.yml` unchanged.
 - Alternative (no PAT): move the build jobs into the release-please workflow, gated
   on the action's per-component `*--release_created` / `*--tag_name` outputs. More
   wiring; rejected to keep the downstream workflows untouched.
 
-**Manual setup required (owner):** create the PAT and add it as
-`RELEASE_PLEASE_TOKEN`. Until then, release PRs open correctly but merging one will
-tag without building.
+**Manual setup (owner) — done:** PAT created and added as `RELEASE_PLEASE_TOKEN`
+in the `production` environment. Without it, release PRs open correctly but merging
+one would tag without building.
 
 ## Pre-1.0 policy
 

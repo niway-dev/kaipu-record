@@ -27,6 +27,11 @@ concurrency:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    # RELEASE_PLEASE_TOKEN lives in the `production` environment (where this repo
+    # keeps all its secrets). A job only sees an environment's secrets when it
+    # declares that environment. `production` has no protection rules, so this
+    # does not gate or pause the run.
+    environment: production
     steps:
       - uses: googleapis/release-please-action@v4
         with:
