@@ -1,27 +1,28 @@
-name: E2E Desktop
+name: Desktop Tests
+
+# The desktop project's tests (unit + E2E), path-filtered so the slow suite only runs
+# when the desktop app or a shared package changes — not on every PR. Lint / build /
+# type-check for all projects lives in the universal `CI` workflow.
 
 on:
   pull_request:
     branches:
       - main
-    # Desktop-only, expensive suite (Electron + xvfb). Only run it when something that can
-    # affect the desktop build/tests changes. kaipu-record has no workspace-package deps, so
-    # its own tree + the workflow + the lockfile fully cover it. (For pull_request, GitHub
-    # evaluates this against the PR's whole diff, so it still runs on every push to a PR that
-    # touches these paths.)
     paths:
       - "apps/kaipu-record/**"
-      - ".github/workflows/e2e-desktop.yml"
+      - "packages/**"
       - "bun.lock"
+      - ".github/workflows/ci-desktop.yml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  e2e:
-    name: E2E (kaipu-record)
+  unit:
+    name: Unit tests
     runs-on: ubuntu-latest
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -31,8 +32,36 @@ jobs:
         with:
           bun-version: 1.3.4
 
-      # setup-bun does not cache modules; cache bun's global install cache keyed on the
-      # lockfile so `bun install` reuses downloads across runs.
+      - name: Cache bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # kaipu-record's only workspace dep is @kaipu/i18n, resolved from source
+      # (tsdown devExports), so the vitest suite needs no package build first.
+      - name: Run unit tests
+        working-directory: apps/kaipu-record
+        run: bun run test
+
+  e2e:
+    name: E2E (kaipu-record)
+    runs-on: ubuntu-latest
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.4
+
       - name: Cache bun dependencies
         uses: actions/cache@v4
         with:

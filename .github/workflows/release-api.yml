@@ -1,4 +1,4 @@
-name: Deploy API
+name: Release API
 
 # Deploys the backend API to its Cloudflare Worker.
 # Trigger: push an `api-v*` tag (e.g. `api-v1.2.0`) so the api versions
@@ -15,8 +15,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  deploy-api:
-    name: Deploy API
+  release-api:
+    name: Release API
     runs-on: ubuntu-latest
     environment: production # Cloudflare + runtime secrets live here
 

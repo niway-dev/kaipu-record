@@ -1,0 +1,57 @@
+name: API Tests
+
+# The api project's tests, path-filtered. Runs `apps/server-hono`'s `test` script when it
+# exists (api has none yet — the step no-ops with a note until one is added, so this
+# workflow is wired and ready). Lint / build / type-check lives in the universal `CI`
+# workflow.
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "apps/server-hono/**"
+      - "packages/**"
+      - "bun.lock"
+      - ".github/workflows/ci-api.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: API tests
+    runs-on: ubuntu-latest
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.4
+
+      - name: Cache bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # api depends on several @kaipu/* packages, so build them before testing — but only
+      # when there is actually a test script to run (no wasted work until tests exist).
+      - name: Run api tests (if present)
+        working-directory: apps/server-hono
+        run: |
+          if [ "$(node -p "require('./package.json').scripts?.test ? 1 : 0")" != "1" ]; then
+            echo "No 'test' script in apps/server-hono yet — add one to enable api tests (this workflow is already wired)."
+            exit 0
+          fi
+          (cd "$GITHUB_WORKSPACE" && bun run build --filter='@kaipu/*')
+          bun run test
