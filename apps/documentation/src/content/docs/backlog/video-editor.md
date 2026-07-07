@@ -5,12 +5,12 @@ description: "Quick, simple video editor for recordings: timeline with cut/trim,
 
 # Video editor
 
-> **Status: 🔵 Proposed — design approved, plans ready** (2026-07-03). The video sibling
-> of the screenshot editor: cut a recording, annotate it over time, drop in image
-> slides, export a new MP4. Design in
-> [specs/2026-07-03-video-editor-design](/specs/2026-07-03-video-editor-design/); six
-> implementation plans below, executed **one PR at a time** with owner review between
-> each.
+> **Status: 🟢 Merged (#28) — validate in prod** (2026-07-06). The full quick editor
+> shipped: cut a recording, annotate it over time, drop in image slides, export a new
+> MP4 via mediabunny. Design in
+> [specs/2026-07-03-video-editor-design](/specs/2026-07-03-video-editor-design/); the six
+> implementation plans below were executed **one PR at a time** with owner review between
+> each. Pending owner validation in a packaged build.
 
 ## What it is
 
