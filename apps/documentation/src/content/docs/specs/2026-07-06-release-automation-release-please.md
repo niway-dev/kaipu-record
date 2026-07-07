@@ -93,7 +93,6 @@ becomes the thing that _creates_ those tags instead of a human.
 {
   "separate-pull-requests": true,
   "bump-minor-pre-major": true,
-  "bump-patch-for-minor-pre-major": true,
   "packages": {
     "apps/kaipu-record": { "release-type": "node", "component": "desktop" },
     "apps/web-hono":     { "release-type": "node", "component": "web" },
@@ -143,26 +142,30 @@ tag without building.
 
 ## Pre-1.0 policy
 
-We are pre-`1.0` and want to stay there while iterating:
+We are pre-`1.0` and want to stay there while iterating, but keep standard semver
+intuition (a feature is a minor bump):
 
-- `bump-patch-for-minor-pre-major: true` → a `feat` bumps **patch** (`0.2.0 →
-0.2.1`) instead of minor.
+- `feat` bumps **minor** (`0.2.0 → 0.3.0`) — standard semver, the default.
 - `bump-minor-pre-major: true` → a breaking change bumps **minor** (`0.2.0 →
-0.3.0`) instead of jumping to `1.0.0`.
+0.3.0`) instead of jumping to `1.0.0`, so a stray `feat!` can't accidentally
+  declare stability.
 
 `1.0.0` is then declared deliberately, by landing a commit with a
-`Release-As: 1.0.0` footer, not triggered accidentally by a `feat!`.
+`Release-As: 1.0.0` footer.
+
+(We deliberately do **not** set `bump-patch-for-minor-pre-major`, which would make
+`feat` a patch bump — the owner wants a feature to be a minor.)
 
 ## Commit → bump reference
 
 For a batch, the bump is the **highest** among the accumulated commits:
 
-| Commit type                                         | Bump (pre-1.0 policy)                        |
-| --------------------------------------------------- | -------------------------------------------- |
-| `fix:`                                              | patch                                        |
-| `feat:`                                             | patch (via `bump-patch-for-minor-pre-major`) |
-| `feat!:` / `BREAKING CHANGE:`                       | minor (via `bump-minor-pre-major`)           |
-| `docs:` `chore:` `test:` `refactor:` `ci:` `style:` | no release                                   |
+| Commit type                                         | Bump (pre-1.0 policy)              |
+| --------------------------------------------------- | ---------------------------------- |
+| `fix:`                                              | patch                              |
+| `feat:`                                             | minor                              |
+| `feat!:` / `BREAKING CHANGE:`                       | minor (via `bump-minor-pre-major`) |
+| `docs:` `chore:` `test:` `refactor:` `ci:` `style:` | no release                         |
 
 A batch of only `chore`/`docs`/`refactor` produces **no** release PR — nothing
 ships until a `feat`/`fix` accumulates.
@@ -183,12 +186,17 @@ The current tag history drifted, so seed carefully instead of deleting tags:
 - Seed each app's manifest to its **highest existing tag** (table above). The
   phantom `desktop-v0.2.0` (which actually shipped `0.1.0` artifacts) is left in
   place, harmless — the next release-please desktop release supersedes it.
-- The first desktop release-please release therefore becomes `0.2.1` (seed `0.2.0`
-  - accumulated `feat` under the pre-1.0 patch policy). Its build is stamped
-    `0.2.1`, the feed advertises `0.2.1`, and an installed `0.1.0` app finally sees a
-    newer version and auto-updates. This is the end-to-end proof of the fix.
-- The one-time jump of `apps/kaipu-record/package.json` from `0.1.0` to `0.2.1`
-  (release-please skips writing the phantom `0.2.0`) is expected and harmless.
+- With the accumulated `feat(i18n)` commits and the `feat → minor` policy, the
+  first release-please releases are **desktop `0.3.0`** (seed `0.2.0`) and **web
+  `0.2.0`** (seed `0.1.1`). The desktop build is stamped `0.3.0`, the feed
+  advertises `0.3.0`, and an installed `0.1.0` app finally sees a newer version and
+  auto-updates — the end-to-end proof of the fix.
+- **api has no commits since `api-v0.1.2`**, so release-please proposes no api
+  release. To bring it onto the same aligned baseline the owner can force it with a
+  `Release-As: 0.2.0` empty/chore commit under `apps/server-hono`; otherwise api
+  simply releases when it next has a real `feat`/`fix`.
+- The one-time jump of each `package.json` (e.g. desktop `0.1.0 → 0.3.0`,
+  release-please skipping the phantom `0.2.0`) is expected and harmless.
 
 ## Downstream workflow changes
 
@@ -207,8 +215,8 @@ release-please and is out of scope.
 2. **Non-shipping validation first:** inspect the desktop release PR's computed
    version and changelog before merging — merging is the only thing that ships.
 3. **Desktop end-to-end (the real proof):** merge the desktop release PR → confirm
-   `desktop-v0.2.1` is created → `release-desktop.yml` builds/signs/notarizes and
-   publishes `latest-mac.yml` advertising `0.2.1` → install the prior signed
+   `desktop-v0.3.0` is created → `release-desktop.yml` builds/signs/notarizes and
+   publishes `latest-mac.yml` advertising `0.3.0` → install the prior signed
    `0.1.0` build, leave it running, and confirm it downloads the update and shows
    the restart banner. (Requires a signed/notarized build; a locally-built
    unsigned app will not accept updates.)
