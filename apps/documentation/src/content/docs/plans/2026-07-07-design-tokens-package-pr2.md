@@ -314,7 +314,14 @@ git commit -m "feat(web): dark/light theme toggle on the landing (data-theme + p
 
 ---
 
-### Task 3: DX fix — stop vite-tsconfig-paths crawling agent worktrees
+### Task 3: ~~DX fix — vite-tsconfig-paths~~ (RESOLVED OUTSIDE THIS PR — skip)
+
+> The dev crash was caused by orphan tsconfigs in the tree (a leaked agent worktree +
+> gitignored `workspace-temp/*` legacy tsconfigs), not by the vite config. Owner decision:
+> clean the strays (done, no commit — all gitignored), do NOT modify vite.config. This
+> task is void; execute Tasks 1, 2 and 4 only.
+
+### ~~Task 3 (original, void)~~: DX fix — stop vite-tsconfig-paths crawling agent worktrees
 
 **Files:**
 
