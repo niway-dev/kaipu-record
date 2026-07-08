@@ -4,14 +4,19 @@ import { Hero } from "@/components/landing/hero";
 import { Features } from "@/components/landing/features";
 import { DownloadSection } from "@/components/landing/download-section";
 import { Footer } from "@/components/landing/footer";
+import { useLandingTheme } from "@/components/theme-toggle";
 
 export const Route = createFileRoute("/")({
   component: LandingPage,
 });
 
 function LandingPage() {
+  const theme = useLandingTheme();
   return (
-    <div className="min-h-screen bg-[var(--kaipu-bg-app)] text-[var(--kaipu-text-primary)]">
+    <div
+      data-theme={theme === "light" ? "light" : undefined}
+      className="min-h-screen bg-[var(--kaipu-bg-app)] text-[var(--kaipu-text-primary)]"
+    >
       <LandingNav />
       <Hero />
       <Features />

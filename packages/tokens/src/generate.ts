@@ -17,7 +17,13 @@ const HEADER = `/*
  * `kaipu-` so it can never shadow web-ui's shadcn variables.
  */
 export function generateCss(prefix = ""): string {
-  const declare = (name: string, value: string) => `  --${prefix}${name}: ${value};`;
+  // Over-long declarations wrap onto a continuation line, matching oxfmt's CSS
+  // style — the generated files must be oxfmt-stable (lint-staged formats staged
+  // css, and a formatter rewrite here would break the drift test).
+  const declare = (name: string, value: string) => {
+    const line = `  --${prefix}${name}: ${value};`;
+    return line.length <= 100 ? line : `  --${prefix}${name}:\n    ${value};`;
+  };
 
   const rootLines = [
     ...THEME_TOKEN_NAMES.map((name) => declare(name, dark[name])),

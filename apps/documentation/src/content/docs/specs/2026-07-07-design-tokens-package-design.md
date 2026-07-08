@@ -104,10 +104,12 @@ packages/tokens/
 
 ### Theming model
 
-- **Web landing (PR2):** a toggle sets `data-theme` on `<html>` and persists to
-  `localStorage`; default (no stored value) is dark — no flash-of-wrong-theme
-  handling needed beyond that default. shadcn routes key on the `.dark` class and
-  are unaffected.
+- **Web landing (PR2, amended as shipped):** a toggle sets `data-theme` on the
+  **landing wrapper div** (not `<html>` — a global attribute leaks the kaipu vars
+  into app/auth routes via the shared `LocaleSwitcher` and the root critical
+  styles) and persists to `localStorage` (`kaipu-theme`); default is dark.
+  Accepted tradeoff: returning light-theme visitors briefly see dark until
+  hydration (cookie-based SSR theme is the upgrade path if it ever matters).
 - **Desktop (PR3):** `theme: "dark" | "light"` joins `AppSettings` exactly as
   `locale` did (persisted, validated, broadcast to every window via the settings
   broadcast from #21). Each window's renderer sets

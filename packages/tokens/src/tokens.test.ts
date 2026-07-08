@@ -28,8 +28,4 @@ describe("token sources", () => {
       expect(base[name], `base.${name}`).toBeTruthy();
     }
   });
-
-  it("light is the dark placeholder until PR2 designs the real palette", () => {
-    expect(light).toEqual(dark);
-  });
 });

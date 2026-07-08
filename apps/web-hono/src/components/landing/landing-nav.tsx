@@ -1,5 +1,6 @@
 import { useTranslations } from "@kaipu/i18n";
 import { LocaleSwitcher } from "../locale-switcher";
+import { ThemeToggle } from "../theme-toggle";
 
 export function LandingNav() {
   const t = useTranslations("landing");
@@ -10,6 +11,7 @@ export function LandingNav() {
         {t("navBrand")}
       </span>
       <div className="flex items-center gap-3">
+        <ThemeToggle />
         <LocaleSwitcher />
         <a
           href="#download"
