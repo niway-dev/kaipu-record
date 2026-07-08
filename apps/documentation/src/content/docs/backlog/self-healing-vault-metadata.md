@@ -5,9 +5,10 @@ description: Derive duration and thumbnail from any recording file on disk when 
 
 # Self-healing vault media metadata
 
-> **Status: 🔵 Proposed.**
-> Design agreed. Ships as two PRs (see [Rollout](#rollout)). One shared thumbnail
-> primitive fixes both bugs; the imported-file heal consumes it.
+> **Status: 🟡 In progress.**
+> PR-A (Bug 2, editor thumbnail) → #43. PR-B (Bug 1, imported-file heal) stacked
+> on it. One shared thumbnail primitive fixes both bugs; the imported-file heal
+> consumes it. Flip to 🟢 once both are merged and validated in a prod build.
 
 ## Problem
 
@@ -106,17 +107,18 @@ The repo already decodes frames from a file the correct way — mediabunny
 `CanvasSink`, which decodes a frame at an exact timestamp **without** the flaky
 `<video>.seeked` seek that breaks Bug 2 (`use-source-thumbnails.ts:37-43`).
 
-Extract one reusable module:
+Extract one reusable module. It lives in `lib/` (neutral, cross-feature) so both
+the video-editor export and the library heal import it without a feature→feature
+dependency:
 
 ```
-src/renderer/src/features/library/media/generate-thumbnail.ts
+src/renderer/src/lib/generate-thumbnail.ts
 
-generateThumbnail(blob: Blob, atSeconds: number): Promise<ArrayBuffer | null>
-  fetch/receive Blob
+generateThumbnail(blob: Blob, atSeconds = 0): Promise<ArrayBuffer | null>
   → new Input({ source: new BlobSource(blob), formats: ALL_FORMATS })
-  → track = getPrimaryVideoTrack()
-  → new CanvasSink(track, { width: THUMB_WIDTH })
-  → first canvas from canvasesAtTimestamps([clamp(atSeconds, 0, duration)])
+  → track = getPrimaryVideoTrack()   (null → return null)
+  → new CanvasSink(track, { width: POSTER_WIDTH })
+  → first canvas from canvasesAtTimestamps([max(0, atSeconds)])
   → canvas.toBlob("image/jpeg", 0.7) → ArrayBuffer
 ```
 
@@ -150,20 +152,24 @@ healOrphan(id): Promise<{ durationSeconds, thumbnail } | null>
   → IPC: persist to sidecar (writeMeta + writeThumbnail)
 ```
 
-Orchestration (a small hook, kept out of `use-local-library`): after `list()`
-resolves, find orphans and heal them in the background with a small concurrency
-pool (2–3 at a time). Fires on Library mount **and** on the Sync button — Sync
-already maps to `refresh()`. This realizes model **A** (self-healing on scan): the
-user never has to know a manual step exists.
+Orchestration is an isolated hook (`features/library/hooks/use-orphan-heal.ts`),
+wired into `use-local-library` with a shared `map-recording.ts` mapper: when the
+`videos` list changes, it finds orphans and heals them in the background with a
+concurrency pool (3 at a time), patching each item in place via a callback (no
+full reload). It fires on Library mount **and** on Sync (which maps to
+`refresh()`). Each id is attempted at most once per mount, so a failed/in-flight
+heal isn't re-triggered by the per-patch re-render. This realizes model **A**
+(self-healing on scan): the user never has to know a manual step exists.
 
 **Orphan predicate:** `kind === "recording"` AND (`durationSeconds === 0` OR
-`thumbnailUrl === null`). Screenshots (`kind === "screenshot"`, also
-`durationSeconds 0`) are **excluded**.
+`!thumbnailUrl`). Screenshots (`kind === "screenshot"`, also `durationSeconds 0`)
+are **excluded**.
 
-**Persistence IPC:** add a `libraryBackfillMeta(id, { durationSeconds, thumbnail })`
-channel that calls the existing `vault.writeMeta` + `vault.writeThumbnail`. Also
-persist `title` (humanized id) and `createdAt` (`stat().birthtimeMs`) so the sidecar
-is complete and stable after healing.
+**Persistence IPC:** `backfillLocalRecordingMeta(id, { durationSeconds, thumbnail })`
+→ `LibraryVault.backfill`, which calls the existing `writeMeta` + `writeThumbnail`
+and returns the re-described recording. Only `durationSeconds` is persisted;
+`title` and `createdAt` keep their stable `describe()` fallbacks (humanized id /
+file birthtime) so a later rename is never clobbered.
 
 ### What deliberately does NOT change
 
