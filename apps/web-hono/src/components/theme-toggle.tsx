@@ -23,7 +23,8 @@ function setTheme(next: Theme) {
       localStorage.removeItem(STORAGE_KEY);
     }
   } catch {
-    // storage unavailable — the toggle still works for the session via listeners
+    // Storage unavailable: readTheme() will keep reporting "dark", so the
+    // toggle is a no-op. Acceptable — no known browser mode lands here.
   }
   for (const notify of listeners) notify();
 }
