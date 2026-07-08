@@ -157,7 +157,20 @@ git commit -m "feat(tokens): real light palette, WCAG-AA-guarded by contrast tes
 
 ---
 
-### Task 2: Landing theme toggle (no-flash) + light-proofing the landing
+### Task 2: Landing theme toggle + light-proofing the landing
+
+> **SHIPPED WITH A DEVIATION (review-mandated).** The design below (data-theme on
+> `<html>`, pre-paint `themeInitScript`, criticalStyles edits in `__root.tsx`) was
+> implemented, then **reverted by review**: a global `<html>` attribute leaks the light
+> theme into app/auth routes (the unlayered criticalStyles override flips the shadcn
+> body, and the shared `LocaleSwitcher` in the app header recolors). What shipped
+> instead: `data-theme` is React-owned and applied on the **landing wrapper div**
+> (`routes/index.tsx`), the theme store lives in `theme-toggle.tsx`
+> (`useLandingTheme`, localStorage key `kaipu-theme`, dark default), and `__root.tsx`
+> is untouched. **Accepted tradeoff:** returning light-theme visitors see the landing
+> paint dark until hydration applies light (no pre-paint script; a cookie-based SSR
+> theme — same pattern as the locale cookie — is the proper fix if the flash ever
+> matters). PR3 must reuse the attribute-on-a-scoped-root contract, not `<html>`.
 
 **Files:**
 

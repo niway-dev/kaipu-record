@@ -53,8 +53,9 @@ export function ThemeToggle() {
     <button
       type="button"
       aria-label={theme === "dark" ? "Cambiar a tema claro" : "Cambiar a tema oscuro"}
+      aria-pressed={theme === "light"}
       onClick={() => setTheme(next)}
-      className="rounded-md border border-[var(--kaipu-border)] p-1.5 text-[var(--kaipu-text-secondary)] transition hover:text-[var(--kaipu-text-primary)]"
+      className="rounded-md border border-[var(--kaipu-border-light)] p-1.5 text-[var(--kaipu-text-secondary)] transition hover:text-[var(--kaipu-text-primary)]"
     >
       {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
     </button>
