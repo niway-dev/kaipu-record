@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import path from "node:path";
+import { readFile } from "node:fs/promises";
 import { launchApp, openEditor, RECORDING_DURATION } from "./helpers/launch";
 import { ffprobeAvailable, probeMedia } from "./helpers/ffprobe";
 
@@ -39,6 +40,14 @@ test("export produces a valid MP4 with in-sync video and audio", async () => {
       .toMatch(/^#\/library\/.+/);
     const newId = (await page.evaluate(() => location.hash)).replace("#/library/", "");
     expect(newId).not.toBe("");
+
+    // Regression guard (PR-A): the edited recording must get a poster thumbnail.
+    // The previous <video>-seek capture always resolved null — no `.kaipu/<id>.jpg`
+    // was ever written — so every edit landed with a generic film-strip icon. This
+    // exercises the real mediabunny decode (the jsdom unit tests can only mock it).
+    const posterPath = path.join(vaultDir, ".kaipu", `${newId}.jpg`);
+    const poster = await readFile(posterPath);
+    expect(poster.byteLength).toBeGreaterThan(0);
 
     // Validate the on-disk output. If ffprobe is unavailable, skip the codec assertion
     // (do NOT pass silently) — the navigation above already proves the pipeline ran.
