@@ -1,6 +1,7 @@
 {
   "ignorePatterns": [
     "**/CHANGELOG.md",
+    "packages/tokens/css/**",
     "**/routeTree.gen.ts",
     "**/*routeTree.gen.ts",
     "routeTree.gen.ts",
