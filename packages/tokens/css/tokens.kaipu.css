@@ -34,7 +34,8 @@
   --kaipu-radius-sm: 4px;
   --kaipu-radius-md: 5px;
   --kaipu-radius-lg: 8px;
-  --kaipu-font-family: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --kaipu-font-family:
+    "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --kaipu-font-mono: "Geist Mono", "SF Mono", "Fira Mono", "Cascadia Code", monospace;
   --kaipu-font-size-xs: 11px;
   --kaipu-font-size-sm: 12px;
@@ -52,24 +53,24 @@
 }
 
 [data-theme="light"] {
-  --kaipu-bg-app: #0f0f11;
-  --kaipu-bg-sidebar: #0c0c0e;
-  --kaipu-bg-card: #171719;
-  --kaipu-bg-card-hover: #1e1e21;
-  --kaipu-bg-input: #1a1a1c;
-  --kaipu-bg-modal: #131315;
-  --kaipu-bg-overlay: rgba(0, 0, 0, 0.72);
-  --kaipu-border: #26262a;
-  --kaipu-border-light: #32323a;
-  --kaipu-text-primary: #e5e5e7;
-  --kaipu-text-secondary: #a1a1aa;
-  --kaipu-text-muted: #6b7280;
+  --kaipu-bg-app: #fafafa;
+  --kaipu-bg-sidebar: #f4f4f5;
+  --kaipu-bg-card: #ffffff;
+  --kaipu-bg-card-hover: #f4f4f5;
+  --kaipu-bg-input: #ffffff;
+  --kaipu-bg-modal: #ffffff;
+  --kaipu-bg-overlay: rgba(9, 9, 11, 0.45);
+  --kaipu-border: #e4e4e7;
+  --kaipu-border-light: #d4d4d8;
+  --kaipu-text-primary: #18181b;
+  --kaipu-text-secondary: #52525b;
+  --kaipu-text-muted: #62626b;
   --kaipu-accent-primary: #f6055c;
   --kaipu-accent-primary-hover: #d4044f;
-  --kaipu-glow-accent: 0 10px 26px -8px rgba(246, 5, 92, 0.75);
-  --kaipu-accent-green: #22c55e;
-  --kaipu-accent-red: #ef4444;
-  --kaipu-accent-red-hover: #dc2626;
-  --kaipu-accent-yellow: #eab308;
-  --kaipu-accent-purple: #a855f7;
+  --kaipu-glow-accent: 0 10px 26px -8px rgba(246, 5, 92, 0.35);
+  --kaipu-accent-green: #16a34a;
+  --kaipu-accent-red: #dc2626;
+  --kaipu-accent-red-hover: #b91c1c;
+  --kaipu-accent-yellow: #ca8a04;
+  --kaipu-accent-purple: #9333ea;
 }
