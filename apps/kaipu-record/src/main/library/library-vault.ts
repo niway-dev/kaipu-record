@@ -118,6 +118,25 @@ export class LibraryVault {
     await writeFile(this.thumbnailPath(id), jpg);
   }
 
+  /**
+   * Backfills a recording whose metadata was never derived from the file — a
+   * hand-imported clip, or one whose `finalize` was interrupted before the
+   * sidecar was written. The renderer decodes duration + poster from the file
+   * (main has no video decoder) and hands them here to persist. Only
+   * `durationSeconds` is written; title and createdAt keep their stable
+   * describe() fallbacks (humanized id / file birthtime), so a later rename is
+   * never clobbered. Returns the re-described recording, or null if the file
+   * vanished meanwhile.
+   */
+  async backfill(
+    id: string,
+    meta: { durationSeconds: number; thumbnail: ArrayBuffer | null },
+  ): Promise<LocalRecording | null> {
+    await this.writeMeta(id, { durationSeconds: meta.durationSeconds });
+    if (meta.thumbnail) await this.writeThumbnail(id, Buffer.from(meta.thumbnail));
+    return this.describe(id);
+  }
+
   /** Writes a screenshot PNG as `<id>.png` in the vault root. */
   async writeImage(id: string, png: Buffer): Promise<void> {
     await mkdir(this.directory, { recursive: true });

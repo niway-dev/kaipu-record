@@ -9,6 +9,7 @@ import type { LocalRecording, VaultDirectory } from "./library-storage";
 import type {
   ControlCommand,
   RecordingActivity,
+  RecordingBackfillMeta,
   RecordingFinalizeMeta,
   RecordingSettings,
   RecordingStartInfo,
@@ -71,6 +72,15 @@ export interface KaipuElectronAPI {
   listLocalRecordings(): Promise<LocalRecording[]>;
   /** Rename a local recording (updates sidecar metadata; the file is untouched). */
   renameLocalRecording(id: string, title: string): Promise<void>;
+  /**
+   * Persist duration + poster the renderer decoded for a recording that had no
+   * sidecar (hand-imported, or an interrupted finalize). Returns the re-described
+   * recording, or null if the file vanished. See {@link RecordingBackfillMeta}.
+   */
+  backfillLocalRecordingMeta(
+    id: string,
+    meta: RecordingBackfillMeta,
+  ): Promise<LocalRecording | null>;
   /** Delete a local recording from disk. */
   deleteLocalRecording(id: string): Promise<void>;
   /** Reveal a local recording in the OS file manager. */

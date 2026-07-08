@@ -68,7 +68,7 @@ beforeEach(() => {
     async (): Promise<LocalRecording> => ({
       id: "new-rec",
       kind: "recording",
-      title: "My recording (editado)",
+      title: "My recording (edited)",
       filePath: "/vault/new-rec.mp4",
       createdAt: 1_700_000_000_000,
       sizeBytes: 100,
@@ -212,7 +212,7 @@ describe("useVideoExport", () => {
       resolveFinalize({
         id: "new-rec",
         kind: "recording",
-        title: "My recording (editado)",
+        title: "My recording (edited)",
         filePath: "/vault/new-rec.mp4",
         createdAt: 1_700_000_000_000,
         sizeBytes: 100,
@@ -225,7 +225,7 @@ describe("useVideoExport", () => {
     expect(result.current.status).toBe("idle");
   });
 
-  it("on done, finalizes with the (editado) title + plan duration and calls onSaved", async () => {
+  it("on done, finalizes with the localized (edited) title + plan duration and calls onSaved", async () => {
     const onSaved = vi.fn();
     const { result } = renderHook(() => useVideoExport());
     await act(async () => {
@@ -240,12 +240,12 @@ describe("useVideoExport", () => {
     await waitFor(() => expect(onSaved).toHaveBeenCalledOnce());
 
     expect(window.electronAPI.recordingFinalize).toHaveBeenCalledWith(sessionId, {
-      title: "My recording (editado)",
+      title: "My recording (edited)",
       durationSeconds: 10,
       thumbnail: FAKE_THUMB,
     });
     expect(onSaved).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "new-rec", title: "My recording (editado)" }),
+      expect.objectContaining({ id: "new-rec", title: "My recording (edited)" }),
     );
     expect(result.current.status).toBe("idle");
   });

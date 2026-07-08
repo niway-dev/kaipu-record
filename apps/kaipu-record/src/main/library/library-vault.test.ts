@@ -137,4 +137,37 @@ describe("LibraryVault — mp4 + thumbnails", () => {
       thumbnailUrl: "kaipu-media://thumb/rec-2",
     });
   });
+
+  it("backfill persists duration + thumbnail for an orphan and returns the updated recording", async () => {
+    const vault = await tempVault();
+    await writeFile(await vault.filePath("orphan-1"), "data"); // orphan mp4, no sidecar
+    expect(await vault.describe("orphan-1")).toMatchObject({
+      durationSeconds: 0,
+      thumbnailUrl: null,
+    });
+
+    const updated = await vault.backfill("orphan-1", {
+      durationSeconds: 54,
+      thumbnail: new Uint8Array([0xff, 0xd8, 0xff]).buffer,
+    });
+
+    expect(updated).toMatchObject({
+      durationSeconds: 54,
+      thumbnailUrl: "kaipu-media://thumb/orphan-1",
+    });
+    // A fresh describe re-reads the sidecar + thumbnail file, proving persistence.
+    expect(await vault.describe("orphan-1")).toMatchObject({
+      durationSeconds: 54,
+      thumbnailUrl: "kaipu-media://thumb/orphan-1",
+    });
+  });
+
+  it("backfill without a thumbnail writes duration only", async () => {
+    const vault = await tempVault();
+    await writeFile(await vault.filePath("orphan-2"), "data");
+
+    const updated = await vault.backfill("orphan-2", { durationSeconds: 10, thumbnail: null });
+
+    expect(updated).toMatchObject({ durationSeconds: 10, thumbnailUrl: null });
+  });
 });

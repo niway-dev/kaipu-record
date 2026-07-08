@@ -49,6 +49,13 @@ test("export produces a valid MP4 with in-sync video and audio", async () => {
     const poster = await readFile(posterPath);
     expect(poster.byteLength).toBeGreaterThan(0);
 
+    // The edited title's suffix is localized (the UI locale is seeded to English),
+    // not the hardcoded Spanish "(editado)".
+    const meta = JSON.parse(
+      await readFile(path.join(vaultDir, ".kaipu", `${newId}.json`), "utf-8"),
+    ) as { title: string };
+    expect(meta.title).toMatch(/\(edited\)$/);
+
     // Validate the on-disk output. If ffprobe is unavailable, skip the codec assertion
     // (do NOT pass silently) — the navigation above already proves the pipeline ran.
     if (!(await ffprobeAvailable())) {

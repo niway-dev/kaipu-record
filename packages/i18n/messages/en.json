@@ -341,6 +341,7 @@
   },
   "videoEditor": {
     "restored": "Restored your previous edit",
+    "editedTitle": "{title} (edited)",
     "restoreError": "Couldn't restore the previous edit",
     "mute": "Mute",
     "unmute": "Unmute",
