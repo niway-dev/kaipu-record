@@ -1,10 +1,10 @@
 import { useCallback, useRef, useState } from "react";
 import type { LocalRecording } from "@shared/types/library-storage";
 import { captureException } from "@renderer/features/analytics";
+import { generateThumbnail } from "@renderer/lib/generate-thumbnail";
 import type { SlideAssetStore } from "../slide-assets";
 import type { VideoScene } from "../scene";
 import { buildExportPlan } from "./export-plan";
-import { captureExportThumbnail } from "./export-thumbnail";
 import type { ExportStartMessage, ExportWorkerMessage } from "./export-messages";
 import { rasterizeOverlays } from "./overlay-raster";
 
@@ -100,11 +100,9 @@ export function useVideoExport(): VideoExportController {
         const sourceBlob = await sourceResponse.blob();
         // Kicked off in parallel with rasterizing/decoding below — it only reads the
         // already-fetched Blob, so it never contends with the worker's own read of it.
-        const thumbnailPromise = captureExportThumbnail(
-          sourceBlob,
-          args.videoWidth,
-          args.videoHeight,
-        );
+        // Poster is decoded from the source's first frame via mediabunny (see
+        // generate-thumbnail); a null result just means no poster is written.
+        const thumbnailPromise = generateThumbnail(sourceBlob);
 
         const rasterized = await rasterizeOverlays(
           args.scene.overlays,

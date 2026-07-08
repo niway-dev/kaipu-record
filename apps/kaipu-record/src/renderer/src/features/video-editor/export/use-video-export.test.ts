@@ -10,8 +10,13 @@ import { useVideoExport } from "./use-video-export";
 // This suite exercises everything the HOOK itself owns: plan validation, session
 // lifecycle (create/write/finalize/abort), message routing, and cancellation —
 // with a fake Worker standing in for the real one.
-vi.mock("./export-thumbnail", () => ({
-  captureExportThumbnail: vi.fn(async () => null),
+// The poster is decoded via mediabunny (WebCodecs), which jsdom lacks — mock the
+// shared primitive so the hook's plumbing is observable. A non-null buffer here
+// proves the fix: the export must forward a real poster to finalize (the old
+// `<video>`-seek capture always resolved null, so no thumbnail was ever written).
+const { FAKE_THUMB } = vi.hoisted(() => ({ FAKE_THUMB: new Uint8Array([9, 8, 7]).buffer }));
+vi.mock("@renderer/lib/generate-thumbnail", () => ({
+  generateThumbnail: vi.fn(async () => FAKE_THUMB),
 }));
 
 class FakeWorker {
@@ -171,7 +176,7 @@ describe("useVideoExport", () => {
   });
 
   it("does not call onSaved when cancel() runs during the done→finalize window", async () => {
-    // captureExportThumbnail is mocked to resolve immediately (see module mock at the
+    // generateThumbnail is mocked to resolve immediately (see module mock at the
     // top), so by the time `done` fires the thumbnailPromise has already settled —
     // the await inside the done handler's IIFE still yields a microtask, which is the
     // exact window cancel() races against. recordingFinalize is made to hang so we can
@@ -237,7 +242,7 @@ describe("useVideoExport", () => {
     expect(window.electronAPI.recordingFinalize).toHaveBeenCalledWith(sessionId, {
       title: "My recording (editado)",
       durationSeconds: 10,
-      thumbnail: null,
+      thumbnail: FAKE_THUMB,
     });
     expect(onSaved).toHaveBeenCalledWith(
       expect.objectContaining({ id: "new-rec", title: "My recording (editado)" }),
