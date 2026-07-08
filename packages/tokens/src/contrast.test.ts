@@ -44,6 +44,25 @@ describe("light theme", () => {
       expect(contrast(light[text], light[surface])).toBeGreaterThanOrEqual(4.5);
     },
   );
+
+  // Semantic accents are non-text UI (status dots, badges, icons) — WCAG 1.4.11
+  // non-text contrast: >= 3:1 against the surfaces they sit on. bg-app and
+  // bg-card cover the distinct light surface values (#fafafa / #ffffff).
+  const SEMANTIC_ACCENTS = [
+    "accent-primary",
+    "accent-green",
+    "accent-red",
+    "accent-yellow",
+    "accent-purple",
+  ] as const;
+  const ACCENT_SURFACES = ["bg-app", "bg-card"] as const;
+
+  it.each(SEMANTIC_ACCENTS.flatMap((a) => ACCENT_SURFACES.map((s) => [a, s] as const)))(
+    "light %s on %s meets WCAG non-text contrast (3:1)",
+    (accent, surface) => {
+      expect(contrast(light[accent], light[surface])).toBeGreaterThanOrEqual(3);
+    },
+  );
 });
 
 // NOTE: the DARK palette is intentionally NOT held to this bar here — the shipped
