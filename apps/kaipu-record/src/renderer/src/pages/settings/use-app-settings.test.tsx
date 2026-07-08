@@ -5,7 +5,7 @@ import { DEFAULT_QUALITY } from "@shared/recording-quality";
 import { useAppSettings } from "./use-app-settings";
 
 const SETTINGS: AppSettings = {
-  theme: "system",
+  theme: "dark",
   locale: "es",
   launchAtLogin: false,
   showInDock: true,
@@ -50,7 +50,7 @@ describe("useAppSettings", () => {
     const { result } = renderHook(() => useAppSettings());
     await waitFor(() => expect(result.current.settings).toEqual(SETTINGS));
 
-    act(() => subscriber?.({ ...SETTINGS, theme: "dark" }));
-    expect(result.current.settings?.theme).toBe("dark");
+    act(() => subscriber?.({ ...SETTINGS, theme: "light" }));
+    expect(result.current.settings?.theme).toBe("light");
   });
 });

@@ -5,10 +5,12 @@ description: Extract Kaipu's design tokens into a single shared package consumed
 
 # Shared design-tokens package (dark + light)
 
-> **Status: 🟡 In progress — design approved** (2026-07-07). Full design:
+> **Status: 🟢 Ready to validate — all three PRs shipped; prod review of the
+> desktop light theme pending** (2026-07-07). Full design:
 > [Design tokens package — design](/specs/2026-07-07-design-tokens-package-design/).
-> Delivery: 3 sequential PRs (package + consumption → light palette + landing toggle →
-> desktop theme setting + QA). The sketch below is superseded by the spec.
+> Delivery: 3 sequential PRs (PR1 package + consumption → PR2 light palette + landing
+> toggle → PR3 desktop theme setting + QA), all shipped. The sketch below is
+> superseded by the spec.
 
 ## Why
 

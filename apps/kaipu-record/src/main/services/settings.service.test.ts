@@ -7,10 +7,12 @@ describe("isValidTheme", () => {
   it("accepts the known themes", () => {
     expect(isValidTheme("light")).toBe(true);
     expect(isValidTheme("dark")).toBe(true);
-    expect(isValidTheme("system")).toBe(true);
   });
 
   it("rejects unknown or non-string values", () => {
+    // "system" is a legacy stored value from builds that declared but never
+    // applied it — it must coerce to the dark default via mergeSettings.
+    expect(isValidTheme("system")).toBe(false);
     expect(isValidTheme("blue")).toBe(false);
     expect(isValidTheme(undefined)).toBe(false);
     expect(isValidTheme(42)).toBe(false);
@@ -51,6 +53,10 @@ describe("mergeSettings", () => {
       shortcuts,
       deviceId: "stored-id",
     });
+  });
+
+  it('coerces a legacy persisted "system" theme to the dark default', () => {
+    expect(mergeSettings({ theme: "system" as never }).theme).toBe("dark");
   });
 
   it("keeps a valid persisted locale and defaults an invalid one", () => {

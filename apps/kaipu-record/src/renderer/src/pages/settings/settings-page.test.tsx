@@ -22,6 +22,7 @@ describe("SettingsPage", () => {
   it("renders only the wired settings sections", () => {
     renderSettings();
     expect(screen.getByRole("heading", { name: /^permissions$/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /^theme$/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /recording quality/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /^files$/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /^app$/i })).toBeInTheDocument();

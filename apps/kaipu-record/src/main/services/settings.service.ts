@@ -18,7 +18,7 @@ import { DEFAULT_LOCALE, isLocale } from "@kaipu/i18n";
  * belong in `src/main/infrastructure`, not here.
  */
 
-const VALID_THEMES: readonly Theme[] = ["light", "dark", "system"];
+const VALID_THEMES: readonly Theme[] = ["light", "dark"];
 
 export function isValidTheme(value: unknown): value is Theme {
   return typeof value === "string" && (VALID_THEMES as readonly string[]).includes(value);

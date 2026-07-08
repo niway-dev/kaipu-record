@@ -10,6 +10,7 @@ import { useVaultDirectory } from "@renderer/features/library/hooks/use-vault-di
 import { useTranslations } from "@kaipu/i18n";
 import { useAppSettings } from "./use-app-settings";
 import { LanguageSettings } from "./language-settings";
+import { ThemeSettings } from "./theme-settings";
 import { RecordingQualitySettings } from "./recording-quality-settings";
 import { DEFAULT_QUALITY } from "@shared/recording-quality";
 import {
@@ -23,13 +24,13 @@ import styles from "./settings-page.module.css";
  * This page intentionally only surfaces settings that are wired end-to-end:
  *   • Permissions       → window.electronAPI permission bridge
  *   • Recording quality → persisted AppSettings.recordingQuality → encoder
+ *   • Theme             → persisted AppSettings.theme → data-theme in every window
  *   • Files             → real on-disk recordings vault
  *   • App / Onboarding  → Dock policy, replay the first-run flow
  *
  * Configurable keyboard shortcuts now ship as their own sidebar page (Shortcuts).
- * Device pickers and theme switching are still absent because no backend wiring
- * exists for them yet — they were inert local state.
- * They are tracked as concepts to build in the backlog:
+ * Device pickers are still absent because no backend wiring exists for them yet —
+ * they were inert local state. They are tracked in the backlog:
  *   apps/documentation/src/content/docs/backlog/settings-roadmap.mdx
  * Re-add each control here only once its IPC + persistence is implemented.
  */
@@ -79,6 +80,13 @@ export function SettingsPage(): React.JSX.Element {
       <div className={styles.sections}>
         <Section title={t("language")}>
           <LanguageSettings />
+        </Section>
+
+        <Section title={t("theme")}>
+          <ThemeSettings
+            theme={settings?.theme ?? "dark"}
+            onChange={(theme) => void update({ theme })}
+          />
         </Section>
 
         <Section title={t("permissions")}>

@@ -110,11 +110,14 @@ packages/tokens/
   styles) and persists to `localStorage` (`kaipu-theme`); default is dark.
   Accepted tradeoff: returning light-theme visitors briefly see dark until
   hydration (cookie-based SSR theme is the upgrade path if it ever matters).
-- **Desktop (PR3):** `theme: "dark" | "light"` joins `AppSettings` exactly as
-  `locale` did (persisted, validated, broadcast to every window via the settings
-  broadcast from #21). Each window's renderer sets
-  `document.documentElement.dataset.theme` on load and on broadcast. A theme
-  selector lands on the Settings page. Default dark.
+- **Desktop (PR3, amended as shipped):** `AppSettings.theme` already existed
+  (typed, validated, persisted, broadcast) from the settings-store rework — it
+  was declared as `"light" | "dark" | "system"` but never applied. PR3 narrowed
+  it to `"light" | "dark"` (default `"dark"`; legacy persisted `"system"`
+  coerces to dark in `mergeSettings`) and surfaced it: the shared renderer root
+  (`I18nRoot`, the single mount point for all four windows) applies
+  `document.documentElement.dataset.theme` on load and on every
+  `settings:changed` broadcast. A theme selector ships on the Settings page.
 
 ### Light palette constraints (values designed in PR2, not here)
 
@@ -124,6 +127,11 @@ packages/tokens/
   near-black backgrounds and will look muddy on white.
 - Transparent/floating windows (widget, control bar) are a known trap
   (background + shadow interplay) — explicit QA items in PR3.
+- Semantic accents (green/red/yellow/purple + the brand accent) meet WCAG 1.4.11
+  non-text contrast (3:1) on the three distinct light surfaces — `bg-app`
+  #fafafa, `bg-card` #ffffff, `bg-sidebar` #f4f4f5 — guarded in
+  `contrast.test.ts`. (PR3 darkened light `accent-yellow` #ca8a04 → #a16207
+  and light `accent-green` #16a34a → #15803d to clear the bar.)
 
 ## Delivery — three sequential PRs, owner-validated each
 

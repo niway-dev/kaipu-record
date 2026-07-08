@@ -10,7 +10,12 @@
 import { DEFAULT_QUALITY, type RecordingQuality } from "../recording-quality";
 import type { Locale } from "@kaipu/i18n";
 
-export type Theme = "light" | "dark" | "system";
+/**
+ * "system" (follow the OS appearance) is a deliberate non-goal for now — the
+ * tokens ship dark (:root default) + light only. Legacy persisted "system"
+ * values coerce to "dark" in mergeSettings.
+ */
+export type Theme = "light" | "dark";
 
 /** Actions that can be bound to a global keyboard shortcut. */
 export const SHORTCUT_ACTIONS = [
@@ -119,7 +124,7 @@ export interface AppSettings {
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  theme: "system",
+  theme: "dark",
   locale: "es",
   launchAtLogin: false,
   showInDock: true,

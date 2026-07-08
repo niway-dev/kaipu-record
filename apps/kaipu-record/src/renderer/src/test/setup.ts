@@ -42,7 +42,7 @@ if (!("ResizeObserver" in globalThis)) {
 }
 
 const STUB_SETTINGS = {
-  theme: "system",
+  theme: "dark",
   locale: "es",
   launchAtLogin: false,
   showInDock: true,
