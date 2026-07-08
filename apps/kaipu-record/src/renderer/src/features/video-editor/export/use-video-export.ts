@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from "react";
+import { useTranslations } from "@kaipu/i18n";
 import type { LocalRecording } from "@shared/types/library-storage";
 import { captureException } from "@renderer/features/analytics";
 import { generateThumbnail } from "@renderer/lib/generate-thumbnail";
@@ -45,6 +46,7 @@ const EMPTY_TIMELINE_ERROR = "No hay nada que exportar";
  * reads the source as a fetched Blob and the writer opens a brand-new session id.
  */
 export function useVideoExport(): VideoExportController {
+  const t = useTranslations("videoEditor");
   const [state, setState] = useState<VideoExportState>(IDLE_STATE);
   const workerRef = useRef<Worker | null>(null);
   const sessionIdRef = useRef<string | null>(null);
@@ -169,7 +171,7 @@ export function useVideoExport(): VideoExportController {
               if (!activeRef.current) return;
               try {
                 const recording = await window.electronAPI.recordingFinalize(sessionId, {
-                  title: `${args.title} (editado)`,
+                  title: t("editedTitle", { title: args.title }),
                   durationSeconds: plan.totalDuration,
                   thumbnail,
                 });
@@ -208,7 +210,7 @@ export function useVideoExport(): VideoExportController {
         fail(GENERIC_ERROR, error);
       }
     },
-    [teardown],
+    [teardown, t],
   );
 
   return { ...state, start, cancel };
