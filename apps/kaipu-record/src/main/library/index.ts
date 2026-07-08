@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { IPC_CHANNELS } from "@shared/types";
-import type { VaultDirectory } from "@shared/types";
+import type { RecordingBackfillMeta, VaultDirectory } from "@shared/types";
 import { createMainTranslator } from "@kaipu/i18n/main";
 import { getAppSettings } from "../infrastructure/settings-store";
 import { LibraryVault } from "./library-vault";
@@ -52,6 +52,10 @@ export function registerLibraryVaultHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.listLocalRecordings, () => currentVault().list());
   ipcMain.handle(IPC_CHANNELS.renameLocalRecording, (_event, id: string, title: string) =>
     currentVault().rename(id, title),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.backfillLocalRecordingMeta,
+    (_event, id: string, meta: RecordingBackfillMeta) => currentVault().backfill(id, meta),
   );
   ipcMain.handle(IPC_CHANNELS.deleteLocalRecording, async (_event, id: string) => {
     await currentVault().remove(id);

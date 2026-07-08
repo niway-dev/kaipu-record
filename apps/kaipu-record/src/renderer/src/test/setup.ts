@@ -78,6 +78,7 @@ window.electronAPI = {
   openSystemSettings: async () => {},
   listLocalRecordings: async () => [],
   renameLocalRecording: async () => {},
+  backfillLocalRecordingMeta: async () => null,
   deleteLocalRecording: async () => {},
   revealLocalRecording: async () => {},
   getVaultDirectory: async () => ({ path: "/tmp/vault", isCustom: false }),

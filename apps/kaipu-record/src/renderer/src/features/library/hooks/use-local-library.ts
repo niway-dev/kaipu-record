@@ -1,21 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "@kaipu/i18n";
-import type { LocalRecording } from "@shared/types";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import { reportError } from "@renderer/features/analytics";
-
-function toLibraryVideo(recording: LocalRecording): LibraryVideo {
-  return {
-    id: recording.id,
-    kind: recording.kind,
-    title: recording.title,
-    createdAt: recording.createdAt,
-    durationSeconds: recording.durationSeconds,
-    fileSizeBytes: recording.sizeBytes,
-    thumbnailUrl: recording.thumbnailUrl ?? null,
-    storage: "local",
-  };
-}
+import { toLibraryVideo } from "@renderer/features/library/map-recording";
+import { useOrphanHeal } from "./use-orphan-heal";
 
 export interface LocalLibrary {
   videos: LibraryVideo[];
@@ -76,6 +64,14 @@ export function useLocalLibrary(): LocalLibrary {
   const reveal = useCallback((id: string) => {
     void window.electronAPI.revealLocalRecording(id);
   }, []);
+
+  // Self-heal recordings whose metadata was never derived from the file (hand-
+  // imported, or an interrupted finalize): decode duration + poster and patch the
+  // item in place, so a `0:00`, un-editable card fixes itself without a reload.
+  const patchHealed = useCallback((healed: LibraryVideo) => {
+    setVideos((prev) => prev.map((video) => (video.id === healed.id ? healed : video)));
+  }, []);
+  useOrphanHeal(videos, patchHealed);
 
   useEffect(() => {
     void refresh();

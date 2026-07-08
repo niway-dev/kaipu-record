@@ -162,6 +162,7 @@ export const IPC_CHANNELS = {
   openSystemSettings: "permissions:open-settings",
   listLocalRecordings: "library:list-local",
   renameLocalRecording: "library:rename-local",
+  backfillLocalRecordingMeta: "library:backfill-meta",
   deleteLocalRecording: "library:delete-local",
   revealLocalRecording: "library:reveal-local",
   getVaultDirectory: "library:get-vault-dir",
@@ -257,6 +258,16 @@ export interface RecordingFinalizeMeta {
   title: string;
   durationSeconds: number;
   thumbnail?: ArrayBuffer | null;
+}
+
+/**
+ * Duration + poster the renderer decoded from a recording file that had no
+ * sidecar, sent to main to persist. `thumbnail` is null when the frame couldn't
+ * be decoded (duration-only heal).
+ */
+export interface RecordingBackfillMeta {
+  durationSeconds: number;
+  thumbnail: ArrayBuffer | null;
 }
 
 /** Source identity for placing the bar on the recorded screen. */
