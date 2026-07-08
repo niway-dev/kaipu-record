@@ -65,7 +65,8 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
   },
 });
 
-// Critical inline styles to prevent flash of unstyled content
+// Critical inline styles to prevent flash of unstyled content. Theme-aware:
+// dark by default, flipped by the pre-paint script below via data-theme.
 const criticalStyles = `
   html, body {
     background-color: oklch(14.5% 0 0);
@@ -73,6 +74,20 @@ const criticalStyles = `
     margin: 0;
     padding: 0;
   }
+  html[data-theme="light"], html[data-theme="light"] body {
+    background-color: #fafafa;
+    color: #18181b;
+  }
+`;
+
+// Applies the stored theme before first paint (dark default, no flash for
+// returning light-theme visitors). Must run before criticalStyles resolves.
+const themeInitScript = `
+  try {
+    if (localStorage.getItem("kaipu-theme") === "light") {
+      document.documentElement.dataset.theme = "light";
+    }
+  } catch {}
 `;
 
 function RootDocument() {
@@ -93,6 +108,7 @@ function RootDocument() {
   return (
     <html lang={locale} className="dark" suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         <style dangerouslySetInnerHTML={{ __html: criticalStyles }} />
         <HeadContent />
       </head>
