@@ -32,11 +32,13 @@ description: "Light/dark theme setting for the desktop app: narrow the existing 
 The light `accent-yellow` (#ca8a04) only reaches ~2.8:1 against the light surfaces — below the WCAG 1.4.11 non-text minimum of 3:1. Add the missing guard first (TDD), watch it fail, then darken the token and regenerate the CSS.
 
 **Files:**
+
 - Modify: `packages/tokens/src/contrast.test.ts`
 - Modify: `packages/tokens/src/themes/light.ts` (line 30: `"accent-yellow": "#ca8a04"`)
 - Regenerate: `packages/tokens/css/tokens.css`, `packages/tokens/css/tokens.kaipu.css` (via `bun run generate` — NEVER hand-edit)
 
 **Interfaces:**
+
 - Consumes: `light`/`dark` `TokenSet` objects and the existing `contrast()` helper in `contrast.test.ts`.
 - Produces: nothing consumed by later tasks (independent pre-flight).
 
@@ -104,6 +106,7 @@ git commit -m "fix(tokens): light accent-yellow meets non-text contrast; add the
 The stored type currently includes `"system"` (default `"system"`), but the spec ships `dark | light` only — `system` is an explicit non-goal follow-up, and the tokens have no `prefers-color-scheme` block, so `"system"` could never render as anything but dark. Narrow the type; persisted `"system"` values from existing installs coerce to `"dark"` through `mergeSettings` (visually identical — theme was never applied before this PR).
 
 **Files:**
+
 - Modify: `apps/kaipu-record/src/shared/types/ipc.ts` (line 13 `Theme`, line 122 `DEFAULT_SETTINGS.theme`)
 - Modify: `apps/kaipu-record/src/main/services/settings.service.ts` (line 21 `VALID_THEMES`)
 - Modify: `apps/kaipu-record/src/main/services/settings.service.test.ts` (lines 6-18)
@@ -111,6 +114,7 @@ The stored type currently includes `"system"` (default `"system"`), but the spec
 - Modify: `apps/kaipu-record/src/renderer/src/test/setup.ts` (line 45 `STUB_SETTINGS.theme`)
 
 **Interfaces:**
+
 - Consumes: existing `Theme`, `AppSettings`, `DEFAULT_SETTINGS`, `isValidTheme`, `mergeSettings`.
 - Produces: `Theme = "light" | "dark"` with `DEFAULT_SETTINGS.theme === "dark"` — Tasks 3 and 4 rely on this exact union and default.
 
@@ -203,12 +207,14 @@ git commit -m "refactor(desktop): narrow Theme to light|dark with dark default"
 One mount point covers every window: `main.tsx` wraps ALL four render targets (main window, `?window=control-bar`, `?window=camera-bubble`, `?mode=capture`) in `await I18nRoot(...)`, which already awaits `getSettings()` and subscribes to `settings:changed`. Theme application slots in next to `syncLocale`.
 
 **Files:**
+
 - Create: `apps/kaipu-record/src/renderer/src/lib/apply-theme.ts`
 - Create: `apps/kaipu-record/src/renderer/src/lib/apply-theme.test.ts`
 - Modify: `apps/kaipu-record/src/renderer/src/app/i18n-root.tsx`
 - Create: `apps/kaipu-record/src/renderer/src/app/i18n-root.test.tsx`
 
 **Interfaces:**
+
 - Consumes: `Theme` (`"light" | "dark"`) from `@shared/types` (Task 2); `window.electronAPI.getSettings/onSettingsChanged` (existing).
 - Produces: `applyTheme(theme: Theme): void` — Task 4's review notes reference it, but no later code imports it outside `i18n-root.tsx`.
 
@@ -388,6 +394,7 @@ git commit -m "feat(desktop): apply the persisted theme in every window via the 
 Mirror `language-settings.tsx` exactly, but theme has no React provider — the component takes `theme` + `onChange` props (the `RecordingQualitySettings` prop pattern) and the page wires them to `useAppSettings()`. `update({ theme })` triggers the main-process broadcast, which re-themes every window including this one (via Task 3's subscription) — no local `applyTheme` call in the component.
 
 **Files:**
+
 - Modify: `packages/i18n/messages/es.json` (settings namespace, after `"english"` line 73)
 - Modify: `packages/i18n/messages/en.json` (settings namespace, after `"english"` line 73)
 - Create: `apps/kaipu-record/src/renderer/src/pages/settings/theme-settings.tsx`
@@ -396,6 +403,7 @@ Mirror `language-settings.tsx` exactly, but theme has no React provider — the 
 - Modify: `apps/kaipu-record/src/renderer/src/pages/settings/settings-page.test.tsx` (add the Theme heading to the wired-sections test)
 
 **Interfaces:**
+
 - Consumes: `Theme` from `@shared/types` (Task 2); `useAppSettings()` (`{ settings, update }`, existing); `Row`/`Button` from `@renderer/ui`; `useTranslations("settings")`.
 - Produces: `ThemeSettings({ theme, onChange }: { theme: Theme; onChange: (theme: Theme) => void })` — consumed only by `settings-page.tsx` in this same task.
 
@@ -568,6 +576,7 @@ git commit -m "feat(desktop): theme selector on the Settings page"
 ### Task 5: Docs — spec amendment, backlog statuses, roadmap row
 
 **Files:**
+
 - Modify: `apps/documentation/src/content/docs/specs/2026-07-07-design-tokens-package-design.md` (Theming model → Desktop paragraph, lines 113-117; Light palette constraints, lines 119-127)
 - Modify: `apps/documentation/src/content/docs/backlog/shared-tokens-package.md` (status banner 🟡 → 🟢)
 - Modify: `apps/documentation/src/content/docs/backlog/index.mdx` (tokens row 🟡 → 🟢)
