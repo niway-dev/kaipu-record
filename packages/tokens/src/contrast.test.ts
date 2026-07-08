@@ -46,8 +46,9 @@ describe("light theme", () => {
   );
 
   // Semantic accents are non-text UI (status dots, badges, icons) — WCAG 1.4.11
-  // non-text contrast: >= 3:1 against the surfaces they sit on. bg-app and
-  // bg-card cover the distinct light surface values (#fafafa / #ffffff).
+  // non-text contrast: >= 3:1 against the surfaces they sit on. bg-app, bg-card,
+  // and bg-sidebar cover the three distinct light surface values (#fafafa /
+  // #ffffff / #f4f4f5).
   const SEMANTIC_ACCENTS = [
     "accent-primary",
     "accent-green",
@@ -55,7 +56,7 @@ describe("light theme", () => {
     "accent-yellow",
     "accent-purple",
   ] as const;
-  const ACCENT_SURFACES = ["bg-app", "bg-card"] as const;
+  const ACCENT_SURFACES = ["bg-app", "bg-card", "bg-sidebar"] as const;
 
   it.each(SEMANTIC_ACCENTS.flatMap((a) => ACCENT_SURFACES.map((s) => [a, s] as const)))(
     "light %s on %s meets WCAG non-text contrast (3:1)",

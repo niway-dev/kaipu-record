@@ -6,7 +6,7 @@ description: Controles de Settings que se removieron de la UI por no tener backe
 # Settings — controles por cablear
 
 > **Estado: 🔵 Propuesto.**
-> La página de Settings hoy solo muestra lo que está **cableado de punta a punta**: Permissions (bridge de permisos), Files (vault real en disco) y Onboarding → Replay. Todo lo demás se removió de la UI porque era `useState` local que no persistía ni afectaba nada — un placeholder que además podía leerse como copia. Esto es el catálogo de lo que sí queremos, con lo que falta para devolverlo a la UI.
+> La página de Settings hoy muestra lo que está **cableado de punta a punta**: Permissions (bridge de permisos), Files (vault real en disco), Onboarding → Replay, y — since the design-tokens PR3 — Language, Recording quality, Recording (control-bar toggle), and Theme, all wired end-to-end through real IPC + persistence (`window.electronAPI.updateSettings` / `getSettings` / `onSettingsChanged`), not local `useState`. Todo lo demás se removió de la UI porque era `useState` local que no persistía ni afectaba nada — un placeholder que además podía leerse como copia. Esto es el catálogo de lo que sí queremos, con lo que falta para devolverlo a la UI.
 
 ## Por qué se removieron
 

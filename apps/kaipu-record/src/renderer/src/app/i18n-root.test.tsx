@@ -30,6 +30,7 @@ describe("I18nRoot theme application", () => {
   });
 
   it("leaves dark with no data-theme attribute", async () => {
+    document.documentElement.dataset.theme = "light";
     await I18nRoot({ children: null });
     expect(document.documentElement.hasAttribute("data-theme")).toBe(false);
   });

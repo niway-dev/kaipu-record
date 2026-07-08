@@ -128,8 +128,10 @@ packages/tokens/
 - Transparent/floating windows (widget, control bar) are a known trap
   (background + shadow interplay) — explicit QA items in PR3.
 - Semantic accents (green/red/yellow/purple + the brand accent) meet WCAG 1.4.11
-  non-text contrast (3:1) on the light surfaces, guarded in `contrast.test.ts`.
-  (PR3 darkened light `accent-yellow` #ca8a04 → #a16207 to clear the bar.)
+  non-text contrast (3:1) on the three distinct light surfaces — `bg-app`
+  #fafafa, `bg-card` #ffffff, `bg-sidebar` #f4f4f5 — guarded in
+  `contrast.test.ts`. (PR3 darkened light `accent-yellow` #ca8a04 → #a16207
+  and light `accent-green` #16a34a → #15803d to clear the bar.)
 
 ## Delivery — three sequential PRs, owner-validated each
 
