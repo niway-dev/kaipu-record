@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { LandingNav } from "@/components/landing/landing-nav";
 import { Hero } from "@/components/landing/hero";
-import { Features } from "@/components/landing/features";
+import { Showcase } from "@/components/landing/showcase";
+import { WhyKaipu } from "@/components/landing/why-kaipu";
 import { DownloadSection } from "@/components/landing/download-section";
 import { Footer } from "@/components/landing/footer";
 import { useLandingTheme } from "@/components/theme-toggle";
@@ -19,7 +20,8 @@ function LandingPage() {
     >
       <LandingNav />
       <Hero />
-      <Features />
+      <Showcase />
+      <WhyKaipu />
       <DownloadSection />
       <Footer />
     </div>
