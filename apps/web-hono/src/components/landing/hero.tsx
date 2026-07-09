@@ -1,5 +1,6 @@
 import { useTranslations } from "@kaipu/i18n";
 import { DownloadButtons } from "./download-buttons";
+import { DemoVideo } from "./demo-video";
 
 export function Hero() {
   const t = useTranslations("landing");
@@ -15,7 +16,9 @@ export function Hero() {
       <div className="mt-10">
         <DownloadButtons />
       </div>
-      <div className="mx-auto mt-14 aspect-video max-w-3xl rounded-xl border border-[var(--kaipu-border)] bg-[var(--kaipu-bg-card)]" />
+      <div className="mx-auto mt-14 max-w-3xl">
+        <DemoVideo name="hero" className="shadow-2xl" />
+      </div>
     </section>
   );
 }
