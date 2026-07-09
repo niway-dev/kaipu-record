@@ -38,6 +38,16 @@ export function captureException(error: unknown, context?: Record<string, unknow
   posthog.captureException(error, context);
 }
 
+/**
+ * Send a named product event with structured properties (developer channel) —
+ * for diagnostics that aren't errors, e.g. a rare state we couldn't reproduce
+ * locally and want to catch in the wild. No-op if analytics is disabled.
+ */
+export function captureEvent(name: string, props?: Record<string, unknown>): void {
+  if (!started) return;
+  posthog.capture(name, props);
+}
+
 /** Read a flag, returning `fallback` while unresolved/disabled. */
 export function isFlagEnabled(name: FlagName, fallback: boolean): boolean {
   if (!started) return fallback;
