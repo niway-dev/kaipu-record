@@ -5,10 +5,12 @@ description: Rework the download landing so the product's features (record, scre
 
 # Landing redesign — feature showcase with looping demos
 
-> **Status: 🔵 Proposed.**
-> Structure + copy + `FeatureDemo` component ship in one PR with poster
-> placeholders. The owner records 8–12s clips afterwards; they drop into
-> `public/demos/` and appear with no code change.
+> **Status: 🟢 Ready to validate.**
+> Structure + copy + `FeatureDemo` component shipped in PR #45. The four demo
+> clips (`hero`, `record`, `screenshot`, `editor`) landed on branch
+> `feat/landing-demo-clips` as `.webm` + `.mp4` + `.jpg` under `public/demos/`
+> — bundled in the repo, **not** R2 (see "Assets — decisions & QA" below).
+> `hero.*` is a copy of `record.*` until a dedicated montage is shot.
 
 ## Goal
 
@@ -154,3 +156,43 @@ removed.
 One PR: new structure + `FeatureDemo`/`DemoVideo` + copy (es/en) + WhyKaipu
 grid, all with poster placeholders. Demo clips land afterwards as plain asset
 drops in `public/demos/` — no code change, no follow-up PR required.
+
+## Assets — decisions & QA (2026-07-10, branch `feat/landing-demo-clips`)
+
+### Where they live: bundled in the repo, not R2
+
+The four clips are committed under `apps/web-hono/public/demos/` and served from
+the web Worker's own origin (`/demos/<name>.<ext>`), **not** R2.
+
+Reasoning (revisit if this changes):
+
+- **Runtime:** at this weight R2 buys nothing. web-hono deploys via Cloudflare
+  Workers Assets (`assets.directory: dist/client`, limits 25 MiB/file, 20k
+  files) — the clips are well within limits.
+- **The only real cost is git history.** The repo has no git-lfs, so binaries
+  go in raw and **permanently** (can't be slimmed without rewriting history).
+  Adding the clips grows `.git` by a fixed one-time amount.
+- **When R2 wins:** once clips start being **re-shot regularly**, each
+  replacement adds another permanent blob to history. Frequently-rotated media
+  is what object storage is for. The [R2 architecture](./r2-storage-architecture)
+  doc reserves the `web/` prefix (`kaipu-bucket/web/demos/`) for exactly this;
+  migrating means pointing `DemoVideo` at the full R2 URL instead of `/demos/`.
+- **Verdict:** in-repo now (simple, clips change rarely); R2 later, gated on
+  clips becoming a moving target — not on total size.
+
+### QA findings on the delivered clips (optimization backlog)
+
+The clips work but were delivered above the production guide's specs. None break
+the page; all are size/quality optimizations to apply **before** the blobs enter
+`main` (history is permanent):
+
+| Finding                     | Delivered                                             | Target       | Effect                                                                                   |
+| --------------------------- | ----------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------- |
+| Poster aspect ratio ≠ video | posters ~3:2 (e.g. 2136×1420); video 16:9 (2560×1440) | match 16:9   | `object-cover` crops the poster differently → visible framing "pop" when playback starts |
+| Frame rate                  | 60 fps                                                | 30 fps       | ~halves file size, no perceptible loss for muted decorative loops                        |
+| Resolution                  | 2560px wide                                           | ~1280–1600px | box is `max-w-5xl` (~1024px / 2048 retina); 2560 is oversized                            |
+| Duration                    | 15s / 22s / 34s                                       | 8–12s        | long, slow loops; `editor` (34s) is ~3× the guide                                        |
+
+Re-encoding all four to 30fps + ~1600px + trimmed loops drops the set from
+~17 MB to ~4–5 MB. Regenerate posters from an actual 16:9 video frame so poster
+and first frame match (kills the pop).
