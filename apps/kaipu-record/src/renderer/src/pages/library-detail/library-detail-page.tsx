@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Check, Copy, FileX2, FolderOpen, Pencil, Scissors, Trash2 } from "lucide-react";
 import type { ImageSource } from "@renderer/features/screenshots/image-source";
 import { useTransientValue } from "@renderer/ui/use-transient-value";
 import { useLocalLibrary } from "@renderer/features/library/hooks/use-local-library";
+import { useMissingRecordingRecovery } from "@renderer/features/library/hooks/use-missing-recording-recovery";
 import { reportError } from "@renderer/features/analytics";
 import { StorageMeta } from "@renderer/features/library/components/storage-meta";
 import { DeleteConfirmDialog } from "@renderer/features/library/components/delete-confirm-dialog";
@@ -18,10 +19,24 @@ import styles from "./library-detail-page.module.css";
 export function LibraryDetailPage(): React.JSX.Element {
   const t = useTranslations("library");
   const { id } = useParams<{ id: string }>();
+  const location = useLocation();
   const navigate = useNavigate();
-  const { videos, isLoading, rename, remove, reveal } = useLocalLibrary();
+  const { videos, isLoading, refresh, rename, remove, reveal } = useLocalLibrary();
 
   const video = videos.find((v) => v.id === id);
+
+  // A recording can momentarily lag the navigation into its own detail page right
+  // after it finalizes; recover (re-list once, then fall back to the Library +
+  // log) instead of dead-ending on "File not found".
+  const fromRecording = (location.state as { fromRecording?: boolean } | null)?.fromRecording;
+  const { recovering } = useMissingRecordingRecovery({
+    id,
+    found: Boolean(video),
+    isLoading,
+    listSize: videos.length,
+    fromRecording: Boolean(fromRecording),
+    refresh,
+  });
 
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [copied, showCopied] = useTransientValue<true>(2200);
@@ -30,7 +45,7 @@ export function LibraryDetailPage(): React.JSX.Element {
     navigate("/library");
   };
 
-  if (isLoading) {
+  if (isLoading || recovering) {
     return <div className={styles.centered}>{t("loading")}</div>;
   }
 

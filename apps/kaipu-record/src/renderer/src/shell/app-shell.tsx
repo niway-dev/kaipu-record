@@ -72,7 +72,13 @@ export function AppShell(): React.JSX.Element {
   // bringToFront rescue). Subscribing here, on the shell that never unmounts
   // across route changes, lands the navigation reliably every time.
   useEffect(
-    () => subscribeRecordingComplete((recording) => navigate(`/library/${recording.id}`)),
+    () =>
+      subscribeRecordingComplete((recording) =>
+        // `fromRecording` lets the detail page tell a post-record vault race (the
+        // item can momentarily lag the navigation) apart from a genuinely stale
+        // URL — see use-missing-recording-recovery.
+        navigate(`/library/${recording.id}`, { state: { fromRecording: true } }),
+      ),
     [navigate],
   );
 
