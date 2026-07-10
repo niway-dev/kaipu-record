@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/csdev19/kaipu-record-monorepo/compare/web-v0.3.0...web-v0.4.0) (2026-07-10)
+
+
+### Features
+
+* **landing:** hero + feature demo clips (bundled, optimized) ([#47](https://github.com/csdev19/kaipu-record-monorepo/issues/47)) ([f218468](https://github.com/csdev19/kaipu-record-monorepo/commit/f2184681a68815f433d27a69c8c3c0ce4028c463))
+
 ## [0.3.0](https://github.com/csdev19/kaipu-record-monorepo/compare/web-v0.2.0...web-v0.3.0) (2026-07-10)
 
 
