@@ -1,7 +1,7 @@
 import { backgroundPaint, frameRadius } from "../beautify/backgrounds";
 import { roughArrow, roughRect } from "./rough";
 import { smoothPath } from "./smooth";
-import { BLUR_STD, HAND_FONT, STROKE_WIDTHS, TEXT_PX } from "./tools";
+import { BLUR_STD, HAND_FONT, STROKE_WIDTHS, TEXT_LINE_HEIGHT, TEXT_PX, textLines } from "./tools";
 import type { Annotation, Scene } from "./scene";
 
 /**
@@ -177,7 +177,16 @@ function annotationSvg(a: Annotation, W: number, H: number, scale: number): stri
     return `<path d="${d}" fill="none" stroke="${a.color}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/>`;
   }
   const fs = TEXT_PX[a.size] * scale;
-  return `<text x="${a.x * W}" y="${a.y * H}" fill="${a.color}" font-family="${HAND_FONT}" font-size="${fs}" font-weight="600" dominant-baseline="hanging">${escapeXml(a.text)}</text>`;
+  const tx = a.x * W;
+  // One tspan per line so line breaks (Alt/Shift+Enter) survive the export exactly
+  // as they render in the preview.
+  const tspans = textLines(a.text)
+    .map(
+      (line, i) =>
+        `<tspan x="${tx}" dy="${i === 0 ? 0 : fs * TEXT_LINE_HEIGHT}">${escapeXml(line)}</tspan>`,
+    )
+    .join("");
+  return `<text x="${tx}" y="${a.y * H}" fill="${a.color}" font-family="${HAND_FONT}" font-size="${fs}" font-weight="600" dominant-baseline="hanging">${tspans}</text>`;
 }
 
 function escapeXml(s: string): string {

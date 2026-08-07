@@ -65,3 +65,26 @@ export const TEXT_PX = [14, 19, 27, 37] as const;
  * attribute alike.
  */
 export const HAND_FONT = "Caveat, 'Comic Sans MS', 'Segoe Print', cursive";
+
+/** Line-height multiple for multi-line text annotations — matches the `dy` between
+ * rendered tspans and the exported SVG so preview and export never diverge. */
+export const TEXT_LINE_HEIGHT = 1.3;
+
+/** Split a text annotation into its display lines. A newline is inserted with
+ * Alt+Enter / Shift+Enter while editing (plain Enter commits), so a label can span
+ * several lines like in Excalidraw or a spreadsheet cell. */
+export function textLines(text: string): string[] {
+  return text.split("\n");
+}
+
+/**
+ * Pixel bounds of a rendered text annotation — the single source for the selection
+ * outline, the hit box, the resize handle and the export. Width comes from the
+ * longest line, height from the line count. The 0.55 factor approximates the hand
+ * font's average glyph advance.
+ */
+export function textBoxPx(text: string, fs: number): { w: number; h: number } {
+  const lines = textLines(text);
+  const longest = lines.reduce((max, line) => Math.max(max, line.length), 0);
+  return { w: longest * fs * 0.55, h: lines.length * fs * TEXT_LINE_HEIGHT };
+}
