@@ -7,7 +7,7 @@ import {
   TEXT_LINE_HEIGHT,
   TEXT_PX,
   textBoxPx,
-  textLines,
+  wrapText,
 } from "./tools";
 import { roughArrow, roughRect } from "./rough";
 import { smoothPath } from "./smooth";
@@ -513,6 +513,11 @@ function Shape({
   const tx = a.x * W;
   const ty = a.y * H;
   const fs = TEXT_PX[a.size];
+  // With a wrap width the label reflows by words to that width; otherwise it breaks
+  // only on the user's own newlines (see wrapText). Same source drives the box below.
+  const widthPx = a.width ? a.width * W : undefined;
+  const lines = wrapText(a.text, fs, widthPx);
+  const box = textBoxPx(a.text, fs, widthPx);
   return (
     <g>
       <text
@@ -525,25 +530,21 @@ function Shape({
         dominantBaseline="hanging"
         style={{ userSelect: "none" }}
       >
-        {textLines(a.text).map((line, i) => (
+        {lines.map((line, i) => (
           <tspan key={i} x={tx} dy={i === 0 ? 0 : fs * TEXT_LINE_HEIGHT}>
             {line}
           </tspan>
         ))}
       </text>
-      {selected &&
-        (() => {
-          const b = textBoxPx(a.text, fs);
-          return (
-            <rect
-              className={styles.selOutline}
-              x={tx - 4}
-              y={ty - 4}
-              width={b.w + 8}
-              height={b.h + 8}
-            />
-          );
-        })()}
+      {selected && (
+        <rect
+          className={styles.selOutline}
+          x={tx - 4}
+          y={ty - 4}
+          width={box.w + 8}
+          height={box.h + 8}
+        />
+      )}
     </g>
   );
 }
@@ -593,7 +594,8 @@ function hitTest(annotations: Annotation[], p: Pt, size: Size): Annotation | nul
       const fs = TEXT_PX[a.size];
       const padX = 8 / (size.w || 1);
       const padY = 8 / (size.h || 1);
-      const box = textBoxPx(a.text, fs);
+      const widthPx = a.width ? a.width * (size.w || 1) : undefined;
+      const box = textBoxPx(a.text, fs, widthPx);
       const w = box.w / (size.w || 1);
       const h = box.h / (size.h || 1);
       if (

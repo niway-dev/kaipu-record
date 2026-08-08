@@ -77,14 +77,50 @@ export function textLines(text: string): string[] {
   return text.split("\n");
 }
 
+/** Approximate advance (px) of one glyph in the hand font at size `fs`. Used to turn
+ * a pixel wrap-width into a character budget and to size the box from a line length —
+ * one factor so wrapping, the box, hit-test and export all agree. */
+const CHAR_ADVANCE = 0.55;
+
+/**
+ * Split text into display lines, word-wrapping to `maxWidthPx` when given (the text
+ * box's width, set by dragging its right edge). The user's own newlines are always
+ * hard breaks. Wrapping is greedy by whole words — a word never splits mid-letter;
+ * a single word wider than the box overflows on its own line instead. Without a
+ * width it degrades to `textLines` (break only on explicit newlines).
+ */
+export function wrapText(text: string, fs: number, maxWidthPx?: number): string[] {
+  const hard = textLines(text);
+  if (!maxWidthPx || maxWidthPx <= 0) return hard;
+  const maxChars = Math.max(1, Math.floor(maxWidthPx / (fs * CHAR_ADVANCE)));
+  const out: string[] = [];
+  for (const line of hard) {
+    let current = "";
+    for (const word of line.split(" ")) {
+      if (current === "") {
+        current = word;
+      } else if (`${current} ${word}`.length <= maxChars) {
+        current += ` ${word}`;
+      } else {
+        out.push(current); // the next word doesn't fit — wrap, never split it
+        current = word;
+      }
+    }
+    out.push(current); // trailing content, and preserves an empty hard line
+  }
+  return out;
+}
+
 /**
  * Pixel bounds of a rendered text annotation — the single source for the selection
- * outline, the hit box, the resize handle and the export. Width comes from the
- * longest line, height from the line count. The 0.55 factor approximates the hand
- * font's average glyph advance.
+ * outline, the hit box, the resize handles and the export. With a wrap width the box
+ * IS that width and the height comes from the wrapped line count; without one, width
+ * comes from the longest line. Height always from the line count × line height.
  */
-export function textBoxPx(text: string, fs: number): { w: number; h: number } {
-  const lines = textLines(text);
+export function textBoxPx(text: string, fs: number, maxWidthPx?: number): { w: number; h: number } {
+  const lines = wrapText(text, fs, maxWidthPx);
+  const h = lines.length * fs * TEXT_LINE_HEIGHT;
+  if (maxWidthPx && maxWidthPx > 0) return { w: maxWidthPx, h };
   const longest = lines.reduce((max, line) => Math.max(max, line.length), 0);
-  return { w: longest * fs * 0.55, h: lines.length * fs * TEXT_LINE_HEIGHT };
+  return { w: longest * fs * CHAR_ADVANCE, h };
 }
