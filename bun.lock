@@ -81,6 +81,7 @@
         "@kaipu/infra-auth": "workspace:*",
         "@kaipu/infra-db": "workspace:*",
         "@kaipu/infra-env": "workspace:*",
+        "@kaipu/infra-storage": "workspace:*",
         "@orpc/contract": "catalog:",
         "@orpc/openapi": "catalog:",
         "@orpc/server": "catalog:",
@@ -167,6 +168,7 @@
         "@types/node": "^22.14.1",
         "tsdown": "catalog:",
         "typescript": "catalog:",
+        "vitest": "^4.1.9",
       },
     },
     "packages/config": {
