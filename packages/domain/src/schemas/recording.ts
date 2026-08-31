@@ -66,17 +66,20 @@ export function extensionForContentType(contentType: string): string {
 }
 
 /**
- * The object key a recording lives at in cloud storage. Namespaced by user so
- * one prefix maps to exactly one account (`recordings/<userId>/`), and suffixed
- * by the content-type extension.
+ * The object key a recording lives at in the private R2 bucket. Follows the
+ * layout in `docs backlog/r2-storage-architecture`: videos and images are split
+ * by prefix, then namespaced by user so one prefix maps to exactly one account.
  *
- * Shape: `recordings/<userId>/<recordingId>.<ext>`.
+ * Shape: `videos/<userId>/<id>.<ext>` (recording) or `img/<userId>/<id>.<ext>`
+ * (screenshot).
  */
 export function buildStorageKey(params: {
   userId: string;
   recordingId: string;
+  kind: RecordingKind;
   contentType: string;
 }): string {
   const ext = extensionForContentType(params.contentType);
-  return `recordings/${params.userId}/${params.recordingId}.${ext}`;
+  const prefix = params.kind === "screenshot" ? "img" : "videos";
+  return `${prefix}/${params.userId}/${params.recordingId}.${ext}`;
 }

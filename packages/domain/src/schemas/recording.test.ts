@@ -28,16 +28,34 @@ describe("extensionForContentType", () => {
 });
 
 describe("buildStorageKey", () => {
-  it("namespaces by user and suffixes by extension", () => {
-    expect(buildStorageKey({ userId: "u1", recordingId: "r1", contentType: "video/webm" })).toBe(
-      "recordings/u1/r1.webm",
-    );
+  it("splits videos vs images by kind and namespaces by user", () => {
+    expect(
+      buildStorageKey({
+        userId: "u1",
+        recordingId: "r1",
+        kind: "recording",
+        contentType: "video/webm",
+      }),
+    ).toBe("videos/u1/r1.webm");
+    expect(
+      buildStorageKey({
+        userId: "u1",
+        recordingId: "s1",
+        kind: "screenshot",
+        contentType: "image/png",
+      }),
+    ).toBe("img/u1/s1.png");
   });
 
   it("uses bin for an unknown content type", () => {
-    expect(buildStorageKey({ userId: "u1", recordingId: "r1", contentType: "weird/thing" })).toBe(
-      "recordings/u1/r1.bin",
-    );
+    expect(
+      buildStorageKey({
+        userId: "u1",
+        recordingId: "r1",
+        kind: "recording",
+        contentType: "weird/thing",
+      }),
+    ).toBe("videos/u1/r1.bin");
   });
 });
 

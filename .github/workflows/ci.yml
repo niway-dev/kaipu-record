@@ -61,6 +61,9 @@ jobs:
       - name: Type check
         run: bun run check-types
 
+      - name: Test packages
+        run: bun run test --filter='@kaipu/*'
+
       - name: Build web app
         working-directory: apps/web-hono
         env:

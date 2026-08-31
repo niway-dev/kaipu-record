@@ -31,7 +31,12 @@ export async function createRecordingUpload(params: {
   }
 
   const id = crypto.randomUUID();
-  const storageKey = buildStorageKey({ userId, recordingId: id, contentType: input.contentType });
+  const storageKey = buildStorageKey({
+    userId,
+    recordingId: id,
+    kind: input.kind,
+    contentType: input.contentType,
+  });
 
   const recording = await repo.create({
     id,

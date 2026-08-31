@@ -98,7 +98,7 @@ describe("createRecordingUpload", () => {
     expect(recording.userId).toBe("u1");
     expect(recording.status).toBe("pending");
     expect(recording.title).toBe("Demo");
-    expect(recording.storageKey).toBe(`recordings/u1/${recording.id}.webm`);
+    expect(recording.storageKey).toBe(`videos/u1/${recording.id}.webm`);
     // The presigned key matches the row's stored key.
     expect(storage.uploads).toEqual([recording.storageKey]);
     expect(uploadUrl).toContain(recording.storageKey);
