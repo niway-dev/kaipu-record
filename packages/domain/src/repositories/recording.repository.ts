@@ -2,6 +2,8 @@ import type { RecordingBase, RecordingKind } from "../schemas/recording";
 
 /** Fields needed to attach a new (pending) recording to an account. */
 export interface CreateRecordingData {
+  /** App-generated id, so the storage key can be built before insert. */
+  id: string;
   userId: string;
   kind: RecordingKind;
   title: string;

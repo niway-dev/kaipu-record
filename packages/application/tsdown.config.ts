@@ -1,7 +1,7 @@
 import { defineConfig } from "tsdown";
 
 export default defineConfig({
-  entry: { todos: "src/todos/index.ts" },
+  entry: { index: "src/index.ts" },
 
   exports: {
     devExports: true,

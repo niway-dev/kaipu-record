@@ -12,6 +12,7 @@ export class RecordingRepository implements IRecordingRepository {
     const [row] = await this.db
       .insert(recordingTable)
       .values({
+        id: data.id,
         userId: data.userId,
         kind: data.kind,
         title: data.title,
