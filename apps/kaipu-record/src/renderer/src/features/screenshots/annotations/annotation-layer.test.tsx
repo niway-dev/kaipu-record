@@ -139,6 +139,57 @@ describe("AnnotationLayer — text tool", () => {
     );
   });
 
+  // Give the layer a real box so toNorm maps client coords to normalized space and
+  // the geometric hit-test can find a label (jsdom reports 0×0 otherwise).
+  function renderSizedLayer(scene: EditorScene, tools: AnnotationToolsController) {
+    const utils = render(<AnnotationLayer scene={scene} tools={tools} src="" />);
+    const layer = utils.container.firstChild as HTMLElement;
+    layer.getBoundingClientRect = () =>
+      ({
+        left: 0,
+        top: 0,
+        width: 100,
+        height: 100,
+        right: 100,
+        bottom: 100,
+        x: 0,
+        y: 0,
+      }) as DOMRect;
+    return { ...utils, layer };
+  }
+
+  const label: Annotation = {
+    id: "t1",
+    kind: "text",
+    x: 0.3,
+    y: 0.3,
+    text: "Hello",
+    color: ANNOTATION_COLORS[0].value,
+    size: 1,
+  };
+
+  it("double-clicking a label re-opens it prefilled and updates it in place", () => {
+    const scene = makeScene([label], "t1");
+    const { layer } = renderSizedLayer(scene, makeTools({ tool: "select" }));
+    fireEvent.doubleClick(layer, { clientX: 30, clientY: 30 });
+    const input = screen.getByDisplayValue("Hello"); // prefilled with the current text
+    fireEvent.change(input, { target: { value: "Hello world" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(scene.commitAnnotation).toHaveBeenCalledWith("t1", { text: "Hello world" });
+    expect(scene.addAnnotation).not.toHaveBeenCalled(); // updates, never duplicates
+  });
+
+  it("clearing the text while re-editing deletes the label", () => {
+    const scene = makeScene([label], "t1");
+    const { layer } = renderSizedLayer(scene, makeTools({ tool: "select" }));
+    fireEvent.doubleClick(layer, { clientX: 30, clientY: 30 });
+    const input = screen.getByDisplayValue("Hello");
+    fireEvent.change(input, { target: { value: "   " } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(scene.removeSelected).toHaveBeenCalled();
+    expect(scene.commitAnnotation).not.toHaveBeenCalled();
+  });
+
   it("auto-selects after committing text (switches to the select tool)", () => {
     const scene = makeScene([], null);
     const tools = makeTools({ tool: "text" });

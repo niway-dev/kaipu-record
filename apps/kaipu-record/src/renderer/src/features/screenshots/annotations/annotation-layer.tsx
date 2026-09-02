@@ -54,7 +54,19 @@ export function AnnotationLayer({
   const ref = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<Size>({ w: 0, h: 0 });
   const [draft, setDraft] = useState<Annotation | null>(null);
-  const [editing, setEditing] = useState<{ x: number; y: number } | null>(null);
+  // A text edit in progress. `id` present = re-editing an existing label (double
+  // click), so commit updates it in place and an emptied label is deleted; absent =
+  // a fresh label at (x, y). The prefill fields mirror the edited label so the
+  // inline editor is WYSIWYG (same font, colour and wrap width).
+  const [editing, setEditing] = useState<{
+    x: number;
+    y: number;
+    id?: string;
+    initialText?: string;
+    color?: string;
+    size?: number;
+    width?: number;
+  } | null>(null);
   const drag = useRef<Drag | null>(null);
   const textInputRef = useRef<HTMLTextAreaElement>(null);
   // Blur-to-commit is "armed" only after the input has settled, so the click
@@ -100,16 +112,42 @@ export function AnnotationLayer({
       textArmed.current = false;
       return;
     }
-    textInputRef.current?.focus();
+    const el = textInputRef.current;
+    el?.focus();
+    if (el) {
+      // Show all prefilled lines and drop the caret at the end (re-edit).
+      el.style.height = "auto";
+      el.style.height = `${el.scrollHeight}px`;
+      el.setSelectionRange(el.value.length, el.value.length);
+    }
     const raf = requestAnimationFrame(() => {
       textArmed.current = true;
     });
     return () => cancelAnimationFrame(raf);
   }, [editing]);
 
-  const toNorm = (e: React.PointerEvent): Pt => {
+  const toNorm = (e: { clientX: number; clientY: number }): Pt => {
     const r = ref.current!.getBoundingClientRect();
     return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
+  };
+
+  // Double-clicking a text label reopens it for editing in place (Excalidraw-style).
+  // Select tool only, so it never clashes with the drawing tools' single-click.
+  const onDoubleClick = (e: React.MouseEvent): void => {
+    if (tools.tool !== "select") return;
+    const hit = hitTest(scene.annotations, toNorm(e), size);
+    if (hit?.kind !== "text") return;
+    scene.select(hit.id);
+    editDone.current = false;
+    setEditing({
+      x: hit.x,
+      y: hit.y,
+      id: hit.id,
+      initialText: hit.text,
+      color: hit.color,
+      size: hit.size,
+      width: hit.width,
+    });
   };
 
   const onPointerDown = (e: React.PointerEvent): void => {
@@ -258,6 +296,21 @@ export function AnnotationLayer({
     if (editDone.current) return; // a trailing unmount-blur after Enter/Escape
     editDone.current = true;
     const text = value.trim();
+
+    // Re-editing an existing label (double-click): update it in place as one undoable
+    // change, or delete it if the user cleared the text (Excalidraw-style).
+    if (editing?.id) {
+      if (text) {
+        scene.commitAnnotation(editing.id, { text });
+        scene.select(editing.id);
+      } else {
+        scene.select(editing.id);
+        scene.removeSelected();
+      }
+      setEditing(null);
+      return;
+    }
+
     if (editing && text) {
       const { id } = nextAnnotationId();
       scene.addAnnotation({
@@ -291,11 +344,15 @@ export function AnnotationLayer({
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerAbort}
       onLostPointerCapture={onPointerAbort}
+      onDoubleClick={onDoubleClick}
     >
       <svg className={styles.svg} width={size.w} height={size.h}>
-        {scene.annotations.map((a) => (
-          <Shape key={a.id} a={a} size={size} selected={scene.selectedId === a.id} src={src} />
-        ))}
+        {scene.annotations.map((a) =>
+          // Hide the label being re-edited — the inline editor sits on top of it.
+          a.id === editing?.id ? null : (
+            <Shape key={a.id} a={a} size={size} selected={scene.selectedId === a.id} src={src} />
+          ),
+        )}
         {draft && <Shape a={draft} size={size} selected={false} src={src} />}
         {selectedAnnotation && <Handles a={selectedAnnotation} size={size} />}
       </svg>
@@ -305,17 +362,20 @@ export function AnnotationLayer({
           className={styles.textInput}
           placeholder={t("typePlaceholder")}
           rows={1}
-          // No soft wrapping: lines break only where the user asked (Alt/Shift+Enter),
-          // so the editor matches the rendered label exactly.
-          wrap="off"
+          // Prefilled when re-editing an existing label; empty for a fresh one.
+          defaultValue={editing.initialText}
+          // With a wrap width, soft-wrap at that width to mirror the label (WYSIWYG);
+          // otherwise lines break only on the user's Alt/Shift+Enter.
+          wrap={editing.width != null ? "soft" : "off"}
           style={{
             left: editing.x * size.w,
             top: editing.y * size.h,
-            color: tools.color,
+            width: editing.width != null ? editing.width * size.w : undefined,
+            color: editing.color ?? tools.color,
             fontFamily: HAND_FONT,
-            fontSize: TEXT_PX[tools.textSize],
+            fontSize: TEXT_PX[editing.size ?? tools.textSize],
             lineHeight: TEXT_LINE_HEIGHT,
-            whiteSpace: "pre",
+            whiteSpace: editing.width != null ? "pre-wrap" : "pre",
             resize: "none",
             overflow: "hidden",
           }}
