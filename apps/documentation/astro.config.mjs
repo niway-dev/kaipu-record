@@ -17,6 +17,10 @@ export default defineConfig({
           items: [{ slug: "index" }],
         },
         {
+          label: "Briefings",
+          autogenerate: { directory: "briefings" },
+        },
+        {
           label: "Stack",
           items: [{ slug: "stack/hono" }, { slug: "stack/better-auth-electron-bug" }],
         },
