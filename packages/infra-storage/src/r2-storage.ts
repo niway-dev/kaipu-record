@@ -39,25 +39,44 @@ export function createR2Storage(config: R2StorageConfig): IStorageService {
     key: string,
     method: "PUT" | "GET",
     expiresInSeconds: number,
+    contentType?: string,
   ): Promise<string> => {
     const url = new URL(objectUrl(key));
     url.searchParams.set("X-Amz-Expires", String(expiresInSeconds));
+    // `content-type` is in aws4fetch's UNSIGNABLE_HEADERS by default (S3 SigV4
+    // historically excludes it), so binding it to the signature requires
+    // `allHeaders: true`. Once signed this way, the actual PUT must send the
+    // exact same Content-Type header or R2 rejects the signature.
+    const headers = contentType ? { "content-type": contentType } : undefined;
     // signQuery => auth travels in the query string, yielding a presigned URL
     // the client can use with a plain fetch (no Authorization header needed).
     const signed = await client.sign(url.toString(), {
       method,
-      aws: { signQuery: true },
+      headers,
+      aws: { signQuery: true, allHeaders: Boolean(contentType) },
     });
     return signed.url;
   };
 
   return {
     createUploadUrl(key: string, options?: CreateUploadUrlOptions): Promise<string> {
-      return presign(key, "PUT", options?.expiresInSeconds ?? DEFAULT_EXPIRY_SECONDS);
+      return presign(
+        key,
+        "PUT",
+        options?.expiresInSeconds ?? DEFAULT_EXPIRY_SECONDS,
+        options?.contentType,
+      );
     },
 
     createDownloadUrl(key: string, options?: CreateDownloadUrlOptions): Promise<string> {
       return presign(key, "GET", options?.expiresInSeconds ?? DEFAULT_EXPIRY_SECONDS);
+    },
+
+    async objectExists(key: string): Promise<boolean> {
+      const res = await client.fetch(objectUrl(key), { method: "HEAD" });
+      if (res.ok) return true;
+      if (res.status === 404) return false;
+      throw new Error(`R2 head failed for "${key}": ${res.status} ${res.statusText}`);
     },
 
     async deleteObject(key: string): Promise<void> {
