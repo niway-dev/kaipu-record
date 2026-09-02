@@ -5,12 +5,17 @@ description: Backend for signing in and uploading local recordings to the user's
 
 # Cloud recordings — accounts + R2 upload (backend)
 
-> **Status: 🟢 Ready to validate (backend).** Full backend vertical implemented and tested
-> (domain + application + infra + API), 18 new unit tests green, `check-types` green across the
+> **Status: 🟢 Validated end-to-end locally (2026-09-02).** Full backend vertical implemented and
+> tested (domain + application + infra + API), unit tests + `check-types` green across the
 > monorepo. Realizes the **presigned-URL path** from
 > [R2 storage architecture](./r2-storage-architecture) (private bucket, read/write through code).
-> Remaining before it works end-to-end: create the private R2 bucket + API token, set the Worker
-> secrets, run `db:push`, then build the desktop upload UI. Effort: Medium.
+> The private bucket (`kaipu-private-bucket`) is provisioned, the schema is applied (`db:push`),
+> and the full cycle — sign up → session → `createUpload` → `PUT` to R2 → `confirm` → `list` →
+> `download-url` → `delete` — was run against real R2 + Postgres. A code review also fixed 7
+> correctness/quality issues (orphaned-row rollback, presigned `Content-Type` binding, confirm
+> verifying the object actually landed, delete ordering, shared error handling). Not yet done:
+> setting the **production** Worker secrets and the **desktop upload UI** (see
+> [Before integrating with Desktop](#before-integrating-with-desktop) below). Effort: Medium.
 
 ## What this delivers
 
@@ -80,19 +85,55 @@ The API reads optional Worker secrets — the API still boots without them, and 
 endpoints report "Cloud storage is not configured" until they're present:
 
 - `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`
-  (`R2_BUCKET` = the **private** bucket, e.g. `kaipu-private-bucket`, Public Access **off**, no
-  custom domain — per the architecture doc's hard rule).
+  (`R2_BUCKET` = the **private** bucket, `kaipu-private-bucket` — **provisioned**, Public Access
+  **off**, no custom domain, per the architecture doc's hard rule).
 
-Then apply the schema with `bun run db:push` (the repo has no versioned migrations).
+Apply the schema with `bun run db:push` (the repo has no versioned migrations) — **done** on the
+local/dev database. Still pending: `wrangler secret put <NAME>` for all four vars on the
+**production** Worker (`apps/server-hono`).
 
 ## How to test
 
-- **Unit (green now, in CI):** `bun run test --filter='@kaipu/*'` — 18 tests: domain key/size rules,
-  the R2 presigner (real SigV4 URL shape), and the use cases over in-memory fakes.
-- **Manual (after secrets + db:push):** hit the endpoints with a session cookie:
-  `createUpload` → `PUT` a small file to the returned URL → `confirm` → `list` shows it `ready` →
-  `download-url` fetches it back → `delete` removes row + object. A second user must not see or
-  fetch it.
+- **Unit (in CI):** `bun run test --filter='@kaipu/*'` — domain key/size rules, the R2 presigner
+  (real SigV4 URL shape, including the `Content-Type` binding), and the use cases over in-memory
+  fakes.
+- **Manual (validated 2026-09-02, local):** `sign-up` → session cookie → `createUpload` → `PUT`
+  the file to the returned URL → `confirm` → `list` shows it `ready` → `download-url` fetches it
+  back → `delete` removes row + object → `list` empty again. Ran against the real
+  `kaipu-private-bucket` and a real Postgres (Neon) — all steps returned the expected
+  status/payload. A second user still must not see or fetch another user's recording (unit-tested,
+  not yet re-verified manually against real R2).
+
+## Before integrating with Desktop
+
+From a code review of the backend (2026-09-02). The vertical itself is solid — it keeps the
+domain → application → infra → app dependency rule, treats the cloud as an optional capability
+on top of the local-first product, and the full ticket → upload → confirm → list → download →
+delete cycle works. These five items are what's left before it's ready to wire into Desktop:
+
+1. **R2 CORS + the Electron origin.** The presigned PUT binds an exact `Content-Type`
+   (`packages/infra-storage/src/r2-storage.ts`), so a fetch from the renderer triggers a CORS
+   preflight against R2's S3-compatible endpoint. Need to decide
+   whether the upload runs in the **main process** (plain Node `fetch`, no browser origin
+   checks — no CORS involved) or the **renderer** (needs the private bucket's CORS policy
+   configured for the app's actual origin), then configure the bucket accordingly.
+2. **Stronger confirm.** `confirmRecording` today only checks that the object _exists_
+   (`objectExists` → `HEAD` 200/404). It should compare the `HEAD` response's
+   `Content-Length`/`Content-Type` against what the client declared before flipping the row to
+   `ready` — otherwise the 2 GiB cap and the declared `contentType` are only a client-side
+   promise, never actually enforced server-side.
+3. **`pending` row lifecycle.** If the app closes, the network drops, or the presigned URL
+   expires (15 min default) mid-upload, the row is stuck `pending` with no cleanup path. Need a
+   policy: re-issue a fresh upload URL for the same row, an explicit cancel endpoint, and/or a
+   scheduled sweep of expired `pending` rows.
+4. **Electron authentication.** The API is already session-gated via Better Auth, but Desktop
+   has no login flow yet, and no session/token custody plan (`safeStorage`, refresh, sign-out).
+   This is the next piece to build, and it decides how Desktop actually calls these endpoints.
+5. **Quotas and abuse.** The 2 GiB per-file cap exists; still need a per-user storage quota and
+   a rate limit on presigned-URL issuance before this opens to real accounts.
+
+**Recommendation:** tackle #1 and #4 together — deciding "upload from main vs. renderer" is
+what determines the CORS policy, the auth/session surface, and where credentials live.
 
 ## Not in this slice
 
