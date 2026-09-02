@@ -40,31 +40,31 @@ cases are unit-tested with in-memory fakes.
 
 `recording` table (prefixed via `createTable`):
 
-| Column                    | Notes                                              |
-| ------------------------- | -------------------------------------------------- |
+| Column                    | Notes                                               |
+| ------------------------- | --------------------------------------------------- |
 | `id`                      | uuid, app-generated so the key exists before insert |
-| `user_id`                 | FK → user (cascade); the account it belongs to     |
-| `kind`                    | `recording` \| `screenshot`                        |
-| `title`                   |                                                    |
-| `storage_key`             | unique — `videos/<userId>/<id>.<ext>` or `img/…`   |
-| `content_type`            |                                                    |
-| `size_bytes`              | bigint (a video can exceed 32-bit)                 |
-| `duration_seconds`        |                                                    |
-| `status`                  | `pending` → `ready` after confirm                  |
-| `created_at`/`updated_at` |                                                    |
+| `user_id`                 | FK → user (cascade); the account it belongs to      |
+| `kind`                    | `recording` \| `screenshot`                         |
+| `title`                   |                                                     |
+| `storage_key`             | unique — `videos/<userId>/<id>.<ext>` or `img/…`    |
+| `content_type`            |                                                     |
+| `size_bytes`              | bigint (a video can exceed 32-bit)                  |
+| `duration_seconds`        |                                                     |
+| `status`                  | `pending` → `ready` after confirm                   |
+| `created_at`/`updated_at` |                                                     |
 
 Storage key layout matches [R2 storage architecture](./r2-storage-architecture): the **private**
 bucket, split `videos/` vs `img/`, namespaced by user.
 
 ## API (all auth-gated, `/api/v1`)
 
-| Method | Path                             | Purpose                                              |
-| ------ | -------------------------------- | ---------------------------------------------------- |
-| `POST` | `/recordings`                    | Create a pending recording + return a presigned PUT  |
-| `POST` | `/recordings/{id}/confirm`       | Mark it `ready` once the upload finished             |
-| `GET`  | `/recordings`                    | List the caller's recordings (newest first)          |
-| `GET`  | `/recordings/{id}/download-url`  | Presigned GET to download                            |
-| `DELETE`| `/recordings/{id}`              | Delete the row and its R2 object                     |
+| Method   | Path                            | Purpose                                             |
+| -------- | ------------------------------- | --------------------------------------------------- |
+| `POST`   | `/recordings`                   | Create a pending recording + return a presigned PUT |
+| `POST`   | `/recordings/{id}/confirm`      | Mark it `ready` once the upload finished            |
+| `GET`    | `/recordings`                   | List the caller's recordings (newest first)         |
+| `GET`    | `/recordings/{id}/download-url` | Presigned GET to download                           |
+| `DELETE` | `/recordings/{id}`              | Delete the row and its R2 object                    |
 
 ## Upload flow
 
