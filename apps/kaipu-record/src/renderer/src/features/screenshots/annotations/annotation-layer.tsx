@@ -1,6 +1,14 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useTranslations } from "@kaipu/i18n";
-import { BLUR_STD, HAND_FONT, STROKE_WIDTHS, TEXT_PX } from "./tools";
+import {
+  BLUR_STD,
+  HAND_FONT,
+  STROKE_WIDTHS,
+  TEXT_LINE_HEIGHT,
+  TEXT_PX,
+  textBoxPx,
+  textLines,
+} from "./tools";
 import { roughArrow, roughRect } from "./rough";
 import { smoothPath } from "./smooth";
 import { nextAnnotationId, type Annotation } from "./scene";
@@ -48,7 +56,7 @@ export function AnnotationLayer({
   const [draft, setDraft] = useState<Annotation | null>(null);
   const [editing, setEditing] = useState<{ x: number; y: number } | null>(null);
   const drag = useRef<Drag | null>(null);
-  const textInputRef = useRef<HTMLInputElement>(null);
+  const textInputRef = useRef<HTMLTextAreaElement>(null);
   // Blur-to-commit is "armed" only after the input has settled, so the click
   // that opened it can't immediately blur-cancel it before the user can type.
   const textArmed = useRef(false);
@@ -292,27 +300,44 @@ export function AnnotationLayer({
         {selectedAnnotation && <Handles a={selectedAnnotation} size={size} />}
       </svg>
       {editing && (
-        <input
+        <textarea
           ref={textInputRef}
           className={styles.textInput}
           placeholder={t("typePlaceholder")}
+          rows={1}
+          // No soft wrapping: lines break only where the user asked (Alt/Shift+Enter),
+          // so the editor matches the rendered label exactly.
+          wrap="off"
           style={{
             left: editing.x * size.w,
             top: editing.y * size.h,
             color: tools.color,
             fontFamily: HAND_FONT,
             fontSize: TEXT_PX[tools.textSize],
+            lineHeight: TEXT_LINE_HEIGHT,
+            whiteSpace: "pre",
+            resize: "none",
+            overflow: "hidden",
           }}
           onPointerDown={(e) => e.stopPropagation()}
           onKeyDown={(e) => {
-            if (e.key === "Enter") {
+            // Plain Enter commits. Alt+Enter / Shift+Enter fall through to the
+            // textarea's default and insert a newline (Excalidraw / spreadsheet
+            // behaviour), then auto-grow runs on the resulting change.
+            if (e.key === "Enter" && !e.altKey && !e.shiftKey) {
               e.preventDefault();
-              commitText((e.target as HTMLInputElement).value);
+              commitText(e.currentTarget.value);
             } else if (e.key === "Escape") {
               e.preventDefault();
               editDone.current = true; // cancel — the unmount blur must not commit
               setEditing(null);
             }
+          }}
+          onInput={(e) => {
+            // Grow with the content so every line stays visible while typing.
+            const el = e.currentTarget;
+            el.style.height = "auto";
+            el.style.height = `${el.scrollHeight}px`;
           }}
           onBlur={(e) => {
             // Ignore the opening click's spurious blur — refocus and keep typing.
@@ -500,17 +525,25 @@ function Shape({
         dominantBaseline="hanging"
         style={{ userSelect: "none" }}
       >
-        {a.text}
+        {textLines(a.text).map((line, i) => (
+          <tspan key={i} x={tx} dy={i === 0 ? 0 : fs * TEXT_LINE_HEIGHT}>
+            {line}
+          </tspan>
+        ))}
       </text>
-      {selected && (
-        <rect
-          className={styles.selOutline}
-          x={tx - 4}
-          y={ty - 4}
-          width={a.text.length * fs * 0.55 + 8}
-          height={fs * 1.3 + 8}
-        />
-      )}
+      {selected &&
+        (() => {
+          const b = textBoxPx(a.text, fs);
+          return (
+            <rect
+              className={styles.selOutline}
+              x={tx - 4}
+              y={ty - 4}
+              width={b.w + 8}
+              height={b.h + 8}
+            />
+          );
+        })()}
     </g>
   );
 }
@@ -560,8 +593,9 @@ function hitTest(annotations: Annotation[], p: Pt, size: Size): Annotation | nul
       const fs = TEXT_PX[a.size];
       const padX = 8 / (size.w || 1);
       const padY = 8 / (size.h || 1);
-      const w = (a.text.length * fs * 0.55) / (size.w || 1);
-      const h = (fs * 1.3) / (size.h || 1);
+      const box = textBoxPx(a.text, fs);
+      const w = box.w / (size.w || 1);
+      const h = box.h / (size.h || 1);
       if (
         p.x >= a.x - padX &&
         p.x <= a.x + w + padX &&

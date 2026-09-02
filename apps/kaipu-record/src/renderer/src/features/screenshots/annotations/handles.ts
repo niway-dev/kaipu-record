@@ -9,7 +9,7 @@
  *   - text       : 1 corner handle (font-based, so it snaps to the nearest size level).
  */
 
-import { TEXT_PX } from "./tools";
+import { TEXT_PX, textBoxPx } from "./tools";
 import type { Annotation } from "./scene";
 
 export type HandleId = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "p1" | "p2";
@@ -72,11 +72,12 @@ export function annotationBox(a: Annotation, size: Size): Box | null {
     const minY = Math.min(...ys);
     return { x: minX, y: minY, w: Math.max(...xs) - minX, h: Math.max(...ys) - minY };
   }
-  // text — mirror the rendered selection outline (see Shape): width from glyph count,
-  // height from the font size, both in normalized space.
+  // text — mirror the rendered selection outline (see Shape): width from the longest
+  // line, height from the line count, both in normalized space.
   const fs = TEXT_PX[a.size];
-  const w = (a.text.length * fs * 0.55) / (size.w || 1);
-  const h = (fs * 1.3) / (size.h || 1);
+  const box = textBoxPx(a.text, fs);
+  const w = box.w / (size.w || 1);
+  const h = box.h / (size.h || 1);
   return { x: a.x, y: a.y, w, h };
 }
 

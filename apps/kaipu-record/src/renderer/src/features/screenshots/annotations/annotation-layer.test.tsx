@@ -112,6 +112,33 @@ describe("AnnotationLayer — text tool", () => {
     expect(scene.addAnnotation).not.toHaveBeenCalled();
   });
 
+  it("Alt+Enter does not commit — it inserts a newline (spreadsheet/Excalidraw)", () => {
+    const scene = makeScene([], null);
+    const input = openTextInput(scene);
+    fireEvent.change(input, { target: { value: "line 1" } });
+    fireEvent.keyDown(input, { key: "Enter", altKey: true });
+    expect(scene.addAnnotation).not.toHaveBeenCalled();
+  });
+
+  it("Shift+Enter does not commit either (also a newline)", () => {
+    const scene = makeScene([], null);
+    const input = openTextInput(scene);
+    fireEvent.change(input, { target: { value: "line 1" } });
+    fireEvent.keyDown(input, { key: "Enter", shiftKey: true });
+    expect(scene.addAnnotation).not.toHaveBeenCalled();
+  });
+
+  it("commits multi-line text with its newline preserved", () => {
+    const scene = makeScene([], null);
+    const input = openTextInput(scene);
+    fireEvent.change(input, { target: { value: "line 1\nline 2" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(scene.addAnnotation).toHaveBeenCalledTimes(1);
+    expect((scene.addAnnotation as ReturnType<typeof vi.fn>).mock.calls[0][0].text).toBe(
+      "line 1\nline 2",
+    );
+  });
+
   it("auto-selects after committing text (switches to the select tool)", () => {
     const scene = makeScene([], null);
     const tools = makeTools({ tool: "text" });
