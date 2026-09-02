@@ -1,3 +1,4 @@
+import { RecordingNotUploadedError, UploadLimitExceededError } from "@kaipu/domain/schemas";
 import type { IStorageService } from "@kaipu/domain/services";
 import {
   confirmRecording,
@@ -46,19 +47,38 @@ export const recordingRouter = impl.router({
   }),
 
   createUpload: impl.createUpload.use(authMiddleware).handler(async ({ input, context }) => {
-    const data = await createRecordingUpload({
-      repo,
-      storage: getStorage(),
-      userId: context.user.id,
-      input,
-    });
-    return { data, error: null };
+    try {
+      const data = await createRecordingUpload({
+        repo,
+        storage: getStorage(),
+        userId: context.user.id,
+        input,
+      });
+      return { data, error: null };
+    } catch (err) {
+      if (err instanceof UploadLimitExceededError) {
+        throw new ORPCError("BAD_REQUEST", { message: err.message });
+      }
+      throw err;
+    }
   }),
 
   confirm: impl.confirm.use(authMiddleware).handler(async ({ input, context }) => {
-    const recording = await confirmRecording({ repo, userId: context.user.id, id: input.id });
-    if (!recording) throw new ORPCError("NOT_FOUND", { message: "Recording not found" });
-    return { data: recording, error: null };
+    try {
+      const recording = await confirmRecording({
+        repo,
+        storage: getStorage(),
+        userId: context.user.id,
+        id: input.id,
+      });
+      if (!recording) throw new ORPCError("NOT_FOUND", { message: "Recording not found" });
+      return { data: recording, error: null };
+    } catch (err) {
+      if (err instanceof RecordingNotUploadedError) {
+        throw new ORPCError("CONFLICT", { message: err.message });
+      }
+      throw err;
+    }
   }),
 
   downloadUrl: impl.downloadUrl.use(authMiddleware).handler(async ({ input, context }) => {
