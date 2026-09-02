@@ -7,6 +7,7 @@ export default defineConfig({
     types: "src/types/index.ts",
     schemas: "src/schemas/index.ts",
     repositories: "src/repositories/index.ts",
+    services: "src/services/index.ts",
   },
 
   exports: {

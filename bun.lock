@@ -34,7 +34,7 @@
     },
     "apps/kaipu-record": {
       "name": "kaipu-record",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "dependencies": {
         "@electron-toolkit/preload": "^3.0.2",
         "@electron-toolkit/utils": "^4.0.0",
@@ -81,6 +81,7 @@
         "@kaipu/infra-auth": "workspace:*",
         "@kaipu/infra-db": "workspace:*",
         "@kaipu/infra-env": "workspace:*",
+        "@kaipu/infra-storage": "workspace:*",
         "@orpc/contract": "catalog:",
         "@orpc/openapi": "catalog:",
         "@orpc/server": "catalog:",
@@ -93,11 +94,12 @@
         "@kaipu/config": "workspace:*",
         "tsdown": "catalog:",
         "typescript": "catalog:",
+        "wrangler": "4.63.0",
       },
     },
     "apps/web-hono": {
       "name": "web-hono",
-      "version": "0.2.0",
+      "version": "0.4.0",
       "dependencies": {
         "@base-ui/react": "^1.0.0",
         "@kaipu/application": "workspace:*",
@@ -167,6 +169,7 @@
         "@types/node": "^22.14.1",
         "tsdown": "catalog:",
         "typescript": "catalog:",
+        "vitest": "^4.1.9",
       },
     },
     "packages/config": {
@@ -183,6 +186,7 @@
         "@types/node": "^22.14.1",
         "tsdown": "catalog:",
         "typescript": "catalog:",
+        "vitest": "^4.1.9",
       },
     },
     "packages/i18n": {
@@ -251,6 +255,19 @@
         "@kaipu/config": "workspace:*",
         "tsdown": "catalog:",
         "typescript": "catalog:",
+      },
+    },
+    "packages/infra-storage": {
+      "name": "@kaipu/infra-storage",
+      "dependencies": {
+        "aws4fetch": "^1.0.20",
+      },
+      "devDependencies": {
+        "@kaipu/config": "workspace:*",
+        "@kaipu/domain": "workspace:*",
+        "tsdown": "catalog:",
+        "typescript": "catalog:",
+        "vitest": "^4.1.9",
       },
     },
     "packages/tokens": {
@@ -774,6 +791,8 @@
     "@kaipu/infra-db": ["@kaipu/infra-db@workspace:packages/infra-db"],
 
     "@kaipu/infra-env": ["@kaipu/infra-env@workspace:packages/infra-env"],
+
+    "@kaipu/infra-storage": ["@kaipu/infra-storage@workspace:packages/infra-storage"],
 
     "@kaipu/tokens": ["@kaipu/tokens@workspace:packages/tokens"],
 

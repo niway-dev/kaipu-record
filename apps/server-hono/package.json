@@ -16,6 +16,7 @@
     "@kaipu/infra-auth": "workspace:*",
     "@kaipu/infra-db": "workspace:*",
     "@kaipu/infra-env": "workspace:*",
+    "@kaipu/infra-storage": "workspace:*",
     "@orpc/contract": "catalog:",
     "@orpc/openapi": "catalog:",
     "@orpc/server": "catalog:",
@@ -27,6 +28,7 @@
   "devDependencies": {
     "@kaipu/config": "workspace:*",
     "tsdown": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "wrangler": "4.63.0"
   }
 }

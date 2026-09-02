@@ -5,8 +5,10 @@ description: How to lay out Kaipu's R2 storage so app installers stay public whi
 
 # R2 storage architecture (public vs private content)
 
-> **Status: 🔵 Proposed** — captured while wiring desktop distribution. Needed before the
-> upload features (videos / images) ship, so private content isn't exposed.
+> **Status: 🔵 Proposed (decision taken)** — captured while wiring desktop distribution. Needed
+> before the upload features (videos / images) ship, so private content isn't exposed. The
+> **presigned-URL path** for private uploads is now implemented in the backend — see
+> [Cloud recordings — accounts + R2 upload](./cloud-recordings-upload).
 
 ## What we want
 

@@ -1,9 +1,12 @@
 name: CI
 
 # Universal fast check on every PR: does everything still lint, format, build and
-# type-check? NO tests here — those live in the per-project test workflows
-# (ci-desktop / ci-web / ci-api), path-filtered so a project's (slow) suite only runs
-# when that project changes. Skips docs-only PRs and release-please chore PRs. (Exception: the design-tokens drift guard, a build-integrity check.)
+# type-check? No app-level test suites here — those live in the per-project test
+# workflows (ci-desktop / ci-web / ci-api), path-filtered so a project's (slow) suite
+# only runs when that project changes. Skips docs-only PRs and release-please chore
+# PRs. (Exceptions, both fast build-integrity checks: the design-tokens drift guard,
+# and the `@kaipu/*` package unit tests below — small, dependency-free suites for
+# domain/application/infra packages that every PR touching them should catch.)
 
 on:
   pull_request:
@@ -60,6 +63,9 @@ jobs:
 
       - name: Type check
         run: bun run check-types
+
+      - name: Test packages
+        run: bun run test --filter='@kaipu/*'
 
       - name: Build web app
         working-directory: apps/web-hono

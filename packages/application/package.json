@@ -14,16 +14,16 @@
     "src"
   ],
   "type": "module",
-  "main": "./dist/todos.mjs",
-  "module": "./dist/todos.mjs",
-  "types": "./dist/todos.d.mts",
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
   "exports": {
-    ".": "./src/todos/index.ts",
+    ".": "./src/index.ts",
     "./package.json": "./package.json"
   },
   "publishConfig": {
     "exports": {
-      ".": "./dist/todos.mjs",
+      ".": "./dist/index.mjs",
       "./package.json": "./package.json"
     }
   },
@@ -33,7 +33,8 @@
     "clean": "rm -rf dist",
     "check-types": "tsc --noEmit",
     "lint": "oxlint src",
-    "lint:fix": "oxlint --fix src"
+    "lint:fix": "oxlint --fix src",
+    "test": "vitest run"
   },
   "dependencies": {
     "zod": "catalog:"
@@ -42,7 +43,8 @@
     "@kaipu/domain": "workspace:*",
     "@types/node": "^22.14.1",
     "tsdown": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "^4.1.9"
   },
   "packageManager": "bun@1.3.4"
 }
