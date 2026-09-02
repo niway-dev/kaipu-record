@@ -5,27 +5,8 @@ import {
   createTodoSchema,
   updateTodoSchema,
   paginationQuerySchema,
-  paginationMetaSchema,
 } from "@kaipu/domain/schemas";
-
-const errorSchema = z.object({ message: z.string() });
-
-const apiResponseSchema = <T extends z.ZodType>(dataSchema: T) =>
-  z.object({
-    data: dataSchema.nullable(),
-    error: errorSchema.nullable(),
-  });
-
-const paginatedApiResponseSchema = <T extends z.ZodType>(dataSchema: T) =>
-  z.object({
-    data: dataSchema.nullable(),
-    error: errorSchema.nullable(),
-    meta: z
-      .object({
-        pagination: paginationMetaSchema,
-      })
-      .optional(),
-  });
+import { apiResponseSchema, paginatedApiResponseSchema } from "./shared.contract";
 
 export const todoContract = {
   list: oc

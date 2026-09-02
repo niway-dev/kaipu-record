@@ -1,14 +1,7 @@
 import { createRecordingUploadSchema, recordingBaseSchema } from "@kaipu/domain/schemas";
 import { oc } from "@orpc/contract";
 import { z } from "zod";
-
-const errorSchema = z.object({ message: z.string() });
-
-const apiResponseSchema = <T extends z.ZodType>(dataSchema: T) =>
-  z.object({
-    data: dataSchema.nullable(),
-    error: errorSchema.nullable(),
-  });
+import { apiResponseSchema } from "./shared.contract";
 
 const uploadTicketSchema = z.object({
   recording: recordingBaseSchema,
