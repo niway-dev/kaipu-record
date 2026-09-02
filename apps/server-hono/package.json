@@ -28,6 +28,7 @@
   "devDependencies": {
     "@kaipu/config": "workspace:*",
     "tsdown": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "wrangler": "4.63.0"
   }
 }
