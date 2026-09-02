@@ -25,6 +25,16 @@ that is unreachable but not deleted.
 - Preserve a privacy deletion guarantee: account deletion must schedule, retry, and eventually prove
   removal of every private object belonging to that account.
 
+## Design direction
+
+The API is a Cloudflare Worker with no existing background-job infrastructure. Cloudflare
+[Cron Triggers](https://developers.cloudflare.com/workers/configuration/cron-triggers/) run a
+Worker on a schedule without adding new infra (Durable Objects, an external queue, or a
+separate service) and are the natural fit here — one triggered handler for the expired-pending
+sweep, another for account-deletion cleanup retries. Confirm the batch size and execution-time
+limits fit a single invocation, or split the sweep into resumable pages if the private bucket
+grows large.
+
 ## Acceptance criteria
 
 - An interrupted upload becomes recoverable or is removed without manual database access.
