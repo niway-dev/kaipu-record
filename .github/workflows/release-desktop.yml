@@ -105,6 +105,45 @@ jobs:
             aws s3 cp "$SRC" "s3://${R2_BUCKET}/download/latest/kaipu-${arch}.dmg" --endpoint-url "$ENDPOINT"
           done
 
+      - name: Prune old release artifacts (keep last N versions)
+        # download/<version>/ and updates/ accumulate one entry per release forever
+        # otherwise (only download/latest/ self-overwrites). Auto-update only ever
+        # needs the newest version's feed entry; older ones just enable manual
+        # rollback, so we only need to keep a handful of them around.
+        if: startsWith(github.ref, 'refs/tags/')
+        working-directory: apps/kaipu-record
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          R2_BUCKET: kaipu-bucket
+          KEEP_VERSIONS: 3
+        run: |
+          ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          # List the version folders under download/ (excludes download/latest/,
+          # which isn't a version), oldest first.
+          VERSIONS=$(aws s3 ls "s3://${R2_BUCKET}/download/" --endpoint-url "$ENDPOINT" \
+            | awk '{print $2}' | sed 's#/$##' | grep -v '^latest$' | grep -v '^$' | sort -V || true)
+          TOTAL=0
+          if [ -n "$VERSIONS" ]; then
+            TOTAL=$(echo "$VERSIONS" | wc -l | tr -d ' ')
+          fi
+          STALE=$((TOTAL - KEEP_VERSIONS))
+          if [ "$STALE" -gt 0 ]; then
+            echo "$VERSIONS" | head -n "$STALE" | while read -r v; do
+              [ -z "$v" ] && continue
+              echo "Pruning release artifacts for v${v} (keeping last ${KEEP_VERSIONS} versions)"
+              aws s3 rm "s3://${R2_BUCKET}/download/${v}/" --recursive --endpoint-url "$ENDPOINT"
+              # Version-scoped update-feed files only (zip + blockmap for both archs).
+              # latest-mac.yml has no version segment in its name, so it's never matched here.
+              aws s3 rm "s3://${R2_BUCKET}/updates/" --recursive --endpoint-url "$ENDPOINT" \
+                --exclude "*" --include "*-${v}-*"
+            done
+          else
+            echo "${TOTAL} version(s) published, nothing to prune (keeping last ${KEEP_VERSIONS})."
+          fi
+
       - name: Upload build as workflow artifact
         # Only for manual-dispatch runs (no tag): a tag release already ships the
         # DMG/zip to R2 and to the GitHub Release, so the workflow artifact would
