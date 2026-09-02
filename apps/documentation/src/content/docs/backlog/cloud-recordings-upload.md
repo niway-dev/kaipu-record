@@ -135,6 +135,13 @@ delete cycle works. These five items are what's left before it's ready to wire i
 **Recommendation:** tackle #1 and #4 together — deciding "upload from main vs. renderer" is
 what determines the CORS policy, the auth/session surface, and where credentials live.
 
+## Security hardening follow-up
+
+The production-readiness work from the security review is split into independently trackable
+documents under [Backend security hardening](./backend-security-hardening). That hub is the source
+of truth for the release gate and links dependency remediation, ticket integrity, production
+configuration, Desktop auth/CORS, abuse controls, Electron hardening, and cloud data lifecycle.
+
 ## Not in this slice
 
 - **Desktop UI**: sign-in screen (token in OS keychain via `safeStorage`) and an "upload / synced"
