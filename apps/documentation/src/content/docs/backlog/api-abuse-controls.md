@@ -29,6 +29,13 @@ chosen anti-abuse key for login. Do not make IP address the only identity for le
 shared networks. Limits must fail closed for upload-ticket issuance when the limiter is unavailable,
 or the alternative must be explicitly justified.
 
+**Implementation option to evaluate first:** the API already runs on Cloudflare Workers, which
+has edge-native [Rate Limiting Rules](https://developers.cloudflare.com/waf/rate-limiting-rules/)
+(WAF-level, no application code, no extra latency from a Durable Object/KV round-trip). Check
+whether it can express the per-route, user-scoped limits above before building a custom
+application-layer limiter — it still needs stable per-account keys (not bare IP) and a documented
+fail-closed/fail-open decision either way, but may cut most of the implementation cost.
+
 ## Acceptance criteria
 
 - Excess ticket creation, quota exhaustion, malformed JSON, unsupported MIME types, and oversized
@@ -40,3 +47,7 @@ or the alternative must be explicitly justified.
 ## Non-goals
 
 - Charging, billing, or subscription entitlements; this task only creates the safe enforcement seam.
+
+## Related
+
+- [Production cloud security](./production-cloud-security)
