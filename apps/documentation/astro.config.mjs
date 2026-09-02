@@ -65,6 +65,7 @@ export default defineConfig({
             { slug: "backlog/auto-update" },
             { slug: "backlog/shared-tokens-package" },
             { slug: "backlog/r2-storage-architecture" },
+            { slug: "backlog/cloud-recordings-upload" },
             { slug: "backlog/backend-security-hardening" },
             { slug: "backlog/dependency-security-upgrades" },
             { slug: "backlog/r2-upload-integrity" },
