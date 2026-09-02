@@ -2,6 +2,7 @@ import type { IRecordingRepository } from "@kaipu/domain/repositories";
 import {
   buildStorageKey,
   isWithinUploadLimit,
+  UploadLimitExceededError,
   type CreateRecordingUpload,
   type RecordingBase,
 } from "@kaipu/domain/schemas";
@@ -27,7 +28,7 @@ export async function createRecordingUpload(params: {
   const { repo, storage, userId, input } = params;
 
   if (!isWithinUploadLimit(input.sizeBytes)) {
-    throw new Error("Recording exceeds the maximum upload size");
+    throw new UploadLimitExceededError(input.sizeBytes);
   }
 
   const id = crypto.randomUUID();
@@ -49,9 +50,16 @@ export async function createRecordingUpload(params: {
     durationSeconds: input.durationSeconds,
   });
 
-  const uploadUrl = await storage.createUploadUrl(storageKey, {
-    contentType: input.contentType,
-  });
-
-  return { recording, uploadUrl };
+  try {
+    const uploadUrl = await storage.createUploadUrl(storageKey, {
+      contentType: input.contentType,
+    });
+    return { recording, uploadUrl };
+  } catch (err) {
+    // Presigning failed after the row was created — best-effort clean it up so
+    // we don't leave a permanently-pending row whose key will never receive an
+    // object. If the cleanup itself fails, surface the original error anyway.
+    await repo.delete(id, userId).catch(() => undefined);
+    throw err;
+  }
 }
