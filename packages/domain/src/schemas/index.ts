@@ -18,6 +18,8 @@ export {
   isWithinUploadLimit,
   extensionForContentType,
   buildStorageKey,
+  UploadLimitExceededError,
+  RecordingNotUploadedError,
   type RecordingKind,
   type RecordingStatus,
   type RecordingBase,

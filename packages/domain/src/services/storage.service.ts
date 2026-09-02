@@ -19,6 +19,8 @@ export interface IStorageService {
   createUploadUrl(key: string, options?: CreateUploadUrlOptions): Promise<string>;
   /** A presigned GET URL to download the object. */
   createDownloadUrl(key: string, options?: CreateDownloadUrlOptions): Promise<string>;
+  /** Whether the object has actually landed in storage (used to verify an upload before trusting it). */
+  objectExists(key: string): Promise<boolean>;
   /** Remove the object from storage. */
   deleteObject(key: string): Promise<void>;
 }

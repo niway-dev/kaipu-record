@@ -50,6 +50,22 @@ export function isWithinUploadLimit(sizeBytes: number): boolean {
   return sizeBytes > 0 && sizeBytes <= MAX_UPLOAD_BYTES;
 }
 
+/** Thrown when a requested upload exceeds `MAX_UPLOAD_BYTES`. */
+export class UploadLimitExceededError extends Error {
+  constructor(sizeBytes: number) {
+    super(`Recording exceeds the maximum upload size (${sizeBytes} > ${MAX_UPLOAD_BYTES} bytes)`);
+    this.name = "UploadLimitExceededError";
+  }
+}
+
+/** Thrown when confirming a recording whose object was never actually uploaded to storage. */
+export class RecordingNotUploadedError extends Error {
+  constructor(storageKey: string) {
+    super(`No object was found in storage for "${storageKey}" — upload it before confirming`);
+    this.name = "RecordingNotUploadedError";
+  }
+}
+
 const EXTENSION_BY_CONTENT_TYPE: Record<string, string> = {
   "video/webm": "webm",
   "video/mp4": "mp4",
