@@ -84,10 +84,9 @@ describe("handlesFor", () => {
     const h = handlesFor(arrow, size);
     expect(h.map((x) => x.id).sort()).toEqual(["p1", "p2"]);
   });
-  it("gives 1 corner handle for text", () => {
+  it("gives a corner (font) and an east-edge (wrap width) handle for text", () => {
     const h = handlesFor(text, size);
-    expect(h).toHaveLength(1);
-    expect(h[0].id).toBe("se");
+    expect(h.map((x) => x.id).sort()).toEqual(["e", "se"]);
   });
 });
 
@@ -179,6 +178,14 @@ describe("resizeAnnotation — text", () => {
   it("snaps to the smallest level when dragged close to the anchor", () => {
     const patch = resizeAnnotation(text, "se", { x: 0.31, y: 0.31 }, size) as { size: number };
     expect(patch.size).toBe(0);
+  });
+  it("the east edge sets the wrap width from the horizontal drag (not the font)", () => {
+    const patch = resizeAnnotation(text, "e", { x: 0.7, y: 0.3 }, size) as { width: number };
+    expect(patch.width).toBeCloseTo(0.4); // 0.7 (drag x) − 0.3 (anchor x)
+  });
+  it("clamps the wrap width to a small minimum, never zero/negative", () => {
+    const patch = resizeAnnotation(text, "e", { x: 0.3, y: 0.3 }, size) as { width: number };
+    expect(patch.width).toBeGreaterThan(0);
   });
 });
 

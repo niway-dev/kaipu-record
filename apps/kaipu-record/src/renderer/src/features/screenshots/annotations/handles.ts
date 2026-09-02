@@ -72,10 +72,12 @@ export function annotationBox(a: Annotation, size: Size): Box | null {
     const minY = Math.min(...ys);
     return { x: minX, y: minY, w: Math.max(...xs) - minX, h: Math.max(...ys) - minY };
   }
-  // text — mirror the rendered selection outline (see Shape): width from the longest
-  // line, height from the line count, both in normalized space.
+  // text — mirror the rendered selection outline (see Shape): when a wrap width is
+  // set the box IS that width (height from the wrapped line count); otherwise width
+  // from the longest line. Both in normalized space.
   const fs = TEXT_PX[a.size];
-  const box = textBoxPx(a.text, fs);
+  const widthPx = a.width ? a.width * (size.w || 1) : undefined;
+  const box = textBoxPx(a.text, fs, widthPx);
   const w = box.w / (size.w || 1);
   const h = box.h / (size.h || 1);
   return { x: a.x, y: a.y, w, h };
@@ -92,8 +94,12 @@ export function handlesFor(a: Annotation, size: Size): Handle[] {
   const b = annotationBox(a, size);
   if (!b) return [];
   if (a.kind === "text") {
-    // Font-based: one corner handle (uniform scale) — no edge stretch.
-    return [{ id: "se", x: b.x + b.w, y: b.y + b.h }];
+    // Two handles: the SE corner scales the font (nearest size level), the E edge
+    // sets the wrap width so the text reflows by words (Excalidraw-style).
+    return [
+      { id: "se", x: b.x + b.w, y: b.y + b.h },
+      { id: "e", x: b.x + b.w, y: b.y + b.h / 2 },
+    ];
   }
   const cx = b.x + b.w / 2;
   const cy = b.y + b.h / 2;
@@ -160,6 +166,12 @@ export function resizeAnnotation(
       : { x2: clamp01(p.x), y2: clamp01(p.y) };
   }
   if (a.kind === "text") {
+    if (handle === "e") {
+      // The east edge sets the wrap width; the text reflows to it by words.
+      const fs = TEXT_PX[a.size];
+      const minWidth = (fs * 2) / (size.w || 1); // never collapse below ~2 glyphs
+      return { width: Math.max(minWidth, clamp01(p.x) - a.x) };
+    }
     // The se corner sets the height; map it to the nearest discrete size level.
     const targetPx = ((clamp01(p.y) - a.y) * (size.h || 1)) / 1.3;
     return { size: nearestTextLevel(targetPx) };
