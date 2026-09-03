@@ -9,17 +9,26 @@ import styles from "./account-panel.module.css";
 
 type FormMode = "closed" | "sign-in" | "sign-up";
 
+/** Exhaustive on purpose — no `default` branch, so adding an AuthError kind without adding its
+ *  copy here is a compile error rather than a silent fallback to the generic message. */
 function errorCopyKey(
   err: AuthError,
-): "authErrorInvalidCredentials" | "authErrorEmailTaken" | "authErrorNetwork" | "authErrorUnknown" {
+):
+  | "authErrorInvalidCredentials"
+  | "authErrorEmailTaken"
+  | "authErrorPasswordTooShort"
+  | "authErrorNetwork"
+  | "authErrorUnknown" {
   switch (err.kind) {
     case "invalid-credentials":
       return "authErrorInvalidCredentials";
     case "email-taken":
       return "authErrorEmailTaken";
+    case "password-too-short":
+      return "authErrorPasswordTooShort";
     case "network":
       return "authErrorNetwork";
-    default:
+    case "unknown":
       return "authErrorUnknown";
   }
 }
@@ -122,6 +131,11 @@ export function AccountPanel(): React.JSX.Element {
         value={password}
         onChange={(e) => setPassword(e.target.value)}
         required
+        // Cheap client-side prevention of the server's PASSWORD_TOO_SHORT (better-auth's default
+        // minimum is 8, and baseConfig does not override it). Sign-in keeps no minimum: an
+        // existing account may predate the rule, and rejecting it here would only hide the
+        // real "wrong email or password" answer behind a misleading validation message.
+        minLength={mode === "sign-up" ? 8 : undefined}
       />
       {error && (
         <p className={styles.error} role="alert">

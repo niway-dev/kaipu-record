@@ -62,6 +62,34 @@ describe("signUpWithPassword", () => {
       signUpWithPassword(config, { email: "dup@b.com", password: "pw", name: "Dup" }),
     ).rejects.toMatchObject({ kind: "email-taken" });
   });
+
+  it("reads the body's code so PASSWORD_TOO_SHORT is not reported as email-taken", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ code: "PASSWORD_TOO_SHORT", message: "too short" }), {
+          status: 400,
+        }),
+      ),
+    );
+    await expect(
+      signUpWithPassword(config, { email: "new@b.com", password: "short", name: "New" }),
+    ).rejects.toMatchObject({ kind: "password-too-short" });
+  });
+
+  it("falls back to the endpoint's default kind for any other error code", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(JSON.stringify({ code: "USER_ALREADY_EXISTS" }), { status: 422 }),
+        ),
+    );
+    await expect(
+      signUpWithPassword(config, { email: "dup@b.com", password: "long enough", name: "Dup" }),
+    ).rejects.toMatchObject({ kind: "email-taken" });
+  });
 });
 
 describe("getSession", () => {

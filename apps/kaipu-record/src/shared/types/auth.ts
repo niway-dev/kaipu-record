@@ -20,5 +20,6 @@ export interface SignUpInput extends AuthCredentials {
 export type AuthError =
   | { kind: "invalid-credentials" }
   | { kind: "email-taken" }
+  | { kind: "password-too-short" }
   | { kind: "network" }
   | { kind: "unknown"; message: string };
