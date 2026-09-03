@@ -62,6 +62,30 @@ describe("useAuthStatus", () => {
     expect(result.current.error).toEqual({ kind: "invalid-credentials" });
   });
 
+  // Regression test: signIn/signUp report a CREDENTIAL failure as a resolved
+  // `{ ok: false, error }`, never a rejection — but the IPC call itself can still reject for a
+  // reason unrelated to credentials (e.g. auth-store.ts's requireMainWindow guard). Without a
+  // catch around `attempt()`, that rejection propagates uncaught: `pending` never resets and the
+  // form is stuck disabled forever with no error shown.
+  it("recovers from the IPC call itself rejecting (not a credential failure)", async () => {
+    vi.spyOn(window.electronAPI, "signIn").mockRejectedValue(
+      new Error("auth IPC calls are only accepted from the main window"),
+    );
+
+    const { result } = renderHook(() => useAuthStatus());
+    await waitFor(() => expect(result.current.status).toEqual({ kind: "signed-out" }));
+
+    await act(async () => {
+      await result.current.signIn({ email: "a@b.com", password: "x" });
+    });
+
+    expect(result.current.pending).toBe(false);
+    expect(result.current.error).toEqual({
+      kind: "unknown",
+      message: "auth IPC calls are only accepted from the main window",
+    });
+  });
+
   it("a new attempt clears the previous error", async () => {
     vi.spyOn(window.electronAPI, "signIn")
       .mockResolvedValueOnce({ ok: false, error: { kind: "invalid-credentials" } })

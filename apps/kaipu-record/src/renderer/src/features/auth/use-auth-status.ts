@@ -51,17 +51,26 @@ export function useAuthStatus(): AuthStatusStore {
     return unsubscribe;
   }, []);
 
-  // The attempt never rejects by contract: signIn/signUp report failure as `{ ok: false, error }`
-  // (a thrown IPC error would lose the structured `kind` — see AuthAttemptResult), and signOut
-  // never fails by design.
+  // signIn/signUp report a CREDENTIAL failure as a resolved `{ ok: false, error }` (a thrown IPC
+  // error would lose the structured `kind` — see AuthAttemptResult), and signOut never fails by
+  // design — but the IPC call itself can still reject for a reason that has nothing to do with
+  // credentials (e.g. auth-store.ts's requireMainWindow rejecting a call from an unexpected
+  // sender). Without this catch, that rejection would propagate out of `attempt()` uncaught —
+  // `pending` would never reset, leaving the UI stuck disabled with no feedback, which is worse
+  // than the generic error message this catch falls back to.
   const runAttempt = useCallback(
     async (attempt: () => Promise<AuthAttemptResult>): Promise<void> => {
       setPending(true);
       setError(null);
-      const result = await attempt();
-      if (result.ok) setStatus(result.status);
-      else setError(result.error);
-      setPending(false);
+      try {
+        const result = await attempt();
+        if (result.ok) setStatus(result.status);
+        else setError(result.error);
+      } catch (err) {
+        setError({ kind: "unknown", message: err instanceof Error ? err.message : String(err) });
+      } finally {
+        setPending(false);
+      }
     },
     [],
   );
