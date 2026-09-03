@@ -9,7 +9,25 @@ description: Email/password sign-in and sign-up for the Kaipu desktop app, using
 feature (cloud recordings upload) has a session to act on. Desktop stays fully usable, offline,
 with zero account required — signing in is opt-in, never a gate.
 
-**Status:** design approved (brainstorming). Implementation plan to follow via `writing-plans`.
+**Status:** design approved (brainstorming), implemented, and manually verified against a real
+local `server-hono` (`wrangler dev`) on 2026-09-02 (Task 12 of the implementation plan) — every
+scenario in the Testing plan's manual section passed, including sign-up/sign-out/sign-in/restart
+restore, a corrupted token file, and the offline `unknown`-state check with reconnect recovery. Two
+real bugs surfaced only by that live verification, and one UX rough edge exposed by real network
+latency, all fixed before sign-off:
+
+1. The origin/CSRF assumption below was wrong — sign-up/sign-in failed outright until fixed (see
+   the **Correction** in "Server-side change").
+2. `AccountPanel`'s form `mode` state never reset after a successful sign-in/sign-up, so a later
+   sign-out re-rendered the stale, still-filled-in form instead of the closed "Sign in"/"Create
+   account" buttons.
+3. Against a real network round-trip, `AccountPanel` briefly rendered the signed-out buttons for an
+   already-signed-in user before the initial `getAuthStatus()` call resolved — invisible with the
+   mocked, near-instant promises the unit tests use. Fixed by gating that render on the hook's
+   `pending` flag now also covering the initial load, not just later submit attempts.
+
+All three fixes and their evidence are on the `feat/desktop-auth-12-manual-verification` branch
+(stacked PR).
 
 **Tech stack:** Electron main process (Node `fetch`), `safeStorage` (new to this codebase), Better
 Auth `bearer` plugin (new server-side addition), React (renderer, Settings page). No new backend
@@ -105,11 +123,42 @@ sessions via `auth.api.getSession({ headers })` — the same internal pipeline t
 — so a bearer token authenticates both `/api/auth/*` and the oRPC `/api/v1/recordings/*` routes
 with no per-route changes.
 
+**Correction (Task 12 manual verification against real `wrangler dev`, superseding the adversarial
+review's "Verified" claim below):** the claim that Desktop needs no `trustedOrigins` entry was
+**wrong** — the sign-up/sign-in calls failed with a real `403 MISSING_OR_NULL_ORIGIN` the first
+time they ran against a live server. The review correctly read `validateOrigin`'s own
+short-circuit (`if (!(forceValidate || useCookies)) return;`, in `origin-check.mjs`), but missed
+that the sign-in/email and sign-up/email routes are *also* gated by a second, independent
+middleware in the same file — `formCsrfMiddleware` / `validateFormCsrf`, whose own doc comment
+says it exists for exactly this: "CSRF protection using Fetch Metadata headers... for first-login
+scenarios." It inspects `Sec-Fetch-Site`/`-Mode`/`-Dest`, and whenever ANY of those three headers
+is present it calls `validateOrigin(ctx, forceValidate: true)` — bypassing the `useCookies`
+short-circuit entirely. Electron's main-process `fetch()` (Chromium's network stack, not a
+browser-page fetch) attaches these `Sec-Fetch-*` headers even outside a page context; confirmed
+directly with `curl` against the local server — identical headers, no cookie, no Origin: 403
+`MISSING_OR_NULL_ORIGIN`; same request with a matching `Origin` header: 200. (`get-session`, a
+GET, and `sign-out`, a POST with no `Sec-Fetch-*` sensitivity in practice, were both confirmed
+unaffected — only the two credential-submission routes need this.)
+
+**Fix implemented in Task 12:** `apps/server-hono/src/lib/auth.ts`'s `trustedOrigins` gains one
+literal entry, `"kaipu-record://app"` — not a real navigable scheme, just Desktop's request
+identity for this check, mirroring the existing mobile pattern (`exp://`, `mobile://` in the same
+file's `cors()` call, which never hit this because React Native's `fetch` doesn't send
+`Sec-Fetch-*` headers). `apps/kaipu-record/src/main/services/auth-client.ts`'s
+`callCredentialEndpoint` sends that same literal as an explicit `Origin` header on its two POST
+calls. Confirmed Electron's main-process `fetch()` does let a caller set `Origin` explicitly (a
+real browser page forbids scripts from doing so; this context does not).
+
+<details>
+<summary>Original (incorrect) claim, kept for the record</summary>
+
 **Verified** (adversarial review, `better-auth/dist/api/middlewares/origin-check.mjs`,
 `validateOrigin`): the check short-circuits with `if (!(forceValidate || useCookies)) return;` — it
 only engages when the request carries cookies or the endpoint forces validation. Desktop's
 main-process requests carry no `Origin` header and, until sign-in, no cookie either, so the check
 never fires and `trustedOrigins`/`CORS_ORIGIN` needs no Desktop entry.
+
+</details>
 
 ---
 
@@ -375,10 +424,22 @@ the same header/Request-immutability class of bug the bearer-plugin choice was m
 though it isn't the deployed production Worker):
 
 - Sign up a new Desktop account → sign out → sign in again → restart the app (or re-invoke
-  `registerAuth`) → confirm the session restores without re-entering credentials → sign out.
-- Confirm a stale/tampered/corrupted token on disk is treated as signed-out, not a crash.
+  `registerAuth`) → confirm the session restores without re-entering credentials → sign out. **Run
+  2026-09-02** as `apps/kaipu-record/e2e/auth.e2e.ts` (a permanent, self-skipping-when-no-server
+  Playwright spec, not a one-off) against the real local server — passed, after the origin/CSRF and
+  `mode`-reset fixes above.
+- Confirm a stale/tampered/corrupted token on disk is treated as signed-out, not a crash. **Run
+  2026-09-02**, same spec file — passed.
 - Confirm going offline mid-session (kill network, reopen Settings) shows `unknown`, not
-  `signed-out`, and the stored token survives.
+  `signed-out`, and the stored token survives, and that reconnecting + retrying recovers to
+  signed-in. **Run 2026-09-02** — sign up while the server is up, kill the local `wrangler dev`
+  process, relaunch the app (same `userData` dir): the Account section showed the `accountUnknown`
+  note with no sign-in prompt. Restarted the server, clicked Retry: recovered to signed-in with no
+  re-entered credentials. Passed. (One operational note for whoever repeats this: drive the
+  kill/restart from a separate process than the one running the Electron/Playwright driver — the
+  first attempt had the driver script kill the server itself via `child_process`, and the sandbox's
+  process-group handling took the driver down along with it. Not an app bug, just a driver-hygiene
+  gotcha; splitting the two processes fixed it.)
 
 **Known gap vs. the backlog's acceptance bar:** [Desktop auth and R2
 CORS](/backlog/desktop-auth-and-r2-cors) asks for these flows to be **integration-tested against a
