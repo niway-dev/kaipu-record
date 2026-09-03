@@ -61,7 +61,7 @@ afterEach(() => {
 
 // Minimal `window.electronAPI` stub so renderer code that talks to the preload
 // bridge (e.g. usePermissions) works under jsdom. Individual tests can override.
-const electronAPI = {
+window.electronAPI = {
   getAppVersion: async () => "1.0.0",
   notifyReady: () => {},
   getUpdateStatus: async () => ({ state: "idle" }),
@@ -140,9 +140,3 @@ const electronAPI = {
   signOut: async () => {},
   onAuthStatusChanged: () => () => {},
 };
-
-// Assign to window after jsdom has initialized
-Object.defineProperty(window, "electronAPI", {
-  configurable: true,
-  value: electronAPI,
-});

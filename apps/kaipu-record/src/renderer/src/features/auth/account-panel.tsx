@@ -1,8 +1,8 @@
 import React from "react";
 import { useTranslations } from "@kaipu/i18n";
-import { Button } from "../../ui/button";
-import { Input } from "../../ui/input";
-import { Row } from "../../ui/row";
+import { Button } from "@renderer/ui/button";
+import { Input } from "@renderer/ui/input";
+import { Row } from "@renderer/ui/row";
 import type { AuthError } from "@shared/types/auth";
 import { useAuthStatus } from "./use-auth-status";
 import styles from "./account-panel.module.css";
