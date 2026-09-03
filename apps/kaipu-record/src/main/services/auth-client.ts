@@ -29,7 +29,7 @@ async function callCredentialEndpoint(
   try {
     res = await fetch(`${config.serverUrl}/api/auth/${path}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Origin: "kaipu-record://app" },
       body: JSON.stringify(body),
     });
   } catch {

@@ -13,7 +13,12 @@ export interface AuthStatusStore {
 
 export function useAuthStatus(): AuthStatusStore {
   const [status, setStatus] = useState<AuthStatus>({ kind: "signed-out" });
-  const [pending, setPending] = useState(false);
+  // Starts true: the default `status` above is indistinguishable from a genuine signed-out
+  // user until the initial getAuthStatus() round-trip actually resolves. Against a real
+  // server this can take noticeably longer than a mocked promise, and without this flag
+  // AccountPanel briefly renders the "Sign in"/"Create account" buttons even for an
+  // already-signed-in user, before flipping to the real state a moment later.
+  const [pending, setPending] = useState(true);
   const [error, setError] = useState<AuthError | null>(null);
 
   const refresh = useCallback(async (): Promise<void> => {
@@ -26,11 +31,13 @@ export function useAuthStatus(): AuthStatusStore {
     const unsubscribe = window.electronAPI.onAuthStatusChanged((status) => {
       broadcastWonRace = true;
       setStatus(status);
+      setPending(false);
     });
     // Subscribe before querying. If a status broadcast lands while the initial query is in flight,
     // it is newer and must not be overwritten by the stale query response.
     void window.electronAPI.getAuthStatus().then((status) => {
       if (!broadcastWonRace) setStatus(status);
+      setPending(false);
     });
     return unsubscribe;
   }, []);

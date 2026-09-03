@@ -32,6 +32,20 @@ export function AccountPanel(): React.JSX.Element {
   const [password, setPassword] = React.useState("");
   const [name, setName] = React.useState("");
 
+  // A successful sign-in/sign-up leaves `mode` at whatever the user opened ("sign-in" or
+  // "sign-up") — nothing else ever resets it. Without this, a later sign-out re-renders the
+  // stale, still-open form (with the old email/password still filled in) instead of the
+  // closed "Sign in"/"Create account" buttons, since `mode === "closed"` is what that branch
+  // requires. Reset on the signed-in transition, not on sign-out itself, so it's already
+  // "closed" by the time signed-out re-renders.
+  React.useEffect(() => {
+    if (status.kind !== "signed-in") return;
+    setMode("closed");
+    setEmail("");
+    setPassword("");
+    setName("");
+  }, [status.kind]);
+
   if (status.kind === "signed-in") {
     return (
       <Row
@@ -60,6 +74,10 @@ export function AccountPanel(): React.JSX.Element {
   }
 
   if (mode === "closed") {
+    // `pending` is true until the initial getAuthStatus() round-trip resolves (see
+    // use-auth-status.ts). Rendering nothing for that brief window avoids flashing the
+    // signed-out buttons for a user who turns out to already be signed in.
+    if (pending) return <></>;
     return (
       <div className={styles.actions}>
         <Button size="sm" onClick={() => setMode("sign-in")}>
