@@ -67,7 +67,7 @@ export function registerAuth(
     try {
       const identity = await getSession(config, token);
       if (!identity) {
-        // Confirmed 401 — the session is genuinely gone. Safe to clear.
+        // Confirmed gone (a 401, or better-auth's far commoner 200 + null body). Safe to clear.
         token = null;
         clearStoredToken();
         return { kind: "signed-out" };

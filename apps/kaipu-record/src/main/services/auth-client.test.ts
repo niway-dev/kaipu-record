@@ -82,6 +82,16 @@ describe("getSession", () => {
     await expect(getSession(config, "tok")).resolves.toBeNull();
   });
 
+  it("resolves null (does not reject) on better-auth's 200 + null body — the common expiry path", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("null", { status: 200 })));
+    await expect(getSession(config, "tok")).resolves.toBeNull();
+  });
+
+  it("resolves null on a 200 with a body that carries no user", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{}", { status: 200 })));
+    await expect(getSession(config, "tok")).resolves.toBeNull();
+  });
+
   it("REJECTS (does not resolve null) on a network failure — the caller must not treat this the same as a 401", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
     await expect(getSession(config, "tok")).rejects.toThrow();

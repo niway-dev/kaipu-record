@@ -72,9 +72,10 @@ export function signUpWithPassword(
 }
 
 /**
- * Resolves `null` ONLY on a confirmed 401. Any other failure (network, timeout, non-401 status)
- * REJECTS — the caller must not conflate "server said no" with "couldn't ask the server," or an
- * offline status check would delete a still-valid token.
+ * Resolves `null` ONLY on a confirmed "the session is gone" answer from the server (a 401, or
+ * the far more common 200 + `null` body — see below). Any other failure (network, timeout,
+ * non-401 error status) REJECTS — the caller must not conflate "server said no" with "couldn't
+ * ask the server," or an offline status check would delete a still-valid token.
  */
 export async function getSession(
   config: AuthClientConfig,
@@ -82,11 +83,18 @@ export async function getSession(
 ): Promise<{ email: string; name: string } | null> {
   const res = await fetch(`${config.serverUrl}/api/auth/get-session`, {
     headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(10_000),
   });
   // A network failure throws out of `fetch` itself and propagates — intentionally not caught here.
   if (res.status === 401) return null;
   if (!res.ok) throw new Error(`get-session failed: ${res.status}`);
-  const data = (await res.json()) as { user: { email: string; name: string } };
+  // better-auth answers "no valid session" (no cookie resolved, or session expired) with
+  // 200 + a `null` body, not 401 — 401 only fires in a narrow concurrent-update edge case.
+  // Both must be treated identically: "confirmed gone," safe to clear the local token.
+  const data = (await res.json().catch(() => null)) as {
+    user?: { email: string; name: string };
+  } | null;
+  if (!data?.user) return null;
   return { email: data.user.email, name: data.user.name };
 }
 
