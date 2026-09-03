@@ -1,4 +1,4 @@
-import type { AuthCredentials, SignUpInput } from "@shared/types/auth";
+import type { AuthCredentials, AuthError, SignUpInput } from "@shared/types/auth";
 
 export interface AuthClientConfig {
   serverUrl: string;
@@ -10,12 +10,11 @@ export interface SignInResult {
   name: string;
 }
 
-interface AuthErrorLike {
-  kind: "invalid-credentials" | "email-taken" | "network" | "unknown";
-  message?: string;
-}
+/** The per-endpoint default reported for a rejected credential submission, used whenever the
+ *  response body carries no more specific code. */
+type DefaultFailureKind = "invalid-credentials" | "email-taken";
 
-function networkError(): AuthErrorLike {
+function networkError(): AuthError {
   return { kind: "network" };
 }
 
@@ -23,7 +22,7 @@ async function callCredentialEndpoint(
   config: AuthClientConfig,
   path: string,
   body: AuthCredentials | SignUpInput,
-  invalidStatusKind: AuthErrorLike["kind"],
+  invalidStatusKind: DefaultFailureKind,
 ): Promise<SignInResult> {
   let res: Response;
   try {
@@ -43,7 +42,16 @@ async function callCredentialEndpoint(
   }
 
   if (!res.ok) {
-    throw { kind: invalidStatusKind } satisfies AuthErrorLike;
+    // better-auth answers an error with a `{code, message}` JSON body. Only PASSWORD_TOO_SHORT
+    // is special-cased: baseConfig sets no `minPasswordLength`, so better-auth's default of 8
+    // applies, and a shorter sign-up password would otherwise be reported to the user as "that
+    // email is already registered" — actively misleading. Every other code keeps the
+    // per-endpoint default, which is already the common case for its endpoint
+    // (INVALID_EMAIL_OR_PASSWORD on sign-in, USER_ALREADY_EXISTS on sign-up).
+    const body = (await res.json().catch(() => null)) as { code?: string } | null;
+    if (body?.code === "PASSWORD_TOO_SHORT")
+      throw { kind: "password-too-short" } satisfies AuthError;
+    throw { kind: invalidStatusKind } satisfies AuthError;
   }
 
   const token = res.headers.get("set-auth-token");
@@ -51,7 +59,7 @@ async function callCredentialEndpoint(
     throw {
       kind: "unknown",
       message: "sign-in succeeded but no session token was issued",
-    } satisfies AuthErrorLike;
+    } satisfies AuthError;
 
   const data = (await res.json()) as { user: { email: string; name: string } };
   return { token, email: data.user.email, name: data.user.name };
@@ -72,9 +80,10 @@ export function signUpWithPassword(
 }
 
 /**
- * Resolves `null` ONLY on a confirmed 401. Any other failure (network, timeout, non-401 status)
- * REJECTS — the caller must not conflate "server said no" with "couldn't ask the server," or an
- * offline status check would delete a still-valid token.
+ * Resolves `null` ONLY on a confirmed "the session is gone" answer from the server (a 401, or
+ * the far more common 200 + `null` body — see below). Any other failure (network, timeout,
+ * non-401 error status) REJECTS — the caller must not conflate "server said no" with "couldn't
+ * ask the server," or an offline status check would delete a still-valid token.
  */
 export async function getSession(
   config: AuthClientConfig,
@@ -82,11 +91,18 @@ export async function getSession(
 ): Promise<{ email: string; name: string } | null> {
   const res = await fetch(`${config.serverUrl}/api/auth/get-session`, {
     headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(10_000),
   });
   // A network failure throws out of `fetch` itself and propagates — intentionally not caught here.
   if (res.status === 401) return null;
   if (!res.ok) throw new Error(`get-session failed: ${res.status}`);
-  const data = (await res.json()) as { user: { email: string; name: string } };
+  // better-auth answers "no valid session" (no cookie resolved, or session expired) with
+  // 200 + a `null` body, not 401 — 401 only fires in a narrow concurrent-update edge case.
+  // Both must be treated identically: "confirmed gone," safe to clear the local token.
+  const data = (await res.json().catch(() => null)) as {
+    user?: { email: string; name: string };
+  } | null;
+  if (!data?.user) return null;
   return { email: data.user.email, name: data.user.name };
 }
 

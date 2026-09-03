@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { AuthCredentials, AuthError, AuthStatus, SignUpInput } from "@shared/types/auth";
+import type { AuthAttemptResult } from "@shared/types/electron-api";
 
 export interface AuthStatusStore {
   status: AuthStatus;
@@ -9,6 +10,9 @@ export interface AuthStatusStore {
   signIn(credentials: AuthCredentials): Promise<void>;
   signUp(input: SignUpInput): Promise<void>;
   signOut(): Promise<void>;
+  /** Dismiss the current error without starting an attempt — for Cancel and the sign-in/sign-up
+   *  mode switch, where the error belongs to a form the user has just left. */
+  clearError(): void;
 }
 
 export function useAuthStatus(): AuthStatusStore {
@@ -47,15 +51,23 @@ export function useAuthStatus(): AuthStatusStore {
     return unsubscribe;
   }, []);
 
+  // signIn/signUp report a CREDENTIAL failure as a resolved `{ ok: false, error }` (a thrown IPC
+  // error would lose the structured `kind` — see AuthAttemptResult), and signOut never fails by
+  // design — but the IPC call itself can still reject for a reason that has nothing to do with
+  // credentials (e.g. auth-store.ts's requireMainWindow rejecting a call from an unexpected
+  // sender). Without this catch, that rejection would propagate out of `attempt()` uncaught —
+  // `pending` would never reset, leaving the UI stuck disabled with no feedback, which is worse
+  // than the generic error message this catch falls back to.
   const runAttempt = useCallback(
-    async (attempt: () => Promise<AuthStatus | void>): Promise<void> => {
+    async (attempt: () => Promise<AuthAttemptResult>): Promise<void> => {
       setPending(true);
       setError(null);
       try {
-        const next = await attempt();
-        if (next) setStatus(next);
+        const result = await attempt();
+        if (result.ok) setStatus(result.status);
+        else setError(result.error);
       } catch (err) {
-        setError(err as AuthError);
+        setError({ kind: "unknown", message: err instanceof Error ? err.message : String(err) });
       } finally {
         setPending(false);
       }
@@ -75,10 +87,12 @@ export function useAuthStatus(): AuthStatusStore {
     () =>
       runAttempt(async () => {
         await window.electronAPI.signOut();
-        setStatus({ kind: "signed-out" });
+        return { ok: true, status: { kind: "signed-out" } as const };
       }),
     [runAttempt],
   );
 
-  return { status, pending, error, refresh, signIn, signUp, signOut };
+  const clearError = useCallback(() => setError(null), []);
+
+  return { status, pending, error, refresh, signIn, signUp, signOut, clearError };
 }

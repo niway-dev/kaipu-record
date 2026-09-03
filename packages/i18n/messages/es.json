@@ -113,6 +113,7 @@
     "accountUnknown": "No se pudo verificar tu sesión — seguimos usando la última.",
     "authErrorInvalidCredentials": "Correo o contraseña incorrectos.",
     "authErrorEmailTaken": "Ese correo ya está registrado.",
+    "authErrorPasswordTooShort": "La contraseña debe tener al menos 8 caracteres.",
     "authErrorNetwork": "No se pudo conectar con el servidor — revisá tu conexión.",
     "authErrorUnknown": "Algo salió mal. Intentá de nuevo."
   },

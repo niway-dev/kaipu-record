@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { AuthStatus } from "@shared/types/auth";
+import type { AuthAttemptResult } from "@shared/types/electron-api";
 import { useAuthStatus } from "./use-auth-status";
 
 afterEach(() => {
@@ -40,10 +41,10 @@ describe("useAuthStatus", () => {
   });
 
   it("signIn sets pending during the call and surfaces an AuthError on failure", async () => {
-    let rejectSignIn: (error: unknown) => void = () => {};
+    let resolveSignIn: (result: AuthAttemptResult) => void = () => {};
     vi.spyOn(window.electronAPI, "signIn").mockReturnValue(
-      new Promise((_, reject) => {
-        rejectSignIn = reject;
+      new Promise((resolve) => {
+        resolveSignIn = resolve;
       }),
     );
 
@@ -53,7 +54,7 @@ describe("useAuthStatus", () => {
     const promise = result.current.signIn({ email: "a@b.com", password: "wrong" });
     await waitFor(() => expect(result.current.pending).toBe(true));
     await act(async () => {
-      rejectSignIn({ kind: "invalid-credentials" });
+      resolveSignIn({ ok: false, error: { kind: "invalid-credentials" } });
       await promise;
     });
 
@@ -61,16 +62,43 @@ describe("useAuthStatus", () => {
     expect(result.current.error).toEqual({ kind: "invalid-credentials" });
   });
 
-  it("a new attempt clears the previous error", async () => {
-    vi.spyOn(window.electronAPI, "signIn")
-      .mockRejectedValueOnce({ kind: "invalid-credentials" })
-      .mockResolvedValueOnce({ kind: "signed-in", email: "a@b.com", name: "A" });
+  // Regression test: signIn/signUp report a CREDENTIAL failure as a resolved
+  // `{ ok: false, error }`, never a rejection — but the IPC call itself can still reject for a
+  // reason unrelated to credentials (e.g. auth-store.ts's requireMainWindow guard). Without a
+  // catch around `attempt()`, that rejection propagates uncaught: `pending` never resets and the
+  // form is stuck disabled forever with no error shown.
+  it("recovers from the IPC call itself rejecting (not a credential failure)", async () => {
+    vi.spyOn(window.electronAPI, "signIn").mockRejectedValue(
+      new Error("auth IPC calls are only accepted from the main window"),
+    );
 
     const { result } = renderHook(() => useAuthStatus());
     await waitFor(() => expect(result.current.status).toEqual({ kind: "signed-out" }));
 
     await act(async () => {
-      await result.current.signIn({ email: "a@b.com", password: "wrong" }).catch(() => {});
+      await result.current.signIn({ email: "a@b.com", password: "x" });
+    });
+
+    expect(result.current.pending).toBe(false);
+    expect(result.current.error).toEqual({
+      kind: "unknown",
+      message: "auth IPC calls are only accepted from the main window",
+    });
+  });
+
+  it("a new attempt clears the previous error", async () => {
+    vi.spyOn(window.electronAPI, "signIn")
+      .mockResolvedValueOnce({ ok: false, error: { kind: "invalid-credentials" } })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: { kind: "signed-in", email: "a@b.com", name: "A" },
+      });
+
+    const { result } = renderHook(() => useAuthStatus());
+    await waitFor(() => expect(result.current.status).toEqual({ kind: "signed-out" }));
+
+    await act(async () => {
+      await result.current.signIn({ email: "a@b.com", password: "wrong" });
     });
     expect(result.current.error).toEqual({ kind: "invalid-credentials" });
 
@@ -78,6 +106,7 @@ describe("useAuthStatus", () => {
       await result.current.signIn({ email: "a@b.com", password: "right" });
     });
     expect(result.current.error).toBeNull();
+    expect(result.current.status).toEqual({ kind: "signed-in", email: "a@b.com", name: "A" });
   });
 
   it("refreshes an unknown status on explicit retry", async () => {

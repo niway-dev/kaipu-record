@@ -62,6 +62,34 @@ describe("signUpWithPassword", () => {
       signUpWithPassword(config, { email: "dup@b.com", password: "pw", name: "Dup" }),
     ).rejects.toMatchObject({ kind: "email-taken" });
   });
+
+  it("reads the body's code so PASSWORD_TOO_SHORT is not reported as email-taken", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ code: "PASSWORD_TOO_SHORT", message: "too short" }), {
+          status: 400,
+        }),
+      ),
+    );
+    await expect(
+      signUpWithPassword(config, { email: "new@b.com", password: "short", name: "New" }),
+    ).rejects.toMatchObject({ kind: "password-too-short" });
+  });
+
+  it("falls back to the endpoint's default kind for any other error code", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(JSON.stringify({ code: "USER_ALREADY_EXISTS" }), { status: 422 }),
+        ),
+    );
+    await expect(
+      signUpWithPassword(config, { email: "dup@b.com", password: "long enough", name: "Dup" }),
+    ).rejects.toMatchObject({ kind: "email-taken" });
+  });
 });
 
 describe("getSession", () => {
@@ -79,6 +107,16 @@ describe("getSession", () => {
 
   it("resolves null on a confirmed 401 — the session is genuinely gone", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 401 })));
+    await expect(getSession(config, "tok")).resolves.toBeNull();
+  });
+
+  it("resolves null (does not reject) on better-auth's 200 + null body — the common expiry path", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("null", { status: 200 })));
+    await expect(getSession(config, "tok")).resolves.toBeNull();
+  });
+
+  it("resolves null on a 200 with a body that carries no user", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{}", { status: 200 })));
     await expect(getSession(config, "tok")).resolves.toBeNull();
   });
 

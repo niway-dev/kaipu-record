@@ -113,6 +113,7 @@
     "accountUnknown": "Couldn't verify your session — still using your last sign-in.",
     "authErrorInvalidCredentials": "Wrong email or password.",
     "authErrorEmailTaken": "That email is already registered.",
+    "authErrorPasswordTooShort": "Password must be at least 8 characters.",
     "authErrorNetwork": "Couldn't reach the server — check your connection.",
     "authErrorUnknown": "Something went wrong. Try again."
   },

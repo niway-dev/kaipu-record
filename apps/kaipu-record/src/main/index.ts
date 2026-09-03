@@ -286,7 +286,12 @@ app.whenReady().then(() => {
 
   // Persisted app settings (+ apply the Dock/switcher policy and launch-at-login).
   registerSettings();
-  registerAuth({ serverUrl: import.meta.env.MAIN_VITE_SERVER_URL! }, () => mainWindow);
+  // Checked explicitly rather than asserted non-null: an unset value would otherwise reach
+  // auth-client as `undefined` in the request URL and surface much later as a generic "network"
+  // error the user cannot act on. Fail loudly at startup, naming the variable.
+  const authServerUrl = import.meta.env.MAIN_VITE_SERVER_URL;
+  if (!authServerUrl) throw new Error("MAIN_VITE_SERVER_URL is not set — check .env");
+  registerAuth({ serverUrl: authServerUrl }, () => mainWindow);
   initMainAnalytics(getDeviceId());
   registerAnalyticsIpc();
 

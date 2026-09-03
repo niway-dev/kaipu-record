@@ -45,6 +45,12 @@ import { registerAuth } from "./auth-store";
 const OTHER_SENDER = { id: "other" };
 const config = { serverUrl: "http://localhost:3000" };
 
+/** The on-disk shape readStoredSession expects: the fake safeStorage marker wrapped around the
+ *  JSON envelope (token + identity), matching what writeStoredSession produces. */
+function storedBlob(token: string, email = "a@b.com", name = "A"): string {
+  return `ENC:${JSON.stringify({ token, email, name })}`;
+}
+
 function fakeWindow(): {
   isDestroyed: () => boolean;
   webContents: { send: ReturnType<typeof vi.fn> };
@@ -87,7 +93,10 @@ describe("auth-store", () => {
       { email: "a@b.com", password: "pw" },
     );
 
-    expect(status).toEqual({ kind: "signed-in", email: "a@b.com", name: "A" });
+    expect(status).toEqual({
+      ok: true,
+      status: { kind: "signed-in", email: "a@b.com", name: "A" },
+    });
     expect(mainWindow.webContents.send).toHaveBeenCalledWith(IPC_CHANNELS.authStatusChanged, {
       kind: "signed-in",
       email: "a@b.com",
@@ -126,6 +135,23 @@ describe("auth-store", () => {
         { email: "a@b.com", password: "pw" },
       ),
     ).rejects.toThrow();
+  });
+
+  it("returns a credential failure as a structured result instead of throwing it", async () => {
+    // Electron serializes anything thrown out of ipcMain.handle down to its `.message`, so a
+    // thrown `{ kind }` would reach the renderer with no discriminant at all. The handler must
+    // resolve the error instead, where structured cloning preserves it in full.
+    vi.spyOn(authClient, "signInWithPassword").mockRejectedValue({ kind: "invalid-credentials" });
+    const mainWindow = mockState.windows[0]!;
+    registerAuth(config, () => mainWindow as never);
+
+    await expect(
+      mockState.handlers.get(IPC_CHANNELS.authSignIn)!(
+        { sender: mainWindow.webContents },
+        { email: "a@b.com", password: "wrong" },
+      ),
+    ).resolves.toEqual({ ok: false, error: { kind: "invalid-credentials" } });
+    expect(mainWindow.webContents.send).not.toHaveBeenCalled();
   });
 
   it("authGetStatus does not reject from a non-main sender — it's read-only", async () => {
@@ -190,6 +216,67 @@ describe("auth-store", () => {
     expect(restored).toEqual({ kind: "signed-in", email: "a@b.com", name: "A" });
   });
 
+  it("names the persisted account in `unknown` on the first check after a restart", async () => {
+    // The canonical case lastKnownEmail exists for: the app restarted with a token on disk and
+    // the server is unreachable, so nothing in THIS process has ever had a successful
+    // getSession to populate an in-memory identity cache. Before the identity was persisted
+    // alongside the token, this rendered an empty label.
+    const { writeFile } = await import("node:fs/promises");
+    await writeFile(
+      join(mockState.userDataDir, "auth.enc"),
+      storedBlob("tok_1", "restored@b.com", "Restored"),
+    );
+    vi.spyOn(authClient, "getSession").mockRejectedValue(new Error("offline"));
+
+    registerAuth(config, () => null);
+    const status = await mockState.handlers.get(IPC_CHANNELS.authGetStatus)!({
+      sender: OTHER_SENDER,
+    });
+
+    expect(status).toEqual({ kind: "unknown", lastKnownEmail: "restored@b.com" });
+  });
+
+  it("persists the identity with the token, so a restart restores it without a round-trip", async () => {
+    vi.spyOn(authClient, "signInWithPassword").mockResolvedValue({
+      token: "tok_1",
+      email: "a@b.com",
+      name: "A",
+    });
+    const mainWindow = mockState.windows[0]!;
+    registerAuth(config, () => mainWindow as never);
+    await mockState.handlers.get(IPC_CHANNELS.authSignIn)!(
+      { sender: mainWindow.webContents },
+      { email: "a@b.com", password: "pw" },
+    );
+
+    const { readFile } = await import("node:fs/promises");
+    const onDisk = await readFile(join(mockState.userDataDir, "auth.enc"), "utf8");
+    expect(JSON.parse(onDisk.slice("ENC:".length))).toEqual({
+      token: "tok_1",
+      email: "a@b.com",
+      name: "A",
+    });
+
+    // A fresh process reading that file reports the identity even with the server unreachable.
+    vi.spyOn(authClient, "getSession").mockRejectedValue(new Error("offline"));
+    registerAuth(config, () => mainWindow as never);
+    await expect(
+      mockState.handlers.get(IPC_CHANNELS.authGetStatus)!({ sender: OTHER_SENDER }),
+    ).resolves.toEqual({ kind: "unknown", lastKnownEmail: "a@b.com" });
+  });
+
+  it("treats a pre-envelope plain-token file as no session rather than crashing", async () => {
+    // An app installed before the envelope has a raw token string on disk; JSON.parse throws on
+    // it, which readStoredSession swallows like any other corruption. A one-time re-login.
+    const { writeFile } = await import("node:fs/promises");
+    await writeFile(join(mockState.userDataDir, "auth.enc"), "ENC:tok_legacy_plain");
+
+    expect(() => registerAuth(config, () => null)).not.toThrow();
+    await expect(
+      mockState.handlers.get(IPC_CHANNELS.authGetStatus)!({ sender: OTHER_SENDER }),
+    ).resolves.toEqual({ kind: "signed-out" });
+  });
+
   it("authSignOut clears local state synchronously even when the remote sign-out fails", async () => {
     vi.spyOn(authClient, "signInWithPassword").mockResolvedValue({
       token: "tok_1",
@@ -223,12 +310,14 @@ describe("auth-store", () => {
     const mainWindow = mockState.windows[0]!;
     registerAuth(config, () => mainWindow as never);
 
+    // The handler RETURNS the failure rather than throwing it (Electron would strip a thrown
+    // error down to its `.message` and lose the structured `kind`).
     await expect(
       mockState.handlers.get(IPC_CHANNELS.authSignIn)!(
         { sender: mainWindow.webContents },
         { email: "a@b.com", password: "pw" },
       ),
-    ).rejects.toThrow();
+    ).resolves.toMatchObject({ ok: false, error: { kind: "unknown" } });
 
     // Query the same registration closure: a regression that cached before persistence failed
     // would be hidden by registering a fresh store below.
@@ -258,7 +347,7 @@ describe("auth-store", () => {
 
   it("fails closed when encryption becomes unavailable while a token exists", async () => {
     const { writeFile } = await import("node:fs/promises");
-    await writeFile(join(mockState.userDataDir, "auth.enc"), "ENC:tok_1");
+    await writeFile(join(mockState.userDataDir, "auth.enc"), storedBlob("tok_1"));
     mockState.encryptionAvailable = false;
 
     registerAuth(config, () => null);
@@ -282,7 +371,10 @@ describe("auth-store", () => {
         { sender: mainWindow.webContents },
         { email: "new@b.com", password: "pw", name: "New" },
       ),
-    ).resolves.toEqual({ kind: "signed-in", email: "new@b.com", name: "New" });
+    ).resolves.toEqual({
+      ok: true,
+      status: { kind: "signed-in", email: "new@b.com", name: "New" },
+    });
   });
 
   it("rejects authSignOut from a non-main sender", async () => {

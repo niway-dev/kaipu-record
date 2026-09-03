@@ -1,7 +1,8 @@
 import { app, BrowserWindow, ipcMain, safeStorage } from "electron";
 import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AuthCredentials, AuthStatus, SignUpInput } from "@shared/types/auth";
+import type { AuthCredentials, AuthError, AuthStatus, SignUpInput } from "@shared/types/auth";
+import type { AuthAttemptResult } from "@shared/types/electron-api";
 import { IPC_CHANNELS } from "@shared/types/ipc";
 import {
   getSession,
@@ -15,40 +16,75 @@ function tokenFilePath(): string {
   return join(app.getPath("userData"), "auth.enc");
 }
 
-function readStoredToken(): string | null {
+/** What survives a restart. The identity is stored alongside the token, not just the token,
+ *  so the very first status check of a new process can already name the account it is trying
+ *  to verify — `unknown`'s `lastKnownEmail` exists precisely for the "restarted while offline"
+ *  case, which is exactly when a process-local cache is still empty. */
+interface StoredSession {
+  token: string;
+  email: string;
+  name: string;
+}
+
+function readStoredSession(): StoredSession | null {
   if (!safeStorage.isEncryptionAvailable()) return null;
   const path = tokenFilePath();
   if (!existsSync(path)) return null;
   try {
-    return safeStorage.decryptString(readFileSync(path));
+    const decrypted = safeStorage.decryptString(readFileSync(path));
+    const parsed = JSON.parse(decrypted) as StoredSession;
+    if (typeof parsed.token !== "string" || typeof parsed.email !== "string") return null;
+    return parsed;
   } catch {
-    // Corrupted blob, copied to another machine, or a different code-signing identity — none of
-    // these should crash app startup. Treat as "no token."
+    // Corrupted blob, copied to another machine, a different code-signing identity, or a
+    // pre-envelope plain-token file (JSON.parse throws on a raw token string) — none of these
+    // should crash app startup. Treat as "no token": a one-time re-login, not a crash.
     return null;
   }
 }
 
-function writeStoredToken(token: string): void {
+function writeStoredSession(session: StoredSession): void {
   if (!safeStorage.isEncryptionAvailable()) {
     throw new Error("Cannot store the session: OS-level encryption is unavailable");
   }
   const path = tokenFilePath();
   const tmp = `${path}.tmp`;
-  writeFileSync(tmp, safeStorage.encryptString(token));
+  writeFileSync(tmp, safeStorage.encryptString(JSON.stringify(session)));
   renameSync(tmp, path); // atomic — a crash mid-write can't corrupt the real file
 }
 
-function clearStoredToken(): void {
-  const path = tokenFilePath();
-  if (existsSync(path)) unlinkSync(path);
+function clearStoredSession(): void {
+  // In-memory state and the sign-out broadcast already flipped before this runs, so a throwing
+  // unlink would otherwise leave a usable token on disk that silently restores the session on
+  // the next launch — after the user explicitly signed out. Log and continue instead.
+  try {
+    const path = tokenFilePath();
+    if (existsSync(path)) unlinkSync(path);
+  } catch (err) {
+    console.error("failed to remove the stored auth session", err);
+  }
+}
+
+/** Narrow whatever auth-client threw into the structured shape the renderer switches on.
+ *  auth-client only ever throws `AuthError`-shaped literals, so the cast is a narrowing,
+ *  not a lie; anything else (a genuine runtime Error) becomes `unknown` with its message. */
+function toAuthError(err: unknown): AuthError {
+  if (err && typeof err === "object" && "kind" in err) return err as AuthError;
+  return { kind: "unknown", message: err instanceof Error ? err.message : String(err) };
 }
 
 export function registerAuth(
   config: AuthClientConfig,
   getMainWindow: () => BrowserWindow | null,
 ): void {
-  let token: string | null = readStoredToken();
-  let cachedIdentity: { email: string; name: string } | null = null;
+  const stored = readStoredSession();
+  let token: string | null = stored?.token ?? null;
+  // Seeded from disk, not left null until the first successful getSession: the whole point of
+  // `unknown`'s lastKnownEmail is the "app restarted, token on disk, server unreachable" case,
+  // where nothing in this process has ever talked to the server yet.
+  let cachedIdentity: { email: string; name: string } | null = stored
+    ? { email: stored.email, name: stored.name }
+    : null;
 
   function broadcast(status: AuthStatus): void {
     for (const win of BrowserWindow.getAllWindows()) {
@@ -67,9 +103,10 @@ export function registerAuth(
     try {
       const identity = await getSession(config, token);
       if (!identity) {
-        // Confirmed 401 — the session is genuinely gone. Safe to clear.
+        // Confirmed gone (a 401, or better-auth's far commoner 200 + null body). Safe to clear.
         token = null;
-        clearStoredToken();
+        cachedIdentity = null;
+        clearStoredSession();
         return { kind: "signed-out" };
       }
       cachedIdentity = identity;
@@ -81,12 +118,12 @@ export function registerAuth(
   });
 
   // Shared by sign-in and sign-up: persist FIRST, only update in-memory state if that succeeds.
-  // Setting `token`/`cachedIdentity` before a possible `writeStoredToken` failure would leave this
+  // Setting `token`/`cachedIdentity` before a possible `writeStoredSession` failure would leave this
   // running process's in-memory state "signed in" even though nothing was saved and the call
   // rejected to the renderer — an inconsistent state a later authGetStatus in the same session
   // could act on.
   function commitSignIn(result: { token: string; email: string; name: string }): AuthStatus {
-    writeStoredToken(result.token);
+    writeStoredSession(result);
     token = result.token;
     cachedIdentity = { email: result.email, name: result.name };
     const status: AuthStatus = { kind: "signed-in", email: result.email, name: result.name };
@@ -94,19 +131,31 @@ export function registerAuth(
     return status;
   }
 
+  // Both handlers RETURN their failure instead of throwing it: Electron serializes anything
+  // thrown out of `ipcMain.handle` down to its `.message`, which would strip the structured
+  // `kind` the renderer needs to pick the right error copy. `requireMainWindow` deliberately
+  // still throws — that is a programming/security error, not a user-facing auth outcome.
   ipcMain.handle(
     IPC_CHANNELS.authSignIn,
-    async (event, credentials: AuthCredentials): Promise<AuthStatus> => {
+    async (event, credentials: AuthCredentials): Promise<AuthAttemptResult> => {
       requireMainWindow(event);
-      return commitSignIn(await signInWithPassword(config, credentials));
+      try {
+        return { ok: true, status: commitSignIn(await signInWithPassword(config, credentials)) };
+      } catch (err) {
+        return { ok: false, error: toAuthError(err) };
+      }
     },
   );
 
   ipcMain.handle(
     IPC_CHANNELS.authSignUp,
-    async (event, input: SignUpInput): Promise<AuthStatus> => {
+    async (event, input: SignUpInput): Promise<AuthAttemptResult> => {
       requireMainWindow(event);
-      return commitSignIn(await signUpWithPassword(config, input));
+      try {
+        return { ok: true, status: commitSignIn(await signUpWithPassword(config, input)) };
+      } catch (err) {
+        return { ok: false, error: toAuthError(err) };
+      }
     },
   );
 
@@ -115,7 +164,7 @@ export function registerAuth(
     const outgoingToken = token;
     token = null;
     cachedIdentity = null;
-    clearStoredToken();
+    clearStoredSession();
     broadcast({ kind: "signed-out" });
     if (outgoingToken)
       void signOutRemote(config, outgoingToken).catch((error) => {

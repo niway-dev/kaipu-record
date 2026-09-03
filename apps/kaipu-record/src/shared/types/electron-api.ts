@@ -15,7 +15,7 @@ import type {
   RecordingStartInfo,
   RecordingTick,
 } from "./ipc";
-import type { AuthCredentials, AuthStatus, SignUpInput } from "./auth";
+import type { AuthCredentials, AuthError, AuthStatus, SignUpInput } from "./auth";
 
 /** A capture source returned by the screen picker — includes a base64 thumbnail. */
 export interface ScreenSource {
@@ -30,6 +30,16 @@ export type PermissionKind = "screen" | "microphone" | "camera";
 
 /** Whether each permission is currently granted. */
 export type PermissionStatus = Record<PermissionKind, boolean>;
+
+/**
+ * Discriminated result for the two credential-submitting IPC calls. A structured
+ * AuthError does not survive a *thrown* IPC error — Electron serializes anything thrown
+ * out of `ipcMain.handle` down to its `.message` alone, so a `{ kind }` payload arrives at
+ * the renderer as an opaque Error and every failure collapses into the generic copy.
+ * Returning the error instead round-trips cleanly, since normal resolved IPC values ARE
+ * structurally cloned in full.
+ */
+export type AuthAttemptResult = { ok: true; status: AuthStatus } | { ok: false; error: AuthError };
 
 export interface KaipuElectronAPI {
   /** The running app version (`app.getVersion()`), used by the version gate. */
@@ -53,10 +63,12 @@ export interface KaipuElectronAPI {
   // ── Authentication ────────────────────────────────────────────────────
   /** Get the current authentication status. */
   getAuthStatus(): Promise<AuthStatus>;
-  /** Sign in with email and password. */
-  signIn(credentials: AuthCredentials): Promise<AuthStatus>;
-  /** Sign up with email, password, and name. */
-  signUp(input: SignUpInput): Promise<AuthStatus>;
+  /** Sign in with email and password. Never rejects on a credential failure — see
+   *  {@link AuthAttemptResult}. */
+  signIn(credentials: AuthCredentials): Promise<AuthAttemptResult>;
+  /** Sign up with email, password, and name. Never rejects on a credential failure — see
+   *  {@link AuthAttemptResult}. */
+  signUp(input: SignUpInput): Promise<AuthAttemptResult>;
   /** Sign out and clear the stored session. */
   signOut(): Promise<void>;
   /** Subscribe to authentication status changes. Returns an unsubscribe fn. */

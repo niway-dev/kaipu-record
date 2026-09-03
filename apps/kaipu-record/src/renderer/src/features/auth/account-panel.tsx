@@ -9,24 +9,33 @@ import styles from "./account-panel.module.css";
 
 type FormMode = "closed" | "sign-in" | "sign-up";
 
+/** Exhaustive on purpose — no `default` branch, so adding an AuthError kind without adding its
+ *  copy here is a compile error rather than a silent fallback to the generic message. */
 function errorCopyKey(
   err: AuthError,
-): "authErrorInvalidCredentials" | "authErrorEmailTaken" | "authErrorNetwork" | "authErrorUnknown" {
+):
+  | "authErrorInvalidCredentials"
+  | "authErrorEmailTaken"
+  | "authErrorPasswordTooShort"
+  | "authErrorNetwork"
+  | "authErrorUnknown" {
   switch (err.kind) {
     case "invalid-credentials":
       return "authErrorInvalidCredentials";
     case "email-taken":
       return "authErrorEmailTaken";
+    case "password-too-short":
+      return "authErrorPasswordTooShort";
     case "network":
       return "authErrorNetwork";
-    default:
+    case "unknown":
       return "authErrorUnknown";
   }
 }
 
 export function AccountPanel(): React.JSX.Element {
   const t = useTranslations("settings");
-  const { status, pending, error, refresh, signIn, signUp, signOut } = useAuthStatus();
+  const { status, pending, error, refresh, signIn, signUp, signOut, clearError } = useAuthStatus();
   const [mode, setMode] = React.useState<FormMode>("closed");
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
@@ -45,6 +54,14 @@ export function AccountPanel(): React.JSX.Element {
     setPassword("");
     setName("");
   }, [status.kind]);
+
+  // The error lives in useAuthStatus and is otherwise only cleared by a NEW attempt, so
+  // cancelling or switching between sign-in and sign-up would leave the previous form's error
+  // sitting above the fresh one. Every user-driven mode change goes through here.
+  const openForm = (next: FormMode): void => {
+    clearError();
+    setMode(next);
+  };
 
   if (status.kind === "signed-in") {
     return (
@@ -80,10 +97,10 @@ export function AccountPanel(): React.JSX.Element {
     if (pending) return <></>;
     return (
       <div className={styles.actions}>
-        <Button size="sm" onClick={() => setMode("sign-in")}>
+        <Button size="sm" onClick={() => openForm("sign-in")}>
           {t("signIn")}
         </Button>
-        <Button variant="outline" size="sm" onClick={() => setMode("sign-up")}>
+        <Button variant="outline" size="sm" onClick={() => openForm("sign-up")}>
           {t("signUp")}
         </Button>
       </div>
@@ -122,6 +139,11 @@ export function AccountPanel(): React.JSX.Element {
         value={password}
         onChange={(e) => setPassword(e.target.value)}
         required
+        // Cheap client-side prevention of the server's PASSWORD_TOO_SHORT (better-auth's default
+        // minimum is 8, and baseConfig does not override it). Sign-in keeps no minimum: an
+        // existing account may predate the rule, and rejecting it here would only hide the
+        // real "wrong email or password" answer behind a misleading validation message.
+        minLength={mode === "sign-up" ? 8 : undefined}
       />
       {error && (
         <p className={styles.error} role="alert">
@@ -132,7 +154,7 @@ export function AccountPanel(): React.JSX.Element {
         <Button type="submit" size="sm" disabled={pending}>
           {t("submit")}
         </Button>
-        <Button type="button" variant="ghost" size="sm" onClick={() => setMode("closed")}>
+        <Button type="button" variant="ghost" size="sm" onClick={() => openForm("closed")}>
           {t("cancel")}
         </Button>
       </div>
