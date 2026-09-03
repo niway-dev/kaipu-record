@@ -15,8 +15,11 @@ Kaipu has two first-party clients:
 - **Desktop** needs its own authenticated API session and may issue browser/renderer requests to
   R2 presigned URLs.
 
-The existing Better Auth Electron workaround document does not match the current dependencies or
-server implementation. It must not be treated as an implemented design.
+The existing [Better Auth Electron workaround](../stack/better-auth-electron-bug) document does
+not match the current dependencies or server implementation — `@better-auth/electron` is not even
+an installed dependency anymore, and neither `lib/auth.ts` nor the `/api/auth/*` handler in
+`server-hono` contain the header-rebuilding workaround it describes. It must not be treated as an
+implemented design; update or archive it once this workstream lands the tested Desktop auth flow.
 
 ## Decisions this workstream must make
 
@@ -46,3 +49,4 @@ server implementation. It must not be treated as an implemented design.
 
 - [Electron security hardening](./electron-security-hardening)
 - [R2 upload integrity](./r2-upload-integrity)
+- [Better Auth Electron workaround](../stack/better-auth-electron-bug) — stale, do not implement from it
