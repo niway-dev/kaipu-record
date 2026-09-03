@@ -19,6 +19,7 @@ import {
   applyDockPolicy,
   onSettingsChanged,
 } from "./infrastructure/settings-store";
+import { registerAuth } from "./infrastructure/auth-store";
 import {
   registerGlobalShortcuts,
   applyGlobalShortcuts,
@@ -285,6 +286,10 @@ app.whenReady().then(() => {
 
   // Persisted app settings (+ apply the Dock/switcher policy and launch-at-login).
   registerSettings();
+  registerAuth(
+    { serverUrl: import.meta.env.MAIN_VITE_SERVER_URL ?? "http://localhost:3000" },
+    () => mainWindow,
+  );
   initMainAnalytics(getDeviceId());
   registerAnalyticsIpc();
 

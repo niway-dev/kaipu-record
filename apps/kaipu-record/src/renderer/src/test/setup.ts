@@ -134,4 +134,9 @@ window.electronAPI = {
   onCaptureScreenshotHotkey: () => () => {},
   saveVideoEditSession: async () => {},
   loadVideoEditSession: async () => null,
+  getAuthStatus: async () => ({ kind: "signed-out" }),
+  signIn: async () => ({ kind: "signed-out" }),
+  signUp: async () => ({ kind: "signed-out" }),
+  signOut: async () => {},
+  onAuthStatusChanged: () => () => {},
 };
