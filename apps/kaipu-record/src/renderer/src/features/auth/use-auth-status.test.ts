@@ -91,4 +91,48 @@ describe("useAuthStatus", () => {
     });
     expect(result.current.status).toEqual({ kind: "signed-in", email: "a@b.com", name: "A" });
   });
+
+  it("prefers a broadcast that arrives during the initial query over the stale query response", async () => {
+    let resolveGetStatus: ((status: unknown) => void) | undefined;
+    let broadcast: ((s: unknown) => void) | undefined;
+    vi.spyOn(window.electronAPI, "getAuthStatus").mockReturnValue(
+      new Promise((resolve) => {
+        resolveGetStatus = resolve;
+      }),
+    );
+    vi.spyOn(window.electronAPI, "onAuthStatusChanged").mockImplementation((cb) => {
+      broadcast = cb;
+      return () => {};
+    });
+
+    const { result } = renderHook(() => useAuthStatus());
+
+    // At this point:
+    // - onAuthStatusChanged is subscribed (broadcast callback captured)
+    // - getAuthStatus promise is in flight (not yet resolved)
+
+    // Trigger a broadcast BEFORE the getAuthStatus query resolves
+    act(() =>
+      broadcast?.({ kind: "signed-in", email: "broadcast@example.com", name: "Broadcast" }),
+    );
+
+    // Verify the broadcast took effect
+    expect(result.current.status).toEqual({
+      kind: "signed-in",
+      email: "broadcast@example.com",
+      name: "Broadcast",
+    });
+
+    // Now resolve the original getAuthStatus promise with a DIFFERENT status (which is now stale)
+    await act(async () => {
+      resolveGetStatus?.({ kind: "signed-in", email: "stale@example.com", name: "Stale" });
+    });
+
+    // The status should STILL be the broadcast value, not the stale query response
+    expect(result.current.status).toEqual({
+      kind: "signed-in",
+      email: "broadcast@example.com",
+      name: "Broadcast",
+    });
+  });
 });
