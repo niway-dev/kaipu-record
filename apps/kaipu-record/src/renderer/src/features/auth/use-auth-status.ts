@@ -35,10 +35,15 @@ export function useAuthStatus(): AuthStatusStore {
     });
     // Subscribe before querying. If a status broadcast lands while the initial query is in flight,
     // it is newer and must not be overwritten by the stale query response.
-    void window.electronAPI.getAuthStatus().then((status) => {
-      if (!broadcastWonRace) setStatus(status);
-      setPending(false);
-    });
+    // In practice authGetStatus's IPC handler never rejects (it catches everything internally),
+    // but a `.then()` with no `.catch()` would leave `pending` stuck true forever if it ever did —
+    // permanently hiding the sign-in UI, worse than the flash this flag exists to prevent.
+    void window.electronAPI
+      .getAuthStatus()
+      .then((status) => {
+        if (!broadcastWonRace) setStatus(status);
+      })
+      .finally(() => setPending(false));
     return unsubscribe;
   }, []);
 
