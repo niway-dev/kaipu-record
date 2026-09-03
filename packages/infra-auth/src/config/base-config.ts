@@ -2,6 +2,7 @@ import { db } from "@kaipu/infra-db/client";
 import { userTable, accountTable, sessionTable } from "@kaipu/infra-db/schemas";
 import type { BetterAuthOptions } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { bearer } from "better-auth/plugins";
 import { randomBytes, scryptSync } from "node:crypto";
 
 export const baseConfig: BetterAuthOptions = {
@@ -74,7 +75,7 @@ export const baseConfig: BetterAuthOptions = {
     },
   },
   // plugins: [customSession(getCustomSession)],
-  plugins: [],
+  plugins: [bearer()],
 };
 
 // export const options = {
