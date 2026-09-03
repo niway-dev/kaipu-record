@@ -286,10 +286,7 @@ app.whenReady().then(() => {
 
   // Persisted app settings (+ apply the Dock/switcher policy and launch-at-login).
   registerSettings();
-  registerAuth(
-    { serverUrl: import.meta.env.MAIN_VITE_SERVER_URL ?? "http://localhost:3000" },
-    () => mainWindow,
-  );
+  registerAuth({ serverUrl: import.meta.env.MAIN_VITE_SERVER_URL! }, () => mainWindow);
   initMainAnalytics(getDeviceId());
   registerAnalyticsIpc();
 
