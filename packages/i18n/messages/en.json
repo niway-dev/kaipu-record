@@ -99,7 +99,22 @@
     "showInDockDescription": "Off keeps Kaipu in the menu bar only — no Dock icon, hidden from ⌘-Tab (macOS).",
     "onboarding": "Onboarding",
     "onboardingDescription": "Replay the first-run setup & permissions.",
-    "replay": "Replay"
+    "replay": "Replay",
+    "account": "Account",
+    "signIn": "Sign in",
+    "signUp": "Create account",
+    "signOut": "Sign out",
+    "submit": "Continue",
+    "cancel": "Cancel",
+    "retry": "Retry",
+    "emailLabel": "Email",
+    "passwordLabel": "Password",
+    "nameLabel": "Name",
+    "accountUnknown": "Couldn't verify your session — still using your last sign-in.",
+    "authErrorInvalidCredentials": "Wrong email or password.",
+    "authErrorEmailTaken": "That email is already registered.",
+    "authErrorNetwork": "Couldn't reach the server — check your connection.",
+    "authErrorUnknown": "Something went wrong. Try again."
   },
   "record": {
     "readyToRecord": "Ready to record",

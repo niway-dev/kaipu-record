@@ -15,6 +15,7 @@ import type {
   RecordingStartInfo,
   RecordingTick,
 } from "./ipc";
+import type { AuthCredentials, AuthStatus, SignUpInput } from "./auth";
 
 /** A capture source returned by the screen picker — includes a base64 thumbnail. */
 export interface ScreenSource {
@@ -48,6 +49,18 @@ export interface KaipuElectronAPI {
   updateSettings(patch: Partial<AppSettings>): Promise<AppSettings>;
   /** Subscribe to persisted-settings changes from any window. Returns an unsubscribe fn. */
   onSettingsChanged(callback: (settings: AppSettings) => void): () => void;
+
+  // ── Authentication ────────────────────────────────────────────────────
+  /** Get the current authentication status. */
+  getAuthStatus(): Promise<AuthStatus>;
+  /** Sign in with email and password. */
+  signIn(credentials: AuthCredentials): Promise<AuthStatus>;
+  /** Sign up with email, password, and name. */
+  signUp(input: SignUpInput): Promise<AuthStatus>;
+  /** Sign out and clear the stored session. */
+  signOut(): Promise<void>;
+  /** Subscribe to authentication status changes. Returns an unsubscribe fn. */
+  onAuthStatusChanged(callback: (status: AuthStatus) => void): () => void;
 
   /** Enumerate available screens and windows via the main-process desktopCapturer. */
   getScreenSources(): Promise<ScreenSource[]>;

@@ -14,6 +14,11 @@ function renderSettings(): void {
 }
 
 describe("SettingsPage", () => {
+  it("renders the account section", () => {
+    renderSettings();
+    expect(screen.getByRole("heading", { name: /^account$/i })).toBeInTheDocument();
+  });
+
   it("renders the page heading", () => {
     renderSettings();
     expect(screen.getByRole("heading", { level: 1, name: /settings/i })).toBeInTheDocument();

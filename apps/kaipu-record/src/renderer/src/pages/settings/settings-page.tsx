@@ -8,6 +8,7 @@ import { useOnboarding } from "@renderer/features/onboarding";
 import { usePermissions } from "@renderer/features/permissions";
 import { useVaultDirectory } from "@renderer/features/library/hooks/use-vault-directory";
 import { useTranslations } from "@kaipu/i18n";
+import { AccountPanel } from "@renderer/features/auth/account-panel";
 import { useAppSettings } from "./use-app-settings";
 import { LanguageSettings } from "./language-settings";
 import { ThemeSettings } from "./theme-settings";
@@ -78,6 +79,10 @@ export function SettingsPage(): React.JSX.Element {
       </div>
 
       <div className={styles.sections}>
+        <Section title={t("account")}>
+          <AccountPanel />
+        </Section>
+
         <Section title={t("language")}>
           <LanguageSettings />
         </Section>

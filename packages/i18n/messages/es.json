@@ -99,7 +99,22 @@
     "showInDockDescription": "Desactivado mantiene Kaipu solo en la barra de menú — sin ícono en el Dock, oculto de ⌘-Tab (macOS).",
     "onboarding": "Introducción",
     "onboardingDescription": "Vuelve a ver la configuración inicial y los permisos.",
-    "replay": "Repetir"
+    "replay": "Repetir",
+    "account": "Cuenta",
+    "signIn": "Iniciar sesión",
+    "signUp": "Crear cuenta",
+    "signOut": "Cerrar sesión",
+    "submit": "Continuar",
+    "cancel": "Cancelar",
+    "retry": "Reintentar",
+    "emailLabel": "Correo electrónico",
+    "passwordLabel": "Contraseña",
+    "nameLabel": "Nombre",
+    "accountUnknown": "No se pudo verificar tu sesión — seguimos usando la última.",
+    "authErrorInvalidCredentials": "Correo o contraseña incorrectos.",
+    "authErrorEmailTaken": "Ese correo ya está registrado.",
+    "authErrorNetwork": "No se pudo conectar con el servidor — revisá tu conexión.",
+    "authErrorUnknown": "Algo salió mal. Intentá de nuevo."
   },
   "record": {
     "readyToRecord": "Todo listo para grabar",
