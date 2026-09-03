@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
+import type { AuthStatus } from "@shared/types/auth";
 import { useAuthStatus } from "./use-auth-status";
 
 afterEach(() => {
@@ -22,7 +23,7 @@ describe("useAuthStatus", () => {
   });
 
   it("subscribes to onAuthStatusChanged and updates on broadcast", async () => {
-    let broadcast: ((s: unknown) => void) | undefined;
+    let broadcast: ((status: AuthStatus) => void) | undefined;
     vi.spyOn(window.electronAPI, "onAuthStatusChanged").mockImplementation((cb) => {
       broadcast = cb;
       return () => {};
@@ -93,10 +94,10 @@ describe("useAuthStatus", () => {
   });
 
   it("prefers a broadcast that arrives during the initial query over the stale query response", async () => {
-    let resolveGetStatus: ((status: unknown) => void) | undefined;
-    let broadcast: ((s: unknown) => void) | undefined;
+    let resolveGetStatus: ((status: AuthStatus) => void) | undefined;
+    let broadcast: ((status: AuthStatus) => void) | undefined;
     vi.spyOn(window.electronAPI, "getAuthStatus").mockReturnValue(
-      new Promise((resolve) => {
+      new Promise<AuthStatus>((resolve) => {
         resolveGetStatus = resolve;
       }),
     );

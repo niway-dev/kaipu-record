@@ -9,7 +9,9 @@ import styles from "./account-panel.module.css";
 
 type FormMode = "closed" | "sign-in" | "sign-up";
 
-function errorCopyKey(err: AuthError): string {
+function errorCopyKey(
+  err: AuthError,
+): "authErrorInvalidCredentials" | "authErrorEmailTaken" | "authErrorNetwork" | "authErrorUnknown" {
   switch (err.kind) {
     case "invalid-credentials":
       return "authErrorInvalidCredentials";
