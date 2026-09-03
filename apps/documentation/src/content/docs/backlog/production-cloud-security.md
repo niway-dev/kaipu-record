@@ -25,7 +25,12 @@ least-privilege credentials, and an operational rollback path.
 5. Define credential rotation, emergency revocation, and rollback instructions.
 6. Add structured operational events for ticket issuance, confirmation failure, deletion failure,
    rate limiting, and cleanup failures. Never include presigned URLs, session tokens, or raw file
-   names in those events.
+   names in those events. **Decide the destination explicitly** rather than defaulting to
+   `console.log`/Wrangler tail: Desktop already sends exceptions to PostHog via `posthog-node`
+   (see [analytics + flags](/desktop/analytics-and-flags)) — either extend that same project with
+   a server-side key so backend and Desktop events land in one place, or pick a Workers-native
+   option (Logpush, Analytics Engine) if PostHog's ingestion model doesn't fit operational events
+   well. Don't let this workstream and a future one each stand up a different tool by accident.
 
 ## Acceptance criteria
 
