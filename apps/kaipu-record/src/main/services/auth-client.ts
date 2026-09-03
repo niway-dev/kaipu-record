@@ -22,7 +22,7 @@ function networkError(): AuthErrorLike {
 async function callCredentialEndpoint(
   config: AuthClientConfig,
   path: string,
-  body: Record<string, string>,
+  body: AuthCredentials | SignUpInput,
   invalidStatusKind: AuthErrorLike["kind"],
 ): Promise<SignInResult> {
   let res: Response;
