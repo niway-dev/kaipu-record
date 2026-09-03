@@ -75,7 +75,12 @@ export const baseConfig: BetterAuthOptions = {
     },
   },
   // plugins: [customSession(getCustomSession)],
-  plugins: [bearer()],
+  // `requireSignature` rejects a bare, unsigned session id in the Authorization header. Without
+  // it the plugin re-signs whatever it was handed and then verifies its own signature — a
+  // tautology that accepts a raw session id. Desktop always sends the full signed cookie value
+  // straight from the `set-auth-token` response header, never a hand-built token, so requiring
+  // the signature costs nothing and closes that acceptance path.
+  plugins: [bearer({ requireSignature: true })],
 };
 
 // export const options = {

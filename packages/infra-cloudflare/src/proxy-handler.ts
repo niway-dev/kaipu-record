@@ -29,6 +29,24 @@ export function createProxyHandler(options: ProxyOptions): (request: Request) =>
       const response = await fetchFn(proxiedRequest);
       const responseHeaders = new Headers(response.headers);
 
+      // The bearer plugin (packages/infra-auth) sets `set-auth-token` on every response after a
+      // successful sign-in/sign-up so Desktop (which has no cookie jar) can read the session token
+      // from a header. The web app signs in through THIS proxy over cookies, not the bearer
+      // transport, so it must never see that header — page JS reading the live session token would
+      // partially defeat `httpOnly` on the session cookie. Desktop reads it directly from
+      // server-hono, not through this proxy, so this strip doesn't affect it.
+      responseHeaders.delete("set-auth-token");
+      const exposedHeaders = responseHeaders.get("access-control-expose-headers");
+      if (exposedHeaders) {
+        const filtered = exposedHeaders
+          .split(",")
+          .map((h) => h.trim())
+          .filter((h) => h.toLowerCase() !== "set-auth-token");
+        if (filtered.length > 0)
+          responseHeaders.set("access-control-expose-headers", filtered.join(", "));
+        else responseHeaders.delete("access-control-expose-headers");
+      }
+
       const setCookies = response.headers.getSetCookie?.() ?? [];
       if (setCookies.length > 0) {
         responseHeaders.delete("set-cookie");
