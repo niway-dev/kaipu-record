@@ -92,6 +92,26 @@ describe("AccountPanel", () => {
     resolveSignIn({ ok: true, status: { kind: "signed-in", email: "a@b.com", name: "A" } });
   });
 
+  it("drops a stale error when the form is cancelled and reopened", async () => {
+    vi.spyOn(window.electronAPI, "getAuthStatus").mockResolvedValue({ kind: "signed-out" });
+    vi.spyOn(window.electronAPI, "signIn").mockResolvedValue({
+      ok: false,
+      error: { kind: "invalid-credentials" },
+    });
+    render(<AccountPanel />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /^sign in$/i }));
+    fireEvent.change(screen.getByLabelText(/email/i), { target: { value: "a@b.com" } });
+    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: "wrong" } });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    await waitFor(() => expect(screen.getByText(/wrong email or password/i)).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /create account/i }));
+
+    expect(screen.queryByText(/wrong email or password/i)).not.toBeInTheDocument();
+  });
+
   // The regression test for the IPC-serialization bug: a structured AuthError returned
   // across the boundary (rather than thrown, which Electron flattens to `.message`) must
   // still reach errorCopyKey with its `kind` intact and render the specific copy.

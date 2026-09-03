@@ -35,7 +35,7 @@ function errorCopyKey(
 
 export function AccountPanel(): React.JSX.Element {
   const t = useTranslations("settings");
-  const { status, pending, error, refresh, signIn, signUp, signOut } = useAuthStatus();
+  const { status, pending, error, refresh, signIn, signUp, signOut, clearError } = useAuthStatus();
   const [mode, setMode] = React.useState<FormMode>("closed");
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
@@ -54,6 +54,14 @@ export function AccountPanel(): React.JSX.Element {
     setPassword("");
     setName("");
   }, [status.kind]);
+
+  // The error lives in useAuthStatus and is otherwise only cleared by a NEW attempt, so
+  // cancelling or switching between sign-in and sign-up would leave the previous form's error
+  // sitting above the fresh one. Every user-driven mode change goes through here.
+  const openForm = (next: FormMode): void => {
+    clearError();
+    setMode(next);
+  };
 
   if (status.kind === "signed-in") {
     return (
@@ -89,10 +97,10 @@ export function AccountPanel(): React.JSX.Element {
     if (pending) return <></>;
     return (
       <div className={styles.actions}>
-        <Button size="sm" onClick={() => setMode("sign-in")}>
+        <Button size="sm" onClick={() => openForm("sign-in")}>
           {t("signIn")}
         </Button>
-        <Button variant="outline" size="sm" onClick={() => setMode("sign-up")}>
+        <Button variant="outline" size="sm" onClick={() => openForm("sign-up")}>
           {t("signUp")}
         </Button>
       </div>
@@ -146,7 +154,7 @@ export function AccountPanel(): React.JSX.Element {
         <Button type="submit" size="sm" disabled={pending}>
           {t("submit")}
         </Button>
-        <Button type="button" variant="ghost" size="sm" onClick={() => setMode("closed")}>
+        <Button type="button" variant="ghost" size="sm" onClick={() => openForm("closed")}>
           {t("cancel")}
         </Button>
       </div>

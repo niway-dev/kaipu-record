@@ -10,6 +10,9 @@ export interface AuthStatusStore {
   signIn(credentials: AuthCredentials): Promise<void>;
   signUp(input: SignUpInput): Promise<void>;
   signOut(): Promise<void>;
+  /** Dismiss the current error without starting an attempt — for Cancel and the sign-in/sign-up
+   *  mode switch, where the error belongs to a form the user has just left. */
+  clearError(): void;
 }
 
 export function useAuthStatus(): AuthStatusStore {
@@ -80,5 +83,7 @@ export function useAuthStatus(): AuthStatusStore {
     [runAttempt],
   );
 
-  return { status, pending, error, refresh, signIn, signUp, signOut };
+  const clearError = useCallback(() => setError(null), []);
+
+  return { status, pending, error, refresh, signIn, signUp, signOut, clearError };
 }
