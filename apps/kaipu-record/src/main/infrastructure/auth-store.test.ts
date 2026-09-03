@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { IPC_CHANNELS } from "@shared/types/ipc";
 
 const mockState = vi.hoisted(() => ({
   userDataDir: "",
@@ -41,14 +42,6 @@ vi.mock("electron", () => ({
 import * as authClient from "../services/auth-client";
 import { registerAuth } from "./auth-store";
 
-const CHANNELS = {
-  authGetStatus: "auth:get-status",
-  authSignIn: "auth:sign-in",
-  authSignUp: "auth:sign-up",
-  authSignOut: "auth:sign-out",
-  authStatusChanged: "auth:status-changed",
-};
-
 const OTHER_SENDER = { id: "other" };
 const config = { serverUrl: "http://localhost:3000" };
 
@@ -74,7 +67,9 @@ describe("auth-store", () => {
 
   it("authGetStatus returns signed-out when no token is stored", async () => {
     registerAuth(config, () => null);
-    const status = await mockState.handlers.get(CHANNELS.authGetStatus)!({ sender: OTHER_SENDER });
+    const status = await mockState.handlers.get(IPC_CHANNELS.authGetStatus)!({
+      sender: OTHER_SENDER,
+    });
     expect(status).toEqual({ kind: "signed-out" });
   });
 
@@ -87,13 +82,13 @@ describe("auth-store", () => {
     const mainWindow = mockState.windows[0]!;
     registerAuth(config, () => mainWindow as never);
 
-    const status = await mockState.handlers.get(CHANNELS.authSignIn)!(
+    const status = await mockState.handlers.get(IPC_CHANNELS.authSignIn)!(
       { sender: mainWindow.webContents },
       { email: "a@b.com", password: "pw" },
     );
 
     expect(status).toEqual({ kind: "signed-in", email: "a@b.com", name: "A" });
-    expect(mainWindow.webContents.send).toHaveBeenCalledWith(CHANNELS.authStatusChanged, {
+    expect(mainWindow.webContents.send).toHaveBeenCalledWith(IPC_CHANNELS.authStatusChanged, {
       kind: "signed-in",
       email: "a@b.com",
       name: "A",
@@ -112,7 +107,7 @@ describe("auth-store", () => {
     });
     registerAuth(config, () => liveWindow as never);
 
-    await mockState.handlers.get(CHANNELS.authSignIn)!(
+    await mockState.handlers.get(IPC_CHANNELS.authSignIn)!(
       { sender: liveWindow.webContents },
       { email: "a@b.com", password: "pw" },
     );
@@ -126,7 +121,7 @@ describe("auth-store", () => {
     registerAuth(config, () => mainWindow as never);
 
     await expect(
-      mockState.handlers.get(CHANNELS.authSignIn)!(
+      mockState.handlers.get(IPC_CHANNELS.authSignIn)!(
         { sender: OTHER_SENDER },
         { email: "a@b.com", password: "pw" },
       ),
@@ -136,7 +131,7 @@ describe("auth-store", () => {
   it("authGetStatus does not reject from a non-main sender — it's read-only", async () => {
     registerAuth(config, () => null);
     await expect(
-      mockState.handlers.get(CHANNELS.authGetStatus)!({ sender: OTHER_SENDER }),
+      mockState.handlers.get(IPC_CHANNELS.authGetStatus)!({ sender: OTHER_SENDER }),
     ).resolves.toEqual({ kind: "signed-out" });
   });
 
@@ -148,18 +143,20 @@ describe("auth-store", () => {
     });
     const mainWindow = mockState.windows[0]!;
     registerAuth(config, () => mainWindow as never);
-    await mockState.handlers.get(CHANNELS.authSignIn)!(
+    await mockState.handlers.get(IPC_CHANNELS.authSignIn)!(
       { sender: mainWindow.webContents },
       { email: "a@b.com", password: "pw" },
     );
 
     vi.spyOn(authClient, "getSession").mockResolvedValue(null); // confirmed 401
-    const status = await mockState.handlers.get(CHANNELS.authGetStatus)!({ sender: OTHER_SENDER });
+    const status = await mockState.handlers.get(IPC_CHANNELS.authGetStatus)!({
+      sender: OTHER_SENDER,
+    });
     expect(status).toEqual({ kind: "signed-out" });
 
     // A second registerAuth (simulating app restart) must not find a token — it was cleared.
     registerAuth(config, () => mainWindow as never);
-    const restored = await mockState.handlers.get(CHANNELS.authGetStatus)!({
+    const restored = await mockState.handlers.get(IPC_CHANNELS.authGetStatus)!({
       sender: OTHER_SENDER,
     });
     expect(restored).toEqual({ kind: "signed-out" });
@@ -173,19 +170,21 @@ describe("auth-store", () => {
     });
     const mainWindow = mockState.windows[0]!;
     registerAuth(config, () => mainWindow as never);
-    await mockState.handlers.get(CHANNELS.authSignIn)!(
+    await mockState.handlers.get(IPC_CHANNELS.authSignIn)!(
       { sender: mainWindow.webContents },
       { email: "a@b.com", password: "pw" },
     );
 
     vi.spyOn(authClient, "getSession").mockRejectedValue(new Error("offline"));
-    const status = await mockState.handlers.get(CHANNELS.authGetStatus)!({ sender: OTHER_SENDER });
+    const status = await mockState.handlers.get(IPC_CHANNELS.authGetStatus)!({
+      sender: OTHER_SENDER,
+    });
     expect(status).toEqual({ kind: "unknown", lastKnownEmail: "a@b.com" });
 
     // The token on disk must survive — a fresh registerAuth + a working getSession proves it.
     vi.spyOn(authClient, "getSession").mockResolvedValue({ email: "a@b.com", name: "A" });
     registerAuth(config, () => mainWindow as never);
-    const restored = await mockState.handlers.get(CHANNELS.authGetStatus)!({
+    const restored = await mockState.handlers.get(IPC_CHANNELS.authGetStatus)!({
       sender: OTHER_SENDER,
     });
     expect(restored).toEqual({ kind: "signed-in", email: "a@b.com", name: "A" });
@@ -200,15 +199,17 @@ describe("auth-store", () => {
     vi.spyOn(authClient, "signOutRemote").mockRejectedValue(new Error("offline"));
     const mainWindow = mockState.windows[0]!;
     registerAuth(config, () => mainWindow as never);
-    await mockState.handlers.get(CHANNELS.authSignIn)!(
+    await mockState.handlers.get(IPC_CHANNELS.authSignIn)!(
       { sender: mainWindow.webContents },
       { email: "a@b.com", password: "pw" },
     );
 
-    await mockState.handlers.get(CHANNELS.authSignOut)!({ sender: mainWindow.webContents });
+    await mockState.handlers.get(IPC_CHANNELS.authSignOut)!({ sender: mainWindow.webContents });
 
     registerAuth(config, () => mainWindow as never);
-    const status = await mockState.handlers.get(CHANNELS.authGetStatus)!({ sender: OTHER_SENDER });
+    const status = await mockState.handlers.get(IPC_CHANNELS.authGetStatus)!({
+      sender: OTHER_SENDER,
+    });
     expect(status).toEqual({ kind: "signed-out" });
   });
 
@@ -223,7 +224,7 @@ describe("auth-store", () => {
     registerAuth(config, () => mainWindow as never);
 
     await expect(
-      mockState.handlers.get(CHANNELS.authSignIn)!(
+      mockState.handlers.get(IPC_CHANNELS.authSignIn)!(
         { sender: mainWindow.webContents },
         { email: "a@b.com", password: "pw" },
       ),
@@ -231,14 +232,16 @@ describe("auth-store", () => {
 
     // Query the same registration closure: a regression that cached before persistence failed
     // would be hidden by registering a fresh store below.
-    const inProcessStatus = await mockState.handlers.get(CHANNELS.authGetStatus)!({
+    const inProcessStatus = await mockState.handlers.get(IPC_CHANNELS.authGetStatus)!({
       sender: OTHER_SENDER,
     });
     expect(inProcessStatus).toEqual({ kind: "signed-out" });
 
     mockState.encryptionAvailable = true; // restore encryption to read what (shouldn't be) there
     registerAuth(config, () => mainWindow as never);
-    const status = await mockState.handlers.get(CHANNELS.authGetStatus)!({ sender: OTHER_SENDER });
+    const status = await mockState.handlers.get(IPC_CHANNELS.authGetStatus)!({
+      sender: OTHER_SENDER,
+    });
     expect(status).toEqual({ kind: "signed-out" });
   });
 
@@ -247,7 +250,9 @@ describe("auth-store", () => {
     await writeFile(join(mockState.userDataDir, "auth.enc"), "not-encrypted-garbage");
 
     expect(() => registerAuth(config, () => null)).not.toThrow();
-    const status = await mockState.handlers.get(CHANNELS.authGetStatus)!({ sender: OTHER_SENDER });
+    const status = await mockState.handlers.get(IPC_CHANNELS.authGetStatus)!({
+      sender: OTHER_SENDER,
+    });
     expect(status).toEqual({ kind: "signed-out" });
   });
 
@@ -257,7 +262,9 @@ describe("auth-store", () => {
     mockState.encryptionAvailable = false;
 
     registerAuth(config, () => null);
-    const status = await mockState.handlers.get(CHANNELS.authGetStatus)!({ sender: OTHER_SENDER });
+    const status = await mockState.handlers.get(IPC_CHANNELS.authGetStatus)!({
+      sender: OTHER_SENDER,
+    });
     expect(status).toEqual({ kind: "signed-out" });
   });
 
@@ -271,7 +278,7 @@ describe("auth-store", () => {
     registerAuth(config, () => mainWindow as never);
 
     await expect(
-      mockState.handlers.get(CHANNELS.authSignUp)!(
+      mockState.handlers.get(IPC_CHANNELS.authSignUp)!(
         { sender: mainWindow.webContents },
         { email: "new@b.com", password: "pw", name: "New" },
       ),
@@ -281,7 +288,7 @@ describe("auth-store", () => {
   it("rejects authSignOut from a non-main sender", async () => {
     registerAuth(config, () => mockState.windows[0] as never);
     await expect(
-      mockState.handlers.get(CHANNELS.authSignOut)!({ sender: OTHER_SENDER }),
+      mockState.handlers.get(IPC_CHANNELS.authSignOut)!({ sender: OTHER_SENDER }),
     ).rejects.toThrow();
   });
 });

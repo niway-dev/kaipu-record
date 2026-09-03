@@ -229,6 +229,12 @@ export const IPC_CHANNELS = {
   // them all up in one directory removal.
   videoEditSaveSession: "videoEdit:save-session",
   videoEditLoadSession: "videoEdit:load-session",
+  // Authentication (main → renderer bridge, preload in Task 6)
+  authGetStatus: "auth:get-status",
+  authSignIn: "auth:sign-in",
+  authSignUp: "auth:sign-up",
+  authSignOut: "auth:sign-out",
+  authStatusChanged: "auth:status-changed",
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];

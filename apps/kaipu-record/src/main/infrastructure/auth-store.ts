@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, safeStorage } from "electron";
 import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AuthCredentials, AuthStatus, SignUpInput } from "@shared/types/auth";
+import { IPC_CHANNELS } from "@shared/types/ipc";
 import {
   getSession,
   signInWithPassword,
@@ -13,16 +14,6 @@ import {
 function tokenFilePath(): string {
   return join(app.getPath("userData"), "auth.enc");
 }
-
-// Task 5 promotes these exact values to the shared IPC contract. Keeping this map local until
-// then lets this task compile and run independently instead of depending on a future commit.
-const AUTH_IPC_CHANNELS = {
-  authGetStatus: "auth:get-status",
-  authSignIn: "auth:sign-in",
-  authSignUp: "auth:sign-up",
-  authSignOut: "auth:sign-out",
-  authStatusChanged: "auth:status-changed",
-} as const;
 
 function readStoredToken(): string | null {
   if (!safeStorage.isEncryptionAvailable()) return null;
@@ -61,7 +52,7 @@ export function registerAuth(
 
   function broadcast(status: AuthStatus): void {
     for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed()) win.webContents.send(AUTH_IPC_CHANNELS.authStatusChanged, status);
+      if (!win.isDestroyed()) win.webContents.send(IPC_CHANNELS.authStatusChanged, status);
     }
   }
 
@@ -71,7 +62,7 @@ export function registerAuth(
     }
   }
 
-  ipcMain.handle(AUTH_IPC_CHANNELS.authGetStatus, async (): Promise<AuthStatus> => {
+  ipcMain.handle(IPC_CHANNELS.authGetStatus, async (): Promise<AuthStatus> => {
     if (!token) return { kind: "signed-out" };
     try {
       const identity = await getSession(config, token);
@@ -104,7 +95,7 @@ export function registerAuth(
   }
 
   ipcMain.handle(
-    AUTH_IPC_CHANNELS.authSignIn,
+    IPC_CHANNELS.authSignIn,
     async (event, credentials: AuthCredentials): Promise<AuthStatus> => {
       requireMainWindow(event);
       return commitSignIn(await signInWithPassword(config, credentials));
@@ -112,14 +103,14 @@ export function registerAuth(
   );
 
   ipcMain.handle(
-    AUTH_IPC_CHANNELS.authSignUp,
+    IPC_CHANNELS.authSignUp,
     async (event, input: SignUpInput): Promise<AuthStatus> => {
       requireMainWindow(event);
       return commitSignIn(await signUpWithPassword(config, input));
     },
   );
 
-  ipcMain.handle(AUTH_IPC_CHANNELS.authSignOut, async (event): Promise<void> => {
+  ipcMain.handle(IPC_CHANNELS.authSignOut, async (event): Promise<void> => {
     requireMainWindow(event);
     const outgoingToken = token;
     token = null;

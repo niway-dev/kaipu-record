@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 import { electronAPI } from "@electron-toolkit/preload";
 import { IPC_CHANNELS } from "@shared/types";
 import type { AppSettings } from "@shared/types";
+import type { AuthStatus } from "@shared/types/auth";
 import type { KaipuElectronAPI } from "@shared/types/electron-api";
 import type {
   ControlCommand,
@@ -28,6 +29,15 @@ const kaipuApi: KaipuElectronAPI = {
     const listener = (_e: IpcRendererEvent, settings: AppSettings): void => callback(settings);
     ipcRenderer.on(IPC_CHANNELS.settingsChanged, listener);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.settingsChanged, listener);
+  },
+  getAuthStatus: () => ipcRenderer.invoke(IPC_CHANNELS.authGetStatus),
+  signIn: (credentials) => ipcRenderer.invoke(IPC_CHANNELS.authSignIn, credentials),
+  signUp: (input) => ipcRenderer.invoke(IPC_CHANNELS.authSignUp, input),
+  signOut: () => ipcRenderer.invoke(IPC_CHANNELS.authSignOut),
+  onAuthStatusChanged: (callback) => {
+    const listener = (_e: IpcRendererEvent, status: AuthStatus): void => callback(status);
+    ipcRenderer.on(IPC_CHANNELS.authStatusChanged, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.authStatusChanged, listener);
   },
   getScreenSources: () => ipcRenderer.invoke("recording:get-screen-sources"),
   resizeCapturePanel: (height) => ipcRenderer.send("capture-panel:resize", height),
