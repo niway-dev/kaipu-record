@@ -29,7 +29,13 @@ async function callCredentialEndpoint(
   try {
     res = await fetch(`${config.serverUrl}/api/auth/${path}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      // This Origin is load-bearing, not decorative: Electron's main-process fetch()
+      // (Chromium's network stack) attaches Sec-Fetch-* headers even outside a page
+      // context, which trips better-auth's Sec-Fetch-gated CSRF check on sign-in/email
+      // and sign-up/email specifically — without a trusted Origin, both 403 with
+      // MISSING_OR_NULL_ORIGIN. Must stay byte-identical to the trustedOrigins entry in
+      // apps/server-hono/src/lib/auth.ts, which explains the mechanism in full.
+      headers: { "Content-Type": "application/json", Origin: "kaipu-record://app" },
       body: JSON.stringify(body),
     });
   } catch {
