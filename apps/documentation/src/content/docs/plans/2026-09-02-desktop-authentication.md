@@ -158,8 +158,16 @@ export type AuthError =
 
 - [ ] **Step 2: Type-check**
 
-Run: `bunx tsc --noEmit -p apps/kaipu-record` (from monorepo root)
+Run (from `apps/kaipu-record`): `bun run typecheck:node`
 Expected: no errors.
+
+**Correction (found during Task 4's execution):** `bunx tsc --noEmit -p apps/kaipu-record` is a
+no-op — the root `tsconfig.json` is solution-style (`"files": []` + `"references"`), which only
+`tsc -b` (build mode) actually traverses; plain `--noEmit -p` against it silently checks nothing
+and always exits 0. `bun run typecheck:node` (from `apps/kaipu-record`, defined in its
+`package.json` as `tsc --noEmit -p tsconfig.node.json --composite false`) is the real check for
+every file this plan's main-process tasks touch. This correction applies everywhere this plan
+says `bunx tsc --noEmit -p apps/kaipu-record` — see Tasks 5–7 below.
 
 - [ ] **Step 3: Commit**
 
@@ -941,7 +949,8 @@ Expected: PASS, including `auth-store.test.ts` still green against the real cons
 
 - [ ] **Step 5: Type-check**
 
-Run: `bunx tsc --noEmit -p apps/kaipu-record`
+Run (from `apps/kaipu-record`): `bun run typecheck:node` (see the correction note under Task 2 —
+`bunx tsc --noEmit -p apps/kaipu-record` is a no-op against this repo's solution-style tsconfig)
 Expected: no errors.
 
 - [ ] **Step 6: Commit**
@@ -992,7 +1001,7 @@ line at the top of the file.
 
 - [ ] **Step 2: Type-check**
 
-Run: `bunx tsc --noEmit -p apps/kaipu-record`
+Run (from `apps/kaipu-record`): `bun run typecheck:node` (see the correction note under Task 2)
 Expected: no errors — this is the only verification available for the preload bridge.
 
 - [ ] **Step 3: Commit**
@@ -1051,7 +1060,8 @@ registerAuth({ serverUrl: import.meta.env.MAIN_VITE_SERVER_URL }, () => mainWind
 
 - [ ] **Step 4: Type-check and build**
 
-Run: `bunx tsc --noEmit -p apps/kaipu-record`, then `bun run build` (from `apps/kaipu-record`)
+Run (from `apps/kaipu-record`): `bun run typecheck:node` (see the correction note under Task 2),
+then `bun run build`
 Expected: both succeed.
 
 - [ ] **Step 5: Commit**
