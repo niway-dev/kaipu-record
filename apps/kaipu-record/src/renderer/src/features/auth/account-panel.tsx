@@ -103,7 +103,11 @@ export function AccountPanel(): React.JSX.Element {
         onChange={(e) => setPassword(e.target.value)}
         required
       />
-      {error && <p className={styles.error}>{t(errorCopyKey(error))}</p>}
+      {error && (
+        <p className={styles.error} role="alert">
+          {t(errorCopyKey(error))}
+        </p>
+      )}
       <div className={styles.formActions}>
         <Button type="submit" size="sm" disabled={pending}>
           {t("submit")}

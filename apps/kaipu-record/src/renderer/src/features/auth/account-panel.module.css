@@ -21,6 +21,6 @@
 }
 
 .unknownNote {
-  color: var(--color-text-secondary, #888);
+  color: var(--text-secondary);
   font-size: 0.875rem;
 }
