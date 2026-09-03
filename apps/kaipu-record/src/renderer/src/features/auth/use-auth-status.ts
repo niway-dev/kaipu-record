@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { AuthCredentials, AuthError, AuthStatus, SignUpInput } from "@shared/types/auth";
+import type { AuthAttemptResult } from "@shared/types/electron-api";
 
 export interface AuthStatusStore {
   status: AuthStatus;
@@ -47,18 +48,17 @@ export function useAuthStatus(): AuthStatusStore {
     return unsubscribe;
   }, []);
 
+  // The attempt never rejects by contract: signIn/signUp report failure as `{ ok: false, error }`
+  // (a thrown IPC error would lose the structured `kind` — see AuthAttemptResult), and signOut
+  // never fails by design.
   const runAttempt = useCallback(
-    async (attempt: () => Promise<AuthStatus | void>): Promise<void> => {
+    async (attempt: () => Promise<AuthAttemptResult>): Promise<void> => {
       setPending(true);
       setError(null);
-      try {
-        const next = await attempt();
-        if (next) setStatus(next);
-      } catch (err) {
-        setError(err as AuthError);
-      } finally {
-        setPending(false);
-      }
+      const result = await attempt();
+      if (result.ok) setStatus(result.status);
+      else setError(result.error);
+      setPending(false);
     },
     [],
   );
@@ -75,7 +75,7 @@ export function useAuthStatus(): AuthStatusStore {
     () =>
       runAttempt(async () => {
         await window.electronAPI.signOut();
-        setStatus({ kind: "signed-out" });
+        return { ok: true, status: { kind: "signed-out" } as const };
       }),
     [runAttempt],
   );

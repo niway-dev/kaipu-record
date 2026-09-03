@@ -87,7 +87,10 @@ describe("auth-store", () => {
       { email: "a@b.com", password: "pw" },
     );
 
-    expect(status).toEqual({ kind: "signed-in", email: "a@b.com", name: "A" });
+    expect(status).toEqual({
+      ok: true,
+      status: { kind: "signed-in", email: "a@b.com", name: "A" },
+    });
     expect(mainWindow.webContents.send).toHaveBeenCalledWith(IPC_CHANNELS.authStatusChanged, {
       kind: "signed-in",
       email: "a@b.com",
@@ -126,6 +129,23 @@ describe("auth-store", () => {
         { email: "a@b.com", password: "pw" },
       ),
     ).rejects.toThrow();
+  });
+
+  it("returns a credential failure as a structured result instead of throwing it", async () => {
+    // Electron serializes anything thrown out of ipcMain.handle down to its `.message`, so a
+    // thrown `{ kind }` would reach the renderer with no discriminant at all. The handler must
+    // resolve the error instead, where structured cloning preserves it in full.
+    vi.spyOn(authClient, "signInWithPassword").mockRejectedValue({ kind: "invalid-credentials" });
+    const mainWindow = mockState.windows[0]!;
+    registerAuth(config, () => mainWindow as never);
+
+    await expect(
+      mockState.handlers.get(IPC_CHANNELS.authSignIn)!(
+        { sender: mainWindow.webContents },
+        { email: "a@b.com", password: "wrong" },
+      ),
+    ).resolves.toEqual({ ok: false, error: { kind: "invalid-credentials" } });
+    expect(mainWindow.webContents.send).not.toHaveBeenCalled();
   });
 
   it("authGetStatus does not reject from a non-main sender — it's read-only", async () => {
@@ -223,12 +243,14 @@ describe("auth-store", () => {
     const mainWindow = mockState.windows[0]!;
     registerAuth(config, () => mainWindow as never);
 
+    // The handler RETURNS the failure rather than throwing it (Electron would strip a thrown
+    // error down to its `.message` and lose the structured `kind`).
     await expect(
       mockState.handlers.get(IPC_CHANNELS.authSignIn)!(
         { sender: mainWindow.webContents },
         { email: "a@b.com", password: "pw" },
       ),
-    ).rejects.toThrow();
+    ).resolves.toMatchObject({ ok: false, error: { kind: "unknown" } });
 
     // Query the same registration closure: a regression that cached before persistence failed
     // would be hidden by registering a fresh store below.
@@ -282,7 +304,10 @@ describe("auth-store", () => {
         { sender: mainWindow.webContents },
         { email: "new@b.com", password: "pw", name: "New" },
       ),
-    ).resolves.toEqual({ kind: "signed-in", email: "new@b.com", name: "New" });
+    ).resolves.toEqual({
+      ok: true,
+      status: { kind: "signed-in", email: "new@b.com", name: "New" },
+    });
   });
 
   it("rejects authSignOut from a non-main sender", async () => {

@@ -1,7 +1,8 @@
 import { app, BrowserWindow, ipcMain, safeStorage } from "electron";
 import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AuthCredentials, AuthStatus, SignUpInput } from "@shared/types/auth";
+import type { AuthCredentials, AuthError, AuthStatus, SignUpInput } from "@shared/types/auth";
+import type { AuthAttemptResult } from "@shared/types/electron-api";
 import { IPC_CHANNELS } from "@shared/types/ipc";
 import {
   getSession,
@@ -41,6 +42,14 @@ function writeStoredToken(token: string): void {
 function clearStoredToken(): void {
   const path = tokenFilePath();
   if (existsSync(path)) unlinkSync(path);
+}
+
+/** Narrow whatever auth-client threw into the structured shape the renderer switches on.
+ *  auth-client only ever throws `AuthError`-shaped literals, so the cast is a narrowing,
+ *  not a lie; anything else (a genuine runtime Error) becomes `unknown` with its message. */
+function toAuthError(err: unknown): AuthError {
+  if (err && typeof err === "object" && "kind" in err) return err as AuthError;
+  return { kind: "unknown", message: err instanceof Error ? err.message : String(err) };
 }
 
 export function registerAuth(
@@ -94,19 +103,31 @@ export function registerAuth(
     return status;
   }
 
+  // Both handlers RETURN their failure instead of throwing it: Electron serializes anything
+  // thrown out of `ipcMain.handle` down to its `.message`, which would strip the structured
+  // `kind` the renderer needs to pick the right error copy. `requireMainWindow` deliberately
+  // still throws — that is a programming/security error, not a user-facing auth outcome.
   ipcMain.handle(
     IPC_CHANNELS.authSignIn,
-    async (event, credentials: AuthCredentials): Promise<AuthStatus> => {
+    async (event, credentials: AuthCredentials): Promise<AuthAttemptResult> => {
       requireMainWindow(event);
-      return commitSignIn(await signInWithPassword(config, credentials));
+      try {
+        return { ok: true, status: commitSignIn(await signInWithPassword(config, credentials)) };
+      } catch (err) {
+        return { ok: false, error: toAuthError(err) };
+      }
     },
   );
 
   ipcMain.handle(
     IPC_CHANNELS.authSignUp,
-    async (event, input: SignUpInput): Promise<AuthStatus> => {
+    async (event, input: SignUpInput): Promise<AuthAttemptResult> => {
       requireMainWindow(event);
-      return commitSignIn(await signUpWithPassword(config, input));
+      try {
+        return { ok: true, status: commitSignIn(await signUpWithPassword(config, input)) };
+      } catch (err) {
+        return { ok: false, error: toAuthError(err) };
+      }
     },
   );
 
