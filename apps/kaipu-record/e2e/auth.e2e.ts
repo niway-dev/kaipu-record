@@ -32,33 +32,33 @@ async function isServerUp(): Promise<boolean> {
   }
 }
 
-/**
- * A bespoke launch — not the shared e2e/helpers/launch.ts — because it needs to expose
- * and reuse the same userData directory across relaunches, to test restart-persistence.
- * Called with no argument it seeds a fresh throwaway profile (a preferences.json pointing
- * at a throwaway vault, so it never touches the real ~/Videos/Kaipu Record, and a pinned
- * English locale for deterministic copy); called with a directory it reuses it as-is.
- */
-async function launchWithUserData(
-  userDataDir?: string,
-): Promise<{ app: ElectronApplication; page: Page; userDataDir: string }> {
-  let dir = userDataDir;
-  if (!dir) {
-    dir = await mkdtemp(path.join(tmpdir(), "kaipu-e2e-auth-"));
-    const vaultDir = await mkdtemp(path.join(tmpdir(), "kaipu-e2e-auth-vault-"));
-    await writeFile(
-      path.join(dir, "preferences.json"),
-      JSON.stringify({ vaultDirectory: vaultDir }),
-    );
-    await writeFile(path.join(dir, "settings.json"), JSON.stringify({ locale: "en" }));
-  }
+/** A throwaway profile: preferences.json pointing at a throwaway vault (so the app never
+ * touches the real ~/Videos/Kaipu Record) and a pinned English locale for deterministic
+ * copy. Returns both directories so the caller can remove them once done — a relaunch
+ * against the SAME userDataDir only needs that dir; vaultDir is only created fresh. */
+async function seedUserData(): Promise<{ userDataDir: string; vaultDir: string }> {
+  const userDataDir = await mkdtemp(path.join(tmpdir(), "kaipu-e2e-auth-"));
+  const vaultDir = await mkdtemp(path.join(tmpdir(), "kaipu-e2e-auth-vault-"));
+  await writeFile(
+    path.join(userDataDir, "preferences.json"),
+    JSON.stringify({ vaultDirectory: vaultDir }),
+  );
+  await writeFile(path.join(userDataDir, "settings.json"), JSON.stringify({ locale: "en" }));
+  return { userDataDir, vaultDir };
+}
 
-  const args = [MAIN_ENTRY, `--user-data-dir=${dir}`];
+/**
+ * A bespoke launch — not the shared e2e/helpers/launch.ts — because it needs to launch
+ * against an already-seeded userData directory, to test restart-persistence (the shared
+ * helper always seeds a fresh one internally and never exposes the path).
+ */
+async function launch(userDataDir: string): Promise<{ app: ElectronApplication; page: Page }> {
+  const args = [MAIN_ENTRY, `--user-data-dir=${userDataDir}`];
   if (process.env.CI) args.push("--no-sandbox");
 
   const app = await electron.launch({ args });
   const page = await app.firstWindow();
-  return { app, page, userDataDir: dir };
+  return { app, page };
 }
 
 /** Mirrors e2e/helpers/launch.ts's dismissOnboarding — duplicated locally to keep this
@@ -98,72 +98,85 @@ test.describe("Desktop authentication (Task 12 manual verification)", () => {
     const password = "correct horse battery staple 1";
     const name = "E2E Auth";
 
-    const { app, page, userDataDir } = await launchWithUserData();
+    const { userDataDir, vaultDir } = await seedUserData();
+    // One outer try/finally covering BOTH launches: an assertion failure anywhere in the
+    // first launch's block must still reach the cleanup below, not just a failure after
+    // the restart section starts.
     try {
-      await openSettings(page);
+      {
+        const { app, page } = await launch(userDataDir);
+        try {
+          await openSettings(page);
 
-      // Sign up
-      await page.getByRole("button", { name: "Create account" }).click();
-      await page.getByLabel("Email").fill(email);
-      await page.getByLabel("Name").fill(name);
-      await page.getByLabel("Password").fill(password);
-      await page.getByRole("button", { name: "Continue" }).click();
-      await expect(page.getByText(email)).toBeVisible();
-      await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+          // Sign up
+          await page.getByRole("button", { name: "Create account" }).click();
+          await page.getByLabel("Email").fill(email);
+          await page.getByLabel("Name").fill(name);
+          await page.getByLabel("Password").fill(password);
+          await page.getByRole("button", { name: "Continue" }).click();
+          await expect(page.getByText(email)).toBeVisible();
+          await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
 
-      // Sign out
-      await page.getByRole("button", { name: "Sign out" }).click();
-      await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
-      await expect(page.getByText(email)).toHaveCount(0);
+          // Sign out
+          await page.getByRole("button", { name: "Sign out" }).click();
+          await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+          await expect(page.getByText(email)).toHaveCount(0);
 
-      // Sign in with the same credentials
-      await page.getByRole("button", { name: "Sign in" }).click();
-      await page.getByLabel("Email").fill(email);
-      await page.getByLabel("Password").fill(password);
-      await page.getByRole("button", { name: "Continue" }).click();
-      await expect(page.getByText(email)).toBeVisible();
-      await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+          // Sign in with the same credentials
+          await page.getByRole("button", { name: "Sign in" }).click();
+          await page.getByLabel("Email").fill(email);
+          await page.getByLabel("Password").fill(password);
+          await page.getByRole("button", { name: "Continue" }).click();
+          await expect(page.getByText(email)).toBeVisible();
+          await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+        } finally {
+          await app.close();
+        }
+      }
+
+      // Restart, reusing the SAME userData dir: the token persisted to auth.enc must
+      // restore the session on the fresh process without re-entering credentials.
+      {
+        const { app, page } = await launch(userDataDir);
+        try {
+          await openSettings(page);
+          await expect(page.getByText(email)).toBeVisible();
+          await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+
+          // Cleanup: sign out so the test doesn't leave a signed-in account behind.
+          await page.getByRole("button", { name: "Sign out" }).click();
+          await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+        } finally {
+          await app.close();
+        }
+      }
     } finally {
-      await app.close();
-    }
-
-    // Restart, reusing the SAME userData dir: the token persisted to auth.enc must
-    // restore the session on the fresh process without re-entering credentials.
-    const relaunch = await launchWithUserData(userDataDir);
-    try {
-      await openSettings(relaunch.page);
-      await expect(relaunch.page.getByText(email)).toBeVisible();
-      await expect(relaunch.page.getByRole("button", { name: "Sign out" })).toBeVisible();
-
-      // Cleanup: sign out so the test doesn't leave a signed-in account behind.
-      await relaunch.page.getByRole("button", { name: "Sign out" }).click();
-      await expect(relaunch.page.getByRole("button", { name: "Sign in" })).toBeVisible();
-    } finally {
-      await relaunch.app.close();
       await rm(userDataDir, { recursive: true, force: true });
+      await rm(vaultDir, { recursive: true, force: true });
     }
   });
 
   test("a corrupted token file does not crash the app and starts signed out", async () => {
-    const dir = await mkdtemp(path.join(tmpdir(), "kaipu-e2e-auth-corrupt-"));
-    const vaultDir = await mkdtemp(path.join(tmpdir(), "kaipu-e2e-auth-corrupt-vault-"));
-    await writeFile(
-      path.join(dir, "preferences.json"),
-      JSON.stringify({ vaultDirectory: vaultDir }),
-    );
-    await writeFile(path.join(dir, "settings.json"), JSON.stringify({ locale: "en" }));
+    const { userDataDir, vaultDir } = await seedUserData();
     // Garbage bytes where auth-store.ts's readStoredToken expects a safeStorage-encrypted
     // blob — its decryptString try/catch must swallow this as "no token", not crash launch.
-    await writeFile(path.join(dir, "auth.enc"), Buffer.from([0x00, 0xff, 0x13, 0x37, 0xde, 0xad]));
+    await writeFile(
+      path.join(userDataDir, "auth.enc"),
+      Buffer.from([0x00, 0xff, 0x13, 0x37, 0xde, 0xad]),
+    );
 
-    const { app, page } = await launchWithUserData(dir);
     try {
-      await openSettings(page);
-      await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
-      await expect(page.getByRole("button", { name: "Create account" })).toBeVisible();
+      const { app, page } = await launch(userDataDir);
+      try {
+        await openSettings(page);
+        await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+        await expect(page.getByRole("button", { name: "Create account" })).toBeVisible();
+      } finally {
+        await app.close();
+      }
     } finally {
-      await app.close();
-      await rm(dir, { recursive: true, force: true });
+      await rm(userDataDir, { recursive: true, force: true });
+      await rm(vaultDir, { recursive: true, force: true });
     }
   });
 });
