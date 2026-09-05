@@ -48,6 +48,17 @@ const text: Annotation = {
   size: 1,
 };
 
+const wrapped: Annotation = {
+  id: "tw",
+  kind: "text",
+  x: 0.1,
+  y: 0.1,
+  text: "Dawd awdaw dwa d dawd awd wadwad",
+  color: "#fff",
+  size: 3,
+  width: 0.4,
+};
+
 describe("annotationBox", () => {
   it("returns the rect directly for box/blur", () => {
     expect(annotationBox(box, size)).toEqual({ x: 0.2, y: 0.2, w: 0.4, h: 0.3 });
@@ -182,6 +193,39 @@ describe("resizeAnnotation — text", () => {
   it("the east edge sets the wrap width from the horizontal drag (not the font)", () => {
     const patch = resizeAnnotation(text, "e", { x: 0.7, y: 0.3 }, size) as { width: number };
     expect(patch.width).toBeCloseTo(0.4); // 0.7 (drag x) − 0.3 (anchor x)
+  });
+  it("scales the font by the drag/box ratio, so a wrapped label still resizes", () => {
+    // The label is 2 wrapped lines tall; dragging the corner to half the box height
+    // must halve the font (deriving it from the raw height would pin it to the max).
+    const b = annotationBox(wrapped, size)!;
+    const patch = resizeAnnotation(
+      wrapped,
+      "se",
+      { x: wrapped.x + b.w, y: wrapped.y + b.h / 2 },
+      size,
+    ) as { size: number };
+    expect(patch.size).toBe(1);
+  });
+  it("keeps the corner a no-op when dragged to the current box corner", () => {
+    const b = annotationBox(wrapped, size)!;
+    const patch = resizeAnnotation(
+      wrapped,
+      "se",
+      { x: wrapped.x + b.w, y: wrapped.y + b.h },
+      size,
+    ) as { size: number };
+    expect(patch.size).toBe(wrapped.size);
+  });
+  it("scales the wrap width with the font so the label keeps its shape", () => {
+    const b = annotationBox(wrapped, size)!;
+    const patch = resizeAnnotation(
+      wrapped,
+      "se",
+      { x: wrapped.x + b.w, y: wrapped.y + b.h / 2 },
+      size,
+    ) as { size: number; width: number };
+    // Level 3 (37px) -> level 1 (19px): the width follows the same ratio.
+    expect(patch.width).toBeCloseTo(0.4 * (TEXT_PX[1] / TEXT_PX[3]), 3);
   });
   it("clamps the wrap width to a small minimum, never zero/negative", () => {
     const patch = resizeAnnotation(text, "e", { x: 0.3, y: 0.3 }, size) as { width: number };

@@ -128,7 +128,7 @@ review's "Verified" claim below):** the claim that Desktop needs no `trustedOrig
 **wrong** — the sign-up/sign-in calls failed with a real `403 MISSING_OR_NULL_ORIGIN` the first
 time they ran against a live server. The review correctly read `validateOrigin`'s own
 short-circuit (`if (!(forceValidate || useCookies)) return;`, in `origin-check.mjs`), but missed
-that the sign-in/email and sign-up/email routes are *also* gated by a second, independent
+that the sign-in/email and sign-up/email routes are _also_ gated by a second, independent
 middleware in the same file — `formCsrfMiddleware` / `validateFormCsrf`, whose own doc comment
 says it exists for exactly this: "CSRF protection using Fetch Metadata headers... for first-login
 scenarios." It inspects `Sec-Fetch-Site`/`-Mode`/`-Dest`, and whenever ANY of those three headers

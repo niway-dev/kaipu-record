@@ -88,6 +88,13 @@ jobs:
       # xvfb-run gives Electron a virtual X display so the window can open headless.
       - name: Run E2E suite
         working-directory: apps/kaipu-record
+        # The main process refuses to start without a server URL (src/main/index.ts),
+        # and electron-vite inlines it at build time — which happens inside this step.
+        # There is no .env in CI, so without this every test times out waiting for a
+        # window that never opens. The value only satisfies the startup guard: no
+        # server runs here, and the auth specs self-skip on their own health check.
+        env:
+          MAIN_VITE_SERVER_URL: http://localhost:3000
         run: xvfb-run --auto-servernum bun run test:e2e
 
       - name: Upload Playwright artifacts on failure

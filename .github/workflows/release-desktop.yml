@@ -72,7 +72,19 @@ jobs:
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          # The auth server the shipped app talks to. electron-vite INLINES this into
+          # the main bundle at build time, so it is frozen into every signed binary —
+          # deliberately its own variable rather than the web's VITE_SERVER_URL, which
+          # can be re-pointed by a redeploy that installed desktop apps cannot follow.
+          MAIN_VITE_SERVER_URL: ${{ vars.MAIN_VITE_SERVER_URL }}
         run: |
+          # Fail here rather than ship: an unset value inlines as `undefined`, and the
+          # main process throws on startup (src/main/index.ts), so the app would open
+          # no window at all on every user's machine.
+          test -n "$MAIN_VITE_SERVER_URL" || {
+            echo "::error::MAIN_VITE_SERVER_URL is not set — add it to the production Environment"
+            exit 1
+          }
           bun run build
           bunx electron-builder --mac --arm64 --x64 --publish never
 
