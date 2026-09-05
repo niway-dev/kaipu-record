@@ -6,10 +6,11 @@
  *   - box / blur : 8 handles (4 corners + 4 edges) that move the corresponding edges.
  *   - path       : the same 8 handles, scaling every point within the new bounding box.
  *   - arrow      : 2 handles, one per endpoint.
- *   - text       : 1 corner handle (font-based, so it snaps to the nearest size level).
+ *   - text       : 2 handles — the SE corner scales the font (snapping to the nearest
+ *                  size level), the E edge sets the wrap width.
  */
 
-import { TEXT_PX, textBoxPx } from "./tools";
+import { TEXT_LINE_HEIGHT, TEXT_PX, textBoxPx } from "./tools";
 import type { Annotation } from "./scene";
 
 export type HandleId = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "p1" | "p2";
@@ -166,15 +167,29 @@ export function resizeAnnotation(
       : { x2: clamp01(p.x), y2: clamp01(p.y) };
   }
   if (a.kind === "text") {
+    const fs = TEXT_PX[a.size];
+    const wrapPx = a.width ? a.width * (size.w || 1) : undefined;
     if (handle === "e") {
       // The east edge sets the wrap width; the text reflows to it by words.
-      const fs = TEXT_PX[a.size];
       const minWidth = (fs * 2) / (size.w || 1); // never collapse below ~2 glyphs
       return { width: Math.max(minWidth, clamp01(p.x) - a.x) };
     }
-    // The se corner sets the height; map it to the nearest discrete size level.
-    const targetPx = ((clamp01(p.y) - a.y) * (size.h || 1)) / 1.3;
-    return { size: nearestTextLevel(targetPx) };
+    // The se corner scales the font. It compares the dragged height against the
+    // CURRENT box height and applies that RATIO to the font — the raw height can't
+    // be the font size, because a wrapped or multi-line label is N lines tall and
+    // would always map to the largest level (i.e. the handle would look dead once
+    // the east edge made the text wrap).
+    const origH = textBoxPx(a.text, fs, wrapPx).h || fs * TEXT_LINE_HEIGHT;
+    const draggedH = (clamp01(p.y) - a.y) * (size.h || 1);
+    const level = nearestTextLevel((fs * draggedH) / origH);
+    if (a.width === undefined) return { size: level };
+    // With a wrap width set, the width scales by the same factor so the label keeps
+    // its shape instead of reflowing into a taller, narrower block.
+    const minWidth = (TEXT_PX[level] * 2) / (size.w || 1);
+    return {
+      size: level,
+      width: clamp01(Math.max(minWidth, a.width * (TEXT_PX[level] / fs))),
+    };
   }
   const orig = annotationBox(a, size);
   if (!orig) return {};
