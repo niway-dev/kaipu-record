@@ -5,8 +5,9 @@ description: Status tracker for replacing husky + lint-staged with one lefthook.
 
 # Git hooks — husky + lint-staged to lefthook
 
-> **Status: 🔵 Proposed (2026-09-06).** Design written, nothing implemented. Blocked only on
-> approval of the spec. Effort: Low (one small PR at the repo root, no app code).
+> **Status: 🟡 In progress (2026-09-06).** Design approved; migration PR
+> [#85](https://github.com/csdev19/kaipu-record-monorepo/pull/85) open and verified on the
+> branch. Effort: Low (one small PR at the repo root, no app code).
 
 ## Why it is on the map
 
