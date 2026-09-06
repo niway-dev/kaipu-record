@@ -55,6 +55,7 @@ export default defineConfig({
           items: [
             { slug: "backlog" },
             { slug: "backlog/code-quality-audit" },
+            { slug: "backlog/lefthook-migration" },
             { slug: "backlog/fable-audit" },
             { slug: "backlog/fable-audit-results" },
             { slug: "backlog/aspect-ratio-distortion" },
