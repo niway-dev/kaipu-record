@@ -1,13 +1,3 @@
-// Todo schemas
-export {
-  todoBaseSchema,
-  createTodoSchema,
-  updateTodoSchema,
-  type TodoBase,
-  type CreateTodo,
-  type UpdateTodo,
-} from "./todo";
-
 // Recording schemas + pure rules
 export {
   recordingKindSchema,
@@ -25,6 +15,23 @@ export {
   type RecordingBase,
   type CreateRecordingUpload,
 } from "./recording";
+
+// Subscription + entitlements (billing, kept apart from auth)
+export {
+  planSchema,
+  subscriptionStatusSchema,
+  subscriptionProviderSchema,
+  subscriptionBaseSchema,
+  entitlementsSchema,
+  FREE_ENTITLEMENTS,
+  isSubscriptionInForce,
+  deriveEntitlements,
+  type Plan,
+  type SubscriptionStatus,
+  type SubscriptionProvider,
+  type SubscriptionBase,
+  type Entitlements,
+} from "./subscription";
 
 // Pagination schemas
 export {

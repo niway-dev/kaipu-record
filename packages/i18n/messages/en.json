@@ -210,22 +210,22 @@
     "signInSuccess": "Sign in successful",
     "signUpSuccess": "Sign up successful"
   },
-  "todos": {
-    "title": "Todos",
-    "placeholder": "What needs to be done?",
-    "add": "Add",
-    "failedLoad": "Failed to load todos",
-    "empty": "No todos yet. Create one above!",
+  "recordings": {
+    "title": "Recordings",
+    "failedLoad": "Failed to load recordings",
+    "empty": "No recordings yet. Capture one from the desktop app and it will show up here.",
     "colTitle": "Title",
+    "colKind": "Kind",
+    "colDuration": "Duration",
+    "colSize": "Size",
     "colActions": "Actions",
-    "pageInfo": "Page {page} of {totalPages} ({total} total)",
-    "previous": "Previous",
-    "next": "Next",
-    "created": "Todo created",
-    "deleteSuccess": "Todo deleted",
-    "createError": "Failed to create todo",
-    "updateError": "Failed to update todo",
-    "deleteError": "Failed to delete todo"
+    "recording": "Recording",
+    "screenshot": "Screenshot",
+    "open": "Open",
+    "delete": "Delete",
+    "deleteSuccess": "Recording deleted",
+    "deleteError": "Failed to delete the recording",
+    "openError": "Failed to open the recording"
   },
   "library": {
     "title": "Library",

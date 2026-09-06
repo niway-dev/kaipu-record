@@ -2,7 +2,7 @@
   "name": "kaipu",
   "version": "1.0.0",
   "private": true,
-  "description": "A monorepo template with DDD + Hexagonal Architecture, auth, deployment configs, and a Todo CRUD example",
+  "description": "Kaipu Record — screen recorder monorepo: Electron desktop app, Hono API, web app, and shared DDD + Hexagonal packages",
   "license": "MIT",
   "workspaces": {
     "packages": [
@@ -42,7 +42,7 @@
     "check-types": "turbo run check-types",
     "dev:web-hono": "turbo run dev -F web-hono",
     "dev:server-hono": "turbo run dev -F server-hono",
-    "db:command": "dotenvx run -f apps/<application>/.env -- turbo run db:command -F @kaipu/infra-db",
+    "db:command": "dotenvx run -f apps/server-hono/.env -- turbo run db:command -F @kaipu/infra-db",
     "db:push": "dotenvx run -f apps/server-hono/.env -- turbo run db:push -F @kaipu/infra-db",
     "db:studio": "dotenvx run -f apps/server-hono/.env -- turbo run db:studio -F @kaipu/infra-db",
     "db:generate": "dotenvx run -f apps/server-hono/.env -- turbo run db:generate -F @kaipu/infra-db",

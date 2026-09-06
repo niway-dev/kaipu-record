@@ -19,34 +19,31 @@ src/
 | --------------------------- | -------- | ---------------------------------------------------------- |
 | `db`                        | const    | Pre-configured Drizzle client using `DATABASE_URL` env var |
 | `createDatabaseClient(url)` | function | Factory that creates a new Drizzle client from a given URL |
+| `DatabaseClient`            | type     | Return type of `createDatabaseClient`                      |
 
 ---
 
 ## `config/`
 
-| Item           | Kind  | Description                                           |
-| -------------- | ----- | ----------------------------------------------------- |
-| `TABLE_PREFIX` | const | `"monorepo_template"` — prefix for all DB table names |
+| Item           | Kind  | Description                                      |
+| -------------- | ----- | ------------------------------------------------ |
+| `TABLE_PREFIX` | const | `"kaipu_record"` — prefix for all DB table names |
 
 ---
 
 ## `enums/`
 
-| Item               | Kind   | Description                                            |
-| ------------------ | ------ | ------------------------------------------------------ |
-| `currencyEnum`     | pgEnum | PostgreSQL enum for currencies (from domain constants) |
-| `todoStatusEnum`   | pgEnum | PostgreSQL enum for todo statuses                      |
-| `todoPriorityEnum` | pgEnum | PostgreSQL enum for todo priorities                    |
-| `todoCategoryEnum` | pgEnum | PostgreSQL enum for todo categories                    |
+Empty — no PostgreSQL enums are declared yet. `kind` and `status` on the recording
+table are plain `text` columns validated by the domain Zod schemas.
 
 ---
 
 ## `utils/`
 
-| Item          | Kind     | Description                                                                       |
-| ------------- | -------- | --------------------------------------------------------------------------------- |
-| `createTable` | function | `pgTableCreator` wrapper that auto-prefixes table names with `monorepo_template_` |
-| `timestamps`  | const    | Reusable column object with `createdAt`, `updatedAt`, `deletedAt`                 |
+| Item          | Kind     | Description                                                                                                                       |
+| ------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `createTable` | function | `pgTableCreator` wrapper that auto-prefixes table names with `kaipu_record_`                                                      |
+| `timestamps`  | const    | Reusable column object with `createdAt`, `updatedAt`, `deletedAt`. Currently unused — the tables declare their timestamps inline. |
 
 ---
 
@@ -54,46 +51,56 @@ src/
 
 ### `auth.ts`
 
+Better Auth's tables. Owned by the auth adapter's expectations — change with care.
+
 | Item                | Kind      | Description                                                      |
 | ------------------- | --------- | ---------------------------------------------------------------- |
 | `userTable`         | table     | Users (id, name, email, emailVerified, image, timestamps)        |
 | `sessionTable`      | table     | Sessions (id, expiresAt, token, ipAddress, userAgent, userId FK) |
 | `accountTable`      | table     | OAuth accounts (accountId, providerId, tokens, userId FK)        |
 | `verificationTable` | table     | Verification codes (identifier, value, expiresAt)                |
-| `userRelations`     | relations | User → many sessions, accounts, todos                            |
+| `userRelations`     | relations | User → many sessions, accounts, recordings; one subscription     |
 | `sessionRelations`  | relations | Session → one user                                               |
 | `accountRelations`  | relations | Account → one user                                               |
 
-### `todo.ts`
+### `recording.ts`
 
-| Item            | Kind      | Description                                                                       |
-| --------------- | --------- | --------------------------------------------------------------------------------- |
-| `todoTable`     | table     | Todos (id, title, description, status, priority, category, userId FK, timestamps) |
-| `todoRelations` | relations | Many-to-one with user                                                             |
-| `Todo`          | type      | Inferred SELECT type                                                              |
-| `NewTodo`       | type      | Inferred INSERT type                                                              |
+| Item                 | Kind      | Description                                                                                                                                                              |
+| -------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `recordingTable`     | table     | Cloud vault metadata (id, userId FK, kind, title, storageKey unique, contentType, sizeBytes, durationSeconds, status, timestamps). The bytes live in R2 at `storageKey`. |
+| `recordingRelations` | relations | Many-to-one with user                                                                                                                                                    |
+
+`status` is `pending` until the presigned upload is confirmed, then `ready`.
+
+### `subscription.ts`
+
+Commercial state, kept off `user` on purpose so the auth layer never carries billing data.
+
+| Item                    | Kind      | Description                                                                                                                                                                      |
+| ----------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `subscriptionTable`     | table     | One row per user (`userId` unique, FK cascade): plan, status, `currentPeriodEnd` (null = never lapses), `provider` (`manual` default), `providerRef`, timestamps. No row = free. |
+| `subscriptionRelations` | relations | Many-to-one with user                                                                                                                                                            |
 
 ---
 
 ## `mappers/`
 
-| Item                               | Kind          | Description         |
-| ---------------------------------- | ------------- | ------------------- |
-| `TodoMapper.toDomain(row)`         | static method | DB row → `TodoBase` |
-| `TodoMapper.toPersistence(entity)` | static method | `TodoBase` → DB row |
+| Item                        | Kind     | Description              |
+| --------------------------- | -------- | ------------------------ |
+| `mapRecordingToDomain(row)` | function | DB row → `RecordingBase` |
 
 ---
 
 ## `repositories/`
 
-| Item                                       | Kind   | Description                                                            |
-| ------------------------------------------ | ------ | ---------------------------------------------------------------------- |
-| `TodoRepository`                           | class  | Implements `ITodoRepository`                                           |
-| `.findById(id, userId)`                    | method | Find by ID + userId, excludes soft-deleted                             |
-| `.findPaginated(userId, params, filters?)` | method | Paginated list with status/priority filters, ordered by updatedAt DESC |
-| `.save(todo)`                              | method | Insert new todo                                                        |
-| `.update(id, userId, data)`                | method | Update fields, sets updatedAt, returns updated entity                  |
-| `.delete(id, userId)`                      | method | Soft delete (sets deletedAt)                                           |
+| Item                       | Kind   | Description                                                           |
+| -------------------------- | ------ | --------------------------------------------------------------------- |
+| `RecordingRepository`      | class  | Implements `IRecordingRepository`                                     |
+| `.create(data)`            | method | Insert a recording with status `pending`                              |
+| `.markReady(id, userId)`   | method | Flip a pending recording to `ready`; null when not found for the user |
+| `.findById(id, userId)`    | method | Find by id scoped to the owner                                        |
+| `.findAllByUserId(userId)` | method | List the user's recordings, newest first                              |
+| `.delete(id, userId)`      | method | Hard delete; returns the removed row so its object can be cleaned up  |
 
 ---
 
@@ -101,10 +108,9 @@ src/
 
 | Category           | Count |
 | ------------------ | ----- |
-| Files              | 12    |
+| Files              | 14    |
 | Exported classes   | 2     |
-| Exported functions | 2     |
+| Exported functions | 4     |
 | Exported constants | 2     |
-| pgEnums            | 4     |
-| Drizzle tables     | 5     |
-| Exported types     | 7     |
+| pgEnums            | 0     |
+| Drizzle tables     | 6     |

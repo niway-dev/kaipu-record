@@ -210,22 +210,22 @@
     "signInSuccess": "Sesión iniciada",
     "signUpSuccess": "Cuenta creada"
   },
-  "todos": {
-    "title": "Tareas",
-    "placeholder": "¿Qué hay que hacer?",
-    "add": "Agregar",
-    "failedLoad": "No se pudieron cargar las tareas",
-    "empty": "Aún no hay tareas. ¡Crea una arriba!",
+  "recordings": {
+    "title": "Grabaciones",
+    "failedLoad": "No se pudieron cargar las grabaciones",
+    "empty": "Aún no hay grabaciones. Captura una desde la app de escritorio y aparecerá aquí.",
     "colTitle": "Título",
+    "colKind": "Tipo",
+    "colDuration": "Duración",
+    "colSize": "Tamaño",
     "colActions": "Acciones",
-    "pageInfo": "Página {page} de {totalPages} ({total} en total)",
-    "previous": "Anterior",
-    "next": "Siguiente",
-    "created": "Tarea creada",
-    "deleteSuccess": "Tarea eliminada",
-    "createError": "No se pudo crear la tarea",
-    "updateError": "No se pudo actualizar la tarea",
-    "deleteError": "No se pudo eliminar la tarea"
+    "recording": "Grabación",
+    "screenshot": "Captura",
+    "open": "Abrir",
+    "delete": "Eliminar",
+    "deleteSuccess": "Grabación eliminada",
+    "deleteError": "No se pudo eliminar la grabación",
+    "openError": "No se pudo abrir la grabación"
   },
   "library": {
     "title": "Biblioteca",

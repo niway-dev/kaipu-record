@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { AuthStatus } from "@shared/types/auth";
+import { FREE_ENTITLEMENTS } from "@shared/entitlements";
 import type { AuthAttemptResult } from "@shared/types/electron-api";
 import { useAuthStatus } from "./use-auth-status";
 
@@ -14,12 +15,18 @@ describe("useAuthStatus", () => {
       kind: "signed-in",
       email: "a@b.com",
       name: "A",
+      entitlements: FREE_ENTITLEMENTS,
     });
 
     const { result } = renderHook(() => useAuthStatus());
 
     await waitFor(() =>
-      expect(result.current.status).toEqual({ kind: "signed-in", email: "a@b.com", name: "A" }),
+      expect(result.current.status).toEqual({
+        kind: "signed-in",
+        email: "a@b.com",
+        name: "A",
+        entitlements: FREE_ENTITLEMENTS,
+      }),
     );
   });
 
@@ -33,10 +40,22 @@ describe("useAuthStatus", () => {
     const { result } = renderHook(() => useAuthStatus());
     await waitFor(() => expect(result.current.status).toEqual({ kind: "signed-out" }));
 
-    act(() => broadcast?.({ kind: "signed-in", email: "x@y.com", name: "X" }));
+    act(() =>
+      broadcast?.({
+        kind: "signed-in",
+        email: "x@y.com",
+        name: "X",
+        entitlements: FREE_ENTITLEMENTS,
+      }),
+    );
 
     await waitFor(() =>
-      expect(result.current.status).toEqual({ kind: "signed-in", email: "x@y.com", name: "X" }),
+      expect(result.current.status).toEqual({
+        kind: "signed-in",
+        email: "x@y.com",
+        name: "X",
+        entitlements: FREE_ENTITLEMENTS,
+      }),
     );
   });
 
@@ -91,7 +110,7 @@ describe("useAuthStatus", () => {
       .mockResolvedValueOnce({ ok: false, error: { kind: "invalid-credentials" } })
       .mockResolvedValueOnce({
         ok: true,
-        status: { kind: "signed-in", email: "a@b.com", name: "A" },
+        status: { kind: "signed-in", email: "a@b.com", name: "A", entitlements: FREE_ENTITLEMENTS },
       });
 
     const { result } = renderHook(() => useAuthStatus());
@@ -106,20 +125,35 @@ describe("useAuthStatus", () => {
       await result.current.signIn({ email: "a@b.com", password: "right" });
     });
     expect(result.current.error).toBeNull();
-    expect(result.current.status).toEqual({ kind: "signed-in", email: "a@b.com", name: "A" });
+    expect(result.current.status).toEqual({
+      kind: "signed-in",
+      email: "a@b.com",
+      name: "A",
+      entitlements: FREE_ENTITLEMENTS,
+    });
   });
 
   it("refreshes an unknown status on explicit retry", async () => {
     vi.spyOn(window.electronAPI, "getAuthStatus")
       .mockResolvedValueOnce({ kind: "unknown", lastKnownEmail: "a@b.com" })
-      .mockResolvedValueOnce({ kind: "signed-in", email: "a@b.com", name: "A" });
+      .mockResolvedValueOnce({
+        kind: "signed-in",
+        email: "a@b.com",
+        name: "A",
+        entitlements: FREE_ENTITLEMENTS,
+      });
     const { result } = renderHook(() => useAuthStatus());
     await waitFor(() => expect(result.current.status.kind).toBe("unknown"));
 
     await act(async () => {
       await result.current.refresh();
     });
-    expect(result.current.status).toEqual({ kind: "signed-in", email: "a@b.com", name: "A" });
+    expect(result.current.status).toEqual({
+      kind: "signed-in",
+      email: "a@b.com",
+      name: "A",
+      entitlements: FREE_ENTITLEMENTS,
+    });
   });
 
   it("prefers a broadcast that arrives during the initial query over the stale query response", async () => {
@@ -143,7 +177,12 @@ describe("useAuthStatus", () => {
 
     // Trigger a broadcast BEFORE the getAuthStatus query resolves
     act(() =>
-      broadcast?.({ kind: "signed-in", email: "broadcast@example.com", name: "Broadcast" }),
+      broadcast?.({
+        kind: "signed-in",
+        email: "broadcast@example.com",
+        name: "Broadcast",
+        entitlements: FREE_ENTITLEMENTS,
+      }),
     );
 
     // Verify the broadcast took effect
@@ -151,11 +190,17 @@ describe("useAuthStatus", () => {
       kind: "signed-in",
       email: "broadcast@example.com",
       name: "Broadcast",
+      entitlements: FREE_ENTITLEMENTS,
     });
 
     // Now resolve the original getAuthStatus promise with a DIFFERENT status (which is now stale)
     await act(async () => {
-      resolveGetStatus?.({ kind: "signed-in", email: "stale@example.com", name: "Stale" });
+      resolveGetStatus?.({
+        kind: "signed-in",
+        email: "stale@example.com",
+        name: "Stale",
+        entitlements: FREE_ENTITLEMENTS,
+      });
     });
 
     // The status should STILL be the broadcast value, not the stale query response
@@ -163,6 +208,7 @@ describe("useAuthStatus", () => {
       kind: "signed-in",
       email: "broadcast@example.com",
       name: "Broadcast",
+      entitlements: FREE_ENTITLEMENTS,
     });
   });
 });

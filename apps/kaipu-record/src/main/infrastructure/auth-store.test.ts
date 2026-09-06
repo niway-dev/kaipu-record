@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { IPC_CHANNELS } from "@shared/types/ipc";
+import { FREE_ENTITLEMENTS, type Entitlements } from "@shared/entitlements";
 
 const mockState = vi.hoisted(() => ({
   userDataDir: "",
@@ -65,6 +66,7 @@ describe("auth-store", () => {
     mockState.handlers.clear();
     mockState.windows = [fakeWindow()];
     vi.restoreAllMocks();
+    vi.spyOn(authClient, "getEntitlements").mockRejectedValue(new Error("offline"));
   });
 
   afterEach(async () => {
@@ -95,12 +97,13 @@ describe("auth-store", () => {
 
     expect(status).toEqual({
       ok: true,
-      status: { kind: "signed-in", email: "a@b.com", name: "A" },
+      status: { kind: "signed-in", email: "a@b.com", name: "A", entitlements: FREE_ENTITLEMENTS },
     });
     expect(mainWindow.webContents.send).toHaveBeenCalledWith(IPC_CHANNELS.authStatusChanged, {
       kind: "signed-in",
       email: "a@b.com",
       name: "A",
+      entitlements: FREE_ENTITLEMENTS,
     });
   });
 
@@ -205,7 +208,11 @@ describe("auth-store", () => {
     const status = await mockState.handlers.get(IPC_CHANNELS.authGetStatus)!({
       sender: OTHER_SENDER,
     });
-    expect(status).toEqual({ kind: "unknown", lastKnownEmail: "a@b.com" });
+    expect(status).toEqual({
+      kind: "unknown",
+      lastKnownEmail: "a@b.com",
+      entitlements: FREE_ENTITLEMENTS,
+    });
 
     // The token on disk must survive — a fresh registerAuth + a working getSession proves it.
     vi.spyOn(authClient, "getSession").mockResolvedValue({ email: "a@b.com", name: "A" });
@@ -213,7 +220,12 @@ describe("auth-store", () => {
     const restored = await mockState.handlers.get(IPC_CHANNELS.authGetStatus)!({
       sender: OTHER_SENDER,
     });
-    expect(restored).toEqual({ kind: "signed-in", email: "a@b.com", name: "A" });
+    expect(restored).toEqual({
+      kind: "signed-in",
+      email: "a@b.com",
+      name: "A",
+      entitlements: FREE_ENTITLEMENTS,
+    });
   });
 
   it("names the persisted account in `unknown` on the first check after a restart", async () => {
@@ -233,7 +245,11 @@ describe("auth-store", () => {
       sender: OTHER_SENDER,
     });
 
-    expect(status).toEqual({ kind: "unknown", lastKnownEmail: "restored@b.com" });
+    expect(status).toEqual({
+      kind: "unknown",
+      lastKnownEmail: "restored@b.com",
+      entitlements: FREE_ENTITLEMENTS,
+    });
   });
 
   it("persists the identity with the token, so a restart restores it without a round-trip", async () => {
@@ -255,6 +271,7 @@ describe("auth-store", () => {
       token: "tok_1",
       email: "a@b.com",
       name: "A",
+      entitlements: FREE_ENTITLEMENTS,
     });
 
     // A fresh process reading that file reports the identity even with the server unreachable.
@@ -262,7 +279,11 @@ describe("auth-store", () => {
     registerAuth(config, () => mainWindow as never);
     await expect(
       mockState.handlers.get(IPC_CHANNELS.authGetStatus)!({ sender: OTHER_SENDER }),
-    ).resolves.toEqual({ kind: "unknown", lastKnownEmail: "a@b.com" });
+    ).resolves.toEqual({
+      kind: "unknown",
+      lastKnownEmail: "a@b.com",
+      entitlements: FREE_ENTITLEMENTS,
+    });
   });
 
   it("treats a pre-envelope plain-token file as no session rather than crashing", async () => {
@@ -373,7 +394,12 @@ describe("auth-store", () => {
       ),
     ).resolves.toEqual({
       ok: true,
-      status: { kind: "signed-in", email: "new@b.com", name: "New" },
+      status: {
+        kind: "signed-in",
+        email: "new@b.com",
+        name: "New",
+        entitlements: FREE_ENTITLEMENTS,
+      },
     });
   });
 
@@ -382,5 +408,107 @@ describe("auth-store", () => {
     await expect(
       mockState.handlers.get(IPC_CHANNELS.authSignOut)!({ sender: OTHER_SENDER }),
     ).rejects.toThrow();
+  });
+
+  // ── Entitlements ──────────────────────────────────────────────────────
+
+  const PRO: Entitlements = {
+    plan: "pro",
+    status: "active",
+    currentPeriodEnd: null,
+    features: { watermarkRemoval: true },
+  };
+
+  async function signInAs(mainWindow: ReturnType<typeof fakeWindow>): Promise<void> {
+    vi.spyOn(authClient, "signInWithPassword").mockResolvedValue({
+      token: "tok_1",
+      email: "a@b.com",
+      name: "A",
+    });
+    registerAuth(config, () => mainWindow as never);
+    await mockState.handlers.get(IPC_CHANNELS.authSignIn)!(
+      { sender: mainWindow.webContents },
+      { email: "a@b.com", password: "pw" },
+    );
+  }
+
+  it("authGetStatus re-checks entitlements on every successful session check", async () => {
+    const mainWindow = mockState.windows[0]!;
+    await signInAs(mainWindow);
+
+    vi.spyOn(authClient, "getSession").mockResolvedValue({ email: "a@b.com", name: "A" });
+    vi.spyOn(authClient, "getEntitlements").mockResolvedValue(PRO);
+    const status = await mockState.handlers.get(IPC_CHANNELS.authGetStatus)!({
+      sender: OTHER_SENDER,
+    });
+
+    expect(status).toEqual({ kind: "signed-in", email: "a@b.com", name: "A", entitlements: PRO });
+  });
+
+  it("a failed entitlements fetch keeps the last known copy — it never downgrades to free", async () => {
+    const mainWindow = mockState.windows[0]!;
+    await signInAs(mainWindow);
+    vi.spyOn(authClient, "getSession").mockResolvedValue({ email: "a@b.com", name: "A" });
+    vi.spyOn(authClient, "getEntitlements").mockResolvedValue(PRO);
+    await mockState.handlers.get(IPC_CHANNELS.authGetStatus)!({ sender: OTHER_SENDER });
+
+    vi.spyOn(authClient, "getEntitlements").mockRejectedValue(new Error("offline"));
+    const status = await mockState.handlers.get(IPC_CHANNELS.authGetStatus)!({
+      sender: OTHER_SENDER,
+    });
+
+    expect(status).toEqual({ kind: "signed-in", email: "a@b.com", name: "A", entitlements: PRO });
+  });
+
+  it("persists entitlements with the token, so an offline restart still reports them in `unknown`", async () => {
+    const mainWindow = mockState.windows[0]!;
+    await signInAs(mainWindow);
+    vi.spyOn(authClient, "getSession").mockResolvedValue({ email: "a@b.com", name: "A" });
+    vi.spyOn(authClient, "getEntitlements").mockResolvedValue(PRO);
+    await mockState.handlers.get(IPC_CHANNELS.authGetStatus)!({ sender: OTHER_SENDER });
+
+    // Fresh process, server unreachable.
+    vi.spyOn(authClient, "getSession").mockRejectedValue(new Error("offline"));
+    registerAuth(config, () => mainWindow as never);
+    const status = await mockState.handlers.get(IPC_CHANNELS.authGetStatus)!({
+      sender: OTHER_SENDER,
+    });
+
+    expect(status).toEqual({ kind: "unknown", lastKnownEmail: "a@b.com", entitlements: PRO });
+  });
+
+  it("sign-in fetches entitlements right away so the first signed-in status already carries them", async () => {
+    vi.spyOn(authClient, "getEntitlements").mockResolvedValue(PRO);
+    const mainWindow = mockState.windows[0]!;
+    vi.spyOn(authClient, "signInWithPassword").mockResolvedValue({
+      token: "tok_1",
+      email: "a@b.com",
+      name: "A",
+    });
+    registerAuth(config, () => mainWindow as never);
+
+    const result = await mockState.handlers.get(IPC_CHANNELS.authSignIn)!(
+      { sender: mainWindow.webContents },
+      { email: "a@b.com", password: "pw" },
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      status: { kind: "signed-in", email: "a@b.com", name: "A", entitlements: PRO },
+    });
+  });
+
+  it("sign-out drops the cached entitlements along with the token", async () => {
+    const mainWindow = mockState.windows[0]!;
+    vi.spyOn(authClient, "getEntitlements").mockResolvedValue(PRO);
+    await signInAs(mainWindow);
+
+    await mockState.handlers.get(IPC_CHANNELS.authSignOut)!({ sender: mainWindow.webContents });
+
+    // A fresh process finds nothing on disk: no token, and therefore no plan to inherit.
+    registerAuth(config, () => mainWindow as never);
+    await expect(
+      mockState.handlers.get(IPC_CHANNELS.authGetStatus)!({ sender: OTHER_SENDER }),
+    ).resolves.toEqual({ kind: "signed-out" });
   });
 });

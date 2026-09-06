@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { FREE_ENTITLEMENTS } from "@shared/entitlements";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { AuthAttemptResult } from "@shared/types/electron-api";
 import { AccountPanel } from "./account-panel";
@@ -18,6 +19,7 @@ describe("AccountPanel", () => {
       kind: "signed-in",
       email: "a@b.com",
       name: "A",
+      entitlements: FREE_ENTITLEMENTS,
     });
     render(<AccountPanel />);
     await waitFor(() => expect(screen.getByText("a@b.com")).toBeInTheDocument());
@@ -38,7 +40,12 @@ describe("AccountPanel", () => {
   it("retries an unknown session check on request", async () => {
     vi.spyOn(window.electronAPI, "getAuthStatus")
       .mockResolvedValueOnce({ kind: "unknown", lastKnownEmail: "a@b.com" })
-      .mockResolvedValueOnce({ kind: "signed-in", email: "a@b.com", name: "A" });
+      .mockResolvedValueOnce({
+        kind: "signed-in",
+        email: "a@b.com",
+        name: "A",
+        entitlements: FREE_ENTITLEMENTS,
+      });
     render(<AccountPanel />);
     fireEvent.click(await screen.findByRole("button", { name: /retry/i }));
     await waitFor(() => expect(screen.getByText("a@b.com")).toBeInTheDocument());
@@ -89,7 +96,10 @@ describe("AccountPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
 
     expect(screen.getByRole("button", { name: /continue/i })).toBeDisabled();
-    resolveSignIn({ ok: true, status: { kind: "signed-in", email: "a@b.com", name: "A" } });
+    resolveSignIn({
+      ok: true,
+      status: { kind: "signed-in", email: "a@b.com", name: "A", entitlements: FREE_ENTITLEMENTS },
+    });
   });
 
   it("drops a stale error when the form is cancelled and reopened", async () => {

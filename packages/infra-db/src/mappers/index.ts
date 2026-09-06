@@ -1,2 +1,2 @@
-export { mapTodoToDomain } from "./todo.mapper";
 export { mapRecordingToDomain } from "./recording.mapper";
+export { mapSubscriptionToDomain } from "./subscription.mapper";

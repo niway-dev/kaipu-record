@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getSession, signInWithPassword, signOutRemote, signUpWithPassword } from "./auth-client";
+import {
+  getEntitlements,
+  getSession,
+  signInWithPassword,
+  signOutRemote,
+  signUpWithPassword,
+} from "./auth-client";
 
 const config = { serverUrl: "http://localhost:3000" };
 
@@ -140,5 +146,49 @@ describe("signOutRemote", () => {
   it("does not throw on failure — best-effort by contract", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("offline")));
     await expect(signOutRemote(config, "tok")).resolves.toBeUndefined();
+  });
+});
+
+describe("getEntitlements", () => {
+  const PRO = {
+    plan: "pro",
+    status: "active",
+    currentPeriodEnd: null,
+    features: { watermarkRemoval: true },
+  };
+
+  it("unwraps the { data } envelope and sends the bearer token to /api/v1/me/entitlements", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ data: PRO, error: null }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getEntitlements(config, "tok")).resolves.toEqual(PRO);
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:3000/api/v1/me/entitlements");
+    expect(new Headers(init.headers).get("Authorization")).toBe("Bearer tok");
+  });
+
+  it("rejects on a network failure so the caller keeps its cached copy", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
+    await expect(getEntitlements(config, "tok")).rejects.toThrow();
+  });
+
+  it("rejects on a non-2xx status — never silently downgrades to free", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 500 })));
+    await expect(getEntitlements(config, "tok")).rejects.toThrow();
+  });
+
+  it("rejects when the envelope carries an error instead of data", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(JSON.stringify({ data: null, error: { message: "nope" } }), { status: 200 }),
+        ),
+    );
+    await expect(getEntitlements(config, "tok")).rejects.toThrow();
   });
 });
