@@ -1,10 +1,12 @@
 import { app, BrowserWindow, ipcMain, safeStorage } from "electron";
 import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { FREE_ENTITLEMENTS, type Entitlements } from "@shared/entitlements";
 import type { AuthCredentials, AuthError, AuthStatus, SignUpInput } from "@shared/types/auth";
 import type { AuthAttemptResult } from "@shared/types/electron-api";
 import { IPC_CHANNELS } from "@shared/types/ipc";
 import {
+  getEntitlements,
   getSession,
   signInWithPassword,
   signOutRemote,
@@ -24,6 +26,10 @@ interface StoredSession {
   token: string;
   email: string;
   name: string;
+  /** Last plan the server reported. Optional on read only: files written before entitlements
+   *  existed have none and load as free — a one-time re-check on the next status call, not a
+   *  re-login. */
+  entitlements?: Entitlements;
 }
 
 function readStoredSession(): StoredSession | null {
@@ -85,6 +91,27 @@ export function registerAuth(
   let cachedIdentity: { email: string; name: string } | null = stored
     ? { email: stored.email, name: stored.name }
     : null;
+  // Same rationale as cachedIdentity: seeded from disk so an offline restart keeps the plan.
+  // Only ever replaced by a successful fetch or cleared by sign-out — a failed fetch is not a
+  // downgrade. Null iff there is no token.
+  let cachedEntitlements: Entitlements | null = stored
+    ? (stored.entitlements ?? FREE_ENTITLEMENTS)
+    : null;
+
+  /** Re-check the plan and persist it. Failure keeps the cached copy — "couldn't ask" ≠ free. */
+  async function refreshEntitlements(
+    current: string,
+    identity: { email: string; name: string },
+  ): Promise<Entitlements> {
+    try {
+      const fresh = await getEntitlements(config, current);
+      cachedEntitlements = fresh;
+      writeStoredSession({ token: current, ...identity, entitlements: fresh });
+      return fresh;
+    } catch {
+      return cachedEntitlements ?? FREE_ENTITLEMENTS;
+    }
+  }
 
   function broadcast(status: AuthStatus): void {
     for (const win of BrowserWindow.getAllWindows()) {
@@ -106,14 +133,23 @@ export function registerAuth(
         // Confirmed gone (a 401, or better-auth's far commoner 200 + null body). Safe to clear.
         token = null;
         cachedIdentity = null;
+        cachedEntitlements = null;
         clearStoredSession();
         return { kind: "signed-out" };
       }
       cachedIdentity = identity;
-      return { kind: "signed-in", ...identity };
+      // Every successful session check re-checks the plan too: this is how a purchase made on
+      // the web reaches the app — the user reopens it. No push, no sync engine.
+      const entitlements = await refreshEntitlements(token, identity);
+      return { kind: "signed-in", ...identity, entitlements };
     } catch {
-      // Network/other failure — NEVER clear a token we couldn't actually verify was invalid.
-      return { kind: "unknown", lastKnownEmail: cachedIdentity?.email };
+      // Network/other failure — NEVER clear a token we couldn't actually verify was invalid,
+      // and keep reporting the plan we last saw.
+      return {
+        kind: "unknown",
+        lastKnownEmail: cachedIdentity?.email,
+        entitlements: cachedEntitlements ?? FREE_ENTITLEMENTS,
+      };
     }
   });
 
@@ -122,11 +158,29 @@ export function registerAuth(
   // running process's in-memory state "signed in" even though nothing was saved and the call
   // rejected to the renderer — an inconsistent state a later authGetStatus in the same session
   // could act on.
-  function commitSignIn(result: { token: string; email: string; name: string }): AuthStatus {
-    writeStoredSession(result);
+  async function commitSignIn(result: {
+    token: string;
+    email: string;
+    name: string;
+  }): Promise<AuthStatus> {
+    // A fresh credential means a fresh account: never carry a previous user's plan across.
+    // Best-effort fetch — a sign-in must not fail because billing was unreachable.
+    let entitlements = FREE_ENTITLEMENTS;
+    try {
+      entitlements = await getEntitlements(config, result.token);
+    } catch {
+      // stays free until the next successful status check
+    }
+    writeStoredSession({ ...result, entitlements });
     token = result.token;
     cachedIdentity = { email: result.email, name: result.name };
-    const status: AuthStatus = { kind: "signed-in", email: result.email, name: result.name };
+    cachedEntitlements = entitlements;
+    const status: AuthStatus = {
+      kind: "signed-in",
+      email: result.email,
+      name: result.name,
+      entitlements,
+    };
     broadcast(status);
     return status;
   }
@@ -140,7 +194,10 @@ export function registerAuth(
     async (event, credentials: AuthCredentials): Promise<AuthAttemptResult> => {
       requireMainWindow(event);
       try {
-        return { ok: true, status: commitSignIn(await signInWithPassword(config, credentials)) };
+        return {
+          ok: true,
+          status: await commitSignIn(await signInWithPassword(config, credentials)),
+        };
       } catch (err) {
         return { ok: false, error: toAuthError(err) };
       }
@@ -152,7 +209,7 @@ export function registerAuth(
     async (event, input: SignUpInput): Promise<AuthAttemptResult> => {
       requireMainWindow(event);
       try {
-        return { ok: true, status: commitSignIn(await signUpWithPassword(config, input)) };
+        return { ok: true, status: await commitSignIn(await signUpWithPassword(config, input)) };
       } catch (err) {
         return { ok: false, error: toAuthError(err) };
       }
@@ -164,6 +221,7 @@ export function registerAuth(
     const outgoingToken = token;
     token = null;
     cachedIdentity = null;
+    cachedEntitlements = null;
     clearStoredSession();
     broadcast({ kind: "signed-out" });
     if (outgoingToken)

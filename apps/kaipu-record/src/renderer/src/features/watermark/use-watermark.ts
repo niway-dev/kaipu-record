@@ -6,6 +6,8 @@ import {
 } from "./watermark";
 import { readDevSimulatePaid } from "./dev-override";
 import { useFlag } from "@renderer/features/analytics/use-flag";
+import { useAuthStatus } from "@renderer/features/auth/use-auth-status";
+import { isWatermarkRemovalGranted } from "@shared/entitlements";
 
 export interface WatermarkState {
   enabled: boolean;
@@ -17,14 +19,17 @@ export interface WatermarkState {
  * know "do we burn the watermark, and how does it look?" reads this hook — the
  * engine never sees plans or flags.
  *
- * Today the inputs are local stubs; the seams are marked so a real backend
- * (entitlement) and a feature flag (PostHog) plug in HERE and nowhere else. The
- * dev-only Settings toggle (`readDevSimulatePaid`) is read at render, so flipping
- * it and navigating to the Record page (a remount) takes effect without a restart.
+ * The paid input is the account's entitlements as the auth status carries them
+ * (signed-in: fresh from the server; `unknown`: the last copy cached on disk, so
+ * going offline keeps the plan). Until the first status round-trip resolves the
+ * hook reports free — the watermark is on by default, never off by accident.
+ * The dev-only Settings toggle (`readDevSimulatePaid`) is read at render, so
+ * flipping it and navigating to the Record page (a remount) takes effect without
+ * a restart.
  */
 export function useWatermark(): WatermarkState {
-  // TODO(backend): real entitlement from the user's plan. Free → watermark on.
-  const isPaid = false;
+  const { status } = useAuthStatus();
+  const isPaid = isWatermarkRemovalGranted(status, new Date());
   // Remote kill-switch for prod testing. Defaults on (offline/unresolved) so the
   // watermark still ships — see FLAG_DEFAULTS.
   const flagOn = useFlag("watermark-enabled");

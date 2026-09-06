@@ -2,6 +2,7 @@ import { relations } from "drizzle-orm";
 import { text, timestamp, boolean, index } from "drizzle-orm/pg-core";
 import { createTable } from "../utils/table-creator";
 import { recordingTable } from "./recording";
+import { subscriptionTable } from "./subscription";
 
 export const userTable = createTable("user", {
   id: text("id").primaryKey(),
@@ -75,10 +76,11 @@ export const verificationTable = createTable(
   (table) => [index("verification_identifier_idx").on(table.identifier)],
 );
 
-export const userRelations = relations(userTable, ({ many }) => ({
+export const userRelations = relations(userTable, ({ many, one }) => ({
   sessions: many(sessionTable),
   accounts: many(accountTable),
   recordings: many(recordingTable),
+  subscription: one(subscriptionTable),
 }));
 
 export const sessionRelations = relations(sessionTable, ({ one }) => ({

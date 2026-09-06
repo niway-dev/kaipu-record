@@ -1,3 +1,4 @@
+import type { Entitlements } from "@shared/entitlements";
 import type { AuthCredentials, AuthError, SignUpInput } from "@shared/types/auth";
 
 export interface AuthClientConfig {
@@ -104,6 +105,29 @@ export async function getSession(
   } | null;
   if (!data?.user) return null;
   return { email: data.user.email, name: data.user.name };
+}
+
+/**
+ * The account's plan and permissions, from the app's own API (not better-auth — billing is
+ * composed with identity server-side, in the route's auth middleware). REJECTS on any failure:
+ * a network error, a non-2xx, or an error envelope. The caller holds the last good copy and
+ * must keep it; "couldn't ask" is never "you are free now".
+ */
+export async function getEntitlements(
+  config: AuthClientConfig,
+  token: string,
+): Promise<Entitlements> {
+  const res = await fetch(`${config.serverUrl}/api/v1/me/entitlements`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!res.ok) throw new Error(`me/entitlements failed: ${res.status}`);
+  const body = (await res.json()) as {
+    data: Entitlements | null;
+    error: { message: string } | null;
+  };
+  if (!body.data) throw new Error(body.error?.message ?? "me/entitlements returned no data");
+  return body.data;
 }
 
 /** Best-effort — never rejects. A failed remote sign-out just means the orphaned server-side

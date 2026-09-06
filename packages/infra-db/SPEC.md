@@ -19,6 +19,7 @@ src/
 | --------------------------- | -------- | ---------------------------------------------------------- |
 | `db`                        | const    | Pre-configured Drizzle client using `DATABASE_URL` env var |
 | `createDatabaseClient(url)` | function | Factory that creates a new Drizzle client from a given URL |
+| `DatabaseClient`            | type     | Return type of `createDatabaseClient`                      |
 
 ---
 
@@ -58,7 +59,7 @@ Better Auth's tables. Owned by the auth adapter's expectations — change with c
 | `sessionTable`      | table     | Sessions (id, expiresAt, token, ipAddress, userAgent, userId FK) |
 | `accountTable`      | table     | OAuth accounts (accountId, providerId, tokens, userId FK)        |
 | `verificationTable` | table     | Verification codes (identifier, value, expiresAt)                |
-| `userRelations`     | relations | User → many sessions, accounts, recordings                       |
+| `userRelations`     | relations | User → many sessions, accounts, recordings; one subscription     |
 | `sessionRelations`  | relations | Session → one user                                               |
 | `accountRelations`  | relations | Account → one user                                               |
 
@@ -70,6 +71,15 @@ Better Auth's tables. Owned by the auth adapter's expectations — change with c
 | `recordingRelations` | relations | Many-to-one with user                                                                                                                                                    |
 
 `status` is `pending` until the presigned upload is confirmed, then `ready`.
+
+### `subscription.ts`
+
+Commercial state, kept off `user` on purpose so the auth layer never carries billing data.
+
+| Item                    | Kind      | Description                                                                                                                                                                      |
+| ----------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `subscriptionTable`     | table     | One row per user (`userId` unique, FK cascade): plan, status, `currentPeriodEnd` (null = never lapses), `provider` (`manual` default), `providerRef`, timestamps. No row = free. |
+| `subscriptionRelations` | relations | Many-to-one with user                                                                                                                                                            |
 
 ---
 
@@ -98,9 +108,9 @@ Better Auth's tables. Owned by the auth adapter's expectations — change with c
 
 | Category           | Count |
 | ------------------ | ----- |
-| Files              | 11    |
-| Exported classes   | 1     |
-| Exported functions | 3     |
+| Files              | 14    |
+| Exported classes   | 2     |
+| Exported functions | 4     |
 | Exported constants | 2     |
 | pgEnums            | 0     |
-| Drizzle tables     | 5     |
+| Drizzle tables     | 6     |
