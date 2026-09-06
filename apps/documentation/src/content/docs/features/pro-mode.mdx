@@ -1,0 +1,157 @@
+---
+title: Pro mode — entitlements conditions
+description: The exact, reviewable rules for when an account is granted "pro" and its features (today, watermark removal) — the grant rule, the offline model, how to grant/revoke by hand, and where every rule lives in code.
+---
+
+# Pro mode — entitlements conditions
+
+This is the operational reference: the precise conditions under which an account counts as
+"pro" and gets a feature, kept separate from [why the system is shaped this
+way](/architecture/decisions/0002-plan-entitlements-separate-from-auth). Read this page to
+verify or change the rules; read the ADR to understand the architecture around them.
+
+## Status
+
+| Field          | Value                                                                         |
+| -------------- | ----------------------------------------------------------------------------- |
+| Status         | 🟢 Shipped, pending real-world validation                                     |
+| Completed      | 2026-09-06                                                                    |
+| Parent feature | [Plans and entitlements](/backlog/plans-and-entitlements)                     |
+| Related ADR    | [ADR 0002](/architecture/decisions/0002-plan-entitlements-separate-from-auth) |
+
+## What it does
+
+An account has a `plan` (`free` or `pro`). Being `pro` is not by itself a permission — it
+unlocks a set of named `features`. Today there is exactly one: `watermarkRemoval`. The
+desktop app reads this feature, not the plan name, to decide whether to burn a watermark
+into a recording.
+
+## The grant rule — the one to review
+
+This is the entire rule, and it lives in exactly one function:
+`deriveEntitlements(subscription, now)` in
+`packages/domain/src/schemas/subscription.ts`. Every other layer calls this function or
+forwards its result; none of them re-implement it.
+
+| Condition                                                                   | Result                                                                    |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| No subscription row for the user                                            | `plan: free`, `watermarkRemoval: false`                                   |
+| Row exists, `plan: pro`, `status: active`, `currentPeriodEnd: null`         | `watermarkRemoval: true` — never lapses on its own                        |
+| Row exists, `plan: pro`, `status: active`, `currentPeriodEnd` in the future | `watermarkRemoval: true`                                                  |
+| Row exists, `plan: pro`, `status: active`, `currentPeriodEnd` in the past   | `watermarkRemoval: false` — plan name still reported, feature revoked     |
+| Row exists, `plan: pro`, `status: canceled` or `past_due`                   | `watermarkRemoval: false`, regardless of `currentPeriodEnd`               |
+| Row exists, `plan: free` (any status)                                       | `watermarkRemoval: false` — the plan name is checked too, not just status |
+
+A lapsed or canceled `pro` row is not deleted — it keeps reporting `plan: pro` in the
+response so a future UI can say "your Pro plan lapsed," while `features.watermarkRemoval`
+is `false`. Only the `features` map is a permission; `plan` and `status` are display data.
+
+**One row per user.** `packages/infra-db/src/schema/subscription.ts` declares `userId` as
+`unique`. A second `insert` for the same user fails the constraint rather than silently
+creating a second, possibly conflicting row.
+
+## The offline model
+
+This is the exact behavior the desktop app was built to, decided explicitly rather than
+inferred:
+
+| Situation                                             | What happens                                                                                                                                                                                |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| First launch, never signed in                         | `free` — the watermark is on by default, never off by accident                                                                                                                              |
+| Sign in                                               | Entitlements fetched immediately; a **new** sign-in never inherits a previous account's cached plan                                                                                         |
+| App reopened, server reachable                        | Entitlements re-checked on every successful session check — this is the entire sync mechanism; there is no push and no background sync                                                      |
+| App reopened, server unreachable                      | `unknown` status, last cached plan kept — a network blip never revokes a paid feature                                                                                                       |
+| Cached `currentPeriodEnd` has already passed, offline | Revoked locally even without a server round-trip (`isWatermarkRemovalGranted` in `apps/kaipu-record/src/shared/entitlements.ts`) — a stale cached `true` cannot outlive its own expiry date |
+| Explicit sign-out                                     | Cached entitlements deleted with the token; the next sign-in starts from `free`                                                                                                             |
+
+There is deliberately no expiry window of its own for the offline cache (e.g. "valid for 7
+days") — only the subscription's own `currentPeriodEnd`, if it has one, and the sign-out
+event. A `manual` grant with `currentPeriodEnd: null` never expires offline.
+
+## Files
+
+| Path                                                                     | Role                                                                    |
+| ------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| `packages/domain/src/schemas/subscription.ts`                            | `deriveEntitlements` — the grant rule, and every type involved          |
+| `packages/domain/src/repositories/subscription.repository.ts`            | `ISubscriptionRepository` — read-only port                              |
+| `packages/application/src/entitlements/get-entitlements.ts`              | Loads the row, calls the rule                                           |
+| `packages/infra-db/src/schema/subscription.ts`                           | `kaipu_record_subscription` table                                       |
+| `packages/infra-db/src/repositories/subscription.repository.ts`          | Drizzle implementation of the port                                      |
+| `apps/server-hono/src/contract/me.contract.ts`                           | `GET /api/v1/me/entitlements` contract                                  |
+| `apps/server-hono/src/modules/me/me.router.ts`                           | Composes `authMiddleware` (identity) with `getEntitlements` (plan)      |
+| `apps/kaipu-record/src/main/services/auth-client.ts`                     | `getEntitlements` — fetches the route; rejects on any failure           |
+| `apps/kaipu-record/src/main/infrastructure/auth-store.ts`                | Caches entitlements alongside the token; re-checks per status call      |
+| `apps/kaipu-record/src/shared/entitlements.ts`                           | Wire type + `isWatermarkRemovalGranted` (adds the offline expiry check) |
+| `apps/kaipu-record/src/renderer/src/features/watermark/use-watermark.ts` | Consumes `isWatermarkRemovalGranted` as `isPaid`                        |
+
+## Decisions
+
+| Decision                                                             | Why                                                                                         |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Grant rule lives in `domain`, not the API route or the desktop       | One place to audit; the route and the desktop both just forward its output                  |
+| `features` is a map, not a single `isPro` boolean                    | A future metered feature (e.g. AI minutes with a balance) is an added key, not a redesign   |
+| `plan` name and `features` permissions are separate fields           | Prevents UI code from checking `plan === "pro"` directly instead of the actual feature flag |
+| Full rationale for the auth/billing split, and alternatives rejected | See [ADR 0002](/architecture/decisions/0002-plan-entitlements-separate-from-auth)           |
+
+## Gotchas & warnings
+
+- ⚠️ **Granting `pro` requires a signed-up user first.** The row references `userId` with a
+  cascading foreign key; there is nothing to grant a plan to until an account exists.
+- ⚠️ **The desktop re-checks on every launch, not continuously.** A plan purchased on the
+  web while the desktop app is open and idle will not appear until the next sign-in or
+  status check (app restart, or whatever next triggers `authGetStatus`).
+- ⚠️ **A `past_due` or `canceled` row still shows `plan: pro` in the API response.** Do not
+  gate UI on `plan` — gate on `features.watermarkRemoval` (or the relevant feature key).
+- ⚠️ **`getEntitlements` (desktop) throws on any non-2xx or network failure, by design.** If
+  you see the plan "flicker" to free during testing, check whether something is catching
+  and swallowing that rejection upstream — it should propagate so the caller keeps the
+  cached copy instead.
+
+## Dependencies
+
+None. No new package. Uses the existing Postgres connection, oRPC contract pattern, and
+Better Auth bearer session already in place.
+
+## How to grant or revoke pro by hand
+
+No payment provider exists yet — see [ADR 0002](/architecture/decisions/0002-plan-entitlements-separate-from-auth#alternatives-considered)
+for what plugs in later. Until then, this is the only way an account becomes `pro`.
+
+**Grant** — via `bun run db:studio`, or:
+
+```sql
+insert into kaipu_record_subscription (id, user_id, plan, status, provider)
+values (gen_random_uuid()::text, '<user id>', 'pro', 'active', 'manual');
+```
+
+**Revoke** — delete the row (reverts to `free`), or flip `status` to `canceled` /
+`past_due` to exercise the lapsed-but-still-named-pro path, or set `current_period_end` to a
+past timestamp to exercise the offline-expiry path.
+
+The account must sign out and back in, or otherwise trigger a fresh `authGetStatus` call
+(an app restart), to see the change reflected.
+
+## Testing
+
+```bash
+# Domain rule (deriveEntitlements) + the use case
+cd packages/domain && bunx vitest run src/schemas/subscription.test.ts
+cd packages/application && bunx vitest run src/entitlements
+
+# Desktop: fetch, on-disk cache, offline expiry, useWatermark wiring
+cd apps/kaipu-record && bunx vitest run \
+  src/shared/entitlements.test.ts \
+  src/main/services/auth-client.test.ts \
+  src/main/infrastructure/auth-store.test.ts \
+  src/renderer/src/features/watermark/use-watermark.test.tsx
+
+# Manual: sign up in the desktop app, grant pro by hand (above), sign out and back in,
+# start a recording, confirm the exported video has no watermark. This last step has not
+# been run yet — see Status above.
+```
+
+## Related
+
+- [ADR 0002 — Plan entitlements kept separate from auth](/architecture/decisions/0002-plan-entitlements-separate-from-auth)
+- [Plans and entitlements (backlog)](/backlog/plans-and-entitlements) — shipping status and what plugs in next
+- [Desktop ↔ cloud sync gap](/backlog/desktop-cloud-sync-gap) — the sibling gap this closes from the desktop side

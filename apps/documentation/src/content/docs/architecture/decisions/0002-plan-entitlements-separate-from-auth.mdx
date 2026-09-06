@@ -1,0 +1,178 @@
+---
+title: "ADR 0002: Plan entitlements kept as a module separate from auth"
+description: Why a user's plan (free/pro) is not a column on Better Auth's `user` table or a Better Auth plugin, but its own table and port composed with identity only at the API route.
+---
+
+# ADR 0002: Plan entitlements kept as a module separate from auth
+
+## Status
+
+| Field         | Value      |
+| ------------- | ---------- |
+| Status        | Accepted   |
+| Date          | 2026-09-06 |
+| Supersedes    | —          |
+| Superseded by | —          |
+
+## Context
+
+The desktop app burns a watermark into every recording unless the account is paid
+(`useWatermark`, `apps/kaipu-record/src/renderer/src/features/watermark/`). Until now
+`isPaid` was a hard-coded `false` with a `TODO(backend)` — there was no concept of a plan
+anywhere in the system. The trigger for this decision was needing exactly one thing to
+work: an operator grants their own account "pro" and the watermark stops being burned in.
+No payment provider exists yet.
+
+Authentication (Better Auth + Drizzle, `packages/infra-auth`) already exists and works —
+sign-up, sign-in, bearer-token sessions for the desktop app, all verified end-to-end.
+Better Auth ships first-class extension points for exactly this kind of problem, so they
+were evaluated before writing anything new:
+
+- **`user.additionalFields`** (core option) — adds typed columns to `user`, `input: false`
+  blocks a client from setting them, `returned: true` makes them ride along in every
+  session response.
+- **The `admin` plugin** — adds `role`, `banned`, `banReason`, `banExpires` to `user` and
+  `impersonatedBy` to `session`, plus `/admin/*` endpoints and an access-control system.
+- **`@better-auth/stripe`** — a separate package that owns a `subscription` table
+  (`referenceId`, `plan`, `status`, `periodEnd`, …), Stripe webhooks, and a
+  `stripeCustomerId` field on `user`.
+
+All three make the plan arrive in the same call as the session, which is a real
+convenience. All three also put commercial state either directly on the identity table or
+inside the auth library's own schema and request lifecycle.
+
+## Decision
+
+Keep the plan in its **own module**, entirely outside Better Auth:
+
+- A `subscription` table (`packages/infra-db/src/schema/subscription.ts`), not a column on
+  `user` and not a table Better Auth's adapter knows about.
+- A domain port, `ISubscriptionRepository`, and a pure rule, `deriveEntitlements`
+  (`packages/domain/src/schemas/subscription.ts`), that turns a row (or no row) into
+  `{ plan, status, currentPeriodEnd, features }`.
+- One API route, `GET /api/v1/me/entitlements`, behind the existing `authMiddleware`. This
+  route is the **only** place identity and billing are composed — `authMiddleware` supplies
+  `user`, the entitlements use case supplies the plan. Neither layer reads the other.
+- `getCustomSession` and `baseConfig` are untouched. Better Auth continues to only ever see
+  `user`, `session`, `account`, `verification`.
+
+The desktop app calls `/me/entitlements` as a second request alongside `get-session`,
+rather than getting the plan for free inside the session payload.
+
+## Consequences
+
+**Positive:**
+
+- Auth and billing can each change for their own reasons without touching the other — a new
+  login method never risks the plan schema, a pricing change never risks a session
+  regression. This mirrors the separation the repo already applies between `infra-auth`,
+  `infra-db`, and `infra-storage`.
+- The provider is not decided by this change. `ISubscriptionRepository` has one
+  implementation today (`SubscriptionRepository` reading Postgres); a Stripe-webhook-backed
+  or Autumn-backed implementation is a second implementation behind the same port. The route
+  and the desktop do not change either way.
+- `manual` is a first-class `provider` value, not a hack — an operator's hand-granted row
+  for testing coexists with future provider-synced rows instead of being something that gets
+  silently overwritten.
+- The desktop's existing offline-tolerant session model (`auth-store.ts`'s "never clear what
+  we couldn't verify" cache) extends naturally: `entitlements` is one more field in the same
+  on-disk envelope, inheriting the same seed-from-disk / never-downgrade-on-network-failure
+  behavior for free.
+
+**Negative:**
+
+- Two round-trips instead of one at desktop startup (`get-session`, then
+  `me/entitlements`). Acceptable at this scale; collapsing them into a single `me` route is
+  a follow-up if it matters, not a blocker.
+- Re-implementing what a plugin gives for free: the route, the domain rule, and the desktop
+  wiring were all written by hand instead of configured.
+
+**Neutral:**
+
+- `getEntitlements` takes `now` as a parameter specifically so `deriveEntitlements`'s lapse
+  rule (`currentPeriodEnd`) is deterministic in tests.
+- Better Auth's `session.cookieCache` (`baseConfig`, 10-minute TTL) caches the _session_
+  response, not this route's response, so it does not apply here — but if a `customSession`
+  plugin callback is ever added later for an unrelated reason, its output does ride the same
+  cache, and a plan change could take up to 10 minutes to show up through that path. Not
+  applicable today since `getCustomSession` does not touch billing.
+
+## Alternatives considered
+
+### `user.additionalFields.plan`
+
+Rejected. `input: false` genuinely blocks self-assignment, and the field would ride along
+in `get-session` for free. But it is billing data stored in the identity table — the exact
+coupling being avoided, one level down. A plan column on `user` is also a schema that has
+to be actively removed, not just stopped-using, the day a real subscription table exists.
+
+### `admin` plugin's `role`
+
+Rejected. `role` is an authorization concept — what an account may do _to other accounts_
+(ban, impersonate, delete). Using it to mean "which plan" overloads a staff/moderation
+concept with a commercial one. It also adds four columns to `user` and an admin API surface
+that would need its own access-control review, for a problem it doesn't actually model.
+
+### `@better-auth/stripe`
+
+Rejected for now, not forever. It decides the provider is Stripe before there is any
+payment integration to justify that, and its `subscription` table and webhook handling
+would live inside the auth library's request lifecycle rather than as a swappable
+implementation of `ISubscriptionRepository`. Notably, its own schema does **not** add a
+`plan` field to `user` either — only `stripeCustomerId` — meaning even the plugin's authors
+keep plan/status off the identity table. If Stripe is chosen later, the natural integration
+point is a second `ISubscriptionRepository` implementation backed by its webhooks, not this
+plugin.
+
+### A `profile` table holding settings + plan together
+
+Rejected. Settings are written when a user toggles something in the app; a plan is written
+by an operator today and by a payment provider later. Different write paths, different
+owners, different consistency requirements. Folding them into one table repeats the
+auth/billing mistake one level down. If both a settings table and a subscription table are
+ever needed, they should be two tables from the start.
+
+### Autumn (usage-based billing / entitlements platform)
+
+Not rejected — deliberately left open, which is why the port exists. Autumn is itself built
+on Stripe and its own docs state explicitly that a customer's id can be the app's own user
+id and that the app should **not** replicate subscription state locally — it is queried
+live via `check()`. If chosen, `SubscriptionRepository` is replaced by an implementation
+that calls Autumn instead of reading Postgres, and the local `subscription` table is
+retired. The route and the desktop are unaffected either way.
+
+## Non-goals
+
+- Payments, checkout, invoicing, and webhooks are explicitly out of scope for this
+  decision. `provider: manual` exists precisely so entitlements can be exercised without
+  any of that.
+- Multi-seat / organization plans are not modeled. `userId` is unique per row for now;
+  `packages/infra-db/src/schema/subscription.ts` names the rename to a `referenceId`-shaped
+  column as the future path, not something built today.
+- Subscription history is not modeled. One active row per user; nothing records past plans.
+
+## When to revisit
+
+Revisit this decision — not the plan/entitlements split itself, which is meant to survive
+any of these — when:
+
+- A real payment provider is chosen and implemented. The port should absorb it as a new
+  `ISubscriptionRepository` implementation; if that turns out not to fit cleanly, that is a
+  signal the port's shape was wrong, not that the separation from auth was wrong.
+- Multi-seat/org plans are needed, at which point the "one row per user" constraint is
+  dropped and `userId` may be renamed.
+- Startup latency from the extra round-trip is measured and matters, at which point
+  collapsing `get-session` + `me/entitlements` into one route is worth doing.
+
+## References
+
+- [Pro mode — entitlements conditions](/features/pro-mode) — the operational reference:
+  exact grant/revoke rules, the offline model, how to grant a plan by hand, testing
+- [Plans and entitlements (backlog)](/backlog/plans-and-entitlements) — status and pending
+  real-world validation
+- [Desktop ↔ cloud sync gap](/backlog/desktop-cloud-sync-gap) — the sibling "no plan
+  entitlement" gap this closes from the desktop side
+- [Better Auth — `additionalFields`](https://www.better-auth.com/docs/concepts/typescript#additional-fields)
+- [Better Auth — `admin` plugin](https://www.better-auth.com/docs/plugins/admin)
+- [Better Auth — `stripe` plugin](https://www.better-auth.com/docs/plugins/stripe)
+- [Autumn — `check()` API](https://docs.useautumn.com/api-reference/core/check)
