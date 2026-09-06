@@ -23,7 +23,7 @@ export const Route = createFileRoute("/auth/login")({
   beforeLoad: async (ctx) => {
     const { isAuthenticated } = ctx.context;
     if (isAuthenticated) {
-      throw redirect({ to: "/todos" });
+      throw redirect({ to: "/recordings" });
     }
   },
 });

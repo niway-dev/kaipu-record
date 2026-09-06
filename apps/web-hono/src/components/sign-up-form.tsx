@@ -29,7 +29,7 @@ export default function SignUpForm() {
         {
           onSuccess: async () => {
             await router.invalidate();
-            navigate({ to: "/todos" });
+            navigate({ to: "/recordings" });
             toast.success(t("signUpSuccess"));
           },
           onError: (error) => {

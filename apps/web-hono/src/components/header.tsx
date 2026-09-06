@@ -22,7 +22,7 @@ export default function Header({ isAuthenticated, userName, userEmail }: HeaderP
           </Link>
           {isAuthenticated && (
             <Link
-              to="/todos"
+              to="/recordings"
               className="text-muted-foreground hover:text-foreground transition-colors"
             >
               {t("dashboard")}

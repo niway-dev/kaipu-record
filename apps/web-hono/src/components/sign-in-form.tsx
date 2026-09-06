@@ -25,7 +25,7 @@ export default function SignInForm() {
         {
           onSuccess: async () => {
             await router.invalidate();
-            navigate({ to: "/todos" });
+            navigate({ to: "/recordings" });
             toast.success(t("signInSuccess"));
           },
           onError: (error) => {
