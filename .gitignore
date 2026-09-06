@@ -75,3 +75,6 @@ workspace-temp
 docs/superpowers/
 docs/specs
 .superpowers/
+
+# lefthook per-developer overrides (never committed)
+lefthook-local.yml

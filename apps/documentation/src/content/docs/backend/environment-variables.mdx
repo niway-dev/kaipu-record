@@ -136,7 +136,7 @@ Single encrypted `.env` at root. Each app loads from there:
 4. Update `drizzle.config.ts` to not depend on root `.env` with relative path
 5. Update `package.json` scripts to use `dotenvx run`
 6. Store `DOTENV_PRIVATE_KEY` in 1Password for team sharing
-7. Optionally add `dotenvx ext precommit` to husky to prevent committing unencrypted secrets
+7. Optionally add `dotenvx ext precommit` as a `pre-commit` job in `lefthook.yml` to prevent committing unencrypted secrets
 
 ### Onboarding a New Developer
 

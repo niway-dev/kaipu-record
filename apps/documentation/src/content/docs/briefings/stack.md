@@ -17,7 +17,7 @@ listed one row at a time.
 | Bun (`^1.3.4`)     | Package manager + JS runtime for scripts (`db:push`, tests)   | Fast install/run, native workspace support, one runtime instead of node + a separate package manager |
 | Turborepo          | Task orchestration + caching across `apps/*` and `packages/*` | Per-project `ci-*.yml` pipelines (see Deployment) run only what changed, cached between runs         |
 | TypeScript (`5.9`) | Language, everywhere                                          | End-to-end type safety from Zod schema → oRPC contract → React client → desktop IPC                  |
-| oxlint / oxfmt     | Lint + format                                                 | Rust-based, materially faster than ESLint/Prettier at this repo's size; wired into `lint-staged`     |
+| oxlint / oxfmt     | Lint + format                                                 | Rust-based, materially faster than ESLint/Prettier at this repo's size; wired into `lefthook`        |
 | Zod (`4.x`)        | Schema definition + validation, shared by every layer         | Domain schemas double as runtime validation and static types (`z.infer`) — one definition, not two   |
 
 ## Backend (`apps/server-hono`)
