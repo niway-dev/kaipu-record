@@ -1,13 +1,3 @@
-// Todo schemas
-export {
-  todoBaseSchema,
-  createTodoSchema,
-  updateTodoSchema,
-  type TodoBase,
-  type CreateTodo,
-  type UpdateTodo,
-} from "./todo";
-
 // Recording schemas + pure rules
 export {
   recordingKindSchema,

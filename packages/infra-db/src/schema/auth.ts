@@ -1,7 +1,7 @@
 import { relations } from "drizzle-orm";
 import { text, timestamp, boolean, index } from "drizzle-orm/pg-core";
 import { createTable } from "../utils/table-creator";
-import { todoTable } from "./todo";
+import { recordingTable } from "./recording";
 
 export const userTable = createTable("user", {
   id: text("id").primaryKey(),
@@ -78,7 +78,7 @@ export const verificationTable = createTable(
 export const userRelations = relations(userTable, ({ many }) => ({
   sessions: many(sessionTable),
   accounts: many(accountTable),
-  todos: many(todoTable),
+  recordings: many(recordingTable),
 }));
 
 export const sessionRelations = relations(sessionTable, ({ one }) => ({

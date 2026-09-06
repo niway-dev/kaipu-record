@@ -6,7 +6,7 @@ import { bearer } from "better-auth/plugins";
 import { randomBytes, scryptSync } from "node:crypto";
 
 export const baseConfig: BetterAuthOptions = {
-  appName: "Monorepo Template",
+  appName: "Kaipu Record",
   database: drizzleAdapter(db, {
     provider: "pg",
     schema: { user: userTable, account: accountTable, session: sessionTable },

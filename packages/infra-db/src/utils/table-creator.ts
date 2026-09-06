@@ -1,4 +1,4 @@
-import { MONOREPO_TEMPLATE_TABLE_PREFIX } from "../config";
+import { TABLE_PREFIX } from "../config";
 import { pgTableCreator } from "drizzle-orm/pg-core";
 
-export const createTable = pgTableCreator((name) => `${MONOREPO_TEMPLATE_TABLE_PREFIX}_${name}`);
+export const createTable = pgTableCreator((name) => `${TABLE_PREFIX}_${name}`);

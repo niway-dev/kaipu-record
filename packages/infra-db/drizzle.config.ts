@@ -1,5 +1,5 @@
 import { defineConfig } from "drizzle-kit";
-import { MONOREPO_TEMPLATE_TABLE_PREFIX } from "./src/config";
+import { TABLE_PREFIX } from "./src/config";
 
 export default defineConfig({
   schema: ["./src/schema", "./src/schema/enums"],
@@ -8,5 +8,5 @@ export default defineConfig({
   dbCredentials: {
     url: process.env.DATABASE_URL || "",
   },
-  tablesFilter: [`${MONOREPO_TEMPLATE_TABLE_PREFIX}_*`],
+  tablesFilter: [`${TABLE_PREFIX}_*`],
 });

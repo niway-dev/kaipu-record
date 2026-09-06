@@ -1,9 +1,8 @@
 import { oc } from "@orpc/contract";
 import { recordingContract } from "./recording.contract";
-import { todoContract } from "./todo.contract";
 
-export const contract = oc.router({ todo: todoContract, recording: recordingContract });
+export const contract = oc.router({ recording: recordingContract });
 
-export { recordingContract, todoContract };
+export { recordingContract };
 
 export type Contract = typeof contract;
