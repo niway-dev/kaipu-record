@@ -44,6 +44,7 @@ Los panes son URLs deep-link por kind y plataforma (`MAC_PANES` / `WINDOWS_PANES
 - **Requeridos para terminar**: `screen` y `microphone`. La cámara es **opcional** (`REQUIRED_PERMISSIONS` en `permissions.ts`).
 - `requiredPermissionsMet(status)` decide si se puede avanzar.
 - El estado vive en `onboarding-store.ts`, expuesto vía `onboarding-context.ts` / `onboarding-provider.tsx`.
+- The completed flag is a `localStorage` key (`kaipu.onboarding.completed`), so it lives in the Chromium profile, not in `settings.json`. If onboarding reappears on every launch, a second Kaipu Record process is holding that profile's Local Storage lock — see the gotcha in [Main Process Architecture](/desktop/main-process-architecture#gotchas).
 - **Replay**: la Settings page puede re-abrir el overlay (`useOnboarding`), así el usuario revisa permisos cuando quiera.
 
 Cada permiso tiene metadata de display (`PERMISSION_META`): ícono (lucide), nombre, si es requerido, y descripción.
