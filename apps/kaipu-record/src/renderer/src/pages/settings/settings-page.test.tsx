@@ -1,15 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { SettingsPage } from "./settings-page";
 import { OnboardingContext } from "@renderer/features/onboarding/onboarding-context";
 
 // SettingsPage reads the onboarding context for its "Replay" button. Provide a
 // stub so the tests don't mount the real provider (which would open the overlay).
-function renderSettings(): void {
+// The router is for the Account section, whose buttons navigate to the auth pages.
+function renderSettings(open = vi.fn()): void {
   render(
-    <OnboardingContext.Provider value={{ isOpen: false, open: vi.fn() }}>
-      <SettingsPage />
-    </OnboardingContext.Provider>,
+    <MemoryRouter>
+      <OnboardingContext.Provider value={{ isOpen: false, open }}>
+        <SettingsPage />
+      </OnboardingContext.Provider>
+    </MemoryRouter>,
   );
 }
 
@@ -49,11 +53,7 @@ describe("SettingsPage", () => {
 
   it("replays onboarding when the Replay button is clicked", () => {
     const open = vi.fn();
-    render(
-      <OnboardingContext.Provider value={{ isOpen: false, open }}>
-        <SettingsPage />
-      </OnboardingContext.Provider>,
-    );
+    renderSettings(open);
     screen.getByRole("button", { name: /replay/i }).click();
     expect(open).toHaveBeenCalledOnce();
   });

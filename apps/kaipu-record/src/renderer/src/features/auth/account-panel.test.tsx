@@ -1,17 +1,55 @@
 import { describe, expect, it, vi } from "vitest";
 import { FREE_ENTITLEMENTS } from "@shared/entitlements";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { AuthAttemptResult } from "@shared/types/electron-api";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { AccountPanel } from "./account-panel";
 
+/** Echoes where the panel navigated to (path + the `from` it attached). */
+function Landed(): React.JSX.Element {
+  const location = useLocation();
+  const from = (location.state as { from?: string } | null)?.from ?? "";
+  return (
+    <p>
+      landed {location.pathname} from {from}
+    </p>
+  );
+}
+
+function renderPanel(): void {
+  render(
+    <MemoryRouter initialEntries={["/settings"]}>
+      <Routes>
+        <Route path="/settings" element={<AccountPanel />} />
+        <Route path="/sign-in" element={<Landed />} />
+        <Route path="/sign-up" element={<Landed />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
 describe("AccountPanel", () => {
-  it("shows sign-in/sign-up buttons when signed out", async () => {
+  it("shows sign-in/sign-up buttons when signed out, and no form", async () => {
     vi.spyOn(window.electronAPI, "getAuthStatus").mockResolvedValue({ kind: "signed-out" });
-    render(<AccountPanel />);
+    renderPanel();
     await waitFor(() =>
       expect(screen.getByRole("button", { name: /sign in/i })).toBeInTheDocument(),
     );
     expect(screen.getByRole("button", { name: /create account/i })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/email/i)).not.toBeInTheDocument();
+  });
+
+  it("opens the sign-in page, telling it to come back to Settings", async () => {
+    vi.spyOn(window.electronAPI, "getAuthStatus").mockResolvedValue({ kind: "signed-out" });
+    renderPanel();
+    fireEvent.click(await screen.findByRole("button", { name: /sign in/i }));
+    expect(screen.getByText("landed /sign-in from /settings")).toBeInTheDocument();
+  });
+
+  it("opens the sign-up page, telling it to come back to Settings", async () => {
+    vi.spyOn(window.electronAPI, "getAuthStatus").mockResolvedValue({ kind: "signed-out" });
+    renderPanel();
+    fireEvent.click(await screen.findByRole("button", { name: /create account/i }));
+    expect(screen.getByText("landed /sign-up from /settings")).toBeInTheDocument();
   });
 
   it("shows the email and a sign-out button when signed in", async () => {
@@ -21,7 +59,7 @@ describe("AccountPanel", () => {
       name: "A",
       entitlements: FREE_ENTITLEMENTS,
     });
-    render(<AccountPanel />);
+    renderPanel();
     await waitFor(() => expect(screen.getByText("a@b.com")).toBeInTheDocument());
     expect(screen.getByRole("button", { name: /sign out/i })).toBeInTheDocument();
   });
@@ -31,7 +69,7 @@ describe("AccountPanel", () => {
       kind: "unknown",
       lastKnownEmail: "a@b.com",
     });
-    render(<AccountPanel />);
+    renderPanel();
     await waitFor(() => expect(screen.getByText(/couldn't verify/i)).toBeInTheDocument());
     expect(screen.queryByRole("button", { name: /sign in/i })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /retry/i })).toBeInTheDocument();
@@ -46,99 +84,24 @@ describe("AccountPanel", () => {
         name: "A",
         entitlements: FREE_ENTITLEMENTS,
       });
-    render(<AccountPanel />);
+    renderPanel();
     fireEvent.click(await screen.findByRole("button", { name: /retry/i }));
     await waitFor(() => expect(screen.getByText("a@b.com")).toBeInTheDocument());
   });
 
-  // The IPC layer reports a credential failure as a RESOLVED `{ ok: false, error }` value,
-  // never a rejection: Electron strips a thrown error down to its `.message`, which would
-  // lose the `kind` this assertion depends on. Mocking a rejection here would pass while the
-  // real app showed the generic "Something went wrong" copy — the exact bug this shape fixes.
-  it("opens the sign-in form, submits it, and shows an inline error on failure", async () => {
-    vi.spyOn(window.electronAPI, "getAuthStatus").mockResolvedValue({ kind: "signed-out" });
-    const signIn = vi.spyOn(window.electronAPI, "signIn").mockResolvedValue({
-      ok: false,
-      error: { kind: "invalid-credentials" },
+  it("signs out and returns to the signed-out buttons", async () => {
+    vi.spyOn(window.electronAPI, "getAuthStatus").mockResolvedValue({
+      kind: "signed-in",
+      email: "a@b.com",
+      name: "A",
+      entitlements: FREE_ENTITLEMENTS,
     });
-    render(<AccountPanel />);
-
-    fireEvent.click(await screen.findByRole("button", { name: /sign in/i }));
-    fireEvent.change(screen.getByLabelText(/email/i), {
-      target: { value: "a@b.com" },
-    });
-    fireEvent.change(screen.getByLabelText(/password/i), {
-      target: { value: "wrong" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-
+    const signOut = vi.spyOn(window.electronAPI, "signOut").mockResolvedValue(undefined);
+    renderPanel();
+    fireEvent.click(await screen.findByRole("button", { name: /sign out/i }));
+    await waitFor(() => expect(signOut).toHaveBeenCalled());
     await waitFor(() =>
-      expect(signIn).toHaveBeenCalledWith({ email: "a@b.com", password: "wrong" }),
+      expect(screen.getByRole("button", { name: /sign in/i })).toBeInTheDocument(),
     );
-    await waitFor(() => expect(screen.getByText(/wrong email or password/i)).toBeInTheDocument());
-  });
-
-  it("disables the submit button while the request is pending", async () => {
-    vi.spyOn(window.electronAPI, "getAuthStatus").mockResolvedValue({ kind: "signed-out" });
-    let resolveSignIn: (v: AuthAttemptResult) => void = () => {};
-    vi.spyOn(window.electronAPI, "signIn").mockReturnValue(
-      new Promise((resolve) => {
-        resolveSignIn = resolve;
-      }),
-    );
-    render(<AccountPanel />);
-
-    fireEvent.click(await screen.findByRole("button", { name: /sign in/i }));
-    fireEvent.change(screen.getByLabelText(/email/i), {
-      target: { value: "a@b.com" },
-    });
-    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: "pw" } });
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-
-    expect(screen.getByRole("button", { name: /continue/i })).toBeDisabled();
-    resolveSignIn({
-      ok: true,
-      status: { kind: "signed-in", email: "a@b.com", name: "A", entitlements: FREE_ENTITLEMENTS },
-    });
-  });
-
-  it("drops a stale error when the form is cancelled and reopened", async () => {
-    vi.spyOn(window.electronAPI, "getAuthStatus").mockResolvedValue({ kind: "signed-out" });
-    vi.spyOn(window.electronAPI, "signIn").mockResolvedValue({
-      ok: false,
-      error: { kind: "invalid-credentials" },
-    });
-    render(<AccountPanel />);
-
-    fireEvent.click(await screen.findByRole("button", { name: /^sign in$/i }));
-    fireEvent.change(screen.getByLabelText(/email/i), { target: { value: "a@b.com" } });
-    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: "wrong" } });
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-    await waitFor(() => expect(screen.getByText(/wrong email or password/i)).toBeInTheDocument());
-
-    fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
-    fireEvent.click(await screen.findByRole("button", { name: /create account/i }));
-
-    expect(screen.queryByText(/wrong email or password/i)).not.toBeInTheDocument();
-  });
-
-  // The regression test for the IPC-serialization bug: a structured AuthError returned
-  // across the boundary (rather than thrown, which Electron flattens to `.message`) must
-  // still reach errorCopyKey with its `kind` intact and render the specific copy.
-  it("renders the specific copy for a structured error returned across the IPC boundary", async () => {
-    vi.spyOn(window.electronAPI, "getAuthStatus").mockResolvedValue({ kind: "signed-out" });
-    vi.spyOn(window.electronAPI, "signIn").mockResolvedValue({
-      ok: false,
-      error: { kind: "invalid-credentials" },
-    });
-    render(<AccountPanel />);
-
-    fireEvent.click(await screen.findByRole("button", { name: /sign in/i }));
-    fireEvent.change(screen.getByLabelText(/email/i), { target: { value: "a@b.com" } });
-    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: "wrong" } });
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-
-    await waitFor(() => expect(screen.getByText(/wrong email or password/i)).toBeInTheDocument());
-    expect(screen.queryByText(/something went wrong/i)).not.toBeInTheDocument();
   });
 });
