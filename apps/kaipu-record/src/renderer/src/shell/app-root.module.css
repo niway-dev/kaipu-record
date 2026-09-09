@@ -1,0 +1,10 @@
+/* Fills the window; the active layout (AppShell or a full-window page) takes the rest
+   of the column below any banner. */
+.root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  background: var(--bg-app);
+  overflow: hidden;
+}

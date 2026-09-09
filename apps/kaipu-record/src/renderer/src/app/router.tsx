@@ -1,4 +1,5 @@
 import { createHashRouter, RouterProvider } from "react-router-dom";
+import { AppRoot } from "@renderer/shell/app-root";
 import { AppShell } from "@renderer/shell/app-shell";
 import { RouteErrorBoundary, NotFound } from "@renderer/shell/route-error";
 import { RecordPage } from "@renderer/pages/record/record-page";
@@ -9,6 +10,7 @@ import { ShortcutsPage } from "@renderer/pages/shortcuts/shortcuts-page";
 import { ScreenshotsPage } from "@renderer/pages/screenshots/screenshots-page";
 import { ScreenshotEditorPage } from "@renderer/pages/screenshot-editor/screenshot-editor-page";
 import { VideoEditorPage } from "@renderer/pages/video-editor/video-editor-page";
+import { AuthPage } from "@renderer/pages/auth/auth-page";
 
 /**
  * Route tree for the app.
@@ -24,22 +26,35 @@ import { VideoEditorPage } from "@renderer/pages/video-editor/video-editor-page"
  *   - The `*` catch-all renders an in-shell 404 (sidebar stays visible) instead
  *     of letting React Router fall back to its default error screen.
  *
- * Add new pages as children of <AppShell /> so they share the sidebar/layout.
+ * Layout:
+ *   - <AppRoot /> wraps everything: the always-on IPC listeners, banners and the
+ *     version gate, so they survive on every route.
+ *   - <AppShell /> (sidebar + status bar) hosts the regular pages. Add new sidebar
+ *     pages as its children so they share the layout.
+ *   - /sign-in and /sign-up are full-window pages: siblings of the shell, not
+ *     children, so they render without the sidebar.
  */
 const router = createHashRouter([
   {
-    element: <AppShell />,
+    element: <AppRoot />,
     errorElement: <RouteErrorBoundary />,
     children: [
-      { index: true, element: <RecordPage /> },
-      { path: "/library", element: <LibraryPage /> },
-      { path: "/library/:id", element: <LibraryDetailPage /> },
-      { path: "/screenshots", element: <ScreenshotsPage /> },
-      { path: "/screenshot-editor", element: <ScreenshotEditorPage /> },
-      { path: "/video-editor", element: <VideoEditorPage /> },
-      { path: "/shortcuts", element: <ShortcutsPage /> },
-      { path: "/settings", element: <SettingsPage /> },
-      { path: "*", element: <NotFound /> },
+      {
+        element: <AppShell />,
+        children: [
+          { index: true, element: <RecordPage /> },
+          { path: "/library", element: <LibraryPage /> },
+          { path: "/library/:id", element: <LibraryDetailPage /> },
+          { path: "/screenshots", element: <ScreenshotsPage /> },
+          { path: "/screenshot-editor", element: <ScreenshotEditorPage /> },
+          { path: "/video-editor", element: <VideoEditorPage /> },
+          { path: "/shortcuts", element: <ShortcutsPage /> },
+          { path: "/settings", element: <SettingsPage /> },
+          { path: "*", element: <NotFound /> },
+        ],
+      },
+      { path: "/sign-in", element: <AuthPage mode="sign-in" /> },
+      { path: "/sign-up", element: <AuthPage mode="sign-up" /> },
     ],
   },
 ]);

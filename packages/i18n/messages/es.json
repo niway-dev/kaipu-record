@@ -104,18 +104,8 @@
     "signIn": "Iniciar sesión",
     "signUp": "Crear cuenta",
     "signOut": "Cerrar sesión",
-    "submit": "Continuar",
-    "cancel": "Cancelar",
     "retry": "Reintentar",
-    "emailLabel": "Correo electrónico",
-    "passwordLabel": "Contraseña",
-    "nameLabel": "Nombre",
-    "accountUnknown": "No se pudo verificar tu sesión — seguimos usando la última.",
-    "authErrorInvalidCredentials": "Correo o contraseña incorrectos.",
-    "authErrorEmailTaken": "Ese correo ya está registrado.",
-    "authErrorPasswordTooShort": "La contraseña debe tener al menos 8 caracteres.",
-    "authErrorNetwork": "No se pudo conectar con el servidor — revisá tu conexión.",
-    "authErrorUnknown": "Algo salió mal. Intentá de nuevo."
+    "accountUnknown": "No se pudo verificar tu sesión — seguimos usando la última."
   },
   "record": {
     "readyToRecord": "Todo listo para grabar",
@@ -208,7 +198,16 @@
     "passwordMin": "La contraseña debe tener al menos 8 caracteres",
     "nameMin": "El nombre debe tener al menos 2 caracteres",
     "signInSuccess": "Sesión iniciada",
-    "signUpSuccess": "Cuenta creada"
+    "signUpSuccess": "Cuenta creada",
+    "continue": "Continuar",
+    "back": "Volver",
+    "signInSubtitle": "Inicia sesión en tu cuenta de Kaipu.",
+    "signUpSubtitle": "Crea tu cuenta de Kaipu.",
+    "errorInvalidCredentials": "Correo o contraseña incorrectos.",
+    "errorEmailTaken": "Ese correo ya está registrado.",
+    "errorPasswordTooShort": "La contraseña debe tener al menos 8 caracteres.",
+    "errorNetwork": "No se pudo conectar con el servidor — revisá tu conexión.",
+    "errorUnknown": "Algo salió mal. Intentá de nuevo."
   },
   "recordings": {
     "title": "Grabaciones",

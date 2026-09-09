@@ -101,7 +101,16 @@ var(--glow-accent)` (ui `Button[data-variant="primary"]`, `RecordButton`, the
 ## Routing & error handling
 
 `app/router.tsx` uses `createHashRouter` (required for `file://` in packaged
-Electron). Every page is a child of `<AppShell />` so it shares the sidebar.
+Electron). The tree has two layout levels:
+
+- **`<AppRoot />`** (`shell/app-root.tsx`) wraps every route. It owns what must stay
+  mounted whatever the page draws: the IPC listeners for the global hotkeys and the
+  Capture Panel, the recording-finished navigation, `notifyReady`, the version gate
+  and the update banner.
+- **`<AppShell />`** (sidebar + content outlet + status bar) hosts the regular pages.
+  Add a new sidebar page as its child so it shares the layout.
+- **`/sign-in` and `/sign-up`** (`pages/auth/`) are siblings of the shell under
+  `AppRoot`: full-window, no sidebar, still covered by the root's listeners.
 
 Two safety nets live in `shell/route-error.tsx`:
 
