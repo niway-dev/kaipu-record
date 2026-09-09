@@ -1,0 +1,93 @@
+.page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-app);
+  color: var(--text-primary);
+}
+
+.top {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding: var(--space-md) var(--space-lg);
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-family);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-secondary);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: color var(--transition);
+}
+
+.back:hover {
+  color: var(--text-primary);
+}
+
+.stage {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--space-lg) var(--space-2xl) var(--space-2xl);
+  background: radial-gradient(110% 70% at 50% -8%, rgba(246, 5, 92, 0.12), transparent 58%);
+}
+
+/* Center vertically, but scroll instead of clipping when the window is short. */
+.stage > * {
+  margin: auto;
+}
+
+.card {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+  text-align: center;
+}
+
+.mark {
+  color: var(--accent-primary);
+  margin-bottom: var(--space-sm);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+}
+
+.subtitle {
+  margin: 0 0 var(--space-lg);
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.switch {
+  margin: var(--space-lg) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.switchLink {
+  color: var(--accent-primary);
+  font-weight: var(--font-weight-medium);
+  text-decoration: none;
+}
+
+.switchLink:hover {
+  text-decoration: underline;
+}

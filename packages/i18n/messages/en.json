@@ -104,18 +104,8 @@
     "signIn": "Sign in",
     "signUp": "Create account",
     "signOut": "Sign out",
-    "submit": "Continue",
-    "cancel": "Cancel",
     "retry": "Retry",
-    "emailLabel": "Email",
-    "passwordLabel": "Password",
-    "nameLabel": "Name",
-    "accountUnknown": "Couldn't verify your session — still using your last sign-in.",
-    "authErrorInvalidCredentials": "Wrong email or password.",
-    "authErrorEmailTaken": "That email is already registered.",
-    "authErrorPasswordTooShort": "Password must be at least 8 characters.",
-    "authErrorNetwork": "Couldn't reach the server — check your connection.",
-    "authErrorUnknown": "Something went wrong. Try again."
+    "accountUnknown": "Couldn't verify your session — still using your last sign-in."
   },
   "record": {
     "readyToRecord": "Ready to record",
@@ -208,7 +198,16 @@
     "passwordMin": "Password must be at least 8 characters",
     "nameMin": "Name must be at least 2 characters",
     "signInSuccess": "Sign in successful",
-    "signUpSuccess": "Sign up successful"
+    "signUpSuccess": "Sign up successful",
+    "continue": "Continue",
+    "back": "Back",
+    "signInSubtitle": "Sign in to your Kaipu account.",
+    "signUpSubtitle": "Create your Kaipu account.",
+    "errorInvalidCredentials": "Wrong email or password.",
+    "errorEmailTaken": "That email is already registered.",
+    "errorPasswordTooShort": "Password must be at least 8 characters.",
+    "errorNetwork": "Couldn't reach the server — check your connection.",
+    "errorUnknown": "Something went wrong. Try again."
   },
   "recordings": {
     "title": "Recordings",

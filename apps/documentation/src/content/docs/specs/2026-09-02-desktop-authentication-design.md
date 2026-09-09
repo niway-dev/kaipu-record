@@ -29,6 +29,14 @@ latency, all fixed before sign-off:
 All three fixes and their evidence are on the `feat/desktop-auth-12-manual-verification` branch
 (stacked PR).
 
+**Change (2026-09-09): the form moved out of Settings.** Sign-in and sign-up are now full-window
+pages (`#/sign-in`, `#/sign-up`, `pages/auth/auth-page.tsx`) rendered outside the sidebar shell;
+Settings → Account keeps the signed-in / `unknown` rows and, signed out, two buttons that open
+those pages and return to Settings afterwards. The form itself is `features/auth/auth-form.tsx`;
+`AccountPanel` no longer owns a `mode`. Everything below section 5 that says "form in Settings"
+describes the original implementation; the states, the IPC contract and `useAuthStatus` are
+unchanged. Tracker: [/backlog/desktop-auth-pages](/backlog/desktop-auth-pages).
+
 **Tech stack:** Electron main process (Node `fetch`), `safeStorage` (new to this codebase), Better
 Auth `bearer` plugin (new server-side addition), React (renderer, Settings page). No new backend
 service, no database migration — reuses the existing `user`/`session` tables and the
@@ -312,7 +320,8 @@ wrapper file needed.
 - `use-auth-status.ts` — `useAuthStatus()`: calls `getAuthStatus()` on mount, subscribes to
   `onAuthStatusChanged`, exposes `{ status, signIn, signUp, signOut, pending, error }` (`pending`
   covers the in-flight request; `error` is the last `AuthError`, cleared on the next attempt).
-- `account-panel.tsx` — renders one of four states:
+- `account-panel.tsx` — renders one of four states (**as of 2026-09-09 the "form open" state is
+  gone: the buttons open the full-window auth pages instead — see the change note at the top**):
   - `signed-out` + no form open → "Iniciar sesión" / "Crear cuenta" buttons.
   - a form open → email/password (+ name for sign-up) fields, using the existing `Card`/`Row`/
     `Button` primitives (same as every other Settings section) — no new form library; this is two

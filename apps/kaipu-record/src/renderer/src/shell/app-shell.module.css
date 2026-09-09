@@ -1,8 +1,9 @@
+/* Fills whatever AppRoot leaves below its banners (see app-root.module.css). */
 .shell {
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  width: 100vw;
+  flex: 1;
+  min-height: 0;
   background: var(--bg-app);
   overflow: hidden;
 }
