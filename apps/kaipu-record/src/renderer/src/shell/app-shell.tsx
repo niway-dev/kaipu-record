@@ -5,6 +5,7 @@ import { useTranslations } from "@kaipu/i18n";
 import { Sidebar } from "./sidebar";
 import { useShortcutLabels } from "@renderer/features/shortcuts/use-shortcut-labels";
 import { useAppVersion } from "./use-app-version";
+import { EnvBadge } from "./env-badge";
 import styles from "./app-shell.module.css";
 
 /** action → `shortcuts` namespace status-word keys for the status bar. */
@@ -39,6 +40,7 @@ export function AppShell(): React.JSX.Element {
         </main>
       </div>
       <div className={styles.statusBar}>
+        <EnvBadge className={styles.statusEnv} />
         {shortcuts &&
           SHORTCUT_DEFINITIONS.map((def, i) => (
             <React.Fragment key={def.action}>
