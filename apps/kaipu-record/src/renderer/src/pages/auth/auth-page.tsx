@@ -10,7 +10,7 @@ import styles from "./auth-page.module.css";
 /** Where the user is sent back to (Back, or a successful sign-in) when nothing sent them here. */
 const DEFAULT_RETURN_TO = "/settings";
 
-/** Navigation state the Settings "Sign in" / "Create account" buttons attach. */
+/** Navigation state the Settings "Sign in" button attaches. */
 export interface AuthPageLocationState {
   from?: string;
 }
@@ -80,7 +80,6 @@ export function AuthPage({ mode }: { mode: AuthFormMode }): React.JSX.Element {
           <h1 className={styles.title}>{t(copy.title)}</h1>
           <p className={styles.subtitle}>{t(copy.subtitle)}</p>
           <AuthForm
-            key={mode}
             mode={mode}
             pending={pending}
             error={error}

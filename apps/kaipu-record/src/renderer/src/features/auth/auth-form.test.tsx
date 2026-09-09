@@ -30,7 +30,7 @@ describe("AuthForm", () => {
     expect(screen.queryByLabelText(/name/i)).not.toBeInTheDocument();
 
     fill({ email: "a@b.com", password: "pw" });
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^sign in$/i }));
 
     expect(onSignIn).toHaveBeenCalledWith({ email: "a@b.com", password: "pw" });
     expect(onSignUp).not.toHaveBeenCalled();
@@ -40,7 +40,7 @@ describe("AuthForm", () => {
     const { onSignIn, onSignUp } = renderForm({ mode: "sign-up" });
 
     fill({ email: "a@b.com", name: "Ada", password: "longenough" });
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^create account$/i }));
 
     expect(onSignUp).toHaveBeenCalledWith({
       email: "a@b.com",
@@ -68,8 +68,37 @@ describe("AuthForm", () => {
     expect(screen.queryByText(/something went wrong/i)).not.toBeInTheDocument();
   });
 
-  it("disables submit while pending", () => {
+  it("disables submit while pending and says what is happening", () => {
     renderForm({ pending: true });
-    expect(screen.getByRole("button", { name: /continue/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /signing in/i })).toBeDisabled();
+  });
+
+  it("names the sign-up attempt while pending", () => {
+    renderForm({ mode: "sign-up", pending: true });
+    expect(screen.getByRole("button", { name: /creating account/i })).toBeDisabled();
+  });
+
+  it("keeps the email but resets the password when the mode switches", () => {
+    const { rerender } = render(
+      <AuthForm
+        mode="sign-in"
+        pending={false}
+        error={null}
+        onSignIn={vi.fn()}
+        onSignUp={vi.fn()}
+      />,
+    );
+    fill({ email: "a@b.com", password: "pw" });
+    rerender(
+      <AuthForm
+        mode="sign-up"
+        pending={false}
+        error={null}
+        onSignIn={vi.fn()}
+        onSignUp={vi.fn()}
+      />,
+    );
+    expect(screen.getByLabelText(/email/i)).toHaveValue("a@b.com");
+    expect(screen.getByLabelText(/password/i)).toHaveValue("");
   });
 });

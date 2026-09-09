@@ -12,9 +12,11 @@ const RETURN_TO: AuthPageLocationState = { from: "/settings" };
 
 /**
  * The Account section of Settings: shows who is signed in (with sign-out), the
- * offline "couldn't verify" state (with retry), or — signed out — the two buttons
- * that open the full-window sign-in / sign-up pages (pages/auth). The form itself
- * no longer lives here.
+ * offline "couldn't verify" state (with retry), or — signed out — a row that says
+ * an account is optional and opens the full-window sign-in page (pages/auth). The
+ * sign-in page carries the link to create an account, so Settings deliberately
+ * offers only "Sign in": until the cloud features ship there is nothing to sell
+ * here, and a second button would only compete with the first.
  */
 export function AccountPanel(): React.JSX.Element {
   const t = useTranslations("settings");
@@ -50,20 +52,17 @@ export function AccountPanel(): React.JSX.Element {
 
   // `pending` is true until the initial getAuthStatus() round-trip resolves (see
   // use-auth-status.ts). Rendering nothing for that brief window avoids flashing the
-  // signed-out buttons for a user who turns out to already be signed in.
+  // signed-out row for a user who turns out to already be signed in.
   if (pending) return <></>;
   return (
-    <div className={styles.actions}>
-      <Button size="sm" onClick={() => navigate("/sign-in", { state: RETURN_TO })}>
-        {t("signIn")}
-      </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => navigate("/sign-up", { state: RETURN_TO })}
-      >
-        {t("signUp")}
-      </Button>
-    </div>
+    <Row
+      label={t("accountTitle")}
+      description={<span className={styles.accountNote}>{t("accountDescription")}</span>}
+      action={
+        <Button size="sm" onClick={() => navigate("/sign-in", { state: RETURN_TO })}>
+          {t("signIn")}
+        </Button>
+      }
+    />
   );
 }
