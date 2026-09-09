@@ -12,6 +12,7 @@ import {
 } from "@renderer/features/version-gate";
 import { useUpdateStatus, UpdateBanner } from "@renderer/features/updater";
 import { useAppVersion } from "./use-app-version";
+import { EnvBadge } from "./env-badge";
 import { useScreenshotCapture } from "@renderer/features/screenshots/use-screenshot-capture";
 import styles from "./app-shell.module.css";
 
@@ -101,6 +102,7 @@ export function AppShell(): React.JSX.Element {
         </main>
       </div>
       <div className={styles.statusBar}>
+        <EnvBadge className={styles.statusEnv} />
         {shortcuts &&
           SHORTCUT_DEFINITIONS.map((def, i) => (
             <React.Fragment key={def.action}>

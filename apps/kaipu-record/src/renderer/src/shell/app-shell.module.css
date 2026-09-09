@@ -48,6 +48,12 @@
   opacity: 0.6;
 }
 
+/* Dev-only env badge, pinned to the left so the shortcuts stay visually centered. */
+.statusEnv {
+  position: absolute;
+  left: 12px;
+}
+
 /* App version, pinned to the right so the shortcuts stay visually centered. */
 .statusVersion {
   position: absolute;
