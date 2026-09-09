@@ -108,12 +108,13 @@ test.describe("Desktop authentication (Task 12 manual verification)", () => {
         try {
           await openSettings(page);
 
-          // Sign up
-          await page.getByRole("button", { name: "Create account" }).click();
+          // Sign up: Settings only offers "Sign in"; the sign-in page links to sign-up.
+          await page.getByRole("button", { name: "Sign in" }).click();
+          await page.getByRole("link", { name: "Create account" }).click();
           await page.getByLabel("Email").fill(email);
           await page.getByLabel("Name").fill(name);
           await page.getByLabel("Password").fill(password);
-          await page.getByRole("button", { name: "Continue" }).click();
+          await page.getByRole("button", { name: "Create account" }).click();
           await expect(page.getByText(email)).toBeVisible();
           await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
 
@@ -126,7 +127,7 @@ test.describe("Desktop authentication (Task 12 manual verification)", () => {
           await page.getByRole("button", { name: "Sign in" }).click();
           await page.getByLabel("Email").fill(email);
           await page.getByLabel("Password").fill(password);
-          await page.getByRole("button", { name: "Continue" }).click();
+          await page.getByRole("button", { name: "Sign in" }).click();
           await expect(page.getByText(email)).toBeVisible();
           await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
         } finally {
@@ -170,7 +171,9 @@ test.describe("Desktop authentication (Task 12 manual verification)", () => {
       try {
         await openSettings(page);
         await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
-        await expect(page.getByRole("button", { name: "Create account" })).toBeVisible();
+        await expect(
+          page.getByText("You can record, edit, and export without an account."),
+        ).toBeVisible();
       } finally {
         await app.close();
       }

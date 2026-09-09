@@ -1,6 +1,7 @@
-.actions {
-  display: flex;
-  gap: 0.5rem;
+/* Row descriptions clip to one line; the Spanish copy here needs room to wrap. */
+.accountNote {
+  display: block;
+  white-space: normal;
 }
 
 .unknownNote {

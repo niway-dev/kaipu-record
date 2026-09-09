@@ -21,20 +21,22 @@ function renderPanel(): void {
       <Routes>
         <Route path="/settings" element={<AccountPanel />} />
         <Route path="/sign-in" element={<Landed />} />
-        <Route path="/sign-up" element={<Landed />} />
       </Routes>
     </MemoryRouter>,
   );
 }
 
 describe("AccountPanel", () => {
-  it("shows sign-in/sign-up buttons when signed out, and no form", async () => {
+  it("says an account is optional and offers only Sign in when signed out", async () => {
     vi.spyOn(window.electronAPI, "getAuthStatus").mockResolvedValue({ kind: "signed-out" });
     renderPanel();
     await waitFor(() =>
       expect(screen.getByRole("button", { name: /sign in/i })).toBeInTheDocument(),
     );
-    expect(screen.getByRole("button", { name: /create account/i })).toBeInTheDocument();
+    expect(screen.getByText(/your kaipu account/i)).toBeInTheDocument();
+    expect(screen.getByText(/without an account/i)).toBeInTheDocument();
+    // Creating an account is reached from the sign-in page, not from Settings.
+    expect(screen.queryByRole("button", { name: /create account/i })).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/email/i)).not.toBeInTheDocument();
   });
 
@@ -43,13 +45,6 @@ describe("AccountPanel", () => {
     renderPanel();
     fireEvent.click(await screen.findByRole("button", { name: /sign in/i }));
     expect(screen.getByText("landed /sign-in from /settings")).toBeInTheDocument();
-  });
-
-  it("opens the sign-up page, telling it to come back to Settings", async () => {
-    vi.spyOn(window.electronAPI, "getAuthStatus").mockResolvedValue({ kind: "signed-out" });
-    renderPanel();
-    fireEvent.click(await screen.findByRole("button", { name: /create account/i }));
-    expect(screen.getByText("landed /sign-up from /settings")).toBeInTheDocument();
   });
 
   it("shows the email and a sign-out button when signed in", async () => {
@@ -89,7 +84,7 @@ describe("AccountPanel", () => {
     await waitFor(() => expect(screen.getByText("a@b.com")).toBeInTheDocument());
   });
 
-  it("signs out and returns to the signed-out buttons", async () => {
+  it("signs out and returns to the signed-out row", async () => {
     vi.spyOn(window.electronAPI, "getAuthStatus").mockResolvedValue({
       kind: "signed-in",
       email: "a@b.com",

@@ -11,9 +11,21 @@ description: Status tracker for moving the desktop sign-in / sign-up form out of
 
 ## What changed
 
-- **Settings → Account** no longer holds the form. Signed out it shows two buttons, "Sign in" and
-  "Create account", that open the new pages and tell them to come back to `/settings`. Signed in
-  (email + Sign out) and the offline `unknown` state (last email + Retry) are unchanged.
+- **Settings → Account** no longer holds the form. Signed out it is a single row — "Your Kaipu
+  account" / "You can record, edit, and export without an account." — with one "Sign in" button
+  that opens the sign-in page and tells it to come back to `/settings`. Creating an account is
+  reached from the sign-in page's switch link, not from Settings. Signed in (email + Sign out) and
+  the offline `unknown` state (last email + Retry) are unchanged.
+- **Copy is deliberately sober** (2026-09-09): the upload/share flow is not wired from the library
+  in this checkout and there is no settings sync, so the row promises nothing. When sharing by link
+  ships, the planned row is "Share your recordings with a link" / "Save your recordings to the cloud
+  and send them without attachments.", and the strong create-account prompt should live at the
+  "Share with link" action, where the intent is concrete, returning to that recording afterwards.
+- **Form buttons name the action**: "Sign in" / "Create account", and "Signing in…" /
+  "Creating account…" while the attempt is in flight (the shared `auth` keys, also used by the web
+  app, moved to sentence case). The sign-up subtitle says an account is optional instead of
+  repeating the title. Switching between sign-in and sign-up keeps the email and clears the
+  password.
 - **`#/sign-in` and `#/sign-up`** are full-window pages without the sidebar: Kaipu mark, title,
   the form, a link to switch between the two, and a Back button. On `signed-in` (from the form, a
   broadcast, or landing there while already signed in) the page returns to the route that opened
@@ -39,3 +51,8 @@ description: Status tracker for moving the desktop sign-in / sign-up form out of
 - The sidebar footer avatar still does nothing. Candidate: open `/sign-in` when signed out and
   `/settings` when signed in.
 - Google sign-in and password reset remain out, as in the original spec.
+- Journey follow-ups from the 2026-09-09 copy review, not done yet: a "Minimum 8 characters" hint
+  and show/hide toggle on the password field (and whether the name should be required at sign-up);
+  an "already registered" error that links to sign-in; translating the raw server errors the web
+  forms display; and the web library empty state, which implies desktop recordings sync
+  automatically.

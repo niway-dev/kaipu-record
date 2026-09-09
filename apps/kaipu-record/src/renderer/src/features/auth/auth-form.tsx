@@ -40,10 +40,20 @@ function errorCopyKey(
   }
 }
 
+/** Submit label per mode: idle, and while the attempt is in flight. */
+const SUBMIT_COPY: Record<
+  AuthFormMode,
+  { idle: "signIn" | "signUp"; pending: "signingIn" | "creatingAccount" }
+> = {
+  "sign-in": { idle: "signIn", pending: "signingIn" },
+  "sign-up": { idle: "signUp", pending: "creatingAccount" },
+};
+
 /**
  * The email/password (+ name on sign-up) form, presentational: the owner runs the attempt
- * and passes `pending`/`error` back in. Render it with `key={mode}` so switching between
- * sign-in and sign-up starts from empty fields instead of carrying the other form's input.
+ * and passes `pending`/`error` back in. Keep it mounted across a sign-in ↔ sign-up switch:
+ * the email carries over (someone who finds out they need an account shouldn't retype it)
+ * while the password and name reset, since they belong to the attempt that was abandoned.
  */
 export function AuthForm({
   mode,
@@ -56,6 +66,11 @@ export function AuthForm({
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [name, setName] = React.useState("");
+
+  React.useEffect(() => {
+    setPassword("");
+    setName("");
+  }, [mode]);
 
   const handleSubmit = (e: React.FormEvent): void => {
     e.preventDefault();
@@ -105,7 +120,7 @@ export function AuthForm({
         </p>
       )}
       <Button type="submit" size="lg" disabled={pending} className={styles.submit}>
-        {t("continue")}
+        {t(pending ? SUBMIT_COPY[mode].pending : SUBMIT_COPY[mode].idle)}
       </Button>
     </form>
   );

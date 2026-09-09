@@ -102,10 +102,11 @@
     "replay": "Replay",
     "account": "Account",
     "signIn": "Sign in",
-    "signUp": "Create account",
     "signOut": "Sign out",
     "retry": "Retry",
-    "accountUnknown": "Couldn't verify your session — still using your last sign-in."
+    "accountUnknown": "Couldn't verify your session — still using your last sign-in.",
+    "accountTitle": "Your Kaipu account",
+    "accountDescription": "You can record, edit, and export without an account."
   },
   "record": {
     "readyToRecord": "Ready to record",
@@ -187,8 +188,8 @@
     "email": "Email",
     "password": "Password",
     "name": "Name",
-    "signIn": "Sign In",
-    "signUp": "Sign Up",
+    "signIn": "Sign in",
+    "signUp": "Create account",
     "submitting": "Submitting…",
     "needAccount": "Need an account?",
     "haveAccount": "Already have an account?",
@@ -199,15 +200,16 @@
     "nameMin": "Name must be at least 2 characters",
     "signInSuccess": "Sign in successful",
     "signUpSuccess": "Sign up successful",
-    "continue": "Continue",
     "back": "Back",
     "signInSubtitle": "Sign in to your Kaipu account.",
-    "signUpSubtitle": "Create your Kaipu account.",
+    "signUpSubtitle": "Recording, editing and exporting on your Mac don't require an account.",
     "errorInvalidCredentials": "Wrong email or password.",
     "errorEmailTaken": "That email is already registered.",
     "errorPasswordTooShort": "Password must be at least 8 characters.",
     "errorNetwork": "Couldn't reach the server — check your connection.",
-    "errorUnknown": "Something went wrong. Try again."
+    "errorUnknown": "Something went wrong. Try again.",
+    "signingIn": "Signing in…",
+    "creatingAccount": "Creating account…"
   },
   "recordings": {
     "title": "Recordings",

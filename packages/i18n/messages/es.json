@@ -102,10 +102,11 @@
     "replay": "Repetir",
     "account": "Cuenta",
     "signIn": "Iniciar sesión",
-    "signUp": "Crear cuenta",
     "signOut": "Cerrar sesión",
     "retry": "Reintentar",
-    "accountUnknown": "No se pudo verificar tu sesión — seguimos usando la última."
+    "accountUnknown": "No se pudo verificar tu sesión — seguimos usando la última.",
+    "accountTitle": "Tu cuenta de Kaipu",
+    "accountDescription": "Puedes grabar, editar y exportar sin una cuenta."
   },
   "record": {
     "readyToRecord": "Todo listo para grabar",
@@ -199,15 +200,16 @@
     "nameMin": "El nombre debe tener al menos 2 caracteres",
     "signInSuccess": "Sesión iniciada",
     "signUpSuccess": "Cuenta creada",
-    "continue": "Continuar",
     "back": "Volver",
     "signInSubtitle": "Inicia sesión en tu cuenta de Kaipu.",
-    "signUpSubtitle": "Crea tu cuenta de Kaipu.",
+    "signUpSubtitle": "Grabar, editar y exportar en tu Mac no requiere una cuenta.",
     "errorInvalidCredentials": "Correo o contraseña incorrectos.",
     "errorEmailTaken": "Ese correo ya está registrado.",
     "errorPasswordTooShort": "La contraseña debe tener al menos 8 caracteres.",
-    "errorNetwork": "No se pudo conectar con el servidor — revisá tu conexión.",
-    "errorUnknown": "Algo salió mal. Intentá de nuevo."
+    "errorNetwork": "No se pudo conectar con el servidor — revisa tu conexión.",
+    "errorUnknown": "Algo salió mal. Inténtalo de nuevo.",
+    "signingIn": "Iniciando sesión…",
+    "creatingAccount": "Creando cuenta…"
   },
   "recordings": {
     "title": "Grabaciones",

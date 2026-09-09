@@ -32,11 +32,13 @@ function renderAt(path: "/sign-in" | "/sign-up", from?: string): void {
 
 /** Fill and submit. Waits for the initial status load first: until it resolves the hook
  *  reports `pending`, the submit button is disabled, and a click would do nothing. */
+const SUBMIT = /^(sign in|create account)$/i;
+
 async function submit(email: string, password: string): Promise<void> {
-  await waitFor(() => expect(screen.getByRole("button", { name: /continue/i })).toBeEnabled());
+  await waitFor(() => expect(screen.getByRole("button", { name: SUBMIT })).toBeEnabled());
   fireEvent.change(screen.getByLabelText(/email/i), { target: { value: email } });
   fireEvent.change(screen.getByLabelText(/password/i), { target: { value: password } });
-  fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+  fireEvent.click(screen.getByRole("button", { name: SUBMIT }));
 }
 
 describe("AuthPage", () => {
@@ -112,11 +114,12 @@ describe("AuthPage", () => {
     await submit("a@b.com", "wrong");
     await waitFor(() => expect(screen.getByText(/wrong email or password/i)).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole("link", { name: /sign up/i }));
+    fireEvent.click(screen.getByRole("link", { name: /create account/i }));
     expect(screen.getByRole("heading", { name: /create account/i })).toBeInTheDocument();
     expect(screen.queryByText(/wrong email or password/i)).not.toBeInTheDocument();
-    // Fresh form: the sign-in email did not carry over.
-    expect(screen.getByLabelText(/email/i)).toHaveValue("");
+    // The email carries over so the user does not retype it; the password does not.
+    expect(screen.getByLabelText(/email/i)).toHaveValue("a@b.com");
+    expect(screen.getByLabelText(/password/i)).toHaveValue("");
   });
 
   it("disables submit while the attempt is in flight", async () => {
@@ -131,7 +134,7 @@ describe("AuthPage", () => {
 
     await submit("a@b.com", "pw");
 
-    expect(screen.getByRole("button", { name: /continue/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /signing in/i })).toBeDisabled();
     resolveSignIn({ ok: true, status: SIGNED_IN });
     await waitFor(() => expect(screen.getByText("landed /settings")).toBeInTheDocument());
   });
