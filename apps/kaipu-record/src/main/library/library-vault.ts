@@ -79,6 +79,7 @@ export class LibraryVault {
     }
     const isImage = IMAGE_EXTS.some((ext) => filePath.endsWith(ext));
     const meta = await this.readSidecar(id);
+    // Placeholder until sidecar v2 lands (next task): identity is minted in ensureIdentity().
     return {
       id,
       assetId: "",
