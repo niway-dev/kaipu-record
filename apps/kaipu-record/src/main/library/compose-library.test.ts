@@ -108,6 +108,15 @@ describe("composeLibrary", () => {
     expect(items[0]?.editing).toBe("needs-source");
   });
 
+  it("after the file is gone on a readable vault, catalogUpdates clears lastSeenLocalId", () => {
+    const { catalogUpdates } = composeLibrary({
+      local: [],
+      catalog: [cloud("A", { lastSeenLocalId: "f1" })],
+      editing: {},
+    });
+    expect(catalogUpdates[0]?.lastSeenLocalId).toBeNull();
+  });
+
   it("does not associate by filename: same local id, different assetId is a different item", () => {
     const { items } = composeLibrary({
       local: [local("f1", "NEW")],

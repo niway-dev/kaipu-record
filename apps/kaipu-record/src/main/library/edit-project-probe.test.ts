@@ -8,7 +8,7 @@ vi.mock("./vault-location", () => ({
   vaultDirectory: () => ({ path: state.dir, isCustom: false }),
 }));
 
-import { saveSession } from "./video-edit-session";
+import { saveSession, sessionMetaPath } from "./video-edit-session";
 import { hasEditSession, probeEditing } from "./edit-project-probe";
 
 describe("probeEditing", () => {
@@ -68,5 +68,21 @@ describe("probeEditing", () => {
     const info = await stat(join(dir, "s.mp4"));
     expect(info.size).not.toBe(1);
     expect(await probeEditing(dir, local("s"))).toBe("missing-dependencies");
+  });
+
+  it("project-available for a legacy session saved before .edit.meta.json existed", async () => {
+    await writeFile(join(dir, "legacy.mp4"), "v");
+    // A session written directly, the way it looked before this branch: `.edit.json`
+    // with no matching `.edit.meta.json` sidecar.
+    await writeFile(join(dir, ".kaipu", "legacy.edit.json"), "{}");
+    expect(await hasEditSession(dir, "legacy")).toBe(true);
+    expect(await probeEditing(dir, local("legacy"))).toBe("project-available");
+  });
+
+  it("missing-dependencies when .edit.meta.json exists but is corrupt", async () => {
+    await writeFile(join(dir, "corrupt.mp4"), "v");
+    await writeFile(join(dir, ".kaipu", "corrupt.edit.json"), "{}");
+    await writeFile(sessionMetaPath(dir, "corrupt"), "{not json");
+    expect(await probeEditing(dir, local("corrupt"))).toBe("missing-dependencies");
   });
 });

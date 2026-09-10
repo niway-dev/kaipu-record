@@ -36,10 +36,19 @@ export async function probeEditing(
   if (!(await hasEditSession(vaultDir, local.id))) {
     return local.derivedFromAssetId ? "exported-only" : "project-available";
   }
+  const metaPath = sessionMetaPath(vaultDir, local.id);
+  if (!(await exists(metaPath))) {
+    // A session saved before this branch has `.edit.json` but no `.edit.meta.json` —
+    // there is nothing to compare the source against, so trust the session rather
+    // than reporting a false "missing-dependencies" for every pre-existing project.
+    return "project-available";
+  }
   let meta: SessionMeta;
   try {
-    meta = JSON.parse(await readFile(sessionMetaPath(vaultDir, local.id), "utf-8")) as SessionMeta;
+    meta = JSON.parse(await readFile(metaPath, "utf-8")) as SessionMeta;
   } catch {
+    // Present but unreadable/corrupt: unlike the absent case above, this is a real
+    // problem with a file that should exist and be trustworthy.
     return "missing-dependencies";
   }
   let info;

@@ -46,12 +46,21 @@ export function composeLibrary(input: ComposeInput): ComposeResult {
     else if (!vaultReadable && entry.lastSeenLocalId) availability = "local-unavailable";
     else availability = "cloud";
     merged.add(entry.assetId);
-    catalogUpdates.push({ ...entry, lastSeenLocalId: local ? local.id : entry.lastSeenLocalId });
+    catalogUpdates.push({
+      ...entry,
+      // A readable vault where the file is now gone clears the association (the item
+      // reads as "cloud", not stuck pointing at a local id that no longer exists); an
+      // *unreadable* vault (disconnected drive) must NOT clear it — that's what lets
+      // the item read as "local unavailable" instead of losing the association forever.
+      lastSeenLocalId: local ? local.id : vaultReadable ? null : entry.lastSeenLocalId,
+    });
     items.push({
       assetId: entry.assetId,
       kind: local?.kind ?? entry.kind,
       title: local?.title ?? entry.title,
       createdAt: local?.createdAt ?? entry.createdAt,
+      // `||` on purpose: a local 0 means "unknown (no sidecar metadata)", so the
+      // cloud value is the better answer.
       durationSeconds: local?.durationSeconds || entry.durationSeconds,
       derivedFromAssetId: local?.derivedFromAssetId ?? entry.derivedFromAssetId,
       local,

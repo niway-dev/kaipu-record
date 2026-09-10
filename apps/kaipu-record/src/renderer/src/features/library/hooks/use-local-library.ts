@@ -110,6 +110,11 @@ export function useLocalLibrary(): LocalLibrary {
 
   useEffect(() => {
     void refresh();
+    // Fire-and-forget: re-confirm the cloud catalog against the server on mount, so
+    // signing in (or reopening the app) doesn't leave a stale/empty cached catalog
+    // showing until the user manually refreshes. On success main broadcasts
+    // `library:changed`, which the listener below turns into a re-list.
+    void window.electronAPI.refreshCloudCatalog();
     // Re-list when the vault folder changes (Settings → Files), so an open
     // Library page doesn't keep showing the old folder's contents.
     return window.electronAPI.onLibraryChanged(() => void refresh());

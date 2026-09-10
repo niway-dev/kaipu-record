@@ -119,6 +119,16 @@ describe("useLocalLibrary", () => {
     });
   });
 
+  it("kicks off a cloud catalog refresh on mount", async () => {
+    const refreshCloudCatalog = vi.fn(async () => ({ ok: true as const, verifiedAt: 1 }));
+    window.electronAPI.refreshCloudCatalog = refreshCloudCatalog;
+
+    const { result } = renderHook(() => useLocalLibrary());
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(refreshCloudCatalog).toHaveBeenCalledTimes(1);
+  });
+
   it("removes a recording from state after delete resolves", async () => {
     const { result } = renderHook(() => useLocalLibrary());
     await waitFor(() => expect(result.current.videos).toHaveLength(2));
