@@ -86,8 +86,9 @@ const exportedOnlyItem: LibraryItem = {
 };
 
 /** Same shape as `exportedOnlyItem`, but with its own editing project still on
- *  this device — the button must NOT show, since removing the local file would
- *  break that project. */
+ *  this device. The button still shows for it — main's remove-local-copy
+ *  policy is the one that refuses with `edit-project`, and the page just
+ *  toasts the blocked-edit copy. */
 const projectAvailableItem: LibraryItem = {
   ...exportedOnlyItem,
   assetId: "asset-c",
@@ -199,16 +200,29 @@ describe("LibraryDetailPage", () => {
     await waitFor(() => expect(listMock).toHaveBeenCalledTimes(2));
   });
 
-  it("hides Remove local download when the editing project is still available on this device", async () => {
+  it("shows Remove local download for a project-available item, and toasts the blocked-edit copy when main refuses", async () => {
     window.electronAPI.listLibraryItems = vi.fn(async () => ({
       items: [projectAvailableItem],
       vaultError: null,
       catalogVerifiedAt: null,
     }));
+    window.electronAPI.removeLocalCopy = vi.fn(async () => ({
+      ok: false,
+      reason: "edit-project" as const,
+    }));
 
     renderDetail("asset-c");
     await waitForLoaded();
 
-    expect(screen.queryByRole("button", { name: /remove local download/i })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /remove local download/i }));
+
+    await waitFor(() =>
+      expect(getToasts()).toContainEqual(
+        expect.objectContaining({
+          message:
+            "This file is used by a local editing project. Keep its files to continue editing.",
+        }),
+      ),
+    );
   });
 });

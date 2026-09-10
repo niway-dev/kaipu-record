@@ -100,16 +100,12 @@ export function LibraryDetailPage(): React.JSX.Element {
 
   // `localId !== null` is implied by the condition below (it requires a local
   // copy to exist) but kept explicit here — the button's own name promises
-  // there is a local download to remove. An `editing === "exported-only"` item
-  // already satisfies `editing !== "project-available"` once it also has a
-  // verified matching cloud copy, so no separate branch for it is needed — and
-  // one would wrongly show the button for a local-only export, which always
-  // fails with "no-cloud-copy".
+  // there is a local download to remove. The editing state is intentionally
+  // not consulted here: a `project-available` item still shows the button,
+  // and main's remove-local-copy policy is what refuses it with `edit-project`
+  // (the page then toasts `removeLocalCopyBlockedEdit`).
   const canRemoveLocalCopy =
-    localId !== null &&
-    video.availability === "local-and-cloud" &&
-    video.comparison === "same" &&
-    video.editing !== "project-available";
+    localId !== null && video.availability === "local-and-cloud" && video.comparison === "same";
 
   const doDelete = (): void => {
     if (!localId) return;
