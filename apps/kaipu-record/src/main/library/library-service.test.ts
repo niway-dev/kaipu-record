@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CloudCatalogEntry } from "@shared/types/library-item";
@@ -128,5 +128,27 @@ describe("LibraryService", () => {
     const after = await service.list();
     expect(after.items.map((i) => i.availability)).toEqual(["cloud"]);
     expect(await service.removeLocalCopy("a")).toEqual({ ok: false, reason: "not-found" });
+  });
+
+  it("removeLocalCopy reports hash-unknown when hashing a file still being written rejects", async () => {
+    await writeFile(join(vaultDir, "a.mp4"), "");
+    const rec = (await new LibraryVault(vaultDir).describe("a"))!;
+    catalog = [cloudEntry(rec.assetId, { sizeBytes: 0 })];
+    await service.refreshCatalog();
+    const flakyVault = Object.assign(new LibraryVault(vaultDir), {
+      ensureContentHash: async () => {
+        throw new Error("changed while hashing");
+      },
+    });
+    service = new LibraryService({
+      vault: () => flakyVault,
+      vaultDir: () => vaultDir,
+      cache: new CatalogCache(userData),
+      account: () => account,
+      fetchCatalog,
+      now: () => 777,
+    });
+    expect(await service.removeLocalCopy("a")).toEqual({ ok: false, reason: "hash-unknown" });
+    await expect(access(join(vaultDir, "a.mp4"))).resolves.toBeUndefined();
   });
 });

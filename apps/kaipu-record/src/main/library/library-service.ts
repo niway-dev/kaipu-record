@@ -107,7 +107,9 @@ export class LibraryService {
     const account = this.deps.account();
     const catalog = account ? await this.deps.cache.read(account.userId) : null;
     const cloud = catalog?.find((e) => e.assetId === rec.assetId) ?? null;
-    const hashed = cloud ? await vault.ensureContentHash(id) : null;
+    // A file still being written cannot be proven identical to the cloud copy —
+    // refuse, do not reject: the policy below turns a null hash into "hash-unknown".
+    const hashed = cloud ? await vault.ensureContentHash(id).catch(() => null) : null;
     const decision = canRemoveLocalCopy({
       local: {
         contentSha256: hashed?.contentSha256 ?? null,
