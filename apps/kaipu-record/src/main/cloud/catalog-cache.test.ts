@@ -61,4 +61,11 @@ describe("CatalogCache", () => {
     const cache = new CatalogCache(dir);
     await expect(cache.write("../x", [])).rejects.toThrow(/unsafe/);
   });
+
+  it("refuses to clear an unsafe userId and does not delete anything", async () => {
+    const cache = new CatalogCache(dir);
+    await cache.write("u1", [entry("a")]);
+    await expect(cache.clear("../x")).rejects.toThrow(/unsafe/);
+    expect(await cache.read("u1")).not.toBeNull();
+  });
 });

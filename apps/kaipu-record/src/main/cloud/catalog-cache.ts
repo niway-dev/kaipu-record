@@ -15,10 +15,14 @@ interface CatalogFile {
 export class CatalogCache {
   constructor(private readonly userDataDir: string) {}
 
-  path(userId: string): string {
+  private accountDir(userId: string): string {
     if (!/^[A-Za-z0-9_-]+$/.test(userId))
       throw new Error(`unsafe userId for a cache path: ${userId}`);
-    return join(this.userDataDir, "cloud", userId, "catalog.json");
+    return join(this.userDataDir, "cloud", userId);
+  }
+
+  path(userId: string): string {
+    return join(this.accountDir(userId), "catalog.json");
   }
 
   async read(userId: string): Promise<CloudCatalogEntry[] | null> {
@@ -32,13 +36,13 @@ export class CatalogCache {
 
   async write(userId: string, entries: CloudCatalogEntry[]): Promise<void> {
     const path = this.path(userId);
-    await mkdir(join(this.userDataDir, "cloud", userId), { recursive: true });
+    await mkdir(this.accountDir(userId), { recursive: true });
     const file: CatalogFile = { version: 1, entries };
     await writeFile(`${path}.tmp`, JSON.stringify(file));
     await rename(`${path}.tmp`, path); // atomic: never a half-written catalog
   }
 
   async clear(userId: string): Promise<void> {
-    await rm(join(this.userDataDir, "cloud", userId), { recursive: true, force: true });
+    await rm(this.accountDir(userId), { recursive: true, force: true });
   }
 }
