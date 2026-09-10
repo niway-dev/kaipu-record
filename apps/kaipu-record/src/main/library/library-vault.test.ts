@@ -140,6 +140,20 @@ describe("LibraryVault", () => {
     await writeRecording("exp", 11); // bytes changed → cached hash is stale
     expect((await vault.describe("exp"))?.contentSha256).toBeNull();
   });
+
+  it("ensureContentHash computes once, caches by size+mtime, and recomputes after a change", async () => {
+    await writeRecording("h", 100);
+    const first = await vault.ensureContentHash("h");
+    expect(first?.contentSha256).toHaveLength(44);
+    const sidecar = JSON.parse(await readFile(join(directory, ".kaipu", "h.json"), "utf-8"));
+    expect(sidecar).toMatchObject({ contentSha256: first?.contentSha256, hashedSizeBytes: 100 });
+    expect((await vault.describe("h"))?.contentSha256).toBe(first?.contentSha256);
+
+    await writeFile(join(directory, "h.webm"), Buffer.alloc(100, 9));
+    const second = await vault.ensureContentHash("h");
+    expect(second?.contentSha256).not.toBe(first?.contentSha256);
+    expect(await vault.ensureContentHash("missing")).toBeNull();
+  });
 });
 
 describe("LibraryVault — screenshots", () => {

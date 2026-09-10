@@ -2,6 +2,7 @@ import { basename, join } from "node:path";
 import { access, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import type { LocalRecording } from "@shared/types/library-storage";
+import { sha256FileBase64 } from "./content-hash";
 
 const META_DIR = ".kaipu";
 /** Known video containers, in preference order — `.mp4` is what we now write. */
@@ -172,6 +173,41 @@ export class LibraryVault {
       this.sidecarPath(id),
       JSON.stringify({ ...current, ...meta, sidecarVersion: 2 }, null, 2),
     );
+  }
+
+  /**
+   * The file's sha256, from the sidecar cache when it still matches the file's
+   * size + mtime, otherwise recomputed and cached. Never called by `list()`.
+   */
+  async ensureContentHash(
+    id: string,
+  ): Promise<{ contentSha256: string; sizeBytes: number } | null> {
+    const filePath = await this.filePath(id);
+    let info;
+    try {
+      info = await stat(filePath);
+    } catch {
+      return null;
+    }
+    const meta = await this.sidecar(id);
+    if (
+      meta.contentSha256 &&
+      meta.hashedSizeBytes === info.size &&
+      meta.hashedMtimeMs === info.mtimeMs
+    ) {
+      return { contentSha256: meta.contentSha256, sizeBytes: info.size };
+    }
+    const contentSha256 = await sha256FileBase64(filePath);
+    // Re-stat after hashing: if the file changed underneath, don't cache a lie.
+    const after = await stat(filePath);
+    if (after.size !== info.size || after.mtimeMs !== info.mtimeMs)
+      return this.ensureContentHash(id);
+    await this.writeMeta(id, {
+      contentSha256,
+      hashedSizeBytes: info.size,
+      hashedMtimeMs: info.mtimeMs,
+    });
+    return { contentSha256, sizeBytes: info.size };
   }
 
   async writeThumbnail(id: string, jpg: Buffer): Promise<void> {
