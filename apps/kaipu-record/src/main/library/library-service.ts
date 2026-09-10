@@ -21,7 +21,8 @@ export interface LibraryServiceDeps {
   now?: () => number;
 }
 
-/** Everything the library IPC needs, with no Electron import — testable against temp dirs. */
+/** Everything the library IPC needs, with no direct Electron import (transitively via
+ *  edit-project-probe → video-edit-session) — testable against temp dirs. */
 export class LibraryService {
   private inflightRefresh: Promise<CatalogRefreshResult> | null = null;
   private readonly now: () => number;
@@ -47,19 +48,16 @@ export class LibraryService {
     }
 
     const { items, catalogUpdates } = composeLibrary({ local, catalog, editing });
-    if (account && catalog && local) {
+    if (account && catalog && local && JSON.stringify(catalogUpdates) !== JSON.stringify(catalog)) {
       // Best-effort: remembering which cloud items were also local is what lets an
-      // unplugged drive read as "local unavailable" instead of "cloud only".
+      // unplugged drive read as "local unavailable" instead of "cloud only". Skipped
+      // when nothing changed so a plain `list()` doesn't keep rewriting the cache file.
       await this.deps.cache.write(account.userId, catalogUpdates).catch(() => undefined);
     }
     const catalogVerifiedAt = account
-      ? Math.max(0, ...(catalog ?? []).map((e) => e.lastVerifiedAt))
+      ? (catalog ?? []).reduce((max, e) => Math.max(max, e.lastVerifiedAt), 0)
       : null;
-    return {
-      items,
-      vaultError,
-      catalogVerifiedAt: account && catalog === null ? 0 : catalogVerifiedAt,
-    };
+    return { items, vaultError, catalogVerifiedAt };
   }
 
   refreshCatalog(): Promise<CatalogRefreshResult> {

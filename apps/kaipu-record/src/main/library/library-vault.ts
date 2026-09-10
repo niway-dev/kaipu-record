@@ -26,6 +26,11 @@ export interface Sidecar {
   localRemovedAt?: number;
 }
 
+// Keyed by the sidecar's absolute path (not per-instance), so a re-minted id on a
+// read-only vault survives across separate `LibraryVault` instances for the same
+// directory (e.g. a fresh instance per IPC call) instead of re-minting on every read.
+const readOnlyIdentityMemo = new Map<string, string>();
+
 async function exists(path: string): Promise<boolean> {
   try {
     await access(path);
@@ -131,8 +136,10 @@ export class LibraryVault {
   /**
    * Read the sidecar and make sure it carries an assetId. A legacy (v1) item gets
    * one minted here, on first read, and persisted best-effort: if the vault is
-   * read-only the id lives for this process only — the alternative (failing to
-   * list) reads as data loss. Also clears `localRemovedAt`, since the file is back.
+   * read-only, the id is instead remembered in `readOnlyIdentityMemo` (keyed by the
+   * sidecar's absolute path) so a later read for the same path reuses it instead of
+   * minting a new one every time — the alternative (failing to list) reads as data
+   * loss. Also clears `localRemovedAt`, since the file is back.
    */
   private async ensureIdentity(id: string): Promise<Sidecar & { assetId: string }> {
     const inFlight = this.identityInFlight.get(id);
@@ -143,16 +150,19 @@ export class LibraryVault {
       if (current.assetId && current.localRemovedAt === undefined) {
         return current as Sidecar & { assetId: string };
       }
+      const sidecarPath = this.sidecarPath(id);
       const next: Sidecar = {
         ...current,
         sidecarVersion: 2,
-        assetId: current.assetId ?? randomUUID(),
+        assetId: current.assetId ?? readOnlyIdentityMemo.get(sidecarPath) ?? randomUUID(),
       };
       delete next.localRemovedAt;
       try {
         await this.writeMeta(id, next);
+        readOnlyIdentityMemo.delete(sidecarPath);
       } catch {
         // Read-only vault: keep the in-memory identity; nothing else could persist either.
+        readOnlyIdentityMemo.set(sidecarPath, next.assetId!);
       }
       return next as Sidecar & { assetId: string };
     })();

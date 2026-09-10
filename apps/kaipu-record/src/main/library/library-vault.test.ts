@@ -122,6 +122,22 @@ describe("LibraryVault", () => {
     },
   );
 
+  it.skipIf(process.platform === "win32")(
+    "reuses the minted assetId for a read-only vault across separate LibraryVault instances",
+    async () => {
+      await writeRecording("ro");
+      await mkdir(join(directory, ".kaipu"), { recursive: true });
+      await chmod(join(directory, ".kaipu"), 0o500);
+      try {
+        const first = await new LibraryVault(directory).describe("ro");
+        const second = await new LibraryVault(directory).describe("ro");
+        expect(second?.assetId).toBe(first?.assetId);
+      } finally {
+        await chmod(join(directory, ".kaipu"), 0o700);
+      }
+    },
+  );
+
   it("exposes provenance and the cached hash only while it matches the file", async () => {
     await writeRecording("exp", 10);
     const info = await stat(join(directory, "exp.webm"));

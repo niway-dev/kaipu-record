@@ -14,6 +14,7 @@ describe("LibraryService", () => {
   let userData: string;
   let account: { userId: string; token: string } | null;
   let catalog: CloudCatalogEntry[];
+  let cache: CatalogCache;
   // Typed with the deps signature (not `ReturnType<typeof vi.fn>`) so the injected
   // object is assignable — vi.fn's loose Mock type otherwise fails `bun run typecheck`
   // even though it runs fine (see screenshot-capture.test.ts for the same pattern).
@@ -47,10 +48,11 @@ describe("LibraryService", () => {
     account = { userId: "u1", token: "t" };
     catalog = [];
     fetchCatalog = vi.fn(async () => catalog);
+    cache = new CatalogCache(userData);
     service = new LibraryService({
       vault: () => new LibraryVault(vaultDir),
       vaultDir: () => vaultDir,
-      cache: new CatalogCache(userData),
+      cache,
       account: () => account,
       fetchCatalog,
       now: () => 777,
@@ -150,5 +152,16 @@ describe("LibraryService", () => {
     });
     expect(await service.removeLocalCopy("a")).toEqual({ ok: false, reason: "hash-unknown" });
     await expect(access(join(vaultDir, "a.mp4"))).resolves.toBeUndefined();
+  });
+
+  it("list() skips the cache write when the catalog is unchanged", async () => {
+    await writeFile(join(vaultDir, "a.mp4"), "");
+    const rec = (await new LibraryVault(vaultDir).describe("a"))!;
+    catalog = [cloudEntry(rec.assetId)];
+    await service.refreshCatalog();
+    await service.list(); // first list() after refresh: records lastSeenLocalId, one write
+    const writeSpy = vi.spyOn(cache, "write");
+    await service.list();
+    expect(writeSpy).not.toHaveBeenCalled();
   });
 });

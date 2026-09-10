@@ -68,4 +68,16 @@ describe("CatalogCache", () => {
     await expect(cache.clear("../x")).rejects.toThrow(/unsafe/);
     expect(await cache.read("u1")).not.toBeNull();
   });
+
+  it("serializes concurrent writes to the same account so the file always ends up valid", async () => {
+    const cache = new CatalogCache(dir);
+    const payloadA = [entry("a")];
+    const payloadB = [entry("b")];
+    await Promise.all([cache.write("u1", payloadA), cache.write("u1", payloadB)]);
+    const result = await cache.read("u1");
+    expect(result).not.toBeNull();
+    expect(
+      [payloadA, payloadB].some((payload) => JSON.stringify(payload) === JSON.stringify(result)),
+    ).toBe(true);
+  });
 });
