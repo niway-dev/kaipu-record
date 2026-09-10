@@ -30,6 +30,7 @@ const startExport = vi.fn(
   async (args: { onSaved: (recording: LocalRecording) => void | Promise<void> }) => {
     await args.onSaved({
       id: "new-rec",
+      assetId: "00000000-0000-0000-0000-000000000001",
       kind: "recording",
       title: "My recording (editado)",
       filePath: "/vault/new-rec.mp4",
@@ -37,6 +38,8 @@ const startExport = vi.fn(
       sizeBytes: 100,
       durationSeconds: 10,
       thumbnailUrl: null,
+      derivedFromAssetId: null,
+      contentSha256: null,
     });
   },
 );

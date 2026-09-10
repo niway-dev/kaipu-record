@@ -67,6 +67,7 @@ beforeEach(() => {
   window.electronAPI.recordingFinalize = vi.fn(
     async (): Promise<LocalRecording> => ({
       id: "new-rec",
+      assetId: "00000000-0000-0000-0000-000000000001",
       kind: "recording",
       title: "My recording (edited)",
       filePath: "/vault/new-rec.mp4",
@@ -74,6 +75,8 @@ beforeEach(() => {
       sizeBytes: 100,
       durationSeconds: 10,
       thumbnailUrl: null,
+      derivedFromAssetId: null,
+      contentSha256: null,
     }),
   );
 });
@@ -211,6 +214,7 @@ describe("useVideoExport", () => {
     await act(async () => {
       resolveFinalize({
         id: "new-rec",
+        assetId: "00000000-0000-0000-0000-000000000001",
         kind: "recording",
         title: "My recording (edited)",
         filePath: "/vault/new-rec.mp4",
@@ -218,6 +222,8 @@ describe("useVideoExport", () => {
         sizeBytes: 100,
         durationSeconds: 10,
         thumbnailUrl: null,
+        derivedFromAssetId: null,
+        contentSha256: null,
       });
     });
 

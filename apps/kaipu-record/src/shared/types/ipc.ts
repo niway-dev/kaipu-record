@@ -264,6 +264,8 @@ export interface RecordingFinalizeMeta {
   title: string;
   durationSeconds: number;
   thumbnail?: ArrayBuffer | null;
+  /** Set by the video editor's export: the asset the render was produced from. */
+  derivedFromAssetId?: string | null;
 }
 
 /**

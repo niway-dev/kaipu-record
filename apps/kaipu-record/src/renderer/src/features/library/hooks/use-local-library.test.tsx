@@ -9,6 +9,7 @@ vi.mock("@renderer/features/analytics", () => ({ reportError: vi.fn() }));
 const recordings: LocalRecording[] = [
   {
     id: "a",
+    assetId: "00000000-0000-0000-0000-000000000001",
     title: "A",
     filePath: "/vault/a.webm",
     createdAt: 2000,
@@ -16,9 +17,12 @@ const recordings: LocalRecording[] = [
     durationSeconds: 10,
     thumbnailUrl: null,
     kind: "recording",
+    derivedFromAssetId: null,
+    contentSha256: null,
   },
   {
     id: "b",
+    assetId: "00000000-0000-0000-0000-000000000002",
     title: "B",
     filePath: "/vault/b.webm",
     createdAt: 1000,
@@ -26,6 +30,8 @@ const recordings: LocalRecording[] = [
     durationSeconds: 20,
     thumbnailUrl: null,
     kind: "recording",
+    derivedFromAssetId: null,
+    contentSha256: null,
   },
 ];
 

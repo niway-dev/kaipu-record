@@ -81,6 +81,7 @@ export class LibraryVault {
     const meta = await this.readSidecar(id);
     return {
       id,
+      assetId: "",
       kind: isImage ? "screenshot" : "recording",
       title: meta.title ?? humanizeId(id),
       filePath,
@@ -95,6 +96,8 @@ export class LibraryVault {
         : (await exists(this.thumbnailPath(id)))
           ? `kaipu-media://thumb/${id}`
           : null,
+      derivedFromAssetId: null,
+      contentSha256: null,
     };
   }
 

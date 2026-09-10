@@ -26,6 +26,7 @@ function video(over: Partial<LibraryVideo> & Pick<LibraryVideo, "id">): LibraryV
 function healedRecording(id: string): LocalRecording {
   return {
     id,
+    assetId: "00000000-0000-0000-0000-000000000001",
     kind: "recording",
     title: id,
     filePath: `/vault/${id}.mp4`,
@@ -33,6 +34,8 @@ function healedRecording(id: string): LocalRecording {
     sizeBytes: 100,
     durationSeconds: 54,
     thumbnailUrl: `kaipu-media://thumb/${id}`,
+    derivedFromAssetId: null,
+    contentSha256: null,
   };
 }
 
