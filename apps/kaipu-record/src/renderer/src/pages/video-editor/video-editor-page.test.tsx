@@ -123,6 +123,21 @@ async function makeDirty(footer: HTMLElement): Promise<void> {
   });
 }
 
+describe("VideoEditorPage — invalid source guard", () => {
+  it("redirects to /library when the nav state has no positive duration", () => {
+    const router = createMemoryRouter(
+      [
+        { path: "/", element: <VideoEditorPage /> },
+        { path: "/library", element: <div>library</div> },
+      ],
+      { initialEntries: [{ pathname: "/", state: { ...SOURCE, durationSeconds: 0 } }] },
+    );
+    render(<RouterProvider router={router} />);
+
+    expect(screen.getByText("library")).not.toBeNull();
+  });
+});
+
 describe("VideoEditorPage — transport bar", () => {
   it("renders the play/pause button with aria-label Play by default", async () => {
     renderEditor();

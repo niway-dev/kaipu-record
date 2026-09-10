@@ -74,7 +74,8 @@ function isVideoEditorSource(value: unknown): value is VideoEditorSource {
     typeof v.id === "string" &&
     typeof v.assetId === "string" &&
     typeof v.title === "string" &&
-    typeof v.durationSeconds === "number"
+    typeof v.durationSeconds === "number" &&
+    v.durationSeconds > 0
   );
 }
 
