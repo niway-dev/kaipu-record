@@ -66,6 +66,100 @@ El renderer no puede leer `file://` directo (CSP + seguridad). El main expone un
 
 `registerMediaScheme()` corre antes de `app.whenReady`; `registerMediaProtocol()` después. El handler mapea el id a su path real vía `recordingFilePath`/`thumbnailFilePath` y hace `net.fetch(file://…)`.
 
+## Identity and sidecar v2
+
+Sidecar v2 adds a stable identity layer (`assetId`), export provenance, lazy content hashing, and the "remove local download" operation. Fully backward compatible: v1 sidecars carry no `assetId` or `sidecarVersion`, and one is minted on first read.
+
+### Sidecar v2 fields
+
+All fields are optional; unknown fields are ignored:
+
+| Field                | Type                  | Meaning                                                                                                                                                                                                                         |
+| -------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sidecarVersion`     | `1 \| 2`              | Omitted = v1. Set to 2 on first write of any new field.                                                                                                                                                                         |
+| `assetId`            | string (UUID)         | Stable identity independent of the local filename. Minted on first read of a v1 file, persisted best-effort. Never changes, even if the file is moved or the vault is transferred.                                              |
+| `derivedFromAssetId` | string \| null        | Provenance: if this recording was exported from another one, this is the source asset's id. `null` means it is original or provenance is unknown.                                                                               |
+| `contentSha256`      | string (base64)       | Lazy content hash: sha256 of the media file, base64-encoded. Only present if `hashedSizeBytes` + `hashedMtimeMs` match the current file stats; otherwise stale and ignored. Computed on demand, never computed during `list()`. |
+| `hashedSizeBytes`    | number                | File size when `contentSha256` was computed. Used to detect staleness.                                                                                                                                                          |
+| `hashedMtimeMs`      | number                | File mtime when `contentSha256` was computed. Used to detect staleness.                                                                                                                                                         |
+| `localRemovedAt`     | number (ms timestamp) | Set by `removeLocalCopy()` when the media file is deleted but identity, sidecar, and cloud relation are kept. Cleared on first read after the file reappears. Signals "cloud only" to the library.                              |
+| `title`              | string                | User-facing recording name; humanized from id if omitted. Rename touches only this field, never the video file.                                                                                                                 |
+| `durationSeconds`    | number                | Video duration in seconds; default 0. Backfilled by the renderer after decode on first write.                                                                                                                                   |
+| `createdAt`          | number (ms timestamp) | Recording creation time; file `birthtimeMs` if omitted. Stable once set.                                                                                                                                                        |
+
+### Lazy-mint rule for `assetId`
+
+When a v1 sidecar (or no sidecar) is read for the first time:
+
+1. `ensureIdentity(id)` generates a UUID and writes it to the sidecar.
+2. If the vault is read-only, the id lives in memory for that process only — a read-only vault cannot persist new identities, but we do not fail to list.
+3. Subsequent reads on the same machine return the persisted id.
+4. If the vault is moved or the machine is replaced, the sidecar file moves with it. A different machine reading the same sidecar under a new vault path will see the same `assetId` because the file is the source of truth.
+
+This means **every recording eventually gets an `assetId`**, even legacy ones, by first-read on any updated client.
+
+### The filename is still the local id (gotcha)
+
+`assetId` is a **stable cross-machine identity** for the asset in the cloud and in the sidecar. The **filename** is the **local working id** and remains the source of truth for enumerating local files:
+
+- Rename the title → sidecar updates, filename stays, `assetId` stays.
+- Rename the `.mp4` file in Finder → the filesystem id changes, the sidecar and `assetId` are "lost" from that id's perspective until the sidecar is moved with the file.
+- Export a recording → the export gets its own id (filename) and `derivedFromAssetId` points to the original.
+- Remove local download → delete the `.mp4` but keep the sidecar, setting `localRemovedAt`.
+
+The filename is intentionally stable for path-based operations (`recordingFilePath`, media protocol, file pickers). If you want the cross-machine identity, reach for `assetId` in the sidecar.
+
+### Edit session metadata (`.edit.meta.json`)
+
+When the video editor saves a project, `video-edit-session.ts` writes a sidecar:
+
+```
+.kaipu/<id>.edit.meta.json
+```
+
+```json
+{
+  "sourceSizeBytes": 45678900,
+  "sourceMtimeMs": 1693478400000,
+  "assetIds": ["<id1>", "<id2>"],
+  "savedAt": 1693478500000
+}
+```
+
+| Field             | Meaning                                                                        |
+| ----------------- | ------------------------------------------------------------------------------ |
+| `sourceSizeBytes` | Size of the source video at the time the edit was opened.                      |
+| `sourceMtimeMs`   | Mtime of the source video at the time the edit was opened.                     |
+| `assetIds`        | Array of asset ids used in the project (placed clips, exported sources, etc.). |
+| `savedAt`         | Timestamp of the last project save.                                            |
+
+The `edit-project-probe.ts` reads this to determine the editing state (see [Library](/desktop/library)): `project-available`, `needs-source`, `exported-only`, or `missing-dependencies`.
+
+### Cloud catalog cache
+
+When an account is signed in, `catalog-client.ts` fetches `GET /api/v1/assets` and `CatalogCache` writes it to:
+
+```
+userData/cloud/<userId>/catalog.json
+```
+
+where `<userId>` is the account id (alphanumeric, `[-_]` allowed for safety). The cache survives:
+
+- **Vault folder moves** — the cache lives in `userData`, not the vault.
+- **Vault disconnection** — unplugged drive, unsynced network folder. The cache is read-only offline and renders as "cloud · offline" in the UI.
+- **Account switching** — each account's cache is isolated; signing out does not clear caches.
+
+A 401 or network failure **never clears** the cache. A failed refresh leaves the previous cache intact.
+
+### Remove local download vs Delete
+
+Two operations, two different outcomes:
+
+| Operation             | Deletes                                                         | Keeps                                                                                             | Use case                                                                                                                                                                                                                         |
+| --------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `removeLocalCopy(id)` | Media file (`.mp4` / `.webm`) only                              | Sidecar (identity, hash, provenance), thumbnail, edit session, edit assets folder, cloud relation | Free disk space while preserving the cloud-linked identity. Item becomes "cloud only" and can be re-downloaded under the same `assetId`. Blocked if: cloud copy has different bytes, hash is unknown, or an edit session exists. |
+| `remove(id)`          | Everything: media, sidecar, thumbnail, edit session, all assets | Nothing                                                                                           | Delete the entire recording permanently. Severed from the cloud.                                                                                                                                                                 |
+
 ## Gotchas
 
 - ⚠️ **El id es el filename.** Renombrar el `title` NO renombra el archivo (intencional: el path es estable, la metadata es mutable). Si el usuario renombra el `.mp4` en Finder, cambia el id y se "desconecta" del sidecar viejo.
