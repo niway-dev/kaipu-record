@@ -2400,7 +2400,7 @@ git commit -m "docs(desktop): sidecar v2 identity, catalog cache and remove-loca
 | Five separate axes, no lossy `storage` enum                                                                                         | 1, 9, 11     |
 | One entry for local + cloud copies; cloud-only visible; account B does not see A                                                    | 9, 10        |
 | Disconnected disk → "local unavailable", associations kept; no reassociation by name                                                | 9, 10        |
-| Cached catalog offline ("Cloud · offline"), no empty-library replacement                                                            | 8, 10, 11    |
+| Cached catalog kept offline, no empty-library replacement; the "Cloud · offline" label is plan 03                                   | 8, 10, 11    |
 | Remove local download preserves identity, cloud relation, thumbnail, session, assets; blocked by edit project; identical bytes only | 5, 6, 10, 11 |
 | Editing axis: project available / needs source / exported only / missing dependencies                                               | 5            |
 | Per-account cache under userData, independent of the media existing                                                                 | 8            |

@@ -126,12 +126,12 @@ When the video editor saves a project, `video-edit-session.ts` writes a sidecar:
 }
 ```
 
-| Field             | Meaning                                                                        |
-| ----------------- | ------------------------------------------------------------------------------ |
-| `sourceSizeBytes` | Size of the source video at the time the edit was opened.                      |
-| `sourceMtimeMs`   | Mtime of the source video at the time the edit was opened.                     |
-| `assetIds`        | Array of asset ids used in the project (placed clips, exported sources, etc.). |
-| `savedAt`         | Timestamp of the last project save.                                            |
+| Field             | Meaning                                                                    |
+| ----------------- | -------------------------------------------------------------------------- |
+| `sourceSizeBytes` | Size of the source video, stamped when the session is saved.               |
+| `sourceMtimeMs`   | Mtime of the source video, stamped when the session is saved.              |
+| `assetIds`        | The session's image assets, kept under `.kaipu/<id>.assets/<assetId>.png`. |
+| `savedAt`         | Timestamp of the last project save.                                        |
 
 The `edit-project-probe.ts` reads this to determine the editing state (see [Library](/desktop/library)): `project-available`, `needs-source`, `exported-only`, or `missing-dependencies`.
 
@@ -146,7 +146,7 @@ userData/cloud/<userId>/catalog.json
 where `<userId>` is the account id (alphanumeric, `[-_]` allowed for safety). The cache survives:
 
 - **Vault folder moves** — the cache lives in `userData`, not the vault.
-- **Vault disconnection** — unplugged drive, unsynced network folder. The cache is read-only offline and renders as "cloud · offline" in the UI.
+- **Vault disconnection** — unplugged drive, unsynced network folder. The cache is read-only offline; the "cloud · offline" label itself is plan 03, not this one.
 - **Account switching** — each account's cache is isolated; signing out does not clear caches.
 
 A 401 or network failure **never clears** the cache. A failed refresh leaves the previous cache intact.
@@ -155,10 +155,10 @@ A 401 or network failure **never clears** the cache. A failed refresh leaves the
 
 Two operations, two different outcomes:
 
-| Operation             | Deletes                                                         | Keeps                                                                                             | Use case                                                                                                                                                                                                                                                 |
-| --------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `removeLocalCopy(id)` | Media file (`.mp4` / `.webm`) only                              | Sidecar (identity, hash, provenance), thumbnail, edit session, edit assets folder, cloud relation | Free disk space while preserving the cloud-linked identity. Item becomes "cloud only" and can be re-downloaded under the same `assetId`. Blocked if: no cloud copy is known, cloud copy has different bytes, hash is unknown, or an edit session exists. |
-| `remove(id)`          | Everything: media, sidecar, thumbnail, edit session, all assets | Nothing                                                                                           | Delete the entire recording permanently. Severed from the cloud.                                                                                                                                                                                         |
+| Operation             | Deletes                                                                                                                                                             | Keeps                                                                                             | Use case                                                                                                                                                                                                                                                 |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `removeLocalCopy(id)` | Media file (`.mp4` / `.webm`) only                                                                                                                                  | Sidecar (identity, hash, provenance), thumbnail, edit session, edit assets folder, cloud relation | Free disk space while preserving the cloud-linked identity. Item becomes "cloud only" and can be re-downloaded under the same `assetId`. Blocked if: no cloud copy is known, cloud copy has different bytes, hash is unknown, or an edit session exists. |
+| `remove(id)`          | `LibraryVault.remove` itself: media, sidecar, thumbnail. The `library:delete-local` IPC handler that calls it additionally deletes the edit session and its assets. | Nothing                                                                                           | Delete the entire recording permanently. Severed from the cloud.                                                                                                                                                                                         |
 
 ## Gotchas
 

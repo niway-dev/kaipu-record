@@ -5,9 +5,9 @@ description: Status tracker for the optional cloud epic — one library entry pe
 
 # Optional cloud — upload, catalog and share links
 
-> **Status: 🔵 Proposed.** Specs and the first two detailed plans are written (2026-09-10); no
-> application code has changed yet. Plan 01 starts with a decision gate (Task 0) the founder
-> fills in, and a real-R2 spike (Task 1) that must pass before the rest is worth building.
+> **Status: 🟡 In progress.** Plan 01 (server) has not started — it still opens with a decision
+> gate (Task 0) the founder fills in, and a real-R2 spike (Task 1) that must pass before the
+> rest is worth building. Plan 02 (desktop) is implemented on branch and in review.
 > Effort: High (six phases).
 
 ## Where the detail lives
@@ -33,6 +33,11 @@ description: Status tracker for the optional cloud epic — one library entry pe
 
 Not yet: transfers (upload/download queue, upload mode setting, cloud thumbnails) — plan 03;
 share links and the delete dialogs — plan 04; automatic upload — plan 05; link update — plan 06.
+
+## Upgrade notes
+
+- A desktop session stored before this change has no `userId` and is treated as absent —
+  the account it belonged to is forced to sign in again once the app updates.
 
 ## Related backlog items this epic absorbs
 
