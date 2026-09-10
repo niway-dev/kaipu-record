@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { LibraryVault } from "./library-vault";
@@ -77,6 +77,68 @@ describe("LibraryVault", () => {
 
     expect(await vault.list()).toHaveLength(0);
     expect(await readdir(directory)).not.toContain("clip.webm");
+  });
+
+  it("mints a stable assetId for a legacy item and persists it without touching other fields", async () => {
+    await writeRecording("legacy");
+    await writeSidecar("legacy", { title: "Old", durationSeconds: 7, createdAt: 123 });
+
+    const first = await vault.describe("legacy");
+    expect(first?.assetId).toMatch(/^[0-9a-f-]{36}$/);
+    const second = await vault.describe("legacy");
+    expect(second?.assetId).toBe(first?.assetId);
+
+    const sidecar = JSON.parse(await readFile(join(directory, ".kaipu", "legacy.json"), "utf-8"));
+    expect(sidecar).toMatchObject({
+      title: "Old",
+      durationSeconds: 7,
+      createdAt: 123,
+      sidecarVersion: 2,
+    });
+    expect(sidecar.assetId).toBe(first?.assetId);
+  });
+
+  it("gives two files different assetIds and never derives the id from the filename", async () => {
+    await writeRecording("one");
+    await writeRecording("two");
+    const [a, b] = await Promise.all([vault.describe("one"), vault.describe("two")]);
+    expect(a?.assetId).not.toBe(b?.assetId);
+    expect(a?.assetId).not.toBe("one");
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "still lists when the sidecar directory is read-only (identity is in memory only)",
+    async () => {
+      await writeRecording("ro");
+      await mkdir(join(directory, ".kaipu"), { recursive: true });
+      await chmod(join(directory, ".kaipu"), 0o500);
+      try {
+        const [rec] = await vault.list();
+        expect(rec.id).toBe("ro");
+        expect(rec.assetId).toMatch(/^[0-9a-f-]{36}$/);
+      } finally {
+        await chmod(join(directory, ".kaipu"), 0o700);
+      }
+    },
+  );
+
+  it("exposes provenance and the cached hash only while it matches the file", async () => {
+    await writeRecording("exp", 10);
+    const info = await stat(join(directory, "exp.webm"));
+    await writeSidecar("exp", {
+      assetId: "11111111-1111-4111-8111-111111111111",
+      derivedFromAssetId: "22222222-2222-4222-8222-222222222222",
+      contentSha256: "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=",
+      hashedSizeBytes: 10,
+      hashedMtimeMs: info.mtimeMs,
+    });
+    expect(await vault.describe("exp")).toMatchObject({
+      assetId: "11111111-1111-4111-8111-111111111111",
+      derivedFromAssetId: "22222222-2222-4222-8222-222222222222",
+      contentSha256: "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=",
+    });
+    await writeRecording("exp", 11); // bytes changed → cached hash is stale
+    expect((await vault.describe("exp"))?.contentSha256).toBeNull();
   });
 });
 

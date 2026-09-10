@@ -1,5 +1,6 @@
 import { basename, join } from "node:path";
 import { access, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import type { LocalRecording } from "@shared/types/library-storage";
 
 const META_DIR = ".kaipu";
@@ -8,10 +9,20 @@ const VIDEO_EXTS = [".mp4", ".webm"] as const;
 const IMAGE_EXTS = [".png"] as const;
 const ALL_EXTS = [...VIDEO_EXTS, ...IMAGE_EXTS] as const;
 
-interface Sidecar {
+/** Version 2 adds identity + provenance + hash cache. Every field stays optional so a v1 file reads fine. */
+export interface Sidecar {
+  sidecarVersion?: 1 | 2;
   title?: string;
   durationSeconds?: number;
   createdAt?: number;
+  assetId?: string;
+  derivedFromAssetId?: string | null;
+  /** base64 sha256 + the file stats it was computed for; stale when they differ. */
+  contentSha256?: string;
+  hashedSizeBytes?: number;
+  hashedMtimeMs?: number;
+  /** Set by `removeLocalCopy`; cleared when a file reappears under this id. */
+  localRemovedAt?: number;
 }
 
 async function exists(path: string): Promise<boolean> {
@@ -30,6 +41,9 @@ async function exists(path: string): Promise<boolean> {
  * directory is injected so it's testable against a temp folder.
  */
 export class LibraryVault {
+  /** Guards `ensureIdentity` so two parallel `describe(id)` calls never mint two ids for the same id. */
+  private readonly identityInFlight = new Map<string, Promise<Sidecar & { assetId: string }>>();
+
   constructor(private readonly directory: string) {}
 
   /** Resolve an id to its real file; if none exists yet, default to `.mp4`. */
@@ -45,11 +59,11 @@ export class LibraryVault {
     return join(this.directory, META_DIR);
   }
 
-  private sidecarPath(id: string): string {
+  sidecarPath(id: string): string {
     return join(this.metaDirectory(), `${id}.json`);
   }
 
-  private thumbnailPath(id: string): string {
+  thumbnailPath(id: string): string {
     return join(this.metaDirectory(), `${id}.jpg`);
   }
 
@@ -78,17 +92,22 @@ export class LibraryVault {
       return null;
     }
     const isImage = IMAGE_EXTS.some((ext) => filePath.endsWith(ext));
-    const meta = await this.readSidecar(id);
-    // Placeholder until sidecar v2 lands (next task): identity is minted in ensureIdentity().
+    const meta = await this.ensureIdentity(id);
+    const hashIsFresh =
+      meta.contentSha256 !== undefined &&
+      meta.hashedSizeBytes === info.size &&
+      meta.hashedMtimeMs === info.mtimeMs;
     return {
       id,
-      assetId: "",
+      assetId: meta.assetId,
       kind: isImage ? "screenshot" : "recording",
       title: meta.title ?? humanizeId(id),
       filePath,
       createdAt: meta.createdAt ?? info.birthtimeMs,
       sizeBytes: info.size,
       durationSeconds: meta.durationSeconds ?? 0,
+      derivedFromAssetId: meta.derivedFromAssetId ?? null,
+      contentSha256: hashIsFresh ? (meta.contentSha256 ?? null) : null,
       thumbnailUrl: isImage
         ? // `?v=<mtime>` busts the renderer image cache when a screenshot is
           // overwritten in place (same id/URL) — only the changed item, so the
@@ -97,12 +116,10 @@ export class LibraryVault {
         : (await exists(this.thumbnailPath(id)))
           ? `kaipu-media://thumb/${id}`
           : null,
-      derivedFromAssetId: null,
-      contentSha256: null,
     };
   }
 
-  private async readSidecar(id: string): Promise<Sidecar> {
+  async sidecar(id: string): Promise<Sidecar> {
     try {
       return JSON.parse(await readFile(this.sidecarPath(id), "utf-8")) as Sidecar;
     } catch {
@@ -110,11 +127,51 @@ export class LibraryVault {
     }
   }
 
+  /**
+   * Read the sidecar and make sure it carries an assetId. A legacy (v1) item gets
+   * one minted here, on first read, and persisted best-effort: if the vault is
+   * read-only the id lives for this process only — the alternative (failing to
+   * list) reads as data loss. Also clears `localRemovedAt`, since the file is back.
+   */
+  private async ensureIdentity(id: string): Promise<Sidecar & { assetId: string }> {
+    const inFlight = this.identityInFlight.get(id);
+    if (inFlight) return inFlight;
+
+    const promise = (async (): Promise<Sidecar & { assetId: string }> => {
+      const current = await this.sidecar(id);
+      if (current.assetId && current.localRemovedAt === undefined) {
+        return current as Sidecar & { assetId: string };
+      }
+      const next: Sidecar = {
+        ...current,
+        sidecarVersion: 2,
+        assetId: current.assetId ?? randomUUID(),
+      };
+      delete next.localRemovedAt;
+      try {
+        await this.writeMeta(id, next);
+      } catch {
+        // Read-only vault: keep the in-memory identity; nothing else could persist either.
+      }
+      return next as Sidecar & { assetId: string };
+    })();
+
+    this.identityInFlight.set(id, promise);
+    try {
+      return await promise;
+    } finally {
+      this.identityInFlight.delete(id);
+    }
+  }
+
   /** Merge fields into the sidecar (used by rename and by finalize). */
   async writeMeta(id: string, meta: Sidecar): Promise<void> {
-    const current = await this.readSidecar(id);
+    const current = await this.sidecar(id);
     await mkdir(this.metaDirectory(), { recursive: true });
-    await writeFile(this.sidecarPath(id), JSON.stringify({ ...current, ...meta }, null, 2));
+    await writeFile(
+      this.sidecarPath(id),
+      JSON.stringify({ ...current, ...meta, sidecarVersion: 2 }, null, 2),
+    );
   }
 
   async writeThumbnail(id: string, jpg: Buffer): Promise<void> {
