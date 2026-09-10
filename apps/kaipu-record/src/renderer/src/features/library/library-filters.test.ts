@@ -5,6 +5,7 @@ import { countByKind, countByStorage, selectVisibleVideos } from "./library-filt
 function video(overrides: Partial<LibraryVideo> = {}): LibraryVideo {
   return {
     id: "id",
+    assetId: "asset-id",
     kind: "recording",
     title: "Recording",
     createdAt: 0,

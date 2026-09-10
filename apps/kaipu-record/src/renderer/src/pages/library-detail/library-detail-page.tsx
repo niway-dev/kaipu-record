@@ -103,7 +103,12 @@ export function LibraryDetailPage(): React.JSX.Element {
   const editVideo = (): void => {
     if (!canEditVideo) return;
     navigate("/video-editor", {
-      state: { id: video.id, title: video.title, durationSeconds: video.durationSeconds },
+      state: {
+        id: video.id,
+        assetId: video.assetId,
+        title: video.title,
+        durationSeconds: video.durationSeconds,
+      },
     });
   };
 

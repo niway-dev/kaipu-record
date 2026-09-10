@@ -12,6 +12,7 @@ const healMock = vi.mocked(healOrphanMetadata);
 
 function video(over: Partial<LibraryVideo> & Pick<LibraryVideo, "id">): LibraryVideo {
   return {
+    assetId: `asset-${over.id}`,
     kind: "recording",
     title: over.id,
     createdAt: 0,

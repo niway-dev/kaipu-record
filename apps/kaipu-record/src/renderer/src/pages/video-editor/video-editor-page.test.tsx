@@ -80,7 +80,12 @@ class FakeImage {
   }
 }
 
-const SOURCE: VideoEditorSource = { id: "rec-1", title: "My recording", durationSeconds: 30 };
+const SOURCE: VideoEditorSource = {
+  id: "rec-1",
+  assetId: "asset-1",
+  title: "My recording",
+  durationSeconds: 30,
+};
 
 function renderEditor() {
   const router = createMemoryRouter(

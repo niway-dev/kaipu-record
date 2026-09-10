@@ -7,6 +7,7 @@ export type LibraryKind = "recording" | "screenshot";
 
 export interface LibraryVideo {
   id: string;
+  assetId: string;
   kind: LibraryKind;
   title: string;
   /** Epoch milliseconds. */

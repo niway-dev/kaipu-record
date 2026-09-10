@@ -66,4 +66,27 @@ describe("RecordingWriter", () => {
     const { writer } = await setup();
     await expect(writer.write("ghost", new ArrayBuffer(1), 0)).rejects.toThrow(/session/i);
   });
+
+  it("persists export provenance in the sidecar and surfaces it on the recording", async () => {
+    const { writer, vaultDir } = await setup();
+    await writer.create("s1");
+    await writer.write("s1", new TextEncoder().encode("AAAA").buffer, 0);
+    const rec = await writer.finalize("s1", {
+      title: "Export",
+      durationSeconds: 1,
+      derivedFromAssetId: "22222222-2222-4222-8222-222222222222",
+    });
+    expect(rec.derivedFromAssetId).toBe("22222222-2222-4222-8222-222222222222");
+    const sidecar = JSON.parse(await readFile(join(vaultDir, ".kaipu", "rec-fixed.json"), "utf-8"));
+    expect(sidecar.derivedFromAssetId).toBe("22222222-2222-4222-8222-222222222222");
+    expect(sidecar.assetId).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it("a plain recording has no provenance", async () => {
+    const { writer } = await setup();
+    await writer.create("s1");
+    await writer.write("s1", new TextEncoder().encode("A").buffer, 0);
+    const rec = await writer.finalize("s1", { title: "Rec", durationSeconds: 1 });
+    expect(rec.derivedFromAssetId).toBeNull();
+  });
 });

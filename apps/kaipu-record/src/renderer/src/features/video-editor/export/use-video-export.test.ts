@@ -45,6 +45,7 @@ function startArgs(
     scene: CLIP_SCENE,
     sourceId: "rec-1",
     title: "My recording",
+    derivedFromAssetId: null,
     videoWidth: 1280,
     videoHeight: 720,
     previewWidth: 640,
@@ -249,6 +250,7 @@ describe("useVideoExport", () => {
       title: "My recording (edited)",
       durationSeconds: 10,
       thumbnail: FAKE_THUMB,
+      derivedFromAssetId: null,
     });
     expect(onSaved).toHaveBeenCalledWith(
       expect.objectContaining({ id: "new-rec", title: "My recording (edited)" }),

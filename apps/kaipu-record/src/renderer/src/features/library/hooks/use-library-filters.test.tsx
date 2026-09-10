@@ -6,6 +6,7 @@ import { useLibraryFilters } from "./use-library-filters";
 const videos: LibraryVideo[] = [
   {
     id: "a",
+    assetId: "asset-a",
     kind: "recording",
     title: "Alpha",
     createdAt: 200,
@@ -15,6 +16,7 @@ const videos: LibraryVideo[] = [
   },
   {
     id: "b",
+    assetId: "asset-b",
     kind: "screenshot",
     title: "Bravo",
     createdAt: 100,
