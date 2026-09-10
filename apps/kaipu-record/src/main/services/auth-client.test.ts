@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { FREE_ENTITLEMENTS } from "@shared/entitlements";
 import {
   getEntitlements,
   getSession,
@@ -159,20 +160,31 @@ describe("signOutRemote", () => {
 });
 
 describe("getEntitlements", () => {
-  const PRO = {
+  // The server does not send `cloudUploads`/`cloudStorageBytes` yet (see
+  // src/shared/entitlements.ts) — a real response body today carries only this.
+  const PRO_BODY = {
     plan: "pro",
     status: "active",
     currentPeriodEnd: null,
     features: { watermarkRemoval: true },
   };
 
-  it("unwraps the { data } envelope and sends the bearer token to /api/v1/me/entitlements", async () => {
+  it("unwraps the { data } envelope, sends the bearer token, and defaults the cloud fields the server does not send yet", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValue(new Response(JSON.stringify({ data: PRO, error: null }), { status: 200 }));
+      .mockResolvedValue(
+        new Response(JSON.stringify({ data: PRO_BODY, error: null }), { status: 200 }),
+      );
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(getEntitlements(config, "tok")).resolves.toEqual(PRO);
+    await expect(getEntitlements(config, "tok")).resolves.toEqual({
+      ...PRO_BODY,
+      features: {
+        watermarkRemoval: true,
+        cloudUploads: false,
+        cloudStorageBytes: FREE_ENTITLEMENTS.features.cloudStorageBytes,
+      },
+    });
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("http://localhost:3000/api/v1/me/entitlements");
@@ -187,6 +199,23 @@ describe("getEntitlements", () => {
   it("rejects on a non-2xx status — never silently downgrades to free", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 500 })));
     await expect(getEntitlements(config, "tok")).rejects.toThrow();
+  });
+
+  it("defaults watermarkRemoval to false too when the body omits it", async () => {
+    const bare = { plan: "free", status: "active", currentPeriodEnd: null, features: {} };
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(JSON.stringify({ data: bare, error: null }), { status: 200 }),
+        ),
+    );
+
+    await expect(getEntitlements(config, "tok")).resolves.toEqual({
+      ...bare,
+      features: FREE_ENTITLEMENTS.features,
+    });
   });
 
   it("rejects when the envelope carries an error instead of data", async () => {

@@ -3,8 +3,9 @@ import type { AuthStatus } from "./types/auth";
 /**
  * What the account is allowed to do, as the API reports it from
  * `GET /api/v1/me/entitlements`. Mirrors `entitlementsSchema` in `@kaipu/domain`
- * on the wire (dates arrive as ISO strings). Pure type + rules — safe for main
- * and renderer.
+ * on the wire (dates arrive as ISO strings), once the server emits the cloud
+ * fields; missing fields are defaulted in auth-client. Pure type + rules — safe
+ * for main and renderer.
  *
  * `plan` is a name for display. Permissions are read from `features`, never by
  * comparing `plan` — that is what keeps a future tier or metered feature from

@@ -1,4 +1,4 @@
-import type { Entitlements } from "@shared/entitlements";
+import { FREE_ENTITLEMENTS, type Entitlements } from "@shared/entitlements";
 import type { AuthCredentials, AuthError, SignUpInput } from "@shared/types/auth";
 
 export interface AuthClientConfig {
@@ -124,11 +124,23 @@ export async function getEntitlements(
   });
   if (!res.ok) throw new Error(`me/entitlements failed: ${res.status}`);
   const body = (await res.json()) as {
-    data: Entitlements | null;
+    data: (Omit<Entitlements, "features"> & { features: Partial<Entitlements["features"]> }) | null;
     error: { message: string } | null;
   };
   if (!body.data) throw new Error(body.error?.message ?? "me/entitlements returned no data");
-  return body.data;
+  // The server does not send `cloudUploads`/`cloudStorageBytes` yet (and `watermarkRemoval`
+  // may also be absent on an older server) — default whatever the body omits instead of
+  // letting `undefined` reach a feature check downstream. See the docstring on
+  // `Entitlements` in @shared/entitlements.
+  return {
+    ...body.data,
+    features: {
+      watermarkRemoval: body.data.features.watermarkRemoval ?? false,
+      cloudUploads: body.data.features.cloudUploads ?? false,
+      cloudStorageBytes:
+        body.data.features.cloudStorageBytes ?? FREE_ENTITLEMENTS.features.cloudStorageBytes,
+    },
+  };
 }
 
 /** Best-effort — never rejects. A failed remote sign-out just means the orphaned server-side

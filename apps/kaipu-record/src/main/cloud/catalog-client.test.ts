@@ -65,6 +65,23 @@ describe("fetchCloudCatalog", () => {
     expect(await fetchCloudCatalog(config, "tok")).toEqual([]);
   });
 
+  it("rejects instead of looping forever when the server keeps returning the same cursor", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(() => Promise.resolve(page([ready("a")], "same-cursor"))),
+    );
+    await expect(fetchCloudCatalog(config, "tok")).rejects.toThrow(/too many pages/);
+  });
+
+  it("maps an invalid createdAt to 0 instead of NaN", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(page([ready("a", { createdAt: "not-a-date" })], null)),
+    );
+    const entries = await fetchCloudCatalog(config, "tok");
+    expect(entries[0]?.createdAt).toBe(0);
+  });
+
   it("rejects on 401 with a typed error, and on any other failure — never resolves to []", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 401 })));
     await expect(fetchCloudCatalog(config, "tok")).rejects.toEqual({ kind: "unauthorized" });

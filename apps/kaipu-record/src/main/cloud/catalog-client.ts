@@ -23,6 +23,9 @@ interface WireAsset {
 }
 
 const PAGE = 100;
+/** Hard ceiling on the number of pages a single fetch follows — a misbehaving server
+ *  that keeps returning a cursor (or repeats the same one) must not loop forever. */
+const MAX_PAGES = 100;
 
 /**
  * The account's ready cloud assets, all pages. Metadata only — no bytes move, so
@@ -37,7 +40,10 @@ export async function fetchCloudCatalog(
 ): Promise<CloudCatalogEntry[]> {
   const entries: CloudCatalogEntry[] = [];
   let cursor: string | null = null;
+  let page = 0;
   do {
+    if (page >= MAX_PAGES) throw new Error("assets list: too many pages");
+    page++;
     const url = new URL(`${config.serverUrl}/api/v1/assets`);
     url.searchParams.set("limit", String(PAGE));
     if (cursor) url.searchParams.set("cursor", cursor);
@@ -60,6 +66,7 @@ export async function fetchCloudCatalog(
         a.contentType === null
       )
         continue;
+      const createdAt = Date.parse(a.createdAt);
       entries.push({
         assetId: a.assetId,
         kind: a.kind,
@@ -72,7 +79,9 @@ export async function fetchCloudCatalog(
         hasThumbnail: a.hasThumbnail,
         derivedFromAssetId: a.derivedFromAssetId,
         autoUploadExcluded: a.autoUploadExcluded,
-        createdAt: Date.parse(a.createdAt),
+        // An invalid date from the server must not poison the sort every item's
+        // `createdAt` participates in — fall back to 0 (oldest) instead of NaN.
+        createdAt: Number.isNaN(createdAt) ? 0 : createdAt,
         lastVerifiedAt: now,
         lastSeenLocalId: null,
       });
