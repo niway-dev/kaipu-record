@@ -17,6 +17,10 @@ export interface Entitlements {
   currentPeriodEnd: string | null;
   features: {
     watermarkRemoval: boolean;
+    /** Whether the account can upload recordings to cloud storage. */
+    cloudUploads: boolean;
+    /** The account's cloud storage quota, in bytes. */
+    cloudStorageBytes: number;
   };
 }
 
@@ -25,7 +29,7 @@ export const FREE_ENTITLEMENTS: Entitlements = {
   plan: "free",
   status: "active",
   currentPeriodEnd: null,
-  features: { watermarkRemoval: false },
+  features: { watermarkRemoval: false, cloudUploads: false, cloudStorageBytes: 1_000_000_000 },
 };
 
 /** The entitlements a status carries, if any: signed-in always, `unknown` when cached, signed-out never. */

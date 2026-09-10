@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { IPC_CHANNELS } from "@shared/types/ipc";
@@ -44,12 +44,15 @@ import * as authClient from "../services/auth-client";
 import { registerAuth } from "./auth-store";
 
 const OTHER_SENDER = { id: "other" };
+/** Sentinel used as the main window's `webContents`, so a fake main-window object can be built
+ *  as `{ webContents: MAIN_SENDER }` and IPC calls sent with `{ sender: MAIN_SENDER }`. */
+const MAIN_SENDER = { id: "main" };
 const config = { serverUrl: "http://localhost:3000" };
 
 /** The on-disk shape readStoredSession expects: the fake safeStorage marker wrapped around the
  *  JSON envelope (token + identity), matching what writeStoredSession produces. */
-function storedBlob(token: string, email = "a@b.com", name = "A"): string {
-  return `ENC:${JSON.stringify({ token, email, name })}`;
+function storedBlob(token: string, email = "a@b.com", name = "A", userId = "user-1"): string {
+  return `ENC:${JSON.stringify({ token, userId, email, name })}`;
 }
 
 function fakeWindow(): {
@@ -84,6 +87,7 @@ describe("auth-store", () => {
   it("authSignIn persists the token, caches identity, and broadcasts signed-in", async () => {
     vi.spyOn(authClient, "signInWithPassword").mockResolvedValue({
       token: "tok_1",
+      userId: "user-1",
       email: "a@b.com",
       name: "A",
     });
@@ -97,10 +101,17 @@ describe("auth-store", () => {
 
     expect(status).toEqual({
       ok: true,
-      status: { kind: "signed-in", email: "a@b.com", name: "A", entitlements: FREE_ENTITLEMENTS },
+      status: {
+        kind: "signed-in",
+        userId: "user-1",
+        email: "a@b.com",
+        name: "A",
+        entitlements: FREE_ENTITLEMENTS,
+      },
     });
     expect(mainWindow.webContents.send).toHaveBeenCalledWith(IPC_CHANNELS.authStatusChanged, {
       kind: "signed-in",
+      userId: "user-1",
       email: "a@b.com",
       name: "A",
       entitlements: FREE_ENTITLEMENTS,
@@ -114,6 +125,7 @@ describe("auth-store", () => {
     mockState.windows = [destroyed, liveWindow];
     vi.spyOn(authClient, "signInWithPassword").mockResolvedValue({
       token: "tok_1",
+      userId: "user-1",
       email: "a@b.com",
       name: "A",
     });
@@ -167,6 +179,7 @@ describe("auth-store", () => {
   it("a confirmed 401 on restore clears the stored token and returns signed-out", async () => {
     vi.spyOn(authClient, "signInWithPassword").mockResolvedValue({
       token: "tok_1",
+      userId: "user-1",
       email: "a@b.com",
       name: "A",
     });
@@ -194,6 +207,7 @@ describe("auth-store", () => {
   it("a network failure on restore keeps the stored token and returns unknown, not signed-out", async () => {
     vi.spyOn(authClient, "signInWithPassword").mockResolvedValue({
       token: "tok_1",
+      userId: "user-1",
       email: "a@b.com",
       name: "A",
     });
@@ -210,18 +224,24 @@ describe("auth-store", () => {
     });
     expect(status).toEqual({
       kind: "unknown",
+      lastKnownUserId: "user-1",
       lastKnownEmail: "a@b.com",
       entitlements: FREE_ENTITLEMENTS,
     });
 
     // The token on disk must survive — a fresh registerAuth + a working getSession proves it.
-    vi.spyOn(authClient, "getSession").mockResolvedValue({ email: "a@b.com", name: "A" });
+    vi.spyOn(authClient, "getSession").mockResolvedValue({
+      userId: "user-1",
+      email: "a@b.com",
+      name: "A",
+    });
     registerAuth(config, () => mainWindow as never);
     const restored = await mockState.handlers.get(IPC_CHANNELS.authGetStatus)!({
       sender: OTHER_SENDER,
     });
     expect(restored).toEqual({
       kind: "signed-in",
+      userId: "user-1",
       email: "a@b.com",
       name: "A",
       entitlements: FREE_ENTITLEMENTS,
@@ -233,7 +253,6 @@ describe("auth-store", () => {
     // the server is unreachable, so nothing in THIS process has ever had a successful
     // getSession to populate an in-memory identity cache. Before the identity was persisted
     // alongside the token, this rendered an empty label.
-    const { writeFile } = await import("node:fs/promises");
     await writeFile(
       join(mockState.userDataDir, "auth.enc"),
       storedBlob("tok_1", "restored@b.com", "Restored"),
@@ -247,6 +266,7 @@ describe("auth-store", () => {
 
     expect(status).toEqual({
       kind: "unknown",
+      lastKnownUserId: "user-1",
       lastKnownEmail: "restored@b.com",
       entitlements: FREE_ENTITLEMENTS,
     });
@@ -255,6 +275,7 @@ describe("auth-store", () => {
   it("persists the identity with the token, so a restart restores it without a round-trip", async () => {
     vi.spyOn(authClient, "signInWithPassword").mockResolvedValue({
       token: "tok_1",
+      userId: "user-1",
       email: "a@b.com",
       name: "A",
     });
@@ -269,6 +290,7 @@ describe("auth-store", () => {
     const onDisk = await readFile(join(mockState.userDataDir, "auth.enc"), "utf8");
     expect(JSON.parse(onDisk.slice("ENC:".length))).toEqual({
       token: "tok_1",
+      userId: "user-1",
       email: "a@b.com",
       name: "A",
       entitlements: FREE_ENTITLEMENTS,
@@ -281,6 +303,7 @@ describe("auth-store", () => {
       mockState.handlers.get(IPC_CHANNELS.authGetStatus)!({ sender: OTHER_SENDER }),
     ).resolves.toEqual({
       kind: "unknown",
+      lastKnownUserId: "user-1",
       lastKnownEmail: "a@b.com",
       entitlements: FREE_ENTITLEMENTS,
     });
@@ -289,7 +312,6 @@ describe("auth-store", () => {
   it("treats a pre-envelope plain-token file as no session rather than crashing", async () => {
     // An app installed before the envelope has a raw token string on disk; JSON.parse throws on
     // it, which readStoredSession swallows like any other corruption. A one-time re-login.
-    const { writeFile } = await import("node:fs/promises");
     await writeFile(join(mockState.userDataDir, "auth.enc"), "ENC:tok_legacy_plain");
 
     expect(() => registerAuth(config, () => null)).not.toThrow();
@@ -301,6 +323,7 @@ describe("auth-store", () => {
   it("authSignOut clears local state synchronously even when the remote sign-out fails", async () => {
     vi.spyOn(authClient, "signInWithPassword").mockResolvedValue({
       token: "tok_1",
+      userId: "user-1",
       email: "a@b.com",
       name: "A",
     });
@@ -325,6 +348,7 @@ describe("auth-store", () => {
     mockState.encryptionAvailable = false;
     vi.spyOn(authClient, "signInWithPassword").mockResolvedValue({
       token: "tok_1",
+      userId: "user-1",
       email: "a@b.com",
       name: "A",
     });
@@ -356,7 +380,6 @@ describe("auth-store", () => {
   });
 
   it("a corrupted token file on disk is treated as signed-out, not a crash", async () => {
-    const { writeFile } = await import("node:fs/promises");
     await writeFile(join(mockState.userDataDir, "auth.enc"), "not-encrypted-garbage");
 
     expect(() => registerAuth(config, () => null)).not.toThrow();
@@ -367,7 +390,6 @@ describe("auth-store", () => {
   });
 
   it("fails closed when encryption becomes unavailable while a token exists", async () => {
-    const { writeFile } = await import("node:fs/promises");
     await writeFile(join(mockState.userDataDir, "auth.enc"), storedBlob("tok_1"));
     mockState.encryptionAvailable = false;
 
@@ -381,6 +403,7 @@ describe("auth-store", () => {
   it("routes sign-up through the same persist-then-cache transaction", async () => {
     vi.spyOn(authClient, "signUpWithPassword").mockResolvedValue({
       token: "tok_2",
+      userId: "user-2",
       email: "new@b.com",
       name: "New",
     });
@@ -396,6 +419,7 @@ describe("auth-store", () => {
       ok: true,
       status: {
         kind: "signed-in",
+        userId: "user-2",
         email: "new@b.com",
         name: "New",
         entitlements: FREE_ENTITLEMENTS,
@@ -416,12 +440,13 @@ describe("auth-store", () => {
     plan: "pro",
     status: "active",
     currentPeriodEnd: null,
-    features: { watermarkRemoval: true },
+    features: { watermarkRemoval: true, cloudUploads: true, cloudStorageBytes: 1_000_000_000 },
   };
 
   async function signInAs(mainWindow: ReturnType<typeof fakeWindow>): Promise<void> {
     vi.spyOn(authClient, "signInWithPassword").mockResolvedValue({
       token: "tok_1",
+      userId: "user-1",
       email: "a@b.com",
       name: "A",
     });
@@ -436,19 +461,33 @@ describe("auth-store", () => {
     const mainWindow = mockState.windows[0]!;
     await signInAs(mainWindow);
 
-    vi.spyOn(authClient, "getSession").mockResolvedValue({ email: "a@b.com", name: "A" });
+    vi.spyOn(authClient, "getSession").mockResolvedValue({
+      userId: "user-1",
+      email: "a@b.com",
+      name: "A",
+    });
     vi.spyOn(authClient, "getEntitlements").mockResolvedValue(PRO);
     const status = await mockState.handlers.get(IPC_CHANNELS.authGetStatus)!({
       sender: OTHER_SENDER,
     });
 
-    expect(status).toEqual({ kind: "signed-in", email: "a@b.com", name: "A", entitlements: PRO });
+    expect(status).toEqual({
+      kind: "signed-in",
+      userId: "user-1",
+      email: "a@b.com",
+      name: "A",
+      entitlements: PRO,
+    });
   });
 
   it("a failed entitlements fetch keeps the last known copy — it never downgrades to free", async () => {
     const mainWindow = mockState.windows[0]!;
     await signInAs(mainWindow);
-    vi.spyOn(authClient, "getSession").mockResolvedValue({ email: "a@b.com", name: "A" });
+    vi.spyOn(authClient, "getSession").mockResolvedValue({
+      userId: "user-1",
+      email: "a@b.com",
+      name: "A",
+    });
     vi.spyOn(authClient, "getEntitlements").mockResolvedValue(PRO);
     await mockState.handlers.get(IPC_CHANNELS.authGetStatus)!({ sender: OTHER_SENDER });
 
@@ -457,13 +496,23 @@ describe("auth-store", () => {
       sender: OTHER_SENDER,
     });
 
-    expect(status).toEqual({ kind: "signed-in", email: "a@b.com", name: "A", entitlements: PRO });
+    expect(status).toEqual({
+      kind: "signed-in",
+      userId: "user-1",
+      email: "a@b.com",
+      name: "A",
+      entitlements: PRO,
+    });
   });
 
   it("persists entitlements with the token, so an offline restart still reports them in `unknown`", async () => {
     const mainWindow = mockState.windows[0]!;
     await signInAs(mainWindow);
-    vi.spyOn(authClient, "getSession").mockResolvedValue({ email: "a@b.com", name: "A" });
+    vi.spyOn(authClient, "getSession").mockResolvedValue({
+      userId: "user-1",
+      email: "a@b.com",
+      name: "A",
+    });
     vi.spyOn(authClient, "getEntitlements").mockResolvedValue(PRO);
     await mockState.handlers.get(IPC_CHANNELS.authGetStatus)!({ sender: OTHER_SENDER });
 
@@ -474,7 +523,12 @@ describe("auth-store", () => {
       sender: OTHER_SENDER,
     });
 
-    expect(status).toEqual({ kind: "unknown", lastKnownEmail: "a@b.com", entitlements: PRO });
+    expect(status).toEqual({
+      kind: "unknown",
+      lastKnownUserId: "user-1",
+      lastKnownEmail: "a@b.com",
+      entitlements: PRO,
+    });
   });
 
   it("sign-in fetches entitlements right away so the first signed-in status already carries them", async () => {
@@ -482,6 +536,7 @@ describe("auth-store", () => {
     const mainWindow = mockState.windows[0]!;
     vi.spyOn(authClient, "signInWithPassword").mockResolvedValue({
       token: "tok_1",
+      userId: "user-1",
       email: "a@b.com",
       name: "A",
     });
@@ -494,7 +549,13 @@ describe("auth-store", () => {
 
     expect(result).toEqual({
       ok: true,
-      status: { kind: "signed-in", email: "a@b.com", name: "A", entitlements: PRO },
+      status: {
+        kind: "signed-in",
+        userId: "user-1",
+        email: "a@b.com",
+        name: "A",
+        entitlements: PRO,
+      },
     });
   });
 
@@ -510,5 +571,36 @@ describe("auth-store", () => {
     await expect(
       mockState.handlers.get(IPC_CHANNELS.authGetStatus)!({ sender: OTHER_SENDER }),
     ).resolves.toEqual({ kind: "signed-out" });
+  });
+
+  // ── Account identity (AuthHandle for main modules) ────────────────────
+
+  it("exposes the current account (userId + token) to main modules and notifies on change", async () => {
+    vi.spyOn(authClient, "signInWithPassword").mockResolvedValue({
+      token: "t1",
+      userId: "user-1",
+      email: "a@b.com",
+      name: "A",
+    });
+    const handle = registerAuth(config, () => ({ webContents: MAIN_SENDER }) as never);
+    const seen: Array<string | null> = [];
+    handle.onAccountChanged((userId) => seen.push(userId));
+
+    expect(handle.getCurrentAccount()).toBeNull();
+    await mockState.handlers.get(IPC_CHANNELS.authSignIn)!(
+      { sender: MAIN_SENDER },
+      { email: "a@b.com", password: "x" },
+    );
+    expect(handle.getCurrentAccount()).toEqual({ userId: "user-1", token: "t1" });
+
+    await mockState.handlers.get(IPC_CHANNELS.authSignOut)!({ sender: MAIN_SENDER });
+    expect(handle.getCurrentAccount()).toBeNull();
+    expect(seen).toEqual(["user-1", null]);
+  });
+
+  it("restores the account id from disk before any server round-trip", async () => {
+    await writeFile(join(mockState.userDataDir, "auth.enc"), storedBlob("t-disk"));
+    const handle = registerAuth(config, () => null);
+    expect(handle.getCurrentAccount()).toEqual({ userId: "user-1", token: "t-disk" });
   });
 });

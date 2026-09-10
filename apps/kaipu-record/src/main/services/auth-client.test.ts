@@ -18,14 +18,14 @@ describe("signInWithPassword", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ user: { email: "a@b.com", name: "A" } }), {
+        new Response(JSON.stringify({ user: { id: "user-1", email: "a@b.com", name: "A" } }), {
           status: 200,
           headers: { "set-auth-token": "tok_123" },
         }),
       ),
     );
     const result = await signInWithPassword(config, { email: "a@b.com", password: "pw" });
-    expect(result).toEqual({ token: "tok_123", email: "a@b.com", name: "A" });
+    expect(result).toEqual({ token: "tok_123", userId: "user-1", email: "a@b.com", name: "A" });
   });
 
   it("rejects with invalid-credentials on a 401/400 body", async () => {
@@ -48,7 +48,7 @@ describe("signUpWithPassword", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ user: { email: "new@b.com", name: "New" } }), {
+        new Response(JSON.stringify({ user: { id: "user-2", email: "new@b.com", name: "New" } }), {
           status: 200,
           headers: { "set-auth-token": "tok_456" },
         }),
@@ -59,7 +59,12 @@ describe("signUpWithPassword", () => {
       password: "pw",
       name: "New",
     });
-    expect(result).toEqual({ token: "tok_456", email: "new@b.com", name: "New" });
+    expect(result).toEqual({
+      token: "tok_456",
+      userId: "user-2",
+      email: "new@b.com",
+      name: "New",
+    });
   });
 
   it("rejects with email-taken on a 422 body", async () => {
@@ -102,13 +107,17 @@ describe("getSession", () => {
   it("resolves the session on 200", async () => {
     vi.stubGlobal(
       "fetch",
-      vi
-        .fn()
-        .mockResolvedValue(
-          new Response(JSON.stringify({ user: { email: "a@b.com", name: "A" } }), { status: 200 }),
-        ),
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ user: { id: "user-1", email: "a@b.com", name: "A" } }), {
+          status: 200,
+        }),
+      ),
     );
-    await expect(getSession(config, "tok")).resolves.toEqual({ email: "a@b.com", name: "A" });
+    await expect(getSession(config, "tok")).resolves.toEqual({
+      userId: "user-1",
+      email: "a@b.com",
+      name: "A",
+    });
   });
 
   it("resolves null on a confirmed 401 — the session is genuinely gone", async () => {

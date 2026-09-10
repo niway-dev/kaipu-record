@@ -13,6 +13,7 @@ describe("useAuthStatus", () => {
   it("loads the status on mount", async () => {
     vi.spyOn(window.electronAPI, "getAuthStatus").mockResolvedValue({
       kind: "signed-in",
+      userId: "user-1",
       email: "a@b.com",
       name: "A",
       entitlements: FREE_ENTITLEMENTS,
@@ -23,6 +24,7 @@ describe("useAuthStatus", () => {
     await waitFor(() =>
       expect(result.current.status).toEqual({
         kind: "signed-in",
+        userId: "user-1",
         email: "a@b.com",
         name: "A",
         entitlements: FREE_ENTITLEMENTS,
@@ -43,6 +45,7 @@ describe("useAuthStatus", () => {
     act(() =>
       broadcast?.({
         kind: "signed-in",
+        userId: "user-x",
         email: "x@y.com",
         name: "X",
         entitlements: FREE_ENTITLEMENTS,
@@ -52,6 +55,7 @@ describe("useAuthStatus", () => {
     await waitFor(() =>
       expect(result.current.status).toEqual({
         kind: "signed-in",
+        userId: "user-x",
         email: "x@y.com",
         name: "X",
         entitlements: FREE_ENTITLEMENTS,
@@ -110,7 +114,13 @@ describe("useAuthStatus", () => {
       .mockResolvedValueOnce({ ok: false, error: { kind: "invalid-credentials" } })
       .mockResolvedValueOnce({
         ok: true,
-        status: { kind: "signed-in", email: "a@b.com", name: "A", entitlements: FREE_ENTITLEMENTS },
+        status: {
+          kind: "signed-in",
+          userId: "user-1",
+          email: "a@b.com",
+          name: "A",
+          entitlements: FREE_ENTITLEMENTS,
+        },
       });
 
     const { result } = renderHook(() => useAuthStatus());
@@ -127,6 +137,7 @@ describe("useAuthStatus", () => {
     expect(result.current.error).toBeNull();
     expect(result.current.status).toEqual({
       kind: "signed-in",
+      userId: "user-1",
       email: "a@b.com",
       name: "A",
       entitlements: FREE_ENTITLEMENTS,
@@ -138,6 +149,7 @@ describe("useAuthStatus", () => {
       .mockResolvedValueOnce({ kind: "unknown", lastKnownEmail: "a@b.com" })
       .mockResolvedValueOnce({
         kind: "signed-in",
+        userId: "user-1",
         email: "a@b.com",
         name: "A",
         entitlements: FREE_ENTITLEMENTS,
@@ -150,6 +162,7 @@ describe("useAuthStatus", () => {
     });
     expect(result.current.status).toEqual({
       kind: "signed-in",
+      userId: "user-1",
       email: "a@b.com",
       name: "A",
       entitlements: FREE_ENTITLEMENTS,
@@ -179,6 +192,7 @@ describe("useAuthStatus", () => {
     act(() =>
       broadcast?.({
         kind: "signed-in",
+        userId: "user-broadcast",
         email: "broadcast@example.com",
         name: "Broadcast",
         entitlements: FREE_ENTITLEMENTS,
@@ -188,6 +202,7 @@ describe("useAuthStatus", () => {
     // Verify the broadcast took effect
     expect(result.current.status).toEqual({
       kind: "signed-in",
+      userId: "user-broadcast",
       email: "broadcast@example.com",
       name: "Broadcast",
       entitlements: FREE_ENTITLEMENTS,
@@ -197,6 +212,7 @@ describe("useAuthStatus", () => {
     await act(async () => {
       resolveGetStatus?.({
         kind: "signed-in",
+        userId: "user-stale",
         email: "stale@example.com",
         name: "Stale",
         entitlements: FREE_ENTITLEMENTS,
@@ -206,6 +222,7 @@ describe("useAuthStatus", () => {
     // The status should STILL be the broadcast value, not the stale query response
     expect(result.current.status).toEqual({
       kind: "signed-in",
+      userId: "user-broadcast",
       email: "broadcast@example.com",
       name: "Broadcast",
       entitlements: FREE_ENTITLEMENTS,

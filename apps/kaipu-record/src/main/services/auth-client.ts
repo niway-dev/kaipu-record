@@ -7,6 +7,7 @@ export interface AuthClientConfig {
 
 export interface SignInResult {
   token: string;
+  userId: string;
   email: string;
   name: string;
 }
@@ -62,8 +63,8 @@ async function callCredentialEndpoint(
       message: "sign-in succeeded but no session token was issued",
     } satisfies AuthError;
 
-  const data = (await res.json()) as { user: { email: string; name: string } };
-  return { token, email: data.user.email, name: data.user.name };
+  const data = (await res.json()) as { user: { id: string; email: string; name: string } };
+  return { token, userId: data.user.id, email: data.user.email, name: data.user.name };
 }
 
 export function signInWithPassword(
@@ -89,7 +90,7 @@ export function signUpWithPassword(
 export async function getSession(
   config: AuthClientConfig,
   token: string,
-): Promise<{ email: string; name: string } | null> {
+): Promise<{ userId: string; email: string; name: string } | null> {
   const res = await fetch(`${config.serverUrl}/api/auth/get-session`, {
     headers: { Authorization: `Bearer ${token}` },
     signal: AbortSignal.timeout(10_000),
@@ -101,10 +102,10 @@ export async function getSession(
   // 200 + a `null` body, not 401 — 401 only fires in a narrow concurrent-update edge case.
   // Both must be treated identically: "confirmed gone," safe to clear the local token.
   const data = (await res.json().catch(() => null)) as {
-    user?: { email: string; name: string };
+    user?: { id: string; email: string; name: string };
   } | null;
   if (!data?.user) return null;
-  return { email: data.user.email, name: data.user.name };
+  return { userId: data.user.id, email: data.user.email, name: data.user.name };
 }
 
 /**

@@ -291,7 +291,10 @@ app.whenReady().then(() => {
   // error the user cannot act on. Fail loudly at startup, naming the variable.
   const authServerUrl = import.meta.env.MAIN_VITE_SERVER_URL;
   if (!authServerUrl) throw new Error("MAIN_VITE_SERVER_URL is not set — check .env");
-  registerAuth({ serverUrl: authServerUrl }, () => mainWindow);
+  // Held so a later task can wire it into registerLibraryVaultHandlers() (Task 10) — not
+  // consumed yet, the call below is unchanged until then.
+  const auth = registerAuth({ serverUrl: authServerUrl }, () => mainWindow);
+  void auth;
   initMainAnalytics(getDeviceId());
   registerAnalyticsIpc();
 

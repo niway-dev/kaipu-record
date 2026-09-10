@@ -50,6 +50,7 @@ describe("AccountPanel", () => {
   it("shows the email and a sign-out button when signed in", async () => {
     vi.spyOn(window.electronAPI, "getAuthStatus").mockResolvedValue({
       kind: "signed-in",
+      userId: "user-1",
       email: "a@b.com",
       name: "A",
       entitlements: FREE_ENTITLEMENTS,
@@ -75,6 +76,7 @@ describe("AccountPanel", () => {
       .mockResolvedValueOnce({ kind: "unknown", lastKnownEmail: "a@b.com" })
       .mockResolvedValueOnce({
         kind: "signed-in",
+        userId: "user-1",
         email: "a@b.com",
         name: "A",
         entitlements: FREE_ENTITLEMENTS,
@@ -87,6 +89,7 @@ describe("AccountPanel", () => {
   it("signs out and returns to the signed-out row", async () => {
     vi.spyOn(window.electronAPI, "getAuthStatus").mockResolvedValue({
       kind: "signed-in",
+      userId: "user-1",
       email: "a@b.com",
       name: "A",
       entitlements: FREE_ENTITLEMENTS,
