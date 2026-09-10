@@ -139,7 +139,7 @@ export function LibraryPage(): React.JSX.Element {
       </div>
 
       {canShowVaultBanner && (
-        <div className={styles.vaultBanner}>
+        <div className={styles.vaultBanner} role="status" aria-live="polite">
           <AlertTriangle size={14} strokeWidth={2} />
           {t("vaultUnreadableBanner")}
         </div>

@@ -19,7 +19,7 @@ export interface StartExportArgs {
   scene: VideoScene;
   sourceId: string;
   title: string;
-  /** the source asset's identity; persisted on the exported file */
+  /** The source asset's identity; persisted on the exported file. */
   derivedFromAssetId: string | null;
   /** From the preview `<video>` element's videoWidth/videoHeight (native pixels). */
   videoWidth: number;
