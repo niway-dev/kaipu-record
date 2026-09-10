@@ -85,6 +85,9 @@ window.electronAPI = {
   chooseVaultDirectory: async () => null,
   resetVaultDirectory: async () => ({ path: "/tmp/vault", isCustom: false }),
   onLibraryChanged: () => () => {},
+  listLibraryItems: async () => ({ items: [], vaultError: null, catalogVerifiedAt: null }),
+  refreshCloudCatalog: async () => ({ ok: false, reason: "signed-out" }),
+  removeLocalCopy: async () => ({ ok: false, reason: "not-found" }),
   recordingCreate: async () => ({ tempPath: "/tmp/session" }),
   recordingWrite: () => {},
   recordingFinalize: async () => {

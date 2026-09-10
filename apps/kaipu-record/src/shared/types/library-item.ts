@@ -97,3 +97,22 @@ export function hasCloudCopy(item: Pick<LibraryItem, "availability">): boolean {
     item.availability === "local-unavailable"
   );
 }
+
+export interface LibraryListResult {
+  items: LibraryItem[];
+  /** The vault folder could not be read; `items` still carries cached cloud entries. */
+  vaultError: string | null;
+  /** null = signed out; otherwise when the cloud catalog was last confirmed (epoch ms) or 0 if never. */
+  catalogVerifiedAt: number | null;
+}
+
+export type CatalogRefreshResult =
+  | { ok: true; verifiedAt: number }
+  | { ok: false; reason: "signed-out" | "unauthorized" | "network" };
+
+export type RemoveLocalCopyResult =
+  | { ok: true }
+  | {
+      ok: false;
+      reason: "no-cloud-copy" | "different-bytes" | "hash-unknown" | "edit-project" | "not-found";
+    };

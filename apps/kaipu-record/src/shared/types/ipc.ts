@@ -170,6 +170,11 @@ export const IPC_CHANNELS = {
   resetVaultDirectory: "library:reset-vault-dir",
   // Main → every window: the vault folder changed, so open pages should re-list.
   libraryChanged: "library:changed",
+  // Combined library: local vault + the signed-in account's cloud catalog cache.
+  listLibraryItems: "library:list-items",
+  refreshCloudCatalog: "library:refresh-cloud-catalog",
+  // Frees disk space for an item whose identical bytes are in cloud; never the generic delete.
+  removeLocalCopy: "library:remove-local-copy",
   // Screenshots (renderer ↔ main)
   screenshotCapture: "screenshot:capture",
   screenshotCopy: "screenshot:copy",
