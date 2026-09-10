@@ -178,6 +178,8 @@ export class LibraryVault {
   /**
    * The file's sha256, from the sidecar cache when it still matches the file's
    * size + mtime, otherwise recomputed and cached. Never called by `list()`.
+   * Retries up to 3 times if the file changes during hashing; throws if it
+   * keeps changing after the third attempt.
    */
   async ensureContentHash(
     id: string,
@@ -197,17 +199,25 @@ export class LibraryVault {
     ) {
       return { contentSha256: meta.contentSha256, sizeBytes: info.size };
     }
-    const contentSha256 = await sha256FileBase64(filePath);
-    // Re-stat after hashing: if the file changed underneath, don't cache a lie.
-    const after = await stat(filePath);
-    if (after.size !== info.size || after.mtimeMs !== info.mtimeMs)
-      return this.ensureContentHash(id);
-    await this.writeMeta(id, {
-      contentSha256,
-      hashedSizeBytes: info.size,
-      hashedMtimeMs: info.mtimeMs,
-    });
-    return { contentSha256, sizeBytes: info.size };
+
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const contentSha256 = await sha256FileBase64(filePath);
+      // Re-stat after hashing: if the file changed underneath, don't cache a lie.
+      const after = await stat(filePath);
+      if (after.size === info.size && after.mtimeMs === info.mtimeMs) {
+        await this.writeMeta(id, {
+          contentSha256,
+          hashedSizeBytes: info.size,
+          hashedMtimeMs: info.mtimeMs,
+        });
+        return { contentSha256, sizeBytes: info.size };
+      }
+      if (attempt < 3) {
+        info = after;
+      }
+    }
+
+    throw new Error(`File "${id}" changed while hashing`);
   }
 
   async writeThumbnail(id: string, jpg: Buffer): Promise<void> {
