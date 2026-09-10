@@ -12,8 +12,13 @@ function makeVideo(overrides: Partial<LibraryVideo> = {}): LibraryVideo {
     createdAt: 1_700_000_000_000,
     durationSeconds: 65,
     fileSizeBytes: 12_000_000,
+    cloudSizeBytes: null,
     thumbnailUrl: null,
-    storage: "local",
+    availability: "local",
+    comparison: "same",
+    editing: "project-available",
+    transfer: { state: "idle" },
+    derivedFromAssetId: null,
     ...overrides,
   };
 }
@@ -21,17 +26,10 @@ function makeVideo(overrides: Partial<LibraryVideo> = {}): LibraryVideo {
 function renderRow(overrides: Partial<React.ComponentProps<typeof VideoRow>> = {}) {
   const onNavigate = vi.fn();
   const onDelete = vi.fn();
-  const onUpload = vi.fn();
   const result = render(
-    <VideoRow
-      video={makeVideo()}
-      onNavigate={onNavigate}
-      onDelete={onDelete}
-      onUpload={onUpload}
-      {...overrides}
-    />,
+    <VideoRow video={makeVideo()} onNavigate={onNavigate} onDelete={onDelete} {...overrides} />,
   );
-  return { ...result, onNavigate, onDelete, onUpload };
+  return { ...result, onNavigate, onDelete };
 }
 
 describe("VideoRow", () => {
@@ -56,21 +54,29 @@ describe("VideoRow", () => {
     expect(onNavigate).not.toHaveBeenCalled();
   });
 
-  it("uploads local recordings without navigating", () => {
-    const { onUpload, onNavigate } = renderRow();
-    fireEvent.click(screen.getByTitle("Upload to cloud"));
-    expect(onUpload).toHaveBeenCalledTimes(1);
-    expect(onNavigate).not.toHaveBeenCalled();
+  it("hides the delete action for a cloud-only item (nothing local to delete)", () => {
+    renderRow({ video: makeVideo({ id: null, availability: "cloud" }) });
+    expect(screen.queryByTitle("Delete")).toBeNull();
   });
 
-  it("hides the upload action for non-local storage", () => {
-    renderRow({ video: makeVideo({ storage: "cloud" }) });
-    expect(screen.queryByTitle("Upload to cloud")).toBeNull();
+  it("shows the location label per availability", () => {
+    renderRow({ video: makeVideo({ availability: "local" }) });
+    expect(screen.getByText("Local")).toBeInTheDocument();
   });
 
-  it("hides the upload action when no onUpload handler is given", () => {
-    render(<VideoRow video={makeVideo()} onNavigate={vi.fn()} onDelete={vi.fn()} />);
-    expect(screen.queryByTitle("Upload to cloud")).toBeNull();
+  it("shows the cloud label for a cloud-only item", () => {
+    renderRow({ video: makeVideo({ id: null, availability: "cloud" }) });
+    expect(screen.getByText("Cloud")).toBeInTheDocument();
+  });
+
+  it("shows the combined label for an item that is both local and cloud", () => {
+    renderRow({ video: makeVideo({ availability: "local-and-cloud" }) });
+    expect(screen.getByText("Local and cloud")).toBeInTheDocument();
+  });
+
+  it("shows the unavailable label when the local file can't be reached", () => {
+    renderRow({ video: makeVideo({ availability: "local-unavailable" }) });
+    expect(screen.getByText("Local location unavailable")).toBeInTheDocument();
   });
 
   it("falls back to 'Untitled recording' for an empty title", () => {

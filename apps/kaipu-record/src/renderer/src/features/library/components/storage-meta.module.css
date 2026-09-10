@@ -1,15 +1,16 @@
-.stored,
-.uploading,
-.failed {
+.stored {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.line {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: var(--font-size-sm);
   white-space: nowrap;
-}
-
-.stored {
-  color: var(--text-secondary);
 }
 
 .dot {
@@ -20,37 +21,17 @@
   background: var(--text-muted);
 }
 
-/* Cloud-backed recordings get the "synced" green; local stays muted. */
-.dot[data-state="cloud"] {
+/* Cloud-backed availability gets the "synced" green; local-only stays muted. */
+.dot[data-availability="cloud"],
+.dot[data-availability="local-and-cloud"] {
   background: var(--accent-green);
 }
 
-.uploading {
-  color: var(--accent-primary);
+.dot[data-availability="local-unavailable"] {
+  background: var(--accent-yellow);
 }
 
-.pulse {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: var(--accent-primary);
-  animation: pulse 1s ease-in-out infinite;
-}
-
-.failed {
+.comparisonLine {
+  font-size: var(--font-size-xs);
   color: var(--accent-yellow);
-  font-weight: var(--font-weight-medium);
-}
-
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.4;
-    transform: scale(0.8);
-  }
 }

@@ -12,17 +12,27 @@ const videos: LibraryVideo[] = [
     createdAt: 200,
     durationSeconds: 5,
     fileSizeBytes: 100,
-    storage: "local",
+    cloudSizeBytes: null,
+    availability: "local",
+    comparison: "same",
+    editing: "project-available",
+    transfer: { state: "idle" },
+    derivedFromAssetId: null,
   },
   {
-    id: "b",
+    id: null,
     assetId: "asset-b",
     kind: "screenshot",
     title: "Bravo",
     createdAt: 100,
     durationSeconds: 5,
     fileSizeBytes: 900,
-    storage: "cloud",
+    cloudSizeBytes: 900,
+    availability: "cloud",
+    comparison: "same",
+    editing: "project-available",
+    transfer: { state: "idle" },
+    derivedFromAssetId: null,
   },
 ];
 
@@ -30,8 +40,8 @@ describe("useLibraryFilters", () => {
   it("starts unfiltered with newest-first ordering and storage + kind counts", () => {
     const { result } = renderHook(() => useLibraryFilters(videos));
     expect(result.current.hasActiveFilters).toBe(false);
-    expect(result.current.visibleItems.map((v) => v.id)).toEqual(["a", "b"]);
-    expect(result.current.counts).toEqual({ local: 1, cloud: 1, failed: 0 });
+    expect(result.current.visibleItems.map((v) => v.id)).toEqual(["a", null]);
+    expect(result.current.counts).toEqual({ local: 1, cloud: 1 });
     expect(result.current.kindCounts).toEqual({ all: 2, recording: 1, screenshot: 1 });
   });
 
@@ -39,14 +49,14 @@ describe("useLibraryFilters", () => {
     const { result } = renderHook(() => useLibraryFilters(videos));
     act(() => result.current.setKindFilter("screenshot"));
     expect(result.current.hasActiveFilters).toBe(true);
-    expect(result.current.visibleItems.map((v) => v.id)).toEqual(["b"]);
+    expect(result.current.visibleItems.map((v) => v.id)).toEqual([null]);
   });
 
   it("flags active filters and reflects them in the visible items", () => {
     const { result } = renderHook(() => useLibraryFilters(videos));
     act(() => result.current.setStorageFilter("cloud"));
     expect(result.current.hasActiveFilters).toBe(true);
-    expect(result.current.visibleItems.map((v) => v.id)).toEqual(["b"]);
+    expect(result.current.visibleItems.map((v) => v.id)).toEqual([null]);
   });
 
   it("clears the storage filter and search but keeps the sort order", () => {
@@ -59,6 +69,6 @@ describe("useLibraryFilters", () => {
     act(() => result.current.clearFilters());
     expect(result.current.hasActiveFilters).toBe(false);
     expect(result.current.sortKey).toBe("largest");
-    expect(result.current.visibleItems.map((v) => v.id)).toEqual(["b", "a"]);
+    expect(result.current.visibleItems.map((v) => v.id)).toEqual([null, "a"]);
   });
 });

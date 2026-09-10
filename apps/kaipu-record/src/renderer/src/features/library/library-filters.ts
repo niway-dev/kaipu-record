@@ -1,7 +1,9 @@
-import type { LibraryKind, LibraryVideo, StorageState } from "./types";
+import { hasCloudCopy, hasLocalCopy } from "@shared/types/library-item";
+import type { LibraryKind, LibraryVideo } from "./types";
 
-/** The storage chip selection — every storage state, plus the "all" pass-through. */
-export type StorageFilter = "all" | StorageState;
+/** The storage chip selection. "local" and "cloud" overlap: an item that is
+ *  both matches both chips (see `hasLocalCopy` / `hasCloudCopy`). */
+export type StorageFilter = "all" | "local" | "cloud";
 
 /** The kind chip selection — recording / screenshot, plus the "all" pass-through. */
 export type KindFilter = "all" | LibraryKind;
@@ -18,7 +20,6 @@ export interface FilterCriteria {
 export interface StorageCounts {
   local: number;
   cloud: number;
-  failed: number;
 }
 
 export interface KindCounts {
@@ -40,7 +41,8 @@ export function selectVisibleVideos(
   const term = criteria.searchTerm.trim().toLowerCase();
   const filtered = videos.filter((video) => {
     if (criteria.kindFilter !== "all" && video.kind !== criteria.kindFilter) return false;
-    if (criteria.storageFilter !== "all" && video.storage !== criteria.storageFilter) return false;
+    if (criteria.storageFilter === "local" && !hasLocalCopy(video)) return false;
+    if (criteria.storageFilter === "cloud" && !hasCloudCopy(video)) return false;
     if (term && !video.title.toLowerCase().includes(term)) return false;
     return true;
   });
@@ -51,12 +53,12 @@ export function selectVisibleVideos(
   });
 }
 
-/** Tally items by storage state for the filter chips. */
+/** Tally items by location for the filter chips. Overlapping: an item with
+ *  both a local and a cloud copy counts toward both totals. */
 export function countByStorage(videos: LibraryVideo[]): StorageCounts {
   return {
-    local: videos.filter((v) => v.storage === "local").length,
-    cloud: videos.filter((v) => v.storage === "cloud").length,
-    failed: videos.filter((v) => v.storage === "failed").length,
+    local: videos.filter(hasLocalCopy).length,
+    cloud: videos.filter(hasCloudCopy).length,
   };
 }
 

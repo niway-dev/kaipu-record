@@ -44,7 +44,7 @@ const router = createHashRouter([
         children: [
           { index: true, element: <RecordPage /> },
           { path: "/library", element: <LibraryPage /> },
-          { path: "/library/:id", element: <LibraryDetailPage /> },
+          { path: "/library/:assetId", element: <LibraryDetailPage /> },
           { path: "/screenshots", element: <ScreenshotsPage /> },
           { path: "/screenshot-editor", element: <ScreenshotEditorPage /> },
           { path: "/video-editor", element: <VideoEditorPage /> },

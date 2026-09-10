@@ -10,7 +10,9 @@ vi.mock("@renderer/features/library/media/heal-orphan-metadata", () => ({
 }));
 const healMock = vi.mocked(healOrphanMetadata);
 
-function video(over: Partial<LibraryVideo> & Pick<LibraryVideo, "id">): LibraryVideo {
+function video(
+  over: Partial<Omit<LibraryVideo, "id">> & { id: string },
+): LibraryVideo & { id: string } {
   return {
     assetId: `asset-${over.id}`,
     kind: "recording",
@@ -18,8 +20,13 @@ function video(over: Partial<LibraryVideo> & Pick<LibraryVideo, "id">): LibraryV
     createdAt: 0,
     durationSeconds: 0,
     fileSizeBytes: 100,
+    cloudSizeBytes: null,
     thumbnailUrl: null,
-    storage: "local",
+    availability: "local",
+    comparison: "same",
+    editing: "project-available",
+    transfer: { state: "idle" },
+    derivedFromAssetId: null,
     ...over,
   };
 }
@@ -66,7 +73,7 @@ describe("useOrphanHeal", () => {
         id: "o1",
         durationSeconds: 54,
         thumbnailUrl: "kaipu-media://thumb/o1",
-        storage: "local",
+        availability: "local",
       }),
     );
   });

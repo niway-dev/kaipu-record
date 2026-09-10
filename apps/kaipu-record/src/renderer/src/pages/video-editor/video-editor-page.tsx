@@ -407,7 +407,7 @@ function VideoEditor({
         // guarantees the predicate observes the bypass regardless of how
         // markClean()'s state updates get batched.
         bypassBlockerRef.current = true;
-        navigate(`/library/${recording.id}`);
+        navigate(`/library/${recording.assetId}`);
       },
     });
   }, [playback, videoExport, scene, source, controller, navigate, assetStoreRef]);

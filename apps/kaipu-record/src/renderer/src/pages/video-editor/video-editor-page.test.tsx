@@ -91,7 +91,7 @@ function renderEditor() {
   const router = createMemoryRouter(
     [
       { path: "/", element: <VideoEditorPage /> },
-      { path: "/library/:id", element: <div>library-detail</div> },
+      { path: "/library/:assetId", element: <div>library-detail</div> },
     ],
     { initialEntries: [{ pathname: "/", state: SOURCE }] },
   );

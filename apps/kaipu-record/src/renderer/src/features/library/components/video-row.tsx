@@ -1,4 +1,4 @@
-import { Film, Upload, Trash2 } from "lucide-react";
+import { Film, Trash2 } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { formatDuration, formatSize } from "@renderer/features/library/format";
 import type { LibraryVideo } from "@renderer/features/library/types";
@@ -12,7 +12,6 @@ interface VideoRowProps {
   isLast?: boolean;
   onNavigate(): void;
   onDelete(): void;
-  onUpload?(): void;
 }
 
 export function VideoRow({
@@ -20,10 +19,8 @@ export function VideoRow({
   isLast,
   onNavigate,
   onDelete,
-  onUpload,
 }: VideoRowProps): React.JSX.Element {
   const t = useTranslations("library");
-  const canUpload = video.storage === "local" && Boolean(onUpload);
 
   return (
     <div
@@ -64,14 +61,15 @@ export function VideoRow({
       </div>
 
       <div className={styles.actions} onClick={(e) => e.stopPropagation()}>
-        {canUpload && (
-          <button className={styles.action} onClick={onUpload} title={t("uploadCloud")}>
-            <Upload size={15} strokeWidth={1.8} />
+        {video.id !== null && (
+          <button
+            className={cx(styles.action, styles.delete)}
+            onClick={onDelete}
+            title={t("delete")}
+          >
+            <Trash2 size={15} strokeWidth={1.8} />
           </button>
         )}
-        <button className={cx(styles.action, styles.delete)} onClick={onDelete} title={t("delete")}>
-          <Trash2 size={15} strokeWidth={1.8} />
-        </button>
       </div>
     </div>
   );

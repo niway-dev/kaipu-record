@@ -1,22 +1,31 @@
 /** Presentational types for the library UI. */
 
-export type StorageState = "local" | "cloud" | "uploading" | "failed";
+import type {
+  Availability,
+  Comparison,
+  EditingState,
+  TransferState,
+} from "@shared/types/library-item";
 
-/** What kind of asset a library item is — a screen recording or a screenshot. */
 export type LibraryKind = "recording" | "screenshot";
 
 export interface LibraryVideo {
-  id: string;
+  /** Local filename id; null for a cloud-only item (nothing to reveal, play or edit locally). */
+  id: string | null;
   assetId: string;
   kind: LibraryKind;
   title: string;
   /** Epoch milliseconds. */
   createdAt: number;
   durationSeconds: number;
+  /** Local size when present, otherwise the cloud size. */
   fileSizeBytes: number;
+  cloudSizeBytes: number | null;
   thumbnailUrl?: string | null;
-  storage: StorageState;
-  /** 0–100, only meaningful while `storage === "uploading"`. */
-  processingProgress?: number;
+  availability: Availability;
+  comparison: Comparison;
+  editing: EditingState;
+  transfer: { state: TransferState; progress?: { sentBytes: number; totalBytes: number } };
+  derivedFromAssetId: string | null;
   tags?: string[];
 }

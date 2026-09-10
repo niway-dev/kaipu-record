@@ -7,7 +7,7 @@ import { captureEvent } from "@renderer/features/analytics";
 const RETRY_DELAY_MS = 500;
 
 export interface MissingRecoveryParams {
-  /** Recording id from the URL (`/library/:id`). */
+  /** Asset id from the URL (`/library/:assetId`). */
   id: string | undefined;
   /** Whether that id is present in the currently-listed vault. */
   found: boolean;
@@ -24,7 +24,7 @@ export interface MissingRecoveryParams {
 /**
  * Recovers a detail page whose recording id isn't in the vault list. The one case
  * we've observed (rarely, never reproduced locally) is a transient race right
- * after a recording finalizes: the navigation to `/library/:id` beats the item
+ * after a recording finalizes: the navigation to `/library/:assetId` beats the item
  * into the freshly-listed vault, so `videos.find` misses and the page would show
  * "File not found" for a recording that is, in fact, on disk.
  *

@@ -1,17 +1,20 @@
 import { useEffect, useRef } from "react";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import { healOrphanMetadata } from "@renderer/features/library/media/heal-orphan-metadata";
-import { toLibraryVideo } from "@renderer/features/library/map-recording";
 
 /** Decode a couple of files at a time — a lost `.kaipu/` can orphan a whole vault. */
 const MAX_CONCURRENT_HEALS = 3;
+
+/** A library video that is known to have a local copy — the only kind this hook
+ *  can heal (there is no file to decode for a cloud-only item). */
+type LocalLibraryVideo = LibraryVideo & { id: string };
 
 /**
  * A recording whose metadata was never derived from the file: no duration (shows
  * `0:00`, editor disabled) or no poster (generic icon). Screenshots also carry a
  * zero duration, so they are explicitly excluded.
  */
-function isOrphan(video: LibraryVideo): boolean {
+function isOrphan(video: LocalLibraryVideo): boolean {
   return video.kind === "recording" && (video.durationSeconds === 0 || !video.thumbnailUrl);
 }
 
@@ -43,7 +46,7 @@ async function runPool<T>(
  * later scan retries. Only `onHealed` (a state update) is gated, on unmount.
  */
 export function useOrphanHeal(
-  videos: LibraryVideo[],
+  videos: LocalLibraryVideo[],
   onHealed: (video: LibraryVideo) => void,
 ): void {
   const attempted = useRef<Set<string>>(new Set());
@@ -71,7 +74,18 @@ export function useOrphanHeal(
           return;
         }
         const updated = await window.electronAPI.backfillLocalRecordingMeta(v.id, meta);
-        if (updated && mounted.current) onHealedRef.current(toLibraryVideo(updated));
+        if (updated && mounted.current) {
+          // Merge the freshly-decoded file fields onto the existing video rather
+          // than re-mapping from a LibraryItem — a backfill only ever touches the
+          // local file's own metadata, never the cloud/availability axes.
+          onHealedRef.current({
+            ...v,
+            title: updated.title,
+            durationSeconds: updated.durationSeconds,
+            thumbnailUrl: updated.thumbnailUrl ?? null,
+            fileSizeBytes: updated.sizeBytes,
+          });
+        }
       } catch {
         attempted.current.delete(v.id); // transient failure — allow a retry
       }

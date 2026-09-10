@@ -39,7 +39,7 @@ export function RecentScreenshots(): React.JSX.Element | null {
             type="button"
             className={styles.card}
             title={shot.title}
-            onClick={() => navigate(`/library/${shot.id}`)}
+            onClick={() => navigate(`/library/${shot.assetId}`)}
           >
             <div className={styles.poster}>
               {shot.thumbnailUrl && <img src={shot.thumbnailUrl} alt={shot.title} />}
