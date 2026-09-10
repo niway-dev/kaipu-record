@@ -154,6 +154,35 @@ describe("LibraryVault", () => {
     expect(second?.contentSha256).not.toBe(first?.contentSha256);
     expect(await vault.ensureContentHash("missing")).toBeNull();
   });
+
+  it("removeLocalCopy deletes only the media file and keeps identity, thumbnail, session and assets", async () => {
+    await writeRecording("keep");
+    await vault.writeMeta("keep", {
+      title: "Keep",
+      assetId: "33333333-3333-4333-8333-333333333333",
+    });
+    await vault.writeThumbnail("keep", Buffer.from([1]));
+    await mkdir(join(directory, ".kaipu", "keep.assets"), { recursive: true });
+    await writeFile(join(directory, ".kaipu", "keep.edit.json"), "{}");
+    await writeFile(join(directory, ".kaipu", "keep.assets", "a.png"), "png");
+
+    await vault.removeLocalCopy("keep");
+
+    expect(await readdir(directory)).not.toContain("keep.webm");
+    const files = await readdir(join(directory, ".kaipu"));
+    expect(files).toEqual(
+      expect.arrayContaining(["keep.json", "keep.jpg", "keep.edit.json", "keep.assets"]),
+    );
+    const sidecar = JSON.parse(await readFile(join(directory, ".kaipu", "keep.json"), "utf-8"));
+    expect(sidecar.assetId).toBe("33333333-3333-4333-8333-333333333333");
+    expect(typeof sidecar.localRemovedAt).toBe("number");
+    expect(await vault.describe("keep")).toBeNull();
+    expect(await vault.list()).toHaveLength(0);
+  });
+
+  it("removeLocalCopy propagates a failure to delete the media file", async () => {
+    await expect(vault.removeLocalCopy("nope")).rejects.toThrow();
+  });
 });
 
 describe("LibraryVault — screenshots", () => {

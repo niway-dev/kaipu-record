@@ -268,6 +268,19 @@ export class LibraryVault {
     ]);
     await rm(await this.filePath(id), { force: true });
   }
+
+  /**
+   * Free disk space while keeping the item: deletes ONLY the media file. The
+   * sidecar (identity, provenance, hash), thumbnail, edit session and assets stay,
+   * so the item survives as a cloud-only entry and can be downloaded back under
+   * the same assetId. Not `remove()`: that one is the destructive delete.
+   */
+  async removeLocalCopy(id: string): Promise<void> {
+    const target = await this.filePath(id);
+    if (!(await exists(target))) throw new Error(`No local media file for "${id}"`);
+    await rm(target);
+    await this.writeMeta(id, { localRemovedAt: Date.now() });
+  }
 }
 
 function humanizeId(id: string): string {
