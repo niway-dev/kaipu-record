@@ -98,15 +98,18 @@ export function LibraryDetailPage(): React.JSX.Element {
     ? videos.find((v) => v.assetId === video.derivedFromAssetId)?.title
     : undefined;
 
-  // `localId !== null` is implied by the spec's condition (both branches require a
-  // local copy to exist) but kept explicit here — the button's own name promises
-  // there is a local download to remove.
+  // `localId !== null` is implied by the condition below (it requires a local
+  // copy to exist) but kept explicit here — the button's own name promises
+  // there is a local download to remove. An `editing === "exported-only"` item
+  // already satisfies `editing !== "project-available"` once it also has a
+  // verified matching cloud copy, so no separate branch for it is needed — and
+  // one would wrongly show the button for a local-only export, which always
+  // fails with "no-cloud-copy".
   const canRemoveLocalCopy =
     localId !== null &&
-    ((video.availability === "local-and-cloud" &&
-      video.comparison === "same" &&
-      video.editing !== "project-available") ||
-      video.editing === "exported-only");
+    video.availability === "local-and-cloud" &&
+    video.comparison === "same" &&
+    video.editing !== "project-available";
 
   const doDelete = (): void => {
     if (!localId) return;
