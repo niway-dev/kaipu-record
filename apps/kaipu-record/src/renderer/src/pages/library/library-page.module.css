@@ -151,6 +151,24 @@
   background: var(--accent-green);
 }
 
+/* ── Vault banner ───────────────────────────── */
+
+/* Non-blocking: the vault couldn't be read, but there is still something to
+ * show (cached cloud items) — unlike the full-page error, which only appears
+ * when the list is otherwise empty. */
+.vaultBanner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: var(--space-md);
+  padding: 10px 14px;
+  background: rgba(234, 179, 8, 0.08);
+  border: 1px solid rgba(234, 179, 8, 0.24);
+  border-radius: var(--radius-md);
+  color: var(--accent-yellow);
+  font-size: var(--font-size-sm);
+}
+
 /* ── Summary bar ────────────────────────────── */
 
 .summaryBar {

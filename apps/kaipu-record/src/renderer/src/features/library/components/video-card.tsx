@@ -1,4 +1,4 @@
-import { Film, Upload, Trash2, Play } from "lucide-react";
+import { Film, Trash2, Play } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { formatDuration, formatSize } from "@renderer/features/library/format";
 import type { LibraryVideo } from "@renderer/features/library/types";
@@ -11,17 +11,10 @@ interface VideoCardProps {
   video: LibraryVideo;
   onNavigate(): void;
   onDelete(): void;
-  onUpload?(): void;
 }
 
-export function VideoCard({
-  video,
-  onNavigate,
-  onDelete,
-  onUpload,
-}: VideoCardProps): React.JSX.Element {
+export function VideoCard({ video, onNavigate, onDelete }: VideoCardProps): React.JSX.Element {
   const t = useTranslations("library");
-  const canUpload = video.storage === "local" && Boolean(onUpload);
 
   return (
     <div
@@ -55,15 +48,6 @@ export function VideoCard({
           <span className={styles.duration}>{formatDuration(video.durationSeconds)}</span>
         )}
 
-        {video.storage === "uploading" && (
-          <div className={styles.progressTrack} aria-hidden>
-            <div
-              className={styles.progressFill}
-              style={{ width: `${Math.round(video.processingProgress ?? 0)}%` }}
-            />
-          </div>
-        )}
-
         {video.kind !== "screenshot" && (
           <div className={styles.playLayer} aria-hidden>
             <span className={styles.playButton}>
@@ -84,18 +68,15 @@ export function VideoCard({
         </span>
 
         <div className={styles.actions} onClick={(e) => e.stopPropagation()}>
-          {canUpload && (
-            <button className={styles.action} onClick={onUpload} title={t("uploadCloud")}>
-              <Upload size={14} strokeWidth={1.8} />
+          {video.id !== null && (
+            <button
+              className={cx(styles.action, styles.delete)}
+              onClick={onDelete}
+              title={t("delete")}
+            >
+              <Trash2 size={14} strokeWidth={1.8} />
             </button>
           )}
-          <button
-            className={cx(styles.action, styles.delete)}
-            onClick={onDelete}
-            title={t("delete")}
-          >
-            <Trash2 size={14} strokeWidth={1.8} />
-          </button>
         </div>
       </div>
     </div>

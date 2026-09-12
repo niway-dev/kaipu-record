@@ -30,6 +30,7 @@ const startExport = vi.fn(
   async (args: { onSaved: (recording: LocalRecording) => void | Promise<void> }) => {
     await args.onSaved({
       id: "new-rec",
+      assetId: "00000000-0000-0000-0000-000000000001",
       kind: "recording",
       title: "My recording (editado)",
       filePath: "/vault/new-rec.mp4",
@@ -37,6 +38,8 @@ const startExport = vi.fn(
       sizeBytes: 100,
       durationSeconds: 10,
       thumbnailUrl: null,
+      derivedFromAssetId: null,
+      contentSha256: null,
     });
   },
 );
@@ -77,13 +80,18 @@ class FakeImage {
   }
 }
 
-const SOURCE: VideoEditorSource = { id: "rec-1", title: "My recording", durationSeconds: 30 };
+const SOURCE: VideoEditorSource = {
+  id: "rec-1",
+  assetId: "asset-1",
+  title: "My recording",
+  durationSeconds: 30,
+};
 
 function renderEditor() {
   const router = createMemoryRouter(
     [
       { path: "/", element: <VideoEditorPage /> },
-      { path: "/library/:id", element: <div>library-detail</div> },
+      { path: "/library/:assetId", element: <div>library-detail</div> },
     ],
     { initialEntries: [{ pathname: "/", state: SOURCE }] },
   );
@@ -114,6 +122,21 @@ async function makeDirty(footer: HTMLElement): Promise<void> {
     expect(footer.querySelectorAll("button")).toHaveLength(2);
   });
 }
+
+describe("VideoEditorPage — invalid source guard", () => {
+  it("redirects to /library when the nav state has no positive duration", () => {
+    const router = createMemoryRouter(
+      [
+        { path: "/", element: <VideoEditorPage /> },
+        { path: "/library", element: <div>library</div> },
+      ],
+      { initialEntries: [{ pathname: "/", state: { ...SOURCE, durationSeconds: 0 } }] },
+    );
+    render(<RouterProvider router={router} />);
+
+    expect(screen.getByText("library")).not.toBeNull();
+  });
+});
 
 describe("VideoEditorPage — transport bar", () => {
   it("renders the play/pause button with aria-label Play by default", async () => {

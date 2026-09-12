@@ -119,6 +119,7 @@ export class RecordingWriter {
       title: meta.title,
       durationSeconds: meta.durationSeconds,
       createdAt: this.now(),
+      derivedFromAssetId: meta.derivedFromAssetId ?? null,
     });
     if (meta.thumbnail) await vault.writeThumbnail(id, Buffer.from(meta.thumbnail));
 

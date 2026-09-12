@@ -291,7 +291,7 @@ app.whenReady().then(() => {
   // error the user cannot act on. Fail loudly at startup, naming the variable.
   const authServerUrl = import.meta.env.MAIN_VITE_SERVER_URL;
   if (!authServerUrl) throw new Error("MAIN_VITE_SERVER_URL is not set — check .env");
-  registerAuth({ serverUrl: authServerUrl }, () => mainWindow);
+  const auth = registerAuth({ serverUrl: authServerUrl }, () => mainWindow);
   initMainAnalytics(getDeviceId());
   registerAnalyticsIpc();
 
@@ -364,8 +364,8 @@ app.whenReady().then(() => {
   // Rebuild the native tray menu when the language changes.
   onSettingsChanged((settings) => rebuildTrayMenu(settings.locale));
 
-  // Library: local recordings vault.
-  registerLibraryVaultHandlers();
+  // Library: local recordings vault + cloud catalog.
+  registerLibraryVaultHandlers({ auth, serverUrl: authServerUrl });
 
   // Screenshots: capture/copy/save IPC handlers.
   registerScreenshotHandlers(captureWindowHooks);

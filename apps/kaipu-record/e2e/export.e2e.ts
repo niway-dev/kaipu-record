@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import path from "node:path";
 import { readFile } from "node:fs/promises";
-import { launchApp, openEditor, RECORDING_DURATION } from "./helpers/launch";
+import { launchApp, localIdForAssetId, openEditor, RECORDING_DURATION } from "./helpers/launch";
 import { ffprobeAvailable, probeMedia } from "./helpers/ffprobe";
 
 test("export produces a valid MP4 with in-sync video and audio", async () => {
@@ -38,8 +38,11 @@ test("export produces a valid MP4 with in-sync video and audio", async () => {
     await expect
       .poll(() => page.evaluate(() => location.hash), { timeout: 90_000 })
       .toMatch(/^#\/library\/.+/);
-    const newId = (await page.evaluate(() => location.hash)).replace("#/library/", "");
-    expect(newId).not.toBe("");
+    const newAssetId = (await page.evaluate(() => location.hash)).replace("#/library/", "");
+    expect(newAssetId).not.toBe("");
+    // The route carries the asset id; the vault names its files after the local id, so resolve
+    // one to the other before asserting on disk.
+    const newId = await localIdForAssetId(vaultDir, newAssetId);
 
     // Regression guard (PR-A): the edited recording must get a poster thumbnail.
     // The previous <video>-seek capture always resolved null — no `.kaipu/<id>.jpg`

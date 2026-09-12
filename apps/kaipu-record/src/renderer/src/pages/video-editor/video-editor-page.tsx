@@ -61,6 +61,8 @@ import styles from "./video-editor-page.module.css";
 
 export interface VideoEditorSource {
   id: string;
+  /** The source recording's stable identity — recorded on the export as provenance. */
+  assetId: string;
   title: string;
   durationSeconds: number;
 }
@@ -70,6 +72,7 @@ function isVideoEditorSource(value: unknown): value is VideoEditorSource {
   const v = value as Record<string, unknown>;
   return (
     typeof v.id === "string" &&
+    typeof v.assetId === "string" &&
     typeof v.title === "string" &&
     typeof v.durationSeconds === "number" &&
     v.durationSeconds > 0
@@ -379,6 +382,7 @@ function VideoEditor({
       scene,
       sourceId: source.id,
       title: source.title,
+      derivedFromAssetId: source.assetId,
       videoWidth: video.videoWidth,
       videoHeight: video.videoHeight,
       previewWidth: video.clientWidth,
@@ -403,7 +407,7 @@ function VideoEditor({
         // guarantees the predicate observes the bypass regardless of how
         // markClean()'s state updates get batched.
         bypassBlockerRef.current = true;
-        navigate(`/library/${recording.id}`);
+        navigate(`/library/${recording.assetId}`);
       },
     });
   }, [playback, videoExport, scene, source, controller, navigate, assetStoreRef]);

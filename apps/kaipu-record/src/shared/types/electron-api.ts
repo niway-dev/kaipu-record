@@ -7,6 +7,11 @@ import type { SerializedError } from "../analytics";
 import type { AppSettings, ShortcutAction, UpdateStatus } from "./ipc";
 import type { LocalRecording, VaultDirectory } from "./library-storage";
 import type {
+  CatalogRefreshResult,
+  LibraryListResult,
+  RemoveLocalCopyResult,
+} from "./library-item";
+import type {
   ControlCommand,
   RecordingActivity,
   RecordingBackfillMeta,
@@ -119,6 +124,12 @@ export interface KaipuElectronAPI {
   resetVaultDirectory(): Promise<VaultDirectory>;
   /** Subscribe to vault-folder changes (so open library pages re-list). Returns an unsubscribe fn. */
   onLibraryChanged(callback: () => void): () => void;
+  /** One entry per logical item (local, cloud, or both) plus vault/catalog status. */
+  listLibraryItems(): Promise<LibraryListResult>;
+  /** Re-fetch the cloud catalog for the signed-in account; resolves with why it could not. */
+  refreshCloudCatalog(): Promise<CatalogRefreshResult>;
+  /** Remove the local media file of an item that has an identical cloud copy. */
+  removeLocalCopy(id: string): Promise<RemoveLocalCopyResult>;
 
   // ── Recording engine (used by the main/recorder window) ───────────────
   /** Open a disk-writer session; returns the temp path. */

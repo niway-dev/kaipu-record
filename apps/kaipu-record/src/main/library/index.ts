@@ -1,10 +1,14 @@
 import { join } from "node:path";
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import { BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { IPC_CHANNELS } from "@shared/types";
 import type { RecordingBackfillMeta, VaultDirectory } from "@shared/types";
 import { createMainTranslator } from "@kaipu/i18n/main";
+import type { AuthHandle } from "../infrastructure/auth-store";
 import { getAppSettings } from "../infrastructure/settings-store";
+import { CatalogCache } from "../cloud/catalog-cache";
+import { fetchCloudCatalog } from "../cloud/catalog-client";
+import { LibraryService } from "./library-service";
 import { LibraryVault } from "./library-vault";
 import { resetVaultDirectory, setVaultDirectory, vaultDirectory } from "./vault-location";
 import { deleteVideoEditSession, registerVideoEditSessionHandlers } from "./video-edit-session";
@@ -48,7 +52,33 @@ export function thumbnailFilePath(id: string): string {
   return join(vaultDirectory().path, ".kaipu", `${id}.jpg`);
 }
 
-export function registerLibraryVaultHandlers(): void {
+export function registerLibraryVaultHandlers(deps: { auth: AuthHandle; serverUrl: string }): void {
+  const service = new LibraryService({
+    vault: currentVault,
+    vaultDir: () => vaultDirectory().path,
+    cache: new CatalogCache(app.getPath("userData")),
+    account: deps.auth.getCurrentAccount,
+    fetchCatalog: (token) => fetchCloudCatalog({ serverUrl: deps.serverUrl }, token),
+  });
+
+  ipcMain.handle(IPC_CHANNELS.listLibraryItems, () => service.list());
+  ipcMain.handle(IPC_CHANNELS.refreshCloudCatalog, async () => {
+    const result = await service.refreshCatalog();
+    if (result.ok) broadcastLibraryChanged();
+    return result;
+  });
+  ipcMain.handle(IPC_CHANNELS.removeLocalCopy, async (_event, id: string) => {
+    const result = await service.removeLocalCopy(id);
+    if (result.ok) broadcastLibraryChanged();
+    return result;
+  });
+  // Account changes (sign-in, sign-out, switch) re-list so the previous account's cloud
+  // items disappear at once, and kick a refresh for the new one.
+  deps.auth.onAccountChanged((userId) => {
+    broadcastLibraryChanged();
+    if (userId) void service.refreshCatalog().then((r) => r.ok && broadcastLibraryChanged());
+  });
+
   ipcMain.handle(IPC_CHANNELS.listLocalRecordings, () => currentVault().list());
   ipcMain.handle(IPC_CHANNELS.renameLocalRecording, (_event, id: string, title: string) =>
     currentVault().rename(id, title),

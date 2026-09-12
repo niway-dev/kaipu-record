@@ -9,7 +9,7 @@ function pro(overrides: Partial<Entitlements> = {}): Entitlements {
     plan: "pro",
     status: "active",
     currentPeriodEnd: null,
-    features: { watermarkRemoval: true },
+    features: { watermarkRemoval: true, cloudUploads: true, cloudStorageBytes: 1_000_000_000 },
     ...overrides,
   };
 }
@@ -20,7 +20,13 @@ describe("isWatermarkRemovalGranted", () => {
   });
 
   it("follows the feature the server derived for a signed-in user", () => {
-    const status: AuthStatus = { kind: "signed-in", email: "a@b", name: "A", entitlements: pro() };
+    const status: AuthStatus = {
+      kind: "signed-in",
+      userId: "user-1",
+      email: "a@b",
+      name: "A",
+      entitlements: pro(),
+    };
     expect(isWatermarkRemovalGranted(status, NOW)).toBe(true);
     expect(isWatermarkRemovalGranted({ ...status, entitlements: FREE_ENTITLEMENTS }, NOW)).toBe(
       false,

@@ -45,6 +45,7 @@ function startArgs(
     scene: CLIP_SCENE,
     sourceId: "rec-1",
     title: "My recording",
+    derivedFromAssetId: null,
     videoWidth: 1280,
     videoHeight: 720,
     previewWidth: 640,
@@ -67,6 +68,7 @@ beforeEach(() => {
   window.electronAPI.recordingFinalize = vi.fn(
     async (): Promise<LocalRecording> => ({
       id: "new-rec",
+      assetId: "00000000-0000-0000-0000-000000000001",
       kind: "recording",
       title: "My recording (edited)",
       filePath: "/vault/new-rec.mp4",
@@ -74,6 +76,8 @@ beforeEach(() => {
       sizeBytes: 100,
       durationSeconds: 10,
       thumbnailUrl: null,
+      derivedFromAssetId: null,
+      contentSha256: null,
     }),
   );
 });
@@ -211,6 +215,7 @@ describe("useVideoExport", () => {
     await act(async () => {
       resolveFinalize({
         id: "new-rec",
+        assetId: "00000000-0000-0000-0000-000000000001",
         kind: "recording",
         title: "My recording (edited)",
         filePath: "/vault/new-rec.mp4",
@@ -218,6 +223,8 @@ describe("useVideoExport", () => {
         sizeBytes: 100,
         durationSeconds: 10,
         thumbnailUrl: null,
+        derivedFromAssetId: null,
+        contentSha256: null,
       });
     });
 
@@ -243,6 +250,7 @@ describe("useVideoExport", () => {
       title: "My recording (edited)",
       durationSeconds: 10,
       thumbnail: FAKE_THUMB,
+      derivedFromAssetId: null,
     });
     expect(onSaved).toHaveBeenCalledWith(
       expect.objectContaining({ id: "new-rec", title: "My recording (edited)" }),

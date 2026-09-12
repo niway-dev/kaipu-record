@@ -4,12 +4,17 @@ import type { Entitlements } from "../entitlements";
 
 export type AuthStatus =
   | { kind: "signed-out" }
-  | { kind: "signed-in"; email: string; name: string; entitlements: Entitlements }
+  | { kind: "signed-in"; userId: string; email: string; name: string; entitlements: Entitlements }
   /** A token is stored but its last verification attempt couldn't reach the server (offline,
    *  timeout) — distinct from `signed-out` so a network blip never silently drops the session.
    *  Carries the last entitlements the server reported, so being offline keeps the plan the
    *  user had rather than downgrading them. */
-  | { kind: "unknown"; lastKnownEmail?: string; entitlements?: Entitlements };
+  | {
+      kind: "unknown";
+      lastKnownUserId?: string;
+      lastKnownEmail?: string;
+      entitlements?: Entitlements;
+    };
 
 export interface AuthCredentials {
   email: string;

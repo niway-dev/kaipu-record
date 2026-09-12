@@ -10,15 +10,23 @@ vi.mock("@renderer/features/library/media/heal-orphan-metadata", () => ({
 }));
 const healMock = vi.mocked(healOrphanMetadata);
 
-function video(over: Partial<LibraryVideo> & Pick<LibraryVideo, "id">): LibraryVideo {
+function video(
+  over: Partial<Omit<LibraryVideo, "id">> & { id: string },
+): LibraryVideo & { id: string } {
   return {
+    assetId: `asset-${over.id}`,
     kind: "recording",
     title: over.id,
     createdAt: 0,
     durationSeconds: 0,
     fileSizeBytes: 100,
+    cloudSizeBytes: null,
     thumbnailUrl: null,
-    storage: "local",
+    availability: "local",
+    comparison: "same",
+    editing: "project-available",
+    transfer: { state: "idle" },
+    derivedFromAssetId: null,
     ...over,
   };
 }
@@ -26,6 +34,7 @@ function video(over: Partial<LibraryVideo> & Pick<LibraryVideo, "id">): LibraryV
 function healedRecording(id: string): LocalRecording {
   return {
     id,
+    assetId: "00000000-0000-0000-0000-000000000001",
     kind: "recording",
     title: id,
     filePath: `/vault/${id}.mp4`,
@@ -33,6 +42,8 @@ function healedRecording(id: string): LocalRecording {
     sizeBytes: 100,
     durationSeconds: 54,
     thumbnailUrl: `kaipu-media://thumb/${id}`,
+    derivedFromAssetId: null,
+    contentSha256: null,
   };
 }
 
@@ -62,7 +73,7 @@ describe("useOrphanHeal", () => {
         id: "o1",
         durationSeconds: 54,
         thumbnailUrl: "kaipu-media://thumb/o1",
-        storage: "local",
+        availability: "local",
       }),
     );
   });

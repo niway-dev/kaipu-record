@@ -40,10 +40,11 @@ describe("useWatermark", () => {
       plan: "pro",
       status: "active",
       currentPeriodEnd: null,
-      features: { watermarkRemoval: true },
+      features: { watermarkRemoval: true, cloudUploads: true, cloudStorageBytes: 1_000_000_000 },
     };
     vi.spyOn(window.electronAPI, "getAuthStatus").mockResolvedValue({
       kind: "signed-in",
+      userId: "user-1",
       email: "a@b.com",
       name: "A",
       entitlements: pro,
@@ -55,6 +56,7 @@ describe("useWatermark", () => {
   it("keeps the watermark for a signed-in free account", async () => {
     vi.spyOn(window.electronAPI, "getAuthStatus").mockResolvedValue({
       kind: "signed-in",
+      userId: "user-1",
       email: "a@b.com",
       name: "A",
       entitlements: FREE_ENTITLEMENTS,

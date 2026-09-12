@@ -117,4 +117,29 @@ describe("video-edit-session", () => {
     const raw = await readFile(join(vaultDir, ".kaipu", "rec-1.edit.json"), "utf-8");
     expect(JSON.parse(raw)).toEqual({ version: 1, scene: {} });
   });
+
+  it("writes edit.meta.json with the source file's size and mtime and the asset ids", async () => {
+    const { writeFile: wf, stat } = await import("node:fs/promises");
+    await wf(join(vaultDir, "rec-1.mp4"), "source-bytes");
+    const info = await stat(join(vaultDir, "rec-1.mp4"));
+    await saveSession("rec-1", {
+      sessionJson: "{}",
+      assets: [{ assetId: "a1", bytes: bytesOf("x") }],
+    });
+    const meta = JSON.parse(
+      await readFile(join(vaultDir, ".kaipu", "rec-1.edit.meta.json"), "utf-8"),
+    );
+    expect(meta).toMatchObject({
+      sourceSizeBytes: info.size,
+      sourceMtimeMs: info.mtimeMs,
+      assetIds: ["a1"],
+    });
+    expect(typeof meta.savedAt).toBe("number");
+  });
+
+  it("deleteVideoEditSession also removes edit.meta.json", async () => {
+    await saveSession("rec-1", { sessionJson: "{}", assets: [] });
+    await deleteVideoEditSession("rec-1");
+    await expect(readFile(join(vaultDir, ".kaipu", "rec-1.edit.meta.json"))).rejects.toThrow();
+  });
 });

@@ -19,6 +19,8 @@ export interface StartExportArgs {
   scene: VideoScene;
   sourceId: string;
   title: string;
+  /** The source asset's identity; persisted on the exported file. */
+  derivedFromAssetId: string | null;
   /** From the preview `<video>` element's videoWidth/videoHeight (native pixels). */
   videoWidth: number;
   videoHeight: number;
@@ -174,6 +176,7 @@ export function useVideoExport(): VideoExportController {
                   title: t("editedTitle", { title: args.title }),
                   durationSeconds: plan.totalDuration,
                   thumbnail,
+                  derivedFromAssetId: args.derivedFromAssetId,
                 });
                 // Re-check again: cancel() could have run during the finalize await too.
                 if (!activeRef.current) return;

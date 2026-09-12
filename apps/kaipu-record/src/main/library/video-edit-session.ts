@@ -9,9 +9,10 @@
  * right after `registerLibraryVaultHandlers()` so all library IPC stays in one module.
  */
 import { ipcMain } from "electron";
-import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { IPC_CHANNELS } from "@shared/types/ipc";
+import { LibraryVault } from "./library-vault";
 import { vaultDirectory } from "./vault-location";
 
 // ── Path helpers ─────────────────────────────────────────────────────────────
@@ -30,6 +31,22 @@ function assetsDir(id: string): string {
 
 function assetPath(id: string, assetId: string): string {
   return join(assetsDir(id), `${assetId}.png`);
+}
+
+/**
+ * Path to the session metadata sidecar — the source file's size/mtime plus the
+ * asset ids at save time. `edit-project-probe.ts` reads this to decide whether
+ * a saved session still matches its source without ever hashing.
+ */
+export function sessionMetaPath(vaultDir: string, id: string): string {
+  return join(vaultDir, ".kaipu", `${id}.edit.meta.json`);
+}
+
+export interface SessionMeta {
+  sourceSizeBytes: number;
+  sourceMtimeMs: number;
+  assetIds: string[];
+  savedAt: number;
 }
 
 // ── Core logic ────────────────────────────────────────────────────────────────
@@ -82,6 +99,30 @@ export async function saveSession(id: string, payload: SavePayload): Promise<voi
       await rm(join(ad, filename), { force: true });
     }
   }
+
+  // Record the source file's size/mtime + the kept asset ids so the editing-state
+  // probe can tell a still-fresh session from a stale one without hashing. Best
+  // effort: if the source is missing at save time (should not happen from the
+  // editor), write nothing — the probe treats a missing meta file as
+  // "missing-dependencies".
+  const sourcePath = await new LibraryVault(vaultDirectory().path).filePath(id);
+  let source: { size: number; mtimeMs: number } | null = null;
+  try {
+    source = await stat(sourcePath);
+  } catch {
+    // Source missing at save time — record nothing.
+  }
+  if (source) {
+    const meta: SessionMeta = {
+      sourceSizeBytes: source.size,
+      sourceMtimeMs: source.mtimeMs,
+      assetIds: [...keptIds],
+      savedAt: Date.now(),
+    };
+    const mp = sessionMetaPath(vaultDirectory().path, id);
+    await writeFile(`${mp}.tmp`, JSON.stringify(meta), "utf-8");
+    await rename(`${mp}.tmp`, mp);
+  }
 }
 
 export async function loadSession(id: string): Promise<LoadResult | null> {
@@ -132,6 +173,7 @@ export async function deleteVideoEditSession(id: string): Promise<void> {
   await Promise.allSettled([
     rm(sessionPath(id), { force: true }),
     rm(assetsDir(id), { recursive: true, force: true }),
+    rm(sessionMetaPath(vaultDirectory().path, id), { force: true }),
   ]);
 }
 

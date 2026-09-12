@@ -5,16 +5,19 @@ description: The cloud recordings API is complete and unused. Nothing in the des
 
 # Desktop ↔ cloud sync — the missing client and the model gap
 
-> **Status: 🔵 Proposed.** The backend is done; the client does not exist. Discovered
-> 2026-09-05 while cleaning the template leftovers out of the backend and applying the
-> schema to the database for the first time (`db:push`, prefix `kaipu_record_`). This doc
-> records the gap so it is not re-investigated. Effort: Medium — but blocked on two
-> data-model decisions, below.
+> **Status: 🟢 Ready to validate.** The model decisions have been decided and implemented in
+> plan 02 (cloud 02 — local identity and combined library). The desktop client architecture
+> is settled: `assetId` is the stable identity link (minted on first read, stored in the sidecar);
+> thumbnails are per-revision auxiliary objects in R2 (no schema change). The upload/download
+> **transfers and the transfer panel are plan 03** — not included in this batch. This doc records
+> the data-model decisions so they are not re-investigated. Effort: Medium.
 
 ## The gap in one sentence
 
 [Cloud recordings — accounts + R2 upload](./cloud-recordings-upload) shipped a complete,
-tested backend vertical, and **no code in the desktop app calls any of it**.
+tested backend vertical. Plan 02 adds the desktop client foundation (stable asset identity,
+catalog cache, remove-local-download operation, combined library with five axes). The upload
+and download flows are plan 03.
 
 ## What exists
 
@@ -44,35 +47,36 @@ flow, no sync state. The library is purely local: `LocalRecording`
 (`src/shared/types/library-storage.ts`) over a folder on disk, read by `library-vault.ts`.
 There is no "upload this recording" action anywhere in main or renderer.
 
-## The model gap — two decisions that block the client
+## Data-model decisions (settled, implemented in plan 02)
 
-The local and cloud models are not mappable onto each other as they stand. Both need a
-decision before the client is worth writing, because both change the schema.
+Two data-model questions had to be decided before the client was worth writing. Both are now
+settled and implemented.
 
-### 1. There is no link between a local recording and its cloud row
+### 1. Link between local and cloud: the `assetId` in the sidecar
 
-`LocalRecording.id` and `recordingTable.id` are independently generated. Nothing records
-that local recording `X` was uploaded as cloud row `Y`.
+**Decision:** The sidecar v2 (`.kaipu/<id>.json`) carries an `assetId` field — a stable UUID
+minted on first read and persisted best-effort. This is the link between a local recording and
+its cloud copy.
 
-Without that link the client cannot answer the questions it has to answer on every launch:
-which recordings are already uploaded, which upload was interrupted and should be retried,
-and which retry would create a duplicate. A pure "upload everything" button is possible
-without it; anything resumable or idempotent is not.
+**Why this shape:** The sidecar is the source of truth when the vault is transferred between
+machines or the drive is mounted on a different computer. A server-side `local_id` column would
+be lost the moment the vault is copied; a sidecar-only identity persists. The unique constraint
+on the server prevents accidental duplicates when uploads are retried.
 
-Shape to decide: a nullable `local_id` column on the recording table (unique per user), or
-a local sidecar that stores the cloud id next to the file, or both. A server-side unique
-constraint is the only one of those that makes a retry genuinely idempotent, because the
-sidecar is lost when the vault folder is moved or the machine is replaced.
+**Implementation:** `LibraryVault.ensureIdentity()` mints a UUID and persists it. If the vault
+is read-only, the id lives in memory for that process only — we do not fail to list, because
+failing reads as data loss. Subsequent reads return the persisted id.
 
-### 2. Thumbnails have nowhere to live in the cloud
+See [Library Vault — Identity and sidecar v2](/desktop/library-vault/#identity-and-sidecar-v2).
 
-`LocalRecording` carries `thumbnailUrl`; `recordingTable` has no thumbnail column and R2
-holds only the recording itself. The web `/recordings` list is therefore text-only today.
+### 2. Thumbnails: per-revision R2 objects
 
-Options: upload the thumbnail as a second R2 object under a derived key (a `thumbs/` prefix
-mirroring the existing split) and store nothing new in Postgres; or add a `thumbnail_key`
-column; or generate thumbnails on demand in the browser from a ranged read. The first keeps
-the schema still and follows the existing key layout.
+**Decision:** Thumbnails are uploaded to R2 as second objects under a `thumbs/` prefix, mirroring
+the existing `videos/` layout. No schema change; no `thumbnail_key` column.
+
+**Why this shape:** It follows the existing R2 key layout, keeps the schema stable, and allows
+the web UI and desktop to fetch thumbnails alongside recordings without a database round-trip.
+Presigned GET URLs make them as efficient as a database-backed thumbnail.
 
 ## Smaller gaps, not blocking
 

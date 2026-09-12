@@ -24,12 +24,23 @@ function tokenFilePath(): string {
  *  case, which is exactly when a process-local cache is still empty. */
 interface StoredSession {
   token: string;
+  userId: string;
   email: string;
   name: string;
   /** Last plan the server reported. Optional on read only: files written before entitlements
    *  existed have none and load as free — a one-time re-check on the next status call, not a
    *  re-login. */
   entitlements?: Entitlements;
+}
+
+/** The signed-in (or restored-from-disk) account, handed to main modules only — the renderer
+ *  never sees the token. Produced by `registerAuth`, consumed by later main-process wiring
+ *  (e.g. the library vault) that needs to know which account owns what it stores. */
+export interface AuthHandle {
+  /** The signed-in (or restored-from-disk) account, or null. Never the renderer's business. */
+  getCurrentAccount(): { userId: string; token: string } | null;
+  /** Fires with the new userId on sign-in and null on sign-out / confirmed-invalid token. */
+  onAccountChanged(listener: (userId: string | null) => void): () => void;
 }
 
 function readStoredSession(): StoredSession | null {
@@ -39,7 +50,14 @@ function readStoredSession(): StoredSession | null {
   try {
     const decrypted = safeStorage.decryptString(readFileSync(path));
     const parsed = JSON.parse(decrypted) as StoredSession;
-    if (typeof parsed.token !== "string" || typeof parsed.email !== "string") return null;
+    // A stored file without a string `userId` predates cloud identity — treated as absent,
+    // forcing one re-login rather than trusting a session with no known account.
+    if (
+      typeof parsed.token !== "string" ||
+      typeof parsed.userId !== "string" ||
+      typeof parsed.email !== "string"
+    )
+      return null;
     return parsed;
   } catch {
     // Corrupted blob, copied to another machine, a different code-signing identity, or a
@@ -82,14 +100,14 @@ function toAuthError(err: unknown): AuthError {
 export function registerAuth(
   config: AuthClientConfig,
   getMainWindow: () => BrowserWindow | null,
-): void {
+): AuthHandle {
   const stored = readStoredSession();
   let token: string | null = stored?.token ?? null;
   // Seeded from disk, not left null until the first successful getSession: the whole point of
   // `unknown`'s lastKnownEmail is the "app restarted, token on disk, server unreachable" case,
   // where nothing in this process has ever talked to the server yet.
-  let cachedIdentity: { email: string; name: string } | null = stored
-    ? { email: stored.email, name: stored.name }
+  let cachedIdentity: { userId: string; email: string; name: string } | null = stored
+    ? { userId: stored.userId, email: stored.email, name: stored.name }
     : null;
   // Same rationale as cachedIdentity: seeded from disk so an offline restart keeps the plan.
   // Only ever replaced by a successful fetch or cleared by sign-out — a failed fetch is not a
@@ -98,10 +116,18 @@ export function registerAuth(
     ? (stored.entitlements ?? FREE_ENTITLEMENTS)
     : null;
 
+  // Notified on sign-in (new userId) and on sign-out / confirmed-invalid token (null) — how
+  // main-process modules that need to know which account owns what they store (e.g. the
+  // library vault) learn of an account change without the renderer relaying the token.
+  const accountListeners = new Set<(userId: string | null) => void>();
+  function notifyAccountChanged(userId: string | null): void {
+    for (const listener of accountListeners) listener(userId);
+  }
+
   /** Re-check the plan and persist it. Failure keeps the cached copy — "couldn't ask" ≠ free. */
   async function refreshEntitlements(
     current: string,
-    identity: { email: string; name: string },
+    identity: { userId: string; email: string; name: string },
   ): Promise<Entitlements> {
     try {
       const fresh = await getEntitlements(config, current);
@@ -135,6 +161,7 @@ export function registerAuth(
         cachedIdentity = null;
         cachedEntitlements = null;
         clearStoredSession();
+        notifyAccountChanged(null);
         return { kind: "signed-out" };
       }
       cachedIdentity = identity;
@@ -147,6 +174,7 @@ export function registerAuth(
       // and keep reporting the plan we last saw.
       return {
         kind: "unknown",
+        lastKnownUserId: cachedIdentity?.userId,
         lastKnownEmail: cachedIdentity?.email,
         entitlements: cachedEntitlements ?? FREE_ENTITLEMENTS,
       };
@@ -160,6 +188,7 @@ export function registerAuth(
   // could act on.
   async function commitSignIn(result: {
     token: string;
+    userId: string;
     email: string;
     name: string;
   }): Promise<AuthStatus> {
@@ -173,15 +202,17 @@ export function registerAuth(
     }
     writeStoredSession({ ...result, entitlements });
     token = result.token;
-    cachedIdentity = { email: result.email, name: result.name };
+    cachedIdentity = { userId: result.userId, email: result.email, name: result.name };
     cachedEntitlements = entitlements;
     const status: AuthStatus = {
       kind: "signed-in",
+      userId: result.userId,
       email: result.email,
       name: result.name,
       entitlements,
     };
     broadcast(status);
+    notifyAccountChanged(result.userId);
     return status;
   }
 
@@ -224,9 +255,19 @@ export function registerAuth(
     cachedEntitlements = null;
     clearStoredSession();
     broadcast({ kind: "signed-out" });
+    notifyAccountChanged(null);
     if (outgoingToken)
       void signOutRemote(config, outgoingToken).catch((error) => {
         console.error("remote auth sign-out failed", error);
       });
   });
+
+  return {
+    getCurrentAccount: () =>
+      token && cachedIdentity ? { userId: cachedIdentity.userId, token } : null,
+    onAccountChanged: (listener) => {
+      accountListeners.add(listener);
+      return () => accountListeners.delete(listener);
+    },
+  };
 }

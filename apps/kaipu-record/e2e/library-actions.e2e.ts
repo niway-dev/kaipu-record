@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
-import { launchApp, dismissOnboarding, RECORDING_ID } from "./helpers/launch";
+import { launchApp, dismissOnboarding, RECORDING_ASSET_ID, RECORDING_ID } from "./helpers/launch";
 
 // Path to the seeded recording's on-disk metadata sidecar. rename() merges { title } into
 // this file, so it is the deterministic boundary for the rename assertion (vs. the optimistic
@@ -15,9 +15,9 @@ test("rename persists the new title to the vault sidecar", async () => {
   try {
     // Onboarding's full-window modal intercepts pointer events, so it must go before any click.
     await dismissOnboarding(page);
-    await page.evaluate((id) => {
-      location.hash = `#/library/${id}`;
-    }, RECORDING_ID);
+    await page.evaluate((assetId) => {
+      location.hash = `#/library/${assetId}`;
+    }, RECORDING_ASSET_ID);
 
     // The seeded title proves the detail page rendered before we start editing.
     await expect(page.getByRole("heading", { name: "E2E Sample" })).toBeVisible();
@@ -49,9 +49,9 @@ test("delete removes the vault file and navigates back to the list", async () =>
   const { page, vaultDir, teardown } = await launchApp();
   try {
     await dismissOnboarding(page);
-    await page.evaluate((id) => {
-      location.hash = `#/library/${id}`;
-    }, RECORDING_ID);
+    await page.evaluate((assetId) => {
+      location.hash = `#/library/${assetId}`;
+    }, RECORDING_ASSET_ID);
 
     // The action-bar Delete button opens the in-renderer confirm dialog (no native dialog).
     await page.getByRole("button", { name: "Delete" }).click();
@@ -91,9 +91,9 @@ test("reveal asks the OS shell to show the recording's file", async () => {
     });
 
     await dismissOnboarding(page);
-    await page.evaluate((id) => {
-      location.hash = `#/library/${id}`;
-    }, RECORDING_ID);
+    await page.evaluate((assetId) => {
+      location.hash = `#/library/${assetId}`;
+    }, RECORDING_ASSET_ID);
 
     await page.getByRole("button", { name: "Reveal" }).click();
 

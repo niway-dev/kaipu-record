@@ -7,6 +7,7 @@ import { AuthPage } from "./auth-page";
 
 const SIGNED_IN = {
   kind: "signed-in",
+  userId: "user-1",
   email: "a@b.com",
   name: "A",
   entitlements: FREE_ENTITLEMENTS,

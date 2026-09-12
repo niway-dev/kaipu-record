@@ -17,6 +17,8 @@ export function LibraryPage(): React.JSX.Element {
   const t = useTranslations("library");
   const navigate = useNavigate();
   const { videos, isLoading, hasError, refresh, remove } = useLocalLibrary();
+  const canShowVaultBanner = hasError && videos.length > 0;
+  const showFullPageError = hasError && videos.length === 0;
   const {
     kindFilter,
     storageFilter,
@@ -134,17 +136,14 @@ export function LibraryPage(): React.JSX.Element {
           <span className={styles.storageDotChip} data-cloud="true" />
           {t("storageCloud")}
         </FilterChip>
-        {counts.failed > 0 && (
-          <FilterChip
-            tone="alert"
-            active={storageFilter === "failed"}
-            onClick={() => setStorageFilter(storageFilter === "failed" ? "all" : "failed")}
-          >
-            <AlertTriangle size={12} strokeWidth={2} />
-            {t("filterFailed", { count: counts.failed })}
-          </FilterChip>
-        )}
       </div>
+
+      {canShowVaultBanner && (
+        <div className={styles.vaultBanner} role="status" aria-live="polite">
+          <AlertTriangle size={14} strokeWidth={2} />
+          {t("vaultUnreadableBanner")}
+        </div>
+      )}
 
       {videos.length > 0 && (
         <div className={styles.summaryBar}>
@@ -157,7 +156,7 @@ export function LibraryPage(): React.JSX.Element {
         </div>
       )}
 
-      {hasError ? (
+      {showFullPageError ? (
         <div className={styles.empty}>
           <AlertTriangle size={48} className={styles.emptyIcon} />
           <h3 className={styles.emptyTitle}>{t("errorTitle")}</h3>
@@ -196,10 +195,13 @@ export function LibraryPage(): React.JSX.Element {
         <div className={styles.grid}>
           {visibleItems.map((video) => (
             <VideoCard
-              key={video.id}
+              key={video.assetId}
               video={video}
-              onNavigate={() => navigate(`/library/${video.id}`)}
-              onDelete={() => setPendingDelete({ id: video.id, title: video.title })}
+              onNavigate={() => navigate(`/library/${video.assetId}`)}
+              onDelete={() => {
+                const { id, title } = video;
+                if (id !== null) setPendingDelete({ id, title });
+              }}
             />
           ))}
         </div>
@@ -208,11 +210,14 @@ export function LibraryPage(): React.JSX.Element {
           <div className={styles.listContainer}>
             {visibleItems.map((video, i) => (
               <VideoRow
-                key={video.id}
+                key={video.assetId}
                 video={video}
                 isLast={i === visibleItems.length - 1}
-                onNavigate={() => navigate(`/library/${video.id}`)}
-                onDelete={() => setPendingDelete({ id: video.id, title: video.title })}
+                onNavigate={() => navigate(`/library/${video.assetId}`)}
+                onDelete={() => {
+                  const { id, title } = video;
+                  if (id !== null) setPendingDelete({ id, title });
+                }}
               />
             ))}
           </div>

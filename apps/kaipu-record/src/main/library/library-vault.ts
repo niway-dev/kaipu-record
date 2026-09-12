@@ -1,6 +1,8 @@
 import { basename, join } from "node:path";
 import { access, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import type { LocalRecording } from "@shared/types/library-storage";
+import { sha256FileBase64 } from "./content-hash";
 
 const META_DIR = ".kaipu";
 /** Known video containers, in preference order — `.mp4` is what we now write. */
@@ -8,11 +10,26 @@ const VIDEO_EXTS = [".mp4", ".webm"] as const;
 const IMAGE_EXTS = [".png"] as const;
 const ALL_EXTS = [...VIDEO_EXTS, ...IMAGE_EXTS] as const;
 
-interface Sidecar {
+/** Version 2 adds identity + provenance + hash cache. Every field stays optional so a v1 file reads fine. */
+export interface Sidecar {
+  sidecarVersion?: 1 | 2;
   title?: string;
   durationSeconds?: number;
   createdAt?: number;
+  assetId?: string;
+  derivedFromAssetId?: string | null;
+  /** base64 sha256 + the file stats it was computed for; stale when they differ. */
+  contentSha256?: string;
+  hashedSizeBytes?: number;
+  hashedMtimeMs?: number;
+  /** Set by `removeLocalCopy`; cleared when a file reappears under this id. */
+  localRemovedAt?: number;
 }
+
+// Keyed by the sidecar's absolute path (not per-instance), so a re-minted id on a
+// read-only vault survives across separate `LibraryVault` instances for the same
+// directory (e.g. a fresh instance per IPC call) instead of re-minting on every read.
+const readOnlyIdentityMemo = new Map<string, string>();
 
 async function exists(path: string): Promise<boolean> {
   try {
@@ -30,6 +47,9 @@ async function exists(path: string): Promise<boolean> {
  * directory is injected so it's testable against a temp folder.
  */
 export class LibraryVault {
+  /** Guards `ensureIdentity` so two parallel `describe(id)` calls never mint two ids for the same id. */
+  private readonly identityInFlight = new Map<string, Promise<Sidecar & { assetId: string }>>();
+
   constructor(private readonly directory: string) {}
 
   /** Resolve an id to its real file; if none exists yet, default to `.mp4`. */
@@ -45,11 +65,11 @@ export class LibraryVault {
     return join(this.directory, META_DIR);
   }
 
-  private sidecarPath(id: string): string {
+  sidecarPath(id: string): string {
     return join(this.metaDirectory(), `${id}.json`);
   }
 
-  private thumbnailPath(id: string): string {
+  thumbnailPath(id: string): string {
     return join(this.metaDirectory(), `${id}.jpg`);
   }
 
@@ -78,15 +98,22 @@ export class LibraryVault {
       return null;
     }
     const isImage = IMAGE_EXTS.some((ext) => filePath.endsWith(ext));
-    const meta = await this.readSidecar(id);
+    const meta = await this.ensureIdentity(id);
+    const hashIsFresh =
+      meta.contentSha256 !== undefined &&
+      meta.hashedSizeBytes === info.size &&
+      meta.hashedMtimeMs === info.mtimeMs;
     return {
       id,
+      assetId: meta.assetId,
       kind: isImage ? "screenshot" : "recording",
       title: meta.title ?? humanizeId(id),
       filePath,
       createdAt: meta.createdAt ?? info.birthtimeMs,
       sizeBytes: info.size,
       durationSeconds: meta.durationSeconds ?? 0,
+      derivedFromAssetId: meta.derivedFromAssetId ?? null,
+      contentSha256: hashIsFresh ? (meta.contentSha256 ?? null) : null,
       thumbnailUrl: isImage
         ? // `?v=<mtime>` busts the renderer image cache when a screenshot is
           // overwritten in place (same id/URL) — only the changed item, so the
@@ -98,7 +125,7 @@ export class LibraryVault {
     };
   }
 
-  private async readSidecar(id: string): Promise<Sidecar> {
+  async sidecar(id: string): Promise<Sidecar> {
     try {
       return JSON.parse(await readFile(this.sidecarPath(id), "utf-8")) as Sidecar;
     } catch {
@@ -106,11 +133,101 @@ export class LibraryVault {
     }
   }
 
+  /**
+   * Read the sidecar and make sure it carries an assetId. A legacy (v1) item gets
+   * one minted here, on first read, and persisted best-effort: if the vault is
+   * read-only, the id is instead remembered in `readOnlyIdentityMemo` (keyed by the
+   * sidecar's absolute path) so a later read for the same path reuses it instead of
+   * minting a new one every time — the alternative (failing to list) reads as data
+   * loss. Also clears `localRemovedAt`, since the file is back.
+   */
+  private async ensureIdentity(id: string): Promise<Sidecar & { assetId: string }> {
+    const inFlight = this.identityInFlight.get(id);
+    if (inFlight) return inFlight;
+
+    const promise = (async (): Promise<Sidecar & { assetId: string }> => {
+      const current = await this.sidecar(id);
+      if (current.assetId && current.localRemovedAt === undefined) {
+        return current as Sidecar & { assetId: string };
+      }
+      const sidecarPath = this.sidecarPath(id);
+      const next: Sidecar = {
+        ...current,
+        sidecarVersion: 2,
+        assetId: current.assetId ?? readOnlyIdentityMemo.get(sidecarPath) ?? randomUUID(),
+      };
+      delete next.localRemovedAt;
+      try {
+        await this.writeMeta(id, next);
+        readOnlyIdentityMemo.delete(sidecarPath);
+      } catch {
+        // Read-only vault: keep the in-memory identity; nothing else could persist either.
+        readOnlyIdentityMemo.set(sidecarPath, next.assetId!);
+      }
+      return next as Sidecar & { assetId: string };
+    })();
+
+    this.identityInFlight.set(id, promise);
+    try {
+      return await promise;
+    } finally {
+      this.identityInFlight.delete(id);
+    }
+  }
+
   /** Merge fields into the sidecar (used by rename and by finalize). */
   async writeMeta(id: string, meta: Sidecar): Promise<void> {
-    const current = await this.readSidecar(id);
+    const current = await this.sidecar(id);
     await mkdir(this.metaDirectory(), { recursive: true });
-    await writeFile(this.sidecarPath(id), JSON.stringify({ ...current, ...meta }, null, 2));
+    await writeFile(
+      this.sidecarPath(id),
+      JSON.stringify({ ...current, ...meta, sidecarVersion: 2 }, null, 2),
+    );
+  }
+
+  /**
+   * The file's sha256, from the sidecar cache when it still matches the file's
+   * size + mtime, otherwise recomputed and cached. Never called by `list()`.
+   * Retries up to 3 times if the file changes during hashing; throws if it
+   * keeps changing after the third attempt.
+   */
+  async ensureContentHash(
+    id: string,
+  ): Promise<{ contentSha256: string; sizeBytes: number } | null> {
+    const filePath = await this.filePath(id);
+    let info;
+    try {
+      info = await stat(filePath);
+    } catch {
+      return null;
+    }
+    const meta = await this.sidecar(id);
+    if (
+      meta.contentSha256 &&
+      meta.hashedSizeBytes === info.size &&
+      meta.hashedMtimeMs === info.mtimeMs
+    ) {
+      return { contentSha256: meta.contentSha256, sizeBytes: info.size };
+    }
+
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const contentSha256 = await sha256FileBase64(filePath);
+      // Re-stat after hashing: if the file changed underneath, don't cache a lie.
+      const after = await stat(filePath);
+      if (after.size === info.size && after.mtimeMs === info.mtimeMs) {
+        await this.writeMeta(id, {
+          contentSha256,
+          hashedSizeBytes: info.size,
+          hashedMtimeMs: info.mtimeMs,
+        });
+        return { contentSha256, sizeBytes: info.size };
+      }
+      if (attempt < 3) {
+        info = after;
+      }
+    }
+
+    throw new Error(`File "${id}" changed while hashing`);
   }
 
   async writeThumbnail(id: string, jpg: Buffer): Promise<void> {
@@ -160,6 +277,19 @@ export class LibraryVault {
       rm(this.thumbnailPath(id), { force: true }),
     ]);
     await rm(await this.filePath(id), { force: true });
+  }
+
+  /**
+   * Free disk space while keeping the item: deletes ONLY the media file. The
+   * sidecar (identity, provenance, hash), thumbnail, edit session and assets stay,
+   * so the item survives as a cloud-only entry and can be downloaded back under
+   * the same assetId. Not `remove()`: that one is the destructive delete.
+   */
+  async removeLocalCopy(id: string): Promise<void> {
+    const target = await this.filePath(id);
+    if (!(await exists(target))) throw new Error(`No local media file for "${id}"`);
+    await rm(target);
+    await this.writeMeta(id, { localRemovedAt: Date.now() });
   }
 }
 

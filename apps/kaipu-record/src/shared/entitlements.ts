@@ -3,8 +3,9 @@ import type { AuthStatus } from "./types/auth";
 /**
  * What the account is allowed to do, as the API reports it from
  * `GET /api/v1/me/entitlements`. Mirrors `entitlementsSchema` in `@kaipu/domain`
- * on the wire (dates arrive as ISO strings). Pure type + rules — safe for main
- * and renderer.
+ * on the wire (dates arrive as ISO strings), once the server emits the cloud
+ * fields; missing fields are defaulted in auth-client. Pure type + rules — safe
+ * for main and renderer.
  *
  * `plan` is a name for display. Permissions are read from `features`, never by
  * comparing `plan` — that is what keeps a future tier or metered feature from
@@ -17,6 +18,10 @@ export interface Entitlements {
   currentPeriodEnd: string | null;
   features: {
     watermarkRemoval: boolean;
+    /** Whether the account can upload recordings to cloud storage. */
+    cloudUploads: boolean;
+    /** The account's cloud storage quota, in bytes. */
+    cloudStorageBytes: number;
   };
 }
 
@@ -25,7 +30,7 @@ export const FREE_ENTITLEMENTS: Entitlements = {
   plan: "free",
   status: "active",
   currentPeriodEnd: null,
-  features: { watermarkRemoval: false },
+  features: { watermarkRemoval: false, cloudUploads: false, cloudStorageBytes: 1_000_000_000 },
 };
 
 /** The entitlements a status carries, if any: signed-in always, `unknown` when cached, signed-out never. */

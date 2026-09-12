@@ -34,6 +34,7 @@ const store = await import("./recorder-store");
 
 const RECORDING: LocalRecording = {
   id: "recording-x",
+  assetId: "00000000-0000-0000-0000-000000000001",
   title: "T",
   filePath: "/vault/recording-x.mp4",
   createdAt: 1,
@@ -41,6 +42,8 @@ const RECORDING: LocalRecording = {
   durationSeconds: 5,
   thumbnailUrl: null,
   kind: "recording",
+  derivedFromAssetId: null,
+  contentSha256: null,
 };
 
 const input = {

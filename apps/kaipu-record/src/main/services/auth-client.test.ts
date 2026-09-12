@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { FREE_ENTITLEMENTS } from "@shared/entitlements";
 import {
   getEntitlements,
   getSession,
@@ -18,14 +19,14 @@ describe("signInWithPassword", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ user: { email: "a@b.com", name: "A" } }), {
+        new Response(JSON.stringify({ user: { id: "user-1", email: "a@b.com", name: "A" } }), {
           status: 200,
           headers: { "set-auth-token": "tok_123" },
         }),
       ),
     );
     const result = await signInWithPassword(config, { email: "a@b.com", password: "pw" });
-    expect(result).toEqual({ token: "tok_123", email: "a@b.com", name: "A" });
+    expect(result).toEqual({ token: "tok_123", userId: "user-1", email: "a@b.com", name: "A" });
   });
 
   it("rejects with invalid-credentials on a 401/400 body", async () => {
@@ -48,7 +49,7 @@ describe("signUpWithPassword", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ user: { email: "new@b.com", name: "New" } }), {
+        new Response(JSON.stringify({ user: { id: "user-2", email: "new@b.com", name: "New" } }), {
           status: 200,
           headers: { "set-auth-token": "tok_456" },
         }),
@@ -59,7 +60,12 @@ describe("signUpWithPassword", () => {
       password: "pw",
       name: "New",
     });
-    expect(result).toEqual({ token: "tok_456", email: "new@b.com", name: "New" });
+    expect(result).toEqual({
+      token: "tok_456",
+      userId: "user-2",
+      email: "new@b.com",
+      name: "New",
+    });
   });
 
   it("rejects with email-taken on a 422 body", async () => {
@@ -102,13 +108,17 @@ describe("getSession", () => {
   it("resolves the session on 200", async () => {
     vi.stubGlobal(
       "fetch",
-      vi
-        .fn()
-        .mockResolvedValue(
-          new Response(JSON.stringify({ user: { email: "a@b.com", name: "A" } }), { status: 200 }),
-        ),
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ user: { id: "user-1", email: "a@b.com", name: "A" } }), {
+          status: 200,
+        }),
+      ),
     );
-    await expect(getSession(config, "tok")).resolves.toEqual({ email: "a@b.com", name: "A" });
+    await expect(getSession(config, "tok")).resolves.toEqual({
+      userId: "user-1",
+      email: "a@b.com",
+      name: "A",
+    });
   });
 
   it("resolves null on a confirmed 401 — the session is genuinely gone", async () => {
@@ -150,20 +160,31 @@ describe("signOutRemote", () => {
 });
 
 describe("getEntitlements", () => {
-  const PRO = {
+  // The server does not send `cloudUploads`/`cloudStorageBytes` yet (see
+  // src/shared/entitlements.ts) — a real response body today carries only this.
+  const PRO_BODY = {
     plan: "pro",
     status: "active",
     currentPeriodEnd: null,
     features: { watermarkRemoval: true },
   };
 
-  it("unwraps the { data } envelope and sends the bearer token to /api/v1/me/entitlements", async () => {
+  it("unwraps the { data } envelope, sends the bearer token, and defaults the cloud fields the server does not send yet", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValue(new Response(JSON.stringify({ data: PRO, error: null }), { status: 200 }));
+      .mockResolvedValue(
+        new Response(JSON.stringify({ data: PRO_BODY, error: null }), { status: 200 }),
+      );
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(getEntitlements(config, "tok")).resolves.toEqual(PRO);
+    await expect(getEntitlements(config, "tok")).resolves.toEqual({
+      ...PRO_BODY,
+      features: {
+        watermarkRemoval: true,
+        cloudUploads: false,
+        cloudStorageBytes: FREE_ENTITLEMENTS.features.cloudStorageBytes,
+      },
+    });
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("http://localhost:3000/api/v1/me/entitlements");
@@ -178,6 +199,23 @@ describe("getEntitlements", () => {
   it("rejects on a non-2xx status — never silently downgrades to free", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 500 })));
     await expect(getEntitlements(config, "tok")).rejects.toThrow();
+  });
+
+  it("defaults watermarkRemoval to false too when the body omits it", async () => {
+    const bare = { plan: "free", status: "active", currentPeriodEnd: null, features: {} };
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(JSON.stringify({ data: bare, error: null }), { status: 200 }),
+        ),
+    );
+
+    await expect(getEntitlements(config, "tok")).resolves.toEqual({
+      ...bare,
+      features: FREE_ENTITLEMENTS.features,
+    });
   });
 
   it("rejects when the envelope carries an error instead of data", async () => {

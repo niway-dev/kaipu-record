@@ -58,7 +58,7 @@ export function AppRoot(): React.JSX.Element {
         // `fromRecording` lets the detail page tell a post-record vault race (the
         // item can momentarily lag the navigation) apart from a genuinely stale
         // URL — see use-missing-recording-recovery.
-        navigate(`/library/${recording.id}`, { state: { fromRecording: true } }),
+        navigate(`/library/${recording.assetId}`, { state: { fromRecording: true } }),
       ),
     [navigate],
   );

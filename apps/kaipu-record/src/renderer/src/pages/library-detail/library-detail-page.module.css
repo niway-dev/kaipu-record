@@ -81,6 +81,12 @@
   opacity: 0.5;
 }
 
+.editingLine {
+  margin: 6px 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
 .actions {
   display: flex;
   gap: var(--space-sm);
