@@ -18,9 +18,12 @@ function renderSettings(open = vi.fn()): void {
 }
 
 describe("SettingsPage", () => {
-  it("renders the account section", () => {
+  it("renders the storage and cloud section with its account block", () => {
     renderSettings();
-    expect(screen.getByRole("heading", { name: /^account$/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 2, name: /^storage and cloud$/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /^account and capacity$/i })).toBeInTheDocument();
   });
 
   it("renders the page heading", () => {
@@ -33,7 +36,8 @@ describe("SettingsPage", () => {
     expect(screen.getByRole("heading", { name: /^permissions$/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /^theme$/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /recording quality/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /^files$/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /^local folder$/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /^save mode$/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /^app$/i })).toBeInTheDocument();
   });
 

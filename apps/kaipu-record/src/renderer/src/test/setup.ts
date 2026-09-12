@@ -50,6 +50,7 @@ const STUB_SETTINGS = {
   showBarInRecording: false,
   shortcuts: DEFAULT_SHORTCUTS,
   deviceId: "",
+  uploadMode: "local-only",
 } as const;
 
 // Vitest does not expose `afterEach` as a global (globals: false), so
@@ -84,6 +85,8 @@ window.electronAPI = {
   getVaultDirectory: async () => ({ path: "/tmp/vault", isCustom: false }),
   chooseVaultDirectory: async () => null,
   resetVaultDirectory: async () => ({ path: "/tmp/vault", isCustom: false }),
+  openVaultDirectory: async () => {},
+  getStorageUsage: async () => ({ kind: "signed-out" }),
   onLibraryChanged: () => () => {},
   listLibraryItems: async () => ({ items: [], vaultError: null, catalogVerifiedAt: null }),
   refreshCloudCatalog: async () => ({ ok: false, reason: "signed-out" }),

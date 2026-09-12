@@ -6,6 +6,7 @@
 import type { SerializedError } from "../analytics";
 import type { AppSettings, ShortcutAction, UpdateStatus } from "./ipc";
 import type { LocalRecording, VaultDirectory } from "./library-storage";
+import type { StorageUsageResult } from "./cloud-storage";
 import type {
   CatalogRefreshResult,
   LibraryListResult,
@@ -122,6 +123,10 @@ export interface KaipuElectronAPI {
   chooseVaultDirectory(): Promise<VaultDirectory | null>;
   /** Reset the recordings folder back to the platform default. */
   resetVaultDirectory(): Promise<VaultDirectory>;
+  /** Open the recordings folder in the OS file manager (creating it if missing). */
+  openVaultDirectory(): Promise<void>;
+  /** The signed-in account's cloud capacity; never zeros for a failed query. */
+  getStorageUsage(): Promise<StorageUsageResult>;
   /** Subscribe to vault-folder changes (so open library pages re-list). Returns an unsubscribe fn. */
   onLibraryChanged(callback: () => void): () => void;
   /** One entry per logical item (local, cloud, or both) plus vault/catalog status. */

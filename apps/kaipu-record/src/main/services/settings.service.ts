@@ -6,6 +6,8 @@ import {
   type ShortcutAction,
   type ShortcutSettings,
   type Theme,
+  UPLOAD_MODES,
+  type UploadMode,
 } from "@shared/types";
 import { sanitizeQuality } from "@shared/recording-quality";
 import { DEFAULT_LOCALE, isLocale } from "@kaipu/i18n";
@@ -19,6 +21,10 @@ import { DEFAULT_LOCALE, isLocale } from "@kaipu/i18n";
  */
 
 const VALID_THEMES: readonly Theme[] = ["light", "dark"];
+
+export function isValidUploadMode(value: unknown): value is UploadMode {
+  return typeof value === "string" && (UPLOAD_MODES as readonly string[]).includes(value);
+}
 
 export function isValidTheme(value: unknown): value is Theme {
   return typeof value === "string" && (VALID_THEMES as readonly string[]).includes(value);
@@ -62,5 +68,6 @@ export function mergeSettings(stored: Partial<AppSettings> | null | undefined): 
         : DEFAULT_SETTINGS.showBarInRecording,
     shortcuts: mergeShortcuts(safe.shortcuts),
     deviceId: typeof safe.deviceId === "string" ? safe.deviceId : "",
+    uploadMode: isValidUploadMode(safe.uploadMode) ? safe.uploadMode : DEFAULT_SETTINGS.uploadMode,
   };
 }

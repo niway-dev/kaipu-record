@@ -1,14 +1,22 @@
 import React from "react";
-import { Mic, Video, Monitor, FolderOpen } from "lucide-react";
+import { Mic, Video, Monitor } from "lucide-react";
 import { Card } from "@renderer/ui/card";
 import { Row } from "@renderer/ui/row";
 import { Button } from "@renderer/ui/button";
 import { Toggle } from "@renderer/ui/toggle";
 import { useOnboarding } from "@renderer/features/onboarding";
 import { usePermissions } from "@renderer/features/permissions";
-import { useVaultDirectory } from "@renderer/features/library/hooks/use-vault-directory";
 import { useTranslations } from "@kaipu/i18n";
-import { AccountPanel } from "@renderer/features/auth/account-panel";
+import { Select } from "@renderer/ui/select";
+import { StorageCloudSettings } from "@renderer/features/storage-cloud/storage-cloud-settings";
+import {
+  SIM_ACCOUNTS,
+  SIM_CAPACITIES,
+  useStorageSimulator,
+  writeStorageSimulator,
+  type SimAccount,
+  type SimCapacity,
+} from "@renderer/features/storage-cloud/dev-storage-simulator";
 import { useAppSettings } from "./use-app-settings";
 import { LanguageSettings } from "./language-settings";
 import { ThemeSettings } from "./theme-settings";
@@ -26,7 +34,8 @@ import styles from "./settings-page.module.css";
  *   • Permissions       → window.electronAPI permission bridge
  *   • Recording quality → persisted AppSettings.recordingQuality → encoder
  *   • Theme             → persisted AppSettings.theme → data-theme in every window
- *   • Files             → real on-disk recordings vault
+ *   • Storage and cloud → real vault folder, AppSettings.uploadMode, GET /api/v1/me/storage
+ *                         (the upload queue that consumes uploadMode arrives with cloud plan 03)
  *   • App / Onboarding  → Dock policy, replay the first-run flow
  *
  * Configurable keyboard shortcuts now ship as their own sidebar page (Shortcuts).
@@ -65,11 +74,11 @@ export function SettingsPage(): React.JSX.Element {
   const t = useTranslations("settings");
   const { open: openOnboarding } = useOnboarding();
   const { status: permissionStatus, request: requestPermission } = usePermissions();
-  const vault = useVaultDirectory();
   const { settings, update } = useAppSettings();
   // Dev-only watermark bypass. `import.meta.env.DEV` is a build-time literal, so
   // this state + the section below are stripped from production bundles.
   const [simulatePaid, setSimulatePaid] = React.useState(() => readDevSimulatePaid());
+  const storageSim = useStorageSimulator();
 
   return (
     <div className={styles.page}>
@@ -79,9 +88,10 @@ export function SettingsPage(): React.JSX.Element {
       </div>
 
       <div className={styles.sections}>
-        <Section title={t("account")}>
-          <AccountPanel />
-        </Section>
+        <StorageCloudSettings
+          uploadMode={settings?.uploadMode ?? null}
+          onUploadModeChange={(uploadMode) => void update({ uploadMode })}
+        />
 
         <Section title={t("language")}>
           <LanguageSettings />
@@ -137,33 +147,6 @@ export function SettingsPage(): React.JSX.Element {
           />
         </Section>
 
-        <Section title={t("files")}>
-          <Row
-            icon={<FolderOpen size={16} />}
-            label={t("recordingsFolder")}
-            description={
-              <span className={styles.pathValue} title={vault.directory?.path}>
-                {vault.directory ? vault.directory.path : t("folderLoading")}
-                {vault.directory
-                  ? ` · ${vault.directory.isCustom ? t("folderCustom") : t("folderDefault")}`
-                  : ""}
-              </span>
-            }
-            action={
-              <>
-                {vault.directory?.isCustom && (
-                  <Button variant="ghost" size="sm" onClick={() => void vault.reset()}>
-                    {t("reset")}
-                  </Button>
-                )}
-                <Button variant="outline" size="sm" onClick={() => void vault.choose()}>
-                  {t("browse")}
-                </Button>
-              </>
-            }
-          />
-        </Section>
-
         <Section title={t("app")}>
           <Row
             label={t("showInDock")}
@@ -198,6 +181,28 @@ export function SettingsPage(): React.JSX.Element {
                     setSimulatePaid(checked);
                     writeDevSimulatePaid(checked);
                   }}
+                />
+              }
+            />
+            <Row
+              label="Simular cuenta (Almacenamiento y cloud)"
+              description="Fuerza el estado de sesión que ve esa sección"
+              action={
+                <Select
+                  value={storageSim.account}
+                  options={SIM_ACCOUNTS.map((value) => ({ value, label: value }))}
+                  onChange={(value) => writeStorageSimulator({ account: value as SimAccount })}
+                />
+              }
+            />
+            <Row
+              label="Simular capacidad cloud"
+              description="Fuerza cada estado de la consulta con cifras falsas"
+              action={
+                <Select
+                  value={storageSim.capacity}
+                  options={SIM_CAPACITIES.map((value) => ({ value, label: value }))}
+                  onChange={(value) => writeStorageSimulator({ capacity: value as SimCapacity })}
                 />
               }
             />

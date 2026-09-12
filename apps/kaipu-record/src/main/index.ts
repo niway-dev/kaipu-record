@@ -9,6 +9,7 @@ import { createTray, rebuildTrayMenu } from "./tray";
 import { registerRecordingSourceHandlers } from "./recording-sources";
 import { registerPermissionHandlers } from "./permissions";
 import { registerLibraryVaultHandlers } from "./library";
+import { registerCloudStorageHandlers } from "./cloud";
 import { registerMediaProtocol, registerMediaScheme } from "./media-protocol";
 import { registerRecordingHub, type RecordingHubHandle } from "./recording/recording-hub";
 import { initAutoUpdater, getUpdateStatus, installDownloadedUpdate } from "./updater/auto-updater";
@@ -366,6 +367,7 @@ app.whenReady().then(() => {
 
   // Library: local recordings vault + cloud catalog.
   registerLibraryVaultHandlers({ auth, serverUrl: authServerUrl });
+  registerCloudStorageHandlers({ auth, serverUrl: authServerUrl });
 
   // Screenshots: capture/copy/save IPC handlers.
   registerScreenshotHandlers(captureWindowHooks);

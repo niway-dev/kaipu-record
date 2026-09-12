@@ -97,6 +97,16 @@ export const DEFAULT_SHORTCUTS: ShortcutSettings = Object.fromEntries(
   SHORTCUT_DEFINITIONS.map((d) => [d.action, d.defaultAccelerator]),
 ) as ShortcutSettings;
 
+/**
+ * How this device treats the cloud. Mutually exclusive, per device, never per account:
+ *   • local-only — files stay on this device; nothing uploads.
+ *   • manual     — the user picks what to upload.
+ *   • automatic  — new files upload when space allows (never existing ones, never links).
+ * Creating an account does not change it. Consumers (upload queue) arrive with cloud plan 03.
+ */
+export const UPLOAD_MODES = ["local-only", "manual", "automatic"] as const;
+export type UploadMode = (typeof UPLOAD_MODES)[number];
+
 export interface AppSettings {
   theme: Theme;
   /** UI language for every renderer window + the native tray. */
@@ -121,6 +131,8 @@ export interface AppSettings {
    * mints one on first load; never shown in the UI.
    */
   deviceId: string;
+  /** Upload preference for this device. See {@link UploadMode}. */
+  uploadMode: UploadMode;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -132,6 +144,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   showBarInRecording: false,
   shortcuts: DEFAULT_SHORTCUTS,
   deviceId: "",
+  uploadMode: "local-only",
 };
 
 /**
@@ -168,6 +181,10 @@ export const IPC_CHANNELS = {
   getVaultDirectory: "library:get-vault-dir",
   chooseVaultDirectory: "library:choose-vault-dir",
   resetVaultDirectory: "library:reset-vault-dir",
+  // Open the recordings folder itself in the OS file manager.
+  openVaultDirectory: "library:open-vault-dir",
+  // The signed-in account's cloud capacity (used / reserved / available).
+  getStorageUsage: "cloud:get-storage-usage",
   // Main → every window: the vault folder changed, so open pages should re-list.
   libraryChanged: "library:changed",
   // Combined library: local vault + the signed-in account's cloud catalog cache.

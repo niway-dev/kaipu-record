@@ -12,6 +12,7 @@ const SETTINGS: AppSettings = {
   showBarInRecording: false,
   shortcuts: DEFAULT_SHORTCUTS,
   deviceId: "",
+  uploadMode: "local-only",
 };
 
 describe("I18nRoot theme application", () => {
