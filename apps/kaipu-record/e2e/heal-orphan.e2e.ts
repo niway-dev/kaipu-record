@@ -60,10 +60,15 @@ test("an imported recording with no sidecar self-heals on Sync", async () => {
         .toBe(true);
     }
 
-    // And the healed recording is now editable in the UI.
-    await page.evaluate((id) => {
-      location.hash = `#/library/${id}`;
-    }, ORPHAN_ID);
+    // And the healed recording is now editable in the UI. The detail route is keyed by
+    // `assetId`, which the vault minted into the sidecar during the same heal — so read it
+    // from disk rather than guessing it.
+    const healedAssetId = (JSON.parse(await readFile(sidecarPath, "utf-8")) as { assetId?: string })
+      .assetId;
+    expect(healedAssetId).toBeTruthy();
+    await page.evaluate((assetId) => {
+      location.hash = `#/library/${assetId}`;
+    }, healedAssetId!);
     await expect(page.getByRole("button", { name: "Edit video" })).toBeEnabled();
   } finally {
     await teardown();

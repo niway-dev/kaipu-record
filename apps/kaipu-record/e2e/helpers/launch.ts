@@ -1,5 +1,5 @@
 import { _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
-import { copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -14,6 +14,29 @@ export const RECORDING_DURATION = 3;
 
 /** The seeded screenshot's id (its filename stem). A `.png` classifies as `kind: "screenshot"`. */
 export const SCREENSHOT_ID = "e2e-shot";
+
+/**
+ * Stable asset ids for the seeded fixtures. The library's detail route is keyed by `assetId`
+ * (`/library/:assetId`), not by the filename-derived local id, so the sidecars are seeded with
+ * these rather than letting the vault mint random ones — a minted id is unknowable to a test
+ * that has to navigate before the first read. Any non-empty string works as an id; UUIDs match
+ * what the vault mints in production.
+ */
+export const RECORDING_ASSET_ID = "e2e0a5e7-0000-4000-8000-0000000000c1";
+export const SCREENSHOT_ASSET_ID = "e2e0a5e7-0000-4000-8000-000000000550";
+
+/** Resolve the local id (filename stem) that owns `assetId`, by reading the vault's sidecars. */
+export async function localIdForAssetId(vaultDir: string, assetId: string): Promise<string> {
+  const metaDir = path.join(vaultDir, ".kaipu");
+  for (const entry of await readdir(metaDir)) {
+    if (!entry.endsWith(".json") || entry.endsWith(".edit.json")) continue;
+    const meta = JSON.parse(await readFile(path.join(metaDir, entry), "utf-8")) as {
+      assetId?: string;
+    };
+    if (meta.assetId === assetId) return path.basename(entry, ".json");
+  }
+  throw new Error(`no sidecar in ${metaDir} carries assetId ${assetId}`);
+}
 
 /**
  * Seed a temp vault with both fixtures so they list and open:
@@ -32,6 +55,8 @@ async function seedVault(vaultDir: string): Promise<void> {
   await writeFile(
     path.join(vaultDir, ".kaipu", `${RECORDING_ID}.json`),
     JSON.stringify({
+      sidecarVersion: 2,
+      assetId: RECORDING_ASSET_ID,
       title: "E2E Sample",
       durationSeconds: RECORDING_DURATION,
       createdAt: 1_700_000_000_000,
@@ -41,7 +66,12 @@ async function seedVault(vaultDir: string): Promise<void> {
   await copyFile(IMAGE_FIXTURE, path.join(vaultDir, `${SCREENSHOT_ID}.png`));
   await writeFile(
     path.join(vaultDir, ".kaipu", `${SCREENSHOT_ID}.json`),
-    JSON.stringify({ title: "E2E Shot", createdAt: 1_700_000_000_000 }),
+    JSON.stringify({
+      sidecarVersion: 2,
+      assetId: SCREENSHOT_ASSET_ID,
+      title: "E2E Shot",
+      createdAt: 1_700_000_000_000,
+    }),
   );
 }
 
@@ -116,9 +146,9 @@ export async function dismissOnboarding(page: Page): Promise<void> {
  */
 export async function openEditor(page: Page): Promise<void> {
   await dismissOnboarding(page);
-  await page.evaluate((id) => {
-    location.hash = `#/library/${id}`;
-  }, RECORDING_ID);
+  await page.evaluate((assetId) => {
+    location.hash = `#/library/${assetId}`;
+  }, RECORDING_ASSET_ID);
   await page.getByRole("button", { name: "Edit video" }).click();
   await page.waitForSelector("video");
 }
@@ -132,9 +162,9 @@ export async function openEditor(page: Page): Promise<void> {
  */
 export async function openScreenshotEditor(page: Page): Promise<void> {
   await dismissOnboarding(page);
-  await page.evaluate((id) => {
-    location.hash = `#/library/${id}`;
-  }, SCREENSHOT_ID);
+  await page.evaluate((assetId) => {
+    location.hash = `#/library/${assetId}`;
+  }, SCREENSHOT_ASSET_ID);
   await page.getByRole("button", { name: "Edit" }).click();
   await page.getByRole("button", { name: /^Save/ }).waitFor({ state: "visible" });
 }
