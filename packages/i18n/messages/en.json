@@ -62,7 +62,8 @@
     "library": "Library",
     "shortcuts": "Shortcuts",
     "settings": "Settings",
-    "account": "Account"
+    "account": "Account",
+    "cloud": "Cloud"
   },
   "settings": {
     "title": "Settings",
@@ -106,7 +107,20 @@
     "retry": "Retry",
     "accountUnknown": "Couldn't verify your session — still using your last sign-in.",
     "accountTitle": "Your Kaipu account",
-    "accountDescription": "You can record, edit, and export without an account."
+    "accountDescription": "You can record, edit, and export without an account.",
+    "general": "General",
+    "generalDescription": "Language and appearance of Kaipu Record.",
+    "permissionsDescription": "What Kaipu Record may access on this device.",
+    "recordingQualityDescription": "Resolution, frame rate and bitrate for new recordings.",
+    "recordingDescription": "How recordings are captured.",
+    "filesDescription": "Where recordings and screenshots are saved on this device.",
+    "appDescription": "How the app behaves on this device.",
+    "developer": "Developer",
+    "openFolder": "Open folder",
+    "accountMoved": "Your account moved to Cloud",
+    "accountMovedDetail": "Session, capacity and uploads live in the Cloud section of the sidebar.",
+    "goToCloud": "Go to Cloud",
+    "navCloudNote": "Your account and cloud capacity now live in the Cloud section."
   },
   "record": {
     "readyToRecord": "Ready to record",
@@ -507,9 +521,6 @@
   "storageCloud": {
     "title": "Storage and cloud",
     "description": "Kaipu works locally. Cloud keeps a private copy and lets you share a link when you decide to.",
-    "localFolder": "Local folder",
-    "openFolder": "Open folder",
-    "change": "Change",
     "saveMode": "Save mode",
     "modeLocalOnly": "Local only",
     "modeLocalOnlyDescription": "Save files on this device. Do not upload files automatically.",
@@ -547,6 +558,8 @@
     "ageJustNow": "just now",
     "ageMinutes": "{count} min ago",
     "ageHours": "{count} h ago",
-    "ageDays": "{count} d ago"
+    "ageDays": "{count} d ago",
+    "notAvailableTitle": "Cloud storage isn't available yet",
+    "notAvailableDetail": "Your plan includes cloud space, but this server doesn't offer uploads yet. Everything keeps working locally."
   }
 }

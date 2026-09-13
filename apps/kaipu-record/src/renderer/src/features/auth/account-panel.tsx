@@ -9,7 +9,7 @@ import { useAuthStatus } from "./use-auth-status";
 import styles from "./account-panel.module.css";
 
 /** Where the auth pages send the user back to (Back, or a successful sign-in). */
-const RETURN_TO: AuthPageLocationState = { from: "/settings" };
+const RETURN_TO: AuthPageLocationState = { from: "/cloud" };
 
 /**
  * The Account section of Settings: shows who is signed in (with sign-out), the

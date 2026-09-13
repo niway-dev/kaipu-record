@@ -25,4 +25,6 @@ export type StorageUsageResult =
   | { kind: "ok"; usage: StorageUsage; fetchedAt: number }
   | { kind: "stale"; usage: StorageUsage; fetchedAt: number }
   | { kind: "error" }
+  /** The server has no capacity endpoint (404): cloud storage is not offered there yet. */
+  | { kind: "not-available" }
   | { kind: "session-expired" };

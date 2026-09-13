@@ -21,6 +21,7 @@ describe("toCapacityView", () => {
   it("passes failures through without inventing usage", () => {
     expect(toCapacityView({ kind: "error" })).toEqual({ kind: "error" });
     expect(toCapacityView({ kind: "session-expired" })).toEqual({ kind: "session-expired" });
+    expect(toCapacityView({ kind: "not-available" })).toEqual({ kind: "not-available" });
   });
 
   it("marks a stale answer with its fetch time", () => {

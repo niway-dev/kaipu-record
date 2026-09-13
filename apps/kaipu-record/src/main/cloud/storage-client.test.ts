@@ -33,6 +33,11 @@ describe("fetchStorageUsage", () => {
     await expect(fetchStorageUsage(config, "tok")).rejects.toEqual({ kind: "unauthorized" });
   });
 
+  it("rejects with not-available on 404 (server without cloud storage)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(reply({}, 404)));
+    await expect(fetchStorageUsage(config, "tok")).rejects.toEqual({ kind: "not-available" });
+  });
+
   it("rejects on a server error instead of returning zeros", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(reply({}, 500)));
     await expect(fetchStorageUsage(config, "tok")).rejects.toThrow("500");

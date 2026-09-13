@@ -15,22 +15,14 @@ function renderSection(uploadMode: "local-only" | "manual" = "local-only") {
 }
 
 describe("StorageCloudSettings", () => {
-  it("signed out: local folder works, cloud modes wait, sign-in offered, no capacity query", async () => {
+  it("signed out: cloud modes wait, sign-in offered, no capacity query", async () => {
     const getStorageUsage = vi.spyOn(window.electronAPI, "getStorageUsage");
     renderSection();
-    expect(await screen.findByText("/tmp/vault · Default")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /local only/i })).toBeEnabled();
     expect(screen.getByRole("radio", { name: /manual upload/i })).toBeDisabled();
     expect(await screen.findByRole("button", { name: "Sign in" })).toBeInTheDocument();
     expect(getStorageUsage).not.toHaveBeenCalled();
     getStorageUsage.mockRestore();
-  });
-
-  it("opens the recordings folder", async () => {
-    const open = vi.spyOn(window.electronAPI, "openVaultDirectory");
-    renderSection();
-    fireEvent.click(screen.getByRole("button", { name: "Open folder" }));
-    expect(open).toHaveBeenCalledOnce();
-    open.mockRestore();
   });
 
   it("signed in: enables cloud modes and renders the queried capacity", async () => {

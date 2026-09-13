@@ -11,6 +11,7 @@ export type CapacityView =
   | { kind: "error" }
   | { kind: "session-expired" }
   | { kind: "beta-unavailable" }
+  | { kind: "not-available" }
   | { kind: "usage"; usage: StorageUsage; staleSince: number | null; suspended: boolean };
 
 /** `null` means the query has not answered yet. */
@@ -20,6 +21,7 @@ export function toCapacityView(result: StorageUsageResult | null): CapacityView 
     case "signed-out":
     case "error":
     case "session-expired":
+    case "not-available":
       return { kind: result.kind };
     case "ok":
     case "stale":

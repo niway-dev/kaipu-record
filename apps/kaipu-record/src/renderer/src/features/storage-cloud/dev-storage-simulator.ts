@@ -23,6 +23,7 @@ export const SIM_CAPACITIES = [
   "error",
   "session-expired",
   "beta-unavailable",
+  "not-available",
   "suspended",
 ] as const;
 export type SimCapacity = (typeof SIM_CAPACITIES)[number];
@@ -137,6 +138,8 @@ export function simulatedStorageResult(
       return { kind: "session-expired" };
     case "beta-unavailable":
       return { kind: "ok", usage: usage({ cloudUploads: false }), fetchedAt: now };
+    case "not-available":
+      return { kind: "not-available" };
     case "suspended":
       return { kind: "ok", usage: usage({ uploadsEnabled: false }), fetchedAt: now };
   }

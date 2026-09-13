@@ -64,6 +64,11 @@ describe("StorageUsageService", () => {
     await expect(svc.get()).resolves.toEqual({ kind: "error" });
   });
 
+  it("reports not-available when the server has no storage endpoint", async () => {
+    const { svc } = service({ fetchUsage: () => Promise.reject({ kind: "not-available" }) });
+    await expect(svc.get()).resolves.toEqual({ kind: "not-available" });
+  });
+
   it("reports an expired session on 401 and forgets that account's cache", async () => {
     const fetchUsage = vi
       .fn()

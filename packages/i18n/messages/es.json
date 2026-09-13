@@ -62,7 +62,8 @@
     "library": "Biblioteca",
     "shortcuts": "Atajos",
     "settings": "Ajustes",
-    "account": "Cuenta"
+    "account": "Cuenta",
+    "cloud": "Cloud"
   },
   "settings": {
     "title": "Ajustes",
@@ -106,7 +107,20 @@
     "retry": "Reintentar",
     "accountUnknown": "No se pudo verificar tu sesión — seguimos usando la última.",
     "accountTitle": "Tu cuenta de Kaipu",
-    "accountDescription": "Puedes grabar, editar y exportar sin una cuenta."
+    "accountDescription": "Puedes grabar, editar y exportar sin una cuenta.",
+    "general": "General",
+    "generalDescription": "Idioma y apariencia de Kaipu Record.",
+    "permissionsDescription": "A qué puede acceder Kaipu Record en este dispositivo.",
+    "recordingQualityDescription": "Resolución, fluidez y peso de las nuevas grabaciones.",
+    "recordingDescription": "Cómo se capturan las grabaciones.",
+    "filesDescription": "Dónde se guardan las grabaciones y capturas en este dispositivo.",
+    "appDescription": "Cómo se comporta la app en este dispositivo.",
+    "developer": "Developer",
+    "openFolder": "Abrir carpeta",
+    "accountMoved": "Tu cuenta se movió a Cloud",
+    "accountMovedDetail": "La sesión, la capacidad y las subidas viven en la sección Cloud del menú lateral.",
+    "goToCloud": "Ir a Cloud",
+    "navCloudNote": "La cuenta y la capacidad en cloud viven ahora en la sección Cloud."
   },
   "record": {
     "readyToRecord": "Todo listo para grabar",
@@ -507,9 +521,6 @@
   "storageCloud": {
     "title": "Almacenamiento y cloud",
     "description": "Kaipu funciona localmente. Cloud guarda una copia privada y te permite compartir un enlace cuando tú lo decidas.",
-    "localFolder": "Carpeta local",
-    "openFolder": "Abrir carpeta",
-    "change": "Cambiar",
     "saveMode": "Modo de guardado",
     "modeLocalOnly": "Solo local",
     "modeLocalOnlyDescription": "Guarda tus archivos en este dispositivo. No sube archivos automáticamente.",
@@ -547,6 +558,8 @@
     "ageJustNow": "hace un momento",
     "ageMinutes": "hace {count} min",
     "ageHours": "hace {count} h",
-    "ageDays": "hace {count} d"
+    "ageDays": "hace {count} d",
+    "notAvailableTitle": "El almacenamiento cloud todavía no está disponible",
+    "notAvailableDetail": "Tu plan incluye espacio en cloud, pero este servidor aún no ofrece subidas. Todo sigue funcionando localmente."
   }
 }

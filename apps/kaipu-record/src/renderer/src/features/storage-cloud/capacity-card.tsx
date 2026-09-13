@@ -80,7 +80,7 @@ export function CapacityCard({
       ? view.usage.capacityBytes
       : (entitlements?.features.cloudStorageBytes ?? null);
   const plan = entitlements?.plan === "pro" ? t("planPro") : t("planFree");
-  const signIn = (): void => void navigate("/sign-in", { state: { from: "/settings" } });
+  const signIn = (): void => void navigate("/sign-in", { state: { from: "/cloud" } });
 
   return (
     <div className={styles.capacity}>
@@ -142,6 +142,15 @@ export function CapacityCard({
               {t("signInAgain")}
             </Button>
           }
+        />
+      )}
+
+      {view.kind === "not-available" && (
+        <Notice
+          tone="neutral"
+          icon={<CloudOff size={16} />}
+          title={t("notAvailableTitle")}
+          detail={t("notAvailableDetail")}
         />
       )}
 

@@ -6,8 +6,8 @@ export interface StorageUsageServiceDeps {
   now?: () => number;
 }
 
-function isUnauthorized(err: unknown): boolean {
-  return !!err && typeof err === "object" && (err as { kind?: unknown }).kind === "unauthorized";
+function errorKind(err: unknown): unknown {
+  return err && typeof err === "object" ? (err as { kind?: unknown }).kind : undefined;
 }
 
 /**
@@ -30,7 +30,8 @@ export class StorageUsageService {
       this.lastGood.set(account.userId, { usage, fetchedAt });
       return { kind: "ok", usage, fetchedAt };
     } catch (err) {
-      if (isUnauthorized(err)) {
+      if (errorKind(err) === "not-available") return { kind: "not-available" };
+      if (errorKind(err) === "unauthorized") {
         this.lastGood.delete(account.userId);
         return { kind: "session-expired" };
       }

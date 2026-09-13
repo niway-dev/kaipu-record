@@ -19,16 +19,14 @@ test("toggling a setting persists through the settings IPC round-trip", async ()
   const { page, teardown } = await launchApp();
   try {
     await dismissOnboarding(page);
-    await page.evaluate(() => (location.hash = "#/settings"));
+    await page.evaluate(() => (location.hash = "#/settings/recording"));
 
     // Read the CURRENT persisted value via the same IPC method the page uses on mount.
     const before = await page.evaluate(() => window.electronAPI.getSettings());
     const initial = before.showBarInRecording;
 
-    // The Toggle is a Radix Switch (role="switch", aria-checked) with no accessible name, so
-    // the two page switches are positional: showBarInRecording renders first (Recording
-    // section), showInDock second (App section). The dev-only watermark toggle is stripped
-    // from the production build under test, so exactly two switches exist.
+    // The Toggle is a Radix Switch (role="switch", aria-checked) with no accessible name.
+    // Settings → Recording holds exactly one switch: showBarInRecording.
     const toggle = page.getByRole("switch").first();
 
     // Guard the positional selector: the first switch must reflect the persisted value we

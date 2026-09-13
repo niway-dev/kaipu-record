@@ -1,7 +1,7 @@
 import type { StorageUsage } from "@shared/types/cloud-storage";
 import type { CloudClientConfig } from "./catalog-client";
 
-export type StorageUsageError = { kind: "unauthorized" };
+export type StorageUsageError = { kind: "unauthorized" } | { kind: "not-available" };
 
 const FIELDS_NUMBER = [
   "capacityBytes",
@@ -26,7 +26,8 @@ function isStorageUsage(value: unknown): value is StorageUsage {
 /**
  * The account's cloud capacity from `GET /api/v1/me/storage`. Rejects on every failure,
  * including a malformed body: the caller must never mistake "could not ask" for zeros.
- * Rejects with `{ kind: "unauthorized" }` on 401 so the UI can ask for a new sign-in.
+ * Rejects with `{ kind: "unauthorized" }` on 401 so the UI can ask for a new sign-in, and
+ * `{ kind: "not-available" }` on 404 — a server without the endpoint, which retrying won't fix.
  */
 export async function fetchStorageUsage(
   config: CloudClientConfig,
@@ -37,6 +38,8 @@ export async function fetchStorageUsage(
     signal: AbortSignal.timeout(15_000),
   });
   if (res.status === 401) throw { kind: "unauthorized" } satisfies StorageUsageError;
+  // A 404 is not a transient failure: this server does not offer cloud storage (yet).
+  if (res.status === 404) throw { kind: "not-available" } satisfies StorageUsageError;
   if (!res.ok) throw new Error(`storage usage failed: ${res.status}`);
   const body = (await res.json()) as { data?: unknown; error?: { message?: string } | null };
   if (!isStorageUsage(body.data)) {

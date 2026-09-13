@@ -93,6 +93,13 @@ describe("CapacityCard", () => {
     expect(screen.getByRole("button", { name: /sign in again/i })).toBeInTheDocument();
   });
 
+  it("says cloud storage is not offered yet on a server without the endpoint, without retry", () => {
+    renderCard({ kind: "not-available" });
+    expect(screen.getByText(/cloud storage isn't available yet/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  });
+
   it("explains unavailable beta access without a bar", () => {
     renderCard({ kind: "beta-unavailable" });
     expect(screen.getByText(/isn't available for your account yet/i)).toBeInTheDocument();
