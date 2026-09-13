@@ -2703,7 +2703,7 @@ export function makeFakeStorage(): IStorageService & {
 ```ts
 // packages/application/src/cloud/cloud.test.ts
 import { beforeEach, describe, expect, it } from "vitest";
-import { FREE_ENTITLEMENTS, type Entitlements } from "@kaipu/domain/schemas";
+import { FREE_ENTITLEMENTS, UploadIntentExpiredError, type Entitlements } from "@kaipu/domain/schemas";
 import { MAX_PENDING_UPLOADS_PER_ACCOUNT } from "@kaipu/domain/constants";
 import { cancelUpload } from "./cancel-upload";
 import { confirmUpload } from "./confirm-upload";
@@ -2774,6 +2774,16 @@ describe("createUploadIntent", () => {
     expect(b.revisionId).toBe(a.revisionId);
     expect((await assets.usage("u1")).reservedBytes).toBe(600);
     expect(b.ticket).not.toBeNull(); // re-issued for the same key
+  });
+
+  it("repeating a cancelled or expired intent key fails as intent-expired, not as a quota error", async () => {
+    const input = intent();
+    const a = await createUploadIntent({ assets, access, storage, userId: "u1", entitlements: grant, input, now: NOW });
+    await cancelUpload({ assets, storage, userId: "u1", assetId: input.assetId, revisionId: a.revisionId });
+    await expect(
+      createUploadIntent({ assets, access, storage, userId: "u1", entitlements: grant, input, now: NOW }),
+    ).rejects.toBeInstanceOf(UploadIntentExpiredError);
+    expect((await assets.usage("u1")).reservedBytes).toBe(0);
   });
 
   it("after confirm, repeating the intent reports ready with no ticket", async () => {
