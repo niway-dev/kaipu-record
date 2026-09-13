@@ -70,6 +70,7 @@ export default defineConfig({
             { slug: "backlog/r2-storage-architecture" },
             { slug: "backlog/cloud-recordings-upload" },
             { slug: "backlog/optional-cloud" },
+            { slug: "backlog/optional-cloud-handoff" },
             { slug: "backlog/desktop-cloud-sync-gap" },
             { slug: "backlog/plans-and-entitlements" },
             { slug: "backlog/backend-security-hardening" },
