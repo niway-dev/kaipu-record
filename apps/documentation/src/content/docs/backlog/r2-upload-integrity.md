@@ -67,3 +67,24 @@ from the ticket PUT as "not uploaded", never assume a 4xx.
 
 Conclusion: the presigned ticket bounds length, hash and overwrite at write time; plan 01
 proceeds with presigned PUT.
+
+## Evidence: URL expiry during a transfer (spike, 2026-09-13)
+
+`packages/infra-storage/scripts/r2-expiry-spike.ts`, with presigned URLs valid for **3 s**,
+against `kaipu-private-bucket` (all objects deleted afterwards). This is R2's observed
+behaviour, not an inference from the S3 documentation:
+
+| Check                                                                  | Result                                                   |
+| ---------------------------------------------------------------------- | -------------------------------------------------------- |
+| 1. 8 MiB PUT started inside the window, body trickled over ~12 s       | `200` — completed 4× past expiry                         |
+| 2. PUT started after expiry                                            | `403`                                                    |
+| 3. 128 MiB GET started inside the window, read slowly for ~33 s        | `200`, all bytes; ~112 MB of them arrived after second 8 |
+| 4. New Range request on the same expired URL (what a player seek does) | `403`                                                    |
+
+Conclusions for plan 01 and the desktop client:
+
+- R2 checks expiry when a request **starts**. A short ticket (5 min) never cuts off a slow upload
+  or a long download that is already running.
+- Every **new** request needs a valid URL. A retry, a reconnect, or a player seek/Range request
+  after expiry gets `403`, so the client must ask the server for a fresh URL (same upload intent
+  for PUT, same revision for GET) instead of treating `403` as "file gone".
