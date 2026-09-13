@@ -6,10 +6,74 @@ import type {
   ReserveRevisionData,
 } from "@kaipu/domain/repositories";
 import type { CloudAsset, CloudRevision } from "@kaipu/domain/schemas";
-import { and, desc, eq, gt, lt, or, sql } from "drizzle-orm";
+import { AssetConflictError } from "@kaipu/domain/schemas";
+import { and, desc, eq, gt, lt, or, type SQL, sql } from "drizzle-orm";
 import type { DatabaseClient } from "../client";
 import { mapCloudAssetToDomain, mapCloudRevisionToDomain } from "../mappers/cloud.mapper";
 import { cloudAssetTable, cloudRevisionTable, cloudStorageAccountTable } from "../schema/cloud";
+
+type AssetRow = typeof cloudAssetTable.$inferSelect;
+type RevisionRow = typeof cloudRevisionTable.$inferSelect;
+/** A table row serialised with `to_jsonb` — snake_case keys, timestamps without zone. */
+type JsonRow = Record<string, unknown>;
+
+/** `timestamp` (without time zone) columns store UTC wall-clock time, as drizzle does. */
+function toTimestamp(date: Date): string {
+  return date.toISOString().replace("T", " ").replace("Z", "");
+}
+function fromTimestamp(value: unknown): Date {
+  // `to_jsonb` renders microseconds ("2026-09-13T08:00:00.123456"); keep milliseconds.
+  const text = String(value).replace(/(\.\d{3})\d+$/, "$1");
+  return new Date(`${text}Z`);
+}
+function nullableTimestamp(value: unknown): Date | null {
+  return value == null ? null : fromTimestamp(value);
+}
+
+function assetFromJson(j: JsonRow): AssetRow {
+  return {
+    userId: String(j.user_id),
+    assetId: String(j.asset_id),
+    kind: String(j.kind),
+    title: String(j.title),
+    currentRevisionId: (j.current_revision_id as string | null) ?? null,
+    durationSeconds: Number(j.duration_seconds),
+    derivedFromAssetId: (j.derived_from_asset_id as string | null) ?? null,
+    autoUploadExcluded: Boolean(j.auto_upload_excluded),
+    createdAt: fromTimestamp(j.created_at),
+    updatedAt: fromTimestamp(j.updated_at),
+    deletedAt: nullableTimestamp(j.deleted_at),
+  };
+}
+
+function revisionFromJson(j: JsonRow): RevisionRow {
+  return {
+    revisionId: String(j.revision_id),
+    userId: String(j.user_id),
+    assetId: String(j.asset_id),
+    intentKey: String(j.intent_key),
+    status: String(j.status),
+    storageKey: String(j.storage_key),
+    thumbnailKey: (j.thumbnail_key as string | null) ?? null,
+    contentType: String(j.content_type),
+    sizeBytes: Number(j.size_bytes),
+    thumbnailBytes: Number(j.thumbnail_bytes),
+    contentSha256: String(j.content_sha256),
+    reservedBytes: Number(j.reserved_bytes),
+    ticketExpiresAt: fromTimestamp(j.ticket_expires_at),
+    verifiedAt: nullableTimestamp(j.verified_at),
+    createdAt: fromTimestamp(j.created_at),
+    updatedAt: fromTimestamp(j.updated_at),
+  };
+}
+
+function isNotNullViolation(err: unknown, column: string): boolean {
+  for (let e: unknown = err; e && typeof e === "object"; e = (e as { cause?: unknown }).cause) {
+    const pg = e as { code?: unknown; column?: unknown };
+    if (pg.code === "23502" && pg.column === column) return true;
+  }
+  return false;
+}
 
 /** Keyset cursor: "<createdAtMillis>:<assetId>", opaque to clients. */
 function encodeCursor(createdAt: Date, assetId: string): string {
@@ -27,102 +91,107 @@ function decodeCursor(cursor: string): { createdAt: Date; assetId: string } | nu
 export class CloudAssetRepository implements ICloudAssetRepository {
   constructor(private db: DatabaseClient) {}
 
+  /**
+   * Atomic reservation. Every counter change happens in the SAME SQL statement as the revision
+   * row it accounts for (data-modifying CTEs), because the Neon HTTP driver autocommits each
+   * statement and has no interactive transactions. A failure anywhere in the statement (for
+   * example the (user, intentKey) unique violation) rolls back the counter bump and the asset
+   * upsert together.
+   *
+   * Tombstoned assets (`deleted_at` set) are never resurrected: the asset upsert only updates a
+   * live row, and when it returns nothing the revision insert gets a NULL `asset_id`, which
+   * violates NOT NULL and aborts the whole statement. The caller then gets `AssetConflictError`.
+   */
   async reserve(data: ReserveRevisionData): Promise<ReserveOutcome> {
-    // 1. Make sure the accounting row exists (idempotent).
+    // Idempotent bootstrap of the accounting row. Safe as its own statement: it never changes
+    // counters of an existing row.
     await this.db
       .insert(cloudStorageAccountTable)
       .values({ userId: data.userId })
       .onConflictDoNothing();
 
-    // 2. THE quota check. One conditional UPDATE: Postgres takes the row lock, a
-    //    concurrent reserve re-evaluates the WHERE after this commits, so two requests
-    //    for the last bytes can never both pass. Also enforces the pending cap.
-    const [account] = await this.db
-      .update(cloudStorageAccountTable)
-      .set({
-        reservedBytes: sql`${cloudStorageAccountTable.reservedBytes} + ${data.reservedBytes}`,
-        pendingUploads: sql`${cloudStorageAccountTable.pendingUploads} + 1`,
-      })
-      .where(
-        and(
-          eq(cloudStorageAccountTable.userId, data.userId),
-          sql`${cloudStorageAccountTable.usedBytes} + ${cloudStorageAccountTable.reservedBytes} + ${data.reservedBytes} <= ${data.capacityBytes}`,
-          sql`${cloudStorageAccountTable.pendingUploads} < ${data.maxPending}`,
-        ),
-      )
-      .returning();
-
-    if (!account) {
-      const current = await this.usage(data.userId);
-      if (current.pendingUploads >= data.maxPending) return { kind: "too-many-pending" };
-      return {
-        kind: "quota-exceeded",
-        usedBytes: current.usedBytes,
-        reservedBytes: current.reservedBytes,
-      };
-    }
-
-    // 3. Upsert the asset and insert the revision. If either fails, give the bytes back;
-    //    if the process dies in between, `reconcile()` (sweep) rebuilds the counters.
+    let rows: Array<{ asset: JsonRow | null; revision: JsonRow | null }>;
     try {
-      const [assetRow] = await this.db
-        .insert(cloudAssetTable)
-        .values({
-          userId: data.userId,
-          assetId: data.assetId,
-          kind: data.kind,
-          title: data.title,
-          durationSeconds: data.durationSeconds,
-          derivedFromAssetId: data.derivedFromAssetId,
-        })
-        .onConflictDoUpdate({
-          target: [cloudAssetTable.userId, cloudAssetTable.assetId],
-          set: { title: data.title, durationSeconds: data.durationSeconds, deletedAt: null },
-        })
-        .returning();
-      const [revisionRow] = await this.db
-        .insert(cloudRevisionTable)
-        .values({
-          revisionId: data.revisionId,
-          userId: data.userId,
-          assetId: data.assetId,
-          intentKey: data.intentKey,
-          status: "reserved",
-          storageKey: data.storageKey,
-          thumbnailKey: data.thumbnailKey,
-          contentType: data.contentType,
-          sizeBytes: data.sizeBytes,
-          thumbnailBytes: data.thumbnailBytes,
-          contentSha256: data.contentSha256,
-          reservedBytes: data.reservedBytes,
-          ticketExpiresAt: data.ticketExpiresAt,
-        })
-        .returning();
-      if (!assetRow || !revisionRow) throw new Error("reserve: insert returned no row");
-      return {
-        kind: "reserved",
-        asset: mapCloudAssetToDomain(assetRow),
-        revision: mapCloudRevisionToDomain(revisionRow),
-      };
+      const result = await this.db.execute<{ asset: JsonRow | null; revision: JsonRow | null }>(sql`
+        with acct as (
+          update ${cloudStorageAccountTable}
+          set reserved_bytes = reserved_bytes + ${data.reservedBytes},
+              pending_uploads = pending_uploads + 1,
+              updated_at = now()
+          where user_id = ${data.userId}
+            and used_bytes + reserved_bytes + ${data.reservedBytes} <= ${data.capacityBytes}
+            and pending_uploads < ${data.maxPending}
+          returning user_id
+        ),
+        up as (
+          insert into ${cloudAssetTable}
+            (user_id, asset_id, kind, title, duration_seconds, derived_from_asset_id)
+          select ${data.userId}, ${data.assetId}, ${data.kind}, ${data.title},
+                 ${data.durationSeconds}, ${data.derivedFromAssetId}
+          from acct
+          on conflict (user_id, asset_id) do update
+            set title = excluded.title,
+                duration_seconds = excluded.duration_seconds,
+                updated_at = now()
+            where ${cloudAssetTable}.deleted_at is null
+          returning *
+        ),
+        rev as (
+          insert into ${cloudRevisionTable}
+            (revision_id, user_id, asset_id, intent_key, status, storage_key, thumbnail_key,
+             content_type, size_bytes, thumbnail_bytes, content_sha256, reserved_bytes,
+             ticket_expires_at)
+          select ${data.revisionId}, acct.user_id, up.asset_id, ${data.intentKey}, 'reserved',
+                 ${data.storageKey}, ${data.thumbnailKey}, ${data.contentType}, ${data.sizeBytes},
+                 ${data.thumbnailBytes}, ${data.contentSha256}, ${data.reservedBytes},
+                 ${toTimestamp(data.ticketExpiresAt)}::timestamp
+          from acct left join up on true
+          returning *
+        )
+        select (select to_jsonb(up) from up) as asset, (select to_jsonb(rev) from rev) as revision
+      `);
+      rows = result.rows;
     } catch (err) {
-      await this.adjust(data.userId, { reservedBytes: -data.reservedBytes, pendingUploads: -1 });
+      if (
+        isNotNullViolation(err, "asset_id") &&
+        (await this.isTombstoned(data.userId, data.assetId))
+      ) {
+        throw new AssetConflictError(
+          "The cloud asset was deleted; it cannot receive new revisions",
+        );
+      }
       throw err;
     }
+
+    const row = rows[0];
+    if (row?.asset && row.revision) {
+      return {
+        kind: "reserved",
+        asset: mapCloudAssetToDomain(assetFromJson(row.asset)),
+        revision: mapCloudRevisionToDomain(revisionFromJson(row.revision)),
+      };
+    }
+
+    // Refused by the conditional UPDATE: nothing was written. Classify with read-only queries.
+    if (await this.isTombstoned(data.userId, data.assetId)) {
+      throw new AssetConflictError("The cloud asset was deleted; it cannot receive new revisions");
+    }
+    const current = await this.usage(data.userId);
+    if (current.pendingUploads >= data.maxPending) return { kind: "too-many-pending" };
+    return {
+      kind: "quota-exceeded",
+      usedBytes: current.usedBytes,
+      reservedBytes: current.reservedBytes,
+    };
   }
 
-  /** Bounded counter arithmetic — never lets a counter drop below zero. */
-  private async adjust(
-    userId: string,
-    delta: { usedBytes?: number; reservedBytes?: number; pendingUploads?: number },
-  ): Promise<void> {
-    await this.db
-      .update(cloudStorageAccountTable)
-      .set({
-        usedBytes: sql`greatest(0, ${cloudStorageAccountTable.usedBytes} + ${delta.usedBytes ?? 0})`,
-        reservedBytes: sql`greatest(0, ${cloudStorageAccountTable.reservedBytes} + ${delta.reservedBytes ?? 0})`,
-        pendingUploads: sql`greatest(0, ${cloudStorageAccountTable.pendingUploads} + ${delta.pendingUploads ?? 0})`,
-      })
-      .where(eq(cloudStorageAccountTable.userId, userId));
+  private async isTombstoned(userId: string, assetId: string): Promise<boolean> {
+    const [row] = await this.db
+      .select({ deletedAt: cloudAssetTable.deletedAt })
+      .from(cloudAssetTable)
+      .where(and(eq(cloudAssetTable.userId, userId), eq(cloudAssetTable.assetId, assetId)))
+      .limit(1);
+    return row?.deletedAt != null;
   }
 
   async findByIntentKey(userId: string, intentKey: string): Promise<CloudRevision | null> {
@@ -182,26 +251,16 @@ export class CloudAssetRepository implements ICloudAssetRepository {
       );
   }
 
-  /** Transition helper: flips status only from `from`; returns null when the row was not in `from`. */
-  private async transition(
-    userId: string,
-    revisionId: string,
-    from: CloudRevision["status"],
-    to: CloudRevision["status"],
-    extra: Partial<typeof cloudRevisionTable.$inferInsert> = {},
-  ): Promise<CloudRevision | null> {
-    const [row] = await this.db
-      .update(cloudRevisionTable)
-      .set({ status: to, ...extra })
-      .where(
-        and(
-          eq(cloudRevisionTable.userId, userId),
-          eq(cloudRevisionTable.revisionId, revisionId),
-          eq(cloudRevisionTable.status, from),
-        ),
-      )
-      .returning();
-    return row ? mapCloudRevisionToDomain(row) : null;
+  /**
+   * One statement per lifecycle transition: a status-guarded UPDATE of the revision, the counter
+   * adjustment computed from the row it returned (floored at zero), and — where relevant — the
+   * asset pointer change. A crash can no longer separate a transition from its accounting, and
+   * a second call finds the status already moved and changes nothing.
+   */
+  private async runTransition(statement: SQL): Promise<CloudRevision | null> {
+    const result = await this.db.execute<{ revision: JsonRow | null }>(statement);
+    const json = result.rows[0]?.revision;
+    return json ? mapCloudRevisionToDomain(revisionFromJson(json)) : null;
   }
 
   async markReady(
@@ -209,58 +268,115 @@ export class CloudAssetRepository implements ICloudAssetRepository {
     revisionId: string,
     verifiedAt: Date,
   ): Promise<CloudRevision | null> {
-    const flipped = await this.transition(userId, revisionId, "reserved", "ready", { verifiedAt });
-    if (!flipped) {
-      // Already ready (idempotent confirm) or not confirmable — report the row as-is, count nothing.
-      const [row] = await this.db
-        .select()
-        .from(cloudRevisionTable)
-        .where(
-          and(eq(cloudRevisionTable.userId, userId), eq(cloudRevisionTable.revisionId, revisionId)),
-        )
-        .limit(1);
-      return row && row.status === "ready" ? mapCloudRevisionToDomain(row) : null;
-    }
-    await this.adjust(userId, {
-      usedBytes: flipped.reservedBytes,
-      reservedBytes: -flipped.reservedBytes,
-      pendingUploads: -1,
-    });
-    await this.db
-      .update(cloudAssetTable)
-      .set({ currentRevisionId: revisionId, deletedAt: null })
-      .where(and(eq(cloudAssetTable.userId, userId), eq(cloudAssetTable.assetId, flipped.assetId)));
-    return flipped;
+    const flipped = await this.runTransition(sql`
+      with f as (
+        update ${cloudRevisionTable}
+        set status = 'ready', verified_at = ${toTimestamp(verifiedAt)}::timestamp, updated_at = now()
+        where user_id = ${userId} and revision_id = ${revisionId} and status = 'reserved'
+        returning *
+      ),
+      acct as (
+        update ${cloudStorageAccountTable} a
+        set used_bytes = greatest(0, a.used_bytes + f.reserved_bytes),
+            reserved_bytes = greatest(0, a.reserved_bytes - f.reserved_bytes),
+            pending_uploads = greatest(0, a.pending_uploads - 1),
+            updated_at = now()
+        from f
+        where a.user_id = f.user_id
+        returning a.user_id
+      ),
+      pointer as (
+        update ${cloudAssetTable} s
+        set current_revision_id = f.revision_id, updated_at = now()
+        from f
+        where s.user_id = f.user_id
+          and s.asset_id = f.asset_id
+          and (
+            s.current_revision_id is null
+            or not exists (
+              select 1 from ${cloudRevisionTable} c
+              where c.revision_id = s.current_revision_id
+                and (c.created_at, c.revision_id) > (f.created_at, f.revision_id)
+            )
+          )
+        returning s.asset_id
+      )
+      select (select to_jsonb(f) from f) as revision,
+             (select count(*) from acct) as accounted,
+             (select count(*) from pointer) as pointed
+    `);
+    if (flipped) return flipped;
+    // Already ready (idempotent confirm) or not confirmable — report the row as-is, count nothing.
+    const [row] = await this.db
+      .select()
+      .from(cloudRevisionTable)
+      .where(
+        and(eq(cloudRevisionTable.userId, userId), eq(cloudRevisionTable.revisionId, revisionId)),
+      )
+      .limit(1);
+    return row && row.status === "ready" ? mapCloudRevisionToDomain(row) : null;
   }
 
   async release(userId: string, revisionId: string): Promise<CloudRevision | null> {
-    const flipped = await this.transition(userId, revisionId, "reserved", "expired");
-    if (!flipped) return null;
-    await this.adjust(userId, { reservedBytes: -flipped.reservedBytes, pendingUploads: -1 });
-    return flipped;
+    return this.runTransition(sql`
+      with f as (
+        update ${cloudRevisionTable}
+        set status = 'expired', updated_at = now()
+        where user_id = ${userId} and revision_id = ${revisionId} and status = 'reserved'
+        returning *
+      ),
+      acct as (
+        update ${cloudStorageAccountTable} a
+        set reserved_bytes = greatest(0, a.reserved_bytes - f.reserved_bytes),
+            pending_uploads = greatest(0, a.pending_uploads - 1),
+            updated_at = now()
+        from f
+        where a.user_id = f.user_id
+        returning a.user_id
+      )
+      select (select to_jsonb(f) from f) as revision, (select count(*) from acct) as accounted
+    `);
   }
 
   async beginDelete(userId: string, revisionId: string): Promise<CloudRevision | null> {
-    const flipped = await this.transition(userId, revisionId, "ready", "deleting");
-    if (!flipped) return null;
-    await this.db
-      .update(cloudAssetTable)
-      .set({ currentRevisionId: null, autoUploadExcluded: true })
-      .where(
-        and(
-          eq(cloudAssetTable.userId, userId),
-          eq(cloudAssetTable.assetId, flipped.assetId),
-          eq(cloudAssetTable.currentRevisionId, revisionId),
-        ),
-      );
-    return flipped;
+    // No counter change: `deleting` bytes stay in `used` until the object is gone.
+    return this.runTransition(sql`
+      with f as (
+        update ${cloudRevisionTable}
+        set status = 'deleting', updated_at = now()
+        where user_id = ${userId} and revision_id = ${revisionId} and status = 'ready'
+        returning *
+      ),
+      pointer as (
+        update ${cloudAssetTable} s
+        set current_revision_id = null, auto_upload_excluded = true, updated_at = now()
+        from f
+        where s.user_id = f.user_id
+          and s.asset_id = f.asset_id
+          and s.current_revision_id = f.revision_id
+        returning s.asset_id
+      )
+      select (select to_jsonb(f) from f) as revision, (select count(*) from pointer) as pointed
+    `);
   }
 
   async finishDelete(userId: string, revisionId: string): Promise<CloudRevision | null> {
-    const flipped = await this.transition(userId, revisionId, "deleting", "deleted");
-    if (!flipped) return null;
-    await this.adjust(userId, { usedBytes: -flipped.reservedBytes });
-    return flipped;
+    return this.runTransition(sql`
+      with f as (
+        update ${cloudRevisionTable}
+        set status = 'deleted', updated_at = now()
+        where user_id = ${userId} and revision_id = ${revisionId} and status = 'deleting'
+        returning *
+      ),
+      acct as (
+        update ${cloudStorageAccountTable} a
+        set used_bytes = greatest(0, a.used_bytes - f.reserved_bytes), updated_at = now()
+        from f
+        where a.user_id = f.user_id
+        returning a.user_id
+      )
+      select (select to_jsonb(f) from f) as revision, (select count(*) from acct) as accounted
+    `);
   }
 
   async setAutoUploadExcluded(
@@ -333,25 +449,46 @@ export class CloudAssetRepository implements ICloudAssetRepository {
       : { usedBytes: 0, reservedBytes: 0, pendingUploads: 0 };
   }
 
+  /**
+   * Rebuilds the counters from revision rows as ONE non-interactive transaction (drizzle
+   * neon-http `batch` → neon `sql.transaction`). The row lock taken by `for update` is held
+   * until commit, and every writer changes the account row in the same statement as the
+   * revision change it accounts for, so no writer can commit between the lock and the sums.
+   * Under READ COMMITTED the sums statement takes a fresh snapshot after the lock is granted.
+   */
   async reconcile(userId: string): Promise<AccountUsage> {
-    const [sums] = await this.db
-      .select({
-        used: sql<number>`coalesce(sum(case when ${cloudRevisionTable.status} in ('ready','deleting') then ${cloudRevisionTable.reservedBytes} else 0 end), 0)::bigint`,
-        reserved: sql<number>`coalesce(sum(case when ${cloudRevisionTable.status} = 'reserved' then ${cloudRevisionTable.reservedBytes} else 0 end), 0)::bigint`,
-        pending: sql<number>`count(*) filter (where ${cloudRevisionTable.status} = 'reserved')::int`,
-      })
-      .from(cloudRevisionTable)
-      .where(eq(cloudRevisionTable.userId, userId));
-    const usage = {
-      usedBytes: Number(sums?.used ?? 0),
-      reservedBytes: Number(sums?.reserved ?? 0),
-      pendingUploads: Number(sums?.pending ?? 0),
+    const [, , result] = await this.db.batch([
+      this.db.insert(cloudStorageAccountTable).values({ userId }).onConflictDoNothing(),
+      this.db.execute(
+        sql`select user_id from ${cloudStorageAccountTable} where user_id = ${userId} for update`,
+      ),
+      this.db.execute<{
+        used_bytes: string | number;
+        reserved_bytes: string | number;
+        pending_uploads: string | number;
+      }>(sql`
+        update ${cloudStorageAccountTable} a
+        set used_bytes = s.used, reserved_bytes = s.reserved, pending_uploads = s.pending,
+            updated_at = now()
+        from (
+          select
+            coalesce(sum(reserved_bytes) filter (where status in ('ready', 'deleting')), 0)::bigint as used,
+            coalesce(sum(reserved_bytes) filter (where status = 'reserved'), 0)::bigint as reserved,
+            (count(*) filter (where status = 'reserved'))::int as pending
+          from ${cloudRevisionTable}
+          where user_id = ${userId}
+        ) s
+        where a.user_id = ${userId}
+        returning a.used_bytes, a.reserved_bytes, a.pending_uploads
+      `),
+    ]);
+    const row = result.rows[0];
+    if (!row) throw new Error("reconcile: accounting row missing after bootstrap");
+    return {
+      usedBytes: Number(row.used_bytes),
+      reservedBytes: Number(row.reserved_bytes),
+      pendingUploads: Number(row.pending_uploads),
     };
-    await this.db
-      .insert(cloudStorageAccountTable)
-      .values({ userId, ...usage })
-      .onConflictDoUpdate({ target: cloudStorageAccountTable.userId, set: usage });
-    return usage;
   }
 
   async listReservedExpiredBefore(before: Date, limit: number): Promise<CloudRevision[]> {

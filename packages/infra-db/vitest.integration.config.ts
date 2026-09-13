@@ -5,7 +5,7 @@ export default defineConfig({
     globals: true,
     environment: "node",
     include: ["src/integration/**/*.integration.test.ts"],
-    // Concurrency tests are the point — never serialise them across files by accident.
+    // Integration files share one real database; run them one at a time so suites never interfere.
     fileParallelism: false,
     testTimeout: 30_000,
   },

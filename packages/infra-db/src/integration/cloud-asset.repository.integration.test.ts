@@ -1,6 +1,7 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
-import { createDatabaseClient } from "../client";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { AssetConflictError } from "@kaipu/domain/schemas";
+import { and, eq } from "drizzle-orm";
+import type { DatabaseClient } from "../client";
 import { CloudAssetRepository } from "../repositories/cloud-asset.repository";
 import { cloudAssetTable, cloudRevisionTable, cloudStorageAccountTable } from "../schema/cloud";
 import { userTable } from "../schema/auth";
@@ -9,16 +10,22 @@ const url = process.env.TEST_DATABASE_URL;
 const describeDb = url ? describe : describe.skip;
 
 describeDb("CloudAssetRepository (real database)", () => {
-  // Placeholder keeps `createDatabaseClient` from throwing at suite-collection time when the
-  // suite is skipped (Vitest still runs this describe body's top-level code for `describe.skip`,
-  // it only skips the `it` callbacks) — no query ever reaches this client without TEST_DATABASE_URL.
-  const db = createDatabaseClient(url ?? "postgresql://user:pass@host.invalid/db");
-  const repo = new CloudAssetRepository(db);
+  // `../client` builds a default client from DATABASE_URL at import time, which throws when that
+  // variable is unset. Importing it lazily (only when the suite actually runs) lets the file
+  // report as skipped without either variable. Vitest still runs a skipped describe body, so
+  // nothing in this body may touch the client synchronously.
+  let db: DatabaseClient;
+  let repo: CloudAssetRepository;
+  beforeAll(async () => {
+    const { createDatabaseClient } = await import("../client");
+    db = createDatabaseClient(url ?? "");
+    repo = new CloudAssetRepository(db);
+  });
   // Unique per run: this suite creates and deletes only this throwaway user's rows.
   const USER = `it-cloud-user-${crypto.randomUUID()}`;
   const USER_EMAIL = `${USER}@example.com`;
 
-  function reserveData(overrides: Partial<Parameters<typeof repo.reserve>[0]> = {}) {
+  function reserveData(overrides: Partial<Parameters<CloudAssetRepository["reserve"]>[0]> = {}) {
     const revisionId = crypto.randomUUID();
     return {
       userId: USER,
@@ -128,5 +135,120 @@ describeDb("CloudAssetRepository (real database)", () => {
     expect(page2.nextCursor).toBeNull();
     const ids = [...page1.items, ...page2.items].map((i) => i.asset.assetId);
     expect(new Set(ids).size).toBe(3);
+  });
+
+  function pgErrorCodes(err: unknown): unknown[] {
+    const codes: unknown[] = [];
+    for (let e = err; e && typeof e === "object"; e = (e as { cause?: unknown }).cause) {
+      codes.push((e as { code?: unknown }).code);
+    }
+    return codes;
+  }
+
+  async function revisionRows() {
+    return db.select().from(cloudRevisionTable).where(eq(cloudRevisionTable.userId, USER));
+  }
+
+  async function trueSums() {
+    const rows = await revisionRows();
+    let usedBytes = 0;
+    let reservedBytes = 0;
+    let pendingUploads = 0;
+    for (const r of rows) {
+      if (r.status === "ready" || r.status === "deleting") usedBytes += r.reservedBytes;
+      if (r.status === "reserved") {
+        reservedBytes += r.reservedBytes;
+        pendingUploads += 1;
+      }
+    }
+    return { usedBytes, reservedBytes, pendingUploads };
+  }
+
+  it("two parallel reserves with the same intent key: one wins, the loser changes nothing", async () => {
+    const intentKey = crypto.randomUUID();
+    const assetId = crypto.randomUUID();
+    const results = await Promise.allSettled([
+      repo.reserve(reserveData({ intentKey, assetId, sizeBytes: 100, reservedBytes: 100 })),
+      repo.reserve(reserveData({ intentKey, assetId, sizeBytes: 100, reservedBytes: 100 })),
+    ]);
+    const fulfilled = results.filter((r) => r.status === "fulfilled");
+    const rejected = results.filter((r) => r.status === "rejected");
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect(fulfilled[0]?.status === "fulfilled" && fulfilled[0].value.kind).toBe("reserved");
+    const reason = rejected[0]?.status === "rejected" ? rejected[0].reason : null;
+    expect(pgErrorCodes(reason)).toContain("23505"); // unique_violation
+    expect(await repo.usage(USER)).toEqual({ usedBytes: 0, reservedBytes: 100, pendingUploads: 1 });
+    expect(await revisionRows()).toHaveLength(1);
+    const assets = await db.select().from(cloudAssetTable).where(eq(cloudAssetTable.userId, USER));
+    expect(assets).toHaveLength(1);
+  });
+
+  it("reconcile racing a burst of reserves leaves counters equal to the revision sums", async () => {
+    for (let round = 0; round < 4; round += 1) {
+      await Promise.all([
+        ...Array.from({ length: 5 }, () =>
+          repo.reserve(
+            reserveData({
+              sizeBytes: 10,
+              reservedBytes: 10,
+              capacityBytes: 1_000_000,
+              maxPending: 1000,
+            }),
+          ),
+        ),
+        repo.reconcile(USER),
+      ]);
+      const expected = await trueSums();
+      expect(expected.pendingUploads).toBe(5 * (round + 1));
+      expect(await repo.usage(USER)).toEqual(expected);
+    }
+  });
+
+  it("a reserve on a tombstoned asset does not resurrect it and writes nothing", async () => {
+    const first = await repo.reserve(reserveData({ sizeBytes: 100, reservedBytes: 100 }));
+    if (first.kind !== "reserved") throw new Error(first.kind);
+    await repo.markReady(USER, first.revision.revisionId, new Date());
+    const deletedAt = new Date();
+    await db
+      .update(cloudAssetTable)
+      .set({ deletedAt })
+      .where(
+        and(eq(cloudAssetTable.userId, USER), eq(cloudAssetTable.assetId, first.asset.assetId)),
+      );
+    const before = await repo.usage(USER);
+
+    await expect(
+      repo.reserve(
+        reserveData({
+          assetId: first.asset.assetId,
+          title: "resurrected",
+          sizeBytes: 100,
+          reservedBytes: 100,
+        }),
+      ),
+    ).rejects.toBeInstanceOf(AssetConflictError);
+
+    const found = await repo.findAsset(USER, first.asset.assetId);
+    expect(found?.asset.deletedAt).not.toBeNull();
+    expect(found?.asset.title).toBe("it");
+    expect(await repo.usage(USER)).toEqual(before);
+    expect(await revisionRows()).toHaveLength(1);
+  });
+
+  it("confirming an older revision after a newer one keeps the asset on the newer revision", async () => {
+    const assetId = crypto.randomUUID();
+    const older = await repo.reserve(reserveData({ assetId, sizeBytes: 100, reservedBytes: 100 }));
+    if (older.kind !== "reserved") throw new Error(older.kind);
+    const newer = await repo.reserve(reserveData({ assetId, sizeBytes: 100, reservedBytes: 100 }));
+    if (newer.kind !== "reserved") throw new Error(newer.kind);
+
+    expect(await repo.markReady(USER, newer.revision.revisionId, new Date())).not.toBeNull();
+    expect(await repo.markReady(USER, older.revision.revisionId, new Date())).not.toBeNull();
+
+    expect((await repo.findAsset(USER, assetId))?.asset.currentRevisionId).toBe(
+      newer.revision.revisionId,
+    );
+    expect(await repo.usage(USER)).toEqual({ usedBytes: 200, reservedBytes: 0, pendingUploads: 0 });
   });
 });
