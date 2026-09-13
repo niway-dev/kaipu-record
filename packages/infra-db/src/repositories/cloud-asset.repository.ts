@@ -75,6 +75,23 @@ function isNotNullViolation(err: unknown, column: string): boolean {
   return false;
 }
 
+/**
+ * A concurrent `reserve` for the same (user, intentKey) loses a unique-index race on
+ * `cloud_revision_user_intent_idx`. The application layer must never see a raw Postgres error
+ * code for this — it maps to `AssetConflictError` so the caller can resolve to the winning
+ * revision via `findByIntentKey`.
+ */
+function isIntentKeyViolation(err: unknown): boolean {
+  for (let e: unknown = err; e && typeof e === "object"; e = (e as { cause?: unknown }).cause) {
+    const pg = e as { code?: unknown; constraint?: unknown; detail?: unknown };
+    if (pg.code !== "23505") continue;
+    if (pg.constraint === "cloud_revision_user_intent_idx") return true;
+    if (typeof pg.detail === "string" && pg.detail.includes("cloud_revision_user_intent_idx"))
+      return true;
+  }
+  return false;
+}
+
 /** Keyset cursor: "<createdAtMillis>:<assetId>", opaque to clients. */
 function encodeCursor(createdAt: Date, assetId: string): string {
   return Buffer.from(`${createdAt.getTime()}:${assetId}`).toString("base64url");
@@ -159,6 +176,9 @@ export class CloudAssetRepository implements ICloudAssetRepository {
         throw new AssetConflictError(
           "The cloud asset was deleted; it cannot receive new revisions",
         );
+      }
+      if (isIntentKeyViolation(err)) {
+        throw new AssetConflictError("An upload intent with this key already exists");
       }
       throw err;
     }

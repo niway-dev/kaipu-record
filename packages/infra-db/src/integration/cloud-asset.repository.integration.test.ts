@@ -137,14 +137,6 @@ describeDb("CloudAssetRepository (real database)", () => {
     expect(new Set(ids).size).toBe(3);
   });
 
-  function pgErrorCodes(err: unknown): unknown[] {
-    const codes: unknown[] = [];
-    for (let e = err; e && typeof e === "object"; e = (e as { cause?: unknown }).cause) {
-      codes.push((e as { code?: unknown }).code);
-    }
-    return codes;
-  }
-
   async function revisionRows() {
     return db.select().from(cloudRevisionTable).where(eq(cloudRevisionTable.userId, USER));
   }
@@ -177,7 +169,8 @@ describeDb("CloudAssetRepository (real database)", () => {
     expect(rejected).toHaveLength(1);
     expect(fulfilled[0]?.status === "fulfilled" && fulfilled[0].value.kind).toBe("reserved");
     const reason = rejected[0]?.status === "rejected" ? rejected[0].reason : null;
-    expect(pgErrorCodes(reason)).toContain("23505"); // unique_violation
+    // The application layer must never see a raw Postgres error code for this race.
+    expect(reason).toBeInstanceOf(AssetConflictError);
     expect(await repo.usage(USER)).toEqual({ usedBytes: 0, reservedBytes: 100, pendingUploads: 1 });
     expect(await revisionRows()).toHaveLength(1);
     const assets = await db.select().from(cloudAssetTable).where(eq(cloudAssetTable.userId, USER));
