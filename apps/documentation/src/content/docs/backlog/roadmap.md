@@ -13,6 +13,12 @@ Status legend: ⬜ todo · 🔨 in progress · ✅ done
 
 ---
 
+## Proposed for later analysis
+
+- **🔵 StyleX across desktop and web** (2026-09-12): evaluate typed shared tokens,
+  replacing Tailwind and CSS Modules, and opportunities for shared UI. No delivery
+  date or implementation commitment. See [proposal](./stylex-migration).
+
 ## Kill order
 
 | #   | Feature                                     | Priority    | Status | Depends on              |

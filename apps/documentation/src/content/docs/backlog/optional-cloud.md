@@ -5,9 +5,11 @@ description: Status tracker for the optional cloud epic — one library entry pe
 
 # Optional cloud — upload, catalog and share links
 
-> **Status: 🟡 In progress.** Plan 01 (server) has not started — it still opens with a decision
-> gate (Task 0) the founder fills in, and a real-R2 spike (Task 1) that must pass before the
-> rest is worth building. Plan 02 (desktop) is implemented on branch and in review.
+> **Status: 🟡 In progress.** Plan 02 (desktop identity + combined library) is merged. Plan 01
+> (server) is in progress on `feat/cloud-01-server-quotas`: the founder's decisions are recorded
+> (Task 0, with five values still open as proposals) and both real-R2 spikes passed (Task 1/1b);
+> Tasks 2–13 are not implemented yet. Cloud Free depends on email verification, which the server
+> does not send yet.
 > Effort: High (six phases).
 
 ## Where the detail lives
