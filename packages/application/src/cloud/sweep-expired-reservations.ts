@@ -6,6 +6,12 @@ import type { IStorageService } from "@kaipu/domain/services";
  * Reservations whose ticket expired more than the grace period ago can no longer
  * be written (presigned URLs check expiry at request start) — release them and
  * delete anything that landed without a confirm. Idempotent; bounded by `limit`.
+ *
+ * Claims each revision FIRST (`release` only succeeds while it is still `reserved`) and only
+ * then attempts to delete its objects — a revision `confirmUpload` won the race on (flipped to
+ * `ready` between the listing above and this loop) fails the claim here and is left completely
+ * untouched, object included. A storage delete failure does not stop the sweep from counting the
+ * revision released: the bytes are already reclaimed, and a stray object can be cleaned up later.
  */
 export async function sweepExpiredReservations(params: {
   assets: ICloudAssetRepository;
@@ -18,14 +24,20 @@ export async function sweepExpiredReservations(params: {
   let released = 0;
   let deletedObjects = 0;
   for (const revision of expired) {
+    const claimed = await params.assets.release(revision.userId, revision.revisionId);
+    if (!claimed) continue; // lost the race (e.g. confirmed since listing) — leave it alone
+    released += 1;
     for (const key of [revision.storageKey, revision.thumbnailKey]) {
       if (!key) continue;
-      if (await params.storage.headObject(key)) {
-        await params.storage.deleteObject(key);
-        deletedObjects += 1;
+      try {
+        if (await params.storage.headObject(key)) {
+          await params.storage.deleteObject(key);
+          deletedObjects += 1;
+        }
+      } catch {
+        // The claim already succeeded; a stray object is acceptable, a failed sweep run is not.
       }
     }
-    if (await params.assets.release(revision.userId, revision.revisionId)) released += 1;
   }
   return { released, deletedObjects };
 }

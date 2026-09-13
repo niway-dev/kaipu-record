@@ -150,7 +150,12 @@ export async function createUploadIntent(params: {
       throw new UploadIntentExpiredError();
     }
     const ticketExpiresAt = new Date(now.getTime() + UPLOAD_TICKET_TTL_SECONDS * 1000);
-    await assets.extendTicket(userId, revision.revisionId, ticketExpiresAt);
+    const extended = await assets.extendTicket(userId, revision.revisionId, ticketExpiresAt);
+    if (!extended) {
+      // The sweep released this reservation between our lookup and the extend — there is
+      // nothing left to hand a ticket for. Not a quota problem: start a new intent.
+      throw new UploadIntentExpiredError();
+    }
     const ticket = await sign(
       { ...revision, ticketExpiresAt },
       input.thumbnail?.contentSha256 ?? null,

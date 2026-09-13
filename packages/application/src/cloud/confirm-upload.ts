@@ -55,6 +55,7 @@ function verify(
   if (head.sizeBytes !== sizeBytes) throw new UploadVerificationError("size");
   if (baseType(head.contentType) !== baseType(contentType))
     throw new UploadVerificationError("content-type");
-  if (head.checksumSha256 !== null && head.checksumSha256 !== sha256)
-    throw new UploadVerificationError("checksum");
+  // Our tickets always sign x-amz-checksum-sha256 and R2 returns it on HEAD; a null checksum
+  // means the object did not come through our ticket, so it is rejected the same as a mismatch.
+  if (head.checksumSha256 !== sha256) throw new UploadVerificationError("checksum");
 }

@@ -258,8 +258,9 @@ export class CloudAssetRepository implements ICloudAssetRepository {
     return { asset, current };
   }
 
-  async extendTicket(userId: string, revisionId: string, ticketExpiresAt: Date): Promise<void> {
-    await this.db
+  /** Status-guarded single UPDATE; reports whether a still-`reserved` row was actually extended. */
+  async extendTicket(userId: string, revisionId: string, ticketExpiresAt: Date): Promise<boolean> {
+    const rows = await this.db
       .update(cloudRevisionTable)
       .set({ ticketExpiresAt })
       .where(
@@ -268,7 +269,9 @@ export class CloudAssetRepository implements ICloudAssetRepository {
           eq(cloudRevisionTable.revisionId, revisionId),
           eq(cloudRevisionTable.status, "reserved"),
         ),
-      );
+      )
+      .returning({ revisionId: cloudRevisionTable.revisionId });
+    return rows.length > 0;
   }
 
   /**

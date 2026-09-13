@@ -52,8 +52,13 @@ export interface ICloudAssetRepository {
     userId: string,
     assetId: string,
   ): Promise<{ asset: CloudAsset; current: CloudRevision | null } | null>;
-  /** Extend the ticket window of a still-`reserved` revision (re-issued ticket). */
-  extendTicket(userId: string, revisionId: string, ticketExpiresAt: Date): Promise<void>;
+  /**
+   * Extend the ticket window of a still-`reserved` revision (re-issued ticket).
+   * Returns false without writing anything when the revision is no longer `reserved`
+   * (e.g. the sweep expired it between lookup and extend) — the caller must not sign
+   * a ticket for a reservation that is already gone.
+   */
+  extendTicket(userId: string, revisionId: string, ticketExpiresAt: Date): Promise<boolean>;
   /**
    * `reserved` → `ready`: moves `reservedBytes` from reserved to used, decrements pending,
    * points the asset at this revision. No-op (returns the row) when already `ready`.

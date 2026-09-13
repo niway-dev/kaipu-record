@@ -140,8 +140,9 @@ export function makeFakeAssets(): ICloudAssetRepository & {
     },
     async extendTicket(userId, revisionId, ticketExpiresAt) {
       const r = revisions.get(revisionId);
-      if (r && r.userId === userId && r.status === "reserved")
-        revisions.set(revisionId, { ...r, ticketExpiresAt });
+      if (!r || r.userId !== userId || r.status !== "reserved") return false;
+      revisions.set(revisionId, { ...r, ticketExpiresAt });
+      return true;
     },
     async markReady(userId, revisionId, verifiedAt) {
       const flipped = flip(userId, revisionId, "reserved", "ready");

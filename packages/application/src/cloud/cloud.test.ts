@@ -118,6 +118,37 @@ describe("createUploadIntent", () => {
     expect(b.ticket).not.toBeNull(); // re-issued for the same key
   });
 
+  // Fix round 1 / Minor: resuming a still-reserved intent actually extends the ticket window
+  // rather than silently re-signing the original (now possibly stale) expiry.
+  it("resuming an intent actually extends the stored ticket window (not a silent re-sign of the stale one)", async () => {
+    const input = intent();
+    const a = await createUploadIntent({
+      assets,
+      access,
+      storage,
+      userId: "u1",
+      entitlements: grant,
+      input,
+      now: NOW,
+    });
+    const originalTicketExpiresAt = assets.revisions.get(a.revisionId)!.ticketExpiresAt.getTime();
+    const later = new Date(NOW.getTime() + 60_000);
+    const b = await createUploadIntent({
+      assets,
+      access,
+      storage,
+      userId: "u1",
+      entitlements: grant,
+      input,
+      now: later,
+    });
+    expect(b.revisionId).toBe(a.revisionId);
+    expect(b.ticket).not.toBeNull();
+    const extended = assets.revisions.get(a.revisionId)!.ticketExpiresAt.getTime();
+    expect(extended).toBeGreaterThan(originalTicketExpiresAt);
+    expect(extended).toBe(later.getTime() + UPLOAD_TICKET_TTL_SECONDS * 1000);
+  });
+
   it("repeating a cancelled or expired intent key fails as intent-expired, not as a quota error", async () => {
     const input = intent();
     const a = await createUploadIntent({
@@ -345,6 +376,89 @@ describe("createUploadIntent", () => {
     expect(assets.revisions.size).toBe(1);
     expect((await assets.usage("u1")).reservedBytes).toBe(input.sizeBytes);
   });
+
+  // Fix round 1 / I1: the test above never reaches the catch branch in create-upload-intent.ts —
+  // its own findByIntentKey fast path already finds the winner and returns before `reserve` ever
+  // runs. These two tests force the actual race window: the fast-path lookup misses (as it would
+  // if the winner committed a moment later), `reserve` then hits the repository-level conflict,
+  // and the catch branch is what resolves — or fails to resolve — the request.
+  function withDeferredFirstLookup(fake: ReturnType<typeof makeFakeAssets>) {
+    let calls = 0;
+    const originalFindByIntentKey = fake.findByIntentKey;
+    return {
+      ...fake,
+      async findByIntentKey(userId: string, intentKey: string) {
+        calls += 1;
+        if (calls === 1) return null; // pretend the winner hasn't committed yet
+        return originalFindByIntentKey(userId, intentKey);
+      },
+    };
+  }
+
+  it("[race] resolves to the winner's revision when the fast-path lookup misses and reserve() then hits the duplicate", async () => {
+    const input = intent();
+    const winnerRevisionId = crypto.randomUUID();
+    const winner = await assets.reserve({
+      userId: "u1",
+      assetId: input.assetId,
+      intentKey: input.intentKey,
+      revisionId: winnerRevisionId,
+      kind: input.kind,
+      title: input.title,
+      durationSeconds: input.durationSeconds,
+      derivedFromAssetId: input.derivedFromAssetId,
+      storageKey: `videos/u1/${input.assetId}/${winnerRevisionId}.mp4`,
+      thumbnailKey: null,
+      contentType: input.contentType,
+      sizeBytes: input.sizeBytes,
+      thumbnailBytes: 0,
+      contentSha256: input.contentSha256,
+      reservedBytes: input.sizeBytes,
+      ticketExpiresAt: new Date(NOW.getTime() + 300_000),
+      capacityBytes: grant.features.cloudStorageBytes,
+      maxPending: MAX_PENDING_UPLOADS_PER_ACCOUNT,
+    });
+    if (winner.kind !== "reserved") throw new Error(winner.kind);
+
+    const raced = withDeferredFirstLookup(assets);
+    const result = await createUploadIntent({
+      assets: raced,
+      access,
+      storage,
+      userId: "u1",
+      entitlements: grant,
+      input,
+      now: NOW,
+    });
+    expect(result.revisionId).toBe(winnerRevisionId);
+    expect(result.status).toBe("reserved");
+    expect(assets.revisions.size).toBe(1); // no second reservation was created
+    expect((await assets.usage("u1")).reservedBytes).toBe(input.sizeBytes); // counted once
+  });
+
+  it("[race] rethrows AssetConflictError when the repository-level conflict has no revision to resolve to", async () => {
+    const input = intent();
+    const conflicted: ReturnType<typeof makeFakeAssets> = {
+      ...assets,
+      async findByIntentKey() {
+        return null; // no committed winner ever shows up (e.g. a tombstoned-asset conflict)
+      },
+      async reserve() {
+        throw new AssetConflictError("simulated conflict with nothing to resume");
+      },
+    };
+    await expect(
+      createUploadIntent({
+        assets: conflicted,
+        access,
+        storage,
+        userId: "u1",
+        entitlements: grant,
+        input,
+        now: NOW,
+      }),
+    ).rejects.toBeInstanceOf(AssetConflictError);
+  });
 });
 
 describe("confirmUpload", () => {
@@ -428,6 +542,37 @@ describe("confirmUpload", () => {
       }),
     ).toBeNull();
   });
+
+  // Fix round 1 / I3: our tickets always sign x-amz-checksum-sha256 and R2 returns it on HEAD, so
+  // a null checksum means the object did not come through our ticket at all — reject it, don't
+  // silently accept it as a match.
+  it("rejects an object with no checksum (did not come through our ticket); the revision stays reserved", async () => {
+    const assets = makeFakeAssets();
+    const storage = makeFakeStorage();
+    const input = intent();
+    const r = await createUploadIntent({
+      assets,
+      access: makeFakeAccess(),
+      storage,
+      userId: "u1",
+      entitlements: grant,
+      input,
+      now: NOW,
+    });
+    const key = assets.revisions.get(r.revisionId)!.storageKey;
+    storage.land(key, { sizeBytes: 600, contentType: "video/mp4" }); // no checksumSha256
+    await expect(
+      confirmUpload({
+        assets,
+        storage,
+        userId: "u1",
+        assetId: input.assetId,
+        revisionId: r.revisionId,
+        now: NOW,
+      }),
+    ).rejects.toMatchObject({ name: "UploadVerificationError", reason: "checksum" });
+    expect(assets.revisions.get(r.revisionId)?.status).toBe("reserved");
+  });
 });
 
 describe("cancelUpload", () => {
@@ -465,6 +610,47 @@ describe("cancelUpload", () => {
       }),
     ).toEqual({ released: false });
     expect(await assets.usage("u1")).toEqual({ usedBytes: 0, reservedBytes: 0, pendingUploads: 0 });
+  });
+
+  // Fix round 1 / I2: confirmUpload winning the race must never lose its object to cancelUpload.
+  it("never deletes the object once confirmUpload has won the race (the revision is already ready)", async () => {
+    const assets = makeFakeAssets();
+    const storage = makeFakeStorage();
+    const input = intent();
+    const r = await createUploadIntent({
+      assets,
+      access: makeFakeAccess(),
+      storage,
+      userId: "u1",
+      entitlements: grant,
+      input,
+      now: NOW,
+    });
+    const key = assets.revisions.get(r.revisionId)!.storageKey;
+    storage.land(key, { sizeBytes: 600, contentType: "video/mp4", checksumSha256: SHA });
+    await confirmUpload({
+      assets,
+      storage,
+      userId: "u1",
+      assetId: input.assetId,
+      revisionId: r.revisionId,
+      now: NOW,
+    });
+    expect(
+      await cancelUpload({
+        assets,
+        storage,
+        userId: "u1",
+        assetId: input.assetId,
+        revisionId: r.revisionId,
+      }),
+    ).toEqual({ released: false });
+    expect(storage.objects.has(key)).toBe(true); // the ready asset's object survives
+    expect(await assets.usage("u1")).toEqual({
+      usedBytes: 600,
+      reservedBytes: 0,
+      pendingUploads: 0,
+    });
   });
 });
 
@@ -640,6 +826,50 @@ describe("sweeps", () => {
     expect(late).toEqual({ released: 1, deletedObjects: 1 });
     expect(await assets.usage("u1")).toEqual({ usedBytes: 0, reservedBytes: 0, pendingUploads: 0 });
     expect(assets.revisions.get(r.revisionId)?.status).toBe("expired");
+  });
+
+  // Fix round 1 / I2: same guarantee as cancelUpload — a revision confirmUpload already promoted
+  // to `ready` is invisible to the sweep (it is no longer `reserved`), so its object is untouched
+  // even though its ticket is long past the grace period.
+  it("never touches a revision or its object once confirmUpload has won the race, even past the grace period", async () => {
+    const assets = makeFakeAssets();
+    const storage = makeFakeStorage();
+    const r = await createUploadIntent({
+      assets,
+      access: makeFakeAccess(),
+      storage,
+      userId: "u1",
+      entitlements: grant,
+      input: intent(),
+      now: NOW,
+    });
+    const key = assets.revisions.get(r.revisionId)!.storageKey;
+    storage.land(key, { sizeBytes: 600, contentType: "video/mp4", checksumSha256: SHA });
+    await confirmUpload({
+      assets,
+      storage,
+      userId: "u1",
+      assetId: r.asset.assetId,
+      revisionId: r.revisionId,
+      now: NOW,
+    });
+
+    const result = await sweepExpiredReservations({
+      assets,
+      storage,
+      now: new Date(
+        NOW.getTime() + (UPLOAD_TICKET_TTL_SECONDS + RESERVATION_GRACE_SECONDS + 60) * 1000,
+      ),
+      limit: 10,
+    });
+    expect(result).toEqual({ released: 0, deletedObjects: 0 });
+    expect(storage.objects.has(key)).toBe(true);
+    expect(assets.revisions.get(r.revisionId)?.status).toBe("ready");
+    expect(await assets.usage("u1")).toEqual({
+      usedBytes: 600,
+      reservedBytes: 0,
+      pendingUploads: 0,
+    });
   });
 
   it("purges every object under a deleted account's prefixes and retries bounded times", async () => {
