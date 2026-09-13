@@ -94,6 +94,17 @@ function makeFakeStorage(): IStorageService & {
       state.deletes.push(key);
       state.existingKeys.delete(key);
     },
+    async createUploadTicket(key: string) {
+      return { url: `https://r2.example/${key}`, headers: {}, expiresAt: new Date() };
+    },
+    async headObject(key: string) {
+      return state.existingKeys.has(key)
+        ? { sizeBytes: 0, contentType: null, etag: null, checksumSha256: null }
+        : null;
+    },
+    async listObjectKeys() {
+      return { keys: [], nextCursor: null };
+    },
   });
 }
 
