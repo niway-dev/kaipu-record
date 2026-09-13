@@ -47,7 +47,8 @@
     "db:studio": "dotenvx run -f apps/server-hono/.env -- turbo run db:studio -F @kaipu/infra-db",
     "db:generate": "dotenvx run -f apps/server-hono/.env -- turbo run db:generate -F @kaipu/infra-db",
     "db:migrate": "dotenvx run -f apps/server-hono/.env -- turbo run db:migrate -F @kaipu/infra-db",
-    "test": "turbo run test"
+    "test": "turbo run test",
+    "test:integration": "dotenvx run -f apps/server-hono/.env -- turbo run test:integration -F @kaipu/infra-db"
   },
   "dependencies": {
     "dotenv": "catalog:",
