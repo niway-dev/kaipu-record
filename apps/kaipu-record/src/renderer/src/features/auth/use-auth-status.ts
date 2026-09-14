@@ -5,6 +5,9 @@ import type { AuthAttemptResult } from "@shared/types/electron-api";
 export interface AuthStatusStore {
   status: AuthStatus;
   pending: boolean;
+  /** False until the first real status arrives (query or broadcast). Unlike `pending`, it never
+   *  goes back to false, so later attempts (sign-out) don't bring back first-load placeholders. */
+  resolved: boolean;
   error: AuthError | null;
   refresh(): Promise<void>;
   signIn(credentials: AuthCredentials): Promise<void>;
@@ -23,6 +26,7 @@ export function useAuthStatus(): AuthStatusStore {
   // AccountPanel briefly renders the "Sign in"/"Create account" buttons even for an
   // already-signed-in user, before flipping to the real state a moment later.
   const [pending, setPending] = useState(true);
+  const [resolved, setResolved] = useState(false);
   const [error, setError] = useState<AuthError | null>(null);
 
   const refresh = useCallback(async (): Promise<void> => {
@@ -36,6 +40,7 @@ export function useAuthStatus(): AuthStatusStore {
       broadcastWonRace = true;
       setStatus(status);
       setPending(false);
+      setResolved(true);
     });
     // Subscribe before querying. If a status broadcast lands while the initial query is in flight,
     // it is newer and must not be overwritten by the stale query response.
@@ -47,7 +52,10 @@ export function useAuthStatus(): AuthStatusStore {
       .then((status) => {
         if (!broadcastWonRace) setStatus(status);
       })
-      .finally(() => setPending(false));
+      .finally(() => {
+        setPending(false);
+        setResolved(true);
+      });
     return unsubscribe;
   }, []);
 
@@ -94,5 +102,5 @@ export function useAuthStatus(): AuthStatusStore {
 
   const clearError = useCallback(() => setError(null), []);
 
-  return { status, pending, error, refresh, signIn, signUp, signOut, clearError };
+  return { status, pending, resolved, error, refresh, signIn, signUp, signOut, clearError };
 }
