@@ -92,7 +92,7 @@ listed as open in `backend/cloud-storage.md`, so work proceeds without pretendin
 | 8   | Cloud Free                 | 1 GB per account with a **verified email**, enabled automatically on verification. No invitation-only access, no first-100 limit, no manual SQL or `cloud:grant` for normal Free access. Capacity is occupied storage, not a monthly allowance. Accompanied by protection against automated sign-ups and consumption tracking. A future lower limit needs a policy for accounts already above it before it applies. |
 | 9   | Global upload switch       | An administrative `uploads_enabled` flag changeable without a deploy. When off, the server authorizes no new uploads; the app shows "Uploads paused"; existing files stay downloadable. It does **not** cut transfers already running or invalidate URLs already issued. Managed through a practical admin command, not hand-written SQL. Not a general feature-flag system.                                        |
 | 10  | Rate limiting              | Cloudflare rate limiting in addition to the local queue and the pending cap: the server protects itself from scripts, modified clients and repeated requests. Document protected routes, thresholds, requester identification and configuration; check the Cloudflare plan's capabilities before fixing rules. Limiting URL issuance is not limiting downloads — a URL is reusable while valid.                     |
-| 11  | Development database       | `apps/server-hono/.env` holds the development `DATABASE_URL`; authorized for generating and applying this work's migrations. Never print its value.                                                                                                                                                                                                                                                                 |
+| 11  | Development database       | `apps/server-hono/.env` holds the development `DATABASE_URL`; authorized for applying this work's schema with `db:push`. Never print its value.                                                                                                                                                                                                                                                                     |
 
 ### Open — implemented as proposals, not approved
 
@@ -1702,13 +1702,12 @@ export const cloudAssetRelations = relations(cloudAssetTable, ({ one }) => ({
 
 Add `export * from "./cloud";` to `packages/infra-db/src/schema/index.ts`.
 
-- [ ] **Step 2: Apply to the dev database and review the SQL**
+- [ ] **Step 2: Apply to the dev database**
 
 Run: `bun run db:push` (from the root; uses `apps/server-hono/.env`). Expected: the five
-`kaipu_record_cloud_*` tables exist (`bun run db:studio` to inspect).
-Run: `bun run db:generate` and review `packages/infra-db/src/migrations/*.sql`; commit it as the
-repeatable migration artifact production will apply (`bun run db:migrate`) — see
-`backlog/production-cloud-security.md` item 4.
+`kaipu_record_cloud_*` tables exist (`bun run db:studio` to inspect). The change is purely
+additive, so production applies it the same way. Do not generate versioned migrations: the
+project stays on `db:push` until an ADR decides otherwise.
 
 - [ ] **Step 3: No seed step.** A missing `cloud_control` row reads as uploads enabled
       (`getControl`), and `cloud:uploads` (Task 11) upserts the row the first time it runs.
@@ -1716,7 +1715,7 @@ repeatable migration artifact production will apply (`bun run db:migrate`) — s
 - [ ] **Step 4: Commit**
 
 ```bash
-git add packages/infra-db/src/schema packages/infra-db/src/migrations
+git add packages/infra-db/src/schema
 git commit -m "feat(infra-db): cloud asset, revision, accounting, control and purge tables"
 ```
 
@@ -4203,8 +4202,7 @@ Cloudflare plan actually includes (number of rules, counting characteristics, pe
 the rules within that. State explicitly that limiting `download-url` issuance does not limit
 downloads: a URL is reusable until it expires. The app-level pending cap is what fails closed if
 the WAF is misconfigured. _Events_: the `cloud.*` names and
-fields. _Production checklist_: link to `backlog/production-cloud-security.md` and list: apply
-migration SQL, seed `cloud_control`, set R2 secrets, create WAF rules, verify one cron run in the
+fields. _Production checklist_: link to `backlog/production-cloud-security.md` and list: applythe schema with `db:push`, seed `cloud_control`, set R2 secrets, create WAF rules, verify one cron run in the
 dashboard.
 
 - [ ] **Step 2: Update backlog statuses honestly**

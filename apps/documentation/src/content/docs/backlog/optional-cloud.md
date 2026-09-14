@@ -9,7 +9,7 @@ description: Status tracker for the optional cloud epic — one library entry pe
 > (server) is partly implemented on `feat/cloud-01-server-quotas`: decisions recorded (Task 0, five
 > values still open as proposals), both real-R2 spikes passed (Task 1/1b), and Tasks 2–9 are done —
 > domain limits and schemas, entitlements (access = verified email), storage and repository ports,
-> R2 tickets, the five cloud tables with migrations, Postgres repositories with single-statement
+> R2 tickets, the five cloud tables (applied with `db:push`), Postgres repositories with single-statement
 > atomic reservations, and the application use cases. **Not done:** Task 10 (the `/assets` and
 > `/me/storage` HTTP routes), Task 11 (cron sweep, account purge, `cloud:uploads` command), Task 12
 > (removing the legacy recording vertical) and Task 13 (operations docs, WAF runbook, CI). No cloud
