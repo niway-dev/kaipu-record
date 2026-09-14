@@ -19,6 +19,8 @@ description: Status tracker for the optional cloud epic — one library entry pe
 
 ## Where the detail lives
 
+- **Handoff (state, carried rulings, how to resume on another machine):** [Optional cloud — handoff](/backlog/optional-cloud-handoff/)
+
 - **Product:** [Optional cloud — product, quotas and file safety](/specs/2026-09-09-cloud-product/)
 - **Data model:** [Cloud — identity, revisions and the relationship with .kaipu](/specs/2026-09-09-cloud-data-model/)
 - **Design brief:** [Claude Design — cloud, sharing and video locations](/specs/2026-09-09-cloud-design-handoff/)
