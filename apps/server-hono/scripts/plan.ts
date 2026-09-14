@@ -15,6 +15,14 @@ import { ManualPlanGrantRepository } from "@kaipu/infra-db/repositories";
 
 const USAGE = "Usage: bun run plan <grant|revoke|show> <email> [plan]";
 
+function hostOf(databaseUrl: string): string {
+  try {
+    return new URL(databaseUrl).hostname || "(unknown host)";
+  } catch {
+    return "(unparseable DATABASE_URL)";
+  }
+}
+
 async function main(): Promise<number> {
   const [command, email, planArg = "pro"] = process.argv.slice(2);
   if (!command || !email) {
@@ -26,6 +34,8 @@ async function main(): Promise<number> {
     console.error("DATABASE_URL is not set.");
     return 1;
   }
+  // Host only — never the credentials — so the operator can see which database is targeted.
+  console.log(`Database: ${hostOf(databaseUrl)}`);
   const repo = new ManualPlanGrantRepository(createDatabaseClient(databaseUrl));
 
   switch (command) {

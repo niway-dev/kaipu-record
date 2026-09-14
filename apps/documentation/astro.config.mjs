@@ -14,7 +14,7 @@ export default defineConfig({
       sidebar: [
         {
           label: "Getting Started",
-          items: [{ slug: "index" }],
+          items: [{ slug: "index" }, { slug: "commands" }],
         },
         {
           label: "Briefings",
