@@ -66,4 +66,31 @@ describe("StorageCloudSettings", () => {
     status.mockRestore();
     usage.mockRestore();
   });
+  it("signed in with an unverified email: cloud modes stay blocked", async () => {
+    const status = vi.spyOn(window.electronAPI, "getAuthStatus").mockResolvedValue({
+      kind: "signed-in",
+      userId: "u1",
+      email: "me@example.com",
+      name: "Me",
+      entitlements: FREE_ENTITLEMENTS,
+    });
+    const usage = vi.spyOn(window.electronAPI, "getStorageUsage").mockResolvedValue({
+      kind: "ok",
+      fetchedAt: Date.now(),
+      usage: {
+        capacityBytes: 1_000_000_000,
+        usedBytes: 0,
+        reservedBytes: 0,
+        availableBytes: 1_000_000_000,
+        pendingUploads: 0,
+        uploadsEnabled: true,
+        cloudUploads: false,
+      },
+    });
+    renderSection();
+    expect(await screen.findByRole("note")).toHaveTextContent(/verify your email to use cloud/i);
+    expect(screen.getByRole("radio", { name: /automatic upload/i })).toBeDisabled();
+    status.mockRestore();
+    usage.mockRestore();
+  });
 });

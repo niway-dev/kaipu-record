@@ -532,6 +532,8 @@
     "modeAutomaticNote": "We will not upload existing files or create links automatically. The preference applies to this device.",
     "modeSignInRequired": "Sign in to use cloud. Recording keeps working on this device.",
     "modeSignedOutSaved": "Cloud modes wait until you sign in; until then files stay on this device.",
+    "modeUnverified": "Verify your email to use cloud. Recording keeps working on this device.",
+    "modeUnverifiedSaved": "Cloud modes wait until your email is verified; until then files stay on this device.",
     "accountAndCapacity": "Account and capacity",
     "planLabel": "Plan {plan} · {capacity}",
     "planFree": "Free",
