@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { deriveEntitlements, type SubscriptionBase } from "./subscription";
+import { deriveEntitlements, FREE_ENTITLEMENTS, type SubscriptionBase } from "./subscription";
 
 const NOW = new Date("2026-09-06T12:00:00Z");
 
@@ -25,7 +25,7 @@ describe("deriveEntitlements", () => {
       plan: "free",
       status: "active",
       currentPeriodEnd: null,
-      features: { watermarkRemoval: false },
+      features: { watermarkRemoval: false, cloudUploads: false, cloudStorageBytes: 1_000_000_000 },
     });
   });
 
@@ -60,5 +60,45 @@ describe("deriveEntitlements", () => {
   it("never grants features on the free plan, even when active", () => {
     const sub = proSubscription({ plan: "free" });
     expect(deriveEntitlements(sub, NOW).features.watermarkRemoval).toBe(false);
+  });
+});
+
+describe("cloud entitlements", () => {
+  const now = new Date("2026-09-10T00:00:00Z");
+  const pro = {
+    id: "s1",
+    userId: "u1",
+    plan: "pro" as const,
+    status: "active" as const,
+    currentPeriodEnd: null,
+    provider: "manual" as const,
+    providerRef: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  it("free accounts get 1 GB; cloudUploads follows email verification, not the plan", () => {
+    const e = deriveEntitlements(null, now, { cloudAccess: false });
+    expect(e.features.cloudStorageBytes).toBe(1_000_000_000);
+    expect(e.features.cloudUploads).toBe(false);
+    expect(deriveEntitlements(null, now, { cloudAccess: true }).features.cloudUploads).toBe(true);
+  });
+
+  it("pro in force gets 25 GB; a lapsed pro falls back to 1 GB", () => {
+    expect(deriveEntitlements(pro, now, { cloudAccess: true }).features.cloudStorageBytes).toBe(
+      25_000_000_000,
+    );
+    const lapsed = { ...pro, currentPeriodEnd: new Date("2026-01-01T00:00:00Z") };
+    expect(deriveEntitlements(lapsed, now, { cloudAccess: true }).features.cloudStorageBytes).toBe(
+      1_000_000_000,
+    );
+  });
+
+  it("FREE_ENTITLEMENTS carries the cloud fields", () => {
+    expect(FREE_ENTITLEMENTS.features).toEqual({
+      watermarkRemoval: false,
+      cloudUploads: false,
+      cloudStorageBytes: 1_000_000_000,
+    });
   });
 });

@@ -66,6 +66,7 @@ export default defineConfig({
             { slug: "backlog/version-gate" },
             { slug: "backlog/auto-update" },
             { slug: "backlog/shared-tokens-package" },
+            { slug: "backlog/stylex-migration" },
             { slug: "backlog/r2-storage-architecture" },
             { slug: "backlog/cloud-recordings-upload" },
             { slug: "backlog/optional-cloud" },

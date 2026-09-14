@@ -35,8 +35,18 @@ Hono + oRPC on Cloudflare Workers (server-hono), Vitest. No new runtime dependen
 - **Decimal units**: `1 GB = 1_000_000_000 bytes`. Every limit and every display value is an
   integer number of bytes; the old binary `MAX_UPLOAD_BYTES = 2 GiB` is deleted, not kept.
 - **Free capacity 1 GB total, future plan 25 GB total, max 1 GB per video, max 25 MB per
-  screenshot** (screenshot value is a proposal — confirmed in Task 0). Capacity is occupied space,
-  never a monthly allowance.
+  screenshot** (decided 2026-09-13; the 25 MB cap also covers high-resolution PNGs the app itself
+  generates). Capacity is occupied space, never a monthly allowance.
+- **Cloud Free access = verified email** (decided 2026-09-13): every account whose
+  `user.email_verified` is true gets `cloudUploads` automatically. No invitation list, no manual
+  grant, no 100-account beta. **Dependency:** the server sends no verification emails today, so no
+  account is verified until email verification ships (tracked in Task 13).
+- **Decided vs proposed:** Task 0 separates approved values from technical proposals. A proposal
+  may ship as a constant so the code runs, but it carries a `// PROPOSAL (Task 0) — not approved`
+  comment and is listed as open in the docs. Never describe a proposal as decided.
+- **R2 expiry is checked when a request starts** (spike evidence, Task 1b): a short ticket never
+  cuts a transfer already running, but every retry, reconnect or Range/seek request after expiry
+  gets `403` and needs a fresh URL from the server.
 - **Quota rule (authoritative, server-side):** `usedBytes + reservedBytes + newBytes <= capacity`.
   `newBytes` includes auxiliaries (thumbnail). Two concurrent requests for the last bytes must not
   both succeed; a client lying about size must not bypass the limit.
@@ -61,37 +71,59 @@ Hono + oRPC on Cloudflare Workers (server-hono), Vitest. No new runtime dependen
 
 ---
 
-## Task 0: Decision gate — values the spec leaves open
+## Task 0: Decisions — approved values and open proposals
 
-**This task blocks every task after Task 1.** The user (founder) fills the "Decided" column and
-commits this file. Implementers copy the decided values into `cloud-limits.ts` (Task 2) and
-`wrangler.jsonc` (Task 11). Do not start Task 2 while a cell says "pending".
+**Recorded 2026-09-13 from the founder's review; this list is the last word and replaces every
+earlier proposal where they differ.** Approved values are implemented as-is. Open values are
+implemented as the proposal shown, marked `// PROPOSAL (Task 0) — not approved` in code, and
+listed as open in `backend/cloud-storage.md`, so work proceeds without pretending they are settled.
 
-| Value                             | Where it applies                                                                                                              | Proposed                                                                                                                                                              | Decided |
-| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
-| `MAX_SCREENSHOT_BYTES`            | per-file cap for `kind = "screenshot"`                                                                                        | `25_000_000` (25 MB)                                                                                                                                                  | pending |
-| `MAX_PENDING_UPLOADS_PER_ACCOUNT` | reservations in `reserved` state per user                                                                                     | `3`                                                                                                                                                                   | pending |
-| `UPLOAD_TICKET_TTL_SECONDS`       | presigned PUT lifetime                                                                                                        | `900` (15 min, current default)                                                                                                                                       | pending |
-| `RESERVATION_GRACE_SECONDS`       | sweep only touches a reservation this long after its ticket expired (a 1 GB PUT started at second 899 must be able to finish) | `3600`                                                                                                                                                                | pending |
-| `DOWNLOAD_URL_TTL_SECONDS`        | presigned GET lifetime                                                                                                        | `600` (10 min)                                                                                                                                                        | pending |
-| Cron schedule                     | `triggers.crons` for the sweep                                                                                                | `"*/15 * * * *"`                                                                                                                                                      | pending |
-| Sweep batch size                  | rows per scheduled invocation (Worker CPU limit)                                                                              | `50` reservations + `50` deletes + `1` purge                                                                                                                          | pending |
-| Beta access                       | how accounts get `cloudUploads`                                                                                               | manual `cloud_access` rows (same pattern as manual `pro` grants); target 100 accounts, not enforced in code                                                           | pending |
-| Global upload switch              | how the operator stops new tickets                                                                                            | `cloud_control` row `uploads_enabled` toggled by SQL, no deploy                                                                                                       | pending |
-| Rate limits                       | who limits `POST /assets/upload-intents`, `confirm`, `download-url`, `DELETE`                                                 | Cloudflare WAF rate-limiting rules keyed on the session cookie / `Authorization` header hash, documented in Task 13; app-level cap is the pending-uploads limit above | pending |
+### Approved
 
-- [ ] **Step 1:** Fill every "Decided" cell. If a decision differs from "Proposed", say so in the
-      commit message body.
-- [ ] **Step 2: Commit**
+| #   | Decision                   | Value and rules                                                                                                                                                                                                                                                                                                                                                                                                     |
+| --- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Max per screenshot / video | `MAX_SCREENSHOT_BYTES = 25_000_000` (also covers high-resolution PNGs the app generates). `MAX_VIDEO_BYTES = 1_000_000_000`.                                                                                                                                                                                                                                                                                        |
+| 2   | Pending uploads            | `MAX_PENDING_UPLOADS_PER_ACCOUNT = 3`, counted across all of the account's devices. Recovery must never duplicate files or reservations: a retry first asks whether the object already arrived and only needs confirming. Server cleanup still runs, because a device may never reconnect.                                                                                                                          |
+| 3   | Upload URL                 | `UPLOAD_TICKET_TTL_SECONDS = 300` (5 min). Requested only when the file's turn comes: authorize + reserve → URL → start immediately. The 5 minutes are a margin to start, not the transfer limit. A retry that needs a new URL keeps the same intent key (no new reservation). Simple PUT with retry; no multipart pause/resume in this stage — a cut transfer may be resent whole.                                 |
+| 4   | Quota reservation          | Atomic check-and-reserve: `used + reserved + new <= capacity`; two devices can never both get the same free bytes. Only the file about to start is reserved, never the local queue. Confirm moves bytes reserved → used exactly once. Cancel, repeated confirm and retries never double-count or double-release. Abandoned reservations expire and are recovered.                                                   |
+| 5   | Download URL               | `DOWNLOAD_URL_TTL_SECONDS = 600` (10 min). Expiry never deletes the file, and a long download must not be cut for passing 10 minutes (verified in R2, Task 1b). A reconnect, a new request, or a player seek after expiry needs a renewed URL.                                                                                                                                                                      |
+| 6   | Remote cleanup             | A scheduled server task, independent of any device being online: releases abandoned reservations, retries failed deletes, and completes pending account-data deletion. Local retries on reconnect are complementary. Its configuration, responsibilities and how to verify it runs are documented (Task 13).                                                                                                        |
+| 7   | Delete                     | Persist the delete intent and hide the file from the library first, then try the physical R2 delete immediately. On failure keep the pending state for the cron to retry in batches — never depend on the user's device. Goal: no orphaned objects and no files reappearing after deletion. Repeated deletes are safe and change quota at most once.                                                                |
+| 8   | Cloud Free                 | 1 GB per account with a **verified email**, enabled automatically on verification. No invitation-only access, no first-100 limit, no manual SQL or `cloud:grant` for normal Free access. Capacity is occupied storage, not a monthly allowance. Accompanied by protection against automated sign-ups and consumption tracking. A future lower limit needs a policy for accounts already above it before it applies. |
+| 9   | Global upload switch       | An administrative `uploads_enabled` flag changeable without a deploy. When off, the server authorizes no new uploads; the app shows "Uploads paused"; existing files stay downloadable. It does **not** cut transfers already running or invalidate URLs already issued. Managed through a practical admin command, not hand-written SQL. Not a general feature-flag system.                                        |
+| 10  | Rate limiting              | Cloudflare rate limiting in addition to the local queue and the pending cap: the server protects itself from scripts, modified clients and repeated requests. Document protected routes, thresholds, requester identification and configuration; check the Cloudflare plan's capabilities before fixing rules. Limiting URL issuance is not limiting downloads — a URL is reusable while valid.                     |
+| 11  | Development database       | `apps/server-hono/.env` holds the development `DATABASE_URL`; authorized for applying this work's schema with `db:push`. Never print its value.                                                                                                                                                                                                                                                                     |
 
-```bash
-git add apps/documentation/src/content/docs/plans/2026-09-09-cloud-01-server-quotas-and-revisions.md
-git commit -m "docs(plans): decide the open values for cloud server limits"
-```
+### Open — implemented as proposals, not approved
+
+| Value                            | Proposal shipped in code                                                                                                                                                                                   |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `RESERVATION_GRACE_SECONDS`      | `10_800` (3 h after ticket expiry). 1 GB at ~1 Mbps takes ~2 h 15 min; 1 h would cut off 2 Mbps uploads.                                                                                                   |
+| Cron schedule                    | `"*/15 * * * *"`                                                                                                                                                                                           |
+| Sweep batch sizes                | `50` reservations + `50` deletes + `1` account purge per run                                                                                                                                               |
+| When deleted bytes stop counting | Code releases quota when the physical R2 delete completes (`finishDelete`). The alternative — at the delete intent — is equally open. Kept in one repository method so either choice is a one-line change. |
+| Rate-limit thresholds            | None fixed; the runbook lists routes and identification only.                                                                                                                                              |
+
+### Requirements for the desktop client (plan 03), recorded here so they are not lost
+
+- A local queue uploads **one file at a time**; queued files request no URL and reserve nothing.
+- Interrupted uploads (app closed, crash, shutdown, connection lost) and uploads that reached R2
+  but were never confirmed show as failed/interrupted with **Retry**. Retry calls `confirm` first;
+  only a `missing` verification re-requests a URL with the **same intent key**. An
+  `intent-expired` answer starts a new intent.
+- A `403` on a ticket PUT or a download/Range request means "URL expired": renew it, never treat
+  it as "file gone".
+- Insufficient capacity: do not start the transfer; show "Capacidad insuficiente. Borra archivos
+  o cambia de plan" (EN: "Not enough capacity. Delete files or change your plan").
 
 ---
 
 ## Task 1: Spike — prove R2 enforces size, type, hash and no-overwrite at write time
+
+**Done 2026-09-13** (`ef41478`): every check passed; evidence in `backlog/r2-upload-integrity.md`.
+**Task 1b, done 2026-09-13** (`3b62cc8`): `scripts/r2-expiry-spike.ts` showed R2 checks URL expiry
+when a request starts — a slow PUT and a slow 128 MiB GET completed long past a 3 s expiry, while
+a new PUT or Range request after expiry got `403`.
 
 The whole plan rests on the presigned PUT being restricted **while bytes are written**, not only
 checked afterwards (a 1 GB object that landed already cost storage). This spike runs against the
@@ -264,7 +296,7 @@ git commit -m "chore(infra-storage): spike proving R2 presigned tickets bound le
 
 **Infra DB (`packages/infra-db/src/`)**
 
-- Create `schema/cloud.ts` — `cloud_asset`, `cloud_revision`, `cloud_storage_account`, `cloud_access`, `cloud_control`, `cloud_purge`.
+- Create `schema/cloud.ts` — `cloud_asset`, `cloud_revision`, `cloud_storage_account`, `cloud_control`, `cloud_purge`. (No `cloud_access`: access is the verified email, Task 0 #8.)
 - Create `repositories/cloud-asset.repository.ts`, `repositories/cloud-access.repository.ts`, `mappers/cloud.mapper.ts`.
 - Create `src/integration/cloud-asset.repository.integration.test.ts`, `vitest.integration.config.ts`.
 - Modify `schema/index.ts`, `repositories/index.ts`, `mappers/index.ts`, `package.json` (test scripts), `schema/auth.ts` (relations).
@@ -300,7 +332,7 @@ All routes are under `/api/v1`, behind `authMiddleware`, wrapped in the `{ data,
 | `GET`    | `/assets?cursor&limit`                             | `cursor?: string`, `limit?: 1..100` (default 50) | `{ items: CloudAssetSummary[], nextCursor: string \| null }`           |
 | `GET`    | `/assets/{assetId}`                                | path                                             | `CloudAssetSummary`                                                    |
 | `GET`    | `/assets/{assetId}/download-url`                   | path                                             | `{ asset: CloudAssetSummary, downloadUrl: string, expiresAt: string }` |
-| `DELETE` | `/assets/{assetId}/cloud`                          | path                                             | `{ deleted: boolean }`                                                 |
+| `DELETE` | `/assets/{assetId}/cloud`                          | path                                             | `{ deleted: boolean; physicallyRemoved: boolean }`                     |
 | `POST`   | `/assets/{assetId}/auto-upload-exclusion`          | `{ excluded: boolean }`                          | `CloudAssetSummary`                                                    |
 | `GET`    | `/me/storage`                                      | —                                                | `StorageUsage`                                                         |
 
@@ -334,7 +366,8 @@ Error mapping (oRPC codes): `QuotaExceededError` → `PAYLOAD_TOO_LARGE` with `d
 `FileTooLargeError` → `PAYLOAD_TOO_LARGE` with `data: { limitBytes }`; `UnsupportedContentTypeError` → `BAD_REQUEST`;
 `TooManyPendingUploadsError` → `TOO_MANY_REQUESTS`; `UploadsDisabledError` → `SERVICE_UNAVAILABLE`;
 `CloudAccessDeniedError` → `FORBIDDEN`; `UploadVerificationError` → `CONFLICT` with `data: { reason }`;
-`AssetConflictError` → `CONFLICT`; not found / not owned → `NOT_FOUND` (never reveals existence).
+`AssetConflictError` → `CONFLICT`; `UploadIntentExpiredError` → `CONFLICT` with `data: { kind: "intent-expired" }`;
+not found / not owned → `NOT_FOUND` (never reveals existence).
 
 ---
 
@@ -360,10 +393,13 @@ Error mapping (oRPC codes): `QuotaExceededError` → `PAYLOAD_TOO_LARGE` with `d
 import { describe, expect, it } from "vitest";
 import {
   BYTES_PER_GB,
+  DOWNLOAD_URL_TTL_SECONDS,
   FREE_CLOUD_CAPACITY_BYTES,
+  MAX_PENDING_UPLOADS_PER_ACCOUNT,
   MAX_SCREENSHOT_BYTES,
   MAX_VIDEO_BYTES,
   PRO_CLOUD_CAPACITY_BYTES,
+  UPLOAD_TICKET_TTL_SECONDS,
   formatDecimalBytes,
   maxBytesForKind,
 } from "./cloud-limits";
@@ -374,6 +410,13 @@ describe("cloud limits", () => {
     expect(FREE_CLOUD_CAPACITY_BYTES).toBe(1_000_000_000);
     expect(PRO_CLOUD_CAPACITY_BYTES).toBe(25_000_000_000);
     expect(MAX_VIDEO_BYTES).toBe(1_000_000_000);
+  });
+
+  it("carries the approved Task 0 values", () => {
+    expect(MAX_SCREENSHOT_BYTES).toBe(25_000_000);
+    expect(MAX_PENDING_UPLOADS_PER_ACCOUNT).toBe(3);
+    expect(UPLOAD_TICKET_TTL_SECONDS).toBe(300);
+    expect(DOWNLOAD_URL_TTL_SECONDS).toBe(600);
   });
 
   it("caps each kind independently", () => {
@@ -397,7 +440,7 @@ describe("cloud limits", () => {
 Run: `bun run test --filter=@kaipu/domain`
 Expected: FAIL — `Cannot find module './cloud-limits'`.
 
-- [ ] **Step 3: Write the constants** (copy the decided values from Task 0)
+- [ ] **Step 3: Write the constants** (values and PROPOSAL markers exactly as in Task 0)
 
 ```ts
 // packages/domain/src/constants/cloud-limits.ts
@@ -415,18 +458,24 @@ export const PRO_CLOUD_CAPACITY_BYTES = 25 * BYTES_PER_GB;
 
 /** Per-file caps, independent of the account capacity. */
 export const MAX_VIDEO_BYTES = 1 * BYTES_PER_GB;
-export const MAX_SCREENSHOT_BYTES = 25 * BYTES_PER_MB; // Task 0
+export const MAX_SCREENSHOT_BYTES = 25 * BYTES_PER_MB; // Task 0: approved 2026-09-13
 /** A persisted thumbnail is an auxiliary object and counts toward capacity. */
 export const MAX_THUMBNAIL_BYTES = 512_000;
 
-/** Reservations a single account may hold in `reserved` state at once. */
-export const MAX_PENDING_UPLOADS_PER_ACCOUNT = 3; // Task 0
-/** Presigned PUT lifetime. */
-export const UPLOAD_TICKET_TTL_SECONDS = 15 * 60; // Task 0
-/** How long after ticket expiry the sweep waits before releasing a reservation. */
-export const RESERVATION_GRACE_SECONDS = 60 * 60; // Task 0
-/** Presigned GET lifetime. */
-export const DOWNLOAD_URL_TTL_SECONDS = 10 * 60; // Task 0
+/** Reservations one account may hold in `reserved` state at once, across all its devices. */
+export const MAX_PENDING_UPLOADS_PER_ACCOUNT = 3; // Task 0: approved 2026-09-13
+/**
+ * Presigned PUT lifetime: a margin to START the upload, not a transfer limit — R2 checks expiry
+ * when the request starts (Task 1b), so a slow upload that began in time completes.
+ */
+export const UPLOAD_TICKET_TTL_SECONDS = 5 * 60; // Task 0: approved 2026-09-13
+/**
+ * How long after ticket expiry the sweep waits before releasing a reservation. Must cover the
+ * slowest reasonable upload: 1 GB at ~1 Mbps takes ~2 h 15 min.
+ */
+export const RESERVATION_GRACE_SECONDS = 3 * 60 * 60; // PROPOSAL (Task 0) — not approved
+/** Presigned GET lifetime; a download already running is not cut when it expires (Task 1b). */
+export const DOWNLOAD_URL_TTL_SECONDS = 10 * 60; // Task 0: approved 2026-09-13
 
 export type CloudAssetKind = "recording" | "screenshot";
 
@@ -454,7 +503,7 @@ export * from "./cloud-limits";
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `bun run test --filter=@kaipu/domain`
-Expected: PASS (3 tests in `cloud-limits.test.ts`).
+Expected: PASS (4 tests in `cloud-limits.test.ts`).
 
 - [ ] **Step 5: Commit**
 
@@ -484,7 +533,7 @@ git commit -m "feat(domain): cloud storage limits in decimal bytes"
   `computeMissingBytes`, `isValidUploadSize`, `toAssetSummary`, and the errors
   `QuotaExceededError`, `FileTooLargeError`, `UnsupportedContentTypeError`, `TooManyPendingUploadsError`,
   `UploadsDisabledError`, `CloudAccessDeniedError`, `UploadVerificationError`, `AssetConflictError`,
-  `RevisionNotReadyError`.
+  `RevisionNotReadyError`, `UploadIntentExpiredError`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -854,6 +903,16 @@ export class RevisionNotReadyError extends Error {
     this.name = "RevisionNotReadyError";
   }
 }
+/**
+ * The intent key refers to a reservation that expired (swept) or was cancelled. Not a quota
+ * problem: the client must start a new intent with a new key.
+ */
+export class UploadIntentExpiredError extends Error {
+  constructor() {
+    super("The upload intent expired; start a new one");
+    this.name = "UploadIntentExpiredError";
+  }
+}
 ```
 
 Add to `packages/domain/src/schemas/index.ts` (keep the existing recording/subscription/pagination
@@ -887,6 +946,7 @@ export {
   UploadVerificationError,
   AssetConflictError,
   RevisionNotReadyError,
+  UploadIntentExpiredError,
   type RevisionStatus,
   type CloudAsset,
   type CloudRevision,
@@ -946,7 +1006,7 @@ describe("cloud entitlements", () => {
     createdAt: now, updatedAt: now,
   };
 
-  it("free accounts get 1 GB; cloudUploads follows the access grant, not the plan", () => {
+  it("free accounts get 1 GB; cloudUploads follows email verification, not the plan", () => {
     const e = deriveEntitlements(null, now, { cloudAccess: false });
     expect(e.features.cloudStorageBytes).toBe(1_000_000_000);
     expect(e.features.cloudUploads).toBe(false);
@@ -972,7 +1032,7 @@ describe("cloud entitlements", () => {
 Append to `packages/application/src/entitlements/entitlements.test.ts`:
 
 ```ts
-it("composes billing with the cloud access grant", async () => {
+it("composes billing with email-verified cloud access", async () => {
   const repo = makeFakeRepo([]);
   const cloudAccessRepo = { hasAccess: async () => true, getControl: async () => ({ uploadsEnabled: true }) };
   const e = await getEntitlements({ repo, cloudAccessRepo, userId: "u1" });
@@ -999,7 +1059,7 @@ export const entitlementsSchema = z.object({
   currentPeriodEnd: z.date().nullable(),
   features: z.object({
     watermarkRemoval: z.boolean(),
-    /** May this account create upload intents (beta access grant). */
+    /** May this account create upload intents: true once its email is verified (Task 0 #8). */
     cloudUploads: z.boolean(),
     /** Total cloud capacity in decimal bytes. Read/delete never depends on it. */
     cloudStorageBytes: z.number().int().nonnegative(),
@@ -1014,7 +1074,7 @@ export const FREE_ENTITLEMENTS: Entitlements = {
 };
 
 export interface EntitlementInputs {
-  /** From the cloud access allowlist (`cloud_access`), not from billing. */
+  /** Whether the account's email is verified (Task 0 #8), not from billing. */
   cloudAccess: boolean;
 }
 
@@ -1046,8 +1106,9 @@ Create `packages/domain/src/repositories/cloud-access.repository.ts`:
 
 ```ts
 /**
- * Beta allowlist + operator switch for cloud uploads. Rows are written by hand
- * (SQL), never through the API — same rule as manual `pro` grants.
+ * Cloud upload access + operator switch. Access is automatic for accounts with a verified email
+ * (Task 0 #8) — there is no allowlist. The switch is flipped through the `cloud:uploads` admin
+ * command (Task 11), never through the API.
  */
 export interface CloudControl {
   /** When false the server issues no new upload tickets; reads and deletes keep working. */
@@ -1055,6 +1116,7 @@ export interface CloudControl {
 }
 
 export interface ICloudAccessRepository {
+  /** True when the account's email is verified. */
   hasAccess(userId: string): Promise<boolean>;
   getControl(): Promise<CloudControl>;
 }
@@ -1073,7 +1135,7 @@ import type { ICloudAccessRepository, ISubscriptionRepository } from "@kaipu/dom
 import { deriveEntitlements, type Entitlements } from "@kaipu/domain/schemas";
 
 /**
- * What the caller may do right now. Billing and the cloud allowlist are read
+ * What the caller may do right now. Billing and cloud access (verified email) are read
  * here and nowhere else; the API route and the desktop never see either row.
  */
 export async function getEntitlements(params: {
@@ -1510,7 +1572,7 @@ git commit -m "feat(infra-storage): restricted upload tickets, HEAD metadata and
 **Interfaces:**
 
 - Produces Drizzle tables `cloudAssetTable`, `cloudRevisionTable`, `cloudStorageAccountTable`,
-  `cloudAccessTable`, `cloudControlTable`, `cloudPurgeTable` (physical names prefixed `kaipu_record_`).
+  `cloudControlTable`, `cloudPurgeTable` (physical names prefixed `kaipu_record_`).
 
 - [ ] **Step 1: Write the schema**
 
@@ -1608,17 +1670,7 @@ export const cloudStorageAccountTable = createTable("cloud_storage_account", {
     .notNull(),
 });
 
-/** Beta allowlist. Written by hand (SQL). A row with `revoked_at` set grants nothing. */
-export const cloudAccessTable = createTable("cloud_access", {
-  userId: text("user_id")
-    .primaryKey()
-    .references(() => userTable.id, { onDelete: "cascade" }),
-  grantedAt: timestamp("granted_at").defaultNow().notNull(),
-  revokedAt: timestamp("revoked_at"),
-  note: text("note"),
-});
-
-/** Single-row operator switches. `id` is always "global". */
+/** Single-row operator switches. `id` is always "global". Flipped by `cloud:uploads` (Task 11). */
 export const cloudControlTable = createTable("cloud_control", {
   id: text("id").primaryKey(),
   uploadsEnabled: boolean("uploads_enabled").default(true).notNull(),
@@ -1650,26 +1702,21 @@ export const cloudAssetRelations = relations(cloudAssetTable, ({ one }) => ({
 
 Add `export * from "./cloud";` to `packages/infra-db/src/schema/index.ts`.
 
-- [ ] **Step 2: Apply to the dev database and review the SQL**
+- [ ] **Step 2: Apply to the dev database**
 
-Run: `bun run db:push` (from the root; uses `apps/server-hono/.env`). Expected: the six
-`kaipu_record_cloud_*` tables exist (`bun run db:studio` to inspect).
-Run: `bun run db:generate` and review `packages/infra-db/src/migrations/*.sql`; commit it as the
-repeatable migration artifact production will apply (`bun run db:migrate`) — see
-`backlog/production-cloud-security.md` item 4.
+Run: `bun run db:push` (from the root; uses `apps/server-hono/.env`). Expected: the five
+`kaipu_record_cloud_*` tables exist (`bun run db:studio` to inspect). The change is purely
+additive, so production applies it the same way. Do not generate versioned migrations: the
+project stays on `db:push` until an ADR decides otherwise.
 
-- [ ] **Step 3: Seed the control row** (dev DB, via `db:studio` or psql):
-
-```sql
-INSERT INTO kaipu_record_cloud_control (id, uploads_enabled) VALUES ('global', true)
-ON CONFLICT (id) DO NOTHING;
-```
+- [ ] **Step 3: No seed step.** A missing `cloud_control` row reads as uploads enabled
+      (`getControl`), and `cloud:uploads` (Task 11) upserts the row the first time it runs.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add packages/infra-db/src/schema packages/infra-db/src/migrations
-git commit -m "feat(infra-db): cloud asset, revision, accounting, access, control and purge tables"
+git add packages/infra-db/src/schema
+git commit -m "feat(infra-db): cloud asset, revision, accounting, control and purge tables"
 ```
 
 ---
@@ -2100,20 +2147,31 @@ export class CloudAssetRepository implements ICloudAssetRepository {
 ```ts
 // packages/infra-db/src/repositories/cloud-access.repository.ts
 import type { CloudControl, ICloudAccessRepository } from "@kaipu/domain/repositories";
-import { and, eq, isNull } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { DatabaseClient } from "../client";
-import { cloudAccessTable, cloudControlTable } from "../schema/cloud";
+import { userTable } from "../schema/auth";
+import { cloudControlTable } from "../schema/cloud";
 
 export class CloudAccessRepository implements ICloudAccessRepository {
   constructor(private db: DatabaseClient) {}
 
+  /** Cloud Free is automatic for a verified email (Task 0 #8); there is no allowlist. */
   async hasAccess(userId: string): Promise<boolean> {
-    const rows = await this.db
-      .select({ userId: cloudAccessTable.userId })
-      .from(cloudAccessTable)
-      .where(and(eq(cloudAccessTable.userId, userId), isNull(cloudAccessTable.revokedAt)))
+    const [row] = await this.db
+      .select({ emailVerified: userTable.emailVerified })
+      .from(userTable)
+      .where(eq(userTable.id, userId))
       .limit(1);
-    return rows.length > 0;
+    return row?.emailVerified === true;
+  }
+
+  /** Admin only (`cloud:uploads`, Task 11). Upserts the single global row. */
+  async setUploadsEnabled(enabled: boolean): Promise<CloudControl> {
+    await this.db
+      .insert(cloudControlTable)
+      .values({ id: "global", uploadsEnabled: enabled })
+      .onConflictDoUpdate({ target: cloudControlTable.id, set: { uploadsEnabled: enabled } });
+    return { uploadsEnabled: enabled };
   }
 
   /** Missing row = uploads enabled: the switch is for stopping, not for starting. */
@@ -2359,7 +2417,7 @@ git commit -m "feat(infra-db): cloud asset repositories with atomic quota reserv
   - `cancelUpload({ assets, storage, userId, assetId, revisionId }) → { released: boolean } | null`
   - `listCloudAssets({ assets, userId, cursor, limit }) → { items: CloudAssetSummary[]; nextCursor }`
   - `getAssetDownloadUrl({ assets, storage, userId, assetId }) → { asset, downloadUrl, expiresAt } | null`
-  - `deleteCloudCopy({ assets, storage, userId, assetId }) → { deleted: boolean } | null`
+  - `deleteCloudCopy({ assets, storage, userId, assetId }) → { deleted: boolean; physicallyRemoved: boolean } | null`
   - `getStorageUsage({ assets, access, userId, entitlements }) → StorageUsage`
   - `setAutoUploadExclusion({ assets, userId, assetId, excluded }) → CloudAssetSummary | null`
   - `sweepExpiredReservations({ assets, storage, now, limit }) → { released: number; deletedObjects: number }`
@@ -2644,7 +2702,7 @@ export function makeFakeStorage(): IStorageService & {
 ```ts
 // packages/application/src/cloud/cloud.test.ts
 import { beforeEach, describe, expect, it } from "vitest";
-import { FREE_ENTITLEMENTS, type Entitlements } from "@kaipu/domain/schemas";
+import { FREE_ENTITLEMENTS, UploadIntentExpiredError, type Entitlements } from "@kaipu/domain/schemas";
 import { MAX_PENDING_UPLOADS_PER_ACCOUNT } from "@kaipu/domain/constants";
 import { cancelUpload } from "./cancel-upload";
 import { confirmUpload } from "./confirm-upload";
@@ -2715,6 +2773,16 @@ describe("createUploadIntent", () => {
     expect(b.revisionId).toBe(a.revisionId);
     expect((await assets.usage("u1")).reservedBytes).toBe(600);
     expect(b.ticket).not.toBeNull(); // re-issued for the same key
+  });
+
+  it("repeating a cancelled or expired intent key fails as intent-expired, not as a quota error", async () => {
+    const input = intent();
+    const a = await createUploadIntent({ assets, access, storage, userId: "u1", entitlements: grant, input, now: NOW });
+    await cancelUpload({ assets, storage, userId: "u1", assetId: input.assetId, revisionId: a.revisionId });
+    await expect(
+      createUploadIntent({ assets, access, storage, userId: "u1", entitlements: grant, input, now: NOW }),
+    ).rejects.toBeInstanceOf(UploadIntentExpiredError);
+    expect((await assets.usage("u1")).reservedBytes).toBe(0);
   });
 
   it("after confirm, repeating the intent reports ready with no ticket", async () => {
@@ -2844,12 +2912,16 @@ describe("list / download / delete / usage", () => {
     expect(dl?.expiresAt.getTime()).toBeGreaterThan(Date.now());
   });
 
-  it("deleteCloudCopy: object first, then accounting; failure leaves it deleting for the sweep", async () => {
+  it("deleteCloudCopy: hides first; an R2 failure is not an error and leaves it deleting for the cron", async () => {
     const assets = makeFakeAssets();
     const storage = makeFakeStorage();
     const assetId = await readyAsset(assets, storage, "u1");
     storage.failDeletes = true;
-    await expect(deleteCloudCopy({ assets, storage, userId: "u1", assetId })).rejects.toThrow(/R2 delete failed/);
+    expect(await deleteCloudCopy({ assets, storage, userId: "u1", assetId })).toEqual({
+      deleted: true,
+      physicallyRemoved: false,
+    });
+    expect((await listCloudAssets({ assets, userId: "u1", cursor: null, limit: 10 })).items).toHaveLength(0);
     const rev = [...assets.revisions.values()][0]!;
     expect(rev.status).toBe("deleting");
     expect((await assets.usage("u1")).usedBytes).toBe(100); // still counted until physically gone
@@ -2857,8 +2929,23 @@ describe("list / download / delete / usage", () => {
     expect(await retryPendingDeletes({ assets, storage, limit: 10 })).toEqual({ finished: 1, failed: 0 });
     expect((await assets.usage("u1")).usedBytes).toBe(0);
     expect((await assets.findAsset("u1", assetId))?.asset.autoUploadExcluded).toBe(true);
-    // Repeating the delete is a no-op that reports deleted: false.
-    expect(await deleteCloudCopy({ assets, storage, userId: "u1", assetId })).toEqual({ deleted: false });
+    // Repeating the delete is a no-op that changes nothing.
+    expect(await deleteCloudCopy({ assets, storage, userId: "u1", assetId })).toEqual({
+      deleted: false,
+      physicallyRemoved: false,
+    });
+    expect((await assets.usage("u1")).usedBytes).toBe(0);
+  });
+
+  it("deleteCloudCopy removes the object at once when R2 is healthy", async () => {
+    const assets = makeFakeAssets();
+    const storage = makeFakeStorage();
+    const assetId = await readyAsset(assets, storage, "u1");
+    expect(await deleteCloudCopy({ assets, storage, userId: "u1", assetId })).toEqual({
+      deleted: true,
+      physicallyRemoved: true,
+    });
+    expect((await assets.usage("u1")).usedBytes).toBe(0);
   });
 
   it("usage reports capacity, committed space and switches", async () => {
@@ -2930,6 +3017,7 @@ import {
   isSupportedContentType,
   isValidUploadSize,
   toAssetSummary,
+  UploadIntentExpiredError,
   type CloudAssetSummary,
   type CloudRevision,
   type CreateUploadIntent,
@@ -2946,7 +3034,7 @@ export interface UploadIntentResult {
 
 /**
  * Reserve quota for one revision and hand back restricted tickets. Order matters:
- * every rule that needs no I/O runs first, then the allowlist/switch, then the
+ * every rule that needs no I/O runs first, then access/switch, then the
  * idempotency lookup, then the atomic reservation, and only then are tickets signed.
  */
 export async function createUploadIntent(params: {
@@ -3021,11 +3109,9 @@ export async function createUploadIntent(params: {
       return { asset: toAssetSummary(found.asset, revision), revisionId: revision.revisionId, status: "ready", ticket: null };
     }
     if (revision.status !== "reserved") {
-      // Expired/deleted intent: the client must start a new intent (new key). Surface as quota
-      // logic would: the reservation is gone.
-      throw new QuotaExceededError(
-        computeMissingBytes({ capacityBytes: entitlements.features.cloudStorageBytes, ...(await assets.usage(userId)) }, revision.reservedBytes),
-      );
+      // Expired (swept) or cancelled intent: the reservation is gone. Not a quota problem —
+      // the client starts a new intent with a new key.
+      throw new UploadIntentExpiredError();
     }
     const ticketExpiresAt = new Date(now.getTime() + UPLOAD_TICKET_TTL_SECONDS * 1000);
     await assets.extendTicket(userId, revision.revisionId, ticketExpiresAt);
@@ -3184,27 +3270,32 @@ import type { ICloudAssetRepository } from "@kaipu/domain/repositories";
 import type { IStorageService } from "@kaipu/domain/services";
 
 /**
- * Delete the current cloud revision of an asset. `beginDelete` flips it to
- * `deleting` (and marks the asset excluded from automatic upload) BEFORE the
- * object is removed, so a crash between the two leaves a row the sweep retries;
- * `finishDelete` settles the accounting only after storage confirmed removal.
- * Returns null for a stranger; `{ deleted: false }` when there is nothing to delete.
+ * Task 0 #7. `beginDelete` persists the delete intent: it flips the revision to `deleting`,
+ * hides the asset (clears its current pointer) and excludes it from automatic upload — all
+ * BEFORE touching storage. Then the physical R2 delete is tried immediately. A storage failure is
+ * not an error for the caller: the revision stays `deleting` and `retryPendingDeletes` (cron)
+ * finishes it without any device. `physicallyRemoved` says which happened. Quota stops counting
+ * in `finishDelete` (open decision, Task 0). Returns null for a stranger.
  */
 export async function deleteCloudCopy(params: {
   assets: ICloudAssetRepository;
   storage: IStorageService;
   userId: string;
   assetId: string;
-}): Promise<{ deleted: boolean } | null> {
+}): Promise<{ deleted: boolean; physicallyRemoved: boolean } | null> {
   const found = await params.assets.findAsset(params.userId, params.assetId);
   if (!found) return null;
-  if (!found.current) return { deleted: false };
+  if (!found.current) return { deleted: false, physicallyRemoved: false };
   const deleting = await params.assets.beginDelete(params.userId, found.current.revisionId);
-  if (!deleting) return { deleted: false };
-  await params.storage.deleteObject(deleting.storageKey);
-  if (deleting.thumbnailKey) await params.storage.deleteObject(deleting.thumbnailKey);
+  if (!deleting) return { deleted: false, physicallyRemoved: false };
+  try {
+    await params.storage.deleteObject(deleting.storageKey);
+    if (deleting.thumbnailKey) await params.storage.deleteObject(deleting.thumbnailKey);
+  } catch {
+    return { deleted: true, physicallyRemoved: false };
+  }
   await params.assets.finishDelete(params.userId, deleting.revisionId);
-  return { deleted: true };
+  return { deleted: true, physicallyRemoved: true };
 }
 ```
 
@@ -3427,6 +3518,7 @@ import {
   QuotaExceededError,
   TooManyPendingUploadsError,
   UnsupportedContentTypeError,
+  UploadIntentExpiredError,
   UploadVerificationError,
   UploadsDisabledError,
 } from "@kaipu/domain/schemas";
@@ -3445,6 +3537,7 @@ describe("toOrpcError", () => {
     expect(toOrpcError(new UploadsDisabledError()).code).toBe("SERVICE_UNAVAILABLE");
     expect(toOrpcError(new CloudAccessDeniedError()).code).toBe("FORBIDDEN");
     expect(toOrpcError(new UploadVerificationError("size")).data).toEqual({ kind: "verification-failed", reason: "size" });
+    expect(toOrpcError(new UploadIntentExpiredError()).data).toEqual({ kind: "intent-expired" });
   });
 
   it("returns unknown errors untouched so the framework reports a 500 without details", () => {
@@ -3526,7 +3619,7 @@ export const cloudContract = {
   deleteCloudCopy: oc
     .route({ method: "DELETE", path: "/assets/{assetId}/cloud" })
     .input(assetParams)
-    .output(apiResponseSchema(z.object({ deleted: z.boolean() }))),
+    .output(apiResponseSchema(z.object({ deleted: z.boolean(), physicallyRemoved: z.boolean() }))),
 
   setAutoUploadExclusion: oc
     .route({ method: "POST", path: "/assets/{assetId}/auto-upload-exclusion" })
@@ -3616,6 +3709,7 @@ import {
   QuotaExceededError,
   TooManyPendingUploadsError,
   UnsupportedContentTypeError,
+  UploadIntentExpiredError,
   UploadVerificationError,
   UploadsDisabledError,
 } from "@kaipu/domain/schemas";
@@ -3635,6 +3729,9 @@ export function toOrpcError(err: unknown): unknown {
   if (err instanceof CloudAccessDeniedError) return new ORPCError("FORBIDDEN", { message: "Cloud upload access is not enabled for this account" });
   if (err instanceof UploadVerificationError) {
     return new ORPCError("CONFLICT", { message: "Uploaded object does not match the declared revision", data: { kind: "verification-failed", reason: err.reason } });
+  }
+  if (err instanceof UploadIntentExpiredError) {
+    return new ORPCError("CONFLICT", { message: "The upload intent expired; start a new one", data: { kind: "intent-expired" } });
   }
   return err;
 }
@@ -3794,7 +3891,7 @@ Replace the inline `getStorage` in `modules/recording/recording.router.ts` with 
 - [ ] **Step 6: Verify** — `bun run test --filter=server-hono && bun run check-types --filter=server-hono`. Expected: PASS.
       Then `bun run dev:server-hono` and, with a signed-in session cookie or bearer token, call
       `GET /api/v1/me/storage`. Expected: `{ data: { capacityBytes: 1000000000, usedBytes: 0, … cloudUploads: false } }`
-      for an account without a `cloud_access` row.
+      for an account whose email is not verified.
 
 - [ ] **Step 7: Commit**
 
@@ -3813,6 +3910,7 @@ git commit -m "feat(server): cloud assets contract and router with structured ev
 - Modify: `apps/server-hono/src/index.ts`, `apps/server-hono/wrangler.jsonc`
 - Modify: `packages/infra-auth/src/config/base-config.ts`
 - Create: `packages/infra-auth/src/hooks/enqueue-purge.ts`
+- Create: `apps/server-hono/scripts/cloud-uploads.ts`; Modify: `apps/server-hono/package.json` (`cloud:uploads` script)
 
 **Interfaces:**
 
@@ -3830,8 +3928,8 @@ import { env } from "./env";
 import { logEvent } from "./lib/events";
 import { tryGetStorage } from "./lib/storage";
 
-const SWEEP_LIMIT = 50; // Task 0
-const PURGE_LIMIT = 1; // Task 0
+const SWEEP_LIMIT = 50; // PROPOSAL (Task 0) — not approved
+const PURGE_LIMIT = 1; // PROPOSAL (Task 0) — not approved
 const PURGE_MAX_ATTEMPTS = 10;
 const RECONCILE_WINDOW_MS = 60 * 60 * 1000;
 
@@ -3885,7 +3983,7 @@ export default {
 };
 ```
 
-Add to `wrangler.jsonc` (value from Task 0):
+Add to `wrangler.jsonc` (PROPOSAL from Task 0 — not approved; keep a `// PROPOSAL` comment next to it):
 
 ```jsonc
   "triggers": { "crons": ["*/15 * * * *"] },
@@ -3926,9 +4024,38 @@ In `base-config.ts` add (next to `emailAndPassword`):
 with `import { enqueueCloudPurge } from "../hooks/enqueue-purge";`. Export the hook from the package
 index if `packages/infra-auth/src/index.ts` re-exports config helpers.
 
+- [ ] **Step 2b: Admin command for the global upload switch** (Task 0 #9 — no hand-written SQL)
+
+```ts
+// apps/server-hono/scripts/cloud-uploads.ts
+// Usage (from apps/server-hono): bun run cloud:uploads status | on | off
+// Reads DATABASE_URL from the environment (.env). Never prints it.
+import { createDatabaseClient } from "@kaipu/infra-db/client";
+import { CloudAccessRepository } from "@kaipu/infra-db/repositories";
+
+const command = process.argv[2];
+const url = process.env.DATABASE_URL;
+if (!url) throw new Error("DATABASE_URL is required");
+if (command !== "status" && command !== "on" && command !== "off") {
+  console.error("usage: cloud:uploads status | on | off");
+  process.exit(2);
+}
+const repo = new CloudAccessRepository(createDatabaseClient(url));
+const control = command === "status" ? await repo.getControl() : await repo.setUploadsEnabled(command === "on");
+console.log(`cloud uploads: ${control.uploadsEnabled ? "enabled" : "PAUSED"}`);
+if (command === "off") {
+  console.log("New uploads are refused. Transfers already running and URLs already issued are not cut.");
+}
+```
+
+In `apps/server-hono/package.json` scripts add `"cloud:uploads": "bun --env-file=.env scripts/cloud-uploads.ts"`.
+
 - [ ] **Step 3: Verify locally**
 
 Run: `bun run check-types --filter=server-hono --filter=@kaipu/infra-auth`. Expected: clean.
+Run: `bun run cloud:uploads off`, then `GET /api/v1/me/storage` shows `uploadsEnabled: false` and
+`POST /api/v1/assets/upload-intents` answers `SERVICE_UNAVAILABLE`; `bun run cloud:uploads on`
+restores it.
 Run: `bun run dev:server-hono`, then trigger the cron once:
 `curl "http://localhost:3000/__scheduled?cron=*/15+*+*+*+*"` (wrangler dev exposes this when
 `--test-scheduled` is passed; add `--test-scheduled` to the `dev` script). Expected: a
@@ -4049,26 +4176,33 @@ git commit -m "refactor: replace the legacy recording vertical with cloud assets
       filled from the code above (no "see plan"): _Model_ (asset / revision / accounting row, status
       table), _Quota enforcement_ (the conditional UPDATE, why no transaction, reconcile), _Tickets_
       (the four signed headers and what each blocks, TTL + grace), _Confirm verification_, _Lifecycle
-      and sweep_ (cron, batch sizes, purge queue, `maxAttempts`), _Operator actions_ with SQL:
+      and sweep_ (cron, batch sizes, purge queue, `maxAttempts`), _Cloud access_ (a verified email grants Cloud Free automatically; no allowlist; the email
+      verification sender does not exist yet — state it as the blocking dependency), _Decisions and open
+      proposals_ (copy Task 0's two tables; never label a proposal approved), _Operator actions_:
+      `bun run cloud:uploads status|on|off` for the global switch (what it does and does not stop), and
+      the read-only diagnostic query for stuck purges:
 
 ```sql
--- grant beta access
-INSERT INTO kaipu_record_cloud_access (user_id, note) VALUES ('<user id>', 'beta wave 1');
--- revoke
-UPDATE kaipu_record_cloud_access SET revoked_at = now() WHERE user_id = '<user id>';
--- stop new uploads globally (reads/deletes keep working)
-UPDATE kaipu_record_cloud_control SET uploads_enabled = false WHERE id = 'global';
--- accounts with stuck purges
 SELECT * FROM kaipu_record_cloud_purge WHERE done_at IS NULL AND attempts >= 10;
 ```
 
+_Remote cleanup (cron)_ — Task 0 #6: what each step does (release reservations past ticket expiry
+plus grace, retry `deleting` revisions, drain the purge queue, reconcile accounting), the schedule
+and batch sizes marked as proposals, why it must not depend on devices, and **how to verify it
+runs**: `wrangler dev --test-scheduled` + `curl /__scheduled`, the `cloud.sweep` event in Workers
+logs, and a dashboard alert on `cloud.sweep.failed`.
+
 _Rate limiting (WAF)_: the rules to create in the Cloudflare dashboard for `kaipu-api`, one per
 route family (`/api/v1/assets/upload-intents`, `…/confirm`, `…/download-url`, `DELETE …/cloud`,
-`/api/auth/sign-in/email`), counting by `http.request.headers["authorization"]` hash or the
-session cookie, thresholds from Task 0, action _block_ for 10 minutes; note that the app-level
-pending cap is what fails closed if the WAF is misconfigured. _Events_: the `cloud.*` names and
-fields. _Production checklist_: link to `backlog/production-cloud-security.md` and list: apply
-migration SQL, seed `cloud_control`, set R2 secrets, create WAF rules, verify one cron run in the
+`/api/auth/sign-in/email`, `/api/auth/sign-up/email`), counting by the
+`http.request.headers["authorization"]` hash or the session cookie (IP as the fallback for
+unauthenticated auth routes). **Thresholds are open (Task 0)** and must allow legitimate use,
+including restoring files from another device. First record which rate-limiting features the
+Cloudflare plan actually includes (number of rules, counting characteristics, periods) and write
+the rules within that. State explicitly that limiting `download-url` issuance does not limit
+downloads: a URL is reusable until it expires. The app-level pending cap is what fails closed if
+the WAF is misconfigured. _Events_: the `cloud.*` names and
+fields. _Production checklist_: link to `backlog/production-cloud-security.md` and list: applythe schema with `db:push`, seed `cloud_control`, set R2 secrets, create WAF rules, verify one cron run in the
 dashboard.
 
 - [ ] **Step 2: Update backlog statuses honestly**
@@ -4082,6 +4216,10 @@ dashboard.
 - `desktop-cloud-sync-gap.md` → record the two model decisions as taken: link = client-minted
   `assetId` with a server unique per account; thumbnail = auxiliary object per revision.
 - `index.mdx` → update those rows; add a row for the cloud epic pointing at the specs and plans 01/02.
+- Add backlog items (🔵 Proposed) for the Task 0 #8 dependencies outside this plan: **email
+  verification sending** (without it no account gets Cloud Free), **automated sign-up
+  protection**, and **cloud consumption tracking** (per-account storage and growth from the
+  `cloud.*` events).
 
 - [ ] **Step 3: CI** — add the `TEST_DATABASE_URL` GitHub secret (a dedicated Neon branch) and a
       step running `bun run test:integration` after the unit tests in the package workflow.
@@ -4109,7 +4247,7 @@ git commit -m "docs(cloud): server storage reference, WAF runbook and backlog st
 | Confirm verifies size/type/hash; repeated confirm no double count              | 9, 8 (`markReady` idempotent)                                      |
 | Pending cap and duration per account                                           | 8/9 (`maxPending`), 9 (sweep)                                      |
 | Entitlements carry capacity + cloud permission, enforced server-side           | 4, 9                                                               |
-| Beta access + global switch                                                    | 7/8 (`cloud_access`, `cloud_control`), 9                           |
+| Access by verified email + global switch with an admin command                 | 4/8 (`hasAccess` = `email_verified`), 7 (`cloud_control`), 11      |
 | Cleanup of expired reservations, retried deletes, tombstones, account deletion | 7, 9, 11                                                           |
 | Reconcilable accounting                                                        | 8 (`reconcile`), 11                                                |
 | Telemetry without URLs/secrets                                                 | 10                                                                 |

@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { FREE_CLOUD_CAPACITY_BYTES, PRO_CLOUD_CAPACITY_BYTES } from "../constants/cloud-limits";
+
 /**
  * Commercial state, kept apart from identity on purpose: Better Auth owns `user`
  * and `session`; this module owns what the user has paid for. Nothing here is
@@ -46,6 +48,10 @@ export const entitlementsSchema = z.object({
   currentPeriodEnd: z.date().nullable(),
   features: z.object({
     watermarkRemoval: z.boolean(),
+    /** May this account create upload intents: true once its email is verified (Task 0 #8). */
+    cloudUploads: z.boolean(),
+    /** Total cloud capacity in decimal bytes. Read/delete never depends on it. */
+    cloudStorageBytes: z.number().int().nonnegative(),
   }),
 });
 export type Entitlements = z.infer<typeof entitlementsSchema>;
@@ -56,7 +62,11 @@ export const FREE_ENTITLEMENTS: Entitlements = {
   plan: "free",
   status: "active",
   currentPeriodEnd: null,
-  features: { watermarkRemoval: false },
+  features: {
+    watermarkRemoval: false,
+    cloudUploads: false,
+    cloudStorageBytes: FREE_CLOUD_CAPACITY_BYTES,
+  },
 };
 
 /** A subscription grants its features only while active and inside its period. */
@@ -66,20 +76,32 @@ export function isSubscriptionInForce(sub: SubscriptionBase, now: Date): boolean
   return true;
 }
 
+export interface EntitlementInputs {
+  /** Whether the account's email is verified (Task 0 #8), not from billing. */
+  cloudAccess: boolean;
+}
+
 /**
  * The single place the plan → permissions rule lives. No row means free. A row
  * that is not in force keeps reporting its plan name (so the UI can say "your
- * Pro plan lapsed") but grants nothing.
+ * Pro plan lapsed") but grants nothing. Cloud upload access is independent of
+ * billing: it follows email verification, passed in via `inputs.cloudAccess`.
  */
-export function deriveEntitlements(sub: SubscriptionBase | null, now: Date): Entitlements {
-  if (!sub) return FREE_ENTITLEMENTS;
-  const inForce = isSubscriptionInForce(sub, now);
+export function deriveEntitlements(
+  sub: SubscriptionBase | null,
+  now: Date,
+  inputs: EntitlementInputs = { cloudAccess: false },
+): Entitlements {
+  const inForce = sub ? isSubscriptionInForce(sub, now) : false;
+  const proInForce = inForce && sub?.plan === "pro";
   return {
-    plan: sub.plan,
-    status: sub.status,
-    currentPeriodEnd: sub.currentPeriodEnd,
+    plan: sub?.plan ?? "free",
+    status: sub?.status ?? "active",
+    currentPeriodEnd: sub?.currentPeriodEnd ?? null,
     features: {
-      watermarkRemoval: inForce && sub.plan === "pro",
+      watermarkRemoval: proInForce,
+      cloudUploads: inputs.cloudAccess,
+      cloudStorageBytes: proInForce ? PRO_CLOUD_CAPACITY_BYTES : FREE_CLOUD_CAPACITY_BYTES,
     },
   };
 }

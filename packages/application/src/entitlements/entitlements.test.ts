@@ -14,6 +14,11 @@ function makeFakeRepo(rows: SubscriptionBase[]): ISubscriptionRepository {
   };
 }
 
+const cloudAccessRepo = {
+  hasAccess: async () => false,
+  getControl: async () => ({ uploadsEnabled: true }),
+};
+
 function manualPro(userId: string): SubscriptionBase {
   return {
     id: `sub-${userId}`,
@@ -30,15 +35,20 @@ function manualPro(userId: string): SubscriptionBase {
 
 describe("getEntitlements", () => {
   it("returns free entitlements for a user without a subscription", async () => {
-    const result = await getEntitlements({ repo: makeFakeRepo([]), userId: "u1", now: NOW });
+    const result = await getEntitlements({
+      repo: makeFakeRepo([]),
+      cloudAccessRepo,
+      userId: "u1",
+      now: NOW,
+    });
     expect(result.plan).toBe("free");
     expect(result.features.watermarkRemoval).toBe(false);
   });
 
   it("returns the caller's own subscription, not another user's", async () => {
     const repo = makeFakeRepo([manualPro("u2")]);
-    const mine = await getEntitlements({ repo, userId: "u1", now: NOW });
-    const theirs = await getEntitlements({ repo, userId: "u2", now: NOW });
+    const mine = await getEntitlements({ repo, cloudAccessRepo, userId: "u1", now: NOW });
+    const theirs = await getEntitlements({ repo, cloudAccessRepo, userId: "u2", now: NOW });
     expect(mine.features.watermarkRemoval).toBe(false);
     expect(theirs.features.watermarkRemoval).toBe(true);
   });
@@ -48,7 +58,26 @@ describe("getEntitlements", () => {
       ...manualPro("u1"),
       currentPeriodEnd: new Date(Date.now() - 1000),
     };
-    const result = await getEntitlements({ repo: makeFakeRepo([lapsed]), userId: "u1" });
+    const result = await getEntitlements({
+      repo: makeFakeRepo([lapsed]),
+      cloudAccessRepo,
+      userId: "u1",
+    });
     expect(result.features.watermarkRemoval).toBe(false);
+  });
+
+  it("composes billing with email-verified cloud access", async () => {
+    const repo = makeFakeRepo([]);
+    const verifiedCloudAccessRepo = {
+      hasAccess: async () => true,
+      getControl: async () => ({ uploadsEnabled: true }),
+    };
+    const e = await getEntitlements({
+      repo,
+      cloudAccessRepo: verifiedCloudAccessRepo,
+      userId: "u1",
+    });
+    expect(e.features.cloudUploads).toBe(true);
+    expect(e.features.cloudStorageBytes).toBe(1_000_000_000);
   });
 });
