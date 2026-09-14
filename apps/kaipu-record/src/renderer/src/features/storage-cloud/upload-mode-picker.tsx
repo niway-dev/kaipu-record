@@ -10,28 +10,40 @@ const COPY = {
   automatic: { label: "modeAutomatic", description: "modeAutomaticDescription" },
 } as const satisfies Record<UploadMode, { label: string; description: string }>;
 
+/** Cloud modes need an account with a verified email. */
+export type CloudBlocker = "signed-out" | "email-unverified";
+
 export interface UploadModePickerProps {
   /** `null` while settings are still loading: nothing is checked, nothing is claimed. */
   mode: UploadMode | null;
-  /** Cloud modes need an account; local-only never does. */
-  cloudAvailable: boolean;
+  /** Why cloud modes are blocked, or `null` when they can be chosen. Local-only never is. */
+  cloudBlocker: CloudBlocker | null;
   onChange(mode: UploadMode): void;
 }
 
 /**
  * Three mutually exclusive save modes as one radio group (not three toggles). Without an
- * account the cloud options stay visible but disabled, with the reason, and local-only keeps
+ * account, or with an unverified email, the cloud options stay visible but disabled, with the reason, and local-only keeps
  * working. A cloud mode saved earlier stays checked while signed out — signing out does not
  * silently rewrite the user's preference.
  */
 export function UploadModePicker({
   mode,
-  cloudAvailable,
+  cloudBlocker,
   onChange,
 }: UploadModePickerProps): React.JSX.Element {
   const t = useTranslations("storageCloud");
   const name = React.useId();
+  const cloudAvailable = cloudBlocker === null;
   const cloudModeWaiting = !cloudAvailable && mode !== null && mode !== "local-only";
+  const blockedNote =
+    cloudBlocker === "email-unverified"
+      ? cloudModeWaiting
+        ? t("modeUnverifiedSaved")
+        : t("modeUnverified")
+      : cloudModeWaiting
+        ? t("modeSignedOutSaved")
+        : t("modeSignInRequired");
 
   return (
     <div className={styles.modeBlock}>
@@ -64,7 +76,7 @@ export function UploadModePicker({
       </div>
       {!cloudAvailable && (
         <p className={styles.note} role="note">
-          {cloudModeWaiting ? t("modeSignedOutSaved") : t("modeSignInRequired")}
+          {blockedNote}
         </p>
       )}
       {cloudAvailable && mode === "automatic" && (

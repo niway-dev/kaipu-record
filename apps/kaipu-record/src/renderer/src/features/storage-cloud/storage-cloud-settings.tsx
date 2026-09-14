@@ -74,7 +74,13 @@ export function StorageCloudSettings({
         ) : (
           <UploadModePicker
             mode={uploadMode}
-            cloudAvailable={hasAccount}
+            cloudBlocker={
+              !hasAccount
+                ? "signed-out"
+                : view.kind === "beta-unavailable"
+                  ? "email-unverified"
+                  : null
+            }
             onChange={onUploadModeChange}
           />
         )}

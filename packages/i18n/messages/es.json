@@ -532,6 +532,8 @@
     "modeAutomaticNote": "No subiremos archivos anteriores ni crearemos enlaces automáticamente. La preferencia aplica a este dispositivo.",
     "modeSignInRequired": "Inicia sesión para usar cloud. Grabar sigue funcionando en este dispositivo.",
     "modeSignedOutSaved": "Los modos cloud esperan a que inicies sesión; mientras tanto, los archivos se quedan en este dispositivo.",
+    "modeUnverified": "Verifica tu correo para usar cloud. Grabar sigue funcionando en este dispositivo.",
+    "modeUnverifiedSaved": "Los modos cloud esperan a que verifiques tu correo; mientras tanto, los archivos se quedan en este dispositivo.",
     "accountAndCapacity": "Cuenta y capacidad",
     "planLabel": "Plan {plan} · {capacity}",
     "planFree": "Free",

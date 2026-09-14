@@ -87,9 +87,8 @@ everything else is a generic error.
    command (`bun run plan verify <email>`); real fix: Better Auth email verification.
 3. **Offline vs server failure.** Distinguish "you're offline" (retry when back) from "the
    server failed" in the capacity card.
-4. **Save mode for unverified accounts.** Manual and automatic upload are selectable when
-   signed in with an unverified email (`cloudAvailable` only checks for an account); gate
-   them on `cloudUploads` too, with the verify-email reason.
+4. ~~**Save mode for unverified accounts.**~~ Done: the picker takes a `cloudBlocker`
+   (`signed-out` or `email-unverified`) and shows the verify-email reason under the modes.
 5. **R2 PUT failures.** Map expired ticket, size mismatch and network errors when plan 03
    builds transfers.
 6. **Upload error copy.** Implement section 3's messages in the desktop transfer flow
