@@ -5,12 +5,21 @@ description: Status tracker for the optional cloud epic — one library entry pe
 
 # Optional cloud — upload, catalog and share links
 
-> **Status: 🟡 In progress.** Plan 01 (server) has not started — it still opens with a decision
-> gate (Task 0) the founder fills in, and a real-R2 spike (Task 1) that must pass before the
-> rest is worth building. Plan 02 (desktop) is implemented on branch and in review.
+> **Status: 🟡 In progress.** Plan 02 (desktop identity + combined library) is merged. Plan 01
+> (server) is partly implemented on `feat/cloud-01-server-quotas`: decisions recorded (Task 0, five
+> values still open as proposals), both real-R2 spikes passed (Task 1/1b), and Tasks 2–9 are done —
+> domain limits and schemas, entitlements (access = verified email), storage and repository ports,
+> R2 tickets, the five cloud tables (applied with `db:push`), Postgres repositories with single-statement
+> atomic reservations, and the application use cases. **Not done:** Task 10 (the `/assets` and
+> `/me/storage` HTTP routes), Task 11 (cron sweep, account purge, `cloud:uploads` command), Task 12
+> (removing the legacy recording vertical) and Task 13 (operations docs, WAF runbook, CI). No cloud
+> endpoint is served yet. Cloud Free also depends on email verification, which the server does not
+> send yet.
 > Effort: High (six phases).
 
 ## Where the detail lives
+
+- **Handoff (state, carried rulings, how to resume on another machine):** [Optional cloud — handoff](/backlog/optional-cloud-handoff/)
 
 - **Product:** [Optional cloud — product, quotas and file safety](/specs/2026-09-09-cloud-product/)
 - **Data model:** [Cloud — identity, revisions and the relationship with .kaipu](/specs/2026-09-09-cloud-data-model/)

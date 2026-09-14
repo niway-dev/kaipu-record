@@ -243,6 +243,7 @@
         "drizzle-kit": "^0.31.8",
         "tsdown": "catalog:",
         "typescript": "catalog:",
+        "vitest": "^4.1.9",
       },
     },
     "packages/infra-env": {

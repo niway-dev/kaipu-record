@@ -9,14 +9,14 @@ Date: 2026-09-09. Status: proposed plan, without application changes or deployme
 
 Detailed, task-by-task plans (written 2026-09-10; execute from these, not from the phase summaries below):
 
-| Phase                              | Plan                                                                                                                  | Status                               |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
-| 1 — server                         | [Cloud 01 — server quotas, revisions and immutable tickets](/plans/2026-09-09-cloud-01-server-quotas-and-revisions/)  | 🔵 Written, Task 0 decisions pending |
-| 2 — local identity                 | [Cloud 02 — local identity and the combined library](/plans/2026-09-09-cloud-02-local-identity-and-combined-library/) | 🔵 Written                           |
-| 3 — manual upload and download     | not written yet — after 01/02 land                                                                                    | —                                    |
-| 4 — links and independent deletion | not written yet                                                                                                       | —                                    |
-| 5 — automatic upload               | not written yet                                                                                                       | —                                    |
-| 6 — explicit link updates          | not written yet                                                                                                       | —                                    |
+| Phase                              | Plan                                                                                                                  | Status                                         |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| 1 — server                         | [Cloud 01 — server quotas, revisions and immutable tickets](/plans/2026-09-09-cloud-01-server-quotas-and-revisions/)  | 🟡 In progress — Tasks 0–9 done, 10–13 pending |
+| 2 — local identity                 | [Cloud 02 — local identity and the combined library](/plans/2026-09-09-cloud-02-local-identity-and-combined-library/) | ✅ Merged (#90)                                |
+| 3 — manual upload and download     | not written yet — after 01/02 land                                                                                    | —                                              |
+| 4 — links and independent deletion | not written yet                                                                                                       | —                                              |
+| 5 — automatic upload               | not written yet                                                                                                       | —                                              |
+| 6 — explicit link updates          | not written yet                                                                                                       | —                                              |
 
 ## Phase 0 — finalize contracts and design
 

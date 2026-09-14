@@ -45,3 +45,46 @@ metadata with the pending row before `markReady`.
 
 - [Cloud recordings backend](./cloud-recordings-upload)
 - [R2 storage architecture](./r2-storage-architecture)
+
+## Evidence (spike, 2026-09-13)
+
+Ran `packages/infra-storage/scripts/r2-ticket-spike.ts` against `kaipu-private-bucket` with a
+1 MiB throwaway object under `spike/<uuid>/` (deleted at the end):
+
+| Check                                                                     | Result                                                       |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| a. body longer than the signed `Content-Length`                           | `502` rejected, nothing stored (see note)                    |
+| b. second PUT on an existing key with signed `If-None-Match: *`           | `412`                                                        |
+| c. body whose sha256 differs from the signed `x-amz-checksum-sha256`      | `400` rejected                                               |
+| d. HEAD returns `content-length`, `content-type`, `x-amz-checksum-sha256` | yes — `1048576`, `application/octet-stream`, non-null sha256 |
+| e. Range GET                                                              | `206`, 10 bytes                                              |
+| f. DELETE                                                                 | `204`                                                        |
+
+Note on (a): R2 answered `502`, not a 4xx. It is still a rejection at write time: check (a)
+used the same key as the later happy-path PUT, which carries `If-None-Match: *` and succeeded
+with `200` — so the oversized body left no object behind. The server must treat any non-2xx
+from the ticket PUT as "not uploaded", never assume a 4xx.
+
+Conclusion: the presigned ticket bounds length, hash and overwrite at write time; plan 01
+proceeds with presigned PUT.
+
+## Evidence: URL expiry during a transfer (spike, 2026-09-13)
+
+`packages/infra-storage/scripts/r2-expiry-spike.ts`, with presigned URLs valid for **3 s**,
+against `kaipu-private-bucket` (all objects deleted afterwards). This is R2's observed
+behaviour, not an inference from the S3 documentation:
+
+| Check                                                                  | Result                                                   |
+| ---------------------------------------------------------------------- | -------------------------------------------------------- |
+| 1. 8 MiB PUT started inside the window, body trickled over ~12 s       | `200` — completed 4× past expiry                         |
+| 2. PUT started after expiry                                            | `403`                                                    |
+| 3. 128 MiB GET started inside the window, read slowly for ~33 s        | `200`, all bytes; ~112 MB of them arrived after second 8 |
+| 4. New Range request on the same expired URL (what a player seek does) | `403`                                                    |
+
+Conclusions for plan 01 and the desktop client:
+
+- R2 checks expiry when a request **starts**. A short ticket (5 min) never cuts off a slow upload
+  or a long download that is already running.
+- Every **new** request needs a valid URL. A retry, a reconnect, or a player seek/Range request
+  after expiry gets `403`, so the client must ask the server for a fresh URL (same upload intent
+  for PUT, same revision for GET) instead of treating `403` as "file gone".

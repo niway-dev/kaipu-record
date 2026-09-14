@@ -21,7 +21,7 @@ least-privilege credentials, and an operational rollback path.
    production environment secrets/variables with least access to the release workflow.
 3. Add those secrets to the API deployment workflow without printing values.
 4. Apply and verify the `recording` schema in the production database before the API release that
-   uses it. Prefer a repeatable migration strategy over an undocumented manual action.
+   uses it, with `bun run db:push`. Versioned migrations are out of scope until an ADR adopts them.
 5. Define credential rotation, emergency revocation, and rollback instructions.
 6. Add structured operational events for ticket issuance, confirmation failure, deletion failure,
    rate limiting, and cleanup failures. Never include presigned URLs, session tokens, or raw file

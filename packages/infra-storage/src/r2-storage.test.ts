@@ -86,3 +86,86 @@ describe("createR2Storage.objectExists", () => {
     }
   });
 });
+
+describe("createR2Storage.createUploadTicket", () => {
+  it("signs content-length, content-type, if-none-match and the sha256 checksum", async () => {
+    const ticket = await storage.createUploadTicket("videos/u1/a1/r1.mp4", {
+      contentType: "video/mp4",
+      contentLength: 1234,
+      checksumSha256: "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=",
+      expiresInSeconds: 900,
+    });
+    const parsed = new URL(ticket.url);
+    const signed = parsed.searchParams.get("X-Amz-SignedHeaders") ?? "";
+    for (const h of ["content-length", "content-type", "if-none-match", "x-amz-checksum-sha256"]) {
+      expect(signed).toContain(h);
+    }
+    expect(ticket.headers).toEqual({
+      "content-type": "video/mp4",
+      "content-length": "1234",
+      "if-none-match": "*",
+      "x-amz-checksum-sha256": "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=",
+    });
+    expect(parsed.searchParams.get("X-Amz-Expires")).toBe("900");
+    expect(ticket.expiresAt.getTime()).toBeGreaterThan(Date.now() + 800_000);
+  });
+});
+
+describe("createR2Storage.headObject", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("parses size, type, etag and checksum from a HEAD response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(null, {
+          status: 200,
+          headers: {
+            "content-length": "1234",
+            "content-type": "video/mp4",
+            etag: '"abc"',
+            "x-amz-checksum-sha256": "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=",
+          },
+        }),
+      ),
+    );
+    await expect(storage.headObject("videos/u1/a1/r1.mp4")).resolves.toEqual({
+      sizeBytes: 1234,
+      contentType: "video/mp4",
+      etag: '"abc"',
+      checksumSha256: "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=",
+    });
+    // The checksum is only returned when the request asks for it.
+    // `AwsClient.fetch` signs the request into a single `Request` object before
+    // calling global `fetch(request)` — there is no separate `init` argument.
+    const request = vi.mocked(fetch).mock.calls[0]?.[0] as Request;
+    expect(request.headers.get("x-amz-checksum-mode")).toBe("ENABLED");
+  });
+
+  it("returns null on 404", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 404 })));
+    await expect(storage.headObject("k")).resolves.toBeNull();
+  });
+});
+
+describe("createR2Storage.listObjectKeys", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("parses ListObjectsV2 keys and the continuation token", async () => {
+    const xml = `<?xml version="1.0"?><ListBucketResult><IsTruncated>true</IsTruncated>
+      <NextContinuationToken>tok&amp;1</NextContinuationToken>
+      <Contents><Key>videos/u1/a1/r1.mp4</Key></Contents><Contents><Key>videos/u1/a1/r1.thumb.jpg</Key></Contents>
+      </ListBucketResult>`;
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(xml, { status: 200 })));
+    await expect(storage.listObjectKeys("videos/u1/")).resolves.toEqual({
+      keys: ["videos/u1/a1/r1.mp4", "videos/u1/a1/r1.thumb.jpg"],
+      nextCursor: "tok&1",
+    });
+    // Same signed-`Request` shape as above: read the URL off the request, not a
+    // separate first-argument string.
+    const request = vi.mocked(fetch).mock.calls[0]?.[0] as Request;
+    const url = new URL(request.url);
+    expect(url.searchParams.get("list-type")).toBe("2");
+    expect(url.searchParams.get("prefix")).toBe("videos/u1/");
+  });
+});

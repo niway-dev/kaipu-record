@@ -73,3 +73,11 @@ promoted from a speculative plan doc.
 - **Hardware-accelerated encode** (VideoToolbox/NVENC) and **native screen capture**
   (ScreenCaptureKit) — ideas, not started; encode currently runs in the renderer
   via WebCodecs, and capture goes through `getDisplayMedia()`.
+
+## Proposals added after the last full review
+
+- **🔵 Typed styles with StyleX across desktop and web** (2026-09-12) — pending
+  analysis; no migration started. Evaluate typed token references, replacing
+  Tailwind/CSS Modules, and shared primitives. See the
+  [proposal](../backlog/stylex-migration). This addition does not revalidate the
+  shipped or in-flight statuses above.
