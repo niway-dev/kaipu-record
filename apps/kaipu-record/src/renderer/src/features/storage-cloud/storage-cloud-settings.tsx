@@ -44,6 +44,9 @@ export function StorageCloudSettings({
   const usage = useStorageUsage(accountKey, simulatedResult === undefined && accountKey !== null);
   const view = toCapacityView(simulatedResult === undefined ? usage.result : simulatedResult);
   const hasAccount = status.kind === "signed-in" || status.kind === "unknown";
+  // Until the first auth status lands the page can't tell signed out from signed in, so it shows
+  // placeholders instead of flashing the signed-out note and disabled cloud modes.
+  const loading = (sim.account === "real" && !auth.resolved) || uploadMode === null;
 
   return (
     <section className={styles.group} aria-labelledby="storage-cloud-title">
@@ -56,17 +59,42 @@ export function StorageCloudSettings({
 
       <div className={styles.block}>
         <h3 className={styles.blockTitle}>{t("saveMode")}</h3>
-        <UploadModePicker
-          mode={uploadMode}
-          cloudAvailable={hasAccount}
-          onChange={onUploadModeChange}
-        />
+        {loading ? (
+          <div className={styles.modeList} aria-hidden>
+            {[0, 1, 2].map((i) => (
+              <div key={i} className={styles.skeletonRow}>
+                <span className={styles.skeletonDot} data-skeleton />
+                <span className={styles.skeletonLines}>
+                  <span className={styles.skeletonLine} data-skeleton data-width="short" />
+                  <span className={styles.skeletonLine} data-skeleton />
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <UploadModePicker
+            mode={uploadMode}
+            cloudAvailable={hasAccount}
+            onChange={onUploadModeChange}
+          />
+        )}
       </div>
 
       <div className={styles.block}>
         <h3 className={styles.blockTitle}>{t("accountAndCapacity")}</h3>
         <Card>
-          {status.kind === "signed-in" || status.kind === "unknown" ? (
+          {loading ? (
+            <div className={styles.capacity} aria-busy="true">
+              <span className={styles.srOnly}>{t("loading")}</span>
+              <div className={styles.accountHeader} aria-hidden>
+                <span className={styles.avatar} data-skeleton />
+                <span className={styles.skeletonLines}>
+                  <span className={styles.skeletonLine} data-skeleton data-width="short" />
+                  <span className={styles.skeletonLine} data-skeleton data-width="tiny" />
+                </span>
+              </div>
+            </div>
+          ) : status.kind === "signed-in" || status.kind === "unknown" ? (
             <CapacityCard
               status={status}
               view={view}

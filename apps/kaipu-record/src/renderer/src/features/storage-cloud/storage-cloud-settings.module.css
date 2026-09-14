@@ -284,7 +284,63 @@
   }
 }
 
+/* ── First-load skeleton ──────────────────── */
+
+[data-skeleton] {
+  background: linear-gradient(
+    90deg,
+    var(--bg-input) 0%,
+    var(--bg-card-hover) 50%,
+    var(--bg-input) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+.skeletonRow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-md);
+  padding: var(--space-md);
+}
+
+.skeletonRow + .skeletonRow {
+  border-top: 1px solid var(--border);
+}
+
+.skeletonDot {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+
+.skeletonLines {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.skeletonLine {
+  display: block;
+  height: 12px;
+  width: 70%;
+  border-radius: var(--radius-sm);
+}
+
+.skeletonLine[data-width="short"] {
+  width: 30%;
+}
+
+.skeletonLine[data-width="tiny"] {
+  width: 18%;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  [data-skeleton],
   .barTrack[data-loading] {
     animation: none;
   }

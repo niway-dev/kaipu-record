@@ -15,12 +15,20 @@ function renderSection(uploadMode: "local-only" | "manual" = "local-only") {
 }
 
 describe("StorageCloudSettings", () => {
+  it("shows a skeleton, not the signed-out view, until the auth status arrives", async () => {
+    renderSection();
+    expect(screen.getByText("Checking your cloud space…")).toBeInTheDocument();
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+    expect(screen.queryByText(/sign in to use cloud/i)).not.toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Sign in" })).toBeInTheDocument();
+  });
+
   it("signed out: cloud modes wait, sign-in offered, no capacity query", async () => {
     const getStorageUsage = vi.spyOn(window.electronAPI, "getStorageUsage");
     renderSection();
+    expect(await screen.findByRole("button", { name: "Sign in" })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: /local only/i })).toBeEnabled();
     expect(screen.getByRole("radio", { name: /manual upload/i })).toBeDisabled();
-    expect(await screen.findByRole("button", { name: "Sign in" })).toBeInTheDocument();
     expect(getStorageUsage).not.toHaveBeenCalled();
     getStorageUsage.mockRestore();
   });
