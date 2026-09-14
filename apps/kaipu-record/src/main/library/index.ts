@@ -97,6 +97,13 @@ export function registerLibraryVaultHandlers(deps: { auth: AuthHandle; serverUrl
   );
 
   ipcMain.handle(IPC_CHANNELS.getVaultDirectory, (): VaultDirectory => vaultDirectory());
+  // shell.openPath resolves with an error string ("" on success) rather than rejecting.
+  ipcMain.handle(IPC_CHANNELS.openVaultDirectory, async (): Promise<void> => {
+    const { path } = vaultDirectory();
+    await mkdir(path, { recursive: true });
+    const error = await shell.openPath(path);
+    if (error) console.error("failed to open the recordings folder", error);
+  });
 
   ipcMain.handle(
     IPC_CHANNELS.chooseVaultDirectory,

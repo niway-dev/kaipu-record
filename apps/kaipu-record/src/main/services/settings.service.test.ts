@@ -42,6 +42,7 @@ describe("mergeSettings", () => {
         showBarInRecording: true,
         shortcuts,
         deviceId: "stored-id",
+        uploadMode: "manual",
       }),
     ).toEqual({
       theme: "dark",
@@ -52,6 +53,7 @@ describe("mergeSettings", () => {
       showBarInRecording: true,
       shortcuts,
       deviceId: "stored-id",
+      uploadMode: "manual",
     });
   });
 
@@ -132,5 +134,24 @@ describe("deviceId", () => {
 
   it("ignores a non-string device id", () => {
     expect(mergeSettings({ deviceId: 42 as unknown as string }).deviceId).toBe("");
+  });
+});
+
+describe("uploadMode", () => {
+  it("defaults to local-only, so creating an account never starts uploads", () => {
+    expect(mergeSettings(null).uploadMode).toBe("local-only");
+    expect(mergeSettings({ theme: "light" }).uploadMode).toBe("local-only");
+  });
+
+  it("keeps each valid mode", () => {
+    for (const mode of ["local-only", "manual", "automatic"] as const) {
+      expect(mergeSettings({ uploadMode: mode }).uploadMode).toBe(mode);
+    }
+  });
+
+  it("drops an unknown mode instead of persisting it", () => {
+    expect(mergeSettings({ uploadMode: "everything" as unknown as "manual" }).uploadMode).toBe(
+      "local-only",
+    );
   });
 });

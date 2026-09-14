@@ -40,11 +40,11 @@ describe("AccountPanel", () => {
     expect(screen.queryByLabelText(/email/i)).not.toBeInTheDocument();
   });
 
-  it("opens the sign-in page, telling it to come back to Settings", async () => {
+  it("opens the sign-in page, telling it to come back to Cloud", async () => {
     vi.spyOn(window.electronAPI, "getAuthStatus").mockResolvedValue({ kind: "signed-out" });
     renderPanel();
     fireEvent.click(await screen.findByRole("button", { name: /sign in/i }));
-    expect(screen.getByText("landed /sign-in from /settings")).toBeInTheDocument();
+    expect(screen.getByText("landed /sign-in from /cloud")).toBeInTheDocument();
   });
 
   it("shows the email and a sign-out button when signed in", async () => {

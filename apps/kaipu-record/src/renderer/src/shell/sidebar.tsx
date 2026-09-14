@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { Video, Library, Camera, Keyboard, Settings, User } from "lucide-react";
+import { Video, Library, Camera, Keyboard, Settings, User, Cloud } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { KaipuMark } from "./kaipu-mark";
 import { cx } from "@renderer/ui/cx";
@@ -10,7 +10,7 @@ const linkClass = ({ isActive }: { isActive: boolean }): string =>
 
 interface NavItem {
   to: string;
-  labelKey: "record" | "screenshots" | "library" | "shortcuts" | "settings";
+  labelKey: "record" | "screenshots" | "library" | "shortcuts" | "settings" | "cloud";
   Icon: typeof Video;
   end?: boolean;
 }
@@ -22,6 +22,7 @@ const NAV: NavItem[] = [
   { to: "/library", labelKey: "library", Icon: Library },
   { to: "/shortcuts", labelKey: "shortcuts", Icon: Keyboard },
   { to: "/settings", labelKey: "settings", Icon: Settings },
+  { to: "/cloud", labelKey: "cloud", Icon: Cloud },
 ];
 
 /**
@@ -51,9 +52,15 @@ export function Sidebar(): React.JSX.Element {
       </div>
 
       <div className={styles.footer}>
-        <button type="button" className={styles.avatar} title={t("account")}>
+        {/* The account lives on the Cloud page. */}
+        <NavLink
+          to="/cloud"
+          className={styles.avatar}
+          title={t("account")}
+          aria-label={t("account")}
+        >
           <User size={16} strokeWidth={1.8} />
-        </button>
+        </NavLink>
       </div>
     </nav>
   );

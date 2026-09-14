@@ -1,11 +1,21 @@
-import { createHashRouter, RouterProvider } from "react-router-dom";
+import { createHashRouter, Navigate, RouterProvider } from "react-router-dom";
 import { AppRoot } from "@renderer/shell/app-root";
 import { AppShell } from "@renderer/shell/app-shell";
 import { RouteErrorBoundary, NotFound } from "@renderer/shell/route-error";
 import { RecordPage } from "@renderer/pages/record/record-page";
 import { LibraryPage } from "@renderer/pages/library/library-page";
 import { LibraryDetailPage } from "@renderer/pages/library-detail/library-detail-page";
-import { SettingsPage } from "@renderer/pages/settings/settings-page";
+import { SettingsLayout } from "@renderer/pages/settings/settings-layout";
+import {
+  AppSettingsPage,
+  DeveloperSettingsPage,
+  FilesSettingsPage,
+  GeneralSettingsPage,
+  PermissionsSettingsPage,
+  RecordingQualitySettingsPage,
+  RecordingSettingsPage,
+} from "@renderer/pages/settings/settings-pages";
+import { CloudPage } from "@renderer/pages/cloud/cloud-page";
 import { ShortcutsPage } from "@renderer/pages/shortcuts/shortcuts-page";
 import { ScreenshotsPage } from "@renderer/pages/screenshots/screenshots-page";
 import { ScreenshotEditorPage } from "@renderer/pages/screenshot-editor/screenshot-editor-page";
@@ -49,7 +59,23 @@ const router = createHashRouter([
           { path: "/screenshot-editor", element: <ScreenshotEditorPage /> },
           { path: "/video-editor", element: <VideoEditorPage /> },
           { path: "/shortcuts", element: <ShortcutsPage /> },
-          { path: "/settings", element: <SettingsPage /> },
+          { path: "/cloud", element: <CloudPage /> },
+          {
+            path: "/settings",
+            element: <SettingsLayout />,
+            children: [
+              { index: true, element: <Navigate to="general" replace /> },
+              { path: "general", element: <GeneralSettingsPage /> },
+              { path: "permissions", element: <PermissionsSettingsPage /> },
+              { path: "recording-quality", element: <RecordingQualitySettingsPage /> },
+              { path: "recording", element: <RecordingSettingsPage /> },
+              { path: "files", element: <FilesSettingsPage /> },
+              { path: "app", element: <AppSettingsPage /> },
+              ...(import.meta.env.DEV
+                ? [{ path: "developer", element: <DeveloperSettingsPage /> }]
+                : []),
+            ],
+          },
           { path: "*", element: <NotFound /> },
         ],
       },

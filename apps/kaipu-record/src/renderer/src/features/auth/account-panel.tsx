@@ -4,11 +4,12 @@ import { useTranslations } from "@kaipu/i18n";
 import { Button } from "@renderer/ui/button";
 import { Row } from "@renderer/ui/row";
 import type { AuthPageLocationState } from "@renderer/pages/auth/auth-page";
+import type { AuthStatus } from "@shared/types/auth";
 import { useAuthStatus } from "./use-auth-status";
 import styles from "./account-panel.module.css";
 
 /** Where the auth pages send the user back to (Back, or a successful sign-in). */
-const RETURN_TO: AuthPageLocationState = { from: "/settings" };
+const RETURN_TO: AuthPageLocationState = { from: "/cloud" };
 
 /**
  * The Account section of Settings: shows who is signed in (with sign-out), the
@@ -18,10 +19,18 @@ const RETURN_TO: AuthPageLocationState = { from: "/settings" };
  * offers only "Sign in": until the cloud features ship there is nothing to sell
  * here, and a second button would only compete with the first.
  */
-export function AccountPanel(): React.JSX.Element {
+export function AccountPanel({
+  statusOverride,
+}: {
+  /** Show this status instead of the real one (the dev storage simulator). */
+  statusOverride?: AuthStatus;
+} = {}): React.JSX.Element {
   const t = useTranslations("settings");
   const navigate = useNavigate();
-  const { status, pending, refresh, signOut } = useAuthStatus();
+  const auth = useAuthStatus();
+  const { refresh, signOut } = auth;
+  const status = statusOverride ?? auth.status;
+  const pending = statusOverride ? false : auth.pending;
 
   if (status.kind === "signed-in") {
     return (

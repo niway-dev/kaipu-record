@@ -74,9 +74,10 @@ async function dismissOnboarding(page: Page): Promise<void> {
   await page.getByRole("dialog", { name: "Onboarding" }).waitFor({ state: "detached" });
 }
 
+// The account moved from Settings to its own Cloud page.
 async function openSettings(page: Page): Promise<void> {
   await dismissOnboarding(page);
-  await page.evaluate(() => (location.hash = "#/settings"));
+  await page.evaluate(() => (location.hash = "#/cloud"));
 }
 
 function uniqueEmail(): string {
