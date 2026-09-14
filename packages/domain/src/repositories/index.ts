@@ -10,3 +10,4 @@ export type {
   AssetPage,
   PurgeJob,
 } from "./cloud-asset.repository";
+export type { IManualPlanGrantRepository } from "./manual-plan-grant.repository";

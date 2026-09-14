@@ -9,6 +9,9 @@
   flex-direction: column;
   height: 100%;
   overflow-y: auto;
+  /* Side gutter so the column never touches the settings nav when the pane is narrow. */
+  padding-inline: var(--space-xl);
+  box-sizing: border-box;
   /* Scrollbar themed globally in base.css. */
 }
 

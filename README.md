@@ -93,11 +93,15 @@ kaipu/
 
 ## Available Scripts
 
+The full reference — every command, per-app scripts, and how to make an account premium
+(`bun run plan grant <email>`) in development or production — lives in the docs site:
+[Commands](apps/documentation/src/content/docs/commands.md).
+
 ### Development
 
 - `bun run dev` -- Start all applications in development mode
-- `bun run dev:web` -- Start only the web application
-- `bun run dev:server` -- Start only the server
+- `bun run dev:web-hono` -- Start only the web application
+- `bun run dev:server-hono` -- Start only the API
 
 ### Building
 
@@ -105,10 +109,12 @@ kaipu/
 
 ### Database
 
-- `bun run db:push` -- Push schema changes to database
+- `bun run db:push` -- Apply the schema to the database (how schema changes ship)
 - `bun run db:studio` -- Open Drizzle Studio (database GUI)
-- `bun run db:generate` -- Generate migration files
-- `bun run db:migrate` -- Run database migrations
+
+### Plans (premium)
+
+- `bun run plan show|grant|revoke <email>` -- Inspect, grant or revoke pro (no watermark) for an account
 
 ### Code Quality
 
