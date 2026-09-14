@@ -100,9 +100,9 @@ describe("CapacityCard", () => {
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
   });
 
-  it("explains unavailable beta access without a bar", () => {
+  it("asks to verify the email when the account has no cloud access", () => {
     renderCard({ kind: "beta-unavailable" });
-    expect(screen.getByText(/isn't available for your account yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/verify your email to use cloud/i)).toBeInTheDocument();
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
   });
 
