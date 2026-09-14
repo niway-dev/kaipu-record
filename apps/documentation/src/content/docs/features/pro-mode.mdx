@@ -117,14 +117,30 @@ Better Auth bearer session already in place.
 No payment provider exists yet — see [ADR 0002](/architecture/decisions/0002-plan-entitlements-separate-from-auth#alternatives-considered)
 for what plugs in later. Until then, this is the only way an account becomes `pro`.
 
-**Grant** — via `bun run db:studio`, or:
+**With the `plan` command** (from the repository root):
+
+```bash
+bun run plan show <email>     # current plan
+bun run plan grant <email>    # active, non-expiring manual pro (idempotent)
+bun run plan revoke <email>   # deletes the manual row, back to free
+```
+
+It loads `DATABASE_URL` from `apps/server-hono/.env` (the development database). dotenvx never
+overrides a variable that is already set, so to act on production pass the production URL
+inline — `DATABASE_URL='<production url>' bun run plan grant <email>` — and keep it out of your
+shell history. The command refuses to touch a row a billing provider (`stripe`, `autumn`) owns,
+and it is not reachable from the API: the logic lives in `grantManualPlan` / `revokeManualPlan`
+(`@kaipu/application`) behind `IManualPlanGrantRepository`, wired only by
+`apps/server-hono/scripts/plan.ts`.
+
+**By hand** — via `bun run db:studio`, or:
 
 ```sql
 insert into kaipu_record_subscription (id, user_id, plan, status, provider)
 values (gen_random_uuid()::text, '<user id>', 'pro', 'active', 'manual');
 ```
 
-**Revoke** — delete the row (reverts to `free`), or flip `status` to `canceled` /
+To exercise other paths: delete the row (reverts to `free`), or flip `status` to `canceled` /
 `past_due` to exercise the lapsed-but-still-named-pro path, or set `current_period_end` to a
 past timestamp to exercise the offline-expiry path.
 
