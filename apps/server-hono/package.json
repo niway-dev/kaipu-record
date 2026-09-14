@@ -8,7 +8,8 @@
     "check-types": "tsc -b",
     "dev": "wrangler dev --port 3000 --inspector-port 9229",
     "deploy": "wrangler deploy",
-    "cf:gen-types": "wrangler types --env-interface CloudflareBindings"
+    "cf:gen-types": "wrangler types --env-interface CloudflareBindings",
+    "test": "vitest run"
   },
   "dependencies": {
     "@kaipu/application": "workspace:*",
@@ -29,6 +30,7 @@
     "@kaipu/config": "workspace:*",
     "tsdown": "catalog:",
     "typescript": "catalog:",
+    "vitest": "^4.1.9",
     "wrangler": "4.63.0"
   }
 }

@@ -1,5 +1,4 @@
 import { RecordingNotUploadedError, UploadLimitExceededError } from "@kaipu/domain/schemas";
-import type { IStorageService } from "@kaipu/domain/services";
 import {
   confirmRecording,
   createRecordingUpload,
@@ -9,34 +8,14 @@ import {
 } from "@kaipu/application";
 import { createDatabaseClient } from "@kaipu/infra-db/client";
 import { RecordingRepository } from "@kaipu/infra-db/repositories";
-import { createR2Storage } from "@kaipu/infra-storage";
 import { implement, ORPCError } from "@orpc/server";
 import { recordingContract } from "../../contract/recording.contract";
 import { env } from "../../env";
+import { getStorage } from "../../lib/storage";
 import { authMiddleware } from "../../middleware/auth";
 
 const db = createDatabaseClient(env.DATABASE_URL);
 const repo = new RecordingRepository(db);
-
-// Built lazily so the API still boots when R2 isn't configured — only the
-// recording endpoints that touch storage fail, with a clear message.
-let storageSingleton: IStorageService | null = null;
-function getStorage(): IStorageService {
-  if (storageSingleton) return storageSingleton;
-  const { R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET } = env;
-  if (!R2_ACCOUNT_ID || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_BUCKET) {
-    throw new ORPCError("INTERNAL_SERVER_ERROR", {
-      message: "Cloud storage is not configured",
-    });
-  }
-  storageSingleton = createR2Storage({
-    accountId: R2_ACCOUNT_ID,
-    accessKeyId: R2_ACCESS_KEY_ID,
-    secretAccessKey: R2_SECRET_ACCESS_KEY,
-    bucket: R2_BUCKET,
-  });
-  return storageSingleton;
-}
 
 const impl = implement(recordingContract).$context<{ headers: Headers }>();
 
