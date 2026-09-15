@@ -112,3 +112,27 @@ img/<userId>/<id>            # user images
 - Where the Worker lives — extend `kaipu-web`, or a dedicated `kaipu-storage` Worker.
 - Presigned URLs vs always-proxy-through-Worker for private reads (cost/latency).
 - Auth source for private reads (Better Auth session via the existing proxy).
+
+## Production configuration (as of 2026-09-15)
+
+The API Worker (`kaipu-api`) receives its R2 settings as Worker secrets from the GitHub
+`production` environment, pushed by `.github/workflows/release-api.yml`:
+
+| Worker secret          | Value                     |
+| ---------------------- | ------------------------- |
+| `R2_ACCOUNT_ID`        | the Cloudflare account ID |
+| `R2_BUCKET`            | `kaipu-private-bucket`    |
+| `R2_ACCESS_KEY_ID`     | R2 API token access key   |
+| `R2_SECRET_ACCESS_KEY` | R2 API token secret       |
+
+`kaipu-private-bucket` has no custom domain, the public development URL disabled, no CORS
+policy (the desktop uploads from the Electron main process, not a browser) and the default
+7-day multipart abort rule.
+
+> **Known shortcut.** The API currently reuses the same R2 token as the desktop release
+> workflow (`release-desktop.yml`, which uploads to `kaipu-bucket`). That token must be able to
+> write to `kaipu-private-bucket`, which means the production API can also write to the public
+> releases bucket. Before real users store content, create a token scoped to
+> `kaipu-private-bucket` only (Object Read & Write), store it as separate secrets (for example
+> `R2_CLOUD_ACCESS_KEY_ID` / `R2_CLOUD_SECRET_ACCESS_KEY`) and point `release-api.yml` at them,
+> leaving the release token untouched.
