@@ -11,6 +11,10 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as LegalTermsAndConditionsRouteImport } from './routes/legal/terms-and-conditions'
+import { Route as LegalPrivacyPolicyRouteImport } from './routes/legal/privacy-policy'
+import { Route as LegalCookiesRouteImport } from './routes/legal/cookies'
+import { Route as LegalCloudTermsRouteImport } from './routes/legal/cloud-terms'
 import { Route as AuthSignupRouteImport } from './routes/auth/signup'
 import { Route as AuthLoginRouteImport } from './routes/auth/login'
 import { Route as AuthenticatedRecordingsIndexRouteImport } from './routes/_authenticated/recordings/index'
@@ -24,6 +28,26 @@ const AuthenticatedRoute = AuthenticatedRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LegalTermsAndConditionsRoute = LegalTermsAndConditionsRouteImport.update({
+  id: '/legal/terms-and-conditions',
+  path: '/legal/terms-and-conditions',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LegalPrivacyPolicyRoute = LegalPrivacyPolicyRouteImport.update({
+  id: '/legal/privacy-policy',
+  path: '/legal/privacy-policy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LegalCookiesRoute = LegalCookiesRouteImport.update({
+  id: '/legal/cookies',
+  path: '/legal/cookies',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LegalCloudTermsRoute = LegalCloudTermsRouteImport.update({
+  id: '/legal/cloud-terms',
+  path: '/legal/cloud-terms',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthSignupRoute = AuthSignupRouteImport.update({
@@ -57,6 +81,10 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth/login': typeof AuthLoginRoute
   '/auth/signup': typeof AuthSignupRoute
+  '/legal/cloud-terms': typeof LegalCloudTermsRoute
+  '/legal/cookies': typeof LegalCookiesRoute
+  '/legal/privacy-policy': typeof LegalPrivacyPolicyRoute
+  '/legal/terms-and-conditions': typeof LegalTermsAndConditionsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/v1/$': typeof ApiV1SplatRoute
   '/recordings/': typeof AuthenticatedRecordingsIndexRoute
@@ -65,6 +93,10 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth/login': typeof AuthLoginRoute
   '/auth/signup': typeof AuthSignupRoute
+  '/legal/cloud-terms': typeof LegalCloudTermsRoute
+  '/legal/cookies': typeof LegalCookiesRoute
+  '/legal/privacy-policy': typeof LegalPrivacyPolicyRoute
+  '/legal/terms-and-conditions': typeof LegalTermsAndConditionsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/v1/$': typeof ApiV1SplatRoute
   '/recordings': typeof AuthenticatedRecordingsIndexRoute
@@ -75,6 +107,10 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/auth/login': typeof AuthLoginRoute
   '/auth/signup': typeof AuthSignupRoute
+  '/legal/cloud-terms': typeof LegalCloudTermsRoute
+  '/legal/cookies': typeof LegalCookiesRoute
+  '/legal/privacy-policy': typeof LegalPrivacyPolicyRoute
+  '/legal/terms-and-conditions': typeof LegalTermsAndConditionsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/v1/$': typeof ApiV1SplatRoute
   '/_authenticated/recordings/': typeof AuthenticatedRecordingsIndexRoute
@@ -85,6 +121,10 @@ export interface FileRouteTypes {
     | '/'
     | '/auth/login'
     | '/auth/signup'
+    | '/legal/cloud-terms'
+    | '/legal/cookies'
+    | '/legal/privacy-policy'
+    | '/legal/terms-and-conditions'
     | '/api/auth/$'
     | '/api/v1/$'
     | '/recordings/'
@@ -93,6 +133,10 @@ export interface FileRouteTypes {
     | '/'
     | '/auth/login'
     | '/auth/signup'
+    | '/legal/cloud-terms'
+    | '/legal/cookies'
+    | '/legal/privacy-policy'
+    | '/legal/terms-and-conditions'
     | '/api/auth/$'
     | '/api/v1/$'
     | '/recordings'
@@ -102,6 +146,10 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth/login'
     | '/auth/signup'
+    | '/legal/cloud-terms'
+    | '/legal/cookies'
+    | '/legal/privacy-policy'
+    | '/legal/terms-and-conditions'
     | '/api/auth/$'
     | '/api/v1/$'
     | '/_authenticated/recordings/'
@@ -112,6 +160,10 @@ export interface RootRouteChildren {
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   AuthLoginRoute: typeof AuthLoginRoute
   AuthSignupRoute: typeof AuthSignupRoute
+  LegalCloudTermsRoute: typeof LegalCloudTermsRoute
+  LegalCookiesRoute: typeof LegalCookiesRoute
+  LegalPrivacyPolicyRoute: typeof LegalPrivacyPolicyRoute
+  LegalTermsAndConditionsRoute: typeof LegalTermsAndConditionsRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiV1SplatRoute: typeof ApiV1SplatRoute
 }
@@ -130,6 +182,34 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/legal/terms-and-conditions': {
+      id: '/legal/terms-and-conditions'
+      path: '/legal/terms-and-conditions'
+      fullPath: '/legal/terms-and-conditions'
+      preLoaderRoute: typeof LegalTermsAndConditionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/legal/privacy-policy': {
+      id: '/legal/privacy-policy'
+      path: '/legal/privacy-policy'
+      fullPath: '/legal/privacy-policy'
+      preLoaderRoute: typeof LegalPrivacyPolicyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/legal/cookies': {
+      id: '/legal/cookies'
+      path: '/legal/cookies'
+      fullPath: '/legal/cookies'
+      preLoaderRoute: typeof LegalCookiesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/legal/cloud-terms': {
+      id: '/legal/cloud-terms'
+      path: '/legal/cloud-terms'
+      fullPath: '/legal/cloud-terms'
+      preLoaderRoute: typeof LegalCloudTermsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth/signup': {
@@ -187,6 +267,10 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   AuthLoginRoute: AuthLoginRoute,
   AuthSignupRoute: AuthSignupRoute,
+  LegalCloudTermsRoute: LegalCloudTermsRoute,
+  LegalCookiesRoute: LegalCookiesRoute,
+  LegalPrivacyPolicyRoute: LegalPrivacyPolicyRoute,
+  LegalTermsAndConditionsRoute: LegalTermsAndConditionsRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiV1SplatRoute: ApiV1SplatRoute,
 }

@@ -3,7 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTranslations } from "@kaipu/i18n";
 import { KaipuMark } from "@renderer/shell/kaipu-mark";
-import { AuthForm, type AuthFormMode } from "@renderer/features/auth/auth-form";
+import { AuthForm, LEGAL_WEB_URL, type AuthFormMode } from "@renderer/features/auth/auth-form";
 import { useAuthStatus } from "@renderer/features/auth/use-auth-status";
 import styles from "./auth-page.module.css";
 
@@ -52,6 +52,7 @@ const COPY: Record<
  */
 export function AuthPage({ mode }: { mode: AuthFormMode }): React.JSX.Element {
   const t = useTranslations("auth");
+  const legal = useTranslations("legal");
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as AuthPageLocationState | null)?.from ?? DEFAULT_RETURN_TO;
@@ -79,6 +80,16 @@ export function AuthPage({ mode }: { mode: AuthFormMode }): React.JSX.Element {
           </span>
           <h1 className={styles.title}>{t(copy.title)}</h1>
           <p className={styles.subtitle}>{t(copy.subtitle)}</p>
+          <p className={styles.cloudTerms}>
+            <strong>{t("cloudPromotion")}</strong> {t("cloudPromotionNote")}{" "}
+            <a
+              href={`${LEGAL_WEB_URL}/legal/cloud-terms`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {legal("readTerms")}
+            </a>
+          </p>
           <AuthForm
             mode={mode}
             pending={pending}

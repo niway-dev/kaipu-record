@@ -11,14 +11,7 @@ import styles from "./account-panel.module.css";
 /** Where the auth pages send the user back to (Back, or a successful sign-in). */
 const RETURN_TO: AuthPageLocationState = { from: "/cloud" };
 
-/**
- * The Account section of Settings: shows who is signed in (with sign-out), the
- * offline "couldn't verify" state (with retry), or — signed out — a row that says
- * an account is optional and opens the full-window sign-in page (pages/auth). The
- * sign-in page carries the link to create an account, so Settings deliberately
- * offers only "Sign in": until the cloud features ship there is nothing to sell
- * here, and a second button would only compete with the first.
- */
+/** Account status and the entry point to the promotional Cloud offer. */
 export function AccountPanel({
   statusOverride,
 }: {

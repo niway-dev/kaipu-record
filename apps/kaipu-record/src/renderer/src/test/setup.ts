@@ -4,26 +4,21 @@ import { cleanup } from "@testing-library/react";
 
 // Component tests render without the <I18nProvider>, so stub the i18n hooks and
 // pass children through. `useTranslations` resolves keys against the real English
-// catalog so assertions can match rendered copy; unknown keys fall back to the
+// catalog using the real translator (including rich links); unknown keys fall back to the
 // namespaced key. Config helpers stay real.
 vi.mock("@kaipu/i18n", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@kaipu/i18n")>();
   const { default: en } = await import("@kaipu/i18n/messages/en");
-  const messages = en as Record<string, Record<string, string>>;
   return {
     ...actual,
     I18nProvider: ({ children }: { children: unknown }) => children,
-    useTranslations: (namespace?: string) => (key: string, values?: Record<string, unknown>) => {
-      const value = namespace ? messages[namespace]?.[key] : undefined;
-      let str = typeof value === "string" ? value : namespace ? `${namespace}.${key}` : key;
-      // Substitute simple ICU `{param}` placeholders so assertions match rendered copy.
-      if (values) {
-        for (const [k, v] of Object.entries(values)) {
-          str = str.replace(new RegExp(`\\{${k}\\}`, "g"), String(v));
-        }
-      }
-      return str;
-    },
+    useTranslations: (namespace?: keyof typeof en) =>
+      actual.createTranslator({
+        locale: "en",
+        messages: en,
+        namespace,
+        getMessageFallback: ({ namespace, key }) => (namespace ? `${namespace}.${key}` : key),
+      }),
     useLocale: () => "en",
     useSetLocale: () => () => {},
   };

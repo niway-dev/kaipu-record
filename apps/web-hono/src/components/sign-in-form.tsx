@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import z from "zod";
 import { Button, Input, Label } from "@kaipu/web-ui";
 import { useTranslations } from "@kaipu/i18n";
+import CloudPromotion from "@/components/cloud-promotion";
 import { authClient } from "@/lib/auth/auth-client";
 
 export default function SignInForm() {
@@ -45,6 +46,8 @@ export default function SignInForm() {
   return (
     <>
       <h1 className="mb-6 text-center text-3xl font-bold">{t("welcomeBack")}</h1>
+
+      <CloudPromotion />
 
       <form
         onSubmit={(e) => {

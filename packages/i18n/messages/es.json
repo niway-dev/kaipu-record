@@ -107,7 +107,7 @@
     "retry": "Reintentar",
     "accountUnknown": "No se pudo verificar tu sesión — seguimos usando la última.",
     "accountTitle": "Tu cuenta de Kaipu",
-    "accountDescription": "Puedes grabar, editar y exportar sin una cuenta.",
+    "accountDescription": "Regístrate y verifica tu correo para obtener 1 GB gratis y probar Kaipu Cloud. Beneficio promocional temporal por cuenta verificada. La capacidad puede cambiar según las condiciones de Cloud. Graba, edita y exporta localmente sin una cuenta.",
     "general": "General",
     "generalDescription": "Idioma y apariencia de Kaipu Record.",
     "permissionsDescription": "A qué puede acceder Kaipu Record en este dispositivo.",
@@ -215,15 +215,18 @@
     "signInSuccess": "Sesión iniciada",
     "signUpSuccess": "Cuenta creada",
     "back": "Volver",
-    "signInSubtitle": "Inicia sesión en tu cuenta de Kaipu.",
-    "signUpSubtitle": "Grabar, editar y exportar en tu Mac no requiere una cuenta.",
+    "signInSubtitle": "Inicia sesión para guardar y compartir con Kaipu Cloud.",
+    "signUpSubtitle": "Regístrate y verifica tu correo para obtener 1 GB gratis y probar Kaipu Cloud.",
     "errorInvalidCredentials": "Correo o contraseña incorrectos.",
     "errorEmailTaken": "Ese correo ya está registrado.",
     "errorPasswordTooShort": "La contraseña debe tener al menos 8 caracteres.",
     "errorNetwork": "No se pudo conectar con el servidor — revisa tu conexión.",
     "errorUnknown": "Algo salió mal. Inténtalo de nuevo.",
     "signingIn": "Iniciando sesión…",
-    "creatingAccount": "Creando cuenta…"
+    "creatingAccount": "Creando cuenta…",
+    "cloudPromotion": "1 GB gratis para probar Kaipu Cloud",
+    "cloudPromotionNote": "Promocional, por cuenta verificada. La capacidad puede cambiar según las condiciones de Cloud.",
+    "cloudActivation": "Guarda y comparte tus grabaciones con espacio gratuito que se activa al verificar tu correo."
   },
   "recordings": {
     "title": "Grabaciones",
@@ -563,5 +566,200 @@
     "ageDays": "hace {count} d",
     "notAvailableTitle": "El almacenamiento cloud todavía no está disponible",
     "notAvailableDetail": "Tu plan incluye espacio en cloud, pero este servidor aún no ofrece subidas. Todo sigue funcionando localmente."
+  },
+  "legal": {
+    "eyebrow": "KAIPU / LEGAL",
+    "title": "Las reglas, claras.",
+    "intro": "Cómo funciona el servicio, qué puedes esperar de Cloud y cómo tratamos tus datos.",
+    "updated": "Actualizado el 14 de septiembre de 2026 · Versión 2026-09-14",
+    "contents": "En esta página",
+    "navigation": "Documentos legales",
+    "contact": "Contacto",
+    "operator": "Niway S.A.C. · Lima, Perú",
+    "contactBody": "Para soporte, privacidad, eliminación de cuenta o reportes de abuso, escríbenos. Indica el correo de tu cuenta y el motivo; no envíes contraseñas ni grabaciones sensibles.",
+    "signupNotice": "Al crear tu cuenta aceptas los <terms>Términos y condiciones</terms> y las <cloud>Condiciones de Cloud</cloud>. Consulta cómo tratamos tus datos en la <privacy>Política de privacidad</privacy>.",
+    "readTerms": "Leer todas las condiciones de Cloud",
+    "print": "Imprimir o guardar como PDF",
+    "home": "Volver a Kaipu",
+    "terms": {
+      "title": "Términos y condiciones",
+      "intro": "Kaipu Record es una aplicación de grabación, edición y exportación local con servicios Cloud opcionales. Estos términos regulan la web, la aplicación y los servicios operados por Niway S.A.C.",
+      "sections": {
+        "agreement": {
+          "title": "Quiénes somos y aceptación",
+          "body": "Niway S.A.C., con domicilio en Lima, Perú (\"Niway\", \"nosotros\"), opera Kaipu Record. Contáctanos en contacto@niway.dev. Al crear una cuenta, iniciar sesión o usar Cloud aceptas estos términos, las condiciones de Cloud y el aviso de cookies, y declaras conocer la política de privacidad. Si no los aceptas, no crees una cuenta ni uses Cloud."
+        },
+        "account": {
+          "title": "Tu cuenta",
+          "body": "Debes tener al menos 18 años, o la mayoría de edad de tu lugar de residencia, y capacidad para contratar; si actúas por una organización, confirmas que estás autorizado para obligarla. Proporciona información veraz, protege tus credenciales y avísanos pronto de cualquier acceso no autorizado. Eres responsable de la actividad de tu cuenta. Podemos exigir verificación de correo y controles de fraude o identidad, y rechazar o cerrar cuentas creadas con información falsa o para eludir límites."
+        },
+        "local": {
+          "title": "Tu dispositivo y tus grabaciones",
+          "body": "Grabar, editar y exportar localmente no requiere una cuenta. Tú decides qué capturar, subir y compartir, y eres el único responsable de obtener los consentimientos necesarios para grabar a personas, pantallas, audio o contenido de terceros. Las grabaciones pueden contener contraseñas o información personal o confidencial: revísalas antes de subirlas o compartirlas. Guarda tus propias copias de seguridad; Niway no responde por la pérdida de archivos en tu dispositivo."
+        },
+        "content": {
+          "title": "Tu contenido sigue siendo tuyo",
+          "body": "Conservas tus derechos sobre tus grabaciones y demás contenido. Otorgas a Niway una licencia mundial, no exclusiva y gratuita para alojar, copiar, procesar, transmitir y mostrar tu contenido en la medida necesaria para operar, proteger, mejorar y dar soporte al servicio y a las funciones que uses, también a través de sus proveedores. No vendemos tu contenido ni lo usamos para publicidad, y no lo usamos para entrenar modelos de IA de propósito general sin tu permiso. La licencia termina al eliminarse el contenido, salvo copias de respaldo, contenido que ya compartiste y conservación legal. Si nos envías comentarios o sugerencias, Niway puede usarlos libremente sin obligación contigo."
+        },
+        "license": {
+          "title": "Software y propiedad intelectual",
+          "body": "Niway te otorga una licencia personal, revocable, no exclusiva e intransferible para usar la app y el servicio conforme a estos términos. Kaipu, su marca, diseño e infraestructura alojada pertenecen a Niway o a sus licenciantes. Los componentes distribuidos bajo licencias de código abierto se rigen por ellas, y estos términos no restringen los derechos que otorgan. No apliques ingeniería inversa al servicio alojado, no accedas sin autorización a sistemas o datos ni infrinjas derechos de terceros."
+        },
+        "evolution": {
+          "title": "La app evoluciona",
+          "body": "Niway puede agregar, cambiar, limitar, reemplazar o retirar funciones, interfaces, formatos, integraciones, requisitos de sistema y proveedores en cualquier momento, y exigir actualizaciones para seguir usando el servicio. Las funciones beta, experimentales y gratuitas se ofrecen sin compromiso y pueden cambiar o terminar sin aviso. Si un cambio reduce de forma relevante un servicio pagado durante su periodo pagado, seguiremos el aviso y las soluciones que exija la ley."
+        },
+        "free": {
+          "title": "Servicios gratuitos y promociones",
+          "body": "Las funciones gratuitas, pruebas, promociones y cuotas se ofrecen a criterio de Niway y pueden modificarse o retirarse, con aviso cuando las condiciones de Cloud lo exijan. No generan derecho a capacidad o funciones continuas o futuras, no tienen valor en dinero y no son transferibles. Usar una promoción nunca genera cargos automáticos."
+        },
+        "payment": {
+          "title": "Planes de pago futuros",
+          "body": "Si ofrecemos planes de pago, mostraremos precio, impuestos, límites, periodo de facturación, renovación y cancelación antes de la compra. Una cuenta gratuita nunca pasará a ser de pago sin tu aceptación expresa. Podemos cambiar precios para periodos futuros avisando antes de la renovación afectada; puedes cancelar antes de que se aplique. Salvo que estos términos, las condiciones de compra o la ley dispongan otra cosa, los pagos no son reembolsables."
+        },
+        "availability": {
+          "title": "Disponibilidad y soporte",
+          "body": "El servicio se ofrece según su disponibilidad. Niway no promete un funcionamiento ininterrumpido o sin errores, un nivel de servicio determinado, compatibilidad con todos los dispositivos ni soporte continuo, salvo acuerdo por escrito. Podemos realizar mantenimientos planificados o urgentes y limitar el uso para proteger el servicio. El soporte se presta con esfuerzo razonable a través del correo de contacto."
+        },
+        "suspension": {
+          "title": "Suspensión y cierre",
+          "body": "Niway puede limitar funciones, retirar contenido o suspender o cerrar cuentas si incumples estos términos, generas riesgos o exposición legal para Niway, los usuarios o terceros, actúas de forma fraudulenta o abusiva, o cuando la ley lo exija. Actuamos de forma proporcionada y, cuando corresponda, explicamos el motivo; los casos urgentes pueden requerir medidas inmediatas. Niway también puede cerrar cuentas gratuitas por cualquier motivo con al menos 30 días de aviso. Puedes dejar de usar el servicio y pedir el cierre de tu cuenta en cualquier momento."
+        },
+        "liability": {
+          "title": "Alcance de la responsabilidad",
+          "body": "En la máxima medida permitida por la ley, el servicio se ofrece \"tal cual\" y \"según disponibilidad\", sin garantías de ningún tipo más allá de las ofrecidas expresamente o exigidas por la ley. Niway no responde por daños indirectos, incidentales, especiales o consecuentes, lucro cesante, pérdida de datos ni interrupción del negocio, y su responsabilidad total por cualquier reclamo relacionado con el servicio se limita al mayor entre lo que pagaste a Niway por el servicio en los 12 meses anteriores al hecho o USD 50. Estos límites no se aplican cuando la ley no los permite, incluidos el dolo o la culpa inexcusable, ni a los derechos irrenunciables de los consumidores."
+        },
+        "claims": {
+          "title": "Responsabilidad por tu uso",
+          "body": "Eres responsable de tu contenido y de tu uso del servicio. En la medida permitida por la ley, mantendrás indemne a Niway frente a reclamos de terceros, multas y costos razonables derivados de tu contenido, del incumplimiento de estos términos o de la infracción de la ley o de derechos de terceros. Niway te notificará el reclamo y podrá participar en la defensa. Esto no se aplica a daños causados por Niway."
+        },
+        "changes": {
+          "title": "Cambios en estos términos",
+          "body": "Niway puede actualizar estos términos, las condiciones de Cloud, la política de privacidad y el aviso de cookies en cualquier momento. Publicamos la versión y la fecha de cada actualización. Los cambios relevantes se comunicarán por correo o en el servicio antes de entrar en vigor, normalmente con al menos 15 días de antelación, o antes cuando sea necesario por razones legales, de seguridad o de abuso. Seguir usando el servicio después de la fecha de vigencia implica que aceptas el cambio; si no lo aceptas, deja de usar el servicio y recupera tu contenido. Los cambios no se aplican retroactivamente a controversias ya notificadas."
+        },
+        "general": {
+          "title": "Disposiciones generales",
+          "body": "Estos documentos constituyen el acuerdo completo entre tú y Niway sobre el servicio. Niway puede ceder o transferirlos, incluso en una fusión, adquisición o venta de activos; tú no puedes transferirlos sin consentimiento. Niway no responde por demoras o fallas causadas por hechos fuera de su control razonable, incluidas caídas de proveedores. No exigir una disposición no implica renunciar a ella. Si una disposición no es exigible, se limitará en lo mínimo necesario y el resto seguirá vigente. Las versiones en español e inglés son equivalentes; en caso de discrepancia, prevalece la versión en español."
+        },
+        "law": {
+          "title": "Ley aplicable y controversias",
+          "body": "Estos términos se rigen por las leyes del Perú. Las controversias se someten a los jueces y tribunales de Lima, Perú, sin perjuicio de las protecciones imperativas al consumidor, del derecho de los consumidores a acudir a las autoridades competentes, como el INDECOPI, o a los tribunales de su domicilio cuando la ley lo reconozca. Te pedimos contactarnos primero para intentar resolver el problema."
+        }
+      }
+    },
+    "privacy": {
+      "title": "Política de privacidad",
+      "intro": "Grabar localmente y subir a Cloud son acciones distintas. Aquí explicamos qué datos se procesan, con qué finalidad y quién participa.",
+      "sections": {
+        "controller": {
+          "title": "Responsable y contacto",
+          "body": "Niway S.A.C., Lima, Perú, es responsable de los datos de cuenta y operación de Kaipu. Para consultas o solicitudes sobre tus datos, escribe a contacto@niway.dev. Si subes datos de otras personas, debes contar con una base válida para hacerlo; alojamos ese contenido según tus instrucciones y las condiciones del servicio."
+        },
+        "local": {
+          "title": "Contenido en tu equipo",
+          "body": "Las grabaciones, capturas, proyectos y exportaciones locales se guardan en tu equipo, en las ubicaciones que usa o que configuras en la aplicación. No se suben a Cloud solo por iniciar sesión. Cuando utilizas una función de subida, el archivo seleccionado y los datos necesarios para gestionarlo se envían al servicio. Los permisos de pantalla, micrófono y cámara se usan para las funciones que activas y se gestionan desde tu sistema operativo."
+        },
+        "account": {
+          "title": "Datos de cuenta y servicio",
+          "body": "Tratamos nombre, correo, estado de verificación, identificadores de cuenta y sesión, fechas y credenciales protegidas mediante hash. Las sesiones pueden incluir dirección IP y datos de navegador o dispositivo. Cloud procesa los archivos que subes, nombres, tipo, tamaño, duración cuando corresponda, fechas, revisiones, estado, uso de cuota y ajustes de compartición. También tratamos la información que envías al pedir soporte."
+        },
+        "purposes": {
+          "title": "Para qué los usamos",
+          "body": "Usamos datos para crear y proteger cuentas, autenticarte, alojar y entregar archivos, gestionar límites, dar soporte, analizar y mejorar el servicio, detectar abuso y fraude, enviar avisos del servicio y legales, y cumplir obligaciones legales. El tratamiento se basa en el contrato, intereses legítimos, obligaciones legales o tu consentimiento cuando se requiera. Las comunicaciones de marketing requieren consentimiento e incluyen una forma de darse de baja. No vendemos datos personales ni usamos tus grabaciones para publicidad, y no las usamos para entrenar modelos de IA de propósito general sin tu permiso. Las funciones que elijas usar, como transcripción o asistencia con IA, procesan el contenido necesario para ellas, lo que puede incluir proveedores especializados."
+        },
+        "providers": {
+          "title": "Dónde se guarda y quién lo procesa",
+          "body": "Usamos proveedores de infraestructura y servicios para operar Kaipu, actualmente entre ellos Cloudflare (web, API y almacenamiento de archivos R2), Neon (base de datos PostgreSQL de cuentas, sesiones y metadatos de Cloud) y PostHog (diagnóstico en las versiones donde está activado), y podemos agregar o reemplazar proveedores, como de correo, pagos o IA, a medida que el servicio evoluciona. Los datos pueden transferirse y tratarse en otros países, incluidos Estados Unidos y la Unión Europea, con las garantías que exige la normativa peruana de protección de datos. Actualizamos esta política cuando cambian proveedores relevantes."
+        },
+        "diagnostics": {
+          "title": "Diagnósticos de la aplicación",
+          "body": "Cuando la distribución tiene telemetría habilitada, PostHog recibe un identificador de instalación, eventos técnicos, información de dispositivo o versión y reportes de error, con mensajes, trazas y contexto que pueden incluir rutas o nombres de archivos. La configuración de Kaipu desactiva la grabación de sesiones de PostHog, la captura automática de clics y las vistas de página automáticas. Esto no significa que no existan eventos o reportes técnicos. Los diagnósticos no están diseñados para enviar el video o audio de tus grabaciones. Puedes escribirnos para ejercer derechos sobre estos datos."
+        },
+        "sharing": {
+          "title": "Compartición y accesos",
+          "body": "Cuando habilitas o usas una función de compartición, las personas con acceso al enlace pueden ver o descargar el contenido según esa función. Un enlace puede reenviarse y no permite recuperar copias ya descargadas. El personal autorizado y los proveedores pueden acceder a datos cuando sea necesario para operación, soporte, seguridad o una obligación legal; limitamos ese acceso a su finalidad. No presentamos Cloud como almacenamiento cifrado de extremo a extremo. Podemos revelar información ante requerimientos legales válidos o para atender incidentes y proteger derechos, dentro de los límites legales."
+        },
+        "retention": {
+          "title": "Conservación y eliminación",
+          "body": "Conservamos los datos mientras la cuenta esté activa y, después, el tiempo necesario para los fines descritos, resolver controversias, prevenir abusos y cumplir obligaciones legales, tributarias o contables. Puedes borrar archivos en la app y pedir el cierre de tu cuenta por correo. La eliminación puede no ser inmediata para todas las copias: las copias de respaldo y los registros se sobrescriben en su ciclo normal. Los archivos de Cloud también pueden eliminarse según las condiciones de Cloud, incluidas las reglas de exceso de límite y cuentas inactivas. Los datos agregados o anonimizados pueden conservarse sin límite."
+        },
+        "rights": {
+          "title": "Tus derechos",
+          "body": "Conforme a la Ley 29733 y demás normas aplicables, puedes solicitar acceso, rectificación, cancelación u oposición, y otros derechos cuando correspondan. Escríbenos desde el correo de tu cuenta; podemos pedir información proporcionada para verificar tu identidad y responderemos en los plazos legales. También puedes presentar una reclamación ante la Autoridad Nacional de Protección de Datos Personales del Perú."
+        },
+        "security": {
+          "title": "Seguridad y cambios",
+          "body": "Aplicamos medidas técnicas y organizativas razonables para proteger los datos, pero ningún sistema elimina todos los riesgos. No compartas contraseñas ni subas información que no estés autorizado a tratar. Actualizaremos esta política si cambian las prácticas, indicando fecha y versión y comunicando cambios relevantes. Publicar una actualización no sustituye un consentimiento cuando sea necesario ni autoriza nuevos usos incompatibles de tus datos."
+        }
+      }
+    },
+    "cloud": {
+      "title": "Cloud y uso aceptable",
+      "intro": "Espacio para probar y compartir, con límites transparentes. Estas condiciones complementan los términos generales y prevalecen para la cuota promocional.",
+      "sections": {
+        "offer": {
+          "title": "La oferta inicial",
+          "body": "La promoción actual incluye hasta 1 GB de almacenamiento total gratuito por cuenta con correo verificado. No es una cuota mensual, un derecho pagado ni una garantía de almacenamiento permanente. Niway define la elegibilidad, la cantidad y la duración, que pueden variar entre cuentas, regiones o periodos. Grabar, editar y exportar localmente no requiere una cuenta."
+        },
+        "changes": {
+          "title": "Cambios de capacidad y funciones",
+          "body": "Niway puede modificar, reducir, suspender o terminar la capacidad gratuita o promocional, los límites o las funciones de Cloud a su criterio, incluso por razones de costos, demanda, disponibilidad, seguridad o negocio. Las reducciones generales de la capacidad gratuita se comunicarán por correo o en el servicio con una antelación razonable, normalmente de al menos 15 días, indicando el nuevo límite y su fecha de aplicación. Los planes de pago, si se ofrecen, siguen el aviso de sus condiciones de compra. Puedes dejar de usar Cloud en cualquier momento sin penalización."
+        },
+        "overLimit": {
+          "title": "Si superas un límite",
+          "body": "Si tus archivos superan un límite nuevo o existente, se podrán restringir las subidas y el uso compartido hasta que liberes espacio. Te indicaremos cuánto espacio excedes y tendrás al menos 60 días desde el aviso para descargar o borrar archivos. Pasado ese plazo, Niway podrá eliminar los archivos que excedan el límite, empezando por los subidos más recientemente, salvo que hayas mejorado tu plan o liberado espacio. Los archivos locales de tu dispositivo nunca se ven afectados."
+        },
+        "abuse": {
+          "title": "Uso aceptable y medidas de protección",
+          "body": "No crees varias cuentas para eludir límites, no automatices un consumo desproporcionado ni uses Cloud de forma que comprometa el servicio o a otros usuarios. Niway puede, a su criterio y sin aviso previo cuando sea necesario para proteger el servicio, a los usuarios o a terceros, restringir subidas o enlaces, retirar contenido, o suspender o cerrar las cuentas afectadas. Explicaremos el motivo cuando corresponda y sea legalmente posible. No tenemos obligación de supervisar el contenido, pero podemos revisarlo ante denuncias o por razones de seguridad o legales."
+        },
+        "limits": {
+          "title": "Límites y disponibilidad",
+          "body": "La capacidad es el almacenamiento total ocupado, no un saldo que se renueva cada mes; 1 GB equivale a 1.000.000.000 bytes. Se aplican límites de tamaño y tipo de archivo, frecuencia de subida, tráfico, subidas simultáneas, vistas de enlaces y uso razonable, que pueden cambiar; la app muestra los límites vigentes. Las reservas de subidas pendientes cuentan para la capacidad. Niway puede restringir temporalmente subidas, descargas o enlaces por capacidad, mantenimiento o seguridad. Las restricciones nunca generan cargos."
+        },
+        "storage": {
+          "title": "Almacenamiento y proveedores",
+          "body": "Los archivos subidos y sus metadatos se almacenan con proveedores de infraestructura, actualmente Cloudflare (incluido R2) y Neon, que pueden tratar datos fuera del Perú. Los proveedores pueden cambiar según la política de privacidad. Almacenar un archivo no lo hace público: las funciones para compartir determinan el acceso. Cloud no es un servicio de copia de seguridad: guarda tu propia copia de lo importante. Niway no garantiza la recuperación de archivos borrados, dañados o perdidos y, en la medida permitida por la ley, no responde por esa pérdida."
+        },
+        "inactivity": {
+          "title": "Cuentas gratuitas inactivas",
+          "body": "Si una cuenta gratuita no inicia sesión en Kaipu durante 12 meses seguidos, Niway podrá eliminar sus archivos de Cloud tras avisar por correo a la dirección de la cuenta con al menos 30 días de antelación. Iniciar sesión durante ese plazo conserva los archivos. La cuenta y los archivos locales no se ven afectados."
+        },
+        "prohibited": {
+          "title": "Contenido y conductas prohibidas",
+          "body": "No uses Cloud para contenido ilegal, contenido sexual que involucre a menores, malware, phishing, fraude, acoso, suplantación, vulneraciones de privacidad, derechos de autor u otros derechos, ni para distribuir lo que no estés autorizado a distribuir. No sondees ni explotes vulnerabilidades, no ataques ni sobrecargues la infraestructura, no revendas ni sublicencies el almacenamiento, ni uses Cloud como alojamiento general de archivos o red de distribución de contenidos. Niway puede retirar ese contenido, conservar evidencia y comunicarlo a las autoridades cuando sea obligatorio o procedente."
+        },
+        "closure": {
+          "title": "Fin de la promoción o de Cloud",
+          "body": "Niway puede terminar la promoción o discontinuar Cloud por cualquier razón operativa, económica, técnica o de negocio. En un cierre ordinario daremos un aviso razonable, normalmente de al menos 30 días, indicando la fecha y cómo descargar el contenido; después de esa fecha el contenido alojado podrá eliminarse. Las situaciones urgentes de seguridad, abuso o legales pueden requerir medidas inmediatas. Los archivos locales siguen bajo tu control."
+        },
+        "review": {
+          "title": "Consultas y revisión",
+          "body": "Si crees que una restricción es incorrecta, escribe a contacto@niway.dev con el correo de tu cuenta, el mensaje mostrado y lo ocurrido. No incluyas contraseñas ni contenido sensible. Niway revisará la solicitud de buena fe; su decisión sobre servicios gratuitos es definitiva en la medida permitida por la ley. No hay conversión automática a un plan de pago."
+        }
+      }
+    },
+    "cookies": {
+      "title": "Cookies y almacenamiento local",
+      "intro": "Usamos mecanismos de sesión y preferencias para que la web y la aplicación funcionen. No todas las tecnologías de almacenamiento son cookies.",
+      "sections": {
+        "session": {
+          "title": "Sesión y seguridad",
+          "body": "La web utiliza cookies de autenticación y caché de sesión para mantener el acceso y protegerlo. Sus plazos dependen de la sesión y del mecanismo de autenticación; el caché de sesión tiene una duración configurada de 10 minutos. Bloquear estas cookies puede impedir el acceso a tu cuenta. La app de escritorio conserva localmente sus credenciales de sesión mediante sus mecanismos de almacenamiento."
+        },
+        "preferences": {
+          "title": "Idioma y apariencia",
+          "body": "La cookie de idioma conserva tu preferencia hasta un año. La web guarda la elección de tema en el almacenamiento local del navegador hasta que la cambies o borres los datos del sitio. Estas preferencias no sirven para mostrar publicidad."
+        },
+        "diagnostics": {
+          "title": "Tecnologías de diagnóstico",
+          "body": "Las versiones de escritorio con PostHog habilitado pueden conservar identificadores y estado de diagnóstico localmente y enviar eventos técnicos. No debe confundirse esto con una cookie necesaria para iniciar sesión. La política de privacidad explica qué datos se envían. Si una nueva tecnología o finalidad exige consentimiento, deberá solicitarse antes de activarla; estos términos no sustituyen ese permiso."
+        },
+        "control": {
+          "title": "Cómo gestionarlos",
+          "body": "Puedes borrar o bloquear cookies y almacenamiento desde tu navegador y gestionar permisos de captura desde el sistema operativo. Borrar cookies puede cerrar tu sesión o restablecer preferencias, pero no elimina tu cuenta ni los archivos de Cloud. Para solicitudes de privacidad o eliminación, escribe al correo de contacto."
+        }
+      }
+    }
   }
 }

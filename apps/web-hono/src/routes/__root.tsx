@@ -16,6 +16,7 @@ import { I18nProvider, type Locale, type Messages } from "@kaipu/i18n";
 import es from "@kaipu/i18n/messages/es";
 import en from "@kaipu/i18n/messages/en";
 
+import { LegalLinks } from "@/components/legal/legal-links";
 import Header from "../components/header";
 import appCss from "../index.css?url";
 import { getAuthSession } from "@/lib/auth/get-auth-session";
@@ -113,6 +114,11 @@ function RootDocument() {
             <main className={isLanding ? "" : "pt-12"}>
               <Outlet />
             </main>
+            {!isLanding && (
+              <footer className="border-t px-6 py-8 text-muted-foreground">
+                <LegalLinks />
+              </footer>
+            )}
           </div>
         </I18nProvider>
         <Toaster richColors />
