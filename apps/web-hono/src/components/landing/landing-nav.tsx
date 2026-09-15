@@ -1,13 +1,14 @@
 import { useTranslations } from "@kaipu/i18n";
 import { LocaleSwitcher } from "../locale-switcher";
 import { ThemeToggle } from "../theme-toggle";
+import { KaipuMark } from "../kaipu-mark";
 
 export function LandingNav() {
   const t = useTranslations("landing");
   return (
     <nav className="flex items-center justify-between px-6 py-4">
       <span className="flex items-center gap-2 font-bold text-[var(--kaipu-text-primary)]">
-        <span className="h-2.5 w-2.5 rounded-full bg-[var(--kaipu-accent-primary)]" />{" "}
+        <KaipuMark size={22} className="text-[var(--kaipu-accent-primary)]" />
         {t("navBrand")}
       </span>
       <div className="flex items-center gap-3">
