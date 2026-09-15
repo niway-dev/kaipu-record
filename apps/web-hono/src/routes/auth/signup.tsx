@@ -1,9 +1,11 @@
+import { NOINDEX } from "@/lib/seo";
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useTranslations } from "@kaipu/i18n";
 
 import SignUpForm from "@/components/sign-up-form";
 
 export const Route = createFileRoute("/auth/signup")({
+  head: () => NOINDEX,
   component: SignUpPage,
   beforeLoad: async (ctx) => {
     const { isAuthenticated } = ctx.context;

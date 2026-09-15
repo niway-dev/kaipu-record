@@ -1,3 +1,4 @@
+import { NOINDEX } from "@/lib/seo";
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useTranslations } from "@kaipu/i18n";
 
@@ -19,6 +20,7 @@ function LoginPage() {
 }
 
 export const Route = createFileRoute("/auth/login")({
+  head: () => NOINDEX,
   component: LoginPage,
   beforeLoad: async (ctx) => {
     const { isAuthenticated } = ctx.context;

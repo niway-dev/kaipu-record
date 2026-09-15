@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.6.0](https://github.com/csdev19/kaipu-record-monorepo/compare/web-v0.5.0...web-v0.6.0) (2026-09-15)
+
+
+### Features
+
+* **web:** Kaipu logo, favicons and SEO metadata ([4a2b5f9](https://github.com/csdev19/kaipu-record-monorepo/commit/4a2b5f9466babb1af4ff9b0b3524494ded8fe4eb))
+* **web:** SEO metadata, favicons, share image, sitemap and robots ([9727b95](https://github.com/csdev19/kaipu-record-monorepo/commit/9727b9588973176fd52b98bdca0b962b8b6358f5))
+* **web:** show the Kaipu mark in the header, landing and favicon ([bf81554](https://github.com/csdev19/kaipu-record-monorepo/commit/bf815547e5257a1d083e2ba7dc40f6373f9385d5))
+
+## [0.5.0](https://github.com/csdev19/kaipu-record-monorepo/compare/web-v0.4.0...web-v0.5.0) (2026-09-15)
+
+
+### Features
+
+* cloud recordings — accounts + R2 presigned upload (backend) ([#53](https://github.com/csdev19/kaipu-record-monorepo/issues/53)) ([ed4b815](https://github.com/csdev19/kaipu-record-monorepo/commit/ed4b815a560713cfc92c42f2571cdf6a75ea3588))
+* **legal:** terms, privacy, Cloud and cookies pages ([972100e](https://github.com/csdev19/kaipu-record-monorepo/commit/972100ee622c37d8da07b2f5f48ffd0886eceaf8))
+* **legal:** terms, privacy, Cloud and cookies pages with sign-up links ([5f27325](https://github.com/csdev19/kaipu-record-monorepo/commit/5f2732508d33e3ccc794450cda408dcd85da42b8))
+* plan entitlements (free/pro) + template cleanup ([e93cfb4](https://github.com/csdev19/kaipu-record-monorepo/commit/e93cfb4520f5c3eb58ce0b54a78be12838a439ba))
+* **web:** add a recordings page, replacing the removed /todos route ([e38e77b](https://github.com/csdev19/kaipu-record-monorepo/commit/e38e77bb6ebb56398affbbc0da290cd6e3318e81))
+
 ## [0.4.0](https://github.com/csdev19/kaipu-record-monorepo/compare/web-v0.3.0...web-v0.4.0) (2026-07-10)
 
 
