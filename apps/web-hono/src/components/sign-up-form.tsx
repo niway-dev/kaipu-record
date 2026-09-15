@@ -3,6 +3,8 @@ import { useNavigate, useRouter } from "@tanstack/react-router";
 import { toast } from "sonner";
 import z from "zod";
 
+import { SignupLegalNotice } from "@/components/legal/signup-legal-notice";
+import CloudPromotion from "@/components/cloud-promotion";
 import { authClient } from "@/lib/auth/auth-client";
 
 import { Button, Input, Label } from "@kaipu/web-ui";
@@ -50,6 +52,8 @@ export default function SignUpForm() {
   return (
     <>
       <h1 className="mb-6 text-center text-3xl font-bold">{t("createAccount")}</h1>
+
+      <CloudPromotion />
 
       <form
         onSubmit={(e) => {
@@ -126,6 +130,8 @@ export default function SignUpForm() {
             )}
           </form.Field>
         </div>
+
+        <SignupLegalNotice />
 
         <form.Subscribe>
           {(state) => (

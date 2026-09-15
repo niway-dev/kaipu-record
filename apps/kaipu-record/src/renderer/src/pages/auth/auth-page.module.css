@@ -91,3 +91,16 @@
 .switchLink:hover {
   text-decoration: underline;
 }
+
+.cloudTerms {
+  margin-bottom: 20px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.cloudTerms a {
+  color: var(--accent-primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

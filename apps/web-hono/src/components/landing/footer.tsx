@@ -1,5 +1,7 @@
 import { useTranslations } from "@kaipu/i18n";
 
+import { LegalLinks } from "@/components/legal/legal-links";
+
 export function Footer() {
   const t = useTranslations("landing");
   return (
@@ -9,6 +11,9 @@ export function Footer() {
         Record
       </span>
       <p className="mt-2">{t("footerTagline")}</p>
+      <div className="mt-5">
+        <LegalLinks />
+      </div>
     </footer>
   );
 }

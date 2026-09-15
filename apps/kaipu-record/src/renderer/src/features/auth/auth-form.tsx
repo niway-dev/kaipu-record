@@ -5,6 +5,12 @@ import { Input } from "@renderer/ui/input";
 import type { AuthCredentials, AuthError, SignUpInput } from "@shared/types/auth";
 import styles from "./auth-form.module.css";
 
+/** Public website that hosts the legal documents. */
+export const LEGAL_WEB_URL = (import.meta.env.VITE_PUBLIC_WEB_URL ?? "https://kaipu.app").replace(
+  /\/$/,
+  "",
+);
+
 export type AuthFormMode = "sign-in" | "sign-up";
 
 export interface AuthFormProps {
@@ -63,6 +69,7 @@ export function AuthForm({
   onSignUp,
 }: AuthFormProps): React.JSX.Element {
   const t = useTranslations("auth");
+  const legal = useTranslations("legal");
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [name, setName] = React.useState("");
@@ -117,6 +124,39 @@ export function AuthForm({
       {error && (
         <p className={styles.error} role="alert">
           {t(errorCopyKey(error))}
+        </p>
+      )}
+      {mode === "sign-up" && (
+        <p className={styles.legalNotice}>
+          {legal.rich("signupNotice", {
+            terms: (chunks) => (
+              <a
+                href={`${LEGAL_WEB_URL}/legal/terms-and-conditions`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {chunks}
+              </a>
+            ),
+            cloud: (chunks) => (
+              <a
+                href={`${LEGAL_WEB_URL}/legal/cloud-terms`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {chunks}
+              </a>
+            ),
+            privacy: (chunks) => (
+              <a
+                href={`${LEGAL_WEB_URL}/legal/privacy-policy`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {chunks}
+              </a>
+            ),
+          })}
         </p>
       )}
       <Button type="submit" size="lg" disabled={pending} className={styles.submit}>
