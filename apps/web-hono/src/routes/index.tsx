@@ -5,9 +5,17 @@ import { Showcase } from "@/components/landing/showcase";
 import { WhyKaipu } from "@/components/landing/why-kaipu";
 import { DownloadSection } from "@/components/landing/download-section";
 import { Footer } from "@/components/landing/footer";
+import { pageHead, SITE_TITLE, SOFTWARE_JSON_LD } from "@/lib/seo";
 import { useLandingTheme } from "@/components/theme-toggle";
 
 export const Route = createFileRoute("/")({
+  head: () => {
+    const head = pageHead({ title: SITE_TITLE, path: "/" });
+    return {
+      ...head,
+      scripts: [{ type: "application/ld+json", children: SOFTWARE_JSON_LD }],
+    };
+  },
   component: LandingPage,
 });
 
