@@ -40,7 +40,9 @@ Switching to manual/local stops new automatic tasks and cancels queued automatic
 
 ## Capacity and restrictions
 
-Initial proposal: Free includes 1 GB total; a future plan includes 25 GB total, without enabling charges now. Maximum video size: 1 GB. Proposed screenshot limit: 25 MB per image. Use decimal commercial units: 1 GB = 1,000,000,000 bytes; display MB/GB consistently and always calculate in integer bytes. This limit will replace the backend's current declared-size limit of 2 GiB.
+**2026-09-15 update:** the new-account offer is now a 250 MB verified-email trial with an explicit, owner-approved expansion to 1 GB total. See [the accepted trial and approval decisions](./2026-09-15-cloud-trial-and-approval). Runtime implementation and existing-account transition are pending.
+
+Historical initial proposal: Free includes 1 GB total; a future plan includes 25 GB total, without enabling charges now. Maximum video size: 1 GB. Proposed screenshot limit: 25 MB per image. Use decimal commercial units: 1 GB = 1,000,000,000 bytes; display MB/GB consistently and always calculate in integer bytes. This limit will replace the backend's current declared-size limit of 2 GiB.
 
 The quota includes persisted media and thumbnails. The per-file limit is independent of the quota: the server communicates the full required size, including auxiliary objects, before reserving capacity. Do not promise that a file exactly equal to the quota fits if its auxiliary objects also consume space.
 
