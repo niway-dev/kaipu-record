@@ -79,6 +79,7 @@
         "@kaipu/domain": "workspace:*",
         "@kaipu/infra-auth": "workspace:*",
         "@kaipu/infra-db": "workspace:*",
+        "@kaipu/infra-email": "workspace:*",
         "@kaipu/infra-env": "workspace:*",
         "@kaipu/infra-storage": "workspace:*",
         "@orpc/contract": "catalog:",
