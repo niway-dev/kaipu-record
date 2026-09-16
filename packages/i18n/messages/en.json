@@ -107,7 +107,7 @@
     "retry": "Retry",
     "accountUnknown": "Couldn't verify your session — still using your last sign-in.",
     "accountTitle": "Your Kaipu account",
-    "accountDescription": "Sign up and verify your email to get 1 GB free and try Kaipu Cloud. Temporary promotional benefit per verified account. Capacity may change under the Cloud terms. Record, edit and export locally without an account.",
+    "accountDescription": "Sign up and verify your email to try Kaipu Cloud with 250 MB free. You can request an increase to 1 GB total, subject to manual approval during the beta. Capacity may change under the Cloud terms. Record, edit and export locally without an account.",
     "general": "General",
     "generalDescription": "Language and appearance of Kaipu Record.",
     "permissionsDescription": "What Kaipu Record may access on this device.",
@@ -216,7 +216,7 @@
     "signUpSuccess": "Sign up successful",
     "back": "Back",
     "signInSubtitle": "Sign in to save and share with Kaipu Cloud.",
-    "signUpSubtitle": "Sign up and verify your email to get 1 GB free and try Kaipu Cloud.",
+    "signUpSubtitle": "Sign up and verify your email to try Kaipu Cloud with 250 MB free.",
     "errorInvalidCredentials": "Wrong email or password.",
     "errorEmailTaken": "That email is already registered.",
     "errorPasswordTooShort": "Password must be at least 8 characters.",
@@ -224,9 +224,9 @@
     "errorUnknown": "Something went wrong. Try again.",
     "signingIn": "Signing in…",
     "creatingAccount": "Creating account…",
-    "cloudPromotion": "1 GB free to try Kaipu Cloud",
+    "cloudPromotion": "250 MB free to try Kaipu Cloud",
     "cloudPromotionNote": "Promotional, per verified account. Capacity may change under the Cloud terms.",
-    "cloudActivation": "Save and share your recordings with free storage activated when you verify your email."
+    "cloudActivation": "Activate your 250 MB by verifying your email. Use it for recordings and screenshots, and request an increase to 1 GB total, subject to manual approval during the beta."
   },
   "recordings": {
     "title": "Recordings",
@@ -699,7 +699,7 @@
       "sections": {
         "offer": {
           "title": "The initial offer",
-          "body": "The current promotion includes up to 1 GB of free total storage per account with a verified email. It is not a monthly allowance, a paid entitlement or a guarantee of permanent storage. Eligibility, amount and duration are set by Niway and may differ between accounts, regions or periods. Recording, editing and exporting locally do not require an account."
+          "body": "The promotion includes 250 MB of free total storage after email verification. You can request an increase to 1 GB total, subject to manual approval by Niway during the beta. Recordings and screenshots share this space; the increase does not add 1 GB to the initial 250 MB. It is not a monthly allowance, a paid entitlement or a guarantee of permanent storage. Eligibility, amount and duration are set by Niway and may differ between accounts, regions or periods. Recording, editing and exporting locally do not require an account."
         },
         "changes": {
           "title": "Capacity and feature changes",
