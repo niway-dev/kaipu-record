@@ -761,5 +761,25 @@
         }
       }
     }
+  },
+  "emails": {
+    "footer": "Kaipu — a Niway product",
+    "verifySubject": "Verify your Kaipu email",
+    "verifyPreview": "Confirm this email address to finish setting up your Kaipu account.",
+    "verifyHeading": "Confirm your email",
+    "verifyBody": "Click the button below to verify this email address for your Kaipu account. The link is valid for 24 hours.",
+    "verifyButton": "Verify email",
+    "verifyIgnore": "If you didn't create a Kaipu account, you can ignore this email.",
+    "resetSubject": "Reset your Kaipu password",
+    "resetPreview": "Choose a new password for your Kaipu account.",
+    "resetHeading": "Reset your password",
+    "resetBody": "Open the link below to choose a new password. It expires in one hour and can only be used once. Resetting your password signs you out of every device.",
+    "resetButton": "Choose a new password",
+    "resetIgnore": "If you didn't ask for a new password, you can ignore this email — nothing changes until the link is opened.",
+    "approvedSubject": "Your Kaipu Cloud space is now {capacity}",
+    "approvedPreview": "Your request for more Kaipu Cloud space was approved.",
+    "approvedHeading": "You have more Cloud space",
+    "approvedBody": "Your request was approved. Your account now has {capacity} of total Kaipu Cloud space.",
+    "approvedButton": "Open Kaipu"
   }
 }

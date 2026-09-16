@@ -761,5 +761,25 @@
         }
       }
     }
+  },
+  "emails": {
+    "footer": "Kaipu — un producto de Niway",
+    "verifySubject": "Verifica tu correo de Kaipu",
+    "verifyPreview": "Confirma esta dirección para terminar de configurar tu cuenta de Kaipu.",
+    "verifyHeading": "Confirma tu correo",
+    "verifyBody": "Haz clic en el botón para verificar esta dirección de correo de tu cuenta de Kaipu. El enlace es válido por 24 horas.",
+    "verifyButton": "Verificar correo",
+    "verifyIgnore": "Si no creaste una cuenta de Kaipu, puedes ignorar este correo.",
+    "resetSubject": "Restablece tu contraseña de Kaipu",
+    "resetPreview": "Elige una nueva contraseña para tu cuenta de Kaipu.",
+    "resetHeading": "Restablece tu contraseña",
+    "resetBody": "Abre el enlace para elegir una nueva contraseña. Expira en una hora y solo puede usarse una vez. Al restablecerla se cierran las sesiones en todos tus dispositivos.",
+    "resetButton": "Elegir nueva contraseña",
+    "resetIgnore": "Si no pediste una nueva contraseña, puedes ignorar este correo: nada cambia hasta abrir el enlace.",
+    "approvedSubject": "Tu espacio en Kaipu Cloud ahora es de {capacity}",
+    "approvedPreview": "Tu solicitud de más espacio en Kaipu Cloud fue aprobada.",
+    "approvedHeading": "Tienes más espacio en Cloud",
+    "approvedBody": "Tu solicitud fue aprobada. Tu cuenta ahora tiene {capacity} de espacio total en Kaipu Cloud.",
+    "approvedButton": "Abrir Kaipu"
   }
 }
