@@ -107,7 +107,7 @@
     "retry": "Reintentar",
     "accountUnknown": "No se pudo verificar tu sesión — seguimos usando la última.",
     "accountTitle": "Tu cuenta de Kaipu",
-    "accountDescription": "Regístrate y verifica tu correo para obtener 1 GB gratis y probar Kaipu Cloud. Beneficio promocional temporal por cuenta verificada. La capacidad puede cambiar según las condiciones de Cloud. Graba, edita y exporta localmente sin una cuenta.",
+    "accountDescription": "Regístrate y verifica tu correo para probar Kaipu Cloud con 250 MB gratis. Puedes solicitar una ampliación a 1 GB total, sujeta a aprobación manual durante la beta. La capacidad puede cambiar según las condiciones de Cloud. Graba, edita y exporta localmente sin una cuenta.",
     "general": "General",
     "generalDescription": "Idioma y apariencia de Kaipu Record.",
     "permissionsDescription": "A qué puede acceder Kaipu Record en este dispositivo.",
@@ -216,7 +216,7 @@
     "signUpSuccess": "Cuenta creada",
     "back": "Volver",
     "signInSubtitle": "Inicia sesión para guardar y compartir con Kaipu Cloud.",
-    "signUpSubtitle": "Regístrate y verifica tu correo para obtener 1 GB gratis y probar Kaipu Cloud.",
+    "signUpSubtitle": "Regístrate y verifica tu correo para probar Kaipu Cloud con 250 MB gratis.",
     "errorInvalidCredentials": "Correo o contraseña incorrectos.",
     "errorEmailTaken": "Ese correo ya está registrado.",
     "errorPasswordTooShort": "La contraseña debe tener al menos 8 caracteres.",
@@ -224,9 +224,9 @@
     "errorUnknown": "Algo salió mal. Inténtalo de nuevo.",
     "signingIn": "Iniciando sesión…",
     "creatingAccount": "Creando cuenta…",
-    "cloudPromotion": "1 GB gratis para probar Kaipu Cloud",
+    "cloudPromotion": "250 MB gratis para probar Kaipu Cloud",
     "cloudPromotionNote": "Promocional, por cuenta verificada. La capacidad puede cambiar según las condiciones de Cloud.",
-    "cloudActivation": "Guarda y comparte tus grabaciones con espacio gratuito que se activa al verificar tu correo.",
+    "cloudActivation": "Activa tus 250 MB al verificar tu correo. Úsalos para grabaciones y capturas, y solicita una ampliación a 1 GB total, sujeta a aprobación manual durante la beta.",
     "forgotPassword": "¿Olvidaste tu contraseña?",
     "forgotTitle": "Restablece tu contraseña",
     "forgotBody": "Escribe el correo de tu cuenta y te enviaremos un enlace para elegir una nueva contraseña.",
@@ -716,7 +716,7 @@
       "sections": {
         "offer": {
           "title": "La oferta inicial",
-          "body": "La promoción actual incluye hasta 1 GB de almacenamiento total gratuito por cuenta con correo verificado. No es una cuota mensual, un derecho pagado ni una garantía de almacenamiento permanente. Niway define la elegibilidad, la cantidad y la duración, que pueden variar entre cuentas, regiones o periodos. Grabar, editar y exportar localmente no requiere una cuenta."
+          "body": "La promoción incluye 250 MB de almacenamiento total gratuito al verificar el correo. Puedes solicitar una ampliación a 1 GB total, sujeta a aprobación manual de Niway durante la beta. El espacio se comparte entre grabaciones y capturas; la ampliación no añade 1 GB a los 250 MB iniciales. No es una cuota mensual, un derecho pagado ni una garantía de almacenamiento permanente. Niway define la elegibilidad, la cantidad y la duración, que pueden variar entre cuentas, regiones o periodos. Grabar, editar y exportar localmente no requiere una cuenta."
         },
         "changes": {
           "title": "Cambios de capacidad y funciones",
