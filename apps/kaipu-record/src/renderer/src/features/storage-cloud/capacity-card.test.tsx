@@ -106,6 +106,18 @@ describe("CapacityCard", () => {
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
   });
 
+  it("lets an unverified account resend the verification email, then disables the button", async () => {
+    const resend = vi
+      .spyOn(window.electronAPI, "resendVerificationEmail")
+      .mockResolvedValue({ ok: true });
+    renderCard({ kind: "beta-unavailable" });
+    const button = screen.getByRole("button", { name: /resend verification email/i });
+    fireEvent.click(button);
+    expect(resend).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText(/verification email sent/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /resend verification email/i })).toBeDisabled();
+  });
+
   it("keeps the figures and adds a notice when uploads are suspended", () => {
     renderCard({ kind: "usage", usage: USAGE, staleSince: null, suspended: true });
     expect(screen.getByRole("img")).toBeInTheDocument();

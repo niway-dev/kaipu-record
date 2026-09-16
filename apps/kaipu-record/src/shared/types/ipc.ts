@@ -257,6 +257,7 @@ export const IPC_CHANNELS = {
   authSignUp: "auth:sign-up",
   authSignOut: "auth:sign-out",
   authStatusChanged: "auth:status-changed",
+  authResendVerification: "auth:resend-verification",
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];

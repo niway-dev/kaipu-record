@@ -81,6 +81,13 @@ export function CapacityCard({
       : (entitlements?.features.cloudStorageBytes ?? null);
   const plan = entitlements?.plan === "pro" ? t("planPro") : t("planFree");
   const signIn = (): void => void navigate("/sign-in", { state: { from: "/cloud" } });
+  const [resendState, setResendState] = React.useState<"idle" | "pending" | "sent">("idle");
+
+  async function handleResend(): Promise<void> {
+    setResendState("pending");
+    const result = await window.electronAPI.resendVerificationEmail();
+    setResendState(result.ok ? "sent" : "idle");
+  }
 
   return (
     <div className={styles.capacity}>
@@ -159,7 +166,17 @@ export function CapacityCard({
           tone="neutral"
           icon={<CloudOff size={16} />}
           title={t("betaTitle")}
-          detail={t("betaDetail")}
+          detail={resendState === "sent" ? t("resendVerificationSent") : t("betaDetail")}
+          action={
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void handleResend()}
+              disabled={resendState !== "idle"}
+            >
+              {t("resendVerification")}
+            </Button>
+          }
         />
       )}
     </div>

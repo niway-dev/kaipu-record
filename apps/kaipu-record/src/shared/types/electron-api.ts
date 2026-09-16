@@ -77,6 +77,9 @@ export interface KaipuElectronAPI {
   signUp(input: SignUpInput): Promise<AuthAttemptResult>;
   /** Sign out and clear the stored session. */
   signOut(): Promise<void>;
+  /** Resend the verification email to the signed-in account. `ok: false` when signed out or
+   *  the request failed — never rejects. */
+  resendVerificationEmail(): Promise<{ ok: boolean }>;
   /** Subscribe to authentication status changes. Returns an unsubscribe fn. */
   onAuthStatusChanged(callback: (status: AuthStatus) => void): () => void;
 

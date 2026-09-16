@@ -143,6 +143,27 @@ export async function getEntitlements(
   };
 }
 
+/** Ask the server to resend the verification email for `email`. Best-effort — never rejects;
+ *  the server builds the actual link (see apps/server-hono/src/lib/auth.ts), this call only
+ *  triggers it. `callbackURL` is required by the endpoint schema but unused for link
+ *  construction. */
+export async function resendVerificationEmail(
+  config: AuthClientConfig,
+  email: string,
+): Promise<boolean> {
+  try {
+    const res = await fetch(`${config.serverUrl}/api/auth/send-verification-email`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Origin: "kaipu-record://app" },
+      body: JSON.stringify({ email, callbackURL: "/auth/email-verified" }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 /** Best-effort — never rejects. A failed remote sign-out just means the orphaned server-side
  *  session expires on its own schedule; it must never block the caller's local sign-out. */
 export async function signOutRemote(config: AuthClientConfig, token: string): Promise<void> {

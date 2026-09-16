@@ -121,6 +121,17 @@ export function AuthForm({
         // real "wrong email or password" answer behind a misleading validation message.
         minLength={mode === "sign-up" ? 8 : undefined}
       />
+      {mode === "sign-in" && (
+        <p className={styles.legalNotice}>
+          <a
+            href={`${LEGAL_WEB_URL}/auth/forgot-password`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {t("forgotPassword")}
+          </a>
+        </p>
+      )}
       {error && (
         <p className={styles.error} role="alert">
           {t(errorCopyKey(error))}
