@@ -20,7 +20,22 @@ Rakoi infra-email pattern. Verification links last 24 hours and complete on web;
 desktop refreshes verification state on return. Password recovery starts on web
 from desktop, uses a one-use link valid for one hour, and invalidates existing
 sessions on successful reset. Resends are user-requested with throttling.
-These flows remain to be implemented.
+
+**Implemented** (plan 01, see `plans/2026-09-15-01-transactional-email`):
+`@kaipu/infra-email` (typed template registry, Rakoi's `IEmailProvider` port,
+`ResendEmailProvider`, `EmailService`); Better Auth's `emailVerification` and
+`emailAndPassword.sendResetPassword` hooks in `apps/server-hono/src/lib/auth.ts`;
+the web pages `/auth/forgot-password`, `/auth/reset-password` and
+`/auth/email-verified` (the last with a resend form on an expired/invalid link);
+and, on desktop, a "Forgot your password?" link plus a resend-verification
+action on the Cloud page's unverified-email notice.
+
+Rollout requires, in order: (1) `updates.niway.dev` verified in Resend with its
+DKIM/SPF records (check the Resend dashboard; nothing in this repo configures
+DNS); (2) the `RESEND_API_KEY` secret added to the GitHub `production`
+environment and deployed via Release API; (3) a manual end-to-end pass: sign up
+with a real inbox, receive the email, verify, see the Cloud page unlock;
+request a reset, set a new password, confirm every session was signed out.
 
 ## Decision 3 — trial and owner-approved expansion
 
