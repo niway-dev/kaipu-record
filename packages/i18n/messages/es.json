@@ -226,7 +226,22 @@
     "creatingAccount": "Creando cuenta…",
     "cloudPromotion": "1 GB gratis para probar Kaipu Cloud",
     "cloudPromotionNote": "Promocional, por cuenta verificada. La capacidad puede cambiar según las condiciones de Cloud.",
-    "cloudActivation": "Guarda y comparte tus grabaciones con espacio gratuito que se activa al verificar tu correo."
+    "cloudActivation": "Guarda y comparte tus grabaciones con espacio gratuito que se activa al verificar tu correo.",
+    "forgotPassword": "¿Olvidaste tu contraseña?",
+    "forgotTitle": "Restablece tu contraseña",
+    "forgotBody": "Escribe el correo de tu cuenta y te enviaremos un enlace para elegir una nueva contraseña.",
+    "forgotSubmit": "Enviar enlace",
+    "forgotSent": "Si ese correo tiene una cuenta de Kaipu, el enlace va en camino. Expira en una hora.",
+    "resetTitle": "Elige una nueva contraseña",
+    "resetSubmit": "Guardar contraseña",
+    "resetSuccess": "Contraseña actualizada. Inicia sesión con tu nueva contraseña.",
+    "resetInvalid": "Este enlace no es válido o expiró. Pide uno nuevo.",
+    "resetMissingToken": "Esta página necesita el enlace de tu correo.",
+    "verifiedTitle": "Correo verificado",
+    "verifiedBody": "Tu correo está verificado. Puedes cerrar esta ventana y volver a la app de Kaipu, o iniciar sesión aquí.",
+    "verifiedError": "Este enlace de verificación no es válido o expiró.",
+    "verifiedResend": "Enviar un nuevo correo de verificación",
+    "verifiedResendSent": "Un nuevo correo de verificación va en camino."
   },
   "recordings": {
     "title": "Grabaciones",

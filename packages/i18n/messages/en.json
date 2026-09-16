@@ -226,7 +226,22 @@
     "creatingAccount": "Creating account…",
     "cloudPromotion": "1 GB free to try Kaipu Cloud",
     "cloudPromotionNote": "Promotional, per verified account. Capacity may change under the Cloud terms.",
-    "cloudActivation": "Save and share your recordings with free storage activated when you verify your email."
+    "cloudActivation": "Save and share your recordings with free storage activated when you verify your email.",
+    "forgotPassword": "Forgot your password?",
+    "forgotTitle": "Reset your password",
+    "forgotBody": "Enter your account email and we'll send you a link to choose a new password.",
+    "forgotSubmit": "Send reset link",
+    "forgotSent": "If that email has a Kaipu account, a reset link is on its way. It expires in one hour.",
+    "resetTitle": "Choose a new password",
+    "resetSubmit": "Set new password",
+    "resetSuccess": "Password updated. Sign in with your new password.",
+    "resetInvalid": "This link is invalid or has expired. Request a new one.",
+    "resetMissingToken": "This page needs the link from your email.",
+    "verifiedTitle": "Email verified",
+    "verifiedBody": "Your email is verified. You can close this window and return to the Kaipu app, or sign in here.",
+    "verifiedError": "This verification link is invalid or has expired.",
+    "verifiedResend": "Send a new verification email",
+    "verifiedResendSent": "A new verification email is on its way."
   },
   "recordings": {
     "title": "Recordings",

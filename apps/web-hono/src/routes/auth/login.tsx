@@ -15,6 +15,11 @@ function LoginPage() {
           {t("signUp")}
         </Link>
       </div>
+      <div className="mt-2 text-center text-sm text-muted-foreground">
+        <Link to="/auth/forgot-password" className="text-primary hover:underline">
+          {t("forgotPassword")}
+        </Link>
+      </div>
     </div>
   );
 }
