@@ -226,7 +226,22 @@
     "creatingAccount": "Creando cuenta…",
     "cloudPromotion": "250 MB gratis para probar Kaipu Cloud",
     "cloudPromotionNote": "Promocional, por cuenta verificada. La capacidad puede cambiar según las condiciones de Cloud.",
-    "cloudActivation": "Activa tus 250 MB al verificar tu correo. Úsalos para grabaciones y capturas, y solicita una ampliación a 1 GB total, sujeta a aprobación manual durante la beta."
+    "cloudActivation": "Activa tus 250 MB al verificar tu correo. Úsalos para grabaciones y capturas, y solicita una ampliación a 1 GB total, sujeta a aprobación manual durante la beta.",
+    "forgotPassword": "¿Olvidaste tu contraseña?",
+    "forgotTitle": "Restablece tu contraseña",
+    "forgotBody": "Escribe el correo de tu cuenta y te enviaremos un enlace para elegir una nueva contraseña.",
+    "forgotSubmit": "Enviar enlace",
+    "forgotSent": "Si ese correo tiene una cuenta de Kaipu, el enlace va en camino. Expira en una hora.",
+    "resetTitle": "Elige una nueva contraseña",
+    "resetSubmit": "Guardar contraseña",
+    "resetSuccess": "Contraseña actualizada. Inicia sesión con tu nueva contraseña.",
+    "resetInvalid": "Este enlace no es válido o expiró. Pide uno nuevo.",
+    "resetMissingToken": "Esta página necesita el enlace de tu correo.",
+    "verifiedTitle": "Correo verificado",
+    "verifiedBody": "Tu correo está verificado. Puedes cerrar esta ventana y volver a la app de Kaipu, o iniciar sesión aquí.",
+    "verifiedError": "Este enlace de verificación no es válido o expiró.",
+    "verifiedResend": "Enviar un nuevo correo de verificación",
+    "verifiedResendSent": "Un nuevo correo de verificación va en camino."
   },
   "recordings": {
     "title": "Grabaciones",
@@ -558,6 +573,8 @@
     "signInAgain": "Volver a iniciar sesión",
     "betaTitle": "Verifica tu correo para usar cloud",
     "betaDetail": "Cloud está disponible para cuentas con el correo verificado. Mientras tanto, Kaipu sigue funcionando localmente.",
+    "resendVerification": "Reenviar correo de verificación",
+    "resendVerificationSent": "Correo de verificación enviado. Revisa tu bandeja.",
     "suspendedTitle": "Las subidas están pausadas por ahora",
     "suspendedDetail": "Nadie puede subir en este momento. Lo que ya está en cloud sigue a salvo.",
     "ageJustNow": "hace un momento",
@@ -761,5 +778,25 @@
         }
       }
     }
+  },
+  "emails": {
+    "footer": "Kaipu — un producto de Niway",
+    "verifySubject": "Verifica tu correo de Kaipu",
+    "verifyPreview": "Confirma esta dirección para terminar de configurar tu cuenta de Kaipu.",
+    "verifyHeading": "Confirma tu correo",
+    "verifyBody": "Haz clic en el botón para verificar esta dirección de correo de tu cuenta de Kaipu. El enlace es válido por 24 horas.",
+    "verifyButton": "Verificar correo",
+    "verifyIgnore": "Si no creaste una cuenta de Kaipu, puedes ignorar este correo.",
+    "resetSubject": "Restablece tu contraseña de Kaipu",
+    "resetPreview": "Elige una nueva contraseña para tu cuenta de Kaipu.",
+    "resetHeading": "Restablece tu contraseña",
+    "resetBody": "Abre el enlace para elegir una nueva contraseña. Expira en una hora y solo puede usarse una vez. Al restablecerla se cierran las sesiones en todos tus dispositivos.",
+    "resetButton": "Elegir nueva contraseña",
+    "resetIgnore": "Si no pediste una nueva contraseña, puedes ignorar este correo: nada cambia hasta abrir el enlace.",
+    "approvedSubject": "Tu espacio en Kaipu Cloud ahora es de {capacity}",
+    "approvedPreview": "Tu solicitud de más espacio en Kaipu Cloud fue aprobada.",
+    "approvedHeading": "Tienes más espacio en Cloud",
+    "approvedBody": "Tu solicitud fue aprobada. Tu cuenta ahora tiene {capacity} de espacio total en Kaipu Cloud.",
+    "approvedButton": "Abrir Kaipu"
   }
 }

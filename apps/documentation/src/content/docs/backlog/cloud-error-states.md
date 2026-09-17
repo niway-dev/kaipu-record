@@ -83,8 +83,11 @@ everything else is a generic error.
 1. **403 with a reason.** Add `data: { kind: "email-unverified" }` to `CloudAccessDeniedError`
    (and to `/me/storage` when `cloudUploads` is false) so the client stops inferring the cause
    once more access conditions exist.
-2. **No way out of "unverified".** Verification email is not sent. Short term: an operator
-   command (`bun run plan verify <email>`); real fix: Better Auth email verification.
+2. ~~**No way out of "unverified".**~~ Done: Better Auth now sends a real verification email
+   via `@kaipu/infra-email` (Resend), with a 24-hour link handled by the web app
+   (`/auth/email-verified`, with a resend form on an expired/invalid link) and a
+   resend-verification action on the desktop's Cloud page. No manual/operator verification
+   path was added, by design.
 3. **Offline vs server failure.** Distinguish "you're offline" (retry when back) from "the
    server failed" in the capacity card.
 4. ~~**Save mode for unverified accounts.**~~ Done: the picker takes a `cloudBlocker`

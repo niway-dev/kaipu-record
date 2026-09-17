@@ -34,6 +34,7 @@ const kaipuApi: KaipuElectronAPI = {
   signIn: (credentials) => ipcRenderer.invoke(IPC_CHANNELS.authSignIn, credentials),
   signUp: (input) => ipcRenderer.invoke(IPC_CHANNELS.authSignUp, input),
   signOut: () => ipcRenderer.invoke(IPC_CHANNELS.authSignOut),
+  resendVerificationEmail: () => ipcRenderer.invoke(IPC_CHANNELS.authResendVerification),
   onAuthStatusChanged: (callback) => {
     const listener = (_e: IpcRendererEvent, status: AuthStatus): void => callback(status);
     ipcRenderer.on(IPC_CHANNELS.authStatusChanged, listener);

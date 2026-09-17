@@ -12,4 +12,11 @@ export const serverEnvSchema = z.object({
   R2_ACCESS_KEY_ID: z.string().optional(),
   R2_SECRET_ACCESS_KEY: z.string().optional(),
   R2_BUCKET: z.string().optional(),
+  // Transactional email (Resend). Optional so the API still boots without
+  // email configured — send hooks log an error and skip instead of crashing.
+  RESEND_API_KEY: z.string().optional(),
+  /** Sender identity; defaults to the Niway convention when unset. */
+  AUTH_EMAIL_FROM: z.string().optional(),
+  /** Public web origin used to build email links; defaults to https://kaipu.app. */
+  PUBLIC_WEB_URL: z.string().optional(),
 });

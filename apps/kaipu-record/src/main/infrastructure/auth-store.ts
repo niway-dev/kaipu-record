@@ -8,6 +8,7 @@ import { IPC_CHANNELS } from "@shared/types/ipc";
 import {
   getEntitlements,
   getSession,
+  resendVerificationEmail,
   signInWithPassword,
   signOutRemote,
   signUpWithPassword,
@@ -246,6 +247,12 @@ export function registerAuth(
       }
     },
   );
+
+  ipcMain.handle(IPC_CHANNELS.authResendVerification, async (event): Promise<{ ok: boolean }> => {
+    requireMainWindow(event);
+    if (!cachedIdentity) return { ok: false };
+    return { ok: await resendVerificationEmail(config, cachedIdentity.email) };
+  });
 
   ipcMain.handle(IPC_CHANNELS.authSignOut, async (event): Promise<void> => {
     requireMainWindow(event);
