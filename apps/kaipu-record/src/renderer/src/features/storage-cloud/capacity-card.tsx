@@ -168,14 +168,19 @@ export function CapacityCard({
           title={t("betaTitle")}
           detail={resendState === "sent" ? t("resendVerificationSent") : t("betaDetail")}
           action={
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void handleResend()}
-              disabled={resendState !== "idle"}
-            >
-              {t("resendVerification")}
-            </Button>
+            <>
+              <Button variant="outline" size="sm" onClick={onRefresh} disabled={refreshing}>
+                <RefreshCw size={12} aria-hidden /> {t("refresh")}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void handleResend()}
+                disabled={resendState !== "idle"}
+              >
+                {t("resendVerification")}
+              </Button>
+            </>
           }
         />
       )}
