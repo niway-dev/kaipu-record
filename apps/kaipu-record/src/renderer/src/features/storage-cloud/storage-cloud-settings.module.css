@@ -462,6 +462,8 @@
 }
 
 .noticeAction {
+  display: flex;
+  gap: var(--space-sm);
   flex-shrink: 0;
   align-self: center;
 }
