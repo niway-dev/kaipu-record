@@ -127,16 +127,17 @@ files — where one exists it is **generated** and gitignored, never edited.
 First-time setup (once per machine):
 
 ```bash
-bun run setup      # installs the Infisical CLI; skips anything already present
+bun run setup      # reports which global tools you are missing, and how to get them
 infisical login
 ```
 
-`scripts/setup-dev.sh` is idempotent — re-run it any time. It prefers Homebrew
-(`brew install infisical/get-cli/infisical`) and falls back to downloading the
-same pinned release binary into `~/.local/bin` when Homebrew refuses. That
-fallback exists because Homebrew blocks _every_ install when Xcode is outdated,
-even for this formula, which only unpacks a prebuilt binary and never compiles.
-The permanent fix for that, if you want Homebrew working generally, is:
+`scripts/setup-dev.sh` **checks, it never installs** — it reports what is missing
+and the command to install it, so nothing lands on your machine that you did not
+run yourself. See the
+[tool-doctor pattern](https://github.com/csdev19/general-knowledge/blob/main/conventions/tool-doctor-pattern.md).
+
+If Homebrew refuses with "Xcode is too outdated", this points it at the Command
+Line Tools and fixes it for every formula:
 
 ```bash
 sudo xcode-select --switch /Library/Developer/CommandLineTools
