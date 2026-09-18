@@ -119,6 +119,35 @@ The web app (TanStack Start) proxies all API requests through itself to the Elys
 - `infra-*` never imports from `application`
 - Mobile app (`apps/mobile/`) only imports from `@kaipu/domain`
 
+## Secrets: Infisical
+
+All environment values come from Infisical. There are no hand-maintained `.env`
+files — where one exists it is **generated** and gitignored, never edited.
+
+First-time setup (once per machine):
+
+```bash
+npm install -g @infisical/cli   # not bun: bun blocks the postinstall that extracts the binary
+infisical login
+```
+
+Then every command works as before — the scripts pull secrets themselves:
+
+- `bun run dev` — each app fetches its own env at start-up
+- `bun run db:push` and the other `db:*` scripts wrap `infisical run`
+
+Changing a value means changing it in Infisical and restarting. Never add it to
+a local file.
+
+Layout: environment slug `dev` (the UI shows it as "Development"). Secrets live
+in four folders — `/cloudflare`, `/database`, `/server-hono`, `/kaipu-record` —
+plus non-secret config at the root. Scripts use `--recursive` (or the four
+explicit `--path` flags where `export` is needed, since `export` has no
+`--recursive`).
+
+Workers are the exception: `wrangler` needs values as bindings rather than
+process env, so `env:pull` writes a generated `.env` that wrangler reads.
+
 ## Common Commands
 
 - `bun run db:push` — Push Drizzle schema to DB (run from monorepo root, NOT from packages/infra-db/)

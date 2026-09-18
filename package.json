@@ -42,14 +42,14 @@
     "check-types": "turbo run check-types",
     "dev:web-hono": "turbo run dev -F web-hono",
     "dev:server-hono": "turbo run dev -F server-hono",
-    "db:command": "dotenvx run -f apps/server-hono/.env -- turbo run db:command -F @kaipu/infra-db",
-    "db:push": "dotenvx run -f apps/server-hono/.env -- turbo run db:push -F @kaipu/infra-db",
-    "db:studio": "dotenvx run -f apps/server-hono/.env -- turbo run db:studio -F @kaipu/infra-db",
-    "db:generate": "dotenvx run -f apps/server-hono/.env -- turbo run db:generate -F @kaipu/infra-db",
-    "db:migrate": "dotenvx run -f apps/server-hono/.env -- turbo run db:migrate -F @kaipu/infra-db",
-    "plan": "dotenvx run -f apps/server-hono/.env -- bun apps/server-hono/scripts/plan.ts",
+    "db:command": "infisical run --env=dev --recursive -- turbo run db:command -F @kaipu/infra-db",
+    "db:push": "infisical run --env=dev --recursive -- turbo run db:push -F @kaipu/infra-db",
+    "db:studio": "infisical run --env=dev --recursive -- turbo run db:studio -F @kaipu/infra-db",
+    "db:generate": "infisical run --env=dev --recursive -- turbo run db:generate -F @kaipu/infra-db",
+    "db:migrate": "infisical run --env=dev --recursive -- turbo run db:migrate -F @kaipu/infra-db",
+    "plan": "infisical run --env=dev --recursive -- bun apps/server-hono/scripts/plan.ts",
     "test": "turbo run test",
-    "test:integration": "dotenvx run -f apps/server-hono/.env -- turbo run test:integration -F @kaipu/infra-db"
+    "test:integration": "infisical run --env=dev --recursive -- turbo run test:integration -F @kaipu/infra-db"
   },
   "dependencies": {
     "dotenv": "catalog:",
