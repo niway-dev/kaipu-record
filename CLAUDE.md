@@ -127,9 +127,23 @@ files — where one exists it is **generated** and gitignored, never edited.
 First-time setup (once per machine):
 
 ```bash
-npm install -g @infisical/cli   # not bun: bun blocks the postinstall that extracts the binary
+bun run setup      # installs the Infisical CLI; skips anything already present
 infisical login
 ```
+
+`scripts/setup-dev.sh` is idempotent — re-run it any time. It prefers Homebrew
+(`brew install infisical/get-cli/infisical`) and falls back to downloading the
+same pinned release binary into `~/.local/bin` when Homebrew refuses. That
+fallback exists because Homebrew blocks _every_ install when Xcode is outdated,
+even for this formula, which only unpacks a prebuilt binary and never compiles.
+The permanent fix for that, if you want Homebrew working generally, is:
+
+```bash
+sudo xcode-select --switch /Library/Developer/CommandLineTools
+```
+
+Do not install the CLI with `bun add` — bun blocks the `preinstall` that
+extracts the binary, so you get the package without a working command.
 
 Then every command works as before — the scripts pull secrets themselves:
 

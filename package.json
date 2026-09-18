@@ -32,6 +32,7 @@
   "type": "module",
   "scripts": {
     "prepare": "lefthook install",
+    "setup": "bash scripts/setup-dev.sh",
     "lint": "oxlint",
     "format": "oxfmt --write .",
     "format:tracked": "git ls-files | grep -E '\\.(ts|tsx|js|jsx|json|jsonc|md|mdx)$' | xargs oxfmt --write",
