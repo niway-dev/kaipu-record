@@ -8,7 +8,7 @@
     "serve": "vite preview",
     "alchemy:dev": "alchemy dev",
     "env:pull": "infisical export --env=dev --path=/ --silent > .env && infisical export --env=dev --path=/database --silent >> .env && infisical export --env=dev --path=/cloudflare --silent >> .env && infisical export --env=dev --path=/server-hono --silent >> .env",
-    "dev": "bash ../../scripts/with-env.sh vite dev",
+    "dev": "bash ../../scripts/with-env.sh --path / -- vite dev",
     "deploy": "alchemy deploy",
     "destroy": "alchemy destroy",
     "wrangler:dev": "bun run env:pull && wrangler dev --port 3001 --inspector-port 9230",
