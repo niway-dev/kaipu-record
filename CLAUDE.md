@@ -163,6 +163,13 @@ explicit `--path` flags where `export` is needed, since `export` has no
 Workers are the exception: `wrangler` needs values as bindings rather than
 process env, so `env:pull` writes a generated `.env` that wrangler reads.
 
+Scripts go through `scripts/with-env.sh` rather than calling `infisical run`
+directly. It fetches from Infisical locally, and **passes straight through when
+`CI` is set** — CI builds with placeholder values on purpose and must not need a
+secrets CLI. Locally a missing CLI fails loudly instead of building with
+undefined values, which would produce a subtly broken artifact rather than an
+error.
+
 ## Common Commands
 
 - `bun run db:push` — Push Drizzle schema to DB (run from monorepo root, NOT from packages/infra-db/)
