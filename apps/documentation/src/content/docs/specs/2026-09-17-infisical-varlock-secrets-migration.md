@@ -5,9 +5,14 @@ description: "Replace nine scattered .env files and dotenvx with one Infisical s
 
 # Secrets & env — migrate scattered `.env` + dotenvx to Infisical + varlock
 
-**Date:** 2026-09-17 · **Branch:** not started (design only) · **Scope:** repo-wide tooling
+**Date:** 2026-09-17 · **Branch:** `feat/varlock-phase-1-foundation` · **Scope:** repo-wide tooling
 
-**Status: 🔵 Proposed — design only.** No implementation exists on `main`. The
+**Status: 🟡 In progress — phase 1 partially landed.** varlock 1.19.0 and the
+Infisical plugin 2.1.1 are installed and the root `.env.schema` parses and
+resolves (`varlock load` → exit 0). What is **not** yet proven is Infisical
+authentication itself: that needs the `local-dev` machine identity's
+credentials, which do not exist yet. Phases 2–6 are unchanged and unstarted —
+each depends on a load that actually reaches Infisical. The
 reusable, product-agnostic guidance lives in the general-knowledge hub at
 `infra/infisical-varlock-secrets.md`; this document records only how that
 playbook applies to this repository. Kaipu is the **second** adoption — the
@@ -170,10 +175,19 @@ collision, and to keep that future split cheap.
 
 ## Target configuration
 
-> ⚠️ **varlock's decorator and resolver syntax moves fast.** The spellings below
-> follow the hub playbook as of 2026-09-17; verify each one against the actually
-> installed version and record what parsed in the migration log. Treat this
-> section as intent, not as copy-paste truth.
+> ✅ **Verified against varlock 1.19.0 / `@varlock/infisical-plugin` 2.1.1**
+> on 2026-09-18 during phase 1. Two corrections were needed versus the hub
+> playbook and are already applied below:
+>
+> 1. **`secretPath` is positional, not a named argument.** The real signature is
+>    `infisical(instanceId, secretName, secretPath)` — the playbook's
+>    `infisical(dev, path="/x")` does not parse.
+> 2. **The secret zero has dedicated types.** `@type=infisicalClientId` and
+>    `@type=infisicalClientSecret` exist and are better than `@type=string`.
+>
+> Also learned the hard way: a comment line that begins with `@` is parsed as a
+> decorator. Prose must not start with `@` or it produces a confusing
+> "decorator cannot be used twice" error.
 
 ### Infisical project
 
@@ -308,19 +322,19 @@ to, which is the deliberate cost of sharing `/cloudflare` and `/database`:
 
 # --- shared systems ---
 # @type=url @sensitive
-DATABASE_URL=forEnv(production, infisical(prod, path="/database"), infisical(dev, path="/database"))
+DATABASE_URL=forEnv(production, infisical(prod, "DATABASE_URL", "/database"), infisical(dev, "DATABASE_URL", "/database"))
 # @sensitive
-R2_ACCESS_KEY_ID=forEnv(production, infisical(prod, path="/cloudflare"), infisical(dev, path="/cloudflare"))
+R2_ACCESS_KEY_ID=forEnv(production, infisical(prod, "R2_ACCESS_KEY_ID", "/cloudflare"), infisical(dev, "R2_ACCESS_KEY_ID", "/cloudflare"))
 # @sensitive
-R2_SECRET_ACCESS_KEY=forEnv(production, infisical(prod, path="/cloudflare"), infisical(dev, path="/cloudflare"))
+R2_SECRET_ACCESS_KEY=forEnv(production, infisical(prod, "R2_ACCESS_KEY_ID", "/cloudflare"), infisical(dev, "R2_ACCESS_KEY_ID", "/cloudflare"))
 # stored once as CLOUDFLARE_ACCOUNT_ID; the app keeps the name it already uses
-R2_ACCOUNT_ID=forEnv(production, infisical(prod, "CLOUDFLARE_ACCOUNT_ID", path="/cloudflare"), infisical(dev, "CLOUDFLARE_ACCOUNT_ID", path="/cloudflare"))
+R2_ACCOUNT_ID=forEnv(production, infisical(prod, "CLOUDFLARE_ACCOUNT_ID", "/cloudflare"), infisical(dev, "CLOUDFLARE_ACCOUNT_ID", "/cloudflare"))
 
 # --- this app's own ---
 # @sensitive
-BETTER_AUTH_SECRET=forEnv(production, infisical(prod, path="/server-hono"), infisical(dev, path="/server-hono"))
+BETTER_AUTH_SECRET=forEnv(production, infisical(prod, "BETTER_AUTH_SECRET", "/server-hono"), infisical(dev, "BETTER_AUTH_SECRET", "/server-hono"))
 # @sensitive
-RESEND_API_KEY=forEnv(production, infisical(prod, path="/server-hono"), infisical(dev, path="/server-hono"))
+RESEND_API_KEY=forEnv(production, infisical(prod, "BETTER_AUTH_SECRET", "/server-hono"), infisical(dev, "BETTER_AUTH_SECRET", "/server-hono"))
 
 # --- non-sensitive config: committed literals, never Infisical ---
 R2_BUCKET=kaipu-private-bucket
