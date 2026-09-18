@@ -78,6 +78,7 @@ export default defineConfig({
             { slug: "backlog/backend-security-hardening" },
             { slug: "backlog/dependency-security-upgrades" },
             { slug: "backlog/r2-upload-integrity" },
+            { slug: "backlog/secrets-inventory" },
             { slug: "backlog/production-cloud-security" },
             { slug: "backlog/desktop-auth-and-r2-cors" },
             { slug: "backlog/api-abuse-controls" },
