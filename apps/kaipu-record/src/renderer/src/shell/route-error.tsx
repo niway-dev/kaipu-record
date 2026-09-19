@@ -1,5 +1,5 @@
 import { isRouteErrorResponse, useNavigate, useRouteError } from "react-router-dom";
-import { useTranslations } from "@kaipu/i18n";
+import { useTranslations, type Translator } from "@kaipu/i18n";
 import styles from "./route-error.module.css";
 
 interface ErrorInfo {
@@ -8,15 +8,7 @@ interface ErrorInfo {
   detail: string;
 }
 
-type Translate = (
-  key:
-    | "notFound"
-    | "notFoundDetail"
-    | "requestError"
-    | "routeError"
-    | "unexpected"
-    | "unknownError",
-) => string;
+type Translate = Translator<"routeError">;
 
 function describe(error: unknown, t: Translate): ErrorInfo {
   if (isRouteErrorResponse(error)) {
