@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.0](https://github.com/csdev19/kaipu-record-monorepo/compare/api-v0.2.0...api-v0.3.0) (2026-09-19)
+
+
+### Features
+
+* **auth:** send verification and password reset emails via Resend ([3984a40](https://github.com/csdev19/kaipu-record-monorepo/commit/3984a40025ae6ebdf38866c5ef3e4d0d51720262))
+* **console:** add the Kaipu Console app ([5463632](https://github.com/csdev19/kaipu-record-monorepo/commit/5463632e520cd5e2c075c825c94eaaa2d1ffd008))
+* **email:** transactional email with Resend (verification + password reset) ([ecdc957](https://github.com/csdev19/kaipu-record-monorepo/commit/ecdc9571ef5e43377ce30371fe78defaaf6eee63))
+* **secrets:** source local env from Infisical, drop dotenvx ([c6a81c1](https://github.com/csdev19/kaipu-record-monorepo/commit/c6a81c19eac4423b46605d614fd4e3cb4d183c45))
+* **secrets:** source local env from Infisical, drop dotenvx ([e24c9d9](https://github.com/csdev19/kaipu-record-monorepo/commit/e24c9d9fd56b21a1cb117750e6aa147eac80f1ff))
+
 ## [0.2.0](https://github.com/csdev19/kaipu-record-monorepo/compare/api-v0.1.2...api-v0.2.0) (2026-09-15)
 
 
