@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.1](https://github.com/csdev19/kaipu-record-monorepo/compare/desktop-v0.6.0...desktop-v0.6.1) (2026-09-19)
+
+
+### Bug Fixes
+
+* **desktop:** bump electron-builder to 26.16.1 for macOS 26.6 signing ([fef6783](https://github.com/csdev19/kaipu-record-monorepo/commit/fef678356bd67886ad1edc1ab5e48377d8997793))
+* **desktop:** bump electron-builder to 26.16.1 for macOS 26.6 signing ([6afce27](https://github.com/csdev19/kaipu-record-monorepo/commit/6afce2768cb232284d7554d4b04eceff985475ef))
+
 ## [0.6.0](https://github.com/csdev19/kaipu-record-monorepo/compare/desktop-v0.5.0...desktop-v0.6.0) (2026-09-19)
 
 
