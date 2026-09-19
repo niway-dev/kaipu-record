@@ -89,7 +89,7 @@ endpoints report "Cloud storage is not configured" until they're present:
   **off**, no custom domain, per the architecture doc's hard rule).
 
 Apply the schema with `bun run db:push` (the repo has no versioned migrations) — **done** on the
-local/dev database. Still pending: `wrangler secret put <NAME>` for all four vars on the
+local/dev database. Still pending: setting all four vars for the production Worker — via the release workflow, not `wrangler secret put`, on the
 **production** Worker (`apps/server-hono`).
 
 ## How to test

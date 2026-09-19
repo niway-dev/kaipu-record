@@ -5,9 +5,13 @@ description: Every command used in the project — development, database, operat
 
 # Commands
 
-Run root commands from the repository root. Commands that touch the database load
-`apps/server-hono/.env` through dotenvx, which **never overrides a variable already set** — so
-`DATABASE_URL` in your shell, or written before the command, wins over the file.
+Run root commands from the repository root. Commands that touch the database fetch their
+environment from Infisical through `scripts/with-env.sh`, filtered to the `db-scripts` tag so
+they receive `DATABASE_URL` and nothing else.
+
+**Infisical overrides variables already set in your shell.** dotenvx, which this replaced, did
+the opposite. Prefixing a command with a different `DATABASE_URL` no longer wins — see
+[Production](#production) below for how to target another database.
 
 ## Development
 
@@ -29,7 +33,8 @@ Run root commands from the repository root. Commands that touch the database loa
 | `bun run db:generate` | Generate versioned migration files. Not used today; the project stays on `db:push` until an ADR adopts migrations. |
 | `bun run db:migrate`  | Apply versioned migrations. Not used today, same reason.                                                           |
 
-Never run `db:*` from `packages/infra-db/` directly: the root scripts are what load the env file.
+Never run `db:*` from `packages/infra-db/` directly: the root scripts are what fetch the
+environment.
 
 ## Plans — make an account premium (pro)
 
@@ -41,13 +46,16 @@ bun run plan grant <email>    # active, non-expiring manual pro (safe to repeat)
 bun run plan revoke <email>   # remove the manual grant, back to free
 ```
 
-- The command first prints `Database: <host>` — check it before trusting the result.
-- **Development:** no extra setup; it uses `apps/server-hono/.env`.
-- **Production:** put the URL in front of the command only, never `export` it, so later commands
-  do not silently hit production:
+- The command first prints `Database: <host>` — check it before trusting the result. This is the
+  safety net for everything below.
+- **Development:** no extra setup; it fetches the `dev` database URL from Infisical.
+- **Production:** `SKIP_INFISICAL=1` is required. Without it Infisical overwrites the URL you
+  passed and the command silently grants pro in **development** instead:
   ```bash
-  DATABASE_URL='<production url>' bun run plan grant <email>
+  SKIP_INFISICAL=1 DATABASE_URL='<production url>' bun run plan grant <email>
   ```
+  Put both in front of the command, never `export` them, so later commands do not inherit a
+  production connection.
 - Run `show` first: "No account uses the email" usually means the wrong database.
 - It refuses to change a subscription a billing provider (`stripe`, `autumn`) owns.
 - The user restarts the desktop app (or signs out and in) to pick up the change.

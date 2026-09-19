@@ -22,9 +22,9 @@ Welcome to the **Kaipu** documentation. A modern full-stack monorepo built with 
 # Install dependencies
 bun install
 
-# Set up environment variables
-cp .env.example .env
-cp .dev.vars.example .dev.vars
+# Check tooling, then sign in — there are no .env files to create
+bun run setup
+infisical login
 
 # Run database migrations
 bun run db:push

@@ -63,8 +63,8 @@ from the original machine or the secret store. Keys used by this work:
 | `BETTER_AUTH_SECRET`, `CORS_ORIGIN`                                      | Server auth.                                                                                                          |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | Private bucket `kaipu-private-bucket`. Needed by the spikes and, from Task 10, by the routes.                         |
 
-`.env` contains an unquoted `&` in `DATABASE_URL`, so `source .env` fails in zsh. Use `dotenvx`
-(the root `db:*` scripts already do) or export single keys with `grep`.
+Do not `source` a generated `.env`: an unquoted `&` in `DATABASE_URL` breaks it in zsh. Use
+`scripts/with-env.sh`, which the root `db:*` scripts already do.
 
 ### Database state
 
@@ -83,9 +83,9 @@ one. Its guards hide drift: it does not prove existing tables match the schema.
 
 ```bash
 bun run check-types && bun run test && bun run check        # expect exit 0 for each
-cd packages/infra-db && \
-  bunx dotenvx run -f ../../apps/server-hono/.env -- \
-  sh -c 'TEST_DATABASE_URL="$DATABASE_URL" bun run test:integration'   # expect 10 passed
+bash scripts/with-env.sh --tags db-scripts -- \
+  sh -c 'cd packages/infra-db && TEST_DATABASE_URL="$DATABASE_URL" bun run test:integration'
+  # expect 10 passed
 ```
 
 Real-R2 evidence can be re-run (both scripts delete what they create):

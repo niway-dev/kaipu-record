@@ -394,15 +394,14 @@ VITE_SERVER_URL=http://localhost:3000
 VITE_SERVER_URL=https://your-backend.workers.dev
 ```
 
-### Backend (`.dev.vars`)
+### Backend
 
-```bash
-CORS_ORIGIN=http://localhost:3001
-BETTER_AUTH_SECRET=your-secret-key
-BETTER_AUTH_URL=http://localhost:3000
-DATABASE_URL=postgresql://...
-DATABASE_URL_DIRECT=postgresql://...
-```
+The API Worker reads `CORS_ORIGIN`, `BETTER_AUTH_SECRET`, `PUBLIC_WEB_URL` and
+`DATABASE_URL`. There is no file to create: `bun run dev` fetches them from
+Infisical and generates the `.env` that wrangler loads.
+
+See [Secrets layout](/deployment/secrets-layout/) for where each value lives and
+[Environment Variables](/backend/environment-variables/) for how it arrives.
 
 ---
 
