@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.2](https://github.com/csdev19/kaipu-record-monorepo/compare/desktop-v0.6.1...desktop-v0.6.2) (2026-09-19)
+
+
+### Bug Fixes
+
+* **kaipu-record:** keep the verification-email state across mounts ([52ae476](https://github.com/csdev19/kaipu-record-monorepo/commit/52ae47668a1fd12ae6cec043a405db5b17b24571))
+* **kaipu-record:** keep the verification-email state across mounts ([eacc93d](https://github.com/csdev19/kaipu-record-monorepo/commit/eacc93d99aa60ee5cf4709e7c5e4df5d651598c3))
+
 ## [0.6.1](https://github.com/csdev19/kaipu-record-monorepo/compare/desktop-v0.6.0...desktop-v0.6.1) (2026-09-19)
 
 
