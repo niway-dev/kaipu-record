@@ -1,7 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { AlertTriangle, CloudOff, KeyRound, PauseCircle, RefreshCw } from "lucide-react";
-import { useTranslations } from "@kaipu/i18n";
+import { useTranslations, type Translator } from "@kaipu/i18n";
 import type { AuthStatus } from "@shared/types/auth";
 import { entitlementsFromStatus } from "@shared/entitlements";
 import { Button } from "@renderer/ui/button";
@@ -10,13 +10,7 @@ import { barSegments, type CapacityView } from "./capacity-view";
 import { formatBytesDecimal, MAX_VIDEO_BYTES } from "./format-bytes";
 import styles from "./storage-cloud-settings.module.css";
 
-/**
- * Scoped to the namespace the helpers below actually read. The un-namespaced
- * `ReturnType<typeof useTranslations>` makes TypeScript instantiate use-intl's
- * recursive key types over the *whole* catalog, which trips TS2589 once the
- * catalog grows another level of nesting.
- */
-type Translate = ReturnType<typeof useTranslations<"storageCloud">>;
+type Translate = Translator<"storageCloud">;
 
 function ageLabel(t: Translate, since: number, now: number): string {
   const minutes = Math.floor((now - since) / 60_000);
