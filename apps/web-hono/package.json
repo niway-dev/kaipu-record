@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
+    "check-types": "tsc --noEmit",
     "serve": "vite preview",
     "alchemy:dev": "alchemy dev",
     "env:pull": "bash ../../scripts/pull-env.sh web-hono .env",
