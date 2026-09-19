@@ -58,13 +58,27 @@ Rules and the offline behaviour: [Pro mode — entitlements conditions](/feature
 
 | Command                  | What it does                                          |
 | ------------------------ | ----------------------------------------------------- |
-| `bun run check-types`    | Type-check every package.                             |
+| `bun run check-types`    | Type-check every workspace, apps included.            |
 | `bun run lint`           | Lint with oxlint.                                     |
 | `bun run format`         | Format with oxfmt.                                    |
 | `bun run format:tracked` | Format only git-tracked files.                        |
 | `bun run check`          | Lint, then format.                                    |
 | `bun run test`           | Run every package's unit tests.                       |
 | `bun run build`          | Build everything (`build:no-cache` forces a rebuild). |
+
+:::caution[Every workspace must expose `check-types`]
+Turbo only runs a task where a package declares it, and it says nothing about the
+packages that don't. A workspace with no `check-types` script is silently skipped, and
+the root command still reports success — which is how `apps/web-hono` went without any
+type checking at all, and how the desktop's `typecheck` (a different name) was left out
+of the root task.
+
+So: **a new workspace declares `check-types`, spelled exactly that way**, and CI needs no
+new step. If it depends on a package that exports built files rather than source — today
+only `@kaipu/web-ui` — give it a package-level `turbo.json` with
+`"dependsOn": ["transit", "^build"]`, as `apps/web-hono` does; otherwise `tsc` runs before
+that `dist/` exists and fails on a missing module.
+:::
 
 ## Per app
 
@@ -75,6 +89,6 @@ Rules and the offline behaviour: [Pro mode — entitlements conditions](/feature
 `bun run wrangler:types`.
 
 **Desktop (`apps/kaipu-record`)** — `bun run test`, `bun run test:e2e` (Playwright),
-`bun run typecheck`, `bun run build:mac` / `build:win` / `build:linux` (installers).
+`bun run check-types`, `bun run build:mac` / `build:win` / `build:linux` (installers).
 
 **Docs (`apps/documentation`)** — `bun run build`, `bun run preview`.
