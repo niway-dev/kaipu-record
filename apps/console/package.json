@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite dev",
+    "env:pull": "bash ../../scripts/pull-env.sh console .env",
+    "dev": "bun run env:pull && vite dev",
     "build": "vite build",
     "check-types": "tsc --noEmit",
     "test": "vitest run",

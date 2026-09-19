@@ -7,18 +7,26 @@ import { cloudAssetTable, cloudRevisionTable, cloudStorageAccountTable } from ".
 import { userTable } from "../schema/auth";
 
 const url = process.env.TEST_DATABASE_URL;
-const describeDb = url ? describe : describe.skip;
+// Fail, never skip. This suite is only ever run deliberately — `bun run test:integration`
+// is in no workflow — so a silent skip answers the one question the command was asked with
+// a green tick and ten untouched tests. Vitest's `describe.skip` did exactly that.
+if (!url) {
+  throw new Error(
+    "TEST_DATABASE_URL is not set, so these tests would report success without reaching a " +
+      "database.\nAdd it to Infisical under the `db-scripts` tag, pointing at a THROWAWAY " +
+      "database: this suite creates and deletes rows.",
+  );
+}
 
-describeDb("CloudAssetRepository (real database)", () => {
-  // `../client` builds a default client from DATABASE_URL at import time, which throws when that
-  // variable is unset. Importing it lazily (only when the suite actually runs) lets the file
-  // report as skipped without either variable. Vitest still runs a skipped describe body, so
-  // nothing in this body may touch the client synchronously.
+describe("CloudAssetRepository (real database)", () => {
+  // `../client` builds a default client from DATABASE_URL at import time and throws when that
+  // variable is unset. This suite connects to TEST_DATABASE_URL instead, so the import stays
+  // lazy: a plain top-level import would make the file fail over a variable it never uses.
   let db: DatabaseClient;
   let repo: CloudAssetRepository;
   beforeAll(async () => {
     const { createDatabaseClient } = await import("../client");
-    db = createDatabaseClient(url ?? "");
+    db = createDatabaseClient(url);
     repo = new CloudAssetRepository(db);
   });
   // Unique per run: this suite creates and deletes only this throwaway user's rows.
