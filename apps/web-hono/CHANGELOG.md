@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.8.0](https://github.com/csdev19/kaipu-record-monorepo/compare/web-v0.7.0...web-v0.8.0) (2026-09-19)
+
+
+### Features
+
+* **web:** public roadmap page at /roadmap ([9ff2a92](https://github.com/csdev19/kaipu-record-monorepo/commit/9ff2a92bc929d616c8c502b2a0d0d9a9d2ca1e17))
+* **web:** public roadmap page at /roadmap ([b1ecd49](https://github.com/csdev19/kaipu-record-monorepo/commit/b1ecd4991b23f7a7e3a20617625558707906d46d))
+
+
+### Bug Fixes
+
+* **web-hono:** give the dev Worker its env instead of the parent process ([b91ee91](https://github.com/csdev19/kaipu-record-monorepo/commit/b91ee91655d452b73c0da5ee780d32da61c74b4e))
+* **web-hono:** give the dev Worker its env instead of the parent process ([20df0f2](https://github.com/csdev19/kaipu-record-monorepo/commit/20df0f212f1186d6ee69edb85b3dd5b5d87fee7a))
+* **web:** one header per public page, and English as the default locale ([d955a26](https://github.com/csdev19/kaipu-record-monorepo/commit/d955a26a6dff1ac078b2c3fe993df459f069c1c9))
+* **web:** one header per public page, and English as the default locale ([4df313c](https://github.com/csdev19/kaipu-record-monorepo/commit/4df313c4c9b9a86ae1c437c1ec22919fa38455ba))
+
 ## [0.7.0](https://github.com/csdev19/kaipu-record-monorepo/compare/web-v0.6.0...web-v0.7.0) (2026-09-19)
 
 
