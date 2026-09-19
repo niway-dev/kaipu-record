@@ -799,5 +799,88 @@
     "approvedHeading": "Tienes más espacio en Cloud",
     "approvedBody": "Tu solicitud fue aprobada. Tu cuenta ahora tiene {capacity} de espacio total en Kaipu Cloud.",
     "approvedButton": "Abrir Kaipu"
+  },
+  "roadmap": {
+    "navLabel": "Roadmap",
+    "eyebrow": "Roadmap público",
+    "heading": "Qué hace Kaipu Record hoy y qué viene después",
+    "intro": "Todo lo de abajo está agrupado por estado, no por fecha. Lo lanzado es lo que ya tienes al descargar Kaipu Record; lo planeado es lo que estamos construyendo ahora.",
+    "disclaimer": "El orden es una prioridad, no una promesa. Los planes se mueven a medida que aprendemos qué necesita la gente de verdad.",
+    "count": "{count, plural, one {# elemento} other {# elementos}}",
+    "status": {
+      "shipped": "Lanzado",
+      "inProgress": "En progreso",
+      "planned": "Planeado"
+    },
+    "items": {
+      "screenAndCamera": {
+        "title": "Grabación de pantalla y cámara",
+        "description": "Graba tu pantalla y tu cámara en alta calidad, con una burbuja de cámara flotante y presets que equilibran tamaño y nitidez."
+      },
+      "videoEditor": {
+        "title": "Editor de video integrado",
+        "description": "Recorta y exporta tus grabaciones sin salir de la app, con miniatura generada para cada video editado."
+      },
+      "screenshotAnnotations": {
+        "title": "Anotaciones en capturas",
+        "description": "Captura y anota con formas y texto: etiquetas de varias líneas, cajas redimensionables con ajuste de línea y doble clic para editar una etiqueta en su sitio."
+      },
+      "library": {
+        "title": "Biblioteca de grabaciones",
+        "description": "Cada captura llega a una sola biblioteca con vistas previas, renombrado y recuperación de grabaciones importadas o interrumpidas."
+      },
+      "watermark": {
+        "title": "Marca de agua en las exportaciones",
+        "description": "Sella tus exportaciones con una marca de agua para que los clips que compartes lleven tu marca."
+      },
+      "shortcuts": {
+        "title": "Atajos de teclado globales",
+        "description": "Inicia, pausa y detén una captura desde donde estés, sin tener que buscar la ventana primero."
+      },
+      "themeAndLanguages": {
+        "title": "Tema claro y oscuro, español e inglés",
+        "description": "Toda la app sigue una paleta compartida de design tokens en ambos temas, y está traducida por completo al español y al inglés."
+      },
+      "accounts": {
+        "title": "Cuentas y verificación de correo",
+        "description": "Crea tu cuenta, inicia sesión, recupera tu contraseña y verifica tu correo. Grabar sigue funcionando sin ninguna cuenta."
+      },
+      "cloudFoundation": {
+        "title": "Bases de Kaipu Cloud",
+        "description": "Una sola biblioteca que combina archivos locales con tu catálogo en la nube, caché por cuenta, modos de guardado, límites de capacidad y quitar la copia local conservando la de la nube."
+      },
+      "cloudUpload": {
+        "title": "Terminar la subida a la nube de punta a punta",
+        "description": "Subir cada captura a Kaipu Cloud automáticamente, con transferencias reanudables, progreso claro y reintentos cuando se cae la red."
+      },
+      "videoZoom": {
+        "title": "Zoom en videos",
+        "description": "Acercar una zona de la grabación para que el detalle que señalas se lea de verdad para quien lo ve."
+      },
+      "photoZoom": {
+        "title": "Zoom en el visor de imágenes",
+        "description": "Acercar y desplazar dentro del visor de capturas, en vez de forzar la vista sobre una imagen reducida."
+      },
+      "watermarkUpgrade": {
+        "title": "Una marca de agua mejor",
+        "description": "Más control sobre la marca de agua: posición, tamaño, opacidad y tu propio logo en lugar de un sello fijo."
+      },
+      "imageTags": {
+        "title": "Etiquetas en imágenes",
+        "description": "Etiquetar capturas y agruparlas por etiqueta, para que una biblioteca larga siga siendo navegable."
+      },
+      "renameOnSave": {
+        "title": "Renombrar una imagen después de guardarla",
+        "description": "Cambiar el nombre de una captura cuando ya está guardada, sin salir a Finder."
+      },
+      "saveEveryScreenshot": {
+        "title": "Opción de guardar todas las capturas",
+        "description": "Un ajuste opcional que guarda en la biblioteca cada captura que tomas, en vez de solo las que guardas a mano."
+      },
+      "brandIdentity": {
+        "title": "Logo e identidad renovados",
+        "description": "Un logo más definido y una identidad visual consistente entre la app, el sitio y los instaladores."
+      }
+    }
   }
 }
