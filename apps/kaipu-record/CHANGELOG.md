@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.6.0](https://github.com/csdev19/kaipu-record-monorepo/compare/desktop-v0.5.0...desktop-v0.6.0) (2026-09-19)
+
+
+### Features
+
+* **console:** add the Kaipu Console app ([5463632](https://github.com/csdev19/kaipu-record-monorepo/commit/5463632e520cd5e2c075c825c94eaaa2d1ffd008))
+* **desktop:** forgot-password link and resend-verification action ([1e6484a](https://github.com/csdev19/kaipu-record-monorepo/commit/1e6484ae7aa7f6e025008dcb49aab878aac61387))
+* **email:** transactional email with Resend (verification + password reset) ([ecdc957](https://github.com/csdev19/kaipu-record-monorepo/commit/ecdc9571ef5e43377ce30371fe78defaaf6eee63))
+* **secrets:** source local env from Infisical, drop dotenvx ([c6a81c1](https://github.com/csdev19/kaipu-record-monorepo/commit/c6a81c19eac4423b46605d614fd4e3cb4d183c45))
+* **secrets:** source local env from Infisical, drop dotenvx ([e24c9d9](https://github.com/csdev19/kaipu-record-monorepo/commit/e24c9d9fd56b21a1cb117750e6aa147eac80f1ff))
+
+
+### Bug Fixes
+
+* **kaipu-record:** add manual refresh for email-verification banner ([d18dbbd](https://github.com/csdev19/kaipu-record-monorepo/commit/d18dbbd80e2a01eef5bb4bf6ce4a672aa59c740c))
+* **kaipu-record:** add manual refresh for email-verification banner ([c64f0ec](https://github.com/csdev19/kaipu-record-monorepo/commit/c64f0ec861b7e292d525bf1fabe7bbc206d9c561))
+* **secrets:** do not couple builds to the Infisical CLI ([fd32f0d](https://github.com/csdev19/kaipu-record-monorepo/commit/fd32f0d0c2056a3e106c5cc3ea5d26d4d981f415))
+* **secrets:** scope env per consumer instead of fetching everything ([700b193](https://github.com/csdev19/kaipu-record-monorepo/commit/700b193233e982b41abb91bcfd50d57e979fcafe))
+
 ## [0.5.0](https://github.com/csdev19/kaipu-record-monorepo/compare/desktop-v0.4.0...desktop-v0.5.0) (2026-09-15)
 
 
