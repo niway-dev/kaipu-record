@@ -20,11 +20,18 @@ export function tryGetEmail(): EmailService | null {
     service = null;
     return service;
   }
-  service = new EmailService(
-    new ResendEmailProvider(env.RESEND_API_KEY),
-    env.AUTH_EMAIL_FROM ?? DEFAULT_FROM,
-    { replyTo: REPLY_TO },
-  );
+  const from = env.AUTH_EMAIL_FROM ?? DEFAULT_FROM;
+  // Announce the sender once per isolate. An unverified sending domain is the
+  // most common reason a provider rejects a message, and AUTH_EMAIL_FROM is
+  // optional — so which address is actually in use, and whether it came from
+  // configuration or the fallback, is the first thing an incident needs.
+  console.log("transactional email enabled", {
+    from,
+    fromSource: env.AUTH_EMAIL_FROM ? "AUTH_EMAIL_FROM" : "default",
+  });
+  service = new EmailService(new ResendEmailProvider(env.RESEND_API_KEY), from, {
+    replyTo: REPLY_TO,
+  });
   return service;
 }
 

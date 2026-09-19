@@ -8,6 +8,18 @@ export interface EmailMessage {
   text: string;
 }
 
+export interface EmailSendResult {
+  /**
+   * The provider's id for the accepted message, when it returns one. Logging it
+   * is what lets "the user says no email arrived" be matched against a row in
+   * the provider's dashboard instead of guessed at.
+   */
+  id?: string;
+}
+
 export interface IEmailProvider {
-  send(message: EmailMessage): Promise<void>;
+  /** Identifies the provider in failure logs. */
+  readonly name: string;
+  /** Throws `EmailSendError` on rejection. */
+  send(message: EmailMessage): Promise<EmailSendResult>;
 }
