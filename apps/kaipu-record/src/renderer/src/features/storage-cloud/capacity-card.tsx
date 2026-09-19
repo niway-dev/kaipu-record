@@ -10,7 +10,13 @@ import { barSegments, type CapacityView } from "./capacity-view";
 import { formatBytesDecimal, MAX_VIDEO_BYTES } from "./format-bytes";
 import styles from "./storage-cloud-settings.module.css";
 
-type Translate = ReturnType<typeof useTranslations>;
+/**
+ * Scoped to the namespace the helpers below actually read. The un-namespaced
+ * `ReturnType<typeof useTranslations>` makes TypeScript instantiate use-intl's
+ * recursive key types over the *whole* catalog, which trips TS2589 once the
+ * catalog grows another level of nesting.
+ */
+type Translate = ReturnType<typeof useTranslations<"storageCloud">>;
 
 function ageLabel(t: Translate, since: number, now: number): string {
   const minutes = Math.floor((now - since) / 60_000);

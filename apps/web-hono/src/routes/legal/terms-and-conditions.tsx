@@ -3,11 +3,11 @@ import { pageHead } from "@/lib/seo";
 import { LegalPage } from "@/components/legal/legal-page";
 
 export const Route = createFileRoute("/legal/terms-and-conditions")({
-  head: () =>
+  staticData: { shell: "marketing" },
+  head: ({ match }) =>
     pageHead({
-      title: "Términos y condiciones | Kaipu Record",
-      description:
-        "Condiciones de uso de Kaipu Record y sus servicios Cloud, operados por Niway S.A.C.",
+      locale: match.context.locale,
+      page: "terms-and-conditions",
       path: "/legal/terms-and-conditions",
     }),
   component: () => <LegalPage document="terms" />,

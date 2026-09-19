@@ -800,6 +800,32 @@
     "approvedBody": "Your request was approved. Your account now has {capacity} of total Kaipu Cloud space.",
     "approvedButton": "Open Kaipu"
   },
+  "seo": {
+    "siteTitle": "Kaipu Record — Record your screen, without the hassle",
+    "siteDescription": "Record your screen and camera in high quality, straight from your Mac. Edit, export and share. Private, fast, and no account needed.",
+    "pages": {
+      "roadmap": {
+        "title": "Roadmap | Kaipu Record",
+        "description": "What Kaipu Record already does and what comes next: the public roadmap, grouped by state."
+      },
+      "terms-and-conditions": {
+        "title": "Terms and conditions | Kaipu Record",
+        "description": "Terms of use for Kaipu Record and its Cloud services, operated by Niway S.A.C."
+      },
+      "privacy-policy": {
+        "title": "Privacy policy | Kaipu Record",
+        "description": "What data Kaipu Record processes, what for, with which providers, and how to exercise your rights."
+      },
+      "cloud-terms": {
+        "title": "Cloud terms | Kaipu Record",
+        "description": "Promotional free storage, limits, acceptable use and changes to Kaipu Cloud."
+      },
+      "cookies": {
+        "title": "Cookies and local storage | Kaipu Record",
+        "description": "The session and preference cookies Kaipu Record uses, and how to manage them."
+      }
+    }
+  },
   "roadmap": {
     "navLabel": "Roadmap",
     "eyebrow": "Public roadmap",

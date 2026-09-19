@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_SETTINGS, DEFAULT_SHORTCUTS } from "@shared/types";
 import { DEFAULT_QUALITY, QUALITY_PRESETS } from "@shared/recording-quality";
+import { DEFAULT_LOCALE } from "@kaipu/i18n";
 import { isValidTheme, mergeSettings, mergeShortcuts } from "./settings.service";
+
+describe("DEFAULT_SETTINGS", () => {
+  // `@shared/types` cannot import the i18n package (preload bundle), so its
+  // locale default is a literal. This is the guard that keeps the copy honest.
+  it("uses the same locale default as @kaipu/i18n", () => {
+    expect(DEFAULT_SETTINGS.locale).toBe(DEFAULT_LOCALE);
+  });
+});
 
 describe("isValidTheme", () => {
   it("accepts the known themes", () => {
@@ -62,9 +71,9 @@ describe("mergeSettings", () => {
   });
 
   it("keeps a valid persisted locale and defaults an invalid one", () => {
-    expect(mergeSettings({ locale: "en" }).locale).toBe("en");
-    expect(mergeSettings({ locale: "fr" as never }).locale).toBe("es");
-    expect(mergeSettings({}).locale).toBe("es");
+    expect(mergeSettings({ locale: "es" }).locale).toBe("es");
+    expect(mergeSettings({ locale: "fr" as never }).locale).toBe("en");
+    expect(mergeSettings({}).locale).toBe("en");
   });
 
   it("defaults showBarInRecording to false when absent or invalid", () => {

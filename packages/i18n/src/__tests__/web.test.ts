@@ -13,9 +13,9 @@ describe("normalizeLocale", () => {
   });
 
   it("falls back to the default for unsupported or empty input", () => {
-    expect(normalizeLocale("fr")).toBe("es");
-    expect(normalizeLocale("")).toBe("es");
-    expect(normalizeLocale(null)).toBe("es");
+    expect(normalizeLocale("fr")).toBe("en");
+    expect(normalizeLocale("")).toBe("en");
+    expect(normalizeLocale(null)).toBe("en");
   });
 });
 
@@ -33,8 +33,15 @@ describe("detectLocaleFromRequest", () => {
     expect(detectLocaleFromRequest(req)).toBe("en");
   });
 
-  it("defaults to es when nothing matches", () => {
-    expect(detectLocaleFromRequest(requestWith({}))).toBe("es");
-    expect(detectLocaleFromRequest(requestWith({ "accept-language": "fr-FR" }))).toBe("es");
+  it("defaults to en when nothing matches", () => {
+    expect(detectLocaleFromRequest(requestWith({}))).toBe("en");
+    expect(detectLocaleFromRequest(requestWith({ "accept-language": "fr-FR" }))).toBe("en");
+  });
+
+  it("still honours an explicit Spanish preference", () => {
+    expect(detectLocaleFromRequest(requestWith({ "accept-language": "es-PE,es;q=0.9" }))).toBe(
+      "es",
+    );
+    expect(detectLocaleFromRequest(requestWith({ cookie: "KAIPU_LOCALE=es" }))).toBe("es");
   });
 });

@@ -1,6 +1,12 @@
 export const SUPPORTED_LOCALES = ["es", "en"] as const;
 export type Locale = (typeof SUPPORTED_LOCALES)[number];
-export const DEFAULT_LOCALE: Locale = "es";
+/**
+ * English is the fallback for anyone with no stated preference — the web's tab
+ * title and first paint, and a fresh desktop install. An explicit choice always
+ * wins: a locale cookie, a desktop setting, or a Spanish `Accept-Language` still
+ * resolves to Spanish.
+ */
+export const DEFAULT_LOCALE: Locale = "en";
 export const TIME_ZONE = "America/Lima";
 
 export function isLocale(value: unknown): value is Locale {
