@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.7.0](https://github.com/csdev19/kaipu-record-monorepo/compare/web-v0.6.0...web-v0.7.0) (2026-09-19)
+
+
+### Features
+
+* **console:** add the Kaipu Console app ([5463632](https://github.com/csdev19/kaipu-record-monorepo/commit/5463632e520cd5e2c075c825c94eaaa2d1ffd008))
+* **email:** transactional email with Resend (verification + password reset) ([ecdc957](https://github.com/csdev19/kaipu-record-monorepo/commit/ecdc9571ef5e43377ce30371fe78defaaf6eee63))
+* **secrets:** source local env from Infisical, drop dotenvx ([c6a81c1](https://github.com/csdev19/kaipu-record-monorepo/commit/c6a81c19eac4423b46605d614fd4e3cb4d183c45))
+* **secrets:** source local env from Infisical, drop dotenvx ([e24c9d9](https://github.com/csdev19/kaipu-record-monorepo/commit/e24c9d9fd56b21a1cb117750e6aa147eac80f1ff))
+* **web:** forgot-password, reset-password and email-verified pages ([b8f8b37](https://github.com/csdev19/kaipu-record-monorepo/commit/b8f8b377a328c9ee3bc0f42376eccdfe401ac889))
+
+
+### Bug Fixes
+
+* **secrets:** do not couple builds to the Infisical CLI ([fd32f0d](https://github.com/csdev19/kaipu-record-monorepo/commit/fd32f0d0c2056a3e106c5cc3ea5d26d4d981f415))
+* **secrets:** scope env per consumer instead of fetching everything ([700b193](https://github.com/csdev19/kaipu-record-monorepo/commit/700b193233e982b41abb91bcfd50d57e979fcafe))
+
 ## [0.6.0](https://github.com/csdev19/kaipu-record-monorepo/compare/web-v0.5.0...web-v0.6.0) (2026-09-15)
 
 
