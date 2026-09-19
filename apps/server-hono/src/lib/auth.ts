@@ -1,5 +1,5 @@
 import { baseConfig, getCustomSession } from "@kaipu/infra-auth";
-import { EMAIL_TEMPLATE_VALUES, type EmailLocale } from "@kaipu/infra-email";
+import { describeEmailFailure, EMAIL_TEMPLATE_VALUES, type EmailLocale } from "@kaipu/infra-email";
 import { betterAuth } from "better-auth";
 import { customSession } from "better-auth/plugins";
 import { env } from "../env";
@@ -32,15 +32,33 @@ export const auth = betterAuth({
     revokeSessionsOnPasswordReset: true,
     sendResetPassword: async ({ user, token }, request) => {
       const email = tryGetEmail();
-      if (!email) return; // already logged by tryGetEmail
+      if (!email) {
+        // tryGetEmail memoises, so it only warns the first time per isolate.
+        // Without this, every later skip is invisible while the caller still
+        // gets a 200 and the user waits for an email nobody attempted.
+        console.error("password reset email skipped: transactional email is disabled", {
+          userId: user.id,
+        });
+        return;
+      }
       try {
-        await email.sendEmail(EMAIL_TEMPLATE_VALUES.RESET_PASSWORD, user.email, {
+        const { id } = await email.sendEmail(EMAIL_TEMPLATE_VALUES.RESET_PASSWORD, user.email, {
           locale: emailLocale(request),
           resetUrl: buildResetUrl(webUrl(), token),
         });
+        console.log("password reset email accepted by the provider", {
+          userId: user.id,
+          providerMessageId: id,
+        });
       } catch (err) {
         // Better Auth swallows hook errors and still returns 200 — log loudly.
-        console.error("failed to send the password reset email", err);
+        // The cause goes in the message, not only in the Error argument: see
+        // describeEmailFailure for the log that lost it.
+        const { summary, fields } = describeEmailFailure(err);
+        console.error(`failed to send the password reset email — ${summary}`, {
+          userId: user.id,
+          ...fields,
+        });
         throw err;
       }
     },
@@ -52,14 +70,27 @@ export const auth = betterAuth({
     expiresIn: 60 * 60 * 24,
     sendVerificationEmail: async ({ user, token }, request) => {
       const email = tryGetEmail();
-      if (!email) return;
+      if (!email) {
+        console.error("verification email skipped: transactional email is disabled", {
+          userId: user.id,
+        });
+        return;
+      }
       try {
-        await email.sendEmail(EMAIL_TEMPLATE_VALUES.VERIFY_EMAIL, user.email, {
+        const { id } = await email.sendEmail(EMAIL_TEMPLATE_VALUES.VERIFY_EMAIL, user.email, {
           locale: emailLocale(request),
           verifyUrl: buildVerifyUrl(webUrl(), token),
         });
+        console.log("verification email accepted by the provider", {
+          userId: user.id,
+          providerMessageId: id,
+        });
       } catch (err) {
-        console.error("failed to send the verification email", err);
+        const { summary, fields } = describeEmailFailure(err);
+        console.error(`failed to send the verification email — ${summary}`, {
+          userId: user.id,
+          ...fields,
+        });
         throw err;
       }
     },
