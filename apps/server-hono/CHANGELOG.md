@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.0](https://github.com/csdev19/kaipu-record-monorepo/compare/api-v0.3.0...api-v0.4.0) (2026-09-19)
+
+
+### Features
+
+* **email:** report why a transactional send failed ([63d386d](https://github.com/csdev19/kaipu-record-monorepo/commit/63d386db1b82446315319af3c320f8a55a8de8b9))
+* **email:** report why a transactional send failed ([797cc0c](https://github.com/csdev19/kaipu-record-monorepo/commit/797cc0c35a9b2993e940920f95d3ad926b97a394))
+
 ## [0.3.0](https://github.com/csdev19/kaipu-record-monorepo/compare/api-v0.2.0...api-v0.3.0) (2026-09-19)
 
 
