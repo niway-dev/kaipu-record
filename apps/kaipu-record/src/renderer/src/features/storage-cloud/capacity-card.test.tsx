@@ -109,13 +109,61 @@ describe("CapacityCard", () => {
   it("lets an unverified account resend the verification email, then disables the button", async () => {
     const resend = vi
       .spyOn(window.electronAPI, "resendVerificationEmail")
-      .mockResolvedValue({ ok: true });
+      .mockResolvedValue({ ok: true, sentAt: NOW });
     renderCard({ kind: "beta-unavailable" });
     const button = screen.getByRole("button", { name: /resend verification email/i });
     fireEvent.click(button);
     expect(resend).toHaveBeenCalledTimes(1);
     expect(await screen.findByText(/verification email sent/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /resend verification email/i })).toBeDisabled();
+  });
+
+  it("offers no refresh until a verification email has actually been sent", () => {
+    renderCard({ kind: "beta-unavailable" });
+    expect(screen.queryByRole("button", { name: /refresh/i })).not.toBeInTheDocument();
+  });
+
+  it("offers refresh once the email is out", async () => {
+    vi.spyOn(window.electronAPI, "resendVerificationEmail").mockResolvedValue({
+      ok: true,
+      sentAt: NOW,
+    });
+    renderCard({ kind: "beta-unavailable" });
+    fireEvent.click(screen.getByRole("button", { name: /resend verification email/i }));
+    expect(await screen.findByRole("button", { name: /refresh/i })).toBeInTheDocument();
+  });
+
+  // The bug this fixes: the card is remounted on every visit to the cloud screen, so a send
+  // remembered only in component state was forgotten as soon as the user navigated away.
+  it("remembers a send from a previous mount, because it comes from the persisted status", () => {
+    renderCard(
+      { kind: "beta-unavailable" },
+      { status: { ...SIGNED_IN, verificationEmailSentAt: NOW - 1_000 } },
+    );
+    expect(screen.getByText(/verification email sent/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /refresh/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /resend verification email/i })).toBeDisabled();
+  });
+
+  it("re-enables resend once the cooldown has passed, but keeps refresh available", () => {
+    renderCard(
+      { kind: "beta-unavailable" },
+      { status: { ...SIGNED_IN, verificationEmailSentAt: NOW - 10 * 60_000 } },
+    );
+    expect(screen.getByRole("button", { name: /resend verification email/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /refresh/i })).toBeInTheDocument();
+  });
+
+  it("says so when the send fails, keeps resend usable and offers no refresh", async () => {
+    vi.spyOn(window.electronAPI, "resendVerificationEmail").mockResolvedValue({ ok: false });
+    renderCard({ kind: "beta-unavailable" });
+    fireEvent.click(screen.getByRole("button", { name: /resend verification email/i }));
+
+    expect(await screen.findByText(/could not be sent/i)).toBeInTheDocument();
+    // A failed send must not look identical to never having pressed the button.
+    expect(screen.queryByText(/verification email sent/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /resend verification email/i })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: /refresh/i })).not.toBeInTheDocument();
   });
 
   it("keeps the figures and adds a notice when uploads are suspended", () => {

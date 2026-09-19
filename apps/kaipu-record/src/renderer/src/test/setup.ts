@@ -139,6 +139,6 @@ window.electronAPI = {
   signIn: async () => ({ ok: true, status: { kind: "signed-out" } }),
   signUp: async () => ({ ok: true, status: { kind: "signed-out" } }),
   signOut: async () => {},
-  resendVerificationEmail: async () => ({ ok: true }),
+  resendVerificationEmail: async () => ({ ok: true, sentAt: Date.now() }),
   onAuthStatusChanged: () => () => {},
 };
