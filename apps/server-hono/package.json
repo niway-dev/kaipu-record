@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsdown",
     "check-types": "tsc -b",
-    "env:pull": "infisical export --env=dev --path=/ --silent > .env && infisical export --env=dev --path=/database --silent >> .env && infisical export --env=dev --path=/cloudflare --silent >> .env && infisical export --env=dev --path=/server-hono --silent >> .env",
+    "env:pull": "bash ../../scripts/pull-env.sh server-hono .env",
     "dev": "bun run env:pull && wrangler dev --port 3000 --inspector-port 9229",
     "deploy": "wrangler deploy",
     "cf:gen-types": "wrangler types --env-interface CloudflareBindings",
