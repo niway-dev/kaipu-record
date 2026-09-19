@@ -1,6 +1,6 @@
 {
   "name": "kaipu-record",
-  "version": "0.5.0",
+  "version": "0.6.1",
   "description": "Kaipu Record — local-first screen + camera recorder for macOS.",
   "homepage": "https://kaipu.app",
   "author": "Niway",
@@ -51,7 +51,7 @@
     "@vitejs/plugin-react": "^5.1.1",
     "@vitest/coverage-v8": "^4.1.9",
     "electron": "^39.2.6",
-    "electron-builder": "^26.0.12",
+    "electron-builder": "^26.16.1",
     "electron-vite": "^5.0.0",
     "jsdom": "^29.1.1",
     "react": "19.2.4",
