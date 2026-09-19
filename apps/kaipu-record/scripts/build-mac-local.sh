@@ -1,19 +1,37 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# electron-builder reads process.env but does NOT load .env* files itself, so we
-# inject the signing/notarization vars here before building. `set -a` exports
-# every assignment that follows (i.e. everything sourced from .env.signing).
-set -a
-# shellcheck disable=SC1091
-source "$(dirname "$0")/../.env.signing"
-set +a
+# Builds and signs a distributable locally.
+#
+# Signing and notarization credentials come from Infisical `prod/kaipu-record`
+# (they used to live in a local .env.signing). electron-builder reads process.env
+# and loads no files itself, so everything must be exported before it runs.
+#
+# `prod` is deliberate: a signed artifact is a production artifact. Running the
+# build under the dev environment would bake development endpoints into
+# something distributable — the failure mode this script exists to avoid.
+#
+# The env vars the renderer inlines (MAIN_VITE_* / VITE_*) are NOT fetched here.
+# Supply them yourself for the target you are building, e.g.
+#
+#   MAIN_VITE_SERVER_URL=https://kaipu-api.example.workers.dev bun run build:mac
+#
+# They are not in Infisical `prod` yet; the release workflow passes them from
+# GitHub Variables. Until that is migrated, an unset value means the build fails
+# its own startup guard rather than shipping a wrong endpoint silently.
+
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 
 echo "→ Signing identities available:"
 security find-identity -v -p codesigning | grep "Developer ID Application" || true
 
-# 1) build renderer + main with electron-vite (includes typecheck)
-npm run build
-
-# 2) package + sign (+ notarize + staple when the APPLE_API_* vars are set)
-npx electron-builder --mac --publish never
+# Fetch signing credentials for the packaging step only, then run both steps
+# inside that environment. `--path` is scoped: this needs the signing material
+# and nothing else.
+exec bash "$ROOT/scripts/with-env.sh" --env prod --path /kaipu-record -- bash -c '
+  set -euo pipefail
+  # 1) build renderer + main with electron-vite (includes typecheck)
+  npm run build
+  # 2) package + sign (+ notarize + staple when the APPLE_API_* vars are set)
+  npx electron-builder --mac --publish never
+'

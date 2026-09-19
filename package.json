@@ -32,6 +32,7 @@
   "type": "module",
   "scripts": {
     "prepare": "lefthook install",
+    "setup": "bash scripts/setup-dev.sh",
     "lint": "oxlint",
     "format": "oxfmt --write .",
     "format:tracked": "git ls-files | grep -E '\\.(ts|tsx|js|jsx|json|jsonc|md|mdx)$' | xargs oxfmt --write",
@@ -42,14 +43,14 @@
     "check-types": "turbo run check-types",
     "dev:web-hono": "turbo run dev -F web-hono",
     "dev:server-hono": "turbo run dev -F server-hono",
-    "db:command": "dotenvx run -f apps/server-hono/.env -- turbo run db:command -F @kaipu/infra-db",
-    "db:push": "dotenvx run -f apps/server-hono/.env -- turbo run db:push -F @kaipu/infra-db",
-    "db:studio": "dotenvx run -f apps/server-hono/.env -- turbo run db:studio -F @kaipu/infra-db",
-    "db:generate": "dotenvx run -f apps/server-hono/.env -- turbo run db:generate -F @kaipu/infra-db",
-    "db:migrate": "dotenvx run -f apps/server-hono/.env -- turbo run db:migrate -F @kaipu/infra-db",
-    "plan": "dotenvx run -f apps/server-hono/.env -- bun apps/server-hono/scripts/plan.ts",
+    "db:command": "bash scripts/with-env.sh --tags db-scripts -- turbo run db:command -F @kaipu/infra-db",
+    "db:push": "bash scripts/with-env.sh --tags db-scripts -- turbo run db:push -F @kaipu/infra-db",
+    "db:studio": "bash scripts/with-env.sh --tags db-scripts -- turbo run db:studio -F @kaipu/infra-db",
+    "db:generate": "bash scripts/with-env.sh --tags db-scripts -- turbo run db:generate -F @kaipu/infra-db",
+    "db:migrate": "bash scripts/with-env.sh --tags db-scripts -- turbo run db:migrate -F @kaipu/infra-db",
+    "plan": "bash scripts/with-env.sh --tags db-scripts -- bun apps/server-hono/scripts/plan.ts",
     "test": "turbo run test",
-    "test:integration": "dotenvx run -f apps/server-hono/.env -- turbo run test:integration -F @kaipu/infra-db"
+    "test:integration": "bash scripts/with-env.sh --tags db-scripts -- turbo run test:integration -F @kaipu/infra-db"
   },
   "dependencies": {
     "dotenv": "catalog:",
