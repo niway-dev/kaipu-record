@@ -798,5 +798,88 @@
     "approvedHeading": "You have more Cloud space",
     "approvedBody": "Your request was approved. Your account now has {capacity} of total Kaipu Cloud space.",
     "approvedButton": "Open Kaipu"
+  },
+  "roadmap": {
+    "navLabel": "Roadmap",
+    "eyebrow": "Public roadmap",
+    "heading": "What Kaipu Record does today, and what comes next",
+    "intro": "Everything below is grouped by state, not by date. The shipped list is what you already get when you download Kaipu Record; the planned list is what we are building next.",
+    "disclaimer": "Order is a priority, not a promise. Plans move as we learn what people actually need.",
+    "count": "{count, plural, one {# item} other {# items}}",
+    "status": {
+      "shipped": "Shipped",
+      "inProgress": "In progress",
+      "planned": "Planned"
+    },
+    "items": {
+      "screenAndCamera": {
+        "title": "Screen and camera recording",
+        "description": "Record your screen and your camera in high quality, with a floating camera bubble and quality presets that trade size for sharpness."
+      },
+      "videoEditor": {
+        "title": "Built-in video editor",
+        "description": "Trim and export your recordings without leaving the app, with a poster thumbnail generated for every edited video."
+      },
+      "screenshotAnnotations": {
+        "title": "Screenshot annotations",
+        "description": "Capture and annotate screenshots with shapes and text: multi-line labels, resizable boxes with word wrap, and double-click to edit a label in place."
+      },
+      "library": {
+        "title": "Library of recordings",
+        "description": "Every capture lands in one library with previews, renaming, and recovery for imported or interrupted recordings."
+      },
+      "watermark": {
+        "title": "Watermark on exports",
+        "description": "Stamp your exports with a watermark so shared clips carry your mark."
+      },
+      "shortcuts": {
+        "title": "Global keyboard shortcuts",
+        "description": "Start, pause and stop a capture from anywhere, without hunting for the window first."
+      },
+      "themeAndLanguages": {
+        "title": "Light and dark theme, English and Spanish",
+        "description": "The whole app follows a shared design-token palette in both themes, and is fully translated into English and Spanish."
+      },
+      "accounts": {
+        "title": "Accounts and email verification",
+        "description": "Sign up, sign in, reset a forgotten password and verify your email. Recording itself still works with no account at all."
+      },
+      "cloudFoundation": {
+        "title": "Kaipu Cloud foundations",
+        "description": "One library that merges local files with your cloud catalogue, per-account caching, save modes, capacity limits, and removing a local copy while keeping the cloud one."
+      },
+      "cloudUpload": {
+        "title": "Finish cloud upload end to end",
+        "description": "Upload every capture to Kaipu Cloud automatically, with resumable transfers, clear progress, and retries when the network drops."
+      },
+      "videoZoom": {
+        "title": "Zoom in videos",
+        "description": "Zoom into a region of a recording so the detail you are pointing at is actually readable for whoever watches it."
+      },
+      "photoZoom": {
+        "title": "Zoom in the image viewer",
+        "description": "Zoom and pan inside the screenshot viewer instead of squinting at a scaled-down capture."
+      },
+      "watermarkUpgrade": {
+        "title": "A better watermark",
+        "description": "More control over the watermark: position, size, opacity, and your own logo instead of a fixed stamp."
+      },
+      "imageTags": {
+        "title": "Tags on images",
+        "description": "Tag screenshots and group them by tag, so a long library stays findable."
+      },
+      "renameOnSave": {
+        "title": "Rename an image after saving",
+        "description": "Change the name of a capture once it is already saved, without going out to Finder."
+      },
+      "saveEveryScreenshot": {
+        "title": "Option to save every screenshot",
+        "description": "An opt-in setting that keeps every screenshot you take in the library automatically, instead of only the ones you save by hand."
+      },
+      "brandIdentity": {
+        "title": "Refreshed logo and identity",
+        "description": "A sharper logo and a consistent visual identity across the app, the site and the installers."
+      }
+    }
   }
 }
