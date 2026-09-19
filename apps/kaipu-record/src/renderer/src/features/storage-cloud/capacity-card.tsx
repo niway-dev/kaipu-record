@@ -21,6 +21,14 @@ function ageLabel(t: Translate, since: number, now: number): string {
   return t("ageDays", { count: Math.floor(hours / 24) });
 }
 
+/** How long the resend button stays disabled after a successful send. Long enough to stop a
+ *  double-press, short enough that a mail which never arrived can be requested again. */
+const RESEND_COOLDOWN_MS = 2 * 60_000;
+
+function withinResendCooldown(sentAt: number | null, now: number): boolean {
+  return sentAt !== null && now - sentAt < RESEND_COOLDOWN_MS;
+}
+
 function Notice({
   icon,
   title,
@@ -81,12 +89,25 @@ export function CapacityCard({
       : (entitlements?.features.cloudStorageBytes ?? null);
   const plan = entitlements?.plan === "pro" ? t("planPro") : t("planFree");
   const signIn = (): void => void navigate("/sign-in", { state: { from: "/cloud" } });
-  const [resendState, setResendState] = React.useState<"idle" | "pending" | "sent">("idle");
+
+  // Only the in-flight attempt is component state. Whether a mail was ever sent comes from the
+  // main process, which persists it with the session: this card is remounted on every visit to
+  // the cloud screen, so component state would forget the send the moment the user navigates.
+  const [attempt, setAttempt] = React.useState<"idle" | "pending" | "failed">("idle");
+  const [sentNow, setSentNow] = React.useState<number | null>(null);
+  const sentAt = sentNow ?? status.verificationEmailSentAt ?? null;
 
   async function handleResend(): Promise<void> {
-    setResendState("pending");
+    setAttempt("pending");
     const result = await window.electronAPI.resendVerificationEmail();
-    setResendState(result.ok ? "sent" : "idle");
+    if (result.ok) {
+      setSentNow(result.sentAt);
+      setAttempt("idle");
+      return;
+    }
+    // A failure used to drop silently back to idle, which looked exactly like never having
+    // pressed the button. Say so, and leave the button usable for another try.
+    setAttempt("failed");
   }
 
   return (
@@ -166,17 +187,29 @@ export function CapacityCard({
           tone="neutral"
           icon={<CloudOff size={16} />}
           title={t("betaTitle")}
-          detail={resendState === "sent" ? t("resendVerificationSent") : t("betaDetail")}
+          detail={
+            attempt === "failed"
+              ? t("resendVerificationFailed")
+              : sentAt !== null
+                ? t("resendVerificationSent")
+                : t("betaDetail")
+          }
           action={
             <>
-              <Button variant="outline" size="sm" onClick={onRefresh} disabled={refreshing}>
-                <RefreshCw size={12} aria-hidden /> {t("refresh")}
-              </Button>
+              {/* Refreshing only makes sense once a mail is out: before that there is no
+                  verification for the server to have recorded, so the button would invite a
+                  round-trip that cannot change anything. A failed send leaves sentAt null,
+                  which is why the failure must re-enable resend rather than offer refresh. */}
+              {sentAt !== null && (
+                <Button variant="outline" size="sm" onClick={onRefresh} disabled={refreshing}>
+                  <RefreshCw size={12} aria-hidden /> {t("refresh")}
+                </Button>
+              )}
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => void handleResend()}
-                disabled={resendState !== "idle"}
+                disabled={attempt === "pending" || withinResendCooldown(sentAt, now)}
               >
                 {t("resendVerification")}
               </Button>

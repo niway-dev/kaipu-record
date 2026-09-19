@@ -32,6 +32,9 @@ interface StoredSession {
    *  existed have none and load as free — a one-time re-check on the next status call, not a
    *  re-login. */
   entitlements?: Entitlements;
+  /** When this machine last sent a verification email for this account. Optional on read:
+   *  files written before this existed simply have none, which reads as "never sent". */
+  verificationEmailSentAt?: number;
 }
 
 /** The signed-in (or restored-from-disk) account, handed to main modules only — the renderer
@@ -116,6 +119,9 @@ export function registerAuth(
   let cachedEntitlements: Entitlements | null = stored
     ? (stored.entitlements ?? FREE_ENTITLEMENTS)
     : null;
+  // Seeded from disk for the same reason: the cloud screen is remounted on every visit, so
+  // this is the only thing that can tell it the verification mail has already gone out.
+  let verificationEmailSentAt: number | undefined = stored?.verificationEmailSentAt;
 
   // Notified on sign-in (new userId) and on sign-out / confirmed-invalid token (null) — how
   // main-process modules that need to know which account owns what they store (e.g. the
@@ -161,6 +167,7 @@ export function registerAuth(
         token = null;
         cachedIdentity = null;
         cachedEntitlements = null;
+        verificationEmailSentAt = undefined;
         clearStoredSession();
         notifyAccountChanged(null);
         return { kind: "signed-out" };
@@ -169,7 +176,7 @@ export function registerAuth(
       // Every successful session check re-checks the plan too: this is how a purchase made on
       // the web reaches the app — the user reopens it. No push, no sync engine.
       const entitlements = await refreshEntitlements(token, identity);
-      return { kind: "signed-in", ...identity, entitlements };
+      return { kind: "signed-in", ...identity, entitlements, verificationEmailSentAt };
     } catch {
       // Network/other failure — NEVER clear a token we couldn't actually verify was invalid,
       // and keep reporting the plan we last saw.
@@ -178,6 +185,7 @@ export function registerAuth(
         lastKnownUserId: cachedIdentity?.userId,
         lastKnownEmail: cachedIdentity?.email,
         entitlements: cachedEntitlements ?? FREE_ENTITLEMENTS,
+        verificationEmailSentAt,
       };
     }
   });
@@ -205,6 +213,9 @@ export function registerAuth(
     token = result.token;
     cachedIdentity = { userId: result.userId, email: result.email, name: result.name };
     cachedEntitlements = entitlements;
+    // A fresh credential means a fresh account: never inherit the previous user's send
+    // history. The written session omits the field, so disk and memory agree.
+    verificationEmailSentAt = undefined;
     const status: AuthStatus = {
       kind: "signed-in",
       userId: result.userId,
@@ -248,11 +259,34 @@ export function registerAuth(
     },
   );
 
-  ipcMain.handle(IPC_CHANNELS.authResendVerification, async (event): Promise<{ ok: boolean }> => {
-    requireMainWindow(event);
-    if (!cachedIdentity) return { ok: false };
-    return { ok: await resendVerificationEmail(config, cachedIdentity.email) };
-  });
+  ipcMain.handle(
+    IPC_CHANNELS.authResendVerification,
+    async (event): Promise<{ ok: true; sentAt: number } | { ok: false }> => {
+      requireMainWindow(event);
+      if (!cachedIdentity || !token) return { ok: false };
+      if (!(await resendVerificationEmail(config, cachedIdentity.email))) return { ok: false };
+
+      const sentAt = Date.now();
+      verificationEmailSentAt = sentAt;
+      // Best-effort persistence: the mail is already out, so a failed write must not be
+      // reported as a failed send. Worst case the fact is forgotten on the next restart —
+      // the same behaviour as before this existed, and strictly better than claiming the
+      // send failed and prompting the user to trigger a second email.
+      try {
+        writeStoredSession({
+          token,
+          userId: cachedIdentity.userId,
+          email: cachedIdentity.email,
+          name: cachedIdentity.name,
+          entitlements: cachedEntitlements ?? FREE_ENTITLEMENTS,
+          verificationEmailSentAt: sentAt,
+        });
+      } catch (err) {
+        console.error("failed to persist the verification-email timestamp", err);
+      }
+      return { ok: true, sentAt };
+    },
+  );
 
   ipcMain.handle(IPC_CHANNELS.authSignOut, async (event): Promise<void> => {
     requireMainWindow(event);
@@ -260,6 +294,7 @@ export function registerAuth(
     token = null;
     cachedIdentity = null;
     cachedEntitlements = null;
+    verificationEmailSentAt = undefined;
     clearStoredSession();
     broadcast({ kind: "signed-out" });
     notifyAccountChanged(null);

@@ -575,6 +575,7 @@
     "betaDetail": "Cloud está disponible para cuentas con el correo verificado. Mientras tanto, Kaipu sigue funcionando localmente.",
     "resendVerification": "Reenviar correo de verificación",
     "resendVerificationSent": "Correo de verificación enviado. Revisa tu bandeja.",
+    "resendVerificationFailed": "No se pudo enviar el correo de verificación. Revisa tu conexión e inténtalo de nuevo.",
     "suspendedTitle": "Las subidas están pausadas por ahora",
     "suspendedDetail": "Nadie puede subir en este momento. Lo que ya está en cloud sigue a salvo.",
     "ageJustNow": "hace un momento",
