@@ -3,11 +3,11 @@ import { pageHead } from "@/lib/seo";
 import { LegalPage } from "@/components/legal/legal-page";
 
 export const Route = createFileRoute("/legal/privacy-policy")({
-  head: () =>
+  staticData: { shell: "marketing" },
+  head: ({ match }) =>
     pageHead({
-      title: "Política de privacidad | Kaipu Record",
-      description:
-        "Qué datos trata Kaipu Record, para qué, con qué proveedores y cómo ejercer tus derechos.",
+      locale: match.context.locale,
+      page: "privacy-policy",
       path: "/legal/privacy-policy",
     }),
   component: () => <LegalPage document="privacy" />,

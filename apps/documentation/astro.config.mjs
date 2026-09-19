@@ -75,6 +75,7 @@ export default defineConfig({
             { slug: "backlog/cloud-error-states" },
             { slug: "backlog/legal-documents" },
             { slug: "backlog/public-roadmap-page" },
+            { slug: "backlog/public-page-shell" },
             { slug: "backlog/plans-and-entitlements" },
             { slug: "backlog/backend-security-hardening" },
             { slug: "backlog/dependency-security-upgrades" },

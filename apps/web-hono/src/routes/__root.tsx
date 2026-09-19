@@ -18,7 +18,7 @@ import en from "@kaipu/i18n/messages/en";
 
 import { LegalLinks } from "@/components/legal/legal-links";
 import Header from "../components/header";
-import { OG_IMAGE, SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, SITE_URL } from "@/lib/seo";
+import { siteHeadMeta } from "@/lib/seo";
 import appCss from "../index.css?url";
 import { getAuthSession } from "@/lib/auth/get-auth-session";
 import { getLocale } from "@/server-functions/get-locale";
@@ -34,35 +34,8 @@ export interface RouterAppContext {
 }
 
 export const Route = createRootRouteWithContext<RouterAppContext>()({
-  head: () => ({
-    meta: [
-      {
-        charSet: "utf-8",
-      },
-      {
-        name: "viewport",
-        content: "width=device-width, initial-scale=1",
-      },
-      { title: SITE_TITLE },
-      { name: "description", content: SITE_DESCRIPTION },
-      { name: "application-name", content: SITE_NAME },
-      { name: "theme-color", content: "#0b0b0d" },
-      { property: "og:type", content: "website" },
-      { property: "og:site_name", content: SITE_NAME },
-      { property: "og:locale", content: "es_PE" },
-      { property: "og:locale:alternate", content: "en_US" },
-      { property: "og:title", content: SITE_TITLE },
-      { property: "og:description", content: SITE_DESCRIPTION },
-      { property: "og:url", content: SITE_URL },
-      { property: "og:image", content: OG_IMAGE },
-      { property: "og:image:width", content: "1200" },
-      { property: "og:image:height", content: "630" },
-      { property: "og:image:alt", content: SITE_TITLE },
-      { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:title", content: SITE_TITLE },
-      { name: "twitter:description", content: SITE_DESCRIPTION },
-      { name: "twitter:image", content: OG_IMAGE },
-    ],
+  head: ({ match }) => ({
+    meta: siteHeadMeta(match.context.locale),
     links: [
       {
         rel: "stylesheet",
@@ -104,8 +77,13 @@ function RootDocument() {
   const router = useRouter();
   const { isAuthenticated, session, locale } = context;
 
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const isLanding = pathname === "/";
+  // Public pages bring their own header and footer, so the app shell must stand
+  // down for them. Read from the route's own staticData rather than matching on
+  // the pathname: a new public page then declares its shell next to its route
+  // instead of having to be remembered in a list here.
+  const isMarketing = useRouterState({
+    select: (s) => s.matches.some((m) => m.staticData.shell === "marketing"),
+  });
 
   // Persist to the cookie, then re-run beforeLoad so the whole tree re-renders
   // with the new messages (resolved server-side — no flash).
@@ -127,17 +105,17 @@ function RootDocument() {
           onLocaleChange={(next) => void handleSetLocale(next)}
         >
           <div className="min-h-svh">
-            {!isLanding && (
+            {!isMarketing && (
               <Header
                 isAuthenticated={isAuthenticated}
                 userName={session?.user?.name ?? ""}
                 userEmail={session?.user?.email ?? ""}
               />
             )}
-            <main className={isLanding ? "" : "pt-12"}>
+            <main className={isMarketing ? "" : "pt-12"}>
               <Outlet />
             </main>
-            {!isLanding && (
+            {!isMarketing && (
               <footer className="border-t px-6 py-8 text-muted-foreground">
                 <LegalLinks />
               </footer>

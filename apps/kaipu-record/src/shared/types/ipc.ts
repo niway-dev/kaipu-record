@@ -137,7 +137,11 @@ export interface AppSettings {
 
 export const DEFAULT_SETTINGS: AppSettings = {
   theme: "dark",
-  locale: "es",
+  // Must match DEFAULT_LOCALE in @kaipu/i18n. Kept as a literal on purpose: this
+  // module is shared with preload, and importing the i18n package here would pull
+  // React and both message catalogs into that bundle. `settings.service.test.ts`
+  // asserts the two stay in agreement.
+  locale: "en",
   launchAtLogin: false,
   showInDock: true,
   recordingQuality: DEFAULT_QUALITY,

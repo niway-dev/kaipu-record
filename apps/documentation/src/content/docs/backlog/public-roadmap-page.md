@@ -22,8 +22,11 @@ committing to delivery dates that age badly the moment a plan moves.
 | Copy (en + es)  | `roadmap` namespace in `packages/i18n/messages/{en,es}.json` |
 | Entry points    | `LandingNav`, `Footer`, `apps/web-hono/public/sitemap.xml`   |
 
-The page reuses the landing shell (`LandingNav` + `Footer`) and the `--kaipu-*` design tokens,
-so it follows the light/dark theme and the locale switcher like every other public page.
+The page renders inside `PublicShell` (`LandingNav` + `Footer` + the landing theme) and uses the
+`--kaipu-*` design tokens, so it follows light/dark and the locale switcher like every other
+public page. Its route declares `staticData: { shell: "marketing" }`, which is what tells the
+root document not to add the app `Header` and legal footer on top — see
+[Public page shell](./public-page-shell).
 
 ## How to update it
 

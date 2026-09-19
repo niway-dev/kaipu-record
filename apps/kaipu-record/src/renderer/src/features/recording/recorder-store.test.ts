@@ -3,6 +3,14 @@ import type { LocalRecording } from "@shared/types";
 import type { ControlCommand } from "@shared/types/ipc";
 import { startEngine, type EngineHandle } from "@renderer/features/recording/recorder-engine";
 import { reportError } from "@renderer/features/analytics";
+import { DEFAULT_LOCALE } from "@kaipu/i18n";
+import es from "@kaipu/i18n/messages/es";
+import en from "@kaipu/i18n/messages/en";
+
+// Assert the copy the store actually emits, resolved for whatever locale the app
+// falls back to — hard-coding a Spanish word here broke the moment the default
+// became English.
+const messages = DEFAULT_LOCALE === "es" ? es : en;
 
 vi.mock("@renderer/features/recording/recorder-engine", () => ({ startEngine: vi.fn() }));
 vi.mock("@renderer/features/analytics", () => ({ reportError: vi.fn() }));
@@ -207,7 +215,7 @@ describe("recorder-store", () => {
 
     expect(store.getRecorderSnapshot()).toEqual({ status: "idle", countdown: null });
     expect(reportErrorMock).toHaveBeenCalledWith(
-      expect.stringMatching(/grabación/i),
+      messages.record.errorStopped,
       expect.any(Error),
       expect.objectContaining({ retry: expect.any(Function) }),
     );
