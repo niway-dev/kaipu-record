@@ -7,7 +7,12 @@ A production-ready monorepo template with DDD + Hexagonal Architecture, authenti
 ### Prerequisites
 
 - [Bun](https://bun.sh) v1.3.4 or higher
-- PostgreSQL database (e.g., [Neon](https://neon.tech))
+- The [Infisical CLI](https://infisical.com/docs/cli/overview) — every dev and
+  database script fetches its environment from it
+- Access to the `kaipu-recorder` Infisical project
+
+`bun run setup` checks both and prints how to install anything missing. It never
+installs on your behalf.
 
 ### Installation
 
@@ -15,45 +20,27 @@ A production-ready monorepo template with DDD + Hexagonal Architecture, authenti
 
 ```bash
 git clone <repository-url>
-cd kaipu
+cd kaipu-record-monorepo
 ```
 
-2. Install dependencies:
+2. Install dependencies and check your tooling:
 
 ```bash
 bun install
+bun run setup
 ```
 
-3. Set up environment variables:
+3. Sign in to Infisical:
 
-   **With dotenvx (recommended):**
+```bash
+infisical login
+```
 
-   Get the `.env.keys` file from your team lead and place it at the repo root. The encrypted `.env` files are already committed -- dotenvx decrypts them automatically at runtime.
+**There are no `.env` files to create.** Every value comes from Infisical and is
+fetched at start-up. Where a `.env` exists it is generated and gitignored —
+editing it does nothing, because the next start overwrites it.
 
-   **Manual setup (from scratch):**
-
-   Copy the `.env.example` files and fill in your values:
-
-   ```bash
-   # Server (Wrangler uses .dev.vars)
-   cp apps/server/.env.example apps/server/.dev.vars
-
-   # Web
-   cp apps/web/.env.example apps/web/.env
-
-   # Mobile (if needed)
-   cp apps/mobile/.env.example apps/mobile/.env
-   ```
-
-   Required variables:
-
-   | Variable             | Apps        | Description                                 |
-   | -------------------- | ----------- | ------------------------------------------- |
-   | `DATABASE_URL`       | server, web | Neon PostgreSQL connection string           |
-   | `BETTER_AUTH_SECRET` | server, web | `openssl rand -base64 32`                   |
-   | `BETTER_AUTH_URL`    | server      | Server URL (e.g., `http://localhost:3000`)  |
-   | `CORS_ORIGIN`        | server      | Web app URL (e.g., `http://localhost:3001`) |
-   | `VITE_SERVER_URL`    | web         | Server URL for Eden Treaty client           |
+Change a value in Infisical, restart, done.
 
 4. Push the database schema:
 
@@ -71,6 +58,21 @@ The application will be available at:
 
 - **Web App**: http://localhost:3001
 - **API Server**: http://localhost:3000
+
+### Environment variables
+
+Every variable, which Infisical folder holds it, and which apps read it:
+**[Secrets layout — folders and tags](apps/documentation/src/content/docs/deployment/secrets-layout.md)**.
+
+The short version: **folders group by what a leak would cost** (`/public`,
+`/database`, `/cloudflare`, `/auth`, `/email`, `/signing`), and **tags name the
+consumer** (`server-hono`, `web-hono`, `kaipu-record`, `console`, `db-scripts`,
+`ci-deploy`). Scripts filter by tag, so each app receives only its own values —
+the desktop build never sees a database credential.
+
+Adding a variable means creating it in Infisical with a folder and at least one
+tag. **An untagged secret is silently absent** from every filtered fetch rather
+than an error, so tag it as you create it.
 
 ## Project Structure
 
@@ -182,23 +184,21 @@ The Todo CRUD example demonstrates this architecture end-to-end:
 
 ## Deployment
 
-Both the web app and API server deploy to Cloudflare Workers.
+The web app, API server and console deploy to Cloudflare Workers. Deploys are
+driven by release-please: merging its release PR tags a component (`api-v*`,
+`web-v*`, `desktop-v*`) and the matching workflow ships it.
+
+To deploy by hand:
 
 ```bash
-# Deploy the web app
-cd apps/web && bun run deploy
-
-# Deploy the server
-cd apps/server && bun run deploy
+cd apps/server-hono && bun run deploy
+cd apps/web-hono && bun run wrangler:dev   # local Worker run
 ```
 
-For Cloudflare Workers secrets:
-
-```bash
-wrangler secret put DATABASE_URL
-wrangler secret put BETTER_AUTH_SECRET
-wrangler secret put BETTER_AUTH_URL
-```
+**Worker secrets are not set with `wrangler secret put`.** Production still
+reads them from GitHub Secrets inside the release workflows; migrating that to
+Infisical with OIDC is pending. Setting a secret by hand creates a value no
+workflow knows about and that nothing will keep in sync.
 
 ## License
 

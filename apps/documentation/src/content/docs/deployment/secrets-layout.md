@@ -6,10 +6,11 @@ description: "How secrets are organised in Infisical: folders by blast radius, t
 # Secrets layout — folders and tags
 
 **Status: 🟢 Applied for `dev`.** The six folders exist, root is empty, tags are
-assigned, and the scripts filter by tag. Two things remain: `DATABASE_URL` needs
-its `server-hono` and `console` tags (without them the API Worker resolves no
-database URL and will not boot), and `prod` is untouched — release workflows
-still read GitHub Secrets.
+assigned, and the scripts filter by tag. Verified end to end: `server-hono`
+resolves its nine values and `GET /api/auth/get-session` returns 200, while
+`web-hono` and `kaipu-record` receive zero credentials.
+
+`prod` is untouched — the release workflows still read GitHub Secrets.
 
 Infisical organises secrets along two independent axes. They answer different
 questions, and using only one forces a compromise that neither needs to make.
@@ -38,7 +39,7 @@ attacker gains and where the value is rotated.
 
 | Folder        | Description (as set in Infisical)                                                                                                        |
 | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `/public`     | Not secret. These values already ship to users or are committed in the repo. A leak costs nothing.                                       |
+| `/public`     | Not a credential. Reading these grants nothing — most already ship to users or are committed in the repo.                                |
 | `/database`   | Full read and write access to every user's data. Rotate in Neon.                                                                         |
 | `/cloudflare` | Read and write every stored recording, and deploy or destroy Workers. Rotate in the Cloudflare dashboard.                                |
 | `/auth`       | Forge session tokens and impersonate any user. Rotating it signs everyone out.                                                           |
@@ -78,6 +79,9 @@ libraries used _by_ the apps that are.
 | `VITE_POSTHOG_PRODUCT`     | `/public`     | `kaipu-record`                       |
 | `VITE_POSTHOG_SURFACE`     | `/public`     | `kaipu-record`                       |
 | `VITE_VERSION_GATE_URL`    | `/public`     | `kaipu-record`                       |
+| `CONSOLE_API_URL`          | `/public`     | `console`                            |
+| `CONSOLE_ENVIRONMENT`      | `/public`     | `console`                            |
+| `CONSOLE_ADMIN_USER_IDS`   | `/public`     | `console`                            |
 | `DATABASE_URL`             | `/database`   | `server-hono` `console` `db-scripts` |
 | `R2_ACCESS_KEY_ID`         | `/cloudflare` | `server-hono`                        |
 | `R2_SECRET_ACCESS_KEY`     | `/cloudflare` | `server-hono`                        |
@@ -104,7 +108,7 @@ Everything above, plus:
 GitHub, from GitHub, so routing it through an external service adds a bootstrap
 dependency and no protection.
 
-## Three decisions worth knowing
+## Decisions worth knowing
 
 **`R2_BUCKET` and `R2_ACCOUNT_ID` live in `/public`.** Neither is a credential —
 a bucket name and an account identifier, both already committed in plaintext in
@@ -112,6 +116,19 @@ release workflows. They were previously kept beside the R2 keys to avoid
 splitting a credential set across two homes; tags remove that reason, because
 the tag keeps the group legible even when folders separate it. What remains in
 `/cloudflare` is only what actually opens something.
+
+**`CONSOLE_ADMIN_USER_IDS` sits in `/public`, not `/auth`.** It is the console's
+authorisation allow-list, which makes `/auth` tempting — but that folder means
+"forge sessions and impersonate any user", and a list of user ids does none of
+that. Reading it reveals which accounts are admins; it grants nothing, because
+you would still have to authenticate as one of them. It is the least public
+thing in `/public`, which is why that folder's description says "reading these
+grants nothing" rather than "these are already published".
+
+Note the asymmetry the blast-radius test does not capture: _writing_ this value
+would grant admin to anyone you add. Write access is governed by the identity's
+permissions, not by the folder, so the folder still answers the question it is
+meant to.
 
 **`/auth` and `/email` hold one secret each.** That looks over-filed, but they
 are different systems with different rotation procedures: `BETTER_AUTH_SECRET`
