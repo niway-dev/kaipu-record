@@ -17,19 +17,22 @@
 set -euo pipefail
 
 ENV_SLUG="dev"
-PATHS=()
+FILTER=()
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --env)  ENV_SLUG="$2"; shift 2 ;;
-    --path) PATHS+=("--path" "$2"); shift 2 ;;
+    # Prefer --tags: a consumer's values deliberately span folders, since
+    # folders group by blast radius rather than by who reads them.
+    --tags) FILTER+=("--recursive" "--tags" "$2"); shift 2 ;;
+    --path) FILTER+=("--path" "$2"); shift 2 ;;
     --)     shift; break ;;
     *)      printf 'with-env: unexpected argument %q (did you forget --?)\n' "$1" >&2; exit 2 ;;
   esac
 done
 
 if [ $# -eq 0 ]; then
-  printf 'usage: with-env.sh [--env <slug>] --path <p> [--path <p>...] -- <command>\n' >&2
+  printf 'usage: with-env.sh [--env <slug>] (--tags <t> | --path <p>)... -- <command>\n' >&2
   exit 2
 fi
 
@@ -54,10 +57,10 @@ if ! command -v infisical >/dev/null 2>&1; then
   exit 1
 fi
 
-if [ ${#PATHS[@]} -eq 0 ]; then
-  printf 'error: at least one --path is required. Fetching every path would hand\n' >&2
-  printf '       this command credentials it does not need.\n' >&2
+if [ ${#FILTER[@]} -eq 0 ]; then
+  printf 'error: a --tags or --path filter is required. Fetching everything would\n' >&2
+  printf '       hand this command credentials it does not need.\n' >&2
   exit 2
 fi
 
-exec infisical run --env="$ENV_SLUG" "${PATHS[@]}" --silent -- "$@"
+exec infisical run --env="$ENV_SLUG" "${FILTER[@]}" --silent -- "$@"
