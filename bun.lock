@@ -60,7 +60,7 @@
     },
     "apps/kaipu-record": {
       "name": "kaipu-record",
-      "version": "0.6.0",
+      "version": "0.6.2",
       "dependencies": {
         "@electron-toolkit/preload": "^3.0.2",
         "@electron-toolkit/utils": "^4.0.0",
@@ -100,7 +100,7 @@
     },
     "apps/server-hono": {
       "name": "server-hono",
-      "version": "0.2.0",
+      "version": "0.4.0",
       "dependencies": {
         "@kaipu/application": "workspace:*",
         "@kaipu/domain": "workspace:*",
@@ -128,7 +128,7 @@
     },
     "apps/web-hono": {
       "name": "web-hono",
-      "version": "0.6.0",
+      "version": "0.8.0",
       "dependencies": {
         "@base-ui/react": "^1.0.0",
         "@kaipu/application": "workspace:*",
@@ -191,10 +191,10 @@
       "name": "@kaipu/application",
       "version": "1.0.0",
       "dependencies": {
+        "@kaipu/domain": "workspace:*",
         "zod": "catalog:",
       },
       "devDependencies": {
-        "@kaipu/domain": "workspace:*",
         "@types/node": "^22.14.1",
         "tsdown": "catalog:",
         "typescript": "catalog:",
@@ -261,6 +261,7 @@
     "packages/infra-db": {
       "name": "@kaipu/infra-db",
       "dependencies": {
+        "@kaipu/domain": "workspace:*",
         "@neondatabase/serverless": "^1.0.2",
         "drizzle-orm": "^0.45.1",
         "ws": "^8.18.3",
@@ -268,7 +269,6 @@
       },
       "devDependencies": {
         "@kaipu/config": "workspace:*",
-        "@kaipu/domain": "workspace:*",
         "@types/ws": "^8.18.1",
         "drizzle-kit": "^0.31.8",
         "tsdown": "catalog:",

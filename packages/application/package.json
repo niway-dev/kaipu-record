@@ -37,10 +37,10 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@kaipu/domain": "workspace:*",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@kaipu/domain": "workspace:*",
     "@types/node": "^22.14.1",
     "tsdown": "catalog:",
     "typescript": "catalog:",

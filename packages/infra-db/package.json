@@ -25,6 +25,7 @@
     "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
+    "@kaipu/domain": "workspace:*",
     "@neondatabase/serverless": "^1.0.2",
     "drizzle-orm": "^0.45.1",
     "ws": "^8.18.3",
@@ -32,7 +33,6 @@
   },
   "devDependencies": {
     "@kaipu/config": "workspace:*",
-    "@kaipu/domain": "workspace:*",
     "@types/ws": "^8.18.1",
     "drizzle-kit": "^0.31.8",
     "tsdown": "catalog:",
