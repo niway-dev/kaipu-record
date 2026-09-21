@@ -53,6 +53,12 @@ bun install
 git switch feat/cloud-01-server-quotas # or main, once #91 and #92 are merged
 ```
 
+> **Env setup note (added after this snapshot):** the steps below describe manually creating and
+> reading `apps/server-hono/.env`, which was accurate on 2026-09-13. The project has since moved
+> to Infisical (landed ~2026-09-18) — there are no hand-maintained `.env` files anymore; see
+> [Environment Variables](/backend/environment-variables/). Prefer `bash scripts/with-env.sh
+--tags db-scripts -- <command>` over the `dotenvx`/manual-`.env` commands quoted here.
+
 Create `apps/server-hono/.env` from `.env.example`. Values are not in the repository; copy them
 from the original machine or the secret store. Keys used by this work:
 
