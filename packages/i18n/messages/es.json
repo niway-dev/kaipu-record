@@ -438,6 +438,7 @@
     "export": "Exportar",
     "exportError": "No pudimos exportar el video",
     "exporting": "Exportando video…",
+    "exportOriginalNote": "La grabación original y su miniatura en la biblioteca siguen mostrando todo.",
     "retry": "Reintentar",
     "close": "Cerrar",
     "cancel": "Cancelar",
