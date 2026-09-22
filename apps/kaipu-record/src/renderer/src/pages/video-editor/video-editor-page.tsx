@@ -59,6 +59,10 @@ import { ZoomLane } from "@renderer/features/video-editor/components/zoom-lane";
 import { EditorInspector } from "@renderer/features/video-editor/components/inspector/editor-inspector";
 import { DetectionPanel } from "@renderer/features/video-editor/components/inspector/detection-panel";
 import { ZoomInspector } from "@renderer/features/video-editor/components/inspector/zoom-inspector";
+import { CameraBox } from "@renderer/features/video-editor/components/camera-box";
+import { HoldOriginalButton } from "@renderer/features/video-editor/components/hold-original-button";
+import { useCameraPath } from "@renderer/features/video-editor/zoom/use-camera-path";
+import { useCameraPreview } from "@renderer/features/video-editor/zoom/use-camera-preview";
 import { useSessionAutosave } from "@renderer/features/video-editor/use-session-autosave";
 import { usePreviewPlayback } from "@renderer/features/video-editor/use-preview-playback";
 import { useSourceThumbnails } from "@renderer/features/video-editor/use-source-thumbnails";
@@ -288,6 +292,9 @@ function VideoEditor({
     sourceDuration: source.durationSeconds,
     cursorTrack,
   });
+  // One camera simulation shared by the preview (useCameraPreview) and the export (doc 05).
+  // Declared before any callback that closes over it (handleExport).
+  const cameraPath = useCameraPath(scene.zoomSegments, cursorTrack, source.durationSeconds);
   // Evidence for the Activity lane — depends only on the (immutable) track.
   const activity = useMemo(
     () => (cursorTrack ? activityMarks(cursorTrack, source.durationSeconds) : []),
@@ -641,6 +648,17 @@ function VideoEditor({
     ? (zooms.visibleZooms.find((z) => z.id === selectedZoomId) ?? null)
     : null;
 
+  // Preview camera (doc 09). Result view applies the camera; selecting a zoom switches to
+  // the zoom-edit view (full frame + camera box); holding "original" shows the raw frame.
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const [holdingOriginal, setHoldingOriginal] = useState(false);
+  useCameraPreview(
+    playback.videoRef,
+    contentRef,
+    cameraPath,
+    !holdingOriginal && selectedZoom === null && playback.activeSlideId === null,
+  );
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (isEditingTarget(e.target)) return;
@@ -745,41 +763,62 @@ function VideoEditor({
               mediaUrl={mediaUrl}
               slideUrl={slideUrl}
               expanded={isFullscreen}
+              contentRef={contentRef}
+              chrome={
+                <>
+                  {selectedZoom && !holdingOriginal && playback.activeSlideId === null && (
+                    <CameraBox
+                      videoRef={playback.videoRef}
+                      path={cameraPath}
+                      segment={selectedZoom}
+                      onBegin={zooms.begin}
+                      onMove={(center) => zooms.liveLock(selectedZoom.id, center)}
+                      onEnd={zooms.end}
+                    />
+                  )}
+                  <HoldOriginalButton holding={holdingOriginal} onHoldChange={setHoldingOriginal} />
+                </>
+              }
+              // "Hold to see original" must show the ORIGINAL: the chip says UNEDITED,
+              // so the annotation layer goes with the camera and the privacy regions.
+              // The hold owns the pointer, so no in-progress draw can be interrupted.
               overlay={
-                <VideoAnnotationLayer
-                  overlays={scene.overlays}
-                  visibleIds={visibleIds}
-                  selectedId={selectedOverlayId}
-                  // A click on the canvas background deselects EVERYTHING (spec § 10.5),
-                  // not just the annotation — otherwise a selected zoom would survive it
-                  // and the inspector would keep showing the Zoom panel. The same click
-                  // still toggles play/pause through onBackgroundClick below.
-                  onSelect={(id) => (id === null ? clearSelection() : selectKind("overlay", id))}
-                  tool={videoTools.tool}
-                  toolState={{
-                    color: videoTools.color,
-                    stroke: videoTools.stroke,
-                    textSize: videoTools.textSize,
-                  }}
-                  playheadTime={playback.timelineTime}
-                  timelineDuration={playback.duration}
-                  onDraft={(draft) =>
-                    controller.updateLive({
-                      ...scene,
-                      overlays: upsertOverlay(scene.overlays, draft),
-                    })
-                  }
-                  onCommit={(overlays) => {
-                    controller.commit({ ...scene, overlays });
-                    // Every onCommit call is a just-finished draw or text label (moves/
-                    // resizes finalize through onInteractEnd only) — auto-switch back to
-                    // select so the new overlay can be adjusted right away.
-                    videoTools.setTool("select");
-                  }}
-                  onInteractStart={controller.beginInteract}
-                  onInteractEnd={controller.endInteract}
-                  onBackgroundClick={playback.toggle}
-                />
+                !holdingOriginal && (
+                  <VideoAnnotationLayer
+                    overlays={scene.overlays}
+                    visibleIds={visibleIds}
+                    selectedId={selectedOverlayId}
+                    // A click on the canvas background deselects EVERYTHING (spec § 10.5),
+                    // not just the annotation — otherwise a selected zoom would survive it
+                    // and the inspector would keep showing the Zoom panel. The same click
+                    // still toggles play/pause through onBackgroundClick below.
+                    onSelect={(id) => (id === null ? clearSelection() : selectKind("overlay", id))}
+                    tool={videoTools.tool}
+                    toolState={{
+                      color: videoTools.color,
+                      stroke: videoTools.stroke,
+                      textSize: videoTools.textSize,
+                    }}
+                    playheadTime={playback.timelineTime}
+                    timelineDuration={playback.duration}
+                    onDraft={(draft) =>
+                      controller.updateLive({
+                        ...scene,
+                        overlays: upsertOverlay(scene.overlays, draft),
+                      })
+                    }
+                    onCommit={(overlays) => {
+                      controller.commit({ ...scene, overlays });
+                      // Every onCommit call is a just-finished draw or text label (moves/
+                      // resizes finalize through onInteractEnd only) — auto-switch back to
+                      // select so the new overlay can be adjusted right away.
+                      videoTools.setTool("select");
+                    }}
+                    onInteractStart={controller.beginInteract}
+                    onInteractEnd={controller.endInteract}
+                    onBackgroundClick={playback.toggle}
+                  />
+                )
               }
             />
           </div>
