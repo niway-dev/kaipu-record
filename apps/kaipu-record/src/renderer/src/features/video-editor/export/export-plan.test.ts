@@ -60,4 +60,50 @@ describe("buildExportPlan", () => {
   it("throws on an empty timeline", () => {
     expect(() => buildExportPlan({ ...initialScene(1), items: [], overlays: [] })).toThrow();
   });
+
+  it("carries only visible redactions, but flags a zoom even inside a cut (v2)", () => {
+    const base = initialScene(30);
+    const plan = buildExportPlan({
+      ...base,
+      items: [clip("a", 0, 10), clip("b", 20, 30)],
+      redactions: [
+        {
+          id: "kept",
+          kind: "cover",
+          start: 2,
+          end: 4,
+          rect: { x: 0, y: 0, w: 1, h: 1 },
+          fill: "#18181b",
+          label: "",
+        },
+        {
+          id: "cut",
+          kind: "cover",
+          start: 12,
+          end: 18,
+          rect: { x: 0, y: 0, w: 1, h: 1 },
+          fill: "#18181b",
+          label: "",
+        },
+      ],
+      zoomSegments: [
+        {
+          id: "z",
+          start: 12,
+          end: 15,
+          scale: 2,
+          mode: "follow",
+          anchor: null,
+          smoothing: 70,
+          origin: "auto",
+          trigger: "click",
+        },
+      ],
+    });
+    expect(plan.redactions.map((r) => r.id)).toEqual(["kept"]);
+    // The zoom lies in deleted footage, yet lookahead + ease-out still carry the camera
+    // over the kept frames on either side of the cut — the preview zooms there, so the
+    // export needs the path too.
+    expect(plan.hasZoom).toBe(true);
+  });
 });
