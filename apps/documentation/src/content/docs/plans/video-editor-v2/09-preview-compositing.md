@@ -7,9 +7,11 @@ sidebar:
 
 # 09 — Preview compositing
 
-> **Status: 🔵 Proposed** (2026-09-21). PR 7 ("Preview camera") in the
+> **Status: 🟡 In progress** (2026-09-22). PR 7 ("Preview camera") in the
 > [audit](/plans/video-editor-v2/00-audit/); defines the layer slot PR 8 uses. Fixes W13.
-> Requires PR 6 ([08](/plans/video-editor-v2/08-editor-layout-and-tracks/)).
+> Requires PR 6 ([08](/plans/video-editor-v2/08-editor-layout-and-tracks/)). Implemented
+> on `feat/video-editor-v2-preview-camera` — not merged, not validated in production; see
+> the [backlog PR table](/backlog/video-editor-zoom-blur-cover/).
 
 ## Problem
 

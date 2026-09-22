@@ -7,9 +7,13 @@ sidebar:
 
 # 03 — Click hook, permissions and gating
 
-> **Status: 🔵 Proposed** (2026-09-21). PR 3 ("Click hook, gated") and the UI part of
+> **Status: 🟡 In progress** (2026-09-22). PR 3 ("Click hook, gated") and the UI part of
 > PR 10 in the [audit](/plans/video-editor-v2/00-audit/). Fixes W7. Requires PR 2
-> ([02](/plans/video-editor-v2/02-cursor-track-capture-and-persistence/)).
+> ([02](/plans/video-editor-v2/02-cursor-track-capture-and-persistence/)). PR 3 is
+> implemented on `feat/video-editor-v2-click-hook`, the UI part on
+> `feat/video-editor-v2-polish` — neither merged, neither validated in production
+> (Spike B's real signed/notarized build check is still outstanding); see the
+> [backlog PR table](/backlog/video-editor-zoom-blur-cover/).
 
 ## Problem
 

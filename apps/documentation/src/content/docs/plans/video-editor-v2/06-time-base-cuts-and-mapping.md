@@ -7,8 +7,12 @@ sidebar:
 
 # 06 — Time base, cuts and mapping
 
-> **Status: 🔵 Proposed** (2026-09-21). Pure part in PR 4, UI rules applied in PRs 6 and 8
-> ([audit](/plans/video-editor-v2/00-audit/)). Fixes W10. Resolves overview decision 1.
+> **Status: 🟡 In progress** (2026-09-22). Pure part in PR 4, UI rules applied in PRs 6
+> and 8 ([audit](/plans/video-editor-v2/00-audit/)). Fixes W10. Resolves overview
+> decision 1. Implemented across `feat/video-editor-v2-zoom-math`,
+> `feat/video-editor-v2-timeline-lanes` and `feat/video-editor-v2-redactions` — none
+> merged, none validated in production; see the
+> [backlog PR table](/backlog/video-editor-zoom-blur-cover/).
 
 ## Decision
 
