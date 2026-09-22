@@ -16,6 +16,7 @@ function renderToolbar(overrides: Partial<EditorToolbarProps> = {}): EditorToolb
     tool: "select",
     onToolChange: vi.fn(),
     onAddZoom: vi.fn(),
+    privacyDisabled: false,
     onExport: vi.fn(),
     exportDisabled: false,
     ...overrides,
@@ -121,5 +122,20 @@ describe("EditorToolbar — v2 camera group", () => {
   it("shows the hint of the active tool", () => {
     renderToolbar({ tool: "arrow" });
     expect(screen.getByText("Drag on the preview to draw an arrow.")).toBeInTheDocument();
+  });
+});
+
+describe("EditorToolbar — v2 privacy tools", () => {
+  it("activates Blur and Cover as tools", () => {
+    const props = renderToolbar();
+    fireEvent.click(screen.getByRole("button", { name: "Blur" }));
+    expect(props.onToolChange).toHaveBeenCalledWith("blur");
+    fireEvent.click(screen.getByRole("button", { name: "Cover" }));
+    expect(props.onToolChange).toHaveBeenCalledWith("cover");
+  });
+
+  it("disables them over a slide", () => {
+    renderToolbar({ privacyDisabled: true });
+    expect(screen.getByRole("button", { name: "Blur" })).toBeDisabled();
   });
 });
