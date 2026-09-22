@@ -32,6 +32,12 @@ export interface ExportStartMessage {
  */
 export type ExportWorkerMessage =
   | { type: "chunk"; data: ArrayBuffer; position: number }
+  /**
+   * JPEG poster of the FIRST RENDERED output frame (transferable), sent once before the
+   * first frame is encoded. It replaces decoding the poster from the source file, which
+   * showed footage the edit deleted and — with video-editor v2 — content it redacted.
+   */
+  | { type: "poster"; data: ArrayBuffer }
   | { type: "progress"; fraction: number }
   | { type: "done" }
   | { type: "error"; message: string };

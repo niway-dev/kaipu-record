@@ -2632,7 +2632,7 @@ the `Escape` branch — so this diff only appends `selectedZoomId` and `handleRe
 ### Task 9 — verify
 
 - [ ] Checks (audit rule 4). Verified before publishing: with Tasks 1–8 applied to
-      `main`, `typecheck:web` is clean and the whole renderer suite passes (including the
+      `main`, `check-types:web` is clean and the whole renderer suite passes (including the
       unchanged `video-editor-page.test.tsx` and `timeline-strip.test.tsx`).
 - [ ] Manual with a PR 2 recording: Activity shows ticks/bars; Zooms shows the detected
       blocks; clicking one moves the playhead and opens the inspector; dragging Level is one

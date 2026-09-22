@@ -642,7 +642,7 @@ In `src/renderer/src/features/recording/recorder-store.ts`:
 Generated against `main` at `d18dbbd`, so the hunk offsets are exact. The engine diff is
 the one that was verified end-to-end; the store diff was regenerated after this plan was
 reviewed (concurrent start, timeout, cancel-branch reset), so after applying it re-run
-`bun run typecheck && bun run test` — the recording suite (101 tests) must stay green.
+`bun run check-types && bun run test` — the recording suite (101 tests) must stay green.
 
 **Diff — `apps/kaipu-record/src/renderer/src/features/recording/recorder-engine.ts`**
 
@@ -848,7 +848,7 @@ reviewed (concurrent start, timeout, cancel-branch reset), so after applying it 
 
 ### Task 7 — verify
 
-- [ ] `bunx oxfmt --check .` · `cd apps/kaipu-record && bun run typecheck && bun run test`.
+- [ ] `bunx oxfmt --check .` · `cd apps/kaipu-record && bun run check-types && bun run test`.
 - [ ] Manual, macOS (after doc 02 is also done): record 20 s of screen, pausing twice for
       ~3 s each; move the pointer in a big circle the whole time. Open
       `<vault>/.kaipu/<id>.cursor.json`: `anchor` is `"exact"`, the last `t` is within

@@ -183,6 +183,17 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
     }
   };
 
+  // Poster = the first composed output frame (see ExportWorkerMessage "poster"). Encoded
+  // before that frame is handed to the encoder, so it shows exactly what the file starts
+  // with — cuts, slides, overlays (and in v2, zoom and privacy regions) included.
+  let posterSent = false;
+  const sendPosterOnce = async (): Promise<void> => {
+    if (posterSent) return;
+    posterSent = true;
+    const data = await encodePoster(canvas);
+    if (data) post({ type: "poster", data }, [data]);
+  };
+
   // Release Output encoders on any error path. Do NOT cancel on the success
   // path — finalize already seals the output and canceling after is an error.
   let finalized = false;
@@ -217,6 +228,7 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
           ctx.fillRect(0, 0, size.width, size.height);
           ctx.drawImage(wrapped.canvas, 0, 0);
           stampOverlays(outTs);
+          await sendPosterOnce();
           // Use the frame's own decoded duration so clip frames preserve the
           // source's native cadence without rounding to a fixed grid.
           await videoSource.add(outTs, wrapped.duration);
@@ -238,6 +250,7 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
           ctx.fillRect(0, 0, size.width, size.height);
           if (bitmap) drawContained(ctx, bitmap, size.width, size.height);
           stampOverlays(outTs);
+          await sendPosterOnce();
           await videoSource.add(outTs, frameDuration);
           reportProgress(outTs);
           prevOutTs = outTs;
@@ -349,6 +362,25 @@ function trimAudioSample(
   // AudioSample.trim takes a [startFrame, endFrame) half-open range and returns a new
   // sample; the caller is responsible for closing it (and the untrimmed original).
   return sample.trim(leadTrim, leadTrim + keepLength);
+}
+
+/** Poster width in px; height follows the output aspect (same size generate-thumbnail used). */
+const POSTER_WIDTH = 640;
+
+/** JPEG of `source` scaled to POSTER_WIDTH; null if the platform cannot encode (cosmetic). */
+async function encodePoster(source: OffscreenCanvas): Promise<ArrayBuffer | null> {
+  try {
+    const width = Math.min(POSTER_WIDTH, source.width);
+    const height = Math.max(1, Math.round((source.height * width) / source.width));
+    const poster = new OffscreenCanvas(width, height);
+    const pctx = poster.getContext("2d");
+    if (!pctx) return null;
+    pctx.drawImage(source, 0, 0, width, height);
+    const blob = await poster.convertToBlob({ type: "image/jpeg", quality: 0.7 });
+    return await blob.arrayBuffer();
+  } catch {
+    return null;
+  }
 }
 
 /**
