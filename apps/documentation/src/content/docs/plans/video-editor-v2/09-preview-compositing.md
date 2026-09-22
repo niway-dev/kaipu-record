@@ -1496,7 +1496,7 @@ camera box's current position, so locking never moves the picture; off a clip
 ### Task 7 — verify
 
 - [ ] Checks (audit rule 4). Verified before publishing: with PRs 5–7 applied to `main`,
-      `typecheck:web` is clean and the renderer suite passes (the video editor + page
+      `check-types:web` is clean and the renderer suite passes (the video editor + page
       folders, including the unchanged page test). The count moved with the tests this
       revision adds — take the suite's own number, not a figure from this document.
 - [ ] Manual (PR 2 recording, a few detected zooms):

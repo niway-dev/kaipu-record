@@ -117,7 +117,7 @@ Read these once; every document assumes them.
 
    ```bash
    bunx oxfmt --check .
-   cd apps/kaipu-record && bun run typecheck && bun run test
+   cd apps/kaipu-record && bun run check-types && bun run test
    ```
 
    All three must pass. Never commit with a failing check; never skip a hook.

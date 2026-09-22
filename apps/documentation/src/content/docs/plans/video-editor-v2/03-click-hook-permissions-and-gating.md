@@ -447,7 +447,7 @@ On top of PR 2's hub, so the hunk offsets assume doc 02's diffs are already appl
 The bare `require` is accepted by the main build's CommonJS output. These were
 regenerated after this plan was reviewed (the `finish(...)` call now carries PR 2's
 `maxMs` argument and wraps), so after applying them re-run
-`bun run typecheck && bun run test`.
+`bun run check-types && bun run test`.
 
 **Diff — `apps/kaipu-record/src/main/recording/recording-hub.ts`**
 

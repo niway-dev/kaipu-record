@@ -1292,7 +1292,7 @@ In `src/main/library/index.ts`, next to the other `ipcMain.handle` calls:
 The textual steps above produce exactly these diffs, generated against `main` at
 `d18dbbd`, so the hunk offsets are exact. They were regenerated after this plan was
 reviewed (`maxMs` tail cut, `.tmp` cleanup), so after applying them re-run
-`bun run typecheck && bun run test` — `typecheck:node` must stay clean and the `main`
+`bun run check-types && bun run test` — `check-types:node` must stay clean and the `main`
 vitest project green. The four IPC files of Task 7 are small and listed verbatim above.
 
 **Diff — `apps/kaipu-record/src/main/library/library-vault.ts`**

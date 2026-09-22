@@ -2549,7 +2549,7 @@ with its ghost block.
 ### Task 10 — verify
 
 - [ ] Checks (audit rule 4). **Expected after PRs 5–8**, not something this 🔵 Proposed doc
-      has already observed on `main`: with those PRs applied, `typecheck:web` comes back
+      has already observed on `main`: with those PRs applied, `check-types:web` comes back
       clean and the renderer suite is green. Record the real numbers in the PR when it lands.
 - [ ] Manual, preview:
   - Draw a Blur over text → marching ants, `W × H · BLUR` in **source** pixels, range

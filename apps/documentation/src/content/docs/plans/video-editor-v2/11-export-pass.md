@@ -967,7 +967,7 @@ places `useCameraPath` right after `useZoomEditing` for this reason.
 
 - [ ] Checks (audit rule 4). **Expected after PRs 1–9**, not something this 🔵 Proposed doc
       has already observed on `main`: with the chain of diffs in docs 01–11 applied cleanly,
-      in order, `typecheck:web` and `typecheck:node` come back clean, `oxfmt --check` passes,
+      in order, `check-types:web` and `check-types:node` come back clean, `oxfmt --check` passes,
       and the full suite is green — ~1,024 tests across the `main` and `renderer` vitest
       projects. Record the real numbers in the PR when it lands.
 - [ ] Pre-v2 regression: export a recording with cuts + slides + annotations and **no**
