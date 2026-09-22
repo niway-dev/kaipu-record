@@ -486,7 +486,12 @@
     "cameraChipFollow": "{level}× · SIGUE",
     "cameraChipLocked": "{level}× · FIJO",
     "holdOriginal": "Mantén para ver el original",
-    "originalChip": "ORIGINAL · SIN EDITAR"
+    "originalChip": "ORIGINAL · SIN EDITAR",
+    "zoomMode": "Modo",
+    "zoomFollow": "Seguir cursor",
+    "zoomLock": "Fijar aquí",
+    "zoomFollowNote": "La cámara empieza a moverse ~200 ms antes de cada clic, para que se vea intencional.",
+    "zoomLockNote": "Fijado en el recuadro que colocaste en la vista previa. Arrástralo para reencuadrar."
   },
   "panel": {
     "saving": "Guardando…",

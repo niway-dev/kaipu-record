@@ -486,7 +486,12 @@
     "cameraChipFollow": "{level}× · FOLLOW",
     "cameraChipLocked": "{level}× · LOCKED",
     "holdOriginal": "Hold to see original",
-    "originalChip": "ORIGINAL · UNEDITED"
+    "originalChip": "ORIGINAL · UNEDITED",
+    "zoomMode": "Mode",
+    "zoomFollow": "Follow cursor",
+    "zoomLock": "Lock here",
+    "zoomFollowNote": "The camera starts moving ~200 ms before each click, so it reads as intentional.",
+    "zoomLockNote": "Locked to the box you positioned on the preview. Drag it to re-aim."
   },
   "panel": {
     "saving": "Saving…",

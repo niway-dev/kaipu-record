@@ -59,7 +59,7 @@ import { ZoomLane } from "@renderer/features/video-editor/components/zoom-lane";
 import { EditorInspector } from "@renderer/features/video-editor/components/inspector/editor-inspector";
 import { DetectionPanel } from "@renderer/features/video-editor/components/inspector/detection-panel";
 import { ZoomInspector } from "@renderer/features/video-editor/components/inspector/zoom-inspector";
-import { CameraBox } from "@renderer/features/video-editor/components/camera-box";
+import { boxCenterAt, CameraBox } from "@renderer/features/video-editor/components/camera-box";
 import { HoldOriginalButton } from "@renderer/features/video-editor/components/hold-original-button";
 import { useCameraPath } from "@renderer/features/video-editor/zoom/use-camera-path";
 import { useCameraPreview } from "@renderer/features/video-editor/zoom/use-camera-preview";
@@ -874,6 +874,13 @@ function VideoEditor({
               index={zooms.visibleZooms.indexOf(selectedZoom) + 1}
               layout={layout}
               zooms={zooms}
+              anchorNow={() =>
+                boxCenterAt(
+                  selectedZoom,
+                  cameraPath,
+                  sourceTimeAtTimeline(layout, playback.timelineTime) ?? selectedZoom.start,
+                )
+              }
               onRemoved={() => selectKind("zoom", null)}
             />
           ) : (

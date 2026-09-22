@@ -1,13 +1,14 @@
 /**
- * Inspector for a selected zoom (UI spec § 7.1): origin badge, range, Level, Smoothness
- * and Remove. Every control edits through ZoomEditing, which flips the segment to
+ * Inspector for a selected zoom (UI spec § 7.1): origin badge, range, Level, Smoothness,
+ * Mode and Remove. Every control edits through ZoomEditing, which flips the segment to
  * `origin: "manual"`.
  *
- * The spec's Follow / Lock Mode control is NOT here yet: "Lock here" has to pin the
- * camera where the user is currently looking, and that position only exists once the
- * camera path does. It ships with the preview in PR 7 (plans/video-editor-v2/09).
+ * "Lock here" commits the mode AND the anchor in one step: `anchorNow()` is where the
+ * camera box sits at this instant, so locking freezes the picture the user is looking
+ * at. Without the anchor, updateZoom would fall back to the frame centre and the camera
+ * would jump (plans/video-editor-v2/09).
  */
-import { Trash2 } from "lucide-react";
+import { Crosshair, Lock, Trash2 } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { sourceRangeToTimelineBlocks } from "../../source-time";
 import type { LayoutEntry } from "../../timeline";
@@ -23,6 +24,7 @@ export function ZoomInspector({
   index,
   layout,
   zooms,
+  anchorNow,
   onRemoved,
 }: {
   segment: ZoomSegment;
@@ -30,6 +32,8 @@ export function ZoomInspector({
   index: number;
   layout: LayoutEntry[];
   zooms: ZoomEditing;
+  /** Where the camera box is right now, normalized and clamped — the anchor Lock pins. */
+  anchorNow(): { x: number; y: number };
   onRemoved(): void;
 }): React.JSX.Element {
   const t = useTranslations("videoEditor");
@@ -76,7 +80,29 @@ export function ZoomInspector({
         onEnd={zooms.end}
         onCommit={(smoothing) => zooms.commitPatch(segment.id, { smoothing })}
       />
-      {/* PR 7 inserts the Follow / Lock Mode control and its note here. */}
+      <div className={styles.segmented} role="group" aria-label={t("zoomMode")}>
+        <button
+          type="button"
+          aria-pressed={segment.mode === "follow"}
+          className={segment.mode === "follow" ? styles.segmentActive : styles.segment}
+          onClick={() => zooms.commitPatch(segment.id, { mode: "follow", anchor: null })}
+        >
+          <Crosshair size={14} />
+          {t("zoomFollow")}
+        </button>
+        <button
+          type="button"
+          aria-pressed={segment.mode === "fixed"}
+          className={segment.mode === "fixed" ? styles.segmentActive : styles.segment}
+          onClick={() => zooms.commitPatch(segment.id, { mode: "fixed", anchor: anchorNow() })}
+        >
+          <Lock size={14} />
+          {t("zoomLock")}
+        </button>
+      </div>
+      <p className={styles.note}>
+        {segment.mode === "follow" ? t("zoomFollowNote") : t("zoomLockNote")}
+      </p>
       <button
         type="button"
         className={styles.dangerButton}
