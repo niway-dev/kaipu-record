@@ -11,6 +11,7 @@ import {
   VolumeX,
 } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
+import { parseCursorTrack, type CursorTrack } from "@shared/cursor-track";
 import { captureException } from "@renderer/features/analytics";
 import {
   initialScene,
@@ -45,6 +46,8 @@ import {
   type SlideAssetStore,
 } from "@renderer/features/video-editor/slide-assets";
 import { parseSession, serializeSession } from "@renderer/features/video-editor/session";
+import { withInitialZooms } from "@renderer/features/video-editor/initial-zooms";
+import { useEditorSelection } from "@renderer/features/video-editor/editor-selection";
 import { usePreviewPlayback } from "@renderer/features/video-editor/use-preview-playback";
 import { useSourceThumbnails } from "@renderer/features/video-editor/use-source-thumbnails";
 import { useVideoScene } from "@renderer/features/video-editor/use-video-scene";
@@ -123,7 +126,10 @@ function VideoEditorLoader({ source }: { source: VideoEditorSource }): React.JSX
     return () => assetStoreRef.current.dispose();
   }, []);
 
-  const [resolvedScene, setResolvedScene] = useState<VideoScene | null>(null);
+  const [resolved, setResolved] = useState<{
+    scene: VideoScene;
+    cursorTrack: CursorTrack | null;
+  } | null>(null);
 
   useEffect(() => {
     // Guards against calling restoreAsset or setting state after unmount —
@@ -131,6 +137,25 @@ function VideoEditorLoader({ source }: { source: VideoEditorSource }): React.JSX
     // then restoreAsset would recreate object URLs that are never revoked.
     let cancelled = false;
     void (async () => {
+      // The cursor track is best-effort and independent of the session: a missing or
+      // malformed track just means no auto zooms (the editor behaves as before v2).
+      let cursorTrack: CursorTrack | null = null;
+      try {
+        const trackJson = await window.electronAPI.loadCursorTrack(source.id);
+        cursorTrack = trackJson ? parseCursorTrack(trackJson) : null;
+      } catch {
+        cursorTrack = null;
+      }
+      if (cancelled) return;
+      // Initial detection happens HERE, before useVideoScene exists, so it is part of the
+      // initial scene — not a commit — and merely opening the editor is not an edit.
+      const open = (scene: VideoScene, hasZoomData: boolean): void => {
+        if (cancelled) return;
+        setResolved({
+          scene: withInitialZooms(scene, hasZoomData, cursorTrack, source.durationSeconds),
+          cursorTrack,
+        });
+      };
       try {
         const saved = await window.electronAPI.loadVideoEditSession(source.id);
         if (cancelled) return;
@@ -156,19 +181,19 @@ function VideoEditorLoader({ source }: { source: VideoEditorSource }): React.JSX
               ),
             };
             showToast({ message: t("restored") });
-            setResolvedScene(filteredScene);
+            open(filteredScene, session.hasZoomData);
           } else {
             // Session file exists but is invalid (schema changed, corruption, etc.).
             showToast({ message: t("restoreError") });
-            if (!cancelled) setResolvedScene(initialScene(source.durationSeconds));
+            open(initialScene(source.durationSeconds), false);
           }
         } else {
           // No saved session — fresh start, no toast.
-          if (!cancelled) setResolvedScene(initialScene(source.durationSeconds));
+          open(initialScene(source.durationSeconds), false);
         }
       } catch {
         // IPC failure is non-fatal; open a fresh editor without surfacing the error.
-        if (!cancelled) setResolvedScene(initialScene(source.durationSeconds));
+        open(initialScene(source.durationSeconds), false);
       }
     })();
     return () => {
@@ -176,14 +201,19 @@ function VideoEditorLoader({ source }: { source: VideoEditorSource }): React.JSX
     };
   }, []); // [] correct: source is stable per VideoEditorPage's key={location.key}
 
-  if (resolvedScene === null) {
+  if (resolved === null) {
     // Brief loading state while the session IPC resolves. The editor grows the window
     // on mount; showing a blank page here avoids a visible size jump.
     return <div className={styles.page} />;
   }
 
   return (
-    <VideoEditor source={source} resolvedScene={resolvedScene} assetStoreRef={assetStoreRef} />
+    <VideoEditor
+      source={source}
+      resolvedScene={resolved.scene}
+      cursorTrack={resolved.cursorTrack}
+      assetStoreRef={assetStoreRef}
+    />
   );
 }
 
@@ -194,6 +224,8 @@ function VideoEditor({
 }: {
   source: VideoEditorSource;
   resolvedScene: VideoScene;
+  /** Parsed `.cursor.json`, or null (no track / window source / pre-v2 recording). */
+  cursorTrack: CursorTrack | null;
   assetStoreRef: React.MutableRefObject<SlideAssetStore>;
 }): React.JSX.Element {
   const t = useTranslations("videoEditor");
@@ -233,14 +265,26 @@ function VideoEditor({
   const videoExport = useVideoExport();
   const mediaUrl = `kaipu-media://recording/${source.id}`;
   const thumbnails = useSourceThumbnails(mediaUrl, source.durationSeconds);
-  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const selection = useEditorSelection();
+  // `select` / `clear` are stable (useCallback, no deps); the `selection` object itself
+  // is rebuilt every render, so never put it in a dependency array.
+  const { select: selectKind, clear: clearSelection } = selection;
+  const selectedItemId = selection.itemId;
+  const selectedOverlayId = selection.overlayId;
+  const setSelectedItemId = useCallback(
+    (id: string | null) => selectKind("item", id),
+    [selectKind],
+  );
+  const setSelectedOverlayId = useCallback(
+    (id: string | null) => selectKind("overlay", id),
+    [selectKind],
+  );
   // A delete must clamp the playhead into the new (shorter) timeline, but the preview
   // hook's layoutRef only picks up the new layout on the NEXT render — seeking
   // synchronously here would map the target time through the stale, pre-delete layout.
   // Queue it and let the effect below (keyed on `layout`) fire the actual seek once
   // layoutRef has caught up.
   const pendingSeekRef = useRef<number | null>(null);
-  const [selectedOverlayId, setSelectedOverlayId] = useState<string | null>(null);
   // Fullscreen state — true while document.fullscreenElement is this page's <main> stage.
   const [isFullscreen, setIsFullscreen] = useState(false);
   // Ref for the stage <main> element, used to request fullscreen on it directly.
@@ -262,6 +306,19 @@ function VideoEditor({
       setSelectedOverlayId(null);
     }
   }, [scene.overlays, selectedOverlayId]);
+
+  const selectedZoomId = selection.zoomId;
+  const selectedRedactionId = selection.redactionId;
+  useEffect(() => {
+    if (selectedZoomId && !scene.zoomSegments.some((z) => z.id === selectedZoomId)) {
+      selectKind("zoom", null);
+    }
+  }, [scene.zoomSegments, selectedZoomId, selectKind]);
+  useEffect(() => {
+    if (selectedRedactionId && !scene.redactions.some((r) => r.id === selectedRedactionId)) {
+      selectKind("redaction", null);
+    }
+  }, [scene.redactions, selectedRedactionId, selectKind]);
 
   // Track fullscreen state via the fullscreenchange event so pressing Esc (which the
   // browser handles natively) still syncs isFullscreen back to false.
@@ -530,6 +587,13 @@ function VideoEditor({
         if (!splitDisabled) handleSplit();
         return;
       }
+      // `!document.fullscreenElement`: in fullscreen the browser handles Esc itself to
+      // leave it — clearing the selection at the same time would be a second, invisible
+      // action the user never asked for.
+      if (e.key === "Escape" && !document.fullscreenElement) {
+        clearSelection();
+        return;
+      }
       // Annotation selection takes precedence over segment deletion when both exist —
       // an annotation is almost always the more "local" thing the user just touched.
       // Cmd/Ctrl+Backspace is a common "delete line/word" chord in text contexts —
@@ -552,6 +616,9 @@ function VideoEditor({
     handleDeleteSelected,
     selectedOverlayId,
     handleDeleteOverlay,
+    clearSelection,
+    selectedZoomId,
+    selectedRedactionId,
   ]);
 
   return (
