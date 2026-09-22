@@ -10,14 +10,9 @@ import { useVideoExport } from "./use-video-export";
 // This suite exercises everything the HOOK itself owns: plan validation, session
 // lifecycle (create/write/finalize/abort), message routing, and cancellation —
 // with a fake Worker standing in for the real one.
-// The poster is decoded via mediabunny (WebCodecs), which jsdom lacks — mock the
-// shared primitive so the hook's plumbing is observable. A non-null buffer here
-// proves the fix: the export must forward a real poster to finalize (the old
-// `<video>`-seek capture always resolved null, so no thumbnail was ever written).
-const { FAKE_THUMB } = vi.hoisted(() => ({ FAKE_THUMB: new Uint8Array([9, 8, 7]).buffer }));
-vi.mock("@renderer/lib/generate-thumbnail", () => ({
-  generateThumbnail: vi.fn(async () => FAKE_THUMB),
-}));
+// The poster is the worker's first rendered frame, delivered as a "poster" message
+// (never decoded from the source — it holds deleted and redacted content).
+const FAKE_THUMB = new Uint8Array([9, 8, 7]).buffer;
 
 class FakeWorker {
   onmessage: ((event: MessageEvent) => void) | null = null;
@@ -180,9 +175,7 @@ describe("useVideoExport", () => {
   });
 
   it("does not call onSaved when cancel() runs during the done→finalize window", async () => {
-    // generateThumbnail is mocked to resolve immediately (see module mock at the
-    // top), so by the time `done` fires the thumbnailPromise has already settled —
-    // the await inside the done handler's IIFE still yields a microtask, which is the
+    // The done handler's IIFE yields a microtask before finalizing, which is the
     // exact window cancel() races against. recordingFinalize is made to hang so we can
     // land cancel() squarely inside that second await too.
     let resolveFinalize!: (recording: LocalRecording) => void;
@@ -202,8 +195,8 @@ describe("useVideoExport", () => {
     const worker = createdWorkers[0];
 
     act(() => worker.onmessage?.({ data: { type: "done" } } as MessageEvent));
-    // Wait for the done handler's IIFE to actually reach recordingFinalize (it awaits
-    // thumbnailPromise first) before racing cancel() against it.
+    // Wait for the done handler's IIFE to actually reach recordingFinalize (it yields
+    // once first) before racing cancel() against it.
     await waitFor(() => expect(window.electronAPI.recordingFinalize).toHaveBeenCalled());
     // Cancel while still awaiting the (still-pending) recordingFinalize call.
     act(() => result.current.cancel());
@@ -242,6 +235,7 @@ describe("useVideoExport", () => {
       .calls[0][0] as string;
     const worker = createdWorkers[0];
 
+    act(() => worker.onmessage?.({ data: { type: "poster", data: FAKE_THUMB } } as MessageEvent));
     act(() => worker.onmessage?.({ data: { type: "done" } } as MessageEvent));
 
     await waitFor(() => expect(onSaved).toHaveBeenCalledOnce());
@@ -256,5 +250,20 @@ describe("useVideoExport", () => {
       expect.objectContaining({ id: "new-rec", title: "My recording (edited)" }),
     );
     expect(result.current.status).toBe("idle");
+  });
+
+  it("finalizes without a poster when the worker sent none (never the source's first frame)", async () => {
+    const onSaved = vi.fn();
+    const { result } = renderHook(() => useVideoExport());
+    await act(async () => {
+      await result.current.start(startArgs({ onSaved }));
+    });
+    const worker = createdWorkers[0];
+    act(() => worker.onmessage?.({ data: { type: "done" } } as MessageEvent));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledOnce());
+    expect(window.electronAPI.recordingFinalize).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ thumbnail: null }),
+    );
   });
 });

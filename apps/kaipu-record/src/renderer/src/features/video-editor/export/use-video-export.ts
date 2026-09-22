@@ -2,7 +2,6 @@ import { useCallback, useRef, useState } from "react";
 import { useTranslations } from "@kaipu/i18n";
 import type { LocalRecording } from "@shared/types/library-storage";
 import { captureException } from "@renderer/features/analytics";
-import { generateThumbnail } from "@renderer/lib/generate-thumbnail";
 import type { SlideAssetStore } from "../slide-assets";
 import type { VideoScene } from "../scene";
 import { buildExportPlan } from "./export-plan";
@@ -102,11 +101,11 @@ export function useVideoExport(): VideoExportController {
       try {
         const sourceResponse = await fetch(`kaipu-media://recording/${args.sourceId}`);
         const sourceBlob = await sourceResponse.blob();
-        // Kicked off in parallel with rasterizing/decoding below — it only reads the
-        // already-fetched Blob, so it never contends with the worker's own read of it.
-        // Poster is decoded from the source's first frame via mediabunny (see
-        // generate-thumbnail); a null result just means no poster is written.
-        const thumbnailPromise = generateThumbnail(sourceBlob);
+        // The poster comes from the worker's first RENDERED frame ("poster" message), never
+        // from the source file: the source still holds deleted footage and redacted content.
+        // No poster (encode failed) → null, and the vault's self-healing metadata decodes
+        // one later from the exported file itself.
+        let poster: ArrayBuffer | null = null;
 
         const rasterized = await rasterizeOverlays(
           args.scene.overlays,
@@ -159,17 +158,20 @@ export function useVideoExport(): VideoExportController {
           if (!activeRef.current) return;
           if (msg.type === "chunk") {
             window.electronAPI.recordingWrite(sessionId, msg.data, msg.position);
+          } else if (msg.type === "poster") {
+            poster = msg.data;
           } else if (msg.type === "progress") {
             setState((s) => (s.status === "exporting" ? { ...s, fraction: msg.fraction } : s));
           } else if (msg.type === "error") {
             fail(GENERIC_ERROR, new Error(msg.message));
           } else if (msg.type === "done") {
             void (async () => {
-              const thumbnail = await thumbnailPromise;
-              // cancel() may have run while awaiting the thumbnail (worker terminated,
+              const thumbnail = poster;
+              // Yield once so a cancel() queued in the same tick wins (worker terminated,
               // writer session aborted, activeRef flipped false) — finalizing or calling
               // onSaved past that point would resurrect a cancelled export (navigating
               // to it, or racing cancel()'s own reset with this callback's).
+              await Promise.resolve();
               if (!activeRef.current) return;
               try {
                 const recording = await window.electronAPI.recordingFinalize(sessionId, {
