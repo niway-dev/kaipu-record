@@ -1,13 +1,13 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { Cloud, Folder, Mic, Monitor, Video } from "lucide-react";
+import { Cloud, Folder, Mic, Monitor, MousePointerClick, Video } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { Row } from "@renderer/ui/row";
 import { Button } from "@renderer/ui/button";
 import { Toggle } from "@renderer/ui/toggle";
 import { Select } from "@renderer/ui/select";
 import { useOnboarding } from "@renderer/features/onboarding";
-import { usePermissions } from "@renderer/features/permissions";
+import { usePermissions, useAccessibility } from "@renderer/features/permissions";
 import { useVaultDirectory } from "@renderer/features/library/hooks/use-vault-directory";
 import {
   readDevSimulatePaid,
@@ -133,6 +133,11 @@ export function RecordingQualitySettingsPage(): React.JSX.Element {
 export function RecordingSettingsPage(): React.JSX.Element {
   const t = useTranslations("settings");
   const { settings, update } = useAppSettings();
+  // "not-required" off macOS, and on macOS until the first IPC round-trip resolves —
+  // both correctly hide the row (plans/video-editor-v2/03 § UI: "Hidden when the
+  // status is not-required"). `request` is the Settings-side call to
+  // `requestAccessibility()`; the onboarding Accessibility step is the only other one.
+  const accessibility = useAccessibility();
   return (
     <SettingsPanel title={t("recording")} subtitle={t("recordingDescription")}>
       <Section title={t("recording")}>
@@ -146,6 +151,26 @@ export function RecordingSettingsPage(): React.JSX.Element {
             />
           }
         />
+        {accessibility.status !== "not-required" && (
+          <Row
+            icon={<MousePointerClick size={16} />}
+            label={t("clickZoomLabel")}
+            description={
+              <span
+                className={
+                  accessibility.status === "granted" ? styles.statusGranted : styles.statusDenied
+                }
+              >
+                {accessibility.status === "granted" ? t("granted") : t("notGranted")}
+              </span>
+            }
+            action={
+              <Button variant="outline" size="sm" onClick={() => void accessibility.request()}>
+                {accessibility.status === "granted" ? t("reRequest") : t("request")}
+              </Button>
+            }
+          />
+        )}
       </Section>
     </SettingsPanel>
   );

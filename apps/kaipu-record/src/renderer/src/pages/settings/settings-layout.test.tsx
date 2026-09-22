@@ -100,4 +100,29 @@ describe("Settings layout", () => {
     fireEvent.click(await screen.findByRole("button", { name: /replay/i }));
     expect(open).toHaveBeenCalledOnce();
   });
+
+  it("Recording hides the Accessibility row when it's not required (non-macOS, or the stub default)", async () => {
+    renderAt("/settings/recording");
+    await screen.findByRole("heading", { level: 2, name: "Recording" });
+    expect(screen.queryByText("Zoom on clicks (Accessibility)")).toBeNull();
+  });
+
+  it("Recording shows the Accessibility row and calls requestAccessibility() (the Settings-side call site, see plans/video-editor-v2/03 § UI)", async () => {
+    const getAccessibilityStatus = vi
+      .spyOn(window.electronAPI, "getAccessibilityStatus")
+      .mockResolvedValue("denied");
+    const requestAccessibility = vi
+      .spyOn(window.electronAPI, "requestAccessibility")
+      .mockResolvedValue("granted");
+    renderAt("/settings/recording");
+
+    const row = await screen.findByText("Zoom on clicks (Accessibility)");
+    expect(row).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Request" }));
+    expect(requestAccessibility).toHaveBeenCalledOnce();
+    expect(await screen.findByRole("button", { name: "Re-request" })).toBeInTheDocument();
+
+    getAccessibilityStatus.mockRestore();
+    requestAccessibility.mockRestore();
+  });
 });
