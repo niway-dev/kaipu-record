@@ -74,6 +74,7 @@ describe("ZoomInspector", () => {
         index={2}
         layout={layout}
         zooms={zooms()}
+        anchorNow={() => ({ x: 0.5, y: 0.5 })}
         onRemoved={vi.fn()}
       />,
     );
@@ -83,23 +84,37 @@ describe("ZoomInspector", () => {
     expect(screen.getByRole("slider", { name: "Level" })).toBeInTheDocument();
     expect(screen.getByRole("slider", { name: "Smoothness" })).toBeInTheDocument();
   });
-  it("has no Mode control until PR 7 supplies the camera path", () => {
+  it("locks at the camera box's current position, not the frame centre", () => {
+    const z = zooms();
     render(
       <ZoomInspector
         segment={SEGMENT}
         index={1}
         layout={layout}
-        zooms={zooms()}
+        zooms={z}
+        anchorNow={() => ({ x: 0.82, y: 0.31 })}
         onRemoved={vi.fn()}
       />,
     );
-    expect(screen.queryByRole("button", { name: /Lock here/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Lock here/ }));
+    expect(z.commitPatch).toHaveBeenCalledWith("z1", {
+      mode: "fixed",
+      anchor: { x: 0.82, y: 0.31 },
+    });
+    expect(screen.getByText(/200 ms before each click/)).toBeInTheDocument();
   });
   it("removes and clears the selection", () => {
     const z = zooms();
     const onRemoved = vi.fn();
     render(
-      <ZoomInspector segment={SEGMENT} index={1} layout={layout} zooms={z} onRemoved={onRemoved} />,
+      <ZoomInspector
+        segment={SEGMENT}
+        index={1}
+        layout={layout}
+        zooms={z}
+        anchorNow={() => ({ x: 0.5, y: 0.5 })}
+        onRemoved={onRemoved}
+      />,
     );
     fireEvent.click(screen.getByRole("button", { name: /Remove this zoom/ }));
     expect(z.remove).toHaveBeenCalledWith("z1");
