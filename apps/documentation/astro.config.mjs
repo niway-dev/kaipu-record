@@ -91,6 +91,7 @@ export default defineConfig({
             { slug: "backlog/shortcuts" },
             { slug: "backlog/screenshots" },
             { slug: "backlog/editor-toolbar-responsive" },
+            { slug: "backlog/video-editor-annotation-inspector" },
             { slug: "backlog/screenshot-save-strategy" },
             { slug: "backlog/screenshot-scene-doc" },
             { slug: "backlog/screenshot-redaction" },
