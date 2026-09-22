@@ -34,6 +34,11 @@ const WINDOWS_PANES: PanePerKind = {
   // Windows does not gate screen capture, so there is no screen pane.
 };
 
+const ACCESSIBILITY_PANE =
+  "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility";
+
+type AccessibilityStatus = "granted" | "denied" | "not-required";
+
 function isMac(): boolean {
   return process.platform === "darwin";
 }
@@ -46,6 +51,11 @@ function isWindows(): boolean {
 async function openSettingsPane(kind: PermissionKind): Promise<void> {
   const pane = (isMac() ? MAC_PANES : isWindows() ? WINDOWS_PANES : {})[kind];
   if (pane) await shell.openExternal(pane);
+}
+
+function accessibilityStatus(): AccessibilityStatus {
+  if (!isMac()) return "not-required";
+  return systemPreferences.isTrustedAccessibilityClient(false) ? "granted" : "denied";
 }
 
 function checkPermission(kind: PermissionKind): boolean {
@@ -102,6 +112,18 @@ async function requestPermission(kind: PermissionKind): Promise<boolean> {
 }
 
 export function registerPermissionHandlers(): void {
+  ipcMain.handle(
+    IPC_CHANNELS.accessibilityStatus,
+    (): AccessibilityStatus => accessibilityStatus(),
+  );
+  ipcMain.handle(IPC_CHANNELS.accessibilityRequest, async (): Promise<AccessibilityStatus> => {
+    if (!isMac()) return "not-required";
+    // `true` adds the app to the list and shows the system prompt the first time.
+    if (systemPreferences.isTrustedAccessibilityClient(true)) return "granted";
+    await shell.openExternal(ACCESSIBILITY_PANE);
+    return accessibilityStatus();
+  });
+
   ipcMain.handle(IPC_CHANNELS.checkPermissions, async (): Promise<PermissionStatus> => {
     return checkAllPermissions();
   });

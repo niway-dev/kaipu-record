@@ -177,6 +177,9 @@ export const IPC_CHANNELS = {
   checkPermissions: "permissions:check",
   requestPermission: "permissions:request",
   openSystemSettings: "permissions:open-settings",
+  // macOS Accessibility, for the click hook. Status never prompts; request does (PR 10).
+  accessibilityStatus: "permissions:accessibility-status",
+  accessibilityRequest: "permissions:accessibility-request",
   listLocalRecordings: "library:list-local",
   renameLocalRecording: "library:rename-local",
   backfillLocalRecordingMeta: "library:backfill-meta",
