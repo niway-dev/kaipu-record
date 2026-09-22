@@ -63,6 +63,19 @@ import { boxCenterAt, CameraBox } from "@renderer/features/video-editor/componen
 import { HoldOriginalButton } from "@renderer/features/video-editor/components/hold-original-button";
 import { useCameraPath } from "@renderer/features/video-editor/zoom/use-camera-path";
 import { useCameraPreview } from "@renderer/features/video-editor/zoom/use-camera-preview";
+import {
+  isPrivacyTool,
+  type EditorTool,
+} from "@renderer/features/video-editor/annotations/video-tools";
+import type { NormRect } from "@renderer/features/video-editor/privacy/redaction";
+import { useRedactionEditing } from "@renderer/features/video-editor/privacy/use-redaction-editing";
+import { RedactionLayer } from "@renderer/features/video-editor/components/redaction-layer";
+import { RegionDrawer } from "@renderer/features/video-editor/components/region-drawer";
+import { RegionEditor } from "@renderer/features/video-editor/components/region-editor";
+import { PrivacyLane } from "@renderer/features/video-editor/components/privacy-lane";
+import { BlurInspector } from "@renderer/features/video-editor/components/inspector/blur-inspector";
+import { CoverInspector } from "@renderer/features/video-editor/components/inspector/cover-inspector";
+import { formatPrecise } from "@renderer/features/video-editor/components/inspector/format";
 import { useSessionAutosave } from "@renderer/features/video-editor/use-session-autosave";
 import { usePreviewPlayback } from "@renderer/features/video-editor/use-preview-playback";
 import { useSourceThumbnails } from "@renderer/features/video-editor/use-source-thumbnails";
@@ -291,6 +304,11 @@ function VideoEditor({
     timelineDuration: playback.duration,
     sourceDuration: source.durationSeconds,
     cursorTrack,
+  });
+  const redactionEdits = useRedactionEditing({
+    controller,
+    layout,
+    sourceDuration: source.durationSeconds,
   });
   // One camera simulation shared by the preview (useCameraPreview) and the export (doc 05).
   // Declared before any callback that closes over it (handleExport).
@@ -648,6 +666,71 @@ function VideoEditor({
     ? (zooms.visibleZooms.find((z) => z.id === selectedZoomId) ?? null)
     : null;
 
+  // Privacy (doc 10). While a privacy tool is active or a region is selected the preview
+  // shows the unzoomed original frame, so drawing/editing maps 1:1 to frame coordinates.
+  const privacyTool = isPrivacyTool(videoTools.tool) ? videoTools.tool : null;
+  const onSlide = playback.activeSlideId !== null;
+  const [draftRegion, setDraftRegion] = useState<NormRect | null>(null);
+  const selectedRedaction = selectedRedactionId
+    ? (redactionEdits.visibleRedactions.find((r) => r.id === selectedRedactionId) ?? null)
+    : null;
+  /** Timeline range covered by a source range's visible pieces (inspector + draw badge). */
+  const timelineRangeOf = useCallback(
+    (start: number, end: number): { from: number; to: number } => {
+      const blocks = sourceRangeToTimelineBlocks(layout, start, end);
+      return {
+        from: blocks[0]?.timelineStart ?? 0,
+        to: blocks[blocks.length - 1]?.timelineEnd ?? 0,
+      };
+    },
+    [layout],
+  );
+  const drawWindow = privacyTool ? redactionEdits.windowAt(playback.timelineTime) : null;
+  const drawRange = drawWindow ? timelineRangeOf(drawWindow.start, drawWindow.end) : null;
+
+  const handleToolChange = useCallback(
+    (tool: EditorTool) => {
+      // Drawing a region starts from a clean slate: no zoom/region box competing with it.
+      if (isPrivacyTool(tool)) clearSelection();
+      videoTools.setTool(tool);
+    },
+    [clearSelection, videoTools],
+  );
+
+  const handleCreateRegion = useCallback(
+    (rect: NormRect) => {
+      if (!privacyTool) return;
+      const result = redactionEdits.add(privacyTool, rect, playback.timelineTime);
+      if (result.ok) {
+        // UI spec § 4.4: on release the region is created, selected, and the tool returns to Select.
+        selectKind("redaction", result.id);
+        videoTools.setTool("select");
+      } else if (result.reason === "on-slide") {
+        showToast({ message: t("privacyNotOnSlide") });
+      }
+    },
+    [privacyTool, redactionEdits, playback.timelineTime, selectKind, videoTools, t],
+  );
+
+  const handleSelectRedaction = useCallback(
+    (id: string) => {
+      selectKind("redaction", id);
+      const r = controller.scene.redactions.find((x) => x.id === id);
+      if (!r) return;
+      const [first] = sourceRangeToTimelineBlocks(layout, r.start, r.end);
+      if (first) playback.seek((first.timelineStart + first.timelineEnd) / 2);
+    },
+    [selectKind, controller, layout, playback],
+  );
+
+  const handleRemoveRedaction = useCallback(
+    (id: string) => {
+      redactionEdits.remove(id);
+      selectKind("redaction", null);
+    },
+    [redactionEdits, selectKind],
+  );
+
   // Preview camera (doc 09). Result view applies the camera; selecting a zoom switches to
   // the zoom-edit view (full frame + camera box); holding "original" shows the raw frame.
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -656,7 +739,11 @@ function VideoEditor({
     playback.videoRef,
     contentRef,
     cameraPath,
-    !holdingOriginal && selectedZoom === null && playback.activeSlideId === null,
+    !holdingOriginal &&
+      selectedZoom === null &&
+      selectedRedaction === null &&
+      privacyTool === null &&
+      !onSlide,
   );
 
   useEffect(() => {
@@ -693,7 +780,8 @@ function VideoEditor({
       // Cmd/Ctrl+Backspace is a common "delete line/word" chord in text contexts —
       // require !isMod so it doesn't also delete an overlay or a segment.
       if (!isMod && (e.key === "Delete" || e.key === "Backspace")) {
-        if (selectedZoomId) handleRemoveZoom(selectedZoomId);
+        if (selectedRedactionId) handleRemoveRedaction(selectedRedactionId);
+        else if (selectedZoomId) handleRemoveZoom(selectedZoomId);
         else if (selectedOverlayId) handleDeleteOverlay();
         else if (!deleteDisabled) handleDeleteSelected();
       }
@@ -715,6 +803,7 @@ function VideoEditor({
     selectedZoomId,
     selectedRedactionId,
     handleRemoveZoom,
+    handleRemoveRedaction,
   ]);
 
   return (
@@ -733,8 +822,9 @@ function VideoEditor({
         deleteDisabled={deleteDisabled}
         onAddImage={handleAddImage}
         tool={videoTools.tool}
-        onToolChange={videoTools.setTool}
+        onToolChange={handleToolChange}
         onAddZoom={handleAddZoom}
+        privacyDisabled={onSlide}
         onExport={handleExport}
         exportDisabled={videoExport.status === "exporting" || scene.items.length === 0}
       />
@@ -764,9 +854,16 @@ function VideoEditor({
               slideUrl={slideUrl}
               expanded={isFullscreen}
               contentRef={contentRef}
+              underlay={
+                <RedactionLayer
+                  redactions={redactionEdits.visibleRedactions}
+                  videoRef={playback.videoRef}
+                  hidden={holdingOriginal || onSlide}
+                />
+              }
               chrome={
                 <>
-                  {selectedZoom && !holdingOriginal && playback.activeSlideId === null && (
+                  {selectedZoom && !holdingOriginal && !onSlide && (
                     <CameraBox
                       videoRef={playback.videoRef}
                       path={cameraPath}
@@ -774,6 +871,27 @@ function VideoEditor({
                       onBegin={zooms.begin}
                       onMove={(center) => zooms.liveLock(selectedZoom.id, center)}
                       onEnd={zooms.end}
+                    />
+                  )}
+                  {selectedRedaction && !holdingOriginal && !onSlide && (
+                    <RegionEditor
+                      rect={selectedRedaction.rect}
+                      onBegin={redactionEdits.begin}
+                      onChange={(rect) => redactionEdits.livePatch(selectedRedaction.id, { rect })}
+                      onEnd={redactionEdits.end}
+                    />
+                  )}
+                  {privacyTool && !holdingOriginal && !onSlide && (
+                    <RegionDrawer
+                      kind={privacyTool}
+                      videoRef={playback.videoRef}
+                      range={
+                        drawRange
+                          ? { from: formatPrecise(drawRange.from), to: formatPrecise(drawRange.to) }
+                          : null
+                      }
+                      onDraft={setDraftRegion}
+                      onCreate={handleCreateRegion}
                     />
                   )}
                   <HoldOriginalButton holding={holdingOriginal} onHoldChange={setHoldingOriginal} />
@@ -793,7 +911,7 @@ function VideoEditor({
                     // and the inspector would keep showing the Zoom panel. The same click
                     // still toggles play/pause through onBackgroundClick below.
                     onSelect={(id) => (id === null ? clearSelection() : selectKind("overlay", id))}
-                    tool={videoTools.tool}
+                    tool={isPrivacyTool(videoTools.tool) ? "select" : videoTools.tool}
                     toolState={{
                       color: videoTools.color,
                       stroke: videoTools.stroke,
@@ -856,6 +974,11 @@ function VideoEditor({
                   {t("zoomCount", { count: zooms.visibleZooms.length })}
                 </span>
               )}
+              {redactionEdits.visibleRedactions.length > 0 && (
+                <span className={styles.counts}>
+                  {t("privacyCount", { count: redactionEdits.visibleRedactions.length })}
+                </span>
+              )}
               <button
                 type="button"
                 className={styles.fullscreenButton}
@@ -868,7 +991,21 @@ function VideoEditor({
           </div>
         </main>
         <EditorInspector>
-          {selectedZoom ? (
+          {selectedRedaction?.kind === "blur" ? (
+            <BlurInspector
+              redaction={selectedRedaction}
+              range={timelineRangeOf(selectedRedaction.start, selectedRedaction.end)}
+              edits={redactionEdits}
+              onRemoved={() => selectKind("redaction", null)}
+            />
+          ) : selectedRedaction?.kind === "cover" ? (
+            <CoverInspector
+              redaction={selectedRedaction}
+              range={timelineRangeOf(selectedRedaction.start, selectedRedaction.end)}
+              edits={redactionEdits}
+              onRemoved={() => selectKind("redaction", null)}
+            />
+          ) : selectedZoom ? (
             <ZoomInspector
               segment={selectedZoom}
               index={zooms.visibleZooms.indexOf(selectedZoom) + 1}
@@ -926,6 +1063,24 @@ function VideoEditor({
                   selectedId={selectedZoomId}
                   onSelect={handleSelectZoom}
                   onEdgeDrag={zooms.edgeDrag}
+                />
+              ),
+            },
+            {
+              key: "privacy",
+              label: t("lanePrivacy"),
+              node: (
+                <PrivacyLane
+                  redactions={redactionEdits.visibleRedactions}
+                  layout={layout}
+                  selectedId={selectedRedactionId}
+                  onSelect={handleSelectRedaction}
+                  onEdgeDrag={redactionEdits.edgeDrag}
+                  ghost={
+                    draftRegion && privacyTool && drawWindow
+                      ? { kind: privacyTool, start: drawWindow.start, end: drawWindow.end }
+                      : null
+                  }
                 />
               ),
             },

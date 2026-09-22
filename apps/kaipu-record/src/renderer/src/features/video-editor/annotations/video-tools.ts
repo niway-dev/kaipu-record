@@ -14,6 +14,17 @@ import { ANNOTATION_COLORS } from "@renderer/features/screenshots/annotations";
 export const VIDEO_TOOLS = ["select", "box", "arrow", "text"] as const;
 export type VideoTool = (typeof VIDEO_TOOLS)[number];
 
+/** Privacy drawing modes (video-editor v2). Separate from VIDEO_TOOLS: the annotation
+ *  layer never sees them (it gets "select" while one is active). */
+export const PRIVACY_TOOLS = ["blur", "cover"] as const;
+export type PrivacyTool = (typeof PRIVACY_TOOLS)[number];
+
+export type EditorTool = VideoTool | PrivacyTool;
+
+export function isPrivacyTool(tool: EditorTool): tool is PrivacyTool {
+  return tool === "blur" || tool === "cover";
+}
+
 /**
  * Default visibility-window length (seconds) for a freshly drawn overlay — long
  * enough to read a label/box without scrubbing, short enough not to blanket the
@@ -22,7 +33,7 @@ export type VideoTool = (typeof VIDEO_TOOLS)[number];
 export const DEFAULT_OVERLAY_SECONDS = 3;
 
 export interface VideoToolState {
-  tool: VideoTool;
+  tool: EditorTool;
   /** Selected drawing colour (hex) — see ANNOTATION_COLORS. */
   color: string;
   /** Stroke level — an index into STROKE_WIDTHS (0–2). */
@@ -32,7 +43,7 @@ export interface VideoToolState {
 }
 
 export interface VideoToolsController extends VideoToolState {
-  setTool(tool: VideoTool): void;
+  setTool(tool: EditorTool): void;
   setColor(color: string): void;
   setStroke(level: number): void;
   setTextSize(level: number): void;
@@ -40,7 +51,7 @@ export interface VideoToolsController extends VideoToolState {
 
 /** Toolbar state for the video-editor annotation tools. */
 export function useVideoTools(): VideoToolsController {
-  const [tool, setTool] = useState<VideoTool>("select");
+  const [tool, setTool] = useState<EditorTool>("select");
   const [color, setColor] = useState<string>(ANNOTATION_COLORS[0].value);
   const [stroke, setStroke] = useState<number>(1);
   const [textSize, setTextSize] = useState<number>(1);
