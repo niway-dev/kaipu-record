@@ -196,6 +196,8 @@ export const IPC_CHANNELS = {
   refreshCloudCatalog: "library:refresh-cloud-catalog",
   // Frees disk space for an item whose identical bytes are in cloud; never the generic delete.
   removeLocalCopy: "library:remove-local-copy",
+  // Editor: read a recording's cursor track sidecar (raw JSON or null).
+  loadCursorTrack: "library:load-cursor-track",
   // Screenshots (renderer ↔ main)
   screenshotCapture: "screenshot:capture",
   screenshotCopy: "screenshot:copy",
@@ -217,6 +219,14 @@ export const IPC_CHANNELS = {
   recordingReportTick: "recording:report-tick",
   recordingStart: "recording:start",
   recordingStop: "recording:stop",
+  // Cursor track (recorder renderer → main). Keyed by the writer session id. See
+  // plans/video-editor-v2/02: main samples the pointer; the renderer sends the clock
+  // anchor and pause edges already converted to main-clock ms.
+  cursorTrackStart: "cursor-track:start",
+  cursorClockNow: "cursor-track:clock-now",
+  cursorTrackAnchor: "cursor-track:anchor",
+  cursorTrackPause: "cursor-track:pause",
+  cursorTrackResume: "cursor-track:resume",
   // Control bar (main → bar broadcasts, bar → main commands)
   controlTick: "control:tick",
   controlCommand: "control:command",

@@ -75,6 +75,15 @@ const kaipuApi: KaipuElectronAPI = {
   recordingReportTick: (tick) => ipcRenderer.send(IPC_CHANNELS.recordingReportTick, tick),
   recordingStart: (info) => ipcRenderer.send(IPC_CHANNELS.recordingStart, info),
   recordingStop: () => ipcRenderer.send(IPC_CHANNELS.recordingStop),
+  cursorTrackStart: (sessionId, sourceId) =>
+    ipcRenderer.invoke(IPC_CHANNELS.cursorTrackStart, sessionId, sourceId),
+  cursorClockNow: () => ipcRenderer.invoke(IPC_CHANNELS.cursorClockNow),
+  cursorTrackAnchor: (sessionId, t0MainMs, quality) =>
+    ipcRenderer.send(IPC_CHANNELS.cursorTrackAnchor, sessionId, t0MainMs, quality),
+  cursorTrackPause: (sessionId, atMainMs) =>
+    ipcRenderer.send(IPC_CHANNELS.cursorTrackPause, sessionId, atMainMs),
+  cursorTrackResume: (sessionId, atMainMs) =>
+    ipcRenderer.send(IPC_CHANNELS.cursorTrackResume, sessionId, atMainMs),
   onRecordingCommand: (callback) => {
     const listener = (_e: IpcRendererEvent, command: ControlCommand): void => callback(command);
     ipcRenderer.on(IPC_CHANNELS.recordingCommand, listener);
@@ -121,6 +130,7 @@ const kaipuApi: KaipuElectronAPI = {
   saveVideoEditSession: (id, sessionJson, assets) =>
     ipcRenderer.invoke(IPC_CHANNELS.videoEditSaveSession, id, sessionJson, assets),
   loadVideoEditSession: (id) => ipcRenderer.invoke(IPC_CHANNELS.videoEditLoadSession, id),
+  loadCursorTrack: (id) => ipcRenderer.invoke(IPC_CHANNELS.loadCursorTrack, id),
   captureScreenshot: () => ipcRenderer.invoke(IPC_CHANNELS.screenshotCapture),
   revealAfterCapture: () => ipcRenderer.send(IPC_CHANNELS.screenshotReveal),
   setEditorWindowMode: (active) => ipcRenderer.send(IPC_CHANNELS.windowSetEditorMode, active),
