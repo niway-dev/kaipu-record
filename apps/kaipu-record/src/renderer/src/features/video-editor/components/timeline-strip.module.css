@@ -14,11 +14,46 @@
    can span all three rows as one continuous vertical line. */
 .timelineBody {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
+  display: grid;
+  /* Label column (UI spec § 6) + the lanes column. Every lane lives in column 2, so all
+     lanes share one horizontal extent. The width is declared ONCE, here: the grid
+     template and .playheadLayer's offset both read it and must never drift apart. */
+  --lane-label-w: 62px;
+  grid-template-columns: var(--lane-label-w) 1fr;
+  align-items: center;
+  column-gap: var(--space-sm);
+  row-gap: var(--space-xs);
   flex: 1;
   min-height: 0;
+}
+
+.laneLabel {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* One grid cell per extra lane (see LaneRow). min-width: 0 stops a wide lane from
+   growing the column past its 1fr share. */
+.laneCell {
+  min-width: 0;
+}
+
+/* Covers the lanes column across every row; the playhead's left % is relative to it,
+   i.e. to the lanes' width, exactly like each lane's own blocks. --lane-label-w is
+   inherited from .timelineBody, so the 62 px lives in exactly one place. */
+.playheadLayer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--lane-label-w) + var(--space-sm));
+  right: 0;
+  pointer-events: none;
+  z-index: 3;
 }
 
 .ruler {
@@ -48,8 +83,8 @@
 
 .track {
   position: relative;
-  flex: 1;
-  min-height: 0;
+  /* Filmstrip row: fixed 44 px (UI spec § 6.1) now that the strip stacks more lanes. */
+  height: 44px;
   border-radius: var(--radius-lg);
   background: var(--bg-input);
   cursor: pointer;
