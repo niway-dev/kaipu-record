@@ -15,6 +15,7 @@ import {
 import type { WatermarkConfig } from "@renderer/features/watermark/watermark";
 import { startRecordingCompositor, type RecordingCompositor } from "./recording-compositor";
 import { levelsFromTimeDomain } from "./audio-levels";
+import { waitForFirstMediaTimestamp, type FirstMediaTimestamp } from "./first-media-timestamp";
 
 export interface EngineHandle {
   pause(): void;
@@ -25,6 +26,11 @@ export interface EngineHandle {
   readLevels(): number[];
   /** A still JPEG frame of the screen captured at start. */
   thumbnail: ArrayBuffer | null;
+  /**
+   * Renderer-clock time of video time 0 (the MP4's first media sample). Resolves
+   * within ~1 frame of start; "estimated" if mediabunny's private field is missing.
+   */
+  firstMediaTimestamp: Promise<FirstMediaTimestamp>;
 }
 
 export interface EngineOptions {
@@ -230,6 +236,10 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
     output.addAudioTrack(audioSource);
   }
   await output.start();
+  // Fallback anchor if mediabunny's private first-media timestamp is unavailable:
+  // the first frame is accepted within one frame period of start() resolving.
+  const startedAt = performance.now();
+  const firstMediaTimestamp = waitForFirstMediaTimestamp(output, startedAt);
 
   // Surface mid-recording failures so the caller tears down cleanly (otherwise the
   // app gets stuck: window hidden, bar showing, no real recording). Fires at most
@@ -261,6 +271,7 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
       return levelsFromTimeDomain(levelBuffer, 5);
     },
     thumbnail,
+    firstMediaTimestamp,
     async stop() {
       teardownStarted = true; // stopping the tracks below would otherwise fire onError
       await output.finalize();
