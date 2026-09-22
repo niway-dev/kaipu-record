@@ -48,6 +48,7 @@ import {
 import { parseSession, serializeSession } from "@renderer/features/video-editor/session";
 import { withInitialZooms } from "@renderer/features/video-editor/initial-zooms";
 import { useEditorSelection } from "@renderer/features/video-editor/editor-selection";
+import { useSessionAutosave } from "@renderer/features/video-editor/use-session-autosave";
 import { usePreviewPlayback } from "@renderer/features/video-editor/use-preview-playback";
 import { useSourceThumbnails } from "@renderer/features/video-editor/use-source-thumbnails";
 import { useVideoScene } from "@renderer/features/video-editor/use-video-scene";
@@ -239,26 +240,33 @@ function VideoEditor({
   const controller = useVideoScene(resolvedScene);
   const { scene } = controller;
   const layout = useMemo(() => toLayout(scene.items), [scene.items]);
-  // Blocks in-app navigation (e.g. the sidebar) while there's an edit that would be
-  // lost — same useBlocker pattern as the screenshot editor.
+  // Writes the session ~800 ms after every commit/endInteract, and flushes on unmount
+  // and beforeunload. See plans/video-editor-v2/07: before this, closing the window
+  // threw away every cut, zoom and redaction, because useBlocker below only ever sees
+  // in-app navigation.
+  const autosave = useSessionAutosave(source.id, scene, controller.interacting, assetStoreRef);
+  // Blocks in-app navigation (e.g. the sidebar) while an edit has NOT reached the
+  // session file yet — same useBlocker pattern as the screenshot editor, but now about
+  // "not written" rather than "edited": with autosave on, an edit that is already on
+  // disk is not lost by leaving, so warning about it would be a lie. In practice the
+  // dialog therefore appears only inside the debounce window or after a failed write,
+  // and its Discard button drops the pending write (`autosave.cancel()`) so it means
+  // exactly what it says.
   //
-  // The predicate reads refs instead of closing over `controller.dirty`/a plain
-  // boolean: react-router's data router consults the predicate SYNCHRONOUSLY inside
-  // `navigate()`, before React has re-rendered. handleExport's onSaved callback calls
-  // `controller.markClean()` (which schedules setPast([])/setFuture([])) immediately
-  // followed by `navigate(...)` — React 19 batches those state updates, so a boolean
-  // `dirty` value closed over at render time would still read `true` at navigate-time
-  // and the "discard changes" dialog would pop on every successful export. Refs
-  // sidestep the batching entirely: they're updated synchronously and read
-  // synchronously by the predicate.
-  const dirtyRef = useRef(controller.dirty);
-  dirtyRef.current = controller.dirty;
+  // The predicate reads a ref instead of a plain boolean: react-router's data router
+  // consults it SYNCHRONOUSLY inside `navigate()`, before React has re-rendered, and
+  // React 19 batches the state updates that a render-time boolean would depend on.
+  // Refs sidestep the batching entirely.
+  const pendingSaveRef = autosave.pendingRef;
   // Set to true right before the post-export `navigate()` so that programmatic
   // navigation always proceeds, regardless of batching timing. Normal in-app
-  // navigation (e.g. the sidebar) never touches this ref, so it still blocks while
-  // dirty.
+  // navigation (e.g. the sidebar) never touches this ref, so it still blocks while a
+  // write is pending.
   const bypassBlockerRef = useRef(false);
-  const shouldBlock = useCallback(() => dirtyRef.current && !bypassBlockerRef.current, []);
+  const shouldBlock = useCallback(
+    () => pendingSaveRef.current && !bypassBlockerRef.current,
+    [pendingSaveRef],
+  );
   const blocker = useBlocker(shouldBlock);
   const playback = usePreviewPlayback(layout);
   const videoTools = useVideoTools();
@@ -445,6 +453,9 @@ function VideoEditor({
       previewWidth: video.clientWidth,
       slideAssets: assetStoreRef.current,
       onSaved: async (recording) => {
+        // This save supersedes whatever the autosave still had queued; dropping it
+        // avoids a second write of the same scene right before unmount.
+        autosave.cancel();
         // Persist the session before navigating away so reopening the editor on the
         // original recording restores cuts/overlays/slides. Non-fatal if it fails —
         // the export already succeeded and the user lands on the new recording.
@@ -467,7 +478,7 @@ function VideoEditor({
         navigate(`/library/${recording.assetId}`);
       },
     });
-  }, [playback, videoExport, scene, source, controller, navigate, assetStoreRef]);
+  }, [playback, videoExport, scene, source, controller, navigate, assetStoreRef, autosave]);
 
   const handleDeleteOverlay = useCallback(() => {
     // Same rationale as handleDeleteSelected: don't touch scene/selection while a
@@ -758,7 +769,15 @@ function VideoEditor({
             <ModalButton variant="ghost" onClick={() => blocker.reset()}>
               {t("keepEditing")}
             </ModalButton>
-            <ModalButton variant="danger" onClick={() => blocker.proceed()}>
+            <ModalButton
+              variant="danger"
+              onClick={() => {
+                // Discard = drop the queued write, so the unmount flush does not save
+                // the very edits the user just chose to throw away.
+                autosave.cancel();
+                blocker.proceed();
+              }}
+            >
               <Trash2 size={15} strokeWidth={1.8} />
               {t("discard")}
             </ModalButton>
