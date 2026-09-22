@@ -501,6 +501,7 @@ function VideoEditor({
       videoHeight: video.videoHeight,
       previewWidth: video.clientWidth,
       slideAssets: assetStoreRef.current,
+      cameraPath,
       onSaved: async (recording) => {
         // This save supersedes whatever the autosave still had queued; dropping it
         // avoids a second write of the same scene right before unmount.
@@ -527,7 +528,17 @@ function VideoEditor({
         navigate(`/library/${recording.assetId}`);
       },
     });
-  }, [playback, videoExport, scene, source, controller, navigate, assetStoreRef, autosave]);
+  }, [
+    playback,
+    videoExport,
+    scene,
+    source,
+    controller,
+    navigate,
+    assetStoreRef,
+    autosave,
+    cameraPath,
+  ]);
 
   const handleDeleteOverlay = useCallback(() => {
     // Same rationale as handleDeleteSelected: don't touch scene/selection while a
