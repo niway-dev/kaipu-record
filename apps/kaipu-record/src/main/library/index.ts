@@ -80,6 +80,9 @@ export function registerLibraryVaultHandlers(deps: { auth: AuthHandle; serverUrl
   });
 
   ipcMain.handle(IPC_CHANNELS.listLocalRecordings, () => currentVault().list());
+  ipcMain.handle(IPC_CHANNELS.loadCursorTrack, (_event, id: string) =>
+    currentVault().readCursorTrack(id),
+  );
   ipcMain.handle(IPC_CHANNELS.renameLocalRecording, (_event, id: string, title: string) =>
     currentVault().rename(id, title),
   );

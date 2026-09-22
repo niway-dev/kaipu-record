@@ -1,4 +1,4 @@
-import { app, BrowserWindow, desktopCapturer, ipcMain } from "electron";
+import { app, BrowserWindow, desktopCapturer, ipcMain, screen } from "electron";
 import { IPC_CHANNELS } from "@shared/types";
 import type {
   ControlCommand,
@@ -8,6 +8,10 @@ import type {
   RecordingStartInfo,
   RecordingTick,
 } from "@shared/types/ipc";
+import { serializeCursorTrack } from "@shared/cursor-track";
+import { LibraryVault } from "../library/library-vault";
+import { pickCapturedDisplay } from "./captured-display";
+import { CursorTrackRegistry } from "./cursor-tracker";
 import { ControlBarWindow } from "./control-bar-window";
 import { CameraBubbleWindow } from "./camera-bubble-window";
 import { RecordingWriter, timestampId } from "./recording-writer";
@@ -58,6 +62,18 @@ export function registerRecordingHub(
     vaultDir: () => vaultDirectory().path,
     newId: () => timestampId(Date.now()),
   });
+
+  // Cursor tracks, keyed by writer session id (see plans/video-editor-v2/02).
+  const cursorTracks = new CursorTrackRegistry({
+    now: () => performance.now(),
+    cursorPoint: () => screen.getCursorScreenPoint(),
+    every: (ms, fn) => {
+      const handle = setInterval(fn, ms);
+      return () => clearInterval(handle);
+    },
+  });
+  // PR 3 replaces this with the click hook's availability (doc 03).
+  const clicksAvailable = (): boolean => false;
 
   // Single source of truth for "is a recording happening", broadcast to every
   // window so non-recorder windows (reopened Record page, Capture Panel) can
@@ -138,9 +154,55 @@ export function registerRecordingHub(
   );
   ipcMain.handle(
     IPC_CHANNELS.recordingFinalize,
-    (_e, sessionId: string, meta: RecordingFinalizeMeta) => writer.finalize(sessionId, meta),
+    async (_e, sessionId: string, meta: RecordingFinalizeMeta) => {
+      let recording;
+      try {
+        recording = await writer.finalize(sessionId, meta);
+      } catch (error) {
+        cursorTracks.discard(sessionId);
+        throw error;
+      }
+      // Best effort: a recording is never failed by its cursor track. The tracker
+      // is still sampling here (finalize runs after the encoder stopped), so the
+      // tail past the last frame is cut with the recording's duration.
+      const track = cursorTracks.finish(sessionId, clicksAvailable(), meta.durationSeconds * 1000);
+      if (track) {
+        await new LibraryVault(vaultDirectory().path)
+          .writeCursorTrack(recording.id, serializeCursorTrack(track))
+          .catch((error) => console.error("cursor track write failed", error));
+      }
+      return recording;
+    },
   );
-  ipcMain.handle(IPC_CHANNELS.recordingAbort, (_e, sessionId: string) => writer.abort(sessionId));
+  ipcMain.handle(IPC_CHANNELS.recordingAbort, (_e, sessionId: string) => {
+    cursorTracks.discard(sessionId);
+    return writer.abort(sessionId);
+  });
+  ipcMain.handle(
+    IPC_CHANNELS.cursorTrackStart,
+    async (_e, sessionId: string, sourceId: string): Promise<{ enabled: boolean }> => {
+      const display = pickCapturedDisplay(
+        sourceId,
+        await displayIdForSource(sourceId),
+        screen.getAllDisplays(),
+      );
+      if (!display) return { enabled: false };
+      cursorTracks.start(sessionId, display);
+      return { enabled: true };
+    },
+  );
+  ipcMain.handle(IPC_CHANNELS.cursorClockNow, () => performance.now());
+  ipcMain.on(
+    IPC_CHANNELS.cursorTrackAnchor,
+    (_e, sessionId: string, t0MainMs: number, quality: "exact" | "estimated") =>
+      cursorTracks.get(sessionId)?.setAnchor(t0MainMs, quality),
+  );
+  ipcMain.on(IPC_CHANNELS.cursorTrackPause, (_e, sessionId: string, atMainMs: number) =>
+    cursorTracks.get(sessionId)?.pause(atMainMs),
+  );
+  ipcMain.on(IPC_CHANNELS.cursorTrackResume, (_e, sessionId: string, atMainMs: number) =>
+    cursorTracks.get(sessionId)?.resume(atMainMs),
+  );
 
   // ── Window orchestration ────────────────────────────────────────────
   ipcMain.on(IPC_CHANNELS.recordingStart, (_e, info: RecordingStartInfo) => {
@@ -197,6 +259,7 @@ export function registerRecordingHub(
       if (settings.isCameraEnabled) cameraBubble.show();
     },
     forceReset: () => {
+      cursorTracks.discardAll();
       if (!activity.active) return;
       applyStopWindowState();
     },

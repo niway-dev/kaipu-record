@@ -68,6 +68,7 @@ function fakeEngine(): EngineHandle {
     stop: vi.fn(async () => {}),
     readLevels: vi.fn(() => [0, 0, 0, 0, 0]),
     thumbnail: null,
+    firstMediaTimestamp: Promise.resolve({ rendererMs: 0, quality: "estimated" as const }),
   };
 }
 

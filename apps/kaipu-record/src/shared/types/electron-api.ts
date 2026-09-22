@@ -155,6 +155,14 @@ export interface KaipuElectronAPI {
   recordingStart(info: RecordingStartInfo): void;
   /** Tell the hub recording ended: hide the bar, restore main window. */
   recordingStop(): void;
+  /** Start sampling the pointer for this writer session. `enabled: false` = no track (window source, unknown display). */
+  cursorTrackStart(sessionId: string, sourceId: string): Promise<{ enabled: boolean }>;
+  /** Main-process performance.now(), for the renderer→main clock handshake. */
+  cursorClockNow(): Promise<number>;
+  /** Video time 0 of this session, in main-clock ms. */
+  cursorTrackAnchor(sessionId: string, t0MainMs: number, quality: "exact" | "estimated"): void;
+  cursorTrackPause(sessionId: string, atMainMs: number): void;
+  cursorTrackResume(sessionId: string, atMainMs: number): void;
   /** Recorder window subscribes to commands from the bar (pause/resume/stop). */
   onRecordingCommand(callback: (command: ControlCommand) => void): () => void;
 
@@ -263,4 +271,6 @@ export interface KaipuElectronAPI {
   loadVideoEditSession(
     id: string,
   ): Promise<{ sessionJson: string; assets: { assetId: string; bytes: ArrayBuffer }[] } | null>;
+  /** Raw `.cursor.json` for a recording, or null when it has none. Parse with parseCursorTrack. */
+  loadCursorTrack(id: string): Promise<string | null>;
 }

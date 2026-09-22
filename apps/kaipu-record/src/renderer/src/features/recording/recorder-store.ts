@@ -1,5 +1,9 @@
 import type { LocalRecording } from "@shared/types";
 import {
+  beginCursorTrackSession,
+  type CursorTrackSession,
+} from "@renderer/features/recording/cursor-track-session";
+import {
   elapsedMs,
   pauseElapsed,
   resumeElapsed,
@@ -57,6 +61,7 @@ const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
 
 let snapshot: RecorderSnapshot = { status: "idle", countdown: null };
 let engine: EngineHandle | null = null;
+let cursorTrack: CursorTrackSession | null = null;
 let sessionId: string | null = null;
 let clock: ElapsedState | null = null;
 let tickTimer: ReturnType<typeof setInterval> | null = null;
@@ -161,41 +166,55 @@ async function beginEngine(input: StartInput): Promise<void> {
   window.electronAPI.recordingStart({ sourceId: input.sourceId, sourceName: input.sourceName });
   try {
     await window.electronAPI.recordingCreate(id);
-    const handle = await startEngine({
-      sourceId: input.sourceId,
-      microphoneDeviceId: input.microphoneDeviceId,
-      systemAudio: input.systemAudio,
-      width: input.width,
-      height: input.height,
-      frameRate: input.frameRate,
-      videoBitrate: input.videoBitrate,
-      watermark: input.watermark,
-      onChunk: (data, position) => window.electronAPI.recordingWrite(id, data, position),
-      // A failure mid-recording (encoder error or the screen capture ending)
-      // runs the same robust stop — finalize-or-abort + always restore the
-      // window/Dock/bar — so the app never gets stuck.
-      onError: (error) => {
-        reportError(runtimeT()("record.errorStopped"), error, {
-          context: { sourceId: input.sourceId, phase: "mid-recording" },
-          retry: () => {
-            if (lastResolveInput) requestStartRecording(lastResolveInput);
-          },
-        });
-        void stopRecording();
-      },
-    });
+    // Best-effort, and started CONCURRENTLY with the engine: main resolves the
+    // captured display through desktopCapturer.getSources(), which costs
+    // 100–500 ms, and the recording must never wait for it. The call never
+    // throws — it resolves to a no-op session when main declines (window source,
+    // unknown display), when IPC fails, or after its own 500 ms timeout.
+    const [track, handle] = await Promise.all([
+      beginCursorTrackSession(window.electronAPI, id, input.sourceId),
+      startEngine({
+        sourceId: input.sourceId,
+        microphoneDeviceId: input.microphoneDeviceId,
+        systemAudio: input.systemAudio,
+        width: input.width,
+        height: input.height,
+        frameRate: input.frameRate,
+        videoBitrate: input.videoBitrate,
+        watermark: input.watermark,
+        onChunk: (data, position) => window.electronAPI.recordingWrite(id, data, position),
+        // A failure mid-recording (encoder error or the screen capture ending)
+        // runs the same robust stop — finalize-or-abort + always restore the
+        // window/Dock/bar — so the app never gets stuck.
+        onError: (error) => {
+          reportError(runtimeT()("record.errorStopped"), error, {
+            context: { sourceId: input.sourceId, phase: "mid-recording" },
+            retry: () => {
+              if (lastResolveInput) requestStartRecording(lastResolveInput);
+            },
+          });
+          void stopRecording();
+        },
+      }),
+    ]);
+    cursorTrack = track;
 
     if (cancelRequested) {
       cancelRequested = false;
       await handle.stop();
       await window.electronAPI.recordingAbort(id);
       window.electronAPI.recordingStop(); // undo the early hide
+      cursorTrack = null;
       sessionId = null;
       update({ status: "idle", countdown: null });
       return;
     }
 
     engine = handle;
+    const activeTrack = cursorTrack;
+    void handle.firstMediaTimestamp.then(({ rendererMs, quality }) =>
+      activeTrack?.anchor(rendererMs, quality),
+    );
     clock = startElapsed(Date.now());
     update({ status: "recording", countdown: null });
 
@@ -221,6 +240,7 @@ async function beginEngine(input: StartInput): Promise<void> {
     // leave it hidden with nothing recording.
     window.electronAPI.recordingStop();
     engine = null;
+    cursorTrack = null;
     sessionId = null;
     // Back to idle (not a separate "error" state) so the Start button is
     // immediately usable again; the toast above carries the retry action.
@@ -230,14 +250,18 @@ async function beginEngine(input: StartInput): Promise<void> {
 
 export function pauseRecording(): void {
   if (!engine || !clock) return;
+  const pausedAt = performance.now();
   engine.pause();
+  cursorTrack?.pause(pausedAt);
   clock = pauseElapsed(clock, Date.now());
   update({ status: "paused" });
 }
 
 export function resumeRecording(): void {
   if (!engine || !clock) return;
+  const resumedAt = performance.now();
   engine.resume();
+  cursorTrack?.resume(resumedAt);
   clock = resumeElapsed(clock, Date.now());
   update({ status: "recording" });
 }
@@ -290,6 +314,7 @@ async function stopRecording(): Promise<void> {
   if (recording) for (const listener of completeListeners) listener(recording);
   window.electronAPI.recordingStop();
   engine = null;
+  cursorTrack = null;
   sessionId = null;
   clock = null;
   stopping = false;

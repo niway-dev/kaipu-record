@@ -70,6 +70,31 @@ describe("LibraryVault", () => {
     expect(await readdir(directory)).toContain("clip.webm");
   });
 
+  it("writes, reads and removes the cursor track sidecar", async () => {
+    await writeRecording("rec");
+    expect(await vault.readCursorTrack("rec")).toBeNull();
+    await vault.writeCursorTrack("rec", '{"version":1}');
+    expect(await vault.readCursorTrack("rec")).toBe('{"version":1}');
+    expect(await readdir(join(directory, ".kaipu"))).not.toContain("rec.cursor.json.tmp");
+    await vault.remove("rec");
+    expect(await vault.readCursorTrack("rec")).toBeNull();
+  });
+
+  it("removes a cursor track temp file left behind by an interrupted write", async () => {
+    await writeRecording("rec");
+    await vault.writeCursorTrack("rec", "{}");
+    await writeFile(`${vault.cursorTrackPath("rec")}.tmp`, "half", "utf-8");
+    await vault.remove("rec");
+    expect(await readdir(join(directory, ".kaipu"))).not.toContain("rec.cursor.json.tmp");
+  });
+
+  it("keeps the cursor track when only the local copy is removed", async () => {
+    await writeRecording("rec");
+    await vault.writeCursorTrack("rec", "{}");
+    await vault.removeLocalCopy("rec");
+    expect(await vault.readCursorTrack("rec")).toBe("{}");
+  });
+
   it("removes the video and its sidecar", async () => {
     await writeRecording("clip");
     await vault.rename("clip", "X");
