@@ -243,6 +243,7 @@ describe("useVideoExport", () => {
     expect(window.electronAPI.recordingFinalize).toHaveBeenCalledWith(sessionId, {
       title: "My recording (edited)",
       durationSeconds: 10,
+      durationMs: 10_000,
       thumbnail: FAKE_THUMB,
       derivedFromAssetId: null,
     });
