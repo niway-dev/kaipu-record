@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { VideoScene } from "./scene";
+import { initialScene, type VideoScene } from "./scene";
 import { parseSession, serializeSession } from "./session";
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -61,6 +61,7 @@ const TEXT_OVERLAY = {
 };
 
 const FULL_SCENE: VideoScene = {
+  ...initialScene(10),
   items: [CLIP_ITEM, SLIDE_ITEM],
   overlays: [BOX_OVERLAY, ARROW_OVERLAY, TEXT_OVERLAY],
 };
@@ -89,7 +90,7 @@ describe("serializeSession / parseSession — round-trips", () => {
   });
 
   it("round-trips a scene with only clips and no overlays", () => {
-    const scene: VideoScene = { items: [CLIP_ITEM], overlays: [] };
+    const scene: VideoScene = { ...initialScene(10), items: [CLIP_ITEM], overlays: [] };
     const result = parseSession(serializeSession(scene));
     expect(result).not.toBeNull();
     expect(result!.scene.items).toHaveLength(1);
@@ -278,5 +279,120 @@ describe("parseSession — null on invalid input", () => {
   it("returns null when the scene is not an object", () => {
     expect(parseSession(JSON.stringify({ version: 1, scene: null }))).toBeNull();
     expect(parseSession(JSON.stringify({ version: 1, scene: 42 }))).toBeNull();
+  });
+});
+
+// ── v2 fields (plans/video-editor-v2/07) ─────────────────────────────────────
+
+const ZOOM = {
+  id: "auto-4600",
+  start: 4.6,
+  end: 7,
+  scale: 2,
+  mode: "follow" as const,
+  anchor: null,
+  smoothing: 70,
+  origin: "auto" as const,
+  trigger: "click" as const,
+};
+
+const BLUR = {
+  id: "r1",
+  kind: "blur" as const,
+  start: 1,
+  end: 6,
+  rect: { x: 0.1, y: 0.1, w: 0.3, h: 0.1 },
+  intensity: 70,
+  style: "gaussian" as const,
+};
+
+const COVER = {
+  id: "r2",
+  kind: "cover" as const,
+  start: 2,
+  end: 4,
+  rect: { x: 0.5, y: 0.5, w: 0.2, h: 0.2 },
+  fill: "#18181b",
+  label: "API key",
+};
+
+describe("parseSession — v2 fields", () => {
+  it("round-trips zoom segments, redactions and sensitivity", () => {
+    const scene: VideoScene = {
+      ...initialScene(10),
+      zoomSegments: [ZOOM],
+      redactions: [BLUR, COVER],
+      zoomSensitivity: 80,
+    };
+    const result = parseSession(serializeSession(scene))!;
+    expect(result.hasZoomData).toBe(true);
+    expect(result.scene.zoomSegments).toEqual([ZOOM]);
+    expect(result.scene.redactions).toEqual([BLUR, COVER]);
+    expect(result.scene.zoomSensitivity).toBe(80);
+  });
+
+  it("opens a pre-v2 session with defaults and hasZoomData = false", () => {
+    const old = JSON.stringify({ version: 1, scene: { items: [CLIP_ITEM], overlays: [] } });
+    const result = parseSession(old)!;
+    expect(result.hasZoomData).toBe(false);
+    expect(result.scene.zoomSegments).toEqual([]);
+    expect(result.scene.redactions).toEqual([]);
+    expect(result.scene.zoomSensitivity).toBe(55);
+  });
+
+  it("clamps a too-weak blur intensity on load", () => {
+    const json = JSON.stringify({
+      version: 1,
+      scene: { items: [CLIP_ITEM], overlays: [], redactions: [{ ...BLUR, intensity: 5 }] },
+    });
+    expect((parseSession(json)!.scene.redactions[0] as typeof BLUR).intensity).toBe(40);
+  });
+
+  it("clamps scale and replaces an unknown cover fill", () => {
+    const json = JSON.stringify({
+      version: 1,
+      scene: {
+        items: [CLIP_ITEM],
+        overlays: [],
+        zoomSegments: [{ ...ZOOM, scale: 9 }],
+        redactions: [{ ...COVER, fill: "red" }],
+      },
+    });
+    const { scene } = parseSession(json)!;
+    expect(scene.zoomSegments[0].scale).toBe(4);
+    expect((scene.redactions[0] as typeof COVER).fill).toBe("#18181b");
+  });
+
+  it("drops an overlapping zoom instead of rejecting the whole session", () => {
+    const json = JSON.stringify({
+      version: 1,
+      scene: {
+        items: [CLIP_ITEM],
+        overlays: [],
+        zoomSegments: [
+          ZOOM,
+          { ...ZOOM, id: "overlaps", start: 6, end: 9 },
+          { ...ZOOM, id: "clear", start: 9, end: 12 },
+        ],
+      },
+    });
+    expect(parseSession(json)!.scene.zoomSegments.map((z) => z.id)).toEqual(["auto-4600", "clear"]);
+  });
+
+  it.each([
+    ["zoom with end <= start", { zoomSegments: [{ ...ZOOM, end: 4 }] }],
+    ["zoom shorter than ZOOM_LIMITS.minSeconds", { zoomSegments: [{ ...ZOOM, end: 5.1 }] }],
+    ["zoom with bad mode", { zoomSegments: [{ ...ZOOM, mode: "orbit" }] }],
+    ["zoom with bad anchor", { zoomSegments: [{ ...ZOOM, anchor: { x: "a" } }] }],
+    ["redaction of unknown kind", { redactions: [{ ...BLUR, kind: "smudge" }] }],
+    ["redaction with empty rect", { redactions: [{ ...BLUR, rect: { x: 0, y: 0, w: 0, h: 1 } }] }],
+    ["non-array zoomSegments", { zoomSegments: "nope" }],
+    ["non-numeric sensitivity", { zoomSensitivity: "high" }],
+  ])("rejects %s", (_label: string, extra: object) => {
+    const json = JSON.stringify({
+      version: 1,
+      scene: { items: [CLIP_ITEM], overlays: [], ...extra },
+    });
+    expect(parseSession(json)).toBeNull();
   });
 });

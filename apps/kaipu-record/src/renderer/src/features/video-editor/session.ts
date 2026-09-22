@@ -6,7 +6,17 @@
  *
  * The version field is an intentional break point: if the shape ever changes in an
  * incompatible way we bump `version` and old sessions are ignored (parse returns null).
+ *
+ * v2 fields (`zoomSegments`, `redactions`, `zoomSensitivity`) are ADDITIVE inside
+ * version 1: missing → defaults (a session saved before v2 still opens). Structural
+ * damage (wrong type, unknown enum member, a zoom under the minimum length) returns
+ * null like any other invalid field; an out-of-range NUMBER is clamped instead, because
+ * a weakened blur or an over-scaled zoom must not be honoured either. Overlapping zooms
+ * are dropped, not rejected. Older app builds ignore the new keys, so opening a v2
+ * session in an old build is safe (it just shows no zooms).
  */
+import { ZOOM_DEFAULTS, ZOOM_LIMITS, type ZoomSegment } from "./zoom/zoom-model";
+import { clampIntensity, REDACTION, type NormRect, type Redaction } from "./privacy/redaction";
 import type {
   ArrowOverlay,
   BoxOverlay,
@@ -21,11 +31,15 @@ import type {
 export interface VideoEditSession {
   version: 1;
   scene: VideoScene;
+  /**
+   * False when the saved JSON predates v2 (no `zoomSegments` key). The loader then runs
+   * detection once, exactly like a fresh open — see plans/video-editor-v2/07.
+   */
+  hasZoomData: boolean;
 }
 
 export function serializeSession(scene: VideoScene): string {
-  const session: VideoEditSession = { version: 1, scene };
-  return JSON.stringify(session);
+  return JSON.stringify({ version: 1, scene });
 }
 
 /**
@@ -70,7 +84,49 @@ export function parseSession(json: string): VideoEditSession | null {
     overlays.push(validated);
   }
 
-  return { version: 1, scene: { items, overlays } };
+  const zoomSegments: ZoomSegment[] = [];
+  const hasZoomData = sceneRaw["zoomSegments"] !== undefined;
+  if (hasZoomData) {
+    if (!Array.isArray(sceneRaw["zoomSegments"])) return null;
+    const parsed: ZoomSegment[] = [];
+    for (const segment of sceneRaw["zoomSegments"] as unknown[]) {
+      const validated = validateZoomSegment(segment);
+      if (validated === null) return null;
+      parsed.push(validated);
+    }
+    parsed.sort((a, b) => a.start - b.start);
+    // The camera assumes exactly ONE active segment at a time (plans 05 and 06), and
+    // nothing downstream re-checks it. A hand-edited file can break that, so drop the
+    // overlapping segments rather than rejecting the session: the user's cuts and
+    // redactions are worth far more than a stray zoom.
+    for (const segment of parsed) {
+      const previous = zoomSegments[zoomSegments.length - 1];
+      if (previous && segment.start < previous.end) continue;
+      zoomSegments.push(segment);
+    }
+  }
+
+  const redactions: Redaction[] = [];
+  if (sceneRaw["redactions"] !== undefined) {
+    if (!Array.isArray(sceneRaw["redactions"])) return null;
+    for (const redaction of sceneRaw["redactions"] as unknown[]) {
+      const validated = validateRedaction(redaction);
+      if (validated === null) return null;
+      redactions.push(validated);
+    }
+  }
+
+  let zoomSensitivity: number = ZOOM_DEFAULTS.sensitivity;
+  if (sceneRaw["zoomSensitivity"] !== undefined) {
+    if (!isNum(sceneRaw["zoomSensitivity"])) return null;
+    zoomSensitivity = Math.min(100, Math.max(0, sceneRaw["zoomSensitivity"] as number));
+  }
+
+  return {
+    version: 1,
+    scene: { items, overlays, zoomSegments, redactions, zoomSensitivity },
+    hasZoomData,
+  };
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -192,5 +248,82 @@ function validateOverlay(raw: unknown): VideoOverlay | null {
   }
 
   // Unknown overlay kind — reject so the worker never receives a type it can't stamp.
+  return null;
+}
+
+function validatePoint(raw: unknown): { x: number; y: number } | null {
+  const p = obj(raw);
+  if (!p || !isNum(p["x"]) || !isNum(p["y"])) return null;
+  return { x: p["x"] as number, y: p["y"] as number };
+}
+
+function validateZoomSegment(raw: unknown): ZoomSegment | null {
+  const z = obj(raw);
+  if (!z) return null;
+  if (!isStr(z["id"]) || !isNum(z["start"]) || !isNum(z["end"])) return null;
+  if (!isNum(z["scale"]) || !isNum(z["smoothing"])) return null;
+  const start = z["start"] as number;
+  const end = z["end"] as number;
+  // `end > start` is not enough: a segment under the minimum has no draggable block on
+  // the timeline and the camera would flicker through it.
+  if (end - start < ZOOM_LIMITS.minSeconds) return null;
+  if (z["mode"] !== "follow" && z["mode"] !== "fixed") return null;
+  if (z["origin"] !== "auto" && z["origin"] !== "manual") return null;
+  const trigger = z["trigger"] ?? null;
+  if (trigger !== null && trigger !== "click" && trigger !== "dwell") return null;
+  let anchor: { x: number; y: number } | null = null;
+  if (z["anchor"] !== null && z["anchor"] !== undefined) {
+    anchor = validatePoint(z["anchor"]);
+    if (!anchor) return null;
+  }
+  return {
+    id: z["id"] as string,
+    start,
+    end,
+    scale: Math.min(ZOOM_LIMITS.maxScale, Math.max(ZOOM_LIMITS.minScale, z["scale"] as number)),
+    mode: z["mode"],
+    anchor,
+    smoothing: Math.min(100, Math.max(0, z["smoothing"] as number)),
+    origin: z["origin"],
+    trigger,
+  };
+}
+
+function validateRect(raw: unknown): NormRect | null {
+  const r = obj(raw);
+  if (!r || !isNum(r["x"]) || !isNum(r["y"]) || !isNum(r["w"]) || !isNum(r["h"])) return null;
+  if ((r["w"] as number) <= 0 || (r["h"] as number) <= 0) return null;
+  return { x: r["x"] as number, y: r["y"] as number, w: r["w"] as number, h: r["h"] as number };
+}
+
+function validateRedaction(raw: unknown): Redaction | null {
+  const r = obj(raw);
+  if (!r) return null;
+  if (!isStr(r["id"]) || !isNum(r["start"]) || !isNum(r["end"])) return null;
+  const start = r["start"] as number;
+  const end = r["end"] as number;
+  if (end <= start) return null;
+  const rect = validateRect(r["rect"]);
+  if (!rect) return null;
+  const base = { id: r["id"] as string, start, end, rect };
+
+  if (r["kind"] === "blur") {
+    if (!isNum(r["intensity"])) return null;
+    if (r["style"] !== "gaussian" && r["style"] !== "pixelate") return null;
+    // Clamp on load too: a hand-edited session must never produce a weak, reversible blur.
+    return {
+      ...base,
+      kind: "blur",
+      intensity: clampIntensity(r["intensity"] as number),
+      style: r["style"],
+    };
+  }
+  if (r["kind"] === "cover") {
+    if (!isStr(r["fill"]) || !isStr(r["label"])) return null;
+    const fill = (REDACTION.coverFills as readonly string[]).includes(r["fill"] as string)
+      ? (r["fill"] as string)
+      : REDACTION.coverFills[0];
+    return { ...base, kind: "cover", fill, label: r["label"] as string };
+  }
   return null;
 }
