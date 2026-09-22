@@ -313,8 +313,13 @@ describe("useVideoFrameClock (no rVFC, like jsdom)", () => {
     video.requestVideoFrameCallback = request;
     video.cancelVideoFrameCallback = cancel;
     const onTime = vi.fn();
+    // Hoisted, NOT `{ current: video }` inline: a fresh ref object per render changes the
+    // subscription effect's own dependency, so the hook would re-subscribe for that reason
+    // and the assertion below would prove nothing about `trigger`. The page passes
+    // `playback.videoRef`, which is a stable useRef.
+    const videoRef = { current: video };
     const { rerender } = renderHook(
-      ({ trigger }) => useVideoFrameClock({ current: video }, onTime, trigger),
+      ({ trigger }) => useVideoFrameClock(videoRef, onTime, trigger),
       { initialProps: { trigger: {} } },
     );
     expect(request).toHaveBeenCalledTimes(1);
@@ -324,7 +329,10 @@ describe("useVideoFrameClock (no rVFC, like jsdom)", () => {
     rerender({ trigger: {} });
     expect(request).toHaveBeenCalledTimes(1);
     expect(cancel).not.toHaveBeenCalled();
-    expect(onTime).toHaveBeenCalledTimes(3); // mount + one per trigger
+    // 4, not 3: on mount BOTH effects apply the callback (subscribe, then trigger). The
+    // double apply is idempotent — it only writes the DOM — and the property this test
+    // exists for is `request === 1 && cancel === 0`.
+    expect(onTime).toHaveBeenCalledTimes(4);
     expect(onTime).toHaveBeenLastCalledWith(3);
   });
 });
