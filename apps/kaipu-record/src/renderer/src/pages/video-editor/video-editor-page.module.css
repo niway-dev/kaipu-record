@@ -60,14 +60,29 @@
 
 /* Transport bar: always-visible auto row below the video region. */
 .transport {
-  display: flex;
+  /* v2: three columns instead of one centred flex row. `justify-content: center` over a
+     flat row meant the play button drifted left as soon as the zoom count was inserted
+     on its right; with 1fr auto 1fr the centre column stays centred whatever the sides
+     weigh, and the count stays right-aligned next to the fullscreen toggle. */
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: center;
   gap: var(--space-md);
   padding: var(--space-sm) var(--space-lg);
   border-top: 1px solid var(--border);
   background: var(--bg-card);
   flex-shrink: 0;
+}
+
+.transportSide {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.transportRight {
+  justify-content: flex-end;
 }
 
 /* Prominent accent circular play/pause button — the primary transport action. */
@@ -150,9 +165,29 @@
 }
 
 .timeline {
-  height: 160px;
+  /* v2: grows with the lanes (ruler, annotations, clips, activity, zooms, privacy):
+     ≈196 px with PR 6's five rows, ≈238 px once PR 8 adds the 38 px Privacy lane. */
+  min-height: 160px;
   flex-shrink: 0;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
+}
+
+/* v2: the stage and the 288 px properties column share the middle row. */
+.workspace {
+  display: flex;
+  min-height: 0;
+}
+
+.workspace > .stage {
+  flex: 1;
+  min-width: 0;
+}
+
+/* "4 zooms detected" · "2 private regions" (UI spec § 5). */
+.counts {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
 }

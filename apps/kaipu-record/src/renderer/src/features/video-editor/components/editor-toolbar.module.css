@@ -128,3 +128,15 @@
   opacity: 0.5;
   cursor: default;
 }
+
+/* Contextual hint (UI spec § 3.2): one line, muted, takes the free space between the
+   tool groups and the actions so the actions stay right-aligned. */
+.hint {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}

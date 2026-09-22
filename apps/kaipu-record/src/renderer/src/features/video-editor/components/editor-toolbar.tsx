@@ -10,6 +10,7 @@ import {
   Trash2,
   Type,
   Undo2,
+  ZoomIn,
 } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { VIDEO_TOOLS, type VideoTool } from "../annotations/video-tools";
@@ -19,6 +20,19 @@ import styles from "./editor-toolbar.module.css";
 const SLIDE_IMAGE_TYPES = "image/png,image/jpeg,image/webp";
 
 type ToolLabelKey = "toolSelect" | "toolBox" | "toolArrow" | "toolText";
+
+type HintKey = "hintSelect" | "hintBox" | "hintArrow" | "hintText";
+
+/** Contextual one-line hint per active tool (UI spec § 3.2). Exhaustive on purpose:
+ *  when PR 8 adds "blur" and "cover" to VideoTool this stops compiling until their
+ *  hints exist. Zoom is an ACTION, not a tool, so it is absent here by design — its
+ *  `hintZoom` copy lives on the button's title (see the camera group below). */
+const TOOL_HINT: Record<VideoTool, HintKey> = {
+  select: "hintSelect",
+  box: "hintBox",
+  arrow: "hintArrow",
+  text: "hintText",
+};
 
 const TOOL_META: Record<VideoTool, { labelKey: ToolLabelKey; Icon: typeof Square }> = {
   select: { labelKey: "toolSelect", Icon: MousePointer2 },
@@ -43,6 +57,8 @@ export interface EditorToolbarProps {
   /** Current annotation tool. */
   tool: VideoTool;
   onToolChange(tool: VideoTool): void;
+  /** Add a zoom at the playhead, or select the one already there (video-editor v2). */
+  onAddZoom(): void;
   /** Run the export pipeline. Disabled while exporting or when the timeline is empty. */
   onExport(): void;
   exportDisabled: boolean;
@@ -66,6 +82,7 @@ export function EditorToolbar({
   onAddImage,
   tool,
   onToolChange,
+  onAddZoom,
   onExport,
   exportDisabled,
 }: EditorToolbarProps): React.JSX.Element {
@@ -92,6 +109,21 @@ export function EditorToolbar({
           );
         })}
       </div>
+      {/* Camera group (UI spec § 3.1 group 2). Zoom is an ACTION, not a drawing mode:
+          it adds a zoom at the playhead (or selects the one there) and the camera box
+          on the preview is how it gets re-aimed. */}
+      <div className={styles.toolGroup}>
+        <button
+          type="button"
+          title={t("hintZoom")}
+          aria-label={t("toolZoom")}
+          className={styles.tool}
+          onClick={onAddZoom}
+        >
+          <ZoomIn size={19} />
+        </button>
+      </div>
+      <span className={styles.hint}>{t(TOOL_HINT[tool])}</span>
       <div className={styles.actions}>
         <button
           type="button"

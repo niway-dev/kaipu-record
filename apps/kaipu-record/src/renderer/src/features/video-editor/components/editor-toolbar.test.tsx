@@ -15,6 +15,7 @@ function renderToolbar(overrides: Partial<EditorToolbarProps> = {}): EditorToolb
     onAddImage: vi.fn(),
     tool: "select",
     onToolChange: vi.fn(),
+    onAddZoom: vi.fn(),
     onExport: vi.fn(),
     exportDisabled: false,
     ...overrides,
@@ -107,5 +108,18 @@ describe("EditorToolbar", () => {
     expect(props.onRedo).not.toHaveBeenCalled();
     expect(props.onSplit).not.toHaveBeenCalled();
     expect(props.onDeleteSelected).not.toHaveBeenCalled();
+  });
+});
+
+describe("EditorToolbar — v2 camera group", () => {
+  it("the Zoom button fires onAddZoom", () => {
+    const props = renderToolbar();
+    fireEvent.click(screen.getByRole("button", { name: "Zoom" }));
+    expect(props.onAddZoom).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the hint of the active tool", () => {
+    renderToolbar({ tool: "arrow" });
+    expect(screen.getByText("Drag on the preview to draw an arrow.")).toBeInTheDocument();
   });
 });
