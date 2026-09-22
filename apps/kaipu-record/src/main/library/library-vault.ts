@@ -1,5 +1,5 @@
 import { basename, join } from "node:path";
-import { access, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import type { LocalRecording } from "@shared/types/library-storage";
 import { sha256FileBase64 } from "./content-hash";
@@ -71,6 +71,11 @@ export class LibraryVault {
 
   thumbnailPath(id: string): string {
     return join(this.metaDirectory(), `${id}.jpg`);
+  }
+
+  /** Cursor event track written at record time (video-editor v2 auto-zoom). */
+  cursorTrackPath(id: string): string {
+    return join(this.metaDirectory(), `${id}.cursor.json`);
   }
 
   async list(): Promise<LocalRecording[]> {
@@ -235,6 +240,23 @@ export class LibraryVault {
     await writeFile(this.thumbnailPath(id), jpg);
   }
 
+  /** Atomic (temp + rename): a crash mid-write never leaves a truncated track. */
+  async writeCursorTrack(id: string, json: string): Promise<void> {
+    await mkdir(this.metaDirectory(), { recursive: true });
+    const target = this.cursorTrackPath(id);
+    await writeFile(`${target}.tmp`, json, "utf-8");
+    await rename(`${target}.tmp`, target);
+  }
+
+  /** The raw track JSON, or null when this recording has none. */
+  async readCursorTrack(id: string): Promise<string | null> {
+    try {
+      return await readFile(this.cursorTrackPath(id), "utf-8");
+    } catch {
+      return null;
+    }
+  }
+
   /**
    * Backfills a recording whose metadata was never derived from the file — a
    * hand-imported clip, or one whose `finalize` was interrupted before the
@@ -275,6 +297,9 @@ export class LibraryVault {
     await Promise.allSettled([
       rm(this.sidecarPath(id), { force: true }),
       rm(this.thumbnailPath(id), { force: true }),
+      rm(this.cursorTrackPath(id), { force: true }),
+      // An interrupted writeCursorTrack can leave the temp file behind.
+      rm(`${this.cursorTrackPath(id)}.tmp`, { force: true }),
     ]);
     await rm(await this.filePath(id), { force: true });
   }
