@@ -1,0 +1,157 @@
+/* Properties panel (UI spec § 7): 288 px, content changes with the selection.
+   flex: 1 makes the panel fill EditorInspector's flex column, which is what gives
+   .dangerButton's `margin-top: auto` something to push against — without it the panel
+   is only as tall as its content and the auto margin resolves to zero. */
+.panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-lg);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.sectionLabel {
+  margin: var(--space-sm) 0 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.badge {
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  background: color-mix(in srgb, var(--accent-primary) 18%, transparent);
+  color: var(--accent-primary);
+  white-space: nowrap;
+}
+
+.badgeBlur {
+  composes: badge;
+  background: color-mix(in srgb, #58a6ff 18%, transparent);
+  color: #58a6ff;
+}
+
+.range,
+.summary {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.text {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.note,
+.hint {
+  margin: 0;
+  padding: var(--space-sm);
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}
+
+.noteInfo {
+  composes: note;
+  color: #58a6ff;
+}
+
+.segmented {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-xs);
+}
+
+.segment,
+.segmentActive,
+.secondaryButton,
+.dangerButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  padding: var(--space-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.segmentActive {
+  border-color: var(--accent-primary);
+  background: var(--accent-primary);
+  color: #fff;
+}
+
+.dangerButton {
+  margin-top: auto;
+  border-color: color-mix(in srgb, var(--accent-red) 50%, transparent);
+  color: var(--accent-red);
+}
+
+.dangerButton:hover {
+  background: color-mix(in srgb, var(--accent-red) 12%, transparent);
+}
+
+.swatches {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.swatch,
+.swatchActive {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.swatchActive {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.fieldInput {
+  padding: var(--space-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+}
