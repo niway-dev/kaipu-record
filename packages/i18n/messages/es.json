@@ -415,6 +415,7 @@
   "videoEditor": {
     "restored": "Se restauró tu edición anterior",
     "editedTitle": "{title} (editado)",
+    "originalUntouched": "ORIGINAL INTACTO",
     "restoreError": "No se pudo restaurar la edición anterior",
     "mute": "Silenciar",
     "unmute": "Activar sonido",
@@ -464,6 +465,7 @@
     "hintZoom": "Agrega un zoom en el cursor de reproducción, o arrastra el recuadro de cámara para reencuadrarlo.",
     "zoomNotOnSlide": "Las imágenes no tienen zoom. Mueve el cursor de reproducción a un clip.",
     "zoomNoRoom": "No hay espacio para otro zoom aquí.",
+    "zoomEmptyState": "Todavía no hay zooms — agrega uno con la herramienta Zoom, o un clic o una pausa creará uno.",
     "zoomCount": "{count, plural, one {# zoom detectado} other {# zooms detectados}}",
     "detectionTitle": "Detección",
     "detectionBody": "Vuelve a analizar la grabación y reemplaza los zooms automáticos. Tus ediciones manuales se conservan.",
@@ -481,6 +483,7 @@
     "zoomBadgeDwell": "PAUSA LARGA",
     "zoomBadgeManual": "MANUAL",
     "zoomLevel": "Nivel",
+    "zoomSoftHint": "A este nivel el texto puede verse suave. Graba en 1440p o 4K para zooms más nítidos.",
     "zoomSmoothness": "Suavidad",
     "zoomSmoothnessNote": "Más alta: la cámara entra más despacio y se desplaza menos.",
     "zoomRemove": "Quitar este zoom",

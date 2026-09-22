@@ -10,11 +10,21 @@
 }
 
 .header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
   padding: var(--space-sm) var(--space-md);
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   flex-shrink: 0;
+}
+
+/* "ORIGINAL UNTOUCHED" — a reminder, not a control (v2 PR 10 polish, W12). */
+.originalPill {
+  flex-shrink: 0;
+  letter-spacing: 0.04em;
 }
 
 .title {
@@ -55,7 +65,14 @@
   place-items: center;
   min-height: 0;
   overflow: hidden;
-  max-height: 50vh;
+  /* v2 PR 10 polish: row-relative, not just viewport-relative. The footer grew with
+     PR 6/8's lanes (≈196–238 px), so below a ≈810–850 px window this 1fr row is
+     already shorter than 50vh — a bare `max-height: 50vh` then let .content (below)
+     size itself up to the viewport figure instead of the row's real, smaller one, and
+     `overflow: hidden` clipped the picture. `100%` here is this grid item's own
+     stretched box (definite, from the page grid's 1fr row), so the smaller of the two
+     always wins. */
+  max-height: min(50vh, 100%);
 }
 
 /* Transport bar: always-visible auto row below the video region. */

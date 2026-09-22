@@ -60,6 +60,19 @@ const TOOL_META: Record<VideoTool, { labelKey: ToolLabelKey; Icon: typeof Square
   text: { labelKey: "toolText", Icon: Type },
 };
 
+/**
+ * One-letter shortcuts (plans/video-editor-v2/08 § PR 10 polish). Plain keyboard
+ * symbols, not prose — same treatment as the done-step's literal "⌘⇧P" — so they are
+ * not i18n keys; every button's `title` appends "(<key>)" to its translated label.
+ */
+const TOOL_SHORTCUT: Record<VideoTool, string> = { select: "V", box: "R", arrow: "A", text: "T" };
+const PRIVACY_SHORTCUT: Record<PrivacyTool, string> = { blur: "B", cover: "C" };
+const ZOOM_SHORTCUT = "Z";
+const SPLIT_SHORTCUT = "S";
+const DELETE_SHORTCUT = "⌫";
+const UNDO_SHORTCUT = "⌘Z";
+const REDO_SHORTCUT = "⌘⇧Z";
+
 export interface EditorToolbarProps {
   canUndo: boolean;
   canRedo: boolean;
@@ -121,7 +134,7 @@ export function EditorToolbar({
             <button
               key={toolKey}
               type="button"
-              title={label}
+              title={`${label} (${TOOL_SHORTCUT[toolKey]})`}
               aria-label={label}
               className={`${styles.tool} ${tool === toolKey ? styles.toolActive : ""}`}
               onClick={() => onToolChange(toolKey)}
@@ -137,7 +150,7 @@ export function EditorToolbar({
       <div className={styles.toolGroup}>
         <button
           type="button"
-          title={t("hintZoom")}
+          title={`${t("hintZoom")} (${ZOOM_SHORTCUT})`}
           aria-label={t("toolZoom")}
           className={styles.tool}
           onClick={onAddZoom}
@@ -151,7 +164,7 @@ export function EditorToolbar({
             <button
               key={toolKey}
               type="button"
-              title={label}
+              title={`${label} (${PRIVACY_SHORTCUT[toolKey]})`}
               aria-label={label}
               aria-pressed={tool === toolKey}
               disabled={privacyDisabled}
@@ -168,7 +181,7 @@ export function EditorToolbar({
         <button
           type="button"
           className={styles.iconBtn}
-          title={t("undo")}
+          title={`${t("undo")} (${UNDO_SHORTCUT})`}
           aria-label={t("undo")}
           disabled={!canUndo}
           onClick={onUndo}
@@ -178,7 +191,7 @@ export function EditorToolbar({
         <button
           type="button"
           className={styles.iconBtn}
-          title={t("redo")}
+          title={`${t("redo")} (${REDO_SHORTCUT})`}
           aria-label={t("redo")}
           disabled={!canRedo}
           onClick={onRedo}
@@ -211,7 +224,7 @@ export function EditorToolbar({
         <button
           type="button"
           className={styles.iconBtn}
-          title={t("splitHere")}
+          title={`${t("splitHere")} (${SPLIT_SHORTCUT})`}
           aria-label={t("splitHere")}
           disabled={splitDisabled}
           onClick={onSplit}
@@ -221,7 +234,7 @@ export function EditorToolbar({
         <button
           type="button"
           className={styles.iconBtn}
-          title={t("deleteSegment")}
+          title={`${t("deleteSegment")} (${DELETE_SHORTCUT})`}
           aria-label={t("deleteSegment")}
           disabled={deleteDisabled}
           onClick={onDeleteSelected}

@@ -1,4 +1,4 @@
-import { fireEvent, render } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { TrackItem } from "../scene";
 import { toLayout } from "../timeline";
@@ -22,6 +22,49 @@ const zoom = (partial: Partial<ZoomSegment>): ZoomSegment => ({
   origin: "auto",
   trigger: "click",
   ...partial,
+});
+
+describe("ZoomLane — empty state (PR 10 polish)", () => {
+  it("shows the empty-state hint with zero zooms and a cursor track", () => {
+    render(
+      <ZoomLane
+        layout={layout}
+        segments={[]}
+        selectedId={null}
+        onSelect={vi.fn()}
+        onEdgeDrag={vi.fn()}
+        hasTrack
+      />,
+    );
+    expect(screen.getByText(/no zooms yet/i)).toBeInTheDocument();
+  });
+
+  it("stays silent with zero zooms and no cursor track (the Detection panel explains that case)", () => {
+    render(
+      <ZoomLane
+        layout={layout}
+        segments={[]}
+        selectedId={null}
+        onSelect={vi.fn()}
+        onEdgeDrag={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText(/no zooms yet/i)).toBeNull();
+  });
+
+  it("stays silent once a zoom exists, even with a track", () => {
+    render(
+      <ZoomLane
+        layout={layout}
+        segments={[zoom({})]}
+        selectedId={null}
+        onSelect={vi.fn()}
+        onEdgeDrag={vi.fn()}
+        hasTrack
+      />,
+    );
+    expect(screen.queryByText(/no zooms yet/i)).toBeNull();
+  });
 });
 
 describe("ZoomLane", () => {

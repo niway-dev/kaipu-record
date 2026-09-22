@@ -5,6 +5,7 @@ import {
   Minimize2,
   Pause,
   Play,
+  Shield,
   Trash2,
   TriangleAlert,
   Volume2,
@@ -28,6 +29,7 @@ import {
   ModalText,
   ModalTitle,
 } from "@renderer/ui/modal";
+import { Badge } from "@renderer/ui/badge";
 import {
   boundaryIndexAt,
   clampOverlays,
@@ -110,6 +112,21 @@ function isVideoEditorSource(value: unknown): value is VideoEditorSource {
     v.durationSeconds > 0
   );
 }
+
+/**
+ * Keyboard shortcuts for the tool group (plans/video-editor-v2/08 § PR 10 polish),
+ * mirroring EditorToolbar's own tooltips: V/R/A/T pick an annotation tool, B/C a
+ * privacy drawing mode. Z (add/select a zoom) is handled separately — it is an action,
+ * not a tool (see editor-toolbar.tsx's TOOL_HINT comment).
+ */
+const TOOL_SHORTCUT_KEYS: Record<string, EditorTool> = {
+  v: "select",
+  r: "box",
+  a: "arrow",
+  t: "text",
+  b: "blur",
+  c: "cover",
+};
 
 /** Target is a text field — don't hijack Space for play/pause while typing. */
 function isEditingTarget(target: EventTarget | null): boolean {
@@ -779,6 +796,18 @@ function VideoEditor({
         if (!splitDisabled) handleSplit();
         return;
       }
+      // Tool shortcuts (plans/video-editor-v2/08 § PR 10 polish): V/R/A/T pick an
+      // annotation tool, Z adds/selects a zoom at the playhead, B/C pick a privacy
+      // drawing mode. Matches EditorToolbar's own tooltips (V R A T / Z / B C).
+      const key = e.key.toLowerCase();
+      if (!isMod && key in TOOL_SHORTCUT_KEYS) {
+        videoTools.setTool(TOOL_SHORTCUT_KEYS[key]);
+        return;
+      }
+      if (!isMod && key === "z") {
+        handleAddZoom();
+        return;
+      }
       // `!document.fullscreenElement`: in fullscreen the browser handles Esc itself to
       // leave it — clearing the selection at the same time would be a second, invisible
       // action the user never asked for.
@@ -815,12 +844,20 @@ function VideoEditor({
     selectedRedactionId,
     handleRemoveZoom,
     handleRemoveRedaction,
+    videoTools,
+    handleAddZoom,
   ]);
 
   return (
     <div className={styles.page}>
       <header className={styles.header}>
         <h1 className={styles.title}>{source.title}</h1>
+        {/* Not interactive — a reminder, not a control (plans/video-editor-v2/08 § PR 10
+            polish, W12's "ORIGINAL UNTOUCHED" pill). The original recording on disk and
+            its library thumbnail are untouched by every edit in this page. */}
+        <Badge variant="neutral" className={styles.originalPill}>
+          <Shield size={12} strokeWidth={2} /> {t("originalUntouched")}
+        </Badge>
       </header>
       <EditorToolbar
         canUndo={controller.canUndo}
@@ -1022,6 +1059,7 @@ function VideoEditor({
               index={zooms.visibleZooms.indexOf(selectedZoom) + 1}
               layout={layout}
               zooms={zooms}
+              sourceHeight={playback.videoRef.current?.videoHeight ?? 0}
               anchorNow={() =>
                 boxCenterAt(
                   selectedZoom,
@@ -1074,6 +1112,7 @@ function VideoEditor({
                   selectedId={selectedZoomId}
                   onSelect={handleSelectZoom}
                   onEdgeDrag={zooms.edgeDrag}
+                  hasTrack={cursorTrack !== null}
                 />
               ),
             },
