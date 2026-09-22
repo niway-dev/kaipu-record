@@ -482,7 +482,9 @@
     "zoomLevel": "Level",
     "zoomSmoothness": "Smoothness",
     "zoomSmoothnessNote": "Higher means the camera eases in longer and drifts less.",
-    "zoomRemove": "Remove this zoom"
+    "zoomRemove": "Remove this zoom",
+    "cameraChipFollow": "{level}× · FOLLOW",
+    "cameraChipLocked": "{level}× · LOCKED"
   },
   "panel": {
     "saving": "Saving…",

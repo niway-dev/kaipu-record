@@ -482,7 +482,9 @@
     "zoomLevel": "Nivel",
     "zoomSmoothness": "Suavidad",
     "zoomSmoothnessNote": "Más alta: la cámara entra más despacio y se desplaza menos.",
-    "zoomRemove": "Quitar este zoom"
+    "zoomRemove": "Quitar este zoom",
+    "cameraChipFollow": "{level}× · SIGUE",
+    "cameraChipLocked": "{level}× · FIJO"
   },
   "panel": {
     "saving": "Guardando…",
