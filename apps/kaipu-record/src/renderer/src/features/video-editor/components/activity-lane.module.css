@@ -1,0 +1,28 @@
+.lane {
+  position: relative;
+  height: 34px;
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* Click: UI spec #F6055C, 24 px — the main trigger. */
+.click {
+  position: absolute;
+  bottom: 5px;
+  width: 2px;
+  height: 24px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--accent-primary);
+}
+
+/* Dwell: UI spec #3d5570, 6–18 px (height set inline from the pause length). */
+.dwell {
+  position: absolute;
+  bottom: 5px;
+  min-width: 2px;
+  border-radius: 2px;
+  background: #3d5570;
+}

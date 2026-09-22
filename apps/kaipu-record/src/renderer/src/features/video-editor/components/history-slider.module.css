@@ -1,0 +1,36 @@
+/* Inspector slider row — label + live value on one line, the range below. */
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.label {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.value {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.input {
+  width: 100%;
+  accent-color: var(--accent-primary);
+}
+
+/* Sibling of the input (aria-describedby), not a child of a wrapping label. */
+.note {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}

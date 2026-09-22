@@ -48,6 +48,17 @@ import {
 import { parseSession, serializeSession } from "@renderer/features/video-editor/session";
 import { withInitialZooms } from "@renderer/features/video-editor/initial-zooms";
 import { useEditorSelection } from "@renderer/features/video-editor/editor-selection";
+import {
+  sourceRangeToTimelineBlocks,
+  sourceTimeAtTimeline,
+} from "@renderer/features/video-editor/source-time";
+import { activityMarks } from "@renderer/features/video-editor/zoom/detect-zoom-segments";
+import { useZoomEditing } from "@renderer/features/video-editor/zoom/use-zoom-editing";
+import { ActivityLane } from "@renderer/features/video-editor/components/activity-lane";
+import { ZoomLane } from "@renderer/features/video-editor/components/zoom-lane";
+import { EditorInspector } from "@renderer/features/video-editor/components/inspector/editor-inspector";
+import { DetectionPanel } from "@renderer/features/video-editor/components/inspector/detection-panel";
+import { ZoomInspector } from "@renderer/features/video-editor/components/inspector/zoom-inspector";
 import { useSessionAutosave } from "@renderer/features/video-editor/use-session-autosave";
 import { usePreviewPlayback } from "@renderer/features/video-editor/use-preview-playback";
 import { useSourceThumbnails } from "@renderer/features/video-editor/use-source-thumbnails";
@@ -221,6 +232,7 @@ function VideoEditorLoader({ source }: { source: VideoEditorSource }): React.JSX
 function VideoEditor({
   source,
   resolvedScene,
+  cursorTrack,
   assetStoreRef,
 }: {
   source: VideoEditorSource;
@@ -269,6 +281,18 @@ function VideoEditor({
   );
   const blocker = useBlocker(shouldBlock);
   const playback = usePreviewPlayback(layout);
+  const zooms = useZoomEditing({
+    controller,
+    layout,
+    timelineDuration: playback.duration,
+    sourceDuration: source.durationSeconds,
+    cursorTrack,
+  });
+  // Evidence for the Activity lane — depends only on the (immutable) track.
+  const activity = useMemo(
+    () => (cursorTrack ? activityMarks(cursorTrack, source.durationSeconds) : []),
+    [cursorTrack, source.durationSeconds],
+  );
   const videoTools = useVideoTools();
   const videoExport = useVideoExport();
   const mediaUrl = `kaipu-media://recording/${source.id}`;
@@ -576,6 +600,47 @@ function VideoEditor({
     [controller],
   );
 
+  // Selecting a zoom also moves the playhead to the middle of its first visible piece
+  // (UI spec § 6.3), so the preview shows what the zoom does.
+  const handleSelectZoom = useCallback(
+    (id: string) => {
+      selectKind("zoom", id);
+      const segment = controller.scene.zoomSegments.find((z) => z.id === id);
+      if (!segment) return;
+      const [first] = sourceRangeToTimelineBlocks(layout, segment.start, segment.end);
+      if (first) playback.seek((first.timelineStart + first.timelineEnd) / 2);
+    },
+    [selectKind, controller, layout, playback],
+  );
+
+  // Zoom tool (an action, not a mode): select the zoom under the playhead if there is
+  // one, otherwise add a manual zoom there.
+  const handleAddZoom = useCallback(() => {
+    const at = sourceTimeAtTimeline(layout, playback.timelineTime);
+    const existing =
+      at === null ? undefined : zooms.visibleZooms.find((z) => at >= z.start && at < z.end);
+    if (existing) {
+      selectKind("zoom", existing.id);
+      return;
+    }
+    const result = zooms.addAtPlayhead(playback.timelineTime);
+    if (result.ok) selectKind("zoom", result.id);
+    else if (result.reason === "on-slide") showToast({ message: t("zoomNotOnSlide") });
+    else if (result.reason === "no-room") showToast({ message: t("zoomNoRoom") });
+  }, [layout, playback.timelineTime, zooms, selectKind, t]);
+
+  const handleRemoveZoom = useCallback(
+    (id: string) => {
+      zooms.remove(id);
+      selectKind("zoom", null);
+    },
+    [zooms, selectKind],
+  );
+
+  const selectedZoom = selectedZoomId
+    ? (zooms.visibleZooms.find((z) => z.id === selectedZoomId) ?? null)
+    : null;
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (isEditingTarget(e.target)) return;
@@ -610,7 +675,8 @@ function VideoEditor({
       // Cmd/Ctrl+Backspace is a common "delete line/word" chord in text contexts —
       // require !isMod so it doesn't also delete an overlay or a segment.
       if (!isMod && (e.key === "Delete" || e.key === "Backspace")) {
-        if (selectedOverlayId) handleDeleteOverlay();
+        if (selectedZoomId) handleRemoveZoom(selectedZoomId);
+        else if (selectedOverlayId) handleDeleteOverlay();
         else if (!deleteDisabled) handleDeleteSelected();
       }
     };
@@ -630,6 +696,7 @@ function VideoEditor({
     clearSelection,
     selectedZoomId,
     selectedRedactionId,
+    handleRemoveZoom,
   ]);
 
   return (
@@ -649,99 +716,136 @@ function VideoEditor({
         onAddImage={handleAddImage}
         tool={videoTools.tool}
         onToolChange={videoTools.setTool}
+        onAddZoom={handleAddZoom}
         onExport={handleExport}
         exportDisabled={videoExport.status === "exporting" || scene.items.length === 0}
       />
-      <main className={styles.stage} ref={stageRef}>
-        {/* Floating per-tool options (Excalidraw-style), pinned to the stage so it
-            doesn't shift with the video's own size. */}
-        <div className={styles.optionsFloat}>
-          <OverlayOptions
-            tools={videoTools}
-            overlays={scene.overlays}
-            selectedId={selectedOverlayId}
-            onCommitOverlay={handleCommitOverlay}
-            onDeleteSelected={handleDeleteOverlay}
-          />
-        </div>
-        {/* Video region: 1fr grid row — centers PreviewStage and constrains its height
-            so the transport bar below is never clipped regardless of video aspect ratio.
-            In fullscreen mode the 50 vh cap is lifted via an inline style override. */}
-        <div
-          className={styles.videoRegion}
-          style={isFullscreen ? { maxHeight: "none" } : undefined}
-        >
-          <PreviewStage
-            playback={playback}
-            mediaUrl={mediaUrl}
-            slideUrl={slideUrl}
-            expanded={isFullscreen}
-            overlay={
-              <VideoAnnotationLayer
-                overlays={scene.overlays}
-                visibleIds={visibleIds}
-                selectedId={selectedOverlayId}
-                onSelect={setSelectedOverlayId}
-                tool={videoTools.tool}
-                toolState={{
-                  color: videoTools.color,
-                  stroke: videoTools.stroke,
-                  textSize: videoTools.textSize,
-                }}
-                playheadTime={playback.timelineTime}
-                timelineDuration={playback.duration}
-                onDraft={(draft) =>
-                  controller.updateLive({
-                    ...scene,
-                    overlays: upsertOverlay(scene.overlays, draft),
-                  })
-                }
-                onCommit={(overlays) => {
-                  controller.commit({ ...scene, overlays });
-                  // Every onCommit call is a just-finished draw or text label (moves/
-                  // resizes finalize through onInteractEnd only) — auto-switch back to
-                  // select so the new overlay can be adjusted right away.
-                  videoTools.setTool("select");
-                }}
-                onInteractStart={controller.beginInteract}
-                onInteractEnd={controller.endInteract}
-                onBackgroundClick={playback.toggle}
-              />
-            }
-          />
-        </div>
-        {/* Transport bar lives outside the overflow:hidden video region so it is always
-            visible even when the video fills the full available height. */}
-        <div className={styles.transport}>
-          <button
-            type="button"
-            className={styles.muteButton}
-            aria-label={playback.muted ? t("unmute") : t("mute")}
-            onClick={playback.toggleMute}
+      <div className={styles.workspace}>
+        <main className={styles.stage} ref={stageRef}>
+          {/* Floating per-tool options (Excalidraw-style), pinned to the stage so it
+              doesn't shift with the video's own size. */}
+          <div className={styles.optionsFloat}>
+            <OverlayOptions
+              tools={videoTools}
+              overlays={scene.overlays}
+              selectedId={selectedOverlayId}
+              onCommitOverlay={handleCommitOverlay}
+              onDeleteSelected={handleDeleteOverlay}
+            />
+          </div>
+          {/* Video region: 1fr grid row — centers PreviewStage and constrains its height
+              so the transport bar below is never clipped regardless of video aspect ratio.
+              In fullscreen mode the 50 vh cap is lifted via an inline style override. */}
+          <div
+            className={styles.videoRegion}
+            style={isFullscreen ? { maxHeight: "none" } : undefined}
           >
-            {playback.muted ? <VolumeX size={16} /> : <Volume2 size={16} />}
-          </button>
-          <button
-            type="button"
-            className={styles.playButton}
-            aria-label={playback.playing ? t("pause") : t("play")}
-            onClick={playback.toggle}
-          >
-            {playback.playing ? <Pause size={20} /> : <Play size={20} />}
-          </button>
-          <span className={styles.timeDisplay}>
-            {formatTime(playback.timelineTime)} / {formatTime(playback.duration)}
-          </span>
-          <button
-            type="button"
-            className={styles.fullscreenButton}
-            aria-label={isFullscreen ? t("exitFullscreen") : t("fullscreen")}
-            onClick={handleFullscreen}
-          >
-            {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-          </button>
-        </div>
-      </main>
+            <PreviewStage
+              playback={playback}
+              mediaUrl={mediaUrl}
+              slideUrl={slideUrl}
+              expanded={isFullscreen}
+              overlay={
+                <VideoAnnotationLayer
+                  overlays={scene.overlays}
+                  visibleIds={visibleIds}
+                  selectedId={selectedOverlayId}
+                  // A click on the canvas background deselects EVERYTHING (spec § 10.5),
+                  // not just the annotation — otherwise a selected zoom would survive it
+                  // and the inspector would keep showing the Zoom panel. The same click
+                  // still toggles play/pause through onBackgroundClick below.
+                  onSelect={(id) => (id === null ? clearSelection() : selectKind("overlay", id))}
+                  tool={videoTools.tool}
+                  toolState={{
+                    color: videoTools.color,
+                    stroke: videoTools.stroke,
+                    textSize: videoTools.textSize,
+                  }}
+                  playheadTime={playback.timelineTime}
+                  timelineDuration={playback.duration}
+                  onDraft={(draft) =>
+                    controller.updateLive({
+                      ...scene,
+                      overlays: upsertOverlay(scene.overlays, draft),
+                    })
+                  }
+                  onCommit={(overlays) => {
+                    controller.commit({ ...scene, overlays });
+                    // Every onCommit call is a just-finished draw or text label (moves/
+                    // resizes finalize through onInteractEnd only) — auto-switch back to
+                    // select so the new overlay can be adjusted right away.
+                    videoTools.setTool("select");
+                  }}
+                  onInteractStart={controller.beginInteract}
+                  onInteractEnd={controller.endInteract}
+                  onBackgroundClick={playback.toggle}
+                />
+              }
+            />
+          </div>
+          {/* Transport bar lives outside the overflow:hidden video region so it is always
+              visible even when the video fills the full available height. Three columns
+              (see .transport): the play button stays optically centred however wide the
+              side clusters get — v2 puts the zoom count on the right. */}
+          <div className={styles.transport}>
+            <div className={styles.transportSide}>
+              <button
+                type="button"
+                className={styles.muteButton}
+                aria-label={playback.muted ? t("unmute") : t("mute")}
+                onClick={playback.toggleMute}
+              >
+                {playback.muted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+              </button>
+            </div>
+            <button
+              type="button"
+              className={styles.playButton}
+              aria-label={playback.playing ? t("pause") : t("play")}
+              onClick={playback.toggle}
+            >
+              {playback.playing ? <Pause size={20} /> : <Play size={20} />}
+            </button>
+            <div className={`${styles.transportSide} ${styles.transportRight}`}>
+              <span className={styles.timeDisplay}>
+                {formatTime(playback.timelineTime)} / {formatTime(playback.duration)}
+              </span>
+              {/* Shown whenever there is something to count: a pre-v2 recording has no
+                  cursor track but can still carry hand-made zooms. */}
+              {(cursorTrack || zooms.visibleZooms.length > 0) && (
+                <span className={styles.counts}>
+                  {t("zoomCount", { count: zooms.visibleZooms.length })}
+                </span>
+              )}
+              <button
+                type="button"
+                className={styles.fullscreenButton}
+                aria-label={isFullscreen ? t("exitFullscreen") : t("fullscreen")}
+                onClick={handleFullscreen}
+              >
+                {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+              </button>
+            </div>
+          </div>
+        </main>
+        <EditorInspector>
+          {selectedZoom ? (
+            <ZoomInspector
+              segment={selectedZoom}
+              index={zooms.visibleZooms.indexOf(selectedZoom) + 1}
+              layout={layout}
+              zooms={zooms}
+              onRemoved={() => selectKind("zoom", null)}
+            />
+          ) : (
+            <DetectionPanel
+              zooms={zooms}
+              sensitivity={scene.zoomSensitivity}
+              clicksAvailable={cursorTrack?.clicksAvailable ?? false}
+            />
+          )}
+        </EditorInspector>
+      </div>
       <footer className={styles.timeline}>
         <TimelineStrip
           layout={layout}
@@ -756,6 +860,30 @@ function VideoEditor({
           selectedOverlayId={selectedOverlayId}
           onSelectOverlay={setSelectedOverlayId}
           onWindowChange={handleWindowChange}
+          extraLanes={[
+            ...(cursorTrack
+              ? [
+                  {
+                    key: "activity",
+                    label: t("laneActivity"),
+                    node: <ActivityLane marks={activity} layout={layout} />,
+                  },
+                ]
+              : []),
+            {
+              key: "zooms",
+              label: t("laneZooms"),
+              node: (
+                <ZoomLane
+                  segments={zooms.visibleZooms}
+                  layout={layout}
+                  selectedId={selectedZoomId}
+                  onSelect={handleSelectZoom}
+                  onEdgeDrag={zooms.edgeDrag}
+                />
+              ),
+            },
+          ]}
         />
       </footer>
       {blocker.state === "blocked" && (
