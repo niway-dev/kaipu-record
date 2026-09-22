@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { buildCameraPath } from "../zoom/camera-path";
 import type { ZoomSegment } from "../zoom/zoom-model";
 import { boxCenterAt, CameraBox } from "./camera-box";
+import { HoldOriginalButton } from "./hold-original-button";
 
 const FIXED: ZoomSegment = {
   id: "z",
@@ -127,5 +128,37 @@ describe("CameraBox", () => {
     fireEvent.lostPointerCapture(box, { pointerId: 1 });
     fireEvent.pointerCancel(box, { pointerId: 1 });
     expect(onEnd).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("HoldOriginalButton", () => {
+  it("holds while pressed and shows the chip", () => {
+    const onHoldChange = vi.fn();
+    const { rerender } = render(<HoldOriginalButton holding={false} onHoldChange={onHoldChange} />);
+    const button = screen.getByRole("button", { name: /Hold to see original/ });
+    fireEvent.pointerDown(button, { pointerId: 1 });
+    expect(onHoldChange).toHaveBeenLastCalledWith(true);
+    rerender(<HoldOriginalButton holding onHoldChange={onHoldChange} />);
+    expect(screen.getByText("ORIGINAL · UNEDITED")).toBeInTheDocument();
+    fireEvent.pointerUp(button, { pointerId: 1 });
+    expect(onHoldChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it("ignores pointerleave when it is not holding", () => {
+    const onHoldChange = vi.fn();
+    render(<HoldOriginalButton holding={false} onHoldChange={onHoldChange} />);
+    fireEvent.pointerLeave(screen.getByRole("button"), { pointerId: 1 });
+    expect(onHoldChange).not.toHaveBeenCalled();
+  });
+
+  it("Space holds without reaching window listeners", () => {
+    const onHoldChange = vi.fn();
+    const windowKey = vi.fn();
+    window.addEventListener("keydown", windowKey);
+    render(<HoldOriginalButton holding={false} onHoldChange={onHoldChange} />);
+    fireEvent.keyDown(screen.getByRole("button"), { key: " " });
+    expect(onHoldChange).toHaveBeenLastCalledWith(true);
+    expect(windowKey).not.toHaveBeenCalled();
+    window.removeEventListener("keydown", windowKey);
   });
 });

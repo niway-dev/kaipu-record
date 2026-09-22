@@ -484,7 +484,9 @@
     "zoomSmoothnessNote": "Más alta: la cámara entra más despacio y se desplaza menos.",
     "zoomRemove": "Quitar este zoom",
     "cameraChipFollow": "{level}× · SIGUE",
-    "cameraChipLocked": "{level}× · FIJO"
+    "cameraChipLocked": "{level}× · FIJO",
+    "holdOriginal": "Mantén para ver el original",
+    "originalChip": "ORIGINAL · SIN EDITAR"
   },
   "panel": {
     "saving": "Guardando…",
