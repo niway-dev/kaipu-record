@@ -100,6 +100,10 @@ export interface KaipuElectronAPI {
    * nudges the prompt via desktopCapturer and re-reads the status.
    */
   requestPermission(kind: PermissionKind): Promise<boolean>;
+  /** "not-required" off macOS. Never prompts. */
+  getAccessibilityStatus(): Promise<"granted" | "denied" | "not-required">;
+  /** macOS: registers the app in the Accessibility list, shows the system prompt once, and opens the pane. */
+  requestAccessibility(): Promise<"granted" | "denied" | "not-required">;
   /** Deep-link System Settings to the relevant Privacy pane (for denied permissions). */
   openSystemSettings(kind: PermissionKind): Promise<void>;
 

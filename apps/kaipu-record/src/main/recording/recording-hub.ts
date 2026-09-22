@@ -1,4 +1,4 @@
-import { app, BrowserWindow, desktopCapturer, ipcMain, screen } from "electron";
+import { app, BrowserWindow, desktopCapturer, ipcMain, screen, systemPreferences } from "electron";
 import { IPC_CHANNELS } from "@shared/types";
 import type {
   ControlCommand,
@@ -11,6 +11,7 @@ import type {
 import { serializeCursorTrack } from "@shared/cursor-track";
 import { LibraryVault } from "../library/library-vault";
 import { pickCapturedDisplay } from "./captured-display";
+import { ClickHook, type HookLike } from "./click-hook";
 import { CursorTrackRegistry } from "./cursor-tracker";
 import { ControlBarWindow } from "./control-bar-window";
 import { CameraBubbleWindow } from "./camera-bubble-window";
@@ -72,8 +73,32 @@ export function registerRecordingHub(
       return () => clearInterval(handle);
     },
   });
-  // PR 3 replaces this with the click hook's availability (doc 03).
-  const clicksAvailable = (): boolean => false;
+  // Mouse-down only, and only while a recording samples (see plans/video-editor-v2/03).
+  const clickHook = new ClickHook(
+    {
+      platform: process.platform,
+      // `false` = check only. Passing true here would show the macOS prompt mid-recording.
+      isAccessibilityTrusted: () =>
+        process.platform === "darwin" && systemPreferences.isTrustedAccessibilityClient(false),
+      load: () => {
+        try {
+          // Lazy require: a broken/missing native binary must not crash main at startup.
+          return (require("uiohook-napi") as { uIOhook: HookLike }).uIOhook;
+        } catch (error) {
+          console.warn("uiohook-napi failed to load", error);
+          return null;
+        }
+      },
+    },
+    (button) => {
+      for (const tracker of cursorTracks.all()) tracker.addClick(button);
+    },
+  );
+  // Sessions whose whole recording had the hook running.
+  const clickSessions = new Set<string>();
+  const stopHookIfIdle = (): void => {
+    if (!cursorTracks.active) clickHook.stop();
+  };
 
   // Single source of truth for "is a recording happening", broadcast to every
   // window so non-recorder windows (reopened Record page, Capture Panel) can
@@ -160,12 +185,19 @@ export function registerRecordingHub(
         recording = await writer.finalize(sessionId, meta);
       } catch (error) {
         cursorTracks.discard(sessionId);
+        clickSessions.delete(sessionId);
+        stopHookIfIdle();
         throw error;
       }
       // Best effort: a recording is never failed by its cursor track. The tracker
       // is still sampling here (finalize runs after the encoder stopped), so the
       // tail past the last frame is cut with the recording's duration.
-      const track = cursorTracks.finish(sessionId, clicksAvailable(), meta.durationSeconds * 1000);
+      const track = cursorTracks.finish(
+        sessionId,
+        clickSessions.delete(sessionId),
+        meta.durationSeconds * 1000,
+      );
+      stopHookIfIdle();
       if (track) {
         await new LibraryVault(vaultDirectory().path)
           .writeCursorTrack(recording.id, serializeCursorTrack(track))
@@ -176,6 +208,8 @@ export function registerRecordingHub(
   );
   ipcMain.handle(IPC_CHANNELS.recordingAbort, (_e, sessionId: string) => {
     cursorTracks.discard(sessionId);
+    clickSessions.delete(sessionId);
+    stopHookIfIdle();
     return writer.abort(sessionId);
   });
   ipcMain.handle(
@@ -188,6 +222,7 @@ export function registerRecordingHub(
       );
       if (!display) return { enabled: false };
       cursorTracks.start(sessionId, display);
+      if (clickHook.ensureRunning()) clickSessions.add(sessionId);
       return { enabled: true };
     },
   );
@@ -260,6 +295,8 @@ export function registerRecordingHub(
     },
     forceReset: () => {
       cursorTracks.discardAll();
+      clickSessions.clear();
+      clickHook.stop();
       if (!activity.active) return;
       applyStopWindowState();
     },
