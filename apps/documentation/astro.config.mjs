@@ -99,6 +99,7 @@ export default defineConfig({
             { slug: "backlog/screen-picker-thumbnail-perf" },
             { slug: "backlog/export-formats" },
             { slug: "backlog/video-editor" },
+            { slug: "backlog/video-editor-zoom-blur-cover" },
           ],
         },
         {
