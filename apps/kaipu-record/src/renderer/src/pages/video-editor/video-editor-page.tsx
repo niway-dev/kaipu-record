@@ -11,6 +11,7 @@ import {
   VolumeX,
 } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
+import { parseCursorTrack, type CursorTrack } from "@shared/cursor-track";
 import { captureException } from "@renderer/features/analytics";
 import {
   initialScene,
@@ -45,6 +46,9 @@ import {
   type SlideAssetStore,
 } from "@renderer/features/video-editor/slide-assets";
 import { parseSession, serializeSession } from "@renderer/features/video-editor/session";
+import { withInitialZooms } from "@renderer/features/video-editor/initial-zooms";
+import { useEditorSelection } from "@renderer/features/video-editor/editor-selection";
+import { useSessionAutosave } from "@renderer/features/video-editor/use-session-autosave";
 import { usePreviewPlayback } from "@renderer/features/video-editor/use-preview-playback";
 import { useSourceThumbnails } from "@renderer/features/video-editor/use-source-thumbnails";
 import { useVideoScene } from "@renderer/features/video-editor/use-video-scene";
@@ -123,7 +127,10 @@ function VideoEditorLoader({ source }: { source: VideoEditorSource }): React.JSX
     return () => assetStoreRef.current.dispose();
   }, []);
 
-  const [resolvedScene, setResolvedScene] = useState<VideoScene | null>(null);
+  const [resolved, setResolved] = useState<{
+    scene: VideoScene;
+    cursorTrack: CursorTrack | null;
+  } | null>(null);
 
   useEffect(() => {
     // Guards against calling restoreAsset or setting state after unmount —
@@ -131,6 +138,25 @@ function VideoEditorLoader({ source }: { source: VideoEditorSource }): React.JSX
     // then restoreAsset would recreate object URLs that are never revoked.
     let cancelled = false;
     void (async () => {
+      // The cursor track is best-effort and independent of the session: a missing or
+      // malformed track just means no auto zooms (the editor behaves as before v2).
+      let cursorTrack: CursorTrack | null = null;
+      try {
+        const trackJson = await window.electronAPI.loadCursorTrack(source.id);
+        cursorTrack = trackJson ? parseCursorTrack(trackJson) : null;
+      } catch {
+        cursorTrack = null;
+      }
+      if (cancelled) return;
+      // Initial detection happens HERE, before useVideoScene exists, so it is part of the
+      // initial scene — not a commit — and merely opening the editor is not an edit.
+      const open = (scene: VideoScene, hasZoomData: boolean): void => {
+        if (cancelled) return;
+        setResolved({
+          scene: withInitialZooms(scene, hasZoomData, cursorTrack, source.durationSeconds),
+          cursorTrack,
+        });
+      };
       try {
         const saved = await window.electronAPI.loadVideoEditSession(source.id);
         if (cancelled) return;
@@ -156,19 +182,19 @@ function VideoEditorLoader({ source }: { source: VideoEditorSource }): React.JSX
               ),
             };
             showToast({ message: t("restored") });
-            setResolvedScene(filteredScene);
+            open(filteredScene, session.hasZoomData);
           } else {
             // Session file exists but is invalid (schema changed, corruption, etc.).
             showToast({ message: t("restoreError") });
-            if (!cancelled) setResolvedScene(initialScene(source.durationSeconds));
+            open(initialScene(source.durationSeconds), false);
           }
         } else {
           // No saved session — fresh start, no toast.
-          if (!cancelled) setResolvedScene(initialScene(source.durationSeconds));
+          open(initialScene(source.durationSeconds), false);
         }
       } catch {
         // IPC failure is non-fatal; open a fresh editor without surfacing the error.
-        if (!cancelled) setResolvedScene(initialScene(source.durationSeconds));
+        open(initialScene(source.durationSeconds), false);
       }
     })();
     return () => {
@@ -176,14 +202,19 @@ function VideoEditorLoader({ source }: { source: VideoEditorSource }): React.JSX
     };
   }, []); // [] correct: source is stable per VideoEditorPage's key={location.key}
 
-  if (resolvedScene === null) {
+  if (resolved === null) {
     // Brief loading state while the session IPC resolves. The editor grows the window
     // on mount; showing a blank page here avoids a visible size jump.
     return <div className={styles.page} />;
   }
 
   return (
-    <VideoEditor source={source} resolvedScene={resolvedScene} assetStoreRef={assetStoreRef} />
+    <VideoEditor
+      source={source}
+      resolvedScene={resolved.scene}
+      cursorTrack={resolved.cursorTrack}
+      assetStoreRef={assetStoreRef}
+    />
   );
 }
 
@@ -194,6 +225,8 @@ function VideoEditor({
 }: {
   source: VideoEditorSource;
   resolvedScene: VideoScene;
+  /** Parsed `.cursor.json`, or null (no track / window source / pre-v2 recording). */
+  cursorTrack: CursorTrack | null;
   assetStoreRef: React.MutableRefObject<SlideAssetStore>;
 }): React.JSX.Element {
   const t = useTranslations("videoEditor");
@@ -207,40 +240,59 @@ function VideoEditor({
   const controller = useVideoScene(resolvedScene);
   const { scene } = controller;
   const layout = useMemo(() => toLayout(scene.items), [scene.items]);
-  // Blocks in-app navigation (e.g. the sidebar) while there's an edit that would be
-  // lost — same useBlocker pattern as the screenshot editor.
+  // Writes the session ~800 ms after every commit/endInteract, and flushes on unmount
+  // and beforeunload. See plans/video-editor-v2/07: before this, closing the window
+  // threw away every cut, zoom and redaction, because useBlocker below only ever sees
+  // in-app navigation.
+  const autosave = useSessionAutosave(source.id, scene, controller.interacting, assetStoreRef);
+  // Blocks in-app navigation (e.g. the sidebar) while an edit has NOT reached the
+  // session file yet — same useBlocker pattern as the screenshot editor, but now about
+  // "not written" rather than "edited": with autosave on, an edit that is already on
+  // disk is not lost by leaving, so warning about it would be a lie. In practice the
+  // dialog therefore appears only inside the debounce window or after a failed write,
+  // and its Discard button drops the pending write (`autosave.cancel()`) so it means
+  // exactly what it says.
   //
-  // The predicate reads refs instead of closing over `controller.dirty`/a plain
-  // boolean: react-router's data router consults the predicate SYNCHRONOUSLY inside
-  // `navigate()`, before React has re-rendered. handleExport's onSaved callback calls
-  // `controller.markClean()` (which schedules setPast([])/setFuture([])) immediately
-  // followed by `navigate(...)` — React 19 batches those state updates, so a boolean
-  // `dirty` value closed over at render time would still read `true` at navigate-time
-  // and the "discard changes" dialog would pop on every successful export. Refs
-  // sidestep the batching entirely: they're updated synchronously and read
-  // synchronously by the predicate.
-  const dirtyRef = useRef(controller.dirty);
-  dirtyRef.current = controller.dirty;
+  // The predicate reads a ref instead of a plain boolean: react-router's data router
+  // consults it SYNCHRONOUSLY inside `navigate()`, before React has re-rendered, and
+  // React 19 batches the state updates that a render-time boolean would depend on.
+  // Refs sidestep the batching entirely.
+  const pendingSaveRef = autosave.pendingRef;
   // Set to true right before the post-export `navigate()` so that programmatic
   // navigation always proceeds, regardless of batching timing. Normal in-app
-  // navigation (e.g. the sidebar) never touches this ref, so it still blocks while
-  // dirty.
+  // navigation (e.g. the sidebar) never touches this ref, so it still blocks while a
+  // write is pending.
   const bypassBlockerRef = useRef(false);
-  const shouldBlock = useCallback(() => dirtyRef.current && !bypassBlockerRef.current, []);
+  const shouldBlock = useCallback(
+    () => pendingSaveRef.current && !bypassBlockerRef.current,
+    [pendingSaveRef],
+  );
   const blocker = useBlocker(shouldBlock);
   const playback = usePreviewPlayback(layout);
   const videoTools = useVideoTools();
   const videoExport = useVideoExport();
   const mediaUrl = `kaipu-media://recording/${source.id}`;
   const thumbnails = useSourceThumbnails(mediaUrl, source.durationSeconds);
-  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const selection = useEditorSelection();
+  // `select` / `clear` are stable (useCallback, no deps); the `selection` object itself
+  // is rebuilt every render, so never put it in a dependency array.
+  const { select: selectKind, clear: clearSelection } = selection;
+  const selectedItemId = selection.itemId;
+  const selectedOverlayId = selection.overlayId;
+  const setSelectedItemId = useCallback(
+    (id: string | null) => selectKind("item", id),
+    [selectKind],
+  );
+  const setSelectedOverlayId = useCallback(
+    (id: string | null) => selectKind("overlay", id),
+    [selectKind],
+  );
   // A delete must clamp the playhead into the new (shorter) timeline, but the preview
   // hook's layoutRef only picks up the new layout on the NEXT render — seeking
   // synchronously here would map the target time through the stale, pre-delete layout.
   // Queue it and let the effect below (keyed on `layout`) fire the actual seek once
   // layoutRef has caught up.
   const pendingSeekRef = useRef<number | null>(null);
-  const [selectedOverlayId, setSelectedOverlayId] = useState<string | null>(null);
   // Fullscreen state — true while document.fullscreenElement is this page's <main> stage.
   const [isFullscreen, setIsFullscreen] = useState(false);
   // Ref for the stage <main> element, used to request fullscreen on it directly.
@@ -262,6 +314,19 @@ function VideoEditor({
       setSelectedOverlayId(null);
     }
   }, [scene.overlays, selectedOverlayId]);
+
+  const selectedZoomId = selection.zoomId;
+  const selectedRedactionId = selection.redactionId;
+  useEffect(() => {
+    if (selectedZoomId && !scene.zoomSegments.some((z) => z.id === selectedZoomId)) {
+      selectKind("zoom", null);
+    }
+  }, [scene.zoomSegments, selectedZoomId, selectKind]);
+  useEffect(() => {
+    if (selectedRedactionId && !scene.redactions.some((r) => r.id === selectedRedactionId)) {
+      selectKind("redaction", null);
+    }
+  }, [scene.redactions, selectedRedactionId, selectKind]);
 
   // Track fullscreen state via the fullscreenchange event so pressing Esc (which the
   // browser handles natively) still syncs isFullscreen back to false.
@@ -388,6 +453,9 @@ function VideoEditor({
       previewWidth: video.clientWidth,
       slideAssets: assetStoreRef.current,
       onSaved: async (recording) => {
+        // This save supersedes whatever the autosave still had queued; dropping it
+        // avoids a second write of the same scene right before unmount.
+        autosave.cancel();
         // Persist the session before navigating away so reopening the editor on the
         // original recording restores cuts/overlays/slides. Non-fatal if it fails —
         // the export already succeeded and the user lands on the new recording.
@@ -410,7 +478,7 @@ function VideoEditor({
         navigate(`/library/${recording.assetId}`);
       },
     });
-  }, [playback, videoExport, scene, source, controller, navigate, assetStoreRef]);
+  }, [playback, videoExport, scene, source, controller, navigate, assetStoreRef, autosave]);
 
   const handleDeleteOverlay = useCallback(() => {
     // Same rationale as handleDeleteSelected: don't touch scene/selection while a
@@ -530,6 +598,13 @@ function VideoEditor({
         if (!splitDisabled) handleSplit();
         return;
       }
+      // `!document.fullscreenElement`: in fullscreen the browser handles Esc itself to
+      // leave it — clearing the selection at the same time would be a second, invisible
+      // action the user never asked for.
+      if (e.key === "Escape" && !document.fullscreenElement) {
+        clearSelection();
+        return;
+      }
       // Annotation selection takes precedence over segment deletion when both exist —
       // an annotation is almost always the more "local" thing the user just touched.
       // Cmd/Ctrl+Backspace is a common "delete line/word" chord in text contexts —
@@ -552,6 +627,9 @@ function VideoEditor({
     handleDeleteSelected,
     selectedOverlayId,
     handleDeleteOverlay,
+    clearSelection,
+    selectedZoomId,
+    selectedRedactionId,
   ]);
 
   return (
@@ -691,7 +769,15 @@ function VideoEditor({
             <ModalButton variant="ghost" onClick={() => blocker.reset()}>
               {t("keepEditing")}
             </ModalButton>
-            <ModalButton variant="danger" onClick={() => blocker.proceed()}>
+            <ModalButton
+              variant="danger"
+              onClick={() => {
+                // Discard = drop the queued write, so the unmount flush does not save
+                // the very edits the user just chose to throw away.
+                autosave.cancel();
+                blocker.proceed();
+              }}
+            >
               <Trash2 size={15} strokeWidth={1.8} />
               {t("discard")}
             </ModalButton>

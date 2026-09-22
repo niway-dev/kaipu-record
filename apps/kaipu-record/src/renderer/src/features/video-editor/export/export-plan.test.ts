@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { TrackItem } from "../scene";
+import { initialScene, type TrackItem } from "../scene";
 import { buildExportPlan } from "./export-plan";
 
 // Copied from timeline.test.ts — the same fixture factories, kept local so this
@@ -23,6 +23,7 @@ const slide = (id: string, duration: number): TrackItem => ({
 describe("buildExportPlan", () => {
   it("maps the track to contiguous render segments", () => {
     const plan = buildExportPlan({
+      ...initialScene(1),
       items: [slide("s1", 3), clip("a", 0, 10), clip("b", 20, 25)],
       overlays: [],
     });
@@ -48,11 +49,15 @@ describe("buildExportPlan", () => {
         end: 4,
       },
     ] as const;
-    const plan = buildExportPlan({ items: [clip("a", 0, 10)], overlays: [...overlays] });
+    const plan = buildExportPlan({
+      ...initialScene(1),
+      items: [clip("a", 0, 10)],
+      overlays: [...overlays],
+    });
     expect(plan.overlayWindows).toEqual([{ overlayId: "o1", start: 1, end: 4 }]);
   });
 
   it("throws on an empty timeline", () => {
-    expect(() => buildExportPlan({ items: [], overlays: [] })).toThrow();
+    expect(() => buildExportPlan({ ...initialScene(1), items: [], overlays: [] })).toThrow();
   });
 });

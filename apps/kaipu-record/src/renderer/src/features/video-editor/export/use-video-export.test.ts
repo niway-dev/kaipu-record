@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LocalRecording } from "@shared/types/library-storage";
-import type { VideoScene } from "../scene";
+import { initialScene, type VideoScene } from "../scene";
 import { createSlideAssetStore } from "../slide-assets";
 import { useVideoExport } from "./use-video-export";
 
@@ -29,6 +29,7 @@ class FakeWorker {
 let createdWorkers: FakeWorker[] = [];
 
 const CLIP_SCENE: VideoScene = {
+  ...initialScene(1),
   items: [{ id: "a", kind: "clip", sourceStart: 0, sourceEnd: 10 }],
   overlays: [],
 };
@@ -87,7 +88,9 @@ describe("useVideoExport", () => {
     const { result } = renderHook(() => useVideoExport());
 
     await act(async () => {
-      await result.current.start(startArgs({ scene: { items: [], overlays: [] } }));
+      await result.current.start(
+        startArgs({ scene: { ...initialScene(1), items: [], overlays: [] } }),
+      );
     });
 
     expect(result.current.status).toBe("error");
@@ -106,7 +109,9 @@ describe("useVideoExport", () => {
   it("dismisses the empty-timeline error via cancel()", async () => {
     const { result } = renderHook(() => useVideoExport());
     await act(async () => {
-      await result.current.start(startArgs({ scene: { items: [], overlays: [] } }));
+      await result.current.start(
+        startArgs({ scene: { ...initialScene(1), items: [], overlays: [] } }),
+      );
     });
     expect(result.current.status).toBe("error");
 
