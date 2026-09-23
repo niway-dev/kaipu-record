@@ -7,9 +7,11 @@ sidebar:
 
 # 09 — Preview compositing
 
-> **Status: 🔵 Proposed** (2026-09-21). PR 7 ("Preview camera") in the
+> **Status: 🟡 In progress** (2026-09-22). PR 7 ("Preview camera") in the
 > [audit](/plans/video-editor-v2/00-audit/); defines the layer slot PR 8 uses. Fixes W13.
-> Requires PR 6 ([08](/plans/video-editor-v2/08-editor-layout-and-tracks/)).
+> Requires PR 6 ([08](/plans/video-editor-v2/08-editor-layout-and-tracks/)). Implemented
+> on `feat/video-editor-v2-preview-camera` — not merged, not validated in production; see
+> the [backlog PR table](/backlog/video-editor-zoom-blur-cover/).
 
 ## Problem
 
@@ -1515,8 +1517,11 @@ camera box's current position, so locking never moves the picture; off a clip
     reads `FIJO`, the inspector shows "Fijar aquí" active; ⌘Z restores it in one step.
   - Press "Fijar aquí" in the inspector **without** dragging: the picture must not move.
     (This is the H1 regression: a mode-only commit would recentre the camera.)
-  - Click inside the camera box on an annotation under it: the annotation is selected —
-    the box's interior does not eat the click; only its frame drags.
+  - Click anywhere inside the camera box, not just its edge: the body grabs the camera
+    and drags it, cursor `grab`/`grabbing`. To reach an annotation under the box, deselect
+    the zoom first (Esc or a background click) or pick the annotation from its lane —
+    the box no longer passes clicks through to whatever is underneath it (see
+    [camera box UX notes](/backlog/video-editor-camera-box-ux/)).
   - Abort a box drag (switch app mid-drag): the drag ends and undo/redo still work.
   - Draw an annotation while zoomed (deselect the zoom first): it lands under the pointer
     and moves with the content.

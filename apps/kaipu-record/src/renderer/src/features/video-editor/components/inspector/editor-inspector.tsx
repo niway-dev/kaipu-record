@@ -1,8 +1,9 @@
 /**
  * The right-hand properties column. Picks the one panel that applies to the current
- * selection — never shows controls that do not apply (UI spec § 7). Annotation and
- * clip selections keep their existing UI (floating OverlayOptions / timeline) and show
- * the Detection panel here, so the column is never empty.
+ * selection — never shows controls that do not apply (UI spec § 7). Every selection
+ * kind resolves to a panel now (zoom, redaction, annotation — plus the annotation
+ * defaults while a drawing tool is armed), and everything else falls through to the
+ * Detection panel, so the column is never empty. Clip selections keep the timeline.
  */
 import type { ReactNode } from "react";
 import styles from "./editor-inspector.module.css";

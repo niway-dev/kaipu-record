@@ -91,6 +91,7 @@ export default defineConfig({
             { slug: "backlog/shortcuts" },
             { slug: "backlog/screenshots" },
             { slug: "backlog/editor-toolbar-responsive" },
+            { slug: "backlog/video-editor-annotation-inspector" },
             { slug: "backlog/screenshot-save-strategy" },
             { slug: "backlog/screenshot-scene-doc" },
             { slug: "backlog/screenshot-redaction" },
@@ -101,7 +102,10 @@ export default defineConfig({
             { slug: "backlog/screen-picker-thumbnail-perf" },
             { slug: "backlog/export-formats" },
             { slug: "backlog/video-editor" },
+            { slug: "backlog/video-editor-camera-box-ux" },
             { slug: "backlog/video-editor-zoom-blur-cover" },
+            { slug: "backlog/cursor-sprite-capture" },
+            { slug: "backlog/edit-state-indicators" },
           ],
         },
         {

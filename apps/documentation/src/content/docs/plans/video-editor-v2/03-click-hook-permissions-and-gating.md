@@ -7,9 +7,13 @@ sidebar:
 
 # 03 — Click hook, permissions and gating
 
-> **Status: 🔵 Proposed** (2026-09-21). PR 3 ("Click hook, gated") and the UI part of
+> **Status: 🟡 In progress** (2026-09-22). PR 3 ("Click hook, gated") and the UI part of
 > PR 10 in the [audit](/plans/video-editor-v2/00-audit/). Fixes W7. Requires PR 2
-> ([02](/plans/video-editor-v2/02-cursor-track-capture-and-persistence/)).
+> ([02](/plans/video-editor-v2/02-cursor-track-capture-and-persistence/)). PR 3 is
+> implemented on `feat/video-editor-v2-click-hook`, the UI part on
+> `feat/video-editor-v2-polish` — neither merged, neither validated in production
+> (Spike B's real signed/notarized build check is still outstanding); see the
+> [backlog PR table](/backlog/video-editor-zoom-blur-cover/).
 
 ## Problem
 
@@ -632,10 +636,18 @@ regenerated after this plan was reviewed (the `finish(...)` call now carries PR 
   keyboard would be false. What the app does is keep mouse clicks and nothing else
   (§ Decisions → What). If Spike B finds that macOS also asks for Input Monitoring, this
   copy no longer covers what we request — stop and report (Task 0).
-- **Settings row** (Recording section): label `settings.clickZoomLabel` "Zoom en clics
+- **Settings row** (Permissions section): label `settings.clickZoomLabel` "Zoom en clics
   (Accesibilidad)" / "Zoom on clicks (Accessibility)", status text from
   `getAccessibilityStatus()`, button calling `requestAccessibility()`. Hidden when the
   status is `"not-required"`.
+
+  This doc originally placed the row in the **Recording** section, and PR 10 shipped it
+  there. Validating it on a real machine showed the obvious failure: the app has a
+  dedicated **Permissions** page listing Screen recording, Microphone and Camera with
+  this exact row shape — same status text, same Request/Re-request button — and that is
+  where a user goes looking for an OS permission. Accessibility now sits with them. The
+  Recording section keeps only what `AppSettings` actually stores.
+
 - **Editor empty-state hint** when the track has `clicksAvailable: false` on macOS:
   `videoEditor.clicksUnavailableHint` "Activa el permiso de Accesibilidad para que los
   clics también generen zoom." / "Turn on Accessibility access so clicks also create zooms."

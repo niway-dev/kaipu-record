@@ -7,6 +7,14 @@
  */
 import type { ExportPlan } from "./export-plan";
 
+/** A CameraPath's arrays (transferred — the renderer sends COPIES, see use-video-export). */
+export interface CameraPathMessage {
+  fps: number;
+  cx: Float32Array;
+  cy: Float32Array;
+  scale: Float32Array;
+}
+
 /** Sent once from the renderer to the worker to kick off the export. */
 export interface ExportStartMessage {
   type: "start";
@@ -23,6 +31,8 @@ export interface ExportStartMessage {
   slides: Array<{ assetId: string; bitmap: ImageBitmap }>;
   /** Native pixel dimensions of the output video. */
   output: { width: number; height: number };
+  /** v2: the preview's camera path (same simulation), or null when the scene has no zoom. */
+  camera: CameraPathMessage | null;
 }
 
 /**

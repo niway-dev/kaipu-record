@@ -37,6 +37,9 @@ export type PermissionKind = "screen" | "microphone" | "camera";
 /** Whether each permission is currently granted. */
 export type PermissionStatus = Record<PermissionKind, boolean>;
 
+/** macOS Accessibility (click hook, see plans/video-editor-v2/03). "not-required" off macOS. */
+export type AccessibilityStatus = "granted" | "denied" | "not-required";
+
 /**
  * Discriminated result for the two credential-submitting IPC calls. A structured
  * AuthError does not survive a *thrown* IPC error — Electron serializes anything thrown
@@ -101,9 +104,14 @@ export interface KaipuElectronAPI {
    */
   requestPermission(kind: PermissionKind): Promise<boolean>;
   /** "not-required" off macOS. Never prompts. */
-  getAccessibilityStatus(): Promise<"granted" | "denied" | "not-required">;
-  /** macOS: registers the app in the Accessibility list, shows the system prompt once, and opens the pane. */
-  requestAccessibility(): Promise<"granted" | "denied" | "not-required">;
+  getAccessibilityStatus(): Promise<AccessibilityStatus>;
+  /**
+   * macOS: registers the app in the Accessibility list, shows the system prompt once, and
+   * opens the pane. The only place this may be called from is the onboarding Accessibility
+   * step or the Settings "Zoom on clicks" row (plans/video-editor-v2/03 § UI) — both are
+   * user-initiated clicks, never anything on the recording path.
+   */
+  requestAccessibility(): Promise<AccessibilityStatus>;
   /** Deep-link System Settings to the relevant Privacy pane (for denied permissions). */
   openSystemSettings(kind: PermissionKind): Promise<void>;
 

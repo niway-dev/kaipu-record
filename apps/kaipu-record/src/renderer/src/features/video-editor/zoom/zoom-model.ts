@@ -45,3 +45,11 @@ export const ZOOM_DEFAULTS = {
   /** Camera smoothing of a new segment: 0 = snappy, 100 = floaty. */
   smoothing: 70,
 } as const;
+
+/** Below this many source pixels of window height, zoomed UI text looks soft. */
+export const SHARP_WINDOW_MIN_HEIGHT = 720;
+
+/** True when a zoom of `scale` on a `sourceHeight` px recording upsamples visibly. */
+export function isSoftZoom(sourceHeight: number, scale: number): boolean {
+  return sourceHeight > 0 && sourceHeight / scale < SHARP_WINDOW_MIN_HEIGHT;
+}

@@ -14,7 +14,7 @@ import { sourceRangeToTimelineBlocks } from "../../source-time";
 import type { LayoutEntry } from "../../timeline";
 import type { ZoomEditing } from "../../zoom/use-zoom-editing";
 import type { ZoomSegment } from "../../zoom/zoom-model";
-import { ZOOM_LIMITS } from "../../zoom/zoom-model";
+import { isSoftZoom, ZOOM_LIMITS } from "../../zoom/zoom-model";
 import { HistorySlider } from "../history-slider";
 import { formatPrecise } from "./format";
 import styles from "./inspector.module.css";
@@ -24,6 +24,7 @@ export function ZoomInspector({
   index,
   layout,
   zooms,
+  sourceHeight,
   anchorNow,
   onRemoved,
 }: {
@@ -32,6 +33,10 @@ export function ZoomInspector({
   index: number;
   layout: LayoutEntry[];
   zooms: ZoomEditing;
+  /** Decoded source video height in px (0 if not yet known) — feeds the soft-zoom hint
+   *  (plans/video-editor-v2/12): recordings are capped at the quality preset's height, so
+   *  a big enough scale upsamples visibly. */
+  sourceHeight: number;
   /** Where the camera box is right now, normalized and clamped — the anchor Lock pins. */
   anchorNow(): { x: number; y: number };
   onRemoved(): void;
@@ -68,6 +73,9 @@ export function ZoomInspector({
         onEnd={zooms.end}
         onCommit={(scale) => zooms.commitPatch(segment.id, { scale })}
       />
+      {isSoftZoom(sourceHeight, segment.scale) && (
+        <p className={styles.hint}>{t("zoomSoftHint")}</p>
+      )}
       <HistorySlider
         label={t("zoomSmoothness")}
         value={segment.smoothing}

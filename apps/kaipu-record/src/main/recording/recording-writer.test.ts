@@ -22,7 +22,7 @@ describe("RecordingWriter", () => {
     await writer.create("s1");
     await writer.write("s1", new TextEncoder().encode("AAAAAAAA").buffer, 0);
     await writer.write("s1", new TextEncoder().encode("BB").buffer, 2);
-    const rec = await writer.finalize("s1", { title: "T", durationSeconds: 3 });
+    const rec = await writer.finalize("s1", { title: "T", durationSeconds: 3, durationMs: 3000 });
     const bytes = await readFile(rec.filePath, "utf-8");
     expect(bytes).toBe("AABBAAAA");
     expect(rec).toMatchObject({ id: "rec-fixed", title: "T", durationSeconds: 3 });
@@ -36,7 +36,7 @@ describe("RecordingWriter", () => {
     // Mimic the IPC path: chunks are sent without awaiting each write.
     void writer.write("s1", new TextEncoder().encode("AAAA").buffer, 0);
     void writer.write("s1", new TextEncoder().encode("BBBB").buffer, 4);
-    const rec = await writer.finalize("s1", { title: "T", durationSeconds: 1 });
+    const rec = await writer.finalize("s1", { title: "T", durationSeconds: 1, durationMs: 1000 });
     expect(await readFile(rec.filePath, "utf-8")).toBe("AAAABBBB");
   });
 
@@ -47,6 +47,7 @@ describe("RecordingWriter", () => {
     await writer.finalize("s1", {
       title: "T",
       durationSeconds: 1,
+      durationMs: 1000,
       thumbnail: new Uint8Array([0xff, 0xd8, 0xff]).buffer,
     });
     await expect(access(join(vaultDir, ".kaipu", "rec-fixed.jpg"))).resolves.toBeUndefined();
@@ -74,6 +75,7 @@ describe("RecordingWriter", () => {
     const rec = await writer.finalize("s1", {
       title: "Export",
       durationSeconds: 1,
+      durationMs: 1000,
       derivedFromAssetId: "22222222-2222-4222-8222-222222222222",
     });
     expect(rec.derivedFromAssetId).toBe("22222222-2222-4222-8222-222222222222");
@@ -86,7 +88,7 @@ describe("RecordingWriter", () => {
     const { writer } = await setup();
     await writer.create("s1");
     await writer.write("s1", new TextEncoder().encode("A").buffer, 0);
-    const rec = await writer.finalize("s1", { title: "Rec", durationSeconds: 1 });
+    const rec = await writer.finalize("s1", { title: "Rec", durationSeconds: 1, durationMs: 1000 });
     expect(rec.derivedFromAssetId).toBeNull();
   });
 });

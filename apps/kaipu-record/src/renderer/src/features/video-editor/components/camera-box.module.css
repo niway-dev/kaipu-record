@@ -4,21 +4,32 @@
   border: 1.5px solid var(--accent-primary);
   /* Scrim: darkens everything outside the window without fully hiding it. */
   box-shadow: 0 0 0 9999px rgba(8, 8, 10, 0.5);
-  /* The interior is transparent to the pointer: at 1.2× the box is nearly the whole
-     picture, and an opaque interior would swallow every click meant for an annotation
-     under it. Only .edge is hit-testable; events bubble from it to this element's
-     handlers, and the pointer capture taken on pointerdown carries the rest of the drag. */
-  pointer-events: none;
+  /* The body grabs the camera: while a zoom is selected, dragging the camera is the main
+     gesture, not reaching an annotation under the box (backlog/video-editor-camera-box-ux).
+     An annotation under the box is still reachable — deselect the zoom first, or pick it
+     from the annotation lane. */
+  pointer-events: auto;
+  cursor: grab;
   touch-action: none;
   z-index: 4;
 }
 
-/* Draggable frame: a 14 px strip straddling each border, wide enough to grab. */
+/* While the pointer capture from a pointerdown on .box or .edge is held. */
+.box.dragging {
+  cursor: grabbing;
+}
+
+/* Draggable frame: a 14 px strip straddling each border — kept past the border so a tiny
+   box (high zoom) still has something wide enough to grab. */
 .edge {
   position: absolute;
   pointer-events: auto;
-  cursor: move;
+  cursor: grab;
   touch-action: none;
+}
+
+.dragging .edge {
+  cursor: grabbing;
 }
 
 .edgeTop {

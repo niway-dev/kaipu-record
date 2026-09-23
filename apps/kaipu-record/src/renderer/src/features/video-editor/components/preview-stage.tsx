@@ -11,6 +11,7 @@ export function PreviewStage({
   chrome,
   contentRef,
   expanded = false,
+  onFrameSize,
 }: {
   playback: PreviewPlayback;
   mediaUrl: string;
@@ -33,6 +34,11 @@ export function PreviewStage({
   /** In fullscreen the bounded (contained-player) size caps are lifted so the video
    *  fills the screen. Off by default — normal editing keeps the compact player. */
   expanded?: boolean;
+  /** Decoded frame size, reported once metadata lands. The <video> element's own
+   *  `videoWidth`/`videoHeight` are not reactive — reading them off the ref during a
+   *  render gives whatever happened to be true at that render and never schedules
+   *  another — so anything that needs them as state has to receive them here. */
+  onFrameSize?: (size: { width: number; height: number }) => void;
 }): React.JSX.Element {
   // The content layer is sized from the DECODED frame ratio, not shrink-wrapped around
   // the <video>: with a height cap binding, a shrink-to-fit wrapper keeps its max-content
@@ -54,7 +60,10 @@ export function PreviewStage({
           onEnded={playback.onVideoEnded}
           onLoadedMetadata={(event) => {
             const { videoWidth, videoHeight } = event.currentTarget;
-            if (videoWidth > 0 && videoHeight > 0) setRatio(videoWidth / videoHeight);
+            if (videoWidth > 0 && videoHeight > 0) {
+              setRatio(videoWidth / videoHeight);
+              onFrameSize?.({ width: videoWidth, height: videoHeight });
+            }
           }}
           // Keep `playing` in sync with what the element actually does — a rejected play()
           // (e.g. interrupted by a seek) leaves it paused, and these events stop the

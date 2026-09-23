@@ -4,6 +4,20 @@ import type { LocalRecording } from "@shared/types/library-storage";
 import { initialScene, type VideoScene } from "../scene";
 import { createSlideAssetStore } from "../slide-assets";
 import { useVideoExport } from "./use-video-export";
+import { buildCameraPath } from "../zoom/camera-path";
+import type { ZoomSegment } from "../zoom/zoom-model";
+
+const ZOOM: ZoomSegment = {
+  id: "z",
+  start: 2,
+  end: 5,
+  scale: 2,
+  mode: "fixed",
+  anchor: { x: 0.5, y: 0.5 },
+  smoothing: 70,
+  origin: "manual",
+  trigger: null,
+};
 
 // The actual worker-run export (mediabunny decode/encode inside a Web Worker) is
 // runtime-deferred — jsdom can neither construct a real Worker nor run WebCodecs.
@@ -46,6 +60,7 @@ function startArgs(
     videoHeight: 720,
     previewWidth: 640,
     slideAssets: createSlideAssetStore(),
+    cameraPath: null,
     onSaved: vi.fn(),
     ...overrides,
   };
@@ -248,6 +263,7 @@ describe("useVideoExport", () => {
     expect(window.electronAPI.recordingFinalize).toHaveBeenCalledWith(sessionId, {
       title: "My recording (edited)",
       durationSeconds: 10,
+      durationMs: 10_000,
       thumbnail: FAKE_THUMB,
       derivedFromAssetId: null,
     });
@@ -270,5 +286,29 @@ describe("useVideoExport", () => {
       expect.any(String),
       expect.objectContaining({ thumbnail: null }),
     );
+  });
+
+  it("sends a COPY of the camera path when the scene has a zoom", async () => {
+    const cameraPath = buildCameraPath([ZOOM], null, 10);
+    const { result } = renderHook(() => useVideoExport());
+    await act(async () => {
+      await result.current.start(
+        startArgs({ scene: { ...CLIP_SCENE, zoomSegments: [ZOOM] }, cameraPath }),
+      );
+    });
+    const [message, transfer] = createdWorkers[0].postMessage.mock.calls[0];
+    expect(message.camera.fps).toBe(60);
+    expect(message.camera.scale).not.toBe(cameraPath.scale);
+    expect(Array.from(message.camera.scale)).toEqual(Array.from(cameraPath.scale));
+    expect(transfer).toContain(message.camera.scale.buffer);
+    expect(transfer).not.toContain(cameraPath.scale.buffer);
+  });
+
+  it("sends no camera when the scene has no zoom at all", async () => {
+    const { result } = renderHook(() => useVideoExport());
+    await act(async () => {
+      await result.current.start(startArgs({ cameraPath: buildCameraPath([], null, 10) }));
+    });
+    expect(createdWorkers[0].postMessage.mock.calls[0][0].camera).toBeNull();
   });
 });
