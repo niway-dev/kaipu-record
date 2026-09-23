@@ -43,6 +43,7 @@ const STUB_SETTINGS = {
   showInDock: true,
   recordingQuality: DEFAULT_QUALITY,
   showBarInRecording: false,
+  screenshotSave: "auto",
   shortcuts: DEFAULT_SHORTCUTS,
   deviceId: "",
   uploadMode: "local-only",

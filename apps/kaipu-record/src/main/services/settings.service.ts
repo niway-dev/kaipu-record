@@ -2,7 +2,9 @@ import {
   type AppSettings,
   DEFAULT_SETTINGS,
   DEFAULT_SHORTCUTS,
+  SCREENSHOT_SAVE_MODES,
   SHORTCUT_ACTIONS,
+  type ScreenshotSaveMode,
   type ShortcutAction,
   type ShortcutSettings,
   type Theme,
@@ -28,6 +30,10 @@ export function isValidUploadMode(value: unknown): value is UploadMode {
 
 export function isValidTheme(value: unknown): value is Theme {
   return typeof value === "string" && (VALID_THEMES as readonly string[]).includes(value);
+}
+
+export function isValidScreenshotSaveMode(value: unknown): value is ScreenshotSaveMode {
+  return typeof value === "string" && (SCREENSHOT_SAVE_MODES as readonly string[]).includes(value);
 }
 
 /**
@@ -66,6 +72,9 @@ export function mergeSettings(stored: Partial<AppSettings> | null | undefined): 
       typeof safe.showBarInRecording === "boolean"
         ? safe.showBarInRecording
         : DEFAULT_SETTINGS.showBarInRecording,
+    screenshotSave: isValidScreenshotSaveMode(safe.screenshotSave)
+      ? safe.screenshotSave
+      : DEFAULT_SETTINGS.screenshotSave,
     shortcuts: mergeShortcuts(safe.shortcuts),
     deviceId: typeof safe.deviceId === "string" ? safe.deviceId : "",
     uploadMode: isValidUploadMode(safe.uploadMode) ? safe.uploadMode : DEFAULT_SETTINGS.uploadMode,

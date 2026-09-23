@@ -49,6 +49,7 @@ describe("mergeSettings", () => {
         showInDock: false,
         recordingQuality: QUALITY_PRESETS.max,
         showBarInRecording: true,
+        screenshotSave: "manual",
         shortcuts,
         deviceId: "stored-id",
         uploadMode: "manual",
@@ -60,6 +61,7 @@ describe("mergeSettings", () => {
       showInDock: false,
       recordingQuality: QUALITY_PRESETS.max,
       showBarInRecording: true,
+      screenshotSave: "manual",
       shortcuts,
       deviceId: "stored-id",
       uploadMode: "manual",
@@ -162,5 +164,18 @@ describe("uploadMode", () => {
     expect(mergeSettings({ uploadMode: "everything" as unknown as "manual" }).uploadMode).toBe(
       "local-only",
     );
+  });
+});
+
+describe("screenshotSave", () => {
+  it("defaults to auto", () => {
+    expect(DEFAULT_SETTINGS.screenshotSave).toBe("auto");
+    expect(mergeSettings(null).screenshotSave).toBe("auto");
+  });
+
+  it("keeps a valid stored mode and coerces anything else to the default", () => {
+    expect(mergeSettings({ screenshotSave: "manual" }).screenshotSave).toBe("manual");
+    expect(mergeSettings({ screenshotSave: "always" as never }).screenshotSave).toBe("auto");
+    expect(mergeSettings({ screenshotSave: 3 as never }).screenshotSave).toBe("auto");
   });
 });
