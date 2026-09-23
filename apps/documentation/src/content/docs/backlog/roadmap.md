@@ -59,10 +59,13 @@ Plus #152's and #153's own manual items.
 3. **[Video editor — mute](./video-editor-mute)** — silence the whole video or chosen
    ranges; same source-anchored model as zooms and redactions, real silence in the
    export. Small–medium.
-4. **[Library — lineage](./library-lineage)** — `derivedFromAssetId` is already recorded;
+4. **[Editor — name the capture](./editor-title-input)** — a title input in the
+   screenshot editor's toolbar, prefilled and editable before and after saving; renames
+   through the existing IPC. Low.
+5. **[Library — lineage](./library-lineage)** — `derivedFromAssetId` is already recorded;
    make it navigable: Source link on an export, Exports list on a recording, deleted
    source handled. Small.
-5. **[Cursor-free capture + drawn cursor](./cursor-sprite-capture)** (v2.1) — deferred,
+6. **[Cursor-free capture + drawn cursor](./cursor-sprite-capture)** (v2.1) — deferred,
    gated on a one-day capture spike; reopen if users flag the blurred cursor under zoom.
 
 ## Settings follow-ups (2026-09-23) 🔵

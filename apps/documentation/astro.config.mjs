@@ -68,6 +68,7 @@ export default defineConfig({
             { slug: "backlog/settings-updates" },
             { slug: "backlog/settings-screenshots" },
             { slug: "backlog/video-editor-mute" },
+            { slug: "backlog/editor-title-input" },
             { slug: "backlog/library-lineage" },
             { slug: "backlog/watermark-redesign" },
             { slug: "backlog/bug-control-bar-hides-last-terminal-line" },
