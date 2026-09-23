@@ -56,11 +56,17 @@ import {
 } from "@renderer/features/video-editor/source-time";
 import { activityMarks } from "@renderer/features/video-editor/zoom/detect-zoom-segments";
 import { useZoomEditing } from "@renderer/features/video-editor/zoom/use-zoom-editing";
+import { seekTargetForSegment } from "@renderer/features/video-editor/zoom/select-seek";
+import { focusInspectorFirstControl } from "@renderer/features/video-editor/focus-inspector";
 import { ActivityLane } from "@renderer/features/video-editor/components/activity-lane";
 import { ZoomLane } from "@renderer/features/video-editor/components/zoom-lane";
 import { EditorInspector } from "@renderer/features/video-editor/components/inspector/editor-inspector";
 import { DetectionPanel } from "@renderer/features/video-editor/components/inspector/detection-panel";
 import { ZoomInspector } from "@renderer/features/video-editor/components/inspector/zoom-inspector";
+import {
+  AnnotationDefaultsPanel,
+  AnnotationInspector,
+} from "@renderer/features/video-editor/components/inspector/annotation-inspector";
 import { boxCenterAt, CameraBox } from "@renderer/features/video-editor/components/camera-box";
 import { HoldOriginalButton } from "@renderer/features/video-editor/components/hold-original-button";
 import { useCameraPath } from "@renderer/features/video-editor/zoom/use-camera-path";
@@ -87,7 +93,6 @@ import { useVideoExport } from "@renderer/features/video-editor/export/use-video
 import { VideoAnnotationLayer } from "@renderer/features/video-editor/annotations/video-annotation-layer";
 import { EditorToolbar } from "@renderer/features/video-editor/components/editor-toolbar";
 import { ExportDialog } from "@renderer/features/video-editor/components/export-dialog";
-import { OverlayOptions } from "@renderer/features/video-editor/components/overlay-options";
 import { PreviewStage } from "@renderer/features/video-editor/components/preview-stage";
 import { TimelineStrip } from "@renderer/features/video-editor/components/timeline-strip";
 import { showToast } from "@renderer/ui/toast-store";
@@ -678,15 +683,27 @@ function VideoEditor({
     [controller],
   );
 
-  // Selecting a zoom also moves the playhead to the middle of its first visible piece
-  // (UI spec § 6.3), so the preview shows what the zoom does.
+  // Selecting a zoom moves the playhead to the middle of its first visible piece (UI
+  // spec § 6.3), so the preview shows what the zoom does — but ONLY when the playhead
+  // isn't already inside the segment: seeking unconditionally threw away a frame the
+  // user had just scrubbed to while positioning the camera box (backlog/video-editor-
+  // camera-box-ux § 2, candidate cause A; seekTargetForSegment carries the full
+  // rationale and is unit-tested on its own in select-seek.test.ts).
+  //
+  // Regardless of whether we seek, focus moves into the inspector on the next frame —
+  // the lane's own <button> would otherwise keep focus after the click, which is what
+  // made the editor look like it "lost focus" (same backlog entry, candidate cause B).
+  // Deferred to requestAnimationFrame so it runs after React commits the ZoomInspector
+  // for the new selection, per focus-inspector.ts's documented contract.
   const handleSelectZoom = useCallback(
     (id: string) => {
       selectKind("zoom", id);
       const segment = controller.scene.zoomSegments.find((z) => z.id === id);
-      if (!segment) return;
-      const [first] = sourceRangeToTimelineBlocks(layout, segment.start, segment.end);
-      if (first) playback.seek((first.timelineStart + first.timelineEnd) / 2);
+      if (segment) {
+        const target = seekTargetForSegment(layout, playback.timelineTime, segment);
+        if (target !== null) playback.seek(target);
+      }
+      requestAnimationFrame(() => focusInspectorFirstControl());
     },
     [selectKind, controller, layout, playback],
   );
@@ -717,6 +734,9 @@ function VideoEditor({
 
   const selectedZoom = selectedZoomId
     ? (zooms.visibleZooms.find((z) => z.id === selectedZoomId) ?? null)
+    : null;
+  const selectedOverlay = selectedOverlayId
+    ? (scene.overlays.find((o) => o.id === selectedOverlayId) ?? null)
     : null;
 
   // Privacy (doc 10). While a privacy tool is active or a region is selected the preview
@@ -910,17 +930,6 @@ function VideoEditor({
       />
       <div className={styles.workspace}>
         <main className={styles.stage} ref={stageRef}>
-          {/* Floating per-tool options (Excalidraw-style), pinned to the stage so it
-              doesn't shift with the video's own size. */}
-          <div className={styles.optionsFloat}>
-            <OverlayOptions
-              tools={videoTools}
-              overlays={scene.overlays}
-              selectedId={selectedOverlayId}
-              onCommitOverlay={handleCommitOverlay}
-              onDeleteSelected={handleDeleteOverlay}
-            />
-          </div>
           {/* Video region: 1fr grid row — centers PreviewStage and constrains its height
               so the transport bar below is never clipped regardless of video aspect ratio.
               In fullscreen mode the 50 vh cap is lifted via an inline style override. */}
@@ -1102,6 +1111,27 @@ function VideoEditor({
               }
               onRemoved={() => selectKind("zoom", null)}
             />
+          ) : selectedOverlay ? (
+            <AnnotationInspector
+              overlay={selectedOverlay}
+              tools={videoTools}
+              // Unlike the redaction/zoom `start`/`end` above (source time, converted via
+              // timelineRangeOf), an overlay's `start`/`end` are ALREADY timeline time
+              // (scene.ts's OverlayBase docs) — so the inspector's range is the overlay's
+              // own window verbatim, no block conversion needed.
+              range={{ start: selectedOverlay.start, end: selectedOverlay.end }}
+              onCommitOverlay={handleCommitOverlay}
+              // handleDeleteOverlay reads `selectedOverlayId` itself rather than taking an
+              // id argument, but the inspector only ever renders (and can only call
+              // onRemove) for that same selected overlay, so the ids always match — one
+              // undoable commit, no wrapper needed.
+              onRemove={handleDeleteOverlay}
+              onRemoved={() => setSelectedOverlayId(null)}
+            />
+          ) : videoTools.tool === "box" ||
+            videoTools.tool === "arrow" ||
+            videoTools.tool === "text" ? (
+            <AnnotationDefaultsPanel tools={videoTools} />
           ) : (
             <DetectionPanel
               zooms={zooms}

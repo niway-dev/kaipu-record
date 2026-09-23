@@ -45,15 +45,6 @@
   background: var(--bg-app);
 }
 
-/* Floating options panel, pinned to the stage (doesn't move with the video's own
-   size) — same convention as the screenshot editor's .optionsFloat. */
-.optionsFloat {
-  position: absolute;
-  top: var(--space-md);
-  left: var(--space-md);
-  z-index: 2;
-}
-
 /* Video region: centers PreviewStage and caps it at 50 vh so the video is a
    contained "player" window (CapCut-style) rather than filling the whole stage.
    The 50 vh cap keeps the toolbar, transport, and timeline all comfortably visible

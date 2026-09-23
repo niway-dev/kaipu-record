@@ -480,3 +480,55 @@ describe("VideoEditorPage — tool shortcuts end to end", () => {
     expect(screen.getByRole("button", { name: "Box" }).className).toMatch(/toolActive/);
   });
 });
+
+// The floating `OverlayOptions` popover (`.optionsFloat`) is gone — annotation controls
+// now live in the inspector column alongside ZoomInspector / BlurInspector /
+// CoverInspector (backlog/video-editor-annotation-inspector). These tests cover what the
+// page harness can honestly reach; see the comment before the last test for what is
+// deliberately NOT covered here (and why).
+describe("VideoEditorPage — inspector column priority (annotation follow-ups)", () => {
+  beforeEach(() => {
+    vi.stubGlobal("Image", FakeImage);
+    stubDecodedVideoSize(1280, 720);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    stubDecodedVideoSize(0, 0);
+  });
+
+  it("shows the Detection panel by default (select tool, nothing selected)", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+
+    expect(screen.getByRole("heading", { name: "Detection" })).toBeInTheDocument();
+  });
+
+  it("arming the Box tool (R) shows the annotation defaults panel in the inspector, with no floating popover duplicating its controls", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+
+    fireEvent.keyDown(window, { key: "r" });
+
+    expect(await screen.findByRole("heading", { name: "Next annotation" })).toBeInTheDocument();
+    // Before this change, the same "Color" picker rendered twice: once in the floating
+    // OverlayOptions popover over the stage, once (if it existed) in the inspector. Now
+    // there is exactly one, and it lives inside the inspector column.
+    const colorLabels = screen.getAllByText("Color");
+    expect(colorLabels).toHaveLength(1);
+    const inspector = document.querySelector('[data-testid="editor-inspector"]')!;
+    expect(inspector.contains(colorLabels[0])).toBe(true);
+  });
+
+  // The seek-on-zoom-select rule (seekTargetForSegment: seek only when the playhead is
+  // outside the segment) is a pure function covered on its own in select-seek.test.ts.
+  // Driving a REAL zoom segment through this page's harness would require a cursor-track
+  // fixture wired through withInitialZooms/useZoomEditing, which this file's harness
+  // does not set up (no test here creates a cursor track) — faking that path would test
+  // a shape the real detector never produces, so it is intentionally left uncovered at
+  // the page level. Likewise, the post-selection focus move (focusInspectorFirstControl,
+  // scheduled via requestAnimationFrame) has its own unit tests in
+  // focus-inspector.test.ts; asserting the rAF callback fired from inside this page's
+  // jsdom harness would be timing-fragile without an existing fake-timers/rAF-flush
+  // pattern already in this file, so it is skipped here too.
+});
