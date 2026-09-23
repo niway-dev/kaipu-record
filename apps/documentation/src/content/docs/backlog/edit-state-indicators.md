@@ -5,11 +5,11 @@ description: "Proposal: a save-state indicator in the video editor (autosave mak
 
 # Edit-state indicators
 
-> **Status: 🔵 Proposed** (2026-09-22). Follows from validating video editor v2 PRs 5–6
+> **Status: 🟢 Ready to validate** — implemented in [#PR](https://github.com/csdev19/kaipu-record-monorepo/pull/PR) (2026-09-23). Originally proposed following validating video editor v2 PRs 5–6
 > ([backlog](./video-editor-zoom-blur-cover)): the owner left the editor, came back, and
 > the zoom edits were still there — and asked how long that lasts and whether we need a
 > "changes without saving" chip. This doc answers both and proposes two small UI pieces.
-> Not scheduled; intended as a sibling PR on top of v2 PR 10 (polish), where the
+> Shipped as a sibling PR on top of v2 PR 10 (polish), where the
 > "ORIGINAL UNTOUCHED" pill lives.
 
 ## How long edits last (the answer)
