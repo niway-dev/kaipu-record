@@ -23,6 +23,42 @@ Status legend: ⬜ todo · 🔨 in progress · ✅ done
   into our frames, so it blurs when zoomed. Deferred, gated on a one-day capture spike;
   reopen if users flag the zoomed cursor. See [proposal](./cursor-sprite-capture).
 
+## Video editor v2 wave (2026-09-22 → 23)
+
+Everything written or shipped in the two days around video editor v2, grouped so it can
+be picked up in order. Status legend as in the [backlog index](./index).
+
+### Shipped ✅
+
+| What                                                                                                            | PRs                       | Where the knowledge lives                                                                                   |
+| --------------------------------------------------------------------------------------------------------------- | ------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| **Video editor v2** — cursor track, click hook, auto-zoom, blur/cover, four-track timeline, export pass, polish | #132–#141 (stacked chain) | [backlog doc](./video-editor-zoom-blur-cover) · [plans 00–12](/plans/video-editor-v2/00-audit/)             |
+| Cursor-track inspector + CLI + real fixture + tail-cut fix                                                      | #143                      | `bun run cursor-track:check <id>` · [handoff](./video-editor-v2-handoff)                                    |
+| Annotation options in the inspector + camera box body-drag                                                      | #152                      | [annotation inspector](./video-editor-annotation-inspector) · [camera box UX](./video-editor-camera-box-ux) |
+| Onboarding: Accessibility as a permissions card, language picker, English-first, real shortcut on Done          | #153                      | [permissions & onboarding](/desktop/permissions-and-onboarding/)                                            |
+| ADR 0003 — an export never replaces the original                                                                | #147                      | [ADR 0003](/architecture/decisions/0003-export-never-replaces-the-original/)                                |
+| Repo hygiene: no postinstall (rebuild:native + doctor), "What to review" on every PR                            | #151, #149                | `CLAUDE.md` § Native dependencies · `.claude/commands/pr-summary.md`                                        |
+
+### Still to validate on hardware 🟢
+
+The checklist lives in the [handoff](./video-editor-v2-handoff#what-still-needs-a-human-hardware-not-the-suite):
+export leak checks (privacy first), A/V sync + export perf, poller CPU cost, the
+Accessibility flow on a Mac that has not granted it, camera-box geometry, the GPU
+blur check, and the detector calibration fixture (a real recording _with clicks_).
+Plus #152's and #153's own manual items.
+
+### Proposed, in suggested order 🔵
+
+1. **[Edit-state indicators](./edit-state-indicators)** — "Saving…" in the editor and
+   "Edited · not exported" in the library. Small, and it closes the one way a user shares
+   the untouched original believing it carries the edits. Sonnet-sized.
+2. **[Live recording controls](./live-recording-controls)** — mute the mic, toggle
+   system audio and the camera bubble _while recording_, from the floating bar and
+   global shortcuts. The camera already follows its toggle; the audio graph needs two
+   gain nodes and an always-present audio track. Medium.
+3. **[Cursor-free capture + drawn cursor](./cursor-sprite-capture)** (v2.1) — deferred,
+   gated on a one-day capture spike; reopen if users flag the blurred cursor under zoom.
+
 ## Kill order
 
 | #   | Feature                                     | Priority    | Status | Depends on              |

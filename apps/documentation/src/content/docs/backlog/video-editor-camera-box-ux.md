@@ -5,7 +5,9 @@ description: "Findings from hands-on validation of the preview camera (v2 PR 7):
 
 # Video editor v2 — camera box UX notes
 
-> **Status: 🔵 Proposed** (2026-09-22). Notes taken while validating
+> **Status: 🟢 Ready to validate** — implemented in
+> [#152](https://github.com/csdev19/kaipu-record-monorepo/pull/152) (2026-09-23); the body-drag
+> needs a hardware pass, see that PR's checklist. Written 2026-09-22 as notes taken while validating
 > [v2 PR 7 — preview camera](https://github.com/csdev19/kaipu-record-monorepo/pull/138)
 > on hardware. The camera works ("está hermoso"); these are interaction problems to fix
 > in a follow-up, not blockers for the remaining v2 PRs. Parent:
