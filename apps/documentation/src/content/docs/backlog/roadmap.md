@@ -56,8 +56,46 @@ Plus #152's and #153's own manual items.
    system audio and the camera bubble _while recording_, from the floating bar and
    global shortcuts. The camera already follows its toggle; the audio graph needs two
    gain nodes and an always-present audio track. Medium.
-3. **[Cursor-free capture + drawn cursor](./cursor-sprite-capture)** (v2.1) — deferred,
+3. **[Video editor — mute](./video-editor-mute)** — silence the whole video or chosen
+   ranges; same source-anchored model as zooms and redactions, real silence in the
+   export. Small–medium.
+4. **[Editor — name the capture](./editor-title-input)** — a title input in the
+   screenshot editor's toolbar, prefilled and editable before and after saving; renames
+   through the existing IPC. Low.
+5. **[Library — lineage](./library-lineage)** — `derivedFromAssetId` is already recorded;
+   make it navigable: Source link on an export, Exports list on a recording, deleted
+   source handled. Small.
+6. **[Cursor-free capture + drawn cursor](./cursor-sprite-capture)** (v2.1) — deferred,
    gated on a one-day capture spike; reopen if users flag the blurred cursor under zoom.
+
+## Settings follow-ups (2026-09-23) 🔵
+
+Two owner requests from using the 0.6 → 0.7 build, both small and both on the Settings
+page. Each has its own doc; neither is scheduled.
+
+1. **[Settings → Updates](./settings-updates)** — the installed version, the updater's
+   real state and a **Check for updates** button. Today the updater checks once at launch
+   and every 6 h, and only the final "restart" state is visible — so a fresh release looks
+   like nothing happened. The feed itself works (verified against `0.7.0`).
+2. **[Settings → Screenshots](./settings-screenshots)** — one control: save every capture
+   **automatically** (default, recording parity) or **when I click Save**. Resolves the
+   open decision in the [save strategy doc](./screenshot-save-strategy) as a preference.
+
+## Owner notes (2026-09-23)
+
+Four more items from the same session, each with its doc:
+
+- **[Watermark redesign](./watermark-redesign)** 🔵 — prettier mark, `bottom-left`
+  default. The compositor already supports the position; the work is the asset. Low.
+- **[Bug — last terminal line missing](./bug-control-bar-hides-last-terminal-line)** 🔵 —
+  hypothesis: the content-protected control bar sits over the last line and leaves a
+  blank patch in the capture. Confirm with "Show bar in recording"; fix by moving the
+  bar to a corner. Low–medium.
+- **[Dock and app switcher](./dock-and-app-switcher)** ✅ decided — macOS cannot separate
+  them (one activation policy drives both); keep one toggle, fix its copy.
+- **[Standalone editor](./standalone-editor)** ⚪ idea — open any photo/video, join two
+  videos. Architectural; brainstorm before any plan. Suggested first slice: import into
+  the Library only.
 
 ## Kill order
 

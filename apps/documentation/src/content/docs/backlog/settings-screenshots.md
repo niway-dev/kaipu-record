@@ -5,7 +5,7 @@ description: "Proposal: a Screenshots section in Settings with one toggle — sa
 
 # Settings → Screenshots
 
-> **Status: 🟢 Ready to validate — implemented in #PR (2026-09-23)**.
+> **Status: 🟢 Ready to validate — implemented in [#155](https://github.com/csdev19/kaipu-record-monorepo/pull/155) (2026-09-23)**.
 > Owner request: a Screenshots section in Settings with a control that decides whether a
 > screenshot is saved automatically or requires a click on Save. Parent:
 > [screenshot save strategy](./screenshot-save-strategy) (the tradeoff analysis;
