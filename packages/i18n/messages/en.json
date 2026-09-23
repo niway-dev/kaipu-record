@@ -370,6 +370,8 @@
     "discardBody": "You have unsaved edits. If you leave now, they're lost.",
     "keepEditing": "Keep editing",
     "discard": "Discard",
+    "discardSaved": "Discard",
+    "discardSavedTitle": "Delete this capture from the Library",
     "saveChangesTitle": "Save changes",
     "saveOptionsBody": "already exists. Overwrite it, or keep it and save a copy?",
     "cancel": "Cancel",

@@ -1,10 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Navigate, useBlocker, useLocation } from "react-router-dom";
+import { Navigate, useBlocker, useLocation, useNavigate } from "react-router-dom";
 import { Check, Copy, Download, Redo2, Undo2, ZoomIn, ZoomOut } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { useImageSource, type ImageSource } from "@renderer/features/screenshots/image-source";
+import { shouldAutoSaveOnOpen } from "@renderer/features/screenshots/auto-save-policy";
 import { DiscardChangesDialog } from "@renderer/features/screenshots/discard-changes-dialog";
 import { reportError } from "@renderer/features/analytics";
+import { useAppSettings } from "@renderer/pages/settings/use-app-settings";
 import {
   BeautifiedFrame,
   BeautifyPanel,
@@ -70,6 +72,16 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
   // The vault id this editor is bound to: set when re-opening a saved shot, and
   // after the first save. While set, Save asks overwrite-or-copy.
   const [savedId, setSavedId] = useState<string | null>(source.kind === "local" ? source.id : null);
+  // Auto-save mode is read ONCE when the editor opens; a Settings change while this
+  // capture is open neither retro-saves nor un-saves it.
+  const { settings } = useAppSettings();
+  const autoSaveRef = useRef<boolean | null>(null);
+  if (autoSaveRef.current === null && settings) {
+    autoSaveRef.current = shouldAutoSaveOnOpen(settings.screenshotSave, source.kind);
+  }
+  // True once THIS editor created the item on open — enables Discard.
+  const [autoSaved, setAutoSaved] = useState(false);
+  const navigate = useNavigate();
   const [askSave, setAskSave] = useState(false);
   const [baseTitle] = useState(
     () => source.title ?? `${t("screenshotPrefix")} — ${new Date().toLocaleString()}`,
@@ -125,14 +137,13 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
 
   const zoomBy = (delta: number): void => setZoom((z) => clampZoom(z + delta));
 
-  // `image` is null on the first render while the reader resolves — render nothing.
-  if (!image) return <></>;
-
   // Composite the beautify frame + annotations to a PNG — what Copy and Save export.
+  // Only ever invoked once `imageReady` is true (see the guards below), which itself
+  // can only happen once `image` has resolved, so the non-null assert is safe.
   const exportPng = async (): Promise<ArrayBuffer> =>
     compositeScene(
       { beautify: scene.beautify.state, annotations: scene.annotations, crop: scene.crop },
-      await image.getBytes(),
+      await image!.getBytes(),
       imgRef.current?.clientWidth ?? 0,
     );
 
@@ -154,8 +165,8 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
     }
   };
 
-  const persist = async (opts: { overwriteId?: string; title?: string }): Promise<void> => {
-    if (busy.current) return;
+  const persist = async (opts: { overwriteId?: string; title?: string }): Promise<boolean> => {
+    if (busy.current) return false;
     busy.current = true;
     try {
       const saved = await window.electronAPI.saveScreenshot(await exportPng(), {
@@ -165,6 +176,7 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
       setSavedId(saved.id);
       setDirty(false); // now safely in the vault — leaving no longer loses work
       showFeedback({ kind: "saved", name: saved.title });
+      return true;
     } catch (error) {
       // A swallowed save (vault on a disconnected drive, disk full, composite
       // failure) let the user close the editor believing the shot was saved.
@@ -173,6 +185,34 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
         context: { phase: "save", overwrite: opts.overwriteId !== undefined },
         retry: () => void persist(opts),
       });
+      return false;
+    } finally {
+      busy.current = false;
+    }
+  };
+
+  // Auto mode: the first save happens the moment the image can be exported, before any
+  // edit. Failure leaves the editor in manual behaviour (dirty, guarded) — `persist`
+  // already reports with a retry.
+  const autoSaveFired = useRef(false);
+  useEffect(() => {
+    if (!imageReady || autoSaveFired.current || !autoSaveRef.current || savedId) return;
+    autoSaveFired.current = true;
+    void persist({}).then((ok) => {
+      if (ok) setAutoSaved(true);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fire once when the image is ready
+  }, [imageReady]);
+
+  const onDiscardSaved = async (): Promise<void> => {
+    if (!savedId || busy.current) return;
+    busy.current = true;
+    try {
+      await window.electronAPI.deleteLocalRecording(savedId);
+      setDirty(false);
+      navigate("/screenshots");
+    } catch (error) {
+      reportError(t("saveError"), error, { context: { phase: "discard", id: savedId } });
     } finally {
       busy.current = false;
     }
@@ -196,6 +236,10 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
 
   const copied = feedback?.kind === "copied";
   const savedName = feedback?.kind === "saved" ? feedback.name : null;
+
+  // `image` is null on the first render while the reader resolves — render nothing.
+  // Moved here (past every hook) so the auto-save effect above stays unconditional.
+  if (!image) return <></>;
 
   return (
     <div className={styles.editor}>
@@ -242,6 +286,16 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
             {savedName ? <Check size={16} /> : <Download size={16} />}{" "}
             {savedName ? t("saved") : t("save")}
           </button>
+          {autoSaved && savedId && (
+            <button
+              type="button"
+              className={styles.secondary}
+              title={t("discardSavedTitle")}
+              onClick={() => void onDiscardSaved()}
+            >
+              {t("discardSaved")}
+            </button>
+          )}
         </div>
       </div>
       <div className={styles.body}>
