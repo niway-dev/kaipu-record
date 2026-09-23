@@ -78,6 +78,22 @@ page. Each has its own doc; neither is scheduled.
    **automatically** (default, recording parity) or **when I click Save**. Resolves the
    open decision in the [save strategy doc](./screenshot-save-strategy) as a preference.
 
+## Owner notes (2026-09-23)
+
+Four more items from the same session, each with its doc:
+
+- **[Watermark redesign](./watermark-redesign)** 🔵 — prettier mark, `bottom-left`
+  default. The compositor already supports the position; the work is the asset. Low.
+- **[Bug — last terminal line missing](./bug-control-bar-hides-last-terminal-line)** 🔵 —
+  hypothesis: the content-protected control bar sits over the last line and leaves a
+  blank patch in the capture. Confirm with "Show bar in recording"; fix by moving the
+  bar to a corner. Low–medium.
+- **[Dock and app switcher](./dock-and-app-switcher)** ✅ decided — macOS cannot separate
+  them (one activation policy drives both); keep one toggle, fix its copy.
+- **[Standalone editor](./standalone-editor)** ⚪ idea — open any photo/video, join two
+  videos. Architectural; brainstorm before any plan. Suggested first slice: import into
+  the Library only.
+
 ## Kill order
 
 | #   | Feature                                     | Priority    | Status | Depends on              |
