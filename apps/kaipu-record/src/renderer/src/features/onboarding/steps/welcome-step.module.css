@@ -43,15 +43,8 @@
   align-items: center;
   justify-content: center;
   gap: 11px;
+  /* Static: no hover, nothing to click — these only say what the app records. */
   cursor: default;
-  transition:
-    border-color var(--transition),
-    background var(--transition);
-}
-
-.feature:hover {
-  border-color: var(--accent-primary);
-  background: rgba(246, 5, 92, 0.08);
 }
 
 .featureIcon {
@@ -63,6 +56,42 @@
   font-size: var(--font-size-xs);
   letter-spacing: 0.12em;
   color: var(--text-secondary);
+}
+
+/* Segmented pill, deliberately quiet: it must be findable by someone who cannot read
+   the rest of the screen, without competing with the CTA. */
+.language {
+  display: inline-flex;
+  margin-top: 26px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+}
+
+.languageOption,
+.languageActive {
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  padding: 5px 14px;
+  border-radius: 999px;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.languageOption:hover {
+  color: var(--text-primary);
+}
+
+.languageActive {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
 }
 
 @keyframes pop {

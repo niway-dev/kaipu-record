@@ -80,9 +80,10 @@ In priority order — the first two are privacy:
 - [ ] **#133 poller cost**: 5 min at the highest quality preset on `main` and on v2;
       main-process CPU and dropped frames. If it regresses, set
       `CURSOR_SAMPLE_INTERVAL_MS` to 16.
-- [ ] **#141 Accessibility flow** on a Mac that has _not_ granted it: the onboarding step
-      appears, "Allow" opens the prompt, and after granting + restart, clicks produce
-      zooms. Also: does macOS list the app under **Input Monitoring**? If yes, stop —
+- [ ] **#141 Accessibility flow** on a Mac that has _not_ granted it: the Accessibility
+      row appears on the onboarding permissions step (it was a standalone step; folded
+      into the list during validation), "Allow" opens the prompt, and after granting +
+      restart, clicks produce zooms. Also: does macOS list the app under **Input Monitoring**? If yes, stop —
       that is an owner decision (see plan doc 03).
 - [ ] **#138 geometry**: shrink the window until the video is height-capped (or open a
       4:3 recording); the camera box must frame the picture exactly.

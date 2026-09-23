@@ -157,9 +157,11 @@ The biggest departure from the source spec: **no `electron-store`, no `i18n:*` I
 settings pipeline.
 
 - **Persistence** — add `locale: Locale` to `AppSettings` (`shared/types/ipc.ts`) and to
-  `DEFAULT_SETTINGS`. `mergeSettings` validates it. On first load, if no locale is persisted, seed
-  from `normalizeLocale(app.getLocale())`, else `'es'`. Persist + broadcast are already handled by
-  `settings-store.ts`.
+  `DEFAULT_SETTINGS`. `mergeSettings` validates it. Persist + broadcast are already handled by
+  `settings-store.ts`. _Superseded (2026-09-23):_ the original design seeded a first run from
+  `normalizeLocale(app.getLocale())`. That was dropped: a first run now opens in English
+  (`DEFAULT_LOCALE`) and the onboarding welcome step carries a language picker, so the user
+  chooses explicitly instead of the OS choosing for them.
 - **Main / tray** — the tray context menu builds its labels via
   `createMainTranslator(getAppSettings().locale, "tray")` and rebuilds by subscribing to the existing
   main-side `onSettingsChanged`. `createTranslator` (use-intl's non-React core) runs fine in the
@@ -218,7 +220,7 @@ Desktop — change from any window:
 5. **Reuse `AppSettings`** — do not add `electron-store` or `i18n:*` IPC channels.
 6. **No IPC loop** — `subscribeExternal`'s `apply` must never re-trigger `onLocaleChange`.
 7. **`app.getLocale()` returns a region** (`es-419`, `en-US`) → `normalizeLocale` maps to base;
-   call only after `app.whenReady()`.
+   call only after `app.whenReady()`. (No longer called by the desktop app — see Persistence.)
 8. **Four renderer roots** all need the provider — a window left unwrapped won't react to changes.
 9. **Neutral Spanish** — canonicalize copy during extraction (fix the landing's voseo); code and
    comments stay English.

@@ -1,5 +1,5 @@
 import { Monitor, Mic, Volume2, Video, type LucideIcon } from "lucide-react";
-import { useTranslations } from "@kaipu/i18n";
+import { useLocale, useSetLocale, useTranslations, type Locale } from "@kaipu/i18n";
 import styles from "./welcome-step.module.css";
 
 type FeatureLabelKey = "featScreen" | "featVoice" | "featAudio" | "featCamera";
@@ -9,6 +9,16 @@ const FEATURES: { icon: LucideIcon; labelKey: FeatureLabelKey }[] = [
   { icon: Mic, labelKey: "featVoice" },
   { icon: Volume2, labelKey: "featAudio" },
   { icon: Video, labelKey: "featCamera" },
+];
+
+/**
+ * Each language is named in itself, on purpose: the reader may not understand the
+ * currently active language, and their own language's name is the one thing they can
+ * always read. Not translated, so not in the message catalogs.
+ */
+const LANGUAGES: ReadonlyArray<{ value: Locale; label: string }> = [
+  { value: "es", label: "Español" },
+  { value: "en", label: "English" },
 ];
 
 function KaipuMark(): React.JSX.Element {
@@ -23,6 +33,34 @@ function KaipuMark(): React.JSX.Element {
         fill="var(--bg-app)"
       />
     </svg>
+  );
+}
+
+/**
+ * Language picker on the very first screen: the app boots in the persisted locale
+ * (default "en"), and until now the only way to switch was Settings — after finishing
+ * an onboarding in a language the user may not read. Writes AppSettings.locale via the
+ * provider, exactly like the Settings picker, so every window follows at once.
+ */
+function LanguagePicker(): React.JSX.Element {
+  const t = useTranslations("onboarding");
+  const locale = useLocale();
+  const setLocale = useSetLocale();
+  return (
+    <div className={styles.language} role="radiogroup" aria-label={t("language")}>
+      {LANGUAGES.map(({ value, label }) => (
+        <button
+          key={value}
+          type="button"
+          role="radio"
+          aria-checked={locale === value}
+          className={locale === value ? styles.languageActive : styles.languageOption}
+          onClick={() => setLocale(value)}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -43,6 +81,7 @@ export function WelcomeStep(): React.JSX.Element {
           </div>
         ))}
       </div>
+      <LanguagePicker />
     </div>
   );
 }

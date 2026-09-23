@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { KaipuElectronAPI, PermissionStatus } from "@shared/types";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import * as i18n from "@kaipu/i18n";
+import { DEFAULT_SHORTCUTS, type KaipuElectronAPI, type PermissionStatus } from "@shared/types";
 import { OnboardingOverlay } from "./onboarding-overlay";
 
 function mockElectronAPI(overrides: Partial<KaipuElectronAPI> = {}): {
@@ -23,9 +24,12 @@ function mockElectronAPI(overrides: Partial<KaipuElectronAPI> = {}): {
     requestPermission: vi.fn().mockResolvedValue(true),
     openSystemSettings: vi.fn().mockResolvedValue(undefined),
     // Default "not-required": every existing test in this file exercises non-mac /
-    // already-decided flows, where the Accessibility step must stay absent.
+    // already-decided flows, where the Accessibility row must stay absent.
     getAccessibilityStatus: vi.fn().mockResolvedValue("not-required"),
     requestAccessibility: vi.fn().mockResolvedValue("not-required"),
+    // The Done step reads the live start-recording binding.
+    getSettings: vi.fn().mockResolvedValue({ shortcuts: DEFAULT_SHORTCUTS }),
+    onSettingsChanged: vi.fn(() => () => {}),
     ...overrides,
   } as unknown as KaipuElectronAPI;
   window.electronAPI = api;
@@ -93,35 +97,35 @@ describe("OnboardingOverlay", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: /continue/i })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
 
+    // The hint shows the real default binding (⌃⌘C on mac), not the old ⌘⇧P literal.
+    expect(await screen.findByText(/⌘C/)).toBeInTheDocument();
+    expect(screen.queryByText("⌘⇧P")).toBeNull();
+
     fireEvent.click(screen.getByRole("button", { name: /start recording/i }));
     expect(onClose).toHaveBeenCalledOnce();
   });
 });
 
-describe("OnboardingOverlay — Accessibility step (plans/video-editor-v2/03 § UI)", () => {
+describe("OnboardingOverlay — Accessibility row (plans/video-editor-v2/03 § UI)", () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it("inserts the step between Permissions and Done only while macOS reports it as not yet granted", async () => {
-    mockElectronAPI({
-      checkPermissions: vi.fn().mockResolvedValue({ screen: true, microphone: true, camera: true }),
-      getAccessibilityStatus: vi.fn().mockResolvedValue("denied"),
-    });
-    render(<OnboardingOverlay onClose={vi.fn()} />);
-
+  async function openPermissions(): Promise<void> {
     fireEvent.click(screen.getByRole("button", { name: /get started/i }));
     await waitFor(() => expect(screen.getByRole("button", { name: /continue/i })).toBeEnabled());
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+  }
 
-    expect(
-      await screen.findByRole("heading", { name: /auto-zoom on clicks/i }),
-    ).toBeInTheDocument();
-    // "Not now" replaces the generic "Continue" label on this optional step.
-    expect(screen.getByRole("button", { name: /not now/i })).toBeInTheDocument();
+  it("is absent while the OS reports it as not required (non-mac)", async () => {
+    mockElectronAPI({
+      checkPermissions: vi.fn().mockResolvedValue({ screen: true, microphone: true, camera: true }),
+    });
+    render(<OnboardingOverlay onClose={vi.fn()} />);
+    await openPermissions();
+    expect(screen.queryByText(/auto-zoom on clicks/i)).toBeNull();
   });
 
-  it("Allow calls requestAccessibility(), and Not now advances to Done without granting", async () => {
+  it("renders as an optional fourth row whose Allow calls requestAccessibility() and never gates Continue", async () => {
     const { requestAccessibility } = mockElectronAPI({
       checkPermissions: vi.fn().mockResolvedValue({ screen: true, microphone: true, camera: true }),
       getAccessibilityStatus: vi.fn().mockResolvedValue("denied"),
@@ -129,66 +133,78 @@ describe("OnboardingOverlay — Accessibility step (plans/video-editor-v2/03 § 
     });
     const onClose = vi.fn();
     render(<OnboardingOverlay onClose={onClose} />);
+    await openPermissions();
 
-    fireEvent.click(screen.getByRole("button", { name: /get started/i }));
-    await waitFor(() => expect(screen.getByRole("button", { name: /continue/i })).toBeEnabled());
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-    await screen.findByRole("heading", { name: /auto-zoom on clicks/i });
-
+    expect(await screen.findByText(/auto-zoom on clicks/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /^allow$/i }));
     expect(requestAccessibility).toHaveBeenCalledOnce();
 
-    fireEvent.click(screen.getByRole("button", { name: /not now/i }));
+    // Still denied after the prompt — the button stays, Continue is still enabled.
+    expect(screen.getByRole("button", { name: /^allow$/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     expect(await screen.findByRole("heading", { name: /you're all set/i })).toBeInTheDocument();
-
     fireEvent.click(screen.getByRole("button", { name: /start recording/i }));
     expect(onClose).toHaveBeenCalledOnce();
   });
 
-  it("keeps the user on Done when the permission is granted outside the app (the step list shrinks under them)", async () => {
+  it("flips the row to GRANTED when the permission is granted outside the app (re-read on focus)", async () => {
     const { getAccessibilityStatus } = mockElectronAPI({
       checkPermissions: vi.fn().mockResolvedValue({ screen: true, microphone: true, camera: true }),
       getAccessibilityStatus: vi.fn().mockResolvedValue("denied"),
     });
     render(<OnboardingOverlay onClose={vi.fn()} />);
+    await openPermissions();
+    await screen.findByRole("button", { name: /^allow$/i });
 
-    fireEvent.click(screen.getByRole("button", { name: /get started/i }));
-    await waitFor(() => expect(screen.getByRole("button", { name: /continue/i })).toBeEnabled());
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-    await screen.findByRole("heading", { name: /auto-zoom on clicks/i });
-    fireEvent.click(screen.getByRole("button", { name: /not now/i }));
-    expect(await screen.findByRole("heading", { name: /you're all set/i })).toBeInTheDocument();
-
-    // The user alt-tabs to System Settings, grants it, and comes back. `useAccessibility`
-    // re-reads on focus, so the Accessibility step disappears and the list goes 4 -> 3.
-    // Tracking the step by INDEX made index 3 fall off the end and render Welcome again,
-    // throwing the user back to the start of a flow they had just finished.
+    // The user alt-tabs to System Settings, grants it, and comes back.
     getAccessibilityStatus.mockResolvedValue("granted");
     fireEvent.focus(window);
 
-    await waitFor(() => {
-      expect(screen.getByRole("heading", { name: /you're all set/i })).toBeInTheDocument();
-    });
-    expect(screen.queryByRole("heading", { name: /welcome|get started/i })).toBeNull();
+    await waitFor(() => expect(screen.queryByRole("button", { name: /^allow$/i })).toBeNull());
+    // Still on the permissions step: nothing moved under the user.
+    expect(screen.getByRole("heading", { name: /grant permissions/i })).toBeInTheDocument();
+  });
+});
+
+describe("OnboardingOverlay — permission explanations", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
-  it("falls forward to Done when granting removes the Accessibility step the user is standing on", async () => {
+  it("keeps the why behind an (i) that opens a popover, instead of a description under the name", async () => {
     mockElectronAPI({
       checkPermissions: vi.fn().mockResolvedValue({ screen: true, microphone: true, camera: true }),
-      getAccessibilityStatus: vi.fn().mockResolvedValue("denied"),
-      requestAccessibility: vi.fn().mockResolvedValue("granted"),
     });
     render(<OnboardingOverlay onClose={vi.fn()} />);
-
     fireEvent.click(screen.getByRole("button", { name: /get started/i }));
     await waitFor(() => expect(screen.getByRole("button", { name: /continue/i })).toBeEnabled());
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-    await screen.findByRole("heading", { name: /auto-zoom on clicks/i });
 
-    fireEvent.click(screen.getByRole("button", { name: /^allow$/i }));
+    expect(screen.queryByText(/captures your full display/i)).toBeNull();
+    fireEvent.click(screen.getByRole("img", { name: /why screen recording\?/i }));
+    expect(screen.getByText(/captures your full display/i)).toBeInTheDocument();
+  });
+});
 
-    // Granting removes this very step. Forward to Done is the right landing — the user
-    // just did the thing it was asking for — and never backwards to Welcome.
-    expect(await screen.findByRole("heading", { name: /you're all set/i })).toBeInTheDocument();
+describe("OnboardingOverlay — language picker on the welcome step", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("offers every locale by its own name, marks the active one, and switches via the provider", () => {
+    mockElectronAPI();
+    // setup.ts stubs `useSetLocale` with a no-op; swap in a spy to assert the write.
+    const setLocale = vi.fn();
+    vi.spyOn(i18n, "useSetLocale").mockReturnValue(setLocale);
+    render(<OnboardingOverlay onClose={vi.fn()} />);
+
+    const group = screen.getByRole("radiogroup", { name: /language/i });
+    const es = within(group).getByRole("radio", { name: "Español" });
+    const en = within(group).getByRole("radio", { name: "English" });
+    // The test setup stubs useLocale to "en".
+    expect(en).toHaveAttribute("aria-checked", "true");
+    expect(es).toHaveAttribute("aria-checked", "false");
+
+    fireEvent.click(es);
+    expect(setLocale).toHaveBeenCalledWith("es");
   });
 });
