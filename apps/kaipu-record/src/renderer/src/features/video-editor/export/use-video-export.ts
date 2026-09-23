@@ -180,6 +180,7 @@ export function useVideoExport(): VideoExportController {
                 const recording = await window.electronAPI.recordingFinalize(sessionId, {
                   title: t("editedTitle", { title: args.title }),
                   durationSeconds: plan.totalDuration,
+                  durationMs: plan.totalDuration * 1000,
                   thumbnail,
                   derivedFromAssetId: args.derivedFromAssetId,
                 });

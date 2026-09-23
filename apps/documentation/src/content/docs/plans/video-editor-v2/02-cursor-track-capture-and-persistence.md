@@ -1524,7 +1524,8 @@ vitest project green. The four IPC files of Task 7 are small and listed verbatim
 
 ### Task 9 — verify
 
-- [ ] Checks (audit rule 4).
+- [ ] Checks (audit rule 4). Automated by `bun run cursor-track:check` — see
+      [Testing: cursor track check](/testing/cursor-track-check/).
 - [ ] Manual: record a **screen** 10 s → `<vault>/.kaipu/<id>.cursor.json` exists and
       parses; record a **window** → no file; delete the screen recording from the library
       → the file is gone; export an edit of it → the export has **no** `.cursor.json`.
