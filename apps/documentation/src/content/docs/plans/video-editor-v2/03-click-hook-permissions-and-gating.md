@@ -631,6 +631,15 @@ regenerated after this plan was reviewed (the `finish(...)` call now carries PR 
   | `accessibilityRestartHint` | Después de permitirlo, reinicia Kaipu Record para activarlo.                                                                        | After allowing it, restart Kaipu Record to turn it on.                                                       |
 
 - The step is **optional**: "Ahora no" continues; zooms then come from pauses only.
+
+  PR 10 shipped it as a standalone step between Permissions and Done. Validating on a
+  real Mac showed the same failure as the Settings row below: the Permissions step
+  already lists every OS permission as a row, and Accessibility showed up as a fourth
+  entry only in Settings, never there. It is now the **fourth row of the Permissions
+  step** (optional badge, "Allow" button, hidden when `not-required`); `accessibilityBody`
+  / `accessibilitySkip` / `accessibilityRestartHint` were folded into a single
+  `accessibilityDesc`, and the flow is three steps again.
+
 - The copy says **"conservamos" / "keep"**, not "leemos" / "read", on purpose: the OS
   permission grants a process-wide input tap, so a claim that the app never _sees_ the
   keyboard would be false. What the app does is keep mouse clicks and nothing else

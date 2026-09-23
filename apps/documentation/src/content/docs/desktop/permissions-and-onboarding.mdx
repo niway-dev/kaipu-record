@@ -39,14 +39,30 @@ Los panes son URLs deep-link por kind y plataforma (`MAC_PANES` / `WINDOWS_PANES
 
 ## Onboarding
 
-`features/onboarding/` — overlay de primer arranque con tres pasos (`steps/`): **welcome → permissions → done**.
+`features/onboarding/` — first-run overlay with three steps (`steps/`): **welcome →
+permissions → done**.
 
-- **Requeridos para terminar**: `screen` y `microphone`. La cámara es **opcional** (`REQUIRED_PERMISSIONS` en `permissions.ts`).
-- `requiredPermissionsMet(status)` decide si se puede avanzar.
-- El estado vive en `onboarding-store.ts`, expuesto vía `onboarding-context.ts` / `onboarding-provider.tsx`.
-- **Replay**: la Settings page puede re-abrir el overlay (`useOnboarding`), así el usuario revisa permisos cuando quiera.
+- **Welcome** carries the **language picker** (`Español` / `English`, each named in
+  itself). The app boots in the persisted locale (`AppSettings.locale`, default `en`),
+  so without it a Spanish speaker had to finish an English onboarding before finding the
+  switch in Settings. It writes through the same provider as the Settings picker.
+- **Permissions** lists four rows: Screen Recording and Microphone (**required** to
+  finish — `REQUIRED_PERMISSIONS` in `permissions.ts`), Camera (optional) and, on macOS
+  only, **Accessibility** (optional, for auto-zoom on clicks). Accessibility is not a
+  `PermissionKind`: it is a single mac-only tri-state read through `useAccessibility`,
+  so it is rendered as its own row after the three media ones and hidden when the OS
+  reports `not-required`. Its "Allow" button and the Settings → Permissions row are the
+  only two call sites of `requestAccessibility()`; nothing on the recording path prompts.
+  Granting happens in System Settings, and the hook re-reads on window focus, so the row
+  flips to GRANTED when the user comes back.
+- `requiredPermissionsMet(status)` decides whether Continue is enabled.
+- State lives in `onboarding-store.ts`, exposed through `onboarding-context.ts` /
+  `onboarding-provider.tsx`.
+- **Replay**: the Settings page can reopen the overlay (`useOnboarding`) so the user can
+  review permissions whenever they want.
 
-Cada permiso tiene metadata de display (`PERMISSION_META`): ícono (lucide), nombre, si es requerido, y descripción.
+Each media permission has display metadata (`PERMISSION_META`): lucide icon, name,
+whether it is required, and description.
 
 ## Gotchas
 

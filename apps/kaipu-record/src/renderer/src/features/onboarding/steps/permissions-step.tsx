@@ -1,5 +1,5 @@
-import { Shield, Check } from "lucide-react";
-import type { PermissionKind, PermissionStatus } from "@shared/types";
+import { Shield, Check, MousePointerClick } from "lucide-react";
+import type { AccessibilityStatus, PermissionKind, PermissionStatus } from "@shared/types";
 import { useTranslations } from "@kaipu/i18n";
 import { Badge } from "@renderer/ui/badge";
 import { Button } from "@renderer/ui/button";
@@ -11,6 +11,14 @@ interface PermissionsStepProps {
   denied: Record<PermissionKind, boolean>;
   onRequest: (kind: PermissionKind) => void;
   onOpenSettings: (kind: PermissionKind) => void;
+  /**
+   * macOS Accessibility for the click hook (plans/video-editor-v2/03 § UI). It is not a
+   * `PermissionKind` — a single mac-only tri-state, not a per-kind grant — so it gets
+   * its own row below the media ones, and no row at all when "not-required".
+   */
+  accessibility: AccessibilityStatus;
+  /** The single onboarding call site for `requestAccessibility()` (the other is Settings). */
+  onRequestAccessibility: () => void;
 }
 
 export function PermissionsStep({
@@ -18,6 +26,8 @@ export function PermissionsStep({
   denied,
   onRequest,
   onOpenSettings,
+  accessibility,
+  onRequestAccessibility,
 }: PermissionsStepProps): React.JSX.Element {
   const t = useTranslations("onboarding");
   return (
@@ -64,6 +74,35 @@ export function PermissionsStep({
             </div>
           );
         })}
+
+        {accessibility !== "not-required" && (
+          <div className={styles.row}>
+            <span className={styles.icon}>
+              <MousePointerClick size={18} strokeWidth={1.8} />
+            </span>
+            <div className={styles.info}>
+              <div className={styles.nameRow}>
+                <span className={styles.name}>{t("accessibilityTitle")}</span>
+                <Badge variant="neutral">{t("optional")}</Badge>
+              </div>
+              <p className={styles.description}>{t("accessibilityDesc")}</p>
+            </div>
+            <div className={styles.action}>
+              {accessibility === "granted" ? (
+                <Badge variant="success" className={styles.granted}>
+                  <Check size={14} strokeWidth={2.4} /> {t("granted")}
+                </Badge>
+              ) : (
+                // Granting happens in System Settings; `requestAccessibility()` registers
+                // the app, prompts once and deep-links the pane, so one button covers
+                // both the first ask and the retry (there is no "denied" branch to detect).
+                <Button variant="primary" size="sm" onClick={onRequestAccessibility}>
+                  {t("accessibilityGrant")}
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
