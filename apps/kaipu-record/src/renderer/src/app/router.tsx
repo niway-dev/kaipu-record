@@ -14,6 +14,7 @@ import {
   PermissionsSettingsPage,
   RecordingQualitySettingsPage,
   RecordingSettingsPage,
+  ScreenshotsSettingsPage,
 } from "@renderer/pages/settings/settings-pages";
 import { CloudPage } from "@renderer/pages/cloud/cloud-page";
 import { ShortcutsPage } from "@renderer/pages/shortcuts/shortcuts-page";
@@ -69,6 +70,7 @@ const router = createHashRouter([
               { path: "permissions", element: <PermissionsSettingsPage /> },
               { path: "recording-quality", element: <RecordingQualitySettingsPage /> },
               { path: "recording", element: <RecordingSettingsPage /> },
+              { path: "screenshots", element: <ScreenshotsSettingsPage /> },
               { path: "files", element: <FilesSettingsPage /> },
               { path: "app", element: <AppSettingsPage /> },
               ...(import.meta.env.DEV

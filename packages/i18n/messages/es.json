@@ -116,12 +116,16 @@
     "recordingDescription": "Cómo se capturan las grabaciones.",
     "filesDescription": "Dónde se guardan las grabaciones y capturas en este dispositivo.",
     "appDescription": "Cómo se comporta la app en este dispositivo.",
+    "screenshots": "Capturas",
+    "screenshotSave": "Guardar capturas automáticamente",
+    "screenshotSaveDescription": "Cada captura va a tu Biblioteca apenas la tomas.",
     "developer": "Developer",
     "openFolder": "Abrir carpeta",
     "accountMoved": "Tu cuenta se movió a Cloud",
     "accountMovedDetail": "La sesión, la capacidad y las subidas viven en la sección Cloud del menú lateral.",
     "goToCloud": "Ir a Cloud",
-    "navCloudNote": "La cuenta y la capacidad en cloud viven ahora en la sección Cloud."
+    "navCloudNote": "La cuenta y la capacidad en cloud viven ahora en la sección Cloud.",
+    "screenshotsDescription": "Cómo se guardan las capturas en este dispositivo."
   },
   "record": {
     "readyToRecord": "Todo listo para grabar",
@@ -371,6 +375,8 @@
     "discardBody": "Tienes ediciones sin guardar. Si sales ahora, se pierden.",
     "keepEditing": "Seguir editando",
     "discard": "Descartar",
+    "discardSaved": "Descartar",
+    "discardSavedTitle": "Eliminar esta captura de la Biblioteca",
     "saveChangesTitle": "Guardar cambios",
     "saveOptionsBody": "ya existe. ¿Sobrescribir, o conservarla y guardar una copia?",
     "cancel": "Cancelar",

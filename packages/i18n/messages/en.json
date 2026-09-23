@@ -116,12 +116,16 @@
     "recordingDescription": "How recordings are captured.",
     "filesDescription": "Where recordings and screenshots are saved on this device.",
     "appDescription": "How the app behaves on this device.",
+    "screenshots": "Screenshots",
+    "screenshotSave": "Save screenshots automatically",
+    "screenshotSaveDescription": "Every capture goes to your Library the moment you take it.",
     "developer": "Developer",
     "openFolder": "Open folder",
     "accountMoved": "Your account moved to Cloud",
     "accountMovedDetail": "Session, capacity and uploads live in the Cloud section of the sidebar.",
     "goToCloud": "Go to Cloud",
-    "navCloudNote": "Your account and cloud capacity now live in the Cloud section."
+    "navCloudNote": "Your account and cloud capacity now live in the Cloud section.",
+    "screenshotsDescription": "How captures are saved on this device."
   },
   "record": {
     "readyToRecord": "Ready to record",
@@ -371,6 +375,8 @@
     "discardBody": "You have unsaved edits. If you leave now, they're lost.",
     "keepEditing": "Keep editing",
     "discard": "Discard",
+    "discardSaved": "Discard",
+    "discardSavedTitle": "Delete this capture from the Library",
     "saveChangesTitle": "Save changes",
     "saveOptionsBody": "already exists. Overwrite it, or keep it and save a copy?",
     "cancel": "Cancel",
