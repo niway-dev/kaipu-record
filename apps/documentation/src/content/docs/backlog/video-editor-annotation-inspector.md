@@ -5,7 +5,9 @@ description: "Findings from validating v2 PR 8 (blur and cover): annotations sti
 
 # Video editor v2 — annotation options in the inspector
 
-> **Status: 🔵 Proposed** (2026-09-22). Notes from validating
+> **Status: 🟢 Ready to validate** — implemented in
+> [#152](https://github.com/csdev19/kaipu-record-monorepo/pull/152) (2026-09-23); see that PR's
+> checklist for the manual pass. Written 2026-09-22 as notes from validating
 > [v2 PR 8 — blur and cover](https://github.com/csdev19/kaipu-record-monorepo/pull/139)
 > on hardware. The redactions work and the owner's verdict on the editor was that the new
 > design "fixes many things I did not like before". This doc records the one

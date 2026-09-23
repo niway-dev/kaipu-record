@@ -5,43 +5,44 @@ description: "Where video editor v2 stands at the end of the 2026-09-22 session:
 
 # Video editor v2 — handoff
 
-> **Status: 🟡 In progress** (written 2026-09-22, end of session). This is a resume
+> **Status: 🟡 In progress** (written 2026-09-22, refreshed 2026-09-23: everything below is
+> merged; only the hardware checklist remains). This is a resume
 > point, not a design doc. Parent: [video editor v2](./video-editor-zoom-blur-cover).
 > Plan: [audit + docs 00–12](/plans/video-editor-v2/00-audit/). When every PR below is
 > merged and validated, fold what lasts into the parent doc and delete this page.
 
 ## Where things stand
 
-All ten implementation PRs exist, as a **stacked chain** — each branch was created from
-the previous one, so they must be merged in order. Eight are merged; two are open.
-Every branch is pushed and matches `origin`; nothing lives only on the machine that
-wrote this.
+All ten implementation PRs were a **stacked chain** — each branch created from the
+previous one — and all ten are merged, plus #143, the UX follow-ups (#152) and the
+onboarding refinements (#153). The grouped view is
+[roadmap → Video editor v2 wave](./roadmap#video-editor-v2-wave-2026-09-22--23).
 
-| PR                                                                | Branch                                    | Delivers                                                                      | State                |
-| ----------------------------------------------------------------- | ----------------------------------------- | ----------------------------------------------------------------------------- | -------------------- |
-| [#132](https://github.com/csdev19/kaipu-record-monorepo/pull/132) | `feat/video-editor-v2-poster-from-output` | export poster from the rendered output                                        | ✅ merged            |
-| [#133](https://github.com/csdev19/kaipu-record-monorepo/pull/133) | `…-cursor-track`                          | cursor position track + clock/pause mapping + vault sidecar                   | ✅ merged            |
-| [#134](https://github.com/csdev19/kaipu-record-monorepo/pull/134) | `…-click-hook`                            | clicks via `uiohook-napi`, gated on Accessibility (no prompt)                 | ✅ merged            |
-| [#135](https://github.com/csdev19/kaipu-record-monorepo/pull/135) | `…-zoom-math`                             | detector, camera path, source-time, redaction math (pure)                     | ✅ merged            |
-| [#136](https://github.com/csdev19/kaipu-record-monorepo/pull/136) | `…-scene-v2`                              | scene v2, session, initial detection, **autosave**                            | ✅ merged            |
-| [#137](https://github.com/csdev19/kaipu-record-monorepo/pull/137) | `…-timeline-lanes`                        | Activity + Zooms lanes, inspector column, Zoom tool                           | ✅ merged            |
-| [#138](https://github.com/csdev19/kaipu-record-monorepo/pull/138) | `…-preview-camera`                        | camera transform per frame, camera box, hold-to-compare, Follow/Lock          | ✅ merged            |
-| [#139](https://github.com/csdev19/kaipu-record-monorepo/pull/139) | `…-redactions`                            | Blur/Cover tools, Privacy lane, inspectors (preview only)                     | ✅ merged            |
-| [#140](https://github.com/csdev19/kaipu-record-monorepo/pull/140) | `…-export-pass`                           | zoom + redactions + pinned overlays burned into the export                    | 🟢 open, base `main` |
-| [#141](https://github.com/csdev19/kaipu-record-monorepo/pull/141) | `…-polish`                                | shortcuts, empty states, Accessibility onboarding, soft-zoom hint, docs to 🟡 | 🟢 open, base `#140` |
+| PR                                                                | Branch                                    | Delivers                                                                      | State     |
+| ----------------------------------------------------------------- | ----------------------------------------- | ----------------------------------------------------------------------------- | --------- |
+| [#132](https://github.com/csdev19/kaipu-record-monorepo/pull/132) | `feat/video-editor-v2-poster-from-output` | export poster from the rendered output                                        | ✅ merged |
+| [#133](https://github.com/csdev19/kaipu-record-monorepo/pull/133) | `…-cursor-track`                          | cursor position track + clock/pause mapping + vault sidecar                   | ✅ merged |
+| [#134](https://github.com/csdev19/kaipu-record-monorepo/pull/134) | `…-click-hook`                            | clicks via `uiohook-napi`, gated on Accessibility (no prompt)                 | ✅ merged |
+| [#135](https://github.com/csdev19/kaipu-record-monorepo/pull/135) | `…-zoom-math`                             | detector, camera path, source-time, redaction math (pure)                     | ✅ merged |
+| [#136](https://github.com/csdev19/kaipu-record-monorepo/pull/136) | `…-scene-v2`                              | scene v2, session, initial detection, **autosave**                            | ✅ merged |
+| [#137](https://github.com/csdev19/kaipu-record-monorepo/pull/137) | `…-timeline-lanes`                        | Activity + Zooms lanes, inspector column, Zoom tool                           | ✅ merged |
+| [#138](https://github.com/csdev19/kaipu-record-monorepo/pull/138) | `…-preview-camera`                        | camera transform per frame, camera box, hold-to-compare, Follow/Lock          | ✅ merged |
+| [#139](https://github.com/csdev19/kaipu-record-monorepo/pull/139) | `…-redactions`                            | Blur/Cover tools, Privacy lane, inspectors (preview only)                     | ✅ merged |
+| [#140](https://github.com/csdev19/kaipu-record-monorepo/pull/140) | `…-export-pass`                           | zoom + redactions + pinned overlays burned into the export                    | ✅ merged |
+| [#141](https://github.com/csdev19/kaipu-record-monorepo/pull/141) | `…-polish`                                | shortcuts, empty states, Accessibility onboarding, soft-zoom hint, docs to 🟡 | ✅ merged |
 
 Plus one implementation PR that came out of validating the data:
 
-| PR                                                                | Branch                                    | Delivers                                                                                                                         | State                |
-| ----------------------------------------------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
-| [#143](https://github.com/csdev19/kaipu-record-monorepo/pull/143) | `feat/video-editor-v2-cursor-track-check` | `inspectCursorTrack`, `bun run cursor-track:check`, a real-recording fixture, **and the tail-cut fix** (`durationMs`, unfloored) | 🟢 open, base `main` |
+| PR                                                                | Branch                                    | Delivers                                                                                                                         | State     |
+| ----------------------------------------------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| [#143](https://github.com/csdev19/kaipu-record-monorepo/pull/143) | `feat/video-editor-v2-cursor-track-check` | `inspectCursorTrack`, `bun run cursor-track:check`, a real-recording fixture, **and the tail-cut fix** (`durationMs`, unfloored) | ✅ merged |
 
 Test suite: 851 on `main` before v2 → 1084 with all ten PRs (→ ~1110 with #143).
 
-**Merge order:** #140 → #141, then #143 (independent; may conflict trivially with #141
-on `recorder-store.ts` — both touch `RecordingFinalizeMeta` call sites).
+Merged in that order on 2026-09-23 (#140 → #141 → #143), then #152 (annotation
+inspector + camera box body-drag) and #153 (onboarding).
 
-## Open docs PRs (all against `main`, docs only)
+## Docs PRs (all merged 2026-09-23)
 
 | PR                                                                | What it records                                                                                                 |
 | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
@@ -51,9 +52,8 @@ on `recorder-store.ts` — both touch `RecordingFinalizeMeta` call sites).
 | [#146](https://github.com/csdev19/kaipu-record-monorepo/pull/146) | `backlog/video-editor-annotation-inspector` — annotations still use the v1 popover; move them to the inspector  |
 | [#147](https://github.com/csdev19/kaipu-record-monorepo/pull/147) | **ADR 0003** — an export never replaces the original recording                                                  |
 
-#144, #145 and #146 each add one row to `backlog/index.mdx` and one sidebar entry at
-different anchors. If the second or third to merge reports a conflict, it is only the
-order of two adjacent table rows.
+Plus [#148](https://github.com/csdev19/kaipu-record-monorepo/pull/148), this page. #145
+and #146 are implemented by #152 and now read 🟢 Ready to validate.
 
 ## Decisions taken while validating (2026-09-22)
 
@@ -114,8 +114,8 @@ In priority order — the first two are privacy:
 
 ```bash
 git fetch origin
-git checkout feat/video-editor-v2-polish        # tip of the chain (PRs 1–10)
-bun install                                     # uiohook-napi prebuilds; postinstall runs install-app-deps
+git checkout main                               # everything is merged
+bun install && bun run rebuild:native           # no postinstall: the rebuild is explicit (#151)
 bun run setup && infisical login                # secrets are per machine
 cd apps/kaipu-record && bun run check-types && bun run test
 bun run dev
@@ -125,7 +125,7 @@ Useful after recording something:
 
 ```bash
 cd apps/kaipu-record
-bun run cursor-track:check <recording-id> --frames 4   # needs #143 merged, or check out its branch
+bun run cursor-track:check <recording-id> --frames 4
 ```
 
 Model assignment used so far (audit § decision 7): Sonnet for implementation by

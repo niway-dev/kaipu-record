@@ -64,6 +64,7 @@ export default defineConfig({
             { slug: "backlog/recording-compositor-perf" },
             { slug: "backlog/roadmap" },
             { slug: "backlog/video-editor-v2-handoff" },
+            { slug: "backlog/live-recording-controls" },
             { slug: "backlog/version-gate" },
             { slug: "backlog/auto-update" },
             { slug: "backlog/shared-tokens-package" },
