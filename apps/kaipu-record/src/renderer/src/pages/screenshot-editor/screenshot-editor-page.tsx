@@ -108,7 +108,15 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
 
   // Block in-app navigation (sidebar clicks, ⌘⌃V start-recording, ⌘⌃X new
   // capture — all go through the router) while there are unsaved changes.
-  const blocker = useBlocker(dirty);
+  // Discard deletes the auto-saved item and leaves. The blocker reads `dirty` from the
+  // render it was called in, so navigating in the same tick as `setDirty(false)` would
+  // still be blocked after an edit; instead, flip `discarding`, let the blocker lift on
+  // re-render, and navigate from the effect below.
+  const [discarding, setDiscarding] = useState(false);
+  const blocker = useBlocker(dirty && !discarding);
+  useEffect(() => {
+    if (discarding) navigate("/screenshots");
+  }, [discarding, navigate]);
 
   // The editor needs more room than the rest of the app — ask main to grow the
   // window (and raise its minimum) while we're here, and restore it on the way out.
@@ -209,8 +217,7 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
     busy.current = true;
     try {
       await window.electronAPI.deleteLocalRecording(savedId);
-      setDirty(false);
-      navigate("/screenshots");
+      setDiscarding(true);
     } catch (error) {
       reportError(t("saveError"), error, { context: { phase: "discard", id: savedId } });
     } finally {
