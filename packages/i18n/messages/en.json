@@ -438,6 +438,7 @@
     "export": "Export",
     "exportError": "Couldn't export the video",
     "exporting": "Exporting video…",
+    "exportOriginalNote": "The original recording and its library thumbnail still show everything.",
     "retry": "Retry",
     "close": "Close",
     "cancel": "Cancel",
