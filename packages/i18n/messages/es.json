@@ -523,7 +523,10 @@
     "coverLabelPlaceholder": "p. ej. clave de API oculta",
     "coverBurnNote": "Queda grabado en los píxeles al exportar: el archivo exportado nunca contiene el secreto.",
     "removeRegion": "Quitar región",
-    "privacyNotOnSlide": "Las imágenes no se pueden desenfocar ni cubrir."
+    "privacyNotOnSlide": "Las imágenes no se pueden desenfocar ni cubrir.",
+    "removeAnnotation": "Quitar anotación",
+    "annotationDefaultsTitle": "Próxima anotación",
+    "annotationDefaultsHint": "Estilo de la próxima anotación que dibujes."
   },
   "panel": {
     "saving": "Guardando…",

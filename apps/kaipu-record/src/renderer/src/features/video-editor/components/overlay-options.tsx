@@ -15,8 +15,12 @@ import styles from "./overlay-options.module.css";
  * the screenshot editor's annotation-options.tsx (see resolveControls there) — reduced
  * to this feature's tools (select/box/arrow/text, no pen/blur/crop), so unlike the
  * screenshot version every overlay kind has color + either stroke or size.
+ *
+ * Exported so the inspector's AnnotationInspector / AnnotationDefaultsPanel (UI spec
+ * § 7.4) can drive the same two cases from the properties column instead of this
+ * floating panel.
  */
-interface ContextualControls {
+export interface ContextualControls {
   /** "size" for text, "stroke" for box/arrow. */
   mode: "stroke" | "size";
   color: string;
@@ -26,7 +30,7 @@ interface ContextualControls {
   setLevel(level: number): void;
 }
 
-function resolveControls(
+export function resolveControls(
   tools: VideoToolsController,
   overlays: VideoOverlay[],
   selectedId: string | null,

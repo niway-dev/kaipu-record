@@ -523,7 +523,10 @@
     "coverLabelPlaceholder": "e.g. API key hidden",
     "coverBurnNote": "Burned into the pixels on export — the exported file never contains the secret.",
     "removeRegion": "Remove region",
-    "privacyNotOnSlide": "Images can't be blurred or covered."
+    "privacyNotOnSlide": "Images can't be blurred or covered.",
+    "removeAnnotation": "Remove annotation",
+    "annotationDefaultsTitle": "Next annotation",
+    "annotationDefaultsHint": "Style for the next annotation you draw."
   },
   "panel": {
     "saving": "Saving…",
