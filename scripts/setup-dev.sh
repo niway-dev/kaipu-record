@@ -76,6 +76,44 @@ if [ "$missing" -gt 0 ]; then
   exit 1
 fi
 
+# --- native dependencies ----------------------------------------------------
+# `uiohook-napi` ships prebuilds for Node, not for Electron, so it has to be
+# rebuilt against Electron's ABI before the desktop app can load it. That rebuild
+# used to be a `postinstall`; it is explicit now (scripts/rebuild-native.sh), so
+# this is the thing that has to notice it is pending.
+#
+# Reported, never run: the rebuild invokes a C compiler, and the decision to do
+# that stays with you — the same rule the tool checks above follow.
+#
+# Not fatal. Without it the app still runs; `click-hook.ts` degrades to "no
+# clicks" rather than crashing, so the only casualty is auto-zoom on clicks. That
+# silence is exactly why this check is here: nothing else would tell you.
+printf '\n%sDesktop native dependencies%s\n' "$bold" "$off"
+native_app_dir="apps/kaipu-record"
+native_stamp="$native_app_dir/node_modules/.native-deps-electron-version"
+native_electron_pkg="$native_app_dir/node_modules/electron/package.json"
+
+if [ ! -f "$native_electron_pkg" ]; then
+  printf '  %s·%s %-12s %snot installed yet — run bun install first%s\n' \
+    "$yellow" "$off" "electron" "$dim" "$off"
+else
+  native_electron_version="$(node -p "require('./$native_electron_pkg').version" 2>/dev/null || echo "")"
+  native_built_for="$(cat "$native_stamp" 2>/dev/null || echo "")"
+  if [ -n "$native_electron_version" ] && [ "$native_built_for" = "$native_electron_version" ]; then
+    printf '  %s✓%s %-12s built for Electron %s\n' "$green" "$off" "uiohook-napi" "$native_electron_version"
+  else
+    if [ -z "$native_built_for" ]; then
+      printf '  %s·%s %-12s %snot built for Electron yet%s\n' \
+        "$yellow" "$off" "uiohook-napi" "$dim" "$off"
+    else
+      printf '  %s·%s %-12s %sbuilt for Electron %s, installed is %s%s\n' \
+        "$yellow" "$off" "uiohook-napi" "$dim" "$native_built_for" "$native_electron_version" "$off"
+    fi
+    printf '       %sneeded for:%s auto-zoom on clicks in the video editor\n' "$dim" "$off"
+    printf '       %srun:%s        bun run rebuild:native\n' "$dim" "$off"
+  fi
+fi
+
 # --- connectivity -----------------------------------------------------------
 # Presence is not access. One real read proves the binary works, the session is
 # valid, and this machine can reach the project — three failures that otherwise
