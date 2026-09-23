@@ -60,8 +60,8 @@
   text-align: left;
 }
 
-/* icon · name-over-badge · status. The status sits in the header so every card is
-   header + one short line, and the four of them fit the default window height. */
+/* icon · name (+ why) over badge · status. A card is just this header: the four of
+   them fit the default window height without scrolling. */
 .header {
   display: flex;
   align-items: center;
@@ -90,14 +90,33 @@
 }
 
 .name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: var(--font-size-md);
   font-weight: var(--font-weight-semibold);
 }
 
-.description {
+.infoIcon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--transition);
+}
+
+.infoIcon:hover {
+  color: var(--text-primary);
+}
+
+.info {
+  margin: 0;
+  max-width: 260px;
+  padding: var(--space-sm) var(--space-md);
   font-size: var(--font-size-sm);
+  line-height: 1.45;
   color: var(--text-secondary);
-  line-height: 1.4;
+  text-align: left;
 }
 
 .granted {

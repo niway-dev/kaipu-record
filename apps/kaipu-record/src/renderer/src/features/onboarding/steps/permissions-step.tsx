@@ -1,8 +1,9 @@
-import { Shield, Check, MousePointerClick } from "lucide-react";
+import { Shield, Check, Info, MousePointerClick } from "lucide-react";
 import type { AccessibilityStatus, PermissionKind, PermissionStatus } from "@shared/types";
 import { useTranslations } from "@kaipu/i18n";
 import { Badge } from "@renderer/ui/badge";
 import { Button } from "@renderer/ui/button";
+import { Popover } from "@renderer/ui/popover";
 import { PERMISSION_META } from "../permissions";
 import styles from "./permissions-step.module.css";
 
@@ -19,6 +20,26 @@ interface PermissionsStepProps {
   accessibility: AccessibilityStatus;
   /** The single onboarding call site for `requestAccessibility()` (the other is Settings). */
   onRequestAccessibility: () => void;
+}
+
+/**
+ * The "why" behind each permission lives behind an (i), not under the name: four cards
+ * with a description each did not fit the default window, and most users only need
+ * the name. Same trigger + popover as the recording-quality sliders in Settings.
+ */
+function WhyPopover({ label, children }: { label: string; children: string }): React.JSX.Element {
+  const t = useTranslations("onboarding");
+  return (
+    <Popover
+      trigger={
+        <span className={styles.infoIcon} role="img" aria-label={t("whatIs", { label })}>
+          <Info size={14} />
+        </span>
+      }
+    >
+      <p className={styles.info}>{children}</p>
+    </Popover>
+  );
 }
 
 export function PermissionsStep({
@@ -49,7 +70,10 @@ export function PermissionsStep({
                   <Icon size={18} strokeWidth={1.8} />
                 </span>
                 <div className={styles.nameRow}>
-                  <span className={styles.name}>{t(nameKey)}</span>
+                  <span className={styles.name}>
+                    {t(nameKey)}
+                    <WhyPopover label={t(nameKey)}>{t(descriptionKey)}</WhyPopover>
+                  </span>
                   <Badge variant={required ? "info" : "neutral"}>
                     {required ? t("required") : t("optional")}
                   </Badge>
@@ -68,7 +92,6 @@ export function PermissionsStep({
                   </Button>
                 )}
               </div>
-              <p className={styles.description}>{t(descriptionKey)}</p>
             </div>
           );
         })}
@@ -80,7 +103,10 @@ export function PermissionsStep({
                 <MousePointerClick size={18} strokeWidth={1.8} />
               </span>
               <div className={styles.nameRow}>
-                <span className={styles.name}>{t("accessibilityTitle")}</span>
+                <span className={styles.name}>
+                  {t("accessibilityTitle")}
+                  <WhyPopover label={t("accessibilityTitle")}>{t("accessibilityDesc")}</WhyPopover>
+                </span>
                 <Badge variant="neutral">{t("optional")}</Badge>
               </div>
               {accessibility === "granted" ? (
@@ -96,7 +122,6 @@ export function PermissionsStep({
                 </Button>
               )}
             </div>
-            <p className={styles.description}>{t("accessibilityDesc")}</p>
           </div>
         )}
       </div>

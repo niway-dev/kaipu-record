@@ -159,6 +159,25 @@ describe("OnboardingOverlay — Accessibility row (plans/video-editor-v2/03 § U
   });
 });
 
+describe("OnboardingOverlay — permission explanations", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("keeps the why behind an (i) that opens a popover, instead of a description under the name", async () => {
+    mockElectronAPI({
+      checkPermissions: vi.fn().mockResolvedValue({ screen: true, microphone: true, camera: true }),
+    });
+    render(<OnboardingOverlay onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /get started/i }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /continue/i })).toBeEnabled());
+
+    expect(screen.queryByText(/captures your full display/i)).toBeNull();
+    fireEvent.click(screen.getByRole("img", { name: /why screen recording\?/i }));
+    expect(screen.getByText(/captures your full display/i)).toBeInTheDocument();
+  });
+});
+
 describe("OnboardingOverlay — language picker on the welcome step", () => {
   afterEach(() => {
     vi.restoreAllMocks();
