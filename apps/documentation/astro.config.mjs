@@ -65,6 +65,8 @@ export default defineConfig({
             { slug: "backlog/roadmap" },
             { slug: "backlog/video-editor-v2-handoff" },
             { slug: "backlog/live-recording-controls" },
+            { slug: "backlog/settings-updates" },
+            { slug: "backlog/settings-screenshots" },
             { slug: "backlog/version-gate" },
             { slug: "backlog/auto-update" },
             { slug: "backlog/shared-tokens-package" },

@@ -59,6 +59,19 @@ Plus #152's and #153's own manual items.
 3. **[Cursor-free capture + drawn cursor](./cursor-sprite-capture)** (v2.1) — deferred,
    gated on a one-day capture spike; reopen if users flag the blurred cursor under zoom.
 
+## Settings follow-ups (2026-09-23) 🔵
+
+Two owner requests from using the 0.6 → 0.7 build, both small and both on the Settings
+page. Each has its own doc; neither is scheduled.
+
+1. **[Settings → Updates](./settings-updates)** — the installed version, the updater's
+   real state and a **Check for updates** button. Today the updater checks once at launch
+   and every 6 h, and only the final "restart" state is visible — so a fresh release looks
+   like nothing happened. The feed itself works (verified against `0.7.0`).
+2. **[Settings → Screenshots](./settings-screenshots)** — one control: save every capture
+   **automatically** (default, recording parity) or **when I click Save**. Resolves the
+   open decision in the [save strategy doc](./screenshot-save-strategy) as a preference.
+
 ## Kill order
 
 | #   | Feature                                     | Priority    | Status | Depends on              |
