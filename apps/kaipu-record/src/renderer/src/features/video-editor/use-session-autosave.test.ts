@@ -115,4 +115,41 @@ describe("useSessionAutosave", () => {
     });
     expect(saved).toEqual([]);
   });
+
+  it("exposes saving → saved around a successful write", async () => {
+    const save = vi.fn(async (id: string, json: string) => {
+      saved.push({ id, json });
+    });
+    window.electronAPI.saveVideoEditSession =
+      save as typeof window.electronAPI.saveVideoEditSession;
+    const { result, rerender } = render();
+    expect(result.current.state).toBe("idle");
+    rerender({ scene: { ...OPENED, zoomSensitivity: 65 }, interacting: false });
+    expect(result.current.state).toBe("saving");
+    await act(async () => {
+      vi.advanceTimersByTime(AUTOSAVE_DEBOUNCE_MS);
+      await Promise.resolve();
+    });
+    expect(save).toHaveBeenCalledOnce();
+    expect(result.current.state).toBe("saved");
+  });
+
+  it("exposes failed when the write rejects, and retry() writes again", async () => {
+    const save = vi.fn().mockRejectedValueOnce(new Error("disk")).mockResolvedValue(undefined);
+    window.electronAPI.saveVideoEditSession =
+      save as typeof window.electronAPI.saveVideoEditSession;
+    const { result, rerender } = render();
+    rerender({ scene: { ...OPENED, zoomSensitivity: 66 }, interacting: false });
+    await act(async () => {
+      vi.advanceTimersByTime(AUTOSAVE_DEBOUNCE_MS);
+      await Promise.resolve();
+    });
+    expect(result.current.state).toBe("failed");
+    expect(result.current.pendingRef.current).toBe(true);
+    await act(async () => {
+      await result.current.retry();
+    });
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(result.current.state).toBe("saved");
+  });
 });
