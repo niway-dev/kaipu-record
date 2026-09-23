@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { IPC_CHANNELS } from "@shared/types";
 import type { AppSettings } from "@shared/types";
-import { normalizeLocale } from "@kaipu/i18n";
 import { mergeSettings } from "../services/settings.service";
 
 /**
@@ -28,20 +27,13 @@ function load(): void {
   }
   settings = mergeSettings(parsed);
 
-  let dirty = false;
-  // First run (or a settings file predating i18n): seed the locale from the OS
-  // so the app opens in the user's language instead of the hardcoded default.
-  // `app.getLocale()` is only valid after `app.whenReady()`, which is where
-  // `registerSettings()` (our only caller) runs.
-  if (!parsed || !("locale" in parsed)) {
-    settings = { ...settings, locale: normalizeLocale(app.getLocale()) };
-    dirty = true;
-  }
+  // The locale is NOT seeded from `app.getLocale()`: a first run opens in English
+  // (`DEFAULT_LOCALE`) and the onboarding welcome step is where the user picks their
+  // language. The owner chose one predictable first screen over OS detection.
   if (!settings.deviceId) {
     settings = { ...settings, deviceId: randomUUID() };
-    dirty = true;
+    persist();
   }
-  if (dirty) persist();
 }
 
 function persist(): void {

@@ -43,9 +43,9 @@ Los panes son URLs deep-link por kind y plataforma (`MAC_PANES` / `WINDOWS_PANES
 permissions → done**.
 
 - **Welcome** carries the **language picker** (`Español` / `English`, each named in
-  itself). The app boots in the persisted locale (`AppSettings.locale`, default `en`),
-  so without it a Spanish speaker had to finish an English onboarding before finding the
-  switch in Settings. It writes through the same provider as the Settings picker.
+  itself). A first run always opens in **English**: `settings-store.ts` deliberately does
+  not seed `AppSettings.locale` from the OS, so this picker is where the user chooses.
+  It writes through the same provider as the Settings picker.
 - **Permissions** lists four rows: Screen Recording and Microphone (**required** to
   finish — `REQUIRED_PERMISSIONS` in `permissions.ts`), Camera (optional) and, on macOS
   only, **Accessibility** (optional, for auto-zoom on clicks). Accessibility is not a
