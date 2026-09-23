@@ -124,7 +124,8 @@
     "accountMoved": "Your account moved to Cloud",
     "accountMovedDetail": "Session, capacity and uploads live in the Cloud section of the sidebar.",
     "goToCloud": "Go to Cloud",
-    "navCloudNote": "Your account and cloud capacity now live in the Cloud section."
+    "navCloudNote": "Your account and cloud capacity now live in the Cloud section.",
+    "screenshotsDescription": "How captures are saved on this device."
   },
   "record": {
     "readyToRecord": "Ready to record",

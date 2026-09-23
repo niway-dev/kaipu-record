@@ -250,6 +250,15 @@ export function AppSettingsPage(): React.JSX.Element {
           }
         />
       </Section>
+    </SettingsPanel>
+  );
+}
+
+/** Screenshots — its own page in the settings nav, right under Recording. */
+export function ScreenshotsSettingsPage(): React.JSX.Element {
+  const t = useTranslations("settings");
+  return (
+    <SettingsPanel title={t("screenshots")} subtitle={t("screenshotsDescription")}>
       <Section title={t("screenshots")}>
         <ScreenshotSaveSettings />
       </Section>
