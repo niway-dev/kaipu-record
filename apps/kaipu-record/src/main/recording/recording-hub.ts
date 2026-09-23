@@ -191,11 +191,14 @@ export function registerRecordingHub(
       }
       // Best effort: a recording is never failed by its cursor track. The tracker
       // is still sampling here (finalize runs after the encoder stopped), so the
-      // tail past the last frame is cut with the recording's duration.
+      // tail past the last frame is cut with the recording's duration. `+ 250`
+      // (not `meta.durationMs` exactly) covers the last frame's own duration and
+      // clock jitter: the whole point of this cut is to drop the 0.6–2 s of
+      // "saving" samples, not to be frame-exact.
       const track = cursorTracks.finish(
         sessionId,
         clickSessions.delete(sessionId),
-        meta.durationSeconds * 1000,
+        meta.durationMs + 250,
       );
       stopHookIfIdle();
       if (track) {

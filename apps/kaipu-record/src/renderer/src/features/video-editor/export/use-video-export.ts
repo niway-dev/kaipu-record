@@ -4,6 +4,7 @@ import type { LocalRecording } from "@shared/types/library-storage";
 import { captureException } from "@renderer/features/analytics";
 import type { SlideAssetStore } from "../slide-assets";
 import type { VideoScene } from "../scene";
+import type { CameraPath } from "../zoom/camera-path";
 import { buildExportPlan } from "./export-plan";
 import type { ExportStartMessage, ExportWorkerMessage } from "./export-messages";
 import { rasterizeOverlays } from "./overlay-raster";
@@ -26,6 +27,8 @@ export interface StartExportArgs {
   /** Displayed px of the preview video box — used to scale overlay strokes true-to-preview. */
   previewWidth: number;
   slideAssets: SlideAssetStore;
+  /** v2: the preview's camera path (useCameraPath). Sent whenever the plan has a zoom. */
+  cameraPath: CameraPath | null;
   onSaved: (recording: LocalRecording) => void;
 }
 
@@ -177,6 +180,7 @@ export function useVideoExport(): VideoExportController {
                 const recording = await window.electronAPI.recordingFinalize(sessionId, {
                   title: t("editedTitle", { title: args.title }),
                   durationSeconds: plan.totalDuration,
+                  durationMs: plan.totalDuration * 1000,
                   thumbnail,
                   derivedFromAssetId: args.derivedFromAssetId,
                 });
@@ -199,6 +203,17 @@ export function useVideoExport(): VideoExportController {
           fail(GENERIC_ERROR, event.error ?? new Error(event.message));
         };
 
+        // COPIES of the camera arrays: transferring the preview's own buffers would detach
+        // them and break the live preview (and undo) after the export starts.
+        const camera =
+          plan.hasZoom && args.cameraPath
+            ? {
+                fps: args.cameraPath.fps,
+                cx: args.cameraPath.cx.slice(),
+                cy: args.cameraPath.cy.slice(),
+                scale: args.cameraPath.scale.slice(),
+              }
+            : null;
         const startMessage: ExportStartMessage = {
           type: "start",
           sourceBlob,
@@ -206,10 +221,12 @@ export function useVideoExport(): VideoExportController {
           overlays,
           slides,
           output: { width: args.videoWidth, height: args.videoHeight },
+          camera,
         };
         worker.postMessage(startMessage, [
           ...overlays.map((o) => o.bitmap),
           ...slides.map((s) => s.bitmap),
+          ...(camera ? [camera.cx.buffer, camera.cy.buffer, camera.scale.buffer] : []),
         ]);
       } catch (error) {
         fail(GENERIC_ERROR, error);

@@ -5,13 +5,19 @@
  * follow mode has no stored offset). Positioned per frame from the camera path without
  * React re-renders; the drag reports normalized CENTERS already clamped into the frame.
  *
- * The box itself is pointer-transparent; only the four edge strips are hit-testable, so
- * the box — which can cover the whole picture at low zoom — never swallows a click meant
- * for an annotation under it. The handlers stay here and receive the strips' bubbled
- * events; the pointer capture taken on pointerdown is what lets the drag continue once
- * the pointer leaves the strip.
+ * The box body is hit-testable and grabs the camera on pointerdown, same as the four edge
+ * strips (kept because they extend past the border and still matter when the box is tiny).
+ * It used to be the other way around — pointer-transparent body, edges only — so that an
+ * opaque box couldn't swallow a click meant for an annotation under it. Hardware validation
+ * (backlog/video-editor-camera-box-ux) found that trade-off backwards: while a zoom is
+ * selected, grabbing the camera IS the main gesture, and reaching an annotation underneath
+ * is the rare case that already has another path — deselect the zoom (Esc / background
+ * click) or pick the annotation from its lane. The handlers stay on this element regardless
+ * of whether the pointerdown originated on the body or bubbled up from an edge strip; the
+ * pointer capture taken on pointerdown is what lets the drag continue once the pointer
+ * leaves the element.
  */
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { useTranslations } from "@kaipu/i18n";
 import { useVideoFrameClock } from "../use-video-frame-clock";
 import { type CameraPath, cameraAt, clampAnchor } from "../zoom/camera-path";
@@ -47,6 +53,8 @@ export function CameraBox({
   const boxRef = useRef<HTMLDivElement | null>(null);
   const center = useRef<Point>({ x: 0.5, y: 0.5 });
   const drag = useRef<{ x: number; y: number; from: Point; w: number; h: number } | null>(null);
+  // Only for the `.dragging` cursor swap; the drag itself is driven by `drag.current`.
+  const [dragging, setDragging] = useState(false);
 
   const place = (c: Point): void => {
     center.current = c;
@@ -73,6 +81,7 @@ export function CameraBox({
   const abort = (): void => {
     if (!drag.current) return;
     drag.current = null;
+    setDragging(false);
     onEnd();
   };
 
@@ -80,7 +89,7 @@ export function CameraBox({
   return (
     <div
       ref={boxRef}
-      className={styles.box}
+      className={dragging ? `${styles.box} ${styles.dragging}` : styles.box}
       data-testid="camera-box"
       onPointerDown={(event) => {
         event.stopPropagation();
@@ -94,6 +103,7 @@ export function CameraBox({
           w: stage.width,
           h: stage.height,
         };
+        setDragging(true);
         onBegin();
       }}
       onPointerMove={(event) => {
@@ -121,7 +131,7 @@ export function CameraBox({
           ? t("cameraChipLocked", { level })
           : t("cameraChipFollow", { level })}
       </span>
-      {/* The only hit-testable parts of the box (see .box / .edge in the CSS). */}
+      {/* Strips outside the border, still useful to grab when the box itself is tiny. */}
       <span className={`${styles.edge} ${styles.edgeTop}`} data-camera-edge="top" />
       <span className={`${styles.edge} ${styles.edgeRight}`} data-camera-edge="right" />
       <span className={`${styles.edge} ${styles.edgeBottom}`} data-camera-edge="bottom" />

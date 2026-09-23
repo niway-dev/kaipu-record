@@ -29,6 +29,12 @@ export interface ZoomLaneProps {
   onSelect(id: string): void;
   /** `sourceTime` is null when the pointer is over a slide — ignore that move. */
   onEdgeDrag(id: string, edge: "start" | "end", sourceTime: number | null, phase: EdgePhase): void;
+  /** True when the recording has a cursor track — gates the empty-state hint (plans/
+   *  video-editor-v2/08 § PR 10 polish): a pre-v2 recording with no track at all already
+   *  explains itself via the Detection panel's "no cursor data" text, so this lane stays
+   *  silent for it instead of doubling up. Defaults to false for callers that don't pass
+   *  it (e.g. existing tests with a fixed set of segments). */
+  hasTrack?: boolean;
 }
 
 export function ZoomLane({
@@ -37,6 +43,7 @@ export function ZoomLane({
   selectedId,
   onSelect,
   onEdgeDrag,
+  hasTrack = false,
 }: ZoomLaneProps): React.JSX.Element {
   const t = useTranslations("videoEditor");
   const laneRef = useRef<HTMLDivElement | null>(null);
@@ -96,6 +103,7 @@ export function ZoomLane({
 
   return (
     <div ref={laneRef} className={styles.lane} data-testid="zoom-lane">
+      {segments.length === 0 && hasTrack && <p className={styles.empty}>{t("zoomEmptyState")}</p>}
       {segments.flatMap((segment, index) => {
         const blocks = sourceRangeToTimelineBlocks(layout, segment.start, segment.end);
         const selected = segment.id === selectedId;

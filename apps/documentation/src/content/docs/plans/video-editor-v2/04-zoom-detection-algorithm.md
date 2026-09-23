@@ -7,8 +7,10 @@ sidebar:
 
 # 04 — Zoom detection algorithm
 
-> **Status: 🔵 Proposed** (2026-09-21). Part of PR 4 ("Zoom + source-time pure modules")
+> **Status: 🟡 In progress** (2026-09-22). Part of PR 4 ("Zoom + source-time pure modules")
 > in the [audit](/plans/video-editor-v2/00-audit/). Fixes W8. Pure TypeScript, no UI.
+> Implemented on `feat/video-editor-v2-zoom-math` — not merged, not validated in
+> production; see the [backlog PR table](/backlog/video-editor-zoom-blur-cover/).
 
 ## Problem
 

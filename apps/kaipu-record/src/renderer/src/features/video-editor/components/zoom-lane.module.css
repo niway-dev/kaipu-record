@@ -5,6 +5,21 @@
   background: var(--bg-input);
 }
 
+/* Zero visible zooms, but a cursor track exists — so autodetection just found none yet,
+   not "this recording has no zoom data" (that case is the Detection panel's own empty
+   state; see DetectionPanel's canDetect branch). */
+.empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
 /* UI spec § 6.3 — rgba(246,5,92,.15) background, faint border, level in mono. */
 .block {
   position: absolute;

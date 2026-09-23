@@ -273,7 +273,8 @@ async function stopRecording(): Promise<void> {
   if (stopping || !activeEngine || !activeSessionId) return;
   stopping = true;
   update({ status: "finalizing", countdown: null });
-  const durationSeconds = clock ? Math.floor(elapsedMs(clock, Date.now()) / 1000) : 0;
+  const durationMs = clock ? elapsedMs(clock, Date.now()) : 0;
+  const durationSeconds = Math.floor(durationMs / 1000);
   // Flip the bar to "Saving…" before the timer stops, so the finalize wait reads
   // as progress instead of a frozen widget.
   window.electronAPI.recordingReportTick({
@@ -294,6 +295,7 @@ async function stopRecording(): Promise<void> {
         return window.electronAPI.recordingFinalize(activeSessionId, {
           title,
           durationSeconds,
+          durationMs,
           thumbnail: activeEngine.thumbnail,
         });
       })(),

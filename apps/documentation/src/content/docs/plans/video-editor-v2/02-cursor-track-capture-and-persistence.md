@@ -7,11 +7,13 @@ sidebar:
 
 # 02 — Cursor track capture and persistence
 
-> **Status: 🔵 Proposed** (2026-09-21). PR 2 ("Cursor position track") in the
+> **Status: 🟡 In progress** (2026-09-22). PR 2 ("Cursor position track") in the
 > [audit](/plans/video-editor-v2/00-audit/), together with
 > [01](/plans/video-editor-v2/01-clock-and-pause-mapping/). Fixes W4, W5, W6.
 > No native module and no UI in this PR: clicks arrive in PR 3
-> ([03](/plans/video-editor-v2/03-click-hook-permissions-and-gating/)).
+> ([03](/plans/video-editor-v2/03-click-hook-permissions-and-gating/)). Implemented on
+> `feat/video-editor-v2-cursor-track` — not merged, not validated in production; see the
+> [backlog PR table](/backlog/video-editor-zoom-blur-cover/).
 
 ## Problem
 
@@ -1522,7 +1524,8 @@ vitest project green. The four IPC files of Task 7 are small and listed verbatim
 
 ### Task 9 — verify
 
-- [ ] Checks (audit rule 4).
+- [ ] Checks (audit rule 4). Automated by `bun run cursor-track:check` — see
+      [Testing: cursor track check](/testing/cursor-track-check/).
 - [ ] Manual: record a **screen** 10 s → `<vault>/.kaipu/<id>.cursor.json` exists and
       parses; record a **window** → no file; delete the screen recording from the library
       → the file is gone; export an edit of it → the export has **no** `.cursor.json`.

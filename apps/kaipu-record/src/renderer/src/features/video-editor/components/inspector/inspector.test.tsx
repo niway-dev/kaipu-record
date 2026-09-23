@@ -74,6 +74,7 @@ describe("ZoomInspector", () => {
         index={2}
         layout={layout}
         zooms={zooms()}
+        sourceHeight={1080}
         anchorNow={() => ({ x: 0.5, y: 0.5 })}
         onRemoved={vi.fn()}
       />,
@@ -92,6 +93,7 @@ describe("ZoomInspector", () => {
         index={1}
         layout={layout}
         zooms={z}
+        sourceHeight={1080}
         anchorNow={() => ({ x: 0.82, y: 0.31 })}
         onRemoved={vi.fn()}
       />,
@@ -103,6 +105,38 @@ describe("ZoomInspector", () => {
     });
     expect(screen.getByText(/200 ms before each click/)).toBeInTheDocument();
   });
+  it("shows the soft-zoom hint when the scale upsamples the source below 720 px", () => {
+    // 1080 / 2.1 ≈ 514 px < 720.
+    render(
+      <ZoomInspector
+        segment={SEGMENT}
+        index={1}
+        layout={layout}
+        zooms={zooms()}
+        sourceHeight={1080}
+        anchorNow={() => ({ x: 0.5, y: 0.5 })}
+        onRemoved={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/text may look soft/)).toBeInTheDocument();
+  });
+
+  it("omits the soft-zoom hint at a scale that stays sharp", () => {
+    // 1080 / 1.2 = 900 px >= 720.
+    render(
+      <ZoomInspector
+        segment={{ ...SEGMENT, scale: 1.2 }}
+        index={1}
+        layout={layout}
+        zooms={zooms()}
+        sourceHeight={1080}
+        anchorNow={() => ({ x: 0.5, y: 0.5 })}
+        onRemoved={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText(/text may look soft/)).toBeNull();
+  });
+
   it("removes and clears the selection", () => {
     const z = zooms();
     const onRemoved = vi.fn();
@@ -112,6 +146,7 @@ describe("ZoomInspector", () => {
         index={1}
         layout={layout}
         zooms={z}
+        sourceHeight={1080}
         anchorNow={() => ({ x: 0.5, y: 0.5 })}
         onRemoved={onRemoved}
       />,
