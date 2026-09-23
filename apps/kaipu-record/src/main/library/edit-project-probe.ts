@@ -66,3 +66,18 @@ export async function probeEditing(
   }
   return "project-available";
 }
+
+/**
+ * When the edit session was last written (epoch ms), or null when the item has no
+ * session, no meta sidecar, or an unreadable one. Read-only, like `probeEditing`:
+ * the library badge compares this against the item's exports' `createdAt`.
+ */
+export async function probeEditSavedAt(vaultDir: string, id: string): Promise<number | null> {
+  if (!(await hasEditSession(vaultDir, id))) return null;
+  try {
+    const meta = JSON.parse(await readFile(sessionMetaPath(vaultDir, id), "utf-8")) as SessionMeta;
+    return typeof meta.savedAt === "number" ? meta.savedAt : null;
+  } catch {
+    return null;
+  }
+}

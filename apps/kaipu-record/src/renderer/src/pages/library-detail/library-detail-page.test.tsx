@@ -15,6 +15,7 @@ const cloudOnlyItem: LibraryItem = {
   createdAt: 1000,
   durationSeconds: 0,
   derivedFromAssetId: null,
+  editSavedAt: null,
   local: null,
   cloud: {
     assetId: "cloud-1",
@@ -49,6 +50,7 @@ const exportedOnlyItem: LibraryItem = {
   createdAt: 2000,
   durationSeconds: 45,
   derivedFromAssetId: null,
+  editSavedAt: null,
   local: {
     id: "local-b",
     assetId: "asset-b",

@@ -73,6 +73,12 @@ export interface LibraryItem {
   createdAt: number;
   durationSeconds: number;
   derivedFromAssetId: string | null;
+  /**
+   * Epoch ms of the last video-edit-session save on this device, or null when there is
+   * no session (or no local copy). Compared against the item's exports to say
+   * "edited, not exported" (backlog/edit-state-indicators).
+   */
+  editSavedAt: number | null;
   /** The local copy, when the file is present and readable. */
   local: LocalRecording | null;
   /** The cloud copy as last seen in the catalog cache. */

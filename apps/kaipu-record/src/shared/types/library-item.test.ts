@@ -8,6 +8,7 @@ const base: LibraryItem = {
   createdAt: 1,
   durationSeconds: 10,
   derivedFromAssetId: null,
+  editSavedAt: null,
   local: null,
   cloud: null,
   availability: "unverified",
