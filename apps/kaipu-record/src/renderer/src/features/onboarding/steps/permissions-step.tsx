@@ -54,9 +54,6 @@ export function PermissionsStep({
                     {required ? t("required") : t("optional")}
                   </Badge>
                 </div>
-              </div>
-              <p className={styles.description}>{t(descriptionKey)}</p>
-              <div className={styles.action}>
                 {granted ? (
                   <Badge variant="success" className={styles.granted}>
                     <Check size={14} strokeWidth={2.4} /> {t("granted")}
@@ -71,6 +68,7 @@ export function PermissionsStep({
                   </Button>
                 )}
               </div>
+              <p className={styles.description}>{t(descriptionKey)}</p>
             </div>
           );
         })}
@@ -85,9 +83,6 @@ export function PermissionsStep({
                 <span className={styles.name}>{t("accessibilityTitle")}</span>
                 <Badge variant="neutral">{t("optional")}</Badge>
               </div>
-            </div>
-            <p className={styles.description}>{t("accessibilityDesc")}</p>
-            <div className={styles.action}>
               {accessibility === "granted" ? (
                 <Badge variant="success" className={styles.granted}>
                   <Check size={14} strokeWidth={2.4} /> {t("granted")}
@@ -101,6 +96,7 @@ export function PermissionsStep({
                 </Button>
               )}
             </div>
+            <p className={styles.description}>{t("accessibilityDesc")}</p>
           </div>
         )}
       </div>

@@ -52,7 +52,7 @@
 .row {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -60,6 +60,8 @@
   text-align: left;
 }
 
+/* icon · name-over-badge · status. The status sits in the header so every card is
+   header + one short line, and the four of them fit the default window height. */
 .header {
   display: flex;
   align-items: center;
@@ -79,11 +81,12 @@
 }
 
 .nameRow {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
 }
 
 .name {
@@ -95,15 +98,10 @@
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
   line-height: 1.4;
-  flex: 1;
-}
-
-.action {
-  display: flex;
-  justify-content: flex-end;
 }
 
 .granted {
+  flex-shrink: 0;
   padding: 6px 11px;
   border-radius: 8px;
   font-family: var(--font-mono);
