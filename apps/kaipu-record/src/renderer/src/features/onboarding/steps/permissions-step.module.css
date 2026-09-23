@@ -60,7 +60,7 @@
   text-align: left;
 }
 
-/* icon · name (+ why) over badge · status. A card is just this header: the four of
+/* icon · name over (badge + why) · status. A card is just this header: the four of
    them fit the default window height without scrolling. */
 .header {
   display: flex;
@@ -90,11 +90,17 @@
 }
 
 .name {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
   font-size: var(--font-size-md);
   font-weight: var(--font-weight-semibold);
+  line-height: 1.25;
+}
+
+/* badge + (i) share one line under the name, so they stay level with each other
+   whether the name above wraps or not. */
+.meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .infoIcon {

@@ -70,13 +70,13 @@ export function PermissionsStep({
                   <Icon size={18} strokeWidth={1.8} />
                 </span>
                 <div className={styles.nameRow}>
-                  <span className={styles.name}>
-                    {t(nameKey)}
+                  <span className={styles.name}>{t(nameKey)}</span>
+                  <span className={styles.meta}>
+                    <Badge variant={required ? "info" : "neutral"}>
+                      {required ? t("required") : t("optional")}
+                    </Badge>
                     <WhyPopover label={t(nameKey)}>{t(descriptionKey)}</WhyPopover>
                   </span>
-                  <Badge variant={required ? "info" : "neutral"}>
-                    {required ? t("required") : t("optional")}
-                  </Badge>
                 </div>
                 {granted ? (
                   <Badge variant="success" className={styles.granted}>
@@ -103,11 +103,11 @@ export function PermissionsStep({
                 <MousePointerClick size={18} strokeWidth={1.8} />
               </span>
               <div className={styles.nameRow}>
-                <span className={styles.name}>
-                  {t("accessibilityTitle")}
+                <span className={styles.name}>{t("accessibilityTitle")}</span>
+                <span className={styles.meta}>
+                  <Badge variant="neutral">{t("optional")}</Badge>
                   <WhyPopover label={t("accessibilityTitle")}>{t("accessibilityDesc")}</WhyPopover>
                 </span>
-                <Badge variant="neutral">{t("optional")}</Badge>
               </div>
               {accessibility === "granted" ? (
                 <Badge variant="success" className={styles.granted}>
