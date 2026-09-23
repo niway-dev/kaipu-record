@@ -5,10 +5,17 @@ description: "UI design for the new video editor screen: automatic zoom segments
 
 # Video editor — zoom, blur and cover
 
-> **Status: 🔵 Proposed design** (2026-09-21). Nothing implemented yet. This is the UI
+> **Status: 🟡 In progress** (2026-09-22). Nothing on this spec's literal screen (titlebar,
+> rail, 288 px properties panel as a _new screen_, literal hex colors, English-only copy)
+> is on `main` or planned as written — [08](/plans/video-editor-v2/08-editor-layout-and-tracks/)
+> (fixing audit W12) found the app's real page instead **evolves the existing editor page**
+> (tokens, i18n, the existing header/toolbar), and that is what got implemented, on
+> unmerged feature branches. See
+> [backlog/video-editor-zoom-blur-cover](/backlog/video-editor-zoom-blur-cover/) for the
+> per-PR branch table — none of it is merged or validated in production. This is the UI
 > counterpart of the [zoom cursor-follow pipeline spec](/specs/2026-09-21-zoom-cursor-follow-design/)
 > and an evolution of the shipped [video editor](/specs/2026-07-03-video-editor-design/)
-> timeline. Tracked in [backlog/video-editor-zoom-blur-cover](/backlog/video-editor-zoom-blur-cover/).
+> timeline.
 
 New screen. Edits an existing recording: adjust the zooms the system detected
 automatically and hide whatever cannot be published.

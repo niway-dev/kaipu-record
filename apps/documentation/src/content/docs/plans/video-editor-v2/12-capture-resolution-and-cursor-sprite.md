@@ -7,8 +7,11 @@ sidebar:
 
 # 12 — Capture resolution and cursor sprite
 
-> **Status: 🔵 Proposed** (2026-09-21). Decision document + one small PR 10 item.
-> Resolves overview decision 3. See the [audit](/plans/video-editor-v2/00-audit/).
+> **Status: 🟡 In progress** (2026-09-22). Decision document + one small PR 10 item.
+> Resolves overview decision 3. See the [audit](/plans/video-editor-v2/00-audit/). The
+> PR 10 item (soft-zoom hint) is implemented on `feat/video-editor-v2-polish` — not
+> merged, not validated in production. The cursor-sprite decision (§ 2) is a v2 non-goal,
+> not something to implement; see the [backlog PR table](/backlog/video-editor-zoom-blur-cover/).
 
 ## 1. Zoom quality
 

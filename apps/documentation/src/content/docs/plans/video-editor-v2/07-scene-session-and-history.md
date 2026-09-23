@@ -7,9 +7,11 @@ sidebar:
 
 # 07 — Scene, session and history
 
-> **Status: 🔵 Proposed** (2026-09-21). PR 5 ("Scene v2 + loader") in the
+> **Status: 🟡 In progress** (2026-09-22). PR 5 ("Scene v2 + loader") in the
 > [audit](/plans/video-editor-v2/00-audit/). Fixes W11; resolves overview decision 5.
 > Requires PR 4 (the pure modules from docs 04–06 and `privacy/redaction.ts` from doc 10).
+> Implemented on `feat/video-editor-v2-scene-v2` — not merged, not validated in
+> production; see the [backlog PR table](/backlog/video-editor-zoom-blur-cover/).
 
 ## Problem
 

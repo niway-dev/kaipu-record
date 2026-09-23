@@ -7,9 +7,11 @@ sidebar:
 
 # 01 — Clock and pause mapping
 
-> **Status: 🔵 Proposed** (2026-09-21). Part of PR 2 ("Cursor position track") in the
+> **Status: 🟡 In progress** (2026-09-22). Part of PR 2 ("Cursor position track") in the
 > [audit](/plans/video-editor-v2/00-audit/). Fixes W1, W2, W3. Implement together with
-> [02](/plans/video-editor-v2/02-cursor-track-capture-and-persistence/).
+> [02](/plans/video-editor-v2/02-cursor-track-capture-and-persistence/). Implemented on
+> `feat/video-editor-v2-cursor-track` — not merged, not validated in production; see the
+> [backlog PR table](/backlog/video-editor-zoom-blur-cover/).
 
 ## Problem
 
