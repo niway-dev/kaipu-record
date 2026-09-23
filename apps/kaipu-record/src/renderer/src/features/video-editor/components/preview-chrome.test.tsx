@@ -94,6 +94,76 @@ describe("CameraBox", () => {
     expect(onEnd).toHaveBeenCalledTimes(1);
   });
 
+  it("drags from a pointerdown on the body, not just the edges", () => {
+    const onBegin = vi.fn();
+    const onMove = vi.fn();
+    const { container } = render(
+      <div>
+        <CameraBox
+          videoRef={{ current: videoAt(2) }}
+          path={buildCameraPath([], null, 5)}
+          segment={FIXED}
+          onBegin={onBegin}
+          onMove={onMove}
+          onEnd={vi.fn()}
+        />
+      </div>,
+    );
+    const stage = container.firstElementChild as HTMLElement;
+    stage.getBoundingClientRect = () =>
+      ({
+        left: 0,
+        top: 0,
+        width: 1000,
+        height: 500,
+        right: 1000,
+        bottom: 500,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    const box = screen.getByTestId("camera-box");
+    // No edge involved this time: the box body itself is now hit-testable and drags.
+    fireEvent.pointerDown(box, { pointerId: 1, clientX: 500, clientY: 250 });
+    fireEvent.pointerMove(box, { pointerId: 1, clientX: 300, clientY: 400 });
+    expect(onBegin).toHaveBeenCalledTimes(1);
+    expect(onMove).toHaveBeenLastCalledWith({ x: 0.55, y: 0.75 });
+  });
+
+  it("carries the dragging class only between pointerdown and pointerup", () => {
+    const { container } = render(
+      <div>
+        <CameraBox
+          videoRef={{ current: videoAt(2) }}
+          path={buildCameraPath([], null, 5)}
+          segment={FIXED}
+          onBegin={vi.fn()}
+          onMove={vi.fn()}
+          onEnd={vi.fn()}
+        />
+      </div>,
+    );
+    const stage = container.firstElementChild as HTMLElement;
+    stage.getBoundingClientRect = () =>
+      ({
+        left: 0,
+        top: 0,
+        width: 1000,
+        height: 500,
+        right: 1000,
+        bottom: 500,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    const box = screen.getByTestId("camera-box");
+    expect(box.className).not.toContain("dragging");
+    fireEvent.pointerDown(box, { pointerId: 1, clientX: 500, clientY: 250 });
+    expect(box.className).toContain("dragging");
+    fireEvent.pointerUp(box, { pointerId: 1 });
+    expect(box.className).not.toContain("dragging");
+  });
+
   it("ends the drag when the pointer capture is lost, and only once", () => {
     const onEnd = vi.fn();
     const { container } = render(

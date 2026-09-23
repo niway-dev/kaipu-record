@@ -449,8 +449,6 @@
     "sizeAria": "Size {label}",
     "strokeLabel": "Stroke",
     "strokeAria": "Stroke {n}",
-    "deleteAria": "Delete",
-    "deleteTitle": "Delete (⌫)",
     "typePlaceholder": "Type…",
     "imageLoadError": "Couldn't load the image. Try another file.",
     "videoStillLoading": "The video is still loading. Try again in a moment.",
@@ -523,7 +521,10 @@
     "coverLabelPlaceholder": "e.g. API key hidden",
     "coverBurnNote": "Burned into the pixels on export — the exported file never contains the secret.",
     "removeRegion": "Remove region",
-    "privacyNotOnSlide": "Images can't be blurred or covered."
+    "privacyNotOnSlide": "Images can't be blurred or covered.",
+    "removeAnnotation": "Remove annotation",
+    "annotationDefaultsTitle": "Next annotation",
+    "annotationDefaultsHint": "Style for the next annotation you draw."
   },
   "panel": {
     "saving": "Saving…",
