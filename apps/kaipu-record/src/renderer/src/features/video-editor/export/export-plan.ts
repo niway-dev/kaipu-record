@@ -6,6 +6,8 @@
  */
 import { layoutDuration, toLayout } from "../timeline";
 import type { VideoScene } from "../scene";
+import type { Redaction } from "../privacy/redaction";
+import { isSourceRangeVisible } from "../source-time";
 
 export interface RenderClipSegment {
   kind: "clip";
@@ -37,6 +39,13 @@ export interface ExportPlan {
   overlayWindows: OverlayWindow[];
   totalDuration: number;
   slideFps: 30;
+  /**
+   * v2: privacy regions (SOURCE time) that are visible somewhere on the timeline. The
+   * worker selects per frame by interval overlap (redactionsForFrame).
+   */
+  redactions: Redaction[];
+  /** v2: true when the scene has ANY zoom — the renderer then sends the camera path. */
+  hasZoom: boolean;
 }
 
 export function buildExportPlan(scene: VideoScene): ExportPlan {
@@ -74,5 +83,11 @@ export function buildExportPlan(scene: VideoScene): ExportPlan {
     overlayWindows,
     totalDuration: layoutDuration(layout),
     slideFps: 30,
+    redactions: scene.redactions.filter((r) => isSourceRangeVisible(layout, r.start, r.end)),
+    // NOT filtered by visibility, unlike the redactions: the camera has 0.2 s of lookahead
+    // and eases out past a segment's end, so a zoom sitting entirely in deleted footage
+    // still moves the camera over the kept frames next to the cut — exactly as the preview
+    // renders it. Dropping the path here would silently un-zoom those frames.
+    hasZoom: scene.zoomSegments.length > 0,
   };
 }

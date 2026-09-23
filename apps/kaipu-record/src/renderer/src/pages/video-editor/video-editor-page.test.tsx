@@ -3,7 +3,7 @@ import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LocalRecording } from "@shared/types/library-storage";
 import { dismissToast, getToasts } from "@renderer/ui/toast-store";
-import { VideoEditorPage, type VideoEditorSource } from "./video-editor-page";
+import { toolForShortcut, VideoEditorPage, type VideoEditorSource } from "./video-editor-page";
 
 /** jsdom's <video> never decodes real media, so videoWidth/videoHeight default to
  *  0 — the same "still loading" state handleExport's metadata guard refuses to
@@ -426,4 +426,109 @@ describe("VideoEditorPage — keydown gate behind open modals", () => {
     expect(playSpy).not.toHaveBeenCalled();
     playSpy.mockRestore();
   });
+});
+
+describe("toolForShortcut — the keyboard agrees with the toolbar's disabled states", () => {
+  it("maps each annotation shortcut to its tool", () => {
+    expect(toolForShortcut("v", { onSlide: false })).toBe("select");
+    expect(toolForShortcut("r", { onSlide: false })).toBe("box");
+    expect(toolForShortcut("a", { onSlide: false })).toBe("arrow");
+    expect(toolForShortcut("t", { onSlide: false })).toBe("text");
+  });
+
+  it("maps B and C to the privacy tools off a slide", () => {
+    expect(toolForShortcut("b", { onSlide: false })).toBe("blur");
+    expect(toolForShortcut("c", { onSlide: false })).toBe("cover");
+  });
+
+  it("refuses B and C on a slide — the toolbar disables those buttons there", () => {
+    expect(toolForShortcut("b", { onSlide: true })).toBeNull();
+    expect(toolForShortcut("c", { onSlide: true })).toBeNull();
+  });
+
+  it("leaves the annotation tools alone on a slide — only privacy is gated", () => {
+    expect(toolForShortcut("v", { onSlide: true })).toBe("select");
+    expect(toolForShortcut("r", { onSlide: true })).toBe("box");
+    expect(toolForShortcut("t", { onSlide: true })).toBe("text");
+  });
+
+  it("returns null for a key that is not a shortcut", () => {
+    expect(toolForShortcut("q", { onSlide: false })).toBeNull();
+    expect(toolForShortcut("enter", { onSlide: false })).toBeNull();
+    // `key in obj` walks the prototype chain; a real KeyboardEvent never produces
+    // these, but the lookup must not resolve them to a "tool" either.
+    expect(toolForShortcut("constructor", { onSlide: false })).toBeNull();
+  });
+});
+
+describe("VideoEditorPage — tool shortcuts end to end", () => {
+  beforeEach(() => {
+    vi.stubGlobal("Image", FakeImage);
+    stubDecodedVideoSize(1280, 720);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    stubDecodedVideoSize(0, 0);
+  });
+
+  it("R arms the Box tool from the keyboard", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+
+    fireEvent.keyDown(window, { key: "r" });
+    expect(screen.getByRole("button", { name: "Box" }).className).toMatch(/toolActive/);
+  });
+});
+
+// The floating `OverlayOptions` popover (`.optionsFloat`) is gone — annotation controls
+// now live in the inspector column alongside ZoomInspector / BlurInspector /
+// CoverInspector (backlog/video-editor-annotation-inspector). These tests cover what the
+// page harness can honestly reach; see the comment before the last test for what is
+// deliberately NOT covered here (and why).
+describe("VideoEditorPage — inspector column priority (annotation follow-ups)", () => {
+  beforeEach(() => {
+    vi.stubGlobal("Image", FakeImage);
+    stubDecodedVideoSize(1280, 720);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    stubDecodedVideoSize(0, 0);
+  });
+
+  it("shows the Detection panel by default (select tool, nothing selected)", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+
+    expect(screen.getByRole("heading", { name: "Detection" })).toBeInTheDocument();
+  });
+
+  it("arming the Box tool (R) shows the annotation defaults panel in the inspector, with no floating popover duplicating its controls", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+
+    fireEvent.keyDown(window, { key: "r" });
+
+    expect(await screen.findByRole("heading", { name: "Next annotation" })).toBeInTheDocument();
+    // Before this change, the same "Color" picker rendered twice: once in the floating
+    // OverlayOptions popover over the stage, once (if it existed) in the inspector. Now
+    // there is exactly one, and it lives inside the inspector column.
+    const colorLabels = screen.getAllByText("Color");
+    expect(colorLabels).toHaveLength(1);
+    const inspector = document.querySelector('[data-testid="editor-inspector"]')!;
+    expect(inspector.contains(colorLabels[0])).toBe(true);
+  });
+
+  // The seek-on-zoom-select rule (seekTargetForSegment: seek only when the playhead is
+  // outside the segment) is a pure function covered on its own in select-seek.test.ts.
+  // Driving a REAL zoom segment through this page's harness would require a cursor-track
+  // fixture wired through withInitialZooms/useZoomEditing, which this file's harness
+  // does not set up (no test here creates a cursor track) — faking that path would test
+  // a shape the real detector never produces, so it is intentionally left uncovered at
+  // the page level. Likewise, the post-selection focus move (focusInspectorFirstControl,
+  // scheduled via requestAnimationFrame) has its own unit tests in
+  // focus-inspector.test.ts; asserting the rAF callback fired from inside this page's
+  // jsdom harness would be timing-fragile without an existing fake-timers/rAF-flush
+  // pattern already in this file, so it is skipped here too.
 });

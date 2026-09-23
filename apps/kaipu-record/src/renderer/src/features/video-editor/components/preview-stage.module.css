@@ -26,7 +26,13 @@
   aspect-ratio: var(--frame-ratio);
   width: min(64vw, calc(46vh * var(--frame-ratio)));
   max-width: 64vw;
-  max-height: 46vh;
+  /* v2 PR 10 polish: row-relative, not just viewport-relative — see .videoRegion in
+     video-editor-page.module.css for why a bare vh cap clips the picture below a
+     ≈810–850 px window. `100%` is .stage's box, which is itself capped to 100% of
+     .videoRegion (both in this chain resolve against the definite grid-area size that
+     ultimately traces back to the page's 1fr stage row — CSS Grid gives a percentage
+     height a definite basis from the grid area regardless of `place-items`). */
+  max-height: min(46vh, 100%);
 }
 
 /* Fullscreen: lift the compact caps, keep the ratio. */

@@ -15,14 +15,14 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "bash ../../scripts/with-env.sh --tags kaipu-record -- sh -c \"bun run build && playwright test\"",
+    "cursor-track:check": "bun run scripts/cursor-track-check.ts",
     "start": "electron-vite preview",
     "dev": "bash ../../scripts/with-env.sh --tags kaipu-record -- electron-vite dev",
     "build": "bun run check-types && electron-vite build",
-    "postinstall": "electron-builder install-app-deps",
-    "build:unpack": "bun run build && electron-builder --dir",
-    "build:win": "bun run build && electron-builder --win",
+    "build:unpack": "bash ../../scripts/rebuild-native.sh && bun run build && electron-builder --dir",
+    "build:win": "bash ../../scripts/rebuild-native.sh && bun run build && electron-builder --win",
     "build:mac": "bash scripts/build-mac-local.sh",
-    "build:linux": "electron-vite build && electron-builder --linux"
+    "build:linux": "bash ../../scripts/rebuild-native.sh && electron-vite build && electron-builder --linux"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
