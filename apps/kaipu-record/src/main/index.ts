@@ -30,6 +30,7 @@ import {
 import { initMainAnalytics, shutdownMainAnalytics } from "./services/analytics.service";
 import { registerAnalyticsIpc } from "./services/analytics-ipc";
 import { registerScreenshotHandlers } from "./screenshots/screenshot-ipc";
+import { claimSingleInstance } from "./single-instance";
 
 let mainWindow: BrowserWindow | null = null;
 let capturePanel: CapturePanelWindow | null = null;
@@ -67,6 +68,15 @@ function sendToRenderer(channel: string): void {
 
 // Must run before `app.whenReady` — privileged scheme registration.
 registerMediaScheme();
+
+// One instance per userData directory, claimed before anything else starts. A second
+// launch (the tray-resident app clicked again, or `bun dev` next to the installed app)
+// hands off to the running instance instead of starting with a broken, in-memory
+// Local Storage — see single-instance.ts for the failure this prevents.
+const isPrimaryInstance = claimSingleInstance(app, bringAppToFront);
+if (!isPrimaryInstance) {
+  console.error("Kaipu Record is already running for this user data directory; quitting.");
+}
 
 /** Normal window minimums; floored so the main UI / onboarding never break. */
 const BASE_MIN_WIDTH = 720;
@@ -262,6 +272,10 @@ const captureWindowHooks = {
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
+  // `app.quit()` is already in flight — registering windows, IPC, the tray or global
+  // shortcuts now would briefly bring up a second, storage-less app on top of it.
+  if (!isPrimaryInstance) return;
+
   // Set app user model id for windows
   electronApp.setAppUserModelId("com.niway.kaipu-record");
 

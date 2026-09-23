@@ -12,6 +12,7 @@ Contraparte de [Renderer Architecture](/desktop/renderer-architecture): cómo es
 `src/main/index.ts` es el entry point. El orden importa:
 
 1. **Antes de `app.whenReady`** — `registerMediaScheme()` registra `kaipu-media://` como esquema privilegiado. Tiene que correr antes del ready o Electron no lo trata como streamable. (`media-protocol.ts`)
+   Right after it, `claimSingleInstance()` takes Electron's single-instance lock for the userData directory. If another Kaipu Record process already holds it, this one calls `app.quit()` and the `whenReady` block returns early; the running instance receives `second-instance` and brings its window to front. (`single-instance.ts`)
 2. **En `app.whenReady`** — registra todos los handlers IPC y crea las ventanas:
    - `registerSettings()` — settings persistidos (`settings.json`) + aplica Dock policy y launch-at-login
    - `initMainAnalytics()` + `registerAnalyticsIpc()` — sink de excepciones desde ventanas secundarias
@@ -67,6 +68,7 @@ La app no tiene dos bundles de renderer: tiene **uno solo cargado con un query d
 - ⚠️ El **renderer es el mismo** para app y panel; cualquier estado global que asuma una sola instancia se duplica. Record page y Capture Panel **no comparten estado en memoria** — coordinan vía hooks/IPC, no vía un store compartido.
 - ⚠️ La Capture Panel se oculta en `blur`. Abrir un dropdown/diálogo del SO que robe foco la cierra; tenerlo en cuenta al agregar UI ahí.
 - ⚠️ `mainWindow` puede ser `null` (cerrada). Todo acceso pasa por `showMainWindow()`, que la recrea — no asumir que existe.
+- ⚠️ **Two instances on one userData break `localStorage` silently.** Chromium keeps Local Storage in a LevelDB that only one process can lock. A second process on the same directory (the tray-resident installed app plus a second click on the `.app`, or the installed app plus `bun dev` — both resolve to `~/Library/Application Support/kaipu-record`) gets an in-memory copy: reads come back empty, so the onboarding flag looks unset and the welcome flow shows on every launch, and writes vanish on exit. Nothing is logged. The single-instance lock exists so that second process never starts; when developing, quit the installed app first, or `bun dev` will exit immediately with "already running".
 
 ## Related
 
