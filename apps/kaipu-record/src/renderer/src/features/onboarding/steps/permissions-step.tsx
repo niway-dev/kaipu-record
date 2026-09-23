@@ -44,18 +44,18 @@ export function PermissionsStep({
           const wasDenied = denied[kind] && !granted;
           return (
             <div key={kind} className={styles.row}>
-              <span className={styles.icon}>
-                <Icon size={18} strokeWidth={1.8} />
-              </span>
-              <div className={styles.info}>
+              <div className={styles.header}>
+                <span className={styles.icon}>
+                  <Icon size={18} strokeWidth={1.8} />
+                </span>
                 <div className={styles.nameRow}>
                   <span className={styles.name}>{t(nameKey)}</span>
                   <Badge variant={required ? "info" : "neutral"}>
                     {required ? t("required") : t("optional")}
                   </Badge>
                 </div>
-                <p className={styles.description}>{t(descriptionKey)}</p>
               </div>
+              <p className={styles.description}>{t(descriptionKey)}</p>
               <div className={styles.action}>
                 {granted ? (
                   <Badge variant="success" className={styles.granted}>
@@ -77,16 +77,16 @@ export function PermissionsStep({
 
         {accessibility !== "not-required" && (
           <div className={styles.row}>
-            <span className={styles.icon}>
-              <MousePointerClick size={18} strokeWidth={1.8} />
-            </span>
-            <div className={styles.info}>
+            <div className={styles.header}>
+              <span className={styles.icon}>
+                <MousePointerClick size={18} strokeWidth={1.8} />
+              </span>
               <div className={styles.nameRow}>
                 <span className={styles.name}>{t("accessibilityTitle")}</span>
                 <Badge variant="neutral">{t("optional")}</Badge>
               </div>
-              <p className={styles.description}>{t("accessibilityDesc")}</p>
             </div>
+            <p className={styles.description}>{t("accessibilityDesc")}</p>
             <div className={styles.action}>
               {accessibility === "granted" ? (
                 <Badge variant="success" className={styles.granted}>
