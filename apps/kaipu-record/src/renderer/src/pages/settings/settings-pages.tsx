@@ -27,6 +27,7 @@ import { useAppSettings } from "./use-app-settings";
 import { LanguageSettings } from "./language-settings";
 import { ThemeSettings } from "./theme-settings";
 import { RecordingQualitySettings } from "./recording-quality-settings";
+import { ScreenshotSaveSettings } from "./screenshot-save-settings";
 import { Section, SettingsPanel } from "./settings-panel";
 import styles from "./settings-page.module.css";
 
@@ -248,6 +249,9 @@ export function AppSettingsPage(): React.JSX.Element {
             </Button>
           }
         />
+      </Section>
+      <Section title={t("screenshots")}>
+        <ScreenshotSaveSettings />
       </Section>
     </SettingsPanel>
   );
