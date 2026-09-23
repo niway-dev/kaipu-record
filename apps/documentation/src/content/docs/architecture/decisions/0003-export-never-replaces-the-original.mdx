@@ -1,0 +1,96 @@
+---
+title: "ADR 0003: An export never replaces the original recording"
+description: Every export of an edited recording is a new library item linked to its source; the original file is never overwritten or removed by the editor, only by the user deleting it. Closes the "replace vs duplicate" question left open by the v1 video editor.
+---
+
+# ADR 0003: An export never replaces the original recording
+
+## Status
+
+| Field         | Value      |
+| ------------- | ---------- |
+| Status        | Accepted   |
+| Date          | 2026-09-22 |
+| Supersedes    | —          |
+| Superseded by | —          |
+
+## Context
+
+The v1 video editor (2026-07) shipped exports as **duplicates**: rendering an edit
+writes a new recording titled `"{title} (editado)"` into the vault, linked to its source
+through `derivedFromAssetId`, and the edit session stays re-editable next to the
+original. Both the design spec and the backlog left the final behaviour open:
+_"final behavior will offer 'reemplazar' vs 'generar duplicado' — deferred."_
+
+Video editor v2 raises the stakes of that open question. Its whole model is
+non-destructive — record clean, keep a cursor track and an edit session as sidecars,
+burn zoom and privacy regions into pixels **only at export** — and the export pass
+(v2 PR 9) is the first moment the editor produces a file that differs from the
+original in ways that cannot be undone: a blur or a cover, once burned in, removes
+information. A "replace original" option would turn that one-way step into data loss
+with a single click, and would make the cursor track and session, both keyed to the
+original's content, point at a file that no longer matches them.
+
+The owner reviewed the export pass on hardware and set the rule explicitly: all editing
+produces a v2 / "edited" file, and **the original is never overwritten until the user
+directly deletes it**.
+
+## Decision
+
+An export **always** creates a new recording in the library, linked to its source. The
+editor never overwrites, truncates, moves or deletes the original file, its cursor
+track or its edit session. Only an explicit user action on the original — deleting it
+from the library — removes it, and that action is the user's, never the editor's.
+
+Concretely:
+
+- `useVideoExport` keeps creating a new recording (`recordingCreate` → render →
+  `recordingFinalize` with `derivedFromAssetId` set to the source). There is no
+  "replace" code path, and none will be added.
+- The exported item is its own recording: it can be shared, uploaded, re-edited (a new
+  session) or deleted independently, without touching the source.
+- The source keeps its session (`.edit.json`) after an export, so the user can re-export
+  with different parameters, exactly as the v2 specs describe (`exports/v1.mp4`,
+  `v2.mp4` in the pipeline spec's project layout).
+- Deleting the source is allowed while exports derived from it exist; the exports stay
+  (they are complete files). The library's `editing` state already covers the reverse
+  case (`needs-source`) when an export's session refers to a source that is gone.
+
+## Alternatives rejected
+
+| Alternative                                                               | Why not                                                                                                                                                                                                                                                                               |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Offer "replace original" next to "duplicate"** (the deferred v1 idea)   | One click turns a reversible edit into an irreversible one, and for redactions that is information loss with no undo. The choice also invalidates the cursor track and the session, which describe the original's frames. A modal warning does not fix a footgun; not having it does. |
+| **Replace, but keep a hidden backup**                                     | Doubles storage for every export while hiding the thing the user most needs to find later. It is the duplicate model with worse discoverability.                                                                                                                                      |
+| **Overwrite in place and rely on the session to regenerate the original** | Impossible by construction: the session references the original's content; once the pixels are gone there is nothing to regenerate from.                                                                                                                                              |
+
+## Consequences
+
+- Vault usage grows by one file per export. Accepted: the original is the asset of
+  record, and disk is cheaper than a lost take. Cleanup is the user's, from the library.
+- The library needs to make the relationship legible: which item is the original, which
+  are exports of it, and whether the original has edits that no export contains yet.
+  That is the [edit-state indicators](/backlog/edit-state-indicators/) proposal
+  ("Editado · sin exportar"), which this ADR makes necessary rather than optional.
+- Naming: repeated exports produce several `"{title} (editado)"` items, and editing an
+  export yields `"… (editado) (editado)"`. Not addressed here; a versioned suffix
+  (`v2`, `v3`) or a per-source counter is a UI refinement that does not change the
+  decision.
+- Cloud upload and library thumbnails of the **original** still contain everything the
+  user later redacted. Out of scope for the editor (v2 non-goal) and consistent with
+  this ADR: the original is the original.
+
+## Non-goals
+
+- Versioning semantics between exports (which one is "current").
+- Automatic cleanup of superseded exports.
+- Any change to the export dialog beyond the note it already carries ("the original
+  recording on disk keeps everything").
+
+## Reopen if
+
+- Storage pressure becomes a real user complaint (then design a "keep only the latest
+  export" cleanup that still never touches the original).
+- A trusted destination needs "publish in place" semantics (cloud replaces a shared
+  link's file). That would be a cloud-side operation on the export, and must still not
+  overwrite the local original.
