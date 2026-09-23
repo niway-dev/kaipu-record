@@ -852,7 +852,11 @@ function VideoEditor({
       const key = e.key.toLowerCase();
       if (!isMod && TOOL_SHORTCUT_KEYS.has(key)) {
         const next = toolForShortcut(key, { onSlide });
-        if (next) videoTools.setTool(next);
+        // Through handleToolChange, not videoTools.setTool: the toolbar path clears
+        // the selection before arming a privacy tool, and the keyboard must match —
+        // otherwise B with a zoom selected leaves the RegionDrawer stacked over the
+        // camera box (equal z-index, later sibling wins) and the box is unreachable.
+        if (next) handleToolChange(next);
         return;
       }
       if (!isMod && key === "z") {
@@ -896,6 +900,7 @@ function VideoEditor({
     handleRemoveZoom,
     handleRemoveRedaction,
     videoTools,
+    handleToolChange,
     handleAddZoom,
     onSlide,
   ]);

@@ -449,8 +449,6 @@
     "sizeAria": "Size {label}",
     "strokeLabel": "Stroke",
     "strokeAria": "Stroke {n}",
-    "deleteAria": "Delete",
-    "deleteTitle": "Delete (⌫)",
     "typePlaceholder": "Type…",
     "imageLoadError": "Couldn't load the image. Try another file.",
     "videoStillLoading": "The video is still loading. Try again in a moment.",

@@ -98,6 +98,44 @@ describe("AnnotationInspector", () => {
     expect(tools.setColor).toHaveBeenCalledWith(ANNOTATION_COLORS[2].value);
   });
 
+  it("edits the size of a selected text overlay and sticks it as the tool default", () => {
+    const onCommitOverlay = vi.fn();
+    const tools = makeTools();
+    render(
+      <AnnotationInspector
+        overlay={text}
+        tools={tools}
+        range={{ start: 0, end: 5 }}
+        onCommitOverlay={onCommitOverlay}
+        onRemove={vi.fn()}
+        onRemoved={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Size L" }));
+    expect(onCommitOverlay).toHaveBeenCalledWith("t1", { size: 3 });
+    expect(tools.setTextSize).toHaveBeenCalledWith(3);
+  });
+
+  it("edits the stroke width of a selected box overlay and sticks it as the tool default", () => {
+    const onCommitOverlay = vi.fn();
+    const tools = makeTools();
+    render(
+      <AnnotationInspector
+        overlay={box}
+        tools={tools}
+        range={{ start: 0, end: 5 }}
+        onCommitOverlay={onCommitOverlay}
+        onRemove={vi.fn()}
+        onRemoved={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Stroke 2" }));
+    expect(onCommitOverlay).toHaveBeenCalledWith("b1", { stroke: 1 });
+    expect(tools.setStroke).toHaveBeenCalledWith(1);
+  });
+
   it("removes the overlay and clears the selection", () => {
     const onRemove = vi.fn();
     const onRemoved = vi.fn();

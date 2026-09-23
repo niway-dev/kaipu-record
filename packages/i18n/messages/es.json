@@ -449,8 +449,6 @@
     "sizeAria": "Tamaño {label}",
     "strokeLabel": "Trazo",
     "strokeAria": "Trazo {n}",
-    "deleteAria": "Eliminar",
-    "deleteTitle": "Eliminar (⌫)",
     "typePlaceholder": "Escribe…",
     "imageLoadError": "No se pudo cargar la imagen. Prueba con otro archivo.",
     "videoStillLoading": "El video todavía se está cargando. Prueba de nuevo en un momento.",
