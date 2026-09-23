@@ -43,15 +43,8 @@
   align-items: center;
   justify-content: center;
   gap: 11px;
+  /* Static: no hover, nothing to click — these only say what the app records. */
   cursor: default;
-  transition:
-    border-color var(--transition),
-    background var(--transition);
-}
-
-.feature:hover {
-  border-color: var(--accent-primary);
-  background: rgba(246, 5, 92, 0.08);
 }
 
 .featureIcon {
