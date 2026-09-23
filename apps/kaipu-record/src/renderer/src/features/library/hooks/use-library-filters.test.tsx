@@ -18,6 +18,7 @@ const videos: LibraryVideo[] = [
     editing: "project-available",
     transfer: { state: "idle" },
     derivedFromAssetId: null,
+    editSavedAt: null,
   },
   {
     id: null,
@@ -33,6 +34,7 @@ const videos: LibraryVideo[] = [
     editing: "project-available",
     transfer: { state: "idle" },
     derivedFromAssetId: null,
+    editSavedAt: null,
   },
 ];
 

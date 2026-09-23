@@ -19,6 +19,7 @@ function makeVideo(overrides: Partial<LibraryVideo> = {}): LibraryVideo {
     editing: "project-available",
     transfer: { state: "idle" },
     derivedFromAssetId: null,
+    editSavedAt: null,
     ...overrides,
   };
 }

@@ -19,6 +19,7 @@ const video: LibraryVideo = {
   editing: "project-available",
   transfer: { state: "idle" },
   derivedFromAssetId: null,
+  editSavedAt: null,
 };
 
 describe("VideoCard", () => {
