@@ -7,9 +7,12 @@ sidebar:
 
 # 08 — Editor layout and tracks
 
-> **Status: 🔵 Proposed** (2026-09-21). PR 6 ("Timeline lanes + inspector panel") in the
-> [audit](/plans/video-editor-v2/00-audit/), plus the polish list for PR 10. Fixes W12.
-> Requires PR 5 ([07](/plans/video-editor-v2/07-scene-session-and-history/)).
+> **Status: 🟡 In progress** (2026-09-22). PR 6 ("Timeline lanes + inspector panel") in
+> the [audit](/plans/video-editor-v2/00-audit/), plus the polish list for PR 10. Fixes
+> W12. Requires PR 5 ([07](/plans/video-editor-v2/07-scene-session-and-history/)). PR 6
+> is implemented on `feat/video-editor-v2-timeline-lanes`, the PR 10 polish list on
+> `feat/video-editor-v2-polish` — neither merged, neither validated in production; see
+> the [backlog PR table](/backlog/video-editor-zoom-blur-cover/).
 
 ## Problem
 

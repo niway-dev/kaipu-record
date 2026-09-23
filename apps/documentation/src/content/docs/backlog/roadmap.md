@@ -18,6 +18,10 @@ Status legend: ⬜ todo · 🔨 in progress · ✅ done
 - **🔵 StyleX across desktop and web** (2026-09-12): evaluate typed shared tokens,
   replacing Tailwind and CSS Modules, and opportunities for shared UI. No delivery
   date or implementation commitment. See [proposal](./stylex-migration).
+- **⚪ Cursor-free capture + drawn cursor (video editor v2.1)** (2026-09-22): the one
+  structural gap between our auto-zoom and Screen Studio / Cap — the OS cursor is baked
+  into our frames, so it blurs when zoomed. Deferred, gated on a one-day capture spike;
+  reopen if users flag the zoomed cursor. See [proposal](./cursor-sprite-capture).
 
 ## Kill order
 

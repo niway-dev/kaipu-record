@@ -170,10 +170,35 @@ secrets CLI. Locally a missing CLI fails loudly instead of building with
 undefined values, which would produce a subtly broken artifact rather than an
 error.
 
+## Native dependencies: no install scripts
+
+There is **no `postinstall`** in this repo, and none should be added. `bun install`
+is not allowed to compile code, download binaries, or run anything you have not
+read — the same rule as `scripts/setup-dev.sh`, which checks and never installs.
+
+The desktop app has one native dependency, `uiohook-napi` (the global mouse hook
+behind auto-zoom on clicks). It ships prebuilds for Node, not for Electron, and
+`electron-builder.yml` sets `npmRebuild: false`, so it has to be rebuilt
+explicitly:
+
+```bash
+bun run rebuild:native   # rebuilds against the installed Electron's ABI
+```
+
+`bun run setup` reports when that rebuild is pending and prints this command —
+it compares a stamp in `node_modules` against the installed Electron version, so
+a fresh install or an Electron bump both show up. Every packaging path
+(`build:mac`, `build:unpack`, `build:win`, `build:linux`, `release-desktop.yml`)
+calls it explicitly, because a release must not depend on someone remembering.
+
+If you skip it the app still runs: `click-hook.ts` degrades to "no clicks"
+rather than crashing. That silence is why the check exists.
+
 ## Common Commands
 
 - `bun run db:push` — Push Drizzle schema to DB (run from monorepo root, NOT from packages/infra-db/)
 - `bun run db:studio` — Open Drizzle Studio to inspect DB
+- `bun run rebuild:native` — Rebuild the desktop app's native deps for Electron (see above)
 
 ## Known Issues
 

@@ -7,10 +7,14 @@ sidebar:
 
 # Video editor v2 — 00 audit
 
-> **Status: 🔵 Proposed** (2026-09-21). Audits
+> **Status: 🟡 In progress** (2026-09-22). Audits
 > [the overview plan](/plans/2026-09-21-video-editor-v2-00-overview/) against the code on
-> `main` at `d18dbbd`. Nothing described here is implemented. The documents `01`–`12` in
-> this folder replace the overview's PR sections; the overview stays as history.
+> `main` at `d18dbbd`. Nothing described here is on `main`, but all ten PRs below are now
+> implemented, each on its own branch (`feat/video-editor-v2-*`) — none merged, none
+> validated in production; see
+> [backlog/video-editor-zoom-blur-cover](/backlog/video-editor-zoom-blur-cover/) for the
+> per-PR branch table. The documents `01`–`12` in this folder replace the overview's PR
+> sections; the overview stays as history.
 
 ## Verdict
 

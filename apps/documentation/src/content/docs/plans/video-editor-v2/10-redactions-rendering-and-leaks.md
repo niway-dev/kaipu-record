@@ -7,9 +7,13 @@ sidebar:
 
 # 10 — Redactions: rendering and leaks
 
-> **Status: 🔵 Proposed** (2026-09-21). Covers PR 1 (poster), the math in PR 4, and PR 8
-> ("Redactions in the editor") of the [audit](/plans/video-editor-v2/00-audit/).
+> **Status: 🟡 In progress** (2026-09-22). Covers PR 1 (poster), the math in PR 4, and
+> PR 8 ("Redactions in the editor") of the [audit](/plans/video-editor-v2/00-audit/).
 > Fixes W14. The export side of the regions is in [11](/plans/video-editor-v2/11-export-pass/).
+> Implemented across `feat/video-editor-v2-poster-from-output`,
+> `feat/video-editor-v2-zoom-math` and `feat/video-editor-v2-redactions` — none merged,
+> none validated in production; see the
+> [backlog PR table](/backlog/video-editor-zoom-blur-cover/).
 
 ## Problem
 
@@ -2548,7 +2552,7 @@ with its ghost block.
 
 ### Task 10 — verify
 
-- [ ] Checks (audit rule 4). **Expected after PRs 5–8**, not something this 🔵 Proposed doc
+- [ ] Checks (audit rule 4). **Expected after PRs 5–8**, not something this 🟡 In progress doc
       has already observed on `main`: with those PRs applied, `check-types:web` comes back
       clean and the renderer suite is green. Record the real numbers in the PR when it lands.
 - [ ] Manual, preview:
