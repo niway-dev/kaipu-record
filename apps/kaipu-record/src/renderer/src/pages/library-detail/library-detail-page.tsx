@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Check, Copy, FileX2, FolderOpen, Pencil, Scissors, Trash2 } from "lucide-react";
 import type { ImageSource } from "@renderer/features/screenshots/image-source";
 import { useTransientValue } from "@renderer/ui/use-transient-value";
@@ -13,8 +13,10 @@ import { RecordingPlayer } from "@renderer/features/library/components/recording
 import { ScreenshotViewer } from "@renderer/features/library/components/screenshot-viewer";
 import { RecordingTitle } from "@renderer/features/library/components/recording-title";
 import { formatDuration, formatSize, relativeDate } from "@renderer/features/library/format";
+import { buildLineage, editBadge } from "@renderer/features/library/lineage";
 import type { EditingState, RemoveLocalCopyResult } from "@shared/types/library-item";
 import { Button } from "@renderer/ui/button";
+import { Badge } from "@renderer/ui/badge";
 import { useTranslations, type Messages } from "@kaipu/i18n";
 import styles from "./library-detail-page.module.css";
 
@@ -71,6 +73,9 @@ export function LibraryDetailPage(): React.JSX.Element {
 
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [copied, showCopied] = useTransientValue<true>(2200);
+  // Computed before the early returns below: hooks can't be called conditionally,
+  // and buildLineage works fine on an empty/loading `videos` list.
+  const lineage = useMemo(() => buildLineage(videos), [videos]);
 
   const back = (): void => {
     navigate("/library");
@@ -94,9 +99,12 @@ export function LibraryDetailPage(): React.JSX.Element {
 
   const localId = video.id;
   const isScreenshot = video.kind === "screenshot";
-  const exportedFromTitle = video.derivedFromAssetId
-    ? videos.find((v) => v.assetId === video.derivedFromAssetId)?.title
+  const source = video.derivedFromAssetId
+    ? lineage.byAssetId.get(video.derivedFromAssetId)
     : undefined;
+  const sourceDeleted = video.derivedFromAssetId !== null && source === undefined;
+  const exports = lineage.exportsOf.get(video.assetId) ?? [];
+  const badge = editBadge(video, lineage);
 
   // `localId !== null` is implied by the condition below (it requires a local
   // copy to exist) but kept explicit here — the button's own name promises
@@ -209,11 +217,32 @@ export function LibraryDetailPage(): React.JSX.Element {
               </>
             )}
           </div>
-          {!isScreenshot && (
+          {!isScreenshot && badge === null && (
             <p className={styles.editingLine}>{t(EDITING_LABEL_KEYS[video.editing])}</p>
           )}
-          {exportedFromTitle && (
-            <p className={styles.editingLine}>{t("exportedFrom", { title: exportedFromTitle })}</p>
+          {badge === "not-exported" && (
+            <button
+              type="button"
+              className={styles.badgeButton}
+              title={t("editedNotExportedHint")}
+              onClick={editVideo}
+              disabled={!canEditVideo}
+            >
+              <Badge variant="warning">{t("editedNotExported")}</Badge>
+            </button>
+          )}
+          {badge === "edited" && <p className={styles.editingLine}>{t("edited")}</p>}
+          {(source || sourceDeleted) && (
+            <p className={styles.editingLine}>
+              <span className={styles.lineageLabel}>{t("source")}</span>
+              {source ? (
+                <Link to={`/library/${source.assetId}`} className={styles.lineageLink}>
+                  {source.title}
+                </Link>
+              ) : (
+                t("sourceDeleted")
+              )}
+            </p>
           )}
         </div>
 
@@ -265,6 +294,31 @@ export function LibraryDetailPage(): React.JSX.Element {
           )}
         </div>
       </div>
+
+      {exports.length > 0 && (
+        <section className={styles.exports} aria-labelledby="exports-heading">
+          <h2 id="exports-heading" className={styles.exportsHeading}>
+            {t("exports")}
+          </h2>
+          <ul className={styles.exportsList}>
+            {exports.map((e) => (
+              <li key={e.assetId} className={styles.exportItem}>
+                {e.thumbnailUrl ? (
+                  <img src={e.thumbnailUrl} alt="" className={styles.exportThumb} />
+                ) : (
+                  <span className={styles.exportThumb} aria-hidden />
+                )}
+                <Link to={`/library/${e.assetId}`} className={styles.lineageLink}>
+                  {e.title}
+                </Link>
+                <span className={styles.metaItem}>
+                  {relativeDate(e.createdAt)} · {formatDuration(e.durationSeconds)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {confirmingDelete && (
         <DeleteConfirmDialog

@@ -228,3 +228,130 @@ describe("LibraryDetailPage", () => {
     );
   });
 });
+
+describe("LibraryDetailPage — lineage and edit badge", () => {
+  beforeEach(() => {
+    window.electronAPI.removeLocalCopy = vi.fn(async () => ({ ok: true as const }));
+    window.electronAPI.onLibraryChanged = () => () => {};
+  });
+
+  afterEach(() => {
+    for (const t of getToasts()) dismissToast(t.id);
+  });
+
+  const base = {
+    kind: "recording" as const,
+    createdAt: 1_000,
+    durationSeconds: 10,
+    local: null,
+    cloud: null,
+    availability: "local" as const,
+    transfer: { state: "idle" as const },
+    comparison: "same" as const,
+    editing: "project-available" as const,
+    sharing: "private" as const,
+    derivedFromAssetId: null,
+    editSavedAt: null,
+  };
+  const local = (id: string) => ({
+    id,
+    assetId: id,
+    kind: "recording" as const,
+    title: id,
+    filePath: `/vault/${id}.mp4`,
+    createdAt: 1_000,
+    sizeBytes: 1,
+    durationSeconds: 10,
+    derivedFromAssetId: null,
+    contentSha256: null,
+  });
+
+  it("links an export to its source and lists exports on the source", async () => {
+    const items = [
+      { ...base, assetId: "src", title: "Original take", local: local("src") },
+      {
+        ...base,
+        assetId: "exp",
+        title: "Original take (export)",
+        createdAt: 2_000,
+        derivedFromAssetId: "src",
+        local: { ...local("exp"), derivedFromAssetId: "src" },
+      },
+    ];
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items,
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+    renderDetail("exp");
+    await waitForLoaded();
+    const link = await screen.findByRole("link", { name: /original take$/i });
+    expect(link).toHaveAttribute("href", "/library/src");
+
+    renderDetail("src");
+    await waitForLoaded();
+    expect(await screen.findByText(/^exports$/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /original take \(export\)/i })).toBeInTheDocument();
+  });
+
+  it("says the source was deleted when the parent is not in the list", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [
+        {
+          ...base,
+          assetId: "exp",
+          title: "Orphan",
+          derivedFromAssetId: "gone",
+          local: local("exp"),
+        },
+      ],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+    renderDetail("exp");
+    await waitForLoaded();
+    expect(await screen.findByText(/source recording was deleted/i)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /gone/ })).toBeNull();
+  });
+
+  it("links to a cloud-only source (no local id)", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [
+        {
+          ...base,
+          assetId: "src",
+          title: "In the cloud",
+          availability: "cloud" as const,
+          editing: "needs-source" as const,
+        },
+        {
+          ...base,
+          assetId: "exp",
+          title: "Export",
+          derivedFromAssetId: "src",
+          local: local("exp"),
+        },
+      ],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+    renderDetail("exp");
+    await waitForLoaded();
+    expect(await screen.findByRole("link", { name: /in the cloud/i })).toHaveAttribute(
+      "href",
+      "/library/src",
+    );
+  });
+
+  it("shows 'Edited · not exported' instead of the editing line when a session has no newer export", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [{ ...base, assetId: "src", title: "Take", local: local("src"), editSavedAt: 5_000 }],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+    renderDetail("src");
+    await waitForLoaded();
+    expect(await screen.findByText(/edited · not exported/i)).toBeInTheDocument();
+    expect(screen.queryByText(/editing project available/i)).toBeNull();
+  });
+});
