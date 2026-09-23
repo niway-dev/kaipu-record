@@ -107,6 +107,10 @@ export const DEFAULT_SHORTCUTS: ShortcutSettings = Object.fromEntries(
 export const UPLOAD_MODES = ["local-only", "manual", "automatic"] as const;
 export type UploadMode = (typeof UPLOAD_MODES)[number];
 
+/** Whether a fresh screenshot is written to the Library when its editor opens, or on Save. */
+export const SCREENSHOT_SAVE_MODES = ["auto", "manual"] as const;
+export type ScreenshotSaveMode = (typeof SCREENSHOT_SAVE_MODES)[number];
+
 export interface AppSettings {
   theme: Theme;
   /** UI language for every renderer window + the native tray. */
@@ -124,6 +128,12 @@ export interface AppSettings {
    * it out via content protection (`NSWindowSharingNone`).
    */
   showBarInRecording: boolean;
+  /**
+   * "auto" (default): a capture is saved to the Library the moment its editor opens,
+   * like recordings; Save then overwrites that item. "manual": kept in memory until
+   * Save (backlog/settings-screenshots).
+   */
+  screenshotSave: ScreenshotSaveMode;
   /** User-rebindable global keyboard shortcuts (Electron accelerator strings). */
   shortcuts: ShortcutSettings;
   /**
@@ -146,6 +156,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   showInDock: true,
   recordingQuality: DEFAULT_QUALITY,
   showBarInRecording: false,
+  screenshotSave: "auto",
   shortcuts: DEFAULT_SHORTCUTS,
   deviceId: "",
   uploadMode: "local-only",

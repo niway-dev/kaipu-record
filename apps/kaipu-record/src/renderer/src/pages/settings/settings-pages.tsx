@@ -27,6 +27,7 @@ import { useAppSettings } from "./use-app-settings";
 import { LanguageSettings } from "./language-settings";
 import { ThemeSettings } from "./theme-settings";
 import { RecordingQualitySettings } from "./recording-quality-settings";
+import { ScreenshotSaveSettings } from "./screenshot-save-settings";
 import { Section, SettingsPanel } from "./settings-panel";
 import styles from "./settings-page.module.css";
 
@@ -248,6 +249,18 @@ export function AppSettingsPage(): React.JSX.Element {
             </Button>
           }
         />
+      </Section>
+    </SettingsPanel>
+  );
+}
+
+/** Screenshots — its own page in the settings nav, right under Recording. */
+export function ScreenshotsSettingsPage(): React.JSX.Element {
+  const t = useTranslations("settings");
+  return (
+    <SettingsPanel title={t("screenshots")} subtitle={t("screenshotsDescription")}>
+      <Section title={t("screenshots")}>
+        <ScreenshotSaveSettings />
       </Section>
     </SettingsPanel>
   );

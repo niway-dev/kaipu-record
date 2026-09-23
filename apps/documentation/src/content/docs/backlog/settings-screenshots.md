@@ -5,11 +5,11 @@ description: "Proposal: a Screenshots section in Settings with one toggle — sa
 
 # Settings → Screenshots
 
-> **Status: 🔵 Proposed** (2026-09-23). Owner request: a Screenshots section in Settings
-> with a control that decides whether a screenshot is saved automatically or requires a
-> click on Save. Parent: [screenshot save strategy](./screenshot-save-strategy) (the
-> tradeoff analysis; "auto-save vs explicit save" is still 🔵 open there) ·
-> [settings roadmap](./settings-roadmap).
+> **Status: 🟢 Ready to validate — implemented in [#155](https://github.com/csdev19/kaipu-record-monorepo/pull/155) (2026-09-23)**.
+> Owner request: a Screenshots section in Settings with a control that decides whether a
+> screenshot is saved automatically or requires a click on Save. Parent:
+> [screenshot save strategy](./screenshot-save-strategy) (the tradeoff analysis;
+> "auto-save vs explicit save" is still 🔵 open there) · [settings roadmap](./settings-roadmap).
 
 ## Context
 
