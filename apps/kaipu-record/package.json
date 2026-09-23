@@ -18,7 +18,7 @@
     "start": "electron-vite preview",
     "dev": "bash ../../scripts/with-env.sh --tags kaipu-record -- electron-vite dev",
     "build": "bun run check-types && electron-vite build",
-    "postinstall": "electron-builder install-app-deps",
+    "postinstall": "bash ../../scripts/install-app-deps.sh",
     "build:unpack": "bun run build && electron-builder --dir",
     "build:win": "bun run build && electron-builder --win",
     "build:mac": "bash scripts/build-mac-local.sh",
