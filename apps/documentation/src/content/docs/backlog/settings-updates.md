@@ -29,6 +29,11 @@ release job finished. What the owner hit is the design, not a bug:
 So "waiting for some action" is exactly right: it is waiting for the next 6-hour tick,
 and even when it does act, nothing shows until the download is done.
 
+The deeper mismatch: Kaipu is a **menu-bar resident app, meant to stay open for days**.
+"Check at launch" is the wrong primary trigger for something that rarely launches. The
+manual button and the focus-throttled check are the paths that will actually run; the
+6-hour timer is the fallback, not the design.
+
 ## Proposal
 
 An **Updates** section on the Settings → App page (or its own sidebar entry if it grows):
