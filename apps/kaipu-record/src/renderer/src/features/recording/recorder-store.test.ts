@@ -201,6 +201,25 @@ describe("recorder-store", () => {
     unsubscribe();
   });
 
+  it("finalizes with the unfloored elapsed time in durationMs, not durationSeconds * 1000", async () => {
+    const engine = fakeEngine();
+    startEngineMock.mockResolvedValue(engine);
+
+    store.requestStartRecording(() => input);
+    await vi.advanceTimersByTimeAsync(3000); // countdown → recording starts
+    // Recording for 2.4 s: durationSeconds floors to 2, but durationMs must carry
+    // the real 2400 ms — the cursor tracker's tail cut needs the unfloored value
+    // (bug fix: RecordingFinalizeMeta.durationMs).
+    await vi.advanceTimersByTimeAsync(2400);
+
+    await stopAndSettle();
+
+    expect(window.electronAPI.recordingFinalize).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ durationSeconds: 2, durationMs: 2400 }),
+    );
+  });
+
   it("tears down and restores the window when the engine fails mid-recording", async () => {
     let onError: ((error: unknown) => void) | undefined;
     startEngineMock.mockImplementation(async (opts) => {

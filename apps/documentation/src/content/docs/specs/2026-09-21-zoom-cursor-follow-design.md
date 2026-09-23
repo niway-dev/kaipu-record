@@ -5,10 +5,16 @@ description: "Automatic cursor-following zoom for screen recordings: record clea
 
 # Zoom cursor-follow — design
 
-> **Status: 🔵 Proposed design** (2026-09-21). Nothing in this spec is implemented yet.
-> It extends the shipped [video editor](/specs/2026-07-03-video-editor-design/) and is
-> tracked in [backlog/video-editor-zoom-blur-cover](/backlog/video-editor-zoom-blur-cover/).
-> The screen design (states, tracks, properties panel, blur/cover) is in the
+> **Status: 🟡 In progress** (2026-09-22). Nothing on this spec's literal design is on
+> `main`. The [audit](/plans/video-editor-v2/00-audit/) found several places this spec is
+> not executable as written (wrong clock source, a "stateless" camera that is also
+> damped, etc.) and replaced its PR plan with deep-dive documents `01`–`12`, each with
+> its own corrected design; **those** are what got implemented, on unmerged feature
+> branches, not this spec directly. See
+> [backlog/video-editor-zoom-blur-cover](/backlog/video-editor-zoom-blur-cover/) for the
+> per-PR branch table — none of it is merged or validated in production. It extends the
+> shipped [video editor](/specs/2026-07-03-video-editor-design/). The screen design
+> (states, tracks, properties panel, blur/cover) is in the
 > [UI spec](/specs/2026-09-21-video-editor-zoom-blur-cover-design/); the interactive
 > mockup lives at [/mockups/zoom-editor.html](/mockups/zoom-editor.html).
 

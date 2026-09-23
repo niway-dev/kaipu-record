@@ -74,6 +74,8 @@ describe("ZoomInspector", () => {
         index={2}
         layout={layout}
         zooms={zooms()}
+        sourceHeight={1080}
+        anchorNow={() => ({ x: 0.5, y: 0.5 })}
         onRemoved={vi.fn()}
       />,
     );
@@ -83,23 +85,71 @@ describe("ZoomInspector", () => {
     expect(screen.getByRole("slider", { name: "Level" })).toBeInTheDocument();
     expect(screen.getByRole("slider", { name: "Smoothness" })).toBeInTheDocument();
   });
-  it("has no Mode control until PR 7 supplies the camera path", () => {
+  it("locks at the camera box's current position, not the frame centre", () => {
+    const z = zooms();
+    render(
+      <ZoomInspector
+        segment={SEGMENT}
+        index={1}
+        layout={layout}
+        zooms={z}
+        sourceHeight={1080}
+        anchorNow={() => ({ x: 0.82, y: 0.31 })}
+        onRemoved={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Lock here/ }));
+    expect(z.commitPatch).toHaveBeenCalledWith("z1", {
+      mode: "fixed",
+      anchor: { x: 0.82, y: 0.31 },
+    });
+    expect(screen.getByText(/200 ms before each click/)).toBeInTheDocument();
+  });
+  it("shows the soft-zoom hint when the scale upsamples the source below 720 px", () => {
+    // 1080 / 2.1 ≈ 514 px < 720.
     render(
       <ZoomInspector
         segment={SEGMENT}
         index={1}
         layout={layout}
         zooms={zooms()}
+        sourceHeight={1080}
+        anchorNow={() => ({ x: 0.5, y: 0.5 })}
         onRemoved={vi.fn()}
       />,
     );
-    expect(screen.queryByRole("button", { name: /Lock here/ })).toBeNull();
+    expect(screen.getByText(/text may look soft/)).toBeInTheDocument();
   });
+
+  it("omits the soft-zoom hint at a scale that stays sharp", () => {
+    // 1080 / 1.2 = 900 px >= 720.
+    render(
+      <ZoomInspector
+        segment={{ ...SEGMENT, scale: 1.2 }}
+        index={1}
+        layout={layout}
+        zooms={zooms()}
+        sourceHeight={1080}
+        anchorNow={() => ({ x: 0.5, y: 0.5 })}
+        onRemoved={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText(/text may look soft/)).toBeNull();
+  });
+
   it("removes and clears the selection", () => {
     const z = zooms();
     const onRemoved = vi.fn();
     render(
-      <ZoomInspector segment={SEGMENT} index={1} layout={layout} zooms={z} onRemoved={onRemoved} />,
+      <ZoomInspector
+        segment={SEGMENT}
+        index={1}
+        layout={layout}
+        zooms={z}
+        sourceHeight={1080}
+        anchorNow={() => ({ x: 0.5, y: 0.5 })}
+        onRemoved={onRemoved}
+      />,
     );
     fireEvent.click(screen.getByRole("button", { name: /Remove this zoom/ }));
     expect(z.remove).toHaveBeenCalledWith("z1");

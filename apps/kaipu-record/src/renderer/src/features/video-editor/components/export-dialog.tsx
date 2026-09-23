@@ -68,6 +68,8 @@ export function ExportDialog({
       >
         <div className={styles.progressFill} style={{ width: `${percent}%` }} />
       </div>
+      {/* v2: the export burns zoom/blur/cover in; the original on disk keeps everything. */}
+      <ModalText>{t("exportOriginalNote")}</ModalText>
       <ModalText>{percent}%</ModalText>
       <ModalActions>
         <ModalButton variant="ghost" onClick={onCancel}>

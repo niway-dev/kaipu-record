@@ -1,5 +1,10 @@
 import { desktopCapturer, ipcMain, shell, systemPreferences } from "electron";
-import { IPC_CHANNELS, type PermissionKind, type PermissionStatus } from "@shared/types";
+import {
+  IPC_CHANNELS,
+  type AccessibilityStatus,
+  type PermissionKind,
+  type PermissionStatus,
+} from "@shared/types";
 
 /**
  * Registers the OS media-permission IPC handlers used by the onboarding flow and
@@ -36,8 +41,6 @@ const WINDOWS_PANES: PanePerKind = {
 
 const ACCESSIBILITY_PANE =
   "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility";
-
-type AccessibilityStatus = "granted" | "denied" | "not-required";
 
 function isMac(): boolean {
   return process.platform === "darwin";

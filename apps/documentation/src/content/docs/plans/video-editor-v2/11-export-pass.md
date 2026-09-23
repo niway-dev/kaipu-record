@@ -7,9 +7,11 @@ sidebar:
 
 # 11 — Export pass
 
-> **Status: 🔵 Proposed** (2026-09-21). PR 9 ("Export pass") in the
+> **Status: 🟡 In progress** (2026-09-22). PR 9 ("Export pass") in the
 > [audit](/plans/video-editor-v2/00-audit/). Requires PR 8 and PR 1. Fixes the export
 > half of W15; the capture-resolution half is [12](/plans/video-editor-v2/12-capture-resolution-and-cursor-sprite/).
+> Implemented on `feat/video-editor-v2-export-pass` — not merged, not validated in
+> production; see the [backlog PR table](/backlog/video-editor-zoom-blur-cover/).
 
 ## Corrected facts
 
@@ -965,7 +967,7 @@ places `useCameraPath` right after `useZoomEditing` for this reason.
 
 ### Task 5 — verify
 
-- [ ] Checks (audit rule 4). **Expected after PRs 1–9**, not something this 🔵 Proposed doc
+- [ ] Checks (audit rule 4). **Expected after PRs 1–9**, not something this 🟡 In progress doc
       has already observed on `main`: with the chain of diffs in docs 01–11 applied cleanly,
       in order, `check-types:web` and `check-types:node` come back clean, `oxfmt --check` passes,
       and the full suite is green — ~1,024 tests across the `main` and `renderer` vitest
@@ -986,7 +988,7 @@ places `useCameraPath` right after `useZoomEditing` for this reason.
       is a solid block, and no covered content is visible on it (accepted, see Decisions).
 
 Housekeeping: [09 § Task 6](/plans/video-editor-v2/09-preview-compositing/) carries the same
-"Verified before publishing: … tests" wording inside an unchecked box on a 🔵 Proposed doc.
+"Verified before publishing: … tests" wording inside an unchecked box on a 🟡 In progress doc.
 It should be rephrased as an expectation the way this section now is — that edit belongs to
 whoever owns doc 09, not to this PR.
 

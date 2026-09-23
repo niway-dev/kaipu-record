@@ -77,6 +77,15 @@ Use this exact format:
 {2-3 sentences: user problem/business need → solution at high level.
 Start with WHY, not WHAT.}
 
+## What to review
+
+{3-5 entries, ordered by risk. Each anchored to `file.ts:NN`.}
+
+1. **`path/to/file.ts:NN` — the claim in one line.** What the reviewer should
+   decide, and what makes it non-obvious.
+
+**Safe to skim:** {generated files, i18n pairs, docs, tests that restate the code}
+
 ## Changes
 
 | File           | Change            |
@@ -111,6 +120,8 @@ Start with WHY, not WHAT.}
 Verify:
 
 - [ ] Description starts with user need, not code details
+- [ ] "What to review" exists, is ordered by risk, and every entry cites `file:line`
+- [ ] "What to review" names what is safe to skim
 - [ ] Changes table covers all modified files
 - [ ] Technical decisions only include non-obvious choices
 - [ ] Steps to reproduce start from a clean state
@@ -150,6 +161,28 @@ Ask:
 - Good: "Users needed a way to save recordings locally before uploading.
   This PR adds a Download button that opens a native save dialog."
 - Bad: "Added a button and IPC handler."
+
+### What to review section
+
+This is the section that decides whether a large PR gets reviewed or rubber-stamped.
+Write it as a reading route, not a summary.
+
+- **Order by risk**, not by directory or by the order you wrote the code.
+- **Anchor to `file.ts:NN`.** A feature name sends the reviewer hunting; a line
+  number puts them in front of the code.
+- **Say what to decide, not what you did.** "Check whether the step index can
+  outrun the array once `status` flips" beats "added an Accessibility step". The
+  reviewer's job is judgement, not re-reading the diff.
+- **Name what is safe to skim, and why** — generated files, i18n pairs that were
+  key-checked, docs, tests that only restate the code. Permission to skip is half
+  the speed-up.
+- **Be honest about what the diff cannot answer.** CSS layout, GPU compositing, an
+  OS permission prompt: say it is unreviewable by reading and move it to the
+  manual checklist instead of dressing it up as a code concern.
+- **Flag anything you changed that the reader would assume is cosmetic** but is
+  not — a test-helper fix, a default that changed, a widened type.
+- Three to five entries. A list of twelve is the same as no list. Skip the
+  section only when the PR is genuinely one obvious change.
 
 ### Technical Decisions section
 

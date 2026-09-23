@@ -7,14 +7,19 @@
  * (no pen/blur/crop).
  *
  * Coordinate space: this component is rendered as a sibling of the <video> element
- * inside PreviewStage's position:relative wrapper (see preview-stage.tsx), and
- * measures THAT wrapper via ResizeObserver — same pattern as the screenshot layer.
- * Unlike a typical object-fit:contain box, this wrapper has no explicit width/height
- * of its own (preview-stage.module.css: only max-width/max-height:100%), so as a
- * flex item it shrinks to exactly wrap the <video>'s own rendered (intrinsic-aspect)
- * box — there is no separate letterbox to account for; the wrapper's clientWidth/
- * clientHeight from the ResizeObserver ARE the video's displayed box. Overlay
- * geometry is normalized 0-1 of that box (see scene.ts).
+ * inside PreviewStage's content layer (see preview-stage.tsx) and fills it
+ * (inset: 0), measuring itself via ResizeObserver — same pattern as the screenshot
+ * layer. That layer is sized from the decoded frame's aspect ratio, so it IS the
+ * video's displayed box with no letterbox to account for, and overlay geometry is
+ * normalized 0-1 of it (see scene.ts).
+ *
+ * Since video-editor v2 the content layer also carries the camera transform. Nothing
+ * here changes: `toNorm` normalizes against this element's own
+ * getBoundingClientRect(), which is the TRANSFORMED rect, so a point under the
+ * pointer still maps to the right place in the original frame while zoomed. `size`
+ * comes from clientWidth/clientHeight (untransformed), and is used only for handle
+ * geometry and hit tolerance — those stay constant in normalized units and simply
+ * read bigger on screen as the camera zooms in.
  *
  * Deviation from the screenshot layer (see plan brief): a draw gesture's live draft
  * is kept in local component state only (never routed through onDraft/onInteractStart)

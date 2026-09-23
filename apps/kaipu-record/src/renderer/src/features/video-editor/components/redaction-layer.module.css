@@ -1,0 +1,34 @@
+/* Covers the content layer exactly (same box as the video), never takes pointer input —
+   selection/editing of regions happens in the stage chrome (region-editor). */
+.layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.region,
+.cover {
+  position: absolute;
+  overflow: hidden;
+}
+
+.cover {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.label {
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 4px;
+}
+
+.pixels {
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}

@@ -16,6 +16,7 @@ function renderToolbar(overrides: Partial<EditorToolbarProps> = {}): EditorToolb
     tool: "select",
     onToolChange: vi.fn(),
     onAddZoom: vi.fn(),
+    privacyDisabled: false,
     onExport: vi.fn(),
     exportDisabled: false,
     ...overrides,
@@ -121,5 +122,43 @@ describe("EditorToolbar — v2 camera group", () => {
   it("shows the hint of the active tool", () => {
     renderToolbar({ tool: "arrow" });
     expect(screen.getByText("Drag on the preview to draw an arrow.")).toBeInTheDocument();
+  });
+});
+
+describe("EditorToolbar — v2 tooltip shortcuts (PR 10 polish)", () => {
+  it("appends the shortcut to every button with one, without changing its accessible name", () => {
+    renderToolbar();
+    expect(screen.getByRole("button", { name: "Select" })).toHaveAttribute("title", "Select (V)");
+    expect(screen.getByRole("button", { name: "Box" })).toHaveAttribute("title", "Box (R)");
+    expect(screen.getByRole("button", { name: "Arrow" })).toHaveAttribute("title", "Arrow (A)");
+    expect(screen.getByRole("button", { name: "Text" })).toHaveAttribute("title", "Text (T)");
+    expect(screen.getByRole("button", { name: "Zoom" }).getAttribute("title")).toMatch(/\(Z\)$/);
+    expect(screen.getByRole("button", { name: "Blur" })).toHaveAttribute("title", "Blur (B)");
+    expect(screen.getByRole("button", { name: "Cover" })).toHaveAttribute("title", "Cover (C)");
+    expect(screen.getByRole("button", { name: "Undo" })).toHaveAttribute("title", "Undo (⌘Z)");
+    expect(screen.getByRole("button", { name: "Redo" })).toHaveAttribute("title", "Redo (⌘⇧Z)");
+    expect(screen.getByRole("button", { name: "Split here" })).toHaveAttribute(
+      "title",
+      "Split here (S)",
+    );
+    expect(screen.getByRole("button", { name: "Delete segment" })).toHaveAttribute(
+      "title",
+      "Delete segment (⌫)",
+    );
+  });
+});
+
+describe("EditorToolbar — v2 privacy tools", () => {
+  it("activates Blur and Cover as tools", () => {
+    const props = renderToolbar();
+    fireEvent.click(screen.getByRole("button", { name: "Blur" }));
+    expect(props.onToolChange).toHaveBeenCalledWith("blur");
+    fireEvent.click(screen.getByRole("button", { name: "Cover" }));
+    expect(props.onToolChange).toHaveBeenCalledWith("cover");
+  });
+
+  it("disables them over a slide", () => {
+    renderToolbar({ privacyDisabled: true });
+    expect(screen.getByRole("button", { name: "Blur" })).toBeDisabled();
   });
 });

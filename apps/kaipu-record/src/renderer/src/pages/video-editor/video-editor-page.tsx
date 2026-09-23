@@ -5,6 +5,7 @@ import {
   Minimize2,
   Pause,
   Play,
+  Shield,
   Trash2,
   TriangleAlert,
   Volume2,
@@ -28,6 +29,7 @@ import {
   ModalText,
   ModalTitle,
 } from "@renderer/ui/modal";
+import { Badge } from "@renderer/ui/badge";
 import {
   boundaryIndexAt,
   clampOverlays,
@@ -54,11 +56,34 @@ import {
 } from "@renderer/features/video-editor/source-time";
 import { activityMarks } from "@renderer/features/video-editor/zoom/detect-zoom-segments";
 import { useZoomEditing } from "@renderer/features/video-editor/zoom/use-zoom-editing";
+import { seekTargetForSegment } from "@renderer/features/video-editor/zoom/select-seek";
+import { focusInspectorFirstControl } from "@renderer/features/video-editor/focus-inspector";
 import { ActivityLane } from "@renderer/features/video-editor/components/activity-lane";
 import { ZoomLane } from "@renderer/features/video-editor/components/zoom-lane";
 import { EditorInspector } from "@renderer/features/video-editor/components/inspector/editor-inspector";
 import { DetectionPanel } from "@renderer/features/video-editor/components/inspector/detection-panel";
 import { ZoomInspector } from "@renderer/features/video-editor/components/inspector/zoom-inspector";
+import {
+  AnnotationDefaultsPanel,
+  AnnotationInspector,
+} from "@renderer/features/video-editor/components/inspector/annotation-inspector";
+import { boxCenterAt, CameraBox } from "@renderer/features/video-editor/components/camera-box";
+import { HoldOriginalButton } from "@renderer/features/video-editor/components/hold-original-button";
+import { useCameraPath } from "@renderer/features/video-editor/zoom/use-camera-path";
+import { useCameraPreview } from "@renderer/features/video-editor/zoom/use-camera-preview";
+import {
+  isPrivacyTool,
+  type EditorTool,
+} from "@renderer/features/video-editor/annotations/video-tools";
+import type { NormRect } from "@renderer/features/video-editor/privacy/redaction";
+import { useRedactionEditing } from "@renderer/features/video-editor/privacy/use-redaction-editing";
+import { RedactionLayer } from "@renderer/features/video-editor/components/redaction-layer";
+import { RegionDrawer } from "@renderer/features/video-editor/components/region-drawer";
+import { RegionEditor } from "@renderer/features/video-editor/components/region-editor";
+import { PrivacyLane } from "@renderer/features/video-editor/components/privacy-lane";
+import { BlurInspector } from "@renderer/features/video-editor/components/inspector/blur-inspector";
+import { CoverInspector } from "@renderer/features/video-editor/components/inspector/cover-inspector";
+import { formatPrecise } from "@renderer/features/video-editor/components/inspector/format";
 import { useSessionAutosave } from "@renderer/features/video-editor/use-session-autosave";
 import { usePreviewPlayback } from "@renderer/features/video-editor/use-preview-playback";
 import { useSourceThumbnails } from "@renderer/features/video-editor/use-source-thumbnails";
@@ -68,7 +93,6 @@ import { useVideoExport } from "@renderer/features/video-editor/export/use-video
 import { VideoAnnotationLayer } from "@renderer/features/video-editor/annotations/video-annotation-layer";
 import { EditorToolbar } from "@renderer/features/video-editor/components/editor-toolbar";
 import { ExportDialog } from "@renderer/features/video-editor/components/export-dialog";
-import { OverlayOptions } from "@renderer/features/video-editor/components/overlay-options";
 import { PreviewStage } from "@renderer/features/video-editor/components/preview-stage";
 import { TimelineStrip } from "@renderer/features/video-editor/components/timeline-strip";
 import { showToast } from "@renderer/ui/toast-store";
@@ -92,6 +116,46 @@ function isVideoEditorSource(value: unknown): value is VideoEditorSource {
     typeof v.durationSeconds === "number" &&
     v.durationSeconds > 0
   );
+}
+
+/**
+ * Keyboard shortcuts for the tool group (plans/video-editor-v2/08 § PR 10 polish),
+ * mirroring EditorToolbar's own tooltips: V/R/A/T pick an annotation tool, B/C a
+ * privacy drawing mode. Z (add/select a zoom) is handled separately — it is an action,
+ * not a tool (see editor-toolbar.tsx's TOOL_HINT comment).
+ */
+const PRIVACY_SHORTCUT_TOOLS = new Set<EditorTool>(["blur", "cover"]);
+
+// A Map, not an object literal: `"constructor" in {}` is true and
+// `({})["constructor"]` returns a function, so an object lookup keyed by arbitrary
+// `e.key` values resolves inherited members as if they were tools. No real keyboard
+// produces those keys, but the lookup should not be the thing standing between us and
+// that — a Map has no prototype chain to walk.
+const TOOL_SHORTCUT_KEYS = new Map<string, EditorTool>([
+  ["v", "select"],
+  ["r", "box"],
+  ["a", "arrow"],
+  ["t", "text"],
+  ["b", "blur"],
+  ["c", "cover"],
+]);
+
+/**
+ * Which tool a one-letter shortcut selects, or null when this shortcut must not fire.
+ *
+ * The gate exists because the toolbar disables Blur/Cover on a slide
+ * (`privacyDisabled={onSlide}`) and the keyboard has to agree with it: there is no
+ * footage to redact under an image, so arming the tool would leave the user drawing
+ * into a toast. Split and delete already honour their own disabled flags.
+ *
+ * Pure and exported so the policy is testable without driving the playhead onto a
+ * slide through the timeline UI.
+ */
+export function toolForShortcut(key: string, opts: { onSlide: boolean }): EditorTool | null {
+  const tool = TOOL_SHORTCUT_KEYS.get(key);
+  if (!tool) return null;
+  if (PRIVACY_SHORTCUT_TOOLS.has(tool) && opts.onSlide) return null;
+  return tool;
 }
 
 /** Target is a text field — don't hijack Space for play/pause while typing. */
@@ -288,6 +352,14 @@ function VideoEditor({
     sourceDuration: source.durationSeconds,
     cursorTrack,
   });
+  const redactionEdits = useRedactionEditing({
+    controller,
+    layout,
+    sourceDuration: source.durationSeconds,
+  });
+  // One camera simulation shared by the preview (useCameraPreview) and the export (doc 05).
+  // Declared before any callback that closes over it (handleExport).
+  const cameraPath = useCameraPath(scene.zoomSegments, cursorTrack, source.durationSeconds);
   // Evidence for the Activity lane — depends only on the (immutable) track.
   const activity = useMemo(
     () => (cursorTrack ? activityMarks(cursorTrack, source.durationSeconds) : []),
@@ -476,6 +548,7 @@ function VideoEditor({
       videoHeight: video.videoHeight,
       previewWidth: video.clientWidth,
       slideAssets: assetStoreRef.current,
+      cameraPath,
       onSaved: async (recording) => {
         // This save supersedes whatever the autosave still had queued; dropping it
         // avoids a second write of the same scene right before unmount.
@@ -502,7 +575,17 @@ function VideoEditor({
         navigate(`/library/${recording.assetId}`);
       },
     });
-  }, [playback, videoExport, scene, source, controller, navigate, assetStoreRef, autosave]);
+  }, [
+    playback,
+    videoExport,
+    scene,
+    source,
+    controller,
+    navigate,
+    assetStoreRef,
+    autosave,
+    cameraPath,
+  ]);
 
   const handleDeleteOverlay = useCallback(() => {
     // Same rationale as handleDeleteSelected: don't touch scene/selection while a
@@ -600,15 +683,27 @@ function VideoEditor({
     [controller],
   );
 
-  // Selecting a zoom also moves the playhead to the middle of its first visible piece
-  // (UI spec § 6.3), so the preview shows what the zoom does.
+  // Selecting a zoom moves the playhead to the middle of its first visible piece (UI
+  // spec § 6.3), so the preview shows what the zoom does — but ONLY when the playhead
+  // isn't already inside the segment: seeking unconditionally threw away a frame the
+  // user had just scrubbed to while positioning the camera box (backlog/video-editor-
+  // camera-box-ux § 2, candidate cause A; seekTargetForSegment carries the full
+  // rationale and is unit-tested on its own in select-seek.test.ts).
+  //
+  // Regardless of whether we seek, focus moves into the inspector on the next frame —
+  // the lane's own <button> would otherwise keep focus after the click, which is what
+  // made the editor look like it "lost focus" (same backlog entry, candidate cause B).
+  // Deferred to requestAnimationFrame so it runs after React commits the ZoomInspector
+  // for the new selection, per focus-inspector.ts's documented contract.
   const handleSelectZoom = useCallback(
     (id: string) => {
       selectKind("zoom", id);
       const segment = controller.scene.zoomSegments.find((z) => z.id === id);
-      if (!segment) return;
-      const [first] = sourceRangeToTimelineBlocks(layout, segment.start, segment.end);
-      if (first) playback.seek((first.timelineStart + first.timelineEnd) / 2);
+      if (segment) {
+        const target = seekTargetForSegment(layout, playback.timelineTime, segment);
+        if (target !== null) playback.seek(target);
+      }
+      requestAnimationFrame(() => focusInspectorFirstControl());
     },
     [selectKind, controller, layout, playback],
   );
@@ -640,6 +735,94 @@ function VideoEditor({
   const selectedZoom = selectedZoomId
     ? (zooms.visibleZooms.find((z) => z.id === selectedZoomId) ?? null)
     : null;
+  const selectedOverlay = selectedOverlayId
+    ? (scene.overlays.find((o) => o.id === selectedOverlayId) ?? null)
+    : null;
+
+  // Privacy (doc 10). While a privacy tool is active or a region is selected the preview
+  // shows the unzoomed original frame, so drawing/editing maps 1:1 to frame coordinates.
+  const privacyTool = isPrivacyTool(videoTools.tool) ? videoTools.tool : null;
+  const onSlide = playback.activeSlideId !== null;
+  const [draftRegion, setDraftRegion] = useState<NormRect | null>(null);
+  const selectedRedaction = selectedRedactionId
+    ? (redactionEdits.visibleRedactions.find((r) => r.id === selectedRedactionId) ?? null)
+    : null;
+  /** Timeline range covered by a source range's visible pieces (inspector + draw badge). */
+  const timelineRangeOf = useCallback(
+    (start: number, end: number): { from: number; to: number } => {
+      const blocks = sourceRangeToTimelineBlocks(layout, start, end);
+      return {
+        from: blocks[0]?.timelineStart ?? 0,
+        to: blocks[blocks.length - 1]?.timelineEnd ?? 0,
+      };
+    },
+    [layout],
+  );
+  const drawWindow = privacyTool ? redactionEdits.windowAt(playback.timelineTime) : null;
+  const drawRange = drawWindow ? timelineRangeOf(drawWindow.start, drawWindow.end) : null;
+
+  const handleToolChange = useCallback(
+    (tool: EditorTool) => {
+      // Drawing a region starts from a clean slate: no zoom/region box competing with it.
+      if (isPrivacyTool(tool)) clearSelection();
+      videoTools.setTool(tool);
+    },
+    [clearSelection, videoTools],
+  );
+
+  const handleCreateRegion = useCallback(
+    (rect: NormRect) => {
+      if (!privacyTool) return;
+      const result = redactionEdits.add(privacyTool, rect, playback.timelineTime);
+      if (result.ok) {
+        // UI spec § 4.4: on release the region is created, selected, and the tool returns to Select.
+        selectKind("redaction", result.id);
+        videoTools.setTool("select");
+      } else if (result.reason === "on-slide") {
+        showToast({ message: t("privacyNotOnSlide") });
+      }
+    },
+    [privacyTool, redactionEdits, playback.timelineTime, selectKind, videoTools, t],
+  );
+
+  const handleSelectRedaction = useCallback(
+    (id: string) => {
+      selectKind("redaction", id);
+      const r = controller.scene.redactions.find((x) => x.id === id);
+      if (!r) return;
+      const [first] = sourceRangeToTimelineBlocks(layout, r.start, r.end);
+      if (first) playback.seek((first.timelineStart + first.timelineEnd) / 2);
+    },
+    [selectKind, controller, layout, playback],
+  );
+
+  const handleRemoveRedaction = useCallback(
+    (id: string) => {
+      redactionEdits.remove(id);
+      selectKind("redaction", null);
+    },
+    [redactionEdits, selectKind],
+  );
+
+  // Preview camera (doc 09). Result view applies the camera; selecting a zoom switches to
+  // the zoom-edit view (full frame + camera box); holding "original" shows the raw frame.
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const [holdingOriginal, setHoldingOriginal] = useState(false);
+  // Decoded source height, as STATE. It feeds the soft-zoom hint, and it cannot be read
+  // off `playback.videoRef.current.videoHeight` during render: that is 0 until metadata
+  // lands and changing it never re-renders, so the hint would appear or not depending on
+  // whether some unrelated render happened to arrive after the metadata did.
+  const [sourceHeight, setSourceHeight] = useState(0);
+  useCameraPreview(
+    playback.videoRef,
+    contentRef,
+    cameraPath,
+    !holdingOriginal &&
+      selectedZoom === null &&
+      selectedRedaction === null &&
+      privacyTool === null &&
+      !onSlide,
+  );
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -663,6 +846,23 @@ function VideoEditor({
         if (!splitDisabled) handleSplit();
         return;
       }
+      // Tool shortcuts (plans/video-editor-v2/08 § PR 10 polish): V/R/A/T pick an
+      // annotation tool, Z adds/selects a zoom at the playhead, B/C pick a privacy
+      // drawing mode. Matches EditorToolbar's own tooltips (V R A T / Z / B C).
+      const key = e.key.toLowerCase();
+      if (!isMod && TOOL_SHORTCUT_KEYS.has(key)) {
+        const next = toolForShortcut(key, { onSlide });
+        // Through handleToolChange, not videoTools.setTool: the toolbar path clears
+        // the selection before arming a privacy tool, and the keyboard must match —
+        // otherwise B with a zoom selected leaves the RegionDrawer stacked over the
+        // camera box (equal z-index, later sibling wins) and the box is unreachable.
+        if (next) handleToolChange(next);
+        return;
+      }
+      if (!isMod && key === "z") {
+        handleAddZoom();
+        return;
+      }
       // `!document.fullscreenElement`: in fullscreen the browser handles Esc itself to
       // leave it — clearing the selection at the same time would be a second, invisible
       // action the user never asked for.
@@ -675,7 +875,8 @@ function VideoEditor({
       // Cmd/Ctrl+Backspace is a common "delete line/word" chord in text contexts —
       // require !isMod so it doesn't also delete an overlay or a segment.
       if (!isMod && (e.key === "Delete" || e.key === "Backspace")) {
-        if (selectedZoomId) handleRemoveZoom(selectedZoomId);
+        if (selectedRedactionId) handleRemoveRedaction(selectedRedactionId);
+        else if (selectedZoomId) handleRemoveZoom(selectedZoomId);
         else if (selectedOverlayId) handleDeleteOverlay();
         else if (!deleteDisabled) handleDeleteSelected();
       }
@@ -697,12 +898,23 @@ function VideoEditor({
     selectedZoomId,
     selectedRedactionId,
     handleRemoveZoom,
+    handleRemoveRedaction,
+    videoTools,
+    handleToolChange,
+    handleAddZoom,
+    onSlide,
   ]);
 
   return (
     <div className={styles.page}>
       <header className={styles.header}>
         <h1 className={styles.title}>{source.title}</h1>
+        {/* Not interactive — a reminder, not a control (plans/video-editor-v2/08 § PR 10
+            polish, W12's "ORIGINAL UNTOUCHED" pill). The original recording on disk and
+            its library thumbnail are untouched by every edit in this page. */}
+        <Badge variant="neutral" className={styles.originalPill}>
+          <Shield size={12} strokeWidth={2} /> {t("originalUntouched")}
+        </Badge>
       </header>
       <EditorToolbar
         canUndo={controller.canUndo}
@@ -715,24 +927,14 @@ function VideoEditor({
         deleteDisabled={deleteDisabled}
         onAddImage={handleAddImage}
         tool={videoTools.tool}
-        onToolChange={videoTools.setTool}
+        onToolChange={handleToolChange}
         onAddZoom={handleAddZoom}
+        privacyDisabled={onSlide}
         onExport={handleExport}
         exportDisabled={videoExport.status === "exporting" || scene.items.length === 0}
       />
       <div className={styles.workspace}>
         <main className={styles.stage} ref={stageRef}>
-          {/* Floating per-tool options (Excalidraw-style), pinned to the stage so it
-              doesn't shift with the video's own size. */}
-          <div className={styles.optionsFloat}>
-            <OverlayOptions
-              tools={videoTools}
-              overlays={scene.overlays}
-              selectedId={selectedOverlayId}
-              onCommitOverlay={handleCommitOverlay}
-              onDeleteSelected={handleDeleteOverlay}
-            />
-          </div>
           {/* Video region: 1fr grid row — centers PreviewStage and constrains its height
               so the transport bar below is never clipped regardless of video aspect ratio.
               In fullscreen mode the 50 vh cap is lifted via an inline style override. */}
@@ -745,41 +947,91 @@ function VideoEditor({
               mediaUrl={mediaUrl}
               slideUrl={slideUrl}
               expanded={isFullscreen}
-              overlay={
-                <VideoAnnotationLayer
-                  overlays={scene.overlays}
-                  visibleIds={visibleIds}
-                  selectedId={selectedOverlayId}
-                  // A click on the canvas background deselects EVERYTHING (spec § 10.5),
-                  // not just the annotation — otherwise a selected zoom would survive it
-                  // and the inspector would keep showing the Zoom panel. The same click
-                  // still toggles play/pause through onBackgroundClick below.
-                  onSelect={(id) => (id === null ? clearSelection() : selectKind("overlay", id))}
-                  tool={videoTools.tool}
-                  toolState={{
-                    color: videoTools.color,
-                    stroke: videoTools.stroke,
-                    textSize: videoTools.textSize,
-                  }}
-                  playheadTime={playback.timelineTime}
-                  timelineDuration={playback.duration}
-                  onDraft={(draft) =>
-                    controller.updateLive({
-                      ...scene,
-                      overlays: upsertOverlay(scene.overlays, draft),
-                    })
-                  }
-                  onCommit={(overlays) => {
-                    controller.commit({ ...scene, overlays });
-                    // Every onCommit call is a just-finished draw or text label (moves/
-                    // resizes finalize through onInteractEnd only) — auto-switch back to
-                    // select so the new overlay can be adjusted right away.
-                    videoTools.setTool("select");
-                  }}
-                  onInteractStart={controller.beginInteract}
-                  onInteractEnd={controller.endInteract}
-                  onBackgroundClick={playback.toggle}
+              contentRef={contentRef}
+              onFrameSize={({ height }) => setSourceHeight(height)}
+              underlay={
+                <RedactionLayer
+                  redactions={redactionEdits.visibleRedactions}
+                  videoRef={playback.videoRef}
+                  hidden={holdingOriginal || onSlide}
                 />
+              }
+              chrome={
+                <>
+                  {selectedZoom && !holdingOriginal && !onSlide && (
+                    <CameraBox
+                      videoRef={playback.videoRef}
+                      path={cameraPath}
+                      segment={selectedZoom}
+                      onBegin={zooms.begin}
+                      onMove={(center) => zooms.liveLock(selectedZoom.id, center)}
+                      onEnd={zooms.end}
+                    />
+                  )}
+                  {selectedRedaction && !holdingOriginal && !onSlide && (
+                    <RegionEditor
+                      rect={selectedRedaction.rect}
+                      onBegin={redactionEdits.begin}
+                      onChange={(rect) => redactionEdits.livePatch(selectedRedaction.id, { rect })}
+                      onEnd={redactionEdits.end}
+                    />
+                  )}
+                  {privacyTool && !holdingOriginal && !onSlide && (
+                    <RegionDrawer
+                      kind={privacyTool}
+                      videoRef={playback.videoRef}
+                      range={
+                        drawRange
+                          ? { from: formatPrecise(drawRange.from), to: formatPrecise(drawRange.to) }
+                          : null
+                      }
+                      onDraft={setDraftRegion}
+                      onCreate={handleCreateRegion}
+                    />
+                  )}
+                  <HoldOriginalButton holding={holdingOriginal} onHoldChange={setHoldingOriginal} />
+                </>
+              }
+              // "Hold to see original" must show the ORIGINAL: the chip says UNEDITED,
+              // so the annotation layer goes with the camera and the privacy regions.
+              // The hold owns the pointer, so no in-progress draw can be interrupted.
+              overlay={
+                !holdingOriginal && (
+                  <VideoAnnotationLayer
+                    overlays={scene.overlays}
+                    visibleIds={visibleIds}
+                    selectedId={selectedOverlayId}
+                    // A click on the canvas background deselects EVERYTHING (spec § 10.5),
+                    // not just the annotation — otherwise a selected zoom would survive it
+                    // and the inspector would keep showing the Zoom panel. The same click
+                    // still toggles play/pause through onBackgroundClick below.
+                    onSelect={(id) => (id === null ? clearSelection() : selectKind("overlay", id))}
+                    tool={isPrivacyTool(videoTools.tool) ? "select" : videoTools.tool}
+                    toolState={{
+                      color: videoTools.color,
+                      stroke: videoTools.stroke,
+                      textSize: videoTools.textSize,
+                    }}
+                    playheadTime={playback.timelineTime}
+                    timelineDuration={playback.duration}
+                    onDraft={(draft) =>
+                      controller.updateLive({
+                        ...scene,
+                        overlays: upsertOverlay(scene.overlays, draft),
+                      })
+                    }
+                    onCommit={(overlays) => {
+                      controller.commit({ ...scene, overlays });
+                      // Every onCommit call is a just-finished draw or text label (moves/
+                      // resizes finalize through onInteractEnd only) — auto-switch back to
+                      // select so the new overlay can be adjusted right away.
+                      videoTools.setTool("select");
+                    }}
+                    onInteractStart={controller.beginInteract}
+                    onInteractEnd={controller.endInteract}
+                    onBackgroundClick={playback.toggle}
+                  />
+                )
               }
             />
           </div>
@@ -817,6 +1069,11 @@ function VideoEditor({
                   {t("zoomCount", { count: zooms.visibleZooms.length })}
                 </span>
               )}
+              {redactionEdits.visibleRedactions.length > 0 && (
+                <span className={styles.counts}>
+                  {t("privacyCount", { count: redactionEdits.visibleRedactions.length })}
+                </span>
+              )}
               <button
                 type="button"
                 className={styles.fullscreenButton}
@@ -829,14 +1086,57 @@ function VideoEditor({
           </div>
         </main>
         <EditorInspector>
-          {selectedZoom ? (
+          {selectedRedaction?.kind === "blur" ? (
+            <BlurInspector
+              redaction={selectedRedaction}
+              range={timelineRangeOf(selectedRedaction.start, selectedRedaction.end)}
+              edits={redactionEdits}
+              onRemoved={() => selectKind("redaction", null)}
+            />
+          ) : selectedRedaction?.kind === "cover" ? (
+            <CoverInspector
+              redaction={selectedRedaction}
+              range={timelineRangeOf(selectedRedaction.start, selectedRedaction.end)}
+              edits={redactionEdits}
+              onRemoved={() => selectKind("redaction", null)}
+            />
+          ) : selectedZoom ? (
             <ZoomInspector
               segment={selectedZoom}
               index={zooms.visibleZooms.indexOf(selectedZoom) + 1}
               layout={layout}
               zooms={zooms}
+              sourceHeight={sourceHeight}
+              anchorNow={() =>
+                boxCenterAt(
+                  selectedZoom,
+                  cameraPath,
+                  sourceTimeAtTimeline(layout, playback.timelineTime) ?? selectedZoom.start,
+                )
+              }
               onRemoved={() => selectKind("zoom", null)}
             />
+          ) : selectedOverlay ? (
+            <AnnotationInspector
+              overlay={selectedOverlay}
+              tools={videoTools}
+              // Unlike the redaction/zoom `start`/`end` above (source time, converted via
+              // timelineRangeOf), an overlay's `start`/`end` are ALREADY timeline time
+              // (scene.ts's OverlayBase docs) — so the inspector's range is the overlay's
+              // own window verbatim, no block conversion needed.
+              range={{ start: selectedOverlay.start, end: selectedOverlay.end }}
+              onCommitOverlay={handleCommitOverlay}
+              // handleDeleteOverlay reads `selectedOverlayId` itself rather than taking an
+              // id argument, but the inspector only ever renders (and can only call
+              // onRemove) for that same selected overlay, so the ids always match — one
+              // undoable commit, no wrapper needed.
+              onRemove={handleDeleteOverlay}
+              onRemoved={() => setSelectedOverlayId(null)}
+            />
+          ) : videoTools.tool === "box" ||
+            videoTools.tool === "arrow" ||
+            videoTools.tool === "text" ? (
+            <AnnotationDefaultsPanel tools={videoTools} />
           ) : (
             <DetectionPanel
               zooms={zooms}
@@ -880,6 +1180,25 @@ function VideoEditor({
                   selectedId={selectedZoomId}
                   onSelect={handleSelectZoom}
                   onEdgeDrag={zooms.edgeDrag}
+                  hasTrack={cursorTrack !== null}
+                />
+              ),
+            },
+            {
+              key: "privacy",
+              label: t("lanePrivacy"),
+              node: (
+                <PrivacyLane
+                  redactions={redactionEdits.visibleRedactions}
+                  layout={layout}
+                  selectedId={selectedRedactionId}
+                  onSelect={handleSelectRedaction}
+                  onEdgeDrag={redactionEdits.edgeDrag}
+                  ghost={
+                    draftRegion && privacyTool && drawWindow
+                      ? { kind: privacyTool, start: drawWindow.start, end: drawWindow.end }
+                      : null
+                  }
                 />
               ),
             },
