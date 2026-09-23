@@ -33,7 +33,7 @@ import styles from "./settings-page.module.css";
 /*
  * Settings pages. Each surfaces only settings wired end to end:
  *   • General           → AppSettings.locale / theme (+ a pointer to /cloud for the account)
- *   • Permissions       → window.electronAPI permission bridge
+ *   • Permissions       → window.electronAPI permission bridge (+ macOS Accessibility)
  *   • Recording quality → AppSettings.recordingQuality → encoder
  *   • Recording         → AppSettings.showBarInRecording
  *   • Files             → the real on-disk recordings vault
@@ -87,6 +87,11 @@ const PERMISSION_ROWS: ReadonlyArray<{
 export function PermissionsSettingsPage(): React.JSX.Element {
   const t = useTranslations("settings");
   const { status, request } = usePermissions();
+  // Accessibility sits with the other three OS permissions, not in Recording where the
+  // plan first put it: it is the same kind of grant, asked the same way, and this is
+  // where a user looks for it. `request` is the Settings-side call to
+  // `requestAccessibility()`; the onboarding Accessibility step is the only other one.
+  const accessibility = useAccessibility();
   return (
     <SettingsPanel title={t("permissions")} subtitle={t("permissionsDescription")}>
       <Section title={t("permissions")}>
@@ -110,6 +115,29 @@ export function PermissionsSettingsPage(): React.JSX.Element {
             />
           );
         })}
+        {/* "not-required" off macOS, and on macOS until the first IPC round-trip
+            resolves — both correctly hide the row (plans/video-editor-v2/03 § UI:
+            "Hidden when the status is not-required"). */}
+        {accessibility.status !== "not-required" && (
+          <Row
+            icon={<MousePointerClick size={16} />}
+            label={t("clickZoomLabel")}
+            description={
+              <span
+                className={
+                  accessibility.status === "granted" ? styles.statusGranted : styles.statusDenied
+                }
+              >
+                {accessibility.status === "granted" ? t("granted") : t("notGranted")}
+              </span>
+            }
+            action={
+              <Button variant="outline" size="sm" onClick={() => void accessibility.request()}>
+                {accessibility.status === "granted" ? t("reRequest") : t("request")}
+              </Button>
+            }
+          />
+        )}
       </Section>
     </SettingsPanel>
   );
@@ -133,11 +161,6 @@ export function RecordingQualitySettingsPage(): React.JSX.Element {
 export function RecordingSettingsPage(): React.JSX.Element {
   const t = useTranslations("settings");
   const { settings, update } = useAppSettings();
-  // "not-required" off macOS, and on macOS until the first IPC round-trip resolves —
-  // both correctly hide the row (plans/video-editor-v2/03 § UI: "Hidden when the
-  // status is not-required"). `request` is the Settings-side call to
-  // `requestAccessibility()`; the onboarding Accessibility step is the only other one.
-  const accessibility = useAccessibility();
   return (
     <SettingsPanel title={t("recording")} subtitle={t("recordingDescription")}>
       <Section title={t("recording")}>
@@ -151,26 +174,6 @@ export function RecordingSettingsPage(): React.JSX.Element {
             />
           }
         />
-        {accessibility.status !== "not-required" && (
-          <Row
-            icon={<MousePointerClick size={16} />}
-            label={t("clickZoomLabel")}
-            description={
-              <span
-                className={
-                  accessibility.status === "granted" ? styles.statusGranted : styles.statusDenied
-                }
-              >
-                {accessibility.status === "granted" ? t("granted") : t("notGranted")}
-              </span>
-            }
-            action={
-              <Button variant="outline" size="sm" onClick={() => void accessibility.request()}>
-                {accessibility.status === "granted" ? t("reRequest") : t("request")}
-              </Button>
-            }
-          />
-        )}
       </Section>
     </SettingsPanel>
   );

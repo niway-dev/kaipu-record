@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createMemoryRouter, Navigate, RouterProvider } from "react-router-dom";
 import { OnboardingContext } from "@renderer/features/onboarding/onboarding-context";
 import { SettingsLayout } from "./settings-layout";
@@ -101,26 +101,39 @@ describe("Settings layout", () => {
     expect(open).toHaveBeenCalledOnce();
   });
 
-  it("Recording hides the Accessibility row when it's not required (non-macOS, or the stub default)", async () => {
-    renderAt("/settings/recording");
-    await screen.findByRole("heading", { level: 2, name: "Recording" });
+  it("Permissions hides the Accessibility row when it's not required (non-macOS, or the stub default)", async () => {
+    renderAt("/settings/permissions");
+    await screen.findByRole("heading", { level: 2, name: "Permissions" });
     expect(screen.queryByText("Zoom on clicks (Accessibility)")).toBeNull();
   });
 
-  it("Recording shows the Accessibility row and calls requestAccessibility() (the Settings-side call site, see plans/video-editor-v2/03 § UI)", async () => {
+  it("Recording does not carry the Accessibility row — it lives with the other OS permissions", async () => {
+    const getAccessibilityStatus = vi
+      .spyOn(window.electronAPI, "getAccessibilityStatus")
+      .mockResolvedValue("denied");
+    renderAt("/settings/recording");
+    await screen.findByRole("heading", { level: 2, name: "Recording" });
+    expect(screen.queryByText("Zoom on clicks (Accessibility)")).toBeNull();
+    getAccessibilityStatus.mockRestore();
+  });
+
+  it("Permissions shows the Accessibility row and calls requestAccessibility() (the Settings-side call site, see plans/video-editor-v2/03 § UI)", async () => {
     const getAccessibilityStatus = vi
       .spyOn(window.electronAPI, "getAccessibilityStatus")
       .mockResolvedValue("denied");
     const requestAccessibility = vi
       .spyOn(window.electronAPI, "requestAccessibility")
       .mockResolvedValue("granted");
-    renderAt("/settings/recording");
+    renderAt("/settings/permissions");
 
-    const row = await screen.findByText("Zoom on clicks (Accessibility)");
-    expect(row).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Request" }));
+    expect(await screen.findByText("Zoom on clicks (Accessibility)")).toBeInTheDocument();
+    // The stub grants screen/mic/camera, so the only ungranted row — and therefore the
+    // only "Request" button — is Accessibility's.
+    fireEvent.click(await screen.findByRole("button", { name: "Request" }));
     expect(requestAccessibility).toHaveBeenCalledOnce();
-    expect(await screen.findByRole("button", { name: "Re-request" })).toBeInTheDocument();
+
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Request" })).toBeNull());
+    expect(screen.getAllByRole("button", { name: "Re-request" })).toHaveLength(4);
 
     getAccessibilityStatus.mockRestore();
     requestAccessibility.mockRestore();
