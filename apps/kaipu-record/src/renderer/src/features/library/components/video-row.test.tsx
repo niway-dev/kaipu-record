@@ -91,4 +91,9 @@ describe("VideoRow", () => {
     });
     expect(container.textContent).not.toMatch(/\d:\d\d/);
   });
+
+  it("shows the edit badge when given one", () => {
+    renderRow({ badge: "not-exported" });
+    expect(screen.getByText(/edited · not exported/i)).toBeInTheDocument();
+  });
 });

@@ -89,4 +89,11 @@ describe("VideoCard", () => {
     );
     expect(container.textContent).not.toMatch(/\d:\d\d/);
   });
+
+  it("shows the edit badge when given one", () => {
+    render(
+      <VideoCard video={video} badge="not-exported" onNavigate={vi.fn()} onDelete={vi.fn()} />,
+    );
+    expect(screen.getByText(/edited · not exported/i)).toBeInTheDocument();
+  });
 });
