@@ -48,6 +48,14 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      # Rebuilds uiohook-napi against Electron's ABI. This was a postinstall until it
+      # was made explicit (scripts/rebuild-native.sh). It MUST stay here: this is a
+      # macOS runner and `electron-builder.yml` sets `npmRebuild: false`, so without
+      # it the signed artifact ships a module built for the wrong ABI — a failure
+      # that surfaces on a user's machine, not in this job.
+      - name: Rebuild native dependencies for Electron
+        run: bash scripts/rebuild-native.sh
+
       - name: Prepare Apple API key file
         # @electron/notarize wants the .p8 as a file path, so materialize it to the
         # runner's temp dir and expose the path to later steps. Accept either the
