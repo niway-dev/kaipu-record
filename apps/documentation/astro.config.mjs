@@ -102,6 +102,7 @@ export default defineConfig({
             { slug: "backlog/export-formats" },
             { slug: "backlog/video-editor" },
             { slug: "backlog/video-editor-zoom-blur-cover" },
+            { slug: "backlog/cursor-sprite-capture" },
           ],
         },
         {
