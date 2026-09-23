@@ -144,4 +144,51 @@ describe("OnboardingOverlay — Accessibility step (plans/video-editor-v2/03 § 
     fireEvent.click(screen.getByRole("button", { name: /start recording/i }));
     expect(onClose).toHaveBeenCalledOnce();
   });
+
+  it("keeps the user on Done when the permission is granted outside the app (the step list shrinks under them)", async () => {
+    const { getAccessibilityStatus } = mockElectronAPI({
+      checkPermissions: vi.fn().mockResolvedValue({ screen: true, microphone: true, camera: true }),
+      getAccessibilityStatus: vi.fn().mockResolvedValue("denied"),
+    });
+    render(<OnboardingOverlay onClose={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /get started/i }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /continue/i })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    await screen.findByRole("heading", { name: /auto-zoom on clicks/i });
+    fireEvent.click(screen.getByRole("button", { name: /not now/i }));
+    expect(await screen.findByRole("heading", { name: /you're all set/i })).toBeInTheDocument();
+
+    // The user alt-tabs to System Settings, grants it, and comes back. `useAccessibility`
+    // re-reads on focus, so the Accessibility step disappears and the list goes 4 -> 3.
+    // Tracking the step by INDEX made index 3 fall off the end and render Welcome again,
+    // throwing the user back to the start of a flow they had just finished.
+    getAccessibilityStatus.mockResolvedValue("granted");
+    fireEvent.focus(window);
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: /you're all set/i })).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("heading", { name: /welcome|get started/i })).toBeNull();
+  });
+
+  it("falls forward to Done when granting removes the Accessibility step the user is standing on", async () => {
+    mockElectronAPI({
+      checkPermissions: vi.fn().mockResolvedValue({ screen: true, microphone: true, camera: true }),
+      getAccessibilityStatus: vi.fn().mockResolvedValue("denied"),
+      requestAccessibility: vi.fn().mockResolvedValue("granted"),
+    });
+    render(<OnboardingOverlay onClose={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /get started/i }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /continue/i })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    await screen.findByRole("heading", { name: /auto-zoom on clicks/i });
+
+    fireEvent.click(screen.getByRole("button", { name: /^allow$/i }));
+
+    // Granting removes this very step. Forward to Done is the right landing — the user
+    // just did the thing it was asking for — and never backwards to Welcome.
+    expect(await screen.findByRole("heading", { name: /you're all set/i })).toBeInTheDocument();
+  });
 });

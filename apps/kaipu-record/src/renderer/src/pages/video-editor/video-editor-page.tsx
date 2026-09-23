@@ -119,14 +119,39 @@ function isVideoEditorSource(value: unknown): value is VideoEditorSource {
  * privacy drawing mode. Z (add/select a zoom) is handled separately — it is an action,
  * not a tool (see editor-toolbar.tsx's TOOL_HINT comment).
  */
-const TOOL_SHORTCUT_KEYS: Record<string, EditorTool> = {
-  v: "select",
-  r: "box",
-  a: "arrow",
-  t: "text",
-  b: "blur",
-  c: "cover",
-};
+const PRIVACY_SHORTCUT_TOOLS = new Set<EditorTool>(["blur", "cover"]);
+
+// A Map, not an object literal: `"constructor" in {}` is true and
+// `({})["constructor"]` returns a function, so an object lookup keyed by arbitrary
+// `e.key` values resolves inherited members as if they were tools. No real keyboard
+// produces those keys, but the lookup should not be the thing standing between us and
+// that — a Map has no prototype chain to walk.
+const TOOL_SHORTCUT_KEYS = new Map<string, EditorTool>([
+  ["v", "select"],
+  ["r", "box"],
+  ["a", "arrow"],
+  ["t", "text"],
+  ["b", "blur"],
+  ["c", "cover"],
+]);
+
+/**
+ * Which tool a one-letter shortcut selects, or null when this shortcut must not fire.
+ *
+ * The gate exists because the toolbar disables Blur/Cover on a slide
+ * (`privacyDisabled={onSlide}`) and the keyboard has to agree with it: there is no
+ * footage to redact under an image, so arming the tool would leave the user drawing
+ * into a toast. Split and delete already honour their own disabled flags.
+ *
+ * Pure and exported so the policy is testable without driving the playhead onto a
+ * slide through the timeline UI.
+ */
+export function toolForShortcut(key: string, opts: { onSlide: boolean }): EditorTool | null {
+  const tool = TOOL_SHORTCUT_KEYS.get(key);
+  if (!tool) return null;
+  if (PRIVACY_SHORTCUT_TOOLS.has(tool) && opts.onSlide) return null;
+  return tool;
+}
 
 /** Target is a text field — don't hijack Space for play/pause while typing. */
 function isEditingTarget(target: EventTarget | null): boolean {
@@ -763,6 +788,11 @@ function VideoEditor({
   // the zoom-edit view (full frame + camera box); holding "original" shows the raw frame.
   const contentRef = useRef<HTMLDivElement | null>(null);
   const [holdingOriginal, setHoldingOriginal] = useState(false);
+  // Decoded source height, as STATE. It feeds the soft-zoom hint, and it cannot be read
+  // off `playback.videoRef.current.videoHeight` during render: that is 0 until metadata
+  // lands and changing it never re-renders, so the hint would appear or not depending on
+  // whether some unrelated render happened to arrive after the metadata did.
+  const [sourceHeight, setSourceHeight] = useState(0);
   useCameraPreview(
     playback.videoRef,
     contentRef,
@@ -800,8 +830,9 @@ function VideoEditor({
       // annotation tool, Z adds/selects a zoom at the playhead, B/C pick a privacy
       // drawing mode. Matches EditorToolbar's own tooltips (V R A T / Z / B C).
       const key = e.key.toLowerCase();
-      if (!isMod && key in TOOL_SHORTCUT_KEYS) {
-        videoTools.setTool(TOOL_SHORTCUT_KEYS[key]);
+      if (!isMod && TOOL_SHORTCUT_KEYS.has(key)) {
+        const next = toolForShortcut(key, { onSlide });
+        if (next) videoTools.setTool(next);
         return;
       }
       if (!isMod && key === "z") {
@@ -846,6 +877,7 @@ function VideoEditor({
     handleRemoveRedaction,
     videoTools,
     handleAddZoom,
+    onSlide,
   ]);
 
   return (
@@ -902,6 +934,7 @@ function VideoEditor({
               slideUrl={slideUrl}
               expanded={isFullscreen}
               contentRef={contentRef}
+              onFrameSize={({ height }) => setSourceHeight(height)}
               underlay={
                 <RedactionLayer
                   redactions={redactionEdits.visibleRedactions}
@@ -1059,7 +1092,7 @@ function VideoEditor({
               index={zooms.visibleZooms.indexOf(selectedZoom) + 1}
               layout={layout}
               zooms={zooms}
-              sourceHeight={playback.videoRef.current?.videoHeight ?? 0}
+              sourceHeight={sourceHeight}
               anchorNow={() =>
                 boxCenterAt(
                   selectedZoom,
