@@ -67,6 +67,8 @@ export default defineConfig({
             { slug: "backlog/live-recording-controls" },
             { slug: "backlog/settings-updates" },
             { slug: "backlog/settings-screenshots" },
+            { slug: "backlog/video-editor-mute" },
+            { slug: "backlog/library-lineage" },
             { slug: "backlog/version-gate" },
             { slug: "backlog/auto-update" },
             { slug: "backlog/shared-tokens-package" },
