@@ -9,7 +9,7 @@ vi.mock("./vault-location", () => ({
 }));
 
 import { saveSession, sessionMetaPath } from "./video-edit-session";
-import { hasEditSession, probeEditing } from "./edit-project-probe";
+import { hasEditSession, probeEditing, probeEditSavedAt } from "./edit-project-probe";
 
 describe("probeEditing", () => {
   let dir: string;
@@ -84,5 +84,22 @@ describe("probeEditing", () => {
     await writeFile(join(dir, ".kaipu", "corrupt.edit.json"), "{}");
     await writeFile(sessionMetaPath(dir, "corrupt"), "{not json");
     expect(await probeEditing(dir, local("corrupt"))).toBe("missing-dependencies");
+  });
+
+  it("probeEditSavedAt returns the session's savedAt, or null without a session", async () => {
+    await writeFile(join(dir, "r.mp4"), "v");
+    expect(await probeEditSavedAt(dir, "r")).toBeNull();
+    await saveSession("r", { sessionJson: "{}", assets: [] });
+    const savedAt = await probeEditSavedAt(dir, "r");
+    expect(typeof savedAt).toBe("number");
+    expect(savedAt).toBeGreaterThan(0);
+  });
+
+  it("probeEditSavedAt returns null for a session without meta or with corrupt meta", async () => {
+    await writeFile(join(dir, "r.mp4"), "v");
+    await writeFile(join(dir, ".kaipu", "r.edit.json"), "{}");
+    expect(await probeEditSavedAt(dir, "r")).toBeNull();
+    await writeFile(sessionMetaPath(dir, "r"), "not json");
+    expect(await probeEditSavedAt(dir, "r")).toBeNull();
   });
 });

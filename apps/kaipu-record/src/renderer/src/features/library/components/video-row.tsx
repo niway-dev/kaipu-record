@@ -2,14 +2,17 @@ import { Film, Trash2 } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { formatDuration, formatSize } from "@renderer/features/library/format";
 import type { LibraryVideo } from "@renderer/features/library/types";
+import type { EditBadge as EditBadgeState } from "@renderer/features/library/lineage";
 import { StorageMeta } from "./storage-meta";
 import { KindBadge } from "./kind-badge";
+import { EditBadge } from "./edit-badge";
 import { cx } from "@renderer/ui/cx";
 import styles from "./video-row.module.css";
 
 interface VideoRowProps {
   video: LibraryVideo;
   isLast?: boolean;
+  badge?: EditBadgeState;
   onNavigate(): void;
   onDelete(): void;
 }
@@ -17,6 +20,7 @@ interface VideoRowProps {
 export function VideoRow({
   video,
   isLast,
+  badge = null,
   onNavigate,
   onDelete,
 }: VideoRowProps): React.JSX.Element {
@@ -53,6 +57,7 @@ export function VideoRow({
         <div className={styles.metaLine}>
           <KindBadge kind={video.kind} />
           <StorageMeta video={video} />
+          <EditBadge state={badge} />
           <span className={styles.specs}>
             {formatSize(video.fileSizeBytes)}
             {video.kind !== "screenshot" && ` · ${formatDuration(video.durationSeconds)}`}

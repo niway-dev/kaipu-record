@@ -5,7 +5,8 @@ description: "Proposal: make the source ↔ export relationship navigable in the
 
 # Library — lineage
 
-> **Status: 🔵 Proposed** (2026-09-23). Owner request: "on a video's detail page, see the
+> **Status: 🟢 Ready to validate** — implemented in [#156](https://github.com/csdev19/kaipu-record-monorepo/pull/156) (2026-09-23). Originally proposed following an owner
+> request: "on a video's detail page, see the
 > previous video it references — an edited video comes from another one and they are not
 > necessarily consecutive." Parent decision:
 > [ADR 0003 — an export never replaces the original](/architecture/decisions/0003-export-never-replaces-the-original/)
