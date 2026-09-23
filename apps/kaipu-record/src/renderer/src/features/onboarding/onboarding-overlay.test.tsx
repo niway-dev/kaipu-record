@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import * as i18n from "@kaipu/i18n";
-import type { KaipuElectronAPI, PermissionStatus } from "@shared/types";
+import { DEFAULT_SHORTCUTS, type KaipuElectronAPI, type PermissionStatus } from "@shared/types";
 import { OnboardingOverlay } from "./onboarding-overlay";
 
 function mockElectronAPI(overrides: Partial<KaipuElectronAPI> = {}): {
@@ -27,6 +27,9 @@ function mockElectronAPI(overrides: Partial<KaipuElectronAPI> = {}): {
     // already-decided flows, where the Accessibility row must stay absent.
     getAccessibilityStatus: vi.fn().mockResolvedValue("not-required"),
     requestAccessibility: vi.fn().mockResolvedValue("not-required"),
+    // The Done step reads the live start-recording binding.
+    getSettings: vi.fn().mockResolvedValue({ shortcuts: DEFAULT_SHORTCUTS }),
+    onSettingsChanged: vi.fn(() => () => {}),
     ...overrides,
   } as unknown as KaipuElectronAPI;
   window.electronAPI = api;
@@ -93,6 +96,10 @@ describe("OnboardingOverlay", () => {
     fireEvent.click(screen.getByRole("button", { name: /get started/i }));
     await waitFor(() => expect(screen.getByRole("button", { name: /continue/i })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+
+    // The hint shows the real default binding (⌃⌘C on mac), not the old ⌘⇧P literal.
+    expect(await screen.findByText(/⌘C/)).toBeInTheDocument();
+    expect(screen.queryByText("⌘⇧P")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: /start recording/i }));
     expect(onClose).toHaveBeenCalledOnce();
