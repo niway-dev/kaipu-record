@@ -6,6 +6,12 @@ name: Release Desktop
 # Trigger: push a `desktop-v*` tag (e.g. `desktop-v0.1.0`), or run manually from
 # the Actions tab while tuning the pipeline.
 #
+# Release gate (ADR 0004, /architecture/decisions/0004-local-first-release-verification):
+# a Linux `verify` job (lint, types, unit tests) must pass on this exact SHA, then the
+# macOS job builds, runs the Playwright E2E against that build, and only then signs,
+# notarizes and writes the update feed to R2. PR-time cloud checks were retired; this
+# is where the cloud validates the code that ships.
+#
 # Secrets live in the `production` GitHub Environment (hence `environment:` below):
 #   CSC_LINK          base64 of the Developer ID .p12 (electron-builder accepts base64)
 #   CSC_KEY_PASSWORD  password set when the .p12 was exported
@@ -31,8 +37,39 @@ permissions:
   contents: write # create the GitHub Release and upload assets
 
 jobs:
+  # Release gate (ADR 0004): the same `bun run verify` the Lefthook pre-push runs, on the
+  # exact SHA being released, in a clean Linux environment. Nothing below starts until it
+  # passes, so a red gate publishes nothing. If it fails after the tag exists, fix forward
+  # and cut a patch release; do not delete tags.
+  verify:
+    name: Verify (lint, types, tests)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.4
+
+      - name: Cache bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Verify
+        run: bun run verify
+
   release-mac:
     name: Build, sign & notarize (macOS)
+    needs: verify
     runs-on: macos-latest
     timeout-minutes: 60
     environment: production # the signing secrets live in this Environment
@@ -71,15 +108,9 @@ jobs:
           fi
           echo "APPLE_API_KEY=$KEY_PATH" >> "$GITHUB_ENV"
 
-      - name: Build, sign & notarize
+      - name: Build
         working-directory: apps/kaipu-record
         env:
-          # electron-builder reads these from the environment. CSC_LINK accepts a
-          # base64-encoded .p12 directly; APPLE_API_KEY (path) comes from GITHUB_ENV.
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           # The auth server the shipped app talks to. electron-vite INLINES this into
           # the main bundle at build time, so it is frozen into every signed binary —
           # deliberately its own variable rather than the web's VITE_SERVER_URL, which
@@ -94,7 +125,40 @@ jobs:
             exit 1
           }
           bun run build
-          bunx electron-builder --mac --arm64 --x64 --publish never
+
+      # Release gate, second half (ADR 0004): Playwright drives the build above — the very
+      # bundle that gets signed — on the platform users run. This is the only place the
+      # export path is exercised in the cloud: on Linux runners it self-skips (no WebCodecs
+      # H.264 encoder). `playwright test` is called directly rather than `bun run test:e2e`
+      # so the build is not repeated. ffprobe is deliberately NOT installed (`brew install
+      # ffmpeg` costs macOS minutes): the export still runs end to end and only the codec
+      # assertion is skipped, with a visible annotation. Add the install when quota allows.
+      # The auth specs self-skip when no server answers their health check.
+      - name: E2E (Playwright, built app)
+        working-directory: apps/kaipu-record
+        run: bunx playwright test
+
+      - name: Upload Playwright artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            apps/kaipu-record/playwright-report
+            apps/kaipu-record/test-results
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Sign, notarize & package
+        working-directory: apps/kaipu-record
+        env:
+          # electron-builder reads these from the environment. CSC_LINK accepts a
+          # base64-encoded .p12 directly; APPLE_API_KEY (path) comes from GITHUB_ENV.
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: bunx electron-builder --mac --arm64 --x64 --publish never
 
       - name: Publish update feed + installers to R2
         if: startsWith(github.ref, 'refs/tags/')
