@@ -18,6 +18,7 @@ function video(overrides: Partial<LibraryVideo> = {}): LibraryVideo {
     transfer: { state: "idle" },
     derivedFromAssetId: null,
     editSavedAt: null,
+    editExportedSavedAt: null,
     ...overrides,
   };
 }

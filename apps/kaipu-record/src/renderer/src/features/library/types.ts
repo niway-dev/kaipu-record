@@ -29,5 +29,6 @@ export interface LibraryVideo {
   derivedFromAssetId: string | null;
   /** Epoch ms of the last edit-session save, null without a session (see LibraryItem). */
   editSavedAt: number | null;
+  editExportedSavedAt: number | null;
   tags?: string[];
 }

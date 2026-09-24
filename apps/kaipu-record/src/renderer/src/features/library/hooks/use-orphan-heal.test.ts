@@ -28,6 +28,7 @@ function video(
     transfer: { state: "idle" },
     derivedFromAssetId: null,
     editSavedAt: null,
+    editExportedSavedAt: null,
     ...over,
   };
 }
