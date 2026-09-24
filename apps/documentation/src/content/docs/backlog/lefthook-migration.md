@@ -5,7 +5,7 @@ description: Status tracker for replacing husky + lint-staged with one lefthook.
 
 # Git hooks — husky + lint-staged to lefthook
 
-> **Status: 🟡 In progress (2026-09-06).** Design approved; migration PR
+> **Status: ✅ Done** — [#85](https://github.com/csdev19/kaipu-record-monorepo/pull/85) merged; `lefthook.yml` is live. Next step for the hook contract (pre-push should run `verify`, not just lint + format) is tracked in [CI minutes audit](./ci-minutes-audit). Originally: 🟡 In progress (2026-09-06). Design approved; migration PR
 > [#85](https://github.com/csdev19/kaipu-record-monorepo/pull/85) open and verified on the
 > branch. Effort: Low (one small PR at the repo root, no app code).
 

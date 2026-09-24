@@ -70,6 +70,7 @@ export default defineConfig({
             { slug: "backlog/video-editor-mute" },
             { slug: "backlog/editor-title-input" },
             { slug: "backlog/library-lineage" },
+            { slug: "backlog/ci-minutes-audit" },
             { slug: "backlog/watermark-redesign" },
             { slug: "backlog/bug-control-bar-hides-last-terminal-line" },
             { slug: "backlog/dock-and-app-switcher" },
