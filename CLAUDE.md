@@ -175,6 +175,8 @@ error.
 There is **no `postinstall`** in this repo, and none should be added. `bun install`
 is not allowed to compile code, download binaries, or run anything you have not
 read — the same rule as `scripts/setup-dev.sh`, which checks and never installs.
+The reusable form of this, including why it breaks unrelated CI jobs, is the
+[native dependencies pattern](https://github.com/csdev19/general-knowledge/blob/main/desktop/native-dependencies.md).
 
 The desktop app has one native dependency, `uiohook-napi` (the global mouse hook
 behind auto-zoom on clicks). It ships prebuilds for Node, not for Electron, and
