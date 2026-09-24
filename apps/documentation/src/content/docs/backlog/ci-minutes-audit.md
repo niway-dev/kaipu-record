@@ -13,8 +13,10 @@ description: "GitHub Actions stopped running jobs because the account's spending
 
 ## The reusable part lives in the hub
 
-The runner billing multipliers (`macos` ×10, `windows` ×2), the "a run that failed in 2 s
-never started" diagnosis, and the monorepo path-filter fan-out are product-agnostic:
+The runner billing multipliers (`macos` ×10), the spending-limit ceiling, the "a run that
+failed in 2 s never started" diagnosis and the shared-path-filter trap are product-agnostic:
+[general-knowledge → CI runner cost](https://github.com/csdev19/general-knowledge/blob/main/monorepos/ci-runner-cost.md).
+The local gate that makes the cuts safe is in
 [general-knowledge → CI/CD pipeline strategy](https://github.com/csdev19/general-knowledge/blob/main/conventions/ci-cd-pipeline-strategy.md).
 This page is only **our** application of it: what Kaipu actually runs, measured, and what
 to cut here.
