@@ -11,17 +11,13 @@ description: "GitHub Actions stopped running jobs because the account's spending
 > this reason, not for anything in the code. Unblocking is a Billing action; this doc is
 > about not hitting the ceiling again.
 
-## The billing rule that dominates everything
+## The reusable part lives in the hub
 
-GitHub bills runners by a multiplier, not by wall time:
-
-| Runner           | Multiplier | 8 wall minutes cost |
-| ---------------- | ---------- | ------------------- |
-| `ubuntu-latest`  | **×1**     | 8 minutes           |
-| `windows-latest` | ×2         | 16 minutes          |
-| `macos-latest`   | **×10**    | **80 minutes**      |
-
-Everything below follows from that line.
+The runner billing multipliers (`macos` ×10, `windows` ×2), the "a run that failed in 2 s
+never started" diagnosis, and the monorepo path-filter fan-out are product-agnostic:
+[general-knowledge → CI/CD pipeline strategy](https://github.com/csdev19/general-knowledge/blob/main/conventions/ci-cd-pipeline-strategy.md).
+This page is only **our** application of it: what Kaipu actually runs, measured, and what
+to cut here.
 
 ## What we run today
 
