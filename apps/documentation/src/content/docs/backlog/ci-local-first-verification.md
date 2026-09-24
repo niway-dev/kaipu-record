@@ -23,8 +23,8 @@ description: Status tracker for moving lint/types/tests to a Lefthook pre-push a
 | PR                                                                | Scope                                                         | State   |
 | ----------------------------------------------------------------- | ------------------------------------------------------------- | ------- |
 | [#160](https://github.com/csdev19/kaipu-record-monorepo/pull/160) | `release-please.yml` path filter                              | 🟡 open |
-| local gate                                                        | `verify` script, Lefthook pre-push, ADR 0004, audit docs      | 🟡 open |
-| release gates                                                     | `verify` job in `release-*.yml`, E2E on the macOS release job | 🟡 open |
+| [#161](https://github.com/csdev19/kaipu-record-monorepo/pull/161) | `verify` script, Lefthook pre-push, ADR 0004, audit docs      | 🟡 open |
+| [#162](https://github.com/csdev19/kaipu-record-monorepo/pull/162) | `verify` job in `release-*.yml`, E2E on the macOS release job | 🟡 open |
 | retire PR checks                                                  | `ci*.yml` keep only `workflow_dispatch`                       | 🟡 open |
 
 Merge in that order. The last one is only safe after the release gate has passed on a
