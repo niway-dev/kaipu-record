@@ -172,9 +172,9 @@ test.describe("Desktop authentication (Task 12 manual verification)", () => {
       try {
         await openSettings(page);
         await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
-        await expect(
-          page.getByText("You can record, edit, and export without an account."),
-        ).toBeVisible();
+        // Same signed-out marker the account-panel unit test uses: the exact sentence has
+        // changed before, and this suite only runs when a local server answers.
+        await expect(page.getByText(/without an account/i).first()).toBeVisible();
       } finally {
         await app.close();
       }
