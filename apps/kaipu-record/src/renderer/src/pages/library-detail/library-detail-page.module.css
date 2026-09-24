@@ -159,3 +159,21 @@
   object-fit: cover;
   flex-shrink: 0;
 }
+
+/* Caption under the player on an original recording: the player shows the vault file,
+   which never contains the edits. Muted on purpose — it is an orientation note, not a
+   warning; the badge in the bar below is what warns. */
+.originalNote {
+  margin: 8px 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
+.originalLabel {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-right: 8px;
+}

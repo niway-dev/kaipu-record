@@ -18,6 +18,7 @@ function video(partial: Partial<LibraryVideo> & { assetId: string }): LibraryVid
     transfer: { state: "idle" },
     derivedFromAssetId: null,
     editSavedAt: null,
+    editExportedSavedAt: null,
     ...partial,
   };
 }
@@ -53,17 +54,41 @@ describe("editBadge", () => {
     expect(editBadge(v, buildLineage([v]))).toBeNull();
   });
 
-  it("is not-exported when the session is newer than every export (or there is none)", () => {
+  it("is never-exported while the recording has no export at all", () => {
     const v = video({ assetId: "a", editSavedAt: 500 });
-    expect(editBadge(v, buildLineage([v]))).toBe("not-exported");
-    const olderExport = video({ assetId: "e", derivedFromAssetId: "a", createdAt: 400 });
-    expect(editBadge(v, buildLineage([v, olderExport]))).toBe("not-exported");
+    expect(editBadge(v, buildLineage([v]))).toBe("never-exported");
   });
 
-  it("is edited when an export is newer than the session", () => {
-    const v = video({ assetId: "a", editSavedAt: 500 });
-    const newerExport = video({ assetId: "e", derivedFromAssetId: "a", createdAt: 600 });
-    expect(editBadge(v, buildLineage([v, newerExport]))).toBe("edited");
+  it("is edited when the stamp matches the session, whatever the export's date says", () => {
+    // `createdAt: 400` is BEFORE `editSavedAt: 500` — the shape that made the old rule
+    // wrong. An export's createdAt is its birthtime, the moment the encode started, and
+    // exporting always saves the session afterwards, so a correct export looks "older"
+    // than the scene it contains. The stamp is what settles it.
+    const v = video({ assetId: "a", editSavedAt: 500, editExportedSavedAt: 500 });
+    const exported = video({ assetId: "e", derivedFromAssetId: "a", createdAt: 400 });
+    expect(editBadge(v, buildLineage([v, exported]))).toBe("edited");
+  });
+
+  it("is stale when the session was saved again after the export", () => {
+    const v = video({ assetId: "a", editSavedAt: 900, editExportedSavedAt: 500 });
+    const exported = video({ assetId: "e", derivedFromAssetId: "a", createdAt: 1_000 });
+    expect(editBadge(v, buildLineage([v, exported]))).toBe("stale");
+  });
+
+  it("is stale for a session written before the stamp existed", () => {
+    // Pre-existing sessions have no `exportedSavedAt`. Reading that as "the newest edits
+    // are in no file" points at the export button; reading it as "edited" would promise
+    // a file we have no evidence exists.
+    const v = video({ assetId: "a", editSavedAt: 900, editExportedSavedAt: null });
+    const exported = video({ assetId: "e", derivedFromAssetId: "a", createdAt: 1_000 });
+    expect(editBadge(v, buildLineage([v, exported]))).toBe("stale");
+  });
+
+  it("returns to never-exported when the only export is deleted", () => {
+    // The stamp still says this scene was exported once, but the file is gone, so no
+    // file carries the edits any more — which is what the badge is actually about.
+    const v = video({ assetId: "a", editSavedAt: 500, editExportedSavedAt: 500 });
+    expect(editBadge(v, buildLineage([v]))).toBe("never-exported");
   });
 
   it("is null for screenshots and for exports themselves", () => {

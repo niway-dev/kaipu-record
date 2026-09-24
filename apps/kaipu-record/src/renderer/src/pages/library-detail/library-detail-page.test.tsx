@@ -16,6 +16,7 @@ const cloudOnlyItem: LibraryItem = {
   durationSeconds: 0,
   derivedFromAssetId: null,
   editSavedAt: null,
+  editExportedSavedAt: null,
   local: null,
   cloud: {
     assetId: "cloud-1",
@@ -51,6 +52,7 @@ const exportedOnlyItem: LibraryItem = {
   durationSeconds: 45,
   derivedFromAssetId: null,
   editSavedAt: null,
+  editExportedSavedAt: null,
   local: {
     id: "local-b",
     assetId: "asset-b",
@@ -252,6 +254,7 @@ describe("LibraryDetailPage — lineage and edit badge", () => {
     sharing: "private" as const,
     derivedFromAssetId: null,
     editSavedAt: null,
+    editExportedSavedAt: null,
   };
   const local = (id: string) => ({
     id,
@@ -343,7 +346,7 @@ describe("LibraryDetailPage — lineage and edit badge", () => {
     );
   });
 
-  it("shows 'Edited · not exported' instead of the editing line when a session has no newer export", async () => {
+  it("shows 'Edited · not exported' instead of the editing line when a session has no export", async () => {
     window.electronAPI.listLibraryItems = vi.fn(async () => ({
       items: [{ ...base, assetId: "src", title: "Take", local: local("src"), editSavedAt: 5_000 }],
       vaultError: null,
@@ -353,5 +356,95 @@ describe("LibraryDetailPage — lineage and edit badge", () => {
     await waitForLoaded();
     expect(await screen.findByText(/edited · not exported/i)).toBeInTheDocument();
     expect(screen.queryByText(/editing project available/i)).toBeNull();
+  });
+
+  it("says the latest edits are unexported — not 'not exported' — above an Exports list", async () => {
+    // The screenshot that started this: "Edited · not exported" sitting directly above
+    // a populated EXPORTS section reads as a contradiction. An export exists; what is
+    // missing from a file is only the edits made after it.
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [
+        {
+          ...base,
+          assetId: "src",
+          title: "Take",
+          local: local("src"),
+          editSavedAt: 9_000,
+          editExportedSavedAt: 5_000,
+        },
+        { ...base, assetId: "exp", title: "Take (edited)", derivedFromAssetId: "src" },
+      ],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+    renderDetail("src");
+    await waitForLoaded();
+    expect(await screen.findByText(/latest edits not exported/i)).toBeInTheDocument();
+    expect(screen.queryByText(/edited · not exported/i)).toBeNull();
+  });
+
+  it("drops the badge once the stamp matches the session, even with an older export date", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [
+        {
+          ...base,
+          assetId: "src",
+          title: "Take",
+          local: local("src"),
+          createdAt: 9_999,
+          editSavedAt: 5_000,
+          editExportedSavedAt: 5_000,
+        },
+        // createdAt BEFORE the session's savedAt — the real shape of every export, and
+        // what the old date comparison mistook for a stale export.
+        {
+          ...base,
+          assetId: "exp",
+          title: "Take (edited)",
+          derivedFromAssetId: "src",
+          createdAt: 1,
+        },
+      ],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+    renderDetail("src");
+    await waitForLoaded();
+    expect(await screen.findByText(/^edited$/i)).toBeInTheDocument();
+    expect(screen.queryByText(/not exported/i)).toBeNull();
+  });
+
+  /** An original and an export of it, both with a local file to play. */
+  const pair = () =>
+    vi.fn(async () => ({
+      items: [
+        { ...base, assetId: "src", title: "Take", local: local("src") },
+        {
+          ...base,
+          assetId: "exp",
+          title: "Take (edited)",
+          derivedFromAssetId: "src",
+          local: local("exp"),
+        },
+      ],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+
+  it("labels the player on an original as showing the unedited file", async () => {
+    // The player streams the vault file, which ADR 0003 keeps untouched — so it never
+    // shows the edits. Nothing said so, which is what made the badge above it read as
+    // a contradiction.
+    window.electronAPI.listLibraryItems = pair();
+    renderDetail("src");
+    await waitForLoaded();
+    expect(await screen.findByText(/edits are not shown here/i)).toBeInTheDocument();
+  });
+
+  it("omits that label on an export, where the player IS the edited video", async () => {
+    window.electronAPI.listLibraryItems = pair();
+    renderDetail("exp");
+    await waitForLoaded();
+    expect(screen.queryByText(/edits are not shown here/i)).toBeNull();
   });
 });

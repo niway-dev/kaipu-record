@@ -561,7 +561,11 @@ function VideoEditor({
           const assets = assetStoreRef.current
             .entries()
             .map((a) => ({ assetId: a.assetId, bytes: a.bytes }));
-          await window.electronAPI.saveVideoEditSession(source.id, sessionJson, assets);
+          // `true`: this scene is exactly what was just burned into `recording`, so the
+          // write stamps it as exported. Without it the save below would bump `savedAt`
+          // past the export and the library would show "not exported" on a recording
+          // the user exported seconds ago.
+          await window.electronAPI.saveVideoEditSession(source.id, sessionJson, assets, true);
         } catch (error) {
           // Session save failure is non-fatal — the export already succeeded.
           captureException(error, { context: "video-edit-session-save" });

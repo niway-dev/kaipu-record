@@ -79,6 +79,12 @@ export interface LibraryItem {
    * "edited, not exported" (backlog/edit-state-indicators).
    */
   editSavedAt: number | null;
+  /**
+   * The `savedAt` already burned into an export, or null when none is. Equal to
+   * `editSavedAt` exactly when every edit is in an export; see
+   * `SessionMeta.exportedSavedAt` for why this is a stamp and not a date comparison.
+   */
+  editExportedSavedAt: number | null;
   /** The local copy, when the file is present and readable. */
   local: LocalRecording | null;
   /** The cloud copy as last seen in the catalog cache. */
