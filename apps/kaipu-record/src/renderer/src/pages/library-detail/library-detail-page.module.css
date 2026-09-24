@@ -92,3 +92,70 @@
   gap: var(--space-sm);
   flex-shrink: 0;
 }
+
+.badgeButton {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.badgeButton:disabled {
+  cursor: default;
+}
+
+.lineageLabel {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-right: 8px;
+}
+
+.lineageLink {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.lineageLink:hover {
+  color: var(--accent-primary);
+}
+
+.exports {
+  margin-top: 24px;
+}
+
+.exportsHeading {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+.exportsList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.exportItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.exportThumb {
+  width: 64px;
+  height: 36px;
+  border-radius: 6px;
+  background: var(--bg-card);
+  object-fit: cover;
+  flex-shrink: 0;
+}

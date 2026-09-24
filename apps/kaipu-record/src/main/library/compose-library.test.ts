@@ -48,6 +48,7 @@ describe("composeLibrary", () => {
       local: [local("f1", "A")],
       catalog: [cloud("A")],
       editing: {},
+      editSavedAt: {},
     });
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({
@@ -64,6 +65,7 @@ describe("composeLibrary", () => {
       local: [local("f1", "A")],
       catalog: [cloud("B")],
       editing: {},
+      editSavedAt: {},
     });
     expect(items.map((i) => [i.assetId, i.availability])).toEqual([
       ["A", "local"],
@@ -76,12 +78,14 @@ describe("composeLibrary", () => {
       local: [local("f1", "A", { contentSha256: OTHER })],
       catalog: [cloud("A")],
       editing: {},
+      editSavedAt: {},
     });
     expect(changed.items[0]?.comparison).toBe("local-changes");
     const unknown = composeLibrary({
       local: [local("f1", "A", { contentSha256: null })],
       catalog: [cloud("A")],
       editing: {},
+      editSavedAt: {},
     });
     expect(unknown.items[0]?.comparison).toBe("pending");
   });
@@ -91,6 +95,7 @@ describe("composeLibrary", () => {
       local: null,
       catalog: [cloud("A", { lastSeenLocalId: "f1" }), cloud("B")],
       editing: {},
+      editSavedAt: {},
     });
     expect(items.map((i) => [i.assetId, i.availability])).toEqual([
       ["A", "local-unavailable"],
@@ -103,6 +108,7 @@ describe("composeLibrary", () => {
       local: [],
       catalog: [cloud("A", { lastSeenLocalId: "f1" })],
       editing: {},
+      editSavedAt: {},
     });
     expect(items[0]?.availability).toBe("cloud");
     expect(items[0]?.editing).toBe("needs-source");
@@ -113,6 +119,7 @@ describe("composeLibrary", () => {
       local: [],
       catalog: [cloud("A", { lastSeenLocalId: "f1" })],
       editing: {},
+      editSavedAt: {},
     });
     expect(catalogUpdates[0]?.lastSeenLocalId).toBeNull();
   });
@@ -122,6 +129,7 @@ describe("composeLibrary", () => {
       local: [local("f1", "NEW")],
       catalog: [cloud("OLD", { lastSeenLocalId: "f1" })],
       editing: {},
+      editSavedAt: {},
     });
     expect(items.map((i) => i.assetId).sort()).toEqual(["NEW", "OLD"]);
   });
@@ -131,6 +139,7 @@ describe("composeLibrary", () => {
       local: [local("src", "S"), local("exp", "E", { derivedFromAssetId: "S", createdAt: 200 })],
       catalog: null,
       editing: { src: "project-available", exp: "exported-only" },
+      editSavedAt: {},
     });
     expect(items.map((i) => i.assetId)).toEqual(["E", "S"]); // newest first
     expect(items[0]).toMatchObject({ derivedFromAssetId: "S", editing: "exported-only" });
@@ -141,11 +150,23 @@ describe("composeLibrary", () => {
     });
   });
 
+  it("carries editSavedAt from the probe for local items and null for cloud-only ones", () => {
+    const { items } = composeLibrary({
+      local: [local("f1", "A")],
+      catalog: [cloud("B")],
+      editing: {},
+      editSavedAt: { f1: 1_700_000_000_000 },
+    });
+    expect(items.find((i) => i.assetId === "A")?.editSavedAt).toBe(1_700_000_000_000);
+    expect(items.find((i) => i.assetId === "B")?.editSavedAt).toBeNull();
+  });
+
   it("with no account there are only local items", () => {
     const { items, catalogUpdates } = composeLibrary({
       local: [local("f1", "A")],
       catalog: null,
       editing: {},
+      editSavedAt: {},
     });
     expect(items).toHaveLength(1);
     expect(items[0]?.cloud).toBeNull();

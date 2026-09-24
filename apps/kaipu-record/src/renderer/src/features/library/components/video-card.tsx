@@ -2,18 +2,26 @@ import { Film, Trash2, Play } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { formatDuration, formatSize } from "@renderer/features/library/format";
 import type { LibraryVideo } from "@renderer/features/library/types";
+import type { EditBadge as EditBadgeState } from "@renderer/features/library/lineage";
 import { StorageMeta } from "./storage-meta";
 import { KindBadge } from "./kind-badge";
+import { EditBadge } from "./edit-badge";
 import { cx } from "@renderer/ui/cx";
 import styles from "./video-card.module.css";
 
 interface VideoCardProps {
   video: LibraryVideo;
+  badge?: EditBadgeState;
   onNavigate(): void;
   onDelete(): void;
 }
 
-export function VideoCard({ video, onNavigate, onDelete }: VideoCardProps): React.JSX.Element {
+export function VideoCard({
+  video,
+  badge = null,
+  onNavigate,
+  onDelete,
+}: VideoCardProps): React.JSX.Element {
   const t = useTranslations("library");
 
   return (
@@ -61,6 +69,7 @@ export function VideoCard({ video, onNavigate, onDelete }: VideoCardProps): Reac
         <p className={styles.title}>{video.title || t("untitled")}</p>
         <div className={styles.metaLine}>
           <StorageMeta video={video} />
+          <EditBadge state={badge} />
         </div>
         <span className={styles.specs}>
           {formatSize(video.fileSizeBytes)}

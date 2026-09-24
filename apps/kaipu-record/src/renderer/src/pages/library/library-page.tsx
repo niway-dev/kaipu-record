@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Library, LayoutGrid, LayoutList, AlertTriangle, RefreshCw } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
@@ -11,6 +11,7 @@ import { SortMenu } from "@renderer/features/library/components/sort-menu";
 import { FilterChip } from "@renderer/features/library/components/filter-chip";
 import { useLocalLibrary } from "@renderer/features/library/hooks/use-local-library";
 import { useLibraryFilters } from "@renderer/features/library/hooks/use-library-filters";
+import { buildLineage, editBadge } from "@renderer/features/library/lineage";
 import styles from "./library-page.module.css";
 
 export function LibraryPage(): React.JSX.Element {
@@ -18,6 +19,9 @@ export function LibraryPage(): React.JSX.Element {
   const navigate = useNavigate();
   const { videos, isLoading, hasError, refresh, remove } = useLocalLibrary();
   const canShowVaultBanner = hasError && videos.length > 0;
+  // Built from the unfiltered `videos`, not `visibleItems`: an export filtered out of
+  // the current view must still count toward its source's badge.
+  const lineage = useMemo(() => buildLineage(videos), [videos]);
   const showFullPageError = hasError && videos.length === 0;
   const {
     kindFilter,
@@ -197,6 +201,7 @@ export function LibraryPage(): React.JSX.Element {
             <VideoCard
               key={video.assetId}
               video={video}
+              badge={editBadge(video, lineage)}
               onNavigate={() => navigate(`/library/${video.assetId}`)}
               onDelete={() => {
                 const { id, title } = video;
@@ -213,6 +218,7 @@ export function LibraryPage(): React.JSX.Element {
                 key={video.assetId}
                 video={video}
                 isLast={i === visibleItems.length - 1}
+                badge={editBadge(video, lineage)}
                 onNavigate={() => navigate(`/library/${video.assetId}`)}
                 onDelete={() => {
                   const { id, title } = video;

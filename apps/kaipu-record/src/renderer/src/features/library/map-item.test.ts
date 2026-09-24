@@ -9,6 +9,7 @@ const item: LibraryItem = {
   createdAt: 5,
   durationSeconds: 9,
   derivedFromAssetId: null,
+  editSavedAt: 123,
   local: {
     id: "f",
     assetId: "A",
@@ -56,6 +57,7 @@ describe("toLibraryVideo", () => {
       comparison: "local-changes",
       editing: "project-available",
       thumbnailUrl: "kaipu-media://thumb/f",
+      editSavedAt: 123,
     });
   });
 

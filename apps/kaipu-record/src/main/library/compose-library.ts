@@ -11,6 +11,8 @@ export interface ComposeInput {
   local: LocalRecording[] | null;
   catalog: CloudCatalogEntry[] | null;
   editing: Record<string, EditingState>;
+  /** Per local id, from `probeEditSavedAt`. */
+  editSavedAt: Record<string, number | null>;
 }
 
 export interface ComposeResult {
@@ -63,6 +65,7 @@ export function composeLibrary(input: ComposeInput): ComposeResult {
       // cloud value is the better answer.
       durationSeconds: local?.durationSeconds || entry.durationSeconds,
       derivedFromAssetId: local?.derivedFromAssetId ?? entry.derivedFromAssetId,
+      editSavedAt: local ? (input.editSavedAt[local.id] ?? null) : null,
       local,
       cloud: entry,
       availability,
@@ -82,6 +85,7 @@ export function composeLibrary(input: ComposeInput): ComposeResult {
       createdAt: rec.createdAt,
       durationSeconds: rec.durationSeconds,
       derivedFromAssetId: rec.derivedFromAssetId,
+      editSavedAt: input.editSavedAt[rec.id] ?? null,
       local: rec,
       cloud: null,
       availability: "local",

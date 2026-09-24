@@ -27,6 +27,7 @@ function video(
     editing: "project-available",
     transfer: { state: "idle" },
     derivedFromAssetId: null,
+    editSavedAt: null,
     ...over,
   };
 }

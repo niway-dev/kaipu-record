@@ -915,6 +915,20 @@ function VideoEditor({
         <Badge variant="neutral" className={styles.originalPill}>
           <Shield size={12} strokeWidth={2} /> {t("originalUntouched")}
         </Badge>
+        {autosave.state !== "idle" && (
+          <button
+            type="button"
+            className={styles.saveState}
+            data-state={autosave.state}
+            onClick={autosave.state === "failed" ? () => void autosave.retry() : undefined}
+            disabled={autosave.state !== "failed"}
+            aria-live="polite"
+          >
+            {autosave.state === "saving" && t("saveStateSaving")}
+            {autosave.state === "saved" && t("saveStateSaved")}
+            {autosave.state === "failed" && t("saveStateFailed")}
+          </button>
+        )}
       </header>
       <EditorToolbar
         canUndo={controller.canUndo}
