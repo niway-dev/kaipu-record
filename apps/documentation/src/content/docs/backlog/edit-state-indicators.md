@@ -6,7 +6,7 @@ description: "Proposal: a save-state indicator in the video editor (autosave mak
 # Edit-state indicators
 
 > **Status: 🟢 Ready to validate** — implemented in [#156](https://github.com/csdev19/kaipu-record-monorepo/pull/156) (2026-09-23), then
-> **corrected** in #157 after prod review found the badge wrong on every export
+> **corrected** in [#159](https://github.com/csdev19/kaipu-record-monorepo/pull/159) after prod review found the badge wrong on every export
 > ([see below](#correction-the-badge-rule-was-wrong-in-every-case)). Originally proposed following validating video editor v2 PRs 5–6
 > ([backlog](./video-editor-zoom-blur-cover)): the owner left the editor, came back, and
 > the zoom edits were still there — and asked how long that lasts and whether we need a
