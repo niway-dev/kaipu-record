@@ -71,6 +71,40 @@ per-app workflows behind a`dorny/paths-filter` job that reads the real dependenc
 6. **Cache checks.** Confirm the bun cache actually hits; a cold `bun install` in five
    jobs is five times the download.
 
+## lefthook is the lever that makes the cuts safe
+
+The hub's [tiered gates](https://github.com/csdev19/general-knowledge/blob/main/conventions/ci-cd-pipeline-strategy.md#tiered-gates-where-each-check-runs)
+say: a cheap `verify` gate runs everywhere (local pre-push **and** PR), tests run locally
+on demand and at promotion (tag), never per PR. Today this repo runs the expensive tier on
+every PR and a weaker gate locally — the wrong way round:
+
+|                           | Contract (hub)                         | This repo today                                                   |
+| ------------------------- | -------------------------------------- | ----------------------------------------------------------------- |
+| `verify` script           | types + lint + format + build packages | **does not exist**                                                |
+| Local pre-push (lefthook) | `bun run verify`                       | lint + format-check only — no types, no build                     |
+| PR CI                     | `verify` only                          | `verify` **plus** desktop unit, desktop E2E, web tests, api tests |
+| Tests                     | local on demand + tag                  | every PR                                                          |
+
+Every push that fails types in CI is a full CI run wasted, then another after the fix.
+Every PR runs ~6 minutes of tests that the author could have run for free.
+
+### The change (small)
+
+1. **`verify`** in the root `package.json`:
+   `oxlint && oxfmt --check . && turbo run check-types && turbo run build --filter='@kaipu/*'`
+2. **lefthook `pre-push`** runs `bun run verify` (replacing the two current jobs) plus
+   `turbo run test --filter='...[origin/main]'` — only the packages the push touched,
+   cached by turbo, so it stays fast enough not to be bypassed. `LEFTHOOK=0` remains the
+   escape hatch; the PR backstop below is why that is acceptable.
+3. **`ci.yml` becomes the PR backstop and runs `verify` only** — drop `Test packages`,
+   `Build web app`, `Build backend` from the PR path.
+4. **`ci-desktop`, `ci-web`, `ci-api` move to `push: main` + tags.** The unit/E2E signal
+   is kept, at merge and at release, where the minutes are worth it.
+
+Expected per-PR cost: from ~8.5 billed minutes (2.5 + 4 + 1 + 1) to ~2.5 — about **70 %**
+— before touching the macOS release job. The local gate is what earns the right to
+remove the PR tests; without it, cut 4 would just move breakage to `main`.
+
 ## Not worth doing
 
 - Moving to self-hosted runners for this size of project.
