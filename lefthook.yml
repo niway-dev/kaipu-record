@@ -1,6 +1,9 @@
-# Git hooks. Docs: https://lefthook.dev — contract: /specs/2026-09-06-lefthook-migration-design
-# commit = fix what you commit · push = verify what you share (read-only, same as CI)
+# Git hooks. Docs: https://lefthook.dev — contract: /specs/2026-09-06-lefthook-migration-design,
+# pre-push widened by ADR 0004 (/architecture/decisions/0004-local-first-release-verification).
+# commit = fix what you commit · push = verify what you share (read-only: lint, format,
+# package build, types, tests — the same `bun run verify` the release gate runs in the cloud)
 # commit-msg = reject what release-please cannot parse. Bypass once: LEFTHOOK=0 git <cmd>.
+# Measured 2026-09-24 on the owner's machine: ~27 s cold, ~3 s with a warm Turbo cache.
 min_version: 2.0.0
 
 pre-commit:
@@ -28,9 +31,8 @@ commit-msg:
         exit 1
 
 pre-push:
-  parallel: true
   jobs:
-    - name: lint
-      run: bunx oxlint
-    - name: format-check
-      run: bunx oxfmt --check .
+    # One entry point, shared with the cloud release gate, so local and cloud can never
+    # drift. Turbo parallelises the type-check and test tasks internally and caches them.
+    - name: verify
+      run: bun run verify
