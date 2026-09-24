@@ -185,7 +185,24 @@ export function LibraryDetailPage(): React.JSX.Element {
       {isScreenshot ? (
         <ScreenshotViewer src={video.thumbnailUrl} />
       ) : (
-        localId && <RecordingPlayer id={localId} poster={video.thumbnailUrl} />
+        localId && (
+          <>
+            <RecordingPlayer id={localId} poster={video.thumbnailUrl} />
+            {/* This player streams the vault file, which ADR 0003 guarantees is the
+                untouched original — edits live in a sidecar session and are composited
+                only in the editor's preview and burned in only by an export. Nothing
+                said so, which made the surrounding edit badges read as contradictions:
+                a "not exported" pill above a player that was, in fact, showing the
+                unedited video. Saying it also makes the ADR's promise checkable — hit
+                play and see the original is still whole. */}
+            {video.derivedFromAssetId === null && (
+              <p className={styles.originalNote}>
+                <span className={styles.originalLabel}>{t("originalLabel")}</span>
+                {t("originalPlayerNote")}
+              </p>
+            )}
+          </>
+        )
       )}
 
       <div className={styles.bar}>
@@ -220,15 +237,17 @@ export function LibraryDetailPage(): React.JSX.Element {
           {!isScreenshot && badge === null && (
             <p className={styles.editingLine}>{t(EDITING_LABEL_KEYS[video.editing])}</p>
           )}
-          {badge === "not-exported" && (
+          {(badge === "never-exported" || badge === "stale") && (
             <button
               type="button"
               className={styles.badgeButton}
-              title={t("editedNotExportedHint")}
+              title={badge === "stale" ? t("editedStaleHint") : t("editedNotExportedHint")}
               onClick={editVideo}
               disabled={!canEditVideo}
             >
-              <Badge variant="warning">{t("editedNotExported")}</Badge>
+              <Badge variant="warning">
+                {badge === "stale" ? t("editedStale") : t("editedNotExported")}
+              </Badge>
             </button>
           )}
           {badge === "edited" && <p className={styles.editingLine}>{t("edited")}</p>}

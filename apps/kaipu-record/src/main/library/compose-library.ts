@@ -6,13 +6,14 @@ import type {
   EditingState,
   LibraryItem,
 } from "@shared/types/library-item";
+import type { EditSessionState } from "./edit-project-probe";
 
 export interface ComposeInput {
   local: LocalRecording[] | null;
   catalog: CloudCatalogEntry[] | null;
   editing: Record<string, EditingState>;
-  /** Per local id, from `probeEditSavedAt`. */
-  editSavedAt: Record<string, number | null>;
+  /** Per local id, from `probeEditSession`. */
+  editSession: Record<string, EditSessionState>;
 }
 
 export interface ComposeResult {
@@ -65,7 +66,8 @@ export function composeLibrary(input: ComposeInput): ComposeResult {
       // cloud value is the better answer.
       durationSeconds: local?.durationSeconds || entry.durationSeconds,
       derivedFromAssetId: local?.derivedFromAssetId ?? entry.derivedFromAssetId,
-      editSavedAt: local ? (input.editSavedAt[local.id] ?? null) : null,
+      editSavedAt: local ? (input.editSession[local.id]?.savedAt ?? null) : null,
+      editExportedSavedAt: local ? (input.editSession[local.id]?.exportedSavedAt ?? null) : null,
       local,
       cloud: entry,
       availability,
@@ -85,7 +87,8 @@ export function composeLibrary(input: ComposeInput): ComposeResult {
       createdAt: rec.createdAt,
       durationSeconds: rec.durationSeconds,
       derivedFromAssetId: rec.derivedFromAssetId,
-      editSavedAt: input.editSavedAt[rec.id] ?? null,
+      editSavedAt: input.editSession[rec.id]?.savedAt ?? null,
+      editExportedSavedAt: input.editSession[rec.id]?.exportedSavedAt ?? null,
       local: rec,
       cloud: null,
       availability: "local",

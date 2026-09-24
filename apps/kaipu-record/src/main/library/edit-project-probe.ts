@@ -67,17 +67,37 @@ export async function probeEditing(
   return "project-available";
 }
 
+/** When the session was last written, and which of those writes has been exported. */
+export interface EditSessionState {
+  /** Epoch ms of the last session write, or null with no session/meta sidecar. */
+  savedAt: number | null;
+  /** The `savedAt` that was burned into an export, or null if none ever was. */
+  exportedSavedAt: number | null;
+}
+
+const NO_SESSION: EditSessionState = { savedAt: null, exportedSavedAt: null };
+
 /**
- * When the edit session was last written (epoch ms), or null when the item has no
- * session, no meta sidecar, or an unreadable one. Read-only, like `probeEditing`:
- * the library badge compares this against the item's exports' `createdAt`.
+ * The session's save/export stamps for one item. Read-only, like `probeEditing`, and
+ * one read for both values — `list()` runs this per item, so a second open of the
+ * same sidecar would double the syscalls for nothing.
+ *
+ * The library badge compares the two for equality. It deliberately does NOT compare
+ * `savedAt` against the exports' `createdAt`: see `SessionMeta.exportedSavedAt` for
+ * why that comparison could never be right.
  */
-export async function probeEditSavedAt(vaultDir: string, id: string): Promise<number | null> {
-  if (!(await hasEditSession(vaultDir, id))) return null;
+export async function probeEditSession(vaultDir: string, id: string): Promise<EditSessionState> {
+  if (!(await hasEditSession(vaultDir, id))) return NO_SESSION;
   try {
     const meta = JSON.parse(await readFile(sessionMetaPath(vaultDir, id), "utf-8")) as SessionMeta;
-    return typeof meta.savedAt === "number" ? meta.savedAt : null;
+    return {
+      savedAt: typeof meta.savedAt === "number" ? meta.savedAt : null,
+      // Sessions written before the stamp existed have no field here. Reading that as
+      // null means a pre-existing edited recording shows "not exported" until its next
+      // export — the honest answer, since nothing recorded that it ever was.
+      exportedSavedAt: typeof meta.exportedSavedAt === "number" ? meta.exportedSavedAt : null,
+    };
   } catch {
-    return null;
+    return NO_SESSION;
   }
 }

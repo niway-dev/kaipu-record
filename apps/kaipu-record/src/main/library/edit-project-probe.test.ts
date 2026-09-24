@@ -9,7 +9,7 @@ vi.mock("./vault-location", () => ({
 }));
 
 import { saveSession, sessionMetaPath } from "./video-edit-session";
-import { hasEditSession, probeEditing, probeEditSavedAt } from "./edit-project-probe";
+import { hasEditSession, probeEditing, probeEditSession } from "./edit-project-probe";
 
 describe("probeEditing", () => {
   let dir: string;
@@ -86,20 +86,45 @@ describe("probeEditing", () => {
     expect(await probeEditing(dir, local("corrupt"))).toBe("missing-dependencies");
   });
 
-  it("probeEditSavedAt returns the session's savedAt, or null without a session", async () => {
+  it("probeEditSession returns the session's savedAt, or null without a session", async () => {
     await writeFile(join(dir, "r.mp4"), "v");
-    expect(await probeEditSavedAt(dir, "r")).toBeNull();
+    expect(await probeEditSession(dir, "r")).toEqual({ savedAt: null, exportedSavedAt: null });
     await saveSession("r", { sessionJson: "{}", assets: [] });
-    const savedAt = await probeEditSavedAt(dir, "r");
+    const { savedAt } = await probeEditSession(dir, "r");
     expect(typeof savedAt).toBe("number");
     expect(savedAt).toBeGreaterThan(0);
   });
 
-  it("probeEditSavedAt returns null for a session without meta or with corrupt meta", async () => {
+  it("probeEditSession returns nulls for a session without meta or with corrupt meta", async () => {
     await writeFile(join(dir, "r.mp4"), "v");
     await writeFile(join(dir, ".kaipu", "r.edit.json"), "{}");
-    expect(await probeEditSavedAt(dir, "r")).toBeNull();
+    expect(await probeEditSession(dir, "r")).toEqual({ savedAt: null, exportedSavedAt: null });
     await writeFile(sessionMetaPath(dir, "r"), "not json");
-    expect(await probeEditSavedAt(dir, "r")).toBeNull();
+    expect(await probeEditSession(dir, "r")).toEqual({ savedAt: null, exportedSavedAt: null });
+  });
+
+  it("reports exportedSavedAt only for the save that carried `exported`", async () => {
+    await writeFile(join(dir, "r.mp4"), "v");
+    await saveSession("r", { sessionJson: "{}", assets: [] });
+    expect((await probeEditSession(dir, "r")).exportedSavedAt).toBeNull();
+
+    await saveSession("r", { sessionJson: "{}", assets: [], exported: true });
+    const exported = await probeEditSession(dir, "r");
+    // The export save stamps its OWN savedAt: equality is what the badge reads as
+    // "every edit is in a file", and it cannot race a slow encode.
+    expect(exported.exportedSavedAt).toBe(exported.savedAt);
+  });
+
+  it("keeps the export stamp across later saves, so it reads as edited-since-export", async () => {
+    await writeFile(join(dir, "r.mp4"), "v");
+    await saveSession("r", { sessionJson: "{}", assets: [], exported: true });
+    const stamp = (await probeEditSession(dir, "r")).exportedSavedAt;
+
+    // A plain edit must neither clear the stamp (that would claim it was never
+    // exported) nor advance it (that would claim the new edit is already in a file).
+    await saveSession("r", { sessionJson: '{"v":2}', assets: [] });
+    const after = await probeEditSession(dir, "r");
+    expect(after.exportedSavedAt).toBe(stamp);
+    expect(after.savedAt).not.toBe(after.exportedSavedAt);
   });
 });

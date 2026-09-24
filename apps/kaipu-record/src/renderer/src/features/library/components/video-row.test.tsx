@@ -20,6 +20,7 @@ function makeVideo(overrides: Partial<LibraryVideo> = {}): LibraryVideo {
     transfer: { state: "idle" },
     derivedFromAssetId: null,
     editSavedAt: null,
+    editExportedSavedAt: null,
     ...overrides,
   };
 }
@@ -93,7 +94,7 @@ describe("VideoRow", () => {
   });
 
   it("shows the edit badge when given one", () => {
-    renderRow({ badge: "not-exported" });
+    renderRow({ badge: "never-exported" });
     expect(screen.getByText(/edited · not exported/i)).toBeInTheDocument();
   });
 });

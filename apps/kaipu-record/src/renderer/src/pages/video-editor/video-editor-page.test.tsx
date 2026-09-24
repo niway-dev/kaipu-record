@@ -249,6 +249,30 @@ describe("VideoEditorPage — post-export navigation vs. useBlocker", () => {
     expect(screen.queryByText(DISCARD_DIALOG_TITLE)).toBeNull();
   });
 
+  it("marks the post-export session save as exported, so the library badge clears", async () => {
+    // The global stub is a plain async function, not a spy; wrap it for this test only.
+    const save = vi.spyOn(window.electronAPI, "saveVideoEditSession");
+    renderEditor();
+    const footer = await waitForEditorLoaded();
+    await makeDirty(footer);
+
+    fireEvent.click(screen.getByRole("button", { name: "Export" }));
+    await waitFor(() => {
+      expect(screen.getByText("library-detail")).toBeInTheDocument();
+    });
+
+    // The 4th argument is the whole fix. Without it this save bumps `savedAt` past the
+    // export that just produced it and the library shows "not exported" on a recording
+    // the user exported a second ago — which is what the old date comparison did on
+    // every single export.
+    expect(save).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.any(Array),
+      true,
+    );
+  });
+
   it("blocks a normal (non-export) navigation while dirty", async () => {
     const router = renderEditor();
     const footer = await waitForEditorLoaded();

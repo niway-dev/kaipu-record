@@ -275,6 +275,12 @@ export interface KaipuElectronAPI {
     id: string,
     sessionJson: string,
     assets: { assetId: string; bytes: ArrayBuffer }[],
+    /**
+     * Pass true only for the save that follows a successful export: it stamps this
+     * scene as the one burned into a file, which is what clears the library's
+     * "not exported" badge. Every other save leaves the stamp alone.
+     */
+    exported?: boolean,
   ): Promise<void>;
   /**
    * Load a previously saved edit session for `id`. Returns `null` when no session

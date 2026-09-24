@@ -20,6 +20,7 @@ const video: LibraryVideo = {
   transfer: { state: "idle" },
   derivedFromAssetId: null,
   editSavedAt: null,
+  editExportedSavedAt: null,
 };
 
 describe("VideoCard", () => {
@@ -92,7 +93,7 @@ describe("VideoCard", () => {
 
   it("shows the edit badge when given one", () => {
     render(
-      <VideoCard video={video} badge="not-exported" onNavigate={vi.fn()} onDelete={vi.fn()} />,
+      <VideoCard video={video} badge="never-exported" onNavigate={vi.fn()} onDelete={vi.fn()} />,
     );
     expect(screen.getByText(/edited · not exported/i)).toBeInTheDocument();
   });
