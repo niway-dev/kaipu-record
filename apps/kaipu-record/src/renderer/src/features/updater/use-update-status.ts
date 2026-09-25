@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { UpdateStatus } from "@shared/types";
+import { useDevUpdateStatus } from "./dev-update-simulator";
 
 /** Track auto-update status: seeds from the main process, then live-updates on events. */
 export function useUpdateStatus(): UpdateStatus {
@@ -17,5 +18,9 @@ export function useUpdateStatus(): UpdateStatus {
       unsubscribe();
     };
   }, []);
-  return status;
+
+  // DEV only: the Developer page can force a state, because the updater itself is
+  // inert in an unpackaged app. Compiled out of production builds.
+  const simulated = useDevUpdateStatus();
+  return simulated ?? status;
 }

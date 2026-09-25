@@ -58,6 +58,12 @@ export interface KaipuElectronAPI {
   notifyReady(): void;
   /** Current auto-update status (for UI that mounts after the event fired). */
   getUpdateStatus(): Promise<UpdateStatus>;
+  /**
+   * Check for updates now. Resolves with the status the check produced, or the
+   * current status unchanged when a check is refused (one already running, a
+   * download in flight, or a build already waiting to install).
+   */
+  checkForUpdates(): Promise<UpdateStatus>;
   /** Subscribe to auto-update status changes. Returns an unsubscribe fn. */
   onUpdateStatus(callback: (status: UpdateStatus) => void): () => void;
   /** Quit and install a downloaded update (the "Reiniciar" button). */

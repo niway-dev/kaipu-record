@@ -21,11 +21,17 @@ import {
   type SimAccount,
   type SimCapacity,
 } from "@renderer/features/storage-cloud/dev-storage-simulator";
+import {
+  DEV_UPDATE_SCENARIOS,
+  readDevUpdateScenarioKey,
+  writeDevUpdateScenario,
+} from "@renderer/features/updater/dev-update-simulator";
 import { DEFAULT_QUALITY } from "@shared/recording-quality";
 import type { PermissionKind } from "@shared/types";
 import { useAppSettings } from "./use-app-settings";
 import { LanguageSettings } from "./language-settings";
 import { ThemeSettings } from "./theme-settings";
+import { UpdateSettings } from "./update-settings";
 import { RecordingQualitySettings } from "./recording-quality-settings";
 import { ScreenshotSaveSettings } from "./screenshot-save-settings";
 import { Section, SettingsPanel } from "./settings-panel";
@@ -225,6 +231,7 @@ export function FilesSettingsPage(): React.JSX.Element {
 
 export function AppSettingsPage(): React.JSX.Element {
   const t = useTranslations("settings");
+  const tUpdates = useTranslations("updates");
   const { open: openOnboarding } = useOnboarding();
   const { settings, update } = useAppSettings();
   return (
@@ -250,6 +257,9 @@ export function AppSettingsPage(): React.JSX.Element {
           }
         />
       </Section>
+      <Section title={tUpdates("updates")}>
+        <UpdateSettings />
+      </Section>
     </SettingsPanel>
   );
 }
@@ -269,6 +279,7 @@ export function ScreenshotsSettingsPage(): React.JSX.Element {
 /** Dev-only overrides. Routed only when `import.meta.env.DEV`; copy is intentionally not localized. */
 export function DeveloperSettingsPage(): React.JSX.Element {
   const [simulatePaid, setSimulatePaid] = React.useState(() => readDevSimulatePaid());
+  const [updateScenario, setUpdateScenario] = React.useState(() => readDevUpdateScenarioKey());
   const storageSim = useStorageSimulator();
   return (
     <SettingsPanel
@@ -286,6 +297,22 @@ export function DeveloperSettingsPage(): React.JSX.Element {
                 setSimulatePaid(checked);
                 writeDevSimulatePaid(checked);
               }}
+            />
+          }
+        />
+      </Section>
+      <Section title="Updater simulator">
+        <Row
+          label="Force an update state"
+          description="The updater is inert in an unpackaged app — this drives the real UI instead"
+          action={
+            <Select
+              value={updateScenario}
+              onChange={(value) => {
+                setUpdateScenario(value);
+                writeDevUpdateScenario(value);
+              }}
+              options={DEV_UPDATE_SCENARIOS.map(({ key }) => ({ value: key, label: key }))}
             />
           }
         />

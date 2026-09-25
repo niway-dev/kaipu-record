@@ -62,6 +62,7 @@ window.electronAPI = {
   getAppVersion: async () => "1.0.0",
   notifyReady: () => {},
   getUpdateStatus: async () => ({ state: "idle" }),
+  checkForUpdates: async () => ({ state: "idle" }) as const,
   onUpdateStatus: () => () => {},
   installUpdate: () => {},
   getSettings: async () => STUB_SETTINGS,
