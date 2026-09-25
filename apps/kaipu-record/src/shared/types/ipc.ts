@@ -178,6 +178,7 @@ export const IPC_CHANNELS = {
   updateGetStatus: "update:get-status",
   updateStatus: "update:status",
   updateInstall: "update:install",
+  updateCheck: "update:check",
   getSettings: "settings:get",
   updateSettings: "settings:update",
   // Main → every window: persisted AppSettings changed. Lets cross-window
@@ -293,8 +294,24 @@ export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
 /** `saving` covers the brief finalize/encode-flush window after Stop. */
 export type RecordingStatus = "recording" | "paused" | "saving";
 
-/** Auto-update state surfaced to the renderer. `ready` = a build is downloaded and installable. */
-export type UpdateStatus = { state: "idle" } | { state: "ready"; version: string };
+/**
+ * Auto-update state surfaced to the renderer. `ready` = a build is downloaded and
+ * installable.
+ *
+ * `checkedAt` (epoch ms) rides only on the variants that follow a COMPLETED check.
+ * `checking`, `downloading` and `ready` carry no timestamp, and the UI omits the
+ * last-checked line for them rather than showing a stale one. Keeping it off those
+ * three is what makes this a widening of the old `idle | ready` union instead of a
+ * rename: every existing consumer narrows on `state` and still compiles.
+ */
+export type UpdateStatus =
+  | { state: "idle" }
+  | { state: "checking" }
+  | { state: "up-to-date"; checkedAt: number }
+  | { state: "available"; version: string; checkedAt: number }
+  | { state: "downloading"; version: string; percent: number }
+  | { state: "ready"; version: string }
+  | { state: "error"; message: string; checkedAt: number };
 
 export interface RecordingTick {
   elapsedSeconds: number;

@@ -17,6 +17,7 @@ const kaipuApi: KaipuElectronAPI = {
   getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.getAppVersion),
   notifyReady: () => ipcRenderer.send(IPC_CHANNELS.appReady),
   getUpdateStatus: () => ipcRenderer.invoke(IPC_CHANNELS.updateGetStatus),
+  checkForUpdates: () => ipcRenderer.invoke(IPC_CHANNELS.updateCheck),
   onUpdateStatus: (callback) => {
     const listener = (_e: IpcRendererEvent, status: UpdateStatus): void => callback(status);
     ipcRenderer.on(IPC_CHANNELS.updateStatus, listener);

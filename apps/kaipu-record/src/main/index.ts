@@ -12,7 +12,12 @@ import { registerLibraryVaultHandlers } from "./library";
 import { registerCloudStorageHandlers } from "./cloud";
 import { registerMediaProtocol, registerMediaScheme } from "./media-protocol";
 import { registerRecordingHub, type RecordingHubHandle } from "./recording/recording-hub";
-import { initAutoUpdater, getUpdateStatus, installDownloadedUpdate } from "./updater/auto-updater";
+import {
+  initAutoUpdater,
+  getUpdateStatus,
+  installDownloadedUpdate,
+  checkForUpdatesNow,
+} from "./updater/auto-updater";
 import {
   registerSettings,
   getDeviceId,
@@ -387,8 +392,9 @@ app.whenReady().then(() => {
   });
 
   // Auto-update (packaged builds only). Silent download; renderer shows a restart banner.
-  initAutoUpdater(() => mainWindow);
+  initAutoUpdater();
   ipcMain.handle(IPC_CHANNELS.updateGetStatus, () => getUpdateStatus());
+  ipcMain.handle(IPC_CHANNELS.updateCheck, () => checkForUpdatesNow());
   ipcMain.on(IPC_CHANNELS.updateInstall, () => installDownloadedUpdate());
 
   // macOS media permissions (onboarding + settings).

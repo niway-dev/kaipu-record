@@ -5,13 +5,30 @@ description: "Proposal: an Updates section in Settings that shows the installed 
 
 # Settings → Updates
 
-> **Status: 🔵 Design written, not implemented** (2026-09-24). Owner report: "I just
+> **Status: 🟢 Ready to validate** (2026-09-25). Implemented; the updater path itself
+> cannot be exercised without a packaged build one version behind the feed. Owner report: "I just
 > published an update, several minutes passed and nothing happens. I assume it has not
 > downloaded it yet or is waiting for some action." Parent:
 > [auto-update](./auto-update) (shipped) · [settings roadmap](./settings-roadmap).
 >
 > **The design lives in [Settings → Updates — design](../specs/2026-09-24-settings-updates-design).**
 > This page keeps the problem statement; the spec holds the decisions.
+
+## Seeing it without a packaged build
+
+`initAutoUpdater` returns early when the app is not packaged, so in `bun run dev` the
+section shows "Updates are disabled in development builds" and nothing else. To look at
+the real UI:
+
+**Settings → Developer → Updater simulator → Force an update state.**
+
+Pick `checking`, `up-to-date`, `available`, `downloading`, `ready` or `error` and the
+Updates section renders the real components in that state, buttons included. The
+simulator is guarded by `import.meta.env.DEV`, so it is dead-code eliminated from
+production builds and nobody can fake a "ready to install" banner from localStorage.
+
+What this still does NOT prove is the updater actually finding, downloading and
+installing a build. That needs a packaged build one version behind the live feed.
 
 ## What happens today, and why "nothing happens"
 
