@@ -1,0 +1,218 @@
+---
+title: "ADR 0005: Draft → Ready for review is the release-candidate readiness signal"
+description: Release PRs open as drafts and accumulate changes for free; marking one Ready for review is what triggers candidate verification, and every later revision is re-verified while it stays ready. Retires the `verify` label, which a bot's own label housekeeping could trigger, including after the PR had merged.
+---
+
+# ADR 0005: Draft → Ready for review is the release-candidate readiness signal
+
+## Status
+
+| Field         | Value                                                                            |
+| ------------- | -------------------------------------------------------------------------------- |
+| Status        | Accepted — implemented locally, **not yet merged or exercised in the cloud**     |
+| Date          | 2026-09-25                                                                       |
+| Amends        | [ADR 0004](./0004-local-first-release-verification), decision 6 (candidate tier) |
+| Superseded by | —                                                                                |
+
+ADR 0004 stands. This decision changes only **how a release candidate is declared ready**,
+the events the candidate workflow listens to, and the name of the required check.
+
+## Context
+
+ADR 0004 put candidate verification on the release PR that release-please maintains. A
+later change made a `verify` **label** both the trigger and the gate, because release-please
+rewrites its PR on every releasable merge to `main` and verifying each rewrite validated a
+state that was superseded before it shipped.
+
+The label worked as a concept and failed as a mechanism. To notice the label, the workflow
+had to listen to `labeled` and `unlabeled` — and those fire for **every** label, not just
+the one it cares about. release-please uses `autorelease: pending` and `autorelease: tagged`
+for its own bookkeeping.
+
+Desktop 0.8.0, on 2026-09-25, produced four candidate runs where one was wanted:
+
+| Run | Trigger                                       | Outcome                                             |
+| --- | --------------------------------------------- | --------------------------------------------------- |
+| #13 | release-please added `autorelease: tagged`    | failed in seconds, no `verify` label yet            |
+| #14 | the owner added `verify`                      | started, cancelled 47 s in                          |
+| #15 | release-please force-pushed the PR            | the one that mattered: 5 m 15 s on the final commit |
+| #16 | release-please removed `autorelease: pending` | **started 13 s after the PR merged**, full run      |
+
+Run #16 is the clearest statement of the problem: a five-minute verification of a candidate
+that had already merged, already been tagged, and was already being published by
+`Release Desktop` in the next tab.
+
+Three further defects were found reading the workflow as a whole:
+
+1. **The label was checked in a step, not a job condition.** The expensive job allocated a
+   runner in order to discover it should not work, then printed an error and exited. Every
+   job bills a whole minute (hub rule R6).
+2. **A missing label was reported as a failure.** "Not marked ready yet" is the normal
+   state of a release PR for most of its life, so release PRs lived under a red X.
+3. **The gate could not tell its own outcomes apart.** Its only message said "add the
+   `verify` label" whether verification had failed, been cancelled, or never run. Run #14
+   was cancelled by concurrency and reported as a missing label.
+
+Separately, the workflow's `pull_request` trigger is filtered by **base** branch. A PR
+opened against another branch and later retargeted onto `main` never triggered it, so the
+required check never reported and the PR could not be merged at all. This happened to
+PR #173 on 2026-09-25 and was cleared by closing and reopening it.
+
+## Decision
+
+1. **Release PRs open as drafts.** `release-please-config.json` sets
+   `"draft-pull-request": true` at the root, so it applies to the desktop, web and api
+   components. This is distinct from `"draft"`, which drafts the GitHub _Release_.
+2. **Draft means "still accumulating".** While a release PR is a draft, release-please's
+   rewrites allocate **no candidate-verification runner**.
+3. **Ready for review is the readiness signal.** `ready_for_review` triggers verification.
+   It replaces the `verify` label, which is retired.
+4. **A ready candidate is re-verified when it changes.** `synchronize` on a non-draft
+   release PR verifies the new revision, and the superseded run is cancelled. "One
+   verification" means one per candidate, not one per release.
+5. **Eligibility is decided at the job level**, before a runner is allocated.
+6. **Label events are no longer triggers.** `labeled` and `unlabeled` are removed, which
+   is what removes runs #13 and #16 at the source.
+7. **`edited` is a trigger only for a base change**, detected through
+   `github.event.changes.base.ref.from`. This is what lets a stacked PR retargeted onto
+   `main` receive its required check. Title and body edits allocate nothing.
+8. **Concurrency is scoped to the expensive job.** There is no workflow-level
+   `concurrency`, because with one, an irrelevant event starts a run that cancels an
+   in-flight verification _before_ the replacement's job conditions skip it — destroying a
+   valid verification in order to run nothing.
+9. **Names say what they are.** The workflow is **PR checks**, the required check is
+   **Merge readiness**, and the expensive release-only job is **Verify release candidate**.
+
+### Draft is skipped, not failed
+
+A draft is a normal working state, and GitHub already refuses to merge a draft, so failing
+one would add a red X that means nothing. The gate therefore does not run on a draft.
+
+Skipping is also the safe choice. No check is reported, so the required check stays
+unsatisfied and merge stays blocked either way. A stale green cannot be carried into the
+ready state, because `ready_for_review` starts a fresh run whose gate reports only after
+`verify` has run **in that run**.
+
+The cost of this symmetry is that a draft → ready → draft → ready cycle verifies the same
+revision twice. That is a manual action, it is rare, and it is safe; it was preferred over
+keeping per-SHA verification state.
+
+## Alternatives rejected
+
+- **Keep the label and filter it to `verify`.** Fixes runs #13 and #16 but keeps a
+  convention a bot can still write to, and keeps a red X as the normal state of an
+  unfinished release PR. Draft is a first-class GitHub concept that bots do not churn.
+- **Make the required check conditional on the head branch.** Not expressible: a ruleset
+  requires a check per **target** branch and cannot condition on where a PR comes from.
+  This is why a cheap always-reporting gate exists at all.
+- **Drop the required check.** Removes the check from every PR and with it the guarantee;
+  the merge button would be green on an unverified release. Since the tag is the deploy, an
+  unverified release is discovered after it has shipped.
+- **Add `edited` unconditionally.** Would re-run the gate on every title and body edit.
+  Filtering on `changes.base` keeps the stacked-PR fix without the noise.
+- **Workflow-level concurrency with a conditional `cancel-in-progress`.** Works, but queues
+  irrelevant runs behind a five-minute verification. Job-level scoping is simpler and never
+  queues.
+
+## Consequences
+
+- Releasing gains one deliberate manual step: mark the release PR **Ready for review**.
+  That step is the point — it is where a human says which candidate is being published.
+- Draft release PRs no longer report `Merge readiness`, so they are unmergeable until
+  marked ready. GitHub already prevented merging them.
+- The `verify` label no longer does anything. It can be deleted from the repository once
+  this is merged.
+- A returned-to-draft candidate cancels its in-flight verification, and verifies again from
+  scratch when marked ready.
+- The required check is renamed, which needs the coordinated migration below.
+
+## Cost
+
+Stated precisely, because the parent ADR exists for cost reasons:
+
+- **A draft release PR update allocates no candidate-verification runner.** GitHub may
+  still display a workflow run whose jobs were all skipped; a skipped job allocates no
+  runner.
+- **The lightweight gate still bills runner minutes.** It is a real job on a real runner,
+  billed at the one-minute minimum like any other, and it runs on every non-draft PR event
+  to `main`. Removing that cost was not a goal here.
+- **During the migration there are two lightweight jobs**, the new `Merge readiness` and
+  the transitional `Release candidate verified` alias, so the gate cost is briefly doubled.
+- **`release-please.yml` still runs** on pushes that touch a releasable path, unchanged.
+
+No saving is claimed until an "after" export is measured against
+[the September baseline](/specs/2026-09-ci-usage-baseline/), per ADR 0004 decision 7.
+
+## Required-check migration
+
+The live ruleset (`main release`, id 23974690) requires a check literally named
+**`Release candidate verified`**. Renaming the job without a plan would leave every PR
+waiting on a name nothing reports, blocking merge on `main` entirely.
+
+The workflow therefore ships a **transitional alias job** that reports the old name with the
+new gate's result, so the rename and the ruleset update are independent and neither blocks
+the other.
+
+Order of operations, once this branch is merged:
+
+1. **Merge the workflow.** Both `Merge readiness` and `Release candidate verified` report.
+   Nothing is blocked; the ruleset is still satisfied by the alias.
+2. **Confirm `Merge readiness` has reported** on at least one PR.
+3. **Update the ruleset** to require `Merge readiness` instead of `Release candidate
+verified`, preserving `deletion`, `non_fast_forward`, the empty bypass list, the default
+   branch target and `strict_required_status_checks_policy: false`:
+
+   ```bash
+   gh api -X PUT repos/csdev19/kaipu-record-monorepo/rulesets/23974690 \
+     --input ruleset.json   # the current ruleset with only the check context changed
+   ```
+
+   Fetch the current ruleset first and edit only
+   `rules[].parameters.required_status_checks[].context`. Do not rebuild it by hand, and do
+   not disable enforcement to get past a failure.
+
+4. **Delete the alias job** from `.github/workflows/pr-checks.yml` in a follow-up PR, and
+   delete the `verify` label from the repository.
+
+Until step 3 is done, **the required check is still the old name**. That is the pending
+integration step.
+
+## Validation status
+
+Validated locally, with `bun scripts/check-workflow-eligibility.ts`, which reads the real
+workflow and evaluates its real `if:` expressions and gate scripts against synthetic event
+payloads, plus `actionlint` over every workflow.
+
+Not validated, and only a real release cycle can:
+
+- that GitHub delivers `ready_for_review`, `converted_to_draft` and the `changes.base`
+  payload exactly as modelled;
+- that job-level `concurrency` cancels an in-flight job from a sibling job in the same
+  group;
+- that `googleapis/release-please-action@v4` opens drafts and leaves a
+  manually-readied PR ready when it force-pushes. The library's `updatePullRequest` sends
+  only number, title and body, with no `draft` field, so it structurally cannot flip the
+  state — but the pinned action version was not read, only the current source.
+
+**Existing release PRs:** there were none open when this was written, so nothing needs
+converting. Should one be open at merge time, the config affects creation only: convert it
+to draft by hand, or leave it ready and let it verify as it is. Do not assume release-please
+will change its state.
+
+## Reopen when
+
+- A release candidate is published without verification because the gate reported success
+  from a run that did not verify it.
+- Marking ready becomes a step people forget, and releases stall in draft.
+- A second person merges, at which point ordinary PRs need their own required checks and
+  the gate stops being the only one.
+
+## Guidance
+
+Reusable mechanics belong in the general-knowledge hub:
+[release-gated verification](https://github.com/csdev19/general-knowledge/blob/main/monorepos/release-gated-verification.md)
+and [PR checks](https://github.com/csdev19/general-knowledge/blob/main/monorepos/pr-checks.md).
+Two things this decision exposed are worth promoting there once it has run for real: that a
+bot-writable convention (a label) is a poor readiness signal next to a first-class one
+(draft state), and that workflow-level `concurrency` plus job-level skipping lets an
+irrelevant event cancel valid work.

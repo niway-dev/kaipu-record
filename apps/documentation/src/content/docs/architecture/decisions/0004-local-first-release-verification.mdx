@@ -7,12 +7,13 @@ description: Iterative checks move to a Lefthook pre-push that runs the same `ve
 
 ## Status
 
-| Field         | Value                                                                   |
-| ------------- | ----------------------------------------------------------------------- |
-| Status        | Accepted — implementation in progress (see "Implementation" below)      |
-| Date          | 2026-09-24                                                              |
-| Supersedes    | The pre-push scope of the 2026-09-06 Lefthook spec (types stayed in CI) |
-| Superseded by | —                                                                       |
+| Field         | Value                                                                                                                        |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Accepted — implementation in progress (see "Implementation" below)                                                           |
+| Date          | 2026-09-24                                                                                                                   |
+| Supersedes    | The pre-push scope of the 2026-09-06 Lefthook spec (types stayed in CI)                                                      |
+| Amended by    | [ADR 0005](./0005-draft-ready-release-candidate-readiness) — candidate readiness, event handling and the required-check name |
+| Superseded by | —                                                                                                                            |
 
 ## Context
 
@@ -66,10 +67,17 @@ validated in the cloud.
 5. **PR-triggered workflows are retired.** The four `ci*.yml` keep `workflow_dispatch` for
    validating a candidate on demand. `release-please.yml` runs only when a releasable path
    changes.
-6. **A candidate tier on the release PR.** `release-candidate.yml` runs `verify` plus the
+6. **A candidate tier on the release PR.** The candidate job runs `verify` plus the
    web and API bundles on the PR that release-please maintains, so `main` is validated as
-   it will be tagged, before the tag exists. On every other PR its single job is skipped
-   at no cost. It can also be dispatched by hand for the risky-change list below.
+   it will be tagged, before the tag exists. On every other PR it is skipped. It can also
+   be dispatched by hand for the risky-change list below.
+
+   > **Amended by [ADR 0005](./0005-draft-ready-release-candidate-readiness).** The file is
+   > now `pr-checks.yml`, readiness is the Draft → Ready for review transition rather than a
+   > `verify` label, and the required check is named `Merge readiness`. The claim that the
+   > workflow costs nothing on other PRs was never quite true: the lightweight gate is a
+   > real job on a real runner.
+
 7. **Measurement before any savings claim.** The September exports are the "before". The
    "after" is a later export in its own dated directory, following the protocol in the
    baseline document.
@@ -113,7 +121,7 @@ Compared with cloud checks on every PR update, stated plainly:
 | Clean-environment detection per PR: uncommitted files, stale lockfile, native deps that only fail on a fresh install, env present locally but not on a runner | The risky-change list: dispatch `Release candidate` before merging a PR that touches `bun.lock`, `scripts/`, `.github/workflows/`, native dependencies or package build config. Minutes per use, not per push. |
 | Bisection: a red gate after many merges has many suspects                                                                                                     | The candidate tier keeps the window to one release PR; a dispatch after a risky merge keeps it shorter.                                                                                                        |
 | Bypass: `LEFTHOOK=0`, or a working tree that differs from the pushed commit                                                                                   | The release gate on the tagged SHA is the guarantee; the hook is convenience. Push with a clean tree.                                                                                                          |
-| Timing: problems surface at release preparation, not at PR time                                                                                               | `release-candidate.yml` fails before the tag exists, so the cost is a push, not a patch release.                                                                                                               |
+| Timing: problems surface at release preparation, not at PR time                                                                                               | The candidate job fails before the tag exists, so the cost is a push, not a patch release.                                                                                                                     |
 
 What is not lost: types were checked before and are checked now, at every push locally and
 at every release in the cloud. Flows are exercised on the platform that ships, against the
@@ -149,7 +157,8 @@ Stacked PRs, in merge order:
 2. Local gate: `verify` script, Lefthook pre-push, this ADR and the audit documents.
 3. Release gates: `verify` job in the three `release-*.yml`, E2E on the macOS release job.
 4. Retire the `pull_request` triggers from the four `ci*.yml`.
-5. Candidate tier: `release-candidate.yml` on the release-please PR and on dispatch.
+5. Candidate tier: the candidate job on the release-please PR and on dispatch (now
+   `pr-checks.yml`; see [ADR 0005](./0005-draft-ready-release-candidate-readiness)).
 
 The account was quota-blocked while these were written, so none of the workflow changes
 had a cloud run. The first real check of the release gate is the next desktop release.
