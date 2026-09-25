@@ -6,14 +6,25 @@ name: Release candidate
 # failure in release-*.yml costs a tag, an empty GitHub Release and a patch release.
 #
 # It is the only pull_request-triggered workflow left. On every other PR the job is
-# skipped by the `if:` below, which costs nothing. The release-please branch prefix is
-# `release-please--`; the workflow-dispatch path exists so a candidate can also be
-# validated by hand from the Actions tab (risky-change list in ADR 0004).
-
+# skipped by the `if:` below, which allocates no runner and so costs nothing. The
+# release-please branch prefix is `release-please--`; the workflow-dispatch path exists so
+# a candidate can also be validated by hand from the Actions tab (risky-change list in
+# ADR 0004).
+#
+# The `verify` LABEL is the trigger, and the gate. release-please rewrites its PR on every
+# merge to `main`, so running on each of those updates verified a state that was superseded
+# before it ever shipped — measured at 6m30 a run, several runs per release. Now nothing
+# runs while merges accumulate; labelling the PR says "I am releasing this", and from that
+# moment every update to it is verified until it merges. Without the label the job fails
+# in seconds with an instruction, so making this a required check on `main` makes the label
+# a precondition of merging a release — the same shape as a review approval.
 on:
   pull_request:
     branches:
       - main
+    # `labeled`/`unlabeled` are not in the default set and are what make the label a
+    # trigger. `synchronize` is kept so a labelled PR re-verifies as it changes.
+    types: [opened, reopened, synchronize, labeled, unlabeled]
   workflow_dispatch:
 
 concurrency:
@@ -26,6 +37,14 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.head_ref, 'release-please--') }}
     steps:
+      # Runs before checkout so the unlabelled path costs seconds, not a build. A failure
+      # here is the gate, not an error: it means "this release has not been marked ready".
+      - name: Require the verify label
+        if: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'verify') }}
+        run: |
+          echo "::error title=Release not marked ready::Add the 'verify' label to this PR to run the release verification. Until it passes, this candidate is not verified and must not be merged."
+          exit 1
+
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -75,3 +94,32 @@ jobs:
       - name: Build backend
         working-directory: apps/server-hono
         run: bun run build
+
+  # The required check. It ALWAYS runs, which is the whole point: a required check that
+  # never reports leaves the PR perpetually pending and blocks merge forever (the
+  # paths-filter gotcha in the hub's pr-checks.md). `verify` above is skipped on ordinary
+  # PRs and on unlabelled release PRs, so it cannot be the required one; this job reads
+  # its result and reports for it. Five seconds, and it is the thing that greys out the
+  # merge button until a release has actually been verified.
+  gate:
+    name: Release candidate verified
+    runs-on: ubuntu-latest
+    needs: [verify]
+    if: always() && github.event_name == 'pull_request'
+    steps:
+      - name: Decide
+        env:
+          IS_RELEASE: ${{ startsWith(github.head_ref, 'release-please--') }}
+          VERIFY: ${{ needs.verify.result }}
+        run: |
+          set -euo pipefail
+          if [ "$IS_RELEASE" != "true" ]; then
+            echo "Not a release candidate; nothing to verify."
+            exit 0
+          fi
+          if [ "$VERIFY" = "success" ]; then
+            echo "Release candidate verified."
+            exit 0
+          fi
+          echo "::error title=Release candidate not verified::Add the 'verify' label to run the release verification. This PR cannot be merged until it passes (verify job: $VERIFY)."
+          exit 1
