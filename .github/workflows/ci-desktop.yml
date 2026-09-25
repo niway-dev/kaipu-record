@@ -1,28 +1,25 @@
 name: Desktop Tests
 
-# The desktop project's tests (unit + E2E), path-filtered so the slow suite only runs
-# when the desktop app or a shared package changes — not on every PR. Lint / build /
+# The desktop project's tests (unit + E2E) on Linux, on demand. Lint / build /
 # type-check for all projects lives in the universal `CI` workflow.
 
+# Trigger (ADR 0004, /architecture/decisions/0004-local-first-release-verification):
+# no longer runs on pull_request. The Lefthook pre-push runs `bun run verify` locally and
+# every release-*.yml runs the same command on the tagged SHA before publishing. This
+# workflow stays for validating a candidate on demand from the Actions tab. In
+# September 2026 its PR-time runs were part of the 802 Linux minutes that exhausted the
+# account's quota and blocked releases.
 on:
-  pull_request:
-    branches:
-      - main
-    paths:
-      - "apps/kaipu-record/**"
-      - "packages/**"
-      - "bun.lock"
-      - ".github/workflows/ci-desktop.yml"
+  workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   unit:
     name: Unit tests
     runs-on: ubuntu-latest
-    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -52,7 +49,6 @@ jobs:
   e2e:
     name: E2E (kaipu-record)
     runs-on: ubuntu-latest
-    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

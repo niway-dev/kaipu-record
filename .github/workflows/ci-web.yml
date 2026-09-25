@@ -1,29 +1,27 @@
 name: Web Tests
 
-# The web project's tests, path-filtered. Runs `apps/web-hono`'s `test` script when it
+# The web project's tests, on demand. Runs `apps/web-hono`'s `test` script when it
 # exists (web has none yet — the step no-ops with a note until one is added, so this
 # workflow is wired and ready). Lint / build / type-check lives in the universal `CI`
 # workflow.
 
+# Trigger (ADR 0004, /architecture/decisions/0004-local-first-release-verification):
+# no longer runs on pull_request. The Lefthook pre-push runs `bun run verify` locally and
+# every release-*.yml runs the same command on the tagged SHA before publishing. This
+# workflow stays for validating a candidate on demand from the Actions tab. In
+# September 2026 its PR-time runs were part of the 802 Linux minutes that exhausted the
+# account's quota and blocked releases.
 on:
-  pull_request:
-    branches:
-      - main
-    paths:
-      - "apps/web-hono/**"
-      - "packages/**"
-      - "bun.lock"
-      - ".github/workflows/ci-web.yml"
+  workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   test:
     name: Web tests
     runs-on: ubuntu-latest
-    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
