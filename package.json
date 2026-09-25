@@ -38,6 +38,7 @@
     "format": "oxfmt --write .",
     "format:tracked": "git ls-files | grep -E '\\.(ts|tsx|js|jsx|json|jsonc|md|mdx)$' | xargs oxfmt --write",
     "check": "bun run lint && bun run format",
+    "verify": "bun run lint && oxfmt --check . && bun run build --filter='@kaipu/*' && bun run check-types && bun run test",
     "dev": "turbo run dev",
     "build": "turbo run build",
     "build:no-cache": "turbo run build --force",

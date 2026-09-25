@@ -14,6 +14,13 @@ half (the decision, the hook contract, the migration procedure, the gotchas) liv
 [general-knowledge · git-hooks-lefthook-playbook](https://github.com/csdev19/general-knowledge/blob/main/monorepos/git-hooks-lefthook-playbook.md).
 This page is Kaipu's application of it: what is true in this repo today and exactly what changes.
 
+> **Update 2026-09-24:** the `pre-push` contract below was widened by
+> [ADR 0004](/architecture/decisions/0004-local-first-release-verification/): it now runs
+> `bun run verify` (lint, format check, package builds, type-check, tests) instead of lint and
+> format only. The "types stay in CI" choice in this spec is superseded; the reopen condition
+> ("CI type failures become the common reason PRs go red") was overtaken by the account's
+> Actions quota running out. `pre-commit` and `commit-msg` are unchanged.
+
 ## Goal
 
 Every hook this repo runs is declared in one file, does one clearly stated job, and can be copied
