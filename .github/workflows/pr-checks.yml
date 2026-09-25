@@ -1,0 +1,248 @@
+name: PR checks
+
+# Tier: pull-request gate (ADR 0004, /architecture/decisions/0004-local-first-release-verification).
+# Reopen when: a second person merges, or release-time verification starts finding
+# regressions `verify` missed locally — at that point ordinary PRs need their own cloud
+# checks again and this workflow stops being the only pull_request-triggered one.
+#
+# Two things live here, and they are deliberately different sizes.
+#
+# 1. `Merge readiness` — the REQUIRED check. It always reports on a non-draft PR, because a
+#    required check that never reports leaves the PR perpetually pending and blocks merge
+#    forever (the paths-filter gotcha in the hub's pr-checks.md). It costs one short job.
+# 2. `Verify release candidate` — the expensive one. It runs `bun run verify` plus the web
+#    and API bundles on the release PR that release-please maintains, so `main` is validated
+#    as it will be tagged, BEFORE the tag exists. A failure here costs a fix and a push; the
+#    same failure in release-*.yml costs a tag, an empty GitHub Release and a patch release.
+#
+# READINESS POLICY — draft means "still accumulating", ready means "verify this".
+#
+# release-please opens its release PRs as drafts (`draft-pull-request` in
+# release-please-config.json) and rewrites them on every releasable merge to `main`. While
+# the PR is a draft none of those rewrites allocate a verification runner. Marking it
+# **Ready for review** is the signal to verify, and from that moment every new revision is
+# re-verified, with the superseded run cancelled.
+#
+# This replaced a `verify` LABEL that did the same job badly: the workflow listened to every
+# `labeled`/`unlabeled` event, so release-please's own `autorelease: pending` / `autorelease:
+# tagged` bookkeeping started full verifications — including one 13 seconds AFTER the PR had
+# merged and the tag already existed (PR #165, runs #13 and #16 on 2026-09-25). Draft state
+# is a first-class GitHub concept, it cannot be churned by a bot's label housekeeping, and
+# GitHub already refuses to merge a draft.
+#
+# Eligibility is decided at the JOB level, before a runner is allocated. The old workflow
+# checked the label in a *step*, so it booted a full VM just to print an error and exit.
+
+on:
+  pull_request:
+    branches:
+      - main
+    # Why each of these, since the default set is not enough and every extra type is a
+    # potential wasted run:
+    #   ready_for_review  — THE trigger. "This candidate is the one I am publishing."
+    #   synchronize       — a new revision. Re-verify it; cancel the superseded run.
+    #   converted_to_draft— back to accumulating. Cancel in-flight verification.
+    #   opened/reopened   — an ordinary PR needs its required check from the start.
+    #   edited            — ONLY for a base change, so a stacked PR retargeted onto `main`
+    #                       still gets its required check. GitHub fires `edited` for title
+    #                       and body edits too; those are filtered out by
+    #                       `github.event.changes.base.ref.from` below, which is populated
+    #                       only when the base actually moved. Without `edited`, a PR opened
+    #                       against another branch and later retargeted to `main` never
+    #                       triggers this workflow, the required check never reports, and
+    #                       the PR is unmergeable forever (hit on PR #173, 2026-09-25).
+    # `labeled`/`unlabeled` are deliberately ABSENT. See the readiness policy above.
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+      - converted_to_draft
+      - edited
+  workflow_dispatch:
+
+# NOTE: there is no workflow-level `concurrency` on purpose. With one, an irrelevant event
+# (a title edit) starts a run that cancels an in-flight verification *before* the new run's
+# job conditions get a chance to skip it — destroying a valid verification to run nothing.
+# Cancellation is scoped to the expensive job instead, below, so only runs that actually
+# verify can supersede one another.
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify release candidate
+    runs-on: ubuntu-latest
+    # Everything that decides "should this cost a runner?" is here, not in a step.
+    #   - an open, non-draft PR                (draft accumulates for free)
+    #   - whose head is a release-please branch (ordinary PRs never pay this)
+    #   - on an event that changes the candidate, not its prose
+    # `workflow_dispatch` bypasses all of it: it is the documented manual escape hatch for
+    # the risky-change list in ADR 0004, and `github.head_ref` is empty outside a PR.
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event.pull_request.state == 'open' &&
+          github.event.pull_request.draft == false &&
+          startsWith(github.head_ref, 'release-please--') &&
+          (github.event.action != 'edited' || github.event.changes.base.ref.from != '')
+        )
+      }}
+    # Job-level, so only runs that reach this job join the group. A newer revision cancels
+    # the verification of the one it replaced; a title edit cannot.
+    concurrency:
+      group: verify-release-candidate-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.4
+
+      - name: Cache bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      # Turbo's local cache. Without it every run re-does `check-types` and `build` from
+      # scratch: measured on #161's run, type-check alone was 1m05 and the builds 55s —
+      # 71% of the job — while the same tasks replay in seconds locally off a warm cache.
+      # Keyed on the lockfile + turbo config, NOT on the SHA: cache entries are immutable,
+      # so a per-SHA key mints a fresh entry on every push of an open PR (x9 jobs) and
+      # eats the repository's 10 GB budget. Turbo validates each task's own input hash, so
+      # an entry that predates the current code is partially reused, never wrongly reused.
+      - name: Cache turbo outputs
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ hashFiles('bun.lock', 'turbo.json') }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Verify
+        run: bun run verify
+
+      # The two app bundles are otherwise built only inside release-web / release-api.
+      # Building them here surfaces a bundling failure before the tag, at no extra job.
+      - name: Build web app
+        working-directory: apps/web-hono
+        env:
+          VITE_SERVER_URL: https://placeholder.example.com
+          DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
+        run: bun run build
+
+      - name: Build backend
+        working-directory: apps/server-hono
+        run: bun run build
+
+  # Returning a ready candidate to draft means "not this one after all". Joining the verify
+  # job's concurrency group from a job that costs seconds cancels the in-flight verification
+  # instead of paying out the remaining minutes of a result nobody will read.
+  cancel-superseded:
+    name: Cancel superseded verification
+    runs-on: ubuntu-latest
+    if: >-
+      ${{
+        github.event.action == 'converted_to_draft' &&
+        startsWith(github.head_ref, 'release-please--')
+      }}
+    concurrency:
+      group: verify-release-candidate-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      - name: Note
+        run: |
+          echo "Candidate returned to draft; any in-flight verification for this PR is cancelled."
+          echo "Mark the pull request ready for review again to verify the current revision."
+
+  # THE REQUIRED CHECK. It always reports on a non-draft PR — that is its entire job.
+  #
+  # Drafts are skipped rather than failed. A draft is a normal working state, not an error,
+  # and GitHub already refuses to merge one, so failing it would add a red X that means
+  # nothing. Skipping is also safe: no check is reported, so the required check stays
+  # unsatisfied and merge stays blocked either way. Nothing can carry a stale green into
+  # the ready state, because `ready_for_review` starts a fresh run whose gate reports only
+  # after `verify` has actually run in THAT run.
+  gate:
+    name: Merge readiness
+    runs-on: ubuntu-latest
+    needs: [verify]
+    if: >-
+      ${{
+        always() &&
+        github.event_name == 'pull_request' &&
+        github.event.pull_request.state == 'open' &&
+        github.event.pull_request.draft == false &&
+        (github.event.action != 'edited' || github.event.changes.base.ref.from != '')
+      }}
+    steps:
+      - name: Decide
+        env:
+          IS_RELEASE: ${{ startsWith(github.head_ref, 'release-please--') }}
+          VERIFY: ${{ needs.verify.result }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          if [ "$IS_RELEASE" != "true" ]; then
+            echo "Not a release candidate. Candidate verification does not apply to this pull request."
+            exit 0
+          fi
+
+          case "$VERIFY" in
+            success)
+              echo "Release candidate verified on $SHA."
+              exit 0
+              ;;
+            failure)
+              echo "::error title=Release candidate failed verification::\`bun run verify\` or an app bundle build failed on $SHA. Fix it and push; the new revision is verified automatically while this PR is ready for review."
+              exit 1
+              ;;
+            cancelled)
+              echo "::error title=Release candidate verification cancelled::It was superseded by a newer revision, or this PR was returned to draft. Mark the pull request ready for review again to verify the current revision."
+              exit 1
+              ;;
+            *)
+              echo "::error title=Release candidate not verified::Verification did not run for this revision (verify job: $VERIFY). Return the pull request to draft and mark it ready for review again."
+              exit 1
+              ;;
+          esac
+
+  # TRANSITIONAL — delete once the `main release` ruleset requires `Merge readiness`.
+  #
+  # The live ruleset (id 23974690) still requires a check literally named "Release candidate
+  # verified". Renaming the gate job without this alias would leave every PR waiting on a
+  # check name nothing reports any more, which blocks merge on `main` for everyone. This job
+  # reports the old name with the new job's result, so the rename and the ruleset update can
+  # happen in either order and neither blocks the other. Migration steps are in ADR 0005.
+  legacy-gate:
+    name: Release candidate verified
+    runs-on: ubuntu-latest
+    needs: [gate]
+    if: >-
+      ${{
+        always() &&
+        github.event_name == 'pull_request' &&
+        github.event.pull_request.state == 'open' &&
+        github.event.pull_request.draft == false &&
+        (github.event.action != 'edited' || github.event.changes.base.ref.from != '')
+      }}
+    steps:
+      - name: Mirror the merge-readiness result
+        env:
+          GATE: ${{ needs.gate.result }}
+        run: |
+          set -euo pipefail
+          echo "Deprecated check name. The decision is made by 'Merge readiness' (result: $GATE)."
+          [ "$GATE" = "success" ]
