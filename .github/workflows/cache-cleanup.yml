@@ -1,0 +1,43 @@
+name: Cache cleanup
+
+# GitHub scopes a cache to the ref that created it, and a `pull_request` run uses
+# `refs/pull/<n>/merge` — not the head branch. Deleting the branch on merge therefore
+# leaves every cache that PR created behind, forever. Twenty-one closed PRs had
+# accumulated 8.1 GB of the repository's 10 GB budget before this workflow existed;
+# past that ceiling GitHub evicts by least-recent-use, which starts throwing away the
+# bun install caches that are the expensive ones to rebuild.
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  actions: write # deleting a cache entry is an Actions write
+  contents: read
+
+jobs:
+  cleanup:
+    name: Delete this PR's caches
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete every cache scoped to the closed PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          REF: refs/pull/${{ github.event.pull_request.number }}/merge
+        run: |
+          set -euo pipefail
+          # `gh cache delete` matches by key, not by ref, and keys repeat across refs —
+          # deleting by key would take another branch's cache with it. Go through the API
+          # and delete by id, filtered on this PR's ref.
+          ids=$(gh api --paginate "repos/$REPO/actions/caches?per_page=100" \
+                  --jq ".actions_caches[] | select(.ref == \"$REF\") | .id")
+          if [ -z "$ids" ]; then
+            echo "No caches for $REF."
+            exit 0
+          fi
+          count=0
+          for id in $ids; do
+            gh api -X DELETE "repos/$REPO/actions/caches/$id" --silent
+            count=$((count + 1))
+          done
+          echo "Deleted $count cache entr$([ "$count" -eq 1 ] && echo y || echo ies) for $REF."
