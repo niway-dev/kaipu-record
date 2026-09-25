@@ -1,0 +1,75 @@
+name: Release candidate
+
+# Candidate tier (ADR 0004, /architecture/decisions/0004-local-first-release-verification):
+# runs `bun run verify` on the release PR that release-please maintains, i.e. on `main` as
+# it will be tagged, BEFORE the tag exists. A failure here costs a fix and a push; the same
+# failure in release-*.yml costs a tag, an empty GitHub Release and a patch release.
+#
+# It is the only pull_request-triggered workflow left. On every other PR the job is
+# skipped by the `if:` below, which costs nothing. The release-please branch prefix is
+# `release-please--`; the workflow-dispatch path exists so a candidate can also be
+# validated by hand from the Actions tab (risky-change list in ADR 0004).
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify release candidate
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.head_ref, 'release-please--') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.4
+
+      - name: Cache bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      # Turbo's local cache. Without it every run re-does `check-types` and `build` from
+      # scratch: measured on #161's run, type-check alone was 1m05 and the builds 55s —
+      # 71% of the job — while the same tasks replay in seconds locally off a warm cache.
+      # Key per SHA, restore from the most recent run's cache (turbo validates each task's
+      # own input hash, so a stale entry is skipped, never wrongly reused).
+      - name: Cache turbo outputs
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Verify
+        run: bun run verify
+
+      # The two app bundles are otherwise built only inside release-web / release-api.
+      # Building them here surfaces a bundling failure before the tag, at no extra job.
+      - name: Build web app
+        working-directory: apps/web-hono
+        env:
+          VITE_SERVER_URL: https://placeholder.example.com
+          DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
+        run: bun run build
+
+      - name: Build backend
+        working-directory: apps/server-hono
+        run: bun run build

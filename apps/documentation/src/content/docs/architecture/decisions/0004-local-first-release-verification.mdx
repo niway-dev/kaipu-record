@@ -66,7 +66,11 @@ validated in the cloud.
 5. **PR-triggered workflows are retired.** The four `ci*.yml` keep `workflow_dispatch` for
    validating a candidate on demand. `release-please.yml` runs only when a releasable path
    changes.
-6. **Measurement before any savings claim.** The September exports are the "before". The
+6. **A candidate tier on the release PR.** `release-candidate.yml` runs `verify` plus the
+   web and API bundles on the PR that release-please maintains, so `main` is validated as
+   it will be tagged, before the tag exists. On every other PR its single job is skipped
+   at no cost. It can also be dispatched by hand for the risky-change list below.
+7. **Measurement before any savings claim.** The September exports are the "before". The
    "after" is a later export in its own dated directory, following the protocol in the
    baseline document.
 
@@ -100,6 +104,26 @@ validated in the cloud.
 - Cloud execution now scales with release candidates instead of with edits.
 - No saving is claimed until a comparable "after" period is measured.
 
+## What is given up, and how each gap is closed
+
+Compared with cloud checks on every PR update, stated plainly:
+
+| Lost                                                                                                                                                          | Closed by                                                                                                                                                                                                      |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Clean-environment detection per PR: uncommitted files, stale lockfile, native deps that only fail on a fresh install, env present locally but not on a runner | The risky-change list: dispatch `Release candidate` before merging a PR that touches `bun.lock`, `scripts/`, `.github/workflows/`, native dependencies or package build config. Minutes per use, not per push. |
+| Bisection: a red gate after many merges has many suspects                                                                                                     | The candidate tier keeps the window to one release PR; a dispatch after a risky merge keeps it shorter.                                                                                                        |
+| Bypass: `LEFTHOOK=0`, or a working tree that differs from the pushed commit                                                                                   | The release gate on the tagged SHA is the guarantee; the hook is convenience. Push with a clean tree.                                                                                                          |
+| Timing: problems surface at release preparation, not at PR time                                                                                               | `release-candidate.yml` fails before the tag exists, so the cost is a push, not a patch release.                                                                                                               |
+
+What is not lost: types were checked before and are checked now, at every push locally and
+at every release in the cloud. Flows are exercised on the platform that ships, against the
+bundle that ships, for the first time. Nothing was ever enforced on PRs, because the
+repository has no branch protection.
+
+Security assessment for a single-owner repository with tag-driven releases: publication is
+safer than before, iteration is less convenient. The day a second person merges, this
+decision reopens (branch protection plus a required `verify` check on PRs).
+
 ## Non-goals
 
 Changing product behaviour, removing or rewriting tests, building signed installers on
@@ -125,6 +149,7 @@ Stacked PRs, in merge order:
 2. Local gate: `verify` script, Lefthook pre-push, this ADR and the audit documents.
 3. Release gates: `verify` job in the three `release-*.yml`, E2E on the macOS release job.
 4. Retire the `pull_request` triggers from the four `ci*.yml`.
+5. Candidate tier: `release-candidate.yml` on the release-please PR and on dispatch.
 
 The account was quota-blocked while these were written, so none of the workflow changes
 had a cloud run. The first real check of the release gate is the next desktop release.
