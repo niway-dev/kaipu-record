@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.8.0](https://github.com/csdev19/kaipu-record-monorepo/compare/desktop-v0.7.0...desktop-v0.8.0) (2026-09-25)
+
+
+### Features
+
+* **library:** edited/not-exported badge on cards and rows ([23db65b](https://github.com/csdev19/kaipu-record-monorepo/commit/23db65b491857ffe6ca88f5556fdd8d6fa9e885e))
+* **library:** expose the edit session's savedAt on library items ([3082963](https://github.com/csdev19/kaipu-record-monorepo/commit/30829639a6efb73d585c38e3fed0bd7289da8952))
+* **library:** lineage (source ↔ exports), edited/not-exported badge, editor save state ([8a7f996](https://github.com/csdev19/kaipu-record-monorepo/commit/8a7f9967b0128f59110a3a5f5b30614df721c561))
+* **library:** pure lineage helpers and the edited/not-exported badge state ([9abc19d](https://github.com/csdev19/kaipu-record-monorepo/commit/9abc19d21e366123440b759448e2ce9cb5e499bf))
+* **library:** Source link, Exports list and edit badge on the detail page ([6ad0a61](https://github.com/csdev19/kaipu-record-monorepo/commit/6ad0a6104b79d87cabe47eadf9383eb723b30822))
+* **screenshots:** auto-save a fresh capture on open (per setting) with Discard ([d2dc78c](https://github.com/csdev19/kaipu-record-monorepo/commit/d2dc78c9ea6e66c0d73973ff363dac8647b34513))
+* **screenshots:** save automatically or on click (Settings → Screenshots) ([7d18779](https://github.com/csdev19/kaipu-record-monorepo/commit/7d18779a5d45d1f392eaffb22b4b10f8b37bc5ee))
+* **settings:** Screenshots gets its own page in the nav, under Recording ([e428999](https://github.com/csdev19/kaipu-record-monorepo/commit/e428999aabe7213a7675d42fd32f79045a4515f3))
+* **settings:** Screenshots section with the save-mode preference ([2db1ddf](https://github.com/csdev19/kaipu-record-monorepo/commit/2db1ddf55979926d36da735a3068e5865e793af5))
+* **settings:** screenshotSave preference (auto | manual), default auto ([ea05b1d](https://github.com/csdev19/kaipu-record-monorepo/commit/ea05b1d289cbccc6d37af80933d7559f5dad61ec))
+* **updater:** surface the real update state and a button to check now ([1848679](https://github.com/csdev19/kaipu-record-monorepo/commit/1848679f2748dc1c2fb6a99cdb2070e0badedd43))
+* **updater:** surface the real update state and a button to check now ([0a7bcf2](https://github.com/csdev19/kaipu-record-monorepo/commit/0a7bcf21500e404481c6f7ca3ea21bad491a87ca))
+* **video-editor:** save-state chip driven by the session autosave ([c4ce341](https://github.com/csdev19/kaipu-record-monorepo/commit/c4ce34150cc0722d71dec5b126acb62a027927e1))
+* **watermark:** move the mark to the bottom-left corner and quiet it down ([915b229](https://github.com/csdev19/kaipu-record-monorepo/commit/915b22957c2dd689cf5cbf6d2ab2c391f89c134a))
+* **watermark:** move the mark to the bottom-right corner and quiet it down ([c1fd238](https://github.com/csdev19/kaipu-record-monorepo/commit/c1fd238464db9b483b2e46089b278c7a62ca5569))
+
+
+### Bug Fixes
+
+* **kaipu-record:** decide "exported" by a stamp, not by comparing clocks ([0227476](https://github.com/csdev19/kaipu-record-monorepo/commit/02274764ba28e392e5a99bf0ffe09f840fcc8be0))
+* **kaipu-record:** decide "exported" by a stamp, not by comparing clocks ([0750c51](https://github.com/csdev19/kaipu-record-monorepo/commit/0750c51b5423c073dcf53004e37143021a08dcdb))
+* **screenshots:** let the navigation blocker lift before Discard leaves the editor ([35fafd3](https://github.com/csdev19/kaipu-record-monorepo/commit/35fafd3dec426c958dfa791b5d7d6d687df4463d))
+* **settings:** screenshot auto-save is a toggle, with copy that fits the row ([28af914](https://github.com/csdev19/kaipu-record-monorepo/commit/28af914891fb7dd932d0129fc32ef939b6c04522))
+* **watermark:** put the mark on the right and lift it off the bottom edge ([a86f824](https://github.com/csdev19/kaipu-record-monorepo/commit/a86f82463c3f351a552f382f49bb2bae1dfbadaa))
+
 ## [0.7.0](https://github.com/csdev19/kaipu-record-monorepo/compare/desktop-v0.6.2...desktop-v0.7.0) (2026-09-23)
 
 
