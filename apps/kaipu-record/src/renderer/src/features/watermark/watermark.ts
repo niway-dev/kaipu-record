@@ -35,13 +35,20 @@ export interface WatermarkConfig {
   marginRatio: number;
 }
 
+/**
+ * The free-plan look. The mark is a signature in a corner, not a claim on the
+ * frame: `middle-right` at 0.9 opacity sat over the content itself, so it moved
+ * to the bottom-left corner and lost a third of its weight. Losing some presence
+ * is the intent — the compositor's drop shadow is what keeps it legible on light
+ * footage at this opacity.
+ */
 export const DEFAULT_WATERMARK_CONFIG: WatermarkConfig = {
   variant: "wordmark",
-  position: "middle-right",
+  position: "bottom-left",
   tint: "white",
-  opacity: 0.9,
+  opacity: 0.75,
   heightRatio: 0.059, // tuned up ~30% from the original 0.045 for visibility
-  marginRatio: 0.03,
+  marginRatio: 0.025,
 };
 
 export interface Rect {
