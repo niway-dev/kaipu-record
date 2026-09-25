@@ -72,6 +72,7 @@ export default defineConfig({
             { slug: "backlog/editor-title-input" },
             { slug: "backlog/library-lineage" },
             { slug: "backlog/ci-minutes-audit" },
+            { slug: "backlog/ci-cost-handoff" },
             { slug: "backlog/watermark-redesign" },
             { slug: "backlog/bug-control-bar-hides-last-terminal-line" },
             { slug: "backlog/dock-and-app-switcher" },
