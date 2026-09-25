@@ -45,13 +45,15 @@ jobs:
       # Turbo's local cache. Without it every run re-does `check-types` and `build` from
       # scratch: measured on #161's run, type-check alone was 1m05 and the builds 55s —
       # 71% of the job — while the same tasks replay in seconds locally off a warm cache.
-      # Key per SHA, restore from the most recent run's cache (turbo validates each task's
-      # own input hash, so a stale entry is skipped, never wrongly reused).
+      # Keyed on the lockfile + turbo config, NOT on the SHA: cache entries are immutable,
+      # so a per-SHA key mints a fresh entry on every push of an open PR (x9 jobs) and
+      # eats the repository's 10 GB budget. Turbo validates each task's own input hash, so
+      # an entry that predates the current code is partially reused, never wrongly reused.
       - name: Cache turbo outputs
         uses: actions/cache@v4
         with:
           path: .turbo
-          key: ${{ runner.os }}-turbo-${{ github.sha }}
+          key: ${{ runner.os }}-turbo-${{ hashFiles('bun.lock', 'turbo.json') }}
           restore-keys: |
             ${{ runner.os }}-turbo-
 
