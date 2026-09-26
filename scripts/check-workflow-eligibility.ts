@@ -446,8 +446,8 @@ ok(
 );
 
 // Scenario 11 + the gate's own decision table, by running the real shell script.
-console.log("\nScenario 11 — the real 'Decide' script, by exit code");
-const decide = stepScript("gate", "Decide");
+console.log("\nScenario 11 — the real merge-requirements script, by exit code");
+const decide = stepScript("gate", "Check whether release verification permits merging");
 const decideCases: Array<[string, string, number, string]> = [
   ["false", "skipped", 0, "ordinary PR: not applicable"],
   ["true", "success", 0, "release candidate verified"],
@@ -483,8 +483,8 @@ for (const [isRelease, verify, wantCode, label] of decideCases) {
 }
 
 // The transitional alias must mirror, never invent, a pass.
-console.log("\nTransitional alias — 'Release candidate verified' mirrors 'Merge readiness'");
-const mirror = stepScript("legacy-gate", "Mirror the merge-readiness result");
+console.log("\nTransitional alias — 'Release candidate verified' mirrors 'Merge requirements'");
+const mirror = stepScript("legacy-gate", "Mirror merge requirements for the existing branch rule");
 for (const [gate, wantCode] of [
   ["success", 0],
   ["failure", 1],

@@ -7,10 +7,10 @@ name: PR checks
 #
 # Two things live here, and they are deliberately different sizes.
 #
-# 1. `Merge readiness` — the REQUIRED check. It always reports on a non-draft PR, because a
+# 1. `Merge requirements` — the REQUIRED check. It always reports on a non-draft PR, because a
 #    required check that never reports leaves the PR perpetually pending and blocks merge
 #    forever (the paths-filter gotcha in the hub's pr-checks.md). It costs one short job.
-# 2. `Verify release candidate` — the expensive one. It runs `bun run verify` plus the web
+# 2. `Run release checks and builds` — the expensive one. It runs `bun run verify` plus the web
 #    and API bundles on the release PR that release-please maintains, so `main` is validated
 #    as it will be tagged, BEFORE the tag exists. A failure here costs a fix and a push; the
 #    same failure in release-*.yml costs a tag, an empty GitHub Release and a patch release.
@@ -72,7 +72,7 @@ permissions:
 
 jobs:
   verify:
-    name: Verify release candidate
+    name: Run release checks and builds
     runs-on: ubuntu-latest
     # Everything that decides "should this cost a runner?" is here, not in a step.
     #   - an open, non-draft PR                (draft accumulates for free)
@@ -96,15 +96,15 @@ jobs:
       group: verify-release-candidate-${{ github.event.pull_request.number || github.ref }}
       cancel-in-progress: true
     steps:
-      - name: Checkout code
+      - name: Check out candidate code
         uses: actions/checkout@v4
 
-      - name: Setup Bun
+      - name: Set up Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.4
 
-      - name: Cache bun dependencies
+      - name: Restore Bun dependency cache
         uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
@@ -119,7 +119,7 @@ jobs:
       # so a per-SHA key mints a fresh entry on every push of an open PR (x9 jobs) and
       # eats the repository's 10 GB budget. Turbo validates each task's own input hash, so
       # an entry that predates the current code is partially reused, never wrongly reused.
-      - name: Cache turbo outputs
+      - name: Restore Turbo task cache
         uses: actions/cache@v4
         with:
           path: .turbo
@@ -127,10 +127,10 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-turbo-
 
-      - name: Install dependencies
+      - name: Install locked dependencies
         run: bun install --frozen-lockfile
 
-      - name: Verify
+      - name: Run lint, formatting, type checks and tests
         run: bun run verify
 
       # The two app bundles are otherwise built only inside release-web / release-api.
@@ -142,7 +142,7 @@ jobs:
           DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
         run: bun run build
 
-      - name: Build backend
+      - name: Build API
         working-directory: apps/server-hono
         run: bun run build
 
@@ -150,7 +150,7 @@ jobs:
   # job's concurrency group from a job that costs seconds cancels the in-flight verification
   # instead of paying out the remaining minutes of a result nobody will read.
   cancel-superseded:
-    name: Cancel superseded verification
+    name: Cancel verification when returned to draft
     runs-on: ubuntu-latest
     if: >-
       ${{
@@ -161,7 +161,7 @@ jobs:
       group: verify-release-candidate-${{ github.event.pull_request.number }}
       cancel-in-progress: true
     steps:
-      - name: Note
+      - name: Explain cancellation after returning to draft
         run: |
           echo "Candidate returned to draft; any in-flight verification for this PR is cancelled."
           echo "Mark the pull request ready for review again to verify the current revision."
@@ -175,7 +175,7 @@ jobs:
   # the ready state, because `ready_for_review` starts a fresh run whose gate reports only
   # after `verify` has actually run in THAT run.
   gate:
-    name: Merge readiness
+    name: Merge requirements
     runs-on: ubuntu-latest
     needs: [verify]
     if: >-
@@ -187,7 +187,7 @@ jobs:
         (github.event.action != 'edited' || github.event.changes.base.ref.from != '')
       }}
     steps:
-      - name: Decide
+      - name: Check whether release verification permits merging
         env:
           IS_RELEASE: ${{ startsWith(github.head_ref, 'release-please--') }}
           VERIFY: ${{ needs.verify.result }}
@@ -219,7 +219,7 @@ jobs:
               ;;
           esac
 
-  # TRANSITIONAL — delete once the `main release` ruleset requires `Merge readiness`.
+  # TRANSITIONAL — delete once the `main release` ruleset requires `Merge requirements`.
   #
   # The live ruleset (id 23974690) still requires a check literally named "Release candidate
   # verified". Renaming the gate job without this alias would leave every PR waiting on a
@@ -239,10 +239,10 @@ jobs:
         (github.event.action != 'edited' || github.event.changes.base.ref.from != '')
       }}
     steps:
-      - name: Mirror the merge-readiness result
+      - name: Mirror merge requirements for the existing branch rule
         env:
           GATE: ${{ needs.gate.result }}
         run: |
           set -euo pipefail
-          echo "Deprecated check name. The decision is made by 'Merge readiness' (result: $GATE)."
+          echo "Deprecated check name. The decision is made by 'Merge requirements' (result: $GATE)."
           [ "$GATE" = "success" ]

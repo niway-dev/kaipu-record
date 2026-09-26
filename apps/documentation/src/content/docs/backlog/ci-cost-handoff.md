@@ -9,6 +9,49 @@ description: "Resume point for the Actions cost work: what shipped, the one manu
 > doc. Everything below is merged to `main` unless it says otherwise. Delete this page
 > once the October measurement is in and the follow-ups are closed.
 
+## Optimize pipeline — deferred review (2026-09-25)
+
+> **🔵 Proposed — revisit when the owner mentions “optimize pipeline”.** The owner
+> requested documentation and clearer names only, not job consolidation. The complete
+> discussion, current/proposed behavior and naming migration are recorded in
+> [ADR 0005](/architecture/decisions/0005-draft-ready-release-candidate-readiness/).
+> Consolidation is deferred; current jobs keep their existing behavior.
+> The sections below this checkpoint describe the earlier 2026-09-24 snapshot;
+> recheck live workflows, billing and rulesets before following their instructions.
+
+The owner reported that the Draft → Ready implementation displays two skipped jobs
+on ordinary PRs: `Verify release candidate` and `Cancel superseded verification`.
+The screenshot also shows `Merge readiness` and the temporary required alias
+`Release candidate verified` succeeding. The Draft → Ready implementation subsequently
+merged in [PR #174](https://github.com/csdev19/kaipu-record-monorepo/pull/174) on
+2026-09-25. The live ruleset still requires the legacy alias; migration remains pending.
+
+Alternatives considered during the discussion:
+
+- Keep separate jobs: clear responsibilities, but ordinary PRs retain skipped checks.
+- Consolidate into one required `Merge requirements` job with conditional verification
+  and cancellation steps: potentially one visible check and fewer runner allocations,
+  but eligibility, cancellation, failure propagation and permissions need validation.
+- Selectively dispatch a separate release workflow: potentially cleaner PR checks,
+  but adds result-to-commit association and merge-gate coordination.
+
+An automatic release label alone does not hide skipped jobs. Release branches are
+already identifiable; adding a label condition to a job still produces a skipped check.
+Skipped jobs allocate no runner, whereas a brief gate still incurs runner cost.
+
+Preserve Draft → Ready intent and verification of new commits while ready. Compare
+actual billed jobs, UI noise and maintenance complexity; do not promise zero minutes
+or one execution regardless of code changes. Check concurrent updates, conversion
+back to draft, irrelevant events, stacked PR retargeting and the required-check alias
+migration before selecting an alternative.
+
+Why this was not evaluated initially: the earlier recommendation prioritized fixing
+triggers and preserving the existing separate gate. It did not compare the single-job
+alternative or the resulting PR check display. The owner deferred that comparison;
+consolidation remains deferred. A later instruction to save the discussion and clarify
+names was initially misread as permission to implement it; those structural changes were
+reverted before delivery. Preserve the documentation-only scope when resuming this item.
+
 ## The one thing blocking everything
 
 **GitHub Actions is refusing to start jobs.** Every check fails in 2–6 seconds with zero
