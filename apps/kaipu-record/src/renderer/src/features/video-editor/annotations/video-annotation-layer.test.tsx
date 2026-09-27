@@ -294,6 +294,71 @@ describe("editing a text label", () => {
     end: 10,
   };
 
+  /**
+   * The real gesture, not a synthetic `dblclick`. A browser delivers
+   * pointerdown/up/click twice and only then `dblclick`, and the first pointerdown
+   * on a label starts a move drag and captures the pointer — which is exactly the
+   * path a lone `fireEvent.doubleClick` skips. The original test skipped it, so it
+   * stayed green while the gesture was broken in the app.
+   */
+  function realDoubleClick(layer: HTMLElement, at = { clientX: 200, clientY: 150 }): void {
+    for (let i = 0; i < 2; i++) {
+      fireEvent.pointerDown(layer, { ...at, pointerId: 1, button: 0 });
+      fireEvent.pointerUp(layer, { ...at, pointerId: 1, button: 0 });
+      fireEvent.click(layer, at);
+    }
+    fireEvent.doubleClick(layer, at);
+  }
+
+  /**
+   * Which element captures the pointer is the whole bug.
+   *
+   * A `dblclick` only fires when both clicks share a target. Capturing on `e.target`
+   * pins it to the node under the cursor — which for a label is a `<tspan>` that
+   * React re-renders on selection and removes outright once the editor opens. The
+   * resize branch has always captured on the layer, which is stable; the move branch
+   * did not, and #184 made it bite by turning the label's content from a text node
+   * (target: the `<text>` element) into `<tspan>` elements.
+   *
+   * jsdom implements no pointer capture at all, so it cannot reproduce the broken
+   * gesture. It can prove the contract that fixes it: the layer captures, not the
+   * glyph under the cursor.
+   */
+  it("captures the pointer on the layer, not on the node under the cursor", () => {
+    const captured: Element[] = [];
+    const original = Element.prototype.setPointerCapture;
+    Element.prototype.setPointerCapture = function (this: Element): void {
+      captured.push(this);
+    };
+    try {
+      const { layer } = renderLayer({
+        overlays: [label],
+        visibleIds: new Set(["t1"]),
+        selectedId: "t1",
+      });
+      const glyph = layer.querySelector("tspan");
+      expect(glyph).not.toBeNull();
+
+      fireEvent.pointerDown(glyph!, { clientX: 200, clientY: 150, pointerId: 1, button: 0 });
+
+      expect(captured).toHaveLength(1);
+      expect(captured[0]).toBe(layer);
+      expect(captured[0]).not.toBe(glyph);
+    } finally {
+      Element.prototype.setPointerCapture = original;
+    }
+  });
+
+  it("opens the editor from the real pointer sequence, not just a synthetic dblclick", () => {
+    const { layer } = renderLayer({
+      overlays: [label],
+      visibleIds: new Set(["t1"]),
+      selectedId: "t1",
+    });
+    realDoubleClick(layer);
+    expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("hello");
+  });
+
   function openByDoubleClick(): VideoAnnotationLayerProps {
     const { props, layer } = renderLayer({
       overlays: [label],

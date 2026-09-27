@@ -213,7 +213,16 @@ export function VideoAnnotationLayer({
       if (hit) {
         onInteractStart();
         drag.current = { mode: "move", id: hit.id, start: p, orig: hit };
-        (e.target as Element).setPointerCapture?.(e.pointerId);
+        // Capture on the LAYER, never on the node under the cursor — the resize
+        // branch above has always done this and it is why resizing kept working.
+        //
+        // `e.target` for a label is a <tspan>, which React re-renders when the
+        // selection changes and removes outright when the inline editor opens.
+        // A dblclick only fires when both clicks share a target, so pinning capture
+        // to that node silently killed double-click-to-edit. It became reachable when
+        // the multi-line change turned the label's content from a text node (target:
+        // the <text> element) into <tspan> elements.
+        ref.current?.setPointerCapture?.(e.pointerId);
       } else {
         // Empty space, select tool: arm a background-click candidate — confirmed on
         // pointerup unless the pointer drifts past CLICK_MOVE_TOL_PX first.
@@ -236,7 +245,9 @@ export function VideoAnnotationLayer({
       seed: Math.floor(Math.random() * 100000),
       window: overlayWindow(playheadTime, timelineDuration),
     };
-    (e.target as Element).setPointerCapture?.(e.pointerId);
+    // Same reason as the move branch: the layer is the only node guaranteed to
+    // outlive the gesture.
+    ref.current?.setPointerCapture?.(e.pointerId);
   };
 
   const onPointerMove = (e: React.PointerEvent): void => {
