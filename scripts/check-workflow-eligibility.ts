@@ -45,8 +45,16 @@ function jobBlock(id: string): string {
 /** The job's `if:` expression, unwrapped from `>-` folding and `${{ }}`. */
 function ifExpression(id: string): string {
   const block = jobBlock(id);
+  // Both spellings: a folded `if: >-` block, and a single-line `if: ${{ … }}`. The gate
+  // deliberately uses the short form now that it has no conditions left to fold.
+  const inline = block.match(/\n {4}if: (\$\{\{.*\}\})\s*$/m);
+  if (inline)
+    return inline[1]!
+      .replace(/^\$\{\{/, "")
+      .replace(/\}\}$/, "")
+      .trim();
   const m = block.match(/\n {4}if: >-\n([\s\S]*?)(?=\n {4}[a-z_-]+:|$)/);
-  if (!m) throw new Error(`job '${id}' has no folded 'if:' block`);
+  if (!m) throw new Error(`job '${id}' has no 'if:' condition`);
   const folded = m[1]!
     .split("\n")
     .map((l) => l.trim())
@@ -311,14 +319,14 @@ const scenarios: Array<{
     title: "Release PR opened as draft",
     ctx: pullRequestEvent({ action: "opened", headRef: RELEASE_BRANCH, draft: true }),
     eventType: "opened",
-    expect: { verify: false, e2e: false, gate: false, legacy: false, cancel: false },
+    expect: { verify: false, e2e: false, gate: true, legacy: true, cancel: false },
   },
   {
     n: 4,
     title: "Draft release PR updated (release-please rewrite)",
     ctx: pullRequestEvent({ action: "synchronize", headRef: RELEASE_BRANCH, draft: true }),
     eventType: "synchronize",
-    expect: { verify: false, e2e: false, gate: false, legacy: false, cancel: false },
+    expect: { verify: false, e2e: false, gate: true, legacy: true, cancel: false },
   },
   {
     n: 5,
@@ -346,7 +354,7 @@ const scenarios: Array<{
     title: "Ready release PR title edited",
     ctx: pullRequestEvent({ action: "edited", headRef: RELEASE_BRANCH, titleChanged: true }),
     eventType: "edited",
-    expect: { verify: false, e2e: false, gate: false, legacy: false, cancel: false },
+    expect: { verify: false, e2e: false, gate: true, legacy: true, cancel: false },
   },
   {
     n: 9,
@@ -357,7 +365,7 @@ const scenarios: Array<{
       draft: true,
     }),
     eventType: "converted_to_draft",
-    expect: { verify: false, e2e: false, gate: false, legacy: false, cancel: true },
+    expect: { verify: false, e2e: false, gate: true, legacy: true, cancel: true },
   },
   {
     n: 10,
@@ -370,13 +378,15 @@ const scenarios: Array<{
       baseChangedFrom: "main",
     }),
     eventType: "edited",
-    expect: { verify: false, e2e: false, gate: false, legacy: false, cancel: false },
+    expect: { verify: false, e2e: false, gate: true, legacy: true, cancel: false },
   },
   {
     n: 12,
     title: "Manual dispatch",
     ctx: dispatchEvent,
     eventType: "workflow_dispatch",
+    // The one place the gate legitimately does not run: there is no pull request to
+    // report a check on. Everywhere else it must run — see the guard below.
     expect: { verify: true, e2e: true, gate: false, legacy: false, cancel: false },
   },
 ];
@@ -463,6 +473,16 @@ ok(
     concurrencyGroup("e2e_desktop") !== concurrencyGroup("verify"),
   "e2e_desktop must cancel its own supersedes, in a group of its own",
 );
+// A skipped job reports a conclusion that branch protection counts as SATISFIED, so the
+// required check must never be skippable. This caught a green merge button on an
+// unverified 0.8.1 candidate; see the job's own comment.
+for (const id of ["gate", "legacy-gate"]) {
+  const expr = ifExpression(id);
+  ok(
+    !/draft/.test(expr) && !/changes\.base/.test(expr) && !/state ==/.test(expr),
+    `'${id}' must have no skip conditions — a skipped required check reads as passed (got: ${expr})`,
+  );
+}
 ok(
   concurrencyGroup("gate") === null && concurrencyGroup("legacy-gate") === null,
   "the gate jobs must not join a cancelling concurrency group",
@@ -477,6 +497,8 @@ console.log("\nScenario 11 — the real merge-requirements script, by exit code"
 const decide = stepScript("gate", "Check whether release verification permits merging");
 const decideCases: Array<[string, string, string, string, number, string]> = [
   ["false", "false", "skipped", "skipped", 0, "ordinary PR: not applicable"],
+  // The row that would have caught the 0.8.1 green button.
+  ["true", "true", "skipped", "skipped", 1, "draft candidate: nothing verified"],
   // A desktop candidate needs BOTH. This row is the one that would have stopped
   // desktop 0.8.0 before the tag existed instead of after it.
   ["true", "true", "success", "success", 0, "desktop candidate: verify + E2E green"],
@@ -497,6 +519,7 @@ for (const [isRelease, isDesktop, verify, e2e, wantCode, label] of decideCases) 
         ...process.env,
         IS_RELEASE: isRelease,
         IS_DESKTOP: isDesktop,
+        IS_DRAFT: label.startsWith("draft") ? "true" : "false",
         VERIFY: verify,
         E2E: e2e,
         SHA: "1bd8b2a",
