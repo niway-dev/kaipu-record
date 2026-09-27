@@ -85,6 +85,17 @@ function checkAllPermissions(): PermissionStatus {
 async function requestPermission(kind: PermissionKind): Promise<boolean> {
   if (checkPermission(kind)) return true;
 
+  // Under test, report what the OS already thinks and ask it for nothing.
+  //
+  // The two escalations below both reach outside the app: the screen nudge enumerates
+  // sources, which is what raises the macOS screen-recording dialog, and the fallback
+  // opens System Settings on the developer's machine. Neither belongs in a suite that
+  // records nothing. This guards the whole function rather than the single call, because
+  // the point is the boundary — no main-process path may touch the OS during a test —
+  // and because the screen dialogs that survived guarding `recording-sources.ts` were
+  // reaching it through a path that was not obvious from reading the renderer.
+  if (process.env.KAIPU_DISABLE_SCREEN_CAPTURE === "1") return false;
+
   try {
     if (isMac()) {
       const status = systemPreferences.getMediaAccessStatus(kind);
