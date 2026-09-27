@@ -14,10 +14,12 @@ description: "Design for a single module that owns text-annotation geometry acro
 >
 > Two things the design got wrong, recorded rather than quietly corrected:
 >
-> 1. **It said five places. There were six.** `annotationBox` — which positions the resize
+> 1. **It said five places. There were seven.** `annotationBox` — which positions the resize
 >    handles — was also computing the font size from the preset index, so the corner dots
->    floated away from the label as soon as a drag set a free size. Counting copies by hand
->    is the method that fails here, which is why the rule is an invariant and not a list.
+>    floated away from the label as soon as a drag set a free size — and five more lived in
+>    the screenshot editor and the two inline editors. Counting copies by hand is the
+>    method that fails here, which is why the rule is now enforced by a test rather than
+>    written down as a list.
 > 2. **The corner scaling design was incomplete.** It described a free `fontPx` but not what
 >    happens when the user then picks a preset. Because `fontPx` wins, writing only `size`
 >    left the label untouched: the control said L while the text stayed put. Picking a

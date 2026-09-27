@@ -43,11 +43,17 @@ Without a `width`, lines break only where the user pressed Enter.
 drag, and it takes precedence — that is what makes a corner drag continuous instead of
 snapping between four levels.
 
-The inspector reflects this: while `fontPx` is set **no preset is highlighted** and a
-`Custom` chip appears instead, because none of the four is the size on screen. Picking a
-preset **clears `fontPx`**. That clearing is load-bearing rather than tidy-up: writing only
-`size` left the label untouched, so the control said L while the text stayed where a
-corner drag had left it.
+Both editors' size controls reflect this: while `fontPx` is set **no preset is
+highlighted** and a `Custom` chip appears instead, because none of the four is the size on
+screen. Picking a preset **clears `fontPx`**.
+
+That clearing is load-bearing rather than tidy-up. Writing only `size` leaves the label
+untouched, so the control lights up L while the text stays where a corner drag left it.
+It shipped that way twice — once per editor — because the fix was applied to one and not
+the other.
+
+**`size` and `fontPx` travel together.** The two size controls are the only places that
+write them, and both now do.
 
 ## The one rule
 
@@ -114,6 +120,37 @@ ported to the other and one half was left behind.
 **So: how much more can be reused?** That block, and it is the obvious next extraction — a
 hook owning the textarea's lifecycle and the style that keeps it matching the label. It is
 not done, and this page should not be read as claiming it is.
+
+## Decisions, and where they are recorded
+
+| Decision                                            | Why                                                                                                                         | Recorded in                                                       |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| The box governs the text                            | Every consumer had to measure the string to know where the annotation was, so every consumer needed the same measuring code | [ADR-adjacent spec](../specs/2026-09-27-text-annotation-geometry) |
+| One owner for text geometry                         | Seven copies drifted, each found by a user rather than by reading the code                                                  | this page, enforced by `one-owner.test.ts`                        |
+| A corner writes a free `fontPx` instead of snapping | Snapping to four presets is what made a slow drag jump                                                                      | [spec](../specs/2026-09-27-text-annotation-geometry)              |
+| `width` and `fontPx` are optional                   | Every label already saved has neither, so there is no migration                                                             | this page                                                         |
+| SVG plus an overlaid textarea, not canvas           | Excalidraw overlays a textarea too; the difference was never the rendering technology                                       | [spec](../specs/2026-09-27-text-annotation-geometry)              |
+| Both editors share the model and the maths          | A shared owner only one editor uses drifts again                                                                            | [spec](../specs/2026-09-27-text-annotation-geometry)              |
+
+## State
+
+**Shipped and working in both editors:** the width-bound box, continuous corner scaling,
+the `Custom` state, four corner handles plus both side midpoints, the solid selection
+outline, editable multi-line labels, and wrapping that survives the export.
+
+**Enforced rather than documented:** the one-owner rule, by a test that fails if anything
+outside `tools.ts` indexes the preset table.
+
+**Not done, and named rather than implied:**
+
+- The inline text editor is still duplicated between the two layers — the overlaid
+  textarea, the armed-blur dance, the focus effect, the commit path. Four of the seven
+  defects lived there. Extracting it into a hook is the next step.
+- No Playwright assertion covers the visual match between editor and label. jsdom cannot,
+  and two of the seven defects were of exactly that kind.
+- Clicking the video to play it still competes with clicking an annotation. A hit-test
+  miss is what made those clicks reach the player, so it felt like part of this work; it
+  is a decision about the player.
 
 ## Handles
 
