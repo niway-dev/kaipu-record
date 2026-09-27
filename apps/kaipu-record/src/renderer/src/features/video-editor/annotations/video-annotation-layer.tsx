@@ -39,6 +39,7 @@ import { useTranslations } from "@kaipu/i18n";
 import {
   HAND_FONT,
   TEXT_PX,
+  TEXT_LINE_HEIGHT,
   handlesFor,
   hitHandle,
   resizeAnnotation,
@@ -124,13 +125,21 @@ export function VideoAnnotationLayer({
   const ref = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<Size>({ w: 0, h: 0 });
   const [draft, setDraft] = useState<VideoOverlay | null>(null);
-  const [editingText, setEditingText] = useState<{ x: number; y: number } | null>(null);
+  // `id` present means we are re-editing an existing label rather than placing a new
+  // one; `initialText` prefills the box. A label used to be write-once, so fixing a
+  // typo meant deleting the overlay and losing its timeline window.
+  const [editingText, setEditingText] = useState<{
+    x: number;
+    y: number;
+    id?: string;
+    initialText?: string;
+  } | null>(null);
   const drag = useRef<Drag | null>(null);
   // Armed on a select-tool pointerdown that hit neither a handle nor a shape; cleared
   // the moment the pointer moves past CLICK_MOVE_TOL_PX so a drag from empty space
   // (which does nothing here, but still isn't a "click") never fires onBackgroundClick.
   const clickCandidate = useRef<Pt | null>(null);
-  const textInputRef = useRef<HTMLInputElement>(null);
+  const textInputRef = useRef<HTMLTextAreaElement>(null);
   // Same arming trick as the screenshot layer: blur-to-commit only fires once the
   // input has settled, so the click that opened it can't immediately cancel it.
   const textArmed = useRef(false);
@@ -160,9 +169,21 @@ export function VideoAnnotationLayer({
     return () => cancelAnimationFrame(raf);
   }, [editingText]);
 
-  const toNorm = (e: React.PointerEvent): Pt => {
+  const toNorm = (e: { clientX: number; clientY: number }): Pt => {
     const r = ref.current!.getBoundingClientRect();
     return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
+  };
+
+  // Double-clicking a label reopens it in place, the same gesture the screenshot
+  // editor uses. Select tool only, so it never collides with a drawing tool's click.
+  const onDoubleClick = (e: React.MouseEvent): void => {
+    if (tool !== "select") return;
+    const candidates = overlays.filter((o) => visibleIds.has(o.id) || o.id === selectedId);
+    const hit = hitTest(candidates, toNorm(e), size);
+    if (hit?.kind !== "text") return;
+    onSelect(hit.id);
+    editDone.current = false;
+    setEditingText({ x: hit.x, y: hit.y, id: hit.id, initialText: hit.text });
   };
 
   const onPointerDown = (e: React.PointerEvent): void => {
@@ -311,22 +332,32 @@ export function VideoAnnotationLayer({
   const commitText = (value: string): void => {
     if (editDone.current) return; // a trailing unmount-blur after Enter/Escape
     editDone.current = true;
+    // Only the ends are trimmed: the user's own newlines are content.
     const text = value.trim();
     if (editingText && text) {
-      const { start, end } = overlayWindow(playheadTime, timelineDuration);
-      const overlay: VideoOverlay = {
-        id: newId(),
-        kind: "text",
-        x: editingText.x,
-        y: editingText.y,
-        text,
-        color: toolState.color,
-        size: toolState.textSize,
-        start,
-        end,
-      };
-      onCommit([...overlays, overlay]);
-      onSelect(overlay.id);
+      if (editingText.id) {
+        // Re-edit: replace the text and keep everything else, above all the timeline
+        // window — retyping a label must not move when it appears.
+        onCommit(
+          overlays.map((o) => (o.id === editingText.id && o.kind === "text" ? { ...o, text } : o)),
+        );
+        onSelect(editingText.id);
+      } else {
+        const { start, end } = overlayWindow(playheadTime, timelineDuration);
+        const overlay: VideoOverlay = {
+          id: newId(),
+          kind: "text",
+          x: editingText.x,
+          y: editingText.y,
+          text,
+          color: toolState.color,
+          size: toolState.textSize,
+          start,
+          end,
+        };
+        onCommit([...overlays, overlay]);
+        onSelect(overlay.id);
+      }
     }
     setEditingText(null);
   };
@@ -341,6 +372,7 @@ export function VideoAnnotationLayer({
       className={styles.layer}
       style={{ cursor: tool === "select" ? "default" : "crosshair" }}
       onPointerDown={onPointerDown}
+      onDoubleClick={onDoubleClick}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerAbort}
@@ -367,22 +399,40 @@ export function VideoAnnotationLayer({
         {selectedOverlay && <OverlayHandles o={selectedOverlay} size={size} />}
       </svg>
       {editingText && (
-        <input
+        <textarea
           ref={textInputRef}
           className={styles.textInput}
           placeholder={t("typePlaceholder")}
+          rows={1}
+          // Prefilled when reopening an existing label; empty for a fresh one.
+          defaultValue={editingText.initialText}
+          // `off` so the only breaks are the ones the user typed — the label itself
+          // does not wrap, so soft-wrapping here would not match what it renders.
+          wrap="off"
           style={{
             left: editingText.x * size.w,
             top: editingText.y * size.h,
             color: toolState.color,
             fontFamily: HAND_FONT,
             fontSize: TEXT_PX[toolState.textSize],
+            lineHeight: TEXT_LINE_HEIGHT,
+            whiteSpace: "pre",
+            resize: "none",
+            overflow: "hidden",
           }}
           onPointerDown={(e) => e.stopPropagation()}
+          onInput={(e) => {
+            // Grow with the content so every line stays visible while typing.
+            const el = e.currentTarget;
+            el.style.height = "auto";
+            el.style.height = `${el.scrollHeight}px`;
+          }}
           onKeyDown={(e) => {
-            if (e.key === "Enter") {
+            // Plain Enter commits; Shift/Alt+Enter fall through to the textarea's own
+            // newline, the way a spreadsheet cell behaves.
+            if (e.key === "Enter" && !e.altKey && !e.shiftKey) {
               e.preventDefault();
-              commitText((e.target as HTMLInputElement).value);
+              commitText(e.currentTarget.value);
             } else if (e.key === "Escape") {
               e.preventDefault();
               editDone.current = true; // cancel — the unmount blur must not commit

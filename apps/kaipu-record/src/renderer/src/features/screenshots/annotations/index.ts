@@ -10,6 +10,11 @@ export {
   TEXT_SIZES,
   TEXT_PX,
   HAND_FONT,
+  // Text geometry, shared with the video editor's overlays so a label breaks, measures
+  // and exports the same way in both editors.
+  TEXT_LINE_HEIGHT,
+  textLines,
+  textBoxPx,
   type AnnotationTool,
   type AnnotationColor,
 } from "./tools";
