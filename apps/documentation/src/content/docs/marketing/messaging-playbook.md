@@ -24,6 +24,8 @@ claims, each of which has to be demonstrable before it goes on the site:
 
 ## Front 1 — the landing
 
+**2026-09-27 copy update:** the current landing and site-level SEO now lead with “Show it. Get back to work.” and explain the local-folder benefit through everyday tasks. The [website concept](/marketing/website-concept/) contains the chapter-navigation proposal, bilingual copy, media brief, and release conditions for watermark, Windows, and source claims. Layout and new media are still proposed; the catalog currently does not advertise those unreleased availability changes.
+
 | Section              | What it shows                                                       | Why                                                                  |
 | -------------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------- |
 | "It's just a folder" | A ten-second clip: record, stop, open Finder, the MP4 is there      | The cheapest and most convincing demo of the message                 |

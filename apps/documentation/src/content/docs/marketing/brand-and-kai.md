@@ -50,3 +50,33 @@ Start with a short task-based review, not a whole-app redesign or a styling-fram
 ## Decision gate
 
 Compare the current brand with a small Kai concept in the landing and an empty state. Ask what users remember and what they think the app does. Proceed if recognition/approachability improves without hurting comprehension. If not, retain the warmer copy and existing identity. CLI feasibility and AI value do not depend on this choice.
+
+## Peruvian-inspired directions
+
+**Owner follow-up · 2026-09-27:** explore pixel art and a Peruvian connection. These are concept candidates, not a selected logo.
+
+| Direction                                           | Why it could work                                                                                | What to watch                                                                                               |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| **Andean vizcacha — recommended first exploration** | Long ears, rounded body, and curved tail offer a readable silhouette; attentive and approachable | Andean, not exclusive to Peru; avoid a generic rabbit or making sleepiness its defining expression          |
+| Alpaca                                              | Familiar, welcoming, and easy to recognize                                                       | Common mascot territory; needs a distinctive silhouette beyond accessories                                  |
+| Abstract thread/knot companion                      | Can connect the ideas of keeping and finding                                                     | More explanation needed; do not invent an etymology or reproduce meaningful cultural patterns as decoration |
+
+Favor a small contemporary character over a collage of tourist symbols. A subtle pink thread is a brand detail, not a claim to represent a traditional textile. Avoid default ponchos, ceremonial headwear, flags, Machu Picchu backdrops, or “Inca” styling as shorthand for Peru.
+
+## Ready-to-use image prompt
+
+Use this with an image-capable generator. First request concepts, then select one and iterate with that image as a reference. This prompt does not require replacing the current Kaipu logo.
+
+> Design three clearly distinct concept variations for Kai, a small Andean vizcacha mascot for Kaipu, a focused screen-recording and screenshot app made by a Peruvian creator. The personality is observant, capable, quietly friendly, and a little curious. Make it feel like a helpful companion for people who build things, not a children's toy or an AI robot.
+>
+> Use deliberate pixel art on a 48 by 48 logical pixel grid per character, with crisp square clusters, a limited palette of at most eight colors, and no anti-aliasing, gradients, blur, or painterly texture. Anatomical cues: long upright ears, compact rounded body, short forepaws, and a distinct curved furry tail; do not turn it into a generic rabbit. Use warm stone gray, soft cream, dark charcoal, and one restrained hot-pink accent inspired by #F6055C. A tiny pink thread around one forepaw is optional; keep the silhouette readable without accessories.
+>
+> Show each variation in the same three-quarter seated pose with a calm, attentive expression. Present the three concepts separately on plain neutral backgrounds at equal scale, with generous spacing and no labels. No text, letters, logos, watermark, scenery, clothing, hats, national flags, sacred symbols, or borrowed game-character features. Keep the silhouette legible when reduced to a small UI illustration. Aim for contemporary Peruvian authorship through the animal choice and warmth, not stereotypical costume.
+
+### Follow-up prompt after choosing one
+
+> Use the attached approved Kai concept as the identity reference. Preserve its exact silhouette, palette, facial proportions, ears, and tail. Produce three separate full-body illustrations on transparent backgrounds: neutral attentive idle; a small welcoming wave; holding a simple rectangular capture frame with a pink corner. Keep the same three-quarter camera angle, logical 48 by 48 pixel grid, pixel size, and character scale in all three. No text, background, shadows outside the sprite, blur, gradients, or new accessories. This is a consistency sheet, not a redesign.
+
+Generated pixel art is a concept, not automatically a production sprite: verify the grid, manually remove stray colors, and normalize proportions in a pixel editor. Export the chosen sprite at integer scales with nearest-neighbor sampling. Test against light and dark surfaces and in monochrome. Create an independently simplified favicon/tray mark only if needed; a full 48-pixel character will not necessarily read at 16 pixels. Transparent output may need cleanup depending on the generator.
+
+For the [website concept](/marketing/website-concept/), start with one static Kai illustration near the closing invitation or an empty-state example. Add animation only after the character and page hierarchy work without it.

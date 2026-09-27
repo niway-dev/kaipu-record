@@ -16,6 +16,7 @@ These are working hypotheses and recommendations, not validated market findings 
 | [Brand and Kai](/marketing/brand-and-kai/)                      | Keep Kaipu and pink; explore a warmer experience and a supporting mascot                                                   |
 | [AI and automation feasibility](/marketing/ai-and-automation/)  | Captions, audio-based summaries, CLI, and agent-driven editing; current technical constraints                              |
 | [Messaging playbook](/marketing/messaging-playbook/)            | The one message and the moves on the landing, in the product and in content that prove it; benchmarks and comparison pages |
+| [Website concept and copy](/marketing/website-concept/)         | Four-chapter visual direction, implemented EN/ES copy, release-aware messaging, media shot list, and production sequence   |
 | [Open source under AGPL-3.0](/marketing/open-source/)           | Why the whole monorepo opens, the pre-open checklist, and the contribution policy                                          |
 | [Product growth roadmap](/backlog/product-growth/)              | Priorities, smallest useful experiments, dependencies, and success criteria                                                |
 | [Free tier without watermark](/backlog/free-tier-no-watermark/) | Decision and implementation: no watermark on the free app, opt-in badge                                                    |
