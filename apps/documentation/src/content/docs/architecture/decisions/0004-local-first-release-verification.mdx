@@ -7,13 +7,13 @@ description: Iterative checks move to a Lefthook pre-push that runs the same `ve
 
 ## Status
 
-| Field         | Value                                                                                                                        |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| Status        | Accepted — implementation in progress (see "Implementation" below)                                                           |
-| Date          | 2026-09-24                                                                                                                   |
-| Supersedes    | The pre-push scope of the 2026-09-06 Lefthook spec (types stayed in CI)                                                      |
-| Amended by    | [ADR 0005](./0005-draft-ready-release-candidate-readiness) — candidate readiness, event handling and the required-check name |
-| Superseded by | —                                                                                                                            |
+| Field         | Value                                                                                                                                                                                                                       |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Accepted — implementation in progress (see "Implementation" below)                                                                                                                                                          |
+| Date          | 2026-09-24                                                                                                                                                                                                                  |
+| Supersedes    | The pre-push scope of the 2026-09-06 Lefthook spec (types stayed in CI)                                                                                                                                                     |
+| Amended by    | [ADR 0005](./0005-draft-ready-release-candidate-readiness) — candidate readiness, event handling and the required-check name · [ADR 0006](./0006-desktop-e2e-in-the-candidate-tier) — desktop E2E moves in front of the tag |
+| Superseded by | —                                                                                                                                                                                                                           |
 
 ## Context
 
@@ -64,6 +64,11 @@ validated in the cloud.
    `electron-builder`, so the export test runs with a real encoder for the first time. The
    build and install are shared with the packaging step; the marginal cost is the Playwright
    run plus an ffmpeg install.
+
+   > **Amended by [ADR 0006](./0006-desktop-e2e-in-the-candidate-tier).** The suite also runs
+   > in the candidate tier now, before the tag exists. Running it only at release time is
+   > how desktop 0.8.0 was tagged and left with a published, empty GitHub Release.
+
 5. **PR-triggered workflows are retired.** The four `ci*.yml` keep `workflow_dispatch` for
    validating a candidate on demand. `release-please.yml` runs only when a releasable path
    changes.

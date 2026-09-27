@@ -1,0 +1,148 @@
+---
+title: "ADR 0006: The desktop E2E suite runs before the tag, not after it"
+description: The macOS Playwright suite moves forward into the release-candidate tier, so a failure costs a push instead of a tag and a published, empty GitHub Release. Gated to desktop candidates, because macOS runners bill at ten times the Linux rate.
+---
+
+# ADR 0006: The desktop E2E suite runs before the tag, not after it
+
+## Status
+
+| Field         | Value                                                                     |
+| ------------- | ------------------------------------------------------------------------- |
+| Status        | Accepted — implemented, **not yet exercised by a real release candidate** |
+| Date          | 2026-09-26                                                                |
+| Amends        | [ADR 0004](./0004-local-first-release-verification), decision 4           |
+| Builds on     | [ADR 0005](./0005-draft-ready-release-candidate-readiness)                |
+| Superseded by | —                                                                         |
+
+## Context
+
+Desktop 0.8.0 was tagged on 2026-09-25 and never shipped. `Release Desktop` failed at its
+E2E step, which sits after `Build` and before `Sign, notarize & package`, so everything
+downstream was skipped.
+
+What that left behind:
+
+| Artefact                        | State                           |
+| ------------------------------- | ------------------------------- |
+| Tag `desktop-v0.8.0`            | created                         |
+| GitHub Release `desktop-v0.8.0` | **published, with zero assets** |
+| Update feed on R2               | still serving 0.7.0             |
+| Signed installers               | never produced                  |
+
+Installed apps were never at risk: the feed is written after signing, so they simply did
+not see 0.8.0. The landing page downloads point at R2, not at GitHub Releases, so they kept
+working. The damage was a public, empty release and a burnt version number.
+
+ADR 0004 decision 4 put the E2E suite on the macOS release runner deliberately, because the
+export test self-skips on Linux (headless Chromium has no H.264 encoder) and a green run
+there would not mean what it appears to mean. That reasoning still holds. What was wrong was
+only **when** it runs.
+
+`bun run verify` did not miss this. It was never looking: `verify` contains lint, format,
+package builds, type checks and unit tests, and by design contains no E2E. A green `verify`
+says nothing about the Playwright suite.
+
+### What actually failed is not yet known
+
+The suite died on its very first interaction, dismissing the onboarding dialog:
+
+```
+Error: locator.click: Target page, context or browser has been closed
+  - waiting for getByRole('button', { name: 'Skip setup' })
+    - locator resolved to <button …>Skip setup</button>
+  - attempting click action
+```
+
+The export assertion never ran. The Electron window went away seconds after launch. The
+uploaded trace contains test-runner events only, with nothing from the app, so it does not
+say why. A second attempt was started and cancelled during `Build`, so it never reached the
+suite either.
+
+**Flake or regression is still open.** `playwright.config.ts` sets `retries: 0`, so either
+one fails a release outright. This decision is correct for both, which is why it did not
+wait for the answer.
+
+## Decision
+
+1. **The macOS desktop E2E suite runs in the candidate tier**, as a job in `pr-checks.yml`,
+   on the same Draft → Ready for review signal as the rest of candidate verification. A
+   failure now costs a push.
+2. **It is gated to desktop candidates.** The job requires `components--desktop` in the head
+   ref. A web or api release PR is still a release PR, but nothing in it can change what the
+   desktop app does, and a macOS minute costs ten.
+3. **It stays in `release-desktop.yml` as well.** Hub rule R1 — a workflow that publishes
+   never runs its publish step without verification on the same SHA — is not negotiable,
+   and the tagged SHA is a merge commit, not the candidate's head.
+4. **`Merge requirements` requires it.** The gate fails a desktop candidate whose E2E
+   failed, was cancelled, or never ran, with its own message. For a web or api candidate a
+   skipped E2E is the expected result and passes.
+5. **The job is a faithful copy of the release step**, native rebuild included. A candidate
+   that does not exercise what ships is not a candidate.
+
+## What this does NOT fix
+
+Stated plainly, because the request behind it was "this can never happen again":
+
+- **A flake at release time can still burn a tag.** The candidate run makes it far less
+  likely, since the same suite has to pass first, but `release-desktop.yml` still runs E2E
+  after the tag exists and still has `retries: 0`.
+- **A failed release still leaves a published, empty GitHub Release.** release-please
+  publishes the Release when the release PR merges; assets are uploaded later by the
+  workflow. Setting `"draft": true` in `release-please-config.json` and publishing only
+  after assets upload would close this. Not done here.
+- **The 0.8.0 release is still incomplete.** It needs either a re-run that reaches the end,
+  or a fix forward and a 0.8.1.
+
+Both of the first two are one-line changes and were left out deliberately, to keep this
+decision to one subject.
+
+## Cost
+
+- Roughly **four minutes of macOS wall clock** per desktop release candidate: install ~17 s,
+  native rebuild ~50 s, build ~15 s, suite ~1 m 30 s, plus job setup. Measured from the
+  0.8.0 release job, not estimated.
+- **macOS runners bill at ten times the Linux rate**, so this is the most expensive single
+  thing in the repository's CI, per occurrence.
+- It runs **once per desktop candidate**, not per push, because a draft candidate never
+  starts it and only the Ready for review transition and later revisions do.
+- Web and api candidates pay **nothing** for it.
+- Keeping the suite in the release workflow too means a successful release pays for it
+  twice. That is the price of R1, and it is charged only on releases that actually ship.
+
+No saving or increase is claimed until an "after" export is measured against
+[the September baseline](/specs/2026-09-ci-usage-baseline/).
+
+## Alternatives rejected
+
+- **Add E2E to `bun run verify`.** It needs a built app, a real encoder and ~1.5 minutes, and
+  `verify` runs on every local push through the pre-push hook. It would make every push slow
+  and, on Linux CI, self-skip into a false green.
+- **Move E2E out of `release-desktop.yml` entirely.** Cheaper, and it would guarantee no
+  post-tag E2E failure ever again, but it removes the only verification on the exact SHA
+  that gets signed. R1 forbids it.
+- **Run it on every PR.** The cost that ADR 0004 exists to avoid, on the most expensive
+  runner available.
+- **Wait until flake-or-regression is known.** The ordering defect is real either way, and
+  the answer needs a run this change would itself provide.
+
+## Validation status
+
+Validated locally: `actionlint` over every workflow, and
+`bun scripts/check-workflow-eligibility.ts`, which reads the real workflow, evaluates its
+real `if:` expressions against synthetic payloads and executes the real gate script in bash.
+The decision table now covers both jobs, including the two rows that matter most: a desktop
+candidate with a failed E2E must block the merge, and a web candidate with a skipped E2E
+must not.
+
+Not validated, and only a real desktop release candidate can: that the macOS job builds
+with `MAIN_VITE_SERVER_URL` from the `production` environment, that `rebuild-native.sh`
+works on the candidate runner, and whether the suite is green at all — which is also the
+answer to flake-or-regression.
+
+## Reopen when
+
+- The candidate E2E proves flaky in its own right, at which point retries or a harness fix
+  is the subject, not the tier.
+- A second platform ships, and "the platform that ships" stops meaning macOS only.
+- The cost of running it twice per release becomes the largest line in the billing export.

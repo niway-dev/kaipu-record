@@ -186,6 +186,10 @@ function evaluate(expr: string, ctx: Record<string, unknown>): boolean {
           return String(args[0] ?? "")
             .toLowerCase()
             .startsWith(String(args[1] ?? "").toLowerCase());
+        case "contains":
+          return String(args[0] ?? "")
+            .toLowerCase()
+            .includes(String(args[1] ?? "").toLowerCase());
         default:
           throw new Error(`unsupported function: ${t}()`);
       }
@@ -232,6 +236,8 @@ function evaluate(expr: string, ctx: Record<string, unknown>): boolean {
 // ── Scenarios ──────────────────────────────────────────────────────────────────
 
 const RELEASE_BRANCH = "release-please--branches--main--components--desktop";
+/** A release candidate that must NOT pay for a macOS runner. */
+const WEB_RELEASE_BRANCH = "release-please--branches--main--components--web";
 
 interface EventOptions {
   action: string;
@@ -273,6 +279,7 @@ const dispatchEvent = {
 
 interface Expectation {
   verify: boolean;
+  e2e: boolean;
   gate: boolean;
   legacy: boolean;
   cancel: boolean;
@@ -290,49 +297,56 @@ const scenarios: Array<{
     title: "Ordinary PR targeting main",
     ctx: pullRequestEvent({ action: "opened" }),
     eventType: "opened",
-    expect: { verify: false, gate: true, legacy: true, cancel: false },
+    expect: { verify: false, e2e: false, gate: true, legacy: true, cancel: false },
   },
   {
     n: 2,
     title: "Ordinary stacked PR retargeted to main",
     ctx: pullRequestEvent({ action: "edited", baseChangedFrom: "docs/settings-updates-spec" }),
     eventType: "edited",
-    expect: { verify: false, gate: true, legacy: true, cancel: false },
+    expect: { verify: false, e2e: false, gate: true, legacy: true, cancel: false },
   },
   {
     n: 3,
     title: "Release PR opened as draft",
     ctx: pullRequestEvent({ action: "opened", headRef: RELEASE_BRANCH, draft: true }),
     eventType: "opened",
-    expect: { verify: false, gate: false, legacy: false, cancel: false },
+    expect: { verify: false, e2e: false, gate: false, legacy: false, cancel: false },
   },
   {
     n: 4,
     title: "Draft release PR updated (release-please rewrite)",
     ctx: pullRequestEvent({ action: "synchronize", headRef: RELEASE_BRANCH, draft: true }),
     eventType: "synchronize",
-    expect: { verify: false, gate: false, legacy: false, cancel: false },
+    expect: { verify: false, e2e: false, gate: false, legacy: false, cancel: false },
   },
   {
     n: 5,
     title: "Release PR marked ready for review",
     ctx: pullRequestEvent({ action: "ready_for_review", headRef: RELEASE_BRANCH }),
     eventType: "ready_for_review",
-    expect: { verify: true, gate: true, legacy: true, cancel: false },
+    expect: { verify: true, e2e: true, gate: true, legacy: true, cancel: false },
   },
   {
     n: 6,
     title: "Ready release PR updated to a new revision",
     ctx: pullRequestEvent({ action: "synchronize", headRef: RELEASE_BRANCH }),
     eventType: "synchronize",
-    expect: { verify: true, gate: true, legacy: true, cancel: false },
+    expect: { verify: true, e2e: true, gate: true, legacy: true, cancel: false },
+  },
+  {
+    n: 13,
+    title: "Ready WEB release candidate (must not pay for macOS)",
+    ctx: pullRequestEvent({ action: "ready_for_review", headRef: WEB_RELEASE_BRANCH }),
+    eventType: "ready_for_review",
+    expect: { verify: true, e2e: false, gate: true, legacy: true, cancel: false },
   },
   {
     n: 8,
     title: "Ready release PR title edited",
     ctx: pullRequestEvent({ action: "edited", headRef: RELEASE_BRANCH, titleChanged: true }),
     eventType: "edited",
-    expect: { verify: false, gate: false, legacy: false, cancel: false },
+    expect: { verify: false, e2e: false, gate: false, legacy: false, cancel: false },
   },
   {
     n: 9,
@@ -343,7 +357,7 @@ const scenarios: Array<{
       draft: true,
     }),
     eventType: "converted_to_draft",
-    expect: { verify: false, gate: false, legacy: false, cancel: true },
+    expect: { verify: false, e2e: false, gate: false, legacy: false, cancel: true },
   },
   {
     n: 10,
@@ -356,14 +370,14 @@ const scenarios: Array<{
       baseChangedFrom: "main",
     }),
     eventType: "edited",
-    expect: { verify: false, gate: false, legacy: false, cancel: false },
+    expect: { verify: false, e2e: false, gate: false, legacy: false, cancel: false },
   },
   {
     n: 12,
     title: "Manual dispatch",
     ctx: dispatchEvent,
     eventType: "workflow_dispatch",
-    expect: { verify: true, gate: false, legacy: false, cancel: false },
+    expect: { verify: true, e2e: true, gate: false, legacy: false, cancel: false },
   },
 ];
 
@@ -376,6 +390,7 @@ const ok = (cond: boolean, msg: string): void => {
 
 const exprs = {
   verify: ifExpression("verify"),
+  e2e: ifExpression("e2e_desktop"),
   gate: ifExpression("gate"),
   legacy: ifExpression("legacy-gate"),
   cancel: ifExpression("cancel-superseded"),
@@ -383,12 +398,17 @@ const exprs = {
 
 console.log(`Workflow: ${WORKFLOW}`);
 console.log(`Trigger types: ${triggerTypes().join(", ")}\n`);
-console.log("  #  scenario                                        verify  gate  legacy  cancel");
-console.log("  -  ----------------------------------------------  ------  ----  ------  ------");
+console.log(
+  "  #  scenario                                        verify  e2e   gate  legacy  cancel",
+);
+console.log(
+  "  -  ----------------------------------------------  ------  ----  ----  ------  ------",
+);
 
 for (const s of scenarios) {
   const got = {
     verify: evaluate(exprs.verify, s.ctx),
+    e2e: evaluate(exprs.e2e, s.ctx),
     gate: evaluate(exprs.gate, s.ctx),
     legacy: evaluate(exprs.legacy, s.ctx),
     cancel: evaluate(exprs.cancel, s.ctx),
@@ -397,11 +417,12 @@ for (const s of scenarios) {
   console.log(
     `  ${String(s.n).padStart(2)} ${s.title.padEnd(48)}` +
       `${mark(got.verify, s.expect.verify).padEnd(8)}` +
+      `${mark(got.e2e, s.expect.e2e).padEnd(6)}` +
       `${mark(got.gate, s.expect.gate).padEnd(6)}` +
       `${mark(got.legacy, s.expect.legacy).padEnd(8)}` +
       `${mark(got.cancel, s.expect.cancel)}`,
   );
-  for (const key of ["verify", "gate", "legacy", "cancel"] as const) {
+  for (const key of ["verify", "e2e", "gate", "legacy", "cancel"] as const) {
     ok(
       got[key] === s.expect[key],
       `scenario ${s.n} (${s.title}): job '${key}' expected ${s.expect[key]}, got ${got[key]}`,
@@ -429,12 +450,18 @@ const verifyGroup = concurrencyGroup("verify");
 const cancelGroup = concurrencyGroup("cancel-superseded");
 console.log(`  verify:            ${verifyGroup}`);
 console.log(`  cancel-superseded: ${cancelGroup}`);
+console.log(`  e2e_desktop:       ${concurrencyGroup("e2e_desktop")}`);
 ok(verifyGroup !== null, "the verify job must declare a job-level concurrency group");
 ok(
   cancelGroup !== null &&
     verifyGroup !== null &&
     cancelGroup.startsWith(verifyGroup.split(" ||")[0]!),
   "cancel-superseded must share the verify job's concurrency group to cancel it",
+);
+ok(
+  concurrencyGroup("e2e_desktop") !== null &&
+    concurrencyGroup("e2e_desktop") !== concurrencyGroup("verify"),
+  "e2e_desktop must cancel its own supersedes, in a group of its own",
 );
 ok(
   concurrencyGroup("gate") === null && concurrencyGroup("legacy-gate") === null,
@@ -448,19 +475,32 @@ ok(
 // Scenario 11 + the gate's own decision table, by running the real shell script.
 console.log("\nScenario 11 — the real merge-requirements script, by exit code");
 const decide = stepScript("gate", "Check whether release verification permits merging");
-const decideCases: Array<[string, string, number, string]> = [
-  ["false", "skipped", 0, "ordinary PR: not applicable"],
-  ["true", "success", 0, "release candidate verified"],
-  ["true", "failure", 1, "verification failed"],
-  ["true", "cancelled", 1, "superseded or returned to draft"],
-  ["true", "skipped", 1, "unexpected skip"],
+const decideCases: Array<[string, string, string, string, number, string]> = [
+  ["false", "false", "skipped", "skipped", 0, "ordinary PR: not applicable"],
+  // A desktop candidate needs BOTH. This row is the one that would have stopped
+  // desktop 0.8.0 before the tag existed instead of after it.
+  ["true", "true", "success", "success", 0, "desktop candidate: verify + E2E green"],
+  ["true", "true", "success", "failure", 1, "desktop candidate: E2E failed"],
+  ["true", "true", "success", "cancelled", 1, "desktop candidate: E2E superseded"],
+  ["true", "true", "success", "skipped", 1, "desktop candidate: E2E never ran"],
+  ["true", "true", "failure", "skipped", 1, "desktop candidate: verify failed"],
+  // A web candidate must PASS on a skipped E2E: it never starts one, by design.
+  ["true", "false", "success", "skipped", 0, "web candidate: E2E not applicable"],
+  ["true", "false", "failure", "skipped", 1, "web candidate: verify failed"],
 ];
-for (const [isRelease, verify, wantCode, label] of decideCases) {
+for (const [isRelease, isDesktop, verify, e2e, wantCode, label] of decideCases) {
   let code = 0;
   let out = "";
   try {
     out = execFileSync("bash", ["-c", decide], {
-      env: { ...process.env, IS_RELEASE: isRelease, VERIFY: verify, SHA: "1bd8b2a" },
+      env: {
+        ...process.env,
+        IS_RELEASE: isRelease,
+        IS_DESKTOP: isDesktop,
+        VERIFY: verify,
+        E2E: e2e,
+        SHA: "1bd8b2a",
+      },
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -470,15 +510,17 @@ for (const [isRelease, verify, wantCode, label] of decideCases) {
     out = err.stdout ?? "";
   }
   console.log(
-    `  IS_RELEASE=${isRelease.padEnd(5)} VERIFY=${verify.padEnd(10)} exit=${code}  ${label}`,
+    `  release=${isRelease.padEnd(5)} desktop=${isDesktop.padEnd(5)} ` +
+      `verify=${verify.padEnd(9)} e2e=${e2e.padEnd(9)} exit=${code}  ${label}`,
   );
   ok(
     code === wantCode,
-    `Decide(IS_RELEASE=${isRelease}, VERIFY=${verify}) expected exit ${wantCode}, got ${code}`,
+    `Decide(release=${isRelease}, desktop=${isDesktop}, verify=${verify}, e2e=${e2e}) ` +
+      `expected exit ${wantCode}, got ${code}`,
   );
   ok(
     !/verify.{0,3}label/i.test(out),
-    `Decide must not mention the retired 'verify' label (IS_RELEASE=${isRelease}, VERIFY=${verify})`,
+    `Decide must not mention the retired 'verify' label (release=${isRelease}, verify=${verify})`,
   );
 }
 
