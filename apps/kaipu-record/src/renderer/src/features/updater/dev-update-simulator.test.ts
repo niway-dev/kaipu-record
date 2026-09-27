@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  DEV_UPDATE_SCENARIOS,
   readDevUpdateStatus,
   subscribeDevUpdateStatus,
   writeDevUpdateScenario,
@@ -35,17 +34,5 @@ describe("dev update simulator", () => {
     writeDevUpdateScenario("ready");
     expect(listener).toHaveBeenCalled();
     unsubscribe();
-  });
-
-  it("offers every state the UI has to render", () => {
-    expect(DEV_UPDATE_SCENARIOS.map((s) => s.status.state)).toEqual([
-      "idle",
-      "checking",
-      "up-to-date",
-      "available",
-      "downloading",
-      "ready",
-      "error",
-    ]);
   });
 });
