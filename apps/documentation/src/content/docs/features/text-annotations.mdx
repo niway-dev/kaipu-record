@@ -54,24 +54,32 @@ corner drag had left it.
 > **No consumer computes text geometry.**
 
 Everything asks `textLines`, `textBoxPx` and `resolveFontPx`. This is not a style
-preference; it is the conclusion of six defects, each one a different place that had
+preference; it is the conclusion of seven defects, each one a different place that had
 measured the text itself and drifted:
 
-| Symptom                                                  | Where the copy lived            |
-| -------------------------------------------------------- | ------------------------------- |
-| Line breaks vanished from the exported video             | the export rasterizer           |
-| The label drew twice while being edited                  | the preview renderer            |
-| A tall label was unclickable, so clicks played the video | the hit test                    |
-| Reopening showed one line until you arrowed down         | the textarea's sizing           |
-| Changing the box did nothing to the text                 | the model had no `width` at all |
-| The corner dots floated far below the label              | `annotationBox`                 |
+| Symptom                                                  | Where the copy lived                |
+| -------------------------------------------------------- | ----------------------------------- |
+| Line breaks vanished from the exported video             | the export rasterizer               |
+| The label drew twice while being edited                  | the preview renderer                |
+| A tall label was unclickable, so clicks played the video | the hit test                        |
+| Reopening showed one line until you arrowed down         | the textarea's sizing               |
+| Changing the box did nothing to the text                 | the model had no `width` at all     |
+| The corner dots floated far below the label              | `annotationBox`                     |
+| The image editor's outline and handles disagreed         | its own renderer, export and editor |
 
 The fifth is the interesting one. It was not a stale copy; it was a **missing field**, and
 it is why the handles looked broken when they were only writing somewhere nothing read.
 
-The sixth is the cautionary one. Earlier notes confidently said "five places". There were
-six. Counting copies by hand is exactly the method that fails here, which is why the rule
-is phrased as an invariant rather than a list.
+The last one is the cautionary one. Earlier notes said "five places", then six. There were
+**seven**, and each was found by a user hitting it rather than by anyone reading the code.
+Counting copies by hand is exactly the method that fails here.
+
+So the rule is now **enforced, not documented**. `one-owner.test.ts` walks every source
+file under `features/` and fails if anything except `tools.ts` indexes `TEXT_PX[...]` —
+because the preset table cannot know about `fontPx`, so anything reading it directly is
+measuring a label the user may not be looking at. That is source inspection, normally a
+junk pattern; it is kept because no behavioural test catches "someone wrote an eighth
+copy" and this failure has now shipped seven times.
 
 ## What the two editors actually share
 

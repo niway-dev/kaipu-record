@@ -135,3 +135,14 @@ export function textBoxPx(text: string, fs: number, maxWidthPx?: number): { w: n
   const longest = lines.reduce((max, line) => Math.max(max, line.length), 0);
   return { w: longest * fs * CHAR_ADVANCE, h };
 }
+
+/**
+ * Keep a dragged font size usable: never invisible, never past the frame.
+ *
+ * Lives here rather than with the handles because it falls back to the preset table,
+ * and that table has exactly one owner — see `one-owner.test.ts`.
+ */
+export function clampFontPx(px: number): number {
+  if (!Number.isFinite(px)) return TEXT_PX[1]!;
+  return Math.min(400, Math.max(6, Math.round(px)));
+}

@@ -38,7 +38,6 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "@kaipu/i18n";
 import {
   HAND_FONT,
-  TEXT_PX,
   TEXT_LINE_HEIGHT,
   textBoxPx,
   resolveFontPx,
@@ -135,6 +134,10 @@ export function VideoAnnotationLayer({
     y: number;
     id?: string;
     initialText?: string;
+    /** The label's own size, so the editor matches what it covers rather than the
+     *  tool default — reopening a corner-sized label used to type at the wrong size. */
+    size?: number;
+    fontPx?: number;
   } | null>(null);
   const drag = useRef<Drag | null>(null);
   // Armed on a select-tool pointerdown that hit neither a handle nor a shape; cleared
@@ -195,7 +198,14 @@ export function VideoAnnotationLayer({
     if (hit?.kind !== "text") return;
     onSelect(hit.id);
     editDone.current = false;
-    setEditingText({ x: hit.x, y: hit.y, id: hit.id, initialText: hit.text });
+    setEditingText({
+      x: hit.x,
+      y: hit.y,
+      id: hit.id,
+      initialText: hit.text,
+      size: hit.size,
+      fontPx: hit.fontPx,
+    });
   };
 
   const onPointerDown = (e: React.PointerEvent): void => {
@@ -443,7 +453,7 @@ export function VideoAnnotationLayer({
             top: editingText.y * size.h,
             color: toolState.color,
             fontFamily: HAND_FONT,
-            fontSize: TEXT_PX[toolState.textSize],
+            fontSize: resolveFontPx(editingText.size ?? toolState.textSize, editingText.fontPx),
             lineHeight: TEXT_LINE_HEIGHT,
             whiteSpace: "pre",
             resize: "none",

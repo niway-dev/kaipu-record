@@ -10,7 +10,7 @@
  *                  size level), the E edge sets the wrap width.
  */
 
-import { resolveFontPx, TEXT_LINE_HEIGHT, TEXT_PX, textBoxPx } from "./tools";
+import { clampFontPx, resolveFontPx, TEXT_LINE_HEIGHT, textBoxPx } from "./tools";
 import type { Annotation } from "./scene";
 
 export type HandleId = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "p1" | "p2";
@@ -217,10 +217,4 @@ export function hitHandle(handles: Handle[], p: Pt, tol: Pt): HandleId | null {
     if (Math.abs(p.x - h.x) <= tol.x && Math.abs(p.y - h.y) <= tol.y) return h.id;
   }
   return null;
-}
-
-/** Keep a dragged font size usable: never invisible, never past the frame. */
-function clampFontPx(px: number): number {
-  if (!Number.isFinite(px)) return TEXT_PX[1]!;
-  return Math.min(400, Math.max(6, Math.round(px)));
 }

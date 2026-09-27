@@ -16,6 +16,7 @@ export {
   textLines,
   textBoxPx,
   resolveFontPx,
+  clampFontPx,
   type AnnotationTool,
   type AnnotationColor,
 } from "./tools";

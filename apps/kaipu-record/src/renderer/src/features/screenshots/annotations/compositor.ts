@@ -1,7 +1,14 @@
 import { backgroundPaint, frameRadius } from "../beautify/backgrounds";
 import { roughArrow, roughRect } from "./rough";
 import { smoothPath } from "./smooth";
-import { BLUR_STD, HAND_FONT, STROKE_WIDTHS, TEXT_LINE_HEIGHT, TEXT_PX, textLines } from "./tools";
+import {
+  BLUR_STD,
+  HAND_FONT,
+  STROKE_WIDTHS,
+  TEXT_LINE_HEIGHT,
+  resolveFontPx,
+  textLines,
+} from "./tools";
 import type { Annotation, Scene } from "./scene";
 
 /**
@@ -176,7 +183,9 @@ function annotationSvg(a: Annotation, W: number, H: number, scale: number): stri
     const d = smoothPath(a.points.map((pt) => ({ x: pt.x * W, y: pt.y * H })));
     return `<path d="${d}" fill="none" stroke="${a.color}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/>`;
   }
-  const fs = TEXT_PX[a.size] * scale;
+  // Through the resolver: a label sized by dragging a corner must export at the
+  // size it was drawn at, not at the preset it started from.
+  const fs = resolveFontPx(a.size, a.fontPx) * scale;
   const tx = a.x * W;
   // One tspan per line so manual breaks (Alt/Shift+Enter) AND width word-wrapping
   // survive the export exactly as they render in the preview. `fs` and the wrap width
