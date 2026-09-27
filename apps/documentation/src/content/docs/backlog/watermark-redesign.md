@@ -9,6 +9,10 @@ description: "Shipped: the free-plan watermark moved from middle-right to the bo
 > prettier, and put it somewhere else — bottom-left?" Parent:
 > [roadmap → 6 — Watermark](./roadmap#6--watermark-free--paid-scalable-plan--shipped-live-gating-awaits-4).
 
+> **2026-09-27.** These defaults now describe the **opt-in "Made with Kaipu" badge**
+> (Settings → Recording, off by default). The free plan no longer burns a watermark; see
+> [free tier without watermark](./free-tier-no-watermark).
+
 ## What shipped
 
 Three default values in `features/watermark/watermark.ts`. No new asset, no new drawing

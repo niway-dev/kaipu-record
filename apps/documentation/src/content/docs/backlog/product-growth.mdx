@@ -1,0 +1,102 @@
+---
+title: Product growth — everyday explanations, AI, and brand
+description: Proposed sequence for positioning, website, workflow polish, captions, summaries, Kai, and CLI exploration.
+---
+
+# Product growth — everyday explanations, AI, and brand
+
+> **Status: 🟡 In progress · 2026-09-27.** The owner reviewed the first draft the same day and
+> took decisions: the watermark item is implemented on this branch, Windows beta and the
+> website move to P0, GIF / keystrokes / captions / presets / open source are P1, and the
+> benchmarks and comparison pages are low priority. Items still need their own feature doc
+> before implementation.
+
+## Status
+
+| Field          | Value                                                                              |
+| -------------- | ---------------------------------------------------------------------------------- |
+| Status         | 🟡 In progress — decisions taken, first item shipped on this branch                |
+| Completed      | N/A                                                                                |
+| Author         | Owner discussion; first draft by OpenCode, decisions and revision with Claude Code |
+| Parent Feature | [Marketing and product growth](/marketing/)                                        |
+| Related Issues | None                                                                               |
+
+## What It Does
+
+Build a stronger daily capture → clarify → deliver → retrieve experience and explain that value on the website. Explore AI and automation only where they shorten that workflow; retain all owner ideas without turning them into simultaneous delivery promises.
+
+## Implementation
+
+### Files Changed
+
+| Path                                                             | Purpose                                                                     |
+| ---------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `apps/documentation/src/content/docs/marketing/`                 | Strategy, evidence boundaries, brand exploration, and technical feasibility |
+| `apps/documentation/src/content/docs/backlog/product-growth.mdx` | Proposed sequence and validation gates                                      |
+| `apps/documentation/astro.config.mjs`                            | Discoverable Marketing section and backlog entry                            |
+
+### Domain Model
+
+No model changes. Existing recordings, edit sessions, exports, and source lineage are the starting point.
+
+### Key Logic
+
+Choose one bounded experiment at a time. P0/P1/P2 below are recommended relative priorities, not replacements for release blockers or promised dates. AI depends on a transcription feasibility result; automation depends on a real non-interactive export spike. Existing work must be validated before being described as a new implementation need.
+
+| Priority              | Candidate and smallest slice                                                            | Enablement/dependency                                                                                                                           | Success signal                                                                                 |
+| --------------------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| ✅ Done (this branch) | Free tier without watermark; opt-in "Made with Kaipu" badge, off by default             | [Decision](/backlog/free-tier-no-watermark/)                                                                                                    | Validate on a packaged build                                                                   |
+| P0                    | Windows recording-only beta                                                             | [Plan](/backlog/windows-beta/); signing on Windows                                                                                              | A Windows user records and exports without help                                                |
+| P0                    | Website: "it's just a folder" clip, trust strip, both captures, Windows download        | [Messaging playbook](/marketing/messaging-playbook/); reuse [landing showcase](/backlog/landing-redesign/)                                      | Visitors can say what the product does; download baseline                                      |
+| P0                    | Validate capture-to-export and retrieval with representative users                      | Current packaged build; [edit states](/backlog/edit-state-indicators/) and [lineage](/backlog/library-lineage/) already await validation        | Task completion, time to usable output, fewer wrong-file selections                            |
+| P1                    | GIF export with loop, plus one background/padding/shadow preset                         | Encoder and palette work; frame geometry, preview/export parity                                                                                 | The clip pastes into a GitHub issue; the competitor's feature list is no longer visibly longer |
+| P1                    | Keystroke visualizer (keys pressed shown on screen while recording)                     | `uiohook-napi` already captures global input for auto-zoom; overlay drawn by the compositor; explicit opt-in per recording, never on by default | Tutorial makers and developers use it; no accidental capture of typed secrets                  |
+| P1                    | Captions: Parakeet TDT v3 transcript with timestamps, correction, SRT/VTT export        | Audio extraction; the runtime the owner already ships elsewhere                                                                                 | Usable silent-viewing workflow with acceptable correction effort                               |
+| P1                    | Export presets (GitHub issue, Slack, Docs, Full)                                        | Export sheet; the size guard; GIF for the docs preset                                                                                           | Fewer "file too large" bounces; the bug-repro story is true end to end                         |
+| P1                    | Open source under AGPL-3.0 at launch                                                    | [Pre-open checklist](/marketing/open-source/#pre-open-checklist); the security workstreams                                                      | The repository is public with signed releases attached                                         |
+| P2                    | Silence cutting (remove pauses automatically, as a reviewable proposal on the timeline) | Audio level analysis; non-destructive session                                                                                                   | A five-minute clip loses its dead air in one click and the user keeps the result               |
+| P2                    | Burned-in captions, one readable style                                                  | Reliable transcript plus compositor/timeline integration                                                                                        | Correctly timed captions in the delivered MP4                                                  |
+| P2                    | Audio-based title and summary                                                           | Transcript foundation; no visual-understanding claim                                                                                            | Users keep/copy accurate drafts                                                                |
+| P2                    | CLI: `list`, `record`, `stop`, `export --preset`, `trim`, `open`                        | The deterministic edit API; app-backed command runner spike                                                                                     | A repeated task is automated with correct output and the original intact                       |
+| P2 research           | Prompt-driven editing: commands → signals → model proposes, user reviews                | The CLI's edit API, captions, cursor track                                                                                                      | A proposal is accepted more often than discarded                                               |
+| P2                    | Kai brand prototype on landing and empty state                                          | Keep Kaipu/pink; validate recognition                                                                                                           | Warmer perception without weaker comprehension                                                 |
+| Low                   | Benchmarks page (RAM idle, CPU recording, installer size, export time)                  | One machine, one method, published with versions                                                                                                | Closes the Tauri question with numbers                                                         |
+| Low                   | Comparison pages (Loom, Screen Studio, Cap, Recordly), respectful by rule               | [Rules](/marketing/messaging-playbook/#comparison-pages)                                                                                        | Organic traffic at the moment of decision                                                      |
+| Later                 | Search spoken words                                                                     | Transcript adoption and demonstrated retrieval pain                                                                                             | Find and reuse an older explanation faster                                                     |
+| Later                 | Linux                                                                                   | Windows out of beta first                                                                                                                       | Demand justifies it                                                                            |
+
+## Decisions
+
+| Decision                                                                                      | Why                                                                                                  | Alternatives Considered                                                          |
+| --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Propose workflow and website first                                                            | Makes existing value easier to use and understand                                                    | Full visual rebrand or competitor feature parity                                 |
+| No watermark on the free tier                                                                 | The monetization ADR already forbids charging for local features; the competitor is free without one | Keep the watermark for marketing (rejected: the share page does that job better) |
+| No Tauri rewrite                                                                              | The gap is the pipeline, already solved; Recordly is Electron too                                    | Rewrite for idle RAM and bundle size (rejected, see the ADR)                     |
+| Ship Windows as a recording-only beta                                                         | The build works; the first objection in every thread is "Windows?"                                   | Wait for screenshot parity                                                       |
+| Captions on Parakeet TDT v3, not Whisper                                                      | The owner already ships it multilingual elsewhere                                                    | Whisper bake-off first                                                           |
+| Explore captions before summaries or agents                                                   | Immediate comprehension benefit and reusable transcription foundation                                | Generic AI chat, autonomous editing first                                        |
+| Close the visible feature gap (GIF, one beautiful default) but not full cursor-effects parity | Cheap items that change the first impression; parity is infinite and not what Kaipu sells            | Chase Screen Studio polish item by item                                          |
+| Keep Kai optional and supporting                                                              | Preserve existing recognition                                                                        | Rename product or couple mascot to AI                                            |
+
+## Gotchas & Warnings
+
+- Relative technical difficulty is documented in [AI and automation](/marketing/ai-and-automation/); no calendar estimates or provider choices are approved.
+- The earlier master backlog includes historical statuses. Use specific feature docs and current code before scheduling duplicate work.
+- Public roadmap updates require an explicit commitment decision; this proposal only updates internal documentation.
+
+## Dependencies
+
+No new runtime packages or services. Architecture choices require separate design and ADR work; pricing changes require resolving the current policy conflict.
+
+## Testing
+
+Documentation: run `bun run build` in `apps/documentation`. The watermark change has unit
+coverage (`use-watermark.test.tsx`, `brand-badge-settings.test.tsx`,
+`settings.service.test.ts`) and a packaged-build checklist in its
+[own page](/backlog/free-tier-no-watermark/). Everything else needs observed tasks and the
+success signals above.
+
+## Related
+
+- [Positioning](/marketing/positioning/) · [Brand and Kai](/marketing/brand-and-kai/) · [AI and automation](/marketing/ai-and-automation/)
+- [Master backlog](/backlog/roadmap/) · [Product philosophy](/desktop/product-philosophy/) · [Monetization ADR](/desktop/filesystem-first-monetization/)

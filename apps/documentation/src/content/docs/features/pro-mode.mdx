@@ -14,10 +14,21 @@ verify or change the rules; read the ADR to understand the architecture around t
 
 | Field          | Value                                                                         |
 | -------------- | ----------------------------------------------------------------------------- |
-| Status         | 🟢 Shipped, pending real-world validation                                     |
+| Status         | ⚠️ Superseded for the watermark (2026-09-27) — the plumbing stays, see below  |
 | Completed      | 2026-09-06                                                                    |
 | Parent feature | [Plans and entitlements](/backlog/plans-and-entitlements)                     |
 | Related ADR    | [ADR 0002](/architecture/decisions/0002-plan-entitlements-separate-from-auth) |
+
+## 2026-09-27 — the watermark is no longer gated
+
+The free app ships without a watermark ([decision](/backlog/free-tier-no-watermark/)). The
+mark is now an opt-in badge (`AppSettings.showBrandBadge`, off by default) and reads no
+entitlement. `isWatermarkRemovalGranted` and the desktop's `watermark-enabled` flag were
+removed. Everything below about the **grant rule, the offline model, the cache and the manual
+grant** is still accurate and still in place; `features.watermarkRemoval` is simply a feature
+with no consumer until the cloud features (`cloudUploads`, `cloudStorageBytes`) take over the
+same map. Read the rest of this page as the reference for _how a feature is granted_, not as
+a description of what the watermark does.
 
 ## What it does
 
@@ -70,19 +81,19 @@ event. A `manual` grant with `currentPeriodEnd: null` never expires offline.
 
 ## Files
 
-| Path                                                                     | Role                                                                    |
-| ------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
-| `packages/domain/src/schemas/subscription.ts`                            | `deriveEntitlements` — the grant rule, and every type involved          |
-| `packages/domain/src/repositories/subscription.repository.ts`            | `ISubscriptionRepository` — read-only port                              |
-| `packages/application/src/entitlements/get-entitlements.ts`              | Loads the row, calls the rule                                           |
-| `packages/infra-db/src/schema/subscription.ts`                           | `kaipu_record_subscription` table                                       |
-| `packages/infra-db/src/repositories/subscription.repository.ts`          | Drizzle implementation of the port                                      |
-| `apps/server-hono/src/contract/me.contract.ts`                           | `GET /api/v1/me/entitlements` contract                                  |
-| `apps/server-hono/src/modules/me/me.router.ts`                           | Composes `authMiddleware` (identity) with `getEntitlements` (plan)      |
-| `apps/kaipu-record/src/main/services/auth-client.ts`                     | `getEntitlements` — fetches the route; rejects on any failure           |
-| `apps/kaipu-record/src/main/infrastructure/auth-store.ts`                | Caches entitlements alongside the token; re-checks per status call      |
-| `apps/kaipu-record/src/shared/entitlements.ts`                           | Wire type + `isWatermarkRemovalGranted` (adds the offline expiry check) |
-| `apps/kaipu-record/src/renderer/src/features/watermark/use-watermark.ts` | Consumes `isWatermarkRemovalGranted` as `isPaid`                        |
+| Path                                                                     | Role                                                                                       |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| `packages/domain/src/schemas/subscription.ts`                            | `deriveEntitlements` — the grant rule, and every type involved                             |
+| `packages/domain/src/repositories/subscription.repository.ts`            | `ISubscriptionRepository` — read-only port                                                 |
+| `packages/application/src/entitlements/get-entitlements.ts`              | Loads the row, calls the rule                                                              |
+| `packages/infra-db/src/schema/subscription.ts`                           | `kaipu_record_subscription` table                                                          |
+| `packages/infra-db/src/repositories/subscription.repository.ts`          | Drizzle implementation of the port                                                         |
+| `apps/server-hono/src/contract/me.contract.ts`                           | `GET /api/v1/me/entitlements` contract                                                     |
+| `apps/server-hono/src/modules/me/me.router.ts`                           | Composes `authMiddleware` (identity) with `getEntitlements` (plan)                         |
+| `apps/kaipu-record/src/main/services/auth-client.ts`                     | `getEntitlements` — fetches the route; rejects on any failure                              |
+| `apps/kaipu-record/src/main/infrastructure/auth-store.ts`                | Caches entitlements alongside the token; re-checks per status call                         |
+| `apps/kaipu-record/src/shared/entitlements.ts`                           | Wire type + `entitlementsFromStatus` (the offline expiry helper was removed with the gate) |
+| `apps/kaipu-record/src/renderer/src/features/watermark/use-watermark.ts` | Reads `AppSettings.showBrandBadge` only; no entitlement involved since 2026-09-27          |
 
 ## Decisions
 
