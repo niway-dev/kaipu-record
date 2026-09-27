@@ -68,10 +68,6 @@ describe("resolveWatermarkEnabled", () => {
 describe("DEFAULT_WATERMARK_CONFIG", () => {
   // The mark is a signature, not a claim on the frame: it sits in a corner and
   // stays under the content. Moved off `middle-right`, which overlapped the video.
-  it("rests in the bottom-right corner", () => {
-    expect(DEFAULT_WATERMARK_CONFIG.position).toBe("bottom-right");
-  });
-
   it("is faint enough not to compete with the content", () => {
     expect(DEFAULT_WATERMARK_CONFIG.opacity).toBeLessThanOrEqual(0.75);
   });

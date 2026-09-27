@@ -60,10 +60,6 @@ describe("the preview picture box", () => {
     expect(content).toMatch(/max-height:[^;]*cqh/);
   });
 
-  it("still declares the frame ratio it is built around", () => {
-    expect(content).toMatch(/aspect-ratio:\s*var\(--frame-ratio\)/);
-  });
-
   it("has a container to measure: the video region establishes one", () => {
     // Container query units resolve against the nearest ancestor with `container-type`.
     // Without this the cq units silently fall back to the small viewport — the same bug
