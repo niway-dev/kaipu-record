@@ -14,6 +14,12 @@ name: PR checks
 #    and API bundles on the release PR that release-please maintains, so `main` is validated
 #    as it will be tagged, BEFORE the tag exists. A failure here costs a fix and a push; the
 #    same failure in release-*.yml costs a tag, an empty GitHub Release and a patch release.
+# 3. `Desktop E2E (macOS, release candidate)` — the expensive one on the expensive runner.
+#    Playwright drives the real Electron build on the platform that ships. It used to run
+#    ONLY inside release-desktop.yml, i.e. AFTER the tag existed, which is how desktop 0.8.0
+#    ended up with a published, empty GitHub Release when it failed on 2026-09-25. Running it
+#    here makes that failure cost a push instead of a tag. macOS bills at 10x, so it is gated
+#    to DESKTOP candidates: a web or api release PR does not pay for it. See ADR 0006.
 #
 # READINESS POLICY — draft means "still accumulating", ready means "verify this".
 #
@@ -146,6 +152,85 @@ jobs:
         working-directory: apps/server-hono
         run: bun run build
 
+  # The desktop release gate, moved in front of the tag (ADR 0006).
+  #
+  # A faithful copy of the E2E step in release-desktop.yml, native rebuild included, because
+  # a candidate that does not exercise what ships is not a candidate. This is the only place
+  # the export path runs in the cloud: on Linux runners it self-skips, as headless Chromium
+  # has no H.264 encoder.
+  #
+  # `environment: production` is declared only to read MAIN_VITE_SERVER_URL, which the build
+  # inlines into the main bundle. That environment has no protection rules, and no signing
+  # secret is used here — signing stays in the release workflow.
+  e2e_desktop:
+    name: Desktop E2E (macOS, release candidate)
+    runs-on: macos-latest
+    timeout-minutes: 30
+    environment: production
+    # Gated to DESKTOP candidates. A web or api release PR is still a release PR, but nothing
+    # in it can change what the desktop app does, and a macOS minute costs ten.
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event.pull_request.state == 'open' &&
+          github.event.pull_request.draft == false &&
+          startsWith(github.head_ref, 'release-please--') &&
+          contains(github.head_ref, 'components--desktop') &&
+          (github.event.action != 'edited' || github.event.changes.base.ref.from != '')
+        )
+      }}
+    concurrency:
+      group: e2e-desktop-candidate-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.4
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # Same reasoning as release-desktop.yml: `electron-builder.yml` sets
+      # `npmRebuild: false`, so uiohook-napi must be rebuilt against Electron's ABI
+      # explicitly. Skip it and the app degrades to "no clicks" rather than crashing, which
+      # would let this suite pass against something users never run.
+      - name: Rebuild native dependencies for Electron
+        run: bash scripts/rebuild-native.sh
+
+      - name: Build
+        working-directory: apps/kaipu-record
+        env:
+          MAIN_VITE_SERVER_URL: ${{ vars.MAIN_VITE_SERVER_URL }}
+        run: |
+          test -n "$MAIN_VITE_SERVER_URL" || {
+            echo "::error::MAIN_VITE_SERVER_URL is not set — add it to the production Environment"
+            exit 1
+          }
+          bun run build
+
+      # `playwright test` directly, not `bun run test:e2e`, so the build above is not
+      # repeated. ffprobe is deliberately not installed (`brew install ffmpeg` costs macOS
+      # minutes): the export still runs end to end and only the codec assertion skips.
+      - name: E2E (Playwright, built app)
+        working-directory: apps/kaipu-record
+        run: bunx playwright test
+
+      - name: Upload Playwright artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-candidate
+          path: |
+            apps/kaipu-record/playwright-report
+            apps/kaipu-record/test-results
+          retention-days: 7
+          if-no-files-found: ignore
+
   # Returning a ready candidate to draft means "not this one after all". Joining the verify
   # job's concurrency group from a job that costs seconds cancels the in-flight verification
   # instead of paying out the remaining minutes of a result nobody will read.
@@ -177,7 +262,7 @@ jobs:
   gate:
     name: Merge requirements
     runs-on: ubuntu-latest
-    needs: [verify]
+    needs: [verify, e2e_desktop]
     if: >-
       ${{
         always() &&
@@ -190,7 +275,9 @@ jobs:
       - name: Check whether release verification permits merging
         env:
           IS_RELEASE: ${{ startsWith(github.head_ref, 'release-please--') }}
+          IS_DESKTOP: ${{ contains(github.head_ref, 'components--desktop') }}
           VERIFY: ${{ needs.verify.result }}
+          E2E: ${{ needs.e2e_desktop.result }}
           SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
@@ -201,10 +288,7 @@ jobs:
           fi
 
           case "$VERIFY" in
-            success)
-              echo "Release candidate verified on $SHA."
-              exit 0
-              ;;
+            success) ;;
             failure)
               echo "::error title=Release candidate failed verification::\`bun run verify\` or an app bundle build failed on $SHA. Fix it and push; the new revision is verified automatically while this PR is ready for review."
               exit 1
@@ -218,6 +302,29 @@ jobs:
               exit 1
               ;;
           esac
+
+          # The desktop E2E only applies to a desktop candidate; a web or api candidate
+          # deliberately never starts it, and `skipped` there is the expected result.
+          if [ "$IS_DESKTOP" = "true" ]; then
+            case "$E2E" in
+              success) ;;
+              failure)
+                echo "::error title=Desktop E2E failed::Playwright failed against the built app on macOS for $SHA. This is the check that used to run only after the tag existed. Fix it and push; the new revision is verified automatically while this PR is ready for review."
+                exit 1
+                ;;
+              cancelled)
+                echo "::error title=Desktop E2E cancelled::It was superseded by a newer revision, or this PR was returned to draft. Mark the pull request ready for review again to verify the current revision."
+                exit 1
+                ;;
+              *)
+                echo "::error title=Desktop E2E did not run::A desktop release candidate must pass the macOS end-to-end suite before the tag exists (e2e_desktop job: $E2E). Return the pull request to draft and mark it ready for review again."
+                exit 1
+                ;;
+            esac
+            echo "Desktop end-to-end suite passed on macOS."
+          fi
+
+          echo "Release candidate verified on $SHA."
 
   # TRANSITIONAL — delete once the `main release` ruleset requires `Merge requirements`.
   #
