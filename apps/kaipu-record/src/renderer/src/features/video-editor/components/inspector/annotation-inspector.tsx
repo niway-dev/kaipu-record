@@ -77,6 +77,18 @@ function ContextualControlsBody({
                 {label}
               </button>
             ))}
+            {/* Only while a corner drag is in force. A permanent chip you cannot press
+                would be a dead control; this one appears exactly when it is true. */}
+            {controls.custom ? (
+              <button
+                type="button"
+                aria-label={t("sizeCustomAria")}
+                className={`${overlayStyles.pickerItem} ${overlayStyles.sizeItem} ${overlayStyles.pickerOn}`}
+                disabled
+              >
+                {t("sizeCustom")}
+              </button>
+            ) : null}
           </div>
         </>
       ) : (

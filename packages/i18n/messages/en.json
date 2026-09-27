@@ -543,7 +543,9 @@
     "privacyNotOnSlide": "Images can't be blurred or covered.",
     "removeAnnotation": "Remove annotation",
     "annotationDefaultsTitle": "Next annotation",
-    "annotationDefaultsHint": "Style for the next annotation you draw."
+    "annotationDefaultsHint": "Style for the next annotation you draw.",
+    "sizeCustom": "Custom",
+    "sizeCustomAria": "Custom size, set by dragging a corner"
   },
   "panel": {
     "saving": "Saving…",

@@ -22,6 +22,8 @@ export interface ContextualControls {
   /** Index into STROKE_WIDTHS or TEXT_SIZES. */
   level: number;
   setLevel(level: number): void;
+  /** True while a corner drag is in force, so no preset matches. */
+  custom?: boolean;
 }
 
 export function resolveControls(
@@ -43,9 +45,15 @@ export function resolveControls(
             onCommitOverlay(selected.id, { color });
             tools.setColor(color);
           },
-          level: selected.size,
+          // -1 highlights no preset: a label sized by dragging a corner is not any of
+          // them, and lighting one up would claim a size the text does not have.
+          level: selected.fontPx === undefined ? selected.size : -1,
+          custom: selected.fontPx !== undefined,
           setLevel: (size) => {
-            onCommitOverlay(selected.id, { size });
+            // Clearing `fontPx` is the point, not a detail. It wins over the preset,
+            // so writing only `size` left the label untouched: you clicked L and
+            // nothing happened.
+            onCommitOverlay(selected.id, { size, fontPx: undefined });
             tools.setTextSize(size);
           },
         }

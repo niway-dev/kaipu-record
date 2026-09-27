@@ -543,7 +543,9 @@
     "privacyNotOnSlide": "Las imágenes no se pueden desenfocar ni cubrir.",
     "removeAnnotation": "Quitar anotación",
     "annotationDefaultsTitle": "Próxima anotación",
-    "annotationDefaultsHint": "Estilo de la próxima anotación que dibujes."
+    "annotationDefaultsHint": "Estilo de la próxima anotación que dibujes.",
+    "sizeCustom": "Custom",
+    "sizeCustomAria": "Tamaño personalizado, fijado arrastrando una esquina"
   },
   "panel": {
     "saving": "Guardando…",
