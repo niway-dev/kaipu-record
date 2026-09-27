@@ -46,25 +46,48 @@ below for later evaluation, not authorized for implementation.
 6. Concurrency is scoped to the expensive job, keyed by PR (or selected ref for manual
    dispatch). **Cancel verification when returned to draft** joins that group to cancel
    in-flight verification. The gate and alias do not join the group.
-7. Draft creation and ordinary draft updates remain skipped at job level to preserve
-   runner savings. Returning a release PR to draft runs only the cancellation job.
-   GitHub itself prevents merging drafts; being draft is not a verification failure.
+7. Draft creation and ordinary draft updates keep the expensive jobs skipped at job level
+   to preserve runner savings, but **the gate itself never skips** (corrected 2026-09-27,
+   see below). Returning a release PR to draft also runs the cancellation job.
 8. Label events are absent. Closed or merged PRs and title/body edits allocate no
    runner. `edited` with a base change supports stacked PRs retargeted to `main`.
    Irrelevant events do not join the cancelling concurrency group.
 9. Manual dispatch intentionally verifies the selected ref without a PR or draft check.
 
+## Correction, 2026-09-27: the gate must never skip
+
+This decision originally had the gate skip on drafts and on irrelevant events, reasoning
+that a skipped job reports nothing and so leaves the required check unsatisfied.
+
+**That is false. A skipped job reports a check, and GitHub's branch protection counts that
+conclusion as satisfied.**
+
+The 0.8.1 candidate proved it. release-please force-pushes its branch _and_ edits the PR
+body, so `synchronize` and `edited` fire together. In the `edited` run the gate skipped,
+reported green, and overwrote the still-running real verification: the merge button was
+enabled on an unverified release candidate while its `verify` job was in flight.
+
+The rule that replaces it is absolute. **Every condition on the required check is a way for
+it to go green without anything being verified** — the precise failure it exists to
+prevent. Its `if` is now nothing but `always() && github.event_name == 'pull_request'`, and
+`scripts/check-workflow-eligibility.ts` fails if a condition is ever added back.
+
+The gate therefore always runs and always decides, and it fails closed. A draft candidate
+reports "not verified", because this check cannot express "no opinion" — anything that is
+not a failure reads as approval. An irrelevant event on a ready candidate turns it red
+until the real run finishes. Both are noise; a false green is not.
+
 ## User-visible flow and names
 
-| Situation                          | Gate behavior                               | Actual work                                                               |
-| ---------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------- |
-| Ordinary ready PR                  | `Merge requirements` succeeds               | Brief applicability summary; no candidate tests                           |
-| Release opened or updated in draft | `Merge requirements` skipped                | No runner; GitHub blocks draft merge                                      |
-| Human marks release ready          | `Merge requirements` waits for verification | Separate job runs checks and both app builds                              |
-| Ready release changes              | New gate waits for verification             | Replaces obsolete verification                                            |
-| Verification fails                 | `Merge requirements` fails                  | Merge blocked                                                             |
-| Verification succeeds              | `Merge requirements` succeeds               | Required check satisfied                                                  |
-| Human returns PR to draft          | Gate skipped                                | Cancellation job supersedes older verification; GitHub blocks draft merge |
+| Situation                          | Gate behavior                                 | Actual work                                           |
+| ---------------------------------- | --------------------------------------------- | ----------------------------------------------------- |
+| Ordinary ready PR                  | `Merge requirements` succeeds                 | Brief applicability summary; no candidate tests       |
+| Release opened or updated in draft | `Merge requirements` **fails** (not verified) | No candidate runner; GitHub blocks draft merge anyway |
+| Human marks release ready          | `Merge requirements` waits for verification   | Separate job runs checks and both app builds          |
+| Ready release changes              | New gate waits for verification               | Replaces obsolete verification                        |
+| Verification fails                 | `Merge requirements` fails                    | Merge blocked                                         |
+| Verification succeeds              | `Merge requirements` succeeds                 | Required check satisfied                              |
+| Human returns PR to draft          | `Merge requirements` **fails** (not verified) | Cancellation job supersedes older verification        |
 
 Inside the verification job, steps check out candidate code, set up Bun, restore Bun
 and Turbo caches, install locked
@@ -140,8 +163,10 @@ historical runs keep their old names. Live ruleset changes are not part of this 
 
 Ordinary ready PRs still allocate one brief runner; this is not zero-cost CI.
 Successful release verification uses a verification runner and a separate gate runner.
-Draft updates and skipped jobs allocate none; conversion back to draft uses a brief
-cancellation run. The temporary alias still adds a job.
+Draft updates allocate no CANDIDATE runner, but the gate runs on every pull-request event
+by necessity (see the correction below), so it is a brief runner each time rather than
+none. Conversion back to draft also uses a brief cancellation run. The temporary alias
+still adds a job.
 Release-please maintenance and tag publication workflows retain their own costs.
 Savings require billing measurement, not multiplying UI durations.
 
