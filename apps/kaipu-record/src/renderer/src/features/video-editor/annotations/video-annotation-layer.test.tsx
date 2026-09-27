@@ -280,3 +280,66 @@ describe("VideoAnnotationLayer — visibility rendering", () => {
     expect(layer.querySelector('g[opacity="1"]')).not.toBeNull();
   });
 });
+
+describe("editing a text label", () => {
+  const label: VideoOverlay = {
+    id: "t1",
+    kind: "text",
+    x: 0.5,
+    y: 0.5,
+    text: "hello",
+    color: "#f6055c",
+    size: 1,
+    start: 0,
+    end: 10,
+  };
+
+  function openByDoubleClick(): VideoAnnotationLayerProps {
+    const { props, layer } = renderLayer({
+      overlays: [label],
+      visibleIds: new Set(["t1"]),
+      selectedId: "t1",
+    });
+    fireEvent.doubleClick(layer, { clientX: 200, clientY: 150 });
+    return props;
+  }
+
+  // Before this, a label was write-once: the only way to change a typo was to delete
+  // the overlay and type it again, losing its timeline window.
+  it("reopens an existing label prefilled, on double click", () => {
+    openByDoubleClick();
+    const input = screen.getByRole("textbox") as HTMLTextAreaElement;
+    expect(input.value).toBe("hello");
+  });
+
+  it("updates that label in place instead of appending a second one", () => {
+    const props = openByDoubleClick();
+    const input = screen.getByRole("textbox");
+    fireEvent.change(input, { target: { value: "goodbye" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    const committed = (props.onCommit as ReturnType<typeof vi.fn>).mock
+      .calls[0]![0] as VideoOverlay[];
+    expect(committed).toHaveLength(1);
+    expect(committed[0]).toMatchObject({ id: "t1", text: "goodbye", start: 0, end: 10 });
+  });
+
+  // Shift+Enter must fall through to the textarea's own newline handling, the way a
+  // spreadsheet cell behaves. Plain Enter still commits.
+  it("does not commit on Shift+Enter", () => {
+    const props = openByDoubleClick();
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter", shiftKey: true });
+    expect(props.onCommit).not.toHaveBeenCalled();
+  });
+
+  it("keeps the line breaks the user typed", () => {
+    const props = openByDoubleClick();
+    const input = screen.getByRole("textbox");
+    fireEvent.change(input, { target: { value: "first\nsecond" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    const committed = (props.onCommit as ReturnType<typeof vi.fn>).mock
+      .calls[0]![0] as VideoOverlay[];
+    expect(committed[0]).toMatchObject({ text: "first\nsecond" });
+  });
+});

@@ -13,6 +13,8 @@ import {
   TEXT_PX,
   roughArrow,
   roughRect,
+  TEXT_LINE_HEIGHT,
+  textLines,
 } from "@renderer/features/screenshots/annotations";
 import type { VideoOverlay } from "../scene";
 
@@ -87,7 +89,18 @@ function shapeSvg(o: VideoOverlay, W: number, H: number, scale: number): string 
   // size first, then scale it the same way strokes are scaled — mirrors the
   // screenshot compositor's `TEXT_PX[a.size] * scale`.
   const fs = TEXT_PX[o.size] * scale;
-  return `<text x="${o.x * W}" y="${o.y * H}" fill="${o.color}" font-family="${HAND_FONT}" font-size="${fs}" font-weight="600" dominant-baseline="hanging">${escapeXml(o.text)}</text>`;
+  const tx = o.x * W;
+  // One tspan per line. SVG `<text>` neither wraps nor honours a newline, so a label
+  // written across two lines in the editor would export as one run of text with the
+  // break silently gone — found only after the export, which is the worst moment.
+  // Mirrors the screenshot compositor; `textLines` and TEXT_LINE_HEIGHT are its own.
+  const tspans = textLines(o.text)
+    .map(
+      (line, i) =>
+        `<tspan x="${tx}" dy="${i === 0 ? 0 : fs * TEXT_LINE_HEIGHT}">${escapeXml(line)}</tspan>`,
+    )
+    .join("");
+  return `<text x="${tx}" y="${o.y * H}" fill="${o.color}" font-family="${HAND_FONT}" font-size="${fs}" font-weight="600" dominant-baseline="hanging">${tspans}</text>`;
 }
 
 function escapeXml(s: string): string {

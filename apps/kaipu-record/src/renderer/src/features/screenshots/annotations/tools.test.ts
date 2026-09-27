@@ -48,3 +48,21 @@ describe("textBoxPx", () => {
     expect(textBoxPx("hi", fs).h).toBeCloseTo(fs * TEXT_LINE_HEIGHT);
   });
 });
+
+describe("textBoxPx, as the video overlay's box", () => {
+  // The video overlay sized its selection rect from `text.length`, so a two-line label
+  // reported a box twice as wide as it looked and only one line tall. This helper
+  // already existed for the screenshot editor; these pin the properties the video
+  // overlay now depends on.
+  it("measures the longest line, not the whole string", () => {
+    expect(textBoxPx("hello\nhi", 20).w).toBe(textBoxPx("hello", 20).w);
+  });
+
+  it("grows in height with each line", () => {
+    expect(textBoxPx("a\nb\nc", 20).h).toBeCloseTo(textBoxPx("a", 20).h * 3);
+  });
+
+  it("keeps an empty trailing line, so a trailing Enter stays visible", () => {
+    expect(textBoxPx("a\n", 20).h).toBeCloseTo(textBoxPx("a\nb", 20).h);
+  });
+});
