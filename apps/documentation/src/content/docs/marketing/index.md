@@ -29,6 +29,14 @@ whole monorepo opening at launch, Windows recording-only beta, and a roadmap tha
 keystroke visualizer, captions on Parakeet, silence cutting and a CLI. The full list with
 links is at the top of [Positioning](/marketing/positioning/#owner-decisions-2026-09-27).
 
+## How this section is worked on
+
+The growth strategy lives as one long-running branch and PR of docs and notes. Every idea
+gets its own brainstorm, in stages, one at a time; the result of each brainstorm is a feature
+doc in `backlog/` linked from the [growth roadmap](/backlog/product-growth/). Code for an
+idea starts only after its doc exists. Order agreed on 2026-09-27: GIF export first (smallest,
+self-contained), then Windows beta, then the landing sections, then keystrokes and the CLI.
+
 ## Working principles
 
 - Win the repeated capture → clarify → deliver → retrieve workflow, rather than matching every video-production feature.
