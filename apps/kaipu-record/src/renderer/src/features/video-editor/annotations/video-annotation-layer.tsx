@@ -40,6 +40,7 @@ import {
   HAND_FONT,
   TEXT_PX,
   TEXT_LINE_HEIGHT,
+  textBoxPx,
   handlesFor,
   hitHandle,
   resizeAnnotation,
@@ -497,13 +498,21 @@ function hitTest(overlays: VideoOverlay[], p: Pt, size: Size): VideoOverlay | nu
       }
     } else if (o.kind === "text") {
       // The text renders in px (TEXT_PX[size]) but lives in normalized space, so the
-      // hit box must derive from the font size AND the layer's pixel size (matches the
-      // rendered bounds in overlay-shapes.tsx) plus an 8px click margin.
+      // hit box derives from the font size AND the layer's pixel size, plus an 8px
+      // click margin.
+      //
+      // `textBoxPx` is the same measurement the renderer and the selection outline
+      // use — one source of truth, which this deliberately is not allowed to restate.
+      // It used to: `text.length * fs * 0.55` counted newlines as characters, so a
+      // three-line label claimed a box three times too wide and one line tall. Every
+      // line after the first fell outside it, so clicking the body of a tall label
+      // missed the annotation and fell through to the video, which started playing.
       const fs = TEXT_PX[o.size];
       const padX = 8 / (size.w || 1);
       const padY = 8 / (size.h || 1);
-      const w = (o.text.length * fs * 0.55) / (size.w || 1);
-      const h = (fs * 1.3) / (size.h || 1);
+      const px = textBoxPx(o.text, fs);
+      const w = px.w / (size.w || 1);
+      const h = px.h / (size.h || 1);
       if (
         p.x >= o.x - padX &&
         p.x <= o.x + w + padX &&
