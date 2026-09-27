@@ -119,6 +119,8 @@
     "screenshots": "Capturas",
     "screenshotSave": "Guardar capturas automáticamente",
     "screenshotSaveDescription": "Cada captura va a tu Biblioteca apenas la tomas.",
+    "brandBadge": "Mostrar la marca \"Hecho con Kaipu\"",
+    "brandBadgeDescription": "Una marca pequeña en la esquina de las nuevas grabaciones. Apagada por defecto.",
     "developer": "Developer",
     "openFolder": "Abrir carpeta",
     "accountMoved": "Tu cuenta se movió a Cloud",

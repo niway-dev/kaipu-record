@@ -119,6 +119,8 @@
     "screenshots": "Screenshots",
     "screenshotSave": "Save screenshots automatically",
     "screenshotSaveDescription": "Every capture goes to your Library the moment you take it.",
+    "brandBadge": "Show a \"Made with Kaipu\" badge",
+    "brandBadgeDescription": "A small mark in the corner of new recordings. Off by default.",
     "developer": "Developer",
     "openFolder": "Open folder",
     "accountMoved": "Your account moved to Cloud",

@@ -134,6 +134,12 @@ export interface AppSettings {
    * Save (backlog/settings-screenshots).
    */
   screenshotSave: ScreenshotSaveMode;
+  /**
+   * Burn a small "Made with Kaipu" mark into recordings. Off by default: the free
+   * app carries no watermark (backlog/free-tier-no-watermark), this is an opt-in
+   * signature for people who want to credit the tool.
+   */
+  showBrandBadge: boolean;
   /** User-rebindable global keyboard shortcuts (Electron accelerator strings). */
   shortcuts: ShortcutSettings;
   /**
@@ -157,6 +163,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   recordingQuality: DEFAULT_QUALITY,
   showBarInRecording: false,
   screenshotSave: "auto",
+  showBrandBadge: false,
   shortcuts: DEFAULT_SHORTCUTS,
   deviceId: "",
   uploadMode: "local-only",
@@ -364,7 +371,11 @@ export interface RecordingStartInfo {
  * renderer's `SelectedSource` / `Microphone`.
  */
 export interface RecordingSettings {
-  selectedSource: { id: string; name: string; type: "screen" | "window" } | null;
+  selectedSource: {
+    id: string;
+    name: string;
+    type: "screen" | "window";
+  } | null;
   selectedMicrophone: { deviceId: string; label: string } | null;
   isMicrophoneEnabled: boolean;
   isSystemAudioEnabled: boolean;

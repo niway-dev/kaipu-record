@@ -75,6 +75,10 @@ export function mergeSettings(stored: Partial<AppSettings> | null | undefined): 
     screenshotSave: isValidScreenshotSaveMode(safe.screenshotSave)
       ? safe.screenshotSave
       : DEFAULT_SETTINGS.screenshotSave,
+    showBrandBadge:
+      typeof safe.showBrandBadge === "boolean"
+        ? safe.showBrandBadge
+        : DEFAULT_SETTINGS.showBrandBadge,
     shortcuts: mergeShortcuts(safe.shortcuts),
     deviceId: typeof safe.deviceId === "string" ? safe.deviceId : "",
     uploadMode: isValidUploadMode(safe.uploadMode) ? safe.uploadMode : DEFAULT_SETTINGS.uploadMode,

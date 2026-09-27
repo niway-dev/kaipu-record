@@ -11,6 +11,7 @@ const SETTINGS: AppSettings = {
   recordingQuality: DEFAULT_QUALITY,
   showBarInRecording: false,
   screenshotSave: "auto",
+  showBrandBadge: false,
   shortcuts: DEFAULT_SHORTCUTS,
   deviceId: "",
   uploadMode: "local-only",

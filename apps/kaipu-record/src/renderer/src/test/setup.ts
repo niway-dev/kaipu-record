@@ -44,6 +44,7 @@ const STUB_SETTINGS = {
   recordingQuality: DEFAULT_QUALITY,
   showBarInRecording: false,
   screenshotSave: "auto",
+  showBrandBadge: false,
   shortcuts: DEFAULT_SHORTCUTS,
   deviceId: "",
   uploadMode: "local-only",

@@ -12,8 +12,7 @@ describe("flag model", () => {
     for (const name of FLAG_NAMES) {
       expect(typeof FLAG_DEFAULTS[name]).toBe("boolean");
     }
-    // Watermark must ship even offline; login is bypassed pre-auth.
-    expect(FLAG_DEFAULTS["watermark-enabled"]).toBe(true);
+    // Login is bypassed pre-auth.
     expect(FLAG_DEFAULTS["bypass-login"]).toBe(true);
   });
 

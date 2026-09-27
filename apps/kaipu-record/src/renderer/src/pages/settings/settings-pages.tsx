@@ -10,10 +10,6 @@ import { useOnboarding } from "@renderer/features/onboarding";
 import { usePermissions, useAccessibility } from "@renderer/features/permissions";
 import { useVaultDirectory } from "@renderer/features/library/hooks/use-vault-directory";
 import {
-  readDevSimulatePaid,
-  writeDevSimulatePaid,
-} from "@renderer/features/watermark/dev-override";
-import {
   SIM_ACCOUNTS,
   SIM_CAPACITIES,
   useStorageSimulator,
@@ -34,6 +30,7 @@ import { ThemeSettings } from "./theme-settings";
 import { UpdateSettings } from "./update-settings";
 import { RecordingQualitySettings } from "./recording-quality-settings";
 import { ScreenshotSaveSettings } from "./screenshot-save-settings";
+import { BrandBadgeSettings } from "./brand-badge-settings";
 import { Section, SettingsPanel } from "./settings-panel";
 import styles from "./settings-page.module.css";
 
@@ -42,7 +39,7 @@ import styles from "./settings-page.module.css";
  *   • General           → AppSettings.locale / theme (+ a pointer to /cloud for the account)
  *   • Permissions       → window.electronAPI permission bridge (+ macOS Accessibility)
  *   • Recording quality → AppSettings.recordingQuality → encoder
- *   • Recording         → AppSettings.showBarInRecording
+ *   • Recording         → AppSettings.showBarInRecording / showBrandBadge
  *   • Files             → the real on-disk recordings vault
  *   • App               → Dock policy, replay the first-run flow
  *   • Developer         → dev-only overrides (stripped from production)
@@ -181,6 +178,7 @@ export function RecordingSettingsPage(): React.JSX.Element {
             />
           }
         />
+        <BrandBadgeSettings />
       </Section>
     </SettingsPanel>
   );
@@ -278,7 +276,6 @@ export function ScreenshotsSettingsPage(): React.JSX.Element {
 
 /** Dev-only overrides. Routed only when `import.meta.env.DEV`; copy is intentionally not localized. */
 export function DeveloperSettingsPage(): React.JSX.Element {
-  const [simulatePaid, setSimulatePaid] = React.useState(() => readDevSimulatePaid());
   const [updateScenario, setUpdateScenario] = React.useState(() => readDevUpdateScenarioKey());
   const storageSim = useStorageSimulator();
   return (
@@ -286,21 +283,6 @@ export function DeveloperSettingsPage(): React.JSX.Element {
       title="Developer"
       subtitle="Dev-only overrides. Stripped from production builds."
     >
-      <Section title="Watermark">
-        <Row
-          label="Remove watermark (simulate a paid plan)"
-          description="Records without the watermark for testing"
-          action={
-            <Toggle
-              checked={simulatePaid}
-              onChange={(checked) => {
-                setSimulatePaid(checked);
-                writeDevSimulatePaid(checked);
-              }}
-            />
-          }
-        />
-      </Section>
       <Section title="Updater simulator">
         <Row
           label="Force an update state"
@@ -312,7 +294,10 @@ export function DeveloperSettingsPage(): React.JSX.Element {
                 setUpdateScenario(value);
                 writeDevUpdateScenario(value);
               }}
-              options={DEV_UPDATE_SCENARIOS.map(({ key }) => ({ value: key, label: key }))}
+              options={DEV_UPDATE_SCENARIOS.map(({ key }) => ({
+                value: key,
+                label: key,
+              }))}
             />
           }
         />
