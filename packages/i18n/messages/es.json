@@ -427,7 +427,9 @@
     "bgOcean": "Océano",
     "bgSunset": "Atardecer",
     "bgForest": "Bosque",
-    "bgGraphite": "Grafito"
+    "bgGraphite": "Grafito",
+    "sizeCustom": "Custom",
+    "sizeCustomAria": "Tamaño personalizado, fijado arrastrando una esquina"
   },
   "videoEditor": {
     "restored": "Se restauró tu edición anterior",
