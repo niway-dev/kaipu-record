@@ -7,9 +7,11 @@ name: PR checks
 #
 # Two things live here, and they are deliberately different sizes.
 #
-# 1. `Merge requirements` — the REQUIRED check. It always reports on a non-draft PR, because a
-#    required check that never reports leaves the PR perpetually pending and blocks merge
-#    forever (the paths-filter gotcha in the hub's pr-checks.md). It costs one short job.
+# 1. `Merge requirements` — the REQUIRED check. It reports on every ordinary pull request,
+#    because a required check that never reports leaves the PR perpetually pending and
+#    blocks merge forever (the paths-filter gotcha in the hub's pr-checks.md), and on a
+#    release candidate it reports exactly once per commit, from the run that verified that
+#    commit. Both halves are explained on the job itself. It costs one short job.
 # 2. `Run release checks and builds` — the expensive one. It runs `bun run verify` plus the web
 #    and API bundles on the release PR that release-please maintains, so `main` is validated
 #    as it will be tagged, BEFORE the tag exists. A failure here costs a fix and a push; the
@@ -251,32 +253,69 @@ jobs:
           echo "Candidate returned to draft; any in-flight verification for this PR is cancelled."
           echo "Mark the pull request ready for review again to verify the current revision."
 
-  # THE REQUIRED CHECK. It always reports on a non-draft PR — that is its entire job.
+  # THE REQUIRED CHECK.
   #
-  # Drafts are skipped rather than failed. A draft is a normal working state, not an error,
-  # and GitHub already refuses to merge one, so failing it would add a red X that means
-  # nothing. Skipping is also safe: no check is reported, so the required check stays
-  # unsatisfied and merge stays blocked either way. Nothing can carry a stale green into
-  # the ready state, because `ready_for_review` starts a fresh run whose gate reports only
-  # after `verify` has actually run in THAT run.
+  # ONE RULE GOVERNS THIS JOB: a given commit must receive exactly one report of this
+  # check, and it must come from the run that actually verified the commit.
+  #
+  # That rule exists because GitHub resolves a required check across every check run of
+  # that name on the head commit by taking the WORST conclusion, not the latest. Measured
+  # on this repository on 2026-09-27, on the desktop 0.9.0 candidate (PR #178):
+  #
+  #   commit 0626081  skipped + success  -> rollup SUCCESS   (skipped is neutral)
+  #   commit c78b287  failure + success  -> rollup FAILURE    (mergeable, but BLOCKED)
+  #   commit fa01a9b  failure + success  -> rollup FAILURE    (mergeable, but BLOCKED)
+  #
+  # A commit gets more than one run because release-please force-pushes the branch AND
+  # rewrites the body, so `synchronize` and `edited` arrive in the same second and GitHub
+  # starts two runs. Returning a candidate to draft and back does the same on one commit.
+  #
+  # So a run that did not verify must report NOTHING. A previous revision of this workflow
+  # made this job unskippable and fail closed, reasoning that a skipped check reads as
+  # passed. Half of that was right — skipped IS neutral — but the conclusion was backwards:
+  # failing closed in the run that verified nothing left a permanent FAILURE on the commit,
+  # and because the rollup takes the worst conclusion, the verified candidate could never
+  # merge. That is what blocked desktop 0.9.0 for three revisions in a row.
+  #
+  # Skipping is safe here for a reason that is worth stating, because it is the whole
+  # safety argument: skipped is neutral, so a skip cannot satisfy the requirement on its
+  # own — it can only decline to speak. What satisfies it is a real success, and the only
+  # job that can produce one is `verify` in this same run. Every non-draft candidate
+  # revision gets such a run, because `synchronize` and `ready_for_review` both start one.
   gate:
     name: Merge requirements
     runs-on: ubuntu-latest
     needs: [verify, e2e_desktop]
-    # NO skip conditions beyond being a pull_request. This is load-bearing.
+    # Report iff this run decided. Two halves, and both are load-bearing:
     #
-    # A skipped job still reports a check, and GitHub's branch protection counts that
-    # conclusion as SATISFIED. So every condition added here is a way for the required
-    # check to go green without anything being verified. It happened on the 0.8.1
-    # candidate: release-please force-pushes AND edits the body, firing `synchronize` and
-    # `edited` together, and the `edited` run — where this job skipped — reported green
-    # over the still-running real one. The merge button was enabled while verification
-    # was in flight.
+    #   - An ordinary pull request is ALWAYS reported on. Its `verify` never runs, so
+    #     without the first clause the required check would never report and every PR in
+    #     the repository would be unmergeable (the paths-filter deadlock, hit on #173).
+    #   - A release candidate is reported on only when this run's `verify` — and, for a
+    #     desktop candidate, its E2E — reached a real conclusion. `skipped` means this run
+    #     was the prose-`edited` twin or the PR is a draft; `cancelled` means a newer
+    #     revision superseded it. Neither knows anything about the commit, so neither may
+    #     speak about it.
     #
-    # This job therefore always runs and always decides. It fails closed: a draft release
-    # candidate, an irrelevant event, a cancelled run — all report "not verified", and only
-    # verification passing in THIS run reports green.
-    if: ${{ always() && github.event_name == 'pull_request' }}
+    # The conditions are read off `needs.*.result`, never off the event shape. A condition
+    # on `draft`, `state` or `changes.base` would make a run that DID verify stay silent,
+    # which is the failure mode this job is built to prevent; the regression check in
+    # scripts/check-workflow-eligibility.ts enforces that distinction.
+    if: >-
+      ${{
+        always() && github.event_name == 'pull_request' &&
+        (
+          !startsWith(github.head_ref, 'release-please--') ||
+          (
+            (needs.verify.result == 'success' || needs.verify.result == 'failure') &&
+            (
+              !contains(github.head_ref, 'components--desktop') ||
+              needs.e2e_desktop.result == 'success' ||
+              needs.e2e_desktop.result == 'failure'
+            )
+          )
+        )
+      }}
     steps:
       - name: Check whether release verification permits merging
         env:
@@ -294,10 +333,10 @@ jobs:
             exit 0
           fi
 
-          # A draft candidate is not an error, but it is not verified either, and this
-          # check cannot say "no opinion" — anything but a failure reads as approval.
-          # GitHub blocks merging a draft anyway, so the red is noise; a green here
-          # would be a lie that outlives the draft.
+          # Unreachable as the job is currently conditioned: a draft candidate never
+          # verifies, so the gate stays silent and this step does not run. It is kept
+          # because it fails closed and says why, so loosening the condition above
+          # degrades to a clear red rather than to a green on an unverified candidate.
           if [ "$IS_DRAFT" = "true" ]; then
             echo "::error title=Release candidate is still a draft::Mark this pull request ready for review to verify it. Nothing has been verified while it is a draft."
             exit 1
@@ -353,20 +392,15 @@ jobs:
     name: Release candidate verified
     runs-on: ubuntu-latest
     needs: [gate]
-    # NO skip conditions beyond being a pull_request. This is load-bearing.
-    #
-    # A skipped job still reports a check, and GitHub's branch protection counts that
-    # conclusion as SATISFIED. So every condition added here is a way for the required
-    # check to go green without anything being verified. It happened on the 0.8.1
-    # candidate: release-please force-pushes AND edits the body, firing `synchronize` and
-    # `edited` together, and the `edited` run — where this job skipped — reported green
-    # over the still-running real one. The merge button was enabled while verification
-    # was in flight.
-    #
-    # This job therefore always runs and always decides. It fails closed: a draft release
-    # candidate, an irrelevant event, a cancelled run — all report "not verified", and only
-    # verification passing in THIS run reports green.
-    if: ${{ always() && github.event_name == 'pull_request' }}
+    # Mirror the gate's silence as well as its verdict. This job carries the name the live
+    # ruleset requires, so reporting a failure here when `gate` declined to speak would
+    # leave the same permanent FAILURE on the commit that the gate's own condition exists
+    # to avoid — the rollup takes the worst conclusion across runs. See the gate above.
+    if: >-
+      ${{
+        always() && github.event_name == 'pull_request' &&
+        needs.gate.result != 'skipped' && needs.gate.result != 'cancelled'
+      }}
     steps:
       - name: Mirror merge requirements for the existing branch rule
         env:

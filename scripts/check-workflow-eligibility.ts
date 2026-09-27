@@ -293,12 +293,31 @@ interface Expectation {
   cancel: boolean;
 }
 
+/**
+ * The gate reads `needs.*.result`, so the scenarios have to model it. Without this the
+ * script would evaluate the gate's condition against an empty `needs` context and every
+ * lookup would come back null — it would agree with itself while the workflow was wrong.
+ *
+ * Default: a job that the scenario expects to run ends in `success`, one that does not
+ * ends in `skipped`. Scenarios that exist to exercise a failure or a cancellation say so.
+ */
+type JobResult = "success" | "failure" | "cancelled" | "skipped";
+
+function needsContext(expect: Expectation, override: Partial<Record<string, JobResult>> = {}) {
+  const verify: JobResult = override.verify ?? (expect.verify ? "success" : "skipped");
+  const e2e: JobResult = override.e2e_desktop ?? (expect.e2e ? "success" : "skipped");
+  const gate: JobResult = override.gate ?? (expect.gate ? "success" : "skipped");
+  return { verify: { result: verify }, e2e_desktop: { result: e2e }, gate: { result: gate } };
+}
+
 const scenarios: Array<{
   n: number;
   title: string;
   ctx: Record<string, unknown>;
   eventType: string;
   expect: Expectation;
+  /** Non-default job results, for the supersede and failure paths. */
+  results?: Partial<Record<string, JobResult>>;
 }> = [
   {
     n: 1,
@@ -319,14 +338,18 @@ const scenarios: Array<{
     title: "Release PR opened as draft",
     ctx: pullRequestEvent({ action: "opened", headRef: RELEASE_BRANCH, draft: true }),
     eventType: "opened",
-    expect: { verify: false, e2e: false, gate: true, legacy: true, cancel: false },
+    // Silent, not red. A draft commit is usually the same commit that will be verified the
+    // moment the PR is marked ready; a failure reported here would survive that
+    // verification and block the merge, because the rollup takes the worst conclusion
+    // across runs. GitHub refuses to merge a draft on its own.
+    expect: { verify: false, e2e: false, gate: false, legacy: false, cancel: false },
   },
   {
     n: 4,
     title: "Draft release PR updated (release-please rewrite)",
     ctx: pullRequestEvent({ action: "synchronize", headRef: RELEASE_BRANCH, draft: true }),
     eventType: "synchronize",
-    expect: { verify: false, e2e: false, gate: true, legacy: true, cancel: false },
+    expect: { verify: false, e2e: false, gate: false, legacy: false, cancel: false },
   },
   {
     n: 5,
@@ -351,10 +374,15 @@ const scenarios: Array<{
   },
   {
     n: 8,
-    title: "Ready release PR title edited",
+    // THE SCENARIO THAT BLOCKED DESKTOP 0.9.0. release-please force-pushes and rewrites the
+    // body in the same second, so GitHub starts two runs on one commit: this one and the
+    // `synchronize` one that verifies. This run knows nothing about the commit, so it must
+    // report nothing — a failure here lands on the same commit as the real success and the
+    // rollup takes the worst of the two, leaving a verified candidate unmergeable.
+    title: "Ready release PR title or body edited (the release-please twin run)",
     ctx: pullRequestEvent({ action: "edited", headRef: RELEASE_BRANCH, titleChanged: true }),
     eventType: "edited",
-    expect: { verify: false, e2e: false, gate: true, legacy: true, cancel: false },
+    expect: { verify: false, e2e: false, gate: false, legacy: false, cancel: false },
   },
   {
     n: 9,
@@ -365,7 +393,9 @@ const scenarios: Array<{
       draft: true,
     }),
     eventType: "converted_to_draft",
-    expect: { verify: false, e2e: false, gate: true, legacy: true, cancel: true },
+    // Same commit, and it may well be marked ready again. Staying silent is what lets that
+    // later verification stand alone on the commit.
+    expect: { verify: false, e2e: false, gate: false, legacy: false, cancel: true },
   },
   {
     n: 10,
@@ -378,7 +408,34 @@ const scenarios: Array<{
       baseChangedFrom: "main",
     }),
     eventType: "edited",
-    expect: { verify: false, e2e: false, gate: true, legacy: true, cancel: false },
+    expect: { verify: false, e2e: false, gate: false, legacy: false, cancel: false },
+  },
+  {
+    n: 14,
+    title: "Ready desktop candidate, verification failed",
+    ctx: pullRequestEvent({ action: "synchronize", headRef: RELEASE_BRANCH }),
+    eventType: "synchronize",
+    results: { verify: "failure" },
+    // A real verdict about this commit. It MUST be reported, or nothing blocks the merge.
+    expect: { verify: true, e2e: true, gate: true, legacy: true, cancel: false },
+  },
+  {
+    n: 15,
+    title: "Ready desktop candidate superseded mid-E2E",
+    ctx: pullRequestEvent({ action: "synchronize", headRef: RELEASE_BRANCH }),
+    eventType: "synchronize",
+    results: { e2e_desktop: "cancelled" },
+    // Superseded means a newer run owns the verdict. Reporting a failure here would
+    // outlive it on the same commit if the candidate is re-verified without a new push.
+    expect: { verify: true, e2e: true, gate: false, legacy: false, cancel: false },
+  },
+  {
+    n: 16,
+    title: "Ready desktop candidate whose verification was cancelled",
+    ctx: pullRequestEvent({ action: "synchronize", headRef: RELEASE_BRANCH }),
+    eventType: "synchronize",
+    results: { verify: "cancelled", e2e_desktop: "cancelled" },
+    expect: { verify: true, e2e: true, gate: false, legacy: false, cancel: false },
   },
   {
     n: 12,
@@ -416,12 +473,13 @@ console.log(
 );
 
 for (const s of scenarios) {
+  const ctx = { ...s.ctx, needs: needsContext(s.expect, s.results) };
   const got = {
-    verify: evaluate(exprs.verify, s.ctx),
-    e2e: evaluate(exprs.e2e, s.ctx),
-    gate: evaluate(exprs.gate, s.ctx),
-    legacy: evaluate(exprs.legacy, s.ctx),
-    cancel: evaluate(exprs.cancel, s.ctx),
+    verify: evaluate(exprs.verify, ctx),
+    e2e: evaluate(exprs.e2e, ctx),
+    gate: evaluate(exprs.gate, ctx),
+    legacy: evaluate(exprs.legacy, ctx),
+    cancel: evaluate(exprs.cancel, ctx),
   };
   const mark = (a: boolean, b: boolean): string => (a === b ? (a ? "run" : " - ") : "BAD");
   console.log(
@@ -473,14 +531,63 @@ ok(
     concurrencyGroup("e2e_desktop") !== concurrencyGroup("verify"),
   "e2e_desktop must cancel its own supersedes, in a group of its own",
 );
-// A skipped job reports a conclusion that branch protection counts as SATISFIED, so the
-// required check must never be skippable. This caught a green merge button on an
-// unverified 0.8.1 candidate; see the job's own comment.
+// THE INVARIANT THIS WHOLE SCRIPT EXISTS FOR.
+//
+// GitHub resolves a required check across every check run of that name on the head commit
+// by taking the WORST conclusion, not the latest, and a commit can collect several runs:
+// release-please force-pushes and rewrites the body in the same second, and returning a
+// candidate to draft and back does it too. So:
+//
+//   - a run that DID verify must report, whatever the verdict — otherwise nothing blocks;
+//   - a run that did NOT verify must report nothing — `skipped` is neutral in the rollup,
+//     whereas a failure lands permanently on a commit this run knows nothing about and
+//     outlives the verification that follows it.
+//
+// Measured on this repository on 2026-09-27 (PR #178): skipped + success rolled up to
+// SUCCESS, failure + success rolled up to FAILURE and the candidate could not merge.
+console.log("\nThe one report per commit invariant");
+for (const s of scenarios) {
+  if (s.eventType === "workflow_dispatch") continue;
+  const ctx = { ...s.ctx, needs: needsContext(s.expect, s.results) };
+  const verified = ["success", "failure"].includes(
+    (needsContext(s.expect, s.results).verify.result as string) ?? "",
+  );
+  const e2eOk = ["success", "failure"].includes(
+    (needsContext(s.expect, s.results).e2e_desktop.result as string) ?? "",
+  );
+  const headRef = String((s.ctx as { github: { head_ref: string } }).github.head_ref).toLowerCase();
+  const isRelease = headRef.startsWith("release-please--");
+  const isDesktop = headRef.includes("components--desktop");
+  const mustReport = !isRelease || (verified && (!isDesktop || e2eOk));
+  const reports = evaluate(exprs.gate, ctx);
+  console.log(
+    `  ${String(s.n).padStart(2)} ${s.title.slice(0, 52).padEnd(54)}` +
+      `${mustReport ? "must report" : "must stay silent"} -> ${reports ? "reports" : "silent"}`,
+  );
+  ok(
+    reports === mustReport,
+    `scenario ${s.n} (${s.title}): the gate must ${mustReport ? "report" : "stay silent"}`,
+  );
+  ok(
+    !reports || evaluate(exprs.legacy, ctx),
+    `scenario ${s.n} (${s.title}): the alias must report whenever the gate does`,
+  );
+}
+
+// The gate decides off `needs.*.result` and nothing else. A condition on the event shape
+// is how a run that DID verify ends up silent — the previous spelling of this guard banned
+// every condition instead, which made the run that verified NOTHING fail closed and
+// blocked desktop 0.9.0 on three consecutive revisions.
 for (const id of ["gate", "legacy-gate"]) {
   const expr = ifExpression(id);
   ok(
-    !/draft/.test(expr) && !/changes\.base/.test(expr) && !/state ==/.test(expr),
-    `'${id}' must have no skip conditions — a skipped required check reads as passed (got: ${expr})`,
+    !/draft/.test(expr) && !/changes\.base/.test(expr) && !/\.state\b/.test(expr),
+    `'${id}' must not condition on the event shape (draft, state, changes.base) — only on ` +
+      `needs.*.result, so a run that verified always reports (got: ${expr})`,
+  );
+  ok(
+    /needs\./.test(expr),
+    `'${id}' must read needs.*.result to know whether this run decided (got: ${expr})`,
   );
 }
 ok(
