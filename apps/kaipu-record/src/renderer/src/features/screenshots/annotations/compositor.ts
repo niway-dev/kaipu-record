@@ -1,7 +1,7 @@
 import { backgroundPaint, frameRadius } from "../beautify/backgrounds";
 import { roughArrow, roughRect } from "./rough";
 import { smoothPath } from "./smooth";
-import { BLUR_STD, HAND_FONT, STROKE_WIDTHS, TEXT_LINE_HEIGHT, TEXT_PX, wrapText } from "./tools";
+import { BLUR_STD, HAND_FONT, STROKE_WIDTHS, TEXT_LINE_HEIGHT, TEXT_PX, textLines } from "./tools";
 import type { Annotation, Scene } from "./scene";
 
 /**
@@ -182,7 +182,7 @@ function annotationSvg(a: Annotation, W: number, H: number, scale: number): stri
   // survive the export exactly as they render in the preview. `fs` and the wrap width
   // both scale by `scale`, so the wrapped line count matches the preview.
   const widthPx = a.width ? a.width * W : undefined;
-  const tspans = wrapText(a.text, fs, widthPx)
+  const tspans = textLines(a.text, fs, widthPx)
     .map(
       (line, i) =>
         `<tspan x="${tx}" dy="${i === 0 ? 0 : fs * TEXT_LINE_HEIGHT}">${escapeXml(line)}</tspan>`,

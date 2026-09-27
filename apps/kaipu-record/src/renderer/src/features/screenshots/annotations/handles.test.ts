@@ -95,9 +95,12 @@ describe("handlesFor", () => {
     const h = handlesFor(arrow, size);
     expect(h.map((x) => x.id).sort()).toEqual(["p1", "p2"]);
   });
-  it("gives a corner (font) and an east-edge (wrap width) handle for text", () => {
+  // Excalidraw's shape: a dot in each corner to scale the text, both side midpoints
+  // to set the width it wraps to. It used to be two handles on the same edge, which
+  // read as "this box has no size" and gave the corner nothing to pull against.
+  it("gives four corners and both side midpoints for text", () => {
     const h = handlesFor(text, size);
-    expect(h.map((x) => x.id).sort()).toEqual(["e", "se"]);
+    expect(h.map((x) => x.id).sort()).toEqual(["e", "ne", "nw", "se", "sw", "w"]);
   });
 });
 
@@ -181,20 +184,40 @@ describe("resizeAnnotation — path", () => {
 });
 
 describe("resizeAnnotation — text", () => {
-  it("snaps to a larger size level when the corner is dragged down", () => {
-    // Drag the corner far below the anchor → large target px → top size level.
-    const patch = resizeAnnotation(text, "se", { x: 0.5, y: 0.9 }, size) as { size: number };
-    expect(patch.size).toBe(TEXT_PX.length - 1);
+  // These two used to assert SNAPPING to the nearest preset, which is what made a
+  // slow drag jump between four sizes. A corner now writes a free `fontPx`; the
+  // presets stay as starting points rather than the only sizes that exist.
+  it("grows the font continuously as the corner is dragged away", () => {
+    const small = resizeAnnotation(text, "se", { x: 0.5, y: 0.5 }, size) as { fontPx: number };
+    const bigger = resizeAnnotation(text, "se", { x: 0.5, y: 0.7 }, size) as { fontPx: number };
+    const biggest = resizeAnnotation(text, "se", { x: 0.5, y: 0.9 }, size) as { fontPx: number };
+    expect(bigger.fontPx).toBeGreaterThan(small.fontPx);
+    expect(biggest.fontPx).toBeGreaterThan(bigger.fontPx);
+    // Not a preset value: the point is that it lands between them.
+    expect(TEXT_PX).not.toContain(bigger.fontPx);
   });
-  it("snaps to the smallest level when dragged close to the anchor", () => {
-    const patch = resizeAnnotation(text, "se", { x: 0.31, y: 0.31 }, size) as { size: number };
-    expect(patch.size).toBe(0);
+  it("never collapses the font to nothing, however far in the corner is dragged", () => {
+    const patch = resizeAnnotation(text, "se", { x: 0.3, y: 0.3 }, size) as { fontPx: number };
+    expect(patch.fontPx).toBeGreaterThanOrEqual(6);
   });
-  it("the east edge sets the wrap width from the horizontal drag (not the font)", () => {
+  it("scales from the opposite corner, so a north-west drag also grows the text", () => {
+    const patch = resizeAnnotation(text, "nw", { x: 0.1, y: 0.05 }, size) as { fontPx: number };
+    expect(patch.fontPx).toBeGreaterThan(0);
+  });
+  it("a side sets the wrap width from the horizontal drag (not the font)", () => {
     const patch = resizeAnnotation(text, "e", { x: 0.7, y: 0.3 }, size) as { width: number };
     expect(patch.width).toBeCloseTo(0.4); // 0.7 (drag x) − 0.3 (anchor x)
   });
-  it("scales the font by the drag/box ratio, so a wrapped label still resizes", () => {
+  it("the west side keeps the right edge put, moving the origin instead", () => {
+    const wide = { ...text, width: 0.4 };
+    const patch = resizeAnnotation(wide, "w", { x: 0.4, y: 0.3 }, size) as {
+      width: number;
+      x: number;
+    };
+    expect(patch.x).toBeCloseTo(0.4);
+    expect(patch.x + patch.width).toBeCloseTo(0.7); // right edge unmoved
+  });
+  it("scales a wrapped label by the drag/box ratio, not by the raw height", () => {
     // The label is 2 wrapped lines tall; dragging the corner to half the box height
     // must halve the font (deriving it from the raw height would pin it to the max).
     const b = annotationBox(wrapped, size)!;
@@ -203,8 +226,12 @@ describe("resizeAnnotation — text", () => {
       "se",
       { x: wrapped.x + b.w, y: wrapped.y + b.h / 2 },
       size,
-    ) as { size: number };
-    expect(patch.size).toBe(1);
+    ) as { fontPx: number };
+    // Half the box height halves the font. Deriving it from the raw height would pin
+    // a multi-line label to the maximum and make the corner look dead.
+    // Exact, not approximate: the font size is rounded to a whole pixel on purpose,
+    // and "close to 18.5" is ambiguous at exactly half a pixel.
+    expect(patch.fontPx).toBe(Math.round(TEXT_PX[wrapped.size] / 2));
   });
   it("keeps the corner a no-op when dragged to the current box corner", () => {
     const b = annotationBox(wrapped, size)!;
@@ -213,8 +240,8 @@ describe("resizeAnnotation — text", () => {
       "se",
       { x: wrapped.x + b.w, y: wrapped.y + b.h },
       size,
-    ) as { size: number };
-    expect(patch.size).toBe(wrapped.size);
+    ) as { fontPx: number };
+    expect(patch.fontPx).toBeCloseTo(TEXT_PX[wrapped.size], 0);
   });
   it("scales the wrap width with the font so the label keeps its shape", () => {
     const b = annotationBox(wrapped, size)!;
@@ -223,9 +250,10 @@ describe("resizeAnnotation — text", () => {
       "se",
       { x: wrapped.x + b.w, y: wrapped.y + b.h / 2 },
       size,
-    ) as { size: number; width: number };
-    // Level 3 (37px) -> level 1 (19px): the width follows the same ratio.
-    expect(patch.width).toBeCloseTo(0.4 * (TEXT_PX[1] / TEXT_PX[3]), 3);
+    ) as { fontPx: number; width: number };
+    // Halving the font halves the width, so the label keeps its shape rather than
+    // reflowing into a taller, narrower block.
+    expect(patch.width).toBeCloseTo(0.4 * (patch.fontPx / TEXT_PX[wrapped.size]), 2);
   });
   it("clamps the wrap width to a small minimum, never zero/negative", () => {
     const patch = resizeAnnotation(text, "e", { x: 0.3, y: 0.3 }, size) as { width: number };

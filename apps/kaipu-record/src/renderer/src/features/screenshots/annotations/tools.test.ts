@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { TEXT_LINE_HEIGHT, textBoxPx, textLines, wrapText } from "./tools";
+import { TEXT_LINE_HEIGHT, textBoxPx, textLines } from "./tools";
 
 describe("textLines", () => {
   it("returns a single line when there is no break", () => {
@@ -12,26 +12,26 @@ describe("textLines", () => {
   });
 });
 
-describe("wrapText", () => {
+describe("textLines", () => {
   // fs 10 → char advance 5.5px → width 55px ≈ 10 chars per line.
   const fs = 10;
   const width = 55;
 
   it("without a width, breaks only on explicit newlines", () => {
-    expect(wrapText("one two three four", fs)).toEqual(["one two three four"]);
-    expect(wrapText("a\nb", fs)).toEqual(["a", "b"]);
+    expect(textLines("one two three four", fs)).toEqual(["one two three four"]);
+    expect(textLines("a\nb", fs)).toEqual(["a", "b"]);
   });
 
   it("word-wraps to the width, whole words only", () => {
-    expect(wrapText("one two three four", fs, width)).toEqual(["one two", "three four"]);
+    expect(textLines("one two three four", fs, width)).toEqual(["one two", "three four"]);
   });
 
   it("a word wider than the box overflows on its own line (never split mid-letter)", () => {
-    expect(wrapText("abcdefghijklmno pq", fs, width)).toEqual(["abcdefghijklmno", "pq"]);
+    expect(textLines("abcdefghijklmno pq", fs, width)).toEqual(["abcdefghijklmno", "pq"]);
   });
 
   it("still honours explicit newlines while wrapping", () => {
-    expect(wrapText("one two three\nfour", fs, width)).toEqual(["one two", "three", "four"]);
+    expect(textLines("one two three\nfour", fs, width)).toEqual(["one two", "three", "four"]);
   });
 });
 

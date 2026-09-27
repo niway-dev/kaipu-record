@@ -41,6 +41,7 @@ import {
   TEXT_PX,
   TEXT_LINE_HEIGHT,
   textBoxPx,
+  resolveFontPx,
   handlesFor,
   hitHandle,
   resizeAnnotation,
@@ -517,10 +518,10 @@ function hitTest(overlays: VideoOverlay[], p: Pt, size: Size): VideoOverlay | nu
       // three-line label claimed a box three times too wide and one line tall. Every
       // line after the first fell outside it, so clicking the body of a tall label
       // missed the annotation and fell through to the video, which started playing.
-      const fs = TEXT_PX[o.size];
+      const fs = resolveFontPx(o.size, o.fontPx);
       const padX = 8 / (size.w || 1);
       const padY = 8 / (size.h || 1);
-      const px = textBoxPx(o.text, fs);
+      const px = textBoxPx(o.text, fs, o.width ? o.width * (size.w || 1) : undefined);
       const w = px.w / (size.w || 1);
       const h = px.h / (size.h || 1);
       if (

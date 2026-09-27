@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { overlaySvg } from "./overlay-raster";
-import type { VideoOverlay } from "@renderer/features/video-editor/scene";
+import type { TextOverlay } from "@renderer/features/video-editor/scene";
 
 /**
  * A line break that survives editing, is drawn in the preview, and then silently
@@ -10,7 +10,7 @@ import type { VideoOverlay } from "@renderer/features/video-editor/scene";
  */
 // No cast: the real type is what guards this fixture, and it already caught two
 // invented field names here.
-function label(text: string): VideoOverlay {
+function label(text: string): TextOverlay {
   return {
     id: "o1",
     kind: "text",
@@ -49,5 +49,39 @@ describe("overlaySvg, for a text overlay", () => {
     const svg = overlaySvg(label("solo"), 1920, 1080, 1);
     expect(svg.match(/<tspan/g)).toHaveLength(1);
     expect(svg).toContain(">solo<");
+  });
+});
+
+/**
+ * The complaint that started the refactor: "cambiar el size del box no afecta el
+ * string interno". The width lived nowhere in the video model, so dragging a side
+ * wrote a field the renderer ignored and the session dropped. These pin the new
+ * contract at the export boundary, where a silent failure is worst.
+ */
+describe("a text overlay with a width", () => {
+  function wide(text: string, width?: number): TextOverlay {
+    return { ...label(text), width };
+  }
+
+  it("wraps to the width instead of running off the frame", () => {
+    const words = "alpha beta gamma delta epsilon";
+    const unbounded = overlaySvg(wide(words), 1920, 1080, 1);
+    const bounded = overlaySvg(wide(words, 0.1), 1920, 1080, 1);
+
+    expect(unbounded.match(/<tspan/g)).toHaveLength(1);
+    expect((bounded.match(/<tspan/g) ?? []).length).toBeGreaterThan(1);
+  });
+
+  it("keeps every word — wrapping moves text, it never drops it", () => {
+    const words = "alpha beta gamma delta epsilon";
+    const bounded = overlaySvg(wide(words, 0.1), 1920, 1080, 1);
+    for (const word of words.split(" ")) expect(bounded).toContain(word);
+  });
+
+  it("honours a free font size over the preset index", () => {
+    const preset = overlaySvg(label("hi"), 1920, 1080, 1);
+    const custom = overlaySvg({ ...label("hi"), fontPx: 123 }, 1920, 1080, 1);
+    expect(custom).toContain('font-size="123"');
+    expect(custom).not.toBe(preset);
   });
 });

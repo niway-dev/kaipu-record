@@ -7,7 +7,7 @@ import {
   TEXT_LINE_HEIGHT,
   TEXT_PX,
   textBoxPx,
-  wrapText,
+  textLines,
 } from "./tools";
 import { roughArrow, roughRect } from "./rough";
 import { smoothPath } from "./smooth";
@@ -574,9 +574,9 @@ function Shape({
   const ty = a.y * H;
   const fs = TEXT_PX[a.size];
   // With a wrap width the label reflows by words to that width; otherwise it breaks
-  // only on the user's own newlines (see wrapText). Same source drives the box below.
+  // only on the user's own newlines (see textLines). Same source drives the box below.
   const widthPx = a.width ? a.width * W : undefined;
-  const lines = wrapText(a.text, fs, widthPx);
+  const lines = textLines(a.text, fs, widthPx);
   const box = textBoxPx(a.text, fs, widthPx);
   return (
     <g>

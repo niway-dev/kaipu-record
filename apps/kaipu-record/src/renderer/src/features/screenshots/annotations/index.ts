@@ -15,6 +15,7 @@ export {
   TEXT_LINE_HEIGHT,
   textLines,
   textBoxPx,
+  resolveFontPx,
   type AnnotationTool,
   type AnnotationColor,
 } from "./tools";

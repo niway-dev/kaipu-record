@@ -244,6 +244,10 @@ function validateOverlay(raw: unknown): VideoOverlay | null {
       y: o["y"] as number,
       text: o["text"] as string,
       size: o["size"] as number,
+      // Optional on purpose: absent in every session written before the box governed
+      // the text, and absent means exactly the old behaviour.
+      ...(typeof o["width"] === "number" ? { width: o["width"] } : {}),
+      ...(typeof o["fontPx"] === "number" ? { fontPx: o["fontPx"] } : {}),
     } satisfies TextOverlay;
   }
 
