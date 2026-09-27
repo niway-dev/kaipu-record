@@ -39,6 +39,14 @@ description: Technical feasibility and smallest useful experiments for captions,
   a bake-off. Whisper stays as the fallback if a language Parakeet lacks becomes a priority.
 - **Export presets** and **prompt-driven editing** are explained in their own sections below,
   because the owner asked how they would work.
+- **Whisper versus Parakeet, briefly.** Whisper was trained on about 680k hours of audio
+  paired with transcripts scraped from the web, much of it subtitle-style text. That is why it
+  reads fluently and also why it sometimes paraphrases or invents words in silence. Parakeet
+  TDT v3 is trained on curated speech corpora with a transducer architecture, which gives
+  tighter word timestamps, far higher throughput on CPU, and a smaller model. For captions
+  that must line up with a timeline, timestamps matter more than fluency, so Parakeet is the
+  better fit. Its limit: v3 covers 25 European languages, so no Japanese, Korean or Chinese;
+  if that becomes a need, Whisper is the fallback for those languages only.
 
 ## Captions first
 
@@ -111,17 +119,39 @@ transcription stays local. That split is consistent with "local files, paid netw
 **What the CLI would do** (owner question, 2026-09-27), in the order it would be built:
 
 ```
-kaipu list                          # the library as JSON: id, title, duration, path
-kaipu record --screen 1 --mic       # start a recording from a script or a shortcut tool
+kaipu screenshot                    # capture the whole screen, exactly like the menu-bar
+                                    # screenshot button but without the region picker;
+                                    # saves to the library and prints the PNG path
+kaipu screenshot --region           # the interactive picker, for completeness
+kaipu record --screen 1 --mic       # start a recording from a script or a launcher
 kaipu stop                          # stop and print the path of the MP4
+kaipu list                          # the library as JSON: id, title, duration, path
 kaipu export <id> --preset github   # export an existing recording with a preset
 kaipu trim <id> --from 0:12 --to 1:04 --out <path>
 kaipu open <id>                     # open it in the editor
 ```
 
-Who uses it: people wiring Kaipu into Raycast, Alfred, a Stream Deck, a shell alias, a test
-suite that records its own failures, or an agent. It is the automation surface the
+`screenshot` and `record` come first: they are the commands a launcher needs, and they reuse
+the app's existing capture paths over IPC rather than a second implementation. The editing
+commands follow once the edit API exists.
+
+**Integrations built on the CLI** (owner request, 2026-09-27; a friend of the owner asked for
+this specifically):
+
+| Surface                                     | What it looks like                                                                                | Cost once the CLI exists              |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| Raycast / Tinycast extension                | "Kaipu: Screenshot", "Kaipu: Record", "Kaipu: Stop", "Kaipu: Open library" as commands with icons | Low: a thin extension calling the CLI |
+| Finder Quick Action (Shortcuts / Automator) | Right-click a recording → "Export for GitHub", "Trim in Kaipu"                                    | Low: a Shortcut that runs the CLI     |
+| Shell alias / Stream Deck                   | `kaipu record` bound to a key                                                                     | Zero                                  |
+| Agents                                      | The same commands with `--json` output                                                            | Zero                                  |
+
+Who uses it: people who want to capture and record without touching the app, plus scripts,
+test suites that record their own failures, and agents. It is the automation surface the
 prompt-driven editing above sits on, and it is the kind of feature developers write about.
+
+**Related, already shipped:** the menu-bar-only mode (Settings → App → "Dock app" off) hides
+Kaipu from the Dock and ⌘-Tab. The owner's note is that it exists but people do not find it;
+the fix is copy, not code. See the [Dock decision](/backlog/dock-and-app-switcher/).
 
 The monorepo helps share types and pure logic. It does not provide an automation interface by itself. Distinguish **developer scripts for maintaining Kaipu**, **a product CLI that controls Kaipu**, and **an agent that chooses edits through that CLI**. The owner request is primarily the latter two, not autonomous source-code modification.
 
