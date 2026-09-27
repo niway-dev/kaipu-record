@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.9.0](https://github.com/csdev19/kaipu-record-monorepo/compare/desktop-v0.8.0...desktop-v0.9.0) (2026-09-27)
+
+
+### Features
+
+* **annotations:** add the Custom size state, and document how text labels work ([7e1db0e](https://github.com/csdev19/kaipu-record-monorepo/commit/7e1db0ed92d5fd0ea43c746f3e86c3ce78946b85))
+* **annotations:** let the box govern the text, with continuous corner scaling ([3bfdcc4](https://github.com/csdev19/kaipu-record-monorepo/commit/3bfdcc4397f2ee647e4f8d6e4074078755f122b1))
+* **annotations:** the box governs the text, with one owner for its geometry ([93b9d83](https://github.com/csdev19/kaipu-record-monorepo/commit/93b9d8329f511b5dddcb0558e604f74acf6a0d27))
+* **video-editor:** make text labels editable and multi-line ([5d59981](https://github.com/csdev19/kaipu-record-monorepo/commit/5d59981d6a51f9ce6761f3a3cf55207e6e0dcb47))
+* **video-editor:** make text labels editable and multi-line ([2c33d5b](https://github.com/csdev19/kaipu-record-monorepo/commit/2c33d5b87c2d87a4f8706486e49009513da51d3a))
+
+
+### Bug Fixes
+
+* **annotations:** place the handles on the box that is actually drawn ([5952a3c](https://github.com/csdev19/kaipu-record-monorepo/commit/5952a3c1a26147f9ef97c6fd0a67e5aa2fa3f306))
+* **annotations:** route every text measurement through the one owner, and enforce it ([0208f27](https://github.com/csdev19/kaipu-record-monorepo/commit/0208f27c539b68a9d58ebd35c0de577188e98b1e))
+* **recording:** stop holding the microphone open just to read device labels ([fbb98b0](https://github.com/csdev19/kaipu-record-monorepo/commit/fbb98b0fd44df42130b21f8946bfdc03c3b32171))
+* **recording:** stop holding the microphone open just to read device labels ([415f6ca](https://github.com/csdev19/kaipu-record-monorepo/commit/415f6ca6a9a05fde20ea8b162f15790c8aeed12d))
+* **screenshots:** clear fontPx when a preset is picked, in the image editor too ([59ae254](https://github.com/csdev19/kaipu-record-monorepo/commit/59ae254b775664696fb49a134c49f6f3866b1823))
+* **video-editor:** capture the pointer on the layer, so double-click still edits ([555136d](https://github.com/csdev19/kaipu-record-monorepo/commit/555136dd1980b59ecc10ab316c8946cdd6b0e903))
+* **video-editor:** capture the pointer on the layer, so double-click still edits ([347c09a](https://github.com/csdev19/kaipu-record-monorepo/commit/347c09aee3fa91e3950bb5c915bb51a8dded0649))
+* **video-editor:** hide the label while its inline editor is open ([16349b3](https://github.com/csdev19/kaipu-record-monorepo/commit/16349b309f28259363b97ed6d6626166bc9a874f))
+* **video-editor:** hide the label while its inline editor is open ([ae7b515](https://github.com/csdev19/kaipu-record-monorepo/commit/ae7b5150b83a0a5a4fafbe1623ff6c74c9bd046e))
+* **video-editor:** measure the text hit box the same way the label is drawn ([4a337db](https://github.com/csdev19/kaipu-record-monorepo/commit/4a337db43501c908715d3f1f995476fe8266dcae))
+* **video-editor:** show every line when reopening a label ([859e008](https://github.com/csdev19/kaipu-record-monorepo/commit/859e00801839d161f9aa782cbc2973eee4524127))
+* **video-editor:** size the preview from its container, not the viewport ([980ba3e](https://github.com/csdev19/kaipu-record-monorepo/commit/980ba3e94db79a17531f948c48c1be37717fc69c))
+* **video-editor:** size the preview from its container, not the viewport ([45e882e](https://github.com/csdev19/kaipu-record-monorepo/commit/45e882e473f73b4dcbcf269614c0c1ba83d66233))
+
 ## [0.8.0](https://github.com/csdev19/kaipu-record-monorepo/compare/desktop-v0.7.0...desktop-v0.8.0) (2026-09-25)
 
 
