@@ -5,9 +5,9 @@ import {
   HAND_FONT,
   STROKE_WIDTHS,
   TEXT_LINE_HEIGHT,
-  TEXT_PX,
+  resolveFontPx,
   textBoxPx,
-  wrapText,
+  textLines,
 } from "./tools";
 import { roughArrow, roughRect } from "./rough";
 import { smoothPath } from "./smooth";
@@ -66,6 +66,8 @@ export function AnnotationLayer({
     color?: string;
     size?: number;
     width?: number;
+    /** A corner-dragged size, so the editor matches the label it covers. */
+    fontPx?: number;
   } | null>(null);
   const drag = useRef<Drag | null>(null);
   const textInputRef = useRef<HTMLTextAreaElement>(null);
@@ -147,6 +149,7 @@ export function AnnotationLayer({
       color: hit.color,
       size: hit.size,
       width: hit.width,
+      fontPx: hit.fontPx,
     });
   };
 
@@ -373,7 +376,8 @@ export function AnnotationLayer({
             width: editing.width != null ? editing.width * size.w : undefined,
             color: editing.color ?? tools.color,
             fontFamily: HAND_FONT,
-            fontSize: TEXT_PX[editing.size ?? tools.textSize],
+            // The editor has to match the label it covers, custom size included.
+            fontSize: resolveFontPx(editing.size ?? tools.textSize, editing.fontPx),
             lineHeight: TEXT_LINE_HEIGHT,
             whiteSpace: editing.width != null ? "pre-wrap" : "pre",
             resize: "none",
@@ -572,11 +576,11 @@ function Shape({
 
   const tx = a.x * W;
   const ty = a.y * H;
-  const fs = TEXT_PX[a.size];
+  const fs = resolveFontPx(a.size, a.fontPx);
   // With a wrap width the label reflows by words to that width; otherwise it breaks
-  // only on the user's own newlines (see wrapText). Same source drives the box below.
+  // only on the user's own newlines (see textLines). Same source drives the box below.
   const widthPx = a.width ? a.width * W : undefined;
-  const lines = wrapText(a.text, fs, widthPx);
+  const lines = textLines(a.text, fs, widthPx);
   const box = textBoxPx(a.text, fs, widthPx);
   return (
     <g>
@@ -651,7 +655,7 @@ function hitTest(annotations: Annotation[], p: Pt, size: Size): Annotation | nul
       // hit box must derive from the font size AND the layer's pixel size — a fixed
       // normalized height broke on short/wide shots (the box was shorter than the
       // glyphs). Match the rendered bounds (see Shape) plus an 8px click margin.
-      const fs = TEXT_PX[a.size];
+      const fs = resolveFontPx(a.size, a.fontPx);
       const padX = 8 / (size.w || 1);
       const padY = 8 / (size.h || 1);
       const widthPx = a.width ? a.width * (size.w || 1) : undefined;

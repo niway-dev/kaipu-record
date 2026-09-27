@@ -11,7 +11,7 @@
 import {
   HAND_FONT,
   STROKE_WIDTHS,
-  TEXT_PX,
+  resolveFontPx,
   handleCursor,
   handlesFor,
   roughArrow,
@@ -112,8 +112,10 @@ export function OverlayShape({
   // text
   const tx = o.x * W;
   const ty = o.y * H;
-  const fs = TEXT_PX[o.size];
-  const box = textBoxPx(o.text, fs);
+  const fs = resolveFontPx(o.size, o.fontPx);
+  // The box governs the text: a width set by dragging a side wraps it by words.
+  const wrapPx = o.width ? o.width * W : undefined;
+  const box = textBoxPx(o.text, fs, wrapPx);
   return (
     <g opacity={opacity}>
       <text
@@ -127,7 +129,7 @@ export function OverlayShape({
         style={{ userSelect: "none" }}
       >
         {/* One tspan per line: SVG text does not honour a newline on its own. */}
-        {textLines(o.text).map((line, i) => (
+        {textLines(o.text, fs, wrapPx).map((line, i) => (
           <tspan key={i} x={tx} dy={i === 0 ? 0 : fs * TEXT_LINE_HEIGHT}>
             {line}
           </tspan>

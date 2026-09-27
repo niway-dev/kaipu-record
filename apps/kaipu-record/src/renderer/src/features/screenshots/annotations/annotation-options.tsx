@@ -19,6 +19,8 @@ interface ContextualControls {
   /** Index into STROKE_WIDTHS or TEXT_SIZES. */
   level: number;
   setLevel(level: number): void;
+  /** True while a corner drag is in force, so no preset matches. */
+  custom?: boolean;
 }
 
 function resolveControls(
@@ -40,9 +42,14 @@ function resolveControls(
             scene.commitAnnotation(selected.id, { color });
             tools.setColor(color);
           },
-          level: selected.size,
+          // -1 highlights no preset: a label sized by dragging a corner is not any of
+          // them, and lighting one up would claim a size the text does not have.
+          level: selected.fontPx === undefined ? selected.size : -1,
+          custom: selected.fontPx !== undefined,
           setLevel: (size) => {
-            scene.commitAnnotation(selected.id, { size });
+            // Clearing `fontPx` is the point, not tidy-up: it wins over the preset, so
+            // writing only `size` lit the control while the label stayed put.
+            scene.commitAnnotation(selected.id, { size, fontPx: undefined });
             tools.setTextSize(size);
           },
         }
@@ -148,6 +155,18 @@ export function AnnotationOptions({
                     {label}
                   </button>
                 ))}
+                {/* Only while a corner drag is in force; a permanent chip nobody can
+                    press would be a dead control. */}
+                {controls.custom ? (
+                  <button
+                    type="button"
+                    aria-label={t("sizeCustomAria")}
+                    className={`${styles.pickerItem} ${styles.sizeItem} ${styles.pickerOn}`}
+                    disabled
+                  >
+                    {t("sizeCustom")}
+                  </button>
+                ) : null}
               </div>
             </>
           ) : (

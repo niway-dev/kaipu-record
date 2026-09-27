@@ -113,8 +113,53 @@ describe("AnnotationInspector", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Size L" }));
-    expect(onCommitOverlay).toHaveBeenCalledWith("t1", { size: 3 });
+    // `fontPx` is cleared, not just left behind. It WINS over the preset, so writing
+    // only `size` left the label unchanged and the control out of sync with the text
+    // — you clicked L and nothing happened.
+    //
+    // Asserted on the key's PRESENCE, not with toHaveBeenCalledWith: vitest's deep
+    // equality ignores properties whose value is undefined, so `{ size: 3 }` and
+    // `{ size: 3, fontPx: undefined }` compare equal and the assertion would pass
+    // against the very bug it is here to catch.
+    const [, patch] = onCommitOverlay.mock.calls.at(-1)!;
+    expect(patch).toMatchObject({ size: 3 });
+    expect(Object.hasOwn(patch, "fontPx")).toBe(true);
+    expect((patch as { fontPx?: number }).fontPx).toBeUndefined();
     expect(tools.setTextSize).toHaveBeenCalledWith(3);
+  });
+
+  describe("a label sized by dragging a corner", () => {
+    function renderOverlay(overlay: VideoOverlay): void {
+      render(
+        <AnnotationInspector
+          overlay={overlay}
+          tools={makeTools()}
+          range={{ start: 0, end: 5 }}
+          onCommitOverlay={vi.fn()}
+          onRemove={vi.fn()}
+          onRemoved={vi.fn()}
+        />,
+      );
+    }
+
+    it("highlights no preset, because none of them is the size on screen", () => {
+      renderOverlay({ ...text, fontPx: 64 });
+      for (const label of ["XS", "S", "M", "L"]) {
+        expect(screen.getByRole("button", { name: `Size ${label}` }).className).not.toMatch(
+          /pickerOn/,
+        );
+      }
+    });
+
+    it("shows a Custom chip instead", () => {
+      renderOverlay({ ...text, fontPx: 64 });
+      expect(screen.getByRole("button", { name: /custom/i })).toBeInTheDocument();
+    });
+
+    it("offers no Custom chip while a preset is in force", () => {
+      renderOverlay(text);
+      expect(screen.queryByRole("button", { name: /custom/i })).toBeNull();
+    });
   });
 
   it("edits the stroke width of a selected box overlay and sticks it as the tool default", () => {

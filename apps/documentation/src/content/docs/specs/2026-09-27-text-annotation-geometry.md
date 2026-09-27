@@ -5,9 +5,26 @@ description: "Design for a single module that owns text-annotation geometry acro
 
 # Text annotation geometry — one owner, box-governed
 
-> **Status: 🔵 Design, not implemented** (2026-09-27). Written after four consecutive
-> defects in the video editor's text annotations, each one a different copy of the same
-> measurement being wrong.
+> **Status: 🟢 Implemented, ready to validate** (2026-09-27). Written after four
+> consecutive defects in the video editor's text annotations, each one a different copy of
+> the same measurement being wrong.
+>
+> **The shipped behaviour lives in [Text annotations](../features/text-annotations).**
+> This page is kept for the reasoning; that page is the reference.
+>
+> Two things the design got wrong, recorded rather than quietly corrected:
+>
+> 1. **It said five places. There were seven.** `annotationBox` — which positions the resize
+>    handles — was also computing the font size from the preset index, so the corner dots
+>    floated away from the label as soon as a drag set a free size — and five more lived in
+>    the screenshot editor and the two inline editors. Counting copies by hand is the
+>    method that fails here, which is why the rule is now enforced by a test rather than
+>    written down as a list.
+> 2. **The corner scaling design was incomplete.** It described a free `fontPx` but not what
+>    happens when the user then picks a preset. Because `fontPx` wins, writing only `size`
+>    left the label untouched: the control said L while the text stayed put. Picking a
+>    preset now clears `fontPx`, and while one is set the inspector highlights no preset and
+>    shows a `Custom` chip.
 
 ## Why this exists
 

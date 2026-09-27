@@ -63,8 +63,20 @@ export interface TextOverlay extends OverlayBase {
   x: number;
   y: number;
   text: string;
-  /** Display px at preview scale, snapped to TEXT_PX levels like screenshots. */
+  /** Index into TEXT_PX — the XS/S/M/L presets. Superseded by `fontPx` when set. */
   size: number;
+  /**
+   * Wrap width in normalized units, set by dragging a side. The text reflows by
+   * words to fit it, so the BOX governs the text rather than the other way round.
+   * Absent = auto width: break only where the user pressed Enter.
+   */
+  width?: number;
+  /**
+   * Free font size in px, set by dragging a corner. Wins over `size`, which is why a
+   * corner drag is continuous instead of snapping between four levels; the size
+   * control reads "Custom" while it is set and clearing it returns to the presets.
+   */
+  fontPx?: number;
 }
 
 export type VideoOverlay = BoxOverlay | ArrowOverlay | TextOverlay;
