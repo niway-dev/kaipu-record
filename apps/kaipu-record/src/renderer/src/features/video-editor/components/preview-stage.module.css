@@ -24,15 +24,25 @@
   position: relative;
   transform-origin: 0 0;
   aspect-ratio: var(--frame-ratio);
-  width: min(64vw, calc(46vh * var(--frame-ratio)));
-  max-width: 64vw;
-  /* v2 PR 10 polish: row-relative, not just viewport-relative — see .videoRegion in
-     video-editor-page.module.css for why a bare vh cap clips the picture below a
-     ≈810–850 px window. `100%` is .stage's box, which is itself capped to 100% of
-     .videoRegion (both in this chain resolve against the definite grid-area size that
-     ultimately traces back to the page's 1fr stage row — CSS Grid gives a percentage
-     height a definite basis from the grid area regardless of `place-items`). */
-  max-height: min(46vh, 100%);
+  /* THE INVARIANT: this box is the picture, exactly. Every geometry in the editor — the
+     camera box, its scrim, the zoom transform, privacy regions, annotations — is stored
+     and dragged as a percentage of this element, so the moment it is wider or taller than
+     the picture, all of it frames a rectangle the user is not looking at, and .stage's
+     `overflow: hidden` clips the difference.
+
+     Both axes therefore bind against the SAME box, and that box is the container, not the
+     viewport. `d491b7d` capped only the height row-relative (`min(46vh, 100%)`) and left
+     the width deriving from `46vh`; below roughly an 850 px window the stage row is
+     shorter than 46vh, so the height clamped while the width kept its larger viewport
+     figure. The box stopped matching the ratio and, with a zoom applied, the bottom of the
+     recorded screen was cut off — the exact failure this rule now makes unexpressible.
+
+     Container query units say what a viewport unit cannot: "the height of the row I am
+     actually in". .videoRegion carries `container-type: size` for them to resolve
+     against. */
+  width: min(100cqw, calc(100cqh * var(--frame-ratio)));
+  max-width: 100cqw;
+  max-height: 100cqh;
 }
 
 /* Fullscreen: lift the compact caps, keep the ratio. */
