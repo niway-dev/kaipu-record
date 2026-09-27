@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { VideoAnnotationLayer, type VideoAnnotationLayerProps } from "./video-annotation-layer";
 import type { VideoOverlay } from "../scene";
+import { TEXT_LINE_HEIGHT, TEXT_PX } from "@renderer/features/screenshots/annotations";
 
 // jsdom never lays anything out, so clientWidth/clientHeight default to 0 — that
 // would make the layer's HANDLE_HIT_PX tolerance divide by a 0-sized box (falling
@@ -293,6 +294,136 @@ describe("editing a text label", () => {
     start: 0,
     end: 10,
   };
+
+  /**
+   * The real gesture, not a synthetic `dblclick`. A browser delivers
+   * pointerdown/up/click twice and only then `dblclick`, and the first pointerdown
+   * on a label starts a move drag and captures the pointer — which is exactly the
+   * path a lone `fireEvent.doubleClick` skips. The original test skipped it, so it
+   * stayed green while the gesture was broken in the app.
+   */
+  function realDoubleClick(layer: HTMLElement, at = { clientX: 200, clientY: 150 }): void {
+    for (let i = 0; i < 2; i++) {
+      fireEvent.pointerDown(layer, { ...at, pointerId: 1, button: 0 });
+      fireEvent.pointerUp(layer, { ...at, pointerId: 1, button: 0 });
+      fireEvent.click(layer, at);
+    }
+    fireEvent.doubleClick(layer, at);
+  }
+
+  /**
+   * Which element captures the pointer is the whole bug.
+   *
+   * A `dblclick` only fires when both clicks share a target. Capturing on `e.target`
+   * pins it to the node under the cursor — which for a label is a `<tspan>` that
+   * React re-renders on selection and removes outright once the editor opens. The
+   * resize branch has always captured on the layer, which is stable; the move branch
+   * did not, and #184 made it bite by turning the label's content from a text node
+   * (target: the `<text>` element) into `<tspan>` elements.
+   *
+   * jsdom implements no pointer capture at all, so it cannot reproduce the broken
+   * gesture. It can prove the contract that fixes it: the layer captures, not the
+   * glyph under the cursor.
+   */
+  it("captures the pointer on the layer, not on the node under the cursor", () => {
+    const captured: Element[] = [];
+    const original = Element.prototype.setPointerCapture;
+    Element.prototype.setPointerCapture = function (this: Element): void {
+      captured.push(this);
+    };
+    try {
+      const { layer } = renderLayer({
+        overlays: [label],
+        visibleIds: new Set(["t1"]),
+        selectedId: "t1",
+      });
+      const glyph = layer.querySelector("tspan");
+      expect(glyph).not.toBeNull();
+
+      fireEvent.pointerDown(glyph!, { clientX: 200, clientY: 150, pointerId: 1, button: 0 });
+
+      expect(captured).toHaveLength(1);
+      expect(captured[0]).toBe(layer);
+      expect(captured[0]).not.toBe(glyph);
+    } finally {
+      Element.prototype.setPointerCapture = original;
+    }
+  });
+
+  /**
+   * A multi-line label has to be clickable over the words it actually draws.
+   *
+   * The hit box was `text.length * fs * 0.55` wide and one line tall: newlines were
+   * counted as characters, so it stretched far past the right edge, while every line
+   * after the first sat outside it. Clicking the body of a tall label therefore missed
+   * the annotation entirely and fell through to the video, which started playing.
+   *
+   * The selection outline was fixed to use `textBoxPx`; this hit test was not, even
+   * though its own comment claims it "matches the rendered bounds".
+   */
+  it("hits a multi-line label on its lower lines, not only the first", () => {
+    const tall: VideoOverlay = { ...label, text: "one\ntwo\nthree", x: 0.1, y: 0.1 };
+    const { props, layer } = renderLayer({
+      overlays: [tall],
+      visibleIds: new Set(["t1"]),
+      selectedId: null,
+    });
+
+    // Third line, measured from the same helper the renderer uses: 400x300 layer.
+    const fs = TEXT_PX[tall.size];
+    const thirdLineY = 0.1 * 300 + fs * TEXT_LINE_HEIGHT * 2.5;
+    fireEvent.pointerDown(layer, { clientX: 0.1 * 400 + 10, clientY: thirdLineY, pointerId: 1 });
+
+    expect(props.onSelect).toHaveBeenCalledWith("t1");
+  });
+
+  it("does not claim clicks to the right of where the words end", () => {
+    // Counting the whole string as one line inflated the width by the line count.
+    // Three ten-character lines measured 32 chars wide instead of 10, so the box
+    // reached roughly three times past the text and swallowed clicks on empty video.
+    const line = "a".repeat(10);
+    const tall: VideoOverlay = { ...label, text: `${line}\n${line}\n${line}`, x: 0.1, y: 0.1 };
+    const { props, layer } = renderLayer({
+      overlays: [tall],
+      visibleIds: new Set(["t1"]),
+      selectedId: null,
+    });
+
+    const fs = TEXT_PX[tall.size];
+    const oneLineWide = line.length * fs * 0.55;
+    // Past the widest line, but inside what the old box claimed.
+    const x = 0.1 * 400 + oneLineWide * 2;
+    fireEvent.pointerDown(layer, { clientX: x, clientY: 0.1 * 300 + 4, pointerId: 1 });
+
+    expect(props.onSelect).toHaveBeenCalledWith(null);
+  });
+
+  // Reopening showed one line and you had to arrow down through the rest: the
+  // textarea is born `rows={1}` and its auto-grow lives in `onInput`, which never
+  // fires for a prefilled value. The screenshot editor sizes it in the focus effect;
+  // that half did not get ported either.
+  it("puts the caret at the end when reopening, ready to keep typing", () => {
+    const { layer } = renderLayer({
+      overlays: [{ ...label, text: "one\ntwo\nthree" }],
+      visibleIds: new Set(["t1"]),
+      selectedId: "t1",
+    });
+    fireEvent.doubleClick(layer, { clientX: 200, clientY: 150 });
+
+    const input = screen.getByRole("textbox") as HTMLTextAreaElement;
+    expect(input.selectionStart).toBe(input.value.length);
+    expect(input.selectionEnd).toBe(input.value.length);
+  });
+
+  it("opens the editor from the real pointer sequence, not just a synthetic dblclick", () => {
+    const { layer } = renderLayer({
+      overlays: [label],
+      visibleIds: new Set(["t1"]),
+      selectedId: "t1",
+    });
+    realDoubleClick(layer);
+    expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("hello");
+  });
 
   function openByDoubleClick(): VideoAnnotationLayerProps {
     const { props, layer } = renderLayer({

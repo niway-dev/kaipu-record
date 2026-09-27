@@ -40,6 +40,7 @@ import {
   HAND_FONT,
   TEXT_PX,
   TEXT_LINE_HEIGHT,
+  textBoxPx,
   handlesFor,
   hitHandle,
   resizeAnnotation,
@@ -162,7 +163,17 @@ export function VideoAnnotationLayer({
       textArmed.current = false;
       return;
     }
-    textInputRef.current?.focus();
+    const el = textInputRef.current;
+    el?.focus();
+    if (el) {
+      // Size it to its content NOW. The textarea is born `rows={1}` and its auto-grow
+      // lives in `onInput`, which never fires for a prefilled value — so reopening a
+      // multi-line label showed one line and you arrowed down through the rest.
+      el.style.height = "auto";
+      el.style.height = `${el.scrollHeight}px`;
+      // Caret at the end, so reopening continues the label instead of overwriting it.
+      el.setSelectionRange(el.value.length, el.value.length);
+    }
     const raf = requestAnimationFrame(() => {
       textArmed.current = true;
     });
@@ -213,7 +224,16 @@ export function VideoAnnotationLayer({
       if (hit) {
         onInteractStart();
         drag.current = { mode: "move", id: hit.id, start: p, orig: hit };
-        (e.target as Element).setPointerCapture?.(e.pointerId);
+        // Capture on the LAYER, never on the node under the cursor — the resize
+        // branch above has always done this and it is why resizing kept working.
+        //
+        // `e.target` for a label is a <tspan>, which React re-renders when the
+        // selection changes and removes outright when the inline editor opens.
+        // A dblclick only fires when both clicks share a target, so pinning capture
+        // to that node silently killed double-click-to-edit. It became reachable when
+        // the multi-line change turned the label's content from a text node (target:
+        // the <text> element) into <tspan> elements.
+        ref.current?.setPointerCapture?.(e.pointerId);
       } else {
         // Empty space, select tool: arm a background-click candidate — confirmed on
         // pointerup unless the pointer drifts past CLICK_MOVE_TOL_PX first.
@@ -236,7 +256,9 @@ export function VideoAnnotationLayer({
       seed: Math.floor(Math.random() * 100000),
       window: overlayWindow(playheadTime, timelineDuration),
     };
-    (e.target as Element).setPointerCapture?.(e.pointerId);
+    // Same reason as the move branch: the layer is the only node guaranteed to
+    // outlive the gesture.
+    ref.current?.setPointerCapture?.(e.pointerId);
   };
 
   const onPointerMove = (e: React.PointerEvent): void => {
@@ -486,13 +508,21 @@ function hitTest(overlays: VideoOverlay[], p: Pt, size: Size): VideoOverlay | nu
       }
     } else if (o.kind === "text") {
       // The text renders in px (TEXT_PX[size]) but lives in normalized space, so the
-      // hit box must derive from the font size AND the layer's pixel size (matches the
-      // rendered bounds in overlay-shapes.tsx) plus an 8px click margin.
+      // hit box derives from the font size AND the layer's pixel size, plus an 8px
+      // click margin.
+      //
+      // `textBoxPx` is the same measurement the renderer and the selection outline
+      // use — one source of truth, which this deliberately is not allowed to restate.
+      // It used to: `text.length * fs * 0.55` counted newlines as characters, so a
+      // three-line label claimed a box three times too wide and one line tall. Every
+      // line after the first fell outside it, so clicking the body of a tall label
+      // missed the annotation and fell through to the video, which started playing.
       const fs = TEXT_PX[o.size];
       const padX = 8 / (size.w || 1);
       const padY = 8 / (size.h || 1);
-      const w = (o.text.length * fs * 0.55) / (size.w || 1);
-      const h = (fs * 1.3) / (size.h || 1);
+      const px = textBoxPx(o.text, fs);
+      const w = px.w / (size.w || 1);
+      const h = px.h / (size.h || 1);
       if (
         p.x >= o.x - padX &&
         p.x <= o.x + w + padX &&
