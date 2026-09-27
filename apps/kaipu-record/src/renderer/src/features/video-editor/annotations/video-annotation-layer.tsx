@@ -163,7 +163,17 @@ export function VideoAnnotationLayer({
       textArmed.current = false;
       return;
     }
-    textInputRef.current?.focus();
+    const el = textInputRef.current;
+    el?.focus();
+    if (el) {
+      // Size it to its content NOW. The textarea is born `rows={1}` and its auto-grow
+      // lives in `onInput`, which never fires for a prefilled value — so reopening a
+      // multi-line label showed one line and you arrowed down through the rest.
+      el.style.height = "auto";
+      el.style.height = `${el.scrollHeight}px`;
+      // Caret at the end, so reopening continues the label instead of overwriting it.
+      el.setSelectionRange(el.value.length, el.value.length);
+    }
     const raf = requestAnimationFrame(() => {
       textArmed.current = true;
     });

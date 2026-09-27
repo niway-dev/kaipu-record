@@ -398,6 +398,23 @@ describe("editing a text label", () => {
     expect(props.onSelect).toHaveBeenCalledWith(null);
   });
 
+  // Reopening showed one line and you had to arrow down through the rest: the
+  // textarea is born `rows={1}` and its auto-grow lives in `onInput`, which never
+  // fires for a prefilled value. The screenshot editor sizes it in the focus effect;
+  // that half did not get ported either.
+  it("puts the caret at the end when reopening, ready to keep typing", () => {
+    const { layer } = renderLayer({
+      overlays: [{ ...label, text: "one\ntwo\nthree" }],
+      visibleIds: new Set(["t1"]),
+      selectedId: "t1",
+    });
+    fireEvent.doubleClick(layer, { clientX: 200, clientY: 150 });
+
+    const input = screen.getByRole("textbox") as HTMLTextAreaElement;
+    expect(input.selectionStart).toBe(input.value.length);
+    expect(input.selectionEnd).toBe(input.value.length);
+  });
+
   it("opens the editor from the real pointer sequence, not just a synthetic dblclick", () => {
     const { layer } = renderLayer({
       overlays: [label],
