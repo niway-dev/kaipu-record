@@ -77,6 +77,7 @@ export default defineConfig({
             { slug: "backlog/product-growth" },
             { slug: "backlog/free-tier-no-watermark" },
             { slug: "backlog/windows-beta" },
+            { slug: "backlog/open-source-security-sweep" },
             { slug: "backlog/video-editor-v2-handoff" },
             { slug: "backlog/live-recording-controls" },
             { slug: "backlog/settings-updates" },
