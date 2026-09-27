@@ -73,6 +73,10 @@
   place-items: center;
   min-height: 0;
   overflow: hidden;
+  /* Makes this the box that .content's container query units measure. Safe as a size
+     container because both of its own dimensions come from the grid, never from its
+     contents: the column for width, the stage area's 1fr row (capped below) for height. */
+  container-type: size;
   /* v2 PR 10 polish: row-relative, not just viewport-relative. The footer grew with
      PR 6/8's lanes (≈196–238 px), so below a ≈810–850 px window this 1fr row is
      already shorter than 50vh — a bare `max-height: 50vh` then let .content (below)
