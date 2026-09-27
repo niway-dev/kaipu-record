@@ -385,6 +385,12 @@ export function VideoAnnotationLayer({
           // Not visible and not selected: not rendered at all. The selected overlay
           // stays visible (dimmed) outside its window so it can still be adjusted.
           if (!visible && !isSelected) return null;
+          // Hide the label being re-edited: the inline editor sits exactly on top of
+          // it, so drawing both renders the same words twice, a hair apart, while the
+          // user types. Its selection outline and handles go with it — the textarea is
+          // the thing being manipulated, and a dashed box around text you are already
+          // editing is noise.
+          if (o.id === editingText?.id) return null;
           return (
             <OverlayShape
               key={o.id}

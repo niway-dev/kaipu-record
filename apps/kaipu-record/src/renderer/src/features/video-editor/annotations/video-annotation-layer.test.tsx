@@ -332,6 +332,38 @@ describe("editing a text label", () => {
     expect(props.onCommit).not.toHaveBeenCalled();
   });
 
+  // The inline editor sits exactly on top of the label, so leaving the label drawn
+  // renders the same words twice, half a pixel apart, while you type. The screenshot
+  // editor hides it; that one line did not get ported with the rest.
+  it("hides the label it is editing, so the two do not overlap", () => {
+    const { layer } = renderLayer({
+      overlays: [label],
+      visibleIds: new Set(["t1"]),
+      selectedId: "t1",
+    });
+    const drawn = (): string => layer.querySelector("svg")?.textContent ?? "";
+    expect(drawn()).toContain("hello");
+
+    fireEvent.doubleClick(layer, { clientX: 200, clientY: 150 });
+
+    // Scoped to the SVG on purpose: the textarea legitimately holds the same string,
+    // and a bare text query matches it, which is what made the first version of this
+    // test pass for the wrong reason.
+    expect(drawn()).not.toContain("hello");
+    expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("hello");
+  });
+
+  it("keeps drawing every other overlay while one is being edited", () => {
+    const other: VideoOverlay = { ...label, id: "t2", text: "untouched", y: 0.1 };
+    const { layer } = renderLayer({
+      overlays: [label, other],
+      visibleIds: new Set(["t1", "t2"]),
+      selectedId: "t1",
+    });
+    fireEvent.doubleClick(layer, { clientX: 200, clientY: 150 });
+    expect(layer.querySelector("svg")?.textContent).toContain("untouched");
+  });
+
   it("keeps the line breaks the user typed", () => {
     const props = openByDoubleClick();
     const input = screen.getByRole("textbox");
