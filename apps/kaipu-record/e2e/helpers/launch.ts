@@ -106,7 +106,13 @@ export async function launchApp(): Promise<{
   const args = [MAIN_ENTRY, `--user-data-dir=${userDataDir}`];
   if (process.env.CI) args.push("--no-sandbox");
 
-  const app = await electron.launch({ args });
+  // No test in this suite records anything, so the app must not ask macOS for screen
+  // capture on its way to the Record page (the default route). Without this, every launch
+  // raises a system permission dialog and a full run stacks one per test.
+  const app = await electron.launch({
+    args,
+    env: { ...process.env, KAIPU_DISABLE_SCREEN_CAPTURE: "1" },
+  });
 
   // Why this instrumentation exists.
   //

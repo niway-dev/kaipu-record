@@ -11,6 +11,15 @@ import type { ScreenSource } from "@shared/types/electron-api";
  */
 export function registerRecordingSourceHandlers(): void {
   ipcMain.handle("recording:get-screen-sources", async (): Promise<ScreenSource[]> => {
+    // Test isolation, the same idea as the throwaway `--user-data-dir` and seeded vault
+    // the suite already launches with: the end-to-end tests never record anything, so
+    // enumerating real screens and windows buys them nothing and costs a macOS
+    // screen-recording prompt PER LAUNCH. Thirteen launches meant thirteen stacked system
+    // dialogs, attributed to whichever terminal spawned the run, interrupting whoever was
+    // working. Returning an empty list keeps the picker honest — it renders its empty
+    // state — without asking the OS for anything.
+    if (process.env.KAIPU_DISABLE_SCREEN_CAPTURE === "1") return [];
+
     const sources = await desktopCapturer.getSources({
       types: ["screen", "window"],
       thumbnailSize: { width: 320, height: 200 },
