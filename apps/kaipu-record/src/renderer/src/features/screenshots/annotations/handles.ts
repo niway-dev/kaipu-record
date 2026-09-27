@@ -76,7 +76,11 @@ export function annotationBox(a: Annotation, size: Size): Box | null {
   // text — mirror the rendered selection outline (see Shape): when a wrap width is
   // set the box IS that width (height from the wrapped line count); otherwise width
   // from the longest line. Both in normalized space.
-  const fs = TEXT_PX[a.size];
+  // Through the SAME resolver the renderer uses. Reading `size` directly here is what
+  // made the handles float away from the label: the moment a corner drag set a free
+  // `fontPx`, this measured the preset while the screen drew the custom size, and the
+  // dots were placed around a box nobody could see.
+  const fs = resolveFontPx(a.size, a.fontPx);
   const widthPx = a.width ? a.width * (size.w || 1) : undefined;
   const box = textBoxPx(a.text, fs, widthPx);
   const w = box.w / (size.w || 1);

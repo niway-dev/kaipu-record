@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { annotationBox, handlesFor, hitHandle, resizeAnnotation } from "./handles";
-import { TEXT_PX } from "./tools";
+import { TEXT_PX, resolveFontPx, textBoxPx } from "./tools";
 import type { Annotation } from "./scene";
 
 const size = { w: 1000, h: 1000 };
@@ -271,5 +271,38 @@ describe("hitHandle", () => {
   it("returns null when no handle is close", () => {
     const handles = handlesFor(box, size);
     expect(hitHandle(handles, { x: 0.4, y: 0.35 }, { x: 0.02, y: 0.02 })).toBeNull();
+  });
+});
+
+/**
+ * The handles are placed from `annotationBox`, and the label is drawn from
+ * `textBoxPx` + `resolveFontPx`. If those two disagree the dots float away from the
+ * box they are supposed to grab — which is exactly what shipped: `annotationBox`
+ * read the preset `size` and ignored `fontPx`, so the moment a corner drag set a
+ * free size the handles measured a different label than the one on screen.
+ */
+describe("annotationBox agrees with what is drawn", () => {
+  const size = { w: 400, h: 300 };
+
+  it("honours a free font size, not the preset index", () => {
+    const preset = { ...text, size: 1, fontPx: undefined };
+    const custom = { ...text, size: 1, fontPx: TEXT_PX[1] * 3 };
+
+    const a = annotationBox(preset, size)!;
+    const b = annotationBox(custom, size)!;
+
+    // Three times the font is three times the box. Reading `size` would have made
+    // these identical, which is the bug.
+    expect(b.h).toBeCloseTo(a.h * 3, 5);
+    expect(b.w).toBeCloseTo(a.w * 3, 5);
+  });
+
+  it("matches textBoxPx exactly, since that is what the renderer uses", () => {
+    const custom = { ...text, size: 1, fontPx: 51 };
+    const box = annotationBox(custom, size)!;
+    const drawn = textBoxPx(custom.text, resolveFontPx(custom.size, custom.fontPx));
+
+    expect(box.w).toBeCloseTo(drawn.w / size.w, 6);
+    expect(box.h).toBeCloseTo(drawn.h / size.h, 6);
   });
 });
