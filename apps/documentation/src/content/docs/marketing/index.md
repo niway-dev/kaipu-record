@@ -10,6 +10,8 @@ These are working hypotheses and recommendations, not validated market findings 
 
 **Direction:** help people turn what they see into something another person can understand, then find and reuse that explanation later.
 
+**Brand authority:** [Kaipu brand identity](/marketing/brand-identity/) preserves the creator's adopted meaning. Read it before interpreting the name or changing brand assets. [Brand and website rollout](/plans/2026-09-27-brand-and-website-rollout/) is the execution sequence, including intake of the creator's new logo and notch-state art.
+
 | Read                                                            | Purpose                                                                                                                    |
 | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | [Positioning and Recordly](/marketing/positioning/)             | Audience, differentiation, competitive evidence, landing narrative, and pricing tension                                    |
@@ -51,4 +53,4 @@ self-contained), then Windows beta, then the landing sections, then keystrokes a
 The [product philosophy](/desktop/product-philosophy/) remains the foundation.
 The [design brief](/briefings/design-brief/) describes the existing visual system; the brand exploration does not replace it.
 The [master backlog](/backlog/roadmap/) links the proposed growth sequence alongside existing work.
-No runtime architecture, model/provider, CLI protocol, pricing policy, or rebrand is selected by these notes.
+Runtime architecture and CLI protocols require their own designs. Brand meaning and the owner's growth decisions are recorded explicitly; final visual assets and the website layout remain pending implementation.

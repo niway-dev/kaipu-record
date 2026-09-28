@@ -7,9 +7,11 @@ description: A product-led chapter experience, revised bilingual copy, and an as
 
 **2026-09-27 · Copy implemented; visual concept proposed.** The current landing structure is retained. New navigation, layout, illustrations, and media described below are not implemented.
 
+**Brand alignment:** read [Brand identity](/marketing/brand-identity/) first. “This. Captured.” is the brand signature; “Show it. Get back to work.” remains the benefit-led hero. Kai's preferred direction is a living knot, with pixel art optional. Inspect the creator's new logo/notch artwork before generating more. Execution and validation live in the [rollout plan](/plans/2026-09-27-brand-and-website-rollout/).
+
 ## Creative direction
 
-**An editorial product showcase with a small pixel-art signature.** Calm, spacious, precise, and warm. The memorable element is a large, real product scene that changes with each chapter; a slim floating chapter navigator makes the journey legible.
+**An editorial product showcase with a small Kai signature.** Calm, spacious, precise, and warm. The memorable element is a large, real product scene that changes with each chapter; a slim floating chapter navigator makes the journey legible. Pixel art is an optional treatment after the knot silhouette is selected.
 
 The owner supplied [pawan.app](https://pawan.app/) and a screenshot showing a large split composition, floating navigation, a vertical product selector, atmospheric color, and pixel-art characters. The screenshot is the visual reference; a text fetch did not expose enough of the live site to verify its interaction behavior. Borrow the hierarchy and sense of discovery, not its assets, characters, exact layout, or portfolio model. Kaipu is one product with several useful moments.
 
