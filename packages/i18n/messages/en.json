@@ -196,12 +196,22 @@
     "featureQualityBody": "Choose recording quality with simple presets. Balance resolution, smoothness, and file size for the task at hand.",
     "featureShortcutsTitle": "One shortcut away.",
     "featureShortcutsBody": "Start and stop from wherever you're working. Customize your shortcuts and keep Kaipu in the menu bar if you prefer.",
+    "originHeading": "Where the name comes from",
+    "originSignature": "This. Captured.",
+    "originFormula": "KAY + khiPU",
+    "originKayTerm": "kay",
+    "originKayBody": "“This” — what is happening in front of you, and is worth showing.",
+    "originKhipuTerm": "khipu",
+    "originKhipuBody": "The Andean system of recording information with cords and knots.",
+    "originBody": "Kaipu brings both together: keeping what is happening, so you can explain it, share it, and find it again.",
+    "originNote": "Kaipu is our own brand construction inspired by these two ideas, not a literal Quechua translation.",
     "downloadTitle": "Next time, show it with Kaipu.",
     "downloadSubtitle": "Free local recording for Mac. No account needed. Windows beta coming soon.",
     "downloadMacArm": "Download for Mac (Apple Silicon)",
     "downloadMacIntel": "Mac (Intel)",
     "downloadWindows": "Windows beta (coming soon)",
-    "footerTagline": "Capture it. Make it clear. Find it again."
+    "footerTagline": "Capture it. Make it clear. Find it again.",
+    "footerSignature": "This. Captured."
   },
   "auth": {
     "welcomeBack": "Welcome Back",

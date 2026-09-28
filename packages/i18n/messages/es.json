@@ -196,12 +196,22 @@
     "featureQualityBody": "Elige la calidad de grabación con ajustes sencillos. Equilibra resolución, fluidez y tamaño del archivo según lo que necesitas.",
     "featureShortcutsTitle": "A un atajo de distancia.",
     "featureShortcutsBody": "Inicia y detén desde donde estés trabajando. Personaliza los atajos y deja Kaipu en la barra de menús si lo prefieres.",
+    "originHeading": "De dónde viene el nombre",
+    "originSignature": "Esto, registrado.",
+    "originFormula": "KAY + khiPU",
+    "originKayTerm": "kay",
+    "originKayBody": "«Esto» — lo que está pasando frente a ti y vale la pena mostrar.",
+    "originKhipuTerm": "khipu",
+    "originKhipuBody": "El sistema andino de registro de información con cuerdas y nudos.",
+    "originBody": "Kaipu une las dos ideas: conservar lo que está pasando para explicarlo, compartirlo y volver a encontrarlo.",
+    "originNote": "Kaipu es una construcción de marca nuestra inspirada en esas dos ideas, no una traducción literal del quechua.",
     "downloadTitle": "La próxima vez, muéstralo con Kaipu.",
     "downloadSubtitle": "Grabación local gratis para Mac. Sin cuenta. Beta de Windows próximamente.",
     "downloadMacArm": "Descargar para Mac (Apple Silicon)",
     "downloadMacIntel": "Mac (Intel)",
     "downloadWindows": "Beta de Windows (próximamente)",
-    "footerTagline": "Captura. Explica. Vuelve a encontrarlo."
+    "footerTagline": "Captura. Explica. Vuelve a encontrarlo.",
+    "footerSignature": "Esto, registrado."
   },
   "auth": {
     "welcomeBack": "Bienvenido de nuevo",

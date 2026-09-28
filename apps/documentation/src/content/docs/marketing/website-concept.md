@@ -48,6 +48,28 @@ Canonical localized strings are in `packages/i18n/messages/{en,es}.json`, under 
 | Ownership       | Your library is a folder.                                                                                                              | Tu biblioteca es una carpeta.                                                                                          |
 | Close           | Next time, show it with Kaipu.                                                                                                         | La próxima vez, muéstralo con Kaipu.                                                                                   |
 
+## Brand origin section (implemented)
+
+The landing carries the name's meaning between the Why cards and Download, at the `#origin`
+anchor, rendered by `apps/web-hono/src/components/landing/brand-origin.tsx`. The footer repeats
+the signature above the workflow line. [Brand identity](/marketing/brand-identity/) stays
+canonical; this section is its public, condensed form.
+
+| Placement | English                                                                                                    | Spanish                                                                                                        |
+| --------- | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Eyebrow   | Where the name comes from                                                                                  | De dónde viene el nombre                                                                                       |
+| Signature | This. Captured.                                                                                            | Esto, registrado.                                                                                              |
+| Formula   | KAY + khiPU                                                                                                | KAY + khiPU                                                                                                    |
+| `kay`     | “This” — what is happening in front of you, and is worth showing.                                          | «Esto» — lo que está pasando frente a ti y vale la pena mostrar.                                               |
+| `khipu`   | The Andean system of recording information with cords and knots.                                           | El sistema andino de registro de información con cuerdas y nudos.                                              |
+| Body      | Kaipu brings both together: keeping what is happening, so you can explain it, share it, and find it again. | Kaipu une las dos ideas: conservar lo que está pasando para explicarlo, compartirlo y volver a encontrarlo.    |
+| Note      | Kaipu is our own brand construction inspired by these two ideas, not a literal Quechua translation.        | Kaipu es una construcción de marca nuestra inspirada en esas dos ideas, no una traducción literal del quechua. |
+
+The disclaimer ships with the section, not as a footnote to remove later: publishing the origin
+without it would present a coined name as a translation. The section is text-only by design —
+it must keep working before any Kai artwork exists, and Kai is added to it only after the
+artwork is selected in phase B of the [rollout plan](/plans/2026-09-27-brand-and-website-rollout/).
+
 The current card “You already explained this” supplies the Find chapter's future narrative. It is not yet a standalone demo section. Recording-quality presets already exist; this copy does not advertise the proposed destination-specific export presets.
 
 ## Additional copy for the visual implementation

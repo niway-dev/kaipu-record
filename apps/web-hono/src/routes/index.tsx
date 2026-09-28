@@ -3,6 +3,7 @@ import { PublicShell } from "@/components/landing/public-shell";
 import { Hero } from "@/components/landing/hero";
 import { Showcase } from "@/components/landing/showcase";
 import { WhyKaipu } from "@/components/landing/why-kaipu";
+import { BrandOrigin } from "@/components/landing/brand-origin";
 import { DownloadSection } from "@/components/landing/download-section";
 import { pageHead, softwareJsonLd } from "@/lib/seo";
 
@@ -24,6 +25,7 @@ function LandingPage() {
       <Hero />
       <Showcase />
       <WhyKaipu />
+      <BrandOrigin />
       <DownloadSection />
     </PublicShell>
   );

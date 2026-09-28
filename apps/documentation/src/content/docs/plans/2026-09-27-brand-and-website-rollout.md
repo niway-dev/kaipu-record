@@ -5,7 +5,7 @@ description: Execution sequence for preserving Kaipu's meaning, selecting Kai an
 
 # Brand identity and website rollout
 
-**Status: 🟡 In progress · 2026-09-27.** Identity documentation, README correction, and EN/ES landing copy are implemented on the growth branch. New layout, mascot/logo replacement, notch behavior, and media production remain pending. Parent: [Product growth](/backlog/product-growth/).
+**Status: 🟡 In progress · 2026-09-28.** Identity documentation, README correction, EN/ES landing copy, and the landing's brand origin section are implemented on the growth branch. New layout, mascot/logo replacement, notch behavior, and media production remain pending. Parent: [Product growth](/backlog/product-growth/).
 
 ## Goal and settled inputs
 
@@ -47,6 +47,9 @@ The creator already has new logos and notch-state artwork. First obtain their pa
 
 ## D — Approve one visual slice, then implement the page
 
+- [x] Publish the name's meaning on the landing: an `#origin` section between the Why cards and
+      Download, plus the signature in the footer, wired through `landing.origin*` /
+      `landing.footerSignature` in both catalogs. Text-only, no artwork dependency.
 - [ ] Compose the hero and one chapter using actual screenshots in desktop/mobile, light/dark.
 - [ ] Validate the composition with the creator before propagating it to all sections.
 - [ ] Update `apps/web-hono/src/components/landing/hero.tsx` and `showcase.tsx`; reuse `feature-demo.tsx` and `demo-video.tsx` where appropriate.
@@ -78,4 +81,6 @@ The [website concept](/marketing/website-concept/) owns the composition and copy
 
 ## Restart here
 
-Documentation and copy are ready for review. Next obtain the creator's logo/notch asset paths, inventory them under phase B, and record the selected variants. The earlier vizcacha prompt is superseded as the primary direction. Do not regenerate the mascot or rewrite the name's meaning before inspecting the supplied work.
+Documentation, copy, and the landing's origin section are ready for review; the meaning is now
+published on the site and no longer depends on a chat transcript. Next obtain the creator's
+logo/notch asset paths, inventory them under phase B, and record the selected variants. The earlier vizcacha prompt is superseded as the primary direction. Do not regenerate the mascot or rewrite the name's meaning before inspecting the supplied work.

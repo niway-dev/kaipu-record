@@ -38,6 +38,21 @@ Approved Spanish brand copy:
 
 > Kaipu une una inspiración en «kay» —esto— con el khipu, el sistema andino de registro mediante cuerdas y nudos. Para nosotros significa «esto, registrado»: capturar lo que está pasando y conservarlo para explicarlo, compartirlo y volver a encontrarlo. Kai es el compañero que representa esa idea.
 
+## Where this identity is published
+
+The meaning no longer depends on a chat transcript or a file outside the repository. It is
+carried in three places, each with a different job:
+
+| Surface                                                | Carries                                                 | File                                                                  |
+| ------------------------------------------------------ | ------------------------------------------------------- | --------------------------------------------------------------------- |
+| This page                                              | The canonical decision, sources, voice, and change rule | `apps/documentation/src/content/docs/marketing/brand-identity.md`     |
+| Root README, “Why Kaipu”                               | The short form a new contributor meets first            | `README.md`                                                           |
+| Landing `#origin` section and footer signature (EN/ES) | The public, condensed form with the disclaimer          | `apps/web-hono/src/components/landing/brand-origin.tsx`, `footer.tsx` |
+
+Landing wording lives in `packages/i18n/messages/{en,es}.json` under `landing.origin*` and
+`landing.footerSignature`; an EN/ES parity test fails if one catalog drifts. Changing the meaning
+means changing this page first, then those three surfaces together — never one of them alone.
+
 ## Purpose and product fit
 
 Kaipu helps people turn what they see into a clear, reusable explanation. Its initial audience is people building software who capture bugs, changes, feedback, and walkthroughs. Videos and screenshots live in a local library; optional cloud capabilities serve those files rather than define the product.
@@ -59,6 +74,8 @@ Keep **Kaipu**, **kaipu.app**, the pink recognition cue, and both light/dark the
 
 **Preferred exploration: Kai, a small knot that keeps moments.** A soft compact knot, simple eyes, and short cord ends provide a character without relying on costume. Its signature gesture is tying a small knot when a moment is saved and extending the thread when sharing. This is our contemporary visual metaphor.
 
+Approved one-line mascot story — EN: “Kai ties a knot so that moment isn't lost.” ES: «Kai hace un nudo para que ese momento no se pierda.» Use it as the caption when Kai is introduced; it states what the character does, without claiming the app can never lose a file.
+
 The mascot, wordmark, small symbol, app icon, and monochrome tray mark have different jobs. Derive a simple mark from the character if it remains recognizable; do not assume a detailed character works at favicon size. Start with a flat silhouette and evaluate pixel art as a treatment, not as an obligation for the whole UI.
 
 The creator reports new logo and notch-state artwork is available. Its paths and final selection have not been supplied in this repository session. Treat those assets as input to the [execution plan](/plans/2026-09-27-brand-and-website-rollout/), not as already integrated or a reason to regenerate artwork from scratch.
@@ -74,6 +91,6 @@ The creator reports new logo and notch-state artwork is available. Its paths and
 ## Related
 
 - [Kai and logo exploration](/marketing/brand-and-kai/)
-- [Website concept and media brief](/marketing/website-concept/)
+- [Website concept and media brief](/marketing/website-concept/) — including the [implemented origin section](/marketing/website-concept/#brand-origin-section-implemented)
 - [Execution plan](/plans/2026-09-27-brand-and-website-rollout/)
 - [Product philosophy](/desktop/product-philosophy/) · [Design brief](/briefings/design-brief/)
