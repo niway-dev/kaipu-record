@@ -1,6 +1,6 @@
 import React from "react";
 import { useTranslations } from "@kaipu/i18n";
-import { KaipuLogo } from "@renderer/shell/kaipu-logo";
+import { KaipuLogo } from "@kaipu/brand";
 import styles from "./panel-header.module.css";
 
 interface PanelHeaderProps {
@@ -14,7 +14,7 @@ export function PanelHeader({ onOpenMainWindow }: PanelHeaderProps): React.JSX.E
     <div className={styles.header}>
       <div className={styles.brand}>
         <span className={styles.mark}>
-          <KaipuLogo size={16} />
+          <KaipuLogo use="micro" size={16} />
         </span>
         <span className={styles.name}>Kaipu Record</span>
       </div>

@@ -1,6 +1,6 @@
 import { Monitor, Mic, Volume2, Video, type LucideIcon } from "lucide-react";
 import { useLocale, useSetLocale, useTranslations, type Locale } from "@kaipu/i18n";
-import { KaipuLogo } from "@renderer/shell/kaipu-logo";
+import { KaipuLogo } from "@kaipu/brand";
 import styles from "./welcome-step.module.css";
 
 type FeatureLabelKey = "featScreen" | "featVoice" | "featAudio" | "featCamera";
@@ -55,7 +55,7 @@ export function WelcomeStep(): React.JSX.Element {
   return (
     <div className={styles.step}>
       <div className={styles.mark}>
-        <KaipuLogo size={50} />
+        <KaipuLogo use="app" size={50} />
       </div>
       <h1 className={styles.title}>{t("welcomeTitle")}</h1>
       <p className={styles.subtitle}>{t("welcomeSubtitle")}</p>

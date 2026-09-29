@@ -2,7 +2,7 @@ import React, { useEffect } from "react";
 import { ArrowLeft } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTranslations } from "@kaipu/i18n";
-import { KaipuLogo } from "@renderer/shell/kaipu-logo";
+import { KaipuLogo } from "@kaipu/brand";
 import { AuthForm, LEGAL_WEB_URL, type AuthFormMode } from "@renderer/features/auth/auth-form";
 import { useAuthStatus } from "@renderer/features/auth/use-auth-status";
 import styles from "./auth-page.module.css";
@@ -76,7 +76,7 @@ export function AuthPage({ mode }: { mode: AuthFormMode }): React.JSX.Element {
       <div className={styles.stage}>
         <div className={styles.card}>
           <span className={styles.mark}>
-            <KaipuLogo size={36} />
+            <KaipuLogo use="product" size={36} />
           </span>
           <h1 className={styles.title}>{t(copy.title)}</h1>
           <p className={styles.subtitle}>{t(copy.subtitle)}</p>

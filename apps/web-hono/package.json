@@ -22,6 +22,7 @@
     "@fontsource-variable/geist-mono": "^5.3.0",
     "@fontsource/instrument-serif": "^5.3.0",
     "@kaipu/application": "workspace:*",
+    "@kaipu/brand": "workspace:*",
     "@kaipu/domain": "workspace:*",
     "@kaipu/infra-cloudflare": "workspace:*",
     "@kaipu/infra-db": "workspace:*",

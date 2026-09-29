@@ -1,5 +1,6 @@
 import { Crop, Folder, Scissors, Search, Video } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
+import { KaipuLogo } from "@kaipu/brand";
 
 import { CHAPTERS, type ChapterId } from "./chapters";
 import { cssVars } from "./css-vars";
@@ -52,11 +53,7 @@ export function Rail() {
             aria-current={isActive ? "true" : undefined}
             onClick={() => scrollTo(chapter.slug)}
           >
-            {Icon ? (
-              <Icon size={17} aria-hidden />
-            ) : (
-              <img src="/brand/logo-app.png" alt="" className={styles.mark} />
-            )}
+            {Icon ? <Icon size={17} aria-hidden /> : <KaipuLogo use="product" size={18} />}
             <span className="kl-sr-only">{label}</span>
             {isActive ? (
               <span className={styles.label} aria-hidden>

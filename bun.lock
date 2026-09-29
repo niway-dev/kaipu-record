@@ -64,6 +64,7 @@
       "dependencies": {
         "@electron-toolkit/preload": "^3.0.2",
         "@electron-toolkit/utils": "^4.0.0",
+        "@kaipu/brand": "workspace:*",
         "@kaipu/i18n": "workspace:*",
         "@kaipu/tokens": "workspace:*",
         "@radix-ui/react-select": "^2.3.0",
@@ -137,6 +138,7 @@
         "@fontsource-variable/geist-mono": "^5.3.0",
         "@fontsource/instrument-serif": "^5.3.0",
         "@kaipu/application": "workspace:*",
+        "@kaipu/brand": "workspace:*",
         "@kaipu/domain": "workspace:*",
         "@kaipu/infra-cloudflare": "workspace:*",
         "@kaipu/infra-db": "workspace:*",
@@ -204,6 +206,18 @@
         "tsdown": "catalog:",
         "typescript": "catalog:",
         "vitest": "^4.1.9",
+      },
+    },
+    "packages/brand": {
+      "name": "@kaipu/brand",
+      "version": "1.0.0",
+      "devDependencies": {
+        "@types/react": "^19",
+        "react": "^19",
+        "typescript": "catalog:",
+      },
+      "peerDependencies": {
+        "react": "^19",
       },
     },
     "packages/config": {
@@ -837,6 +851,8 @@
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
 
     "@kaipu/application": ["@kaipu/application@workspace:packages/application"],
+
+    "@kaipu/brand": ["@kaipu/brand@workspace:packages/brand"],
 
     "@kaipu/config": ["@kaipu/config@workspace:packages/config"],
 
