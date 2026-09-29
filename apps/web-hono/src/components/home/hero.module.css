@@ -1,20 +1,37 @@
 .hero {
   position: relative;
-  display: grid;
-  min-height: 92vh;
-  place-items: center;
-  padding: 120px var(--kl-gutter) 80px;
+  padding: 150px var(--kl-gutter) 120px;
   overflow: hidden;
 }
 
-.inner {
+.grid {
   position: relative;
   z-index: 1;
-  max-width: 980px;
-  text-align: center;
+  display: grid;
+  max-width: var(--kl-max-w);
+  margin: 0 auto;
+  align-items: center;
+  gap: 56px;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+}
+
+@media (width < 1080px) {
+  .grid {
+    grid-template-columns: 1fr;
+    gap: 80px;
+  }
+}
+
+/* ---- Left column ------------------------------------------------------- */
+
+.logoTile {
+  width: 72px;
+  height: 72px;
+  box-shadow: 0 18px 44px -18px rgb(246 5 92 / 0.9);
 }
 
 .eyebrow {
+  margin-top: 22px;
   font-family: var(--kl-font-mono);
   font-size: 12.5px;
   font-weight: 500;
@@ -23,111 +40,154 @@
   color: var(--kl-faint);
 }
 
-/*
- * The page's voice in one rule: a tight sans statement, then a serif italic
- * answer in pink. Both live in the same h1 because they are one sentence —
- * splitting them into two elements would let a screen reader read them as two.
- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 8px 16px;
+  border: 1px solid var(--kl-bd-2);
+  border-radius: 999px;
+  font-size: 13.5px;
+  color: var(--kl-dim);
+}
+
+.badgeStrong {
+  font-weight: 600;
+  color: var(--kl-tx);
+}
+
 .title {
-  margin: 18px 0 0;
+  margin: 20px 0 0;
   font-size: var(--kl-fs-h1);
   font-weight: 700;
   line-height: var(--kl-leading-h);
   letter-spacing: var(--kl-tracking-h1);
-  text-wrap: balance;
 }
 
+/* The serif answer sits on its own line here, unlike the chapters where it
+ * trails the sans phrase — the hero's two lines are two sentences. */
 .serif {
+  display: block;
+  margin-top: 6px;
   font-family: var(--kl-font-serif);
   font-size: var(--kl-fs-h1-serif);
   font-style: italic;
   font-weight: 400;
-  letter-spacing: -0.01em; /* the serif is already open; it does not want the sans tracking */
+  letter-spacing: -0.01em;
   color: var(--kl-pink-tx);
 }
 
-.sub {
-  max-width: 620px;
-  margin: 26px auto 0;
+.body {
+  max-width: 480px;
+  margin-top: 26px;
   font-size: var(--kl-fs-body);
   line-height: var(--kl-leading-body);
   color: var(--kl-dim);
   text-wrap: pretty;
 }
 
-.chips {
+.pills {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
-  gap: 12px;
-  margin-top: 38px;
+  gap: 10px;
+  margin-top: 26px;
+  max-width: 480px;
 }
 
-/*
- * A chip is a link to its chapter, so the hero doubles as the table of contents.
- * The tint lives on the dot only — the label stays neutral so four chips do not
- * read as four competing buttons.
- */
-.chip {
+.pill {
+  padding: 9px 18px;
+  border: 1px solid var(--kl-bd-2);
+  border-radius: 999px;
+  font-size: var(--kl-fs-chip);
+  color: var(--kl-tx);
+}
+
+.ctas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 34px;
+}
+
+.ctaPrimary {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  padding: 9px 18px 9px 9px;
+  padding: 15px 28px;
+  border-radius: 999px;
+  background: var(--kl-pink);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: var(--kl-glow-btn);
+  transition: filter 0.2s ease;
+}
+
+.ctaPrimary:hover {
+  filter: brightness(1.08);
+}
+
+.ctaSecondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 15px 26px;
   border: 1px solid var(--kl-bd-2);
   border-radius: 999px;
-  background: var(--kl-card);
   color: var(--kl-tx);
-  font-size: var(--kl-fs-chip);
+  font-size: 16px;
   font-weight: 500;
   text-decoration: none;
-  transition:
-    border-color 0.2s ease,
-    background 0.2s ease;
+  transition: border-color 0.2s ease;
 }
 
-.chip:hover {
-  border-color: color-mix(in srgb, var(--kl-tint) 55%, transparent);
-  background: var(--kl-card-2);
+.ctaSecondary:hover {
+  border-color: var(--kl-dim);
 }
 
-.chip:focus-visible {
+.ctaPrimary:focus-visible,
+.ctaSecondary:focus-visible {
   outline: 2px solid var(--kl-pink);
-  outline-offset: 2px;
+  outline-offset: 3px;
 }
 
-.chipDot {
-  display: grid;
-  width: 30px;
-  height: 30px;
-  place-items: center;
-  border-radius: 999px;
-  background: linear-gradient(145deg, var(--kl-tint-from), var(--kl-tint-to));
-  color: #fff;
-  box-shadow: 0 8px 18px -8px color-mix(in srgb, var(--kl-tint) 90%, transparent);
-}
-
-.chipNum {
+.footnote {
+  margin-top: 22px;
   font-family: var(--kl-font-mono);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 12.5px;
+  letter-spacing: 0.04em;
   color: var(--kl-faint);
 }
 
-/*
- * Background glyph: the product's own language as decoration (design system
- * §4.3). Purely presentational, so it is aria-hidden in the markup and sits
- * behind everything.
- */
+/* ---- Background glyphs (design system §4.3) ---------------------------- */
+
 .glyph {
   position: absolute;
-  top: 26px;
-  left: 40px;
   z-index: 0;
   font-family: var(--kl-font-mono);
-  font-size: clamp(48px, 7vw, 92px);
   font-weight: 600;
-  letter-spacing: 0.06em;
-  color: rgb(255 255 255 / 0.055);
+  color: rgb(255 255 255 / 0.05);
   pointer-events: none;
   user-select: none;
+  letter-spacing: 0.04em;
+}
+
+.glyphTimer {
+  top: 120px;
+  left: 46%;
+  font-size: clamp(38px, 4.4vw, 62px);
+}
+
+.glyphKeys {
+  top: 160px;
+  right: 9%;
+  font-size: clamp(38px, 4.4vw, 62px);
+}
+
+.glyphRec {
+  bottom: 60px;
+  left: 44px;
+  font-size: clamp(44px, 5vw, 74px);
 }

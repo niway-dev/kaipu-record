@@ -1,12 +1,13 @@
 import type { ReactNode } from "react";
 
 import { Rail } from "./rail";
+import { TopNav } from "./top-nav";
 import "@/styles/landing.css";
 
 /**
- * Chrome for the redesigned home. Deliberately NOT PublicShell: this page has no
- * top nav — the rail is its only navigation — and it owns its own dark token
- * layer rather than the app's theme.
+ * Chrome for the redesigned home. Deliberately NOT PublicShell: it has its own
+ * top bar and the chapter rail, and it owns a dark token layer rather than the
+ * app's theme.
  *
  * `data-kl` is the hook every landing style hangs off. Nothing in
  * styles/landing*.css applies without it, which is what keeps this page from
@@ -16,6 +17,7 @@ import "@/styles/landing.css";
 export function HomeShell({ children }: { children: ReactNode }) {
   return (
     <div data-kl>
+      <TopNav />
       <Rail />
       <main>{children}</main>
     </div>

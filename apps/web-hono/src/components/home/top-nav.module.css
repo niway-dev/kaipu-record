@@ -1,0 +1,139 @@
+.nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 50;
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 28px;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--kl-tx);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+}
+
+/* The centre pill group, floating free of both edges. */
+.center {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px;
+  border: 1px solid var(--kl-bd);
+  border-radius: 999px;
+}
+
+.tab {
+  padding: 8px 18px;
+  border-radius: 999px;
+  color: var(--kl-dim);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  transition:
+    color 0.2s ease,
+    background 0.2s ease;
+}
+
+.tab:hover {
+  color: var(--kl-tx);
+}
+
+.tabActive {
+  background: var(--kl-card-2);
+  color: var(--kl-tx);
+}
+
+.right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Theme and locale share one shape so the cluster reads as a set. */
+.round {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid var(--kl-bd);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--kl-dim);
+  cursor: pointer;
+  transition:
+    color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.round:hover {
+  color: var(--kl-tx);
+  border-color: var(--kl-bd-2);
+}
+
+.locale {
+  display: flex;
+  align-items: center;
+  padding: 4px;
+  border: 1px solid var(--kl-bd);
+  border-radius: 999px;
+}
+
+.localeOption {
+  padding: 5px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--kl-dim);
+  font-family: var(--kl-font-mono);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.localeActive {
+  background: var(--kl-card-2);
+  color: var(--kl-tx);
+}
+
+.download {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 22px;
+  border-radius: 999px;
+  background: var(--kl-pink);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: var(--kl-glow-btn);
+  transition: filter 0.2s ease;
+}
+
+.download:hover {
+  filter: brightness(1.08);
+}
+
+.round:focus-visible,
+.localeOption:focus-visible,
+.download:focus-visible,
+.tab:focus-visible,
+.brand:focus-visible {
+  outline: 2px solid var(--kl-pink);
+  outline-offset: 3px;
+}
+
+@media (width < 900px) {
+  .center {
+    display: none;
+  }
+}
