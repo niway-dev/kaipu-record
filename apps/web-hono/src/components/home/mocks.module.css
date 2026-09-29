@@ -1,0 +1,744 @@
+/*
+ * The chapters' product mockups.
+ *
+ * All four share one stylesheet because they share one vocabulary: a window with
+ * traffic lights, a light "someone else's app" surface, and a dark Kaipu surface
+ * on top of it. Splitting them per chapter would duplicate that chrome four
+ * times and let the four drift apart.
+ *
+ * These are pictures, not interfaces: nothing inside is focusable and none of it
+ * announces itself, so a keyboard user tabs straight past the whole figure.
+ */
+
+/* ---- Window chrome ----------------------------------------------------- */
+
+.window {
+  overflow: hidden;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.windowDark {
+  overflow: hidden;
+  border: 1px solid var(--kl-bd-2);
+  border-radius: 12px;
+  background: #0e0e11;
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  background: #f1f1f4;
+}
+
+.barDark {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--kl-bd);
+}
+
+.lights {
+  display: flex;
+  gap: 6px;
+}
+
+.light {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+}
+.red {
+  background: #ff5f57;
+}
+.amber {
+  background: #febc2e;
+}
+.green {
+  background: #28c840;
+}
+
+/* The address chip, centred like a browser's. */
+.address {
+  flex: 1;
+  max-width: 260px;
+  margin: 0 auto;
+  padding: 4px 12px;
+  border-radius: 6px;
+  background: #fff;
+  color: #6b7280;
+  font-family: var(--kl-font-mono);
+  font-size: 11px;
+  text-align: center;
+}
+
+.barTitle {
+  color: #4b5563;
+  font-size: 12.5px;
+}
+
+/* ---- Light surface primitives (someone else's app) --------------------- */
+
+.sheet {
+  padding: 22px;
+  color: #0f172a;
+}
+
+.h {
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.sub {
+  margin-top: 4px;
+  color: #6b7280;
+  font-size: 12.5px;
+}
+
+.field {
+  margin-top: 12px;
+  padding: 11px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 9px;
+}
+
+.fieldLabel {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #9ca3af;
+}
+
+.fieldValue {
+  margin-top: 4px;
+  font-family: var(--kl-font-mono);
+  font-size: 13.5px;
+  color: #111827;
+}
+
+.cols {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.alert {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 12px;
+  padding: 11px 14px;
+  border-radius: 9px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.payBtn {
+  margin-top: 12px;
+  padding: 13px;
+  border-radius: 9px;
+  background: #16213e;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.aside {
+  padding: 18px;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.asideHead {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #9ca3af;
+}
+
+.line {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 11px;
+  font-size: 13.5px;
+  color: #374151;
+}
+
+.lineTotal {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.split {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: 1.25fr 0.9fr;
+}
+
+/* ---- Kaipu surfaces layered on top ------------------------------------- */
+
+/* The recording bar that sits over the bottom of the captured window. */
+.recBar {
+  position: absolute;
+  right: 8%;
+  bottom: -26px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 18px;
+  border-radius: 12px;
+  color: var(--kl-tx);
+}
+
+.timer {
+  font-family: var(--kl-font-mono);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.levels {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 18px;
+}
+
+.levelBar {
+  width: 3px;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--kl-pink);
+}
+
+.stopBtn {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--kl-pink);
+  color: #fff;
+}
+
+/* The "what am I recording" card, overlapping the lower-left corner. */
+.recCard {
+  position: absolute;
+  bottom: -62px;
+  left: -38px;
+  width: 300px;
+  padding: 14px 16px 12px;
+  border-radius: 12px;
+}
+
+.recHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--kl-font-mono);
+  font-size: 10.5px;
+  letter-spacing: var(--kl-tracking-label);
+  text-transform: uppercase;
+  color: var(--kl-faint);
+}
+
+.recDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--kl-pink);
+}
+
+.recTitle {
+  margin-top: 9px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--kl-tx);
+}
+
+.recRow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 9px;
+  font-size: 13px;
+  color: var(--kl-dim);
+}
+
+.recLive {
+  margin-left: auto;
+  font-family: var(--kl-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--kl-pink-tx);
+}
+
+/* The camera bubble, ringed so it reads as a live circle. */
+.bubble {
+  position: absolute;
+  right: 22px;
+  bottom: 24px;
+  display: grid;
+  width: 96px;
+  height: 96px;
+  place-items: center;
+  border: 2px solid var(--kl-pink);
+  border-radius: 999px;
+  background: #0e0e11;
+  color: var(--kl-dim);
+  font-size: 11.5px;
+  line-height: 1.35;
+  text-align: center;
+}
+
+/* ---- Chapter 02: the capture, framed on its tint ----------------------- */
+
+.framed {
+  padding: 34px;
+  border-radius: 16px;
+  background: linear-gradient(150deg, var(--kl-tint-from), var(--kl-tint-to));
+}
+
+.toggleRow {
+  display: flex;
+  align-items: center;
+  margin-top: 10px;
+  padding: 13px 15px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+}
+
+/* The row the annotation points at: highlighted, boxed, the way a person marks
+ * up a screenshot by hand. */
+.toggleRowMarked {
+  border: 2px solid var(--kl-pink);
+  background: #fefce8;
+}
+
+.toggleName {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.toggleMeta {
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: #6b7280;
+}
+
+.switch {
+  width: 38px;
+  height: 21px;
+  margin-left: auto;
+  border-radius: 999px;
+  background: #e5e7eb;
+}
+
+.switchOn {
+  background: var(--kl-pink);
+}
+
+.redacted {
+  display: inline-block;
+  width: 180px;
+  height: 11px;
+  border-radius: 3px;
+  background: #cbd5e1;
+  filter: blur(3px);
+  vertical-align: middle;
+}
+
+.hand {
+  position: absolute;
+  top: 26%;
+  right: -6px;
+  font-family: var(--kl-font-hand);
+  font-size: 27px;
+  color: var(--kl-pink);
+  transform: rotate(-6deg);
+}
+
+/* The editor toolbar that hangs off the bottom of the capture. */
+.toolbar {
+  position: absolute;
+  right: 18px;
+  bottom: -22px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  color: var(--kl-dim);
+}
+
+.tool {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 8px;
+}
+
+.toolActive {
+  background: var(--kl-pink);
+  color: #fff;
+}
+
+.copyBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  border-radius: 8px;
+  background: var(--kl-pink);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* ---- Chapter 03: the editor -------------------------------------------- */
+
+.stageFrame {
+  display: grid;
+  place-items: center;
+  padding: 26px;
+  background: #16161a;
+}
+
+.stageInner {
+  width: 100%;
+  max-width: 460px;
+  padding: 20px;
+  border-radius: 8px;
+  background: #9ca3af;
+}
+
+.apiRow {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: #111827;
+  color: #9ca3af;
+  font-size: 11.5px;
+  text-align: center;
+}
+
+.zoomBox {
+  position: relative;
+  margin-top: 12px;
+  padding: 26px 14px 14px;
+  border: 2px solid var(--kl-pink);
+  border-radius: 4px;
+  background: #fff;
+}
+
+.zoomTag {
+  position: absolute;
+  top: -11px;
+  left: 0;
+  padding: 2px 7px;
+  background: #111;
+  color: var(--kl-pink-tx);
+  font-family: var(--kl-font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+}
+
+.zoomCta {
+  height: 30px;
+  margin-left: auto;
+  width: 120px;
+  border-radius: 4px;
+  background: var(--kl-pink);
+}
+
+.timeline {
+  padding: 16px 18px;
+  border-top: 1px solid var(--kl-bd);
+}
+
+.transport {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.playBtn {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--kl-pink);
+  color: #fff;
+}
+
+.time {
+  font-family: var(--kl-font-mono);
+  font-size: 12.5px;
+  color: var(--kl-dim);
+}
+
+.track {
+  display: grid;
+  align-items: center;
+  gap: 12px;
+  margin-top: 9px;
+  grid-template-columns: 62px 1fr;
+}
+
+.trackName {
+  font-family: var(--kl-font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  color: var(--kl-faint);
+}
+
+.trackLane {
+  display: flex;
+  gap: 4px;
+  height: 22px;
+}
+
+.clip {
+  flex: 1;
+  border-radius: 3px;
+  background: #f3f4f6;
+}
+
+.zoomChip {
+  display: grid;
+  place-items: center;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--kl-pink) 42%, transparent);
+  color: #fff;
+  font-family: var(--kl-font-mono);
+  font-size: 9px;
+}
+
+.privacyChip {
+  display: grid;
+  place-items: center;
+  border-radius: 3px;
+  font-family: var(--kl-font-mono);
+  font-size: 9px;
+  color: #fff;
+}
+
+.autoCard {
+  position: absolute;
+  top: -34px;
+  right: -28px;
+  width: 268px;
+  padding: 14px 16px;
+  border-radius: 12px;
+}
+
+.autoHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--kl-tx);
+}
+
+.autoBody {
+  margin-top: 6px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--kl-dim);
+}
+
+.autoChips {
+  display: flex;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.autoChip {
+  padding: 3px 9px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--kl-pink) 22%, transparent);
+  color: var(--kl-pink-tx);
+  font-family: var(--kl-font-mono);
+  font-size: 11px;
+}
+
+/* ---- Chapter 04: the library ------------------------------------------- */
+
+.library {
+  padding: 18px;
+}
+
+.libTop {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.search {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 14px;
+  border: 1px solid var(--kl-bd);
+  border-radius: 9px;
+  color: var(--kl-faint);
+  font-size: 13.5px;
+}
+
+.filters {
+  display: flex;
+  gap: 6px;
+}
+
+.filter {
+  padding: 7px 14px;
+  border-radius: 7px;
+  color: var(--kl-dim);
+  font-size: 13px;
+}
+
+.filterActive {
+  background: var(--kl-pink);
+  color: #fff;
+  font-weight: 600;
+}
+
+.cards {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.card {
+  overflow: hidden;
+  border: 1px solid var(--kl-bd);
+  border-radius: 10px;
+}
+
+.thumb {
+  position: relative;
+  display: grid;
+  height: 96px;
+  place-items: center;
+  padding: 14px;
+}
+
+.thumbSheet {
+  width: 100%;
+  height: 100%;
+  padding: 10px;
+  border-radius: 4px;
+  background: #fff;
+}
+
+.thumbLine {
+  height: 6px;
+  margin-bottom: 5px;
+  border-radius: 2px;
+  background: #e5e7eb;
+}
+
+.thumbAccent {
+  height: 6px;
+  width: 40%;
+  border-radius: 2px;
+  background: var(--kl-pink);
+}
+
+.badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  font-family: var(--kl-font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  color: #fff;
+}
+
+.badgeRec {
+  background: var(--kl-pink);
+}
+
+.badgeShot {
+  background: var(--kl-c2);
+}
+
+.stamp {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgb(0 0 0 / 0.55);
+  font-family: var(--kl-font-mono);
+  font-size: 10px;
+  color: #fff;
+}
+
+.cardMeta {
+  padding: 10px 12px;
+}
+
+.cardName {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--kl-tx);
+}
+
+.cardSub {
+  margin-top: 3px;
+  font-family: var(--kl-font-mono);
+  font-size: 10.5px;
+  color: var(--kl-faint);
+}
+
+.searchCard {
+  position: absolute;
+  right: -26px;
+  bottom: -46px;
+  width: 300px;
+  padding: 14px;
+  border-radius: 12px;
+}
+
+.searchField {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 12px;
+  border: 1px solid var(--kl-pink);
+  border-radius: 8px;
+  color: var(--kl-tx);
+  font-size: 13.5px;
+}
+
+.searchMeta {
+  margin-top: 9px;
+  font-size: 12px;
+  color: var(--kl-faint);
+}

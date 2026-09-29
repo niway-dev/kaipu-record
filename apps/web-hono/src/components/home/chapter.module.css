@@ -1,0 +1,119 @@
+/*
+ * The shared frame for chapters 01–04. Every chapter is the same object with a
+ * different tint, headline and mockup, so this exists once and the tint arrives
+ * as --kl-tint rather than as four near-identical stylesheets.
+ */
+
+.chapter {
+  position: relative;
+  padding: 110px var(--kl-gutter);
+  overflow: hidden;
+}
+
+.grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  max-width: var(--kl-max-w);
+  margin: 0 auto;
+  align-items: center;
+  gap: 64px;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+}
+
+@media (width < 1080px) {
+  .grid {
+    grid-template-columns: 1fr;
+    gap: 56px;
+  }
+}
+
+.icon {
+  display: grid;
+  width: 60px;
+  height: 60px;
+  place-items: center;
+  border-radius: 16px;
+  color: #fff;
+}
+
+.meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.counter {
+  font-family: var(--kl-font-mono);
+  font-size: 13px;
+  letter-spacing: 0.18em;
+  color: var(--kl-faint);
+}
+
+.label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 15px;
+  border: 1px solid var(--kl-bd-2);
+  border-radius: 999px;
+  font-size: 13.5px;
+  color: var(--kl-dim);
+}
+
+.labelStrong {
+  font-weight: 600;
+  color: var(--kl-tx);
+}
+
+.title {
+  margin: 22px 0 0;
+  font-size: var(--kl-fs-h2);
+  font-weight: 700;
+  line-height: var(--kl-leading-h);
+  letter-spacing: var(--kl-tracking-h2);
+}
+
+/* The serif answer follows the sans statement on its own line, always pink. */
+.serif {
+  display: block;
+  margin-top: 14px;
+  font-family: var(--kl-font-serif);
+  font-size: var(--kl-fs-h2-serif);
+  font-style: italic;
+  font-weight: 400;
+  line-height: 1.16;
+  letter-spacing: -0.01em;
+  color: var(--kl-pink-tx);
+}
+
+.body {
+  max-width: 470px;
+  margin-top: 24px;
+  font-size: var(--kl-fs-body);
+  line-height: var(--kl-leading-body);
+  color: var(--kl-dim);
+  text-wrap: pretty;
+}
+
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 26px;
+  max-width: 470px;
+}
+
+.pill {
+  padding: 9px 17px;
+  border: 1px solid var(--kl-bd-2);
+  border-radius: 999px;
+  font-size: var(--kl-fs-chip);
+  color: var(--kl-tx);
+}
+
+.stage {
+  position: relative;
+  margin: 0;
+}
