@@ -157,8 +157,12 @@ export function AnnotationLayer({
     const p = toNorm(e);
     if (tools.tool === "select") {
       // A selected shape's resize handles take priority over the shape hit-test, so
-      // grabbing a corner resizes instead of moving.
-      const sel = scene.annotations.find((a) => a.id === scene.selectedId) ?? null;
+      // grabbing a corner resizes instead of moving. Skipped while the inline text
+      // editor is open: the handles are hidden then, so hit-testing them would start
+      // a resize from a corner the user cannot see.
+      const sel = editing
+        ? null
+        : (scene.annotations.find((a) => a.id === scene.selectedId) ?? null);
       if (sel) {
         const tol = { x: HANDLE_HIT_PX / (size.w || 1), y: HANDLE_HIT_PX / (size.h || 1) };
         const handle = hitHandle(handlesFor(sel, size), p, tol);
@@ -171,7 +175,14 @@ export function AnnotationLayer({
       }
       const hit = hitTest(scene.annotations, p, size);
       scene.select(hit?.id ?? null);
-      if (hit) {
+      // The label whose inline editor is open belongs to that editor. The hit-test
+      // keeps an 8px margin around it, and the textarea only covers the box itself,
+      // so a press in that ring would drag the label out from under its own caret.
+      // Today the textarea's min-width hides the ring on short labels; this does not
+      // depend on that. Other shapes stay grabbable, so "click another shape while
+      // editing to select it" is unchanged.
+      const editingThis = editing?.id !== undefined && hit?.id === editing.id;
+      if (hit && !editingThis) {
         scene.beginInteract();
         drag.current = { mode: "move", id: hit.id, start: p, orig: hit };
         (e.target as Element).setPointerCapture?.(e.pointerId);
@@ -331,9 +342,13 @@ export function AnnotationLayer({
     setEditing(null);
   };
 
-  // Resize handles show for the selected shape while the select tool is active.
+  // Resize handles show for the selected shape while the select tool is active —
+  // never while the inline text editor is open. Their geometry comes from the
+  // STORED annotation, which stops matching the moment the user types, so the box
+  // visibly deforms around the editor; and there is nothing to resize mid-edit,
+  // since the label's size follows its text until the edit is committed.
   const selectedAnnotation =
-    tools.tool === "select"
+    tools.tool === "select" && !editing
       ? (scene.annotations.find((a) => a.id === scene.selectedId) ?? null)
       : null;
 
@@ -380,6 +395,10 @@ export function AnnotationLayer({
             fontSize: resolveFontPx(editing.size ?? tools.textSize, editing.fontPx),
             lineHeight: TEXT_LINE_HEIGHT,
             whiteSpace: editing.width != null ? "pre-wrap" : "pre",
+            // Match the committed label, which breaks a word too long for the box
+            // (see textLines). Stated rather than left to the UA default, so the
+            // editor and the label cannot drift apart.
+            overflowWrap: "break-word",
             resize: "none",
             overflow: "hidden",
           }}
@@ -426,6 +445,7 @@ function Handles({ a, size }: { a: Annotation; size: Size }): React.JSX.Element 
       {handlesFor(a, size).map((h) => (
         <rect
           key={h.id}
+          data-testid="resize-handle"
           className={styles.handle}
           x={h.x * W - HANDLE_PX / 2}
           y={h.y * H - HANDLE_PX / 2}

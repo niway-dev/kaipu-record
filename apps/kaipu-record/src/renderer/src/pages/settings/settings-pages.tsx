@@ -33,6 +33,7 @@ import { LanguageSettings } from "./language-settings";
 import { ThemeSettings } from "./theme-settings";
 import { UpdateSettings } from "./update-settings";
 import { RecordingQualitySettings } from "./recording-quality-settings";
+import { ScreenshotCopySettings } from "./screenshot-copy-settings";
 import { ScreenshotSaveSettings } from "./screenshot-save-settings";
 import { Section, SettingsPanel } from "./settings-panel";
 import styles from "./settings-page.module.css";
@@ -271,6 +272,7 @@ export function ScreenshotsSettingsPage(): React.JSX.Element {
     <SettingsPanel title={t("screenshots")} subtitle={t("screenshotsDescription")}>
       <Section title={t("screenshots")}>
         <ScreenshotSaveSettings />
+        <ScreenshotCopySettings />
       </Section>
     </SettingsPanel>
   );
