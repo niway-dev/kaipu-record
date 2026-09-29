@@ -175,7 +175,14 @@ export function AnnotationLayer({
       }
       const hit = hitTest(scene.annotations, p, size);
       scene.select(hit?.id ?? null);
-      if (hit) {
+      // The label whose inline editor is open belongs to that editor. The hit-test
+      // keeps an 8px margin around it, and the textarea only covers the box itself,
+      // so a press in that ring would drag the label out from under its own caret.
+      // Today the textarea's min-width hides the ring on short labels; this does not
+      // depend on that. Other shapes stay grabbable, so "click another shape while
+      // editing to select it" is unchanged.
+      const editingThis = editing?.id !== undefined && hit?.id === editing.id;
+      if (hit && !editingThis) {
         scene.beginInteract();
         drag.current = { mode: "move", id: hit.id, start: p, orig: hit };
         (e.target as Element).setPointerCapture?.(e.pointerId);

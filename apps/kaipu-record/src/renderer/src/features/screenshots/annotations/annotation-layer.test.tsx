@@ -222,6 +222,32 @@ describe("AnnotationLayer — text tool", () => {
     for (const [, patch] of updates) expect(patch).not.toHaveProperty("fontPx");
   });
 
+  it("does not drag the label out from under its own inline editor", () => {
+    // The hit-test keeps an 8px margin around the label and the textarea covers only
+    // the box, so a press in that ring reaches the layer. It must not grab the label
+    // the user is typing into.
+    const scene = makeScene([label], "t1");
+    const { layer } = renderSizedLayer(scene, makeTools({ tool: "select" }));
+    fireEvent.doubleClick(layer, { clientX: 30, clientY: 30 });
+    fireEvent.pointerDown(layer, { clientX: 31, clientY: 31 });
+    fireEvent.pointerMove(layer, { clientX: 45, clientY: 45 });
+    expect(scene.updateAnnotation).not.toHaveBeenCalled();
+  });
+
+  it("still lets another shape be grabbed while a label is being edited", () => {
+    // Only the edited label is off limits; the rest of the canvas keeps working.
+    // The box sits well clear of the label so each click lands on one of them.
+    const farBox: BoxAnnotation = { ...box, x: 0.05, y: 0.05, w: 0.1, h: 0.1 };
+    const scene = makeScene([label, farBox], "t1");
+    const { layer } = renderSizedLayer(scene, makeTools({ tool: "select" }));
+    fireEvent.doubleClick(layer, { clientX: 30, clientY: 30 });
+    screen.getByDisplayValue("Hello"); // the label's editor is open
+    fireEvent.pointerDown(layer, { clientX: 10, clientY: 10 }); // inside the box
+    fireEvent.pointerMove(layer, { clientX: 20, clientY: 20 });
+    expect(scene.select).toHaveBeenCalledWith("b1");
+    expect(scene.updateAnnotation).toHaveBeenCalled();
+  });
+
   it("auto-selects after committing text (switches to the select tool)", () => {
     const scene = makeScene([], null);
     const tools = makeTools({ tool: "text" });
