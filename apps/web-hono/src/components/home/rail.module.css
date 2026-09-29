@@ -1,0 +1,110 @@
+/*
+ * The chapter rail. Component-scoped classes on purpose: a CSS module is one
+ * class per element with no descendant chains, which is the shape StyleX wants
+ * when this migrates. Shared looks (glass, glow) come from the global .kl-*
+ * primitives instead of being restated here.
+ */
+
+.rail {
+  position: fixed;
+  top: 50%;
+  right: 18px;
+  z-index: 40;
+  display: flex;
+  translate: 0 -50%;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 8px;
+  border-radius: 999px;
+}
+
+/*
+ * Below this width the rail would sit on top of the content rather than beside
+ * it, so it goes away and the page is read by scrolling. The number comes from
+ * the design system (§5).
+ */
+@media (width < 980px) {
+  .rail {
+    display: none;
+  }
+}
+
+.count {
+  font-family: var(--kl-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: var(--kl-tracking-label);
+  color: var(--kl-faint);
+}
+
+/* The hairline between the readout and the buttons. */
+.tick {
+  width: 1px;
+  height: 14px;
+  background: var(--kl-bd-2);
+}
+
+.item {
+  position: relative;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--kl-faint);
+  cursor: pointer;
+  transition:
+    color 0.2s ease,
+    background 0.2s ease;
+}
+
+.item:hover {
+  color: var(--kl-tx);
+  background: rgb(255 255 255 / 0.06);
+}
+
+.item:focus-visible {
+  outline: 2px solid var(--kl-pink);
+  outline-offset: 2px;
+}
+
+/*
+ * Active takes the chapter's own tint and its glow. --kl-tint is set inline per
+ * button, so one rule serves all six instead of six near-identical ones.
+ */
+.itemActive {
+  color: #fff;
+  background: var(--kl-tint, var(--kl-pink));
+  box-shadow: 0 10px 24px -10px color-mix(in srgb, var(--kl-tint, var(--kl-pink)) 95%, transparent);
+}
+
+.itemActive:hover {
+  color: #fff;
+  background: var(--kl-tint, var(--kl-pink));
+}
+
+/* The label rides to the left of the active button. */
+.label {
+  position: absolute;
+  top: 50%;
+  right: calc(100% + 12px);
+  translate: 0 -50%;
+  padding: 5px 10px;
+  border: 1px solid var(--kl-bd-2);
+  border-radius: 8px;
+  background: var(--kl-glass);
+  backdrop-filter: blur(var(--kl-glass-blur));
+  color: var(--kl-tx);
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.mark {
+  width: 18px;
+  height: 18px;
+}

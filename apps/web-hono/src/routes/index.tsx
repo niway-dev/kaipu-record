@@ -1,12 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { PublicShell } from "@/components/landing/public-shell";
-import { Hero } from "@/components/landing/hero";
-import { Showcase } from "@/components/landing/showcase";
-import { WhyKaipu } from "@/components/landing/why-kaipu";
-import { DownloadSection } from "@/components/landing/download-section";
+
+import { HomeShell } from "@/components/home/home-shell";
+import { Hero } from "@/components/home/hero";
 import { pageHead, softwareJsonLd } from "@/lib/seo";
 
 export const Route = createFileRoute("/")({
+  // The redesigned home brings its own chrome (the rail, no top nav), so the
+  // root document must stand down exactly as it does for the marketing shell.
   staticData: { shell: "marketing" },
   head: ({ match }) => {
     const { locale } = match.context;
@@ -15,16 +15,13 @@ export const Route = createFileRoute("/")({
       scripts: [{ type: "application/ld+json", children: softwareJsonLd(locale) }],
     };
   },
-  component: LandingPage,
+  component: HomePage,
 });
 
-function LandingPage() {
+function HomePage() {
   return (
-    <PublicShell>
+    <HomeShell>
       <Hero />
-      <Showcase />
-      <WhyKaipu />
-      <DownloadSection />
-    </PublicShell>
+    </HomeShell>
   );
 }
