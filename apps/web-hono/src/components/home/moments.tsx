@@ -25,9 +25,9 @@ export function Moments() {
       <div className={styles.inner}>
         <p className={styles.eyebrow}>{t("homeEyebrow")}</p>
         <h1 className={styles.title}>
-          {t("homeHeroLead")} <span className={styles.serif}>{t("homeHeroSerif")}</span>
+          {t("homeMomentsLead")} <span className={styles.serif}>{t("homeMomentsSerif")}</span>
         </h1>
-        <p className={styles.sub}>{t("homeHeroSub")}</p>
+        <p className={styles.sub}>{t("homeMomentsSub")}</p>
 
         <div className={styles.chips}>
           {NUMBERED.map((chapter, i) => {

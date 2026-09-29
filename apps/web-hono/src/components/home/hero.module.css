@@ -218,6 +218,12 @@
   color: var(--kl-faint);
 }
 
+/* A grid child will not shrink below its content unless told to — this is what
+ * lets the app window scale down instead of widening the page. */
+.grid > * {
+  min-width: 0;
+}
+
 @media (width < 980px) {
   .hero {
     /* Clears the fixed top bar plus the chapter strip pinned under it. */
@@ -254,5 +260,18 @@
 
   .pills {
     max-width: none;
+  }
+
+  /* The app window is drawn at desktop proportions; at phone width it is scaled
+   * as one piece rather than reflowed, so its internal layout stays truthful. */
+  .grid > figure {
+    transform-origin: top left;
+    scale: 0.82;
+    width: 122%;
+  }
+
+  .logoTile {
+    width: 58px;
+    height: 58px;
   }
 }

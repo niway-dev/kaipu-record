@@ -10,7 +10,7 @@
 .inner {
   position: relative;
   z-index: 1;
-  max-width: 980px;
+  max-width: 1120px;
   text-align: center;
 }
 
@@ -30,7 +30,9 @@
  */
 .title {
   margin: 18px 0 0;
-  font-size: var(--kl-fs-h1);
+  /* The chapters' intro, not the page's opening: one step down from the hero so
+   * the whole line fits without wrapping mid-quote. */
+  font-size: var(--kl-fs-h2);
   font-weight: 700;
   line-height: var(--kl-leading-h);
   letter-spacing: var(--kl-tracking-h1);
@@ -39,7 +41,7 @@
 
 .serif {
   font-family: var(--kl-font-serif);
-  font-size: var(--kl-fs-h1-serif);
+  font-size: var(--kl-fs-h2-serif);
   font-style: italic;
   font-weight: 400;
   letter-spacing: -0.01em; /* the serif is already open; it does not want the sans tracking */

@@ -203,9 +203,7 @@
     "downloadWindows": "Windows (coming soon)",
     "footerTagline": "Record. Share. No fuss.",
     "homeEyebrow": "Kaipu, in four moments",
-    "homeHeroLead": "From “look at this”",
     "homeHeroSerif": "Get back to work.",
-    "homeHeroSub": "Some things take three paragraphs to explain and ten seconds to show. Kaipu is for those.",
     "homeChapter1Label": "Record",
     "homeChapter1Sub": "Screen · voice · camera",
     "homeChapter1Title": "Show what happened.",
@@ -287,7 +285,10 @@
     "homeHeroCtaMobile": "Send the link to my Mac",
     "homeHeroMobileNote": "Kaipu is a Mac app. Send yourself the download link and install it later from your Mac.",
     "homeStickyCta": "Get Kaipu for Mac",
-    "homeMenuOpen": "Open menu"
+    "homeMenuOpen": "Open menu",
+    "homeMomentsLead": "From “look at this”",
+    "homeMomentsSerif": "to “got it”.",
+    "homeMomentsSub": "Some things take three paragraphs to explain and ten seconds to show. Kaipu is for those."
   },
   "auth": {
     "welcomeBack": "Welcome Back",

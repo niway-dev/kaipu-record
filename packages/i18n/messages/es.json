@@ -203,9 +203,7 @@
     "downloadWindows": "Windows (próximamente)",
     "footerTagline": "Graba. Comparte. Sin vueltas.",
     "homeEyebrow": "Kaipu, en cuatro momentos",
-    "homeHeroLead": "De “mira esto”",
     "homeHeroSerif": "Vuelve a lo tuyo.",
-    "homeHeroSub": "Hay cosas que toman tres párrafos explicar y diez segundos mostrar. Kaipu es para esas.",
     "homeChapter1Label": "Graba",
     "homeChapter1Sub": "Pantalla · voz · cámara",
     "homeChapter1Title": "Muestra lo que pasó.",
@@ -287,7 +285,10 @@
     "homeHeroCtaMobile": "Envíame el enlace a mi Mac",
     "homeHeroMobileNote": "Kaipu es una app para Mac. Envíate el enlace de descarga e instálala después desde tu Mac.",
     "homeStickyCta": "Consigue Kaipu para Mac",
-    "homeMenuOpen": "Abrir menú"
+    "homeMenuOpen": "Abrir menú",
+    "homeMomentsLead": "De “mira esto”",
+    "homeMomentsSerif": "a “ya entendí”.",
+    "homeMomentsSub": "Hay cosas que toman tres párrafos explicar y diez segundos mostrar. Kaipu es para esas."
   },
   "auth": {
     "welcomeBack": "Bienvenido de nuevo",

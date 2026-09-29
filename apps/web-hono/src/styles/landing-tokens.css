@@ -124,6 +124,16 @@
     background: var(--kl-bg);
     color: var(--kl-tx);
     font-family: var(--kl-font-sans);
+
+    /*
+     * The page is built from windows and floating cards that deliberately hang
+     * past their container. On a phone that overhang becomes a horizontal
+     * scrollbar and the right edge of every section gets cut off. Clipping here
+     * rather than on <body> keeps the containment inside the landing, where it
+     * belongs, and does not break `position: fixed` for the rail and the top bar
+     * the way `overflow: hidden` on an ancestor of the viewport would.
+     */
+    overflow-x: clip;
   }
 
   /*

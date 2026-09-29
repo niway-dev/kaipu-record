@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { useTranslations } from "@kaipu/i18n";
 
 import { cssVars } from "./css-vars";
+import { useReveal } from "./use-reveal";
 import styles from "./chapter.module.css";
 
 interface ChapterProps {
@@ -28,6 +29,8 @@ interface ChapterProps {
  */
 export function Chapter({ id, tint, number, icon: Icon, keyPrefix, children }: ChapterProps) {
   const t = useTranslations("landing");
+  // The mockup arrives as the section does — see use-reveal.
+  const { ref, shown } = useReveal<HTMLElement>();
   // Literal indices, not a mapped range: `Pill${number}` widens to every integer
   // and stops matching a real message key, so a typo would slip through.
   const pills = ([1, 2, 3, 4] as const).map((n) => t(`${keyPrefix}Pill${n}`));
@@ -76,7 +79,7 @@ export function Chapter({ id, tint, number, icon: Icon, keyPrefix, children }: C
           </div>
         </div>
 
-        <figure className={`${styles.stage} kl-reveal`} data-kl-shown="true">
+        <figure ref={ref} className={`${styles.stage} kl-reveal`} data-kl-shown={shown}>
           {children}
         </figure>
       </div>

@@ -53,7 +53,7 @@ export function Rail() {
             aria-current={isActive ? "true" : undefined}
             onClick={() => scrollTo(chapter.slug)}
           >
-            {Icon ? <Icon size={17} aria-hidden /> : <KaipuLogo use="product" size={18} />}
+            {Icon ? <Icon size={17} aria-hidden /> : <KaipuLogo use="product" size={26} />}
             <span className="kl-sr-only">{label}</span>
             {isActive ? (
               <span className={styles.label} aria-hidden>
