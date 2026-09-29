@@ -2,6 +2,7 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { AnnotationLayer } from "./annotation-layer";
 import { ANNOTATION_COLORS } from "./tools";
+import { handlesFor } from "./handles";
 import type { Annotation, BoxAnnotation } from "./scene";
 import type { EditorScene } from "./use-editor-scene";
 import type { AnnotationToolsController } from "./use-annotation-tools";
@@ -188,6 +189,37 @@ describe("AnnotationLayer — text tool", () => {
     fireEvent.keyDown(input, { key: "Enter" });
     expect(scene.removeSelected).toHaveBeenCalled();
     expect(scene.commitAnnotation).not.toHaveBeenCalled();
+  });
+
+  it("shows the resize handles for a selected label that is not being edited", () => {
+    const scene = makeScene([label], "t1");
+    const { container } = renderSizedLayer(scene, makeTools({ tool: "select" }));
+    expect(container.querySelectorAll('[data-testid="resize-handle"]').length).toBeGreaterThan(0);
+  });
+
+  it("hides the resize handles while the label is being edited", () => {
+    // The handles are drawn from the label's STORED geometry, which stops matching
+    // what the user is typing the moment they type it — a box that visibly deforms
+    // around the inline editor. Resizing is impossible mid-edit anyway.
+    const scene = makeScene([label], "t1");
+    const { container, layer } = renderSizedLayer(scene, makeTools({ tool: "select" }));
+    fireEvent.doubleClick(layer, { clientX: 30, clientY: 30 });
+    screen.getByDisplayValue("Hello"); // the inline editor is open
+    expect(container.querySelectorAll('[data-testid="resize-handle"]')).toHaveLength(0);
+  });
+
+  it("does not resize from a hidden handle while the label is being edited", () => {
+    // The handles are gone, so their geometry must not be hit-tested either —
+    // otherwise a corner the user cannot see still grabs and rescales the font.
+    const scene = makeScene([label], "t1");
+    const { layer } = renderSizedLayer(scene, makeTools({ tool: "select" }));
+    fireEvent.doubleClick(layer, { clientX: 30, clientY: 30 });
+    const handle = handlesFor(label, { w: 100, h: 100 })[0];
+    fireEvent.pointerDown(layer, { clientX: handle.x * 100, clientY: handle.y * 100 });
+    fireEvent.pointerMove(layer, { clientX: handle.x * 100 + 20, clientY: handle.y * 100 + 20 });
+    // A resize of a text label rescales its font; nothing may do that mid-edit.
+    const updates = (scene.updateAnnotation as ReturnType<typeof vi.fn>).mock.calls;
+    for (const [, patch] of updates) expect(patch).not.toHaveProperty("fontPx");
   });
 
   it("auto-selects after committing text (switches to the select tool)", () => {
