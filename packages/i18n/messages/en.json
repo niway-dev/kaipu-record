@@ -288,7 +288,9 @@
     "homeMenuOpen": "Open menu",
     "homeMomentsLead": "From “look at this”",
     "homeMomentsSerif": "to “got it”.",
-    "homeMomentsSub": "Some things take three paragraphs to explain and ten seconds to show. Kaipu is for those."
+    "homeMomentsSub": "Some things take three paragraphs to explain and ten seconds to show. Kaipu is for those.",
+    "homeFooterPrivacy": "Privacy",
+    "homeFooterGithub": "GitHub"
   },
   "auth": {
     "welcomeBack": "Welcome Back",

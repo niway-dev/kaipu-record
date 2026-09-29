@@ -1,0 +1,111 @@
+/*
+ * "Your files" sits on --kl-bg-2 with a rule above and below. That small surface
+ * shift is the page changing subject: everything before it is what Kaipu DOES,
+ * this is what you can trust it not to do.
+ */
+.section {
+  position: relative;
+  padding: 110px var(--kl-gutter);
+  border-top: 1px solid var(--kl-bd);
+  border-bottom: 1px solid var(--kl-bd);
+  background: var(--kl-bg-2);
+  overflow: hidden;
+}
+
+.grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  max-width: var(--kl-max-w);
+  margin: 0 auto;
+  align-items: center;
+  gap: 64px;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+}
+
+.grid > * {
+  min-width: 0;
+}
+
+.eyebrow {
+  font-family: var(--kl-font-mono);
+  font-size: 12.5px;
+  letter-spacing: var(--kl-tracking-label);
+  text-transform: uppercase;
+  color: var(--kl-faint);
+}
+
+.title {
+  margin: 18px 0 0;
+  font-size: var(--kl-fs-h2);
+  font-weight: 700;
+  line-height: var(--kl-leading-h);
+  letter-spacing: var(--kl-tracking-h2);
+}
+
+.body {
+  max-width: 470px;
+  margin-top: 24px;
+  font-size: var(--kl-fs-body);
+  line-height: var(--kl-leading-body);
+  color: var(--kl-dim);
+  text-wrap: pretty;
+}
+
+.checks {
+  margin: 28px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 14px;
+  font-size: 16.5px;
+  color: var(--kl-tx);
+}
+
+.tick {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--kl-pink) 18%, transparent);
+  color: var(--kl-pink-tx);
+}
+
+.stage {
+  position: relative;
+  margin: 0;
+  min-width: 0;
+}
+
+.pixels {
+  bottom: 40px;
+  left: 44px;
+}
+
+@media (width < 1080px) {
+  .grid {
+    grid-template-columns: 1fr;
+    gap: 48px;
+  }
+}
+
+@media (width < 980px) {
+  .section {
+    padding: 70px 20px;
+  }
+
+  .body {
+    max-width: none;
+  }
+
+  .pixels {
+    display: none;
+  }
+}

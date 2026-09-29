@@ -9,6 +9,8 @@ import { MockRecord } from "@/components/home/mock-record";
 import { MockCapture } from "@/components/home/mock-capture";
 import { MockEdit } from "@/components/home/mock-edit";
 import { MockFind } from "@/components/home/mock-find";
+import { Files } from "@/components/home/files";
+import { Closing } from "@/components/home/closing";
 import { pageHead, softwareJsonLd } from "@/lib/seo";
 
 export const Route = createFileRoute("/")({
@@ -42,6 +44,8 @@ function HomePage() {
       <Chapter id="find" tint="c4" number="04" icon={Search} keyPrefix="homeChapter4">
         <MockFind />
       </Chapter>
+      <Files />
+      <Closing />
     </HomeShell>
   );
 }

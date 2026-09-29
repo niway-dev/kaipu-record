@@ -1,0 +1,203 @@
+.window {
+  display: grid;
+  overflow: hidden;
+  grid-template-columns: 190px 1fr;
+  border: 1px solid var(--kl-bd-2);
+  border-radius: 12px;
+  background: #0e0e11;
+}
+
+.side {
+  padding: 13px 10px;
+  border-right: 1px solid var(--kl-bd);
+  background: #121216;
+}
+
+.lights {
+  display: flex;
+  gap: 6px;
+  padding: 0 4px 16px;
+}
+
+.light {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+}
+.red {
+  background: #ff5f57;
+}
+.amber {
+  background: #febc2e;
+}
+.green {
+  background: #28c840;
+}
+
+.sideHead {
+  padding: 0 8px 8px;
+  font-size: 11.5px;
+  color: var(--kl-faint);
+}
+
+.sideRow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--kl-dim);
+}
+
+.sideRowActive {
+  background: rgb(255 255 255 / 0.07);
+  color: var(--kl-tx);
+  font-weight: 500;
+}
+
+.list {
+  padding: 13px 0 16px;
+}
+
+.path {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 0 16px 12px;
+}
+
+.pathName {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--kl-tx);
+}
+
+.pathDim {
+  font-family: var(--kl-font-mono);
+  font-size: 11.5px;
+  color: var(--kl-faint);
+}
+
+.head {
+  display: grid;
+  grid-template-columns: 1fr 110px 70px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--kl-bd);
+  border-bottom: 1px solid var(--kl-bd);
+  font-size: 11.5px;
+  color: var(--kl-faint);
+}
+
+.row {
+  display: grid;
+  align-items: center;
+  grid-template-columns: 1fr 110px 70px;
+  padding: 7px 16px;
+  font-size: 13px;
+  color: var(--kl-tx);
+}
+
+/* One row selected, the way a Finder window looks when you just clicked a file. */
+.rowSelected {
+  background: #1e3a5f;
+}
+
+.name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dim {
+  font-family: var(--kl-font-mono);
+  font-size: 11.5px;
+  color: var(--kl-faint);
+}
+
+.rowSelected .dim {
+  color: #cbd5e1;
+}
+
+/* The file-type badges macOS puts on document icons. */
+.chip {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 4px;
+  font-family: var(--kl-font-mono);
+  font-size: 7.5px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.chipMp4 {
+  background: #3b82f6;
+}
+.chipPng {
+  background: #8b5cf6;
+}
+
+.openWith {
+  position: absolute;
+  right: -34px;
+  bottom: -40px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 12px;
+}
+
+.openIcon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 8px;
+  background: rgb(59 130 246 / 0.18);
+  color: #60a5fa;
+}
+
+.openName {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--kl-tx);
+}
+
+.openMeta {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--kl-font-mono);
+  font-size: 11px;
+  color: var(--kl-faint);
+}
+
+@media (width < 980px) {
+  .window {
+    grid-template-columns: 1fr;
+  }
+
+  /* The sidebar is the least load-bearing part of the argument at phone width —
+   * the file list is what proves the point. */
+  .side {
+    display: none;
+  }
+
+  .head,
+  .row {
+    grid-template-columns: 1fr 70px;
+  }
+
+  .head > :nth-child(2),
+  .row > :nth-child(2) {
+    display: none;
+  }
+
+  .openWith {
+    position: static;
+    margin-top: 14px;
+  }
+}

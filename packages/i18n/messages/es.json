@@ -288,7 +288,9 @@
     "homeMenuOpen": "Abrir menú",
     "homeMomentsLead": "De “mira esto”",
     "homeMomentsSerif": "a “ya entendí”.",
-    "homeMomentsSub": "Hay cosas que toman tres párrafos explicar y diez segundos mostrar. Kaipu es para esas."
+    "homeMomentsSub": "Hay cosas que toman tres párrafos explicar y diez segundos mostrar. Kaipu es para esas.",
+    "homeFooterPrivacy": "Privacidad",
+    "homeFooterGithub": "GitHub"
   },
   "auth": {
     "welcomeBack": "Bienvenido de nuevo",

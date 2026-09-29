@@ -1,0 +1,189 @@
+/* The page's last screen: the mark, the promise restated, and the three ways to
+ * get it. No mockup — everything has been shown; what is left is the decision. */
+.closing {
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: 130px var(--kl-gutter) 110px;
+  overflow: hidden;
+  text-align: center;
+}
+
+.glow {
+  background: radial-gradient(52% 50% at 50% 42%, rgb(246 5 92 / 0.22), transparent 70%);
+}
+
+.pixels {
+  top: 90px;
+  left: 60px;
+}
+
+.inner {
+  position: relative;
+  z-index: 1;
+  max-width: 920px;
+}
+
+.logo {
+  margin: 0 auto;
+  box-shadow: 0 26px 60px -20px rgb(246 5 92 / 0.85);
+}
+
+.title {
+  margin: 34px 0 0;
+  font-size: var(--kl-fs-h1);
+  font-weight: 700;
+  line-height: 1.02;
+  letter-spacing: var(--kl-tracking-h1);
+  text-wrap: balance;
+}
+
+.serif {
+  font-family: var(--kl-font-serif);
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  color: var(--kl-pink-tx);
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 40px;
+}
+
+.primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 17px 32px;
+  border-radius: 999px;
+  background: var(--kl-pink);
+  color: #fff;
+  font-size: 16.5px;
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: var(--kl-glow-btn);
+  transition: filter 0.2s ease;
+}
+
+.primary:hover {
+  filter: brightness(1.08);
+}
+
+.secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 17px 30px;
+  border: 1px solid var(--kl-bd-2);
+  border-radius: 999px;
+  color: var(--kl-tx);
+  font-size: 16.5px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: border-color 0.2s ease;
+}
+
+.secondary:hover {
+  border-color: var(--kl-dim);
+}
+
+/* Windows is not a link: it is a promise, and a disabled-looking chip says that
+ * better than a button that goes nowhere. */
+.soon {
+  display: inline-flex;
+  align-items: center;
+  padding: 17px 30px;
+  border: 1px dashed var(--kl-bd-2);
+  border-radius: 999px;
+  color: var(--kl-faint);
+  font-size: 16.5px;
+}
+
+.footnote {
+  margin-top: 26px;
+  font-family: var(--kl-font-mono);
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  color: var(--kl-faint);
+}
+
+.primary:focus-visible,
+.secondary:focus-visible {
+  outline: 2px solid var(--kl-pink);
+  outline-offset: 3px;
+}
+
+/* ---- Footer ------------------------------------------------------------ */
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 26px 40px;
+  border-top: 1px solid var(--kl-bd);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--kl-tx);
+}
+
+.madeIn {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--kl-faint);
+}
+
+.links {
+  display: flex;
+  gap: 24px;
+}
+
+.link {
+  color: var(--kl-dim);
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.link:hover {
+  color: var(--kl-tx);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+@media (width < 980px) {
+  .closing {
+    padding: 80px 20px 70px;
+  }
+
+  .buttons {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .primary,
+  .secondary,
+  .soon {
+    justify-content: center;
+  }
+
+  .pixels {
+    display: none;
+  }
+
+  .footer {
+    flex-direction: column;
+    /* Clears the sticky CTA, which floats over the bottom of the page. */
+    padding: 24px 20px 96px;
+    text-align: center;
+  }
+}
