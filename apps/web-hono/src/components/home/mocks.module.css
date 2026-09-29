@@ -742,3 +742,62 @@
   font-size: 12px;
   color: var(--kl-faint);
 }
+
+/* ---- Responsive --------------------------------------------------------
+ * The floating cards hang off the mockups with negative offsets that only work
+ * when there is empty page beside them. At phone width there is not: they would
+ * sit half off-screen and force a horizontal scrollbar. The checkout's aside
+ * and the library's third column go for the same reason — three cards at 375px
+ * are three unreadable cards.
+ */
+@media (width < 980px) {
+  .split {
+    grid-template-columns: 1fr;
+  }
+
+  .aside {
+    display: none;
+  }
+
+  .recCard,
+  .autoCard,
+  .searchCard {
+    position: static;
+    width: auto;
+    margin-top: 16px;
+  }
+
+  .recBar {
+    position: static;
+    margin-top: 14px;
+    justify-content: center;
+  }
+
+  .toolbar {
+    position: static;
+    margin-top: 14px;
+    justify-content: center;
+  }
+
+  .bubble {
+    right: 12px;
+    bottom: 12px;
+    width: 72px;
+    height: 72px;
+    font-size: 10px;
+  }
+
+  .cards {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .framed {
+    padding: 18px;
+  }
+
+  .hand {
+    top: 34%;
+    right: 4px;
+    font-size: 21px;
+  }
+}

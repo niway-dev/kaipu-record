@@ -191,3 +191,68 @@
   left: 44px;
   font-size: clamp(44px, 5vw, 74px);
 }
+
+/* ---- Responsive -------------------------------------------------------- */
+
+/*
+ * The desktop/mobile pair below is a content swap, not a layout tweak: the page
+ * offers a different action on a phone (see hero.tsx). Kept as CSS so both are
+ * server-rendered.
+ */
+.deskOnly {
+  display: inline-flex;
+}
+
+.mobileOnly {
+  display: none;
+}
+
+.mobileNote {
+  display: none;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 440px;
+  margin-top: 18px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--kl-faint);
+}
+
+@media (width < 980px) {
+  .hero {
+    /* Clears the fixed top bar plus the chapter strip pinned under it. */
+    padding: 128px 20px 90px;
+  }
+
+  .deskOnly {
+    display: none;
+  }
+
+  .mobileOnly {
+    display: inline-flex;
+  }
+
+  .mobileNote.mobileOnly {
+    display: flex;
+  }
+
+  .ctas {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ctaPrimary,
+  .ctaSecondary {
+    justify-content: center;
+  }
+
+  /* Both glyph clusters overlap the headline once it wraps to three lines. */
+  .glyphTimer,
+  .glyphKeys {
+    display: none;
+  }
+
+  .pills {
+    max-width: none;
+  }
+}

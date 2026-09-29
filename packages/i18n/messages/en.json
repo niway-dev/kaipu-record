@@ -283,7 +283,11 @@
     "homeTrayClock": "Mon 10:09",
     "homeTrayStart": "Start recording",
     "homeTrayShot": "Take screenshot",
-    "homeTrayLibrary": "Open library"
+    "homeTrayLibrary": "Open library",
+    "homeHeroCtaMobile": "Send the link to my Mac",
+    "homeHeroMobileNote": "Kaipu is a Mac app. Send yourself the download link and install it later from your Mac.",
+    "homeStickyCta": "Get Kaipu for Mac",
+    "homeMenuOpen": "Open menu"
   },
   "auth": {
     "welcomeBack": "Welcome Back",

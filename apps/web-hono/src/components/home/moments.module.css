@@ -131,3 +131,26 @@
   pointer-events: none;
   user-select: none;
 }
+
+@media (width < 980px) {
+  .hero {
+    min-height: 0;
+    padding: 70px 20px;
+  }
+
+  /* A 2x2 grid of chapter cards, as the mobile design lays them out — four
+   * pills in a row shrink past readability at 375px. */
+  .chips {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .chip {
+    justify-content: flex-start;
+  }
+
+  .glyph {
+    display: none;
+  }
+}

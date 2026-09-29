@@ -283,7 +283,11 @@
     "homeTrayClock": "Lun 10:09",
     "homeTrayStart": "Empezar a grabar",
     "homeTrayShot": "Tomar captura",
-    "homeTrayLibrary": "Abrir biblioteca"
+    "homeTrayLibrary": "Abrir biblioteca",
+    "homeHeroCtaMobile": "Envíame el enlace a mi Mac",
+    "homeHeroMobileNote": "Kaipu es una app para Mac. Envíate el enlace de descarga e instálala después desde tu Mac.",
+    "homeStickyCta": "Consigue Kaipu para Mac",
+    "homeMenuOpen": "Abrir menú"
   },
   "auth": {
     "welcomeBack": "Bienvenido de nuevo",

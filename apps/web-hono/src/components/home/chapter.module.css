@@ -117,3 +117,24 @@
   position: relative;
   margin: 0;
 }
+
+@media (width < 980px) {
+  .chapter {
+    padding: 70px 20px;
+  }
+
+  .body,
+  .pills {
+    max-width: none;
+  }
+
+  /* Two per row reads better than a ragged wrap at phone width. */
+  .pills {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .pill {
+    text-align: center;
+  }
+}

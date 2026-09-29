@@ -1,4 +1,4 @@
-import { Apple, ArrowUpRight, Play } from "lucide-react";
+import { Apple, ArrowUpRight, Mail, Monitor, Play } from "lucide-react";
 import { KaipuLogo } from "@kaipu/brand";
 import { useTranslations } from "@kaipu/i18n";
 
@@ -50,10 +50,21 @@ export function Hero() {
           </div>
 
           <div className={styles.ctas}>
-            <a href={downloadUrls.macArm64} className={styles.ctaPrimary}>
+            {/*
+              Two primaries, swapped by CSS rather than by JS. On a phone the
+              visitor is not on the Mac they would install on, so offering a
+              .dmg is a dead end — the useful action is mailing the link to the
+              machine that can run it. Both are rendered server-side and one is
+              hidden, which avoids the flash a client-side width check gives.
+            */}
+            <a href={downloadUrls.macArm64} className={`${styles.ctaPrimary} ${styles.deskOnly}`}>
               <Apple size={18} aria-hidden />
               {t("homeHeroCtaPrimary")}
               <ArrowUpRight size={17} aria-hidden />
+            </a>
+            <a href="#download" className={`${styles.ctaPrimary} ${styles.mobileOnly}`}>
+              <Mail size={17} aria-hidden />
+              {t("homeHeroCtaMobile")}
             </a>
             <a href="#record" className={styles.ctaSecondary}>
               <Play size={15} aria-hidden />
@@ -61,7 +72,11 @@ export function Hero() {
             </a>
           </div>
 
-          <p className={styles.footnote}>{t("homeHeroFootnote")}</p>
+          <p className={`${styles.footnote} ${styles.deskOnly}`}>{t("homeHeroFootnote")}</p>
+          <p className={`${styles.mobileNote} ${styles.mobileOnly}`}>
+            <Monitor size={14} aria-hidden />
+            {t("homeHeroMobileNote")}
+          </p>
         </div>
 
         <figure style={{ margin: 0 }} aria-label={t("homeAppTitle")}>

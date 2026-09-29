@@ -1,4 +1,4 @@
-import { Apple, Sun } from "lucide-react";
+import { Apple, Menu, Sun } from "lucide-react";
 import { KaipuLogo } from "@kaipu/brand";
 import { useTranslations } from "@kaipu/i18n";
 
@@ -33,6 +33,10 @@ export function TopNav() {
           {tRoadmap("navLabel")}
         </a>
       </nav>
+
+      <button type="button" className={styles.menuBtn} aria-label={t("homeMenuOpen")}>
+        <Menu size={19} aria-hidden />
+      </button>
 
       <div className={styles.right}>
         <button type="button" className={styles.round} aria-label="Theme">

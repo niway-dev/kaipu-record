@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 
+import { ChapterStrip } from "./chapter-strip";
 import { Rail } from "./rail";
+import { StickyCta } from "./sticky-cta";
 import { TopNav } from "./top-nav";
 import "@/styles/landing.css";
 
@@ -18,8 +20,10 @@ export function HomeShell({ children }: { children: ReactNode }) {
   return (
     <div data-kl>
       <TopNav />
+      <ChapterStrip />
       <Rail />
       <main>{children}</main>
+      <StickyCta />
     </div>
   );
 }
