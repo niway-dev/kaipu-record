@@ -1,7 +1,7 @@
 import { NavLink } from "react-router-dom";
 import { Video, Library, Camera, Keyboard, Settings, User, Cloud } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
-import { KaipuMark } from "./kaipu-mark";
+import { KaipuLogo } from "./kaipu-logo";
 import { cx } from "@renderer/ui/cx";
 import styles from "./sidebar.module.css";
 
@@ -35,7 +35,7 @@ export function Sidebar(): React.JSX.Element {
   return (
     <nav className={styles.sidebar}>
       <div className={styles.brand} title="Kaipu Record">
-        <KaipuMark size={24} />
+        <KaipuLogo size={24} />
       </div>
 
       <div className={styles.sections}>
