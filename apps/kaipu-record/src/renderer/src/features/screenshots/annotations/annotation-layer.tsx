@@ -388,6 +388,10 @@ export function AnnotationLayer({
             fontSize: resolveFontPx(editing.size ?? tools.textSize, editing.fontPx),
             lineHeight: TEXT_LINE_HEIGHT,
             whiteSpace: editing.width != null ? "pre-wrap" : "pre",
+            // Match the committed label, which breaks a word too long for the box
+            // (see textLines). Stated rather than left to the UA default, so the
+            // editor and the label cannot drift apart.
+            overflowWrap: "break-word",
             resize: "none",
             overflow: "hidden",
           }}
