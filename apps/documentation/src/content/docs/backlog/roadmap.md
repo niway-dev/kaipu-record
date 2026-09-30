@@ -13,6 +13,35 @@ Status legend: ⬜ todo · 🔨 in progress · ✅ done
 
 ---
 
+## Before the marketing landing merges (2026-09-30) 🟡
+
+PR [#196](https://github.com/csdev19/kaipu-record-monorepo/pull/196) is mergeable and
+green, but it is still a draft because the page makes two claims that are not true.
+Both are small; neither is a layout problem.
+
+1. **The landing promises a feature that was cancelled.** `homeChapter3Pill3` reads
+   "Mute or boost audio" / "Silenciar o subir audio" in both catalogues. Boost was
+   dropped — mute ships alone and stays binary — so the pill must read "Mute audio" /
+   "Silenciar audio". The corrected strings already exist on `design/editor-audio`;
+   merging that branch fixes it, otherwise it is a two-line edit.
+2. **The shortcut glyphs on the landing are hardcoded and wrong.** Five of them:
+   `hero.tsx:21` and `app-window.tsx:84, 101, 106, 111`. They are typed characters, not
+   values read from anywhere, so they drifted from the real defaults without anything
+   failing. The approved fix is `packages/domain/src/constants/shortcuts.ts` holding
+   the _(action, default accelerator)_ pair keyed by platform, plus a
+   `formatAccelerator()` for the web — the full shape is in
+   [open decisions §3](./open-decisions-editor-audio). Two consequences to accept with
+   it: `apps/kaipu-record` gains a dependency on `@kaipu/domain` (pure, no runtime
+   deps), and the Windows column is written but **unvalidated** — there is no Windows
+   build to test it against.
+
+Neither blocks a merge technically. They block it editorially: a marketing page that
+promises a cancelled feature and prints the wrong keyboard shortcut is worse than no
+page. Fix both, then decide whether #196 leaves draft.
+
+**Also open, and not a blocker:** nobody has reviewed the landing in a browser. It was
+measured at five viewports, which verifies geometry, not judgement.
+
 ## Proposed for later analysis
 
 - **🟡 Product growth beyond cloud** (2026-09-27): the owner reviewed the Recordly comparison and decided: no watermark on the free tier ([done on branch](./free-tier-no-watermark)), [Windows recording-only beta](./windows-beta), [AGPL-3.0 open source at launch](/marketing/open-source/), and a roadmap with GIF, keystroke visualizer, captions on Parakeet, export presets, silence cutting and a CLI. See the [prioritized proposal](./product-growth) and [marketing hub](/marketing/). Existing release blockers retain priority.
