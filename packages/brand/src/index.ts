@@ -21,6 +21,8 @@
  */
 
 import logoApp from "../assets/logo-app.png";
+import logoDone from "../assets/logo-done.png";
+import logoPermissions from "../assets/logo-permissions.png";
 import logoPlain from "../assets/logo-plain.png";
 import logoRecord from "../assets/logo-record.png";
 import logoScreenshot from "../assets/logo-screenshot.png";
@@ -35,6 +37,14 @@ export const LOGO_USES = [
   /** State marks — a recording in progress, a capture. */
   "record",
   "screenshot",
+  /**
+   * Moment marks. Not states and not identity: the fox reacting to what just
+   * happened, used once, large, as the hero of a full screen. They exist so a
+   * milestone in the product is told by the mascot rather than by a generic
+   * lucide glyph in a tinted square — which is the part a user remembers.
+   */
+  "permissions",
+  "done",
 ] as const;
 
 export type LogoUse = (typeof LOGO_USES)[number];
@@ -50,6 +60,8 @@ export const LOGO_SRC: Record<LogoUse, string> = {
   micro: logoPlain,
   record: logoRecord,
   screenshot: logoScreenshot,
+  permissions: logoPermissions,
+  done: logoDone,
 };
 
 export { KaipuLogo } from "./logo";
