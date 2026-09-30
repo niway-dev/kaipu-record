@@ -54,12 +54,18 @@ export function Rail() {
             onClick={() => scrollTo(chapter.slug)}
           >
             {Icon ? <Icon size={17} aria-hidden /> : <KaipuLogo use="product" size={26} />}
+            {/*
+              The name is drawn only while this button is hovered or focused.
+              The previous version drew it permanently beside the ACTIVE icon,
+              which put a box reading "Kaipu" on top of the app mockup's
+              "Change" button on the very first screen. On hover it is the
+              reader's own doing, it is transient, and it answers the question
+              for any chapter rather than only the one you are already in.
+            */}
+            <span className={styles.label} aria-hidden>
+              {label}
+            </span>
             <span className="kl-sr-only">{label}</span>
-            {isActive ? (
-              <span className={styles.label} aria-hidden>
-                {label}
-              </span>
-            ) : null}
           </button>
         );
       })}
