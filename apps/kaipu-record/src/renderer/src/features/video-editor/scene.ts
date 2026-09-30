@@ -1,3 +1,4 @@
+import type { MutedRange } from "./audio-edits";
 /**
  * Video-editor scene model. All overlay geometry is normalized 0–1 of the VIDEO frame
  * (same convention as screenshot annotations); all times are seconds. Overlays are
@@ -81,6 +82,8 @@ export interface TextOverlay extends OverlayBase {
 
 export type VideoOverlay = BoxOverlay | ArrowOverlay | TextOverlay;
 
+export type { MutedRange } from "./audio-edits";
+
 export interface VideoScene {
   /** The main track in playback order; uncovered source footage is deleted footage. */
   items: TrackItem[];
@@ -91,6 +94,13 @@ export interface VideoScene {
   redactions: Redaction[];
   /** Detection sensitivity 0–100; regenerates `origin: "auto"` segments. */
   zoomSensitivity: number;
+  /**
+   * The whole recording is silent — the export drops the audio track rather than
+   * writing a silent one. Separate from `mutedRanges` on purpose: see audio-edits.ts.
+   */
+  audioMuted: boolean;
+  /** Source-anchored silenced spans; may overlap, and are never merged on input. */
+  mutedRanges: MutedRange[];
 }
 
 export function newId(): string {
@@ -114,5 +124,7 @@ export function initialScene(durationSeconds: number): VideoScene {
     zoomSegments: [],
     redactions: [],
     zoomSensitivity: ZOOM_DEFAULTS.sensitivity,
+    audioMuted: false,
+    mutedRanges: [],
   };
 }

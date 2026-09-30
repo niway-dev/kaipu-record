@@ -21,6 +21,7 @@ import type {
   ArrowOverlay,
   BoxOverlay,
   ClipItem,
+  MutedRange,
   SlideItem,
   TextOverlay,
   TrackItem,
@@ -116,6 +117,24 @@ export function parseSession(json: string): VideoEditSession | null {
     }
   }
 
+  // Audio edits are additive too: a session saved before muting existed has
+  // neither key and loads as "nothing muted" rather than failing.
+  let audioMuted = false;
+  if (sceneRaw["audioMuted"] !== undefined) {
+    if (typeof sceneRaw["audioMuted"] !== "boolean") return null;
+    audioMuted = sceneRaw["audioMuted"];
+  }
+
+  const mutedRanges: MutedRange[] = [];
+  if (sceneRaw["mutedRanges"] !== undefined) {
+    if (!Array.isArray(sceneRaw["mutedRanges"])) return null;
+    for (const raw of sceneRaw["mutedRanges"] as unknown[]) {
+      const validated = validateMutedRange(raw);
+      if (validated === null) return null;
+      mutedRanges.push(validated);
+    }
+  }
+
   let zoomSensitivity: number = ZOOM_DEFAULTS.sensitivity;
   if (sceneRaw["zoomSensitivity"] !== undefined) {
     if (!isNum(sceneRaw["zoomSensitivity"])) return null;
@@ -124,12 +143,27 @@ export function parseSession(json: string): VideoEditSession | null {
 
   return {
     version: 1,
-    scene: { items, overlays, zoomSegments, redactions, zoomSensitivity },
+    scene: { items, overlays, zoomSegments, redactions, zoomSensitivity, audioMuted, mutedRanges },
     hasZoomData,
   };
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
+
+/**
+ * A muted range is only trusted when it names a real, forward span. A zero-width
+ * or reversed one would silence nothing while still rendering a handle on the
+ * timeline, so it is rejected rather than repaired.
+ */
+function validateMutedRange(raw: unknown): MutedRange | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw as Record<string, unknown>;
+  if (!isStr(r["id"]) || !isNum(r["sourceStart"]) || !isNum(r["sourceEnd"])) return null;
+  const sourceStart = r["sourceStart"] as number;
+  const sourceEnd = r["sourceEnd"] as number;
+  if (sourceStart < 0 || sourceEnd <= sourceStart) return null;
+  return { id: r["id"] as string, sourceStart, sourceEnd };
+}
 
 function isNum(v: unknown): v is number {
   return typeof v === "number" && isFinite(v);

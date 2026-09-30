@@ -396,3 +396,43 @@ describe("parseSession — v2 fields", () => {
     expect(parseSession(json)).toBeNull();
   });
 });
+
+describe("audio edits", () => {
+  const withScene = (scene: Record<string, unknown>) =>
+    parseSession(
+      JSON.stringify({ version: 1, scene: { items: [CLIP_ITEM], overlays: [], ...scene } }),
+    );
+
+  it("loads a session saved before muting existed as nothing muted", () => {
+    // The whole point of additive fields: an old .edit.json must still open.
+    const parsed = withScene({});
+    expect(parsed?.scene.audioMuted).toBe(false);
+    expect(parsed?.scene.mutedRanges).toEqual([]);
+  });
+
+  it("keeps a stored whole-video mute", () => {
+    expect(withScene({ audioMuted: true })?.scene.audioMuted).toBe(true);
+  });
+
+  it("keeps stored ranges, overlaps included", () => {
+    const ranges = [
+      { id: "a", sourceStart: 10, sourceEnd: 15 },
+      { id: "b", sourceStart: 12, sourceEnd: 20 },
+    ];
+    expect(withScene({ mutedRanges: ranges })?.scene.mutedRanges).toEqual(ranges);
+  });
+
+  it.each([
+    ["a reversed range", { id: "a", sourceStart: 15, sourceEnd: 10 }],
+    ["a zero-width range", { id: "a", sourceStart: 10, sourceEnd: 10 }],
+    ["a negative start", { id: "a", sourceStart: -1, sourceEnd: 5 }],
+    ["a range with no id", { sourceStart: 1, sourceEnd: 5 }],
+    ["a non-numeric bound", { id: "a", sourceStart: "1", sourceEnd: 5 }],
+  ])("rejects %s rather than repairing it", (_label, range) => {
+    expect(withScene({ mutedRanges: [range] })).toBeNull();
+  });
+
+  it("rejects a non-boolean audioMuted", () => {
+    expect(withScene({ audioMuted: "yes" })).toBeNull();
+  });
+});

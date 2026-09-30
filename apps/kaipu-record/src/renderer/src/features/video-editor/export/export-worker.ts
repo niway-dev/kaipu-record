@@ -62,6 +62,7 @@ import {
 } from "mediabunny";
 import type { StreamTargetChunk } from "mediabunny";
 import type { ExportStartMessage, ExportWorkerMessage } from "./export-messages";
+import { silencedSpansFor } from "../audio-edits";
 import { rebaseVideoTimestamp } from "./rebase-timestamp";
 import { applyRedactions, planClipFrame, type Ctx2D, type ScratchCanvas } from "./compose-frame";
 
@@ -147,9 +148,14 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
   // zero-duration or duplicate frames in the encoder.
   out.addVideoTrack(videoSource);
 
-  const audioSource = audioTrack
-    ? new AudioSampleSource({ codec: "aac", bitrate: QUALITY_HIGH })
-    : null;
+  // A whole-video mute produces a file with NO audio track, not a silent one:
+  // smaller, and no dead volume control in the player. This is the same branch a
+  // screen-only recording already takes, so nothing downstream is new.
+  const audioMuted = plan.audio.audioMuted;
+  const audioSource =
+    audioTrack && !audioMuted
+      ? new AudioSampleSource({ codec: "aac", bitrate: QUALITY_HIGH })
+      : null;
   if (audioSource) out.addAudioTrack(audioSource);
 
   // Sample rate / channel count for synthesized slide silence — derived from
@@ -327,15 +333,25 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
       let audioCursor = 0;
       for (const segment of plan.segments) {
         if (segment.kind === "clip") {
+          // Muted spans of THIS segment, clipped and merged. Walking them in
+          // order lets each decoded sample be zeroed in place rather than
+          // dropped: dropping would shorten the audio and drift it out of sync
+          // with the video, which is silence's whole job to avoid.
+          const silenced = silencedSpansFor(segment.sourceStart, segment.sourceEnd, plan.audio);
           const sink = new AudioSampleSink(audioTrack);
           for await (const sample of sink.samples(segment.sourceStart, segment.sourceEnd)) {
             // Clip each decoded sample to the segment's exact source range — see the
             // "Audio trimming" header comment for why this is needed.
             const trimmed = trimAudioSample(sample, segment.sourceStart, segment.sourceEnd);
             if (trimmed) {
-              trimmed.setTimestamp(audioCursor);
-              audioCursor += trimmed.duration;
-              await audioSource.add(trimmed);
+              const start = trimmed.timestamp;
+              const end = start + trimmed.duration;
+              const muted = silenced.some((span) => start < span.end && end > span.start);
+              const emitted = muted ? zeroedLike(trimmed) : trimmed;
+              emitted.setTimestamp(audioCursor);
+              audioCursor += emitted.duration;
+              await audioSource.add(emitted);
+              if (emitted !== trimmed) emitted.close();
               if (trimmed !== sample) trimmed.close();
             }
             sample.close();
@@ -392,6 +408,23 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
  * common case for interior samples), a new trimmed `AudioSample` when it does
  * (the caller closes it), or `null` if trimming leaves nothing to encode.
  */
+/**
+ * A silent copy of a sample: same layout, same duration, zeroed data.
+ *
+ * A copy rather than a mutation because `AudioSample` owns its backing buffer
+ * and the caller still has to close the original. Same rate and channel count,
+ * so the encoder sees one continuous stream and not a format change mid-file.
+ */
+function zeroedLike(sample: AudioSample): AudioSample {
+  return new AudioSample({
+    data: new Float32Array(sample.numberOfFrames * sample.numberOfChannels),
+    format: "f32",
+    numberOfChannels: sample.numberOfChannels,
+    sampleRate: sample.sampleRate,
+    timestamp: sample.timestamp,
+  });
+}
+
 function trimAudioSample(
   sample: AudioSample,
   rangeStart: number,

@@ -107,3 +107,27 @@ describe("buildExportPlan", () => {
     expect(plan.hasZoom).toBe(true);
   });
 });
+
+describe("audio edits reach the export plan", () => {
+  it("carries nothing muted for a fresh scene", () => {
+    const plan = buildExportPlan(initialScene(30));
+    expect(plan.audio).toEqual({ audioMuted: false, mutedRanges: [] });
+  });
+
+  it("carries a whole-video mute", () => {
+    const scene = { ...initialScene(30), audioMuted: true };
+    expect(buildExportPlan(scene).audio.audioMuted).toBe(true);
+  });
+
+  it("keeps a range that sits entirely in deleted footage", () => {
+    // Unlike redactions, ranges are not filtered by visibility: they are clipped
+    // per segment at write time, so one inside a cut costs nothing and comes
+    // back if the cut is undone.
+    const scene = {
+      ...initialScene(30),
+      items: [clip("a", 0, 5), clip("b", 20, 30)],
+      mutedRanges: [{ id: "m", sourceStart: 10, sourceEnd: 15 }],
+    };
+    expect(buildExportPlan(scene).audio.mutedRanges).toHaveLength(1);
+  });
+});
