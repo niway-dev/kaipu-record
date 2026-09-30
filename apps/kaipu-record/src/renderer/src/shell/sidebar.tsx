@@ -35,7 +35,7 @@ export function Sidebar(): React.JSX.Element {
   return (
     <nav className={styles.sidebar}>
       <div className={styles.brand} title="Kaipu Record">
-        <KaipuLogo use="product" size={24} />
+        <KaipuLogo use="product" size={40} />
       </div>
 
       <div className={styles.sections}>

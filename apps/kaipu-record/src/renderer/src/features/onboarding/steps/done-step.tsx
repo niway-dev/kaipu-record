@@ -1,5 +1,5 @@
-import { Check } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
+import { KaipuLogo } from "@kaipu/brand";
 import { useShortcutLabels } from "@renderer/features/shortcuts/use-shortcut-labels";
 import styles from "./done-step.module.css";
 
@@ -11,8 +11,8 @@ export function DoneStep(): React.JSX.Element {
   const shortcuts = useShortcutLabels();
   return (
     <div className={styles.step}>
-      <span className={styles.check}>
-        <Check size={34} strokeWidth={2.4} />
+      <span className={styles.mark}>
+        <KaipuLogo use="done" size={96} />
       </span>
       <h1 className={styles.title}>{t("doneTitle")}</h1>
       <p className={styles.subtitle}>

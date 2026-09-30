@@ -55,7 +55,7 @@ export function WelcomeStep(): React.JSX.Element {
   return (
     <div className={styles.step}>
       <div className={styles.mark}>
-        <KaipuLogo use="app" size={50} />
+        <KaipuLogo use="app" size={96} />
       </div>
       <h1 className={styles.title}>{t("welcomeTitle")}</h1>
       <p className={styles.subtitle}>{t("welcomeSubtitle")}</p>
