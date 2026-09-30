@@ -127,8 +127,16 @@
   color: var(--kl-dim);
 }
 
+/*
+ * A column, not two inline spans: the name and the meta line are stacked in the
+ * design, and as inline spans they ran together into "DisplayPRIMARY · 2560x1600"
+ * with the meta's margin-top silently doing nothing.
+ */
 .displayText {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
 }
 
 .displayName {
@@ -138,7 +146,7 @@
 }
 
 .displayMeta {
-  margin-top: 3px;
+  margin-top: 4px;
   font-family: var(--kl-font-mono);
   font-size: 11px;
   letter-spacing: 0.06em;

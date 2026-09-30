@@ -4,10 +4,34 @@
   overflow: hidden;
 }
 
+/*
+ * The hero owns the first screen. Without this the section is only as tall as
+ * its content, so on a tall display the next section peeks above the fold and
+ * the page opens on two things at once. `svh` rather than `vh` so a mobile
+ * browser's collapsing toolbar does not make it jump.
+ *
+ * Only in the two-column regime: below 1080px the page is a single column that
+ * is meant to scroll, and pinning a viewport height there would strand the
+ * mockup off-screen. `min-height`, never `height` — a short viewport still gets
+ * a hero as tall as its content needs.
+ */
+@media (width >= 1080px) {
+  .hero {
+    display: flex;
+    min-height: 100svh;
+    flex-direction: column;
+    justify-content: center;
+  }
+}
+
 .grid {
   position: relative;
   z-index: 1;
   display: grid;
+  /* Explicit, because the hero is a flex column: `margin: 0 auto` on a flex item
+   * cancels the default stretch and collapses it to fit-content, which pulled
+   * the whole left column inward off the page's grid. */
+  width: 100%;
   max-width: var(--kl-max-w);
   margin: 0 auto;
   align-items: center;
@@ -30,8 +54,22 @@
   box-shadow: 0 18px 44px -18px rgb(246 5 92 / 0.9);
 }
 
+/* Mark + label + badge on one row (see hero.tsx). */
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.identityText {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
 .eyebrow {
-  margin-top: 22px;
+  margin: 0;
   font-family: var(--kl-font-mono);
   font-size: 12.5px;
   font-weight: 500;
@@ -44,7 +82,7 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  margin-top: 12px;
+  margin: 0;
   padding: 8px 16px;
   border: 1px solid var(--kl-bd-2);
   border-radius: 999px;
@@ -58,7 +96,7 @@
 }
 
 .title {
-  margin: 20px 0 0;
+  margin: 30px 0 0;
   font-size: var(--kl-fs-h1);
   font-weight: 700;
   line-height: var(--kl-leading-h);
@@ -273,5 +311,139 @@
   .logoTile {
     width: 58px;
     height: 58px;
+  }
+}
+
+/* ---- Viewport steps: xl · l · m · s ------------------------------------
+ *
+ * Once the headline caps at 112px the hero is a FIXED ~990px tall, whatever the
+ * width. That is why the same page reads well on a 27" external (1440px of
+ * height, 450px to spare) and breaks on a MacBook Pro 14 (950px, 40px short):
+ * the mockup and the footnote fall below the fold. The variable is viewport
+ * HEIGHT, so that is what these steps key on — a width ladder alone would not
+ * have caught it, because the failing screen is wide.
+ *
+ * Scoped to `width >= 1080px`, the two-column regime. Below that the page is
+ * already a single column that is meant to scroll, and the existing breakpoints
+ * own it.
+ *
+ * Each step shortens the same four things in proportion: the section's padding,
+ * the headline, the mark, and the rhythm between blocks. Nothing is removed —
+ * a short viewport gets the whole hero, just tighter.
+ */
+
+/* l — 13"/14" laptops at full height, and any window shorter than a desktop. */
+@media (width >= 1080px) and (height < 1040px) {
+  .hero {
+    padding: 120px var(--kl-gutter) 92px;
+  }
+
+  .logoTile {
+    width: 64px;
+    height: 64px;
+  }
+
+  .title {
+    margin-top: 26px;
+    font-size: clamp(56px, 7.2vw, 96px);
+  }
+
+  .serif {
+    font-size: clamp(34px, 4.3vw, 54px);
+  }
+
+  .body {
+    margin-top: 22px;
+  }
+
+  .pills {
+    margin-top: 22px;
+  }
+
+  .ctas {
+    margin-top: 28px;
+  }
+
+  .footnote {
+    margin-top: 18px;
+  }
+}
+
+/* m — 13" laptops (1440x900), or a browser window with toolbars stacked up. */
+@media (width >= 1080px) and (height < 940px) {
+  .hero {
+    padding: 104px var(--kl-gutter) 76px;
+  }
+
+  .logoTile {
+    width: 60px;
+    height: 60px;
+  }
+
+  .title {
+    margin-top: 22px;
+    font-size: clamp(52px, 6.4vw, 86px);
+  }
+
+  .serif {
+    font-size: clamp(32px, 3.9vw, 48px);
+  }
+
+  .body {
+    margin-top: 20px;
+  }
+
+  .pills {
+    margin-top: 20px;
+  }
+
+  .ctas {
+    margin-top: 24px;
+  }
+
+  .footnote {
+    margin-top: 16px;
+  }
+}
+
+/* s — 1280x800 and anything shorter still running the two-column layout. */
+@media (width >= 1080px) and (height < 860px) {
+  .hero {
+    padding: 88px var(--kl-gutter) 62px;
+  }
+
+  .identity {
+    gap: 14px;
+  }
+
+  .logoTile {
+    width: 54px;
+    height: 54px;
+  }
+
+  .title {
+    margin-top: 18px;
+    font-size: clamp(48px, 5.6vw, 74px);
+  }
+
+  .serif {
+    margin-top: 2px;
+    font-size: clamp(30px, 3.4vw, 43px);
+  }
+
+  .body {
+    margin-top: 16px;
+  }
+
+  .pills {
+    margin-top: 16px;
+  }
+
+  .ctas {
+    margin-top: 22px;
+  }
+
+  .footnote {
+    margin-top: 14px;
   }
 }

@@ -26,13 +26,23 @@ export function Hero() {
 
       <div className={styles.grid}>
         <div>
-          <KaipuLogo use="app" size={72} className={styles.logoTile} />
-          <p className={styles.eyebrow}>{t("homeHeroEyebrow")}</p>
-          <p className={styles.badge}>
-            <Apple size={14} aria-hidden />
-            <span className={styles.badgeStrong}>{t("homeHeroBadgeMac")}</span> ·{" "}
-            {t("homeHeroBadgeRest")}
-          </p>
+          {/*
+            Mark, label and platform badge sit on ONE row, as in the design. As
+            three stacked blocks they cost ~70px of the hero's vertical budget
+            for nothing — and the hero's budget is the thing that runs out on a
+            laptop (see the viewport steps in hero.module.css).
+          */}
+          <div className={styles.identity}>
+            <KaipuLogo use="app" size={72} className={styles.logoTile} />
+            <div className={styles.identityText}>
+              <p className={styles.eyebrow}>{t("homeHeroEyebrow")}</p>
+              <p className={styles.badge}>
+                <Apple size={14} aria-hidden />
+                <span className={styles.badgeStrong}>{t("homeHeroBadgeMac")}</span> ·{" "}
+                {t("homeHeroBadgeRest")}
+              </p>
+            </div>
+          </div>
 
           <h1 className={styles.title}>
             {t("homeHeroTitle")}

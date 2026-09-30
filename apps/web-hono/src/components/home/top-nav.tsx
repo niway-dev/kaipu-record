@@ -17,43 +17,51 @@ export function TopNav() {
 
   return (
     <header className={styles.nav}>
-      <a href="#top" className={styles.brand}>
-        <KaipuLogo use="product" size={30} />
-        {t("navBrand")}
-      </a>
-
-      <nav className={styles.center}>
-        <a href="#top" className={`${styles.tab} ${styles.tabActive}`}>
-          {t("homeNavProduct")}
+      {/*
+        The bar is full-bleed (it spans the viewport and carries the blur), but
+        its CONTENTS sit in the same container as the page below, so the mark on
+        the left and the Download button on the right land on the page's own
+        left and right edges instead of on the viewport's.
+      */}
+      <div className={styles.inner}>
+        <a href="#top" className={styles.brand}>
+          <KaipuLogo use="product" size={30} />
+          {t("navBrand")}
         </a>
-        <a href="#files" className={styles.tab}>
-          {t("homeNavYourFiles")}
-        </a>
-        <a href="/roadmap" className={styles.tab}>
-          {tRoadmap("navLabel")}
-        </a>
-      </nav>
 
-      <button type="button" className={styles.menuBtn} aria-label={t("homeMenuOpen")}>
-        <Menu size={19} aria-hidden />
-      </button>
+        <nav className={styles.center}>
+          <a href="#top" className={`${styles.tab} ${styles.tabActive}`}>
+            {t("homeNavProduct")}
+          </a>
+          <a href="#files" className={styles.tab}>
+            {t("homeNavYourFiles")}
+          </a>
+          <a href="/roadmap" className={styles.tab}>
+            {tRoadmap("navLabel")}
+          </a>
+        </nav>
 
-      <div className={styles.right}>
-        <button type="button" className={styles.round} aria-label="Theme">
-          <Sun size={17} aria-hidden />
+        <button type="button" className={styles.menuBtn} aria-label={t("homeMenuOpen")}>
+          <Menu size={19} aria-hidden />
         </button>
-        <div className={styles.locale}>
-          <button type="button" className={`${styles.localeOption} ${styles.localeActive}`}>
-            EN
+
+        <div className={styles.right}>
+          <button type="button" className={styles.round} aria-label="Theme">
+            <Sun size={17} aria-hidden />
           </button>
-          <button type="button" className={styles.localeOption}>
-            ES
-          </button>
+          <div className={styles.locale}>
+            <button type="button" className={`${styles.localeOption} ${styles.localeActive}`}>
+              EN
+            </button>
+            <button type="button" className={styles.localeOption}>
+              ES
+            </button>
+          </div>
+          <a href={downloadUrls.macArm64} className={styles.download}>
+            <Apple size={16} aria-hidden />
+            {t("navDownload")}
+          </a>
         </div>
-        <a href={downloadUrls.macArm64} className={styles.download}>
-          <Apple size={16} aria-hidden />
-          {t("navDownload")}
-        </a>
       </div>
     </header>
   );

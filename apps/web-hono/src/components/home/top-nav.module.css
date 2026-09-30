@@ -3,11 +3,27 @@
   top: 0;
   left: 0;
   z-index: 50;
+  width: 100%;
+  padding: 16px 0;
+}
+
+/*
+ * Same container as every section of the page (--kl-max-w + the gutter), so the
+ * brand aligns with the hero's logo and the Download button with the right edge
+ * of the content. Without this the bar used its own 28px gutter and drifted out
+ * of the grid as soon as the viewport grew past the container.
+ */
+.inner {
   display: flex;
   width: 100%;
+  /* The sections put the gutter OUTSIDE their 1280 container (padding on the
+   * section, max-width on the inner grid), so the bar has to widen by the same
+   * amount for its content box to land on the identical edges. */
+  max-width: calc(var(--kl-max-w) + 2 * var(--kl-gutter));
+  margin: 0 auto;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 28px;
+  padding: 0 var(--kl-gutter);
 }
 
 .brand {
