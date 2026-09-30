@@ -5,6 +5,8 @@ description: "The home page rebuilt from the owner's design: its own token layer
 
 # Marketing landing — the four-moments home
 
+> **Review update (2026-09-30):** [draft PR #196](https://github.com/csdev19/kaipu-record-monorepo/pull/196) now exists and includes `main` integration. The earlier no-PR/push-blocked notes below describe prior runs, not the current review status. Read the [home audit](/marketing/home-conversion-audit/), [EN/ES proposals](/marketing/home-copy-review/), and [execution plan](/plans/2026-09-30-home-conversion-review/) before implementation. Documenting a finding does not fix it. Historical E2E failures are not a current failure result; use the PR's latest check evidence.
+
 > **Status: 🟡 In progress** — branch `feat/marketing-landing`, no PR yet.
 > The page is complete (hero, moments intro, chapters 01–04 with their mockups,
 > "Your files", closing CTA, footer) and `bun run verify` passes. What is left is

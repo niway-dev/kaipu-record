@@ -1,5 +1,17 @@
 # Session handoff
 
+## Latest update — home audit documentation (2026-09-30)
+
+This update supersedes the old Next instructions only for the current documentation task; the decisions and related editor-audio work below remain context.
+
+- Owner request: "quiero que todo esto que recomiendas lo pongas en documentos y generes un PR directamente para que podamos revisar esos cambios en otra maquina".
+- Work: documented the conversion/i18n/Kai audit, proposed EN/ES copy, and ordered implementation/acceptance steps. No runtime copy or UI fix is included in this documentation pass.
+- Review in draft PR #196 on `feat/marketing-landing`. Start at `apps/documentation/src/content/docs/marketing/home-conversion-audit.md`, then `home-copy-review.md`, then `plans/2026-09-30-home-conversion-review.md`.
+- Updated facts: optional watermark is already integrated; landing catalogs now contain 106 keys each with no missing/empty values; site-level SEO was aligned by the merge. Public downloaded-release behavior remains unverified here. The origin component exists but is not rendered by the new home.
+- Next implementation: H04/H05 (truthful audio claims and approved shortcuts), coordinated with the editor-audio branch; the owner retains theme/locale work. Then translation coverage, conversion proof/FAQ, and restrained use of the existing fox Kai.
+- The previous knot direction is historical exploration; reconcile visual-status docs with the implemented fox without changing KAY + khiPU or the coined-name qualification.
+- Documentation-session checks: `bun run build` in `apps/documentation` exited 0 with 234 pages (duplicate-content-ID and missing-sitemap-site warnings); `bun run test` in `packages/i18n` exited 0 with 3 files / 13 tests. Push-hook evidence is recorded in the PR after it runs. Historical failures below must not be presented as current results or dismissed as contention without reproducing them.
+
 ## Goal
 
 Finish the marketing landing and get its PR mergeable, integrate the free-tier

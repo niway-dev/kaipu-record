@@ -12,17 +12,20 @@ These are working hypotheses and recommendations, not validated market findings 
 
 **Brand authority:** [Kaipu brand identity](/marketing/brand-identity/) preserves the creator's adopted meaning. Read it before interpreting the name or changing brand assets. [Brand and website rollout](/plans/2026-09-27-brand-and-website-rollout/) is the execution sequence, including intake of the creator's new logo and notch-state art.
 
-| Read                                                            | Purpose                                                                                                                    |
-| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| [Positioning and Recordly](/marketing/positioning/)             | Audience, differentiation, competitive evidence, landing narrative, and pricing tension                                    |
-| [Brand and Kai](/marketing/brand-and-kai/)                      | Keep Kaipu and pink; explore a warmer experience and a supporting mascot                                                   |
-| [AI and automation feasibility](/marketing/ai-and-automation/)  | Captions, audio-based summaries, CLI, and agent-driven editing; current technical constraints                              |
-| [Messaging playbook](/marketing/messaging-playbook/)            | The one message and the moves on the landing, in the product and in content that prove it; benchmarks and comparison pages |
-| [Website concept and copy](/marketing/website-concept/)         | Four-chapter visual direction, implemented EN/ES copy, release-aware messaging, media shot list, and production sequence   |
-| [Open source under AGPL-3.0](/marketing/open-source/)           | Why the whole monorepo opens, the pre-open checklist, and the contribution policy                                          |
-| [Product growth roadmap](/backlog/product-growth/)              | Priorities, smallest useful experiments, dependencies, and success criteria                                                |
-| [Free tier without watermark](/backlog/free-tier-no-watermark/) | Decision and implementation: no watermark on the free app, opt-in badge                                                    |
-| [Windows beta](/backlog/windows-beta/)                          | Ship recording on Windows now, screenshots later                                                                           |
+| Read                                                                   | Purpose                                                                                                                    |
+| ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| [Positioning and Recordly](/marketing/positioning/)                    | Audience, differentiation, competitive evidence, landing narrative, and pricing tension                                    |
+| [Brand and Kai](/marketing/brand-and-kai/)                             | Keep Kaipu and pink; explore a warmer experience and a supporting mascot                                                   |
+| [AI and automation feasibility](/marketing/ai-and-automation/)         | Captions, audio-based summaries, CLI, and agent-driven editing; current technical constraints                              |
+| [Messaging playbook](/marketing/messaging-playbook/)                   | The one message and the moves on the landing, in the product and in content that prove it; benchmarks and comparison pages |
+| [Website concept and copy](/marketing/website-concept/)                | Four-chapter visual direction, implemented EN/ES copy, release-aware messaging, media shot list, and production sequence   |
+| [Home conversion audit](/marketing/home-conversion-audit/)             | Prioritized findings from the new home, updated after the main merge; runtime issues remain open                           |
+| [Home EN/ES copy review](/marketing/home-copy-review/)                 | Proposed key-level replacements, mockup translation inventory, FAQ, and Kai introduction                                   |
+| [Home audit execution plan](/plans/2026-09-30-home-conversion-review/) | Review order, implementation slices, and acceptance checks for another machine                                             |
+| [Open source under AGPL-3.0](/marketing/open-source/)                  | Why the whole monorepo opens, the pre-open checklist, and the contribution policy                                          |
+| [Product growth roadmap](/backlog/product-growth/)                     | Priorities, smallest useful experiments, dependencies, and success criteria                                                |
+| [Free tier without watermark](/backlog/free-tier-no-watermark/)        | Decision and implementation: no watermark on the free app, opt-in badge                                                    |
+| [Windows beta](/backlog/windows-beta/)                                 | Ship recording on Windows now, screenshots later                                                                           |
 
 ## Decisions taken on 2026-09-27
 

@@ -40,6 +40,8 @@ Approved Spanish brand copy:
 
 ## Where this identity is published
 
+**Current home status (2026-09-30):** the redesigned home does not currently mount `BrandOrigin` or the old footer signature. The component and EN/ES keys are preserved, but the public-surface row below describes the earlier home. Restoring the visible connection and reconciling the implemented fox with the earlier knot exploration is tracked in [home audit H12](/marketing/home-conversion-audit/) and [execution slice 4](/plans/2026-09-30-home-conversion-review/#slice-4--kai-and-the-brand-origin-connection). The adopted meaning is unchanged.
+
 The meaning no longer depends on a chat transcript or a file outside the repository. It is
 carried in three places, each with a different job:
 
