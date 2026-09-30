@@ -136,6 +136,7 @@ window.electronAPI = {
   captureScreenshot: async () => null,
   revealAfterCapture: () => {},
   setEditorWindowMode: () => {},
+  setOnboardingWindowMode: () => {},
   copyImageToClipboard: async () => {},
   copyScreenshotById: async () => {},
   readScreenshotBytes: async () => new ArrayBuffer(0),

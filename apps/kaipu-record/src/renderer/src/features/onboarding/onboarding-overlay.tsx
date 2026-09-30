@@ -35,6 +35,14 @@ export function OnboardingOverlay({ onClose }: OnboardingOverlayProps): React.JS
   const { status, denied, request, openSettings } = usePermissions();
   const accessibility = useAccessibility();
 
+  // The takeover cannot reflow below a point (see ONBOARDING_MIN_HEIGHT in main):
+  // raise the window's minimum while it is up, and release it on unmount so the
+  // rest of the app keeps its normal floor.
+  useEffect(() => {
+    window.electronAPI.setOnboardingWindowMode(true);
+    return () => window.electronAPI.setOnboardingWindowMode(false);
+  }, []);
+
   const activeStepId = STEPS[step];
   const canAdvance = activeStepId !== "permissions" || requiredPermissionsMet(status);
   const isLastStep = step === STEPS.length - 1;
