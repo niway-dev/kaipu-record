@@ -51,6 +51,7 @@ describe("mergeSettings", () => {
         showBarInRecording: true,
         screenshotSave: "manual",
         showBrandBadge: true,
+        screenshotCopy: "manual",
         shortcuts,
         deviceId: "stored-id",
         uploadMode: "manual",
@@ -64,6 +65,7 @@ describe("mergeSettings", () => {
       showBarInRecording: true,
       screenshotSave: "manual",
       showBrandBadge: true,
+      screenshotCopy: "manual",
       shortcuts,
       deviceId: "stored-id",
       uploadMode: "manual",
@@ -197,5 +199,29 @@ describe("showBrandBadge", () => {
   it("keeps a stored boolean and coerces anything else to off", () => {
     expect(mergeSettings({ showBrandBadge: true }).showBrandBadge).toBe(true);
     expect(mergeSettings({ showBrandBadge: "yes" as never }).showBrandBadge).toBe(false);
+  });
+});
+
+describe("screenshotCopy", () => {
+  it("defaults to auto", () => {
+    expect(DEFAULT_SETTINGS.screenshotCopy).toBe("auto");
+    expect(mergeSettings(null).screenshotCopy).toBe("auto");
+  });
+
+  it("keeps a valid stored mode and coerces anything else to the default", () => {
+    expect(mergeSettings({ screenshotCopy: "manual" }).screenshotCopy).toBe("manual");
+    expect(mergeSettings({ screenshotCopy: "always" as never }).screenshotCopy).toBe("auto");
+    expect(mergeSettings({ screenshotCopy: 3 as never }).screenshotCopy).toBe("auto");
+  });
+
+  it("is independent of screenshotSave — every combination survives a merge", () => {
+    expect(mergeSettings({ screenshotSave: "manual", screenshotCopy: "auto" })).toMatchObject({
+      screenshotSave: "manual",
+      screenshotCopy: "auto",
+    });
+    expect(mergeSettings({ screenshotSave: "auto", screenshotCopy: "manual" })).toMatchObject({
+      screenshotSave: "auto",
+      screenshotCopy: "manual",
+    });
   });
 });

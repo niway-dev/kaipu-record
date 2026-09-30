@@ -81,6 +81,7 @@ export default defineConfig({
             { slug: "backlog/live-recording-controls" },
             { slug: "backlog/settings-updates" },
             { slug: "backlog/settings-screenshots" },
+            { slug: "backlog/settings-screenshot-clipboard" },
             { slug: "backlog/video-editor-mute" },
             { slug: "backlog/editor-title-input" },
             { slug: "backlog/library-lineage" },

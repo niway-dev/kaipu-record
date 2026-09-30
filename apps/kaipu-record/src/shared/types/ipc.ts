@@ -111,6 +111,14 @@ export type UploadMode = (typeof UPLOAD_MODES)[number];
 export const SCREENSHOT_SAVE_MODES = ["auto", "manual"] as const;
 export type ScreenshotSaveMode = (typeof SCREENSHOT_SAVE_MODES)[number];
 
+/**
+ * Whether a fresh screenshot lands on the system clipboard when its editor opens,
+ * or only when the user clicks Copy. Independent of {@link SCREENSHOT_SAVE_MODES}:
+ * all four combinations are valid, and the editor honours each one.
+ */
+export const SCREENSHOT_COPY_MODES = ["auto", "manual"] as const;
+export type ScreenshotCopyMode = (typeof SCREENSHOT_COPY_MODES)[number];
+
 export interface AppSettings {
   theme: Theme;
   /** UI language for every renderer window + the native tray. */
@@ -140,6 +148,13 @@ export interface AppSettings {
    * signature for people who want to credit the tool.
    */
   showBrandBadge: boolean;
+  /**
+   * "auto" (default): the composited capture is put on the clipboard the moment its
+   * editor opens, so ⌘V works without touching Copy. "manual": only the Copy button
+   * writes to the clipboard. Applies to fresh captures only, never to a shot
+   * re-opened from the Library (backlog/settings-screenshot-clipboard).
+   */
+  screenshotCopy: ScreenshotCopyMode;
   /** User-rebindable global keyboard shortcuts (Electron accelerator strings). */
   shortcuts: ShortcutSettings;
   /**
@@ -164,6 +179,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   showBarInRecording: false,
   screenshotSave: "auto",
   showBrandBadge: false,
+  screenshotCopy: "auto",
   shortcuts: DEFAULT_SHORTCUTS,
   deviceId: "",
   uploadMode: "local-only",

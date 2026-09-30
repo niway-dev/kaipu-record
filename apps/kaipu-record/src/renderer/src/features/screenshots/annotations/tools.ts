@@ -87,9 +87,11 @@ export function resolveFontPx(size: number, fontPx?: number): number {
  * The display lines of a text annotation — THE entry point, deliberately the only one.
  *
  * A newline is inserted with Alt/Shift+Enter while editing (plain Enter commits). Given
- * a font size and a wrap width, lines also break by whole words to fit the box: a word
- * never splits mid-letter, and a single word wider than the box overflows on its own
- * line. Without a width it breaks only on the user's own newlines.
+ * a font size and a wrap width, lines also break by whole words to fit the box. A word
+ * that cannot fit on a line of its own is broken mid-letter, like CSS
+ * `overflow-wrap: anywhere`: the alternative is a line running past the box that the
+ * selection outline, the hit-test and the export all measure from — a label whose text
+ * visibly escapes its own frame. Without a width it breaks only on the user's newlines.
  *
  * This absorbed `wrapText`, which used to sit on top of it. A pair where one function
  * ignores the width is a pair a caller gets wrong, and the video editor's renderer did
@@ -103,13 +105,25 @@ export function textLines(text: string, fs?: number, maxWidthPx?: number): strin
   for (const line of hard) {
     let current = "";
     for (const word of line.split(" ")) {
+      // Too long to ever fit a line. Like CSS `overflow-wrap: break-word` (and the
+      // inline editor's own textarea), give it a fresh line first, then break it
+      // every `maxChars` — so only the part that truly does not fit gets split.
+      let rest = word;
+      if (rest.length > maxChars && current !== "") {
+        out.push(current);
+        current = "";
+      }
+      while (rest.length > maxChars) {
+        out.push(rest.slice(0, maxChars));
+        rest = rest.slice(maxChars);
+      }
       if (current === "") {
-        current = word;
-      } else if (`${current} ${word}`.length <= maxChars) {
-        current += ` ${word}`;
+        current = rest;
+      } else if (`${current} ${rest}`.length <= maxChars) {
+        current += ` ${rest}`;
       } else {
         out.push(current); // the next word does not fit — wrap, never split it
-        current = word;
+        current = rest;
       }
     }
     out.push(current); // trailing content, and preserves an empty hard line

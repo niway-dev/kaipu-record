@@ -26,8 +26,27 @@ describe("textLines", () => {
     expect(textLines("one two three four", fs, width)).toEqual(["one two", "three four"]);
   });
 
-  it("a word wider than the box overflows on its own line (never split mid-letter)", () => {
-    expect(textLines("abcdefghijklmno pq", fs, width)).toEqual(["abcdefghijklmno", "pq"]);
+  // A word that cannot fit on a line of its own has nowhere to go: leaving it whole
+  // runs it past the box that the outline, hit-test and export all measure from.
+  it("breaks a word wider than the box instead of letting it overflow", () => {
+    expect(textLines("abcdefghijklmno pq", fs, width)).toEqual(["abcdefghij", "klmno pq"]);
+  });
+
+  it("breaks a long word that follows text on the same line", () => {
+    expect(textLines("hi abcdefghijklmnopqr", fs, width)).toEqual(["hi", "abcdefghij", "klmnopqr"]);
+  });
+
+  it("keeps breaking a word many times its width", () => {
+    expect(textLines("a".repeat(25), fs, width)).toEqual(["a".repeat(10), "a".repeat(10), "aaaaa"]);
+  });
+
+  it("never splits a word that does fit", () => {
+    expect(textLines("abcdefghij kl", fs, width)).toEqual(["abcdefghij", "kl"]);
+  });
+
+  it("every produced line fits the character budget", () => {
+    const lines = textLines("supercalifragilisticexpialidocious is a word", fs, width);
+    for (const line of lines) expect(line.length).toBeLessThanOrEqual(10);
   });
 
   it("still honours explicit newlines while wrapping", () => {

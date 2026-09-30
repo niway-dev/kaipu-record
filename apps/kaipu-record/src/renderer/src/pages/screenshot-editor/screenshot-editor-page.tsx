@@ -3,7 +3,10 @@ import { Navigate, useBlocker, useLocation, useNavigate } from "react-router-dom
 import { Check, Copy, Download, Redo2, Undo2, ZoomIn, ZoomOut } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { useImageSource, type ImageSource } from "@renderer/features/screenshots/image-source";
-import { shouldAutoSaveOnOpen } from "@renderer/features/screenshots/auto-save-policy";
+import {
+  type AutoActions,
+  autoActionsOnOpen,
+} from "@renderer/features/screenshots/auto-capture-policy";
 import { DiscardChangesDialog } from "@renderer/features/screenshots/discard-changes-dialog";
 import { reportError } from "@renderer/features/analytics";
 import { useAppSettings } from "@renderer/pages/settings/use-app-settings";
@@ -33,7 +36,12 @@ const ZOOM_STEP = 0.25;
 const FEEDBACK_MS = 2600;
 
 /** The editor's transient success indicator. */
-type Feedback = { kind: "copied" } | { kind: "saved"; name: string };
+type Feedback =
+  | { kind: "copied" }
+  | { kind: "saved"; name: string }
+  // Both auto actions fired on open. One indicator, not two: `feedback` holds a
+  // single value on purpose, so the combined outcome needs its own kind.
+  | { kind: "savedAndCopied"; name: string };
 
 const clampZoom = (z: number): number =>
   Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 100) / 100));
@@ -72,12 +80,16 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
   // The vault id this editor is bound to: set when re-opening a saved shot, and
   // after the first save. While set, Save asks overwrite-or-copy.
   const [savedId, setSavedId] = useState<string | null>(source.kind === "local" ? source.id : null);
-  // Auto-save mode is read ONCE when the editor opens; a Settings change while this
-  // capture is open neither retro-saves nor un-saves it.
+  // The auto save/copy modes are read ONCE when the editor opens; a Settings change
+  // while this capture is open neither retro-saves nor un-saves nor re-copies it.
   const { settings } = useAppSettings();
-  const autoSaveRef = useRef<boolean | null>(null);
-  if (autoSaveRef.current === null && settings) {
-    autoSaveRef.current = shouldAutoSaveOnOpen(settings.screenshotSave, source.kind);
+  const autoActionsRef = useRef<AutoActions | null>(null);
+  if (autoActionsRef.current === null && settings) {
+    autoActionsRef.current = autoActionsOnOpen(
+      settings.screenshotSave,
+      settings.screenshotCopy,
+      source.kind,
+    );
   }
   // True once THIS editor created the item on open — enables Discard.
   const [autoSaved, setAutoSaved] = useState(false);
@@ -155,12 +167,16 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
       imgRef.current?.clientWidth ?? 0,
     );
 
-  const onCopy = async (): Promise<void> => {
-    if (busy.current || !imageReady) return;
+  /**
+   * Export the scene and put it on the clipboard. Reports its own failures; the
+   * caller owns the "Copied" indicator, because the auto path shows a combined one.
+   */
+  const copyToClipboard = async (): Promise<boolean> => {
+    if (busy.current || !imageReady) return false;
     busy.current = true;
     try {
       await window.electronAPI.copyImageToClipboard(await exportPng());
-      showFeedback({ kind: "copied" });
+      return true;
     } catch (error) {
       // Without this the button just never flips to "Copied" and the rejection is
       // unhandled — the user has no idea the copy failed.
@@ -168,13 +184,24 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
         context: { phase: "copy" },
         retry: () => void onCopy(),
       });
+      return false;
     } finally {
       busy.current = false;
     }
   };
 
-  const persist = async (opts: { overwriteId?: string; title?: string }): Promise<boolean> => {
-    if (busy.current) return false;
+  const onCopy = async (): Promise<void> => {
+    if (await copyToClipboard()) showFeedback({ kind: "copied" });
+  };
+
+  /** Returns the saved title, or null when the save failed (already reported). */
+  const persist = async (opts: {
+    overwriteId?: string;
+    title?: string;
+    /** The auto path shows one combined indicator instead of this one. */
+    silent?: boolean;
+  }): Promise<string | null> => {
+    if (busy.current) return null;
     busy.current = true;
     try {
       const saved = await window.electronAPI.saveScreenshot(await exportPng(), {
@@ -183,8 +210,8 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
       });
       setSavedId(saved.id);
       setDirty(false); // now safely in the vault — leaving no longer loses work
-      showFeedback({ kind: "saved", name: saved.title });
-      return true;
+      if (!opts.silent) showFeedback({ kind: "saved", name: saved.title });
+      return saved.title;
     } catch (error) {
       // A swallowed save (vault on a disconnected drive, disk full, composite
       // failure) let the user close the editor believing the shot was saved.
@@ -193,22 +220,37 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
         context: { phase: "save", overwrite: opts.overwriteId !== undefined },
         retry: () => void persist(opts),
       });
-      return false;
+      return null;
     } finally {
       busy.current = false;
     }
   };
 
-  // Auto mode: the first save happens the moment the image can be exported, before any
-  // edit. Failure leaves the editor in manual behaviour (dirty, guarded) — `persist`
-  // already reports with a retry.
-  const autoSaveFired = useRef(false);
+  /**
+   * Whatever the two preferences asked for, once, on open. Sequential on purpose:
+   * both paths take the `busy` lock and composite the same scene, so running them
+   * together would silently drop one. Copy goes first — it is the one the user is
+   * waiting on to paste; the save round-trips to disk.
+   */
+  const runAutoActions = async (actions: AutoActions): Promise<void> => {
+    const copied = actions.copy ? await copyToClipboard() : false;
+    const savedTitle = actions.save ? await persist({ silent: true }) : null;
+    if (savedTitle) setAutoSaved(true);
+    if (savedTitle && copied) showFeedback({ kind: "savedAndCopied", name: savedTitle });
+    else if (savedTitle) showFeedback({ kind: "saved", name: savedTitle });
+    else if (copied) showFeedback({ kind: "copied" });
+  };
+
+  // Auto modes act the moment the image can be exported, before any edit. A failed
+  // save leaves the editor in manual behaviour (dirty, guarded) — `persist` already
+  // reports with a retry.
+  const autoActionsFired = useRef(false);
   useEffect(() => {
-    if (!imageReady || autoSaveFired.current || !autoSaveRef.current || savedId) return;
-    autoSaveFired.current = true;
-    void persist({}).then((ok) => {
-      if (ok) setAutoSaved(true);
-    });
+    const actions = autoActionsRef.current;
+    if (!imageReady || autoActionsFired.current || !actions || savedId) return;
+    if (!actions.save && !actions.copy) return;
+    autoActionsFired.current = true;
+    void runAutoActions(actions);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fire once when the image is ready
   }, [imageReady]);
 
@@ -241,8 +283,11 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
     void persist({ title: `${baseTitle} (${t("copySuffix")})` });
   };
 
-  const copied = feedback?.kind === "copied";
-  const savedName = feedback?.kind === "saved" ? feedback.name : null;
+  // "savedAndCopied" lights both indicators at once — that combined state is exactly
+  // what the two auto preferences produce together.
+  const copied = feedback?.kind === "copied" || feedback?.kind === "savedAndCopied";
+  const savedName =
+    feedback?.kind === "saved" || feedback?.kind === "savedAndCopied" ? feedback.name : null;
 
   // `image` is null on the first render while the reader resolves — render nothing.
   // Moved here (past every hook) so the auto-save effect above stays unconditional.
@@ -287,7 +332,13 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
             className={styles.save}
             data-done={savedName !== null}
             disabled={!imageReady}
-            title={savedName ? t("savedAsTitle", { name: savedName }) : t("saveTitle")}
+            title={
+              savedName
+                ? feedback?.kind === "savedAndCopied"
+                  ? t("savedAndCopiedTitle", { name: savedName })
+                  : t("savedAsTitle", { name: savedName })
+                : t("saveTitle")
+            }
             onClick={onSave}
           >
             {savedName ? <Check size={16} /> : <Download size={16} />}{" "}
