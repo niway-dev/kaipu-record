@@ -12,6 +12,7 @@ const SETTINGS: AppSettings = {
   recordingQuality: DEFAULT_QUALITY,
   showBarInRecording: false,
   screenshotSave: "auto",
+  showBrandBadge: false,
   screenshotCopy: "auto",
   shortcuts: DEFAULT_SHORTCUTS,
   deviceId: "",

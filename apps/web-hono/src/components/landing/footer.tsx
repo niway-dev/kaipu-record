@@ -13,7 +13,8 @@ export function Footer() {
         <KaipuMark size={16} className="text-[var(--kaipu-accent-primary)]" /> {t("navBrand")}{" "}
         Record
       </span>
-      <p className="mt-2">{t("footerTagline")}</p>
+      <p className="mt-2 font-medium text-[var(--kaipu-text-secondary)]">{t("footerSignature")}</p>
+      <p className="mt-1">{t("footerTagline")}</p>
       <div className="mt-5">
         <Link to="/roadmap" className="underline-offset-4 hover:underline focus-visible:underline">
           {tRoadmap("navLabel")}

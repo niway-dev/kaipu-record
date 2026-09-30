@@ -50,6 +50,7 @@ describe("mergeSettings", () => {
         recordingQuality: QUALITY_PRESETS.max,
         showBarInRecording: true,
         screenshotSave: "manual",
+        showBrandBadge: true,
         screenshotCopy: "manual",
         shortcuts,
         deviceId: "stored-id",
@@ -63,6 +64,7 @@ describe("mergeSettings", () => {
       recordingQuality: QUALITY_PRESETS.max,
       showBarInRecording: true,
       screenshotSave: "manual",
+      showBrandBadge: true,
       screenshotCopy: "manual",
       shortcuts,
       deviceId: "stored-id",
@@ -97,8 +99,9 @@ describe("mergeSettings", () => {
   it("sanitizes recordingQuality — keeps valid, defaults garbage/absent", () => {
     expect(mergeSettings({}).recordingQuality).toEqual(DEFAULT_QUALITY);
     expect(
-      mergeSettings({ recordingQuality: { resolution: 9, fps: 1, bitrate: "x" } as never })
-        .recordingQuality,
+      mergeSettings({
+        recordingQuality: { resolution: 9, fps: 1, bitrate: "x" } as never,
+      }).recordingQuality,
     ).toEqual(DEFAULT_QUALITY);
     const custom = { resolution: 2160, fps: 48, bitrate: "max" } as const;
     expect(mergeSettings({ recordingQuality: custom }).recordingQuality).toEqual(custom);
@@ -123,7 +126,12 @@ describe("mergeShortcuts", () => {
   });
 
   it("keeps valid per-action bindings and defaults the rest", () => {
-    expect(mergeShortcuts({ startRecording: "Command+Control+G", stopRecording: "" })).toEqual({
+    expect(
+      mergeShortcuts({
+        startRecording: "Command+Control+G",
+        stopRecording: "",
+      }),
+    ).toEqual({
       startRecording: "Command+Control+G",
       stopRecording: DEFAULT_SHORTCUTS.stopRecording,
       bringToFront: DEFAULT_SHORTCUTS.bringToFront,
@@ -179,6 +187,18 @@ describe("screenshotSave", () => {
     expect(mergeSettings({ screenshotSave: "manual" }).screenshotSave).toBe("manual");
     expect(mergeSettings({ screenshotSave: "always" as never }).screenshotSave).toBe("auto");
     expect(mergeSettings({ screenshotSave: 3 as never }).screenshotSave).toBe("auto");
+  });
+});
+
+describe("showBrandBadge", () => {
+  it("defaults to off — the free app carries no watermark", () => {
+    expect(DEFAULT_SETTINGS.showBrandBadge).toBe(false);
+    expect(mergeSettings(null).showBrandBadge).toBe(false);
+  });
+
+  it("keeps a stored boolean and coerces anything else to off", () => {
+    expect(mergeSettings({ showBrandBadge: true }).showBrandBadge).toBe(true);
+    expect(mergeSettings({ showBrandBadge: "yes" as never }).showBrandBadge).toBe(false);
   });
 });
 

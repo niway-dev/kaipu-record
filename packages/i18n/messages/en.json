@@ -119,6 +119,8 @@
     "screenshots": "Screenshots",
     "screenshotSave": "Save screenshots automatically",
     "screenshotSaveDescription": "Every capture goes to your Library the moment you take it.",
+    "brandBadge": "Show a \"Made with Kaipu\" badge",
+    "brandBadgeDescription": "A small mark in the corner of new recordings. Off by default.",
     "screenshotCopy": "Copy screenshots to the clipboard automatically",
     "screenshotCopyDescription": "Every capture is ready to paste the moment you take it.",
     "developer": "Developer",
@@ -268,7 +270,17 @@
     "homeMomentsSerif": "to “got it”.",
     "homeMomentsSub": "Some things take three paragraphs to explain and ten seconds to show. Kaipu is for those.",
     "homeFooterPrivacy": "Privacy",
-    "homeFooterGithub": "GitHub"
+    "homeFooterGithub": "GitHub",
+    "originHeading": "Where the name comes from",
+    "originSignature": "This. Captured.",
+    "originFormula": "KAY + khiPU",
+    "originKayTerm": "kay",
+    "originKayBody": "“This” — what is happening in front of you, and is worth showing.",
+    "originKhipuTerm": "khipu",
+    "originKhipuBody": "The Andean system of recording information with cords and knots.",
+    "originBody": "Kaipu brings both together: keeping what is happening, so you can explain it, share it, and find it again.",
+    "originNote": "Kaipu is our own brand construction inspired by these two ideas, not a literal Quechua translation.",
+    "footerSignature": "This. Captured."
   },
   "auth": {
     "welcomeBack": "Welcome Back",
@@ -991,8 +1003,8 @@
     "approvedButton": "Open Kaipu"
   },
   "seo": {
-    "siteTitle": "Kaipu Record — Record your screen, without the hassle",
-    "siteDescription": "Record your screen and camera in high quality, straight from your Mac. Edit, export and share. Private, fast, and no account needed.",
+    "siteTitle": "Kaipu — Screen recordings and screenshots, kept on your Mac",
+    "siteDescription": "Record a bug, explain a change, or annotate a screenshot. Edit and export with Kaipu, then find it again in your local library. No account needed for local use.",
     "pages": {
       "roadmap": {
         "title": "Roadmap | Kaipu Record",

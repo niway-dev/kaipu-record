@@ -143,6 +143,12 @@ export interface AppSettings {
    */
   screenshotSave: ScreenshotSaveMode;
   /**
+   * Burn a small "Made with Kaipu" mark into recordings. Off by default: the free
+   * app carries no watermark (backlog/free-tier-no-watermark), this is an opt-in
+   * signature for people who want to credit the tool.
+   */
+  showBrandBadge: boolean;
+  /**
    * "auto" (default): the composited capture is put on the clipboard the moment its
    * editor opens, so ⌘V works without touching Copy. "manual": only the Copy button
    * writes to the clipboard. Applies to fresh captures only, never to a shot
@@ -172,6 +178,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   recordingQuality: DEFAULT_QUALITY,
   showBarInRecording: false,
   screenshotSave: "auto",
+  showBrandBadge: false,
   screenshotCopy: "auto",
   shortcuts: DEFAULT_SHORTCUTS,
   deviceId: "",
@@ -381,7 +388,11 @@ export interface RecordingStartInfo {
  * renderer's `SelectedSource` / `Microphone`.
  */
 export interface RecordingSettings {
-  selectedSource: { id: string; name: string; type: "screen" | "window" } | null;
+  selectedSource: {
+    id: string;
+    name: string;
+    type: "screen" | "window";
+  } | null;
   selectedMicrophone: { deviceId: string; label: string } | null;
   isMicrophoneEnabled: boolean;
   isSystemAudioEnabled: boolean;

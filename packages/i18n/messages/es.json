@@ -119,6 +119,8 @@
     "screenshots": "Capturas",
     "screenshotSave": "Guardar capturas automáticamente",
     "screenshotSaveDescription": "Cada captura va a tu Biblioteca apenas la tomas.",
+    "brandBadge": "Mostrar la marca \"Hecho con Kaipu\"",
+    "brandBadgeDescription": "Una marca pequeña en la esquina de las nuevas grabaciones. Apagada por defecto.",
     "screenshotCopy": "Copiar capturas al portapapeles automáticamente",
     "screenshotCopyDescription": "Cada captura queda lista para pegar apenas la tomas.",
     "developer": "Developer",
@@ -268,7 +270,17 @@
     "homeMomentsSerif": "a “ya entendí”.",
     "homeMomentsSub": "Hay cosas que toman tres párrafos explicar y diez segundos mostrar. Kaipu es para esas.",
     "homeFooterPrivacy": "Privacidad",
-    "homeFooterGithub": "GitHub"
+    "homeFooterGithub": "GitHub",
+    "originHeading": "De dónde viene el nombre",
+    "originSignature": "Esto, registrado.",
+    "originFormula": "KAY + khiPU",
+    "originKayTerm": "kay",
+    "originKayBody": "«Esto» — lo que está pasando frente a ti y vale la pena mostrar.",
+    "originKhipuTerm": "khipu",
+    "originKhipuBody": "El sistema andino de registro de información con cuerdas y nudos.",
+    "originBody": "Kaipu une las dos ideas: conservar lo que está pasando para explicarlo, compartirlo y volver a encontrarlo.",
+    "originNote": "Kaipu es una construcción de marca nuestra inspirada en esas dos ideas, no una traducción literal del quechua.",
+    "footerSignature": "Esto, registrado."
   },
   "auth": {
     "welcomeBack": "Bienvenido de nuevo",
@@ -991,8 +1003,8 @@
     "approvedButton": "Abrir Kaipu"
   },
   "seo": {
-    "siteTitle": "Kaipu Record — Graba tu pantalla, sin complicaciones",
-    "siteDescription": "Graba tu pantalla y cámara en alta calidad, directo en tu Mac. Edita, exporta y comparte. Privado, rápido y sin cuenta.",
+    "siteTitle": "Kaipu — Grabaciones y capturas de pantalla en tu Mac",
+    "siteDescription": "Graba un error, explica un cambio o anota una captura. Edita y exporta con Kaipu, y vuelve a encontrarlo en tu biblioteca local. Sin cuenta para uso local.",
     "pages": {
       "roadmap": {
         "title": "Roadmap | Kaipu Record",

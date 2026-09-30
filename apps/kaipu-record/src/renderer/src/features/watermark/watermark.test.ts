@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  DEFAULT_WATERMARK_CONFIG,
-  resolveWatermarkEnabled,
-  watermarkRect,
-  type WatermarkConfig,
-} from "./watermark";
+import { DEFAULT_WATERMARK_CONFIG, watermarkRect, type WatermarkConfig } from "./watermark";
 
 const base: WatermarkConfig = {
   ...DEFAULT_WATERMARK_CONFIG,
@@ -41,27 +36,6 @@ describe("watermarkRect", () => {
     const r = watermarkRect(3840, 2160, 2, base);
     expect(r.height).toBe(216); // 2160 × 0.1
     expect(r.width).toBe(432);
-  });
-});
-
-describe("resolveWatermarkEnabled", () => {
-  it("shows the watermark for free users with the flag on", () => {
-    expect(resolveWatermarkEnabled({ flagOn: true, isPaid: false, devForce: null })).toBe(true);
-  });
-
-  it("removes it for paid users", () => {
-    expect(resolveWatermarkEnabled({ flagOn: true, isPaid: true, devForce: null })).toBe(false);
-  });
-
-  it("the flag can kill it entirely", () => {
-    expect(resolveWatermarkEnabled({ flagOn: false, isPaid: false, devForce: null })).toBe(false);
-  });
-
-  it("the dev force overrides the real entitlement", () => {
-    // forced paid → off, even though the real entitlement is free
-    expect(resolveWatermarkEnabled({ flagOn: true, isPaid: false, devForce: "paid" })).toBe(false);
-    // forced free → on, even though the real entitlement is paid
-    expect(resolveWatermarkEnabled({ flagOn: true, isPaid: true, devForce: "free" })).toBe(true);
   });
 });
 
