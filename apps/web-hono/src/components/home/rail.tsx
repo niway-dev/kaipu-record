@@ -54,12 +54,14 @@ export function Rail() {
             onClick={() => scrollTo(chapter.slug)}
           >
             {Icon ? <Icon size={17} aria-hidden /> : <KaipuLogo use="product" size={26} />}
+            {/*
+              The name is announced but never drawn. A floating label beside the
+              active icon overlapped the app mockup (the hero's read "Kaipu" and
+              landed on its "Change" button at 1440x900), and the design has no
+              such label — the active state is carried by the pill and the
+              number at the top of the rail. Screen readers still get the name.
+            */}
             <span className="kl-sr-only">{label}</span>
-            {isActive ? (
-              <span className={styles.label} aria-hidden>
-                {label}
-              </span>
-            ) : null}
           </button>
         );
       })}

@@ -5,9 +5,8 @@ description: "Every unresolved question across the three workstreams queued on 2
 
 # Open decisions — 2026-09-30
 
-> **Status: 🟢 Decided** (2026-09-30), except item 3, which needs a mechanism
-> that does not exist yet and carries a proposal instead of a recommendation.
-> Nothing here is implemented.
+> **Status: 🟢 All decided** (2026-09-30). Item 6 is done; the rest are approved
+> and not yet implemented.
 
 Three workstreams landed in one request: audio in the video editor, the
 shortcuts the landing shows, and folding the free-watermark branch into
@@ -122,7 +121,7 @@ constant to move.
    the assertion has to reach across apps or be duplicated too; and this class
    of drift is precisely what just shipped a wrong promise to the landing.
 
-**PROPOSAL, awaiting a yes.** The owner asked for "a package with the constant,
+**APPROVED.** The owner asked for "a package with the constant,
 maybe in domain, as an enumerated constant", and for a proposal if none exists.
 None exists: `packages/domain/src/constants/` holds only `cloud-limits`, and
 `apps/kaipu-record` does not depend on `@kaipu/domain` at all today.
@@ -142,16 +141,52 @@ export const SHORTCUT_ACTIONS = [
 
 export type ShortcutAction = (typeof SHORTCUT_ACTIONS)[number];
 
+/** Kaipu runs on macOS today and the landing already says "Windows coming
+ *  soon", so the defaults are keyed by platform from the start rather than
+ *  migrated later. */
+export type ShortcutPlatform = "mac" | "windows";
+
 /** Electron accelerator strings. The desktop app registers these; the landing
  *  renders them. One definition, so the two can never disagree. */
-export const DEFAULT_ACCELERATORS: Record<ShortcutAction, string> = {
-  startRecording: "Command+Control+C",
-  stopRecording: "Command+Control+S",
-  bringToFront: "Command+Control+O",
-  captureScreenshot: "Command+Control+X",
-  openLibrary: "Command+Control+L",
+export const DEFAULT_ACCELERATORS: Record<
+  ShortcutPlatform,
+  Record<ShortcutAction, string>
+> = {
+  mac: {
+    startRecording: "Command+Control+C",
+    stopRecording: "Command+Control+S",
+    bringToFront: "Command+Control+O",
+    captureScreenshot: "Command+Control+X",
+    openLibrary: "Command+Control+L",
+  },
+  windows: {
+    startRecording: "Control+Alt+C",
+    stopRecording: "Control+Alt+S",
+    bringToFront: "Control+Alt+O",
+    captureScreenshot: "Control+Alt+X",
+    openLibrary: "Control+Alt+L",
+  },
 };
 ```
+
+### Why the map is keyed by platform
+
+Not a nicety — the current defaults **cannot work on Windows**. `Command` is a
+macOS-only modifier; Electron maps it to nothing on Windows, so
+`Command+Control+C` would register as a dead binding rather than fail loudly.
+`Control+Alt+<key>` is the Windows analogue of the same intent: a distinctive
+prefix that avoids the crowded `Ctrl+Shift` space browsers and editors lean on,
+which is the reason the macOS family was chosen in the first place (see the
+comment above `SHORTCUT_DEFINITIONS`).
+
+`CommandOrControl` was considered and rejected: it collapses to plain `Ctrl` on
+Windows, which puts `Ctrl+C` — copy — on "start recording", globally.
+
+**The Windows column is unvalidated.** Nobody has tested those combinations
+against Windows' own reserved shortcuts, because there is no Windows build yet.
+It is written down so the shape is right and the gap is visible, not because the
+values are confirmed. Validating them is part of whatever ships the Windows
+build.
 
 Everything else — labels, descriptions, groups, `statusWord` — stays in
 `SHORTCUT_DEFINITIONS` in the desktop app, because it is English UI copy with no
@@ -211,7 +246,11 @@ shortcut that does nothing.
 Recorded here because the objection was raised and overruled, which is a normal
 outcome and should be visible to a later reader rather than lost in a chat.
 
-The practical consequence, which is not a decision but a cost: branch
+**Resolved:** the owner's call is to let the merge sort it out — the commits
+arrive when the branches meet, and the conflicting files are resolved then rather
+than pre-empted now. No branch rename, no cherry-pick.
+
+The cost is recorded anyway, because whoever performs the merge meets it: branch
 `feat/growth-strategy-and-free-watermark` carries `289f2ea` (the free tier
 without a watermark), `262e1df` (relicence MIT → AGPL-3.0-only) **and** edits to
 `apps/web-hono/src/components/landing/` — a directory `feat/marketing-landing`
@@ -246,10 +285,16 @@ down, where the icons alone are just five grey glyphs.
    screen is exactly where a reader has not yet learned what the rail is, so it
    is the worst place to withhold the explanation.
 
-**Recommendation: 1.** It fixes the overlap everywhere rather than at the one
-place it was noticed, and it keeps the affordance for the reader who wants it.
+**DECIDED: neither — the label is removed outright** ("sacala entonces"), which
+is what the design shows. The active section is still legible from the pill
+behind its icon and the number at the top of the rail, so nothing is lost that
+the page did not already say twice.
 
-**Default if unanswered:** option 1.
+The name is still rendered for screen readers (`kl-sr-only`); only the drawn box
+is gone. A navigation control whose items announce nothing would be a worse
+regression than the overlap it fixed.
+
+**Done** in `rail.tsx` / `rail.module.css`.
 
 ## Sources
 
