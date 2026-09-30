@@ -202,6 +202,33 @@ function VideoEditorLoader({ source }: { source: VideoEditorSource }): React.JSX
     return () => assetStoreRef.current.dispose();
   }, []);
 
+  /**
+   * Raise the window's minimum size while the editor is open, and drop it back
+   * on the way out. Main clamps the floor to the display, so a small screen gets
+   * as much as it has rather than a window pinned to the whole desktop.
+   *
+   * The IPC and the floor already existed for the screenshot editor; nothing
+   * ever called them, so the video editor — the screen that needs it most —
+   * could be squeezed until the timeline lanes stopped being readable.
+   */
+  useEffect(() => {
+    window.electronAPI.setEditorWindowMode(true);
+    return () => window.electronAPI.setEditorWindowMode(false);
+  }, []);
+
+  /**
+   * The recording's name lives in the window title, not in a header row. It is
+   * reference, never a control, and a full-width row for one static string is
+   * width the timeline needs more.
+   */
+  useEffect(() => {
+    const previous = document.title;
+    document.title = source.title;
+    return () => {
+      document.title = previous;
+    };
+  }, [source.title]);
+
   const [resolved, setResolved] = useState<{
     scene: VideoScene;
     cursorTrack: CursorTrack | null;
@@ -911,8 +938,23 @@ function VideoEditor({
 
   return (
     <div className={styles.page}>
-      <header className={styles.header}>
-        <h1 className={styles.title}>{source.title}</h1>
+      <EditorToolbar
+        canUndo={controller.canUndo}
+        canRedo={controller.canRedo}
+        onUndo={controller.undo}
+        onRedo={controller.redo}
+        onSplit={handleSplit}
+        splitDisabled={splitDisabled}
+        onDeleteSelected={handleDeleteSelected}
+        deleteDisabled={deleteDisabled}
+        onAddImage={handleAddImage}
+        tool={videoTools.tool}
+        onToolChange={handleToolChange}
+        onAddZoom={handleAddZoom}
+        privacyDisabled={onSlide}
+        onExport={handleExport}
+        exportDisabled={videoExport.status === "exporting" || scene.items.length === 0}
+      >
         {/* Not interactive — a reminder, not a control (plans/video-editor-v2/08 § PR 10
             polish, W12's "ORIGINAL UNTOUCHED" pill). The original recording on disk and
             its library thumbnail are untouched by every edit in this page. */}
@@ -933,24 +975,7 @@ function VideoEditor({
             {autosave.state === "failed" && t("saveStateFailed")}
           </button>
         )}
-      </header>
-      <EditorToolbar
-        canUndo={controller.canUndo}
-        canRedo={controller.canRedo}
-        onUndo={controller.undo}
-        onRedo={controller.redo}
-        onSplit={handleSplit}
-        splitDisabled={splitDisabled}
-        onDeleteSelected={handleDeleteSelected}
-        deleteDisabled={deleteDisabled}
-        onAddImage={handleAddImage}
-        tool={videoTools.tool}
-        onToolChange={handleToolChange}
-        onAddZoom={handleAddZoom}
-        privacyDisabled={onSlide}
-        onExport={handleExport}
-        exportDisabled={videoExport.status === "exporting" || scene.items.length === 0}
-      />
+      </EditorToolbar>
       <div className={styles.workspace}>
         <main className={styles.stage} ref={stageRef}>
           {/* Video region: 1fr grid row — centers PreviewStage and constrains its height

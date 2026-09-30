@@ -1,5 +1,11 @@
+/*
+ * An icon rail, not a labelled one. The mono captions under each icon cost 20px
+ * of width on every screen to repeat what the icon and its tooltip already say,
+ * and the video editor needs that width for its timeline lanes more than the
+ * nav needs it for a caption.
+ */
 .sidebar {
-  width: 72px;
+  width: 52px;
   height: 100%;
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border);
@@ -55,11 +61,20 @@
     color var(--transition);
 }
 
+/*
+ * Hidden from sight, not from a screen reader: each item's only other name is a
+ * `title` tooltip, which assistive tech is not obliged to announce, so removing
+ * this outright would leave the nav as six unlabelled icons.
+ */
 .navLabel {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 /* Indicator bar on the rail's left edge — only visible when active. */

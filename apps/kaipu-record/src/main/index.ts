@@ -1,4 +1,4 @@
-import { app, shell, dialog, BrowserWindow, ipcMain, Notification, Tray } from "electron";
+import { app, shell, dialog, BrowserWindow, ipcMain, Notification, screen, Tray } from "electron";
 import { join } from "path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import { IPC_CHANNELS } from "@shared/types";
@@ -77,8 +77,15 @@ registerMediaScheme();
 const BASE_MIN_WIDTH = 720;
 const BASE_MIN_HEIGHT = 560;
 /** The screenshot editor (toolbar + canvas + beautify panel) needs more room. */
-const EDITOR_MIN_WIDTH = 1040;
-const EDITOR_MIN_HEIGHT = 720;
+/**
+ * The editors' floor. The video editor stacks a preview, an inspector and five
+ * timeline lanes; below this the lanes stop being readable and the inspector
+ * squeezes the preview out. Clamped to the display's work area at apply time —
+ * a floor larger than the screen would pin the window to the whole desktop and
+ * leave nothing to drag.
+ */
+const EDITOR_MIN_WIDTH = 1440;
+const EDITOR_MIN_HEIGHT = 900;
 /**
  * The first-run takeover. Its content does not reflow — a 96px brand mark, a
  * headline, a two-line subtitle and a 2x2 grid of permission cards — so under
@@ -398,6 +405,12 @@ app.whenReady().then(() => {
       mainWindow.setMinimumSize(BASE_MIN_WIDTH, BASE_MIN_HEIGHT);
       return;
     }
+    // Never ask for more than the screen can give. On a 1440x900 display an
+    // unclamped 1440x900 floor pins the window to the entire desktop, with no
+    // room to move it and no way to shrink it.
+    const area = screen.getDisplayMatching(mainWindow.getBounds()).workAreaSize;
+    minWidth = Math.min(minWidth, area.width);
+    minHeight = Math.min(minHeight, area.height);
     mainWindow.setMinimumSize(minWidth, minHeight);
     const [w, h] = mainWindow.getSize();
     if (w < minWidth || h < minHeight) {

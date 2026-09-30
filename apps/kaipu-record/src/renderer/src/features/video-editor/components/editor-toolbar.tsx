@@ -95,6 +95,9 @@ export interface EditorToolbarProps {
   privacyDisabled: boolean;
   /** Run the export pipeline. Disabled while exporting or when the timeline is empty. */
   onExport(): void;
+  /** Status chips that used to sit in their own header row (the original-untouched
+   *  pill, the autosave state). Rendered at the far right of the toolbar. */
+  children?: React.ReactNode;
   exportDisabled: boolean;
 }
 
@@ -119,6 +122,7 @@ export function EditorToolbar({
   onAddZoom,
   privacyDisabled,
   onExport,
+  children,
   exportDisabled,
 }: EditorToolbarProps): React.JSX.Element {
   const t = useTranslations("videoEditor");
@@ -241,6 +245,7 @@ export function EditorToolbar({
         >
           <Trash2 size={18} />
         </button>
+        {children}
         <span className={styles.divider} />
         <button
           type="button"
