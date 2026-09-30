@@ -12,6 +12,8 @@ description: Everything a model needs to answer questions or write code about Ka
 
 ## What it is
 
+**Brand update (2026-09-27):** consult [Brand identity](/marketing/brand-identity/) before naming, logo, mascot, onboarding, or marketing work. It preserves the creator's adopted name construction and distinguishes it from a literal translation. The [rollout plan](/plans/2026-09-27-brand-and-website-rollout/) records implementation status. This note does not revalidate the older technical snapshot below.
+
 Kaipu Record is a local-first macOS desktop app (Electron) for screen and camera
 recording, screenshot capture/annotation, and lightweight video editing, backed by a
 Cloudflare Workers web app and API for the marketing site, authentication, and an

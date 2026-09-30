@@ -1,5 +1,13 @@
 # Development Rules
 
+## Brand Identity
+
+Before changing Kaipu's name, story, logo, mascot, onboarding, or marketing copy, read
+`apps/documentation/src/content/docs/marketing/brand-identity.md` — the canonical
+brand decision. Other documents link to it; they do not redefine the origin.
+The execution sequence lives in
+`apps/documentation/src/content/docs/plans/2026-09-27-brand-and-website-rollout.md`.
+
 ## Template Customization
 
 This is a multi-pattern template. Before starting development, customize it:

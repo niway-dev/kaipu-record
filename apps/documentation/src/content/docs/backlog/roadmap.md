@@ -15,6 +15,7 @@ Status legend: ⬜ todo · 🔨 in progress · ✅ done
 
 ## Proposed for later analysis
 
+- **🟡 Product growth beyond cloud** (2026-09-27): the owner reviewed the Recordly comparison and decided: no watermark on the free tier ([done on branch](./free-tier-no-watermark)), [Windows recording-only beta](./windows-beta), [AGPL-3.0 open source at launch](/marketing/open-source/), and a roadmap with GIF, keystroke visualizer, captions on Parakeet, export presets, silence cutting and a CLI. See the [prioritized proposal](./product-growth) and [marketing hub](/marketing/). Existing release blockers retain priority.
 - **🔵 StyleX across desktop and web** (2026-09-12): evaluate typed shared tokens,
   replacing Tailwind and CSS Modules, and opportunities for shared UI. No delivery
   date or implementation commitment. See [proposal](./stylex-migration).

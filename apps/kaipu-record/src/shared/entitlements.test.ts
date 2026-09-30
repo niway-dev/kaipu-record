@@ -1,56 +1,42 @@
 import { describe, expect, it } from "vitest";
 import type { AuthStatus } from "./types/auth";
-import { FREE_ENTITLEMENTS, isWatermarkRemovalGranted, type Entitlements } from "./entitlements";
+import { entitlementsFromStatus, FREE_ENTITLEMENTS, type Entitlements } from "./entitlements";
 
-const NOW = new Date("2026-09-06T12:00:00Z");
+const pro: Entitlements = {
+  plan: "pro",
+  status: "active",
+  currentPeriodEnd: null,
+  features: {
+    watermarkRemoval: true,
+    cloudUploads: true,
+    cloudStorageBytes: 1_000_000_000,
+  },
+};
 
-function pro(overrides: Partial<Entitlements> = {}): Entitlements {
-  return {
-    plan: "pro",
-    status: "active",
-    currentPeriodEnd: null,
-    features: { watermarkRemoval: true, cloudUploads: true, cloudStorageBytes: 1_000_000_000 },
-    ...overrides,
-  };
-}
-
-describe("isWatermarkRemovalGranted", () => {
-  it("is false for a signed-out user", () => {
-    expect(isWatermarkRemovalGranted({ kind: "signed-out" }, NOW)).toBe(false);
+describe("entitlementsFromStatus", () => {
+  it("is null for a signed-out user", () => {
+    expect(entitlementsFromStatus({ kind: "signed-out" })).toBeNull();
   });
 
-  it("follows the feature the server derived for a signed-in user", () => {
+  it("returns what the server derived for a signed-in user", () => {
     const status: AuthStatus = {
       kind: "signed-in",
       userId: "user-1",
       email: "a@b",
       name: "A",
-      entitlements: pro(),
+      entitlements: pro,
     };
-    expect(isWatermarkRemovalGranted(status, NOW)).toBe(true);
-    expect(isWatermarkRemovalGranted({ ...status, entitlements: FREE_ENTITLEMENTS }, NOW)).toBe(
-      false,
+    expect(entitlementsFromStatus(status)).toBe(pro);
+    expect(entitlementsFromStatus({ ...status, entitlements: FREE_ENTITLEMENTS })).toBe(
+      FREE_ENTITLEMENTS,
     );
   });
 
-  it("keeps the last known entitlements while the server is unreachable", () => {
-    const status: AuthStatus = { kind: "unknown", lastKnownEmail: "a@b", entitlements: pro() };
-    expect(isWatermarkRemovalGranted(status, NOW)).toBe(true);
+  it("keeps the last cached entitlements while the server is unreachable", () => {
+    expect(entitlementsFromStatus({ kind: "unknown", entitlements: pro })).toBe(pro);
   });
 
-  it("revokes offline once the cached period has ended, without trusting the stale feature flag", () => {
-    const lapsed = pro({ currentPeriodEnd: "2026-09-01T00:00:00Z" });
-    const status: AuthStatus = { kind: "unknown", lastKnownEmail: "a@b", entitlements: lapsed };
-    expect(isWatermarkRemovalGranted(status, NOW)).toBe(false);
-  });
-
-  it("still grants offline while the cached period is in the future", () => {
-    const current = pro({ currentPeriodEnd: "2026-10-01T00:00:00Z" });
-    const status: AuthStatus = { kind: "unknown", lastKnownEmail: "a@b", entitlements: current };
-    expect(isWatermarkRemovalGranted(status, NOW)).toBe(true);
-  });
-
-  it("is false in `unknown` when nothing was ever cached", () => {
-    expect(isWatermarkRemovalGranted({ kind: "unknown" }, NOW)).toBe(false);
+  it("is null in `unknown` when nothing was ever cached", () => {
+    expect(entitlementsFromStatus({ kind: "unknown" })).toBeNull();
   });
 });

@@ -17,6 +17,11 @@ export interface Entitlements {
   /** ISO timestamp, or null when the grant does not lapse on its own. */
   currentPeriodEnd: string | null;
   features: {
+    /**
+     * Legacy: the desktop no longer gates anything on it — the free app ships
+     * without a watermark (backlog/free-tier-no-watermark). Still on the wire
+     * until the server drops it.
+     */
     watermarkRemoval: boolean;
     /** Whether the account can upload recordings to cloud storage. */
     cloudUploads: boolean;
@@ -37,16 +42,4 @@ export const FREE_ENTITLEMENTS: Entitlements = {
 export function entitlementsFromStatus(status: AuthStatus): Entitlements | null {
   if (status.kind === "signed-out") return null;
   return status.entitlements ?? null;
-}
-
-/**
- * Whether to skip burning the watermark. Reads the server-derived feature, with
- * one local check on top: a cached period end that has already passed revokes it,
- * so an offline app cannot ride a stale `true` past the day the plan lapsed.
- */
-export function isWatermarkRemovalGranted(status: AuthStatus, now: Date): boolean {
-  const entitlements = entitlementsFromStatus(status);
-  if (!entitlements?.features.watermarkRemoval) return false;
-  if (entitlements.currentPeriodEnd === null) return true;
-  return Date.parse(entitlements.currentPeriodEnd) > now.getTime();
 }

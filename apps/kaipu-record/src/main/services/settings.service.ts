@@ -81,6 +81,10 @@ export function mergeSettings(stored: Partial<AppSettings> | null | undefined): 
     screenshotSave: isValidScreenshotSaveMode(safe.screenshotSave)
       ? safe.screenshotSave
       : DEFAULT_SETTINGS.screenshotSave,
+    showBrandBadge:
+      typeof safe.showBrandBadge === "boolean"
+        ? safe.showBrandBadge
+        : DEFAULT_SETTINGS.showBrandBadge,
     screenshotCopy: isValidScreenshotCopyMode(safe.screenshotCopy)
       ? safe.screenshotCopy
       : DEFAULT_SETTINGS.screenshotCopy,

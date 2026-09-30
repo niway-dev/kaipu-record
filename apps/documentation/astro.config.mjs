@@ -10,7 +10,13 @@ export default defineConfig({
     starlight({
       title: "Kaipu",
       lastUpdated: true,
-      social: [{ icon: "github", label: "GitHub", href: "https://github.com/withastro/starlight" }],
+      social: [
+        {
+          icon: "github",
+          label: "GitHub",
+          href: "https://github.com/withastro/starlight",
+        },
+      ],
       sidebar: [
         {
           label: "Getting Started",
@@ -19,6 +25,10 @@ export default defineConfig({
         {
           label: "Briefings",
           autogenerate: { directory: "briefings" },
+        },
+        {
+          label: "Marketing",
+          autogenerate: { directory: "marketing" },
         },
         {
           label: "Stack",
@@ -64,6 +74,9 @@ export default defineConfig({
             { slug: "backlog/editor-zoom" },
             { slug: "backlog/recording-compositor-perf" },
             { slug: "backlog/roadmap" },
+            { slug: "backlog/product-growth" },
+            { slug: "backlog/free-tier-no-watermark" },
+            { slug: "backlog/windows-beta" },
             { slug: "backlog/video-editor-v2-handoff" },
             { slug: "backlog/live-recording-controls" },
             { slug: "backlog/settings-updates" },

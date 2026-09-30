@@ -7,6 +7,17 @@ description: ADR — why Kaipu stays on Electron, where the real performance gap
 
 > Análisis del tradeoff de framework para Kaipu, Junio 2026.
 
+## Revisited 2026-09-27
+
+The verdict below was re-checked during the competitive review against Recordly and
+**stands**. Two facts sharpen it: the capture pipeline is now on mediabunny/WebCodecs with
+hardware encoding ([ADR 0001](/architecture/decisions/0001-mediabunny-over-ffmpeg/)), so the
+"real performance" work this page asked for is done; and Recordly itself is Electron, so a
+Tauri rewrite would not differentiate against it. The competitor that sells "native" is
+ScreenKite (Swift + Metal), which Tauri would not match either. The next step is the
+[benchmarks page](/marketing/messaging-playbook/#the-benchmarks-page): measure against the
+threshold below and publish it, instead of re-opening the framework debate.
+
 ## Veredicto
 
 **No reescribas a Tauri ahora.** El gap de performance que sentís en Cap no viene del framework —

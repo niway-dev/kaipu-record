@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "description": "Kaipu Record — screen recorder monorepo: Electron desktop app, Hono API, web app, and shared DDD + Hexagonal packages",
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "workspaces": {
     "packages": [
       "apps/*",
