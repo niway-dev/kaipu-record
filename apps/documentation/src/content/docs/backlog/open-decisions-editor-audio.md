@@ -5,9 +5,9 @@ description: "Every unresolved question across the three workstreams queued on 2
 
 # Open decisions — 2026-09-30
 
-> **Status: 🟡 Awaiting the owner.** Nothing here is implemented. Each item ends
-> with the default that will be applied if it is not answered, so silence still
-> produces a decision rather than a stall.
+> **Status: 🟢 Decided** (2026-09-30), except item 3, which needs a mechanism
+> that does not exist yet and carries a proposal instead of a recommendation.
+> Nothing here is implemented.
 
 Three workstreams landed in one request: audio in the video editor, the
 shortcuts the landing shows, and folding the free-watermark branch into
@@ -59,12 +59,18 @@ for Spotify and for Descript's leveling).
    does not read, and it needs a meter to be usable, which the editor does not
    have.
 
-**Recommendation: 2, with 1 as a later refinement.** Kaipu's audience is the
-Descript/Loom audience, not the Premiere audience, and a one-button boost that
-cannot clip is honest about what it guarantees. Adding a slider afterwards is
-additive; walking back a knob that ruined someone's export is not.
+**DECIDED: none of them — boost is dropped entirely.** The owner's call once the
+research was in: "solo mute, nada de multiplicador". Mute ships alone; raising
+volume is not a Kaipu feature today and may never be.
 
-**Default if unanswered:** option 2, normalizing to a peak ceiling of −1 dBFS.
+This also removes a promise the landing was already making. `homeChapter3Pill3`
+read "Mute or boost audio" / "Silenciar o subir audio"; it now reads "Mute audio"
+/ "Silenciar audio". A landing that advertises a control the product does not
+have is the more expensive half of this decision.
+
+The research above is kept rather than deleted: if boost is ever revisited, the
+finding that nobody ships a bare percentage multiplier is the starting point, not
+something to rediscover.
 
 ## 2 — Does mute stay binary?
 
@@ -85,9 +91,13 @@ own thing.
    existing zero-fill path; boost is a separate, additive operation. Against:
    two concepts where the UI shows one control, which has to be explained.
 
-**Recommendation: 2.** The guarantee is the reason the feature is trusted.
+**DECIDED: mute stays binary, 0 or 1.** With boost gone the non-goal in
+`backlog/video-editor-mute` is not reopened at all — no superseding decision is
+needed, and the doc stands as written. The testable invariant survives: every
+sample inside a mute range is exactly zero.
 
-**Default if unanswered:** option 2.
+Levels can be revisited later ("escalamos luego"). Doing so would reopen the
+non-goal, and that is the moment to record a decision, not before.
 
 ## 3 — Where do the shortcut defaults live?
 
@@ -112,12 +122,59 @@ constant to move.
    the assertion has to reach across apps or be duplicated too; and this class
    of drift is precisely what just shipped a wrong promise to the landing.
 
-**Recommendation: 1.** The duplication pattern exists here for a reason that
-does not apply — `DEFAULT_LOCALE` is duplicated to keep React and two message
-catalogs out of the preload bundle. There is no equivalent cost for four
-accelerator strings.
+**PROPOSAL, awaiting a yes.** The owner asked for "a package with the constant,
+maybe in domain, as an enumerated constant", and for a proposal if none exists.
+None exists: `packages/domain/src/constants/` holds only `cloud-limits`, and
+`apps/kaipu-record` does not depend on `@kaipu/domain` at all today.
 
-**Default if unanswered:** option 1.
+The proposal is `@kaipu/domain/constants` → `shortcuts.ts`, holding the action
+names as a `const` tuple (so the type is a union of real actions, not `string`)
+and one record of defaults keyed by it:
+
+```ts
+export const SHORTCUT_ACTIONS = [
+  "startRecording",
+  "stopRecording",
+  "bringToFront",
+  "captureScreenshot",
+  "openLibrary",
+] as const;
+
+export type ShortcutAction = (typeof SHORTCUT_ACTIONS)[number];
+
+/** Electron accelerator strings. The desktop app registers these; the landing
+ *  renders them. One definition, so the two can never disagree. */
+export const DEFAULT_ACCELERATORS: Record<ShortcutAction, string> = {
+  startRecording: "Command+Control+C",
+  stopRecording: "Command+Control+S",
+  bringToFront: "Command+Control+O",
+  captureScreenshot: "Command+Control+X",
+  openLibrary: "Command+Control+L",
+};
+```
+
+Everything else — labels, descriptions, groups, `statusWord` — stays in
+`SHORTCUT_DEFINITIONS` in the desktop app, because it is English UI copy with no
+reader on the web. Only the pair _(action, default accelerator)_ moves, which is
+exactly the pair that drifted.
+
+Two consequences to accept before this is a yes:
+
+1. **`apps/kaipu-record` gains a dependency on `@kaipu/domain`.** Domain is pure
+   and has no runtime dependencies, so the cost is one line in `package.json` —
+   but it is a new arrow in the dependency graph and the repo's import rules make
+   that direction legal (apps may import domain), so nothing is violated.
+2. **The landing needs a formatter.** `"Command+Control+C"` is an Electron
+   accelerator, not something to show a reader; the web needs a small
+   `formatAccelerator()` that renders it as `⌃⌘C`. The desktop already has this
+   logic in `useShortcutLabels`; the display formatter should move to domain
+   beside the constant, or be written once on the web. **Recommendation:** move
+   it, for the same reason the constant moves.
+
+**Rejected:** duplicating with an agreement test, the pattern this repo uses for
+`DEFAULT_LOCALE`. That duplication exists to keep React and two message catalogs
+out of the preload bundle; there is no equivalent cost for five accelerator
+strings, and the assertion would have to reach across two apps.
 
 ### The measured mismatch, for the record
 
@@ -142,9 +199,11 @@ because a global shortcut overrides the focused app.
 2. **`⌘L` as shown**, matching the design. Against: it hijacks a very common
    combination system-wide, which is a support problem, not a style one.
 
-**Recommendation: 1.**
-
-**Default if unanswered:** option 1.
+**DECIDED: option 1, `Command+Control+L`.** It keeps the family the other four
+belong to, and the landing is corrected to show it rather than the `⌘L` the
+design drew. This adds a fifth entry to `SHORTCUT_DEFINITIONS` and a real action
+behind it — opening the Library from anywhere — so the landing stops promising a
+shortcut that does nothing.
 
 ## 5 — The watermark and licence merge
 
@@ -159,18 +218,36 @@ without a watermark), `262e1df` (relicence MIT → AGPL-3.0-only) **and** edits 
 deleted. The merge conflicts for real. `brand-origin.tsx` in particular is a new
 landing component that has to be re-homed into `components/home/` or dropped.
 
-## 6 — The rail's active-chapter label
+## 6 — A floating label on the landing overlaps the mockup
 
-Unrelated to the above, still unanswered from the landing review. On the hero the
-rail's label reads "Kaipu" and at 1440×900 it overlaps the app mockup's "Change"
-button.
+Reformulated, because the first version assumed context the reader does not have.
 
-1. Show the label on hover/focus only — keeps the navigation affordance, removes
-   the collision.
-2. Drop it on the bookends (`hero`, `files`), keep it on the numbered chapters —
-   closer to the design, but the reader loses their place on the first scroll.
+**What the rail is.** Down the right edge of the landing there is a thin vertical
+strip of icons — one per section of the page — that tracks where the reader has
+scrolled to. It is the page's own navigation, and it is fixed: it stays on screen
+while everything else moves.
 
-**Recommendation: 1.**
+**What goes wrong.** Whichever section you are currently in, the rail shows its
+name in a small floating box to the left of its icon. In the hero — the very
+first screen, the one everybody sees — that name is "Kaipu", so a box reading
+"Kaipu" hangs in mid-air beside the rail. At 1440×900 it lands **on top of the
+"Change" button** inside the app mockup, so the screenshot of the product has a
+label sitting across it. The owner's design has no such label anywhere.
+
+**The trade-off.** The label exists to answer "where am I on this page". Removing
+it is free on the hero, where the answer is obvious, and costs something further
+down, where the icons alone are just five grey glyphs.
+
+1. **Show the name only while the pointer is over the rail** (or it has keyboard
+   focus). The collision disappears because nothing floats unless the reader
+   asked for it, and the answer to "where am I" is one hover away.
+2. **Never label the two ends of the page** (the hero and "Your files"), keep the
+   label on the four numbered chapters. Closest to the design. Against: the first
+   screen is exactly where a reader has not yet learned what the rail is, so it
+   is the worst place to withhold the explanation.
+
+**Recommendation: 1.** It fixes the overlap everywhere rather than at the one
+place it was noticed, and it keeps the affordance for the reader who wants it.
 
 **Default if unanswered:** option 1.
 
