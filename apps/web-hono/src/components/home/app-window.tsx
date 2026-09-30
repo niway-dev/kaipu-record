@@ -1,6 +1,7 @@
 import { Camera, Crop, Library, Mic, Monitor, Video, Volume2 } from "lucide-react";
 import { KaipuLogo } from "@kaipu/brand";
 import { useTranslations } from "@kaipu/i18n";
+import { DEFAULT_ACCELERATORS, formatAccelerator } from "@kaipu/domain/constants";
 
 import styles from "./app-window.module.css";
 
@@ -14,6 +15,12 @@ import styles from "./app-window.module.css";
  */
 export function AppWindow() {
   const t = useTranslations("landing");
+  // Read from the same record the desktop app registers, never typed by hand —
+  // all three glyphs here were wrong before this existed.
+  const keys = {
+    record: formatAccelerator(DEFAULT_ACCELERATORS.mac.startRecording),
+    screenshot: formatAccelerator(DEFAULT_ACCELERATORS.mac.captureScreenshot),
+  };
 
   const sources = [
     { icon: Mic, label: t("homeAppMic"), on: true },
@@ -81,7 +88,7 @@ export function AppWindow() {
               <span className={styles.startInner}>
                 <span className={styles.readyDot} style={{ background: "#fff" }} />
                 {t("homeAppStart")}
-                <span className={styles.startShortcut}>⌘⇧P</span>
+                <span className={styles.startShortcut}>{keys.record}</span>
               </span>
             </div>
           </div>
@@ -98,17 +105,16 @@ export function AppWindow() {
         <div className={`${styles.trayRow} ${styles.trayRowActive}`}>
           <span className={styles.trayDot} />
           {t("homeTrayStart")}
-          <span className={styles.trayKeys}>⌘⇧P</span>
+          <span className={styles.trayKeys}>{keys.record}</span>
         </div>
         <div className={styles.trayRow}>
           <Crop size={15} />
           {t("homeTrayShot")}
-          <span className={styles.trayKeys}>⌘⌃4</span>
+          <span className={styles.trayKeys}>{keys.screenshot}</span>
         </div>
         <div className={styles.trayRow}>
           <Library size={15} />
           {t("homeTrayLibrary")}
-          <span className={styles.trayKeys}>⌘L</span>
         </div>
       </div>
     </div>

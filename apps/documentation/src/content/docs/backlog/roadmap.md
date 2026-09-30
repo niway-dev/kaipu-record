@@ -13,36 +13,44 @@ Status legend: ⬜ todo · 🔨 in progress · ✅ done
 
 ---
 
-## After the marketing landing merges (2026-09-30) 🟡
+## Landing shortcuts — fixed (2026-09-30) ✅
 
-PR [#196](https://github.com/csdev19/kaipu-record-monorepo/pull/196) merges with
-`design/editor-audio` folded in. One item was deliberately deferred past the merge to
-close the branch gap — it is a correctness debt, not a nicety, so it should be the next
-thing picked up.
+The landing's keyboard shortcuts now come from
+`packages/domain/src/constants/shortcuts.ts`, which is also what the desktop app
+registers. One definition, so the two cannot disagree.
 
-**The shortcut glyphs on the landing are hardcoded.** Five of them: `hero.tsx:21` and
-`app-window.tsx:84, 101, 106, 111`. They are typed characters, read from nothing, so
-they drifted from the real defaults without any test failing — and nothing stops them
-drifting again. Today they happen to match; that is luck, not a guarantee.
+**The note this replaces was wrong.** It said the glyphs "happen to match today; that
+is luck". They did not match at all — every one was false:
 
-The approved fix is `packages/domain/src/constants/shortcuts.ts` holding the
-_(action, default accelerator)_ pair keyed by platform, plus a `formatAccelerator()`
-for the web. Full shape in [open decisions §3](./open-decisions-editor-audio). Two
-consequences to accept with it:
+| The page printed | The real binding |
+| ---------------- | ---------------- |
+| ⌘⇧P start        | ⌘⌃C              |
+| ⌘⌃4 screenshot   | ⌘⌃X              |
+| ⌘L open library  | no such shortcut |
 
-- `apps/kaipu-record` gains a dependency on `@kaipu/domain` — pure, no runtime deps, so
-  the cost is one line in `package.json`, but it is a new arrow in the dependency graph.
-- The Windows column is written but **unvalidated**: nobody has tested those
-  combinations against Windows' reserved shortcuts, because there is no Windows build.
-  `Command` is macOS-only, so today's defaults would be dead bindings there.
+Six places were hardcoded, not five: `hero.tsx`, four in `app-window.tsx`, and
+`homeChapter1Pill2` in both message catalogues. The "open library" row lost its key
+entirely — there is no global binding for it, and an invented one is the same lie in a
+smaller font.
 
-**Also open, and not a blocker:** nobody has reviewed the landing in a browser. It was
-measured at five viewports, which verifies geometry, not judgement. And merging
-`editor-audio` settled the rail label in favour of the hover version — one revert
-undoes it if the other reading is preferred.
+The pill stays a literal because pills come from the catalogues; a test in
+`@kaipu/i18n` pins it to the constant, the same shape that pins `DEFAULT_LOCALE`.
+Reverting the constant by hand makes it fail, which was checked.
 
-Resolved at merge time: the "Mute or boost audio" pill, which promised a feature that
-was cancelled, now reads "Mute audio" / "Silenciar audio" in both catalogues.
+Still open:
+
+- **The Windows column is unvalidated.** Nobody has tested `Control+Alt+<key>` against
+  Windows' reserved shortcuts, because there is no Windows build. `Command` is
+  macOS-only, so the previous defaults would have been dead bindings there.
+- **`openLibrary` is not implemented.** The approved shape in
+  [open decisions §3](./open-decisions-editor-audio) lists five actions; only the four
+  the app actually registers are in the constant. Adding a default for an action
+  nobody binds would recreate the drift this removes — it belongs with the work that
+  implements it.
+- **Nobody has reviewed the landing in a browser.** It was measured at five viewports,
+  which verifies geometry, not judgement.
+- Merging `editor-audio` settled the rail label in favour of the hover version; one
+  revert undoes it if the other reading is preferred.
 
 ## Proposed for later analysis
 

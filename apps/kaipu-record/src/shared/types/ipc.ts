@@ -9,6 +9,7 @@
 
 import { DEFAULT_QUALITY, type RecordingQuality } from "../recording-quality";
 import type { Locale } from "@kaipu/i18n";
+import { DEFAULT_ACCELERATORS, SHORTCUT_ACTIONS } from "@kaipu/domain/constants";
 
 /**
  * "system" (follow the OS appearance) is a deliberate non-goal for now — the
@@ -17,13 +18,13 @@ import type { Locale } from "@kaipu/i18n";
  */
 export type Theme = "light" | "dark";
 
-/** Actions that can be bound to a global keyboard shortcut. */
-export const SHORTCUT_ACTIONS = [
-  "startRecording",
-  "stopRecording",
-  "bringToFront",
-  "captureScreenshot",
-] as const;
+/**
+ * Actions that can be bound to a global keyboard shortcut, re-exported from
+ * `@kaipu/domain/constants` so every consumer here keeps its current import.
+ * The list and the default bindings live there because the marketing site
+ * prints them too, and it cannot import from this app.
+ */
+export { SHORTCUT_ACTIONS };
 export type ShortcutAction = (typeof SHORTCUT_ACTIONS)[number];
 
 /** Electron accelerator string per action (e.g. "Command+Control+C"). */
@@ -52,15 +53,15 @@ export interface ShortcutDefinition {
 }
 
 /**
- * The `Command+Control` base is distinctive: it avoids macOS reserved combos
- * (screenshots, VoiceOver's Control+Option) and the crowded Command+Shift space
- * that browsers/editors lean on — important because a global shortcut overrides
- * the focused (recorded) app.
+ * The accelerators are NOT written here: they come from
+ * `DEFAULT_ACCELERATORS.mac` in `@kaipu/domain/constants`, which is also what
+ * the landing renders. Everything else — labels, descriptions, groups,
+ * statusWord — is UI copy with no reader on the web and stays local.
  */
 export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
   {
     action: "startRecording",
-    defaultAccelerator: "Command+Control+C",
+    defaultAccelerator: DEFAULT_ACCELERATORS.mac.startRecording,
     group: "recording",
     label: "Start recording",
     description: "Begin a screen recording from anywhere",
@@ -68,7 +69,7 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
   },
   {
     action: "stopRecording",
-    defaultAccelerator: "Command+Control+S",
+    defaultAccelerator: DEFAULT_ACCELERATORS.mac.stopRecording,
     group: "recording",
     label: "Stop recording",
     description: "End the current recording from anywhere",
@@ -76,7 +77,7 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
   },
   {
     action: "bringToFront",
-    defaultAccelerator: "Command+Control+O",
+    defaultAccelerator: DEFAULT_ACCELERATORS.mac.bringToFront,
     group: "app",
     label: "Bring Kaipu to front",
     description: "Show the app window if it slips behind or out of reach",
@@ -84,7 +85,7 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
   },
   {
     action: "captureScreenshot",
-    defaultAccelerator: "Command+Control+X",
+    defaultAccelerator: DEFAULT_ACCELERATORS.mac.captureScreenshot,
     group: "app",
     label: "Capture screenshot",
     description: "Open the area selection to take a screenshot",
