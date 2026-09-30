@@ -65,6 +65,7 @@
         "@electron-toolkit/preload": "^3.0.2",
         "@electron-toolkit/utils": "^4.0.0",
         "@kaipu/brand": "workspace:*",
+        "@kaipu/domain": "workspace:*",
         "@kaipu/i18n": "workspace:*",
         "@kaipu/tokens": "workspace:*",
         "@radix-ui/react-select": "^2.3.0",
@@ -244,6 +245,7 @@
         "use-intl": "^4.11.0",
       },
       "devDependencies": {
+        "@kaipu/domain": "workspace:*",
         "@types/node": "^22.14.1",
         "@types/react": "^19",
         "tsdown": "catalog:",

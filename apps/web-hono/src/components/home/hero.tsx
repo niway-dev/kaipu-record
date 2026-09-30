@@ -1,6 +1,7 @@
 import { Apple, ArrowUpRight, Mail, Monitor, Play } from "lucide-react";
 import { KaipuLogo } from "@kaipu/brand";
 import { useTranslations } from "@kaipu/i18n";
+import { DEFAULT_ACCELERATORS, formatAccelerator } from "@kaipu/domain/constants";
 
 import { downloadUrls } from "@/lib/download";
 import { AppWindow } from "./app-window";
@@ -18,7 +19,7 @@ export function Hero() {
         00:14
       </span>
       <span className={`${styles.glyph} ${styles.glyphKeys}`} aria-hidden>
-        ⌘⇧P
+        {formatAccelerator(DEFAULT_ACCELERATORS.mac.startRecording)}
       </span>
       <span className={`${styles.glyph} ${styles.glyphRec}`} aria-hidden>
         REC

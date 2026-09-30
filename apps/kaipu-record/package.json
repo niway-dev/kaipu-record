@@ -28,6 +28,7 @@
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
     "@kaipu/brand": "workspace:*",
+    "@kaipu/domain": "workspace:*",
     "@kaipu/i18n": "workspace:*",
     "@kaipu/tokens": "workspace:*",
     "@radix-ui/react-select": "^2.3.0",
