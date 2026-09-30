@@ -13,34 +13,36 @@ Status legend: ⬜ todo · 🔨 in progress · ✅ done
 
 ---
 
-## Before the marketing landing merges (2026-09-30) 🟡
+## After the marketing landing merges (2026-09-30) 🟡
 
-PR [#196](https://github.com/csdev19/kaipu-record-monorepo/pull/196) is mergeable and
-green, but it is still a draft because the page makes two claims that are not true.
-Both are small; neither is a layout problem.
+PR [#196](https://github.com/csdev19/kaipu-record-monorepo/pull/196) merges with
+`design/editor-audio` folded in. One item was deliberately deferred past the merge to
+close the branch gap — it is a correctness debt, not a nicety, so it should be the next
+thing picked up.
 
-1. **The landing promises a feature that was cancelled.** `homeChapter3Pill3` reads
-   "Mute or boost audio" / "Silenciar o subir audio" in both catalogues. Boost was
-   dropped — mute ships alone and stays binary — so the pill must read "Mute audio" /
-   "Silenciar audio". The corrected strings already exist on `design/editor-audio`;
-   merging that branch fixes it, otherwise it is a two-line edit.
-2. **The shortcut glyphs on the landing are hardcoded and wrong.** Five of them:
-   `hero.tsx:21` and `app-window.tsx:84, 101, 106, 111`. They are typed characters, not
-   values read from anywhere, so they drifted from the real defaults without anything
-   failing. The approved fix is `packages/domain/src/constants/shortcuts.ts` holding
-   the _(action, default accelerator)_ pair keyed by platform, plus a
-   `formatAccelerator()` for the web — the full shape is in
-   [open decisions §3](./open-decisions-editor-audio). Two consequences to accept with
-   it: `apps/kaipu-record` gains a dependency on `@kaipu/domain` (pure, no runtime
-   deps), and the Windows column is written but **unvalidated** — there is no Windows
-   build to test it against.
+**The shortcut glyphs on the landing are hardcoded.** Five of them: `hero.tsx:21` and
+`app-window.tsx:84, 101, 106, 111`. They are typed characters, read from nothing, so
+they drifted from the real defaults without any test failing — and nothing stops them
+drifting again. Today they happen to match; that is luck, not a guarantee.
 
-Neither blocks a merge technically. They block it editorially: a marketing page that
-promises a cancelled feature and prints the wrong keyboard shortcut is worse than no
-page. Fix both, then decide whether #196 leaves draft.
+The approved fix is `packages/domain/src/constants/shortcuts.ts` holding the
+_(action, default accelerator)_ pair keyed by platform, plus a `formatAccelerator()`
+for the web. Full shape in [open decisions §3](./open-decisions-editor-audio). Two
+consequences to accept with it:
+
+- `apps/kaipu-record` gains a dependency on `@kaipu/domain` — pure, no runtime deps, so
+  the cost is one line in `package.json`, but it is a new arrow in the dependency graph.
+- The Windows column is written but **unvalidated**: nobody has tested those
+  combinations against Windows' reserved shortcuts, because there is no Windows build.
+  `Command` is macOS-only, so today's defaults would be dead bindings there.
 
 **Also open, and not a blocker:** nobody has reviewed the landing in a browser. It was
-measured at five viewports, which verifies geometry, not judgement.
+measured at five viewports, which verifies geometry, not judgement. And merging
+`editor-audio` settled the rail label in favour of the hover version — one revert
+undoes it if the other reading is preferred.
+
+Resolved at merge time: the "Mute or boost audio" pill, which promised a feature that
+was cancelled, now reads "Mute audio" / "Silenciar audio" in both catalogues.
 
 ## Proposed for later analysis
 
