@@ -12,6 +12,7 @@ const SETTINGS: AppSettings = {
   showBarInRecording: false,
   screenshotSave: "auto",
   showBrandBadge: false,
+  screenshotCopy: "auto",
   shortcuts: DEFAULT_SHORTCUTS,
   deviceId: "",
   uploadMode: "local-only",

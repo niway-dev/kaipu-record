@@ -5,7 +5,7 @@ description: Preserve Kaipu's pink identity and focused UI while exploring a mem
 
 # A warmer Kaipu and the Kai exploration
 
-**Exploration · 2026-09-27.** The owner likes kaipu.app, the pink accent, and light/dark themes, and proposed “Kai” as an abbreviation and possible mascot. No identity replacement or mascot design is approved.
+**Exploration · 2026-09-27.** The name and origin are settled in the [canonical brand identity](/marketing/brand-identity/). The preferred mascot direction is now **Kai, a small knot that keeps moments**, superseding the earlier vizcacha recommendation. Final artwork integration is pending. The creator reports new logos and notch-state art; inspect those files before generating replacements.
 
 ## Recommendation
 
@@ -30,12 +30,12 @@ Avoid jokes in failure/recovery states, constant animations, and calling every s
 ## Visual exploration brief
 
 - Produce a few simple silhouettes that remain identifiable at small sizes and in monochrome.
-- Explore a character related to connecting or keeping explanations together; choose a specific animal or form only after testing, not by default.
+- Explore a compact knot-character that keeps moments; compare flat silhouettes before treating pixel art as the final style.
 - Preserve pink as the brand accent, with suitable neutral treatment in both themes.
 - Keep the app icon, wordmark, tray icon, and mascot distinct in purpose. Test the current logo before assuming it needs replacement.
 - Check recognition without the wordmark and whether the character makes the product feel approachable without implying a toy.
 
-The owner associates the naming family with Quechua. Do not invent an etymology for Kaipu or Kai, or imply that an abbreviation is a verified Quechua word. Verify language-specific meanings with a qualified speaker before publishing a brand-origin story; avoid treating cultural motifs as generic decoration.
+Use the adopted origin from [Brand identity](/marketing/brand-identity/). It explicitly distinguishes the creator's construction from a literal translation. Kai's knot gesture is a contemporary metaphor, not a reconstruction of historical quipu encoding.
 
 ## UI improvements with higher immediate value
 
@@ -50,3 +50,38 @@ Start with a short task-based review, not a whole-app redesign or a styling-fram
 ## Decision gate
 
 Compare the current brand with a small Kai concept in the landing and an empty state. Ask what users remember and what they think the app does. Proceed if recognition/approachability improves without hurting comprehension. If not, retain the warmer copy and existing identity. CLI feasibility and AI value do not depend on this choice.
+
+## Peruvian-inspired directions
+
+**Owner follow-up · 2026-09-27:** explore pixel art and a Peruvian connection. These are concept candidates, not a selected logo.
+
+| Direction                               | Why it could work                                                                                | What to watch                                                                                               |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| **Living knot — preferred exploration** | Connects the recording metaphor, name, and companion directly                                    | Avoid a generic bow, yarn ball, or sewing-brand silhouette                                                  |
+| Andean vizcacha — earlier alternative   | Long ears, rounded body, and curved tail offer a readable silhouette; attentive and approachable | Andean, not exclusive to Peru; avoid a generic rabbit or making sleepiness its defining expression          |
+| Alpaca                                  | Familiar, welcoming, and easy to recognize                                                       | Common mascot territory; needs a distinctive silhouette beyond accessories                                  |
+| Abstract thread/knot companion          | Can connect the ideas of keeping and finding                                                     | More explanation needed; do not invent an etymology or reproduce meaningful cultural patterns as decoration |
+
+Favor a small contemporary character over a collage of tourist symbols. A subtle pink thread is a brand detail, not a claim to represent a traditional textile. Avoid default ponchos, ceremonial headwear, flags, Machu Picchu backdrops, or “Inca” styling as shorthand for Peru.
+
+## Ready-to-use image prompt
+
+Use this only if the supplied artwork needs further exploration. First inspect the creator's logos and notch-state designs. The [execution plan](/plans/2026-09-27-brand-and-website-rollout/) separates artwork selection, small-size logo tests, and runtime notch behavior.
+
+> Design three distinct flat-shape concepts for Kai, a small living knot that keeps moments, the companion of Kaipu, a screen-recording and screenshot app made by a Peruvian creator. Kaipu's brand signature is “This. Captured.” The character draws contemporary inspiration from recording information with cords and knots; it does not reproduce historical quipu notation. Make it attentive, curious, capable, and careful.
+>
+> Build a soft, compact body from one visually understandable cord knot, with two simple eyes and short cord ends as small limbs. Explore: a compact knot; a more expressive knot-character; a knot with a subtle capture-frame relationship. Use Kaipu pink inspired by #F6055C, charcoal, and cream. Present each concept at equal scale on a neutral background, beside a simplified one-color symbol. Favor clean vector-like shapes and recognizable negative space. Do not make a generic yarn ball, gift bow, sewing logo, brain, or tangled mass.
+>
+> No text, letters, wordmarks, background scenery, gradients, texture, costume, flags, or borrowed characters. The Peruvian connection should come from the recording metaphor rather than tourist decoration. The full mascot and the simplified small symbol must feel related, but do not squeeze all facial detail into the small symbol.
+
+### Follow-up prompt after choosing one
+
+> Use the attached approved Kai knot concept as the identity reference. Preserve its cord structure, silhouette, eyes, proportions, and colors. Produce three separate poses on transparent backgrounds: attentive idle; carefully tying a small knot around a captured moment represented by a simple frame; extending one thread toward another frame to suggest sharing. Keep the same angle and scale. These are conceptual brand gestures, not claims about implemented app states. No text, scenery, gradients, or new accessories. This is a consistency sheet, not a redesign.
+
+### Optional pixel-art treatment
+
+> Translate the approved Kai knot design into deliberate pixel art on a 48 by 48 logical grid. Preserve its knot structure and distinctive silhouette. Use no more than eight colors, crisp square clusters, and no anti-aliasing or gradients. Show the idle pose first; do not invent a new character. Provide a separate simplified small-size symbol rather than automatically downscaling the full sprite.
+
+Generated pixel art is a concept, not automatically a production sprite: verify the grid, manually remove stray colors, and normalize proportions in a pixel editor. Export the chosen sprite at integer scales with nearest-neighbor sampling. Test against light and dark surfaces and in monochrome. Create an independently simplified favicon/tray mark only if needed; a full 48-pixel character will not necessarily read at 16 pixels. Transparent output may need cleanup depending on the generator.
+
+For the [website concept](/marketing/website-concept/), start with one static Kai illustration near the closing invitation or an empty-state example. Add animation only after the character and page hierarchy work without it.

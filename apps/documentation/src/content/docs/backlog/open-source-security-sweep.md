@@ -1,6 +1,6 @@
 ---
 title: "Open-source security sweep"
-description: "The pass the repository goes through before it becomes public under AGPL-3.0: secrets in history, the cloud security workstreams, docs language, personal references, and the repository files a public project needs. Tracked in one draft PR."
+description: "The pass the repository goes through before it becomes public under AGPL-3.0: secrets in history, the cloud security workstreams, docs language, personal references, and the repository files a public project needs. None of it is done yet: this is the plan and the measured baseline."
 ---
 
 # Open-source security sweep
@@ -8,7 +8,12 @@ description: "The pass the repository goes through before it becomes public unde
 > **Status: 🟡 In progress** (2026-09-27). Owner: "first a sweep; put it as a PR in a separate
 > worktree, generate a doc and a draft PR, and do all the security changes in that PR."
 > Parent: [Open source under AGPL-3.0](/marketing/open-source/) · pre-open checklist.
-> This page is the working log of that PR; the checklist there is the contract.
+> **The plan merged ahead of the work.** Holding it in a long-lived PR kept it
+> invisible and let it rot against a moving `main`, so this page lands on `main`
+> as the tracker instead. **Nothing below is done** — the checklist is 0 of 18 —
+> and the baseline was measured on 2026-09-27, so re-measure before trusting it.
+> The repository must not go public until every box is ticked or explicitly
+> accepted.
 
 ## What the sweep is for
 
@@ -29,7 +34,8 @@ is about **what a public repository exposes**, not about hiding the code.
 
 ## Work items, in order
 
-Each item is a commit or a small group of commits on this PR. Tick it here when it lands.
+Each item is a commit or a small group of commits. Tick it here when it lands; this page
+is the record, so a box ticked here is the claim that it was actually done.
 
 ### 1. Secrets
 
@@ -115,7 +121,7 @@ keep the slugs, keep the tables. Legacy Spanish is tech debt already declared in
 - [ ] The first public release exists with signed macOS and Windows artifacts attached.
 - [ ] The announcement bundle is ready ([timing](/marketing/open-source/#timing)).
 
-## Out of scope for this PR
+## Out of scope for the sweep
 
 Feature work, the landing, and the Windows beta. Those have their own pages. This PR is
 allowed to be long-lived; it merges when the checklist is done, not before.

@@ -10,12 +10,15 @@ These are working hypotheses and recommendations, not validated market findings 
 
 **Direction:** help people turn what they see into something another person can understand, then find and reuse that explanation later.
 
+**Brand authority:** [Kaipu brand identity](/marketing/brand-identity/) preserves the creator's adopted meaning. Read it before interpreting the name or changing brand assets. [Brand and website rollout](/plans/2026-09-27-brand-and-website-rollout/) is the execution sequence, including intake of the creator's new logo and notch-state art.
+
 | Read                                                            | Purpose                                                                                                                    |
 | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | [Positioning and Recordly](/marketing/positioning/)             | Audience, differentiation, competitive evidence, landing narrative, and pricing tension                                    |
 | [Brand and Kai](/marketing/brand-and-kai/)                      | Keep Kaipu and pink; explore a warmer experience and a supporting mascot                                                   |
 | [AI and automation feasibility](/marketing/ai-and-automation/)  | Captions, audio-based summaries, CLI, and agent-driven editing; current technical constraints                              |
 | [Messaging playbook](/marketing/messaging-playbook/)            | The one message and the moves on the landing, in the product and in content that prove it; benchmarks and comparison pages |
+| [Website concept and copy](/marketing/website-concept/)         | Four-chapter visual direction, implemented EN/ES copy, release-aware messaging, media shot list, and production sequence   |
 | [Open source under AGPL-3.0](/marketing/open-source/)           | Why the whole monorepo opens, the pre-open checklist, and the contribution policy                                          |
 | [Product growth roadmap](/backlog/product-growth/)              | Priorities, smallest useful experiments, dependencies, and success criteria                                                |
 | [Free tier without watermark](/backlog/free-tier-no-watermark/) | Decision and implementation: no watermark on the free app, opt-in badge                                                    |
@@ -27,6 +30,14 @@ No watermark on the free tier (done on this branch), no Tauri rewrite, AGPL-3.0 
 whole monorepo opening at launch, Windows recording-only beta, and a roadmap that adds GIF,
 keystroke visualizer, captions on Parakeet, silence cutting and a CLI. The full list with
 links is at the top of [Positioning](/marketing/positioning/#owner-decisions-2026-09-27).
+
+## How this section is worked on
+
+The growth strategy lives as one long-running branch and PR of docs and notes. Every idea
+gets its own brainstorm, in stages, one at a time; the result of each brainstorm is a feature
+doc in `backlog/` linked from the [growth roadmap](/backlog/product-growth/). Code for an
+idea starts only after its doc exists. Order agreed on 2026-09-27: GIF export first (smallest,
+self-contained), then Windows beta, then the landing sections, then keystrokes and the CLI.
 
 ## Working principles
 
@@ -42,4 +53,4 @@ links is at the top of [Positioning](/marketing/positioning/#owner-decisions-202
 The [product philosophy](/desktop/product-philosophy/) remains the foundation.
 The [design brief](/briefings/design-brief/) describes the existing visual system; the brand exploration does not replace it.
 The [master backlog](/backlog/roadmap/) links the proposed growth sequence alongside existing work.
-No runtime architecture, model/provider, CLI protocol, pricing policy, or rebrand is selected by these notes.
+Runtime architecture and CLI protocols require their own designs. Brand meaning and the owner's growth decisions are recorded explicitly; final visual assets and the website layout remain pending implementation.

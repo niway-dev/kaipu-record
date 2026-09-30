@@ -25,6 +25,41 @@ person who takes screenshots.
 | The library and vault                                 | Anything that depends on macOS-only APIs (Dock policy, content-protected control bar) |
 | Auto-update via the existing release pipeline         |                                                                                       |
 
+## What exists today (checked 2026-09-27)
+
+| Piece                                                                   | State                                                                                                                                                                                                |
+| ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bun run build:win` (rebuild native → build → `electron-builder --win`) | Exists; the owner has run it and the app records                                                                                                                                                     |
+| `electron-builder.yml` `win` / `nsis` targets                           | Configured (installer name, shortcuts)                                                                                                                                                               |
+| Release pipeline `release-desktop.yml`                                  | **macOS only**: one job on `macos-latest`, sign + notarize + DMG + R2 feed. No Windows job                                                                                                           |
+| Windows code signing                                                    | **Not configured**: no certificate, no `CSC_*` secrets for Windows                                                                                                                                   |
+| Platform guards                                                         | Recording, click hook and login-item already branch on `win32`. Screenshot capture returns `null` outside macOS (`main/screenshots/screenshot-ipc.ts`), which is a silent no-op, not a "coming soon" |
+| Auto-update on Windows                                                  | Untested; the feed writer only knows the macOS artifacts                                                                                                                                             |
+
+So the gap is not the build. It is **distribution**: CI, signing, the update feed, and the
+UI telling the truth about screenshots.
+
+## Steps, in order
+
+1. **CI job.** Add a `windows-latest` job to `release-desktop.yml` mirroring the macOS one:
+   checkout, `bun install`, `rebuild:native`, `build:win`, upload the `-setup.exe` to the
+   release. Run it on a tag first, unsigned, to prove reproducibility.
+2. **Screenshots say "coming soon".** Replace the silent `null` with a platform-aware state:
+   hide the capture tab and the global screenshot shortcut on Windows, or show them disabled
+   with a one-line "Coming to Windows" and a link to the public roadmap.
+3. **Signing decision** (owner): buy a code-signing certificate now (an OV certificate is
+   enough to stop SmartScreen after reputation builds; EV removes the warning immediately but
+   costs more and needs hardware), or ship the first beta unsigned with an explicit
+   SmartScreen walkthrough on the download page. Recommendation: ship unsigned beta now with
+   the walkthrough, buy OV in parallel, sign from the second beta.
+4. **Auto-update.** Extend the feed writer for the NSIS artifact (`latest.yml`) and verify a
+   Windows install updates from beta 1 to beta 2.
+5. **Version gate and analytics** verified against the Windows artifact.
+6. **Landing and roadmap.** "Download for Windows (beta)" button, the screenshots gap stated,
+   and a public-roadmap row "Windows — screenshots".
+7. **Manual QA on real hardware**: record with mic and system audio, camera bubble, export,
+   library, auto-zoom on clicks (the native hook), update.
+
 ## Checklist before the first public beta
 
 - [ ] `build:win` reproducible from CI (`release-desktop.yml`), not only from a laptop.
