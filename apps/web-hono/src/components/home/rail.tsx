@@ -55,12 +55,16 @@ export function Rail() {
           >
             {Icon ? <Icon size={17} aria-hidden /> : <KaipuLogo use="product" size={26} />}
             {/*
-              The name is announced but never drawn. A floating label beside the
-              active icon overlapped the app mockup (the hero's read "Kaipu" and
-              landed on its "Change" button at 1440x900), and the design has no
-              such label — the active state is carried by the pill and the
-              number at the top of the rail. Screen readers still get the name.
+              The name is drawn only while this button is hovered or focused.
+              The previous version drew it permanently beside the ACTIVE icon,
+              which put a box reading "Kaipu" on top of the app mockup's
+              "Change" button on the very first screen. On hover it is the
+              reader's own doing, it is transient, and it answers the question
+              for any chapter rather than only the one you are already in.
             */}
+            <span className={styles.label} aria-hidden>
+              {label}
+            </span>
             <span className="kl-sr-only">{label}</span>
           </button>
         );

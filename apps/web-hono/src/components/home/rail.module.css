@@ -92,3 +92,42 @@
   width: 18px;
   height: 18px;
 }
+
+/*
+ * Hover/focus label. Hidden by default and revealed by the button's own state,
+ * so nothing floats over the page unless the reader put the pointer on the rail.
+ * `pointer-events: none` keeps it from stealing the hover it depends on.
+ */
+.label {
+  position: absolute;
+  top: 50%;
+  right: calc(100% + 12px);
+  padding: 5px 10px;
+  border: 1px solid var(--kl-bd-2);
+  border-radius: 8px;
+  background: var(--kl-glass);
+  backdrop-filter: blur(var(--kl-glass-blur));
+  color: var(--kl-tx);
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  translate: 6px -50%;
+  transition:
+    opacity 0.16s ease,
+    translate 0.16s ease;
+}
+
+.item:hover .label,
+.item:focus-visible .label {
+  opacity: 1;
+  translate: 0 -50%;
+}
+
+/* Decorative: the name is on the button already, via .kl-sr-only. */
+@media (prefers-reduced-motion: reduce) {
+  .label {
+    transition: none;
+  }
+}
