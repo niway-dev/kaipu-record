@@ -1,0 +1,160 @@
+/*
+ * The marketing landing's own design system, from "Kaipu Landing — Tokens,
+ * tipografía y efectos".
+ *
+ * Three rules hold this file together:
+ *
+ * 1. EVERY name is --kl-*, never --kaipu-*. The app and the landing share
+ *    PublicShell, so a landing tweak that redefined a product token would leak
+ *    into roadmap, legal and the authenticated routes. Promoting a value to a
+ *    product token stays a deliberate move, not an accident.
+ *
+ * 2. EVERYTHING is scoped to [data-kl]. Nothing here applies outside the
+ *    landing's root element, so this file cannot reach the app even by mistake.
+ *
+ * 3. Flat custom properties, one value each, no nesting and no descendant
+ *    selectors. This maps one-to-one onto StyleX's defineVars for the planned
+ *    CSS-in-JS migration (backlog/stylex-migration) — a token here becomes a
+ *    key there, with nothing to untangle first.
+ *
+ * Only the dark theme is wired today. The light values are here because the
+ * design system defines them and writing them down costs nothing; turning them
+ * on is a matter of setting data-kl-theme="light", which no UI does yet.
+ */
+
+@layer kaipu-landing {
+  [data-kl] {
+    /* ---- Surfaces ---------------------------------------------------- */
+    --kl-bg: #0b0b0d; /* page */
+    --kl-bg-2: #111114; /* "Your files" — the surface shift that says the page changed subject */
+    --kl-card: #151518;
+    --kl-card-2: #1c1c20; /* active nav pill */
+
+    /* ---- Lines ------------------------------------------------------- */
+    --kl-bd: rgb(255 255 255 / 0.08); /* soft borders */
+    --kl-bd-2: rgb(255 255 255 / 0.14); /* chips, secondary buttons, glass edges */
+
+    /* ---- Ink --------------------------------------------------------- */
+    --kl-tx: #f4f4f6; /* primary */
+    --kl-dim: #a1a1aa; /* body copy */
+    --kl-faint: #6b6b74; /* mono labels, metadata */
+
+    /* ---- Texture and glass ------------------------------------------- */
+    --kl-dot: rgb(255 255 255 / 0.05); /* dot grid */
+    --kl-glass: rgb(17 17 20 / 0.72); /* nav, rail, pickers */
+    --kl-glass-blur: 14px;
+
+    /* ---- Brand ------------------------------------------------------- */
+    --kl-pink: #f6055c; /* buttons, active state — same hex as the product accent */
+    /*
+     * Pink FOR TEXT is a different value on purpose: the brand pink on a near
+     * black background does not carry enough contrast to read as body-adjacent
+     * type. Lighter in dark, darker in light. Never swap one for the other.
+     */
+    --kl-pink-tx: #ff3a7c;
+
+    /* ---- Chapter tints ------------------------------------------------
+     * One tint per moment, used ONLY on the chapter icon, the ambient glow and
+     * the rail. Never on text, never on a button: those stay brand pink, so the
+     * page never has two competing calls to action.
+     */
+    --kl-c1: #f6055c; /* 01 Record */
+    --kl-c1-from: #ff2d6e;
+    --kl-c1-to: #a3044a;
+
+    --kl-c2: #8b5cf6; /* 02 Capture */
+    --kl-c2-from: #a78bfa;
+    --kl-c2-to: #6d28d9;
+
+    --kl-c3: #f59e0b; /* 03 Edit */
+    --kl-c3-from: #fbbf24;
+    --kl-c3-to: #c2410c;
+
+    --kl-c4: #14b8a6; /* 04 Find */
+    --kl-c4-from: #2dd4bf;
+    --kl-c4-to: #0f766e;
+
+    --kl-c5: #58a6ff; /* Your files — no gradient, icon only */
+
+    /* ---- Type families ------------------------------------------------ */
+    --kl-font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+    --kl-font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", monospace;
+    --kl-font-serif: "Instrument Serif", ui-serif, Georgia, serif;
+    --kl-font-hand: "Caveat Variable", ui-rounded, cursive;
+
+    /* ---- Type scale ---------------------------------------------------
+     * Fluid, so the page reads at 1280px and at 1920px without breakpoints.
+     * The clamp floors are the phone sizes; see landing-responsive.css for what
+     * else changes down there.
+     */
+    --kl-fs-h1: clamp(60px, 8.4vw, 112px);
+    --kl-fs-h1-serif: clamp(38px, 5vw, 62px);
+    --kl-fs-h2: clamp(44px, 5.4vw, 70px);
+    --kl-fs-h2-serif: clamp(28px, 3.2vw, 40px);
+    --kl-fs-body: clamp(17.5px, 1.3vw, 19px);
+    --kl-fs-chip: 14px;
+    --kl-fs-label: 13px;
+
+    /* Headlines are set tight on both axes — that compression is most of the
+     * design's voice. Body copy stays open at 1.6 so it remains readable. */
+    --kl-tracking-h1: -0.055em;
+    --kl-tracking-h2: -0.05em;
+    --kl-tracking-label: 0.15em; /* uppercase mono only */
+    --kl-leading-h: 0.94;
+    --kl-leading-body: 1.6;
+
+    /* ---- Depth --------------------------------------------------------
+     * Colour, not black, and a negative spread so the light sits UNDER the
+     * object like a reflection instead of outlining it.
+     */
+    --kl-glow-btn: 0 18px 40px -16px rgb(246 5 92 / 0.95);
+    --kl-shadow-window: 0 60px 120px -40px rgb(0 0 0 / 0.8);
+    --kl-shadow-float: 0 20px 50px -20px rgb(0 0 0 / 0.7);
+
+    /* ---- Motion -------------------------------------------------------- */
+    --kl-ease-reveal: cubic-bezier(0.2, 0.7, 0.2, 1);
+    --kl-dur-reveal: 0.8s;
+
+    /* ---- Layout -------------------------------------------------------- */
+    --kl-max-w: 1280px;
+    --kl-gutter: 24px;
+    --kl-rail-w: 56px;
+
+    color-scheme: dark;
+    background: var(--kl-bg);
+    color: var(--kl-tx);
+    font-family: var(--kl-font-sans);
+
+    /*
+     * The page is built from windows and floating cards that deliberately hang
+     * past their container. On a phone that overhang becomes a horizontal
+     * scrollbar and the right edge of every section gets cut off. Clipping here
+     * rather than on <body> keeps the containment inside the landing, where it
+     * belongs, and does not break `position: fixed` for the rail and the top bar
+     * the way `overflow: hidden` on an ancestor of the viewport would.
+     */
+    overflow-x: clip;
+  }
+
+  /*
+   * Defined, not shipped: no control sets this attribute yet. Kept in sync with
+   * the design system's light column so enabling it later is one toggle rather
+   * than a second pass over every value.
+   */
+  [data-kl][data-kl-theme="light"] {
+    --kl-bg: #faf8f5; /* warm white, not #fff — it is what makes it read editorial */
+    --kl-bg-2: #f2efea;
+    --kl-card: #ffffff;
+    --kl-card-2: #ece9e4;
+    --kl-bd: rgb(20 20 22 / 0.09);
+    --kl-bd-2: rgb(20 20 22 / 0.16);
+    --kl-tx: #141416;
+    --kl-dim: #4f4f57;
+    --kl-faint: #7c7c85;
+    --kl-dot: rgb(20 20 22 / 0.07);
+    --kl-glass: rgb(250 248 245 / 0.78);
+    --kl-pink-tx: #d8004d; /* darker, for contrast on the warm white */
+
+    color-scheme: light;
+  }
+}

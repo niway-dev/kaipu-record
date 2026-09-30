@@ -1,0 +1,87 @@
+---
+title: Home audit — conversion, EN/ES, and Kai
+description: Evidence-based review of the four-moments home, with prioritized conversion, translation, product-claim, and accessibility findings.
+---
+
+# Home audit — conversion, EN/ES, and Kai
+
+**Reviewed 2026-09-30 · Findings open unless explicitly marked resolved.** Documentation only: this audit does not implement its recommendations. Baseline: `feat/marketing-landing` at `1ade987`, after the `main` integration in `177fa48`. Review continues in [PR #196](https://github.com/csdev19/kaipu-record-monorepo/pull/196).
+
+## One-minute summary
+
+The visual identity is strong enough to keep. The next improvement is credibility and conversion: explain the category, make every CTA perform its stated action, show a useful output, and answer installation questions. EN/ES catalog parity is healthy; visible translation coverage is incomplete. Kai should punctuate meaningful moments rather than appear as another floating decoration.
+
+| Priority | Work                                                                          | Why                                                |
+| -------- | ----------------------------------------------------------------------------- | -------------------------------------------------- |
+| P0       | Working controls, truthful CTAs, correct audio claims and shortcuts           | Visitors must be able to do what the page promises |
+| P1       | Complete translation, precise file/privacy copy, proof and FAQ                | Reduce doubt before downloading                    |
+| P1       | Restore the brand-origin connection and use existing Kai artwork deliberately | Preserve identity while explaining the product     |
+| P2       | Compact the second introduction, polish motion and secondary metadata         | Improve reading pace and comfort                   |
+
+Read the [copy inventory](/marketing/home-copy-review/) for proposed EN/ES replacements and the [execution plan](/plans/2026-09-30-home-conversion-review/) for order, owners, and acceptance checks.
+
+## Evidence and changes since the chat audit
+
+- Inspected all eight owner screenshots, `apps/web-hono/src/components/home/`, home route composition, landing CSS, both message catalogs, and relevant desktop code. Visual judgments are based on screenshots; no new interactive browser review was performed in this audit.
+- The initial audit counted **96 landing keys per locale**. After the merge, both catalogs have **106**, including restored `origin*` and `footerSignature` keys. No missing or empty landing values were found in the recheck. The existing i18n suite previously passed 13 tests; repeat it when editing messages.
+- The earlier finding that this branch lacked the watermark change is **resolved by integration**. `use-watermark.ts` now reads only the opt-in setting. The remaining check is whether the public download artifact contains the validated change.
+- The earlier stale site-level SEO finding is **resolved by integration**: title/description now mention screen recordings, screenshots, and the local library. Review against final copy, but do not rewrite merely to repeat completed work.
+- Brand-origin keys and the `BrandOrigin` component exist after the merge, but the new home route does not render that component or the old footer signature. Catalog presence is not proof of visible content.
+- The previous handoff assigns theme/locale controls to the owner, drops audio boost, and approves a shared platform-specific shortcut source. Coordinate with that work rather than implementing competing solutions. Merely changing “Mute or boost” to “Mute” is not sufficient while export mute remains unavailable.
+
+## Findings
+
+Paths below are relative to the repository root; `home/` abbreviates `apps/web-hono/src/components/home/` and `styles/` abbreviates `apps/web-hono/src/styles/`. Line references identify the inspected snapshot; use the named component/key if lines move.
+
+| ID  | Priority | Evidence                                                                                                           | Finding and recommended response                                                                                                                                                                                                                                                                             |
+| --- | -------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| H01 | P0       | `apps/web-hono/src/components/home/top-nav.tsx:44–58`                                                              | Menu, theme, and EN/ES controls are inert; EN is always visually selected. Coordinate the owner's switches, reuse locale persistence, and avoid publishing enabled-looking dead controls.                                                                                                                    |
+| H02 | P0       | `home/hero.tsx:75`, `home/sticky-cta.tsx:19`, `home/closing.tsx:28–40`                                             | “Send the link to my Mac” only scrolls to download; the mobile sticky CTA downloads a DMG. Recommend a real copy-link action with success/failure feedback, or truthful navigation wording until that action exists. No email backend is needed.                                                             |
+| H03 | P0       | `home/hero.module.css:265`, `home/hero.tsx:70`, `home/top-nav.tsx:60`                                              | Width is treated as device identity and generic Mac buttons download ARM64. A narrow Mac is not a phone, and Intel visitors need a visible correct choice. Offer architecture selection without relying on unreliable automatic detection.                                                                   |
+| H04 | P0       | `landing.homeChapter3Body`, `landing.homeChapter3Pill3`, `home/mock-edit.tsx:89–109`                               | Copy and the simulated audio lane promise mute/boost in delivered output. `use-preview-playback.ts:13–22` only mutes playback; `VideoScene` has no mute/gain edit model. Remove the unavailable claim and visual lane now; introduce mute wording only after export validation. Boost is explicitly dropped. |
+| H05 | P0       | `home/app-window.tsx:84,101,106,111`, `home/hero.tsx:21`, `landing.homeChapter1Pill2`                              | Displayed shortcuts differ from desktop defaults. Follow the approved shared-constant work; do not independently invent a library shortcut. Current start/stop/show/capture defaults are Command+Control+C/S/O/X in `apps/kaipu-record/src/shared/types/ipc.ts`.                                             |
+| H06 | P1       | All five `home/mock-*.tsx` files                                                                                   | Mockup text bypasses i18n. Translating headings alone leaves Spanish visitors with English Kaipu controls and examples. Translate visible language and accessible descriptions; format fictional dates/numbers consistently.                                                                                 |
+| H07 | P1       | `landing.homeChapter1Serif`, `homeHeroPill4`, `homeFilesBody`, `homeFilesCheck2`                                   | “No setup,” “not a cloud,” “anything,” and “nothing leaves” overstate convenience, compatibility, or privacy. Replace with specific local-recording benefits. Telemetry is different from media storage.                                                                                                     |
+| H08 | P1       | `home/mock-finder.tsx:62`, `landing.homeFilesBody`, `apps/kaipu-record/src/main/library/vault-location.ts:7,38–51` | `~/Movies/Kaipu` is not the default (`Kaipu Record`) and users may choose another folder. Prefer “your local library folder”; use a truthful sample path in Finder art.                                                                                                                                      |
+| H09 | P1       | `landing.homeCtaFootnote`, `home/closing.tsx:59`                                                                   | A Windows notification promise has no subscription flow. The GitHub destination was private during the audit. Use a roadmap link and show source only once publicly accessible. Verify minimum macOS against the actual release rather than assuming the mockup's value.                                     |
+| H10 | P1       | `home/mock-capture.tsx:17,56`, `home/mock-find.tsx:18–42,99–101`                                                   | Example continuity breaks: capture highlights deploy alerts but library says mentions; “checkout” shows two results although one title lacks the term. Real library search is title-only (`library-filters.ts:41–46`). Use consistent titles and matching search results.                                    |
+| H11 | P1       | `home/mock-record.tsx:112–115`, `routes/index.tsx:33–48`                                                           | “Your face / or browse files” reads as an unfinished placeholder. The visitor sees illustrative UI but no complete delivered result. Finish the camera illustration and add one truthful capture-to-output proof, keeping HTML mockups for the chapter design.                                               |
+| H12 | P1       | `routes/index.tsx:33–48`, `components/landing/brand-origin.tsx`                                                    | The origin component and footer signature became disconnected when the home shell changed. Port a compact origin/Kai connection to the new style layer; reuse canonical wording and existing keys, not a second etymology.                                                                                   |
+| H13 | P2       | `home/moments.module.css:4`, `home/moments.tsx:27`                                                                 | A 92vh introduction follows a full-screen hero, delaying product proof. Keep the phrase but shorten this transition; change its second H1 to H2.                                                                                                                                                             |
+| H14 | P1       | `styles/landing-tokens.css:40,48`, `home/hero.module.css:159`                                                      | Calculated contrast: faint text on main dark surface ≈3.73:1; white on pink button ≈4.12:1. Small text needs 4.5:1. Tune semantic text/button tokens and recheck actual rendered contexts, including light mode when enabled.                                                                                |
+| H15 | P1       | `home/app-window.tsx:24`, `home/chapter.tsx:82`, `home/files.tsx:40`, `home/home-shell.tsx:25`                     | Mockup comments promise one accessible announcement, but descendants are not hidden/grouped as a single illustration. Add localized meaningful descriptions, hide decorative internals, and provide a skip link to the main content. Do not make fake UI controls focusable.                                 |
+| H16 | P2       | `home/rail.tsx:31`, `styles/landing-effects.css:136–145`                                                           | Rail forces smooth scrolling; decorative animations loop indefinitely. Use semantic section links, respect reduced motion, and stop short decorative motions or provide pause/hide for sustained animation. The existing reduced-motion CSS is useful but does not cover forced JS scrolling.                |
+| H17 | P1       | `home/use-reveal.ts:20`, `styles/landing-effects.css:153–164`                                                      | Server state starts hidden despite the comment claiming an SSR-visible fallback. Without script execution, product illustrations remain invisible. Make the baseline visible and progressively enhance the reveal.                                                                                           |
+
+## Conversion recommendations by section
+
+| Section      | Keep                                                 | Improve                                                                                                                                        |
+| ------------ | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Header       | Wordmark, restrained navigation, download access     | Functional locale/menu controls; correct architecture path; no dead GitHub link                                                                |
+| Hero         | “Show it. Get back to work.” and large product stage | Explicit “Screen recording & screenshots for Mac” category; outcome-led body; price/account/watermark facts near the CTA once release-verified |
+| Moments      | “From ‘look at this’ to ‘got it’”                    | Compact transition, not a second full-screen opening                                                                                           |
+| Record       | Real bug example and start-from-anywhere benefit     | Correct shortcuts; honest setup wording; finished camera illustration                                                                          |
+| Capture      | Concrete annotated screenshot                        | Emphasize the copy/paste outcome; keep example titles consistent                                                                               |
+| Edit         | Original preserved; zoom and redaction               | Replace unavailable audio claims with annotations/export; show the final result                                                                |
+| Find         | “Useful now. Easy to find later.”                    | Replace badges-as-benefit with retrieval/reuse; describe title search without implying semantic/video-content search                           |
+| Files        | “Your library is a folder.”                          | Specific ownership statement, configurable path, avoid universal privacy/compatibility claims                                                  |
+| Close/footer | Repeated download invitation and Made in Peru        | Compact FAQ, one Kai moment, brand signature, explicit installation choice                                                                     |
+
+Add only three conversion elements: one completed-output proof, a factual price/friction strip, and a four-question FAQ. No fabricated testimonials, counters, benchmark claims, broad comparison section, or another full redesign.
+
+## Kai recommendation
+
+The implemented artwork is now a fox in `packages/brand`, with `app`, `product`, `micro`, `record`, `screenshot`, `permissions`, and `done` purposes. Use that work; do not restart the earlier knot/vizcacha exploration. Preserve the name construction and signature from [Brand identity](/marketing/brand-identity/).
+
+- Keep `product` in navigation; identity does not need to change state on every scroll.
+- Use `record` and `screenshot` within their respective illustrated product moments where the state actually makes sense.
+- Use `done` once near the completed result or closing invitation, as a quiet celebration.
+- Reserve `permissions` for a real installation/permission explanation, not an unsupported security badge.
+- Introduce Kai briefly near the close and connect to the origin. Do not imply an AI assistant, automatic editing, or a new product capability.
+- Avoid another floating layer: the page already has a rail, cards, and animated details. Prefer static art or a brief nonrepeating response, with reduced-motion support.
+
+Current canonical prose still describes the knot exploration and says artwork is pending. Reconcile that visual-status prose with the existing fox without changing the adopted name's meaning or inventing a story about the fox's linguistic origin. The related rollout plan also needs status reconciliation rather than another round of asset generation.
+
+## What this audit cannot prove
+
+No measured conversion improvement, fresh browser interaction/accessibility test, released-download verification, or minimum-OS compatibility test was performed. Screenshot polish does not prove functional controls; passing catalog tests does not prove translation coverage. Static contrast calculations identify likely failures but do not replace checking rendered states. Recheck repository visibility and release artifacts when implementing the relevant claims.

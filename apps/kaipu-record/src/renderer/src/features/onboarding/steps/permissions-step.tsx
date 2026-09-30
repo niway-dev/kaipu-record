@@ -1,6 +1,7 @@
-import { Shield, Check, Info, MousePointerClick } from "lucide-react";
+import { Check, Info, MousePointerClick } from "lucide-react";
 import type { AccessibilityStatus, PermissionKind, PermissionStatus } from "@shared/types";
 import { useTranslations } from "@kaipu/i18n";
+import { KaipuLogo } from "@kaipu/brand";
 import { Badge } from "@renderer/ui/badge";
 import { Button } from "@renderer/ui/button";
 import { Popover } from "@renderer/ui/popover";
@@ -53,8 +54,8 @@ export function PermissionsStep({
   const t = useTranslations("onboarding");
   return (
     <div className={styles.step}>
-      <span className={styles.shield}>
-        <Shield size={26} strokeWidth={1.8} />
+      <span className={styles.mark}>
+        <KaipuLogo use="permissions" size={96} />
       </span>
       <h1 className={styles.title}>{t("permTitle")}</h1>
       <p className={styles.subtitle}>{t("permSubtitle")}</p>

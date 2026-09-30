@@ -27,6 +27,8 @@ function mockElectronAPI(overrides: Partial<KaipuElectronAPI> = {}): {
     // already-decided flows, where the Accessibility row must stay absent.
     getAccessibilityStatus: vi.fn().mockResolvedValue("not-required"),
     requestAccessibility: vi.fn().mockResolvedValue("not-required"),
+    // The overlay raises the window's minimum size while it is mounted.
+    setOnboardingWindowMode: vi.fn(),
     // The Done step reads the live start-recording binding.
     getSettings: vi.fn().mockResolvedValue({ shortcuts: DEFAULT_SHORTCUTS }),
     onSettingsChanged: vi.fn(() => () => {}),

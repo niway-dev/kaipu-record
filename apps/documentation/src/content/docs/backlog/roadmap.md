@@ -13,6 +13,37 @@ Status legend: ⬜ todo · 🔨 in progress · ✅ done
 
 ---
 
+## After the marketing landing merges (2026-09-30) 🟡
+
+PR [#196](https://github.com/csdev19/kaipu-record-monorepo/pull/196) merges with
+`design/editor-audio` folded in. One item was deliberately deferred past the merge to
+close the branch gap — it is a correctness debt, not a nicety, so it should be the next
+thing picked up.
+
+**The shortcut glyphs on the landing are hardcoded.** Five of them: `hero.tsx:21` and
+`app-window.tsx:84, 101, 106, 111`. They are typed characters, read from nothing, so
+they drifted from the real defaults without any test failing — and nothing stops them
+drifting again. Today they happen to match; that is luck, not a guarantee.
+
+The approved fix is `packages/domain/src/constants/shortcuts.ts` holding the
+_(action, default accelerator)_ pair keyed by platform, plus a `formatAccelerator()`
+for the web. Full shape in [open decisions §3](./open-decisions-editor-audio). Two
+consequences to accept with it:
+
+- `apps/kaipu-record` gains a dependency on `@kaipu/domain` — pure, no runtime deps, so
+  the cost is one line in `package.json`, but it is a new arrow in the dependency graph.
+- The Windows column is written but **unvalidated**: nobody has tested those
+  combinations against Windows' reserved shortcuts, because there is no Windows build.
+  `Command` is macOS-only, so today's defaults would be dead bindings there.
+
+**Also open, and not a blocker:** nobody has reviewed the landing in a browser. It was
+measured at five viewports, which verifies geometry, not judgement. And merging
+`editor-audio` settled the rail label in favour of the hover version — one revert
+undoes it if the other reading is preferred.
+
+Resolved at merge time: the "Mute or boost audio" pill, which promised a feature that
+was cancelled, now reads "Mute audio" / "Silenciar audio" in both catalogues.
+
 ## Proposed for later analysis
 
 - **🟡 Product growth beyond cloud** (2026-09-27): the owner reviewed the Recordly comparison and decided: no watermark on the free tier ([done on branch](./free-tier-no-watermark)), [Windows recording-only beta](./windows-beta), [AGPL-3.0 open source at launch](/marketing/open-source/), and a roadmap with GIF, keystroke visualizer, captions on Parakeet, export presets, silence cutting and a CLI. See the [prioritized proposal](./product-growth) and [marketing hub](/marketing/). Existing release blockers retain priority.

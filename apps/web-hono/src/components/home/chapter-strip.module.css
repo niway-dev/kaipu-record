@@ -1,0 +1,68 @@
+/*
+ * The rail's mobile form. Below 980px the vertical rail is hidden (it would sit
+ * on top of the content), and the same chapters appear as a horizontal strip
+ * pinned under the top bar.
+ *
+ * It scrolls sideways on purpose: four tinted pills do not fit a 375px screen,
+ * and shrinking them to fit would make the labels unreadable. The design shows
+ * the fourth one clipped at the edge, which is the affordance — a cut-off pill
+ * says "there is more this way" better than any arrow.
+ */
+
+.strip {
+  position: fixed;
+  top: 62px;
+  left: 0;
+  z-index: 45;
+  display: none;
+  width: 100%;
+  gap: 8px;
+  padding: 10px 16px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--kl-bd);
+}
+
+.strip::-webkit-scrollbar {
+  display: none;
+}
+
+@media (width < 980px) {
+  .strip {
+    display: flex;
+  }
+}
+
+.item {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 16px 7px 7px;
+  border: 1px solid var(--kl-bd-2);
+  border-radius: 999px;
+  background: var(--kl-card);
+  color: var(--kl-dim);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+/* Active takes the chapter's own tint, like the rail's active button. */
+.itemActive {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--kl-tint) 22%, var(--kl-card));
+  color: var(--kl-tx);
+  font-weight: 600;
+  box-shadow: 0 8px 20px -10px color-mix(in srgb, var(--kl-tint) 85%, transparent);
+}
+
+.dot {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 999px;
+  background: linear-gradient(145deg, var(--kl-tint-from), var(--kl-tint-to));
+  color: #fff;
+}

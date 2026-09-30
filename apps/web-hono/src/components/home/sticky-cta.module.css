@@ -1,0 +1,38 @@
+.cta {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  z-index: 46;
+  display: none;
+  translate: -50% 0;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 9px 9px 12px;
+  border-radius: 999px;
+  color: var(--kl-tx);
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+@media (width < 980px) {
+  .cta {
+    display: inline-flex;
+  }
+}
+
+.arrow {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--kl-pink);
+  color: #fff;
+}
+
+.cta:focus-visible {
+  outline: 2px solid var(--kl-pink);
+  outline-offset: 3px;
+}

@@ -1,0 +1,27 @@
+.grid {
+  position: absolute;
+  z-index: 0;
+  display: grid;
+  grid-template-columns: repeat(9, 12px);
+  gap: 5px;
+  pointer-events: none;
+  user-select: none;
+}
+
+.cell {
+  width: 12px;
+  height: 12px;
+  background: var(--kl-pink);
+}
+
+@media (width < 980px) {
+  .grid {
+    grid-template-columns: repeat(9, 9px);
+    gap: 4px;
+  }
+
+  .cell {
+    width: 9px;
+    height: 9px;
+  }
+}

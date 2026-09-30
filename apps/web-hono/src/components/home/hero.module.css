@@ -1,0 +1,449 @@
+.hero {
+  position: relative;
+  padding: 150px var(--kl-gutter) 120px;
+  overflow: hidden;
+}
+
+/*
+ * The hero owns the first screen. Without this the section is only as tall as
+ * its content, so on a tall display the next section peeks above the fold and
+ * the page opens on two things at once. `svh` rather than `vh` so a mobile
+ * browser's collapsing toolbar does not make it jump.
+ *
+ * Only in the two-column regime: below 1080px the page is a single column that
+ * is meant to scroll, and pinning a viewport height there would strand the
+ * mockup off-screen. `min-height`, never `height` — a short viewport still gets
+ * a hero as tall as its content needs.
+ */
+@media (width >= 1080px) {
+  .hero {
+    display: flex;
+    min-height: 100svh;
+    flex-direction: column;
+    justify-content: center;
+  }
+}
+
+.grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  /* Explicit, because the hero is a flex column: `margin: 0 auto` on a flex item
+   * cancels the default stretch and collapses it to fit-content, which pulled
+   * the whole left column inward off the page's grid. */
+  width: 100%;
+  max-width: var(--kl-max-w);
+  margin: 0 auto;
+  align-items: center;
+  gap: 56px;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+}
+
+@media (width < 1080px) {
+  .grid {
+    grid-template-columns: 1fr;
+    gap: 80px;
+  }
+}
+
+/* ---- Left column ------------------------------------------------------- */
+
+.logoTile {
+  width: 72px;
+  height: 72px;
+  box-shadow: 0 18px 44px -18px rgb(246 5 92 / 0.9);
+}
+
+/* Mark + label + badge on one row (see hero.tsx). */
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.identityText {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.eyebrow {
+  margin: 0;
+  font-family: var(--kl-font-mono);
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: var(--kl-tracking-label);
+  text-transform: uppercase;
+  color: var(--kl-faint);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 16px;
+  border: 1px solid var(--kl-bd-2);
+  border-radius: 999px;
+  font-size: 13.5px;
+  color: var(--kl-dim);
+}
+
+.badgeStrong {
+  font-weight: 600;
+  color: var(--kl-tx);
+}
+
+.title {
+  margin: 30px 0 0;
+  font-size: var(--kl-fs-h1);
+  font-weight: 700;
+  line-height: var(--kl-leading-h);
+  letter-spacing: var(--kl-tracking-h1);
+}
+
+/* The serif answer sits on its own line here, unlike the chapters where it
+ * trails the sans phrase — the hero's two lines are two sentences. */
+.serif {
+  display: block;
+  margin-top: 6px;
+  font-family: var(--kl-font-serif);
+  font-size: var(--kl-fs-h1-serif);
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  color: var(--kl-pink-tx);
+}
+
+.body {
+  max-width: 480px;
+  margin-top: 26px;
+  font-size: var(--kl-fs-body);
+  line-height: var(--kl-leading-body);
+  color: var(--kl-dim);
+  text-wrap: pretty;
+}
+
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 26px;
+  max-width: 480px;
+}
+
+.pill {
+  padding: 9px 18px;
+  border: 1px solid var(--kl-bd-2);
+  border-radius: 999px;
+  font-size: var(--kl-fs-chip);
+  color: var(--kl-tx);
+}
+
+.ctas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 34px;
+}
+
+.ctaPrimary {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 15px 28px;
+  border-radius: 999px;
+  background: var(--kl-pink);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: var(--kl-glow-btn);
+  transition: filter 0.2s ease;
+}
+
+.ctaPrimary:hover {
+  filter: brightness(1.08);
+}
+
+.ctaSecondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 15px 26px;
+  border: 1px solid var(--kl-bd-2);
+  border-radius: 999px;
+  color: var(--kl-tx);
+  font-size: 16px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: border-color 0.2s ease;
+}
+
+.ctaSecondary:hover {
+  border-color: var(--kl-dim);
+}
+
+.ctaPrimary:focus-visible,
+.ctaSecondary:focus-visible {
+  outline: 2px solid var(--kl-pink);
+  outline-offset: 3px;
+}
+
+.footnote {
+  margin-top: 22px;
+  font-family: var(--kl-font-mono);
+  font-size: 12.5px;
+  letter-spacing: 0.04em;
+  color: var(--kl-faint);
+}
+
+/* ---- Background glyphs (design system §4.3) ---------------------------- */
+
+.glyph {
+  position: absolute;
+  z-index: 0;
+  font-family: var(--kl-font-mono);
+  font-weight: 600;
+  color: rgb(255 255 255 / 0.05);
+  pointer-events: none;
+  user-select: none;
+  letter-spacing: 0.04em;
+}
+
+.glyphTimer {
+  top: 120px;
+  left: 46%;
+  font-size: clamp(38px, 4.4vw, 62px);
+}
+
+.glyphKeys {
+  top: 160px;
+  right: 9%;
+  font-size: clamp(38px, 4.4vw, 62px);
+}
+
+.glyphRec {
+  bottom: 60px;
+  left: 44px;
+  font-size: clamp(44px, 5vw, 74px);
+}
+
+/* ---- Responsive -------------------------------------------------------- */
+
+/*
+ * The desktop/mobile pair below is a content swap, not a layout tweak: the page
+ * offers a different action on a phone (see hero.tsx). Kept as CSS so both are
+ * server-rendered.
+ */
+.deskOnly {
+  display: inline-flex;
+}
+
+.mobileOnly {
+  display: none;
+}
+
+.mobileNote {
+  display: none;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 440px;
+  margin-top: 18px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--kl-faint);
+}
+
+/* A grid child will not shrink below its content unless told to — this is what
+ * lets the app window scale down instead of widening the page. */
+.grid > * {
+  min-width: 0;
+}
+
+@media (width < 980px) {
+  .hero {
+    /* Clears the fixed top bar plus the chapter strip pinned under it. */
+    padding: 128px 20px 90px;
+  }
+
+  .deskOnly {
+    display: none;
+  }
+
+  .mobileOnly {
+    display: inline-flex;
+  }
+
+  .mobileNote.mobileOnly {
+    display: flex;
+  }
+
+  .ctas {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ctaPrimary,
+  .ctaSecondary {
+    justify-content: center;
+  }
+
+  /* Both glyph clusters overlap the headline once it wraps to three lines. */
+  .glyphTimer,
+  .glyphKeys {
+    display: none;
+  }
+
+  .pills {
+    max-width: none;
+  }
+
+  /* The app window is drawn at desktop proportions; at phone width it is scaled
+   * as one piece rather than reflowed, so its internal layout stays truthful. */
+  .grid > figure {
+    transform-origin: top left;
+    scale: 0.82;
+    width: 122%;
+  }
+
+  .logoTile {
+    width: 58px;
+    height: 58px;
+  }
+}
+
+/* ---- Viewport steps: xl · l · m · s ------------------------------------
+ *
+ * Once the headline caps at 112px the hero is a FIXED ~990px tall, whatever the
+ * width. That is why the same page reads well on a 27" external (1440px of
+ * height, 450px to spare) and breaks on a MacBook Pro 14 (950px, 40px short):
+ * the mockup and the footnote fall below the fold. The variable is viewport
+ * HEIGHT, so that is what these steps key on — a width ladder alone would not
+ * have caught it, because the failing screen is wide.
+ *
+ * Scoped to `width >= 1080px`, the two-column regime. Below that the page is
+ * already a single column that is meant to scroll, and the existing breakpoints
+ * own it.
+ *
+ * Each step shortens the same four things in proportion: the section's padding,
+ * the headline, the mark, and the rhythm between blocks. Nothing is removed —
+ * a short viewport gets the whole hero, just tighter.
+ */
+
+/* l — 13"/14" laptops at full height, and any window shorter than a desktop. */
+@media (width >= 1080px) and (height < 1040px) {
+  .hero {
+    padding: 120px var(--kl-gutter) 92px;
+  }
+
+  .logoTile {
+    width: 64px;
+    height: 64px;
+  }
+
+  .title {
+    margin-top: 26px;
+    font-size: clamp(56px, 7.2vw, 96px);
+  }
+
+  .serif {
+    font-size: clamp(34px, 4.3vw, 54px);
+  }
+
+  .body {
+    margin-top: 22px;
+  }
+
+  .pills {
+    margin-top: 22px;
+  }
+
+  .ctas {
+    margin-top: 28px;
+  }
+
+  .footnote {
+    margin-top: 18px;
+  }
+}
+
+/* m — 13" laptops (1440x900), or a browser window with toolbars stacked up. */
+@media (width >= 1080px) and (height < 940px) {
+  .hero {
+    padding: 104px var(--kl-gutter) 76px;
+  }
+
+  .logoTile {
+    width: 60px;
+    height: 60px;
+  }
+
+  .title {
+    margin-top: 22px;
+    font-size: clamp(52px, 6.4vw, 86px);
+  }
+
+  .serif {
+    font-size: clamp(32px, 3.9vw, 48px);
+  }
+
+  .body {
+    margin-top: 20px;
+  }
+
+  .pills {
+    margin-top: 20px;
+  }
+
+  .ctas {
+    margin-top: 24px;
+  }
+
+  .footnote {
+    margin-top: 16px;
+  }
+}
+
+/* s — 1280x800 and anything shorter still running the two-column layout. */
+@media (width >= 1080px) and (height < 860px) {
+  .hero {
+    padding: 88px var(--kl-gutter) 62px;
+  }
+
+  .identity {
+    gap: 14px;
+  }
+
+  .logoTile {
+    width: 54px;
+    height: 54px;
+  }
+
+  .title {
+    margin-top: 18px;
+    font-size: clamp(48px, 5.6vw, 74px);
+  }
+
+  .serif {
+    margin-top: 2px;
+    font-size: clamp(30px, 3.4vw, 43px);
+  }
+
+  .body {
+    margin-top: 16px;
+  }
+
+  .pills {
+    margin-top: 16px;
+  }
+
+  .ctas {
+    margin-top: 22px;
+  }
+
+  .footnote {
+    margin-top: 14px;
+  }
+}

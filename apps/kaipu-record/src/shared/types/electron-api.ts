@@ -246,6 +246,14 @@ export interface KaipuElectronAPI {
    * on unmount.
    */
   setEditorWindowMode(active: boolean): void;
+  /**
+   * Toggle "onboarding mode" window sizing. The first-run takeover is a fixed
+   * amount of content — a 96px mark, a headline, and up to four permission
+   * cards — that cannot reflow any smaller, so below this floor it stops being
+   * a page and becomes a scroll well. The overlay calls true on mount, false on
+   * unmount.
+   */
+  setOnboardingWindowMode(active: boolean): void;
   /** Put a PNG on the system clipboard. */
   copyImageToClipboard(png: ArrayBuffer): Promise<void>;
   /** Copy a saved screenshot to the clipboard by id (main reads the vault file). */

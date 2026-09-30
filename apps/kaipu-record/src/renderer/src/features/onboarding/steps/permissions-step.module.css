@@ -7,17 +7,15 @@
   animation: pop 0.35s ease;
 }
 
-.shield {
-  width: 52px;
-  height: 52px;
-  border-radius: 14px;
-  background: rgba(246, 5, 92, 0.12);
-  border: 1px solid rgba(246, 5, 92, 0.4);
+/*
+ * No tinted square and no border: the mark brings its own pink ground, so a
+ * second container around it would read as a badge on a badge. Only the glow is
+ * kept — it is what lifts the mark off the page at this size.
+ */
+.mark {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--accent-primary);
-  margin-bottom: 16px;
+  margin-bottom: 20px;
+  filter: drop-shadow(0 16px 44px rgba(246, 5, 92, 0.45));
 }
 
 .title {

@@ -79,6 +79,15 @@ const BASE_MIN_HEIGHT = 560;
 /** The screenshot editor (toolbar + canvas + beautify panel) needs more room. */
 const EDITOR_MIN_WIDTH = 1040;
 const EDITOR_MIN_HEIGHT = 720;
+/**
+ * The first-run takeover. Its content does not reflow — a 96px brand mark, a
+ * headline, a two-line subtitle and a 2x2 grid of permission cards — so under
+ * this floor the step stops being a page and turns into a scroll well with the
+ * footer buttons pushed out of reach. Width is the base floor (the step is
+ * capped at 640px plus gutters); only the height needs raising.
+ */
+const ONBOARDING_MIN_WIDTH = BASE_MIN_WIDTH;
+const ONBOARDING_MIN_HEIGHT = 700;
 
 /**
  * Create the main window. `showOnReady` defaults to true; pass false when
@@ -377,19 +386,34 @@ app.whenReady().then(() => {
   // Screenshots: capture/copy/save IPC handlers.
   registerScreenshotHandlers(captureWindowHooks);
 
-  // Editor mode: give the screenshot editor more room, restore the floor on exit.
-  ipcMain.on(IPC_CHANNELS.windowSetEditorMode, (_event, active: boolean) => {
+  /**
+   * Raise the window's minimum size for a screen that cannot reflow, growing the
+   * window when it is already smaller, and drop back to the base floor on exit.
+   * Shared by the editors and the onboarding takeover — both want the same
+   * behaviour with different numbers.
+   */
+  const setWindowFloor = (active: boolean, minWidth: number, minHeight: number): void => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
-    if (active) {
-      mainWindow.setMinimumSize(EDITOR_MIN_WIDTH, EDITOR_MIN_HEIGHT);
-      const [w, h] = mainWindow.getSize();
-      if (w < EDITOR_MIN_WIDTH || h < EDITOR_MIN_HEIGHT) {
-        mainWindow.setSize(Math.max(w, EDITOR_MIN_WIDTH), Math.max(h, EDITOR_MIN_HEIGHT), true);
-      }
-    } else {
+    if (!active) {
       mainWindow.setMinimumSize(BASE_MIN_WIDTH, BASE_MIN_HEIGHT);
+      return;
     }
-  });
+    mainWindow.setMinimumSize(minWidth, minHeight);
+    const [w, h] = mainWindow.getSize();
+    if (w < minWidth || h < minHeight) {
+      mainWindow.setSize(Math.max(w, minWidth), Math.max(h, minHeight), true);
+    }
+  };
+
+  // Editor mode: give the screenshot editor more room, restore the floor on exit.
+  ipcMain.on(IPC_CHANNELS.windowSetEditorMode, (_event, active: boolean) =>
+    setWindowFloor(active, EDITOR_MIN_WIDTH, EDITOR_MIN_HEIGHT),
+  );
+
+  // Onboarding mode: same treatment for the first-run takeover.
+  ipcMain.on(IPC_CHANNELS.windowSetOnboardingMode, (_event, active: boolean) =>
+    setWindowFloor(active, ONBOARDING_MIN_WIDTH, ONBOARDING_MIN_HEIGHT),
+  );
 
   // Auto-update (packaged builds only). Silent download; renderer shows a restart banner.
   initAutoUpdater();

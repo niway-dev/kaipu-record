@@ -1,0 +1,185 @@
+/*
+ * The landing's glow, texture and motion primitives (design system §3 and §4).
+ *
+ * Everything here is a gradient or a transform — no images, no backdrop blur on
+ * anything the size of a section. The whole "glowy" look costs a handful of
+ * painted rectangles, which is what keeps a page this heavy-looking cheap.
+ *
+ * Same contract as landing-tokens.css: scoped to [data-kl], one class per
+ * effect, no descendant selectors, so each of these becomes a single StyleX
+ * style object later.
+ */
+
+@layer kaipu-landing {
+  /*
+   * Text that only a screen reader gets. Defined here rather than borrowed from
+   * Tailwind's sr-only so the landing owns every class it uses — a utility from
+   * another system is the one thing that would not survive the StyleX migration.
+   */
+  .kl-sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* ---- Ambient glow (the auroras) -------------------------------------
+   * An absolutely positioned layer behind the content, holding one or two
+   * radial gradients that fade to transparent. Three things make it read as
+   * light rather than as a stain:
+   *   - low opacity (.11–.20): it tints the background, it is not a blob;
+   *   - `transparent 70%`: the edge dissolves, so there is no visible circle;
+   *   - asymmetric placement: in a chapter the focus sits at 78% 50%, right
+   *     behind the mockup, so the light appears to come off the product.
+   * The tint changes per chapter — that colour shift IS the transition the
+   * reader feels scrolling from 01 to 04.
+   */
+  .kl-glow {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .kl-glow-hero {
+    background:
+      radial-gradient(60% 55% at 12% 18%, rgb(246 5 92 / 0.2), transparent 70%),
+      radial-gradient(45% 50% at 88% 70%, rgb(124 77 255 / 0.14), transparent 70%);
+  }
+
+  /* Chapter glow: the tint arrives as --kl-tint from the section, so one class
+   * serves all four instead of four near-identical ones. */
+  .kl-glow-chapter {
+    background: radial-gradient(
+      55% 60% at 78% 50%,
+      color-mix(in srgb, var(--kl-tint, var(--kl-pink)) 14%, transparent),
+      transparent 70%
+    );
+  }
+
+  /* ---- Dot grid --------------------------------------------------------
+   * "Technical paper" texture for the hero and "Your files". Reads --kl-dot, so
+   * it follows the theme on its own.
+   */
+  .kl-dots {
+    background-image: radial-gradient(var(--kl-dot) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+
+  /* ---- Glass -----------------------------------------------------------
+   * Nav, rail and the cards that overlap a mockup. The 1px light border is what
+   * separates them from the window behind — without it they read as a hole.
+   */
+  .kl-glass {
+    background: var(--kl-glass);
+    backdrop-filter: blur(var(--kl-glass-blur));
+    -webkit-backdrop-filter: blur(var(--kl-glass-blur));
+    border: 1px solid var(--kl-bd-2);
+  }
+
+  /* ---- Depth -----------------------------------------------------------*/
+  .kl-window {
+    box-shadow: var(--kl-shadow-window);
+  }
+
+  .kl-float-card {
+    background: rgb(19 19 22 / 0.95);
+    backdrop-filter: blur(var(--kl-glass-blur));
+    -webkit-backdrop-filter: blur(var(--kl-glass-blur));
+    border: 1px solid var(--kl-bd-2);
+    box-shadow: var(--kl-shadow-float);
+  }
+
+  /* Chapter icon: the tint's own gradient plus its own coloured glow. */
+  .kl-chapter-icon {
+    background: linear-gradient(145deg, var(--kl-tint-from), var(--kl-tint-to));
+    box-shadow: 0 16px 34px -14px color-mix(in srgb, var(--kl-tint) 90%, transparent);
+  }
+
+  /* ---- Motion ----------------------------------------------------------*/
+  @keyframes kl-float {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-8px);
+    }
+  }
+
+  @keyframes kl-ring {
+    0% {
+      transform: scale(1);
+      opacity: 0.55;
+    }
+    100% {
+      transform: scale(2.4);
+      opacity: 0;
+    }
+  }
+
+  @keyframes kl-levels {
+    0%,
+    100% {
+      transform: scaleY(0.35);
+    }
+    50% {
+      transform: scaleY(1);
+    }
+  }
+
+  .kl-anim-float {
+    animation: kl-float 5s ease-in-out infinite;
+  }
+
+  .kl-anim-ring {
+    animation: kl-ring 1.8s ease-out infinite;
+  }
+
+  .kl-anim-levels {
+    animation: kl-levels 0.9s ease-in-out infinite;
+    transform-origin: bottom;
+  }
+
+  /* Scroll reveal. The element starts shifted and transparent; a class added by
+   * the observer at 82% of the viewport releases it. Declared as a transition
+   * rather than an animation so a mockup that is already on screen at load
+   * (the hero) can be revealed immediately without a flash. */
+  .kl-reveal {
+    opacity: 0;
+    transform: translateY(34px);
+    transition:
+      opacity var(--kl-dur-reveal) var(--kl-ease-reveal),
+      transform var(--kl-dur-reveal) var(--kl-ease-reveal);
+  }
+
+  .kl-reveal[data-kl-shown="true"] {
+    opacity: 1;
+    transform: none;
+  }
+
+  /*
+   * Not in the design system, added deliberately: everything above is decorative
+   * — a floating fox, a pulsing ring, panels sliding in on scroll. For a reader
+   * with a vestibular disorder that is not atmosphere, it is a symptom trigger.
+   * Content never depends on the motion, so removing it costs the page nothing.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    .kl-anim-float,
+    .kl-anim-ring,
+    .kl-anim-levels {
+      animation: none;
+    }
+
+    .kl-reveal {
+      opacity: 1;
+      transform: none;
+      transition: none;
+    }
+  }
+}

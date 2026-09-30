@@ -6,17 +6,15 @@
   animation: pop 0.35s ease;
 }
 
-.check {
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  background: var(--accent-primary);
-  color: #fff;
+/*
+ * The mark carries its own pink ground, so the old pink disc is gone. The glow
+ * stays — it is what made this screen feel like an arrival — but as a
+ * drop-shadow that follows the artwork's rounded square instead of a circle.
+ */
+.mark {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 20px;
-  box-shadow: 0 12px 40px -8px rgba(246, 5, 92, 0.85);
+  margin-bottom: 24px;
+  filter: drop-shadow(0 16px 52px rgba(246, 5, 92, 0.6));
 }
 
 .title {

@@ -198,6 +198,7 @@ export const IPC_CHANNELS = {
   appReady: "app:ready",
   // Renderer → main: grow/reset the window for the screenshot editor.
   windowSetEditorMode: "window:set-editor-mode",
+  windowSetOnboardingMode: "window:set-onboarding-mode",
   updateGetStatus: "update:get-status",
   updateStatus: "update:status",
   updateInstall: "update:install",

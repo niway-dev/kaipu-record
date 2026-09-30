@@ -1,0 +1,12 @@
+/*
+ * The marketing landing's stylesheet. Imported once, by the landing shell.
+ *
+ * Load order matters: fonts declare the faces, tokens declare the values, and
+ * effects consume both. Everything sits in @layer kaipu-landing, which loses to
+ * Tailwind utilities on purpose — a utility in a component should still win over
+ * a landing default without anyone reaching for !important.
+ */
+
+@import "./landing-fonts.css";
+@import "./landing-tokens.css";
+@import "./landing-effects.css";

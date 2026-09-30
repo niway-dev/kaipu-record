@@ -1,0 +1,158 @@
+.hero {
+  position: relative;
+  display: grid;
+  min-height: 92vh;
+  place-items: center;
+  padding: 120px var(--kl-gutter) 80px;
+  overflow: hidden;
+}
+
+.inner {
+  position: relative;
+  z-index: 1;
+  max-width: 1120px;
+  text-align: center;
+}
+
+.eyebrow {
+  font-family: var(--kl-font-mono);
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: var(--kl-tracking-label);
+  text-transform: uppercase;
+  color: var(--kl-faint);
+}
+
+/*
+ * The page's voice in one rule: a tight sans statement, then a serif italic
+ * answer in pink. Both live in the same h1 because they are one sentence —
+ * splitting them into two elements would let a screen reader read them as two.
+ */
+.title {
+  margin: 18px 0 0;
+  /* The chapters' intro, not the page's opening: one step down from the hero so
+   * the whole line fits without wrapping mid-quote. */
+  font-size: var(--kl-fs-h2);
+  font-weight: 700;
+  line-height: var(--kl-leading-h);
+  letter-spacing: var(--kl-tracking-h1);
+  text-wrap: balance;
+}
+
+.serif {
+  font-family: var(--kl-font-serif);
+  font-size: var(--kl-fs-h2-serif);
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.01em; /* the serif is already open; it does not want the sans tracking */
+  color: var(--kl-pink-tx);
+}
+
+.sub {
+  max-width: 620px;
+  margin: 26px auto 0;
+  font-size: var(--kl-fs-body);
+  line-height: var(--kl-leading-body);
+  color: var(--kl-dim);
+  text-wrap: pretty;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 38px;
+}
+
+/*
+ * A chip is a link to its chapter, so the hero doubles as the table of contents.
+ * The tint lives on the dot only — the label stays neutral so four chips do not
+ * read as four competing buttons.
+ */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 18px 9px 9px;
+  border: 1px solid var(--kl-bd-2);
+  border-radius: 999px;
+  background: var(--kl-card);
+  color: var(--kl-tx);
+  font-size: var(--kl-fs-chip);
+  font-weight: 500;
+  text-decoration: none;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease;
+}
+
+.chip:hover {
+  border-color: color-mix(in srgb, var(--kl-tint) 55%, transparent);
+  background: var(--kl-card-2);
+}
+
+.chip:focus-visible {
+  outline: 2px solid var(--kl-pink);
+  outline-offset: 2px;
+}
+
+.chipDot {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 999px;
+  background: linear-gradient(145deg, var(--kl-tint-from), var(--kl-tint-to));
+  color: #fff;
+  box-shadow: 0 8px 18px -8px color-mix(in srgb, var(--kl-tint) 90%, transparent);
+}
+
+.chipNum {
+  font-family: var(--kl-font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--kl-faint);
+}
+
+/*
+ * Background glyph: the product's own language as decoration (design system
+ * §4.3). Purely presentational, so it is aria-hidden in the markup and sits
+ * behind everything.
+ */
+.glyph {
+  position: absolute;
+  top: 26px;
+  left: 40px;
+  z-index: 0;
+  font-family: var(--kl-font-mono);
+  font-size: clamp(48px, 7vw, 92px);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: rgb(255 255 255 / 0.055);
+  pointer-events: none;
+  user-select: none;
+}
+
+@media (width < 980px) {
+  .hero {
+    min-height: 0;
+    padding: 70px 20px;
+  }
+
+  /* A 2x2 grid of chapter cards, as the mobile design lays them out — four
+   * pills in a row shrink past readability at 375px. */
+  .chips {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .chip {
+    justify-content: flex-start;
+  }
+
+  .glyph {
+    display: none;
+  }
+}

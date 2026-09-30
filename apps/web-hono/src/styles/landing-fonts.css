@@ -1,0 +1,23 @@
+/*
+ * The landing's four typefaces, self-hosted from node_modules — never a CDN.
+ * The page's own pitch is "nothing leaves your Mac"; asking a third party for a
+ * font on every visit contradicts it, and it is one more origin that can be slow
+ * or down. Fontsource ships the woff2 files and the @font-face rules; Vite
+ * fingerprints and serves them from our own domain.
+ *
+ * Three of the four are variable fonts: one file covers every weight the design
+ * uses, instead of one file per weight. Instrument Serif has no variable cut and
+ * is only ever used italic at 400, so that single face is all we load.
+ */
+
+/* Headlines and UI — 400..700 (design system §2). */
+@import "@fontsource-variable/geist/wght.css";
+
+/* Data and labels — 500..600 in the design, one variable file covers both. */
+@import "@fontsource-variable/geist-mono/wght.css";
+
+/* The second voice. Italic only, always in --kl-pink-tx. */
+@import "@fontsource/instrument-serif/400-italic.css";
+
+/* Handwriting, only inside product mockups ("turn this on!"). */
+@import "@fontsource-variable/caveat/wght.css";
