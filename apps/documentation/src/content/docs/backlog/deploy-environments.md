@@ -28,10 +28,11 @@ production at all.
 - **`kaipu-web` reaches `kaipu-api` through a Service Binding by worker name.** This is the
   constraint that makes environments a real decision: any new environment must resolve which
   API its web half talks to, or a staging front end writes to the production database.
-- **The release path is already plain wrangler.** `release-web.yml` builds and then runs
-  `cloudflare/wrangler-action@v3.14.1` with `command: deploy`. `apps/web-hono/alchemy.run.ts`
-  exists and is wired only to the local `deploy`/`alchemy:dev` scripts — **no CI workflow calls
-  it**. There is nothing to migrate to reach a wrangler-native flow; the repo is already there.
+- **The release path is plain wrangler, and now it is the only one.** `release-web.yml` builds
+  and runs `cloudflare/wrangler-action@v3.14.1` with `command: deploy`. An unused second
+  mechanism (`alchemy.run.ts` plus `deploy`/`destroy`/`alchemy:dev` scripts) sat beside it,
+  called by no workflow, and was removed — it was already making readers believe the app
+  deployed through Alchemy.
 - **Infisical has a single environment, `dev`.** A persistent new environment needs a second
   one with its four folders — this is half the real work, not a detail.
 - **ADRs live at `architecture/decisions/`**, numbered `0001`–`0006` (mediabunny over ffmpeg,
@@ -135,6 +136,7 @@ to write the full spec and `ADR 0001`:
   `wrangler preview` for the per-branch shape and clears the "update available" notice on every
   `wrangler dev`.
 - The Infisical question, which only arises with the persistent shape.
-- Retiring `apps/web-hono/alchemy.run.ts` if nothing uses it — it is not in the release path,
-  and leaving a second, unused deployment mechanism in the repo is how someone later believes
-  the app deploys through Alchemy. (It is how this design turn first got it wrong.)
+- Local `deploy`/`destroy` scripts are gone with Alchemy and were not replaced. Production is
+  reached by cutting a `web-v*` tag, which runs the verify gate first (ADR 0004). A laptop
+  script that deploys straight to production would route around that gate, so its absence is
+  the point, not an omission.
