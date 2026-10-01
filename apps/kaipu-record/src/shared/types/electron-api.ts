@@ -1,3 +1,4 @@
+import type { WindowPresetName } from "../window-size";
 /**
  * Contract for the renderer-facing `window.electronAPI` bridge (implemented in
  * `src/preload`, typed for the renderer via `src/preload/index.d.ts`). Pure types.
@@ -245,12 +246,11 @@ export interface KaipuElectronAPI {
    * restores the normal minimum. The renderer calls true on editor mount, false
    * on unmount.
    */
-  setEditorWindowMode(active: boolean): void;
   /**
-   * Raise the window's minimum size for the current screen, or release it with
-   * (null, null). Main clamps the request to the display's work area.
+   * Resize the window to the preset this screen wants and set its minimum.
+   * Main clamps both to the display's work area.
    */
-  setWindowFloor(minWidth: number | null, minHeight: number | null): void;
+  applyWindowPreset(preset: WindowPresetName): void;
   /**
    * Toggle "onboarding mode" window sizing. The first-run takeover is a fixed
    * amount of content — a 96px mark, a headline, and up to four permission

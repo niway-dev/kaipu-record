@@ -205,10 +205,9 @@ export const IPC_CHANNELS = {
   // the listeners' registration against the page's did-finish-load.
   appReady: "app:ready",
   // Renderer → main: grow/reset the window for the screenshot editor.
-  windowSetEditorMode: "window:set-editor-mode",
   windowSetOnboardingMode: "window:set-onboarding-mode",
-  /** A screen declaring the minimum window size it needs; null/null releases it. */
-  windowSetFloor: "window:set-floor",
+  /** A screen declaring the window size and minimum it wants (see window-size.ts). */
+  windowApplyPreset: "window:apply-preset",
   updateGetStatus: "update:get-status",
   updateStatus: "update:status",
   updateInstall: "update:install",

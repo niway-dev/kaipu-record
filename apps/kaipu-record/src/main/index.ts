@@ -35,6 +35,7 @@ import {
 import { initMainAnalytics, shutdownMainAnalytics } from "./services/analytics.service";
 import { registerAnalyticsIpc } from "./services/analytics-ipc";
 import { registerScreenshotHandlers } from "./screenshots/screenshot-ipc";
+import { fitPresetToDisplay, WINDOW_PRESETS, type WindowPresetName } from "@shared/window-size";
 
 let mainWindow: BrowserWindow | null = null;
 let capturePanel: CapturePanelWindow | null = null;
@@ -77,15 +78,6 @@ registerMediaScheme();
 const BASE_MIN_WIDTH = 720;
 const BASE_MIN_HEIGHT = 560;
 /** The screenshot editor (toolbar + canvas + beautify panel) needs more room. */
-/**
- * The editors' floor. The video editor stacks a preview, an inspector and five
- * timeline lanes; below this the lanes stop being readable and the inspector
- * squeezes the preview out. Clamped to the display's work area at apply time —
- * a floor larger than the screen would pin the window to the whole desktop and
- * leave nothing to drag.
- */
-const EDITOR_MIN_WIDTH = 1440;
-const EDITOR_MIN_HEIGHT = 900;
 /**
  * The first-run takeover. Its content does not reflow — a 96px brand mark, a
  * headline, a two-line subtitle and a 2x2 grid of permission cards — so under
@@ -418,22 +410,28 @@ app.whenReady().then(() => {
     }
   };
 
-  // Editor mode: give the screenshot editor more room, restore the floor on exit.
-  ipcMain.on(IPC_CHANNELS.windowSetEditorMode, (_event, active: boolean) =>
-    setWindowFloor(active, EDITOR_MIN_WIDTH, EDITOR_MIN_HEIGHT),
-  );
+  /**
+   * A screen declaring the window it wants. Both numbers matter: the size it
+   * should be given, and the size below which it stops working.
+   *
+   * Order is not arbitrary. The minimum is lowered BEFORE a shrink, or the new
+   * size is clamped back up by the old floor and leaving the editor leaves the
+   * window editor-sized; it is raised AFTER a grow for the mirror reason.
+   *
+   * `setSize(..., true)` animates on macOS, which is what keeps a 1440 -> 900
+   * step from looking like a glitch.
+   */
+  ipcMain.on(IPC_CHANNELS.windowApplyPreset, (_event, name: WindowPresetName) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const area = screen.getDisplayMatching(mainWindow.getBounds()).workAreaSize;
+    const { width, height, minWidth, minHeight } = fitPresetToDisplay(WINDOW_PRESETS[name], area);
+    const [currentWidth, currentHeight] = mainWindow.getSize();
+    const shrinking = width < currentWidth || height < currentHeight;
 
-  // Any screen can declare the room it needs; null/null gives the base floor back.
-  ipcMain.on(
-    IPC_CHANNELS.windowSetFloor,
-    (_event, minWidth: number | null, minHeight: number | null) => {
-      if (minWidth === null || minHeight === null) {
-        setWindowFloor(false, 0, 0);
-        return;
-      }
-      setWindowFloor(true, minWidth, minHeight);
-    },
-  );
+    if (shrinking) mainWindow.setMinimumSize(minWidth, minHeight);
+    mainWindow.setSize(width, height, true);
+    if (!shrinking) mainWindow.setMinimumSize(minWidth, minHeight);
+  });
 
   // Onboarding mode: same treatment for the first-run takeover.
   ipcMain.on(IPC_CHANNELS.windowSetOnboardingMode, (_event, active: boolean) =>
