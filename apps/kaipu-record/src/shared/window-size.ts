@@ -57,3 +57,20 @@ export function fitPresetToDisplay(
     minHeight: Math.min(preset.minHeight, height),
   };
 }
+
+/**
+ * Which preset a route wants.
+ *
+ * A table rather than each page calling a hook: the page components mount and
+ * unmount under a shell that does not, so a page asking on mount can grow the
+ * window with nothing to shrink it back. Resolving from the path means every
+ * navigation restates the answer, including the ones that leave an editor.
+ */
+const PRESET_BY_PATH: Record<string, WindowPresetName> = {
+  "/video-editor": "videoEditor",
+  "/screenshot-editor": "screenshotEditor",
+};
+
+export function presetForPath(pathname: string): WindowPresetName {
+  return PRESET_BY_PATH[pathname] ?? "base";
+}

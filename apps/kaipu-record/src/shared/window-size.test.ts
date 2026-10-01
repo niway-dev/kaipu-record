@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fitPresetToDisplay, WINDOW_PRESETS } from "./window-size";
+import { fitPresetToDisplay, presetForPath, WINDOW_PRESETS } from "./window-size";
 
 const BIG = { width: 3840, height: 2160 };
 
@@ -45,5 +45,20 @@ describe("WINDOW_PRESETS", () => {
   it("gives the editors more room than the base screens", () => {
     expect(WINDOW_PRESETS.videoEditor.width).toBeGreaterThan(WINDOW_PRESETS.base.width);
     expect(WINDOW_PRESETS.screenshotEditor.width).toBeGreaterThan(WINDOW_PRESETS.base.width);
+  });
+});
+
+describe("presetForPath", () => {
+  it("gives the editors their own presets", () => {
+    expect(presetForPath("/video-editor")).toBe("videoEditor");
+    expect(presetForPath("/screenshot-editor")).toBe("screenshotEditor");
+  });
+
+  it("gives every other route the base preset", () => {
+    // Including the ones a user reaches straight after leaving an editor —
+    // the shrink back used to depend on an unmount that never happened.
+    for (const path of ["/", "/library", "/library/abc", "/screenshots", "/settings/app"]) {
+      expect(presetForPath(path)).toBe("base");
+    }
   });
 });

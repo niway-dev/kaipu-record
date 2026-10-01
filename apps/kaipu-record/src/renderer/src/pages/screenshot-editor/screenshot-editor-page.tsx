@@ -28,7 +28,6 @@ import {
 } from "@renderer/features/screenshots/annotations";
 import { useTransientValue } from "@renderer/ui/use-transient-value";
 import styles from "./screenshot-editor-page.module.css";
-import { useWindowPreset } from "@renderer/shell/use-window-preset";
 
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3;
@@ -130,10 +129,6 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
   useEffect(() => {
     if (discarding) navigate("/screenshots");
   }, [discarding, navigate]);
-
-  // The editor needs more room than the rest of the app. The base preset comes
-  // back from the shell when the user navigates out.
-  useWindowPreset("screenshotEditor");
 
   // ⌘/Ctrl + wheel (and trackpad pinch, which arrives as ctrlKey wheel) zooms the
   // view. Non-passive so we can preventDefault Electron's own page zoom. Attaches

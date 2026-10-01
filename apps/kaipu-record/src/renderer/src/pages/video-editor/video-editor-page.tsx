@@ -100,7 +100,6 @@ import { PreviewStage } from "@renderer/features/video-editor/components/preview
 import { TimelineStrip } from "@renderer/features/video-editor/components/timeline-strip";
 import { showToast } from "@renderer/ui/toast-store";
 import styles from "./video-editor-page.module.css";
-import { useWindowPreset } from "@renderer/shell/use-window-preset";
 
 export interface VideoEditorSource {
   id: string;
@@ -207,7 +206,6 @@ function VideoEditorLoader({ source }: { source: VideoEditorSource }): React.JSX
   }, []);
 
   // The room this screen needs; released when it unmounts. See use-window-floor.
-  useWindowPreset("videoEditor");
 
   /**
    * The recording's name lives in the window title, not in a header row. It is

@@ -421,8 +421,12 @@ app.whenReady().then(() => {
    * `setSize(..., true)` animates on macOS, which is what keeps a 1440 -> 900
    * step from looking like a glitch.
    */
+  let appliedPreset: WindowPresetName | null = null;
   ipcMain.on(IPC_CHANNELS.windowApplyPreset, (_event, name: WindowPresetName) => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
+    // Navigating between two base screens must not fight a manual resize.
+    if (name === appliedPreset) return;
+    appliedPreset = name;
     const area = screen.getDisplayMatching(mainWindow.getBounds()).workAreaSize;
     const { width, height, minWidth, minHeight } = fitPresetToDisplay(WINDOW_PRESETS[name], area);
     const [currentWidth, currentHeight] = mainWindow.getSize();

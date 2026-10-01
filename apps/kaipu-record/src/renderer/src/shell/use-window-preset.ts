@@ -2,16 +2,18 @@ import { useEffect } from "react";
 import type { WindowPresetName } from "@shared/window-size";
 
 /**
- * Declare the window this screen wants.
+ * Apply the window preset for the current screen.
  *
- * Applied on mount, never undone on unmount: the screen being navigated TO
- * declares its own, so the window follows wherever you are. An "undo on the way
- * out" is what left the window editor-sized after leaving the editor — the
- * minimum was released and the size was not.
+ * Called with a value derived from the route, so it re-applies on every
+ * navigation rather than once per mount. Nothing is undone on unmount: the
+ * destination states its own, which is what makes leaving an editor shrink the
+ * window instead of stranding it.
  *
- * The trade-off worth knowing: resizing the window by hand is lost the next time
- * you change screens, because the destination restates its preset. Remembering a
- * per-screen manual size would fix that and is not built.
+ * Main ignores a repeat, so navigating between two base screens costs nothing.
+ *
+ * The trade-off worth knowing: resizing by hand is lost when the preset
+ * changes, because entering an editor and leaving it restates both. Remembering
+ * a per-screen manual size would fix that and is not built.
  */
 export function useWindowPreset(preset: WindowPresetName): void {
   useEffect(() => {

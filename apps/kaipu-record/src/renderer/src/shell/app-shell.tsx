@@ -1,11 +1,12 @@
 import React from "react";
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 import { SHORTCUT_DEFINITIONS, type ShortcutAction } from "@shared/types";
 import { useTranslations } from "@kaipu/i18n";
 import { Sidebar } from "./sidebar";
 import { useShortcutLabels } from "@renderer/features/shortcuts/use-shortcut-labels";
 import { useAppVersion } from "./use-app-version";
 import { useWindowPreset } from "./use-window-preset";
+import { presetForPath } from "@shared/window-size";
 import { EnvBadge } from "./env-badge";
 import styles from "./app-shell.module.css";
 
@@ -32,11 +33,11 @@ export function AppShell(): React.JSX.Element {
   const t = useTranslations("shortcuts");
   const shortcuts = useShortcutLabels();
   const version = useAppVersion();
-  // Every screen under the shell wants the base window. Declared here rather
-  // than in each page so a new page cannot forget and inherit whatever size the
-  // last screen left behind — which is exactly how leaving the editor used to
-  // strand the window at 1440x900.
-  useWindowPreset("base");
+  // Resolved from the route on every navigation, not asked for on each page's
+  // mount. The pages mount and unmount under this shell, which does not, so a
+  // page that grew the window on mount had nothing to shrink it back when the
+  // user navigated away — the editor stranded the window at 1440x900.
+  useWindowPreset(presetForPath(useLocation().pathname));
 
   return (
     <div className={styles.shell}>
