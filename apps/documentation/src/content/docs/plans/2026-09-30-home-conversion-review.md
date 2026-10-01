@@ -5,7 +5,7 @@ description: Ordered implementation slices and acceptance checks for the documen
 
 # Home audit execution and cross-machine review
 
-**Status: 🔵 Proposed implementation · audit documented 2026-09-30.** Review on `feat/marketing-landing`, [draft PR #196](https://github.com/csdev19/kaipu-record-monorepo/pull/196). This documentation pass does not change runtime copy, controls, or layouts.
+**Status: Superseded as an execution contract · 2026-10-01.** Keep this page as the historical audit sequence. For the current Hero copy, compact Moments band, third-section Kai introduction, camera-bubble illustration, closing `done` mark, and related documentation, use [Home: Kai, the hero copy, and the fox on camera](/plans/2026-10-01-home-kai-and-hero-copy/). For the remaining conversion work, use [Home conversion and Kai implementation v2](/plans/2026-10-01-home-conversion-v2/). Do not execute unchecked items from this page directly.
 
 ## Start here on the other machine
 
@@ -52,12 +52,12 @@ description: Ordered implementation slices and acceptance checks for the documen
 
 ## Slice 4 — Kai and the brand-origin connection
 
-- [ ] **H12:** port the existing origin content into the new home using CSS Modules and `--kl-*`, not the old Tailwind/product-token component unchanged.
-- [ ] Reuse `footerSignature` and the canonical naming text. Keep the distinction between “This. Captured.” and “Show it. Get back to work.”
-- [ ] Introduce Kai with the proposed short EN/ES copy near the close. Use `record`, `screenshot`, and `done` at meaningful moments, keeping navigation on `product` and permissions art for genuine permission guidance.
-- [ ] Reconcile visual-status prose in `marketing/brand-identity.md`, `brand-and-kai.md`, and the earlier rollout plan: the fox is implemented; the knot was an earlier exploration. Preserve the adopted name and sources.
+**Ownership transferred 2026-10-01.** This historical slice is not an execution checklist.
 
-**Acceptance:** Kai has a clear supporting role without another roaming overlay, the origin is reachable from the home, and neither the character nor its motion implies AI or a lossless-recording guarantee. Do not claim that downloading completed merely because a link was clicked.
+- [Home: Kai, the hero copy, and the fox on camera](/plans/2026-10-01-home-kai-and-hero-copy/) owns H12, H13, the camera-illustration half of H11, the closing `done` mark, and reconciliation of the fox and brand-origin documentation.
+- [Home conversion and Kai implementation v2](/plans/2026-10-01-home-conversion-v2/) owns the capture-to-output half of H11 and the remaining conversion, localization, controls, trust, FAQ, and accessibility work.
+
+The original acceptance intent remains useful historical context: Kai must have a supporting role, the origin must be reachable, and neither the character nor its motion may imply AI behavior or a lossless-recording guarantee. Completion status belongs in the owning plans, not here.
 
 ## Slice 5 — Accessibility and visual verification
 
