@@ -5,7 +5,7 @@ description: Preserve Kaipu's pink identity and focused UI while exploring a mem
 
 # A warmer Kaipu and the Kai exploration
 
-**Exploration · 2026-09-27.** The name and origin are settled in the [canonical brand identity](/marketing/brand-identity/). The preferred mascot direction is now **Kai, a small knot that keeps moments**, superseding the earlier vizcacha recommendation. Final artwork integration is pending. The creator reports new logos and notch-state art; inspect those files before generating replacements.
+**Exploration · 2026-09-27 · closed 2026-10-01.** The name and origin are settled in the [canonical brand identity](/marketing/brand-identity/), and so is the character: **Kai is the fox** shipped in `packages/brand`. The knot and vizcacha directions below, and the image prompts, are kept as the record of how the choice was made; they are not open work. What still applies from this page is the restraint: a companion beside the product story, never a second product name, a new domain, or an assumed AI assistant.
 
 ## Recommendation
 
@@ -17,13 +17,13 @@ The existing [design brief](/briefings/design-brief/) describes compact, focused
 
 ## Where Kai could help
 
-| Surface                       | Possible role                                         | Boundary                                                     |
-| ----------------------------- | ----------------------------------------------------- | ------------------------------------------------------------ |
-| Website                       | Recognizable signature beside a genuine product story | The product demo remains the primary proof                   |
-| First launch                  | A brief welcome and shortcut introduction             | Never lengthen the path to first capture                     |
-| Empty library                 | A friendly invitation to make the first capture       | Keep the action direct and keyboard-accessible               |
-| Release notes and support     | Consistent illustration and helpful tone              | Do not imply a real-time assistant exists                    |
-| Editor and recording controls | Usually absent                                        | Avoid obstructing content, adding noise, or entering exports |
+| Surface                       | Possible role                                                                                   | Boundary                                                       |
+| ----------------------------- | ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| Website                       | "Meet Kai" after the hero; the fox on camera in the recording illustration; `done` at the close | The product demo remains the primary proof; no floating mascot |
+| First launch                  | A brief welcome and shortcut introduction                                                       | Never lengthen the path to first capture                       |
+| Empty library                 | A friendly invitation to make the first capture                                                 | Keep the action direct and keyboard-accessible                 |
+| Release notes and support     | Consistent illustration and helpful tone                                                        | Do not imply a real-time assistant exists                      |
+| Editor and recording controls | Usually absent                                                                                  | Avoid obstructing content, adding noise, or entering exports   |
 
 Avoid jokes in failure/recovery states, constant animations, and calling every smart feature “Kai.” A mascot can improve recognition; it does not substitute for activation or reliability.
 
@@ -53,7 +53,7 @@ Compare the current brand with a small Kai concept in the landing and an empty s
 
 ## Peruvian-inspired directions
 
-**Owner follow-up · 2026-09-27:** explore pixel art and a Peruvian connection. These are concept candidates, not a selected logo.
+**Owner follow-up · 2026-09-27, resolved 2026-10-01 by the fox.** These were concept candidates while the character was open; none is a selected logo.
 
 | Direction                               | Why it could work                                                                                | What to watch                                                                                               |
 | --------------------------------------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
@@ -66,7 +66,7 @@ Favor a small contemporary character over a collage of tourist symbols. A subtle
 
 ## Ready-to-use image prompt
 
-Use this only if the supplied artwork needs further exploration. First inspect the creator's logos and notch-state designs. The [execution plan](/plans/2026-09-27-brand-and-website-rollout/) separates artwork selection, small-size logo tests, and runtime notch behavior.
+Historical. The supplied artwork settled the character on 2026-10-01; regenerate nothing from these prompts. They stay so a later reader can see what was tried and why the fox was not a knot.
 
 > Design three distinct flat-shape concepts for Kai, a small living knot that keeps moments, the companion of Kaipu, a screen-recording and screenshot app made by a Peruvian creator. Kaipu's brand signature is “This. Captured.” The character draws contemporary inspiration from recording information with cords and knots; it does not reproduce historical quipu notation. Make it attentive, curious, capable, and careful.
 >
