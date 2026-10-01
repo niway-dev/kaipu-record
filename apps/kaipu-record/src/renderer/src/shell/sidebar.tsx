@@ -4,6 +4,7 @@ import { useTranslations } from "@kaipu/i18n";
 import { KaipuLogo } from "@kaipu/brand";
 import { cx } from "@renderer/ui/cx";
 import styles from "./sidebar.module.css";
+import { ROUTES } from "@shared/routes";
 
 const linkClass = ({ isActive }: { isActive: boolean }): string =>
   cx(styles.navItem, isActive && styles.active);
@@ -17,12 +18,12 @@ interface NavItem {
 
 // Record is the index route (`/`), so it uses `end` to avoid matching everything.
 const NAV: NavItem[] = [
-  { to: "/", labelKey: "record", Icon: Video, end: true },
-  { to: "/screenshots", labelKey: "screenshots", Icon: Camera },
-  { to: "/library", labelKey: "library", Icon: Library },
-  { to: "/shortcuts", labelKey: "shortcuts", Icon: Keyboard },
-  { to: "/settings", labelKey: "settings", Icon: Settings },
-  { to: "/cloud", labelKey: "cloud", Icon: Cloud },
+  { to: ROUTES.record, labelKey: "record", Icon: Video, end: true },
+  { to: ROUTES.screenshots, labelKey: "screenshots", Icon: Camera },
+  { to: ROUTES.library, labelKey: "library", Icon: Library },
+  { to: ROUTES.shortcuts, labelKey: "shortcuts", Icon: Keyboard },
+  { to: ROUTES.settings, labelKey: "settings", Icon: Settings },
+  { to: ROUTES.cloud, labelKey: "cloud", Icon: Cloud },
 ];
 
 /**

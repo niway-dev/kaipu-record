@@ -428,9 +428,14 @@ app.whenReady().then(() => {
     if (name === appliedPreset) return;
     appliedPreset = name;
     const area = screen.getDisplayMatching(mainWindow.getBounds()).workAreaSize;
-    const { width, height, minWidth, minHeight } = fitPresetToDisplay(WINDOW_PRESETS[name], area);
+    const fitted = fitPresetToDisplay(WINDOW_PRESETS[name], area);
+    const { width, height, minWidth, minHeight, maxWidth, maxHeight } = fitted;
     const [currentWidth, currentHeight] = mainWindow.getSize();
     const shrinking = width < currentWidth || height < currentHeight;
+
+    // A screen with no maximum must have any previous one cleared, or the limit
+    // would outlive the screen that asked for it. 0 means "no limit" to Electron.
+    mainWindow.setMaximumSize(maxWidth ?? 0, maxHeight ?? 0);
 
     if (shrinking) mainWindow.setMinimumSize(minWidth, minHeight);
     mainWindow.setSize(width, height, true);
