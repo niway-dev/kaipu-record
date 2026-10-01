@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
+import { KaipuLogo } from "@kaipu/brand";
 import { useTranslations } from "@kaipu/i18n";
 
-import { KaipuMark } from "@/components/kaipu-mark";
 import { LegalLinks } from "@/components/legal/legal-links";
 
 export function Footer() {
@@ -10,8 +10,7 @@ export function Footer() {
   return (
     <footer className="border-t border-[var(--kaipu-border)] px-6 py-8 text-center text-sm text-[var(--kaipu-text-muted)]">
       <span className="flex items-center justify-center gap-2 font-semibold text-[var(--kaipu-text-secondary)]">
-        <KaipuMark size={16} className="text-[var(--kaipu-accent-primary)]" /> {t("navBrand")}{" "}
-        Record
+        <KaipuLogo use="micro" size={16} /> {t("navBrand")} Record
       </span>
       <p className="mt-2 font-medium text-[var(--kaipu-text-secondary)]">{t("footerSignature")}</p>
       <p className="mt-1">{t("footerTagline")}</p>

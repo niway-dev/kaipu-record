@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
+import { KaipuLogo } from "@kaipu/brand";
 import { useTranslations } from "@kaipu/i18n";
 
-import { KaipuMark } from "./kaipu-mark";
 import UserMenu from "./user-menu";
 import { LocaleSwitcher } from "./locale-switcher";
 import type { AuthSession } from "@/lib/auth/types";
@@ -19,7 +19,7 @@ export default function Header({ isAuthenticated, userName, userEmail }: HeaderP
       <div className="flex flex-row items-center justify-between px-4 py-2">
         <nav className="flex items-center gap-4 text-lg">
           <Link to="/" className="flex items-center gap-2 font-semibold">
-            <KaipuMark size={20} className="text-[var(--kaipu-accent-primary)]" />
+            <KaipuLogo use="product" size={22} />
             {t("brand")}
           </Link>
           {isAuthenticated && (
