@@ -35,7 +35,12 @@ import {
 import { initMainAnalytics, shutdownMainAnalytics } from "./services/analytics.service";
 import { registerAnalyticsIpc } from "./services/analytics-ipc";
 import { registerScreenshotHandlers } from "./screenshots/screenshot-ipc";
-import { fitPresetToDisplay, WINDOW_PRESETS, type WindowPresetName } from "@shared/window-size";
+import {
+  fitPresetToDisplay,
+  isEditorPreset,
+  WINDOW_PRESETS,
+  type WindowPresetName,
+} from "@shared/window-size";
 
 let mainWindow: BrowserWindow | null = null;
 let capturePanel: CapturePanelWindow | null = null;
@@ -421,25 +426,65 @@ app.whenReady().then(() => {
    * `setSize(..., true)` animates on macOS, which is what keeps a 1440 -> 900
    * step from looking like a glitch.
    */
+  /**
+   * Apply the window a screen asks for.
+   *
+   * Sidebar screens all ask for `main`, and a repeat is a no-op, so navigating
+   * between them never resizes: the window is the user's, and each screen lays
+   * its content out inside it.
+   *
+   * An editor is the exception. Entering one remembers the bounds the user had
+   * and grows the window; leaving restores exactly those bounds rather than a
+   * preset, so an enlarged or carefully placed window survives a visit to the
+   * editor.
+   */
   let appliedPreset: WindowPresetName | null = null;
+  let boundsBeforeEditor: Electron.Rectangle | null = null;
+
   ipcMain.on(IPC_CHANNELS.windowApplyPreset, (_event, name: WindowPresetName) => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
-    // Navigating between two base screens must not fight a manual resize.
     if (name === appliedPreset) return;
+    const previous = appliedPreset;
     appliedPreset = name;
-    const area = screen.getDisplayMatching(mainWindow.getBounds()).workAreaSize;
-    const fitted = fitPresetToDisplay(WINDOW_PRESETS[name], area);
-    const { width, height, minWidth, minHeight, maxWidth, maxHeight } = fitted;
-    const [currentWidth, currentHeight] = mainWindow.getSize();
-    const shrinking = width < currentWidth || height < currentHeight;
 
-    // A screen with no maximum must have any previous one cleared, or the limit
-    // would outlive the screen that asked for it. 0 means "no limit" to Electron.
+    const area = screen.getDisplayMatching(mainWindow.getBounds()).workAreaSize;
+    const { width, height, minWidth, minHeight, maxWidth, maxHeight } = fitPresetToDisplay(
+      WINDOW_PRESETS[name],
+      area,
+    );
+    // Cleared every time, so a limit cannot outlive the screen that set it.
     mainWindow.setMaximumSize(maxWidth ?? 0, maxHeight ?? 0);
 
-    if (shrinking) mainWindow.setMinimumSize(minWidth, minHeight);
+    // Leaving an editor: put back what the user had, not what the preset says.
+    if (previous !== null && isEditorPreset(previous) && !isEditorPreset(name)) {
+      const restore = boundsBeforeEditor;
+      boundsBeforeEditor = null;
+      mainWindow.setMinimumSize(minWidth, minHeight);
+      if (restore) {
+        mainWindow.setBounds(restore, true);
+        return;
+      }
+    }
+
+    if (isEditorPreset(name) && !isEditorPreset(previous ?? "main")) {
+      boundsBeforeEditor = mainWindow.getBounds();
+    }
+
+    // The first screen of the session gets its starting size; after that only an
+    // editor changes it, and `main` already matches what is on screen.
+    if (previous === null && !isEditorPreset(name)) {
+      mainWindow.setMinimumSize(minWidth, minHeight);
+      return;
+    }
+    if (!isEditorPreset(name)) {
+      mainWindow.setMinimumSize(minWidth, minHeight);
+      return;
+    }
+
+    // Growing into an editor: raise the floor after the size, or the old floor
+    // would clamp nothing and the new one would fight the resize.
     mainWindow.setSize(width, height, true);
-    if (!shrinking) mainWindow.setMinimumSize(minWidth, minHeight);
+    mainWindow.setMinimumSize(minWidth, minHeight);
   });
 
   // The menu bar mirrors the capture panel's selected mode.

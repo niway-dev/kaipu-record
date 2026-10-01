@@ -1,16 +1,17 @@
-import { ROUTES, type RouteName } from "./routes";
+import { ROUTES } from "./routes";
 
 /**
- * The window each screen asks for.
+ * The window a screen asks for.
  *
- * Three pairs, and they answer three different questions:
- *   - `width`/`height`      — the size the screen should be given when you reach it.
- *   - `minWidth`/`minHeight` — the size below which the screen stops working, not
- *     the size below which it looks tight. A grid that reflows to one column is
- *     fine; a timeline whose lanes become unreadable is not.
- *   - `maxWidth`/`maxHeight` — optional, and omitted almost everywhere on
- *     purpose. A maximum stops someone with a large display from using it, so a
- *     screen should only declare one when being wider genuinely breaks it.
+ *   - `width`/`height`      — a STARTING size, used when a window first needs one.
+ *     Not a size to restore on every visit: see `presetForPath`.
+ *   - `minWidth`/`minHeight` — where the layout stops working, not where it stops
+ *     looking roomy. A grid that drops to two columns is fine; a timeline whose
+ *     lanes become unreadable is not.
+ *   - `maxWidth`/`maxHeight` — optional and unused. A maximum stops a large
+ *     display from being used, so only a screen that genuinely breaks when wider
+ *     should declare one. Content can have a max width without the window having
+ *     one.
  *
  * Pure, so main and the renderer share one definition and the clamping below is
  * testable without a BrowserWindow.
@@ -25,59 +26,59 @@ export interface WindowSizePreset {
 }
 
 /**
- * One preset per screen. Written out rather than defaulted so each screen's
- * floor is a decision someone made, not an accident of what it inherited.
+ * Three presets, not one per screen.
  *
- * The minimums are where each layout stops being usable:
- *  - the library's grid needs three cards and their labels to stay legible;
- *  - the editors need their preview, inspector and lanes at once;
- *  - the settings pages are a two-column form that collapses below ~900.
+ * An earlier version gave every route its own size and applied it on every
+ * navigation. Record → Library → Settings → Library resized the window four
+ * times: the app took and released desktop space on its own, a window placed
+ * beside another app lost that arrangement, and a window the user had
+ * deliberately enlarged was reset — the app overriding a choice the user made.
+ *
+ * A screen having an ideal size does not mean it should impose it on arrival.
+ * The main window keeps ONE size, which the user owns, and each screen lays its
+ * content out inside whatever it is given. The video editor is the single
+ * exception, because its layout genuinely needs the room, and leaving it
+ * restores the size the window had before rather than a preset.
  */
 export const WINDOW_PRESETS = {
-  record: { width: 980, height: 720, minWidth: 820, minHeight: 640 },
-  library: { width: 1180, height: 820, minWidth: 1040, minHeight: 700 },
-  libraryDetail: { width: 1180, height: 820, minWidth: 1040, minHeight: 700 },
-  screenshots: { width: 1080, height: 780, minWidth: 940, minHeight: 680 },
-  screenshotEditor: { width: 1240, height: 820, minWidth: 1040, minHeight: 720 },
+  /**
+   * Every screen but one: the sidebar pages AND the screenshot editor, whose
+   * canvas and panel fit here without taking the window over.
+   */
+  main: { width: 1040, height: 760, minWidth: 900, minHeight: 670 },
+  /**
+   * The only exception. A preview, an inspector and five timeline lanes do not
+   * fit the shared window, and below this the lanes stop being readable rather
+   * than merely narrow.
+   */
   videoEditor: { width: 1440, height: 900, minWidth: 1180, minHeight: 760 },
-  shortcuts: { width: 980, height: 760, minWidth: 880, minHeight: 640 },
-  cloud: { width: 1040, height: 760, minWidth: 900, minHeight: 640 },
-  settings: { width: 1040, height: 780, minWidth: 900, minHeight: 660 },
-  /** Auth is a single centred card; it never needs more than this. */
-  signIn: { width: 900, height: 700, minWidth: 820, minHeight: 620 },
-  signUp: { width: 900, height: 700, minWidth: 820, minHeight: 620 },
   /**
    * The first-run takeover does not reflow — a 96px mark, a headline, a two-line
    * subtitle and a 2x2 grid of permission cards.
    */
   onboarding: { width: 1000, height: 760, minWidth: 900, minHeight: 700 },
-} as const satisfies Record<RouteName | "onboarding", WindowSizePreset>;
+} as const satisfies Record<string, WindowSizePreset>;
 
 export type WindowPresetName = keyof typeof WINDOW_PRESETS;
-
-/** Path → preset, derived from ROUTES so a renamed route cannot lose its size. */
-const PRESET_BY_PATH = Object.fromEntries(
-  (Object.keys(ROUTES) as RouteName[]).map((name) => [ROUTES[name], name]),
-) as Record<string, WindowPresetName>;
 
 /**
  * Which preset a path wants.
  *
- * Resolved from the path on every navigation rather than asked for by each page
- * on mount: the pages mount and unmount under a shell that does not, so a page
- * that grew the window had nothing to shrink it back on the way out.
+ * Only the video editor asks for something of its own; every other route is
+ * `main`, and main treats a repeat as a no-op, so navigating anywhere else —
+ * including into and out of the screenshot editor — never touches the window.
  *
- * Nested paths fall back to their parent — `/settings/general` is a settings
- * screen — and anything unrecognised gets the record preset rather than nothing.
+ * Still resolved from the path rather than requested by each page on mount: the
+ * pages mount and unmount under a shell that does not, so a page that grew the
+ * window had nothing to shrink it back on the way out.
  */
 export function presetForPath(pathname: string): WindowPresetName {
-  const exact = PRESET_BY_PATH[pathname];
-  if (exact) return exact;
-  // `/library/<id>` and `/settings/<section>` are the parent screen resized.
-  const parent = pathname.slice(0, pathname.indexOf("/", 1));
-  if (parent === ROUTES.library) return "libraryDetail";
-  if (parent === ROUTES.settings) return "settings";
-  return "record";
+  return pathname === ROUTES.videoEditor ? "videoEditor" : "main";
+}
+
+/** True for the one screen that takes the window over. */
+export function isEditorPreset(name: WindowPresetName): boolean {
+  return name === "videoEditor";
 }
 
 /**
@@ -91,8 +92,7 @@ export function presetForPath(pathname: string): WindowPresetName {
 export function fitPresetToDisplay(
   preset: WindowSizePreset,
   workArea: { width: number; height: number },
-): Required<Pick<WindowSizePreset, "width" | "height" | "minWidth" | "minHeight">> &
-  Pick<WindowSizePreset, "maxWidth" | "maxHeight"> {
+): WindowSizePreset {
   const width = Math.min(preset.width, workArea.width);
   const height = Math.min(preset.height, workArea.height);
   return {
