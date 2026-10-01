@@ -1,0 +1,148 @@
+/*
+ * Kai sits on the base surface between the moments band and chapter 01: the fox
+ * at the left, the introduction and the name's origin at the right. Compact on
+ * purpose — it is the third section and the product proof is next.
+ */
+.section {
+  position: relative;
+  padding: 72px var(--kl-gutter) 110px;
+  overflow: hidden;
+}
+
+.grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  max-width: var(--kl-max-w);
+  margin: 0 auto;
+  align-items: center;
+  gap: 64px;
+  grid-template-columns: 240px minmax(0, 1fr);
+}
+
+.grid > * {
+  min-width: 0;
+}
+
+.stage {
+  margin: 0;
+}
+
+/* The same pink lift the hero's mark carries, so the two read as one character. */
+.fox {
+  box-shadow: 0 26px 60px -20px rgb(246 5 92 / 0.85);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--kl-fs-h2);
+  font-weight: 700;
+  line-height: var(--kl-leading-h);
+  letter-spacing: var(--kl-tracking-h2);
+}
+
+.body {
+  max-width: 560px;
+  margin-top: 20px;
+  font-size: var(--kl-fs-body);
+  line-height: var(--kl-leading-body);
+  color: var(--kl-dim);
+  text-wrap: pretty;
+}
+
+.origin {
+  max-width: 560px;
+  margin-top: 36px;
+  padding-top: 28px;
+  border-top: 1px solid var(--kl-bd);
+}
+
+.eyebrow {
+  margin: 0;
+  font-family: var(--kl-font-mono);
+  font-size: 12.5px;
+  letter-spacing: var(--kl-tracking-label);
+  text-transform: uppercase;
+  color: var(--kl-faint);
+}
+
+.formula {
+  margin: 12px 0 0;
+  font-family: var(--kl-font-mono);
+  font-size: 13px;
+  color: var(--kl-faint);
+}
+
+.terms {
+  display: grid;
+  gap: 18px;
+  margin: 18px 0 0;
+  grid-template-columns: 1fr 1fr;
+}
+
+.term {
+  margin: 0;
+}
+
+.termName {
+  font-family: var(--kl-font-serif);
+  font-size: 22px;
+  font-style: italic;
+  color: var(--kl-pink-tx);
+}
+
+.termBody {
+  margin: 6px 0 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--kl-dim);
+}
+
+.originBody {
+  margin: 18px 0 0;
+  font-size: 15.5px;
+  line-height: 1.55;
+  color: var(--kl-tx);
+  text-wrap: pretty;
+}
+
+.signature {
+  margin: 14px 0 0;
+  font-family: var(--kl-font-serif);
+  font-size: 24px;
+  font-style: italic;
+  color: var(--kl-pink-tx);
+}
+
+.note {
+  margin: 12px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--kl-faint);
+}
+
+@media (width < 1080px) {
+  .grid {
+    grid-template-columns: 1fr;
+    gap: 40px;
+  }
+
+  .stage {
+    justify-self: start;
+  }
+
+  .fox {
+    width: 160px;
+    height: 160px;
+  }
+}
+
+@media (width < 980px) {
+  .section {
+    padding: 48px 20px 70px;
+  }
+
+  .terms {
+    grid-template-columns: 1fr;
+  }
+}

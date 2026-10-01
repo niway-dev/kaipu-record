@@ -4,6 +4,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { HomeShell } from "@/components/home/home-shell";
 import { Hero } from "@/components/home/hero";
 import { Moments } from "@/components/home/moments";
+import { Kai } from "@/components/home/kai";
 import { Chapter } from "@/components/home/chapter";
 import { MockRecord } from "@/components/home/mock-record";
 import { MockCapture } from "@/components/home/mock-capture";
@@ -32,6 +33,7 @@ function HomePage() {
     <HomeShell>
       <Hero />
       <Moments />
+      <Kai />
       <Chapter id="record" tint="c1" number="01" icon={Video} keyPrefix="homeChapter1">
         <MockRecord />
       </Chapter>
