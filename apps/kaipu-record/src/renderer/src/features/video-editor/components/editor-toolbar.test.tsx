@@ -34,6 +34,9 @@ function renderRail(overrides: Partial<EditorToolRailProps> = {}): EditorToolRai
     onToolChange: vi.fn(),
     onAddZoom: vi.fn(),
     privacyDisabled: false,
+    onAddMute: vi.fn(),
+    onToggleMuteAll: vi.fn(),
+    audioMuted: false,
     ...overrides,
   };
   render(<EditorToolRail {...props} />);
@@ -178,5 +181,28 @@ describe("EditorToolRail — v2 privacy tools", () => {
   it("disables them over a slide", () => {
     renderRail({ privacyDisabled: true });
     expect(screen.getByRole("button", { name: "Blur" })).toBeDisabled();
+  });
+});
+
+describe("EditorToolRail — audio", () => {
+  it("adds a muted section at the playhead", () => {
+    const props = renderRail();
+    fireEvent.click(screen.getByRole("button", { name: "Mute a section" }));
+    expect(props.onAddMute).toHaveBeenCalledOnce();
+  });
+
+  it("offers to mute everything, and says so when it already is", () => {
+    renderRail();
+    const mute = screen.getByRole("button", { name: "Mute the whole recording" });
+    expect(mute).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("flips its name and pressed state once the recording is muted", () => {
+    // The same control both states — a second button would let the two disagree.
+    const props = renderRail({ audioMuted: true });
+    const unmute = screen.getByRole("button", { name: "Unmute the recording" });
+    expect(unmute).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(unmute);
+    expect(props.onToggleMuteAll).toHaveBeenCalledOnce();
   });
 });

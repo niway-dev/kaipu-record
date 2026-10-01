@@ -629,7 +629,18 @@
     "annotationDefaultsTitle": "Next annotation",
     "annotationDefaultsHint": "Style for the next annotation you draw.",
     "sizeCustom": "Custom",
-    "sizeCustomAria": "Custom size, set by dragging a corner"
+    "sizeCustomAria": "Custom size, set by dragging a corner",
+    "laneAudio": "AUDIO",
+    "audioEmptyState": "No muted sections yet.",
+    "audioAllMuted": "The whole recording is muted",
+    "muteTitle": "Muted section {n}",
+    "toolMute": "Mute a section",
+    "hintMute": "Adds a silent section at the playhead.",
+    "toolMuteAll": "Mute the whole recording",
+    "toolUnmuteAll": "Unmute the recording",
+    "muteRemove": "Delete this muted section",
+    "muteNoRoom": "Not enough room left to mute.",
+    "muteOnSlide": "A slide has no audio to mute."
   },
   "panel": {
     "saving": "Saving…",

@@ -12,6 +12,9 @@ import {
   Trash2,
   Type,
   Undo2,
+  Volume2,
+  VolumeOff,
+  VolumeX,
   ZoomIn,
 } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
@@ -110,6 +113,11 @@ export interface EditorToolbarProps {
  * more than the tools need to be in a line.
  */
 export interface EditorToolRailProps {
+  /** Silence a stretch of audio at the playhead. */
+  onAddMute(): void;
+  /** Silence the whole recording; the export then drops the audio track. */
+  onToggleMuteAll(): void;
+  audioMuted: boolean;
   /** Current tool (annotation or privacy). */
   tool: EditorTool;
   onToolChange(tool: EditorTool): void;
@@ -124,6 +132,9 @@ export function EditorToolRail({
   onToolChange,
   onAddZoom,
   privacyDisabled,
+  onAddMute,
+  onToggleMuteAll,
+  audioMuted,
 }: EditorToolRailProps): React.JSX.Element {
   const t = useTranslations("videoEditor");
   return (
@@ -178,6 +189,31 @@ export function EditorToolRail({
             </button>
           );
         })}
+      </div>
+      <span className={styles.railSeparator} aria-hidden />
+      {/* Audio. Mute-a-section is an ACTION like Zoom — it drops a silent range
+          at the playhead — while mute-everything is a toggle on the whole
+          recording, so the two are a button and a pressed state, not two tools. */}
+      <div className={styles.railGroup}>
+        <button
+          type="button"
+          title={t("hintMute")}
+          aria-label={t("toolMute")}
+          className={styles.tool}
+          onClick={onAddMute}
+        >
+          <VolumeX size={19} />
+        </button>
+        <button
+          type="button"
+          title={audioMuted ? t("toolUnmuteAll") : t("toolMuteAll")}
+          aria-label={audioMuted ? t("toolUnmuteAll") : t("toolMuteAll")}
+          aria-pressed={audioMuted}
+          className={`${styles.tool} ${audioMuted ? styles.toolActive : ""}`}
+          onClick={onToggleMuteAll}
+        >
+          {audioMuted ? <VolumeOff size={19} /> : <Volume2 size={19} />}
+        </button>
       </div>
     </div>
   );

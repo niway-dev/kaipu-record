@@ -100,6 +100,8 @@ import { PreviewStage } from "@renderer/features/video-editor/components/preview
 import { TimelineStrip } from "@renderer/features/video-editor/components/timeline-strip";
 import { showToast } from "@renderer/ui/toast-store";
 import styles from "./video-editor-page.module.css";
+import { useMuteEditing } from "@renderer/features/video-editor/use-mute-editing";
+import { AudioLane } from "@renderer/features/video-editor/components/audio-lane";
 
 export interface VideoEditorSource {
   id: string;
@@ -364,6 +366,10 @@ function VideoEditor({
     sourceDuration: source.durationSeconds,
     cursorTrack,
   });
+  const mutes = useMuteEditing(controller, layout, source.durationSeconds);
+  // Local to the lane: a muted range has no inspector panel yet, so it does not
+  // join the shared `selection` the zoom and privacy inspectors share.
+  const [selectedMuteId, setSelectedMuteId] = useState<string | null>(null);
   const redactionEdits = useRedactionEditing({
     controller,
     layout,
@@ -740,6 +746,13 @@ function VideoEditor({
     else if (result.reason === "no-room") showToast({ message: t("zoomNoRoom") });
   }, [layout, playback.timelineTime, zooms, selectKind, t]);
 
+  const handleAddMute = useCallback(() => {
+    const result = mutes.addAtPlayhead(playback.timelineTime);
+    if (result.ok) setSelectedMuteId(result.id);
+    else if (result.reason === "on-slide") showToast({ message: t("muteOnSlide") });
+    else if (result.reason === "no-room") showToast({ message: t("muteNoRoom") });
+  }, [mutes, playback.timelineTime, t]);
+
   const handleRemoveZoom = useCallback(
     (id: string) => {
       zooms.remove(id);
@@ -960,6 +973,9 @@ function VideoEditor({
       </EditorToolbar>
       <div className={styles.workspace}>
         <EditorToolRail
+          onAddMute={handleAddMute}
+          onToggleMuteAll={mutes.toggleAll}
+          audioMuted={mutes.audioMuted}
           tool={videoTools.tool}
           onToolChange={handleToolChange}
           onAddZoom={handleAddZoom}
@@ -1230,6 +1246,20 @@ function VideoEditor({
                       ? { kind: privacyTool, start: drawWindow.start, end: drawWindow.end }
                       : null
                   }
+                />
+              ),
+            },
+            {
+              key: "audio",
+              label: t("laneAudio"),
+              node: (
+                <AudioLane
+                  ranges={mutes.mutedRanges}
+                  layout={layout}
+                  audioMuted={mutes.audioMuted}
+                  selectedId={selectedMuteId}
+                  onSelect={setSelectedMuteId}
+                  onEdgeDrag={mutes.edgeDrag}
                 />
               ),
             },
