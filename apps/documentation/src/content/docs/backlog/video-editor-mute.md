@@ -7,9 +7,9 @@ description: "Proposal: a Mute tool in the video editor that silences the audio 
 
 > **Status: 🟢 Ready to validate — implemented in
 > [#199](https://github.com/csdev19/kaipu-record-monorepo/pull/199) (2026-10-01).** The owner
-> exercised it by hand on a real recording the same day: add a range, drag its edges, hear it
-> go silent in the preview, delete it from the inspector. Export validation on a packaged build
-> is the remaining step. Original request after the v2 wave: "an option to remove the sound —
+> exercised it by hand on a real recording the same day: a muted section, the whole-video mute,
+> and both exports — the section silent in the file, the whole-video export with no audio track.
+> Validation on a packaged build is the remaining step. Original request after the v2 wave: "an option to remove the sound —
 > for the whole video or for a section". Parent: [video editor v2](./video-editor-zoom-blur-cover)
 > · sibling: [live recording controls](./live-recording-controls) (mute _while_ recording; this
 > doc is mute _after_ recording).
