@@ -640,7 +640,8 @@
     "toolUnmuteAll": "Quitar el silencio",
     "muteRemove": "Eliminar este tramo silenciado",
     "muteNoRoom": "No queda espacio para silenciar.",
-    "muteOnSlide": "Una diapositiva no tiene audio que silenciar."
+    "muteOnSlide": "Una diapositiva no tiene audio que silenciar.",
+    "muteInspectorNote": "Silencio en el export. La grabación original conserva su audio."
   },
   "panel": {
     "saving": "Guardando…",

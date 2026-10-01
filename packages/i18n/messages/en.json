@@ -640,7 +640,8 @@
     "toolUnmuteAll": "Unmute the recording",
     "muteRemove": "Delete this muted section",
     "muteNoRoom": "Not enough room left to mute.",
-    "muteOnSlide": "A slide has no audio to mute."
+    "muteOnSlide": "A slide has no audio to mute.",
+    "muteInspectorNote": "Silent in the export. The original recording keeps its audio."
   },
   "panel": {
     "saving": "Saving…",

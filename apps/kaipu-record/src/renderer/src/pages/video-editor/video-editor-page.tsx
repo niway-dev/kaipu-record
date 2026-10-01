@@ -102,6 +102,7 @@ import { showToast } from "@renderer/ui/toast-store";
 import styles from "./video-editor-page.module.css";
 import { useMuteEditing } from "@renderer/features/video-editor/use-mute-editing";
 import { AudioLane } from "@renderer/features/video-editor/components/audio-lane";
+import { MuteInspector } from "@renderer/features/video-editor/components/inspector/mute-inspector";
 
 export interface VideoEditorSource {
   id: string;
@@ -374,9 +375,6 @@ function VideoEditor({
     cursorTrack,
   });
   const mutes = useMuteEditing(controller, layout, source.durationSeconds);
-  // Local to the lane: a muted range has no inspector panel yet, so it does not
-  // join the shared `selection` the zoom and privacy inspectors share.
-  const [selectedMuteId, setSelectedMuteId] = useState<string | null>(null);
   const redactionEdits = useRedactionEditing({
     controller,
     layout,
@@ -438,6 +436,7 @@ function VideoEditor({
 
   const selectedZoomId = selection.zoomId;
   const selectedRedactionId = selection.redactionId;
+  const selectedMuteId = selection.muteId;
   useEffect(() => {
     if (selectedZoomId && !scene.zoomSegments.some((z) => z.id === selectedZoomId)) {
       selectKind("zoom", null);
@@ -448,6 +447,11 @@ function VideoEditor({
       selectKind("redaction", null);
     }
   }, [scene.redactions, selectedRedactionId, selectKind]);
+  useEffect(() => {
+    if (selectedMuteId && !scene.mutedRanges.some((r) => r.id === selectedMuteId)) {
+      selectKind("mute", null);
+    }
+  }, [scene.mutedRanges, selectedMuteId, selectKind]);
 
   // Track fullscreen state via the fullscreenchange event so pressing Esc (which the
   // browser handles natively) still syncs isFullscreen back to false.
@@ -755,10 +759,10 @@ function VideoEditor({
 
   const handleAddMute = useCallback(() => {
     const result = mutes.addAtPlayhead(playback.timelineTime);
-    if (result.ok) setSelectedMuteId(result.id);
+    if (result.ok) selectKind("mute", result.id);
     else if (result.reason === "on-slide") showToast({ message: t("muteOnSlide") });
     else if (result.reason === "no-room") showToast({ message: t("muteNoRoom") });
-  }, [mutes, playback.timelineTime, t]);
+  }, [mutes, playback.timelineTime, selectKind, t]);
 
   const handleRemoveZoom = useCallback(
     (id: string) => {
@@ -780,6 +784,9 @@ function VideoEditor({
   const privacyTool = isPrivacyTool(videoTools.tool) ? videoTools.tool : null;
   const onSlide = playback.activeSlideId !== null;
   const [draftRegion, setDraftRegion] = useState<NormRect | null>(null);
+  const selectedMute = selectedMuteId
+    ? (scene.mutedRanges.find((r) => r.id === selectedMuteId) ?? null)
+    : null;
   const selectedRedaction = selectedRedactionId
     ? (redactionEdits.visibleRedactions.find((r) => r.id === selectedRedactionId) ?? null)
     : null;
@@ -1154,6 +1161,14 @@ function VideoEditor({
               edits={redactionEdits}
               onRemoved={() => selectKind("redaction", null)}
             />
+          ) : selectedMute ? (
+            <MuteInspector
+              range={selectedMute}
+              index={scene.mutedRanges.indexOf(selectedMute) + 1}
+              layout={layout}
+              mutes={mutes}
+              onRemoved={() => selectKind("mute", null)}
+            />
           ) : selectedZoom ? (
             <ZoomInspector
               segment={selectedZoom}
@@ -1265,7 +1280,7 @@ function VideoEditor({
                   layout={layout}
                   audioMuted={mutes.audioMuted}
                   selectedId={selectedMuteId}
-                  onSelect={setSelectedMuteId}
+                  onSelect={(id) => selectKind("mute", id)}
                   onEdgeDrag={mutes.edgeDrag}
                 />
               ),

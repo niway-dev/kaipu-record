@@ -6,7 +6,7 @@
  */
 import { useCallback, useState } from "react";
 
-export type SelectionKind = "item" | "overlay" | "zoom" | "redaction";
+export type SelectionKind = "item" | "overlay" | "zoom" | "redaction" | "mute";
 export type EditorSelection = { kind: SelectionKind; id: string } | null;
 
 export function selectedIdOf(selection: EditorSelection, kind: SelectionKind): string | null {
@@ -19,6 +19,7 @@ export interface EditorSelectionController {
   overlayId: string | null;
   zoomId: string | null;
   redactionId: string | null;
+  muteId: string | null;
   /** `id = null` clears the selection only if it currently is of that kind. */
   select(kind: SelectionKind, id: string | null): void;
   clear(): void;
@@ -38,6 +39,7 @@ export function useEditorSelection(): EditorSelectionController {
     overlayId: selectedIdOf(selection, "overlay"),
     zoomId: selectedIdOf(selection, "zoom"),
     redactionId: selectedIdOf(selection, "redaction"),
+    muteId: selectedIdOf(selection, "mute"),
     select,
     clear,
   };
