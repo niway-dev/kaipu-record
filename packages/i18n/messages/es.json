@@ -629,7 +629,19 @@
     "annotationDefaultsTitle": "Próxima anotación",
     "annotationDefaultsHint": "Estilo de la próxima anotación que dibujes.",
     "sizeCustom": "Custom",
-    "sizeCustomAria": "Tamaño personalizado, fijado arrastrando una esquina"
+    "sizeCustomAria": "Tamaño personalizado, fijado arrastrando una esquina",
+    "laneAudio": "AUDIO",
+    "audioEmptyState": "Aún no hay tramos silenciados.",
+    "audioAllMuted": "Toda la grabación está silenciada",
+    "muteTitle": "Tramo silenciado {n}",
+    "toolMute": "Silenciar un tramo",
+    "hintMute": "Agrega un tramo silenciado en el cabezal.",
+    "toolMuteAll": "Silenciar toda la grabación",
+    "toolUnmuteAll": "Quitar el silencio",
+    "muteRemove": "Eliminar este tramo silenciado",
+    "muteNoRoom": "No queda espacio para silenciar.",
+    "muteOnSlide": "Una diapositiva no tiene audio que silenciar.",
+    "muteInspectorNote": "Silencio en el export. La grabación original conserva su audio."
   },
   "panel": {
     "saving": "Guardando…",

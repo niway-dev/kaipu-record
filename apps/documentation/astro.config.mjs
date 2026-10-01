@@ -84,6 +84,8 @@ export default defineConfig({
             { slug: "backlog/settings-screenshots" },
             { slug: "backlog/settings-screenshot-clipboard" },
             { slug: "backlog/video-editor-mute" },
+            { slug: "backlog/editor-space-and-window-presets" },
+            { slug: "backlog/capture-panel-latency" },
             { slug: "backlog/editor-title-input" },
             { slug: "backlog/library-lineage" },
             { slug: "backlog/ci-minutes-audit" },

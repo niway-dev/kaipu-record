@@ -22,6 +22,7 @@ import { ScreenshotsPage } from "@renderer/pages/screenshots/screenshots-page";
 import { ScreenshotEditorPage } from "@renderer/pages/screenshot-editor/screenshot-editor-page";
 import { VideoEditorPage } from "@renderer/pages/video-editor/video-editor-page";
 import { AuthPage } from "@renderer/pages/auth/auth-page";
+import { ROUTES } from "@shared/routes";
 
 /**
  * Route tree for the app.
@@ -54,15 +55,15 @@ const router = createHashRouter([
         element: <AppShell />,
         children: [
           { index: true, element: <RecordPage /> },
-          { path: "/library", element: <LibraryPage /> },
-          { path: "/library/:assetId", element: <LibraryDetailPage /> },
-          { path: "/screenshots", element: <ScreenshotsPage /> },
-          { path: "/screenshot-editor", element: <ScreenshotEditorPage /> },
-          { path: "/video-editor", element: <VideoEditorPage /> },
-          { path: "/shortcuts", element: <ShortcutsPage /> },
-          { path: "/cloud", element: <CloudPage /> },
+          { path: ROUTES.library, element: <LibraryPage /> },
+          { path: ROUTES.libraryDetail, element: <LibraryDetailPage /> },
+          { path: ROUTES.screenshots, element: <ScreenshotsPage /> },
+          { path: ROUTES.screenshotEditor, element: <ScreenshotEditorPage /> },
+          { path: ROUTES.videoEditor, element: <VideoEditorPage /> },
+          { path: ROUTES.shortcuts, element: <ShortcutsPage /> },
+          { path: ROUTES.cloud, element: <CloudPage /> },
           {
-            path: "/settings",
+            path: ROUTES.settings,
             element: <SettingsLayout />,
             children: [
               { index: true, element: <Navigate to="general" replace /> },
@@ -81,8 +82,8 @@ const router = createHashRouter([
           { path: "*", element: <NotFound /> },
         ],
       },
-      { path: "/sign-in", element: <AuthPage mode="sign-in" /> },
-      { path: "/sign-up", element: <AuthPage mode="sign-up" /> },
+      { path: ROUTES.signIn, element: <AuthPage mode="sign-in" /> },
+      { path: ROUTES.signUp, element: <AuthPage mode="sign-up" /> },
     ],
   },
 ]);

@@ -130,13 +130,6 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
     if (discarding) navigate("/screenshots");
   }, [discarding, navigate]);
 
-  // The editor needs more room than the rest of the app — ask main to grow the
-  // window (and raise its minimum) while we're here, and restore it on the way out.
-  useEffect(() => {
-    window.electronAPI.setEditorWindowMode(true);
-    return () => window.electronAPI.setEditorWindowMode(false);
-  }, []);
-
   // ⌘/Ctrl + wheel (and trackpad pinch, which arrives as ctrlKey wheel) zooms the
   // view. Non-passive so we can preventDefault Electron's own page zoom. Attaches
   // once the canvas mounts (image resolves) — keyed on a stable boolean, not the

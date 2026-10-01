@@ -6,6 +6,7 @@
  */
 import { layoutDuration, toLayout } from "../timeline";
 import type { VideoScene } from "../scene";
+import type { AudioEdits } from "../audio-edits";
 import type { Redaction } from "../privacy/redaction";
 import { isSourceRangeVisible } from "../source-time";
 
@@ -46,6 +47,12 @@ export interface ExportPlan {
   redactions: Redaction[];
   /** v2: true when the scene has ANY zoom — the renderer then sends the camera path. */
   hasZoom: boolean;
+  /**
+   * The audio half of the scene, carried through untouched so the worker can
+   * decide per segment what to copy and what to zero. `audioMuted` makes the
+   * worker skip the audio track entirely rather than write a silent one.
+   */
+  audio: AudioEdits;
 }
 
 export function buildExportPlan(scene: VideoScene): ExportPlan {
@@ -89,5 +96,9 @@ export function buildExportPlan(scene: VideoScene): ExportPlan {
     // still moves the camera over the kept frames next to the cut — exactly as the preview
     // renders it. Dropping the path here would silently un-zoom those frames.
     hasZoom: scene.zoomSegments.length > 0,
+    // Not filtered by visibility either: a range is clipped to each segment at
+    // write time, so one sitting in deleted footage costs nothing and survives
+    // an undo of the cut.
+    audio: { audioMuted: scene.audioMuted, mutedRanges: scene.mutedRanges },
   };
 }

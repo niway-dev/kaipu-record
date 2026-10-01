@@ -1,3 +1,4 @@
+import type { WindowPresetName } from "../window-size";
 /**
  * Contract for the renderer-facing `window.electronAPI` bridge (implemented in
  * `src/preload`, typed for the renderer via `src/preload/index.d.ts`). Pure types.
@@ -245,7 +246,13 @@ export interface KaipuElectronAPI {
    * restores the normal minimum. The renderer calls true on editor mount, false
    * on unmount.
    */
-  setEditorWindowMode(active: boolean): void;
+  /**
+   * Resize the window to the preset this screen wants and set its minimum.
+   * Main clamps both to the display's work area.
+   */
+  applyWindowPreset(preset: WindowPresetName): void;
+  /** Mirror the capture panel's selected mode in the menu-bar icon. */
+  setTrayMode(mode: "record" | "screenshot"): void;
   /**
    * Toggle "onboarding mode" window sizing. The first-run takeover is a fixed
    * amount of content — a 96px mark, a headline, and up to four permission

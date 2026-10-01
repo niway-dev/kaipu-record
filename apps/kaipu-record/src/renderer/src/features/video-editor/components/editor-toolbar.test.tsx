@@ -1,6 +1,11 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { EditorToolbar, type EditorToolbarProps } from "./editor-toolbar";
+import {
+  EditorToolbar,
+  EditorToolRail,
+  type EditorToolbarProps,
+  type EditorToolRailProps,
+} from "./editor-toolbar";
 
 function renderToolbar(overrides: Partial<EditorToolbarProps> = {}): EditorToolbarProps {
   const props: EditorToolbarProps = {
@@ -14,14 +19,27 @@ function renderToolbar(overrides: Partial<EditorToolbarProps> = {}): EditorToolb
     deleteDisabled: false,
     onAddImage: vi.fn(),
     tool: "select",
-    onToolChange: vi.fn(),
-    onAddZoom: vi.fn(),
-    privacyDisabled: false,
     onExport: vi.fn(),
     exportDisabled: false,
     ...overrides,
   };
   render(<EditorToolbar {...props} />);
+  return props;
+}
+
+/** The drawing and camera tools now live in the vertical rail beside the preview. */
+function renderRail(overrides: Partial<EditorToolRailProps> = {}): EditorToolRailProps {
+  const props: EditorToolRailProps = {
+    tool: "select",
+    onToolChange: vi.fn(),
+    onAddZoom: vi.fn(),
+    privacyDisabled: false,
+    onAddMute: vi.fn(),
+    onToggleMuteAll: vi.fn(),
+    audioMuted: false,
+    ...overrides,
+  };
+  render(<EditorToolRail {...props} />);
   return props;
 }
 
@@ -44,7 +62,7 @@ describe("EditorToolbar", () => {
   });
 
   it("renders the four annotation tools and highlights the active one", () => {
-    renderToolbar({ tool: "box" });
+    renderRail({ tool: "box" });
     for (const name of ["Select", "Box", "Arrow", "Text"]) {
       expect(screen.getByRole("button", { name })).toBeInTheDocument();
     }
@@ -53,7 +71,7 @@ describe("EditorToolbar", () => {
   });
 
   it("fires onToolChange with the picked tool", () => {
-    const props = renderToolbar();
+    const props = renderRail();
     fireEvent.click(screen.getByRole("button", { name: "Arrow" }));
     expect(props.onToolChange).toHaveBeenCalledWith("arrow");
   });
@@ -112,9 +130,9 @@ describe("EditorToolbar", () => {
   });
 });
 
-describe("EditorToolbar — v2 camera group", () => {
+describe("EditorToolRail — v2 camera group", () => {
   it("the Zoom button fires onAddZoom", () => {
-    const props = renderToolbar();
+    const props = renderRail();
     fireEvent.click(screen.getByRole("button", { name: "Zoom" }));
     expect(props.onAddZoom).toHaveBeenCalledTimes(1);
   });
@@ -127,6 +145,9 @@ describe("EditorToolbar — v2 camera group", () => {
 
 describe("EditorToolbar — v2 tooltip shortcuts (PR 10 polish)", () => {
   it("appends the shortcut to every button with one, without changing its accessible name", () => {
+    // The convention spans both pieces of the chrome since the tools moved into
+    // the rail; rendering one would silently stop covering half the buttons.
+    renderRail();
     renderToolbar();
     expect(screen.getByRole("button", { name: "Select" })).toHaveAttribute("title", "Select (V)");
     expect(screen.getByRole("button", { name: "Box" })).toHaveAttribute("title", "Box (R)");
@@ -148,9 +169,9 @@ describe("EditorToolbar — v2 tooltip shortcuts (PR 10 polish)", () => {
   });
 });
 
-describe("EditorToolbar — v2 privacy tools", () => {
+describe("EditorToolRail — v2 privacy tools", () => {
   it("activates Blur and Cover as tools", () => {
-    const props = renderToolbar();
+    const props = renderRail();
     fireEvent.click(screen.getByRole("button", { name: "Blur" }));
     expect(props.onToolChange).toHaveBeenCalledWith("blur");
     fireEvent.click(screen.getByRole("button", { name: "Cover" }));
@@ -158,7 +179,30 @@ describe("EditorToolbar — v2 privacy tools", () => {
   });
 
   it("disables them over a slide", () => {
-    renderToolbar({ privacyDisabled: true });
+    renderRail({ privacyDisabled: true });
     expect(screen.getByRole("button", { name: "Blur" })).toBeDisabled();
+  });
+});
+
+describe("EditorToolRail — audio", () => {
+  it("adds a muted section at the playhead", () => {
+    const props = renderRail();
+    fireEvent.click(screen.getByRole("button", { name: "Mute a section" }));
+    expect(props.onAddMute).toHaveBeenCalledOnce();
+  });
+
+  it("offers to mute everything, and says so when it already is", () => {
+    renderRail();
+    const mute = screen.getByRole("button", { name: "Mute the whole recording" });
+    expect(mute).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("flips its name and pressed state once the recording is muted", () => {
+    // The same control both states — a second button would let the two disagree.
+    const props = renderRail({ audioMuted: true });
+    const unmute = screen.getByRole("button", { name: "Unmute the recording" });
+    expect(unmute).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(unmute);
+    expect(props.onToggleMuteAll).toHaveBeenCalledOnce();
   });
 });

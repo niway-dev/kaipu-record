@@ -1,11 +1,11 @@
-import { app, shell, dialog, BrowserWindow, ipcMain, Notification, Tray } from "electron";
+import { app, shell, dialog, BrowserWindow, ipcMain, Notification, screen, Tray } from "electron";
 import { join } from "path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import { IPC_CHANNELS } from "@shared/types";
 import icon from "../../resources/icon.png?asset";
 import { CapturePanelWindow } from "./capture-panel-window";
 import { createMainTranslator } from "@kaipu/i18n/main";
-import { createTray, rebuildTrayMenu } from "./tray";
+import { createTray, rebuildTrayMenu, setTrayState, type TrayState } from "./tray";
 import { registerRecordingSourceHandlers } from "./recording-sources";
 import { registerPermissionHandlers } from "./permissions";
 import { registerLibraryVaultHandlers } from "./library";
@@ -35,6 +35,12 @@ import {
 import { initMainAnalytics, shutdownMainAnalytics } from "./services/analytics.service";
 import { registerAnalyticsIpc } from "./services/analytics-ipc";
 import { registerScreenshotHandlers } from "./screenshots/screenshot-ipc";
+import {
+  fitPresetToDisplay,
+  isEditorPreset,
+  WINDOW_PRESETS,
+  type WindowPresetName,
+} from "@shared/window-size";
 
 let mainWindow: BrowserWindow | null = null;
 let capturePanel: CapturePanelWindow | null = null;
@@ -77,8 +83,6 @@ registerMediaScheme();
 const BASE_MIN_WIDTH = 720;
 const BASE_MIN_HEIGHT = 560;
 /** The screenshot editor (toolbar + canvas + beautify panel) needs more room. */
-const EDITOR_MIN_WIDTH = 1040;
-const EDITOR_MIN_HEIGHT = 720;
 /**
  * The first-run takeover. Its content does not reflow — a 96px brand mark, a
  * headline, a two-line subtitle and a 2x2 grid of permission cards — so under
@@ -398,6 +402,12 @@ app.whenReady().then(() => {
       mainWindow.setMinimumSize(BASE_MIN_WIDTH, BASE_MIN_HEIGHT);
       return;
     }
+    // Never ask for more than the screen can give. On a 1440x900 display an
+    // unclamped 1440x900 floor pins the window to the entire desktop, with no
+    // room to move it and no way to shrink it.
+    const area = screen.getDisplayMatching(mainWindow.getBounds()).workAreaSize;
+    minWidth = Math.min(minWidth, area.width);
+    minHeight = Math.min(minHeight, area.height);
     mainWindow.setMinimumSize(minWidth, minHeight);
     const [w, h] = mainWindow.getSize();
     if (w < minWidth || h < minHeight) {
@@ -405,10 +415,80 @@ app.whenReady().then(() => {
     }
   };
 
-  // Editor mode: give the screenshot editor more room, restore the floor on exit.
-  ipcMain.on(IPC_CHANNELS.windowSetEditorMode, (_event, active: boolean) =>
-    setWindowFloor(active, EDITOR_MIN_WIDTH, EDITOR_MIN_HEIGHT),
-  );
+  /**
+   * A screen declaring the window it wants. Both numbers matter: the size it
+   * should be given, and the size below which it stops working.
+   *
+   * Order is not arbitrary. The minimum is lowered BEFORE a shrink, or the new
+   * size is clamped back up by the old floor and leaving the editor leaves the
+   * window editor-sized; it is raised AFTER a grow for the mirror reason.
+   *
+   * `setSize(..., true)` animates on macOS, which is what keeps a 1440 -> 900
+   * step from looking like a glitch.
+   */
+  /**
+   * Apply the window a screen asks for.
+   *
+   * Sidebar screens all ask for `main`, and a repeat is a no-op, so navigating
+   * between them never resizes: the window is the user's, and each screen lays
+   * its content out inside it.
+   *
+   * An editor is the exception. Entering one remembers the bounds the user had
+   * and grows the window; leaving restores exactly those bounds rather than a
+   * preset, so an enlarged or carefully placed window survives a visit to the
+   * editor.
+   */
+  let appliedPreset: WindowPresetName | null = null;
+  let boundsBeforeEditor: Electron.Rectangle | null = null;
+
+  ipcMain.on(IPC_CHANNELS.windowApplyPreset, (_event, name: WindowPresetName) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (name === appliedPreset) return;
+    const previous = appliedPreset;
+    appliedPreset = name;
+
+    const area = screen.getDisplayMatching(mainWindow.getBounds()).workAreaSize;
+    const { width, height, minWidth, minHeight, maxWidth, maxHeight } = fitPresetToDisplay(
+      WINDOW_PRESETS[name],
+      area,
+    );
+    // Cleared every time, so a limit cannot outlive the screen that set it.
+    mainWindow.setMaximumSize(maxWidth ?? 0, maxHeight ?? 0);
+
+    // Leaving an editor: put back what the user had, not what the preset says.
+    if (previous !== null && isEditorPreset(previous) && !isEditorPreset(name)) {
+      const restore = boundsBeforeEditor;
+      boundsBeforeEditor = null;
+      mainWindow.setMinimumSize(minWidth, minHeight);
+      if (restore) {
+        mainWindow.setBounds(restore, true);
+        return;
+      }
+    }
+
+    if (isEditorPreset(name) && !isEditorPreset(previous ?? "main")) {
+      boundsBeforeEditor = mainWindow.getBounds();
+    }
+
+    // The first screen of the session gets its starting size; after that only an
+    // editor changes it, and `main` already matches what is on screen.
+    if (previous === null && !isEditorPreset(name)) {
+      mainWindow.setMinimumSize(minWidth, minHeight);
+      return;
+    }
+    if (!isEditorPreset(name)) {
+      mainWindow.setMinimumSize(minWidth, minHeight);
+      return;
+    }
+
+    // Growing into an editor: raise the floor after the size, or the old floor
+    // would clamp nothing and the new one would fight the resize.
+    mainWindow.setSize(width, height, true);
+    mainWindow.setMinimumSize(minWidth, minHeight);
+  });
+
+  // The menu bar mirrors the capture panel's selected mode.
+  ipcMain.on(IPC_CHANNELS.traySetMode, (_event, mode: TrayState) => setTrayState(mode));
 
   // Onboarding mode: same treatment for the first-run takeover.
   ipcMain.on(IPC_CHANNELS.windowSetOnboardingMode, (_event, active: boolean) =>

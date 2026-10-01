@@ -37,6 +37,14 @@ export function CapturePanel(): React.JSX.Element {
   const [tab, setTab] = useState<PanelTab>("record");
   const activeTab: PanelTab = isBusy ? "record" : tab;
 
+  // The menu-bar icon mirrors this selection — it is often the only part of
+  // Kaipu on screen, so it should say which mode a shortcut would start.
+  // The panel calls the second tab "capture"; the brand calls that mark
+  // "screenshot". Mapped here rather than renaming either vocabulary.
+  useEffect(() => {
+    window.electronAPI.setTrayMode(activeTab === "record" ? "record" : "screenshot");
+  }, [activeTab]);
+
   // Keep the Electron window height matched to the content (mic menu, etc.).
   useEffect(() => {
     const el = rootRef.current;

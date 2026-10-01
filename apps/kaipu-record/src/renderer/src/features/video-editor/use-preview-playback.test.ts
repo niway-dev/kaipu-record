@@ -315,3 +315,82 @@ describe("usePreviewPlayback — play/pause stays in sync with the element", () 
     expect(result.current.playing).toBe(true);
   });
 });
+
+describe("edit-driven muting (the scene's muted ranges reach the preview)", () => {
+  const items: TrackItem[] = [{ id: "a", kind: "clip", sourceStart: 0, sourceEnd: 30 }];
+  const layout = toLayout(items);
+  const range = { id: "m", sourceStart: 10, sourceEnd: 15 };
+
+  it("mutes the element inside a muted range and not outside it", () => {
+    const video = makeVideo();
+    const { result } = renderHook(() =>
+      usePreviewPlayback(layout, { audioMuted: false, mutedRanges: [range] }),
+    );
+    result.current.videoRef.current = video;
+
+    video.currentTime = 12;
+    act(() => result.current.onVideoTimeUpdate());
+    expect(video.muted).toBe(true);
+
+    video.currentTime = 20;
+    act(() => result.current.onVideoTimeUpdate());
+    expect(video.muted).toBe(false);
+  });
+
+  it("mutes everywhere when the whole recording is muted", () => {
+    const video = makeVideo();
+    const { result } = renderHook(() =>
+      usePreviewPlayback(layout, { audioMuted: true, mutedRanges: [] }),
+    );
+    result.current.videoRef.current = video;
+    for (const t of [0, 12, 29]) {
+      video.currentTime = t;
+      act(() => result.current.onVideoTimeUpdate());
+      expect(video.muted, `at ${t}`).toBe(true);
+    }
+  });
+
+  it("keeps the user's own mute independent — either one silences", () => {
+    const video = makeVideo();
+    const { result } = renderHook(() =>
+      usePreviewPlayback(layout, { audioMuted: false, mutedRanges: [range] }),
+    );
+    result.current.videoRef.current = video;
+
+    // Outside the range, the user's toggle is the only thing that can mute.
+    video.currentTime = 20;
+    act(() => result.current.toggleMute());
+    expect(video.muted).toBe(true);
+    // Un-muting outside the range unmutes…
+    act(() => result.current.toggleMute());
+    expect(video.muted).toBe(false);
+    // …but un-muting INSIDE the range cannot override the edit.
+    video.currentTime = 12;
+    act(() => result.current.onVideoTimeUpdate());
+    expect(video.muted).toBe(true);
+  });
+
+  it("re-applies when the edits change while paused on the spot", () => {
+    const video = makeVideo();
+    const { result, rerender } = renderHook(({ audio }) => usePreviewPlayback(layout, audio), {
+      initialProps: { audio: { audioMuted: false, mutedRanges: [] as (typeof range)[] } },
+    });
+    result.current.videoRef.current = video;
+    video.currentTime = 12;
+    act(() => result.current.onVideoTimeUpdate());
+    expect(video.muted).toBe(false);
+
+    // A range is drawn over the paused playhead — heard at once, not at the next tick.
+    rerender({ audio: { audioMuted: false, mutedRanges: [range] } });
+    expect(video.muted).toBe(true);
+  });
+
+  it("stays audible with no edits at all (the old behaviour)", () => {
+    const video = makeVideo();
+    const { result } = renderHook(() => usePreviewPlayback(layout));
+    result.current.videoRef.current = video;
+    video.currentTime = 12;
+    act(() => result.current.onVideoTimeUpdate());
+    expect(video.muted).toBe(false);
+  });
+});

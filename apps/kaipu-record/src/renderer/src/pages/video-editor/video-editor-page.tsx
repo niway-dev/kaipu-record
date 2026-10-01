@@ -91,12 +91,18 @@ import { useVideoScene } from "@renderer/features/video-editor/use-video-scene";
 import { useVideoTools } from "@renderer/features/video-editor/annotations/video-tools";
 import { useVideoExport } from "@renderer/features/video-editor/export/use-video-export";
 import { VideoAnnotationLayer } from "@renderer/features/video-editor/annotations/video-annotation-layer";
-import { EditorToolbar } from "@renderer/features/video-editor/components/editor-toolbar";
+import {
+  EditorToolbar,
+  EditorToolRail,
+} from "@renderer/features/video-editor/components/editor-toolbar";
 import { ExportDialog } from "@renderer/features/video-editor/components/export-dialog";
 import { PreviewStage } from "@renderer/features/video-editor/components/preview-stage";
 import { TimelineStrip } from "@renderer/features/video-editor/components/timeline-strip";
 import { showToast } from "@renderer/ui/toast-store";
 import styles from "./video-editor-page.module.css";
+import { useMuteEditing } from "@renderer/features/video-editor/use-mute-editing";
+import { AudioLane } from "@renderer/features/video-editor/components/audio-lane";
+import { MuteInspector } from "@renderer/features/video-editor/components/inspector/mute-inspector";
 
 export interface VideoEditorSource {
   id: string;
@@ -201,6 +207,21 @@ function VideoEditorLoader({ source }: { source: VideoEditorSource }): React.JSX
   useEffect(() => {
     return () => assetStoreRef.current.dispose();
   }, []);
+
+  // The room this screen needs; released when it unmounts. See use-window-floor.
+
+  /**
+   * The recording's name lives in the window title, not in a header row. It is
+   * reference, never a control, and a full-width row for one static string is
+   * width the timeline needs more.
+   */
+  useEffect(() => {
+    const previous = document.title;
+    document.title = source.title;
+    return () => {
+      document.title = previous;
+    };
+  }, [source.title]);
 
   const [resolved, setResolved] = useState<{
     scene: VideoScene;
@@ -307,12 +328,6 @@ function VideoEditor({
 }): React.JSX.Element {
   const t = useTranslations("videoEditor");
   const navigate = useNavigate();
-  useEffect(() => {
-    // Same window growth the screenshot editor uses; restored on unmount.
-    window.electronAPI.setEditorWindowMode(true);
-    return () => window.electronAPI.setEditorWindowMode(false);
-  }, []);
-
   const controller = useVideoScene(resolvedScene);
   const { scene } = controller;
   const layout = useMemo(() => toLayout(scene.items), [scene.items]);
@@ -344,7 +359,14 @@ function VideoEditor({
     [pendingSaveRef],
   );
   const blocker = useBlocker(shouldBlock);
-  const playback = usePreviewPlayback(layout);
+  // The preview hears the scene's muting so scrubbing matches the export. Memoised on
+  // the two fields rather than passed as `scene`: the scene object changes on every
+  // commit, and the hook re-applies the mute whenever this value changes.
+  const audioEdits = useMemo(
+    () => ({ audioMuted: scene.audioMuted, mutedRanges: scene.mutedRanges }),
+    [scene.audioMuted, scene.mutedRanges],
+  );
+  const playback = usePreviewPlayback(layout, audioEdits);
   const zooms = useZoomEditing({
     controller,
     layout,
@@ -352,6 +374,7 @@ function VideoEditor({
     sourceDuration: source.durationSeconds,
     cursorTrack,
   });
+  const mutes = useMuteEditing(controller, layout, source.durationSeconds);
   const redactionEdits = useRedactionEditing({
     controller,
     layout,
@@ -413,6 +436,7 @@ function VideoEditor({
 
   const selectedZoomId = selection.zoomId;
   const selectedRedactionId = selection.redactionId;
+  const selectedMuteId = selection.muteId;
   useEffect(() => {
     if (selectedZoomId && !scene.zoomSegments.some((z) => z.id === selectedZoomId)) {
       selectKind("zoom", null);
@@ -423,6 +447,11 @@ function VideoEditor({
       selectKind("redaction", null);
     }
   }, [scene.redactions, selectedRedactionId, selectKind]);
+  useEffect(() => {
+    if (selectedMuteId && !scene.mutedRanges.some((r) => r.id === selectedMuteId)) {
+      selectKind("mute", null);
+    }
+  }, [scene.mutedRanges, selectedMuteId, selectKind]);
 
   // Track fullscreen state via the fullscreenchange event so pressing Esc (which the
   // browser handles natively) still syncs isFullscreen back to false.
@@ -728,6 +757,13 @@ function VideoEditor({
     else if (result.reason === "no-room") showToast({ message: t("zoomNoRoom") });
   }, [layout, playback.timelineTime, zooms, selectKind, t]);
 
+  const handleAddMute = useCallback(() => {
+    const result = mutes.addAtPlayhead(playback.timelineTime);
+    if (result.ok) selectKind("mute", result.id);
+    else if (result.reason === "on-slide") showToast({ message: t("muteOnSlide") });
+    else if (result.reason === "no-room") showToast({ message: t("muteNoRoom") });
+  }, [mutes, playback.timelineTime, selectKind, t]);
+
   const handleRemoveZoom = useCallback(
     (id: string) => {
       zooms.remove(id);
@@ -748,6 +784,9 @@ function VideoEditor({
   const privacyTool = isPrivacyTool(videoTools.tool) ? videoTools.tool : null;
   const onSlide = playback.activeSlideId !== null;
   const [draftRegion, setDraftRegion] = useState<NormRect | null>(null);
+  const selectedMute = selectedMuteId
+    ? (scene.mutedRanges.find((r) => r.id === selectedMuteId) ?? null)
+    : null;
   const selectedRedaction = selectedRedactionId
     ? (redactionEdits.visibleRedactions.find((r) => r.id === selectedRedactionId) ?? null)
     : null;
@@ -911,8 +950,20 @@ function VideoEditor({
 
   return (
     <div className={styles.page}>
-      <header className={styles.header}>
-        <h1 className={styles.title}>{source.title}</h1>
+      <EditorToolbar
+        canUndo={controller.canUndo}
+        canRedo={controller.canRedo}
+        onUndo={controller.undo}
+        onRedo={controller.redo}
+        onSplit={handleSplit}
+        splitDisabled={splitDisabled}
+        onDeleteSelected={handleDeleteSelected}
+        deleteDisabled={deleteDisabled}
+        onAddImage={handleAddImage}
+        tool={videoTools.tool}
+        onExport={handleExport}
+        exportDisabled={videoExport.status === "exporting" || scene.items.length === 0}
+      >
         {/* Not interactive — a reminder, not a control (plans/video-editor-v2/08 § PR 10
             polish, W12's "ORIGINAL UNTOUCHED" pill). The original recording on disk and
             its library thumbnail are untouched by every edit in this page. */}
@@ -933,25 +984,17 @@ function VideoEditor({
             {autosave.state === "failed" && t("saveStateFailed")}
           </button>
         )}
-      </header>
-      <EditorToolbar
-        canUndo={controller.canUndo}
-        canRedo={controller.canRedo}
-        onUndo={controller.undo}
-        onRedo={controller.redo}
-        onSplit={handleSplit}
-        splitDisabled={splitDisabled}
-        onDeleteSelected={handleDeleteSelected}
-        deleteDisabled={deleteDisabled}
-        onAddImage={handleAddImage}
-        tool={videoTools.tool}
-        onToolChange={handleToolChange}
-        onAddZoom={handleAddZoom}
-        privacyDisabled={onSlide}
-        onExport={handleExport}
-        exportDisabled={videoExport.status === "exporting" || scene.items.length === 0}
-      />
+      </EditorToolbar>
       <div className={styles.workspace}>
+        <EditorToolRail
+          onAddMute={handleAddMute}
+          onToggleMuteAll={mutes.toggleAll}
+          audioMuted={mutes.audioMuted}
+          tool={videoTools.tool}
+          onToolChange={handleToolChange}
+          onAddZoom={handleAddZoom}
+          privacyDisabled={onSlide}
+        />
         <main className={styles.stage} ref={stageRef}>
           {/* Video region: 1fr grid row — centers PreviewStage and constrains its height
               so the transport bar below is never clipped regardless of video aspect ratio.
@@ -1118,6 +1161,14 @@ function VideoEditor({
               edits={redactionEdits}
               onRemoved={() => selectKind("redaction", null)}
             />
+          ) : selectedMute ? (
+            <MuteInspector
+              range={selectedMute}
+              index={scene.mutedRanges.indexOf(selectedMute) + 1}
+              layout={layout}
+              mutes={mutes}
+              onRemoved={() => selectKind("mute", null)}
+            />
           ) : selectedZoom ? (
             <ZoomInspector
               segment={selectedZoom}
@@ -1217,6 +1268,20 @@ function VideoEditor({
                       ? { kind: privacyTool, start: drawWindow.start, end: drawWindow.end }
                       : null
                   }
+                />
+              ),
+            },
+            {
+              key: "audio",
+              label: t("laneAudio"),
+              node: (
+                <AudioLane
+                  ranges={mutes.mutedRanges}
+                  layout={layout}
+                  audioMuted={mutes.audioMuted}
+                  selectedId={selectedMuteId}
+                  onSelect={(id) => selectKind("mute", id)}
+                  onEdgeDrag={mutes.edgeDrag}
                 />
               ),
             },

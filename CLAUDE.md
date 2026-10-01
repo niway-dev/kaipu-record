@@ -126,6 +126,14 @@ The web app (TanStack Start) proxies all API requests through itself to the Elys
 - `application` never imports from `infra-*` (uses domain interfaces)
 - `infra-*` never imports from `application`
 - Mobile app (`apps/mobile/`) only imports from `@kaipu/domain`
+- `apps/kaipu-record/src/shared/**` never takes a **value** import from a workspace
+  package — type-only imports are fine. That directory is reachable from the
+  preload bundle, which externalizes workspace packages and then cannot load
+  their TypeScript at runtime: the preload script fails, `window.electronAPI`
+  comes back `undefined`, and the app opens to a black window with a green build,
+  green types and a green test suite. Keep the value as a literal there (as
+  `locale` and the shortcut accelerators do) and pin it with a test that imports
+  the package — test files are not in that bundle.
 
 ## Secrets: Infisical
 

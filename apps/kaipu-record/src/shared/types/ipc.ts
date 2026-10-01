@@ -9,7 +9,6 @@
 
 import { DEFAULT_QUALITY, type RecordingQuality } from "../recording-quality";
 import type { Locale } from "@kaipu/i18n";
-import { DEFAULT_ACCELERATORS, SHORTCUT_ACTIONS } from "@kaipu/domain/constants";
 
 /**
  * "system" (follow the OS appearance) is a deliberate non-goal for now — the
@@ -18,13 +17,13 @@ import { DEFAULT_ACCELERATORS, SHORTCUT_ACTIONS } from "@kaipu/domain/constants"
  */
 export type Theme = "light" | "dark";
 
-/**
- * Actions that can be bound to a global keyboard shortcut, re-exported from
- * `@kaipu/domain/constants` so every consumer here keeps its current import.
- * The list and the default bindings live there because the marketing site
- * prints them too, and it cannot import from this app.
- */
-export { SHORTCUT_ACTIONS };
+/** Actions that can be bound to a global keyboard shortcut. */
+export const SHORTCUT_ACTIONS = [
+  "startRecording",
+  "stopRecording",
+  "bringToFront",
+  "captureScreenshot",
+] as const;
 export type ShortcutAction = (typeof SHORTCUT_ACTIONS)[number];
 
 /** Electron accelerator string per action (e.g. "Command+Control+C"). */
@@ -53,15 +52,23 @@ export interface ShortcutDefinition {
 }
 
 /**
- * The accelerators are NOT written here: they come from
- * `DEFAULT_ACCELERATORS.mac` in `@kaipu/domain/constants`, which is also what
- * the landing renders. Everything else — labels, descriptions, groups,
- * statusWord — is UI copy with no reader on the web and stays local.
+ * The accelerators are LITERALS here, and deliberately, even though
+ * `DEFAULT_ACCELERATORS.mac` in `@kaipu/domain/constants` holds the same pair
+ * and the marketing site reads it.
+ *
+ * This file is reachable from the PRELOAD bundle, which externalizes workspace
+ * packages and then cannot load their TypeScript at runtime — importing one
+ * here makes the preload script fail, `window.electronAPI` come back undefined,
+ * and the app open to a black window. The same reason `locale` above is a
+ * literal instead of importing from `@kaipu/i18n`.
+ *
+ * `shortcut-defaults.test.ts` asserts these match domain, so the two cannot
+ * drift — the shape this repo already uses to pin DEFAULT_LOCALE.
  */
 export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
   {
     action: "startRecording",
-    defaultAccelerator: DEFAULT_ACCELERATORS.mac.startRecording,
+    defaultAccelerator: "Command+Control+C",
     group: "recording",
     label: "Start recording",
     description: "Begin a screen recording from anywhere",
@@ -69,7 +76,7 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
   },
   {
     action: "stopRecording",
-    defaultAccelerator: DEFAULT_ACCELERATORS.mac.stopRecording,
+    defaultAccelerator: "Command+Control+S",
     group: "recording",
     label: "Stop recording",
     description: "End the current recording from anywhere",
@@ -77,7 +84,7 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
   },
   {
     action: "bringToFront",
-    defaultAccelerator: DEFAULT_ACCELERATORS.mac.bringToFront,
+    defaultAccelerator: "Command+Control+O",
     group: "app",
     label: "Bring Kaipu to front",
     description: "Show the app window if it slips behind or out of reach",
@@ -85,7 +92,7 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
   },
   {
     action: "captureScreenshot",
-    defaultAccelerator: DEFAULT_ACCELERATORS.mac.captureScreenshot,
+    defaultAccelerator: "Command+Control+X",
     group: "app",
     label: "Capture screenshot",
     description: "Open the area selection to take a screenshot",
@@ -198,8 +205,11 @@ export const IPC_CHANNELS = {
   // the listeners' registration against the page's did-finish-load.
   appReady: "app:ready",
   // Renderer → main: grow/reset the window for the screenshot editor.
-  windowSetEditorMode: "window:set-editor-mode",
   windowSetOnboardingMode: "window:set-onboarding-mode",
+  /** A screen declaring the window size and minimum it wants (see window-size.ts). */
+  windowApplyPreset: "window:apply-preset",
+  /** The capture panel's selected mode, mirrored by the menu-bar icon. */
+  traySetMode: "tray:set-mode",
   updateGetStatus: "update:get-status",
   updateStatus: "update:status",
   updateInstall: "update:install",

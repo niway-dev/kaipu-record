@@ -13,6 +13,18 @@ Status legend: ⬜ todo · 🔨 in progress · ✅ done
 
 ---
 
+## Mute, editor space, window presets — shipped (2026-10-01) 🟢
+
+[#199](https://github.com/csdev19/kaipu-record-monorepo/pull/199): mute as a real edit (ranges and
+the whole video, burned into the export, heard in the preview, deleted from the inspector), the
+video editor's width given back to the timeline, one stable window for every screen with the
+video editor as the only exception, routes as constants, and the fox in the macOS menu bar.
+Owner-verified by hand; packaged-build validation pending. Details:
+[video-editor-mute](./video-editor-mute) ·
+[editor-space-and-window-presets](./editor-space-and-window-presets). Follow-ups recorded:
+[capture-panel-latency](./capture-panel-latency), and the Audio toggle still fails silently when
+macOS denies system-audio capture to a dev build.
+
 ## Landing shortcuts — fixed (2026-09-30) ✅
 
 The landing's keyboard shortcuts now come from
@@ -54,6 +66,11 @@ Still open:
 
 ## Proposed for later analysis
 
+- **🔵 Capture panel latency** (2026-10-01): the tray widget shows a loader before it
+  appears and the screen picker takes up to ~1 s, because the panel pays for a thumbnail of
+  every open window just to default to "Screen 1". Three small fixes are designed in
+  [capture-panel-latency](./capture-panel-latency) — split the enumeration from the
+  thumbnails, pre-create the panel window, keep the retry on the picker only. Not applied yet.
 - **🟡 Product growth beyond cloud** (2026-09-27): the owner reviewed the Recordly comparison and decided: no watermark on the free tier ([done on branch](./free-tier-no-watermark)), [Windows recording-only beta](./windows-beta), [AGPL-3.0 open source at launch](/marketing/open-source/), and a roadmap with GIF, keystroke visualizer, captions on Parakeet, export presets, silence cutting and a CLI. See the [prioritized proposal](./product-growth) and [marketing hub](/marketing/). Existing release blockers retain priority.
 - **🔵 StyleX across desktop and web** (2026-09-12): evaluate typed shared tokens,
   replacing Tailwind and CSS Modules, and opportunities for shared UI. No delivery
