@@ -22,7 +22,7 @@
   overflow: hidden;
   border: 1px solid var(--kl-bd-2);
   border-radius: 12px;
-  background: #0e0e11;
+  background: var(--kl-mock-bg);
 }
 
 .bar {
@@ -299,7 +299,7 @@
   overflow: hidden;
   border: 2px solid var(--kl-pink);
   border-radius: 999px;
-  background: #0e0e11;
+  background: var(--kl-mock-bg);
 }
 
 .bubbleFox {
@@ -420,7 +420,7 @@
   display: grid;
   place-items: center;
   padding: 26px;
-  background: #16161a;
+  background: var(--kl-mock-stage);
 }
 
 .stageInner {
@@ -455,7 +455,7 @@
   top: -11px;
   left: 0;
   padding: 2px 7px;
-  background: #111;
+  background: var(--kl-mock-deep);
   color: var(--kl-pink-tx);
   font-family: var(--kl-font-mono);
   font-size: 9.5px;

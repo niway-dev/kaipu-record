@@ -16,7 +16,7 @@
   grid-template-rows: auto 1fr;
   border: 1px solid var(--kl-bd-2);
   border-radius: 14px;
-  background: #0e0e11;
+  background: var(--kl-mock-bg);
 }
 
 .titlebar {
@@ -115,7 +115,7 @@
   padding: 14px 16px;
   border: 1px solid var(--kl-bd);
   border-radius: 12px;
-  background: #131317;
+  background: var(--kl-mock-chrome);
 }
 
 .displayIcon {
@@ -178,13 +178,13 @@
   padding: 18px 8px;
   border: 1px solid var(--kl-bd);
   border-radius: 12px;
-  background: #131317;
+  background: var(--kl-mock-chrome);
   color: var(--kl-dim);
 }
 
 .sourceOn {
   border-color: color-mix(in srgb, var(--kl-pink) 45%, transparent);
-  background: color-mix(in srgb, var(--kl-pink) 12%, #131317);
+  background: color-mix(in srgb, var(--kl-pink) 12%, var(--kl-mock-chrome));
   color: var(--kl-pink-tx);
 }
 

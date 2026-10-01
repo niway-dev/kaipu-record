@@ -87,8 +87,13 @@
     box-shadow: var(--kl-shadow-window);
   }
 
+  /*
+   * The panels that float off a mockup — the menu-bar dropdown, the recording
+   * bar, the Finder hint. Kaipu chrome, so it follows --kl-mock-*; a fixed dark
+   * here left their labels unreadable once the page could turn light.
+   */
   .kl-float-card {
-    background: rgb(19 19 22 / 0.95);
+    background: color-mix(in srgb, var(--kl-mock-chrome) 95%, transparent);
     backdrop-filter: blur(var(--kl-glass-blur));
     -webkit-backdrop-filter: blur(var(--kl-glass-blur));
     border: 1px solid var(--kl-bd-2);

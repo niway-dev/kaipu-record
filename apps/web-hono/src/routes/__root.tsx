@@ -23,6 +23,8 @@ import appCss from "../index.css?url";
 import { getAuthSession } from "@/lib/auth/get-auth-session";
 import { getLocale } from "@/server-functions/get-locale";
 import { setLocale as setLocaleFn } from "@/server-functions/set-locale";
+import { getLandingTheme } from "@/server-functions/get-landing-theme";
+import type { LandingTheme } from "@/lib/landing-theme";
 import type { AuthSession } from "@/lib/auth/types";
 
 export interface RouterAppContext {
@@ -31,6 +33,8 @@ export interface RouterAppContext {
   session: AuthSession | null;
   locale: Locale;
   messages: Messages;
+  /** The landing's own dark/light choice; unrelated to the app shell's theme. */
+  landingTheme: LandingTheme;
 }
 
 export const Route = createRootRouteWithContext<RouterAppContext>()({
@@ -53,12 +57,17 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
   component: RootDocument,
   staleTime: 10 * 60 * 1000, // 10 minutes
   beforeLoad: async () => {
-    const [session, i18n] = await Promise.all([getAuthSession(), getLocale()]);
+    const [session, i18n, theme] = await Promise.all([
+      getAuthSession(),
+      getLocale(),
+      getLandingTheme(),
+    ]);
     return {
       session: session ?? null,
       isAuthenticated: !!session,
       locale: i18n.locale,
       messages: i18n.messages,
+      landingTheme: theme.theme,
     };
   },
 });

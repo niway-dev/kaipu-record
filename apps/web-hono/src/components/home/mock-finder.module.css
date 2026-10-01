@@ -4,13 +4,13 @@
   grid-template-columns: 190px 1fr;
   border: 1px solid var(--kl-bd-2);
   border-radius: 12px;
-  background: #0e0e11;
+  background: var(--kl-mock-bg);
 }
 
 .side {
   padding: 13px 10px;
   border-right: 1px solid var(--kl-bd);
-  background: #121216;
+  background: var(--kl-mock-deep);
 }
 
 .lights {
