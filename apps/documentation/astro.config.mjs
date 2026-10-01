@@ -63,6 +63,7 @@ export default defineConfig({
         {
           label: "Backlog",
           items: [
+            "backlog/deploy-environments",
             { slug: "backlog" },
             { slug: "backlog/code-quality-audit" },
             { slug: "backlog/lefthook-migration" },
