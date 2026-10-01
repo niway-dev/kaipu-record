@@ -87,6 +87,12 @@ jobs:
         working-directory: apps/web-hono
         env:
           VITE_SERVER_URL: ${{ vars.VITE_SERVER_URL }}
+          # The release job passes a real DATABASE_URL here. Nothing under
+          # apps/web-hono/src references it — the app reaches data through the
+          # API service binding, not a direct client — so the preview passes a
+          # deliberately unusable value. If some build step turns out to need a
+          # live connection, this fails loudly instead of letting a preview
+          # touch the production database.
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           VITE_PUBLIC_DOWNLOAD_URL: https://updates.kaipu.app
         run: bun run build
@@ -98,13 +104,19 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: apps/web-hono
+          # Without this the action installs its own default (3.90.0) — two
+          # majors behind what this repo uses, through npm, which is the
+          # `catalog:` failure above. Pin it to the version the workspace has.
+          wranglerVersion: "4.63.0"
+          packageManager: bun
           # `versions upload` stages the code without routing traffic to it.
           # `deploy` is what release-web.yml runs; the two must stay distinct.
           command: versions upload --message "${{ inputs.message }}"
         env:
-          ENVIRONMENT: production
+          # No ENVIRONMENT here. It existed for Alchemy's state store, Alchemy is
+          # deleted, and a job in the `preview` environment announcing
+          # ENVIRONMENT=production is exactly the confusion this PR removes.
           VITE_SERVER_URL: ${{ vars.VITE_SERVER_URL }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
       # The URL is in the action's output; surfacing it in the run summary means
       # you do not have to open the Cloudflare dashboard to find it.
