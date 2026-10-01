@@ -91,12 +91,16 @@ import { useVideoScene } from "@renderer/features/video-editor/use-video-scene";
 import { useVideoTools } from "@renderer/features/video-editor/annotations/video-tools";
 import { useVideoExport } from "@renderer/features/video-editor/export/use-video-export";
 import { VideoAnnotationLayer } from "@renderer/features/video-editor/annotations/video-annotation-layer";
-import { EditorToolbar } from "@renderer/features/video-editor/components/editor-toolbar";
+import {
+  EditorToolbar,
+  EditorToolRail,
+} from "@renderer/features/video-editor/components/editor-toolbar";
 import { ExportDialog } from "@renderer/features/video-editor/components/export-dialog";
 import { PreviewStage } from "@renderer/features/video-editor/components/preview-stage";
 import { TimelineStrip } from "@renderer/features/video-editor/components/timeline-strip";
 import { showToast } from "@renderer/ui/toast-store";
 import styles from "./video-editor-page.module.css";
+import { useWindowFloor, WINDOW_FLOORS } from "@renderer/shell/use-window-floor";
 
 export interface VideoEditorSource {
   id: string;
@@ -202,19 +206,8 @@ function VideoEditorLoader({ source }: { source: VideoEditorSource }): React.JSX
     return () => assetStoreRef.current.dispose();
   }, []);
 
-  /**
-   * Raise the window's minimum size while the editor is open, and drop it back
-   * on the way out. Main clamps the floor to the display, so a small screen gets
-   * as much as it has rather than a window pinned to the whole desktop.
-   *
-   * The IPC and the floor already existed for the screenshot editor; nothing
-   * ever called them, so the video editor — the screen that needs it most —
-   * could be squeezed until the timeline lanes stopped being readable.
-   */
-  useEffect(() => {
-    window.electronAPI.setEditorWindowMode(true);
-    return () => window.electronAPI.setEditorWindowMode(false);
-  }, []);
+  // The room this screen needs; released when it unmounts. See use-window-floor.
+  useWindowFloor(WINDOW_FLOORS.videoEditor.width, WINDOW_FLOORS.videoEditor.height);
 
   /**
    * The recording's name lives in the window title, not in a header row. It is
@@ -949,9 +942,6 @@ function VideoEditor({
         deleteDisabled={deleteDisabled}
         onAddImage={handleAddImage}
         tool={videoTools.tool}
-        onToolChange={handleToolChange}
-        onAddZoom={handleAddZoom}
-        privacyDisabled={onSlide}
         onExport={handleExport}
         exportDisabled={videoExport.status === "exporting" || scene.items.length === 0}
       >
@@ -977,6 +967,12 @@ function VideoEditor({
         )}
       </EditorToolbar>
       <div className={styles.workspace}>
+        <EditorToolRail
+          tool={videoTools.tool}
+          onToolChange={handleToolChange}
+          onAddZoom={handleAddZoom}
+          privacyDisabled={onSlide}
+        />
         <main className={styles.stage} ref={stageRef}>
           {/* Video region: 1fr grid row — centers PreviewStage and constrains its height
               so the transport bar below is never clipped regardless of video aspect ratio.

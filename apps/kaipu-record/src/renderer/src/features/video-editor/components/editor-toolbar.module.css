@@ -1,8 +1,46 @@
 /*
- * Video-editor toolbar. Structure and tokens mirror the screenshot editor's
- * top bar (screenshot-editor-page.module.css: .toolbar/.actions/.iconBtn/.divider)
- * so both editors read as the same product.
+ * Video-editor chrome, in two pieces.
+ *
+ * `.toolbar` is the top row: the active tool's hint, the history and clip
+ * actions, the status chips and Export. `.rail` is the vertical tool column
+ * beside the preview — the drawing tools moved there because a horizontal strip
+ * of them spent the full width of the window on eight icons, and width is what
+ * the timeline needs.
+ *
+ * Tokens still mirror the screenshot editor's top bar
+ * (screenshot-editor-page.module.css: .toolbar/.actions/.iconBtn/.divider) so
+ * both editors read as the same product.
  */
+
+/* The vertical tool column. Scrolls rather than squeezing: a tool that shrinks
+   below its hit target is worse than one the user has to scroll to. */
+.rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: var(--space-sm) 6px;
+  overflow-y: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  flex-shrink: 0;
+}
+
+/* Inside the rail the groups stack, so their own border would draw a box around
+   two icons; the separator between groups does that job instead. */
+.railGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.railSeparator {
+  width: 22px;
+  height: 1px;
+  margin: 2px 0;
+  background: var(--border);
+}
 
 .toolbar {
   display: flex;

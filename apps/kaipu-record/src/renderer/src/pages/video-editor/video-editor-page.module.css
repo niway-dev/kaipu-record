@@ -3,9 +3,11 @@
  * from base.css — same convention as the screenshot editor.
  */
 
+/* Three rows: the top bar, the workspace, the timeline. The fourth row this
+   once reserved belonged to the title header, which is now the window title. */
 .page {
   display: grid;
-  grid-template-rows: auto auto 1fr auto;
+  grid-template-rows: auto 1fr auto;
   height: 100%;
 }
 
@@ -206,6 +208,7 @@
 /* v2: the stage and the 288 px properties column share the middle row. */
 .workspace {
   display: flex;
+  gap: var(--space-sm);
   min-height: 0;
 }
 

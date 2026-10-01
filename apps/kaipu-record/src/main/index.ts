@@ -423,6 +423,18 @@ app.whenReady().then(() => {
     setWindowFloor(active, EDITOR_MIN_WIDTH, EDITOR_MIN_HEIGHT),
   );
 
+  // Any screen can declare the room it needs; null/null gives the base floor back.
+  ipcMain.on(
+    IPC_CHANNELS.windowSetFloor,
+    (_event, minWidth: number | null, minHeight: number | null) => {
+      if (minWidth === null || minHeight === null) {
+        setWindowFloor(false, 0, 0);
+        return;
+      }
+      setWindowFloor(true, minWidth, minHeight);
+    },
+  );
+
   // Onboarding mode: same treatment for the first-run takeover.
   ipcMain.on(IPC_CHANNELS.windowSetOnboardingMode, (_event, active: boolean) =>
     setWindowFloor(active, ONBOARDING_MIN_WIDTH, ONBOARDING_MIN_HEIGHT),

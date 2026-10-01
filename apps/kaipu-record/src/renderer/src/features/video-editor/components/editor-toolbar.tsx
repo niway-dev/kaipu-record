@@ -86,13 +86,8 @@ export interface EditorToolbarProps {
   deleteDisabled: boolean;
   /** Insert an image slide at the playhead's nearest item boundary. */
   onAddImage(file: File): void;
-  /** Current tool (annotation or privacy). */
+  /** Read only for the hint line: the tools themselves live in EditorToolRail. */
   tool: EditorTool;
-  onToolChange(tool: EditorTool): void;
-  /** Add a zoom at the playhead, or select the one already there (video-editor v2). */
-  onAddZoom(): void;
-  /** Blur/Cover need footage: disabled while the playhead is on a slide. */
-  privacyDisabled: boolean;
   /** Run the export pipeline. Disabled while exporting or when the timeline is empty. */
   onExport(): void;
   /** Status chips that used to sit in their own header row (the original-untouched
@@ -107,30 +102,33 @@ export interface EditorToolbarProps {
  * active-tool styling mirror the screenshot editor's toolbar (AnnotationToolbar on
  * the left, action icons on the right) — see annotation-toolbar.tsx.
  */
-export function EditorToolbar({
-  canUndo,
-  canRedo,
-  onUndo,
-  onRedo,
-  onSplit,
-  splitDisabled,
-  onDeleteSelected,
-  deleteDisabled,
-  onAddImage,
+/**
+ * The drawing and camera tools, as a column beside the preview.
+ *
+ * Split out of the top row: eight icons laid out horizontally claimed the full
+ * window width for a strip two icons tall, and the timeline needs that width
+ * more than the tools need to be in a line.
+ */
+export interface EditorToolRailProps {
+  /** Current tool (annotation or privacy). */
+  tool: EditorTool;
+  onToolChange(tool: EditorTool): void;
+  /** Add a zoom at the playhead, or select the one already there (video-editor v2). */
+  onAddZoom(): void;
+  /** Blur/Cover need footage: disabled while the playhead is on a slide. */
+  privacyDisabled: boolean;
+}
+
+export function EditorToolRail({
   tool,
   onToolChange,
   onAddZoom,
   privacyDisabled,
-  onExport,
-  children,
-  exportDisabled,
-}: EditorToolbarProps): React.JSX.Element {
+}: EditorToolRailProps): React.JSX.Element {
   const t = useTranslations("videoEditor");
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-
   return (
-    <div className={styles.toolbar}>
-      <div className={styles.toolGroup}>
+    <div className={styles.rail} role="toolbar" aria-orientation="vertical">
+      <div className={styles.railGroup}>
         {VIDEO_TOOLS.map((toolKey) => {
           const { labelKey, Icon } = TOOL_META[toolKey];
           const label = t(labelKey);
@@ -148,10 +146,11 @@ export function EditorToolbar({
           );
         })}
       </div>
+      <span className={styles.railSeparator} aria-hidden />
       {/* Camera group (UI spec § 3.1 group 2). Zoom is an ACTION, not a drawing mode:
-          it adds a zoom at the playhead (or selects the one there) and the camera box
-          on the preview is how it gets re-aimed. */}
-      <div className={styles.toolGroup}>
+            it adds a zoom at the playhead (or selects the one there) and the camera box
+            on the preview is how it gets re-aimed. */}
+      <div className={styles.railGroup}>
         <button
           type="button"
           title={`${t("hintZoom")} (${ZOOM_SHORTCUT})`}
@@ -180,6 +179,30 @@ export function EditorToolbar({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+export function EditorToolbar({
+  canUndo,
+  canRedo,
+  onUndo,
+  onRedo,
+  onSplit,
+  splitDisabled,
+  onDeleteSelected,
+  deleteDisabled,
+  onAddImage,
+  tool,
+  onExport,
+  children,
+  exportDisabled,
+}: EditorToolbarProps): React.JSX.Element {
+  const t = useTranslations("videoEditor");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  return (
+    <div className={styles.toolbar}>
       <span className={styles.hint}>{t(TOOL_HINT[tool])}</span>
       <div className={styles.actions}>
         <button

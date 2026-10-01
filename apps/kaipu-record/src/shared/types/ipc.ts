@@ -207,6 +207,8 @@ export const IPC_CHANNELS = {
   // Renderer → main: grow/reset the window for the screenshot editor.
   windowSetEditorMode: "window:set-editor-mode",
   windowSetOnboardingMode: "window:set-onboarding-mode",
+  /** A screen declaring the minimum window size it needs; null/null releases it. */
+  windowSetFloor: "window:set-floor",
   updateGetStatus: "update:get-status",
   updateStatus: "update:status",
   updateInstall: "update:install",
