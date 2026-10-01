@@ -358,7 +358,14 @@ function VideoEditor({
     [pendingSaveRef],
   );
   const blocker = useBlocker(shouldBlock);
-  const playback = usePreviewPlayback(layout);
+  // The preview hears the scene's muting so scrubbing matches the export. Memoised on
+  // the two fields rather than passed as `scene`: the scene object changes on every
+  // commit, and the hook re-applies the mute whenever this value changes.
+  const audioEdits = useMemo(
+    () => ({ audioMuted: scene.audioMuted, mutedRanges: scene.mutedRanges }),
+    [scene.audioMuted, scene.mutedRanges],
+  );
+  const playback = usePreviewPlayback(layout, audioEdits);
   const zooms = useZoomEditing({
     controller,
     layout,

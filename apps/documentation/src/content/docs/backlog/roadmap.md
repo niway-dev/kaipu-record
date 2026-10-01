@@ -54,6 +54,11 @@ Still open:
 
 ## Proposed for later analysis
 
+- **🔵 Capture panel latency** (2026-10-01): the tray widget shows a loader before it
+  appears and the screen picker takes up to ~1 s, because the panel pays for a thumbnail of
+  every open window just to default to "Screen 1". Three small fixes are designed in
+  [capture-panel-latency](./capture-panel-latency) — split the enumeration from the
+  thumbnails, pre-create the panel window, keep the retry on the picker only. Not applied yet.
 - **🟡 Product growth beyond cloud** (2026-09-27): the owner reviewed the Recordly comparison and decided: no watermark on the free tier ([done on branch](./free-tier-no-watermark)), [Windows recording-only beta](./windows-beta), [AGPL-3.0 open source at launch](/marketing/open-source/), and a roadmap with GIF, keystroke visualizer, captions on Parakeet, export presets, silence cutting and a CLI. See the [prioritized proposal](./product-growth) and [marketing hub](/marketing/). Existing release blockers retain priority.
 - **🔵 StyleX across desktop and web** (2026-09-12): evaluate typed shared tokens,
   replacing Tailwind and CSS Modules, and opportunities for shared UI. No delivery
