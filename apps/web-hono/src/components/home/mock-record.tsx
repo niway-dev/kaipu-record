@@ -5,8 +5,8 @@ import styles from "./mocks.module.css";
 
 /**
  * Chapter 01 — a real bug being recorded: someone else's checkout with a failed
- * payment, Kaipu's recording bar across it, the "what am I capturing" card, and
- * the camera bubble.
+ * payment, Kaipu's recording bar across it, the "what am I capturing" card,
+ * and the camera bubble, with Kai in it.
  *
  * The figures are invented sample data, not real orders.
  */
@@ -109,10 +109,15 @@ export function MockRecord() {
         ))}
       </div>
 
+      {/* The real product surface is a live webcam bubble. This marketing
+          illustration uses Kai as an intentionally nonliteral sample subject. */}
       <div className={styles.bubble}>
-        Your face
-        <br />
-        <span style={{ opacity: 0.7, fontSize: 10 }}>or browse files</span>
+        <KaipuLogo
+          use="product"
+          size={92}
+          className={styles.bubbleFox}
+          style={{ borderRadius: 999 }}
+        />
       </div>
     </div>
   );
