@@ -8,7 +8,14 @@
   position: relative;
   display: grid;
   place-items: center;
-  padding: 96px var(--kl-gutter) 72px;
+  /*
+   * Generous, but still a band and not the 92vh screen this used to be (home
+   * audit H13). The tight version left only ~144px between this promise and the
+   * Kai section below, and on a single flat surface two sections that close
+   * read as one long one. The air IS the separator here — there is no rule or
+   * tint between them.
+   */
+  padding: 150px var(--kl-gutter) 130px;
   overflow: hidden;
 }
 
@@ -63,6 +70,6 @@
 
 @media (width < 980px) {
   .band {
-    padding: 64px 20px 48px;
+    padding: 96px 20px 84px;
   }
 }

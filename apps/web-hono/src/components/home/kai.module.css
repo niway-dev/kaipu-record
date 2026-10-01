@@ -8,7 +8,9 @@
  */
 .section {
   position: relative;
-  padding: 72px var(--kl-gutter) 110px;
+  /* Matches the moments band's rhythm, so Kai reads as its own section rather
+   * than as the band's second paragraph, and chapter 01 gets its own entrance. */
+  padding: 130px var(--kl-gutter) 150px;
   overflow: hidden;
 }
 
@@ -352,7 +354,7 @@
 
 @media (width < 980px) {
   .section {
-    padding: 48px 20px 70px;
+    padding: 84px 20px 96px;
   }
 
   .terms {
