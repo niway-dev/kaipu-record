@@ -41,10 +41,12 @@ jobs:
   preview:
     name: Upload a version and print its URL
     runs-on: ubuntu-latest
-    # Same environment as the release job: the upload needs the same Cloudflare
-    # credentials and the same build-time values, or the version is not a
-    # faithful picture of what a release would produce.
-    environment: production
+    # `preview`, not `production`, even though it needs the same Cloudflare
+    # credentials. GitHub renders "Deploying to <environment>" from this line
+    # alone, so pointing it at production made every preview run announce a
+    # production deploy that was never happening. The run page is a safety
+    # signal; a signal that cries wolf is worse than no signal.
+    environment: preview
 
     steps:
       - name: Checkout the requested ref
@@ -67,6 +69,14 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      # wrangler-action installs wrangler with npm when the working directory has
+      # no wrangler dependency, and npm cannot parse bun's `catalog:` protocol in
+      # this workspace's package.json. Installing it with bun first makes the
+      # action find a binary instead of reaching for npm. release-web.yml does the
+      # same thing for the same reason.
+      - name: Install Wrangler
+        run: bun add -g wrangler
 
       - name: Build packages only
         run: bun run build --filter='@kaipu/*'
