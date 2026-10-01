@@ -5,12 +5,12 @@ description: Captured design state for adding an intermediate environment to the
 
 # Deploy environments
 
-> **Status: 🔵 Proposed · design captured 2026-10-01, not decided.** The research and the
+> **Status: 🟢 Ready to validate · 2026-10-01.** The preview step is implemented; the persistent-environment question is captured, not decided. The research and the
 > owner's answers are recorded here so the next session writes the spec instead of repeating
-> the investigation. No code or configuration has changed.
+> the investigation.
 >
-> Direction agreed: **start with per-branch Previews for the web app**, and treat a persistent
-> intermediate environment as a separate, later decision.
+> Shipped: **on-demand version uploads from any ref** (`preview-web.yml`). A persistent
+> intermediate environment remains a separate, later decision.
 
 ## Why this came up
 
@@ -28,12 +28,15 @@ production at all.
 - **`kaipu-web` reaches `kaipu-api` through a Service Binding by worker name.** This is the
   constraint that makes environments a real decision: any new environment must resolve which
   API its web half talks to, or a staging front end writes to the production database.
-- **`web-hono` deploys through Alchemy**, not `wrangler deploy`. `alchemy.run.ts` already
-  branches on `ENVIRONMENT === "production"` for its state store. The API and console are
-  plain wrangler.
+- **The release path is already plain wrangler.** `release-web.yml` builds and then runs
+  `cloudflare/wrangler-action@v3.14.1` with `command: deploy`. `apps/web-hono/alchemy.run.ts`
+  exists and is wired only to the local `deploy`/`alchemy:dev` scripts — **no CI workflow calls
+  it**. There is nothing to migrate to reach a wrangler-native flow; the repo is already there.
 - **Infisical has a single environment, `dev`.** A persistent new environment needs a second
   one with its four folders — this is half the real work, not a detail.
-- The repository has **no ADRs yet**. Whatever is decided here becomes `0001`.
+- **ADRs live at `architecture/decisions/`**, numbered `0001`–`0006` (mediabunny over ffmpeg,
+  plan entitlements, export never replaces the original, local-first release verification,
+  release-candidate readiness, desktop E2E tier). A decision here would be `0007`.
 
 ## What the state of the art does
 
@@ -86,11 +89,31 @@ Two shapes fit the existing tags without changing their meaning:
 These are not exclusive — shape 2 is the natural second step once there is something that needs
 a fixed address, and it leaves shape 1 in place for per-PR work.
 
-## Decided for now
+## Decided, and shipped
 
-**Per-branch Previews for the web app.** It gives a real edge target with real compression today,
-keeps production untouched, needs no second Infisical environment, and adds nothing to maintain
-between deploys. Tags are not touched: `web-vX.Y.Z` continues to mean production.
+**On-demand version uploads, not per-branch Previews.** The owner's described flow is "send what
+is on `main` somewhere to look at it, when I choose to" — which is not branch testing, it is
+exactly what Cloudflare documents **Version URLs** for: inspecting one uploaded version before
+promoting it.
+
+That distinction decided the implementation, because **`wrangler preview` does not exist in the
+installed wrangler 4.63.0** — it would need an upgrade to ~4.146, and wrangler is a dependency of
+`console` and `server-hono` as well. `wrangler versions upload` works today, with no upgrade.
+
+Shipped as `.github/workflows/preview-web.yml`: `workflow_dispatch` with a `ref` input, the same
+build as the release job, then `versions upload`. It prints the URL into the run summary with the
+Lighthouse commands ready to paste. Production is untouched, because a version is uploaded and
+never deployed.
+
+Tags are not touched: `web-vX.Y.Z` still means production.
+
+**It is a looking glass, not a gate.** Nothing forces anyone to run it before cutting a tag. That
+is the right trade today — the goal is measuring against real edge and brotli — but it must not be
+mistaken for protection. Making it protect a release means making it a required step, which is a
+different decision.
+
+Upgrading wrangler (4.63 → current) is captured separately as its own task; it unlocks
+`wrangler preview` if the per-branch shape is ever wanted.
 
 ## What would reopen this
 
@@ -104,7 +127,14 @@ to write the full spec and `ADR 0001`:
 
 ## Not yet done
 
-- The spec (`docs/specs/`) and `ADR 0001` — deliberately deferred; the decision above is
-  provisional and recorded here, not ratified.
-- Any configuration change. Previews are not set up yet.
+- An ADR (`architecture/decisions/0007-…`) for the persistent environment — deferred, because
+  that decision is not made. The preview step shipped without one: it adds a reversible manual
+  workflow and changes no existing behaviour.
+- **Upgrade wrangler 4.63 → current (~4.146).** Its own task: wrangler is a dependency of
+  `console` and `server-hono`, so the upgrade is not scoped to the web app. It unlocks
+  `wrangler preview` for the per-branch shape and clears the "update available" notice on every
+  `wrangler dev`.
 - The Infisical question, which only arises with the persistent shape.
+- Retiring `apps/web-hono/alchemy.run.ts` if nothing uses it — it is not in the release path,
+  and leaving a second, unused deployment mechanism in the repo is how someone later believes
+  the app deploys through Alchemy. (It is how this design turn first got it wrong.)
