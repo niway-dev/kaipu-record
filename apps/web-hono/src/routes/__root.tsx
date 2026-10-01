@@ -23,6 +23,8 @@ import appCss from "../index.css?url";
 import { getAuthSession } from "@/lib/auth/get-auth-session";
 import { getLocale } from "@/server-functions/get-locale";
 import { setLocale as setLocaleFn } from "@/server-functions/set-locale";
+import { getLandingTheme } from "@/server-functions/get-landing-theme";
+import type { LandingTheme } from "@/lib/landing-theme";
 import type { AuthSession } from "@/lib/auth/types";
 
 export interface RouterAppContext {
@@ -31,6 +33,8 @@ export interface RouterAppContext {
   session: AuthSession | null;
   locale: Locale;
   messages: Messages;
+  /** The landing's own dark/light choice; unrelated to the app shell's theme. */
+  landingTheme: LandingTheme;
 }
 
 export const Route = createRootRouteWithContext<RouterAppContext>()({
@@ -53,25 +57,41 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
   component: RootDocument,
   staleTime: 10 * 60 * 1000, // 10 minutes
   beforeLoad: async () => {
-    const [session, i18n] = await Promise.all([getAuthSession(), getLocale()]);
+    const [session, i18n, theme] = await Promise.all([
+      getAuthSession(),
+      getLocale(),
+      getLandingTheme(),
+    ]);
     return {
       session: session ?? null,
       isAuthenticated: !!session,
       locale: i18n.locale,
       messages: i18n.messages,
+      landingTheme: theme.theme,
     };
   },
 });
 
 // Critical inline styles to prevent flash of unstyled content
-const criticalStyles = `
+/*
+ * The first paint, before any stylesheet has arrived.
+ *
+ * It has to agree with the theme the page is about to render, or the visitor
+ * watches the wrong one and then a flip. Measured on a throttled connection the
+ * stylesheets gate the first paint at ~2.7s, so "briefly" means seconds: a
+ * light-theme visitor used to stare at a black screen for most of the load and
+ * then have it turn white.
+ */
+function criticalStyles(light: boolean): string {
+  return `
   html, body {
-    background-color: oklch(14.5% 0 0);
-    color: oklch(98.5% 0 0);
+    background-color: ${light ? "#faf8f5" : "oklch(14.5% 0 0)"};
+    color: ${light ? "#141416" : "oklch(98.5% 0 0)"};
     margin: 0;
     padding: 0;
   }
 `;
+}
 
 function RootDocument() {
   const context = Route.useRouteContext();
@@ -86,6 +106,9 @@ function RootDocument() {
     select: (s) => s.matches.some((m) => m.staticData.shell === "marketing"),
   });
 
+  // Both the <html> class and the pre-stylesheet background hang off this.
+  const isLandingLight = isMarketing && context.landingTheme === "light";
+
   // Persist to the cookie, then re-run beforeLoad so the whole tree re-renders
   // with the new messages (resolved server-side — no flash).
   const handleSetLocale = async (next: Locale) => {
@@ -94,9 +117,15 @@ function RootDocument() {
   };
 
   return (
-    <html lang={locale} className="dark" suppressHydrationWarning>
+    <html
+      lang={locale}
+      // `dark` is the APP's Tailwind theme and stays on for every app route.
+      // Only the landing has a light choice, and only the landing may drop it.
+      className={isLandingLight ? undefined : "dark"}
+      suppressHydrationWarning
+    >
       <head>
-        <style dangerouslySetInnerHTML={{ __html: criticalStyles }} />
+        <style dangerouslySetInnerHTML={{ __html: criticalStyles(isLandingLight) }} />
         <HeadContent />
       </head>
       <body suppressHydrationWarning>

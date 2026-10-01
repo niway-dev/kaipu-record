@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useRouteContext } from "@tanstack/react-router";
 
 import { ChapterStrip } from "./chapter-strip";
 import { Rail } from "./rail";
@@ -15,10 +16,17 @@ import "@/styles/landing.css";
  * styles/landing*.css applies without it, which is what keeps this page from
  * leaking into the roadmap, legal and authenticated routes that still use
  * PublicShell.
+ *
+ * `data-kl-theme` selects which of the two token columns in landing-tokens.css
+ * wins. It comes from the route context, which read the cookie on the server,
+ * so the first paint is already the visitor's theme — no flash, nothing to
+ * correct on hydration.
  */
 export function HomeShell({ children }: { children: ReactNode }) {
+  const { landingTheme } = useRouteContext({ from: "__root__" });
+
   return (
-    <div data-kl>
+    <div data-kl data-kl-theme={landingTheme}>
       <TopNav />
       <ChapterStrip />
       <Rail />

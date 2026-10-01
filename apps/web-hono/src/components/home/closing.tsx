@@ -19,7 +19,8 @@ export function Closing() {
         <PixelGrid className={styles.pixels} />
 
         <div className={styles.inner}>
-          <KaipuLogo use="app" size={112} className={`${styles.logo} kl-anim-float`} />
+          {/* `done`, once: the quiet celebration the audit asked for at the close. */}
+          <KaipuLogo use="done" size={112} className={`${styles.logo} kl-anim-float`} />
 
           <h2 className={styles.title}>
             {t("homeCtaLead")} <span className={styles.serif}>{t("homeCtaSerif")}</span>

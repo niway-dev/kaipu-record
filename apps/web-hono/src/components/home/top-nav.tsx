@@ -1,19 +1,33 @@
-import { Apple, Menu, Sun } from "lucide-react";
+import { Apple, Menu, Moon, Sun } from "lucide-react";
+import { useRouteContext, useRouter } from "@tanstack/react-router";
 import { KaipuLogo } from "@kaipu/brand";
-import { useTranslations } from "@kaipu/i18n";
+import { SUPPORTED_LOCALES, useLocale, useSetLocale, useTranslations } from "@kaipu/i18n";
 
 import { downloadUrls } from "@/lib/download";
+import { setLandingTheme } from "@/server-functions/set-landing-theme";
 import styles from "./top-nav.module.css";
 
 /**
- * The fixed top bar. The theme and locale controls are rendered here as the
- * design shows them, but they are inert placeholders — the owner is building
- * both switches. They carry real labels so swapping in the behaviour is the
- * only change needed.
+ * The fixed top bar, and the two switches a visitor actually needs: the
+ * language and the landing's theme.
+ *
+ * Both persist in a cookie and then re-run the route's beforeLoad, so the
+ * server re-renders with the new answer instead of the client patching it. That
+ * is why neither one flashes and why a reload keeps the choice.
  */
 export function TopNav() {
   const t = useTranslations("landing");
   const tRoadmap = useTranslations("roadmap");
+  const locale = useLocale();
+  const setLocale = useSetLocale();
+  const router = useRouter();
+  const { landingTheme } = useRouteContext({ from: "__root__" });
+  const nextTheme = landingTheme === "dark" ? "light" : "dark";
+
+  const toggleTheme = async () => {
+    await setLandingTheme({ data: nextTheme });
+    await router.invalidate();
+  };
 
   return (
     <header className={styles.nav}>
@@ -46,16 +60,27 @@ export function TopNav() {
         </button>
 
         <div className={styles.right}>
-          <button type="button" className={styles.round} aria-label="Theme">
-            <Sun size={17} aria-hidden />
+          {/* The icon shows the theme you would GET, not the one you are in. */}
+          <button
+            type="button"
+            className={styles.round}
+            aria-label={nextTheme === "light" ? t("homeThemeToLight") : t("homeThemeToDark")}
+            onClick={() => void toggleTheme()}
+          >
+            {nextTheme === "light" ? <Sun size={17} aria-hidden /> : <Moon size={17} aria-hidden />}
           </button>
-          <div className={styles.locale}>
-            <button type="button" className={`${styles.localeOption} ${styles.localeActive}`}>
-              EN
-            </button>
-            <button type="button" className={styles.localeOption}>
-              ES
-            </button>
+          <div className={styles.locale} role="group" aria-label={t("homeLocaleGroup")}>
+            {SUPPORTED_LOCALES.map((code) => (
+              <button
+                key={code}
+                type="button"
+                className={`${styles.localeOption} ${code === locale ? styles.localeActive : ""}`}
+                aria-pressed={code === locale}
+                onClick={() => setLocale(code)}
+              >
+                {code.toUpperCase()}
+              </button>
+            ))}
           </div>
           <a href={downloadUrls.macArm64} className={styles.download}>
             <Apple size={16} aria-hidden />

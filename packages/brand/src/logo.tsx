@@ -15,6 +15,14 @@ export interface KaipuLogoProps {
    */
   alt?: string;
   style?: CSSProperties;
+  /**
+   * Browser loading hints, passed straight through. The marks are 778px PNGs of
+   * about 23KB each, so a surface that shows several of them below the fold —
+   * the home's Kai moods — should pass `loading="lazy"` and keep them off the
+   * critical path. Identity marks above the fold leave both unset.
+   */
+  loading?: "eager" | "lazy";
+  decoding?: "sync" | "async" | "auto";
 }
 
 /**
@@ -34,6 +42,8 @@ export function KaipuLogo({
   className,
   alt,
   style,
+  loading,
+  decoding,
 }: KaipuLogoProps): React.JSX.Element {
   return (
     <img
@@ -43,6 +53,8 @@ export function KaipuLogo({
       alt={alt ?? ""}
       aria-hidden={alt ? undefined : true}
       className={className}
+      loading={loading}
+      decoding={decoding}
       style={{ borderRadius: size * 0.22, display: "block", ...style }}
     />
   );

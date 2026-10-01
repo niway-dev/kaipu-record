@@ -41,6 +41,43 @@
 
     /* ---- Texture and glass ------------------------------------------- */
     --kl-dot: rgb(255 255 255 / 0.05); /* dot grid */
+    /*
+     * A surface lifted a hair off the background, and the giant background
+     * glyphs. Both used to be hardcoded white at a low alpha, which is the one
+     * thing that cannot survive a theme flip: on the warm white they turned
+     * invisible. As tokens they simply invert.
+     */
+    --kl-surface: rgb(255 255 255 / 0.03);
+    --kl-watermark: rgb(255 255 255 / 0.05);
+
+    /*
+     * ---- The mockups' own chrome -------------------------------------
+     *
+     * Kaipu Record's surfaces inside the product illustrations. They used to be
+     * fixed hexes, which is the one thing that cannot survive a theme flip: the
+     * ink tokens turned dark for the light page while these stayed black, and
+     * every label inside a mockup went dark-on-dark.
+     *
+     * They are tokens because the real app HAS a light theme — so a light page
+     * showing a light app is the honest picture, not a dark window pasted onto
+     * warm white. The light values follow the app's own light appearance.
+     *
+     * This covers Kaipu's chrome only. The simulated third-party content in the
+     * mockups — the checkout page, the billing screen, the traffic lights —
+     * keeps its own literal colours in both themes, because it is a picture of
+     * somebody else's website and does not follow our theme.
+     *
+     * The values are NOT invented here: they are `@kaipu/tokens`' own surface
+     * column, the palette the desktop app actually draws itself with, in both
+     * themes. Copied rather than imported because the landing's contract is
+     * that it uses only `--kl-*` inside `[data-kl]` and never reaches for an
+     * app token — so the mapping is written down here instead, and a change to
+     * `packages/tokens/css/tokens.css` is a change to make here too.
+     */
+    --kl-mock-bg: #0f0f11; /* tokens --bg-app: the window body */
+    --kl-mock-chrome: #171719; /* tokens --bg-card: cards and floating panels */
+    --kl-mock-stage: #1e1e21; /* tokens --bg-card-hover: the editor's stage */
+    --kl-mock-deep: #1a1a1c; /* tokens --bg-input: recessed strips and tags */
     --kl-glass: rgb(17 17 20 / 0.72); /* nav, rail, pickers */
     --kl-glass-blur: 14px;
 
@@ -137,9 +174,11 @@
   }
 
   /*
-   * Defined, not shipped: no control sets this attribute yet. Kept in sync with
-   * the design system's light column so enabling it later is one toggle rather
-   * than a second pass over every value.
+   * Shipped since the top bar's theme switch: `HomeShell` sets this attribute
+   * from a cookie the server read, so the first paint is already the visitor's
+   * theme. Kept in sync with the design system's light column — a value added
+   * to the dark block above belongs here in the same commit, or the light theme
+   * silently falls back to the dark one.
    */
   [data-kl][data-kl-theme="light"] {
     --kl-bg: #faf8f5; /* warm white, not #fff — it is what makes it read editorial */
@@ -150,9 +189,22 @@
     --kl-bd-2: rgb(20 20 22 / 0.16);
     --kl-tx: #141416;
     --kl-dim: #4f4f57;
-    --kl-faint: #7c7c85;
+    /*
+     * Darker than the dark theme's faint, not lighter. #7c7c85 measured 3.9:1
+     * against this background — below AA for the rail labels, the nav tabs and
+     * the chapter numbers, which are small mono text. This value measures 5.3:1.
+     */
+    --kl-faint: #67676f;
     --kl-dot: rgb(20 20 22 / 0.07);
+    --kl-surface: rgb(20 20 22 / 0.03);
+    --kl-watermark: rgb(20 20 22 / 0.05);
     --kl-glass: rgb(250 248 245 / 0.78);
+
+    /* The same four, from `@kaipu/tokens`' [data-theme="light"] block. */
+    --kl-mock-bg: #fafafa;
+    --kl-mock-chrome: #ffffff;
+    --kl-mock-stage: #f4f4f5;
+    --kl-mock-deep: #ffffff;
     --kl-pink-tx: #d8004d; /* darker, for contrast on the warm white */
 
     color-scheme: light;

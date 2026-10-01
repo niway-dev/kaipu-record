@@ -3,6 +3,7 @@ import { routerWithQueryClient } from "@tanstack/react-router-with-query";
 
 import es from "@kaipu/i18n/messages/es";
 import Loader from "./components/loader";
+import { DEFAULT_LANDING_THEME } from "./lib/landing-theme";
 import { createQueryClient } from "./lib/query-client";
 import { routeTree } from "./routeTree.gen";
 
@@ -19,6 +20,9 @@ export const getRouter = () => {
         session: null,
         locale: "es",
         messages: es,
+        // Placeholder until the root's beforeLoad reads the cookie; it must
+        // match DEFAULT_LANDING_THEME or the first paint would be the wrong one.
+        landingTheme: DEFAULT_LANDING_THEME,
       },
       defaultPendingComponent: () => <Loader />,
       defaultNotFoundComponent: () => <div>Not Found</div>,
