@@ -1,5 +1,4 @@
 import { app, Menu, nativeImage, Tray } from "electron";
-import trayIdlePath from "../../resources/tray.png?asset";
 import trayRecordingPath from "../../resources/tray-recording.png?asset";
 import trayScreenshotPath from "../../resources/tray-screenshot.png?asset";
 import { createMainTranslator } from "@kaipu/i18n/main";
@@ -14,10 +13,11 @@ import type { CapturePanelWindow } from "./capture-panel-window";
  * Each icon is a monochrome black+alpha template image; `setTemplateImage(true)`
  * lets macOS recolor it for light/dark menu bars automatically.
  *
- * The icon follows the app's state: the plain fox at rest, the fox with its
- * record dot while a recording runs, the framed fox while a capture is being
- * taken. It is the only part of Kaipu visible when every window is hidden, so
- * it is where "am I still recording?" gets answered.
+ * The icon follows the mode the capture panel has selected: the fox with its
+ * record dot for Record, the framed fox for Screenshot. There is no third
+ * "idle" icon because there is no idle mode — one of the two is always chosen,
+ * and the menu bar is often the only part of Kaipu on screen, so it should say
+ * which.
  *
  * The context menu is rebuilt on locale change (see `rebuildTrayMenu`) — native
  * menu labels can't be mutated in place.
@@ -27,22 +27,21 @@ let showMain: (() => void) | null = null;
 let contextMenu: Menu | null = null;
 let trayRef: Tray | null = null;
 
-/** What the menu-bar icon is showing. */
-export type TrayState = "idle" | "recording" | "screenshot";
+/** The capture mode the menu-bar icon is showing. */
+export type TrayState = "record" | "screenshot";
 
 const TRAY_ICONS: Record<TrayState, string> = {
-  idle: trayIdlePath,
-  recording: trayRecordingPath,
+  record: trayRecordingPath,
   screenshot: trayScreenshotPath,
 };
 
-let trayState: TrayState = "idle";
+let trayState: TrayState = "record";
 
 /**
- * Swap the menu-bar icon for the app's state. Safe before the tray exists and a
- * no-op when the state has not changed — this is called from a broadcast that
- * fires on every elapsed-second tick, and reloading the image each time would
- * repaint the menu bar once a second for no reason.
+ * Swap the menu-bar icon for the selected mode. Safe before the tray exists, and
+ * a no-op when nothing changed — the panel re-sends its selection on every
+ * render, and reloading the image each time would repaint the menu bar for no
+ * reason.
  */
 export function setTrayState(state: TrayState): void {
   if (state === trayState) return;

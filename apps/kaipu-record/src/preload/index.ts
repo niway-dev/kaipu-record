@@ -137,6 +137,7 @@ const kaipuApi: KaipuElectronAPI = {
   captureScreenshot: () => ipcRenderer.invoke(IPC_CHANNELS.screenshotCapture),
   revealAfterCapture: () => ipcRenderer.send(IPC_CHANNELS.screenshotReveal),
   applyWindowPreset: (preset) => ipcRenderer.send(IPC_CHANNELS.windowApplyPreset, preset),
+  setTrayMode: (mode) => ipcRenderer.send(IPC_CHANNELS.traySetMode, mode),
   setOnboardingWindowMode: (active) =>
     ipcRenderer.send(IPC_CHANNELS.windowSetOnboardingMode, active),
   copyImageToClipboard: (png) => ipcRenderer.invoke(IPC_CHANNELS.screenshotCopy, png),

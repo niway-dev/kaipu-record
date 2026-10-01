@@ -251,6 +251,8 @@ export interface KaipuElectronAPI {
    * Main clamps both to the display's work area.
    */
   applyWindowPreset(preset: WindowPresetName): void;
+  /** Mirror the capture panel's selected mode in the menu-bar icon. */
+  setTrayMode(mode: "record" | "screenshot"): void;
   /**
    * Toggle "onboarding mode" window sizing. The first-run takeover is a fixed
    * amount of content — a 96px mark, a headline, and up to four permission

@@ -5,7 +5,7 @@ import { IPC_CHANNELS } from "@shared/types";
 import icon from "../../resources/icon.png?asset";
 import { CapturePanelWindow } from "./capture-panel-window";
 import { createMainTranslator } from "@kaipu/i18n/main";
-import { createTray, rebuildTrayMenu } from "./tray";
+import { createTray, rebuildTrayMenu, setTrayState, type TrayState } from "./tray";
 import { registerRecordingSourceHandlers } from "./recording-sources";
 import { registerPermissionHandlers } from "./permissions";
 import { registerLibraryVaultHandlers } from "./library";
@@ -432,6 +432,9 @@ app.whenReady().then(() => {
     mainWindow.setSize(width, height, true);
     if (!shrinking) mainWindow.setMinimumSize(minWidth, minHeight);
   });
+
+  // The menu bar mirrors the capture panel's selected mode.
+  ipcMain.on(IPC_CHANNELS.traySetMode, (_event, mode: TrayState) => setTrayState(mode));
 
   // Onboarding mode: same treatment for the first-run takeover.
   ipcMain.on(IPC_CHANNELS.windowSetOnboardingMode, (_event, active: boolean) =>
