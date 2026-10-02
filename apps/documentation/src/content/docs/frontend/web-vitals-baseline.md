@@ -27,9 +27,41 @@ Other categories, desktop preset: accessibility **96**, best practices **100**, 
 **Layout stability is already perfect** — CLS 0 on both presets, and blocking time is
 negligible. The landing's entire problem is how long it takes to show anything.
 
-## Two conditions that make these numbers pessimistic
+## The second measurement — the edge, as promised
 
-Read the table with both of these in mind, or the first optimization will look like a
+Lighthouse 13.5.0 (same instrument), against a **Cloudflare Version URL** — real edge,
+real brotli, real TTFB — serving `main` at `976105a`, uploaded by the manual
+[Preview Web](https://github.com/csdev19/kaipu-record-monorepo/actions/workflows/preview-web.yml)
+workflow. Same code path as the first row: nothing was optimized in between, so the
+delta below is the compression-and-edge effect the first row's caveats predicted, and
+nothing else.
+
+| Preset                   | Performance | FCP   | LCP   | TBT   | CLS |
+| ------------------------ | ----------- | ----- | ----- | ----- | --- |
+| Desktop                  | **95**      | 1.0 s | 1.1 s | 0 ms  | 0   |
+| Mobile (Slow 4G, CPU 4×) | **71**      | 4.4 s | 4.8 s | 20 ms | 0   |
+
+Conditions worth recording: headless run, Brave as the Chromium binary (the measuring
+machine has no Google Chrome; the landing loads no third parties, where the difference
+would live). Cloudflare Access has to be off for the measurement window — Lighthouse is
+an unauthenticated client and measures the Access login page otherwise, which is how one
+PageSpeed Insights run on this URL produced numbers for the wrong page entirely. Turn it
+back on afterwards.
+
+Two readings to take away, one calming and one not:
+
+- **SEO reads 66 on the version URL and that is correct behaviour, not a regression.**
+  The only failing audit is `is-crawlable`: Cloudflare stamps `x-robots-tag: noindex`
+  on every version URL, which is exactly what keeps previews out of search results.
+  `kaipu.app` does not carry that header.
+- **The compression caveat is now spent.** The download got its brotli; what remains is
+  the work: unused JavaScript and render-blocking CSS are untouched, and mobile 71 —
+  not 57 — is the honest floor the optimization effort starts from.
+
+## Two conditions that made the first numbers pessimistic
+
+These applied to the first measurement; the second one above retires the first condition.
+Read the first table with both of these in mind, or the first optimization will look like a
 miracle it is not.
 
 1. **The local preview sends no compression.** Measured: the main bundle goes over the
@@ -77,6 +109,13 @@ The series is only a series if every row used the same instrument. Do not substi
 hand-rolled script, and do not measure the dev server — Vite serves CSS as modules there,
 so the page flashes unstyled in development and does not in production.
 
+**The edge way (preferred since the second row):** run the manual **Preview Web** workflow
+from Actions; its run summary prints the version URL and these same Lighthouse commands
+pointed at it. Disable Cloudflare Access on the worker's preview URLs for the window,
+re-enable it after, and record the commit the run uploaded.
+
+**The localhost way (how the first row was taken):**
+
 ```bash
 cd apps/web-hono && bun run build
 bun run serve --port 4173 &
@@ -95,6 +134,7 @@ check, not a performance instrument.
 Append a row per measurement. Never edit an old row — a corrected number is a new row with
 a note, because the point of the series is the shape of the curve.
 
-| Date       | Commit    | Desktop | Mobile | What changed since the row above                      |
-| ---------- | --------- | ------- | ------ | ----------------------------------------------------- |
-| 2026-10-01 | `78f6dea` | 87      | 57     | Baseline. Design complete, no optimization attempted. |
+| Date       | Commit    | Desktop | Mobile | What changed since the row above                                               |
+| ---------- | --------- | ------- | ------ | ------------------------------------------------------------------------------ |
+| 2026-10-01 | `78f6dea` | 87      | 57     | Baseline. Design complete, no optimization attempted.                          |
+| 2026-10-01 | `976105a` | 95      | 71     | Same code, first edge measurement: Cloudflare Version URL, brotli + real TTFB. |
