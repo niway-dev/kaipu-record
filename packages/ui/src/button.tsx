@@ -35,6 +35,17 @@ const styles = stylex.create({
       ":hover": "var(--kaipu-glow-accent)",
     },
   },
+  // Control variant for the experiment: literal colors, zero var() — if this
+  // renders pink and `primary` does not, the missing piece is the token
+  // variables on that surface, not StyleX. (Desktop proved exactly that:
+  // it defines --accent-primary, not --kaipu-accent-primary.)
+  raw: {
+    color: "#ffffff",
+    backgroundColor: {
+      default: "#f6055c",
+      ":hover": "#d4044f",
+    },
+  },
   ghost: {
     color: "var(--kaipu-text-primary)",
     backgroundColor: {
@@ -47,7 +58,7 @@ const styles = stylex.create({
 
 export interface KaipuButtonProps {
   children: ReactNode;
-  variant?: "primary" | "ghost";
+  variant?: "primary" | "ghost" | "raw";
   onClick?: () => void;
   type?: "button" | "submit";
 }

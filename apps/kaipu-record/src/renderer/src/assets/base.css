@@ -5,6 +5,11 @@
  * All components reference tokens via var(--token).
  */
 @import "@kaipu/tokens/css";
+/* StyleX experiment: shared @kaipu/ui components reference the PREFIXED
+ * variables (--kaipu-*), the same spelling the web uses, so the shared code
+ * has one spelling. Same values, same generator, additive. The experiment's
+ * verdict decides whether defineVars replaces both imports. */
+@import "@kaipu/tokens/css/kaipu";
 
 *,
 *::before,

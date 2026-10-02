@@ -34,7 +34,10 @@ export function SharedProbe() {
     <h1 {...stylex.props(styles.banner)}>
       shared component
       <KaipuButton onClick={() => setClicks((c) => c + 1)}>
-        click{clicks > 0 ? ` (${clicks})` : ""}
+        tokens{clicks > 0 ? ` (${clicks})` : ""}
+      </KaipuButton>
+      <KaipuButton variant="raw" onClick={() => setClicks((c) => c + 1)}>
+        raw css{clicks > 0 ? ` (${clicks})` : ""}
       </KaipuButton>
     </h1>
   );
