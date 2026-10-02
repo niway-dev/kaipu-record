@@ -5,7 +5,7 @@ description: The canonical meaning of Kaipu, its Peruvian inspiration, voice, pr
 
 # Kaipu brand identity
 
-**Canonical brand decision · adopted by the creator on 2026-09-27.** Consult this page before changing brand copy, the logo, mascot, onboarding, or marketing. The meaning is settled; the final visual design remains to be selected and integrated.
+**Canonical brand decision · adopted by the creator on 2026-09-27.** Consult this page before changing brand copy, the logo, mascot, onboarding, or marketing. The meaning is settled. The visual identity is settled too, since 2026-10-01: Kai is the fox shipped in `packages/brand` (see [Visual identity and Kai](#visual-identity-and-kai)).
 
 ## The definition we preserve
 
@@ -40,19 +40,20 @@ Approved Spanish brand copy:
 
 ## Where this identity is published
 
-**Current home status (2026-09-30):** the redesigned home does not currently mount `BrandOrigin` or the old footer signature. The component and EN/ES keys are preserved, but the public-surface row below describes the earlier home. Restoring the visible connection and reconciling the implemented fox with the earlier knot exploration is tracked in [home audit H12](/marketing/home-conversion-audit/) and [execution slice 4](/plans/2026-09-30-home-conversion-review/#slice-4--kai-and-the-brand-origin-connection). The adopted meaning is unchanged.
+**Home status (2026-10-01):** the four-moments home carries the identity in its third section, "Meet Kai" (`apps/web-hono/src/components/home/kai.tsx`), which reuses the `landing.origin*` messages and shows the signature "This. Captured." in place. The unmounted `BrandOrigin` component is retired from the home. The home-specific footer does not render `footerSignature`, but `components/landing/footer.tsx` still uses that key on routes mounted through `PublicShell`. Nothing else changed in the adopted meaning. Shipped in [PR #202](https://github.com/csdev19/kaipu-record-monorepo/pull/202).
 
 The meaning no longer depends on a chat transcript or a file outside the repository. It is
 carried in three places, each with a different job:
 
-| Surface                                                | Carries                                                 | File                                                                  |
-| ------------------------------------------------------ | ------------------------------------------------------- | --------------------------------------------------------------------- |
-| This page                                              | The canonical decision, sources, voice, and change rule | `apps/documentation/src/content/docs/marketing/brand-identity.md`     |
-| Root README, “Why Kaipu”                               | The short form a new contributor meets first            | `README.md`                                                           |
-| Landing `#origin` section and footer signature (EN/ES) | The public, condensed form with the disclaimer          | `apps/web-hono/src/components/landing/brand-origin.tsx`, `footer.tsx` |
+| Surface                               | Carries                                                                    | File                                                              |
+| ------------------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| This page                             | The canonical decision, sources, voice, and change rule                    | `apps/documentation/src/content/docs/marketing/brand-identity.md` |
+| Root README, “Why Kaipu”              | The short form a new contributor meets first                               | `README.md`                                                       |
+| Home "Meet Kai" section (EN/ES)       | The public origin story and coined-name qualification beside the character | `apps/web-hono/src/components/home/kai.tsx`                       |
+| Public-shell footer signature (EN/ES) | The compact brand signature on other public routes                         | `apps/web-hono/src/components/landing/footer.tsx`                 |
 
-Landing wording lives in `packages/i18n/messages/{en,es}.json` under `landing.origin*` and
-`landing.footerSignature`; an EN/ES parity test fails if one catalog drifts. Changing the meaning
+Landing wording lives in `packages/i18n/messages/{en,es}.json` under `landing.origin*`,
+`landing.homeKai*`, and `landing.footerSignature`; an EN/ES parity test fails if one catalog drifts. Changing the meaning
 means changing this page first, then those three surfaces together — never one of them alone.
 
 ## Purpose and product fit
@@ -74,13 +75,26 @@ Lead with outcomes, use short sentences, and explain local use separately from a
 
 Keep **Kaipu**, **kaipu.app**, the pink recognition cue, and both light/dark themes. Existing design tokens remain the implementation authority for color and contrast; this document does not redefine them.
 
-**Preferred exploration: Kai, a small knot that keeps moments.** A soft compact knot, simple eyes, and short cord ends provide a character without relying on costume. Its signature gesture is tying a small knot when a moment is saved and extending the thread when sharing. This is our contemporary visual metaphor.
+**Kai is a fox.** Adopted by the creator on 2026-10-01, when the artwork already shipped in `packages/brand` became the identity the product and the website use everywhere. The small-knot direction explored on 2026-09-27, and the vizcacha before it, are closed: the knot lives on in the name's meaning — the khipu — not in the character. The [exploration page](/marketing/brand-and-kai/) keeps that history as history.
 
-Approved one-line mascot story — EN: “Kai ties a knot so that moment isn't lost.” ES: «Kai hace un nudo para que ese momento no se pierda.» Use it as the caption when Kai is introduced; it states what the character does, without claiming the app can never lose a file.
+The artwork is a black fox bust on Kaipu pink, a flat silhouette with two cream eyes. `@kaipu/brand` resolves it by **purpose**, never by file name (`packages/brand/src/index.ts`):
 
-The mascot, wordmark, small symbol, app icon, and monochrome tray mark have different jobs. Derive a simple mark from the character if it remains recognizable; do not assume a detailed character works at favicon size. Start with a flat silhouette and evaluate pixel art as a treatment, not as an obligation for the whole UI.
+| Purpose                 | Artwork                                   | Where                                                      |
+| ----------------------- | ----------------------------------------- | ---------------------------------------------------------- |
+| `app`                   | the fox with frame corners and record dot | Dock, ⌘-Tab, DMG, the hero's identity row                  |
+| `product` · `micro`     | the plain fox                             | navbars, the desktop sidebar, favicons, Kai on camera      |
+| `record` · `screenshot` | capture-mode marks                        | the menu bar when recording or screenshot mode is selected |
+| `permissions` · `done`  | moment marks                              | onboarding; `done` once in the home's closing              |
 
-The creator reports new logo and notch-state artwork is available. Its paths and final selection have not been supplied in this repository session. Treat those assets as input to the [execution plan](/plans/2026-09-27-brand-and-website-rollout/), not as already integrated or a reason to regenerate artwork from scratch.
+Where Kai appears, and what he does not do:
+
+- **Website:** a dedicated "Meet Kai" introduction after the hero's transition; Kai as an intentionally nonliteral subject in the recording illustration's camera bubble; `done` in the closing invitation. No floating mascot, no constant animation.
+- **App:** the menu-bar mark follows the capture mode; `permissions` and `done` open and close onboarding.
+- **Never** as an assistant, a chatbot, automatic editing, or a promise that a recording cannot be lost.
+
+Approved one-line introduction — EN: "Kai is the fox behind Kaipu, the companion for moments worth capturing." ES: «Kai es el zorro de Kaipu, el compañero de los momentos que vale la pena capturar.» It replaces the earlier knot caption ("Kai ties a knot so that moment isn't lost"), which described a character that was never drawn. The full landing copy is `landing.homeKaiBody`.
+
+Still missing, tracked in [Marketing landing — Open](/backlog/marketing-landing/#open): the pink lockup as SVG, a cropped fox head for a true favicon, and a monochrome plain fox for the idle menu-bar state. An asset refresh alone does not reopen this decision.
 
 ## Sources and authority
 

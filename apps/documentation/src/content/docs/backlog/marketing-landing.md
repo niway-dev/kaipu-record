@@ -5,12 +5,12 @@ description: "The home page rebuilt from the owner's design: its own token layer
 
 # Marketing landing — the four-moments home
 
-> **Review update (2026-09-30):** [draft PR #196](https://github.com/csdev19/kaipu-record-monorepo/pull/196) now exists and includes `main` integration. The earlier no-PR/push-blocked notes below describe prior runs, not the current review status. Read the [home audit](/marketing/home-conversion-audit/), [EN/ES proposals](/marketing/home-copy-review/), and [execution plan](/plans/2026-09-30-home-conversion-review/) before implementation. Documenting a finding does not fix it. Historical E2E failures are not a current failure result; use the PR's latest check evidence.
-
-> **Status: 🟡 In progress** — branch `feat/marketing-landing`, no PR yet.
-> The page is complete (hero, moments intro, chapters 01–04 with their mockups,
-> "Your files", closing CTA, footer) and `bun run verify` passes. What is left is
-> in [Open](#open) below.
+> **Status: 🟡 In progress** — the four-moments home merged in
+> [PR #196](https://github.com/csdev19/kaipu-record-monorepo/pull/196). The focused Hero,
+> Moments, Kai, camera, closing, and documentation slice follows in
+> [PR #202](https://github.com/csdev19/kaipu-record-monorepo/pull/202). Remaining conversion work is
+> owned by [Home conversion and Kai implementation v2](/plans/2026-10-01-home-conversion-v2/).
+> Current unresolved items remain in [Open](#open).
 >
 > Supersedes [Landing redesign — feature showcase with looping demos](./landing-redesign):
 > that page's components were deleted on this branch.
@@ -149,15 +149,6 @@ container is `calc(var(--kl-max-w) + 2 * var(--kl-gutter))`. With a plain
 - **Nothing has been reviewed in a browser by the owner.** The page now renders
   and has been measured at five viewports, but every layout decision was reasoned
   from the design images. The owner reviews by screenshot each round.
-- **The rail's active-chapter label collides with the mockup.** On the hero the
-  label reads "Kaipu" and at 1440×900 it overlaps the mockup's "Change" button.
-  Two candidate fixes: show it on hover/focus only, or drop it on the bookends
-  (`hero`, `files`) and keep it on the numbered chapters. Undecided.
-- **Two desktop E2E failures block `git push`** (`playback.e2e.ts:60`,
-  `shortcuts.e2e.ts:15`). Neither asserts on changed code — one is a 120s
-  timeout, the other a video that advanced 1.8s instead of 2.1s — and the same
-  suite passed 13/13 earlier on another branch under lighter load. Suspected
-  contention, **not verified**.
 - **The desktop bundle icon** (`build/icon.icns`, `.ico`, `.png`) is still the
   old artwork. Needs a 1024×1024 export from Figma; the source is 778px and
   upscaling looks soft in the Dock.
@@ -167,6 +158,8 @@ container is `calc(var(--kl-max-w) + 2 * var(--kl-gutter))`. With a plain
   mockup. Subsetting brings it to ~8 kB. Worth doing before this ships.
 - **The mobile CTA has no backend.** "Send the link to my Mac" scrolls to
   `#download`; there is no mail flow.
+- **The five mockups still speak English in Spanish** (audit H06). Deliberately left out of
+  the Kai PR; it is the next landing PR.
 
 ## Related
 

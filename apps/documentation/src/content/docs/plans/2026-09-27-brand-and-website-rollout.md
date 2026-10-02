@@ -5,11 +5,11 @@ description: Execution sequence for preserving Kaipu's meaning, selecting Kai an
 
 # Brand identity and website rollout
 
-**Status: 🟡 In progress · 2026-09-28.** Identity documentation, README correction, EN/ES landing copy, and the landing's brand origin section are implemented on the growth branch. New layout, mascot/logo replacement, notch behavior, and media production remain pending. Parent: [Product growth](/backlog/product-growth/).
+**Status: 🟡 In progress · updated 2026-10-01.** Identity documentation, README correction, EN/ES landing copy, the four-moments home, `@kaipu/brand` with the fox, and the menu-bar capture-mode marks are on `main`. The home's Kai section and hero copy ship in [PR #202](https://github.com/csdev19/kaipu-record-monorepo/pull/202). Still pending: the desktop bundle icon export, the SVG lockup and favicon crop, and media production. Parent: [Product growth](/backlog/product-growth/).
 
 ## Goal and settled inputs
 
-Preserve **Kaipu = KAY + khiPU → «Esto, registrado»**, make the identity usable in everyday design work, and deliver a product-led website showing capture, explanation, and retrieval. [Brand identity](/marketing/brand-identity/) is canonical. The preferred mascot exploration is a small living knot; final artwork is not selected by this plan.
+Preserve **Kaipu = KAY + khiPU → «Esto, registrado»**, make the identity usable in everyday design work, and deliver a product-led website showing capture, explanation, and retrieval. [Brand identity](/marketing/brand-identity/) is canonical. The character is the fox shipped in `packages/brand` (adopted 2026-10-01).
 
 The existing growth sequence remains GIF → Windows beta → landing sections → keystrokes/CLI. This plan orders the brand/website work internally; it does not silently reorder the product roadmap. No inference runtime, renderer architecture, or styling-framework migration is included.
 
@@ -26,10 +26,10 @@ The existing growth sequence remains GIF → Windows beta → landing sections �
 
 The creator already has new logos and notch-state artwork. First obtain their paths/files and identify which variants are approved. Inspect those assets before commissioning or generating more.
 
-- [ ] Inventory the supplied assets: source file, variant, intended surface, theme, static/animated, and approval status.
+- [x] Inventory the supplied assets: source file, variant, intended surface, theme, static/animated, and approval status. Done: six PNGs (`logo-app`, `logo-plain`, `logo-record`, `logo-screenshot`, `logo-permissions`, `logo-done`) and two monochrome SVGs (`mono-record`, `mono-screenshot`) in `packages/brand/assets/`, resolved by purpose in `packages/brand/src/index.ts`; `product` and `micro` both resolve to `logo-plain.png`.
 - [ ] Compare compact knot, knot-character, and knot-with-capture-frame only if the supplied artwork does not already settle the direction.
 - [ ] Test the small symbol at 16/24/32 px, one color, and light/dark; test the full character independently.
-- [ ] Select wordmark, small symbol, app icon, monochrome tray mark, and full Kai. Record which source generates each output.
+- [x] Select wordmark, small symbol, app icon, monochrome tray mark, and full Kai. Record which source generates each output. Done: `packages/brand/src/index.ts` selects by purpose (`app`, `product`/`micro`, `record`/`screenshot`, `permissions`/`done`); the menu-bar capture-mode marks follow the selected recording or screenshot mode.
 - [ ] If pixel art is selected, normalize its grid and palette; preserve a simpler small-size mark.
 
 **Existing consumers to inspect:** `apps/web-hono/src/components/kaipu-mark.tsx`, `apps/web-hono/public/favicon*`, `apps/kaipu-record/src/renderer/src/assets/brand/`, `apps/kaipu-record/src/renderer/src/shell/kaipu-mark.tsx`, `apps/kaipu-record/resources/`, desktop packaging icons, and `apps/documentation/public/favicon.svg`.
