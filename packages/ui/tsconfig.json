@@ -4,10 +4,11 @@
     "target": "ESNext",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "lib": ["ESNext"],
-    "types": ["node"],
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
     "strict": true,
     "skipLibCheck": true,
+    "resolveJsonModule": true,
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
@@ -17,6 +18,6 @@
     "noUnusedParameters": true,
     "noEmit": true
   },
-  "include": ["src/**/*", "stylex/**/*"],
+  "include": ["src/**/*"],
   "exclude": ["node_modules"]
 }

@@ -5,8 +5,113 @@ description: Proposal to evaluate shared typed token references and a gradual mi
 
 # Typed styles with StyleX across desktop and web
 
-> **Status: 🔵 Proposed — pending analysis** (2026-09-12). This records a direction
-> to evaluate later, not an approved implementation plan. No migration has started.
+> **Status: 🟡 In progress — feasibility proven, migration not started** (updated
+> 2026-10-01). The owner chose StyleX as the direction; the first experiment is
+> committed on `experiment/stylex-button` and the design spec is next. The original
+> proposal below still describes the end state.
+
+## What the first experiment proved (2026-10-01, `be6eed7`)
+
+One `KaipuButton` written with `stylex.create` in a new source-exported package,
+`packages/ui` (`@kaipu/ui`), compiles in **both** pipelines with official StyleX
+pieces only (0.19.1) — no community Vite plugin:
+
+- `@stylexjs/babel-plugin` passed **inline** to `@vitejs/plugin-react`, in
+  `apps/web-hono/vite.config.ts` and the renderer section of
+  `apps/kaipu-record/electron.vite.config.ts`;
+- `@stylexjs/postcss-plugin` scanning the StyleX sources and writing atomics where a
+  stylesheet says `@stylex;` (`apps/web-hono/src/stylex.css`,
+  `apps/kaipu-record/src/renderer/src/dev/stylex-probe.css`).
+
+Both production builds exit 0. The web build emits a separate ~1 KB `stylex-*.css`;
+the renderer merges the atomics into its `index-*.css`. Every color in the emitted
+CSS is a `var(--kaipu-*)` reference, so the existing theme blocks style the shared
+button with no theming code in the component — the token layer crossed the
+desktop/web boundary exactly as this proposal hoped.
+
+### The working pipeline
+
+How a style written in `@kaipu/ui` reaches a screen, on either surface:
+
+```
+packages/ui/src/*.tsx            stylex.create({...}), colors as var(--kaipu-*)
+        │
+        ├─ JS side:  @stylexjs/babel-plugin, INLINE in @vitejs/plugin-react
+        │            (vite.config.ts / electron.vite.config.ts) — turns
+        │            stylex.props(...) into class names on the element
+        │
+        └─ CSS side: @stylexjs/postcss-plugin scans the same sources
+                     (narrow include globs; parses with babel.config.cjs)
+                     and writes the atomic rules where a sheet says `@stylex;`
+                     (web: src/stylex.css · desktop: dev/stylex-probe.css)
+
+var(--kaipu-*) resolves because BOTH surfaces define the prefixed set:
+web via index.css, desktop via assets/base.css (both @kaipu/tokens imports).
+```
+
+Toolchain invariants learned the hard way, which the migration must keep:
+
+1. The PostCSS plugin's scanner parses its `include` files with its **own** Babel:
+   it needs the `babel.config.cjs` each app now carries (that file exists _only_
+   for the scanner — Vite's React transform takes its plugins inline and never
+   reads it), and its globs must point at StyleX sources only, or it chokes on
+   generated TS such as `routeTree.gen.ts`.
+2. Babel 8 removed `preset-typescript`'s `isTSX`/`allExtensions`; older recipes
+   that pass them fail the build.
+3. **Every StyleX transform in the pipeline must agree on its options.** The
+   inline plugin ran `dev: true` on the dev server while the scanner ran
+   `dev: false`: different class names, a correct sheet nothing referenced, dev
+   unstyled while production worked. `dev` is pinned `false` in both configs; to
+   ever flip it, flip it everywhere at once.
+4. **An undefined `var()` silently unsets the declaration.** The desktop defined
+   only the unprefixed token set, the button said `var(--kaipu-accent-primary)`,
+   and the background computed transparent with the sheet present and the class
+   applied. Both surfaces now import the prefixed set; the permanent fix is typed
+   `defineVars` generated from `@kaipu/tokens`, which makes a missing spelling a
+   compile error instead of an invisible button.
+
+Probes to see it render: web `/dev/stylex` (unlinked route), desktop
+`#stylex-probe` (dev-only, tree-shaken from packaged builds). Both show
+`primary` (tokens), `ghost`, and `raw` — the control variant with literal
+colors: where `raw` renders and `primary` does not, the surface's token
+variables are missing, not StyleX.
+
+Still open before widening: dev-server HMR behaviour of the scanner,
+[facebook/stylex#1918](https://github.com/facebook/stylex/issues/1918) on our Vite,
+and typed `defineVars` generated from `@kaipu/tokens` (the button consumes the
+tokens as `var()` strings). The agreed shape: the web-ui CSS dedup ships first,
+the auth screens (dark today) are rebuilt on shadcn-cssinjs as the pilot, and the
+cloud shell is born in StyleX when it goes live — Tailwind leaves with its last
+shadcn screen. The design spec and ADR will carry those decisions.
+
+## What the second pass proved (2026-10-02)
+
+The three things the first pass declared untested, now measured:
+
+- **Live-edit freshness: yes.** With the web dev server running, a style value
+  edited in `@kaipu/ui` reached both the served sheet and the component's
+  compiled class names within seconds, in lockstep (`.xixl9f9` on both sides).
+- **[facebook/stylex#1918](https://github.com/facebook/stylex/issues/1918)
+  (stale chunk hash): does not reproduce here.** Two production builds differing
+  in one style value produced different sheet filenames, contents and JS chunk
+  hashes.
+- **Typed tokens: shipped as generated `defineVars`.** `@kaipu/tokens` now also
+  generates `stylex/kaipu.stylex.ts` — typed references over the prefixed
+  custom properties, so a token typo is a compile error while the existing
+  `[data-theme]` blocks keep owning the values. The button consumes
+  `tokens.accentPrimary` instead of a `var()` string; both builds emit the
+  defining `:root` block (`--xbxcam6: var(--kaipu-accent-primary)`) and the
+  atomics referencing it. Replacing the references with literal values +
+  `createTheme` (retiring the css imports) stays a spec decision, on purpose.
+
+Invariant 5, learned shipping it: **the import specifier must end in
+`.stylex`** — the compiler refuses `@kaipu/tokens/stylex` and accepts
+`@kaipu/tokens/kaipu.stylex` (the export map key carries the suffix). And a
+corollary of invariant 4 caught in the same hour: the scanner's `include`
+globs are part of the correctness surface — a formatter-collapsed config line
+silently dropped the tokens glob, and the sheet _used_ the hashed vars without
+_defining_ them. The grep that catches it:
+`grep -- '--x[a-z0-9]*:var(--kaipu-' <emitted css>` must match.
 
 ## Motivation
 
