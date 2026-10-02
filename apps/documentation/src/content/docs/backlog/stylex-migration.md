@@ -5,8 +5,50 @@ description: Proposal to evaluate shared typed token references and a gradual mi
 
 # Typed styles with StyleX across desktop and web
 
-> **Status: 🔵 Proposed — pending analysis** (2026-09-12). This records a direction
-> to evaluate later, not an approved implementation plan. No migration has started.
+> **Status: 🟡 In progress — feasibility proven, migration not started** (updated
+> 2026-10-01). The owner chose StyleX as the direction; the first experiment is
+> committed on `experiment/stylex-button` and the design spec is next. The original
+> proposal below still describes the end state.
+
+## What the first experiment proved (2026-10-01, `be6eed7`)
+
+One `KaipuButton` written with `stylex.create` in a new source-exported package,
+`packages/ui` (`@kaipu/ui`), compiles in **both** pipelines with official StyleX
+pieces only (0.19.1) — no community Vite plugin:
+
+- `@stylexjs/babel-plugin` passed **inline** to `@vitejs/plugin-react`, in
+  `apps/web-hono/vite.config.ts` and the renderer section of
+  `apps/kaipu-record/electron.vite.config.ts`;
+- `@stylexjs/postcss-plugin` scanning the StyleX sources and writing atomics where a
+  stylesheet says `@stylex;` (`apps/web-hono/src/stylex.css`,
+  `apps/kaipu-record/src/renderer/src/dev/stylex-probe.css`).
+
+Both production builds exit 0. The web build emits a separate ~1 KB `stylex-*.css`;
+the renderer merges the atomics into its `index-*.css`. Every color in the emitted
+CSS is a `var(--kaipu-*)` reference, so the existing theme blocks style the shared
+button with no theming code in the component — the token layer crossed the
+desktop/web boundary exactly as this proposal hoped.
+
+Toolchain invariants learned the hard way, which the migration must keep:
+
+1. The PostCSS plugin's scanner parses its `include` files with its **own** Babel:
+   it needs the `babel.config.cjs` each app now carries (that file exists _only_
+   for the scanner — Vite's React transform takes its plugins inline and never
+   reads it), and its globs must point at StyleX sources only, or it chokes on
+   generated TS such as `routeTree.gen.ts`.
+2. Babel 8 removed `preset-typescript`'s `isTSX`/`allExtensions`; older recipes
+   that pass them fail the build.
+
+Probes to see it render: web `/dev/stylex` (unlinked route), desktop
+`#stylex-probe` (dev-only, tree-shaken from packaged builds).
+
+Still open before widening: dev-server HMR behaviour of the scanner,
+[facebook/stylex#1918](https://github.com/facebook/stylex/issues/1918) on our Vite,
+and typed `defineVars` generated from `@kaipu/tokens` (the button consumes the
+tokens as `var()` strings). The agreed shape: the web-ui CSS dedup ships first,
+the auth screens (dark today) are rebuilt on shadcn-cssinjs as the pilot, and the
+cloud shell is born in StyleX when it goes live — Tailwind leaves with its last
+shadcn screen. The design spec and ADR will carry those decisions.
 
 ## Motivation
 
