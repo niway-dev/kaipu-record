@@ -1,8 +1,6 @@
 import type { ReactNode } from "react";
 import { useRouteContext } from "@tanstack/react-router";
 
-import { SharedProbe } from "@kaipu/ui";
-
 import { ChapterStrip } from "./chapter-strip";
 import { Rail } from "./rail";
 import { StickyCta } from "./sticky-cta";
@@ -32,16 +30,7 @@ export function HomeShell({ children }: { children: ReactNode }) {
       <TopNav />
       <ChapterStrip />
       <Rail />
-      <main>
-        {/* StyleX experiment: shared with the desktop app's main screen.
-            The nav is `position: fixed`, so main's top row sits underneath
-            it — the padding is what actually clears it; being first in the
-            flow was not enough. */}
-        <div style={{ paddingTop: 128 }}>
-          <SharedProbe />
-        </div>
-        {children}
-      </main>
+      <main>{children}</main>
       <StickyCta />
     </div>
   );

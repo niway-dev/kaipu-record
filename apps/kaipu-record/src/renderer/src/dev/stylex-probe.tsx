@@ -14,6 +14,7 @@ export function StylexProbe() {
     <div style={{ display: "flex", gap: 16, padding: 48, alignItems: "center" }}>
       <KaipuButton onClick={() => setClicks((c) => c + 1)}>Record a moment ({clicks})</KaipuButton>
       <KaipuButton variant="ghost">Maybe later</KaipuButton>
+      <KaipuButton variant="raw">raw control</KaipuButton>
     </div>
   );
 }

@@ -20,6 +20,7 @@ function StylexProbe() {
     <div style={{ display: "flex", gap: 16, padding: 48 }}>
       <KaipuButton onClick={() => console.log("primary")}>Record a moment</KaipuButton>
       <KaipuButton variant="ghost">Maybe later</KaipuButton>
+      <KaipuButton variant="raw">raw control</KaipuButton>
     </div>
   );
 }

@@ -29,6 +29,26 @@ CSS is a `var(--kaipu-*)` reference, so the existing theme blocks style the shar
 button with no theming code in the component — the token layer crossed the
 desktop/web boundary exactly as this proposal hoped.
 
+### The working pipeline
+
+How a style written in `@kaipu/ui` reaches a screen, on either surface:
+
+```
+packages/ui/src/*.tsx            stylex.create({...}), colors as var(--kaipu-*)
+        │
+        ├─ JS side:  @stylexjs/babel-plugin, INLINE in @vitejs/plugin-react
+        │            (vite.config.ts / electron.vite.config.ts) — turns
+        │            stylex.props(...) into class names on the element
+        │
+        └─ CSS side: @stylexjs/postcss-plugin scans the same sources
+                     (narrow include globs; parses with babel.config.cjs)
+                     and writes the atomic rules where a sheet says `@stylex;`
+                     (web: src/stylex.css · desktop: dev/stylex-probe.css)
+
+var(--kaipu-*) resolves because BOTH surfaces define the prefixed set:
+web via index.css, desktop via assets/base.css (both @kaipu/tokens imports).
+```
+
 Toolchain invariants learned the hard way, which the migration must keep:
 
 1. The PostCSS plugin's scanner parses its `include` files with its **own** Babel:
@@ -38,9 +58,23 @@ Toolchain invariants learned the hard way, which the migration must keep:
    generated TS such as `routeTree.gen.ts`.
 2. Babel 8 removed `preset-typescript`'s `isTSX`/`allExtensions`; older recipes
    that pass them fail the build.
+3. **Every StyleX transform in the pipeline must agree on its options.** The
+   inline plugin ran `dev: true` on the dev server while the scanner ran
+   `dev: false`: different class names, a correct sheet nothing referenced, dev
+   unstyled while production worked. `dev` is pinned `false` in both configs; to
+   ever flip it, flip it everywhere at once.
+4. **An undefined `var()` silently unsets the declaration.** The desktop defined
+   only the unprefixed token set, the button said `var(--kaipu-accent-primary)`,
+   and the background computed transparent with the sheet present and the class
+   applied. Both surfaces now import the prefixed set; the permanent fix is typed
+   `defineVars` generated from `@kaipu/tokens`, which makes a missing spelling a
+   compile error instead of an invisible button.
 
 Probes to see it render: web `/dev/stylex` (unlinked route), desktop
-`#stylex-probe` (dev-only, tree-shaken from packaged builds).
+`#stylex-probe` (dev-only, tree-shaken from packaged builds). Both show
+`primary` (tokens), `ghost`, and `raw` — the control variant with literal
+colors: where `raw` renders and `primary` does not, the surface's token
+variables are missing, not StyleX.
 
 Still open before widening: dev-server HMR behaviour of the scanner,
 [facebook/stylex#1918](https://github.com/facebook/stylex/issues/1918) on our Vite,
