@@ -1,6 +1,24 @@
 import { resolve } from "path";
 import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 import react from "@vitejs/plugin-react";
+import stylexPostcss from "@stylexjs/postcss-plugin";
+
+/**
+ * StyleX experiment (shared @kaipu/ui components): the babel plugin compiles
+ * stylex.create calls in the renderer, and the postcss plugin scans the same
+ * sources to write the atomic CSS where a stylesheet says `@stylex;`
+ * (dev/stylex-probe.css). babel.config.cjs exists only for the postcss
+ * plugin's scanner; the renderer's real transform gets its plugins inline.
+ */
+const stylexBabel = [
+  "@stylexjs/babel-plugin",
+  {
+    dev: process.env.NODE_ENV !== "production",
+    runtimeInjection: false,
+    treeshakeCompensation: true,
+    unstable_moduleResolution: { type: "commonJS" },
+  },
+];
 
 export default defineConfig({
   main: {
@@ -32,6 +50,15 @@ export default defineConfig({
         "@shared": resolve("src/shared"),
       },
     },
-    plugins: [react()],
+    plugins: [react({ babel: { plugins: [stylexBabel] } })],
+    css: {
+      postcss: {
+        plugins: [
+          stylexPostcss({
+            include: ["../../packages/ui/src/**/*.{ts,tsx}", "src/renderer/src/dev/**/*.{ts,tsx}"],
+          }),
+        ],
+      },
+    },
   },
 });

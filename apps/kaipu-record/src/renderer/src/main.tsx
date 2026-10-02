@@ -8,6 +8,7 @@ import { ControlBarWindowRoot } from "./features/control-bar/control-bar-window"
 import { CameraBubble } from "./features/camera-bubble/camera-bubble";
 import { installCrashForwarder } from "./features/analytics/crash-forwarder";
 import { I18nRoot } from "./app/i18n-root";
+import { StylexProbe } from "./dev/stylex-probe";
 
 // Same HTML entry, four render targets selected by query param:
 //   ?mode=capture         → the menu-bar tray's compact panel
@@ -47,6 +48,9 @@ async function bootstrap(): Promise<void> {
     document.body.dataset.window = "capture-panel";
     installCrashForwarder("capture-panel");
     node = <CapturePanel />;
+  } else if (import.meta.env.DEV && window.location.hash === "#stylex-probe") {
+    // Experiment probe (see dev/stylex-probe.tsx); unreachable in a packaged app.
+    node = <StylexProbe />;
   } else {
     node = <App />;
   }

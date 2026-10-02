@@ -25,6 +25,7 @@
     "@kaipu/infra-db": "workspace:*",
     "@kaipu/infra-env": "workspace:*",
     "@kaipu/tokens": "workspace:*",
+    "@kaipu/ui": "workspace:*",
     "@orpc/client": "catalog:",
     "@orpc/contract": "catalog:",
     "@orpc/openapi-client": "catalog:",
@@ -54,10 +55,14 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@babel/preset-react": "^8.0.1",
+    "@babel/preset-typescript": "^8.0.1",
     "@cloudflare/vite-plugin": "^1.20.1",
     "@kaipu/config": "workspace:*",
     "@kaipu/i18n": "workspace:*",
     "@kaipu/web-ui": "workspace:*",
+    "@stylexjs/babel-plugin": "^0.19.1",
+    "@stylexjs/postcss-plugin": "^0.19.1",
     "@tailwindcss/vite": "catalog:",
     "@tanstack/react-query-devtools": "^5.91.1",
     "@tanstack/react-router-devtools": "^1.141.1",
