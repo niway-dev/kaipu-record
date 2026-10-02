@@ -22,6 +22,9 @@ export * from "./components/alert-dialog";
 export * from "./lib/utils";
 export * from "./lib/normalize-markdown";
 
-import "./styles.css";
-
-// import "./components/markdown-content.css";
+// NO side-effect CSS import here. The app owns the single Tailwind build:
+// its index.css @imports this package's styles.css SOURCE, whose @source
+// directives make the app's build scan these components and generate every
+// class they use. Importing styles.css here (with libInjectCss) shipped a
+// SECOND full utilities layer inside dist, which is the duplicated-cascade
+// bug the hub documents in web/tailwind-v4-split-css-cascade.md.

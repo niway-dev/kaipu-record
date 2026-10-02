@@ -6,6 +6,11 @@
 @source "./components/**/*.tsx";
 @source "./lib/**/*.ts";
 
+/* Plain component CSS (not Tailwind) rides the same app-owned sheet: the app
+ * @imports this file's source, so this is how package CSS reaches consumers
+ * now that dist injects nothing. */
+@import "./components/markdown-content.css";
+
 @custom-variant dark (&:is(.dark *));
 
 :root {
