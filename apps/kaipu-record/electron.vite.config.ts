@@ -58,7 +58,11 @@ export default defineConfig({
       postcss: {
         plugins: [
           stylexPostcss({
-            include: ["../../packages/ui/src/**/*.{ts,tsx}", "src/renderer/src/dev/**/*.{ts,tsx}"],
+            include: [
+              "../../packages/ui/src/**/*.{ts,tsx}",
+              "../../packages/tokens/stylex/*.stylex.ts",
+              "src/renderer/src/dev/**/*.{ts,tsx}",
+            ],
           }),
         ],
       },

@@ -5,7 +5,8 @@
   "files": [
     "css",
     "dist",
-    "src"
+    "src",
+    "stylex"
   ],
   "type": "module",
   "sideEffects": [
@@ -18,14 +19,16 @@
     ".": "./src/index.ts",
     "./package.json": "./package.json",
     "./css": "./css/tokens.css",
-    "./css/kaipu": "./css/tokens.kaipu.css"
+    "./css/kaipu": "./css/tokens.kaipu.css",
+    "./kaipu.stylex": "./stylex/kaipu.stylex.ts"
   },
   "publishConfig": {
     "exports": {
       ".": "./dist/index.mjs",
       "./package.json": "./package.json",
       "./css": "./css/tokens.css",
-      "./css/kaipu": "./css/tokens.kaipu.css"
+      "./css/kaipu": "./css/tokens.kaipu.css",
+      "./kaipu.stylex": "./stylex/kaipu.stylex.ts"
     }
   },
   "scripts": {
@@ -34,6 +37,9 @@
     "check-types": "tsc --noEmit",
     "test": "vitest run",
     "lint": "oxlint src"
+  },
+  "dependencies": {
+    "@stylexjs/stylex": "^0.19.1"
   },
   "devDependencies": {
     "@types/node": "^22.14.1",

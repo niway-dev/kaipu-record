@@ -10,7 +10,11 @@ module.exports = {
       // Only where stylex.create lives. The plugin parses these with its own
       // Babel (no TS config of ours), so a broad glob chokes on generated TS
       // like routeTree.gen.ts — and scanning the world is wasted work anyway.
-      include: ["../../packages/ui/src/**/*.{ts,tsx}", "src/routes/dev/**/*.{ts,tsx}"],
+      include: [
+        "../../packages/ui/src/**/*.{ts,tsx}",
+        "../../packages/tokens/stylex/*.stylex.ts",
+        "src/routes/dev/**/*.{ts,tsx}",
+      ],
     },
   },
 };

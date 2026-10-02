@@ -1,4 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
+import { tokens } from "@kaipu/tokens/kaipu.stylex";
 import type { ReactNode } from "react";
 
 /**
@@ -27,12 +28,12 @@ const styles = stylex.create({
   primary: {
     color: "#ffffff",
     backgroundColor: {
-      default: "var(--kaipu-accent-primary)",
-      ":hover": "var(--kaipu-accent-primary-hover)",
+      default: tokens.accentPrimary,
+      ":hover": tokens.accentPrimaryHover,
     },
     boxShadow: {
       default: "none",
-      ":hover": "var(--kaipu-glow-accent)",
+      ":hover": tokens.glowAccent,
     },
   },
   // Control variant for the experiment: literal colors, zero var() — if this
@@ -47,12 +48,12 @@ const styles = stylex.create({
     },
   },
   ghost: {
-    color: "var(--kaipu-text-primary)",
+    color: tokens.textPrimary,
     backgroundColor: {
       default: "transparent",
-      ":hover": "var(--kaipu-bg-card-hover)",
+      ":hover": tokens.bgCardHover,
     },
-    boxShadow: `inset 0 0 0 1px var(--kaipu-border-light)`,
+    boxShadow: `inset 0 0 0 1px ${tokens.borderLight}`,
   },
 });
 

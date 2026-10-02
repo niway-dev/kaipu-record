@@ -84,6 +84,35 @@ the auth screens (dark today) are rebuilt on shadcn-cssinjs as the pilot, and th
 cloud shell is born in StyleX when it goes live — Tailwind leaves with its last
 shadcn screen. The design spec and ADR will carry those decisions.
 
+## What the second pass proved (2026-10-02)
+
+The three things the first pass declared untested, now measured:
+
+- **Live-edit freshness: yes.** With the web dev server running, a style value
+  edited in `@kaipu/ui` reached both the served sheet and the component's
+  compiled class names within seconds, in lockstep (`.xixl9f9` on both sides).
+- **[facebook/stylex#1918](https://github.com/facebook/stylex/issues/1918)
+  (stale chunk hash): does not reproduce here.** Two production builds differing
+  in one style value produced different sheet filenames, contents and JS chunk
+  hashes.
+- **Typed tokens: shipped as generated `defineVars`.** `@kaipu/tokens` now also
+  generates `stylex/kaipu.stylex.ts` — typed references over the prefixed
+  custom properties, so a token typo is a compile error while the existing
+  `[data-theme]` blocks keep owning the values. The button consumes
+  `tokens.accentPrimary` instead of a `var()` string; both builds emit the
+  defining `:root` block (`--xbxcam6: var(--kaipu-accent-primary)`) and the
+  atomics referencing it. Replacing the references with literal values +
+  `createTheme` (retiring the css imports) stays a spec decision, on purpose.
+
+Invariant 5, learned shipping it: **the import specifier must end in
+`.stylex`** — the compiler refuses `@kaipu/tokens/stylex` and accepts
+`@kaipu/tokens/kaipu.stylex` (the export map key carries the suffix). And a
+corollary of invariant 4 caught in the same hour: the scanner's `include`
+globs are part of the correctness surface — a formatter-collapsed config line
+silently dropped the tokens glob, and the sheet _used_ the hashed vars without
+_defining_ them. The grep that catches it:
+`grep -- '--x[a-z0-9]*:var(--kaipu-' <emitted css>` must match.
+
 ## Motivation
 
 Write component styles and token references in TypeScript across desktop and web,

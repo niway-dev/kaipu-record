@@ -45,10 +45,43 @@ export function generateCss(prefix = ""): string {
   ].join("\n");
 }
 
+/**
+ * Render the typed StyleX layer: `defineVars` whose VALUES are references to
+ * the prefixed custom properties the css flavors above declare. This gives
+ * components typed, rename-safe token access (a typo is a compile error)
+ * while the existing `[data-theme]` blocks keep owning the actual values —
+ * no theming mechanism changes hands. Replacing the references with literal
+ * values + `createTheme` (retiring the css imports entirely) is the design
+ * decision the shared-styling spec owns; this file deliberately does not
+ * make it.
+ */
+export function generateStylex(): string {
+  const camel = (name: string) => name.replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase());
+  const entries = [...THEME_TOKEN_NAMES, ...BASE_TOKEN_NAMES].map(
+    (name) => `  ${camel(name)}: "var(--kaipu-${name})",`,
+  );
+  return [
+    HEADER.replace(
+      "Dark is the default in :root; light theme overrides are in a separate block.",
+      "Typed references over the kaipu-prefixed custom properties in css/.",
+    ),
+    "",
+    'import * as stylex from "@stylexjs/stylex";',
+    "",
+    "export const tokens = stylex.defineVars({",
+    ...entries,
+    "});",
+    "",
+  ].join("\n");
+}
+
 if (import.meta.main) {
   const outDir = fileURLToPath(new URL("../css/", import.meta.url));
   mkdirSync(outDir, { recursive: true });
   writeFileSync(`${outDir}tokens.css`, generateCss());
   writeFileSync(`${outDir}tokens.kaipu.css`, generateCss("kaipu-"));
-  console.log("Wrote css/tokens.css and css/tokens.kaipu.css");
+  const stylexDir = fileURLToPath(new URL("../stylex/", import.meta.url));
+  mkdirSync(stylexDir, { recursive: true });
+  writeFileSync(`${stylexDir}kaipu.stylex.ts`, generateStylex());
+  console.log("Wrote css/tokens.css, css/tokens.kaipu.css and stylex/kaipu.stylex.ts");
 }
