@@ -1,0 +1,78 @@
+---
+title: "ADR 0008: Styles are written once, in StyleX, over one typed token source"
+description: "StyleX is the styling direction for desktop and web, fed by typed tokens generated from @kaipu/tokens; migration runs in four independently shippable stages, and Tailwind leaves with its last shadcn screen."
+---
+
+# ADR 0008: Styles are written once, in StyleX, over one typed token source
+
+## Status
+
+| Field         | Value                                                                                          |
+| ------------- | ---------------------------------------------------------------------------------------------- |
+| Status        | Accepted — stage 0 shipped (experiment + dedup branches), stages 1–4 planned                   |
+| Date          | 2026-10-02                                                                                     |
+| Amends        | —                                                                                              |
+| Builds on     | [Shared styling spec](/specs/2026-10-02-shared-styling-stylex/), `backlog/stylex-migration.md` |
+| Superseded by | —                                                                                              |
+
+## Context
+
+Kaipu styles the same design three ways: desktop CSS Modules over unprefixed
+custom properties, web Tailwind + shadcn, and the landing's own `--kl-*` layer.
+The same token exists under three spellings, and an undefined `var()` fails by
+rendering nothing — a class of bug this repo has now hit on screen. The owner's
+product goal is shared UI: the landing's hand-drawn replica of the app should be
+the app's own shell, imported.
+
+An experiment (branch `experiment/stylex-button`) proved StyleX compiles on both
+Vite pipelines with official plugins only, measured live-edit freshness, found
+that the stale-hash upstream bug does not reproduce here, and shipped typed token
+references where a typo is a compile error. Seven toolchain invariants from that
+work are recorded in the backlog doc and the hub.
+
+## Decision
+
+**StyleX is the styling system for shared and new UI on desktop and web**, fed by
+a single typed token source generated from `@kaipu/tokens` (`defineVars`, with
+`createTheme` for light/dark). Migration runs in the spec's four stages — tokens,
+the portable product shell, the home, then cloud/auth on shadcn-cssinjs — each
+leaving `main` releasable. **Tailwind, shadcn-Radix and their satellites are
+removed in the same change that rebuilds the last shadcn screen**, not before.
+Desktop CSS Modules that nothing shares migrate opportunistically or not at all.
+
+## Alternatives rejected
+
+- **Tailwind everywhere** — the landing and the entire desktop never adopted it;
+  it would mean migrating the two surfaces that already agree.
+- **Keep CSS Modules and share only tokens** — the status quo; it cannot deliver
+  shared components, and it keeps three spellings of every token alive.
+- **Remove Tailwind immediately** — measured false premise: auth and cloud
+  screens are built on shadcn, dark but routed. Removing it first means
+  rebuilding screens twice or shipping an unstyled cloud.
+- **Big-bang migration** — two Vite pipelines on community-held tooling plus a
+  component-library rewrite in one move; rejected the day the experiment was
+  scoped, and nothing since argues for it.
+
+## Consequences
+
+- A token typo or a missing spelling becomes a compile error instead of an
+  invisible element.
+- The toolchain invariants are load-bearing: scanner options and include globs
+  are correctness surface; generated export subpaths live in `customExports`;
+  the import specifier ends in `.stylex`.
+- Until stage 4, Tailwind and StyleX coexist; the one-Tailwind-build-per-app
+  rule (hub) holds throughout.
+- The landing's visual identity does not change; styles move systems, pixels
+  stay.
+
+## Non-goals
+
+A visual redesign, the mobile app, and replacing Radix/Base UI interaction
+behavior outside the cloud stage's own review.
+
+## What would reopen this
+
+StyleX's Vite story regressing to unusable (the official pieces breaking with no
+fix in a release cycle), or the cloud stage's coverage inventory showing
+shadcn-cssinjs cannot carry the auth screens and hand-building them costs more
+than keeping Tailwind for that surface alone.
