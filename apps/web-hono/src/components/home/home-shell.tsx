@@ -29,12 +29,15 @@ export function HomeShell({ children }: { children: ReactNode }) {
 
   return (
     <div data-kl data-kl-theme={landingTheme}>
-      {/* StyleX experiment: shared with the desktop app's main screen. */}
-      <SharedProbe />
       <TopNav />
       <ChapterStrip />
       <Rail />
-      <main>{children}</main>
+      <main>
+        {/* StyleX experiment: shared with the desktop app's main screen. In
+            the flow, below the fixed nav, so it is visible AND clickable. */}
+        <SharedProbe />
+        {children}
+      </main>
       <StickyCta />
     </div>
   );

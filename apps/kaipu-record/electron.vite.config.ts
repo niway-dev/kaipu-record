@@ -13,7 +13,10 @@ import stylexPostcss from "@stylexjs/postcss-plugin";
 const stylexBabel = [
   "@stylexjs/babel-plugin",
   {
-    dev: process.env.NODE_ENV !== "production",
+    // Always false: it must MATCH the postcss scanner (babel.config.cjs,
+    // dev:false) — with dev:true the transform emits different class
+    // names than the sheet carries and dev renders unstyled.
+    dev: false,
     runtimeInjection: false,
     treeshakeCompensation: true,
     unstable_moduleResolution: { type: "commonJS" },
