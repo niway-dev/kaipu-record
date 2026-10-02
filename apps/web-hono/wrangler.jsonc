@@ -27,7 +27,13 @@
   // .workers.dev address, which routes no production traffic.
   //
   // Wrangler leaves an existing value alone when the key is absent, so it has to
-  // be explicit to turn on. Two things follow from enabling it: the URLs are
+  // be explicit to turn on. One timing fact, read from wrangler's own source
+  // (4.63.0, src/triggers/deploy.ts): `versions upload` only READS the flag from
+  // Cloudflare, and only a deploy — or the dashboard toggle under Settings →
+  // Domains & Routes → Preview URLs — WRITES it. This line therefore takes
+  // effect on the next release, while the toggle works immediately; it exists so
+  // deploys preserve the decision rather than to apply it. Two things follow
+  // from enabling it: the URLs are
   // public (restrict them with Cloudflare Access under the worker's Preview URLs
   // settings), and a version runs with the worker's real secrets and service
   // bindings, so it reads production data. It is the last look before a tag, not

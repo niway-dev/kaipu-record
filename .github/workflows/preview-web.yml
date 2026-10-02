@@ -152,10 +152,10 @@ jobs:
               echo "- **URL:** none — wrangler printed no version URL."
               echo
               echo "This is a configuration result, not a failed upload: the version above is"
-              echo "uploaded and intact. Version URLs exist only when \`preview_urls\` is true in"
-              echo "\`apps/web-hono/wrangler.jsonc\` AND the worker in Cloudflare has picked that"
-              echo "setting up. Check it there first — with it off, the dashboard has no URL to"
-              echo "find either, and looking for one wastes the trip."
+              echo "uploaded and intact. \`versions upload\` only READS the worker's preview-URL"
+              echo "flag in Cloudflare; it never writes it. The flag is written by a deploy, or"
+              echo "instantly by hand: Workers → kaipu-web → Settings → Domains & Routes →"
+              echo "Preview URLs → Enable. Flip it there and re-run; nothing else will help."
             fi
             echo
             echo "Production is untouched: this uploaded a version, it did not deploy one."
