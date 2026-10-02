@@ -46,30 +46,44 @@ export function generateCss(prefix = ""): string {
 }
 
 /**
- * Render the typed StyleX layer: `defineVars` whose VALUES are references to
- * the prefixed custom properties the css flavors above declare. This gives
- * components typed, rename-safe token access (a typo is a compile error)
- * while the existing `[data-theme]` blocks keep owning the actual values —
- * no theming mechanism changes hands. Replacing the references with literal
- * values + `createTheme` (retiring the css imports entirely) is the design
- * decision the shared-styling spec owns; this file deliberately does not
- * make it.
+ * Render the typed StyleX layer: `defineVars` with LITERAL values from the
+ * same sources as the css flavors (dark is the default, matching :root), plus
+ * a `createTheme` carrying the light overrides — ADR 0008, stage 1. A token
+ * typo is a compile error; light/dark in the StyleX world is the exported
+ * theme, applied by each surface at its themed root. The css flavors keep
+ * being generated for every existing `var()` consumer; they retire when the
+ * last one does, not before.
  */
 export function generateStylex(): string {
   const camel = (name: string) => name.replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase());
-  const entries = [...THEME_TOKEN_NAMES, ...BASE_TOKEN_NAMES].map(
-    (name) => `  ${camel(name)}: "var(--kaipu-${name})",`,
-  );
+  // Same oxfmt-stability rule as `declare` in generateCss: the generated file
+  // must survive the formatter byte-identical, or the drift test dies.
+  // oxfmt picks single quotes when the string contains double quotes; mirror it.
+  const quote = (value: string) =>
+    value.includes('"') && !value.includes("'") ? `'${value}'` : JSON.stringify(value);
+  const line = (name: string, value: string) => {
+    const one = `  ${camel(name)}: ${quote(value)},`;
+    return one.length <= 100 ? one : `  ${camel(name)}:\n    ${quote(value)},`;
+  };
+  const defaults = [
+    ...THEME_TOKEN_NAMES.map((name) => line(name, dark[name])),
+    ...BASE_TOKEN_NAMES.map((name) => line(name, base[name])),
+  ];
+  const lightLines = THEME_TOKEN_NAMES.map((name) => line(name, light[name]));
   return [
     HEADER.replace(
       "Dark is the default in :root; light theme overrides are in a separate block.",
-      "Typed references over the kaipu-prefixed custom properties in css/.",
+      "Typed tokens: literal values, dark as the default; `lightTheme` carries the overrides.",
     ),
     "",
     'import * as stylex from "@stylexjs/stylex";',
     "",
     "export const tokens = stylex.defineVars({",
-    ...entries,
+    ...defaults,
+    "});",
+    "",
+    "export const lightTheme = stylex.createTheme(tokens, {",
+    ...lightLines,
     "});",
     "",
   ].join("\n");
