@@ -321,12 +321,18 @@ describe("VideoEditorPage — handleExport metadata guard", () => {
     // the empty-timeline guard) — clicking it hits the videoWidth === 0 guard instead.
     fireEvent.click(screen.getByRole("button", { name: "Export" }));
 
+    // Wait for the toast first, then assert the negative. A bare
+    // `not.toHaveBeenCalled()` after a click passes just as happily when the
+    // handler never ran at all, so it needs an observable effect to anchor it —
+    // the toast proves the guard is what refused.
+    await waitFor(() => {
+      expect(getToasts()).toContainEqual(
+        expect.objectContaining({
+          message: "The video is still loading. Try again in a moment.",
+        }),
+      );
+    });
     expect(startExport).not.toHaveBeenCalled();
-    expect(getToasts()).toContainEqual(
-      expect.objectContaining({
-        message: "The video is still loading. Try again in a moment.",
-      }),
-    );
   });
 
   it("refuses to start the export when only videoHeight is 0", async () => {
@@ -336,6 +342,15 @@ describe("VideoEditorPage — handleExport metadata guard", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Export" }));
 
+    // Same guard, same toast: waiting for it is what makes the negative below mean
+    // "the guard refused" rather than "the handler had not started".
+    await waitFor(() => {
+      expect(getToasts()).toContainEqual(
+        expect.objectContaining({
+          message: "The video is still loading. Try again in a moment.",
+        }),
+      );
+    });
     expect(startExport).not.toHaveBeenCalled();
     stubDecodedVideoSize(0, 0); // restore the undecoded default for other suites
   });
@@ -347,7 +362,9 @@ describe("VideoEditorPage — handleExport metadata guard", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Export" }));
 
-    expect(startExport).toHaveBeenCalledOnce();
+    await waitFor(() => {
+      expect(startExport).toHaveBeenCalledOnce();
+    });
     stubDecodedVideoSize(0, 0); // restore the undecoded default for other suites
   });
 });
@@ -447,6 +464,10 @@ describe("VideoEditorPage — keydown gate behind open modals", () => {
 
     fireEvent.keyDown(window, { key: " " });
 
+    // Let any queued effect or promise the keydown could have started settle, so
+    // this negative means "the gate held" and not "playback had not begun yet".
+    await act(async () => {});
+
     expect(playSpy).not.toHaveBeenCalled();
     playSpy.mockRestore();
   });
@@ -501,7 +522,32 @@ describe("VideoEditorPage — tool shortcuts end to end", () => {
     await waitForEditorLoaded();
 
     fireEvent.keyDown(window, { key: "r" });
-    expect(screen.getByRole("button", { name: "Box" }).className).toMatch(/toolActive/);
+
+    // The class lands on a re-render, not on the event. Asserting it synchronously
+    // reads the DOM one render too early and only passes when the machine is fast
+    // enough — which is how this failed under a parallel `turbo run test`.
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Box" }).className).toMatch(/toolActive/);
+    });
+  });
+
+  it("V hands the tool back to select after R armed Box", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+
+    fireEvent.keyDown(window, { key: "r" });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Box" }).className).toMatch(/toolActive/);
+    });
+
+    fireEvent.keyDown(window, { key: "v" });
+
+    // The way back was untested: `toolForShortcut` proves "v" maps to select as a
+    // pure function, but nothing proved the page acts on it and disarms Box.
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Box" }).className).not.toMatch(/toolActive/);
+    });
+    expect(screen.getByRole("button", { name: "Select" }).className).toMatch(/toolActive/);
   });
 });
 
@@ -525,7 +571,9 @@ describe("VideoEditorPage — inspector column priority (annotation follow-ups)"
     renderEditor();
     await waitForEditorLoaded();
 
-    expect(screen.getByRole("heading", { name: "Detection" })).toBeInTheDocument();
+    // The footer this harness waits on and the inspector column land on different
+    // renders, so the inspector's heading is a `findBy`, not a `getBy`.
+    expect(await screen.findByRole("heading", { name: "Detection" })).toBeInTheDocument();
   });
 
   it("arming the Box tool (R) shows the annotation defaults panel in the inspector, with no floating popover duplicating its controls", async () => {
