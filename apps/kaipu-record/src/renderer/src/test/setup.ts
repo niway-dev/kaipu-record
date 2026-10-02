@@ -1,6 +1,15 @@
 import "@testing-library/jest-dom/vitest";
 import { afterEach, vi } from "vitest";
-import { cleanup } from "@testing-library/react";
+import { cleanup, configure } from "@testing-library/react";
+
+// Testing Library's default `findBy*` timeout is 1000 ms, which is this suite's
+// own CPU budget rather than a property of the product: under `turbo run test`
+// the renderer's 194 files compete with every other package's suite, and the
+// editor's heaviest assertions landed at 1016 ms and 1106 ms — failing by
+// milliseconds while passing in isolation. A slow machine or one more parallel
+// task should not read as a broken editor. A genuinely missing element still
+// fails, just five seconds later.
+configure({ asyncUtilTimeout: 5000 });
 
 // Component tests render without the <I18nProvider>, so stub the i18n hooks and
 // pass children through. `useTranslations` resolves keys against the real English

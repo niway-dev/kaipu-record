@@ -5,10 +5,11 @@ description: Proposal to evaluate shared typed token references and a gradual mi
 
 # Typed styles with StyleX across desktop and web
 
-> **Status: 🟡 In progress — feasibility proven, migration not started** (updated
-> 2026-10-01). The owner chose StyleX as the direction; the first experiment is
-> committed on `experiment/stylex-button` and the design spec is next. The original
-> proposal below still describes the end state.
+> **Status: 🟡 In progress — stages 0–1 shipped, stage 2 started** (updated
+> 2026-10-02). ADR 0008 settled the direction and the four stages; stages 0 and 1
+> are on `main` (PR #212). Stage 2 is migrating the desktop's primitives into
+> `@kaipu/ui` under `atoms/`. The original proposal below still describes the end
+> state.
 
 ## What the first experiment proved (2026-10-01, `be6eed7`)
 
@@ -71,10 +72,13 @@ Toolchain invariants learned the hard way, which the migration must keep:
    compile error instead of an invisible button.
 
 Probes to see it render: web `/dev/stylex` (unlinked route), desktop
-`#stylex-probe` (dev-only, tree-shaken from packaged builds). Both show
-`primary` (tokens), `ghost`, and `raw` — the control variant with literal
-colors: where `raw` renders and `primary` does not, the surface's token
-variables are missing, not StyleX.
+`#stylex-probe` (dev-only, tree-shaken from packaged builds). Both show every
+`Button` variant and size, plus a raw control with literal colors: where the
+raw control renders and the token-driven buttons do not, the surface's token
+variables are missing, not StyleX. Since stage 2 the control is a local button
+inside each probe rather than a `Button` variant, so a debugging aid stays out
+of the product's API. (`KaipuButton`, named above as the first spike, is now
+`Button` in `packages/ui/src/atoms/`.)
 
 Still open before widening: dev-server HMR behaviour of the scanner,
 [facebook/stylex#1918](https://github.com/facebook/stylex/issues/1918) on our Vite,
@@ -112,6 +116,93 @@ globs are part of the correctness surface — a formatter-collapsed config line
 silently dropped the tokens glob, and the sheet _used_ the hashed vars without
 _defining_ them. The grep that catches it:
 `grep -- '--x[a-z0-9]*:var(--kaipu-' <emitted css>` must match.
+
+## Stage 2 — what is actually migrated (2026-10-02)
+
+One component. Being precise about this matters, because the package's existence
+reads like more than it is.
+
+| Component                                                         | Where it lives now                             | Who renders it          |
+| ----------------------------------------------------------------- | ---------------------------------------------- | ----------------------- |
+| `Button` (4 variants × 3 sizes)                                   | `packages/ui/src/atoms/button.tsx`             | **only the two probes** |
+| `IconButton`, `Card`, `Input`, `Select`, `Toggle`, `Badge`, `Row` | still `apps/kaipu-record/src/renderer/src/ui/` | the desktop             |
+| `Modal`, `Popover`, `Toast`, `PageHeader`, `SearchInput`          | same, and deliberately deferred                | the desktop             |
+
+**There are two buttons in the repository right now.** The desktop's 12 call
+sites still import its own `ui/button.tsx` on CSS Modules; nothing in either
+product renders the shared one. Migrating those call sites is the next step, and
+until it happens stage 2 has changed no screen.
+
+`Modal`, `Popover` and `Toast` are held back on purpose: they render through
+portals, and how a theme reaches a portal is an open question in the spec. Taking
+them now would answer it sideways.
+
+### Decisions inside the Button worth knowing
+
+- **Hover is a separate style layer applied only while enabled**, not a `:hover`
+  nested in each variant. The CSS it replaces guarded every hover with
+  `:not(:disabled)`; as one declaration the outcome would depend on the
+  compiler's pseudo-class ordering instead of on something readable.
+- **`type="button"` is now the default.** A bare `<button>` inside a form
+  submits it. The only form using the primitive (`features/auth/auth-form.tsx`)
+  passes `type="submit"` itself, so the default costs nothing — and that same
+  line is the only `className` override on a primitive in the whole renderer.
+- **Two values have no token behind them.** The `ghost`/`outline` hover is the
+  accent at 10% alpha, hard-coded here as it is in the desktop's stylesheet. And
+  the `transition` token is the CSS shorthand `"150ms ease"`, which no longhand
+  accepts, so the component splits it into duration and easing. Both are debts
+  of the token layer, not of the component.
+
+### Testing
+
+`packages/ui` runs vitest with the renderer's conventions (Testing Library,
+jsdom, co-located tests) and **the StyleX babel plugin with the same options as
+every other transform** — invariant 3, and not optional either: `stylex.create`
+is a compile-time call, so without the plugin the module throws on import.
+
+The tests assert relationships between emitted classes, never a hash: a hash
+changes with any value change, which is a refactor the test must survive.
+"primary and danger do not look the same" and "a disabled button carries no
+hover rule" are the properties whose breakage would reach a user.
+
+The setup file is four lines, against the renderer's ~150 of IPC, i18n and
+settings stubs. That gap is ADR 0009's boundary working; if the file starts
+growing stubs, the boundary was crossed.
+
+### The CPU-budget test failure this exposed
+
+Adding this test suite took `turbo`'s test tasks from 9 to 10 at
+`concurrency: 20`, and two tests in
+`pages/video-editor/video-editor-page.test.tsx` then failed under
+`bun run verify` — a different one each run, while passing in isolation (25/25),
+passing with the desktop suite alone (194 files, 1329 tests), and `verify` green
+on a clean tree.
+
+There turned out to be **two** causes, found one at a time because each run
+surfaced a different test:
+
+1. **Testing Library's default `findBy*` timeout of 1000 ms.** The two heaviest
+   assertions landed at 1016 ms and 1106 ms. They were already `await findBy*` —
+   the selectors were never the problem, the budget was. The renderer's setup now
+   sets `asyncUtilTimeout: 5000`. A suite's wall-clock under parallel load is not
+   a property of the product; a genuinely missing element still fails, five
+   seconds later.
+2. **Assertions that read the DOM one render too early.** `R arms the Box tool`
+   asserted `className` synchronously right after `fireEvent.keyDown`, so it only
+   passed when the machine won the race. Five assertions in that file now wait
+   for the render or effect they describe.
+
+Three of those five were negatives — `expect(startExport).not.toHaveBeenCalled()`
+straight after a click. A negative with nothing to anchor it passes just as
+happily when the handler never ran, so each now waits for the guard's toast first
+and asserts the negative after. They were green for the wrong reason before.
+
+The file also gained a test: `V` handing the tool back to `select` after `R`
+armed Box. `toolForShortcut` proved the mapping as a pure function, but nothing
+proved the page acted on it and disarmed the previous tool.
+
+Stability check: `bun run verify` green three consecutive times, 10/10 test
+tasks, 26 tests in that file.
 
 ## Motivation
 

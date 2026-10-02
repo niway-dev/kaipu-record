@@ -13,16 +13,27 @@
   },
   "scripts": {
     "check-types": "tsc --noEmit",
-    "lint": "oxlint src"
+    "lint": "oxlint src",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@kaipu/tokens": "workspace:*",
     "@stylexjs/stylex": "^0.19.1"
   },
   "devDependencies": {
+    "@stylexjs/babel-plugin": "^0.19.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "catalog:",
+    "jsdom": "^29.1.1",
     "react": "^19",
-    "typescript": "catalog:"
+    "react-dom": "^19",
+    "typescript": "catalog:",
+    "vitest": "^4.1.9"
   },
   "peerDependencies": {
     "react": "^19"
