@@ -1,139 +1,92 @@
 # Session handoff
 
-## Latest update — home audit documentation (2026-09-30)
-
-This update supersedes the old Next instructions only for the current documentation task; the decisions and related editor-audio work below remain context.
-
-- Owner request: "quiero que todo esto que recomiendas lo pongas en documentos y generes un PR directamente para que podamos revisar esos cambios en otra maquina".
-- Work: documented the conversion/i18n/Kai audit, proposed EN/ES copy, and ordered implementation/acceptance steps. No runtime copy or UI fix is included in this documentation pass.
-- Review in draft PR #196 on `feat/marketing-landing`. Start at `apps/documentation/src/content/docs/marketing/home-conversion-audit.md`, then `home-copy-review.md`, then `plans/2026-09-30-home-conversion-review.md`.
-- Updated facts: optional watermark is already integrated; landing catalogs now contain 106 keys each with no missing/empty values; site-level SEO was aligned by the merge. Public downloaded-release behavior remains unverified here. The origin component exists but is not rendered by the new home.
-- Next implementation: H04/H05 (truthful audio claims and approved shortcuts), coordinated with the editor-audio branch; the owner retains theme/locale work. Then translation coverage, conversion proof/FAQ, and restrained use of the existing fox Kai.
-- The previous knot direction is historical exploration; reconcile visual-status docs with the implemented fox without changing KAY + khiPU or the coined-name qualification.
-- Documentation-session checks: `bun run build` in `apps/documentation` exited 0 with 234 pages (duplicate-content-ID and missing-sitemap-site warnings); `bun run test` in `packages/i18n` exited 0 with 3 files / 13 tests. Push-hook evidence is recorded in the PR after it runs. Historical failures below must not be presented as current results or dismissed as contention without reproducing them.
-
 ## Goal
 
-Finish the marketing landing and get its PR mergeable, integrate the free-tier
-watermark and AGPL relicense, design the editor's audio work, and untangle the
-branch stack. Owner's words: "dime en que orden hago merge las ramas que tenemos
-y de una vez arregla todos los conflicts".
+Update the brand documentation in PR #203 so it describes the Kai section that actually
+shipped — a tappable mood ring — instead of the single still portrait it was written against.
 
 ## Mode
 
-code
+code (documentation)
 
 ## Where we stopped
 
-- **Last done:** `feat/marketing-landing` is pushed at `177fa48` with `origin/main`
-  merged in and its four conflicts resolved. `verify` and the 13 desktop E2E both
-  passed in the pre-push hook. PR #196 now shows the merge.
-- **Next:** fix the two things the landing states that are false, both small and
-  both on `feat/marketing-landing`:
-  1. `packages/i18n/messages/{en,es}.json` → `homeChapter3Pill3` still reads
-     "Mute or boost audio" / "Silenciar o subir audio". The corrected copy
-     ("Mute audio" / "Silenciar audio") already exists on `design/editor-audio`;
-     either merge that branch in or repeat the two-line edit.
-  2. The shortcut glyphs in `apps/web-hono/src/components/home/app-window.tsx`
-     (lines 84, 101, 106, 111) and `hero.tsx` (line 21) are hardcoded and wrong.
-     Implement the approved shared constant — see
-     `backlog/open-decisions-editor-audio` §3 for the exact shape — in
-     `packages/domain/src/constants/shortcuts.ts`, keyed by platform, plus a
-     `formatAccelerator()` for the web.
-
-  **Then** ask the owner whether to flip PR #196 out of draft.
+- Last done: the web work this PR documents all merged to `main` (#202, #207), and the
+  branch was left untouched and stale. Its five commits are intact and still build.
+- Next: run `git merge origin/main` on this branch (it is **17 commits behind**), then fix
+  the three claims listed under **Open** below, starting with
+  `apps/documentation/src/content/docs/marketing/brand-identity.md` — its artwork table says
+  `record` · `screenshot` appear in "the menu bar when recording or screenshot mode is
+  selected", which is now incomplete: they also appear on the website, in the mood ring.
 
 ## Decided
 
-Settled; do not reopen.
-
-- **Boost audio is dropped entirely.** Mute ships alone and stays binary, so the
-  non-goal in `backlog/video-editor-mute` is never reopened and that doc stands
-  as written. The owner's call after the research: "solo mute, nada de
-  multiplicador".
-- **The shortcut defaults move to `@kaipu/domain/constants`**, keyed by platform
-  (`mac` / `windows`). `Command` is macOS-only, so today's defaults would be dead
-  bindings on Windows; `CommandOrControl` was rejected because it collapses to
-  plain `Ctrl`, putting copy on "start recording" globally. The Windows column is
-  written but **unvalidated** — there is no Windows build to test against.
-- **The library shortcut is `Command+Control+L`**, joining the existing family. A
-  global `⌘L` would take that combination from every other app.
-- **The rail's permanent label is gone** on this branch; `design/editor-audio`
-  carries a hover/focus version instead. The owner has not picked between them.
-- **The landing's viewport ladder keys on HEIGHT, not width** — the hero is a
-  fixed ~990px tall once the headline caps, so it broke on a wide-but-short
-  laptop. Steps at `height < 1040 / 940 / 860`, all scoped to `width >= 1080px`.
-- **The top bar's contents share the page container**, at
-  `calc(--kl-max-w + 2 * --kl-gutter)` — the sections put the gutter outside
-  their container, so a plain `max-width` lands 24px too far in.
-- **The watermark and the AGPL relicense went in via `main`**, not by moving
-  commits between branches. PR #192 merged; #191 followed.
+- The mood ring deliberately puts `record` and `screenshot` artwork on the website — settled
+  in #202's commit `e9568ea`, reversing the earlier "no capture-mode marks on the web" rule.
+  Do not re-argue it; document it.
+- Each mood's caption states where that mark really appears, verified against
+  `apps/kaipu-record/src/main/tray.ts` (exactly two capture states). Copy must not claim Kai
+  reacts to events on its own. Settled.
+- Docs live in the docs site, never a root `docs/` folder. ADRs are at
+  `architecture/decisions/` (0001–0006), not `docs/adr/`. Settled by repo convention.
+- The marketing landing stays 🟡 In progress while conversion v2 is pending. Settled.
 
 ## Open
 
-- **`brand-origin.tsx` is orphaned.** It renders the Kay + khipu origin story that
-  `marketing/brand-identity.md` calls canonical, and it was written for the home
-  page this branch replaced. Not deleted (it is the owner's brand content) and not
-  ported (it uses Tailwind and `--kaipu-*` tokens, both forbidden in the new
-  landing, so it needs rewriting against `--kl-*`). Where it belongs in the
-  four-moments narrative is the owner's call.
-- **The rail label:** removed, or the hover version on `design/editor-audio`?
-  Unanswered. The two branches differ in `rail.tsx` / `rail.module.css` until it
-  is.
-- **PR #196 is still a draft.** Recommendation is to fix the two Next items first,
-  because they publish false claims on a marketing page.
-- **Nobody has reviewed the landing in a browser.** It was measured at five
-  viewports, which verifies geometry, not judgement.
-- **`main` window disappears whenever the app loses focus** — diagnosed, not
-  fixed, in `backlog/bug-main-window-hides-on-blur`. macOS orders the window out;
-  nothing in our code calls `hide()`. The camera was the trigger, not the cause.
-- **The editor audio spec is not written.** The design is closed
-  (`backlog/open-decisions-editor-audio`); the spec and plan come next.
+Three claims in this PR that `main` now contradicts. Each needs a decision, not just an edit:
+
+1. **`brand-identity.md`** — the artwork table's "Where" column for `record` · `screenshot`
+   omits the website. Decide whether the mood ring counts as a brand placement worth listing.
+2. **`brand-identity.md` "Website:" bullet** — describes "a dedicated Meet Kai introduction"
+   plus camera bubble plus closing `done`. The section is now a five-mood interactive ring
+   with an origin block laid out as `kay + khipu = Kaipu` cards. Rewrite needed.
+3. **`home-copy-review.md` / `home-conversion-audit.md`** — mark rows as resolved in PR #202,
+   which is correct, but `homeKaiBody` was **rewritten again** in `e9568ea` after those rows
+   were written. Check the quoted EN/ES values against `packages/i18n/messages/*.json` on
+   `main` character by character; the previous values are stale.
+
+Unanswered by the user: whether the landing should also gain a light-theme mention anywhere
+in the brand docs, now that the theme switch shipped in #202.
 
 ## State
 
-- Branch `feat/marketing-landing` at `177fa48`, PR
-  https://github.com/csdev19/kaipu-record-monorepo/pull/196 (draft)
-- Branch `design/editor-audio` at `fb43e4d`, stacked on it, **no PR**
-- Both are pushed and identical to their remotes.
-- **Committed on `feat/marketing-landing`** (6 beyond `a72a555`):
-  `54dee13` brand moment marks · `4a895a0` onboarding at 96px + sidebar at 40px ·
-  `23a2f6a` onboarding window floor 720x700 · `97aed58` hero fits a laptop, bar on
-  the page grid · `80bf27b` docs · `177fa48` merge of `main`
-- **Committed on `design/editor-audio`** (4): the open-decisions doc, its index
-  row, the audio decisions + dropping the boost promise, and the rail hover label.
-- **Uncommitted at park time:** nothing.
+- Branch `docs/home-kai-reconcile`, PR https://github.com/csdev19/kaipu-record-monorepo/pull/203
+  (draft, MERGEABLE/CLEAN, **17 commits behind `main`**)
+- Committed: five documentation commits (`0a79593`, `20903b8`, `aa1316f`, `9fb9253`,
+  `c58d1e8`) covering brand-identity, brand-and-kai, the rollout plan, the copy review and
+  audit, and the backlog status. All still build; all partly stale in the ways listed above.
+- Uncommitted at park time: nothing but this handoff file.
 
 ## For the agent
 
-- **Original request, verbatim:** "hay que agregar unos cambios mas en el editor …
-  aun no tneemos el mute o boost audio hay que implementarlo aqui" — later
-  narrowed to "solo mute nada de multiplicador eliminalo y quitalo del landing,
-  super simple".
-- **Files in play:**
-  - `apps/web-hono/src/components/home/` — the landing (hero, top-nav, rail,
-    app-window)
-  - `packages/i18n/messages/{en,es}.json` — the `landing` namespace
-  - `packages/domain/src/constants/` — where the shortcut constant goes
-  - `apps/kaipu-record/src/shared/types/ipc.ts` — `SHORTCUT_DEFINITIONS` today
-  - `apps/documentation/src/content/docs/backlog/` — marketing-landing,
-    open-decisions-editor-audio, bug-main-window-hides-on-blur
-- **Check command:** `bun run verify` — **exit 0** at park time, run by the
-  pre-push hook (20.6s) alongside the 13 desktop E2E (43.7s).
-- **Conventions to keep:**
-  - Landing CSS never uses a Tailwind utility and never a `--kaipu-*` token.
-  - New copy needs both `en.json` and `es.json`; grep before adding a key
-    (`homeHeroSerif` was silently overwritten once).
-  - **This machine's test suite lies under load.** `vitest` fails with "Timeout
-    starting forks runner" when the load average is high, and the failures look
-    like real test failures. It happened four times this session — the `playback`,
-    `shortcuts` and `auth` E2E, and the unit suite — and every one passed when
-    re-run alone or with `--pool=threads`. Check `uptime` before believing a
-    failure, and close the dev servers on 3000 / 3001 / 5174.
-  - `infisical` is installed under node 22.23.2 while the shell runs node 24, so
-    the pre-push hook cannot find it. Prefix with
-    `PATH="$HOME/.local/share/mise/installs/node/22.23.2/bin:$PATH"` or reinstall
-    it under the active node.
-  - The repo-local `core.sshCommand` points at `id_ed25519_github_csdev19` with
-    keepalive, because `~/.ssh/config` lost the `github-personal` alias. Do not
-    remove it until that config is fixed.
+- Original request, verbatim: "la 203 tenemos que actualizarla pero en otro lado"
+- Files in play:
+  - `apps/documentation/src/content/docs/marketing/brand-identity.md` (the main one)
+  - `apps/documentation/src/content/docs/marketing/brand-and-kai.md`
+  - `apps/documentation/src/content/docs/marketing/home-copy-review.md`
+  - `apps/documentation/src/content/docs/marketing/home-conversion-audit.md`
+  - Read-only ground truth: `apps/web-hono/src/components/home/kai.tsx` on `main`,
+    `packages/i18n/messages/{en,es}.json`, `apps/kaipu-record/src/main/tray.ts`
+- Check command: `cd apps/documentation && bun run build` — result at park time: **exit 0**,
+  239 pages, no broken-link or frontmatter error. It covers link and frontmatter integrity
+  only; it cannot tell you a sentence is factually stale.
+- Conventions to keep:
+  - Doc bodies in English; chat may be Spanish.
+  - Never write "shipped in #N" before N is merged. #202 and #207 **are** merged, so past
+    tense is now correct for them.
+  - Verify every claim against code, not against another document. `cs-audit-product-page`
+    (niway-dev/skills#16) is the procedure for that and applies directly here.
+  - This branch owns `apps/documentation/**` only.
+
+## Also open elsewhere, not part of this branch
+
+- `kaipu#208` — the manual web preview workflow, ready to merge. After merging, run
+  **Preview Web** from Actions with `ref: main`, set the `preview` environment's
+  `DATABASE_URL` to an unusable value first, and append the result as the second row of
+  `frontend/web-vitals-baseline`.
+- One-line bug found by the audit and **not yet fixed**: `homeFilesBody` promises
+  `~/Movies/Kaipu`; `vault-location.ts` writes `~/Movies/Kaipu Record`. Both locales.
+- `general-knowledge#47` (vitals + deploy environments) and `#49` (product playbook), and
+  `niway-dev/skills#16` (`cs-audit-product-page`) are open and independent.
+- The skills repo working tree holds unrelated uncommitted work (`install.sh`,
+  `cs-respond-clearly/`, `tests/`) that is not mine — left untouched.
