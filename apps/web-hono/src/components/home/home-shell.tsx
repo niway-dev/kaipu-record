@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { useRouteContext } from "@tanstack/react-router";
 
+import { SharedProbe } from "@kaipu/ui";
+
 import { ChapterStrip } from "./chapter-strip";
 import { Rail } from "./rail";
 import { StickyCta } from "./sticky-cta";
@@ -27,6 +29,8 @@ export function HomeShell({ children }: { children: ReactNode }) {
 
   return (
     <div data-kl data-kl-theme={landingTheme}>
+      {/* StyleX experiment: shared with the desktop app's main screen. */}
+      <SharedProbe />
       <TopNav />
       <ChapterStrip />
       <Rail />

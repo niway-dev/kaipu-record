@@ -20,6 +20,9 @@ import { LegalLinks } from "@/components/legal/legal-links";
 import Header from "../components/header";
 import { siteHeadMeta } from "@/lib/seo";
 import appCss from "../index.css?url";
+// StyleX experiment: the generated atomics (~1 KB). Linked globally while the
+// shared probe sits on the home; retire with the experiment or keep per-route.
+import stylexCss from "../stylex.css?url";
 import { getAuthSession } from "@/lib/auth/get-auth-session";
 import { getLocale } from "@/server-functions/get-locale";
 import { setLocale as setLocaleFn } from "@/server-functions/set-locale";
@@ -44,6 +47,10 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
       {
         rel: "stylesheet",
         href: appCss,
+      },
+      {
+        rel: "stylesheet",
+        href: stylexCss,
       },
       // Raster only: the fox has no vector cut yet (see @kaipu/brand), and a
       // stale SVG here would win over every PNG in Chrome.
