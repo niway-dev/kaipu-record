@@ -119,17 +119,23 @@ jobs:
           VITE_SERVER_URL: ${{ vars.VITE_SERVER_URL }}
 
       # The URL is in the action's output; surfacing it in the run summary means
-      # you do not have to open the Cloudflare dashboard to find it.
+      # you do not have to open the Cloudflare dashboard to find it. The version
+      # id is reported too: it is the one identifier wrangler always prints, so
+      # the summary stays useful even when no URL comes back.
       - name: Report the preview URL
         env:
           OUTPUT: ${{ steps.upload.outputs.command-output }}
         run: |
           URL=$(printf '%s' "$OUTPUT" | grep -oE 'https://[a-z0-9-]+\.[a-z0-9-]+\.workers\.dev' | head -1)
+          VERSION=$(printf '%s' "$OUTPUT" | grep -oE 'Worker Version ID: [0-9a-f-]+' | head -1 | cut -d' ' -f4)
           {
             echo "## Web preview"
             echo
             echo "- **ref:** \`${{ inputs.ref }}\`"
             echo "- **commit:** \`${{ github.sha }}\`"
+            if [ -n "$VERSION" ]; then
+              echo "- **version id:** \`$VERSION\`"
+            fi
             if [ -n "$URL" ]; then
               echo "- **URL:** $URL"
               echo
@@ -143,8 +149,13 @@ jobs:
               echo "Then append a row to \`frontend/web-vitals-baseline\`. This run is served"
               echo "by Cloudflare, so unlike the local baseline it has brotli and a real edge."
             else
-              echo "- **URL:** not found in the command output — open the Cloudflare dashboard"
-              echo "  under Workers → kaipu-web → Versions."
+              echo "- **URL:** none — wrangler printed no version URL."
+              echo
+              echo "This is a configuration result, not a failed upload: the version above is"
+              echo "uploaded and intact. \`versions upload\` only READS the worker's preview-URL"
+              echo "flag in Cloudflare; it never writes it. The flag is written by a deploy, or"
+              echo "instantly by hand: Workers → kaipu-web → Settings → Domains & Routes →"
+              echo "Preview URLs → Enable. Flip it there and re-run; nothing else will help."
             fi
             echo
             echo "Production is untouched: this uploaded a version, it did not deploy one."
