@@ -1,0 +1,84 @@
+---
+title: "ADR 0007: Production previews use Version URLs; a development environment waits for a writer"
+description: The pre-release look at the web app is a Cloudflare Version URL uploaded by the manual Preview Web workflow — real edge, real secrets, zero routed traffic. A persistent development environment is a separate Worker, deliberately not built until something pre-production needs to write.
+---
+
+# ADR 0007: Production previews use Version URLs; a development environment waits for a writer
+
+## Status
+
+| Field         | Value                                                                              |
+| ------------- | ---------------------------------------------------------------------------------- |
+| Status        | Accepted — implemented and exercised (first measured preview: `main` at `976105a`) |
+| Date          | 2026-10-01                                                                         |
+| Amends        | —                                                                                  |
+| Builds on     | the Preview Web workflow (PRs #208, #209)                                          |
+| Superseded by | —                                                                                  |
+
+## Context
+
+`release-web.yml` deploys `kaipu-web` to production on a tag. Before this decision there
+was no way to see or measure a build on real infrastructure without tagging it: local
+`vite preview` sends no compression and has no edge, so every local measurement overstated
+the cost a visitor pays (the web-vitals baseline carries the numbers — mobile 57 locally
+against 71 on the edge, same commit).
+
+Cloudflare offers three mechanisms here, and they are not interchangeable; the reusable
+comparison lives in the hub's
+[deploy environments](https://github.com/csdev19/general-knowledge/blob/main/infra/deploy-environments.md)
+page. The short form: per-branch **Previews** and persistent **Wrangler environments**
+exist for testing _changes_; **Version URLs** exist for inspecting one uploaded version
+before promoting it.
+
+## Decision
+
+**The pre-release look at the web app is a Version URL**, produced by the manual
+`Preview Web` workflow (`versions upload`, never `deploy`): a public-but-unguessable
+`<version-prefix>-kaipu-web.<subdomain>.workers.dev` address serving the uploaded build
+with the Worker's real secrets and its real `API_SERVICE` binding, while production
+traffic stays wherever the last release put it.
+
+**A persistent development environment is deliberately not built.** When one becomes
+necessary, it is a **separate Worker** (own name, own bindings, `workers_dev` on), not a
+widening of this mechanism — and the hub page's binding rule applies: the service binding
+must resolve per environment, or a dev front end writes through the production API.
+
+## The condition that reopens this
+
+The Version URL runs against production data through the service binding. That is
+acceptable for exactly one reason: the thing being inspected — the marketing home, a
+render-only measurement — **does not write**. The moment a pre-production need writes
+(testing signup flows, editing data, exercising the API), this ADR's answer is wrong by
+its own logic, and the separate dev Worker gets built. Do not stretch Version URLs to
+cover that day.
+
+## Alternatives rejected
+
+- **Per-branch Previews (`wrangler preview`)** — Cloudflare's recommended branch-testing
+  tool, but it answers a question we are not asking; the workflow exists to inspect the
+  release candidate, which is Version URLs' stated purpose.
+- **A twin preview Worker** — considered when it seemed `workers_dev: true` was required
+  on the production Worker (a second public origin for the live site). It is not:
+  `preview_urls` is independent once explicit, so the twin's only remaining advantage was
+  isolation we get from Access plus the no-write rule.
+- **Measuring production after each release** — loses the entire point: the look happens
+  _before_ the tag.
+
+## Consequences
+
+- Version URLs are public: **Cloudflare Access stays enabled** on the Worker's preview
+  URLs, and is turned off only for a measurement window (unauthenticated measurers like
+  PageSpeed score the Access login page otherwise — this happened).
+- Cloudflare stamps `x-robots-tag: noindex` on Version URLs: SEO category drops there are
+  environmental, and previews cannot create duplicate-content problems.
+- Login does not work on a Version URL (the `workers.dev` origin is not in the API's
+  `trustedOrigins`); acceptable, since anything needing auth is a writer and belongs to
+  the reopened decision above.
+- No logs on Version URLs; debugging happens elsewhere.
+- Versions and aliases expire (100 versions / 1000 aliases retained): measurements record
+  the **commit**, never just the URL.
+
+## Non-goals
+
+Branch or PR testing, a staging tier, and any pre-production writing. Each of those is the
+separate Worker's job, on the day it exists.
