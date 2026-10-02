@@ -67,11 +67,36 @@ exactly as today. Exit: `@kaipu/ui` components carry no `var()` strings and
 render correctly in both themes on both surfaces.
 
 **Stage 2 — the portable product shell.** The pieces of the real desktop UI
-that the home's mocks replicate (window chrome, sidebar/rail, record controls)
-move into `@kaipu/ui` in StyleX, the desktop adopts them in place of its local
-modules for those pieces, and the home's `mock-*` components are replaced by
-the real imports. Exit: the landing's mini-Kaipu is the product's own shell,
-and a visual change to it ships to both surfaces from one file.
+that the home's mocks replicate move into `@kaipu/ui` in StyleX, the desktop
+adopts them in place of its local modules for those pieces, and the home's
+`mock-*` components are replaced by the real imports. Exit: the landing's
+mini-Kaipu is the product's own shell, and a visual change to it ships to both
+surfaces from one file.
+
+The inventory taken on 2026-10-02 corrects this stage's first sketch, which
+read "window chrome + rail + record controls":
+
+| What the landing draws         | The real piece                                                        | Portable                              |
+| ------------------------------ | --------------------------------------------------------------------- | ------------------------------------- |
+| titlebar with the three lights | drawn by macOS; no code exists                                        | **No** — the landing paints a photo   |
+| sidebar with logo + icons      | `shell/sidebar.tsx` (6 items, labels, avatar)                         | Yes, with navigation injected         |
+| screen selector                | `features/recording/components/screen-source-selector`, `source-card` | Yes                                   |
+| mic / audio / camera sources   | `features/recording/components/recording-toggles`                     | Yes                                   |
+| start button with its shortcut | `features/recording/components/record-button`                         | Yes                                   |
+| the menu-bar card              | `src/main/tray.ts`, the native tray                                   | **No** — not React                    |
+| `mock-record`                  | `features/control-bar`, `capture-panel`, `camera-bubble`              | Yes                                   |
+| `mock-capture`                 | `features/screenshots/{annotations,beautify}`                         | Yes, later                            |
+| `mock-edit`                    | `features/video-editor` (16 CSS modules)                              | Yes, later                            |
+| `mock-find`                    | `features/library` (10 CSS modules)                                   | Yes, later                            |
+| `mock-finder`                  | a Finder window, on purpose                                           | **No** — the section's point needs it |
+| `rail.module.css`              | the landing's own chapter rail, not the app's                         | **No** — belongs to stage 3           |
+
+So "window chrome" is almost nothing: the chrome is the operating system's. What
+stage 2 actually carries is the primitives those pieces are built on, then the
+pieces themselves. The primitives go first — migrating the controls before them
+would mean migrating the controls twice, once against CSS Modules and again when
+the primitives change API. The order and the components' dependency boundary are
+[ADR 0009](/architecture/decisions/0009-shared-ui-takes-no-dependencies/).
 
 **Stage 3 — the home's remaining CSS.** The 15 landing modules translate to
 StyleX near-1:1; `--kl-*` values fold into the unified tokens (decision 6).
