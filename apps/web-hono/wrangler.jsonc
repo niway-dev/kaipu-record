@@ -19,6 +19,20 @@
     { "pattern": "kaipu.app", "custom_domain": true },
     { "pattern": "www.kaipu.app", "custom_domain": true },
   ],
+  // Version URLs for `wrangler versions upload`, which is what preview-web.yml
+  // runs. This is independent of `workers_dev`: that one would publish the
+  // DEPLOYED worker at kaipu-web.<subdomain>.workers.dev, a second public origin
+  // for production that bypasses the kaipu.app zone's rules. It stays off. This
+  // only gives each uploaded version its own <prefix>-kaipu-web.<subdomain>
+  // .workers.dev address, which routes no production traffic.
+  //
+  // Wrangler leaves an existing value alone when the key is absent, so it has to
+  // be explicit to turn on. Two things follow from enabling it: the URLs are
+  // public (restrict them with Cloudflare Access under the worker's Preview URLs
+  // settings), and a version runs with the worker's real secrets and service
+  // bindings, so it reads production data. It is the last look before a tag, not
+  // a sandbox.
+  "preview_urls": true,
   "services": [
     {
       "binding": "API_SERVICE",
