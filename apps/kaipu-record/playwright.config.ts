@@ -1,5 +1,16 @@
 import { defineConfig } from "@playwright/test";
 
+/*
+ * Run this suite through `node`, never through the `playwright` shim on PATH.
+ * `bun run` puts its own `node` shim ahead of the real binary, so the CLI's
+ * `#!/usr/bin/env node` resolves to bun — and Playwright under bun loads its
+ * runtime twice, so every `test()` registers against an instance the runner
+ * never reads. The failure says "did not expect test() to be called here" and
+ * ends with "No tests found": a suite that silently tests nothing while the
+ * command looks like it ran. That is why package.json calls
+ * `node node_modules/@playwright/test/cli.js` by path.
+ */
+
 // E2E launches the real Electron build (see e2e/helpers/launch.ts). One worker: the app
 // grabs a fixed userData/vault per launch and Electron single-instance behavior makes
 // parallel app launches unreliable. Artifacts captured on failure replace the manual CDP

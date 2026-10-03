@@ -14,7 +14,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "bash ../../scripts/with-env.sh --tags kaipu-record -- sh -c \"bun run build && playwright test\"",
+    "test:e2e": "bash ../../scripts/with-env.sh --tags kaipu-record -- sh -c \"bun run build && node node_modules/@playwright/test/cli.js test\"",
     "cursor-track:check": "bun run scripts/cursor-track-check.ts",
     "start": "electron-vite preview",
     "dev": "bash ../../scripts/with-env.sh --tags kaipu-record -- electron-vite dev",
