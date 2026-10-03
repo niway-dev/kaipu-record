@@ -2,9 +2,8 @@
  * Shared product UI, styled with StyleX over @kaipu/tokens.
  *
  * `atoms/` holds components that import no other component from this package
- * and hold no state. A piece that composes atoms, or keeps presentation state,
- * belongs in a `molecules/` folder — added when the first one exists, not
- * before.
+ * and hold no state. `molecules/` holds the pieces that compose, or that carry
+ * behavior of their own — the Modal's focus and dismissal, for instance.
  *
  * Nothing here may import a router, @kaipu/i18n, IPC, or the domain: labels,
  * navigation and data arrive as props, so the desktop and the landing can
@@ -15,3 +14,14 @@ export { Button, type ButtonProps } from "./atoms/button";
 export { Card, type CardProps } from "./atoms/card";
 export { Input, type InputProps } from "./atoms/input";
 export { SearchInput, type SearchInputProps } from "./atoms/search-input";
+export { Toggle, type ToggleProps } from "./atoms/toggle";
+
+export {
+  ModalActions,
+  ModalButton,
+  ModalIcon,
+  ModalName,
+  ModalOverlay,
+  ModalText,
+  ModalTitle,
+} from "./molecules/modal";

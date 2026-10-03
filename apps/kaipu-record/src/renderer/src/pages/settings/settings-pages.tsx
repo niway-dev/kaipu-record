@@ -4,7 +4,7 @@ import { Cloud, Folder, Mic, Monitor, MousePointerClick, Video } from "lucide-re
 import { useTranslations } from "@kaipu/i18n";
 import { Row } from "@renderer/ui/row";
 import { Button } from "@kaipu/ui";
-import { Toggle } from "@renderer/ui/toggle";
+import { Toggle } from "@kaipu/ui";
 import { Select } from "@renderer/ui/select";
 import { useOnboarding } from "@renderer/features/onboarding";
 import { usePermissions, useAccessibility } from "@renderer/features/permissions";

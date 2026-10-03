@@ -7,7 +7,7 @@ import {
   ModalOverlay,
   ModalText,
   ModalTitle,
-} from "@renderer/ui/modal";
+} from "@kaipu/ui";
 
 interface DiscardChangesDialogProps {
   /** Copy tuned to whether the shot was ever saved — a fresh capture is lost entirely. */
