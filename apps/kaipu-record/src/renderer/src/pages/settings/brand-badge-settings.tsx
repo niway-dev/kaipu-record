@@ -1,6 +1,6 @@
 import React from "react";
 import { useTranslations } from "@kaipu/i18n";
-import { Row } from "@renderer/ui/row";
+import { Row } from "@kaipu/ui";
 import { Toggle } from "@kaipu/ui";
 import { useAppSettings } from "./use-app-settings";
 

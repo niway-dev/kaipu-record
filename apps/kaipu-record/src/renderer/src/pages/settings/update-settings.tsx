@@ -1,6 +1,6 @@
 import React from "react";
 import { useTranslations } from "@kaipu/i18n";
-import { Row } from "@renderer/ui/row";
+import { Row } from "@kaipu/ui";
 import { Button } from "@kaipu/ui";
 import { useUpdateStatus } from "@renderer/features/updater";
 import { useDevUpdateStatus } from "@renderer/features/updater/dev-update-simulator";

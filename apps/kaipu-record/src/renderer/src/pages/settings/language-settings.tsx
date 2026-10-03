@@ -1,6 +1,6 @@
 import React from "react";
 import { useLocale, useSetLocale, useTranslations, type Locale } from "@kaipu/i18n";
-import { Row } from "@renderer/ui/row";
+import { Row } from "@kaipu/ui";
 import { Button } from "@kaipu/ui";
 
 /** Language picker — writes AppSettings.locale via the provider's onLocaleChange. */
