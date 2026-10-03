@@ -84,11 +84,6 @@
   margin-top: var(--space-lg);
 }
 
-.search {
-  flex: 1;
-  min-width: 0;
-}
-
 .viewToggle {
   display: flex;
   gap: 2px;

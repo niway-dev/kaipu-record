@@ -1,9 +1,8 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { useTranslations } from "@kaipu/i18n";
-import { Button } from "@kaipu/ui";
+import { Button, Input } from "@kaipu/ui";
 import { tokens } from "@kaipu/tokens/kaipu.stylex";
-import { Input } from "@renderer/ui/input";
 import type { AuthCredentials, AuthError, SignUpInput } from "@shared/types/auth";
 import styles from "./auth-form.module.css";
 

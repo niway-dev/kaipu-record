@@ -1,17 +1,8 @@
-export { Input } from "./input";
-export type { InputProps } from "./input";
-
-export { PageHeader } from "./page-header";
-export type { PageHeaderProps } from "./page-header";
-
 export { Popover, PopoverItem } from "./popover";
 export type { PopoverProps, PopoverItemProps } from "./popover";
 
 export { Row } from "./row";
 export type { RowProps } from "./row";
-
-export { SearchInput } from "./search-input";
-export type { SearchInputProps } from "./search-input";
 
 export { Select } from "./select";
 export type { SelectProps } from "./select";

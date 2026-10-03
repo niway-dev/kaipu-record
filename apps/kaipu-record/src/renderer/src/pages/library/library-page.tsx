@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Library, LayoutGrid, LayoutList, AlertTriangle, RefreshCw } from "lucide-react";
+import { Library, LayoutGrid, LayoutList, AlertTriangle, RefreshCw, Search } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
-import { SearchInput } from "@renderer/ui/search-input";
+import * as stylex from "@stylexjs/stylex";
+import { SearchInput } from "@kaipu/ui";
 import { Button } from "@kaipu/ui";
 import { VideoCard } from "@renderer/features/library/components/video-card";
 import { VideoRow } from "@renderer/features/library/components/video-row";
@@ -13,6 +14,17 @@ import { useLocalLibrary } from "@renderer/features/library/hooks/use-local-libr
 import { useLibraryFilters } from "@renderer/features/library/hooks/use-library-filters";
 import { buildLineage, editBadge } from "@renderer/features/library/lineage";
 import styles from "./library-page.module.css";
+
+/** The search field's share of the toolbar, moved out of the module: the shared
+ *  SearchInput takes StyleX styles, not a className. */
+const sxLibrary = stylex.create({
+  search: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+    minWidth: 0,
+  },
+});
 
 export function LibraryPage(): React.JSX.Element {
   const t = useTranslations("library");
@@ -75,7 +87,8 @@ export function LibraryPage(): React.JSX.Element {
           placeholder={t("searchPlaceholder")}
           value={searchTerm}
           onSearch={setSearchTerm}
-          className={styles.search}
+          icon={<Search size={14} strokeWidth={1.8} />}
+          style={sxLibrary.search}
         />
         <SortMenu sort={sortKey} onChange={setSortKey} />
         <div className={styles.viewToggle}>
