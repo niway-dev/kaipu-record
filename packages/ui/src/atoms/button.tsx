@@ -82,18 +82,12 @@ const variants = stylex.create({
  * every hover with `:not(:disabled)`, and expressing that as one declaration
  * would leave the outcome to the compiler's pseudo-class ordering instead of
  * to something readable here.
- *
- * `accentSoft` is the accent at 10% alpha, the one value with no token behind
- * it — the desktop's stylesheet hard-codes it too. It is a candidate for the
- * token layer, not a decision this atom should make.
  */
-const accentSoft = "rgba(246, 5, 92, 0.1)";
-
 const hovers = stylex.create({
   primary: { backgroundColor: { default: null, ":hover": tokens.accentPrimaryHover } },
   danger: { backgroundColor: { default: null, ":hover": tokens.accentRedHover } },
-  ghost: { backgroundColor: { default: null, ":hover": accentSoft } },
-  outline: { backgroundColor: { default: null, ":hover": accentSoft } },
+  ghost: { backgroundColor: { default: null, ":hover": tokens.accentPrimarySoft } },
+  outline: { backgroundColor: { default: null, ":hover": tokens.accentPrimarySoft } },
 });
 
 export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "style"> {

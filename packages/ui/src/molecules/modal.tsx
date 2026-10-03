@@ -76,8 +76,8 @@ const styles = stylex.create({
     color: tokens.accentRed,
   },
   toneAccent: {
-    backgroundColor: "rgba(246, 5, 92, 0.12)",
-    borderColor: "rgba(246, 5, 92, 0.4)",
+    backgroundColor: tokens.accentPrimaryTint,
+    borderColor: tokens.accentPrimaryRing,
     color: tokens.accentPrimary,
   },
   title: {

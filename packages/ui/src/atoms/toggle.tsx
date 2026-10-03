@@ -35,9 +35,7 @@ const styles = stylex.create({
     },
     boxShadow: {
       default: "none",
-      // The focus ring is the accent at 40% alpha — no token covers it, same as
-      // the Button's soft hover.
-      ":focus-visible": "0 0 0 2px rgba(246, 5, 92, 0.4)",
+      ":focus-visible": `0 0 0 2px ${tokens.accentPrimaryRing}`,
     },
   },
   off: { backgroundColor: tokens.border },
