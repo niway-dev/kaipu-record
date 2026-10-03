@@ -2,7 +2,7 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { Cloud, Folder, Mic, Monitor, MousePointerClick, Video } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
-import { Row } from "@renderer/ui/row";
+import { Row } from "@kaipu/ui";
 import { Button } from "@kaipu/ui";
 import { Toggle } from "@kaipu/ui";
 import { Select } from "@renderer/ui/select";

@@ -1,7 +1,7 @@
 import React from "react";
 import { useTranslations } from "@kaipu/i18n";
 import { Card } from "@kaipu/ui";
-import { Row } from "@renderer/ui/row";
+import { Row } from "@kaipu/ui";
 import { useAppSettings } from "@renderer/pages/settings/use-app-settings";
 import { ShortcutInput } from "@renderer/features/shortcuts/shortcut-input";
 import { conflictingAction } from "@renderer/features/shortcuts/keyboard-accelerator";
