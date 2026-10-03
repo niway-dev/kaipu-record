@@ -3,7 +3,7 @@ import type { AccessibilityStatus, PermissionKind, PermissionStatus } from "@sha
 import { useTranslations } from "@kaipu/i18n";
 import { KaipuLogo } from "@kaipu/brand";
 import { Badge } from "@renderer/ui/badge";
-import { Button } from "@renderer/ui/button";
+import { Button } from "@kaipu/ui";
 import { Popover } from "@renderer/ui/popover";
 import { PERMISSION_META } from "../permissions";
 import styles from "./permissions-step.module.css";

@@ -4,7 +4,7 @@ import { AlertTriangle, CloudOff, KeyRound, PauseCircle, RefreshCw } from "lucid
 import { useTranslations, type Translator } from "@kaipu/i18n";
 import type { AuthStatus } from "@shared/types/auth";
 import { entitlementsFromStatus } from "@shared/entitlements";
-import { Button } from "@renderer/ui/button";
+import { Button } from "@kaipu/ui";
 import { Badge } from "@renderer/ui/badge";
 import { barSegments, type CapacityView } from "./capacity-view";
 import { formatBytesDecimal, MAX_VIDEO_BYTES } from "./format-bytes";

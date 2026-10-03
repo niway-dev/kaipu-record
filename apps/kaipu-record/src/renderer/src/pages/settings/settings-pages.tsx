@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Cloud, Folder, Mic, Monitor, MousePointerClick, Video } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { Row } from "@renderer/ui/row";
-import { Button } from "@renderer/ui/button";
+import { Button } from "@kaipu/ui";
 import { Toggle } from "@renderer/ui/toggle";
 import { Select } from "@renderer/ui/select";
 import { useOnboarding } from "@renderer/features/onboarding";

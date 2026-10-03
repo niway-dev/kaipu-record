@@ -2,7 +2,7 @@ import React from "react";
 import { useTranslations } from "@kaipu/i18n";
 import type { Theme } from "@shared/types";
 import { Row } from "@renderer/ui/row";
-import { Button } from "@renderer/ui/button";
+import { Button } from "@kaipu/ui";
 
 /** Theme picker — writes AppSettings.theme; every window re-themes via the settings broadcast. */
 export function ThemeSettings({

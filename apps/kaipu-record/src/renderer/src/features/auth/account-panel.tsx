@@ -1,7 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslations } from "@kaipu/i18n";
-import { Button } from "@renderer/ui/button";
+import { Button } from "@kaipu/ui";
 import { Row } from "@renderer/ui/row";
 import type { AuthPageLocationState } from "@renderer/pages/auth/auth-page";
 import type { AuthStatus } from "@shared/types/auth";

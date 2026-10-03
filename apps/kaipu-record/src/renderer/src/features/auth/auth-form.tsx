@@ -1,9 +1,22 @@
 import React from "react";
+import * as stylex from "@stylexjs/stylex";
 import { useTranslations } from "@kaipu/i18n";
-import { Button } from "@renderer/ui/button";
+import { Button } from "@kaipu/ui";
+import { tokens } from "@kaipu/tokens/kaipu.stylex";
 import { Input } from "@renderer/ui/input";
 import type { AuthCredentials, AuthError, SignUpInput } from "@shared/types/auth";
 import styles from "./auth-form.module.css";
+
+/** The shared Button takes StyleX styles, not a className: its classes are
+ *  generated and atomic, so a module class could not win the cascade
+ *  predictably. This is the form's own layout for the submit button, moved out
+ *  of auth-form.module.css. */
+const sx = stylex.create({
+  submit: {
+    width: "100%",
+    marginTop: tokens.spaceXs,
+  },
+});
 
 /** Public website that hosts the legal documents. */
 export const LEGAL_WEB_URL = (import.meta.env.VITE_PUBLIC_WEB_URL ?? "https://kaipu.app").replace(
@@ -170,7 +183,7 @@ export function AuthForm({
           })}
         </p>
       )}
-      <Button type="submit" size="lg" disabled={pending} className={styles.submit}>
+      <Button type="submit" size="lg" disabled={pending} style={sx.submit}>
         {t(pending ? SUBMIT_COPY[mode].pending : SUBMIT_COPY[mode].idle)}
       </Button>
     </form>

@@ -61,7 +61,10 @@ export default defineConfig({
             include: [
               "../../packages/ui/src/**/*.{ts,tsx}",
               "../../packages/tokens/stylex/*.stylex.ts",
-              "src/renderer/src/dev/**/*.{ts,tsx}",
+              // The whole renderer: any screen may now use a @kaipu/ui
+              // component, and a style the scanner does not see is a class the
+              // sheet never defines (invariant 1 in backlog/stylex-migration).
+              "src/renderer/src/**/*.{ts,tsx}",
             ],
           }),
         ],

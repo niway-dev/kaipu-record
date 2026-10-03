@@ -79,3 +79,6 @@ docs/specs
 
 # lefthook per-developer overrides (never committed)
 lefthook-local.yml
+
+# git worktrees live here; they are checkouts of other branches, not sources
+.claude/worktrees/

@@ -1,4 +1,6 @@
 @import "./base.css";
+/* StyleX atomics for @kaipu/ui and any renderer StyleX styles. */
+@import "./stylex.css";
 
 body {
   user-select: none;

@@ -1,6 +1,7 @@
 {
   "ignorePatterns": [
     "**/CHANGELOG.md",
+    "**/.claude/worktrees/**",
     "apps/documentation/public/mockups/**",
     "apps/documentation/public/audits/**",
     "**/routeTree.gen.ts",

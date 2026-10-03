@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Library, LayoutGrid, LayoutList, AlertTriangle, RefreshCw } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { SearchInput } from "@renderer/ui/search-input";
-import { Button } from "@renderer/ui/button";
+import { Button } from "@kaipu/ui";
 import { VideoCard } from "@renderer/features/library/components/video-card";
 import { VideoRow } from "@renderer/features/library/components/video-row";
 import { DeleteConfirmDialog } from "@renderer/features/library/components/delete-confirm-dialog";
