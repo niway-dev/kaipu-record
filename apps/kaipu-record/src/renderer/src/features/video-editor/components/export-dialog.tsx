@@ -7,7 +7,7 @@ import {
   ModalOverlay,
   ModalText,
   ModalTitle,
-} from "@renderer/ui/modal";
+} from "@kaipu/ui";
 import styles from "./export-dialog.module.css";
 
 export interface ExportDialogProps {

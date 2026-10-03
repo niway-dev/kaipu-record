@@ -8,6 +8,3 @@ export { Select } from "./select";
 export type { SelectProps } from "./select";
 
 export { ToastHost } from "./toast";
-
-export { Toggle } from "./toggle";
-export type { ToggleProps } from "./toggle";

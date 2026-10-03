@@ -28,7 +28,7 @@ import {
   ModalOverlay,
   ModalText,
   ModalTitle,
-} from "@renderer/ui/modal";
+} from "@kaipu/ui";
 import * as stylex from "@stylexjs/stylex";
 import { Badge } from "@kaipu/ui";
 import {
