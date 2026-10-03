@@ -5,7 +5,7 @@ import { KaipuLogo } from "@kaipu/brand";
 import * as stylex from "@stylexjs/stylex";
 import { Badge, Button } from "@kaipu/ui";
 import { tokens } from "@kaipu/tokens/kaipu.stylex";
-import { Popover } from "@renderer/ui/popover";
+import { Popover } from "@kaipu/ui";
 import { PERMISSION_META } from "../permissions";
 import styles from "./permissions-step.module.css";
 

@@ -1,7 +1,7 @@
 import React from "react";
 import { Info } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
-import { Popover } from "@renderer/ui/popover";
+import { Popover } from "@kaipu/ui";
 import {
   activePreset,
   BITRATE_STEP_LABELS,

@@ -22,7 +22,7 @@ never drift from the app. Tailwind leaves the repo with its last shadcn screen.
 | 2   | Light/dark in the StyleX world is `createTheme`, applied at each surface's root; the `[data-theme]` attribute mechanism keeps working for legacy CSS during the transition                                                  | It is the same dark/light product behavior, typed; two mechanisms coexist only while legacy consumers exist                                                         | 0008       |
 | 3   | Migration order: **tokens → portable product shell → home's remaining CSS → cloud/auth on shadcn-cssinjs**. The auth/shadcn stage waits for the cloud to go live                                                            | The home is plain CSS (near-1:1 translation) and is the only stage that delivers the portable shell; shadcn depends on a young community port and on product timing | 0008       |
 | 4   | The desktop's 91 CSS Modules migrate **opportunistically**: shared pieces and touched surfaces only, no big-bang rewrite                                                                                                    | The win is sharing and type-safety, not churn; a module nobody touches costs nothing                                                                                | —          |
-| 5   | Tailwind and shadcn-Radix are removed when the last shadcn screen is rebuilt (the cloud stage). Removing them earlier is out of scope                                                                                       | "Unused dependency" was measured false: auth/cloud screens are built on them, dark but routed                                                                       | 0008       |
+| 5   | Tailwind and shadcn are removed when the last shadcn screen is rebuilt (the cloud stage). Removing them earlier is out of scope                                                                                             | "Unused dependency" was measured false: auth/cloud screens are built on them, dark but routed                                                                       | 0008       |
 | 6   | The landing's `--kl-*` layer folds into the unified tokens during the home stage; untouched before that                                                                                                                     | It is the third spelling of the same values; folding it any earlier couples stages                                                                                  | 0008       |
 
 **Open questions:** shadcn-cssinjs coverage of the 18 components (inventory gates
@@ -54,6 +54,40 @@ decisions, which belong to the cloud stage's own review.
   typed tokens rendering dark values on a light surface. Stage 1 keeps values
   flowing through the existing custom properties until `createTheme` lands per
   surface, so both mechanisms cannot disagree while they coexist.
+
+## What stage 2 proved about StyleX's limits
+
+Measured while migrating eleven primitives, because each of these was first
+mistaken for something it was not.
+
+**StyleX cannot express a sibling selector, and that is usually fine.** The
+settings Row separated consecutive rows with `.row + .row { border-top }`. The
+same rendering is a top border suppressed on `:first-child`, which StyleX does
+express. Reach for the equivalent before concluding a component is stuck.
+
+**StyleX cannot express attribute or descendant selectors, and that is
+sometimes fatal.** The desktop's Select styles the state Radix publishes —
+`[data-state="open"]`, `[data-highlighted]`, `[data-disabled]` — plus a
+descendant (`.trigger[data-state=open] .chevron`) and Radix's injected
+`--radix-select-trigger-width`. None of it has a StyleX form. Migrating it would
+mean lifting the open/highlight state into React so styles could be chosen in
+JS: a behavioural rewrite of the piece whose keyboard handling and positioning
+are the reason Radix is there at all.
+
+**That generalises to every headless primitive that communicates through data
+attributes**, which is how Radix, Base UI and shadcn all work. It is the single
+most important constraint for stage 4: rebuilding the shadcn screens in StyleX
+is not a matter of swapping class strings, because the class strings react to
+attributes the library sets. Budget for controlled state, not for a translation.
+
+**A compile-time system has nothing to say about runtime values.** The Popover
+measures its trigger on open and positions itself from those coordinates; those
+stay an inline `style`. Mixing the two is correct, not a compromise.
+
+**The two surfaces hold different versions of the same libraries.** `lucide-react`
+is `^1.18` on the desktop and `^0.525` on the web, so a shared component cannot
+import an icon — it takes one as a prop. Expect more of these; the rule that
+falls out is the same one ADR 0009 already states for routers and translations.
 
 ## The stages
 
@@ -104,7 +138,7 @@ Exit: the landing carries no `.module.css` and no `--kl-*` definitions.
 
 **Stage 4 — cloud/auth on shadcn-cssinjs, Tailwind leaves.** Gated on the
 cloud going live and on the coverage inventory. The auth screens rebuild on
-the port, the cloud shell is born in StyleX, and Tailwind, shadcn-Radix,
+the port, the cloud shell is born in StyleX, and Tailwind, shadcn,
 `tw-animate-css`, `tailwind-merge` and the `@source` machinery leave in the
 same change that deletes the last shadcn screen.
 

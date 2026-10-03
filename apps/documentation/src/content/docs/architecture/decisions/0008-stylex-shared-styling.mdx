@@ -9,7 +9,7 @@ description: "StyleX is the styling direction for desktop and web, fed by typed 
 
 | Field         | Value                                                                                          |
 | ------------- | ---------------------------------------------------------------------------------------------- |
-| Status        | Accepted — stages 0–1 shipped (PRs #212, #214), stage 2 started, stages 3–4 planned            |
+| Status        | Accepted — stages 0–2a shipped (PRs #212–#222), stages 2b–4 planned                            |
 | Date          | 2026-10-02                                                                                     |
 | Amends        | —                                                                                              |
 | Builds on     | [Shared styling spec](/specs/2026-10-02-shared-styling-stylex/), `backlog/stylex-migration.md` |
@@ -36,8 +36,8 @@ work are recorded in the backlog doc and the hub.
 a single typed token source generated from `@kaipu/tokens` (`defineVars`, with
 `createTheme` for light/dark). Migration runs in the spec's four stages — tokens,
 the portable product shell, the home, then cloud/auth on shadcn-cssinjs — each
-leaving `main` releasable. **Tailwind, shadcn-Radix and their satellites are
-removed in the same change that rebuilds the last shadcn screen**, not before.
+leaving `main` releasable. **Tailwind, shadcn and their satellites are removed
+in the same change that rebuilds the last shadcn screen**, not before.
 Desktop CSS Modules that nothing shares migrate opportunistically or not at all.
 
 ## Alternatives rejected
@@ -49,6 +49,12 @@ Desktop CSS Modules that nothing shares migrate opportunistically or not at all.
 - **Remove Tailwind immediately** — measured false premise: auth and cloud
   screens are built on shadcn, dark but routed. Removing it first means
   rebuilding screens twice or shipping an unstyled cloud.
+
+_Correction (2026-10-03): this ADR first said "shadcn-Radix". `@kaipu/web-ui` is
+built on `@base-ui/react`, not Radix; the desktop is the surface that uses Radix,
+and only for its Select. The two surfaces run **different** headless libraries,
+which is a constraint stage 4 has to settle rather than a detail._
+
 - **Big-bang migration** — two Vite pipelines on community-held tooling plus a
   component-library rewrite in one move; rejected the day the experiment was
   scoped, and nothing since argues for it.
