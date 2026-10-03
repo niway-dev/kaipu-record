@@ -1,7 +1,7 @@
 import React from "react";
 import { useTranslations } from "@kaipu/i18n";
 import { Row } from "@renderer/ui/row";
-import { Button } from "@renderer/ui/button";
+import { Button } from "@kaipu/ui";
 import { useUpdateStatus } from "@renderer/features/updater";
 import { useDevUpdateStatus } from "@renderer/features/updater/dev-update-simulator";
 import type { UpdateStatus } from "@shared/types";

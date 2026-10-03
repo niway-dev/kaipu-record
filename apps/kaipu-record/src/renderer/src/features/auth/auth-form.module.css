@@ -11,11 +11,6 @@
   margin: 0;
 }
 
-.submit {
-  width: 100%;
-  margin-top: var(--space-xs);
-}
-
 .legalNotice {
   color: var(--text-secondary);
   font-size: var(--font-size-sm);

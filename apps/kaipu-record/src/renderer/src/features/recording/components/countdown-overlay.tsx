@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { Loader2 } from "lucide-react";
-import { Button } from "@renderer/ui/button";
+import { Button } from "@kaipu/ui";
 import styles from "./countdown-overlay.module.css";
 
 interface CountdownOverlayProps {

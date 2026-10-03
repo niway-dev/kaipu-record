@@ -15,7 +15,7 @@ import { RecordingTitle } from "@renderer/features/library/components/recording-
 import { formatDuration, formatSize, relativeDate } from "@renderer/features/library/format";
 import { buildLineage, editBadge } from "@renderer/features/library/lineage";
 import type { EditingState, RemoveLocalCopyResult } from "@shared/types/library-item";
-import { Button } from "@renderer/ui/button";
+import { Button } from "@kaipu/ui";
 import { Badge } from "@renderer/ui/badge";
 import { useTranslations, type Messages } from "@kaipu/i18n";
 import styles from "./library-detail-page.module.css";
