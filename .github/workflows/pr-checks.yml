@@ -218,9 +218,13 @@ jobs:
       # `playwright test` directly, not `bun run test:e2e`, so the build above is not
       # repeated. ffprobe is deliberately not installed (`brew install ffmpeg` costs macOS
       # minutes): the export still runs end to end and only the codec assertion skips.
+      # Invoked through node by path, never `bunx playwright`: a bun runtime loads
+      # Playwright's modules twice, every test() registers against an instance the
+      # runner never reads, and the run ends "No tests found" — a gate that tests
+      # nothing while looking like it ran. See playwright.config.ts.
       - name: E2E (Playwright, built app)
         working-directory: apps/kaipu-record
-        run: bunx playwright test
+        run: node node_modules/@playwright/test/cli.js test
 
       - name: Upload Playwright artifacts on failure
         if: failure()
