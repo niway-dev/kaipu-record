@@ -24,11 +24,6 @@
 }
 
 /* "ORIGINAL UNTOUCHED" — a reminder, not a control (v2 PR 10 polish, W12). */
-.originalPill {
-  flex-shrink: 0;
-  letter-spacing: 0.04em;
-}
-
 .saveState {
   margin-left: 10px;
   background: none;

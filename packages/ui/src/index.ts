@@ -10,4 +10,6 @@
  * navigation and data arrive as props, so the desktop and the landing can
  * render the same component from different sources.
  */
+export { Badge, type BadgeProps } from "./atoms/badge";
 export { Button, type ButtonProps } from "./atoms/button";
+export { Card, type CardProps } from "./atoms/card";

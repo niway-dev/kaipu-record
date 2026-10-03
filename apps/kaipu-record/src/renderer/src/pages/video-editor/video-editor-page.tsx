@@ -29,7 +29,8 @@ import {
   ModalText,
   ModalTitle,
 } from "@renderer/ui/modal";
-import { Badge } from "@renderer/ui/badge";
+import * as stylex from "@stylexjs/stylex";
+import { Badge } from "@kaipu/ui";
 import {
   boundaryIndexAt,
   clampOverlays,
@@ -100,6 +101,15 @@ import { PreviewStage } from "@renderer/features/video-editor/components/preview
 import { TimelineStrip } from "@renderer/features/video-editor/components/timeline-strip";
 import { showToast } from "@renderer/ui/toast-store";
 import styles from "./video-editor-page.module.css";
+
+/** The "original" pill's own shape, moved out of video-editor-page.module.css:
+ *  the shared Badge takes StyleX styles, not a className. */
+const sxEditor = stylex.create({
+  originalPill: {
+    flexShrink: 0,
+    letterSpacing: "0.04em",
+  },
+});
 import { useMuteEditing } from "@renderer/features/video-editor/use-mute-editing";
 import { AudioLane } from "@renderer/features/video-editor/components/audio-lane";
 import { MuteInspector } from "@renderer/features/video-editor/components/inspector/mute-inspector";
@@ -967,7 +977,7 @@ function VideoEditor({
         {/* Not interactive — a reminder, not a control (plans/video-editor-v2/08 § PR 10
             polish, W12's "ORIGINAL UNTOUCHED" pill). The original recording on disk and
             its library thumbnail are untouched by every edit in this page. */}
-        <Badge variant="neutral" className={styles.originalPill}>
+        <Badge variant="neutral" style={sxEditor.originalPill}>
           <Shield size={12} strokeWidth={2} /> {t("originalUntouched")}
         </Badge>
         {autosave.state !== "idle" && (
