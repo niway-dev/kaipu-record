@@ -16,7 +16,7 @@ import { formatDuration, formatSize, relativeDate } from "@renderer/features/lib
 import { buildLineage, editBadge } from "@renderer/features/library/lineage";
 import type { EditingState, RemoveLocalCopyResult } from "@shared/types/library-item";
 import { Button } from "@kaipu/ui";
-import { Badge } from "@renderer/ui/badge";
+import { Badge } from "@kaipu/ui";
 import { useTranslations, type Messages } from "@kaipu/i18n";
 import styles from "./library-detail-page.module.css";
 

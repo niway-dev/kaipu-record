@@ -1,6 +1,6 @@
 import React from "react";
 import { useTranslations } from "@kaipu/i18n";
-import { Card } from "@renderer/ui/card";
+import { Card } from "@kaipu/ui";
 import { Row } from "@renderer/ui/row";
 import { useAppSettings } from "@renderer/pages/settings/use-app-settings";
 import { ShortcutInput } from "@renderer/features/shortcuts/shortcut-input";

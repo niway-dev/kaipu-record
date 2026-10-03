@@ -1,5 +1,5 @@
 import React from "react";
-import { Card } from "@renderer/ui/card";
+import { Card } from "@kaipu/ui";
 import styles from "./settings-page.module.css";
 
 /** One settings page: title, subtitle, then its titled sections. */

@@ -1,7 +1,7 @@
 import React from "react";
 import { useTranslations } from "@kaipu/i18n";
 import type { UploadMode } from "@shared/types";
-import { Card } from "@renderer/ui/card";
+import { Card } from "@kaipu/ui";
 import { AccountPanel } from "@renderer/features/auth/account-panel";
 import { useAuthStatus } from "@renderer/features/auth/use-auth-status";
 import { CapacityCard } from "./capacity-card";

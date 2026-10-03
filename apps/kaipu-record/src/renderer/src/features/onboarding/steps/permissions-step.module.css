@@ -123,14 +123,6 @@
   text-align: left;
 }
 
-.granted {
-  flex-shrink: 0;
-  padding: 6px 11px;
-  border-radius: 8px;
-  font-family: var(--font-mono);
-  letter-spacing: 0.08em;
-}
-
 @keyframes pop {
   0% {
     transform: scale(0.7);

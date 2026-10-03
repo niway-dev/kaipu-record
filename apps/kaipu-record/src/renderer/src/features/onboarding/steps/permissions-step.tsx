@@ -2,11 +2,25 @@ import { Check, Info, MousePointerClick } from "lucide-react";
 import type { AccessibilityStatus, PermissionKind, PermissionStatus } from "@shared/types";
 import { useTranslations } from "@kaipu/i18n";
 import { KaipuLogo } from "@kaipu/brand";
-import { Badge } from "@renderer/ui/badge";
-import { Button } from "@kaipu/ui";
+import * as stylex from "@stylexjs/stylex";
+import { Badge, Button } from "@kaipu/ui";
+import { tokens } from "@kaipu/tokens/kaipu.stylex";
 import { Popover } from "@renderer/ui/popover";
 import { PERMISSION_META } from "../permissions";
 import styles from "./permissions-step.module.css";
+
+/** The "granted" pill's own shape, moved out of permissions-step.module.css:
+ *  the shared Badge takes StyleX styles, not a className. */
+const sx = stylex.create({
+  granted: {
+    flexShrink: 0,
+    paddingBlock: "6px",
+    paddingInline: "11px",
+    borderRadius: "8px",
+    fontFamily: tokens.fontMono,
+    letterSpacing: "0.08em",
+  },
+});
 
 interface PermissionsStepProps {
   status: PermissionStatus;
@@ -80,7 +94,7 @@ export function PermissionsStep({
                   </span>
                 </div>
                 {granted ? (
-                  <Badge variant="success" className={styles.granted}>
+                  <Badge variant="success" style={sx.granted}>
                     <Check size={14} strokeWidth={2.4} /> {t("granted")}
                   </Badge>
                 ) : wasDenied ? (
@@ -111,7 +125,7 @@ export function PermissionsStep({
                 </span>
               </div>
               {accessibility === "granted" ? (
-                <Badge variant="success" className={styles.granted}>
+                <Badge variant="success" style={sx.granted}>
                   <Check size={14} strokeWidth={2.4} /> {t("granted")}
                 </Badge>
               ) : (

@@ -1,12 +1,3 @@
-export { Badge } from "./badge";
-export type { BadgeProps } from "./badge";
-
-export { Card } from "./card";
-export type { CardProps } from "./card";
-
-export { IconButton } from "./icon-button";
-export type { IconButtonProps } from "./icon-button";
-
 export { Input } from "./input";
 export type { InputProps } from "./input";
 
