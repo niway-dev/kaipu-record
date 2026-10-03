@@ -44,6 +44,7 @@ export {
   type PopoverItemProps,
   type PopoverProps,
 } from "./molecules/popover";
+export { Rail, type RailItem, type RailLinkProps, type RailProps } from "./molecules/rail";
 export {
   SourcePicker,
   type SourcePickerProps,
