@@ -117,25 +117,52 @@ silently dropped the tokens glob, and the sheet _used_ the hashed vars without
 _defining_ them. The grep that catches it:
 `grep -- '--x[a-z0-9]*:var(--kaipu-' <emitted css>` must match.
 
-## Stage 2 — what is actually migrated (2026-10-02)
+## Stage 2a — the shared library, as it stands (2026-10-03)
 
-One component. Being precise about this matters, because the package's existence
-reads like more than it is.
+Eleven of the desktop's thirteen primitives are gone from the app and nine of
+them live in `@kaipu/ui`. Nothing here changes a pixel: every component was
+migrated value for value.
 
-| Component                                                         | Where it lives now                             | Who renders it          |
-| ----------------------------------------------------------------- | ---------------------------------------------- | ----------------------- |
-| `Button` (4 variants × 3 sizes)                                   | `packages/ui/src/atoms/button.tsx`             | **only the two probes** |
-| `IconButton`, `Card`, `Input`, `Select`, `Toggle`, `Badge`, `Row` | still `apps/kaipu-record/src/renderer/src/ui/` | the desktop             |
-| `Modal`, `Popover`, `Toast`, `PageHeader`, `SearchInput`          | same, and deliberately deferred                | the desktop             |
+|                        | Components                                                   |
+| ---------------------- | ------------------------------------------------------------ |
+| `atoms/`               | `Badge` `Button` `Card` `Input` `Row` `SearchInput` `Toggle` |
+| `molecules/`           | `Modal` `Popover` `ToastList`                                |
+| Deleted — no consumers | `IconButton` `PageHeader`                                    |
+| Still in the desktop   | `Select`                                                     |
 
-**There are two buttons in the repository right now.** The desktop's 12 call
-sites still import its own `ui/button.tsx` on CSS Modules; nothing in either
-product renders the shared one. Migrating those call sites is the next step, and
-until it happens stage 2 has changed no screen.
+`Select` is the only one left, and not for want of effort — see the limits
+section in the spec. Radix publishes its state through data attributes that
+StyleX has no way to select on, so migrating it means lifting that state into
+React: a behavioural rewrite of the component whose keyboard handling is the
+whole reason Radix is there. Stage 4 settles it, along with which headless
+library both surfaces share.
 
-`Modal`, `Popover` and `Toast` are held back on purpose: they render through
-portals, and how a theme reaches a portal is an open question in the spec. Taking
-them now would answer it sideways.
+What the desktop's `ui/` folder still holds is no longer components: the toast
+host (six lines wiring this app's store to the shared stack), the toast store
+itself, and two helpers.
+
+### Dependencies this removed
+
+`@radix-ui/react-switch` is gone. `Toggle` is a `<button role="switch">`, which
+is what the primitive rendered anyway, and the native button already provides
+keyboard activation and focus. It mattered because the web runs on
+`@base-ui/react`: a shared component carrying Radix would pull a second headless
+library into whichever surface lacked it.
+
+### What it cost in bytes: almost nothing
+
+Desktop renderer bundle, built before (`228bf47`) and after the whole migration:
+
+|     | Before    | After     |
+| --- | --------- | --------- |
+| CSS | 172.4 KB  | 170.9 KB  |
+| JS  | 2824.1 KB | 2815.7 KB |
+
+−1.5 KB and −8.4 KB, the JS mostly from dropping Radix's switch. **This migration
+is not a performance change and should not be sold as one.** Its return is
+type-safety and shareability. The landing is untouched so far, so there is
+nothing for a web preview to measure yet; that comes when stage 2b replaces the
+home's hand-drawn mocks with the real components.
 
 ### Decisions inside the Button worth knowing
 
