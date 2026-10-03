@@ -13,3 +13,5 @@
 export { Badge, type BadgeProps } from "./atoms/badge";
 export { Button, type ButtonProps } from "./atoms/button";
 export { Card, type CardProps } from "./atoms/card";
+export { Input, type InputProps } from "./atoms/input";
+export { SearchInput, type SearchInputProps } from "./atoms/search-input";
