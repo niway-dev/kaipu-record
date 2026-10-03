@@ -3,8 +3,6 @@ import * as stylex from "@stylexjs/stylex";
 import { Button } from "@kaipu/ui";
 import { lightTheme } from "@kaipu/tokens/kaipu.stylex";
 
-import "./stylex-probe.css";
-
 /**
  * Experiment probe: the shared StyleX components rendered inside the Electron
  * renderer. Mounted only in dev and only at #stylex-probe, so it can never
