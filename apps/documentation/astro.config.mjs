@@ -65,6 +65,7 @@ export default defineConfig({
           items: [
             "backlog/deploy-environments",
             { slug: "backlog" },
+            { slug: "backlog/technical-debt" },
             { slug: "backlog/code-quality-audit" },
             { slug: "backlog/lefthook-migration" },
             { slug: "backlog/ci-local-first-verification" },
