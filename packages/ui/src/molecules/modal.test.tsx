@@ -101,6 +101,34 @@ describe("ModalButton", () => {
     expect([...enabled].filter((c) => !disabled.has(c))).not.toHaveLength(0);
   });
 
+  it("keeps the variant's fill and ink while enabled — the hover layer must not erase them", () => {
+    // Same regression as Button: a hover layer with `default: null` erased the
+    // variant's background (and, for ghost, its text colour). The disabled
+    // button has no hover layer, so the only classes it may carry that the
+    // enabled one lacks are its own layer: opacity and cursor.
+    const variants = ["ghost", "primary", "danger"] as const;
+    for (const variant of variants) {
+      const { rerender, unmount } = render(
+        <ModalButton variant={variant} onClick={() => {}}>
+          Go
+        </ModalButton>,
+      );
+      const enabled = new Set(screen.getByRole("button").className.split(" "));
+      rerender(
+        <ModalButton variant={variant} onClick={() => {}} disabled>
+          Go
+        </ModalButton>,
+      );
+      const disabled = new Set(screen.getByRole("button").className.split(" "));
+      unmount();
+
+      expect(
+        [...disabled].filter((c) => !enabled.has(c)),
+        variant,
+      ).toHaveLength(2);
+    }
+  });
+
   it("gives each variant a different set of classes", () => {
     const variants = ["ghost", "primary", "danger"] as const;
     const seen = variants.map((variant) => {

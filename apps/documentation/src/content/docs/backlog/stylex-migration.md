@@ -170,6 +170,14 @@ home's hand-drawn mocks with the real components.
   nested in each variant. The CSS it replaces guarded every hover with
   `:not(:disabled)`; as one declaration the outcome would depend on the
   compiler's pseudo-class ordering instead of on something readable.
+  **The layer must repeat the variant's value as its `default`.** A later style
+  that names a property replaces it whole, so `{ default: null, ":hover": x }`
+  erases the variant's value instead of keeping it. That shipped: every enabled
+  Button, Modal button and SourceCard action rendered with the browser's
+  default fill (white buttons with only the accent glow left), while disabled
+  ones — no hover layer — looked right. Tests in `button.test.tsx` and
+  `modal.test.tsx` now fail if an enabled button carries fewer of the
+  variant's classes than a disabled one.
 - **`type="button"` is now the default.** A bare `<button>` inside a form
   submits it. The only form using the primitive (`features/auth/auth-form.tsx`)
   passes `type="submit"` itself, so the default costs nothing — and that same
