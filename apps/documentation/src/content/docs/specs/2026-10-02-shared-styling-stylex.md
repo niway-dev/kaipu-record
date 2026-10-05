@@ -51,9 +51,13 @@ decisions, which belong to the cloud stage's own review.
   that impossible. The failure to watch for is the inverse: a product change
   breaking the landing — the shell's consumers build in CI, so a break is loud.
 - **Theme mismatch between surfaces** during the transition: a component on
-  typed tokens rendering dark values on a light surface. Stage 1 keeps values
-  flowing through the existing custom properties until `createTheme` lands per
-  surface, so both mechanisms cannot disagree while they coexist.
+  typed tokens rendering dark values on a light surface. This one happened:
+  stage 1 shipped the tokens as literal values with `lightTheme` as a
+  `createTheme` class, and no surface applied that class, so on a light desktop
+  every migrated primitive stayed dark. The landing applies the class on the
+  app window it renders; the desktop now applies it on `<html>` in
+  `applyTheme`, next to `[data-theme="light"]`, and a test fails if it stops
+  landing there.
 
 ## What stage 2 proved about StyleX's limits
 
