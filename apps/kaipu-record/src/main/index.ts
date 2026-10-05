@@ -36,6 +36,7 @@ import { initMainAnalytics, shutdownMainAnalytics } from "./services/analytics.s
 import { registerAnalyticsIpc } from "./services/analytics-ipc";
 import { registerScreenshotHandlers } from "./screenshots/screenshot-ipc";
 import {
+  boundsAroundCenter,
   fitPresetToDisplay,
   isEditorPreset,
   WINDOW_PRESETS,
@@ -405,13 +406,17 @@ app.whenReady().then(() => {
     // Never ask for more than the screen can give. On a 1440x900 display an
     // unclamped 1440x900 floor pins the window to the entire desktop, with no
     // room to move it and no way to shrink it.
-    const area = screen.getDisplayMatching(mainWindow.getBounds()).workAreaSize;
-    minWidth = Math.min(minWidth, area.width);
-    minHeight = Math.min(minHeight, area.height);
+    const { workArea } = screen.getDisplayMatching(mainWindow.getBounds());
+    minWidth = Math.min(minWidth, workArea.width);
+    minHeight = Math.min(minHeight, workArea.height);
     mainWindow.setMinimumSize(minWidth, minHeight);
-    const [w, h] = mainWindow.getSize();
-    if (w < minWidth || h < minHeight) {
-      mainWindow.setSize(Math.max(w, minWidth), Math.max(h, minHeight), true);
+    const bounds = mainWindow.getBounds();
+    if (bounds.width < minWidth || bounds.height < minHeight) {
+      const size = {
+        width: Math.max(bounds.width, minWidth),
+        height: Math.max(bounds.height, minHeight),
+      };
+      mainWindow.setBounds(boundsAroundCenter(bounds, size, workArea), true);
     }
   };
 
@@ -423,7 +428,7 @@ app.whenReady().then(() => {
    * size is clamped back up by the old floor and leaving the editor leaves the
    * window editor-sized; it is raised AFTER a grow for the mirror reason.
    *
-   * `setSize(..., true)` animates on macOS, which is what keeps a 1440 -> 900
+   * `setBounds(..., true)` animates on macOS, which is what keeps a 1440 -> 900
    * step from looking like a glitch.
    */
   /**
@@ -482,8 +487,12 @@ app.whenReady().then(() => {
     }
 
     // Growing into an editor: raise the floor after the size, or the old floor
-    // would clamp nothing and the new one would fight the resize.
-    mainWindow.setSize(width, height, true);
+    // would clamp nothing and the new one would fight the resize. Around the
+    // window's centre, not from its top-left corner — `setSize` grows only right
+    // and down. Leaving restores `boundsBeforeEditor`, position included.
+    const current = mainWindow.getBounds();
+    const { workArea } = screen.getDisplayMatching(current);
+    mainWindow.setBounds(boundsAroundCenter(current, { width, height }, workArea), true);
     mainWindow.setMinimumSize(minWidth, minHeight);
   });
 

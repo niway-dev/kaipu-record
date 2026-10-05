@@ -109,6 +109,24 @@ async function waitForEditorLoaded(): Promise<HTMLElement> {
   return document.querySelector("footer")!;
 }
 
+/**
+ * Press an editor shortcut until the page reacts to it.
+ *
+ * The footer `waitForEditorLoaded` waits for appears on the commit that renders the
+ * editor; the page registers its `keydown` listener in a `useEffect` of that same
+ * component, which runs a moment AFTER the commit. A key fired in that gap reaches
+ * no listener and is lost. On a fast machine the gap is never hit; on a GitHub
+ * runner it was, and "arming the Box tool (R)" waited 10 s for a panel the dropped
+ * key never opened. Re-pressing inside `waitFor` closes the gap — every shortcut
+ * used this way is idempotent (R arms Box again; it does not toggle it off).
+ */
+async function pressUntil(key: string, assertion: () => void): Promise<void> {
+  await waitFor(() => {
+    fireEvent.keyDown(window, { key });
+    assertion();
+  });
+}
+
 /** Adds an image slide via the toolbar — the simplest way to produce one undoable
  *  commit, which is what makes `controller.dirty` true. */
 async function makeDirty(footer: HTMLElement): Promise<void> {
@@ -521,12 +539,10 @@ describe("VideoEditorPage — tool shortcuts end to end", () => {
     renderEditor();
     await waitForEditorLoaded();
 
-    fireEvent.keyDown(window, { key: "r" });
-
     // The class lands on a re-render, not on the event. Asserting it synchronously
     // reads the DOM one render too early and only passes when the machine is fast
     // enough — which is how this failed under a parallel `turbo run test`.
-    await waitFor(() => {
+    await pressUntil("r", () => {
       expect(screen.getByRole("button", { name: "Box" }).className).toMatch(/toolActive/);
     });
   });
@@ -535,8 +551,7 @@ describe("VideoEditorPage — tool shortcuts end to end", () => {
     renderEditor();
     await waitForEditorLoaded();
 
-    fireEvent.keyDown(window, { key: "r" });
-    await waitFor(() => {
+    await pressUntil("r", () => {
       expect(screen.getByRole("button", { name: "Box" }).className).toMatch(/toolActive/);
     });
 
@@ -580,9 +595,9 @@ describe("VideoEditorPage — inspector column priority (annotation follow-ups)"
     renderEditor();
     await waitForEditorLoaded();
 
-    fireEvent.keyDown(window, { key: "r" });
-
-    expect(await screen.findByRole("heading", { name: "Next annotation" })).toBeInTheDocument();
+    await pressUntil("r", () => {
+      expect(screen.getByRole("heading", { name: "Next annotation" })).toBeInTheDocument();
+    });
     // Before this change, the same "Color" picker rendered twice: once in the floating
     // OverlayOptions popover over the stage, once (if it existed) in the inspector. Now
     // there is exactly one, and it lives inside the inspector column.

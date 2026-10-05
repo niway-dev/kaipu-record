@@ -62,6 +62,15 @@ make 1040 the minimum — two legible cards in a smaller window beat forcing the
 Remembering the window size **across restarts** (and validating it against the monitors
 present at launch). Today the memory lives for the session.
 
+### It grows from its centre (2026-10-05)
+
+Entering the video editor used `setSize`, which keeps the top-left corner fixed: a window
+placed in the middle of the screen stretched only right and down. It now grows around its
+own centre (`boundsAroundCenter` in `shared/window-size.ts`) and slides back inside the
+work area when that would cross an edge, keeping the size the editor needs. The onboarding
+floor grows the same way. Leaving the editor still restores the exact bounds from before,
+position included.
+
 ## The menu-bar icon follows the capture mode
 
 Two template images, not three: the capture panel always has Record or Screenshot selected,
