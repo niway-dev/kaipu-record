@@ -144,7 +144,7 @@ Each needs a full `check-types` + `build` + `test` pass with it removed before i
 - `vite-tsconfig-paths` misplaced in `packages/web-ui`
 - a `react`/`react-dom` drift between `19.2.3` and `19.2.4` — align only if the drift is
   provably unintentional
-:::
+  :::
 
 A false positive here breaks CI, which is worse than an unremoved dead dependency. When in
 doubt, leave it declared.
