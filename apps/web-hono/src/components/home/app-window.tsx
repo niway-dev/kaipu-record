@@ -1,20 +1,34 @@
+import * as stylex from "@stylexjs/stylex";
+import { useRouteContext } from "@tanstack/react-router";
 import { Camera, Crop, Library, Mic, Monitor, Video, Volume2 } from "lucide-react";
 import { KaipuLogo } from "@kaipu/brand";
 import { useTranslations } from "@kaipu/i18n";
 import { DEFAULT_ACCELERATORS, formatAccelerator } from "@kaipu/domain/constants";
+import { Rail, RecordButton, SourceCard, StatusToggleRow, type RailItem } from "@kaipu/ui";
+import { lightTheme } from "@kaipu/tokens/kaipu.stylex";
 
 import styles from "./app-window.module.css";
+
+const noop = () => {};
 
 /**
  * The hero's product shot: the Kaipu window in its "ready to record" state, with
  * the menu-bar card overlapping its corner.
  *
- * Presentational only — nothing here is interactive, so it carries no buttons a
- * keyboard could land on and no labels a screen reader should read out. The
- * whole thing is announced once, by the figure that wraps it.
+ * The window's content is the product's own components from `@kaipu/ui` — the
+ * same rail, source card, toggles and record button the desktop renders — fed
+ * the landing's labels. Only the frame (title bar, traffic lights) and the
+ * menu-bar card are landing-local decoration.
+ *
+ * Nothing here is interactive: the window is `inert`, so the real buttons it
+ * renders can never take focus or a click, and the whole thing is announced
+ * once, by the figure that wraps it.
  */
 export function AppWindow() {
   const t = useTranslations("landing");
+  const nav = useTranslations("nav");
+  const record = useTranslations("record");
+  const { landingTheme } = useRouteContext({ from: "__root__" });
   // Read from the same record the desktop app registers, never typed by hand —
   // all three glyphs here were wrong before this existed.
   const keys = {
@@ -22,15 +36,34 @@ export function AppWindow() {
     screenshot: formatAccelerator(DEFAULT_ACCELERATORS.mac.captureScreenshot),
   };
 
-  const sources = [
-    { icon: Mic, label: t("homeAppMic"), on: true },
-    { icon: Volume2, label: t("homeAppAudio"), on: true },
-    { icon: Camera, label: t("homeAppCamera"), on: false },
+  const railItems: RailItem[] = [
+    {
+      id: "record",
+      label: nav("record"),
+      icon: <Video size={19} strokeWidth={1.8} />,
+      active: true,
+    },
+    {
+      id: "screenshots",
+      label: nav("screenshots"),
+      icon: <Camera size={19} strokeWidth={1.8} />,
+    },
+    { id: "library", label: nav("library"), icon: <Library size={19} strokeWidth={1.8} /> },
   ];
+
+  const toggles = [
+    { id: "mic", icon: <Mic size={19} />, label: record("micLabel"), isActive: true },
+    { id: "audio", icon: <Volume2 size={19} />, label: record("audioLabel"), isActive: true },
+    { id: "camera", icon: <Camera size={19} />, label: record("cameraLabel"), isActive: false },
+  ].map((toggle) => ({ ...toggle, onToggle: noop }));
+
+  // The real components read the app's dark tokens by default; the landing's own
+  // light mode takes the generated light theme, exactly as the desktop does.
+  const theme = landingTheme === "light" ? stylex.props(lightTheme).className : undefined;
 
   return (
     <div className={styles.wrap}>
-      <div className={`${styles.window} kl-window`}>
+      <div className={[styles.window, "kl-window", theme].filter(Boolean).join(" ")}>
         <div className={styles.titlebar}>
           <div className={styles.lights}>
             <span className={`${styles.light} ${styles.red}`} />
@@ -41,56 +74,32 @@ export function AppWindow() {
           <span />
         </div>
 
-        <div className={styles.body}>
-          <div className={styles.sidebar}>
-            <KaipuLogo use="product" size={26} />
-            <span className={`${styles.sideItem} ${styles.sideActive}`}>
-              <Video size={18} />
-            </span>
-            <span className={styles.sideItem}>
-              <Camera size={18} />
-            </span>
-            <span className={styles.sideItem}>
-              <Library size={18} />
-            </span>
-          </div>
+        <div className={styles.body} inert>
+          <Rail
+            brand={<KaipuLogo use="product" size={40} />}
+            items={railItems}
+            renderLink={(item, props) => <span data-rail-item={item.id} {...props} />}
+          />
 
           <div className={styles.main}>
             <span className={styles.ready}>
               <span className={styles.readyDot} />
-              {t("homeAppReady")}
+              {record("readyToRecord")}
             </span>
 
-            <div className={styles.display}>
-              <span className={styles.displayIcon}>
-                <Monitor size={19} />
-              </span>
-              <span className={styles.displayText}>
-                <span className={styles.displayName}>{t("homeAppDisplay")}</span>
-                <span className={styles.displayMeta}>{t("homeAppDisplayMeta")}</span>
-              </span>
-              <span className={styles.changeBtn}>{t("homeAppChange")}</span>
-            </div>
+            <SourceCard
+              icon={<Monitor size={19} />}
+              name={t("homeAppDisplay")}
+              meta={t("homeAppDisplayMeta")}
+              actionLabel={record("change")}
+              onAction={noop}
+            />
 
-            <div className={styles.sources}>
-              {sources.map(({ icon: Icon, label, on }) => (
-                <span key={label} className={`${styles.source} ${on ? styles.sourceOn : ""}`}>
-                  <Icon size={19} />
-                  <span className={styles.sourceLabel}>{label}</span>
-                  <span className={styles.sourceState}>
-                    {on ? t("homeAppOn") : t("homeAppOff")}
-                  </span>
-                </span>
-              ))}
-            </div>
+            <StatusToggleRow items={toggles} onText={t("homeAppOn")} offText={t("homeAppOff")} />
 
-            <div className={styles.start}>
-              <span className={styles.startInner}>
-                <span className={styles.readyDot} style={{ background: "#fff" }} />
-                {t("homeAppStart")}
-                <span className={styles.startShortcut}>{keys.record}</span>
-              </span>
-            </div>
+            <RecordButton isRecording={false} shortcut={keys.record} onClick={noop}>
+              {record("startRecordingBtn")}
+            </RecordButton>
           </div>
         </div>
       </div>

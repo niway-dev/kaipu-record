@@ -1,9 +1,7 @@
 /*
- * The Kaipu app, rebuilt in HTML rather than pasted in as a screenshot: it stays
- * sharp at any density, it translates, and it cannot silently fall out of date
- * the way an exported PNG does. The structure mirrors the real renderer, but the
- * code is its own — coupling marketing to the app's components would let an app
- * refactor break the landing.
+ * The frame around the product shot: window chrome and the menu-bar card are
+ * landing-local decoration. The app content inside the window is rendered by the
+ * real components from @kaipu/ui, which carry their own StyleX styles.
  */
 
 .wrap {
@@ -58,30 +56,7 @@
 
 .body {
   display: grid;
-  grid-template-columns: 62px 1fr;
-}
-
-.sidebar {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  padding: 16px 0;
-  border-right: 1px solid var(--kl-bd);
-}
-
-.sideItem {
-  display: grid;
-  width: 36px;
-  height: 36px;
-  place-items: center;
-  border-radius: 10px;
-  color: var(--kl-faint);
-}
-
-.sideActive {
-  background: color-mix(in srgb, var(--kl-pink) 18%, transparent);
-  color: var(--kl-pink-tx);
+  grid-template-columns: auto 1fr;
 }
 
 .main {
@@ -106,133 +81,6 @@
   height: 9px;
   border-radius: 999px;
   background: var(--kl-pink);
-}
-
-.display {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 14px 16px;
-  border: 1px solid var(--kl-bd);
-  border-radius: 12px;
-  background: var(--kl-mock-chrome);
-}
-
-.displayIcon {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  place-items: center;
-  border-radius: 8px;
-  color: var(--kl-dim);
-}
-
-/*
- * A column, not two inline spans: the name and the meta line are stacked in the
- * design, and as inline spans they ran together into "DisplayPRIMARY · 2560x1600"
- * with the meta's margin-top silently doing nothing.
- */
-.displayText {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-}
-
-.displayName {
-  font-size: 14.5px;
-  font-weight: 600;
-  color: var(--kl-tx);
-}
-
-.displayMeta {
-  margin-top: 4px;
-  font-family: var(--kl-font-mono);
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  color: var(--kl-faint);
-}
-
-.changeBtn {
-  padding: 7px 14px;
-  border: 1px solid var(--kl-bd-2);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--kl-tx);
-  font-size: 13px;
-  font-weight: 500;
-}
-
-/* The three source toggles. Colour carries the state: on is pink, off is inert. */
-.sources {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-}
-
-.source {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 7px;
-  padding: 18px 8px;
-  border: 1px solid var(--kl-bd);
-  border-radius: 12px;
-  background: var(--kl-mock-chrome);
-  color: var(--kl-dim);
-}
-
-.sourceOn {
-  border-color: color-mix(in srgb, var(--kl-pink) 45%, transparent);
-  background: color-mix(in srgb, var(--kl-pink) 12%, var(--kl-mock-chrome));
-  color: var(--kl-pink-tx);
-}
-
-.sourceLabel {
-  font-size: 13.5px;
-  font-weight: 500;
-}
-
-.sourceState {
-  font-family: var(--kl-font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.12em;
-  color: var(--kl-faint);
-}
-
-.sourceOn .sourceState {
-  color: var(--kl-pink-tx);
-}
-
-.start {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 16px;
-  border-radius: 12px;
-  background: var(--kl-pink);
-  color: #fff;
-  font-size: 16px;
-  font-weight: 600;
-  box-shadow: var(--kl-glow-btn);
-}
-
-.startShortcut {
-  position: absolute;
-  right: 20px;
-  font-family: var(--kl-font-mono);
-  font-size: 12px;
-  opacity: 0.75;
-}
-
-.startInner {
-  position: relative;
-  display: flex;
-  width: 100%;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
 }
 
 /* ---- The menu-bar card, overlapping the window's lower-left corner ------ */
