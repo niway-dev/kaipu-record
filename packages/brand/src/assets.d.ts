@@ -3,7 +3,7 @@
  * package is consumed as source by two different bundlers (Vite for the web,
  * electron-vite for the desktop) and neither one's ambient types reach it.
  */
-declare module "*.webp" {
+declare module "*.svg?no-inline" {
   const src: string;
   export default src;
 }

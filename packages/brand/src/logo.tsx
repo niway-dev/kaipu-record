@@ -16,8 +16,8 @@ export interface KaipuLogoProps {
   alt?: string;
   style?: CSSProperties;
   /**
-   * Browser loading hints, passed straight through. The marks are 778px PNGs of
-   * about 23KB each, so a surface that shows several of them below the fold —
+   * Browser loading hints, passed straight through. Each mark is a small
+   * vector file, but still its own request, so a surface that shows several of them below the fold —
    * the home's Kai moods — should pass `loading="lazy"` and keep them off the
    * critical path. Identity marks above the fold leave both unset.
    */
@@ -28,10 +28,10 @@ export interface KaipuLogoProps {
 /**
  * The Kaipu lockup, shared by the desktop app and the web.
  *
- * A raster rather than a vector: every cut has a coloured, rounded background,
- * and no SVG export exists. The sources are 778px square against a largest real
- * use of about 50px, so there is headroom on any display. When vectors arrive,
- * only LOGO_SRC changes and no caller moves.
+ * Vector artwork rendered through <img>: each mood is one composed SVG file (the
+ * fox cut plus a small accessory layer), so it stays sharp at any size and keeps
+ * the lazy-loading and decoding hints of a plain image. Callers never see the
+ * artwork, only a purpose.
  *
  * The corner radius is proportional (22% of the edge) because the artwork's own
  * rounding scales with it; a fixed radius clips at 16px and looks square at 64.
