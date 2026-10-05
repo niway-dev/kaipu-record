@@ -5,9 +5,12 @@ description: Every command used in the project — development, database, operat
 
 # Commands
 
-Run root commands from the repository root. Commands that touch the database load
-`apps/server-hono/.env` through dotenvx, which **never overrides a variable already set** — so
-`DATABASE_URL` in your shell, or written before the command, wins over the file.
+Run root commands from the repository root. Commands that touch the database fetch their
+environment from Infisical via `scripts/with-env.sh` (see [Environment
+Variables](/backend/environment-variables/)). Infisical **overrides a variable already set** in
+your shell, so to point a command at a different `DATABASE_URL` — production, for example —
+prefix it inline and set `SKIP_INFISICAL=1`, rather than `export`ing it beforehand:
+`DATABASE_URL='<url>' SKIP_INFISICAL=1 bun run plan grant <email>`.
 
 ## Development
 
@@ -29,7 +32,8 @@ Run root commands from the repository root. Commands that touch the database loa
 | `bun run db:generate` | Generate versioned migration files. Not used today; the project stays on `db:push` until an ADR adopts migrations. |
 | `bun run db:migrate`  | Apply versioned migrations. Not used today, same reason.                                                           |
 
-Never run `db:*` from `packages/infra-db/` directly: the root scripts are what load the env file.
+Never run `db:*` from `packages/infra-db/` directly: the root scripts are what fetch the
+environment from Infisical.
 
 ## Plans — make an account premium (pro)
 
@@ -42,11 +46,13 @@ bun run plan revoke <email>   # remove the manual grant, back to free
 ```
 
 - The command first prints `Database: <host>` — check it before trusting the result.
-- **Development:** no extra setup; it uses `apps/server-hono/.env`.
-- **Production:** put the URL in front of the command only, never `export` it, so later commands
-  do not silently hit production:
+- **Development:** no extra setup; it fetches `DATABASE_URL` from Infisical.
+- **Production:** put the URL in front of the command and set `SKIP_INFISICAL=1`, never
+  `export` it, so later commands do not silently hit production. `SKIP_INFISICAL` is required —
+  Infisical overrides a variable already set in the shell, so without it the inline value would
+  be silently replaced by the dev one:
   ```bash
-  DATABASE_URL='<production url>' bun run plan grant <email>
+  DATABASE_URL='<production url>' SKIP_INFISICAL=1 bun run plan grant <email>
   ```
 - Run `show` first: "No account uses the email" usually means the wrong database.
 - It refuses to change a subscription a billing provider (`stripe`, `autumn`) owns.

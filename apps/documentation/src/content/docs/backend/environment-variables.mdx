@@ -1,156 +1,78 @@
 ---
 title: Environment Variables
-description: How environment variables are loaded across apps and a proposal for encrypted env management with dotenvx
+description: How secrets and environment variables actually reach every app today, via Infisical.
 ---
 
 # Environment Variables
 
-## How Env Vars Are Loaded
+All environment values come from [Infisical](https://infisical.com). There are no
+hand-maintained `.env` files — where one exists on disk, it is **generated** by a script,
+gitignored, and never edited by hand. Changing a value means changing it in Infisical and
+restarting the affected command; editing a generated file locally only lasts until the next
+generation.
 
-| App/Package                       | Method                                      | Source File                                | When                                   |
-| --------------------------------- | ------------------------------------------- | ------------------------------------------ | -------------------------------------- |
-| **Server**                        | `import { env } from "cloudflare:workers"`  | `.dev.vars` (dev), wrangler secrets (prod) | Runtime                                |
-| **Web**                           | Vite `import.meta.env` + Alchemy bindings   | `.env`                                     | Build-time (client) / Runtime (server) |
-| **Mobile**                        | Expo `EXPO_PUBLIC_` prefix + Zod validation | `.env`                                     | Build-time                             |
-| **Infra-DB** (drizzle migrations) | `dotenv` loading `../../.env` (root)        | Root `.env`                                | Migration-time                         |
+An earlier proposal evaluated managing encrypted `.env` files with
+[dotenvx](https://dotenvx.com) instead. It was rejected in favour of Infisical; see
+[Rejected: dotenvx for encrypted env management](/specs/2026-06-15-dotenvx-env-management-proposal/)
+for that record and why.
 
----
+:::note[This is today's state, not the final one]
+A further migration to [varlock](https://varlock.dev) on top of Infisical is designed and
+in flight — typed schemas, `varlock-wrangler` for Worker deploys, and the removal of the
+remaining per-app `.env` generation. It is a six-phase plan and **no phase has merged yet**.
+The spec lands with PR #112 (design) and phase 1 with PR #113. Read them before changing
+anything on this page, so a fix does not collide with a phase that already owns it — and see
+[Secrets and dependency audit — handoff](/backlog/secrets-and-dependency-audit-handoff/) for
+the current state of that work.
+:::
 
-## Variables by Context
+## Layout in Infisical
 
-| Variable              | Server | Web | Mobile | Infra-DB | Sensitive? |
-| --------------------- | ------ | --- | ------ | -------- | ---------- |
-| `DATABASE_URL`        | Yes    | Yes | -      | Yes      | **Yes**    |
-| `DATABASE_URL_DIRECT` | Yes    | Yes | -      | -        | **Yes**    |
-| `BETTER_AUTH_SECRET`  | Yes    | Yes | -      | -        | **Yes**    |
-| `BETTER_AUTH_URL`     | Yes    | -   | -      | -        | No         |
-| `CORS_ORIGIN`         | Yes    | -   | -      | -        | No         |
-| `VITE_SERVER_URL`     | -      | Yes | -      | -        | No         |
-| `EXPO_PUBLIC_API_URL` | -      | -   | Yes    | -        | No         |
-| `ENVIRONMENT`         | -      | Yes | -      | -        | No         |
+- Environment slug: `dev` (the Infisical UI shows it as "Development").
+- Secrets live in four folders, grouped by blast radius rather than by which app reads them:
+  `/cloudflare`, `/database`, `/server-hono`, `/kaipu-record`.
+- Non-secret config lives at the Infisical root.
 
----
+## How commands get their environment
 
-## Current Pain Points
+Two different mechanisms exist because Cloudflare Workers need env differently from everything
+else:
 
-1. **Multiple .env file locations** -- root `.env`, `apps/server/.dev.vars`, `apps/web/.env`, `apps/mobile/.env`
-2. **Manual sync** -- changing `DATABASE_URL` requires updating 3+ files
-3. **No encryption** -- secrets stored in plaintext
-4. **Wrangler uses `.dev.vars`** not `.env` -- different format/location from everything else
-5. **Drizzle loads from root** -- `config({ path: "../../.env" })` is fragile
-6. **GitHub Actions works fine** -- secrets/vars managed in GitHub, no issue there
+| Mechanism                                | Used by                                                           | How                                                                                                                                                                                                                                             |
+| ---------------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scripts/with-env.sh`                    | Most commands — `bun run dev`, `db:*`, `test:integration`, `plan` | Wraps the command with `infisical run`, injecting values into the process environment. Requires an explicit `--tags` or `--path` filter — there is no "fetch everything" mode.                                                                  |
+| `scripts/pull-env.sh` (generated `.env`) | Cloudflare Workers (`apps/server-hono`, `apps/web-hono`)          | `wrangler` reads Worker bindings from a file, not from the parent process, so `infisical run` never reaches the Worker. This script writes a gitignored `.env` file with exactly one consumer's secrets, filtered by tag, for wrangler to read. |
 
----
+Both scripts pass straight through when `CI` is set (CI builds with placeholder values on
+purpose and must not need a secrets CLI) and both fail loudly if the Infisical CLI is missing
+locally, rather than silently building with undefined values.
 
-## Proposal: dotenvx for Encrypted Env Management
+`scripts/with-env.sh` also honours `SKIP_INFISICAL=1` as an escape hatch for an operator who
+wants to supply values directly — for example
+`DATABASE_URL='<production url>' SKIP_INFISICAL=1 bun run plan grant <email>` when running a
+command against a database other than the default `dev` one. Without `SKIP_INFISICAL`,
+Infisical overrides variables already set in the shell, so a plain inline override would
+silently be ignored.
 
-[dotenvx](https://dotenvx.com) is the next-generation replacement for dotenv, by the same author. Free and open source (BSD-3).
+## First-time setup
 
-### Key Features
-
-- **Encryption** -- AES-256 + secp256k1. Values encrypted inline in `.env` files
-- **Safe to commit** -- encrypted `.env` files can live in git
-- **Per-environment keys** -- `.env.production` gets its own key pair
-- **Asymmetric crypto** -- public key in `.env` (anyone can add secrets), private key in `.env.keys` (only holders can decrypt)
-- **Language-agnostic CLI** -- wraps any command: `dotenvx run -- bun run dev`
-- **Monorepo support** -- `-f` flag to specify which `.env` file
-
-### How Encryption Works
-
-```bash
-# Before encryption
-DATABASE_URL=postgresql://user:pass@host/db
-
-# After `dotenvx encrypt`
-DOTENV_PUBLIC_KEY="03f98bf6e00bce..."
-DATABASE_URL="encrypted:BCV9qZmblsUm77..."
-```
-
-A separate `.env.keys` file holds private keys (never committed):
+Once per machine:
 
 ```bash
-DOTENV_PRIVATE_KEY="a1b2c3d4..."
-DOTENV_PRIVATE_KEY_PRODUCTION="f6e5d4c3..."
+bun run setup      # reports which global tools are missing, and how to install them
+infisical login
 ```
 
----
+`scripts/setup-dev.sh` only checks — it never installs. After that, every command that needs
+secrets fetches them itself; there is nothing to configure per app.
 
-## Options
+## Rules
 
-### Option A: dotenvx for Everything EXCEPT Server Dev (Recommended)
+- Never hand-write or hand-edit a `.env` file. Where one exists it was generated by
+  `pull-env.sh` (or equivalent) and is gitignored.
+- Adding a new Infisical folder means adding it to the `FOLDERS` list in
+  `scripts/pull-env.sh` too, or its secrets go missing from generated files without any error.
+- Never print secret values in logs, commits, or documentation.
 
-Use dotenvx to manage `apps/web/.env`, `apps/mobile/.env`, and root `.env`. Keep `.dev.vars` for server development as-is.
-
-**Pros**: Least disruption, wrangler works natively
-**Cons**: Server secrets still unencrypted locally in `.dev.vars`
-
-### Option B: Generate `.dev.vars` from dotenvx-managed `.env`
-
-Keep `apps/server/.env` managed by dotenvx. Script decrypts and writes to `.dev.vars`:
-
-```json
-{
-  "scripts": {
-    "dev:sync": "dotenvx run -f .env -- sh -c 'printenv | grep -E \"^(DATABASE_URL|CORS_ORIGIN|BETTER_AUTH)\" > .dev.vars'",
-    "dev": "bun run dev:sync && wrangler dev --port 3000"
-  }
-}
-```
-
-### Option C: Use `wrangler dev --env-file .env` (Wrangler v4+)
-
-Wrangler supports `--env-file` flag or `env_file` in `wrangler.jsonc`:
-
-```jsonc
-{
-  "env_file": ".env"
-}
-```
-
-### Option D: Consolidate to Root `.env` + dotenvx
-
-Single encrypted `.env` at root. Each app loads from there:
-
-```json
-{
-  "dev": "dotenvx run -f ../../.env -- wrangler dev --port 3000"
-}
-```
-
----
-
-## Recommended Approach
-
-**Start with Option A** because:
-
-1. Zero risk to existing wrangler workflow
-2. Encrypts web, mobile, and root env files immediately
-3. `.dev.vars` already works for local server dev
-4. Can migrate to Option B or C later
-
-### Implementation Steps
-
-1. Install `@dotenvx/dotenvx` as root devDependency
-2. Encrypt existing `.env` files with `dotenvx encrypt`
-3. Update `.gitignore` to include `.env.keys` and `.dev.vars`
-4. Update `drizzle.config.ts` to not depend on root `.env` with relative path
-5. Update `package.json` scripts to use `dotenvx run`
-6. Store `DOTENV_PRIVATE_KEY` in 1Password for team sharing
-7. Optionally add `dotenvx ext precommit` as a `pre-commit` job in `lefthook.yml` to prevent committing unencrypted secrets
-
-### Onboarding a New Developer
-
-1. Clone repo (gets encrypted `.env` files)
-2. Receive `.env.keys` from team lead (via 1Password, etc.)
-3. Place `.env.keys` at repo root
-4. Run `bun run dev` -- everything decrypts automatically
-
-### CI/CD (GitHub Actions)
-
-```yaml
-- run: bunx dotenvx run -f apps/server/.env -- wrangler deploy
-  env:
-    DOTENV_PRIVATE_KEY: ${{ secrets.DOTENV_PRIVATE_KEY }}
-```
-
-Or keep using current GitHub secrets approach (no change needed).
+See the root `CLAUDE.md` ("Secrets: Infisical") for the source-of-truth summary this page
+expands on.

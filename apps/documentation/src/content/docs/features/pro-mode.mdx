@@ -136,10 +136,11 @@ bun run plan grant <email>    # active, non-expiring manual pro (idempotent)
 bun run plan revoke <email>   # deletes the manual row, back to free
 ```
 
-It loads `DATABASE_URL` from `apps/server-hono/.env` (the development database). dotenvx never
-overrides a variable that is already set, so to act on production pass the production URL
-inline — `DATABASE_URL='<production url>' bun run plan grant <email>` — and keep it out of your
-shell history. The command refuses to touch a row a billing provider (`stripe`, `autumn`) owns,
+It fetches `DATABASE_URL` from Infisical (the development database; see [Environment
+Variables](/backend/environment-variables/)). Infisical overrides a variable that is already
+set, so to act on production, pass the production URL inline and set `SKIP_INFISICAL=1` —
+`DATABASE_URL='<production url>' SKIP_INFISICAL=1 bun run plan grant <email>` — and keep it out
+of your shell history. The command refuses to touch a row a billing provider (`stripe`, `autumn`) owns,
 and it is not reachable from the API: the logic lives in `grantManualPlan` / `revokeManualPlan`
 (`@kaipu/application`) behind `IManualPlanGrantRepository`, wired only by
 `apps/server-hono/scripts/plan.ts`.

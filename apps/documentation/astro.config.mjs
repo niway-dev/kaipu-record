@@ -67,6 +67,7 @@ export default defineConfig({
             { slug: "backlog" },
             { slug: "backlog/technical-debt" },
             { slug: "backlog/code-quality-audit" },
+            { slug: "backlog/secrets-and-dependency-audit-handoff" },
             { slug: "backlog/lefthook-migration" },
             { slug: "backlog/ci-local-first-verification" },
             { slug: "backlog/desktop-auth-pages" },
