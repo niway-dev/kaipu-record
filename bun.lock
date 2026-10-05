@@ -203,6 +203,7 @@
         "typescript": "catalog:",
         "vite": "catalog:",
         "vite-tsconfig-paths": "^5.1.4",
+        "vitest": "^4.1.9",
         "web-vitals": "^5.0.3",
       },
     },
