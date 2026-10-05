@@ -20,12 +20,15 @@
  * each caller's head.
  */
 
-import logoApp from "../assets/logo-app.webp";
-import logoDone from "../assets/logo-done.webp";
-import logoPermissions from "../assets/logo-permissions.webp";
-import logoPlain from "../assets/logo-plain.webp";
-import logoRecord from "../assets/logo-record.webp";
-import logoScreenshot from "../assets/logo-screenshot.webp";
+// `?no-inline`: each file is under Vite's 4KB inline limit, so without it the
+// six marks would be base64-embedded in the entry JS and lose their own hashed,
+// lazy-loadable requests.
+import logoApp from "../assets/logo-app.svg?no-inline";
+import logoDone from "../assets/logo-done.svg?no-inline";
+import logoPermissions from "../assets/logo-permissions.svg?no-inline";
+import logoPlain from "../assets/logo-plain.svg?no-inline";
+import logoRecord from "../assets/logo-record.svg?no-inline";
+import logoScreenshot from "../assets/logo-screenshot.svg?no-inline";
 
 export const LOGO_USES = [
   /** Dock, ⌘-Tab, Finder, the DMG, installers, large marketing art. */
