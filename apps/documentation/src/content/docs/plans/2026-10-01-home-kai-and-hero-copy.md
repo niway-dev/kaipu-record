@@ -846,7 +846,7 @@ The meaning is settled. The visual identity is settled too, since 2026-10-01: Ka
 Replace the "Current home status (2026-09-30)" paragraph (line 43) with:
 
 ```markdown
-**Home status (2026-10-01):** the four-moments home carries the identity in its third section, "Meet Kai" (`apps/web-hono/src/components/home/kai.tsx`), which reuses the `landing.origin*` messages and shows the signature "This. Captured." in place. The unmounted `BrandOrigin` component is retired from the home. The home-specific footer does not render `footerSignature`, but `components/landing/footer.tsx` still uses that key on routes mounted through `PublicShell`. Nothing else changed in the adopted meaning. Shipped in [PR #A](https://github.com/csdev19/kaipu-record-monorepo/pull/A).
+**Home status (2026-10-01):** the four-moments home carries the identity in its third section, "Meet Kai" (`apps/web-hono/src/components/home/kai.tsx`), which reuses the `landing.origin*` messages and shows the signature "This. Captured." in place. The unmounted `BrandOrigin` component is retired from the home. The home-specific footer does not render `footerSignature`, but `components/landing/footer.tsx` still uses that key on routes mounted through `PublicShell`. Nothing else changed in the adopted meaning. Shipped in [PR #A](https://github.com/niway-dev/kaipu-record/pull/A).
 ```
 
 Replace `A` with Agent A's PR number here and in every later task; Task B6 greps for leftovers.
@@ -963,7 +963,7 @@ Tick (`[x]`) only items the repo proves: the asset inventory (six PNGs and two m
 Replace line 8's status sentence with:
 
 ```markdown
-**Status: 🟡 In progress · updated 2026-10-01.** Identity documentation, README correction, EN/ES landing copy, the four-moments home, `@kaipu/brand` with the fox, and the menu-bar capture-mode marks are on `main`. The home's Kai section and hero copy ship in [PR #A](https://github.com/csdev19/kaipu-record-monorepo/pull/A). Still pending: the desktop bundle icon export, the SVG lockup and favicon crop, and media production. Parent: [Product growth](/backlog/product-growth/).
+**Status: 🟡 In progress · updated 2026-10-01.** Identity documentation, README correction, EN/ES landing copy, the four-moments home, `@kaipu/brand` with the fox, and the menu-bar capture-mode marks are on `main`. The home's Kai section and hero copy ship in [PR #A](https://github.com/niway-dev/kaipu-record/pull/A). Still pending: the desktop bundle icon export, the SVG lockup and favicon crop, and media production. Parent: [Product growth](/backlog/product-growth/).
 ```
 
 Also replace the sentence `The preferred mascot exploration is a small living knot; final artwork is not selected by this plan.` in "Goal and settled inputs" with `The character is the fox shipped in `packages/brand` (adopted 2026-10-01).`
@@ -1053,9 +1053,9 @@ Replace lines 8–16 (both `>` blocks) with a single block:
 
 ```markdown
 > **Status: 🟡 In progress** — the four-moments home merged in
-> [PR #196](https://github.com/csdev19/kaipu-record-monorepo/pull/196). The focused Hero,
+> [PR #196](https://github.com/niway-dev/kaipu-record/pull/196). The focused Hero,
 > Moments, Kai, camera, closing, and documentation slice follows in
-> [PR #A](https://github.com/csdev19/kaipu-record-monorepo/pull/A). Remaining conversion work is
+> [PR #A](https://github.com/niway-dev/kaipu-record/pull/A). Remaining conversion work is
 > owned by [Home conversion and Kai implementation v2](/plans/2026-10-01-home-conversion-v2/).
 > Current unresolved items remain in [Open](#open).
 >

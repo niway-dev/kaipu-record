@@ -46,7 +46,7 @@ After #91 merges, GitHub retargets #92 to `main`; after #92 merges, this page's 
 ### Setup
 
 ```bash
-git clone git@github-personal:csdev19/kaipu-record-monorepo.git
+git clone git@github-csdev:niway-dev/kaipu-record.git
 cd kaipu-record-monorepo
 gh auth switch --user csdev19          # the remote uses the github-personal SSH host
 bun install

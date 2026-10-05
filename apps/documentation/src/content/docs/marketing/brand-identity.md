@@ -40,7 +40,7 @@ Approved Spanish brand copy:
 
 ## Where this identity is published
 
-**Home status (2026-10-01):** the four-moments home carries the identity in its third section, "Meet Kai" (`apps/web-hono/src/components/home/kai.tsx`), which reuses the `landing.origin*` messages and shows the signature "This. Captured." in place. The unmounted `BrandOrigin` component is retired from the home. The home-specific footer does not render `footerSignature`, but `components/landing/footer.tsx` still uses that key on routes mounted through `PublicShell`. Nothing else changed in the adopted meaning. Shipped in [PR #202](https://github.com/csdev19/kaipu-record-monorepo/pull/202).
+**Home status (2026-10-01):** the four-moments home carries the identity in its third section, "Meet Kai" (`apps/web-hono/src/components/home/kai.tsx`), which reuses the `landing.origin*` messages and shows the signature "This. Captured." in place. The unmounted `BrandOrigin` component is retired from the home. The home-specific footer does not render `footerSignature`, but `components/landing/footer.tsx` still uses that key on routes mounted through `PublicShell`. Nothing else changed in the adopted meaning. Shipped in [PR #202](https://github.com/niway-dev/kaipu-record/pull/202).
 
 The meaning no longer depends on a chat transcript or a file outside the repository. It is
 carried in three places, each with a different job:

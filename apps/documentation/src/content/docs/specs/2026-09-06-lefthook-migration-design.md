@@ -9,7 +9,7 @@ description: Replace the husky + lint-staged setup with one lefthook.yml that en
 (`package.json`, `.husky/`, `lefthook.yml`, `.gitignore`) and three docs pages. No app or package
 code changes.
 
-**Status: 🟡 Approved — implemented in [PR #85](https://github.com/csdev19/kaipu-record-monorepo/pull/85), pending merge.** The reusable
+**Status: 🟡 Approved — implemented in [PR #85](https://github.com/niway-dev/kaipu-record/pull/85), pending merge.** The reusable
 half (the decision, the hook contract, the migration procedure, the gotchas) lives in the hub:
 [general-knowledge · git-hooks-lefthook-playbook](https://github.com/csdev19/general-knowledge/blob/main/monorepos/git-hooks-lefthook-playbook.md).
 This page is Kaipu's application of it: what is true in this repo today and exactly what changes.

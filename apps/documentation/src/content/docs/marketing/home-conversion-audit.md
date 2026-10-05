@@ -5,7 +5,7 @@ description: Evidence-based review of the four-moments home, with prioritized co
 
 # Home audit — conversion, EN/ES, and Kai
 
-**Reviewed 2026-09-30 · Findings open unless explicitly marked resolved.** Documentation only: this audit does not implement its recommendations. Baseline: `feat/marketing-landing` at `1ade987`, after the `main` integration in `177fa48`. Review continues in [PR #196](https://github.com/csdev19/kaipu-record-monorepo/pull/196).
+**Reviewed 2026-09-30 · Findings open unless explicitly marked resolved.** Documentation only: this audit does not implement its recommendations. Baseline: `feat/marketing-landing` at `1ade987`, after the `main` integration in `177fa48`. Review continues in [PR #196](https://github.com/niway-dev/kaipu-record/pull/196).
 
 ## One-minute summary
 

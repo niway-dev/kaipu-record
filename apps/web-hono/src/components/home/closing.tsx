@@ -57,7 +57,7 @@ export function Closing() {
             {t("homeFooterPrivacy")}
           </Link>
           <a
-            href="https://github.com/csdev19/kaipu-record-monorepo"
+            href="https://github.com/niway-dev/kaipu-record"
             className={styles.link}
             rel="noreferrer"
           >

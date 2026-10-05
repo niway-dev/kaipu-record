@@ -136,9 +136,10 @@ await window.electronAPI.getAppVersion();
 - The recording pipeline captures through **WebCodecs via `mediabunny`**, not
   `MediaRecorder` + FFmpeg — FFmpeg was the legacy approach and is kept only as an
   optional, lazy, on-demand offline tool, never embedded in the live capture path.
-- The GitHub repo is **`csdev19/kaipu-record-monorepo`** (a personal-account repo,
-  `github-personal` SSH alias) — the `Niway` author field in `apps/kaipu-record/
-package.json` is a business name, not a separate GitHub org this code lives in.
+- The GitHub repo is **`niway-dev/kaipu-record`**, public under AGPL-3.0 and owned by the
+  Niway organisation since 2026-10-05 (it moved from `csdev19/kaipu-record-monorepo`, which
+  still redirects). Push through the `github-csdev` SSH alias; the maintainer is
+  `@csdev19`.
 - Cloud is a **capability**, not the product's category — don't describe or pitch
   Kaipu Record as "cloud-first" or "a Loom competitor" in the collaboration-platform
   sense; the desktop app is the product, and sync/sharing is what you turn on.

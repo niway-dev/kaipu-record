@@ -8,7 +8,7 @@ description: "Self-contained handoff to resume the crop-tool rework: change crop
 > **Read this first when resuming after a context clear.** It is self-contained: it has the
 > decision, the diagnosis, the current state, the exact rework plan, and the workflow rules.
 > Branch: `feat/screenshot-crop`. Open PR: **#15**
-> (`https://github.com/csdev19/kaipu-record-monorepo/pull/15`).
+> (`https://github.com/niway-dev/kaipu-record/pull/15`).
 
 ## 0. TL;DR — what to do
 

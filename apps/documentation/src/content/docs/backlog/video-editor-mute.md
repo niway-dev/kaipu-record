@@ -6,7 +6,7 @@ description: "Proposal: a Mute tool in the video editor that silences the audio 
 # Video editor — mute
 
 > **Status: 🟢 Ready to validate — implemented in
-> [#199](https://github.com/csdev19/kaipu-record-monorepo/pull/199) (2026-10-01).** The owner
+> [#199](https://github.com/niway-dev/kaipu-record/pull/199) (2026-10-01).** The owner
 > exercised it by hand on a real recording the same day: add a range, drag its edges, hear it
 > go silent in the preview, delete it from the inspector. Export validation on a packaged build
 > is the remaining step. Original request after the v2 wave: "an option to remove the sound —
