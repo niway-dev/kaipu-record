@@ -1070,7 +1070,7 @@ Expected: all green (record the totals in the PR body).
 
 - [ ] **Step 2: Update the docs**
 
-Change each doc's first blockquote line to `> **Status: 🟢 Ready to validate** — implemented in [#NNN](https://github.com/csdev19/kaipu-record-monorepo/pull/NNN) (2026-09-23). Originally proposed …` keeping the rest of the paragraph. Update the two index rows' status column. Run `../../node_modules/.bin/oxfmt` on the three files (or `bunx oxfmt` from the repo root).
+Change each doc's first blockquote line to `> **Status: 🟢 Ready to validate** — implemented in [#NNN](https://github.com/niway-dev/kaipu-record/pull/NNN) (2026-09-23). Originally proposed …` keeping the rest of the paragraph. Update the two index rows' status column. Run `../../node_modules/.bin/oxfmt` on the three files (or `bunx oxfmt` from the repo root).
 
 - [ ] **Step 3: Commit and open the PR**
 

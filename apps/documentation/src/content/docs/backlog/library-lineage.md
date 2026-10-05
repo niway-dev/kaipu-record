@@ -5,7 +5,7 @@ description: "Proposal: make the source ↔ export relationship navigable in the
 
 # Library — lineage
 
-> **Status: 🟢 Ready to validate** — implemented in [#156](https://github.com/csdev19/kaipu-record-monorepo/pull/156) (2026-09-23). Originally proposed following an owner
+> **Status: 🟢 Ready to validate** — implemented in [#156](https://github.com/niway-dev/kaipu-record/pull/156) (2026-09-23). Originally proposed following an owner
 > request: "on a video's detail page, see the
 > previous video it references — an edited video comes from another one and they are not
 > necessarily consecutive." Parent decision:

@@ -61,9 +61,11 @@ this one.
    site; the repo content rule is English.
 4. **Personal references.** Nothing in docs, fixtures or comments that names people, clients
    or private infrastructure that should not be public.
-5. **`CONTRIBUTING.md`** with the contribution policy below.
-6. **`SECURITY.md`** with a private disclosure address.
+5. **`CONTRIBUTING.md`** with the contribution policy below. _Done 2026-10-05._
+6. **`SECURITY.md`** with a private disclosure address. _Done 2026-10-05: GitHub private
+   vulnerability reporting, with `contacto@niway.dev` as the fallback._
 7. **Issue templates** that ask for the app version, OS and a recording of the problem.
+   _Done 2026-10-05._
 8. **A first public release** with signed macOS and Windows artifacts already attached, so the
    first visitor can download, not only clone.
 
@@ -73,11 +75,18 @@ Recordly's public post-mortem is the warning: unreviewed, AI-generated pull requ
 export crashes, memory leaks and audio desync, and with one maintainer offline there was no one
 to catch them. Kaipu is also a one-person project. The rules exist so that stays survivable.
 
-- **Issue before pull request.** A PR without a linked, accepted issue is closed with a
-  pointer to this rule. It is the only way to keep the maintainer's review queue bounded.
+- **Issues from anyone, pull requests from collaborators only** (decided 2026-10-05, when the
+  repository went public). The repository's _Pull requests → Collaborators only_ setting
+  ([GitHub, Feb 2026](https://github.blog/changelog/2026-02-13-new-repository-settings-for-configuring-pull-request-access/))
+  enforces it: outsiders cannot open one at all, so nothing has to be closed by hand or by a
+  bot. This is stronger than the earlier "issue before pull request" rule and replaces it;
+  projects such as tldraw reached the same place by auto-closing external pull requests.
+- **Issue before pull request**, for collaborators too: a pull request links the issue it
+  resolves.
 - **Small, single-purpose PRs.** One behavior per PR; refactors travel separately.
-- **The existing gates apply to everyone.** `verify` locally, CI green, no new failing check on
-  the commit ([ADR 0004](/architecture/decisions/0004-local-first-release-verification/)).
+- **The existing gates apply to everyone.** CI green on every pull request — `verify`, the app
+  builds and the macOS end-to-end suite
+  ([ADR 0010](/architecture/decisions/0010-checks-run-in-actions-on-every-pr/)).
 - **Disclose generated code.** A PR must say whether it was produced with an AI tool and
   confirm the author ran it. Undisclosed generated PRs are closed.
 - **No drive-by dependency changes.** Adding or upgrading a dependency needs its own issue,

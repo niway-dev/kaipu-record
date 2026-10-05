@@ -6,9 +6,9 @@ description: "Findings from validating v2 PR 8 (blur and cover): annotations sti
 # Video editor v2 — annotation options in the inspector
 
 > **Status: 🟢 Ready to validate** — implemented in
-> [#152](https://github.com/csdev19/kaipu-record-monorepo/pull/152) (2026-09-23); see that PR's
+> [#152](https://github.com/niway-dev/kaipu-record/pull/152) (2026-09-23); see that PR's
 > checklist for the manual pass. Written 2026-09-22 as notes from validating
-> [v2 PR 8 — blur and cover](https://github.com/csdev19/kaipu-record-monorepo/pull/139)
+> [v2 PR 8 — blur and cover](https://github.com/niway-dev/kaipu-record/pull/139)
 > on hardware. The redactions work and the owner's verdict on the editor was that the new
 > design "fixes many things I did not like before". This doc records the one
 > inconsistency that stands out now that the inspector column exists, and the caveats of
@@ -90,7 +90,7 @@ Worth keeping in front of whoever tests this branch stack:
   and is drawn _under_ the camera transform. The check the test suite cannot do: select
   a zoom over a region, deselect, press play — the blur must stay glued to the content
   while the camera moves (`backdrop-filter` under a CSS transform on a real GPU).
-- **Nothing is in the file until PR 9** ([#140](https://github.com/csdev19/kaipu-record-monorepo/pull/140)).
+- **Nothing is in the file until PR 9** ([#140](https://github.com/niway-dev/kaipu-record/pull/140)).
   That PR's manual checks are the ones not to skip, on the **exported** file with a
   frame-accurate player: a blur flush against the frame's top and left edge (nothing
   readable in the outer ~3σ band), and a blur drawn over a cover (the covered content

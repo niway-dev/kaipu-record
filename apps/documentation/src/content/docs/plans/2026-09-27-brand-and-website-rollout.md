@@ -5,7 +5,7 @@ description: Execution sequence for preserving Kaipu's meaning, selecting Kai an
 
 # Brand identity and website rollout
 
-**Status: 🟡 In progress · updated 2026-10-01.** Identity documentation, README correction, EN/ES landing copy, the four-moments home, `@kaipu/brand` with the fox, and the menu-bar capture-mode marks are on `main`. The home's Kai section and hero copy ship in [PR #202](https://github.com/csdev19/kaipu-record-monorepo/pull/202). Still pending: the desktop bundle icon export, the SVG lockup and favicon crop, and media production. Parent: [Product growth](/backlog/product-growth/).
+**Status: 🟡 In progress · updated 2026-10-01.** Identity documentation, README correction, EN/ES landing copy, the four-moments home, `@kaipu/brand` with the fox, and the menu-bar capture-mode marks are on `main`. The home's Kai section and hero copy ship in [PR #202](https://github.com/niway-dev/kaipu-record/pull/202). Still pending: the desktop bundle icon export, the SVG lockup and favicon crop, and media production. Parent: [Product growth](/backlog/product-growth/).
 
 ## Goal and settled inputs
 

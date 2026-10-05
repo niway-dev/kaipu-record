@@ -23,7 +23,7 @@ The owner reported that the Draft → Ready implementation displays two skipped 
 on ordinary PRs: `Verify release candidate` and `Cancel superseded verification`.
 The screenshot also shows `Merge readiness` and the temporary required alias
 `Release candidate verified` succeeding. The Draft → Ready implementation subsequently
-merged in [PR #174](https://github.com/csdev19/kaipu-record-monorepo/pull/174) on
+merged in [PR #174](https://github.com/niway-dev/kaipu-record/pull/174) on
 2026-09-25. The live ruleset still requires the legacy alias; migration remains pending.
 
 Alternatives considered during the discussion:
@@ -70,15 +70,15 @@ Two axes. Frequency was the big one; duration was the follow-up.
 
 | PR                                                                | What it does                                                                                                                                                                    |
 | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [#159](https://github.com/csdev19/kaipu-record-monorepo/pull/159) | Fixes the "Edited · not exported" badge, which was wrong on every export — it compared a session's `savedAt` against an export's `createdAt`, two different clocks. Now a stamp |
-| [#160](https://github.com/csdev19/kaipu-record-monorepo/pull/160) | `release-please` runs only when a releasable path changes (was: every push to `main`, ~88 runs in September)                                                                    |
-| [#161](https://github.com/csdev19/kaipu-record-monorepo/pull/161) | **Local `verify` gate on pre-push** (lefthook) + **ADR 0004** + the September billing baseline in `public/audits/ci-usage/2026-09-baseline/`                                    |
-| [#162](https://github.com/csdev19/kaipu-record-monorepo/pull/162) | Every release workflow gates its build/deploy job behind `needs: verify`                                                                                                        |
-| [#163](https://github.com/csdev19/kaipu-record-monorepo/pull/163) | Retires the `pull_request` triggers from the four validation workflows — **this is the 802 minutes**                                                                            |
-| [#164](https://github.com/csdev19/kaipu-record-monorepo/pull/164) | Verifies the release candidate before the tag exists                                                                                                                            |
-| [#166](https://github.com/csdev19/kaipu-record-monorepo/pull/166) | Caches turbo outputs in the nine jobs that run `check-types` or `build`                                                                                                         |
-| [#167](https://github.com/csdev19/kaipu-record-monorepo/pull/167) | Deletes a PR's caches when it closes; stops the per-SHA turbo key minting one per push                                                                                          |
-| [#168](https://github.com/csdev19/kaipu-record-monorepo/pull/168) | The **`verify` label** is both the trigger and the gate for the candidate verify, plus the always-running `Release candidate verified` job that reports the required check      |
+| [#159](https://github.com/niway-dev/kaipu-record/pull/159) | Fixes the "Edited · not exported" badge, which was wrong on every export — it compared a session's `savedAt` against an export's `createdAt`, two different clocks. Now a stamp |
+| [#160](https://github.com/niway-dev/kaipu-record/pull/160) | `release-please` runs only when a releasable path changes (was: every push to `main`, ~88 runs in September)                                                                    |
+| [#161](https://github.com/niway-dev/kaipu-record/pull/161) | **Local `verify` gate on pre-push** (lefthook) + **ADR 0004** + the September billing baseline in `public/audits/ci-usage/2026-09-baseline/`                                    |
+| [#162](https://github.com/niway-dev/kaipu-record/pull/162) | Every release workflow gates its build/deploy job behind `needs: verify`                                                                                                        |
+| [#163](https://github.com/niway-dev/kaipu-record/pull/163) | Retires the `pull_request` triggers from the four validation workflows — **this is the 802 minutes**                                                                            |
+| [#164](https://github.com/niway-dev/kaipu-record/pull/164) | Verifies the release candidate before the tag exists                                                                                                                            |
+| [#166](https://github.com/niway-dev/kaipu-record/pull/166) | Caches turbo outputs in the nine jobs that run `check-types` or `build`                                                                                                         |
+| [#167](https://github.com/niway-dev/kaipu-record/pull/167) | Deletes a PR's caches when it closes; stops the per-SHA turbo key minting one per push                                                                                          |
+| [#168](https://github.com/niway-dev/kaipu-record/pull/168) | The **`verify` label** is both the trigger and the gate for the candidate verify, plus the always-running `Release candidate verified` job that reports the required check      |
 
 ### The numbers
 

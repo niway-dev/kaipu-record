@@ -83,7 +83,7 @@ export type GateState =
   | { kind: "hard"; message: string; downloadUrl: string };
 
 export const VERSION_GATE_THROTTLE_MS = 10 * 60 * 1000; // 10 min between network checks
-export const DEFAULT_DOWNLOAD_URL = "https://github.com/csdev19/kaipu-record-monorepo/releases/latest";
+export const DEFAULT_DOWNLOAD_URL = "https://github.com/niway-dev/kaipu-record/releases/latest";
 
 /** -1 | 0 | 1 for a vs b on plain x.y.z. Missing/short parts treated as 0 (so "1.2" == "1.2.0"). */
 export function compareSemver(a: string, b: string): -1 | 0 | 1;
@@ -176,7 +176,7 @@ VERSION_GATE_THROTTLE_MS`. Update `lastCheckedAt` only on an actual fetch attemp
   "minVersion": "1.2.0",
   "latestVersion": "1.4.0",
   "message": "Optional custom copy shown in the overlay/banner",
-  "downloadUrl": "https://github.com/csdev19/kaipu-record-monorepo/releases/latest"
+  "downloadUrl": "https://github.com/niway-dev/kaipu-record/releases/latest"
 }
 ```
 

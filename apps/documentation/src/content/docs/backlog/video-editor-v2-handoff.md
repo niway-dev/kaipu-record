@@ -20,22 +20,22 @@ onboarding refinements (#153). The grouped view is
 
 | PR                                                                | Branch                                    | Delivers                                                                      | State     |
 | ----------------------------------------------------------------- | ----------------------------------------- | ----------------------------------------------------------------------------- | --------- |
-| [#132](https://github.com/csdev19/kaipu-record-monorepo/pull/132) | `feat/video-editor-v2-poster-from-output` | export poster from the rendered output                                        | ✅ merged |
-| [#133](https://github.com/csdev19/kaipu-record-monorepo/pull/133) | `…-cursor-track`                          | cursor position track + clock/pause mapping + vault sidecar                   | ✅ merged |
-| [#134](https://github.com/csdev19/kaipu-record-monorepo/pull/134) | `…-click-hook`                            | clicks via `uiohook-napi`, gated on Accessibility (no prompt)                 | ✅ merged |
-| [#135](https://github.com/csdev19/kaipu-record-monorepo/pull/135) | `…-zoom-math`                             | detector, camera path, source-time, redaction math (pure)                     | ✅ merged |
-| [#136](https://github.com/csdev19/kaipu-record-monorepo/pull/136) | `…-scene-v2`                              | scene v2, session, initial detection, **autosave**                            | ✅ merged |
-| [#137](https://github.com/csdev19/kaipu-record-monorepo/pull/137) | `…-timeline-lanes`                        | Activity + Zooms lanes, inspector column, Zoom tool                           | ✅ merged |
-| [#138](https://github.com/csdev19/kaipu-record-monorepo/pull/138) | `…-preview-camera`                        | camera transform per frame, camera box, hold-to-compare, Follow/Lock          | ✅ merged |
-| [#139](https://github.com/csdev19/kaipu-record-monorepo/pull/139) | `…-redactions`                            | Blur/Cover tools, Privacy lane, inspectors (preview only)                     | ✅ merged |
-| [#140](https://github.com/csdev19/kaipu-record-monorepo/pull/140) | `…-export-pass`                           | zoom + redactions + pinned overlays burned into the export                    | ✅ merged |
-| [#141](https://github.com/csdev19/kaipu-record-monorepo/pull/141) | `…-polish`                                | shortcuts, empty states, Accessibility onboarding, soft-zoom hint, docs to 🟡 | ✅ merged |
+| [#132](https://github.com/niway-dev/kaipu-record/pull/132) | `feat/video-editor-v2-poster-from-output` | export poster from the rendered output                                        | ✅ merged |
+| [#133](https://github.com/niway-dev/kaipu-record/pull/133) | `…-cursor-track`                          | cursor position track + clock/pause mapping + vault sidecar                   | ✅ merged |
+| [#134](https://github.com/niway-dev/kaipu-record/pull/134) | `…-click-hook`                            | clicks via `uiohook-napi`, gated on Accessibility (no prompt)                 | ✅ merged |
+| [#135](https://github.com/niway-dev/kaipu-record/pull/135) | `…-zoom-math`                             | detector, camera path, source-time, redaction math (pure)                     | ✅ merged |
+| [#136](https://github.com/niway-dev/kaipu-record/pull/136) | `…-scene-v2`                              | scene v2, session, initial detection, **autosave**                            | ✅ merged |
+| [#137](https://github.com/niway-dev/kaipu-record/pull/137) | `…-timeline-lanes`                        | Activity + Zooms lanes, inspector column, Zoom tool                           | ✅ merged |
+| [#138](https://github.com/niway-dev/kaipu-record/pull/138) | `…-preview-camera`                        | camera transform per frame, camera box, hold-to-compare, Follow/Lock          | ✅ merged |
+| [#139](https://github.com/niway-dev/kaipu-record/pull/139) | `…-redactions`                            | Blur/Cover tools, Privacy lane, inspectors (preview only)                     | ✅ merged |
+| [#140](https://github.com/niway-dev/kaipu-record/pull/140) | `…-export-pass`                           | zoom + redactions + pinned overlays burned into the export                    | ✅ merged |
+| [#141](https://github.com/niway-dev/kaipu-record/pull/141) | `…-polish`                                | shortcuts, empty states, Accessibility onboarding, soft-zoom hint, docs to 🟡 | ✅ merged |
 
 Plus one implementation PR that came out of validating the data:
 
 | PR                                                                | Branch                                    | Delivers                                                                                                                         | State     |
 | ----------------------------------------------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | --------- |
-| [#143](https://github.com/csdev19/kaipu-record-monorepo/pull/143) | `feat/video-editor-v2-cursor-track-check` | `inspectCursorTrack`, `bun run cursor-track:check`, a real-recording fixture, **and the tail-cut fix** (`durationMs`, unfloored) | ✅ merged |
+| [#143](https://github.com/niway-dev/kaipu-record/pull/143) | `feat/video-editor-v2-cursor-track-check` | `inspectCursorTrack`, `bun run cursor-track:check`, a real-recording fixture, **and the tail-cut fix** (`durationMs`, unfloored) | ✅ merged |
 
 Test suite: 851 on `main` before v2 → 1084 with all ten PRs (→ ~1110 with #143).
 
@@ -46,13 +46,13 @@ inspector + camera box body-drag) and #153 (onboarding).
 
 | PR                                                                | What it records                                                                                                 |
 | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| [#142](https://github.com/csdev19/kaipu-record-monorepo/pull/142) | `backlog/cursor-sprite-capture` — cursor-free capture + drawn cursor, deferred to v2.1; linked from the roadmap |
-| [#144](https://github.com/csdev19/kaipu-record-monorepo/pull/144) | `backlog/edit-state-indicators` — "Guardando…" in the editor; "Editado · sin exportar" in the library           |
-| [#145](https://github.com/csdev19/kaipu-record-monorepo/pull/145) | `backlog/video-editor-camera-box-ux` — box only grabs on its border; focus lost after a timeline click          |
-| [#146](https://github.com/csdev19/kaipu-record-monorepo/pull/146) | `backlog/video-editor-annotation-inspector` — annotations still use the v1 popover; move them to the inspector  |
-| [#147](https://github.com/csdev19/kaipu-record-monorepo/pull/147) | **ADR 0003** — an export never replaces the original recording                                                  |
+| [#142](https://github.com/niway-dev/kaipu-record/pull/142) | `backlog/cursor-sprite-capture` — cursor-free capture + drawn cursor, deferred to v2.1; linked from the roadmap |
+| [#144](https://github.com/niway-dev/kaipu-record/pull/144) | `backlog/edit-state-indicators` — "Guardando…" in the editor; "Editado · sin exportar" in the library           |
+| [#145](https://github.com/niway-dev/kaipu-record/pull/145) | `backlog/video-editor-camera-box-ux` — box only grabs on its border; focus lost after a timeline click          |
+| [#146](https://github.com/niway-dev/kaipu-record/pull/146) | `backlog/video-editor-annotation-inspector` — annotations still use the v1 popover; move them to the inspector  |
+| [#147](https://github.com/niway-dev/kaipu-record/pull/147) | **ADR 0003** — an export never replaces the original recording                                                  |
 
-Plus [#148](https://github.com/csdev19/kaipu-record-monorepo/pull/148), this page. #145
+Plus [#148](https://github.com/niway-dev/kaipu-record/pull/148), this page. #145
 and #146 are implemented by #152 and now read 🟢 Ready to validate.
 
 ## Decisions taken while validating (2026-09-22)

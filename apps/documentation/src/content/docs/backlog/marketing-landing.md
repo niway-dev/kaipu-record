@@ -6,9 +6,9 @@ description: "The home page rebuilt from the owner's design: its own token layer
 # Marketing landing — the four-moments home
 
 > **Status: 🟡 In progress** — the four-moments home merged in
-> [PR #196](https://github.com/csdev19/kaipu-record-monorepo/pull/196). The focused Hero,
+> [PR #196](https://github.com/niway-dev/kaipu-record/pull/196). The focused Hero,
 > Moments, Kai, camera, closing, and documentation slice follows in
-> [PR #202](https://github.com/csdev19/kaipu-record-monorepo/pull/202). Remaining conversion work is
+> [PR #202](https://github.com/niway-dev/kaipu-record/pull/202). Remaining conversion work is
 > owned by [Home conversion and Kai implementation v2](/plans/2026-10-01-home-conversion-v2/).
 > Current unresolved items remain in [Open](#open).
 >

@@ -33,7 +33,7 @@ negligible. The landing's entire problem is how long it takes to show anything.
 
 Lighthouse 13.5.0 (same instrument), against a **Cloudflare Version URL** — real edge,
 real brotli, real TTFB — serving `main` at `976105a`, uploaded by the manual
-[Preview Web](https://github.com/csdev19/kaipu-record-monorepo/actions/workflows/preview-web.yml)
+[Preview Web](https://github.com/niway-dev/kaipu-record/actions/workflows/preview-web.yml)
 workflow. Same code path as the first row: nothing was optimized in between, so the
 delta below is the compression-and-edge effect the first row's caveats predicted, and
 nothing else.
@@ -147,7 +147,7 @@ a note, because the point of the series is the shape of the curve.
 ## The third measurement — the CSS dedup, and why the mobile number cannot be trusted
 
 Lighthouse 13.5.0 against the Version URL serving `main` at `0b6f4c4`, after
-[#214](https://github.com/csdev19/kaipu-record-monorepo/pull/214) stopped `@kaipu/web-ui`
+[#214](https://github.com/niway-dev/kaipu-record/pull/214) stopped `@kaipu/web-ui`
 from shipping its own Tailwind build. Raw reports:
 [desktop](/audits/web-vitals/2026-10-02-post-dedup/lighthouse-desktop.html) ·
 [mobile](/audits/web-vitals/2026-10-02-post-dedup/lighthouse-mobile.html) ·
@@ -198,7 +198,7 @@ check that the key exists.
 ### How to settle the mobile question
 
 Upload `976105a` as a second Version URL through the
-[Preview Web](https://github.com/csdev19/kaipu-record-monorepo/actions/workflows/preview-web.yml)
+[Preview Web](https://github.com/niway-dev/kaipu-record/actions/workflows/preview-web.yml)
 workflow and measure both URLs back to back on the same host. Two commits, one machine, one
 sitting — that isolates the dedup properly, and it is cheap because the workflow takes a
 `ref`.

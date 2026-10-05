@@ -6,7 +6,7 @@ description: "What shipped alongside the mute work in #199: the video editor giv
 # Editor space, window presets, and the menu-bar icon
 
 > **Status: 🟢 Ready to validate — shipped in
-> [#199](https://github.com/csdev19/kaipu-record-monorepo/pull/199) (2026-10-01).** Owner-verified by
+> [#199](https://github.com/niway-dev/kaipu-record/pull/199) (2026-10-01).** Owner-verified by
 > hand the same day on desktop. Not yet validated on a packaged build.
 
 ## The video editor gives its width back to the timeline

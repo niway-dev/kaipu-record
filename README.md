@@ -31,9 +31,8 @@ preserves the adopted meaning, origin story, and sources. Start there for brand 
   off by default. Packaged-build validation is pending; see the
   [validation checklist](apps/documentation/src/content/docs/backlog/free-tier-no-watermark.md).
 
-Visit [kaipu.app](https://kaipu.app) for available downloads. Source publication under
-AGPL is planned as a separate launch step; a license change does not itself publish
-the repository. Roadmap items are not claims about the currently downloaded release.
+Visit [kaipu.app](https://kaipu.app) for available downloads. The source is public under
+AGPL-3.0-only. Roadmap items are not claims about the currently downloaded release.
 
 ## Start reading
 
@@ -246,8 +245,18 @@ reads them from GitHub Secrets inside the release workflows; migrating that to
 Infisical with OIDC is pending. Setting a secret by hand creates a value no
 workflow knows about and that nothing will keep in sync.
 
+## Maintainer and contributing
+
+Kaipu Record is written and maintained by **Cristian Sotomayor
+([@csdev19](https://github.com/csdev19))** and published by **Niway S.A.C.**
+
+**Issues are open to everyone; pull requests are limited to collaborators.** Report bugs and
+request features through [issues](https://github.com/niway-dev/kaipu-record/issues) — see
+[CONTRIBUTING.md](CONTRIBUTING.md) for why, and [SECURITY.md](SECURITY.md) for reporting a
+vulnerability privately.
+
 ## License
 
 This project is licensed under **AGPL-3.0-only**. See [LICENSE](LICENSE).
 The [open-source plan](apps/documentation/src/content/docs/marketing/open-source.md)
-describes publication readiness and the proposed contribution policy.
+records why the repository is open and how contributions are handled.

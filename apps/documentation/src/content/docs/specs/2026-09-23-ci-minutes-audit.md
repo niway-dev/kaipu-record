@@ -44,7 +44,7 @@ Its root `verify` does not reproduce every CI build or E2E check despite the hoo
 
 ### Measured examples
 
-- [Kaipu desktop v0.7.0 release](https://github.com/csdev19/kaipu-record-monorepo/actions/runs/35897309334):
+- [Kaipu desktop v0.7.0 release](https://github.com/niway-dev/kaipu-record/actions/runs/35897309334):
   macOS job **10m00s**; install **27s**; native rebuild **11s**; combined build/sign/notarize
   **8m23s**. Step timestamps do not separate compilation, packaging, signing, and Apple's
   notarization wait. This release already runs only on a tag or manual request.
@@ -98,9 +98,9 @@ the commit being pushed.
 
 ## Reproduce the evidence
 
-Use `gh run list --repo csdev19/kaipu-record-monorepo --limit 40` and the equivalent
+Use `gh run list --repo niway-dev/kaipu-record --limit 40` and the equivalent
 command for `csdev19/invisible-assistant`. For detailed timings, use
-`gh run view 35897309334 --repo csdev19/kaipu-record-monorepo --json jobs` and
+`gh run view 35897309334 --repo niway-dev/kaipu-record --json jobs` and
 `gh run view 35820454565 --repo csdev19/invisible-assistant --json jobs`.
 Inspect root package scripts, `lefthook.yml` / `.husky/pre-push`, and `.github/workflows/`.
 No application tests, local timing benchmark, or new cloud build was run for this audit.

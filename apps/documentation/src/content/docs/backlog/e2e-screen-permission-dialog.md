@@ -28,7 +28,7 @@ confusing and why a packaged build does not behave this way.
 | After guarding the source list           | 2                       |
 | After guarding the permission escalation | **1**                   |
 
-Both guards are merged ([#180](https://github.com/csdev19/kaipu-record-monorepo/pull/180))
+Both guards are merged ([#180](https://github.com/niway-dev/kaipu-record/pull/180))
 and neither is suspected of regressing; the count dropped each time.
 
 ## What is already guarded
@@ -47,7 +47,7 @@ and neither is suspected of regressing; the count dropped each time.
   test records anything.
 - **`useMicrophones`.** It did open a real audio stream on mount, which lit the microphone
   indicator, but that is the microphone and not the screen. Fixed separately in
-  [#181](https://github.com/csdev19/kaipu-record-monorepo/pull/181).
+  [#181](https://github.com/niway-dev/kaipu-record/pull/181).
 - **`useCameraPreview`.** Already conditional on the camera toggle being on.
 
 ## Candidates not yet examined

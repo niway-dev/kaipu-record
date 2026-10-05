@@ -15,7 +15,7 @@ Status legend: ⬜ todo · 🔨 in progress · ✅ done
 
 ## Mute, editor space, window presets — shipped (2026-10-01) 🟢
 
-[#199](https://github.com/csdev19/kaipu-record-monorepo/pull/199): mute as a real edit (ranges and
+[#199](https://github.com/niway-dev/kaipu-record/pull/199): mute as a real edit (ranges and
 the whole video, burned into the export, heard in the preview, deleted from the inspector), the
 video editor's width given back to the timeline, one stable window for every screen with the
 video editor as the only exception, routes as constants, and the fox in the macOS menu bar.
