@@ -324,14 +324,15 @@ const scenarios: Array<{
     title: "Ordinary PR targeting main",
     ctx: pullRequestEvent({ action: "opened" }),
     eventType: "opened",
-    expect: { verify: false, e2e: false, gate: true, legacy: true, cancel: false },
+    // ADR 0010: every pull request is verified in Actions, not only release candidates.
+    expect: { verify: true, e2e: true, gate: true, legacy: true, cancel: false },
   },
   {
     n: 2,
     title: "Ordinary stacked PR retargeted to main",
     ctx: pullRequestEvent({ action: "edited", baseChangedFrom: "docs/settings-updates-spec" }),
     eventType: "edited",
-    expect: { verify: false, e2e: false, gate: true, legacy: true, cancel: false },
+    expect: { verify: true, e2e: true, gate: true, legacy: true, cancel: false },
   },
   {
     n: 3,
@@ -367,10 +368,12 @@ const scenarios: Array<{
   },
   {
     n: 13,
-    title: "Ready WEB release candidate (must not pay for macOS)",
+    // It used to skip macOS to save minutes billed at ten; on a public repository they are
+    // free, so every candidate runs the desktop suite (ADR 0010).
+    title: "Ready WEB release candidate (now runs macOS too)",
     ctx: pullRequestEvent({ action: "ready_for_review", headRef: WEB_RELEASE_BRANCH }),
     eventType: "ready_for_review",
-    expect: { verify: true, e2e: false, gate: true, legacy: true, cancel: false },
+    expect: { verify: true, e2e: true, gate: true, legacy: true, cancel: false },
   },
   {
     n: 8,
@@ -436,6 +439,39 @@ const scenarios: Array<{
     eventType: "synchronize",
     results: { verify: "cancelled", e2e_desktop: "cancelled" },
     expect: { verify: true, e2e: true, gate: false, legacy: false, cancel: false },
+  },
+  {
+    n: 17,
+    title: "Ordinary PR opened as draft",
+    ctx: pullRequestEvent({ action: "opened", draft: true }),
+    eventType: "opened",
+    // The readiness policy now covers every PR: a draft pushes freely without runners.
+    expect: { verify: false, e2e: false, gate: false, legacy: false, cancel: false },
+  },
+  {
+    n: 18,
+    title: "Ordinary PR title or body edited",
+    ctx: pullRequestEvent({ action: "edited", titleChanged: true }),
+    eventType: "edited",
+    // The prose twin. The run that verified this commit already reported; this one must
+    // stay silent or a stale result could land beside it.
+    expect: { verify: false, e2e: false, gate: false, legacy: false, cancel: false },
+  },
+  {
+    n: 19,
+    title: "Ordinary PR returned to draft",
+    ctx: pullRequestEvent({ action: "converted_to_draft", draft: true }),
+    eventType: "converted_to_draft",
+    expect: { verify: false, e2e: false, gate: false, legacy: false, cancel: true },
+  },
+  {
+    n: 20,
+    title: "Ordinary PR, desktop E2E failed",
+    ctx: pullRequestEvent({ action: "synchronize" }),
+    eventType: "synchronize",
+    results: { e2e_desktop: "failure" },
+    // A real verdict: it must be reported, so the red E2E blocks the merge.
+    expect: { verify: true, e2e: true, gate: true, legacy: true, cancel: false },
   },
   {
     n: 12,
@@ -555,10 +591,8 @@ for (const s of scenarios) {
   const e2eOk = ["success", "failure"].includes(
     (needsContext(s.expect, s.results).e2e_desktop.result as string) ?? "",
   );
-  const headRef = String((s.ctx as { github: { head_ref: string } }).github.head_ref).toLowerCase();
-  const isRelease = headRef.startsWith("release-please--");
-  const isDesktop = headRef.includes("components--desktop");
-  const mustReport = !isRelease || (verified && (!isDesktop || e2eOk));
+  // ADR 0010: one rule for every pull request — report iff both checks reached a verdict.
+  const mustReport = verified && e2eOk;
   const reports = evaluate(exprs.gate, ctx);
   console.log(
     `  ${String(s.n).padStart(2)} ${s.title.slice(0, 52).padEnd(54)}` +
@@ -601,32 +635,27 @@ ok(
 
 // Scenario 11 + the gate's own decision table, by running the real shell script.
 console.log("\nScenario 11 — the real merge-requirements script, by exit code");
-const decide = stepScript("gate", "Check whether release verification permits merging");
-const decideCases: Array<[string, string, string, string, number, string]> = [
-  ["false", "false", "skipped", "skipped", 0, "ordinary PR: not applicable"],
+const decide = stepScript("gate", "Check whether verification permits merging");
+// [isDraft, verify, e2e, expected exit, label]
+const decideCases: Array<[string, string, string, number, string]> = [
   // The row that would have caught the 0.8.1 green button.
-  ["true", "true", "skipped", "skipped", 1, "draft candidate: nothing verified"],
-  // A desktop candidate needs BOTH. This row is the one that would have stopped
-  // desktop 0.8.0 before the tag existed instead of after it.
-  ["true", "true", "success", "success", 0, "desktop candidate: verify + E2E green"],
-  ["true", "true", "success", "failure", 1, "desktop candidate: E2E failed"],
-  ["true", "true", "success", "cancelled", 1, "desktop candidate: E2E superseded"],
-  ["true", "true", "success", "skipped", 1, "desktop candidate: E2E never ran"],
-  ["true", "true", "failure", "skipped", 1, "desktop candidate: verify failed"],
-  // A web candidate must PASS on a skipped E2E: it never starts one, by design.
-  ["true", "false", "success", "skipped", 0, "web candidate: E2E not applicable"],
-  ["true", "false", "failure", "skipped", 1, "web candidate: verify failed"],
+  ["true", "skipped", "skipped", 1, "draft: nothing verified"],
+  ["false", "success", "success", 0, "verify + E2E green"],
+  // This row is the one that would have stopped desktop 0.8.0 before the tag existed.
+  ["false", "success", "failure", 1, "E2E failed"],
+  ["false", "success", "cancelled", 1, "E2E superseded"],
+  ["false", "success", "skipped", 1, "E2E never ran — no longer a pass for anything"],
+  ["false", "failure", "success", 1, "verify failed"],
+  ["false", "failure", "skipped", 1, "verify failed, E2E never ran"],
 ];
-for (const [isRelease, isDesktop, verify, e2e, wantCode, label] of decideCases) {
+for (const [isDraft, verify, e2e, wantCode, label] of decideCases) {
   let code = 0;
   let out = "";
   try {
     out = execFileSync("bash", ["-c", decide], {
       env: {
         ...process.env,
-        IS_RELEASE: isRelease,
-        IS_DESKTOP: isDesktop,
-        IS_DRAFT: label.startsWith("draft") ? "true" : "false",
+        IS_DRAFT: isDraft,
         VERIFY: verify,
         E2E: e2e,
         SHA: "1bd8b2a",
@@ -640,17 +669,15 @@ for (const [isRelease, isDesktop, verify, e2e, wantCode, label] of decideCases) 
     out = err.stdout ?? "";
   }
   console.log(
-    `  release=${isRelease.padEnd(5)} desktop=${isDesktop.padEnd(5)} ` +
-      `verify=${verify.padEnd(9)} e2e=${e2e.padEnd(9)} exit=${code}  ${label}`,
+    `  draft=${isDraft.padEnd(5)} verify=${verify.padEnd(9)} e2e=${e2e.padEnd(9)} exit=${code}  ${label}`,
   );
   ok(
     code === wantCode,
-    `Decide(release=${isRelease}, desktop=${isDesktop}, verify=${verify}, e2e=${e2e}) ` +
-      `expected exit ${wantCode}, got ${code}`,
+    `Decide(draft=${isDraft}, verify=${verify}, e2e=${e2e}) expected exit ${wantCode}, got ${code}`,
   );
   ok(
     !/verify.{0,3}label/i.test(out),
-    `Decide must not mention the retired 'verify' label (release=${isRelease}, verify=${verify})`,
+    `Decide must not mention the retired 'verify' label (verify=${verify}, e2e=${e2e})`,
   );
 }
 

@@ -1,11 +1,12 @@
 # Git hooks. Docs: https://lefthook.dev — contract: /specs/2026-09-06-lefthook-migration-design,
-# pre-push widened by ADR 0004 (/architecture/decisions/0004-local-first-release-verification).
-# commit = fix what you commit · push = verify what you share (read-only: lint, format,
-# package build, types, tests — the same `bun run verify` the release gate runs in the cloud)
+# pre-push narrowed by ADR 0010 (/architecture/decisions/0010-checks-run-in-actions-on-every-pr).
+# commit = fix what you commit · push = the fast checks only (lint, format, types)
 # commit-msg = reject what release-please cannot parse. Bypass once: LEFTHOOK=0 git <cmd>.
-# Measured 2026-09-24 on the owner's machine: ~27 s cold, ~3 s with a warm Turbo cache.
-# Pushes touching the desktop app also run its end-to-end suite (~37 s including the
-# build, measured 2026-09-26) — see the `desktop-e2e` job for what that buys and costs.
+#
+# Tests, the app bundles and the desktop end-to-end suite run in Actions on every pull
+# request (pr-checks.yml), not here. The e2e suite opens the app thirteen times and took
+# the screen for half a minute on every push; on a public repository the same run costs
+# nothing in the cloud. `bun run verify` still runs the full set locally when you want it.
 min_version: 2.0.0
 
 pre-commit:
@@ -34,32 +35,7 @@ commit-msg:
 
 pre-push:
   jobs:
-    # One entry point, shared with the cloud release gate, so local and cloud can never
-    # drift. Turbo parallelises the type-check and test tasks internally and caches them.
-    - name: verify
-      run: bun run verify
-
-    # The desktop end-to-end suite, on pushes that can change the desktop app.
-    #
-    # ADR 0004 listed bisection as the thing given up by moving cloud checks to the release
-    # boundary: a red gate after many merges has many suspects. This closes that for the
-    # desktop, where the suite is the only thing exercising the export path, the library
-    # actions, settings persistence and the shortcut round-trip against a real build.
-    #
-    # Measured 2026-09-26 on the owner's machine: build 2.4 s, suite 34.9 s, 13/13 green.
-    # The same suite takes ~56 s on a GitHub macOS runner for two fewer tests, which is why
-    # it is worth running here first.
-    #
-    # It is NOT a defence against the CI flake that prompted it: that failure has never
-    # reproduced locally and the evidence points at the runner, not the app. See
-    # playwright.config.ts.
-    #
-    # The glob keeps a docs or web push from paying for it. Real cost: it opens the app
-    # thirteen times, so windows appear and disappear for about half a minute. When that is
-    # the wrong trade for the moment, `LEFTHOOK=0 git push` skips every hook.
-    - name: desktop-e2e
-      glob:
-        - "apps/kaipu-record/**"
-        - "packages/**"
-        - "bun.lock"
-      run: bun run --cwd apps/kaipu-record test:e2e
+    # Lint, format check, package builds (cached by Turbo) and type checks. No tests and no
+    # end-to-end suite — see the header.
+    - name: verify-local
+      run: bun run verify:local

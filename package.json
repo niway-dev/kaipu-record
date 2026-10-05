@@ -40,6 +40,7 @@
     "check": "bun run lint && bun run format",
     "check-workflows": "bun scripts/check-workflow-eligibility.ts",
     "verify": "bun run check-workflows && bun run lint && oxfmt --check . && bun run build --filter='@kaipu/*' && bun run check-types && bun run test",
+    "verify:local": "bun run lint && oxfmt --check . && bun run build --filter='@kaipu/*' && bun run check-types",
     "dev": "turbo run dev",
     "build": "turbo run build",
     "build:no-cache": "turbo run build --force",

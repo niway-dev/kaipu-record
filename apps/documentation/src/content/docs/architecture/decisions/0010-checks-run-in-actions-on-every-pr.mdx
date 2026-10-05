@@ -1,0 +1,95 @@
+---
+title: "ADR 0010: Checks run in Actions on every pull request; the pre-push hook keeps only the fast ones"
+description: With the repository going public, verification moves back from the author's machine to GitHub Actions — `verify`, the app bundles and the macOS desktop E2E on every non-draft pull request. The pre-push hook shrinks to lint, format and types. Supersedes ADR 0004's local-first verification.
+---
+
+# ADR 0010: Checks run in Actions on every pull request; the pre-push hook keeps only the fast ones
+
+## Status
+
+| Field         | Value                                                                                                                                                                                                              |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Status        | Accepted — implemented in `pr-checks.yml` and `lefthook.yml`; **not yet exercised on a real pull request** (GitHub Actions was degraded on the day it merged)                                                      |
+| Date          | 2026-10-05                                                                                                                                                                                                         |
+| Supersedes    | [ADR 0004](./0004-local-first-release-verification) — the local-first pre-push gate                                                                                                                                |
+| Amends        | [ADR 0006](./0006-desktop-e2e-in-the-candidate-tier) — the desktop E2E is no longer gated to desktop candidates · [ADR 0005](./0005-draft-ready-release-candidate-readiness) — draft/ready now applies to every PR |
+| Superseded by | —                                                                                                                                                                                                                  |
+
+## Context
+
+ADR 0004 moved verification onto the author's machine because Actions minutes were the
+bottleneck: 802 Linux minutes in September 2026, an account quota exhausted twice, and
+releases blocked by a spending limit. Its pre-push hook ran the full `bun run verify`, and
+ADR 0006 later added the desktop end-to-end suite to it for pushes touching the app.
+
+Two things changed.
+
+**The repository is going public** under AGPL-3.0 (see
+[Open source under AGPL-3.0](/marketing/open-source/)). GitHub-hosted runners are free for
+public repositories, macOS included. The cost that justified ADR 0004 disappears.
+
+**The local gate stopped being cheap for the owner.** The desktop E2E suite opens the app
+thirteen times per push and takes the screen for about half a minute. That is the cost
+ADR 0006 named and accepted when minutes were scarce; with free minutes it is no longer
+worth paying.
+
+ADR 0004's own reopen condition also holds: _"Collaboration requires server-enforced
+pre-merge checks."_ A public project receives pull requests from people who never install
+our hooks.
+
+## Decision
+
+1. **Every non-draft pull request to `main` is verified in Actions**: `bun run verify`, the
+   web and API bundle builds on Linux, and the Playwright desktop suite against the built
+   app on macOS. Release-please candidates are no longer special: they get the same jobs.
+2. **The desktop E2E runs on every pull request, with no path filter.** A filter would need
+   its own job and its own failure mode; on a public repository the run costs nothing. A
+   docs-only pull request waits for it, which is the accepted cost.
+3. **`Merge requirements` stays the one required check**, with the same invariant: a commit
+   receives exactly one report, from the run that verified it. It reports when both
+   `verify` and the E2E reached a verdict, and stays silent otherwise.
+4. **Draft means "do not spend runners yet"** for every pull request, not just release
+   candidates. Mark a pull request ready for review to have it checked.
+5. **The pre-push hook keeps only the fast checks**: lint, format check, the package builds
+   (Turbo-cached) and type checks — `bun run verify:local`, about 7 s warm. Tests and the
+   E2E suite are not run on push. `bun run verify` still runs everything locally on demand.
+6. The release workflows keep their own gates (ADR 0006's E2E before signing): a release
+   still validates the exact commit it publishes.
+
+## Alternatives rejected
+
+- **Keep ADR 0004 and only drop the E2E from pre-push.** It would remove the screen
+  takeover, but a public repository would still accept pull requests checked by nobody
+  but their author.
+- **Path-filter the macOS job to desktop-affecting changes.** Saves wall-clock on docs and
+  web pull requests, at the price of a `changes` job whose output the gate must also read
+  — the paths-filter deadlock is how PR #173 became unmergeable. Reconsider if waiting on
+  macOS becomes the common complaint.
+- **Run the checks in Actions while the repository is still private.** macOS bills at ten
+  times the Linux rate on a private repository; that is the September problem again. The
+  change is meant to land together with the repository going public.
+
+## Consequences
+
+- Feedback moves later for the author: a type or lint error still fails on push, but a
+  failing unit test or E2E shows up on the pull request a few minutes after it.
+- Every pull request needs a macOS runner. On a degraded Actions day nothing merges — the
+  ruleset blocks even an administrator, as it did on 2026-10-05.
+- `scripts/check-workflow-eligibility.ts` now models ordinary pull requests as verifying
+  runs, and it enforces the single report rule for them too.
+- **If the repository stays private, this decision costs money**: every pull request would
+  bill macOS minutes at ten times the Linux rate.
+
+## Non-goals
+
+Self-hosted runners, changing the release workflows, a path filter, and changing what
+`bun run verify` contains.
+
+## Reopen when
+
+- The repository is not public, or GitHub stops offering free hosted runners to public
+  repositories.
+- Waiting on the macOS job becomes the routine reason pull requests sit unmerged — then
+  add the path filter, with the gate reading its output.
+- Flaky runners make the required check unreliable often enough that merges routinely
+  need a re-run.
