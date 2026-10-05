@@ -1,9 +1,17 @@
 import React, { useState } from "react";
 import { AppWindowMac, Monitor } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
+import {
+  SourceGrid,
+  SourcePicker,
+  SourcePickerLoading,
+  SourcePickerMessage,
+  SourceThumbFallback,
+  SourceThumbImage,
+  SourceTile,
+} from "@kaipu/ui";
 import type { ScreenSource } from "@shared/types/electron-api";
 import { PermissionNotice } from "./permission-notice";
-import styles from "./screen-source-selector.module.css";
 
 /** The thumbnail, or a clean monitor/window icon when the capture came back blank
  *  (or the image fails to load) — never a broken <img>. */
@@ -13,12 +21,14 @@ function SourceThumbnail({ source }: { source: ScreenSource }): React.JSX.Elemen
   if (blank || failed) {
     const Icon = source.type === "screen" ? Monitor : AppWindowMac;
     return (
-      <div className={styles.thumbFallback} aria-hidden>
+      <SourceThumbFallback>
         <Icon size={30} strokeWidth={1.75} />
-      </div>
+      </SourceThumbFallback>
     );
   }
-  return <img src={source.thumbnail} alt={source.name} onError={() => setFailed(true)} />;
+  return (
+    <SourceThumbImage src={source.thumbnail} alt={source.name} onError={() => setFailed(true)} />
+  );
 }
 
 type SourceKind = "screens" | "windows";
@@ -44,7 +54,9 @@ interface ScreenSourceSelectorProps {
   onGrantAccess?: () => void;
 }
 
-/** Dumb screen/window picker. The source list is provided by `useScreenSources`. */
+/** Dumb screen/window picker. The source list is provided by `useScreenSources`.
+ *  The frame, tiles and states are `@kaipu/ui`; the tab state, the filtering by
+ *  source type, the thumbnail fallback and the translations stay here. */
 export function ScreenSourceSelector(props: ScreenSourceSelectorProps): React.JSX.Element | null {
   const t = useTranslations("record");
   const { isOpen, sources, isLoading, error, isAccessGranted = true, currentSourceId } = props;
@@ -64,85 +76,59 @@ export function ScreenSourceSelector(props: ScreenSourceSelectorProps): React.JS
   const panel = ((): React.JSX.Element => {
     if (!isAccessGranted) {
       return (
-        <div className={styles.placeholder}>
+        <SourcePickerMessage>
           <PermissionNotice
             label={t("screenAccessOff")}
             onOpenSettings={() => props.onGrantAccess?.()}
           />
-        </div>
+        </SourcePickerMessage>
       );
     }
     if (isLoading) {
       return (
-        <div className={styles.pending}>
-          <div className={styles.loader} />
+        <SourcePickerLoading>
           <p>{t("loadingSources")}</p>
-        </div>
+        </SourcePickerLoading>
       );
     }
     if (error) {
       return (
-        <div className={styles.placeholder}>
+        <SourcePickerMessage>
           <p>{error}</p>
-        </div>
+        </SourcePickerMessage>
       );
     }
     if (tiles.length === 0) {
       return (
-        <div className={styles.placeholder}>
+        <SourcePickerMessage>
           <p>{kind === "screens" ? t("noScreens") : t("noWindows")}</p>
-        </div>
+        </SourcePickerMessage>
       );
     }
     return (
-      <div className={styles.grid}>
+      <SourceGrid>
         {tiles.map((source) => (
-          <div
+          <SourceTile
             key={source.id}
-            className={styles.tile}
-            data-active={source.id === currentSourceId || undefined}
-            onClick={() => choose(source)}
-          >
-            <SourceThumbnail source={source} />
-            <div className={styles.tileLabel}>
-              <div className={styles.tileLabelText}>{source.name}</div>
-            </div>
-          </div>
+            thumbnail={<SourceThumbnail source={source} />}
+            label={source.name}
+            isActive={source.id === currentSourceId}
+            onSelect={() => choose(source)}
+          />
         ))}
-      </div>
+      </SourceGrid>
     );
   })();
 
   return (
-    <div
-      className={styles.overlay}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) props.onClose();
-      }}
+    <SourcePicker
+      title={t("selectScreenOrWindow")}
+      tabs={KINDS.map((k) => ({ id: k.id, label: t(k.labelKey) }))}
+      activeTab={kind}
+      onTabChange={(id) => setKind(id as SourceKind)}
+      onClose={props.onClose}
     >
-      <div className={styles.modal}>
-        <div className={styles.header}>
-          <h3>{t("selectScreenOrWindow")}</h3>
-          <button className={styles.closeButton} onClick={props.onClose}>
-            ✕
-          </button>
-        </div>
-
-        <div className={styles.tabs}>
-          {KINDS.map((k) => (
-            <button
-              key={k.id}
-              className={styles.tabButton}
-              data-active={k.id === kind || undefined}
-              onClick={() => setKind(k.id)}
-            >
-              {t(k.labelKey)}
-            </button>
-          ))}
-        </div>
-
-        <div className={styles.content}>{panel}</div>
-      </div>
-    </div>
+      {panel}
+    </SourcePicker>
   );
 }
