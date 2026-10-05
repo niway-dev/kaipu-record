@@ -68,8 +68,8 @@ not. A 2-second failure with no steps is the billing block, not your branch.
 
 Two axes. Frequency was the big one; duration was the follow-up.
 
-| PR                                                                | What it does                                                                                                                                                                    |
-| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PR                                                         | What it does                                                                                                                                                                    |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [#159](https://github.com/niway-dev/kaipu-record/pull/159) | Fixes the "Edited · not exported" badge, which was wrong on every export — it compared a session's `savedAt` against an export's `createdAt`, two different clocks. Now a stamp |
 | [#160](https://github.com/niway-dev/kaipu-record/pull/160) | `release-please` runs only when a releasable path changes (was: every push to `main`, ~88 runs in September)                                                                    |
 | [#161](https://github.com/niway-dev/kaipu-record/pull/161) | **Local `verify` gate on pre-push** (lefthook) + **ADR 0004** + the September billing baseline in `public/audits/ci-usage/2026-09-baseline/`                                    |

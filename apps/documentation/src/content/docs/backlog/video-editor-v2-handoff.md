@@ -18,8 +18,8 @@ previous one — and all ten are merged, plus #143, the UX follow-ups (#152) and
 onboarding refinements (#153). The grouped view is
 [roadmap → Video editor v2 wave](./roadmap#video-editor-v2-wave-2026-09-22--23).
 
-| PR                                                                | Branch                                    | Delivers                                                                      | State     |
-| ----------------------------------------------------------------- | ----------------------------------------- | ----------------------------------------------------------------------------- | --------- |
+| PR                                                         | Branch                                    | Delivers                                                                      | State     |
+| ---------------------------------------------------------- | ----------------------------------------- | ----------------------------------------------------------------------------- | --------- |
 | [#132](https://github.com/niway-dev/kaipu-record/pull/132) | `feat/video-editor-v2-poster-from-output` | export poster from the rendered output                                        | ✅ merged |
 | [#133](https://github.com/niway-dev/kaipu-record/pull/133) | `…-cursor-track`                          | cursor position track + clock/pause mapping + vault sidecar                   | ✅ merged |
 | [#134](https://github.com/niway-dev/kaipu-record/pull/134) | `…-click-hook`                            | clicks via `uiohook-napi`, gated on Accessibility (no prompt)                 | ✅ merged |
@@ -33,8 +33,8 @@ onboarding refinements (#153). The grouped view is
 
 Plus one implementation PR that came out of validating the data:
 
-| PR                                                                | Branch                                    | Delivers                                                                                                                         | State     |
-| ----------------------------------------------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| PR                                                         | Branch                                    | Delivers                                                                                                                         | State     |
+| ---------------------------------------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | --------- |
 | [#143](https://github.com/niway-dev/kaipu-record/pull/143) | `feat/video-editor-v2-cursor-track-check` | `inspectCursorTrack`, `bun run cursor-track:check`, a real-recording fixture, **and the tail-cut fix** (`durationMs`, unfloored) | ✅ merged |
 
 Test suite: 851 on `main` before v2 → 1084 with all ten PRs (→ ~1110 with #143).
@@ -44,8 +44,8 @@ inspector + camera box body-drag) and #153 (onboarding).
 
 ## Docs PRs (all merged 2026-09-23)
 
-| PR                                                                | What it records                                                                                                 |
-| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| PR                                                         | What it records                                                                                                 |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
 | [#142](https://github.com/niway-dev/kaipu-record/pull/142) | `backlog/cursor-sprite-capture` — cursor-free capture + drawn cursor, deferred to v2.1; linked from the roadmap |
 | [#144](https://github.com/niway-dev/kaipu-record/pull/144) | `backlog/edit-state-indicators` — "Guardando…" in the editor; "Editado · sin exportar" in the library           |
 | [#145](https://github.com/niway-dev/kaipu-record/pull/145) | `backlog/video-editor-camera-box-ux` — box only grabs on its border; focus lost after a timeline click          |
