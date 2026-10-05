@@ -20,12 +20,12 @@
  * each caller's head.
  */
 
-import logoApp from "../assets/logo-app.png";
-import logoDone from "../assets/logo-done.png";
-import logoPermissions from "../assets/logo-permissions.png";
-import logoPlain from "../assets/logo-plain.png";
-import logoRecord from "../assets/logo-record.png";
-import logoScreenshot from "../assets/logo-screenshot.png";
+import logoApp from "../assets/logo-app.webp";
+import logoDone from "../assets/logo-done.webp";
+import logoPermissions from "../assets/logo-permissions.webp";
+import logoPlain from "../assets/logo-plain.webp";
+import logoRecord from "../assets/logo-record.webp";
+import logoScreenshot from "../assets/logo-screenshot.webp";
 
 export const LOGO_USES = [
   /** Dock, ⌘-Tab, Finder, the DMG, installers, large marketing art. */

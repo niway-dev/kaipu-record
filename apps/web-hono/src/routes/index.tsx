@@ -1,6 +1,7 @@
 import { Crop, Scissors, Search, Video } from "lucide-react";
 import { createFileRoute } from "@tanstack/react-router";
 
+import { LazyHydrate } from "@/components/lazy-hydrate";
 import { HomeShell } from "@/components/home/home-shell";
 import { Hero } from "@/components/home/hero";
 import { Moments } from "@/components/home/moments";
@@ -32,22 +33,41 @@ function HomePage() {
   return (
     <HomeShell>
       <Hero />
-      <Moments />
-      <Kai />
-      <Chapter id="record" tint="c1" number="01" icon={Video} keyPrefix="homeChapter1">
-        <MockRecord />
-      </Chapter>
-      <Chapter id="capture" tint="c2" number="02" icon={Crop} keyPrefix="homeChapter2">
-        <MockCapture />
-      </Chapter>
-      <Chapter id="edit" tint="c3" number="03" icon={Scissors} keyPrefix="homeChapter3">
-        <MockEdit />
-      </Chapter>
-      <Chapter id="find" tint="c4" number="04" icon={Search} keyPrefix="homeChapter4">
-        <MockFind />
-      </Chapter>
-      <Files />
-      <Closing />
+      {/* Everything below the hero hydrates lazily: its HTML is server-rendered
+          and stays in the document, but its client work waits until the section
+          is near the viewport. See LazyHydrate. */}
+      <LazyHydrate>
+        <Moments />
+      </LazyHydrate>
+      <LazyHydrate>
+        <Kai />
+      </LazyHydrate>
+      <LazyHydrate>
+        <Chapter id="record" tint="c1" number="01" icon={Video} keyPrefix="homeChapter1">
+          <MockRecord />
+        </Chapter>
+      </LazyHydrate>
+      <LazyHydrate>
+        <Chapter id="capture" tint="c2" number="02" icon={Crop} keyPrefix="homeChapter2">
+          <MockCapture />
+        </Chapter>
+      </LazyHydrate>
+      <LazyHydrate>
+        <Chapter id="edit" tint="c3" number="03" icon={Scissors} keyPrefix="homeChapter3">
+          <MockEdit />
+        </Chapter>
+      </LazyHydrate>
+      <LazyHydrate>
+        <Chapter id="find" tint="c4" number="04" icon={Search} keyPrefix="homeChapter4">
+          <MockFind />
+        </Chapter>
+      </LazyHydrate>
+      <LazyHydrate>
+        <Files />
+      </LazyHydrate>
+      <LazyHydrate>
+        <Closing />
+      </LazyHydrate>
     </HomeShell>
   );
 }

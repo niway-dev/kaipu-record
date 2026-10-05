@@ -14,15 +14,16 @@ import {
 } from "@kaipu/web-ui";
 import { Download, Trash2 } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
-import {
-  recordingsQueryOptions,
-  useDeleteRecording,
-  useOpenRecording,
-  useRecordings,
-} from "@/hooks/use-recordings";
+import { useDeleteRecording, useOpenRecording, useRecordings } from "@/hooks/use-recordings";
 
 export const Route = createFileRoute("/_authenticated/recordings/")({
-  loader: ({ context }) => context.queryClient.ensureQueryData(recordingsQueryOptions()),
+  // Imported on demand: the hooks module pulls in the oRPC client, the API
+  // contract and zod, and a static import here would put all of it in the entry
+  // chunk, which every public page downloads.
+  loader: async ({ context }) => {
+    const { recordingsQueryOptions } = await import("@/hooks/use-recordings");
+    return context.queryClient.ensureQueryData(recordingsQueryOptions());
+  },
   component: RecordingsPage,
 });
 

@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { z } from "zod";
 import { useTranslations } from "@kaipu/i18n";
 import { Button, Input, Label } from "@kaipu/web-ui";
 
@@ -78,6 +77,10 @@ function ResetPasswordPage() {
 
 export const Route = createFileRoute("/auth/reset-password")({
   head: () => NOINDEX,
-  validateSearch: z.object({ token: z.string().optional() }),
+  // Hand-written rather than a zod schema: route options stay in the entry chunk,
+  // so a zod import here would ship zod to every page, public ones included.
+  validateSearch: (search: Record<string, unknown>): { token?: string } => ({
+    token: typeof search.token === "string" ? search.token : undefined,
+  }),
   component: ResetPasswordPage,
 });
