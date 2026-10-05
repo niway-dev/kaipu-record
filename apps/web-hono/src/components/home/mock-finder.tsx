@@ -52,14 +52,14 @@ export function MockFinder() {
           {/* Kaipu is just another folder in the sidebar — that is the argument. */}
           <div className={`${styles.sideRow} ${styles.sideRowActive}`}>
             <KaipuLogo use="product" size={15} />
-            Kaipu
+            Kaipu Record
           </div>
         </div>
 
         <div className={styles.list}>
           <div className={styles.path}>
-            <span className={styles.pathName}>Kaipu</span>
-            <span className={styles.pathDim}>~/Movies/Kaipu</span>
+            <span className={styles.pathName}>Kaipu Record</span>
+            <span className={styles.pathDim}>~/Movies/Kaipu Record</span>
           </div>
 
           <div className={styles.head}>
