@@ -41,7 +41,8 @@ const kaipuApi: KaipuElectronAPI = {
     ipcRenderer.on(IPC_CHANNELS.authStatusChanged, listener);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.authStatusChanged, listener);
   },
-  getScreenSources: () => ipcRenderer.invoke("recording:get-screen-sources"),
+  getScreenSources: (options?: { withThumbnails?: boolean }) =>
+    ipcRenderer.invoke("recording:get-screen-sources", options),
   resizeCapturePanel: (height) => ipcRenderer.send("capture-panel:resize", height),
   openMainWindow: () => ipcRenderer.send("capture-panel:open-main"),
   checkPermissions: () => ipcRenderer.invoke(IPC_CHANNELS.checkPermissions),

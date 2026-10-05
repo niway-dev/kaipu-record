@@ -12,9 +12,17 @@ const PANEL_INITIAL_HEIGHT = 380;
  * Frameless, always-on-top panel shown from the menu-bar tray. It loads the same
  * renderer with `?mode=capture`, so React renders <CapturePanel/> instead of the
  * main app. Auto-hides on blur and repositions under the tray icon on each show.
+ *
+ * It is created ahead of the first click (`prewarm`) and only revealed once it
+ * has painted. Created on the click instead, the first open showed an empty
+ * transparent window while the renderer loaded and React mounted.
  */
 export class CapturePanelWindow {
   private window: BrowserWindow | null = null;
+  /** True once the renderer has painted; showing before that shows nothing. */
+  private painted = false;
+  /** A click that arrived before the first paint — honoured when it lands. */
+  private pendingTrayBounds: Rectangle | null = null;
 
   constructor() {
     this.registerIpc();
@@ -28,9 +36,20 @@ export class CapturePanelWindow {
     }
   }
 
+  /** Create the window hidden so the first tray click finds it already loaded. */
+  prewarm(): void {
+    if (!this.window || this.window.isDestroyed()) {
+      this.create();
+    }
+  }
+
   show(trayBounds: Rectangle): void {
     if (!this.window || this.window.isDestroyed()) {
       this.create();
+    }
+    if (!this.painted) {
+      this.pendingTrayBounds = trayBounds;
+      return;
     }
     this.position(trayBounds);
     this.window?.show();
@@ -38,6 +57,7 @@ export class CapturePanelWindow {
   }
 
   hide(): void {
+    this.pendingTrayBounds = null;
     if (this.window && !this.window.isDestroyed()) {
       this.window.hide();
     }
@@ -86,10 +106,20 @@ export class CapturePanelWindow {
       });
     }
 
+    this.painted = false;
+    this.window.once("ready-to-show", () => {
+      this.painted = true;
+      const pending = this.pendingTrayBounds;
+      this.pendingTrayBounds = null;
+      if (pending) this.show(pending);
+    });
+
     // Clicking anywhere else dismisses the panel (natural popover behavior).
     this.window.on("blur", () => this.hide());
     this.window.on("closed", () => {
       this.window = null;
+      this.painted = false;
+      this.pendingTrayBounds = null;
     });
   }
 
