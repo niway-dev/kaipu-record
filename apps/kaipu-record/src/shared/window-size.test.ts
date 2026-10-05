@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { ROUTES } from "./routes";
-import { fitPresetToDisplay, isEditorPreset, presetForPath, WINDOW_PRESETS } from "./window-size";
+import {
+  boundsAroundCenter,
+  fitPresetToDisplay,
+  isEditorPreset,
+  presetForPath,
+  WINDOW_PRESETS,
+} from "./window-size";
 
 const BIG = { width: 3840, height: 2160 };
 
@@ -84,5 +90,44 @@ describe("fitPresetToDisplay", () => {
         expect(fitted.minHeight).toBeLessThanOrEqual(fitted.height);
       }
     }
+  });
+});
+
+describe("boundsAroundCenter", () => {
+  const area = { x: 0, y: 25, width: 1920, height: 1055 };
+
+  it("grows in every direction around the window's centre", () => {
+    // A 1040x760 window centred on a 1920-wide screen, growing into the editor.
+    const current = { x: 440, y: 172, width: 1040, height: 760 };
+    const next = boundsAroundCenter(current, { width: 1440, height: 900 }, area);
+
+    expect(next).toEqual({ x: 240, y: 102, width: 1440, height: 900 });
+    // Same centre before and after: it did not just stretch right and down.
+    expect(next.x + next.width / 2).toBe(current.x + current.width / 2);
+    expect(next.y + next.height / 2).toBe(current.y + current.height / 2);
+  });
+
+  it("slides back inside the work area instead of crossing an edge", () => {
+    // Placed near the top-left: growing around the centre would cross both edges.
+    const current = { x: 10, y: 30, width: 1040, height: 760 };
+    const next = boundsAroundCenter(current, { width: 1440, height: 900 }, area);
+
+    expect(next.x).toBe(area.x);
+    expect(next.y).toBe(area.y);
+    expect(next.width).toBe(1440);
+    expect(next.height).toBe(900);
+  });
+
+  it("keeps the window on a display that does not start at the origin", () => {
+    // A second display to the right, with its own work area.
+    const second = { x: 1920, y: 0, width: 1440, height: 875 };
+    const current = { x: 2900, y: 400, width: 1040, height: 760 };
+    const next = boundsAroundCenter(current, { width: 1440, height: 900 }, second);
+
+    expect(next.x).toBe(1920);
+    expect(next.y).toBe(0);
+    expect(next.width).toBe(1440);
+    // Taller than the display: it gets all the height there is.
+    expect(next.height).toBe(875);
   });
 });

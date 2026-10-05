@@ -104,3 +104,39 @@ export function fitPresetToDisplay(
     maxHeight: preset.maxHeight,
   };
 }
+
+interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Where a window should go when it changes size: around its own centre, kept
+ * inside the work area.
+ *
+ * Electron's `setSize` keeps the top-left corner fixed, so a window entering the
+ * video editor grew only to the right and down — off-centre, and partly off a
+ * screen it had been placed in the middle of. Growing around the centre keeps it
+ * where the user left it; if that would cross an edge, it slides back inside
+ * rather than shrinking, since the size is what the screen needs.
+ */
+export function boundsAroundCenter(
+  current: Rect,
+  size: { width: number; height: number },
+  workArea: Rect,
+): Rect {
+  const width = Math.min(size.width, workArea.width);
+  const height = Math.min(size.height, workArea.height);
+  const centreX = current.x + current.width / 2;
+  const centreY = current.y + current.height / 2;
+  const clamp = (value: number, min: number, max: number): number =>
+    Math.max(min, Math.min(value, max));
+  return {
+    x: Math.round(clamp(centreX - width / 2, workArea.x, workArea.x + workArea.width - width)),
+    y: Math.round(clamp(centreY - height / 2, workArea.y, workArea.y + workArea.height - height)),
+    width,
+    height,
+  };
+}
