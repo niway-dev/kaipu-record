@@ -82,12 +82,20 @@ const variants = stylex.create({
  * every hover with `:not(:disabled)`, and expressing that as one declaration
  * would leave the outcome to the compiler's pseudo-class ordering instead of
  * to something readable here.
+ *
+ * Each `default` repeats the variant's own background, and must. A later style
+ * that names a property replaces it whole, so `default: null` does not mean
+ * "leave the variant's value alone" — it erases it. That shipped once: every
+ * enabled button lost its fill and rendered the browser's white, keeping only
+ * the accent glow, while disabled buttons (no hover layer) looked right.
  */
 const hovers = stylex.create({
-  primary: { backgroundColor: { default: null, ":hover": tokens.accentPrimaryHover } },
-  danger: { backgroundColor: { default: null, ":hover": tokens.accentRedHover } },
-  ghost: { backgroundColor: { default: null, ":hover": tokens.accentPrimarySoft } },
-  outline: { backgroundColor: { default: null, ":hover": tokens.accentPrimarySoft } },
+  primary: {
+    backgroundColor: { default: tokens.accentPrimary, ":hover": tokens.accentPrimaryHover },
+  },
+  danger: { backgroundColor: { default: tokens.accentRed, ":hover": tokens.accentRedHover } },
+  ghost: { backgroundColor: { default: "transparent", ":hover": tokens.accentPrimarySoft } },
+  outline: { backgroundColor: { default: "transparent", ":hover": tokens.accentPrimarySoft } },
 });
 
 export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "style"> {

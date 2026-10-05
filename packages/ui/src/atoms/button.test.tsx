@@ -62,6 +62,31 @@ describe("Button", () => {
     expect(onlyWhenDisabled).not.toHaveLength(0);
   });
 
+  it("keeps the variant's fill while enabled — the hover layer must not erase it", () => {
+    // Regression: the hover layer once said `backgroundColor: { default: null }`,
+    // which in StyleX REMOVES the variant's background instead of keeping it.
+    // Every enabled button rendered the browser's white with only the glow left.
+    // A disabled button carries no hover layer, so it kept its fill — which is
+    // what makes the two comparable: the only classes a disabled button may have
+    // that the enabled one lacks are its own layer (opacity, cursor, box-shadow).
+    // A fourth means the enabled button lost a property the variant set.
+    const variants = ["primary", "danger", "ghost", "outline"] as const;
+    for (const variant of variants) {
+      const { rerender, unmount } = render(<Button variant={variant}>Go</Button>);
+      const enabled = classesOf(/go/i);
+      rerender(
+        <Button variant={variant} disabled>
+          Go
+        </Button>,
+      );
+      const disabled = classesOf(/go/i);
+      unmount();
+
+      const onlyWhenDisabled = [...disabled].filter((c) => !enabled.has(c));
+      expect(onlyWhenDisabled, variant).toHaveLength(3);
+    }
+  });
+
   it("gives each variant a different set of classes", () => {
     const variants = ["primary", "danger", "ghost", "outline"] as const;
     const seen = variants.map((variant) => {

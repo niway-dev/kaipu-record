@@ -133,13 +133,18 @@ const styles = stylex.create({
   btnDisabled: { opacity: 0.55, cursor: "not-allowed" },
 });
 
+// Each `default` repeats the matching btn* value on purpose: a later style that
+// names a property replaces it whole, so `default: null` here would erase the
+// variant's fill instead of leaving it alone (see Button's hover layer).
 const hovers = stylex.create({
   ghost: {
-    backgroundColor: { default: null, ":hover": tokens.bgCardHover },
-    color: { default: null, ":hover": tokens.textPrimary },
+    backgroundColor: { default: "transparent", ":hover": tokens.bgCardHover },
+    color: { default: tokens.textSecondary, ":hover": tokens.textPrimary },
   },
-  primary: { backgroundColor: { default: null, ":hover": tokens.accentPrimaryHover } },
-  danger: { backgroundColor: { default: null, ":hover": tokens.accentRedHover } },
+  primary: {
+    backgroundColor: { default: tokens.accentPrimary, ":hover": tokens.accentPrimaryHover },
+  },
+  danger: { backgroundColor: { default: tokens.accentRed, ":hover": tokens.accentRedHover } },
 });
 
 export function ModalOverlay({

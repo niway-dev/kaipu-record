@@ -91,9 +91,10 @@ const styles = stylex.create({
     transitionDuration: "150ms",
     transitionTimingFunction: "ease",
   },
+  // The defaults repeat `action`'s values: `null` would erase them, not keep them.
   actionHover: {
-    borderColor: { default: null, ":hover": tokens.textMuted },
-    color: { default: null, ":hover": tokens.textPrimary },
+    borderColor: { default: tokens.borderLight, ":hover": tokens.textMuted },
+    color: { default: tokens.textSecondary, ":hover": tokens.textPrimary },
   },
   actionCompact: {
     paddingBlock: "2px",
