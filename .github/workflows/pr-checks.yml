@@ -1,29 +1,24 @@
 name: PR checks
 
-# Tier: pull-request gate (ADR 0004, /architecture/decisions/0004-local-first-release-verification).
-# Reopen when: a second person merges, or release-time verification starts finding
-# regressions `verify` missed locally — at that point ordinary PRs need their own cloud
-# checks again and this workflow stops being the only pull_request-triggered one.
+# Tier: pull-request gate (ADR 0010, /architecture/decisions/0010-checks-run-in-actions-on-every-pr/,
+# which supersedes ADR 0004's local-first verification).
 #
-# Two things live here, and they are deliberately different sizes.
+# Every pull request is verified here, not on the author's machine. The repository is
+# public, so Actions minutes cost nothing — the reason ADR 0004 moved verification to the
+# pre-push hook is gone, and a public project needs server-enforced checks anyway: outside
+# contributors do not run our hooks. The pre-push hook keeps only the fast, local checks.
 #
-# 1. `Merge requirements` — the REQUIRED check. It reports on every ordinary pull request,
-#    because a required check that never reports leaves the PR perpetually pending and
-#    blocks merge forever (the paths-filter gotcha in the hub's pr-checks.md), and on a
-#    release candidate it reports exactly once per commit, from the run that verified that
-#    commit. Both halves are explained on the job itself. It costs one short job.
-# 2. `Run release checks and builds` — the expensive one. It runs `bun run verify` plus the web
-#    and API bundles on the release PR that release-please maintains, so `main` is validated
-#    as it will be tagged, BEFORE the tag exists. A failure here costs a fix and a push; the
-#    same failure in release-*.yml costs a tag, an empty GitHub Release and a patch release.
-# 3. `Desktop E2E (macOS, release candidate)` — the expensive one on the expensive runner.
-#    Playwright drives the real Electron build on the platform that ships. It used to run
-#    ONLY inside release-desktop.yml, i.e. AFTER the tag existed, which is how desktop 0.8.0
-#    ended up with a published, empty GitHub Release when it failed on 2026-09-25. Running it
-#    here makes that failure cost a push instead of a tag. macOS bills at 10x, so it is gated
-#    to DESKTOP candidates: a web or api release PR does not pay for it. See ADR 0006.
+# 1. `Merge requirements` — the REQUIRED check. It reports exactly once per commit, from
+#    the run that verified that commit. The rule and the evidence are on the job itself.
+# 2. `Run checks and builds` — `bun run verify` plus the web and API bundles, on Linux.
+# 3. `Desktop E2E (macOS)` — Playwright driving the real Electron build on the platform
+#    that ships. It runs on every pull request too: on a public repository a macOS minute
+#    is free, and this suite is the only thing that exercises the export path, the library
+#    actions and settings persistence against a real build (ADR 0006).
 #
-# READINESS POLICY — draft means "still accumulating", ready means "verify this".
+# READINESS POLICY — draft means "still accumulating", ready means "verify this". It now
+# applies to every pull request, not just release candidates: open a PR as a draft to push
+# freely without starting runners, and mark it ready when it should be checked.
 #
 # release-please opens its release PRs as drafts (`draft-pull-request` in
 # release-please-config.json) and rewrites them on every releasable merge to `main`. While
@@ -80,11 +75,10 @@ permissions:
 
 jobs:
   verify:
-    name: Run release checks and builds
+    name: Run checks and builds
     runs-on: ubuntu-latest
-    # Everything that decides "should this cost a runner?" is here, not in a step.
+    # Everything that decides "should this start a runner?" is here, not in a step.
     #   - an open, non-draft PR                (draft accumulates for free)
-    #   - whose head is a release-please branch (ordinary PRs never pay this)
     #   - on an event that changes the candidate, not its prose
     # `workflow_dispatch` bypasses all of it: it is the documented manual escape hatch for
     # the risky-change list in ADR 0004, and `github.head_ref` is empty outside a PR.
@@ -94,14 +88,13 @@ jobs:
         (
           github.event.pull_request.state == 'open' &&
           github.event.pull_request.draft == false &&
-          startsWith(github.head_ref, 'release-please--') &&
           (github.event.action != 'edited' || github.event.changes.base.ref.from != '')
         )
       }}
     # Job-level, so only runs that reach this job join the group. A newer revision cancels
     # the verification of the one it replaced; a title edit cannot.
     concurrency:
-      group: verify-release-candidate-${{ github.event.pull_request.number || github.ref }}
+      group: verify-pr-${{ github.event.pull_request.number || github.ref }}
       cancel-in-progress: true
     steps:
       - name: Check out candidate code
@@ -154,7 +147,7 @@ jobs:
         working-directory: apps/server-hono
         run: bun run build
 
-  # The desktop release gate, moved in front of the tag (ADR 0006).
+  # The desktop end-to-end suite, on every pull request (ADR 0006, widened by ADR 0010).
   #
   # A faithful copy of the E2E step in release-desktop.yml, native rebuild included, because
   # a candidate that does not exercise what ships is not a candidate. This is the only place
@@ -165,25 +158,24 @@ jobs:
   # inlines into the main bundle. That environment has no protection rules, and no signing
   # secret is used here — signing stays in the release workflow.
   e2e_desktop:
-    name: Desktop E2E (macOS, release candidate)
+    name: Desktop E2E (macOS)
     runs-on: macos-latest
     timeout-minutes: 30
     environment: production
-    # Gated to DESKTOP candidates. A web or api release PR is still a release PR, but nothing
-    # in it can change what the desktop app does, and a macOS minute costs ten.
+    # Same eligibility as `verify`. It used to be gated to desktop release candidates
+    # because a macOS minute billed at ten; on a public repository it bills at nothing, and
+    # a path filter here would need its own job and its own way to go wrong.
     if: >-
       ${{
         github.event_name == 'workflow_dispatch' ||
         (
           github.event.pull_request.state == 'open' &&
           github.event.pull_request.draft == false &&
-          startsWith(github.head_ref, 'release-please--') &&
-          contains(github.head_ref, 'components--desktop') &&
           (github.event.action != 'edited' || github.event.changes.base.ref.from != '')
         )
       }}
     concurrency:
-      group: e2e-desktop-candidate-${{ github.event.pull_request.number || github.ref }}
+      group: e2e-desktop-pr-${{ github.event.pull_request.number || github.ref }}
       cancel-in-progress: true
     steps:
       - name: Checkout code
@@ -230,31 +222,27 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-candidate
+          name: playwright-report-pr
           path: |
             apps/kaipu-record/playwright-report
             apps/kaipu-record/test-results
           retention-days: 7
           if-no-files-found: ignore
 
-  # Returning a ready candidate to draft means "not this one after all". Joining the verify
+  # Returning a ready PR to draft means "not this one after all". Joining the verify
   # job's concurrency group from a job that costs seconds cancels the in-flight verification
   # instead of paying out the remaining minutes of a result nobody will read.
   cancel-superseded:
     name: Cancel verification when returned to draft
     runs-on: ubuntu-latest
-    if: >-
-      ${{
-        github.event.action == 'converted_to_draft' &&
-        startsWith(github.head_ref, 'release-please--')
-      }}
+    if: ${{ github.event.action == 'converted_to_draft' }}
     concurrency:
-      group: verify-release-candidate-${{ github.event.pull_request.number }}
+      group: verify-pr-${{ github.event.pull_request.number }}
       cancel-in-progress: true
     steps:
       - name: Explain cancellation after returning to draft
         run: |
-          echo "Candidate returned to draft; any in-flight verification for this PR is cancelled."
+          echo "Returned to draft; any in-flight verification for this PR is cancelled."
           echo "Mark the pull request ready for review again to verify the current revision."
 
   # THE REQUIRED CHECK.
@@ -290,16 +278,11 @@ jobs:
     name: Merge requirements
     runs-on: ubuntu-latest
     needs: [verify, e2e_desktop]
-    # Report iff this run decided. Two halves, and both are load-bearing:
-    #
-    #   - An ordinary pull request is ALWAYS reported on. Its `verify` never runs, so
-    #     without the first clause the required check would never report and every PR in
-    #     the repository would be unmergeable (the paths-filter deadlock, hit on #173).
-    #   - A release candidate is reported on only when this run's `verify` — and, for a
-    #     desktop candidate, its E2E — reached a real conclusion. `skipped` means this run
-    #     was the prose-`edited` twin or the PR is a draft; `cancelled` means a newer
-    #     revision superseded it. Neither knows anything about the commit, so neither may
-    #     speak about it.
+    # Report iff this run decided: both checks reached a real conclusion. `skipped` means
+    # this run was a prose-`edited` twin or the PR is a draft; `cancelled` means a newer
+    # revision superseded it. Neither knows anything about the commit, so neither may
+    # speak about it. Every non-draft revision gets a run that does decide, because
+    # `opened`, `synchronize` and `ready_for_review` all start one.
     #
     # The conditions are read off `needs.*.result`, never off the event shape. A condition
     # on `draft`, `state` or `changes.base` would make a run that DID verify stay silent,
@@ -308,23 +291,12 @@ jobs:
     if: >-
       ${{
         always() && github.event_name == 'pull_request' &&
-        (
-          !startsWith(github.head_ref, 'release-please--') ||
-          (
-            (needs.verify.result == 'success' || needs.verify.result == 'failure') &&
-            (
-              !contains(github.head_ref, 'components--desktop') ||
-              needs.e2e_desktop.result == 'success' ||
-              needs.e2e_desktop.result == 'failure'
-            )
-          )
-        )
+        (needs.verify.result == 'success' || needs.verify.result == 'failure') &&
+        (needs.e2e_desktop.result == 'success' || needs.e2e_desktop.result == 'failure')
       }}
     steps:
-      - name: Check whether release verification permits merging
+      - name: Check whether verification permits merging
         env:
-          IS_RELEASE: ${{ startsWith(github.head_ref, 'release-please--') }}
-          IS_DESKTOP: ${{ contains(github.head_ref, 'components--desktop') }}
           IS_DRAFT: ${{ github.event.pull_request.draft }}
           VERIFY: ${{ needs.verify.result }}
           E2E: ${{ needs.e2e_desktop.result }}
@@ -332,58 +304,48 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ "$IS_RELEASE" != "true" ]; then
-            echo "Not a release candidate. Candidate verification does not apply to this pull request."
-            exit 0
-          fi
-
-          # Unreachable as the job is currently conditioned: a draft candidate never
-          # verifies, so the gate stays silent and this step does not run. It is kept
-          # because it fails closed and says why, so loosening the condition above
-          # degrades to a clear red rather than to a green on an unverified candidate.
+          # Unreachable as the job is currently conditioned: a draft never verifies, so
+          # the gate stays silent and this step does not run. It is kept because it fails
+          # closed and says why, so loosening the condition above degrades to a clear red
+          # rather than to a green on an unverified pull request.
           if [ "$IS_DRAFT" = "true" ]; then
-            echo "::error title=Release candidate is still a draft::Mark this pull request ready for review to verify it. Nothing has been verified while it is a draft."
+            echo "::error title=Pull request is still a draft::Mark it ready for review to verify it. Nothing has been verified while it is a draft."
             exit 1
           fi
 
           case "$VERIFY" in
             success) ;;
             failure)
-              echo "::error title=Release candidate failed verification::\`bun run verify\` or an app bundle build failed on $SHA. Fix it and push; the new revision is verified automatically while this PR is ready for review."
+              echo "::error title=Verification failed::\`bun run verify\` or an app bundle build failed on $SHA. Fix it and push; the new revision is verified automatically."
               exit 1
               ;;
             cancelled)
-              echo "::error title=Release candidate verification cancelled::It was superseded by a newer revision, or this PR was returned to draft. Mark the pull request ready for review again to verify the current revision."
+              echo "::error title=Verification cancelled::It was superseded by a newer revision, or this PR was returned to draft. Mark it ready for review again to verify the current revision."
               exit 1
               ;;
             *)
-              echo "::error title=Release candidate not verified::Verification did not run for this revision (verify job: $VERIFY). Return the pull request to draft and mark it ready for review again."
+              echo "::error title=Not verified::Verification did not run for this revision (verify job: $VERIFY). Return the pull request to draft and mark it ready for review again."
               exit 1
               ;;
           esac
 
-          # The desktop E2E only applies to a desktop candidate; a web or api candidate
-          # deliberately never starts it, and `skipped` there is the expected result.
-          if [ "$IS_DESKTOP" = "true" ]; then
-            case "$E2E" in
-              success) ;;
-              failure)
-                echo "::error title=Desktop E2E failed::Playwright failed against the built app on macOS for $SHA. This is the check that used to run only after the tag existed. Fix it and push; the new revision is verified automatically while this PR is ready for review."
-                exit 1
-                ;;
-              cancelled)
-                echo "::error title=Desktop E2E cancelled::It was superseded by a newer revision, or this PR was returned to draft. Mark the pull request ready for review again to verify the current revision."
-                exit 1
-                ;;
-              *)
-                echo "::error title=Desktop E2E did not run::A desktop release candidate must pass the macOS end-to-end suite before the tag exists (e2e_desktop job: $E2E). Return the pull request to draft and mark it ready for review again."
-                exit 1
-                ;;
-            esac
-            echo "Desktop end-to-end suite passed on macOS."
-          fi
+          case "$E2E" in
+            success) ;;
+            failure)
+              echo "::error title=Desktop E2E failed::Playwright failed against the built app on macOS for $SHA. Fix it and push; the new revision is verified automatically."
+              exit 1
+              ;;
+            cancelled)
+              echo "::error title=Desktop E2E cancelled::It was superseded by a newer revision, or this PR was returned to draft. Mark it ready for review again to verify the current revision."
+              exit 1
+              ;;
+            *)
+              echo "::error title=Desktop E2E did not run::Every pull request must pass the macOS end-to-end suite (e2e_desktop job: $E2E). Return the pull request to draft and mark it ready for review again."
+              exit 1
+              ;;
+          esac
 
-          echo "Release candidate verified on $SHA."
+          echo "Verified on $SHA: checks, builds and the desktop end-to-end suite passed."
 
   # TRANSITIONAL — delete once the `main release` ruleset requires `Merge requirements`.
   #
