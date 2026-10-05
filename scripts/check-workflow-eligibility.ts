@@ -307,7 +307,20 @@ function needsContext(expect: Expectation, override: Partial<Record<string, JobR
   const verify: JobResult = override.verify ?? (expect.verify ? "success" : "skipped");
   const e2e: JobResult = override.e2e_desktop ?? (expect.e2e ? "success" : "skipped");
   const gate: JobResult = override.gate ?? (expect.gate ? "success" : "skipped");
-  return { verify: { result: verify }, e2e_desktop: { result: e2e }, gate: { result: gate } };
+  // The parallel parts `verify` collects. They share its eligibility, so by default they
+  // ran exactly when it did.
+  const part = (id: string): { result: JobResult } => ({
+    result: override[id] ?? (expect.verify ? "success" : "skipped"),
+  });
+  return {
+    lint: part("lint"),
+    types: part("types"),
+    tests: part("tests"),
+    bundles: part("bundles"),
+    verify: { result: verify },
+    e2e_desktop: { result: e2e },
+    gate: { result: gate },
+  };
 }
 
 const scenarios: Array<{
@@ -325,13 +338,6 @@ const scenarios: Array<{
     ctx: pullRequestEvent({ action: "opened" }),
     eventType: "opened",
     // ADR 0010: every pull request is verified in Actions, not only release candidates.
-    expect: { verify: true, e2e: true, gate: true, legacy: true, cancel: false },
-  },
-  {
-    n: 2,
-    title: "Ordinary stacked PR retargeted to main",
-    ctx: pullRequestEvent({ action: "edited", baseChangedFrom: "docs/settings-updates-spec" }),
-    eventType: "edited",
     expect: { verify: true, e2e: true, gate: true, legacy: true, cancel: false },
   },
   {
@@ -376,18 +382,6 @@ const scenarios: Array<{
     expect: { verify: true, e2e: true, gate: true, legacy: true, cancel: false },
   },
   {
-    n: 8,
-    // THE SCENARIO THAT BLOCKED DESKTOP 0.9.0. release-please force-pushes and rewrites the
-    // body in the same second, so GitHub starts two runs on one commit: this one and the
-    // `synchronize` one that verifies. This run knows nothing about the commit, so it must
-    // report nothing — a failure here lands on the same commit as the real success and the
-    // rollup takes the worst of the two, leaving a verified candidate unmergeable.
-    title: "Ready release PR title or body edited (the release-please twin run)",
-    ctx: pullRequestEvent({ action: "edited", headRef: RELEASE_BRANCH, titleChanged: true }),
-    eventType: "edited",
-    expect: { verify: false, e2e: false, gate: false, legacy: false, cancel: false },
-  },
-  {
     n: 9,
     title: "Release PR returned to draft during verification",
     ctx: pullRequestEvent({
@@ -399,19 +393,6 @@ const scenarios: Array<{
     // Same commit, and it may well be marked ready again. Staying silent is what lets that
     // later verification stand alone on the commit.
     expect: { verify: false, e2e: false, gate: false, legacy: false, cancel: true },
-  },
-  {
-    n: 10,
-    title: "Merged release PR edited afterwards",
-    ctx: pullRequestEvent({
-      action: "edited",
-      headRef: RELEASE_BRANCH,
-      state: "closed",
-      merged: true,
-      baseChangedFrom: "main",
-    }),
-    eventType: "edited",
-    expect: { verify: false, e2e: false, gate: false, legacy: false, cancel: false },
   },
   {
     n: 14,
@@ -449,15 +430,6 @@ const scenarios: Array<{
     expect: { verify: false, e2e: false, gate: false, legacy: false, cancel: false },
   },
   {
-    n: 18,
-    title: "Ordinary PR title or body edited",
-    ctx: pullRequestEvent({ action: "edited", titleChanged: true }),
-    eventType: "edited",
-    // The prose twin. The run that verified this commit already reported; this one must
-    // stay silent or a stale result could land beside it.
-    expect: { verify: false, e2e: false, gate: false, legacy: false, cancel: false },
-  },
-  {
     n: 19,
     title: "Ordinary PR returned to draft",
     ctx: pullRequestEvent({ action: "converted_to_draft", draft: true }),
@@ -471,6 +443,25 @@ const scenarios: Array<{
     eventType: "synchronize",
     results: { e2e_desktop: "failure" },
     // A real verdict: it must be reported, so the red E2E blocks the merge.
+    expect: { verify: true, e2e: true, gate: true, legacy: true, cancel: false },
+  },
+  {
+    n: 21,
+    title: "Ordinary PR superseded while its tests ran",
+    ctx: pullRequestEvent({ action: "synchronize" }),
+    eventType: "synchronize",
+    // A part cancelled by a newer revision: `verify` must not run, so it cannot turn the
+    // cancellation into a failure that lands on a commit this run knows nothing about.
+    results: { tests: "cancelled" },
+    expect: { verify: false, e2e: true, gate: false, legacy: false, cancel: false },
+  },
+  {
+    n: 22,
+    title: "Ordinary PR whose lint failed",
+    ctx: pullRequestEvent({ action: "synchronize" }),
+    eventType: "synchronize",
+    // A real verdict: `verify` runs (always()), fails, and the gate reports it.
+    results: { lint: "failure", verify: "failure" },
     expect: { verify: true, e2e: true, gate: true, legacy: true, cancel: false },
   },
   {
@@ -540,8 +531,18 @@ for (const s of scenarios) {
   }
 }
 
-// Scenario 7: label churn must not be a trigger at all.
-console.log("\nScenario 7 — unrelated label added or removed");
+// Scenario 7: label churn must not be a trigger at all — and neither may `edited`. An
+// `edited` run (release-please rewrites its PR body on every update) verifies nothing and
+// reports every check as skipped; GitHub counts a skipped required check as passing, so the
+// PR read "All checks have passed" while the real run was still working (PR #195).
+console.log("\nScenario 7 — label churn and body edits are not triggers");
+ok(
+  !triggerTypes().includes("edited"),
+  "'edited' must not be a trigger type: its run reports skipped checks that GitHub counts as passing",
+);
+console.log(
+  `  'edited' in types: ${triggerTypes().includes("edited") ? "YES (regression)" : "no — workflow never starts"}`,
+);
 for (const t of ["labeled", "unlabeled"]) {
   const listed = triggerTypes().includes(t);
   console.log(`  '${t}' in types: ${listed ? "YES (regression)" : "no — workflow never starts"}`);
