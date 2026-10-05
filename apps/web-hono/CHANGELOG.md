@@ -1,5 +1,60 @@
 # Changelog
 
+## [0.9.0](https://github.com/niway-dev/kaipu-record/compare/web-v0.8.0...web-v0.9.0) (2026-10-05)
+
+
+### Features
+
+* **brand:** @kaipu/brand, one logo system shared by desktop and web ([70d196e](https://github.com/niway-dev/kaipu-record/commit/70d196ee66474a61be0e59caa2a791413d1677ac))
+* **experiment:** one StyleX button shared by web and the desktop renderer ([be6eed7](https://github.com/niway-dev/kaipu-record/commit/be6eed7b6264fce1caddd5b6b1f6bb7460ba4e32))
+* **experiment:** the shared probe mounts on both main screens ([2f6bacb](https://github.com/niway-dev/kaipu-record/commit/2f6bacbe433b5d77f60227de81bf382a618bf657))
+* free local recordings, Kaipu identity, and growth strategy ([d2c3345](https://github.com/niway-dev/kaipu-record/commit/d2c33458d74b1b43e9e1d5c910ae164ea5aee74d))
+* **styles:** StyleX stages 0-1 — the proven pipeline and typed literal tokens with a light theme ([2deb9ec](https://github.com/niway-dev/kaipu-record/commit/2deb9ecf75de9c8763d89e5acae4d3d94a0fc24e))
+* **tokens:** stage 1 — literal typed tokens and the generated light theme ([90c733c](https://github.com/niway-dev/kaipu-record/commit/90c733c785cd41835f4eb2619bfe76c7c58e1304))
+* **tokens:** typed StyleX token references, generated from the same source ([0554710](https://github.com/niway-dev/kaipu-record/commit/055471061567e41373440e6a2ac406d9e423ee64))
+* **ui:** stage 2b part 2 — shared navigation rail and a real-components landing shot ([97c2212](https://github.com/niway-dev/kaipu-record/commit/97c2212c440993a6593a13e02066a908d384e844))
+* **ui:** the shared Button becomes an atom, with the boundary that makes it shareable ([0b6f4c4](https://github.com/niway-dev/kaipu-record/commit/0b6f4c4593d3b0a9ceb6fbc4c0a9ba2cf7202bc0))
+* **web:** brand marks and the landing design system foundation ([4dc9206](https://github.com/niway-dev/kaipu-record/commit/4dc92064da31c8f9bae7b2a8d0563ed4ea6a13fd))
+* **web:** hero with the app mockup, top bar, and the moments intro ([cac1fe8](https://github.com/niway-dev/kaipu-record/commit/cac1fe808c700e82cea3caa1b36cb448c672f04f))
+* **web:** Kai on camera — the recording illustration's bubble shows the fox instead of a placeholder ([6f4b0c3](https://github.com/niway-dev/kaipu-record/commit/6f4b0c3eed97c315d72dc03eb775453d5c7b6305))
+* **web:** Kai's moods — the menu-bar marks, tappable, instead of one still fox ([e9568ea](https://github.com/niway-dev/kaipu-record/commit/e9568eab70bf29414443304c284a4741ea5b338f))
+* **web:** marketing home, Kai branding, and conversion audit ([08d4b52](https://github.com/niway-dev/kaipu-record/commit/08d4b526e0e4c0a6f7baa09d8c6910ed9532123c))
+* **web:** meet Kai — the fox and the name's origin as the home's third section ([d1dd99c](https://github.com/niway-dev/kaipu-record/commit/d1dd99c5281e9e01361816c9bbb170eb5c9d0065))
+* **web:** mobile layout — chapter strip, sticky CTA, and a different ask ([4d87bc7](https://github.com/niway-dev/kaipu-record/commit/4d87bc714449a444bbe6844b7d5045cbe25b6b25))
+* **web:** new home shell, chapter rail and hero ([0c55049](https://github.com/niway-dev/kaipu-record/commit/0c550495c10466a68cbd0b85ff9d879125da42d5))
+* **web:** the closing's mark is Kai's done moment, not the app icon again ([9af7743](https://github.com/niway-dev/kaipu-record/commit/9af77438968e2f1bec748c7417e94fee61057317))
+* **web:** the four chapters, with their product mockups in HTML ([788432d](https://github.com/niway-dev/kaipu-record/commit/788432d70e3f24603e893c53ab16700fd238cb06))
+* **web:** the fox everywhere the web still showed the old play-mark ([b83266b](https://github.com/niway-dev/kaipu-record/commit/b83266ba8d8a8bef5f6bf98987b033ebb45a643f))
+* **web:** the fox everywhere the web still showed the old play-mark ([7dd5330](https://github.com/niway-dev/kaipu-record/commit/7dd5330af3be032292f9adba07f11cab792528e1))
+* **web:** the home meets Kai, speaks Spanish and turns light ([d5d8ae4](https://github.com/niway-dev/kaipu-record/commit/d5d8ae479ea75309d087a0a8617b7229578cad5b))
+* **web:** the home speaks Spanish and turns light, on purpose ([8916d4f](https://github.com/niway-dev/kaipu-record/commit/8916d4f71b88957c8bb5859a79e7f5b02829c1e3))
+* **web:** the landing's product shot renders the real @kaipu/ui components ([df6efee](https://github.com/niway-dev/kaipu-record/commit/df6efeec2f49b82cd92877af88c1834bf80c5b70))
+* **web:** the moments intro is a band, not a second opening screen ([bc9fe83](https://github.com/niway-dev/kaipu-record/commit/bc9fe834ad22b762c71481a3cc40f57a0027e2fc))
+* **web:** the rail names a chapter on hover instead of permanently ([fb43e4d](https://github.com/niway-dev/kaipu-record/commit/fb43e4d2247045a82d3546ea986d0bd35b791d70))
+* **web:** Your files, the closing CTA and the footer ([d1dbaf5](https://github.com/niway-dev/kaipu-record/commit/d1dbaf5f5c8abbf81d713556bb8d85b8fc32d2be))
+
+
+### Bug Fixes
+
+* **ci:** the web preview emits a version URL, and says so when it cannot ([976105a](https://github.com/niway-dev/kaipu-record/commit/976105a769cc84828aff913cfe1835266cdae4cd))
+* **ci:** the web preview emits a version URL, and says so when it cannot ([82d4002](https://github.com/niway-dev/kaipu-record/commit/82d40024c20a6b6cca8a67579cfc0c566782fe9c))
+* **experiment:** the probe clears the fixed nav, and dev matches the scanner ([13d9633](https://github.com/niway-dev/kaipu-record/commit/13d9633a52272ee40df6c485a24adc88a0af2cb8))
+* **experiment:** the web probe actually clears the fixed nav ([ad8c70e](https://github.com/niway-dev/kaipu-record/commit/ad8c70ece5371e838399f634e7ec3ea4cd8d80c1))
+* **landing:** read the real keyboard shortcuts instead of typed glyphs ([5fcf402](https://github.com/niway-dev/kaipu-record/commit/5fcf4026945429a281d1ea48e05f7ef02b61176b))
+* **landing:** read the real keyboard shortcuts instead of typed glyphs ([dac5772](https://github.com/niway-dev/kaipu-record/commit/dac577283635cf92704d9daffb810b64e2891a59))
+* **web:** drop the rail's floating label, and approve the shared shortcuts ([9ed5a6c](https://github.com/niway-dev/kaipu-record/commit/9ed5a6cfabdb5289d91b3ff24be49cf1dc1cf643))
+* **web:** restore the moments headline, reveal mockups on scroll, contain overflow ([9d8a956](https://github.com/niway-dev/kaipu-record/commit/9d8a956135b58cb7b9177de293f041d521c99cf1))
+* **web:** the first paint agrees with the theme instead of flashing dark ([78f6dea](https://github.com/niway-dev/kaipu-record/commit/78f6deacbd97123a2b8c6712c98e6f2fc16eb9b1))
+* **web:** the hero fits a laptop, and the bar sits on the page's grid ([97aed58](https://github.com/niway-dev/kaipu-record/commit/97aed58c5701301e76ece6b5053889bb0a25b446))
+* **web:** the moments band and Kai get room to be separate sections ([75d4aa5](https://github.com/niway-dev/kaipu-record/commit/75d4aa50736d6e64e8d717c00a35f8f10215e699))
+
+
+### Performance Improvements
+
+* **web-hono:** hydrate below-the-fold landing sections lazily ([818ad04](https://github.com/niway-dev/kaipu-record/commit/818ad04446a220945421ea636ffd5ee3bcf33ae6))
+* **web-hono:** landing critical path diet (lazy hydration, lean root, WebP foxes) ([6b5e75f](https://github.com/niway-dev/kaipu-record/commit/6b5e75f22013d035f7c338ef11f2d593bdafc0af))
+* **web-hono:** put the root on a diet ([762ca6b](https://github.com/niway-dev/kaipu-record/commit/762ca6b6d988ba1718d6818fd4bd10087439962f))
+
 ## [0.8.0](https://github.com/csdev19/kaipu-record-monorepo/compare/web-v0.7.0...web-v0.8.0) (2026-09-19)
 
 
