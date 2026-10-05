@@ -512,6 +512,10 @@ app.whenReady().then(() => {
   // Menu-bar tray + its Capture Panel.
   capturePanel = new CapturePanelWindow();
   tray = createTray(capturePanel, showMainWindow, getAppSettings().locale);
+  // Load the panel hidden so the first tray click does not pay a cold start. After
+  // the main window is ready, not alongside it: the main window's start-up comes
+  // first, and the end-to-end suite takes the first window to open as the app.
+  mainWindow?.once("ready-to-show", () => capturePanel?.prewarm());
 
   app.on("activate", function () {
     // Dock-icon click: bring the main window back (recreating it if it was

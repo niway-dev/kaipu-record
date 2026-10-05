@@ -94,8 +94,13 @@ export interface KaipuElectronAPI {
   /** Subscribe to authentication status changes. Returns an unsubscribe fn. */
   onAuthStatusChanged(callback: (status: AuthStatus) => void): () => void;
 
-  /** Enumerate available screens and windows via the main-process desktopCapturer. */
-  getScreenSources(): Promise<ScreenSource[]>;
+  /**
+   * Enumerate recordable sources via the main-process desktopCapturer. By default it
+   * returns screens AND windows with thumbnails — what the picker shows. Pass
+   * `{ withThumbnails: false }` for screens only and no captures, which is all a
+   * default selection needs and costs milliseconds instead of a screenshot per window.
+   */
+  getScreenSources(options?: { withThumbnails?: boolean }): Promise<ScreenSource[]>;
 
   /** Capture Panel → main: resize the panel window to its measured content height. */
   resizeCapturePanel(height: number): void;

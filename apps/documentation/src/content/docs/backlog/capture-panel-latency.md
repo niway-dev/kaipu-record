@@ -5,7 +5,9 @@ description: "Why opening the tray widget shows a loader before the panel, why t
 
 # Capture panel latency
 
-> **Status: 🔵 Proposed — fixes designed, not applied.** Owner noticed on 2026-10-01: _"cuando
+> **Status: 🟢 Ready to validate — fixes 1–3 applied (2026-10-05), not yet felt on a
+> packaged build.** See [What shipped](#what-shipped) for the exact shape and the check.
+> Owner noticed on 2026-10-01: _"cuando
 > sale el widget primero hay un loading y luego recién aparece"_ and _"para elegir las
 > pantallas se toma un poco de tiempo"_. Parent of the older perf note
 > [screen-picker-thumbnail-perf](./screen-picker-thumbnail-perf), which parked the same cost
@@ -58,3 +60,28 @@ Fixes 1–3 touch enumeration and the window lifecycle only, not the capture pip
 by hand: open the widget from the tray on a desktop with many windows; the panel should show
 _Ready to record · Screen 1_ with no loader, and the picker's loader should be the only one
 left.
+
+## What shipped
+
+Fixes 1–3, as designed, with two details the design did not spell out:
+
+- **The screens-only call uses a 0×0 thumbnail**, not 1×1. Electron documents 0 as
+  skipping the capture entirely; the IPC keeps its old behaviour when called with no
+  argument, so the picker and anything else that wanted thumbnails is unchanged.
+- **Only the latest enumeration may write.** The mount's quick call and the picker's
+  full call can overlap now, and the quick one landing second would have replaced the
+  picker's tiles with a list that has no windows and no thumbnails.
+  `useScreenSources` drops any result that is not from its most recent call.
+- **The panel is pre-created after the main window's `ready-to-show`**, not inside
+  `createTray`. The main window's start-up comes first, and the end-to-end suite takes
+  the first window to open as the app. A click that arrives before the panel's first
+  paint is held and honoured when it lands, instead of showing an empty window.
+
+Unit tests pin the hook behaviour (screens only on mount, full list only when the picker
+opens, no retry without thumbnails, latest call wins); all three fail on the old code.
+The window pre-creation has no unit test — it is Electron lifecycle — so the check is by
+hand: on a packaged build with many windows open, click the menu-bar icon. The panel
+should appear with _Ready to record · Screen 1_ and no loader; the picker's loader is the
+only one left.
+
+The parked fix 4 (a window-ready signal instead of polling) is still open.
