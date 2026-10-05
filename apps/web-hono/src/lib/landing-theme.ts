@@ -22,3 +22,10 @@ export const DEFAULT_LANDING_THEME: LandingTheme = "dark";
 export function isLandingTheme(value: unknown): value is LandingTheme {
   return value === "dark" || value === "light";
 }
+
+/** Browser-only: the saved choice from `document.cookie`, or the default. */
+export function readLandingThemeCookie(): LandingTheme {
+  const match = document.cookie.match(new RegExp(`(?:^|; )${LANDING_THEME_COOKIE}=([^;]*)`));
+  const saved = match ? decodeURIComponent(match[1] ?? "") : undefined;
+  return isLandingTheme(saved) ? saved : DEFAULT_LANDING_THEME;
+}

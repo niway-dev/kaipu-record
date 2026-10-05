@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { z } from "zod";
 import { useTranslations } from "@kaipu/i18n";
 import { Button, Input, Label } from "@kaipu/web-ui";
 
@@ -60,6 +59,10 @@ function EmailVerifiedPage() {
 
 export const Route = createFileRoute("/auth/email-verified")({
   head: () => NOINDEX,
-  validateSearch: z.object({ error: z.string().optional() }),
+  // Hand-written rather than a zod schema: route options stay in the entry chunk,
+  // so a zod import here would ship zod to every page, public ones included.
+  validateSearch: (search: Record<string, unknown>): { error?: string } => ({
+    error: typeof search.error === "string" ? search.error : undefined,
+  }),
   component: EmailVerifiedPage,
 });

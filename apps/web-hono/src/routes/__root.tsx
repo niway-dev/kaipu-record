@@ -11,29 +11,26 @@ import {
 } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 
-import { Toaster } from "@kaipu/web-ui";
-import { I18nProvider, type Locale, type Messages } from "@kaipu/i18n";
-import es from "@kaipu/i18n/messages/es";
-import en from "@kaipu/i18n/messages/en";
+import { I18nProvider, type Locale } from "@kaipu/i18n";
 
-import { LegalLinks } from "@/components/legal/legal-links";
-import Header from "../components/header";
 import { siteHeadMeta } from "@/lib/seo";
 import appCss from "../index.css?url";
 import stylexCss from "../stylex.css?url";
-import { getAuthSession } from "@/lib/auth/get-auth-session";
+import { forget, readCovering, remember } from "@/lib/i18n/messages-cache";
+import type { MessageTree } from "@/lib/i18n/pick-messages";
+import { slicesForPath, type MessageSlice } from "@/lib/i18n/route-messages";
 import { getLocale } from "@/server-functions/get-locale";
 import { setLocale as setLocaleFn } from "@/server-functions/set-locale";
 import { getLandingTheme } from "@/server-functions/get-landing-theme";
-import type { LandingTheme } from "@/lib/landing-theme";
-import type { AuthSession } from "@/lib/auth/types";
+import { readLandingThemeCookie, type LandingTheme } from "@/lib/landing-theme";
 
 export interface RouterAppContext {
   queryClient: QueryClient;
-  isAuthenticated: boolean;
-  session: AuthSession | null;
   locale: Locale;
-  messages: Messages;
+  /** Only the slices the matched route renders, in the active locale. */
+  messages: MessageTree;
+  /** Which slices `messages` was filtered to; see `lib/i18n/route-messages`. */
+  messageSlices: MessageSlice[];
   /** The landing's own dark/light choice; unrelated to the app shell's theme. */
   landingTheme: LandingTheme;
 }
@@ -59,19 +56,32 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
     ],
   }),
   component: RootDocument,
-  staleTime: 10 * 60 * 1000, // 10 minutes
-  beforeLoad: async () => {
-    const [session, i18n, theme] = await Promise.all([
-      getAuthSession(),
-      getLocale(),
-      getLandingTheme(),
+  // No `staleTime` here. A fresh root match skips `beforeLoad` on client-side
+  // navigation, and `beforeLoad` is what loads the messages the next route needs:
+  // with a staleTime the legal pages rendered against the home's message slices.
+  // The round trips it used to save are avoided inside `beforeLoad` itself (the
+  // messages cache, and the theme cookie read in the browser).
+  // The session is deliberately not resolved here: the public pages do not
+  // reflect it, and fetching it would put the auth client on every route. The
+  // layouts that need it (`auth`, `_authenticated`) load it themselves.
+  // `location` is typed by hand: the registered router type is derived from this
+  // very route, so reading it from the inferred context makes TypeScript give up
+  // and type the whole callback as returning `never`.
+  beforeLoad: async ({ location }: { location: { pathname: string } }) => {
+    const slices = slicesForPath(location.pathname);
+    // On the client a slice already in hand is not worth a round trip.
+    const [i18n, landingTheme] = await Promise.all([
+      readCovering(slices) ?? getLocale({ data: { slices } }),
+      // The cookie is not httpOnly, so the browser can read it without a call.
+      typeof window === "undefined"
+        ? getLandingTheme().then((r) => r.theme)
+        : readLandingThemeCookie(),
     ]);
     return {
-      session: session ?? null,
-      isAuthenticated: !!session,
       locale: i18n.locale,
-      messages: i18n.messages,
-      landingTheme: theme.theme,
+      messages: remember(i18n.locale, slices, i18n.messages),
+      messageSlices: slices,
+      landingTheme,
     };
   },
 });
@@ -100,7 +110,10 @@ function criticalStyles(light: boolean): string {
 function RootDocument() {
   const context = Route.useRouteContext();
   const router = useRouter();
-  const { isAuthenticated, session, locale } = context;
+  const { locale } = context;
+  // The SSR payload is the client's first copy of the messages; keep it so the
+  // next client-side navigation only asks for what is missing. No-op on the server.
+  remember(locale, context.messageSlices, context.messages);
 
   // Public pages bring their own header and footer, so the app shell must stand
   // down for them. Read from the route's own staticData rather than matching on
@@ -113,10 +126,12 @@ function RootDocument() {
   // Both the <html> class and the pre-stylesheet background hang off this.
   const isLandingLight = isMarketing && context.landingTheme === "light";
 
-  // Persist to the cookie, then re-run beforeLoad so the whole tree re-renders
-  // with the new messages (resolved server-side — no flash).
+  // Persist to the cookie, drop the cache (it holds the old language), then
+  // re-run beforeLoad so the tree re-renders with the new messages (resolved
+  // server-side). Until they land the provider keeps showing the old text.
   const handleSetLocale = async (next: Locale) => {
     await setLocaleFn({ data: next });
+    forget();
     await router.invalidate();
   };
 
@@ -135,28 +150,25 @@ function RootDocument() {
       <body suppressHydrationWarning>
         <I18nProvider
           initialLocale={locale}
-          messagesByLocale={{ es, en }}
+          // Only the active locale's messages are loaded. Both keys point at them so
+          // the provider never reads an empty catalog in the moment between the
+          // locale state flipping and the reloaded messages arriving.
+          messagesByLocale={{ es: context.messages, en: context.messages }}
           onLocaleChange={(next) => void handleSetLocale(next)}
         >
+          {/* The app header, footer and toaster live in the `auth` and
+              `_authenticated` layouts (`AppShell`), so the public pages never
+              download them. */}
           <div className="min-h-svh">
-            {!isMarketing && (
-              <Header
-                isAuthenticated={isAuthenticated}
-                userName={session?.user?.name ?? ""}
-                userEmail={session?.user?.email ?? ""}
-              />
-            )}
-            <main className={isMarketing ? "" : "pt-12"}>
+            {isMarketing ? (
+              <main>
+                <Outlet />
+              </main>
+            ) : (
               <Outlet />
-            </main>
-            {!isMarketing && (
-              <footer className="border-t px-6 py-8 text-muted-foreground">
-                <LegalLinks />
-              </footer>
             )}
           </div>
         </I18nProvider>
-        <Toaster richColors />
         <TanStackRouterDevtools position="bottom-left" />
         <ReactQueryDevtools position="bottom" buttonPosition="bottom-right" />
         <Scripts />
