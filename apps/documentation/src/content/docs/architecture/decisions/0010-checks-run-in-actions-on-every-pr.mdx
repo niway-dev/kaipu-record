@@ -53,7 +53,16 @@ our hooks.
 5. **The pre-push hook keeps only the fast checks**: lint, format check, the package builds
    (Turbo-cached) and type checks — `bun run verify:local`, about 7 s warm. Tests and the
    E2E suite are not run on push. `bun run verify` still runs everything locally on demand.
-6. The release workflows keep their own gates (ADR 0006's E2E before signing): a release
+6. **`verify` runs as parallel jobs** (added 2026-10-05, after the first real runs took about
+   six minutes): lint and format; package builds and types; the workspace tests; the desktop
+   renderer suite in three Vitest shards; the web and API bundles. A `verify` job collects
+   them, so `Merge requirements` and its single-report invariant are unchanged. A part
+   cancelled by a newer revision makes `verify` skip rather than fail.
+7. **`edited` is no longer a trigger** (2026-10-05). Its run verified nothing and reported
+   every check as skipped, and GitHub counts a skipped required check as passing: while the
+   real run worked, release PR #195 read "All checks have passed". A stacked pull request
+   retargeted onto `main` now needs one push, or close and reopen, to start its checks.
+8. The release workflows keep their own gates (ADR 0006's E2E before signing): a release
    still validates the exact commit it publishes.
 
 ## Alternatives rejected

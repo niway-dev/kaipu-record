@@ -46,22 +46,22 @@ on:
     #   synchronize       — a new revision. Re-verify it; cancel the superseded run.
     #   converted_to_draft— back to accumulating. Cancel in-flight verification.
     #   opened/reopened   — an ordinary PR needs its required check from the start.
-    #   edited            — ONLY for a base change, so a stacked PR retargeted onto `main`
-    #                       still gets its required check. GitHub fires `edited` for title
-    #                       and body edits too; those are filtered out by
-    #                       `github.event.changes.base.ref.from` below, which is populated
-    #                       only when the base actually moved. Without `edited`, a PR opened
-    #                       against another branch and later retargeted to `main` never
-    #                       triggers this workflow, the required check never reports, and
-    #                       the PR is unmergeable forever (hit on PR #173, 2026-09-25).
     # `labeled`/`unlabeled` are deliberately ABSENT. See the readiness policy above.
+    #
+    # `edited` is ABSENT too, since 2026-10-05. It existed for one case — a stacked PR
+    # retargeted onto `main` — and opened a hole: release-please edits its PR body in the
+    # same second it force-pushes, so every rewrite started a second run that verified
+    # nothing and reported every check as `skipped`. GitHub treats a skipped required check
+    # as passing, so while the real run was still working the PR read "All checks have
+    # passed" and could be merged unverified (seen on desktop 0.10.0, PR #195). Without
+    # `edited`, the required check stays "Expected" until the run that verifies reports it.
+    # The retargeted stacked PR now needs one push, or close and reopen, to start its run.
     types:
       - opened
       - reopened
       - synchronize
       - ready_for_review
       - converted_to_draft
-      - edited
   workflow_dispatch:
 
 # NOTE: there is no workflow-level `concurrency` on purpose. With one, an irrelevant event
@@ -74,27 +74,24 @@ permissions:
   contents: read
 
 jobs:
-  verify:
-    name: Run checks and builds
+  # `bun run verify`, split into jobs that run side by side (2026-10-05). As one job it took
+  # ~6 minutes: install, package builds, type checks and ~3.5 minutes of tests, in series on
+  # one runner. Split, the run takes as long as its slowest part. Every part has the same
+  # eligibility, so they start together or not at all, and each cancels its own superseded
+  # run. `verify` below collects them; `Merge requirements` still reads only `verify`.
+  lint:
+    name: Lint, format and workflow checks
     runs-on: ubuntu-latest
-    # Everything that decides "should this start a runner?" is here, not in a step.
-    #   - an open, non-draft PR                (draft accumulates for free)
-    #   - on an event that changes the candidate, not its prose
-    # `workflow_dispatch` bypasses all of it: it is the documented manual escape hatch for
-    # the risky-change list in ADR 0004, and `github.head_ref` is empty outside a PR.
     if: >-
       ${{
         github.event_name == 'workflow_dispatch' ||
         (
           github.event.pull_request.state == 'open' &&
-          github.event.pull_request.draft == false &&
-          (github.event.action != 'edited' || github.event.changes.base.ref.from != '')
+          github.event.pull_request.draft == false
         )
       }}
-    # Job-level, so only runs that reach this job join the group. A newer revision cancels
-    # the verification of the one it replaced; a title edit cannot.
     concurrency:
-      group: verify-pr-${{ github.event.pull_request.number || github.ref }}
+      group: lint-pr-${{ github.event.pull_request.number || github.ref }}
       cancel-in-progress: true
     steps:
       - name: Check out candidate code
@@ -113,11 +110,54 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-bun-
 
-      # Turbo's local cache. Without it every run re-does `check-types` and `build` from
-      # scratch: measured on #161's run, type-check alone was 1m05 and the builds 55s —
-      # 71% of the job — while the same tasks replay in seconds locally off a warm cache.
-      # Keyed on the lockfile + turbo config, NOT on the SHA: cache entries are immutable,
-      # so a per-SHA key mints a fresh entry on every push of an open PR (x9 jobs) and
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Check the PR workflow's eligibility rules
+        run: bun run check-workflows
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Check formatting
+        run: bunx oxfmt --check .
+
+  types:
+    name: Package builds and type checks
+    runs-on: ubuntu-latest
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event.pull_request.state == 'open' &&
+          github.event.pull_request.draft == false
+        )
+      }}
+    concurrency:
+      group: types-pr-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Check out candidate code
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.4
+
+      - name: Restore Bun dependency cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      # Turbo's local cache. Keyed on the lockfile + turbo config, NOT on the SHA: entries
+      # are immutable, so a per-SHA key mints a fresh entry on every push of an open PR and
       # eats the repository's 10 GB budget. Turbo validates each task's own input hash, so
       # an entry that predates the current code is partially reused, never wrongly reused.
       - name: Restore Turbo task cache
@@ -128,14 +168,128 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-turbo-
 
+      - name: Build the workspace packages
+        run: bun run build --filter='@kaipu/*'
+
+      - name: Type-check every package and app
+        run: bun run check-types
+
+  # The desktop renderer suite is most of the test time, so it is split three ways with
+  # Vitest's own sharding; the rest of the workspace runs as one more part.
+  tests:
+    name: Tests (${{ matrix.part }})
+    runs-on: ubuntu-latest
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event.pull_request.state == 'open' &&
+          github.event.pull_request.draft == false
+        )
+      }}
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [packages, desktop 1/3, desktop 2/3, desktop 3/3]
+    concurrency:
+      group: tests-${{ matrix.part }}-pr-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Check out candidate code
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.4
+
+      - name: Restore Bun dependency cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
       - name: Install locked dependencies
         run: bun install --frozen-lockfile
 
-      - name: Run lint, formatting, type checks and tests
-        run: bun run verify
+      # Turbo's local cache. Keyed on the lockfile + turbo config, NOT on the SHA: entries
+      # are immutable, so a per-SHA key mints a fresh entry on every push of an open PR and
+      # eats the repository's 10 GB budget. Turbo validates each task's own input hash, so
+      # an entry that predates the current code is partially reused, never wrongly reused.
+      - name: Restore Turbo task cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ hashFiles('bun.lock', 'turbo.json') }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-
 
-      # The two app bundles are otherwise built only inside release-web / release-api.
-      # Building them here surfaces a bundling failure before the tag, at no extra job.
+      - name: Build the workspace packages
+        run: bun run build --filter='@kaipu/*'
+
+      - name: Test the workspace except the desktop app
+        if: ${{ matrix.part == 'packages' }}
+        run: bunx turbo run test --filter='!kaipu-record'
+
+      - name: Test one shard of the desktop app
+        if: ${{ matrix.part != 'packages' }}
+        working-directory: apps/kaipu-record
+        env:
+          PART: ${{ matrix.part }}
+        run: bun run test -- --shard="${PART#desktop }"
+
+  # The two app bundles are otherwise built only inside release-web / release-api.
+  bundles:
+    name: Web and API bundles
+    runs-on: ubuntu-latest
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event.pull_request.state == 'open' &&
+          github.event.pull_request.draft == false
+        )
+      }}
+    concurrency:
+      group: bundles-pr-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Check out candidate code
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.4
+
+      - name: Restore Bun dependency cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      # Turbo's local cache. Keyed on the lockfile + turbo config, NOT on the SHA: entries
+      # are immutable, so a per-SHA key mints a fresh entry on every push of an open PR and
+      # eats the repository's 10 GB budget. Turbo validates each task's own input hash, so
+      # an entry that predates the current code is partially reused, never wrongly reused.
+      - name: Restore Turbo task cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ hashFiles('bun.lock', 'turbo.json') }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-
+
+      - name: Build the workspace packages
+        run: bun run build --filter='@kaipu/*'
+
       - name: Build web app
         working-directory: apps/web-hono
         env:
@@ -146,6 +300,47 @@ jobs:
       - name: Build API
         working-directory: apps/server-hono
         run: bun run build
+
+  # Collects the parts above into the one result `Merge requirements` reads.
+  #
+  # `always()` so a failed part still produces a verdict (failure) instead of a skip. A
+  # CANCELLED part means a newer revision superseded this run; then this job is skipped
+  # rather than run, because a run that knows nothing about the commit must report nothing
+  # (see the gate). Each part is named explicitly: `needs.*` is not something the
+  # eligibility check in scripts/ can evaluate, and it must evaluate this condition.
+  verify:
+    name: Run checks and builds
+    runs-on: ubuntu-latest
+    needs: [lint, types, tests, bundles]
+    if: >-
+      ${{
+        always() &&
+        (
+          github.event_name == 'workflow_dispatch' ||
+          (
+            github.event.pull_request.state == 'open' &&
+            github.event.pull_request.draft == false
+          )
+        ) &&
+        needs.lint.result != 'cancelled' &&
+        needs.types.result != 'cancelled' &&
+        needs.tests.result != 'cancelled' &&
+        needs.bundles.result != 'cancelled'
+      }}
+    concurrency:
+      group: verify-pr-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Require every part to have passed
+        env:
+          LINT: ${{ needs.lint.result }}
+          TYPES: ${{ needs.types.result }}
+          TESTS: ${{ needs.tests.result }}
+          BUNDLES: ${{ needs.bundles.result }}
+        run: |
+          set -euo pipefail
+          echo "lint=$LINT types=$TYPES tests=$TESTS bundles=$BUNDLES"
+          [ "$LINT" = success ] && [ "$TYPES" = success ] && [ "$TESTS" = success ] && [ "$BUNDLES" = success ]
 
   # The desktop end-to-end suite, on every pull request (ADR 0006, widened by ADR 0010).
   #
@@ -170,8 +365,7 @@ jobs:
         github.event_name == 'workflow_dispatch' ||
         (
           github.event.pull_request.state == 'open' &&
-          github.event.pull_request.draft == false &&
-          (github.event.action != 'edited' || github.event.changes.base.ref.from != '')
+          github.event.pull_request.draft == false
         )
       }}
     concurrency:
