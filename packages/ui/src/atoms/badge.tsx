@@ -46,7 +46,7 @@ const variants = stylex.create({
     color: tokens.accentGreen,
   },
   info: {
-    backgroundColor: "rgba(246, 5, 92, 0.12)",
+    backgroundColor: tokens.accentPrimaryTint,
     color: tokens.accentPrimary,
   },
   warning: {
