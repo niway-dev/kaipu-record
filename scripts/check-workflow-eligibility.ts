@@ -19,8 +19,10 @@
  * Run: bun scripts/check-workflow-eligibility.ts
  */
 
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const WORKFLOW = ".github/workflows/pr-checks.yml";
 const source = readFileSync(WORKFLOW, "utf8");
@@ -303,7 +305,14 @@ interface Expectation {
  */
 type JobResult = "success" | "failure" | "cancelled" | "skipped";
 
-function needsContext(expect: Expectation, override: Partial<Record<string, JobResult>> = {}) {
+function needsContext(
+  expect: Expectation,
+  override: Partial<Record<string, JobResult>> = {},
+  docsOnly = false,
+) {
+  // `changes` shares the parts' eligibility, so it ran whenever anything verifying did.
+  const changes: JobResult =
+    override.changes ?? (expect.verify || expect.e2e || docsOnly ? "success" : "skipped");
   const verify: JobResult = override.verify ?? (expect.verify ? "success" : "skipped");
   const e2e: JobResult = override.e2e_desktop ?? (expect.e2e ? "success" : "skipped");
   const gate: JobResult = override.gate ?? (expect.gate ? "success" : "skipped");
@@ -313,6 +322,11 @@ function needsContext(expect: Expectation, override: Partial<Record<string, JobR
     result: override[id] ?? (expect.verify ? "success" : "skipped"),
   });
   return {
+    changes: {
+      result: changes,
+      // A job output is the empty string unless the job succeeded and set it.
+      outputs: { docs_only: changes === "success" ? String(docsOnly) : "" },
+    },
     lint: part("lint"),
     types: part("types"),
     tests: part("tests"),
@@ -331,6 +345,8 @@ const scenarios: Array<{
   expect: Expectation;
   /** Non-default job results, for the supersede and failure paths. */
   results?: Partial<Record<string, JobResult>>;
+  /** What `changes` classified the pull request as. Default: code. */
+  docsOnly?: boolean;
 }> = [
   {
     n: 1,
@@ -465,6 +481,61 @@ const scenarios: Array<{
     expect: { verify: true, e2e: true, gate: true, legacy: true, cancel: false },
   },
   {
+    n: 23,
+    title: "Docs-only PR",
+    ctx: pullRequestEvent({ action: "synchronize" }),
+    eventType: "synchronize",
+    docsOnly: true,
+    // ADR 0010 amendment: no macOS run, and the gate still reports — a skipped E2E with a
+    // docs-only classification from this same run is a decision, not silence.
+    expect: { verify: true, e2e: false, gate: true, legacy: true, cancel: false },
+  },
+  {
+    n: 24,
+    title: "Docs-only PR whose lint failed",
+    ctx: pullRequestEvent({ action: "synchronize" }),
+    eventType: "synchronize",
+    docsOnly: true,
+    results: { lint: "failure", verify: "failure" },
+    expect: { verify: true, e2e: false, gate: true, legacy: true, cancel: false },
+  },
+  {
+    n: 25,
+    title: "PR whose change detection failed",
+    ctx: pullRequestEvent({ action: "synchronize" }),
+    eventType: "synchronize",
+    results: { changes: "failure" },
+    // No E2E without a classification, and the gate reports the failure instead of
+    // leaving the required check on "Expected".
+    expect: { verify: true, e2e: false, gate: true, legacy: true, cancel: false },
+  },
+  {
+    n: 26,
+    title: "Docs-only PR opened as draft",
+    ctx: pullRequestEvent({ action: "opened", draft: true }),
+    eventType: "opened",
+    results: { changes: "skipped" },
+    expect: { verify: false, e2e: false, gate: false, legacy: false, cancel: false },
+  },
+  {
+    n: 27,
+    title: "Docs-only PR superseded while its tests ran",
+    ctx: pullRequestEvent({ action: "synchronize" }),
+    eventType: "synchronize",
+    docsOnly: true,
+    results: { tests: "cancelled" },
+    expect: { verify: false, e2e: false, gate: false, legacy: false, cancel: false },
+  },
+  {
+    n: 28,
+    title: "PR whose change detection was cancelled",
+    ctx: pullRequestEvent({ action: "synchronize" }),
+    eventType: "synchronize",
+    results: { changes: "cancelled" },
+    // Not a docs-only skip and not a failure: this run decided nothing about the E2E.
+    expect: { verify: true, e2e: false, gate: false, legacy: false, cancel: false },
+  },
+  {
     n: 12,
     title: "Manual dispatch",
     ctx: dispatchEvent,
@@ -483,6 +554,8 @@ const ok = (cond: boolean, msg: string): void => {
 };
 
 const exprs = {
+  changes: ifExpression("changes"),
+  lint: ifExpression("lint"),
   verify: ifExpression("verify"),
   e2e: ifExpression("e2e_desktop"),
   gate: ifExpression("gate"),
@@ -500,7 +573,13 @@ console.log(
 );
 
 for (const s of scenarios) {
-  const ctx = { ...s.ctx, needs: needsContext(s.expect, s.results) };
+  const ctx = { ...s.ctx, needs: needsContext(s.expect, s.results, s.docsOnly) };
+  // `changes` must be eligible exactly when the verifying parts are, or the E2E and the
+  // gate would read a classification that never ran.
+  ok(
+    evaluate(exprs.changes, ctx) === evaluate(exprs.lint, ctx),
+    `scenario ${s.n} (${s.title}): 'changes' must share the verifying parts' eligibility`,
+  );
   const got = {
     verify: evaluate(exprs.verify, ctx),
     e2e: evaluate(exprs.e2e, ctx),
@@ -585,15 +664,18 @@ ok(
 console.log("\nThe one report per commit invariant");
 for (const s of scenarios) {
   if (s.eventType === "workflow_dispatch") continue;
-  const ctx = { ...s.ctx, needs: needsContext(s.expect, s.results) };
-  const verified = ["success", "failure"].includes(
-    (needsContext(s.expect, s.results).verify.result as string) ?? "",
-  );
-  const e2eOk = ["success", "failure"].includes(
-    (needsContext(s.expect, s.results).e2e_desktop.result as string) ?? "",
-  );
-  // ADR 0010: one rule for every pull request — report iff both checks reached a verdict.
-  const mustReport = verified && e2eOk;
+  const needs = needsContext(s.expect, s.results, s.docsOnly);
+  const ctx = { ...s.ctx, needs };
+  const verified = ["success", "failure"].includes(needs.verify.result);
+  // ADR 0010: report iff both checks reached a verdict. For the E2E, a docs-only skip
+  // classified by this run is a verdict, and so is a failed classification.
+  const e2eDecided =
+    ["success", "failure"].includes(needs.e2e_desktop.result) ||
+    (needs.e2e_desktop.result === "skipped" &&
+      needs.changes.result === "success" &&
+      needs.changes.outputs.docs_only === "true") ||
+    needs.changes.result === "failure";
+  const mustReport = verified && e2eDecided;
   const reports = evaluate(exprs.gate, ctx);
   console.log(
     `  ${String(s.n).padStart(2)} ${s.title.slice(0, 52).padEnd(54)}` +
@@ -637,19 +719,23 @@ ok(
 // Scenario 11 + the gate's own decision table, by running the real shell script.
 console.log("\nScenario 11 — the real merge-requirements script, by exit code");
 const decide = stepScript("gate", "Check whether verification permits merging");
-// [isDraft, verify, e2e, expected exit, label]
-const decideCases: Array<[string, string, string, number, string]> = [
+// [isDraft, verify, e2e, changes, docsOnly, expected exit, label]
+const decideCases: Array<[string, string, string, string, string, number, string]> = [
   // The row that would have caught the 0.8.1 green button.
-  ["true", "skipped", "skipped", 1, "draft: nothing verified"],
-  ["false", "success", "success", 0, "verify + E2E green"],
+  ["true", "skipped", "skipped", "skipped", "", 1, "draft: nothing verified"],
+  ["false", "success", "success", "success", "false", 0, "verify + E2E green"],
   // This row is the one that would have stopped desktop 0.8.0 before the tag existed.
-  ["false", "success", "failure", 1, "E2E failed"],
-  ["false", "success", "cancelled", 1, "E2E superseded"],
-  ["false", "success", "skipped", 1, "E2E never ran — no longer a pass for anything"],
-  ["false", "failure", "success", 1, "verify failed"],
-  ["false", "failure", "skipped", 1, "verify failed, E2E never ran"],
+  ["false", "success", "failure", "success", "false", 1, "E2E failed"],
+  ["false", "success", "cancelled", "success", "false", 1, "E2E superseded"],
+  ["false", "success", "skipped", "success", "false", 1, "code change, E2E never ran"],
+  ["false", "failure", "success", "success", "false", 1, "verify failed"],
+  ["false", "failure", "skipped", "success", "false", 1, "verify failed, E2E never ran"],
+  ["false", "success", "skipped", "success", "true", 0, "docs-only, E2E skipped"],
+  ["false", "failure", "skipped", "success", "true", 1, "docs-only, verify failed"],
+  ["false", "success", "failure", "success", "true", 1, "docs-only, E2E ran and failed"],
+  ["false", "success", "skipped", "failure", "", 1, "change detection failed"],
 ];
-for (const [isDraft, verify, e2e, wantCode, label] of decideCases) {
+for (const [isDraft, verify, e2e, changes, docsOnly, wantCode, label] of decideCases) {
   let code = 0;
   let out = "";
   try {
@@ -659,6 +745,8 @@ for (const [isDraft, verify, e2e, wantCode, label] of decideCases) {
         IS_DRAFT: isDraft,
         VERIFY: verify,
         E2E: e2e,
+        CHANGES: changes,
+        DOCS_ONLY: docsOnly,
         SHA: "1bd8b2a",
       },
       encoding: "utf8",
@@ -670,7 +758,7 @@ for (const [isDraft, verify, e2e, wantCode, label] of decideCases) {
     out = err.stdout ?? "";
   }
   console.log(
-    `  draft=${isDraft.padEnd(5)} verify=${verify.padEnd(9)} e2e=${e2e.padEnd(9)} exit=${code}  ${label}`,
+    `  draft=${isDraft.padEnd(5)} verify=${verify.padEnd(9)} e2e=${e2e.padEnd(9)} changes=${changes.padEnd(8)} docs=${docsOnly.padEnd(5)} exit=${code}  ${label}`,
   );
   ok(
     code === wantCode,
@@ -681,6 +769,63 @@ for (const [isDraft, verify, e2e, wantCode, label] of decideCases) {
     `Decide must not mention the retired 'verify' label (verify=${verify}, e2e=${e2e})`,
   );
 }
+
+// The docs-only classifier, by running the real step against file lists. Every row that
+// is not plainly documentation must come out as code: a wrong answer here skips the E2E.
+console.log("\nDocs-only classifier — the real step, by its output");
+const classify = stepScript("changes", "Classify the change");
+const scratch = mkdtempSync(join(tmpdir(), "kaipu-classify-"));
+const classifyCases: Array<[string[] | null, boolean, string]> = [
+  [["apps/documentation/src/content/docs/marketing/index.md"], true, "docs site page"],
+  [
+    ["README.md", "apps/kaipu-record/CHANGELOG.md", ".claude/skills/x/SKILL.md"],
+    true,
+    "Markdown anywhere",
+  ],
+  [
+    ["apps/documentation/astro.config.mjs", "apps/documentation/package.json"],
+    true,
+    "docs site config",
+  ],
+  [
+    ["apps/documentation/src/content/docs/a.md", "apps/kaipu-record/src/main/index.ts"],
+    false,
+    "docs plus code",
+  ],
+  [["apps/documentation-evil/x.ts"], false, "lookalike prefix"],
+  [["notes.md.ts"], false, "Markdown-looking extension"],
+  [["package.json"], false, "root manifest"],
+  [["bun.lock", "docs/a.md"], false, "lockfile plus docs"],
+  [[], false, "empty list"],
+  [null, false, "no list (manual dispatch)"],
+  [Array.from({ length: 3000 }, (_, i) => `apps/documentation/p${i}.md`), false, "API cap reached"],
+];
+for (const [files, want, label] of classifyCases) {
+  const listPath = join(scratch, "changed-files.txt");
+  const outPath = join(scratch, "output.txt");
+  writeFileSync(outPath, "");
+  if (files === null) writeFileSync(listPath, "", { flag: "w" });
+  else writeFileSync(listPath, files.length ? `${files.join("\n")}\n` : "");
+  execFileSync("bash", ["-c", classify], {
+    env: {
+      ...process.env,
+      FILES: files === null ? join(scratch, "missing.txt") : listPath,
+      GITHUB_OUTPUT: outPath,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const got = /docs_only=true/.test(readFileSync(outPath, "utf8"));
+  console.log(`  docs_only=${String(got).padEnd(5)} ${label}`);
+  ok(got === want, `classifier on '${label}' expected docs_only=${want}, got ${got}`);
+}
+ok(
+  /previous_filename/.test(jobBlock("changes")),
+  "the changed-file list must include the old path of a rename, or moving code into a .md reads as docs-only",
+);
+ok(
+  !/^ {4}paths(-ignore)?:/m.test(source),
+  "no workflow-level path filter: a skipped workflow never reports the required check (PR #173)",
+);
 
 // The transitional alias must mirror, never invent, a pass.
 console.log("\nTransitional alias — 'Release candidate verified' mirrors 'Merge requirements'");
