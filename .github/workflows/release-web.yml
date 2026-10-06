@@ -107,6 +107,7 @@ jobs:
       # Empty values are dropped for that reason: a GitHub secret that went missing must
       # not blank the value the Worker already has.
       - name: Write Worker secrets file
+        working-directory: apps/web-hono
         env:
           VITE_SERVER_URL: ${{ vars.VITE_SERVER_URL }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -115,7 +116,7 @@ jobs:
           jq -n \
             --arg VITE_SERVER_URL "$VITE_SERVER_URL" \
             --arg DATABASE_URL "$DATABASE_URL" \
-            '$ARGS.named | with_entries(select(.value != ""))' > "$RUNNER_TEMP/worker-secrets.json"
+            '$ARGS.named | with_entries(select(.value != ""))' > worker-secrets.json
 
       - name: Deploy to Cloudflare Workers
         uses: cloudflare/wrangler-action@v3.14.1
@@ -123,8 +124,8 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: apps/web-hono
-          command: deploy --secrets-file ${{ runner.temp }}/worker-secrets.json
+          command: deploy --secrets-file worker-secrets.json
 
       - name: Remove Worker secrets file
         if: always()
-        run: rm -f "$RUNNER_TEMP/worker-secrets.json"
+        run: rm -f apps/web-hono/worker-secrets.json

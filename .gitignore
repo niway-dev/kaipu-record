@@ -20,6 +20,9 @@ build
 !.env.signing.example
 !.env.x
 
+# Written by the release workflows for `wrangler deploy --secrets-file`; never committed.
+worker-secrets.json
+
 # Code signing / notarization secrets (never commit these)
 *.p12
 *.p8
