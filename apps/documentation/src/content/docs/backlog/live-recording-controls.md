@@ -11,6 +11,11 @@ description: "Proposal: let the user mute the microphone, turn system audio on o
 > [Recording pipeline](/desktop/recording-pipeline/) · sibling:
 > [Roadmap → Video editor v2 wave](./roadmap#video-editor-v2-wave-2026-09-22--23).
 
+> **2026-10-06 — superseded by the [design spec](/specs/2026-10-06-live-recording-controls-design/)**
+> where they differ: no buttons on the floating control bar (the Capture Panel, the Record
+> page and shortcuts carry the toggles), and system audio is unavailable on macOS today, so
+> it needs the Phase B capture change ([ADR 0011](/architecture/decisions/0011-system-audio-acquired-whenever-available/)).
+
 ## Problem
 
 Once a take starts, every input is frozen. The main window hides, the floating

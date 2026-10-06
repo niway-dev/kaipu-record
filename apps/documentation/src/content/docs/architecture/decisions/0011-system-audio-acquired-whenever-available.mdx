@@ -1,0 +1,69 @@
+---
+title: "ADR 0011: System audio is acquired whenever the platform allows; off means silent, not absent"
+description: To let the user turn system (playback) audio on mid-recording, the loopback track is acquired at the start of every desktop take where the platform supports it, and the "off" setting mutes it with gain 0. Screen capture moves to getDisplayMedia so macOS can provide loopback.
+---
+
+# ADR 0011: System audio is acquired whenever the platform allows; off means silent, not absent
+
+## Status
+
+| Field         | Value                                                                                                         |
+| ------------- | ------------------------------------------------------------------------------------------------------------- |
+| Status        | Proposed — [live recording controls spec](/specs/2026-10-06-live-recording-controls-design/); not implemented |
+| Date          | 2026-10-06                                                                                                    |
+| Supersedes    | —                                                                                                             |
+| Superseded by | —                                                                                                             |
+
+## Context
+
+The owner wants to turn system audio (what the computer plays) on and off during a take
+without ending it. A loopback track can only be acquired together with the screen, at the
+start of the take. So if the user starts with system audio off and the app does not acquire
+loopback, "turn it on" later is impossible.
+
+Separately, on `main` (2026-10-06) macOS takes never contain system audio: the engine asks
+for it with the legacy `chromeMediaSource: "desktop"` audio constraint, macOS rejects the
+call, and the engine falls back to video only (`recorder-engine.ts:105-127`). Electron 39
+provides macOS loopback only through `getDisplayMedia()` answered by
+`session.setDisplayMediaRequestHandler` with `audio: "loopback"` (CoreAudio Tap /
+ScreenCaptureKit, macOS 13+).
+
+## Decision
+
+1. On every desktop-source take where the platform supports loopback, the engine acquires the
+   loopback track at start, **regardless of the system-audio setting**.
+2. The setting controls a `GainNode`: off = gain 0, which writes silence; on = gain 1. The
+   samples written while off are exactly zero (± a ~20 ms ramp).
+3. Screen capture moves from `getUserMedia({chromeMediaSource: "desktop"})` to
+   `getDisplayMedia()` served by `setDisplayMediaRequestHandler`, so macOS gets loopback.
+   This is Phase B of the spec and starts with a verification on a real Mac.
+
+## Alternatives rejected
+
+- **Acquire loopback only when the setting is on at start** (today's rule). Keeps the
+  privacy story simple, but "turn system audio on mid-take" cannot work — the owner's request.
+- **Restart capture to add loopback mid-take.** Splits the take or drops frames; the encoder
+  cannot add a track after `start()`.
+- **Native loopback via a separate helper (e.g. a CoreAudio tap addon).** More code to
+  build and notarize than the Electron path, which now exists.
+
+## Consequences
+
+- The OS sees the app capturing system audio during takes where the user turned it off. The
+  file contains silence for those ranges, but this must be stated in the docs and in the
+  Settings description of the toggle.
+- Every desktop take on a supporting platform has a loopback input; the always-present audio
+  track (spec decision 4) holds the mix.
+- Moving to `getDisplayMedia` changes the code the source picker and permissions depend on;
+  Phase B has to re-test them.
+
+## Non-goals
+
+Separate audio tracks per input; capturing audio from a single app; volume levels.
+
+## Reopen when
+
+- Users or reviewers object to loopback being acquired while the toggle is off — then offer a
+  setting "never capture system audio" that restores today's rule for that user.
+- mediabunny can add a track after `start()`, or Electron can attach loopback to a running
+  capture — then acquisition can be lazy again.
