@@ -258,6 +258,9 @@ export const IPC_CHANNELS = {
   accessibilityRequest: "permissions:accessibility-request",
   listLocalRecordings: "library:list-local",
   renameLocalRecording: "library:rename-local",
+  /** Replace an item's tags (recording-tags design, Phase 1: sidecar only). */
+  setTags: "library:setTags",
+  getTagVocabulary: "library:getTagVocabulary",
   backfillLocalRecordingMeta: "library:backfill-meta",
   deleteLocalRecording: "library:delete-local",
   revealLocalRecording: "library:reveal-local",
@@ -390,6 +393,12 @@ export interface RecordingTick {
 }
 
 export type ControlCommand = "pause" | "resume" | "stop";
+
+/** One tag in use across the library and how many items carry it. */
+export interface TagVocabularyEntry {
+  tag: string;
+  count: number;
+}
 
 /** Global recording activity shared across windows. `status`/`elapsedSeconds` matter when active. */
 export interface RecordingActivity {

@@ -132,6 +132,13 @@ export interface KaipuElectronAPI {
   /** Rename a local recording (updates sidecar metadata; the file is untouched). */
   renameLocalRecording(id: string, title: string): Promise<void>;
   /**
+   * Replace a local item's tags. Main normalizes them again before writing the
+   * sidecar and resolves to the tags actually stored.
+   */
+  setTags(id: string, tags: readonly string[]): Promise<string[]>;
+  /** Every tag in use, most used first — for autocomplete. */
+  getTagVocabulary(): Promise<TagVocabularyEntry[]>;
+  /**
    * Persist duration + poster the renderer decoded for a recording that had no
    * sidecar (hand-imported, or an interrupted finalize). Returns the re-described
    * recording, or null if the file vanished. See {@link RecordingBackfillMeta}.

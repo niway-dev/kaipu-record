@@ -28,6 +28,11 @@ export interface LocalRecording {
    * current size + mtime. null = not computed yet or stale (never "unknown bytes").
    */
   contentSha256: string | null;
+  /**
+   * Normalized tags from the sidecar; `[]` without any. Optional so older callers
+   * and fixtures that build a `LocalRecording` by hand stay valid.
+   */
+  tags?: string[];
 }
 
 /** Where recordings are stored, and whether the user picked a custom folder. */
