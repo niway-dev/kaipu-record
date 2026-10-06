@@ -3,7 +3,12 @@ import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LocalRecording } from "@shared/types/library-storage";
 import { dismissToast, getToasts } from "@renderer/ui/toast-store";
-import { toolForShortcut, VideoEditorPage, type VideoEditorSource } from "./video-editor-page";
+import {
+  toolForShortcut,
+  VideoEditorLoader,
+  VideoEditorPage,
+  type VideoEditorSource,
+} from "./video-editor-page";
 
 /** jsdom's <video> never decodes real media, so videoWidth/videoHeight default to
  *  0 — the same "still loading" state handleExport's metadata guard refuses to
@@ -90,10 +95,10 @@ const SOURCE: VideoEditorSource = {
 function renderEditor() {
   const router = createMemoryRouter(
     [
-      { path: "/", element: <VideoEditorPage /> },
+      { path: "/", element: <VideoEditorLoader source={SOURCE} /> },
       { path: "/library/:assetId", element: <div>library-detail</div> },
     ],
-    { initialEntries: [{ pathname: "/", state: SOURCE }] },
+    { initialEntries: ["/"] },
   );
   render(<RouterProvider router={router} />);
   return router;
@@ -141,18 +146,29 @@ async function makeDirty(footer: HTMLElement): Promise<void> {
   });
 }
 
-describe("VideoEditorPage — invalid source guard", () => {
-  it("redirects to /library when the nav state has no positive duration", () => {
+describe("VideoEditorPage — legacy /video-editor redirect", () => {
+  const renderLegacy = (state: unknown) => {
     const router = createMemoryRouter(
       [
-        { path: "/", element: <VideoEditorPage /> },
-        { path: "/library", element: <div>library</div> },
+        { path: "/video-editor", element: <VideoEditorPage /> },
+        { path: "/editor", element: <div>editor-home</div> },
+        { path: "/editor/video/:assetId", element: <div>editor-video</div> },
       ],
-      { initialEntries: [{ pathname: "/", state: { ...SOURCE, durationSeconds: 0 } }] },
+      { initialEntries: [{ pathname: "/video-editor", state }] },
     );
     render(<RouterProvider router={router} />);
+    return router;
+  };
 
-    expect(screen.getByText("library")).not.toBeNull();
+  it("lands an old navigation that carries the recording on its editor URL", () => {
+    const router = renderLegacy(SOURCE);
+    expect(screen.getByText("editor-video")).not.toBeNull();
+    expect(router.state.location.pathname).toBe("/editor/video/asset-1");
+  });
+
+  it("sends a stateless (or unusable) navigation to the Editor home", () => {
+    renderLegacy({ ...SOURCE, durationSeconds: 0 });
+    expect(screen.getByText("editor-home")).not.toBeNull();
   });
 });
 

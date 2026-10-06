@@ -21,6 +21,12 @@ import { ShortcutsPage } from "@renderer/pages/shortcuts/shortcuts-page";
 import { ScreenshotsPage } from "@renderer/pages/screenshots/screenshots-page";
 import { ScreenshotEditorPage } from "@renderer/pages/screenshot-editor/screenshot-editor-page";
 import { VideoEditorPage } from "@renderer/pages/video-editor/video-editor-page";
+import { EditorHomePage } from "@renderer/pages/editor/editor-home-page";
+import {
+  EditorImagePage,
+  EditorVideoPage,
+  LegacyScreenshotEditorRedirect,
+} from "@renderer/pages/editor/editor-routes";
 import { AuthPage } from "@renderer/pages/auth/auth-page";
 import { ROUTES } from "@shared/routes";
 
@@ -58,7 +64,14 @@ const router = createHashRouter([
           { path: ROUTES.library, element: <LibraryPage /> },
           { path: ROUTES.libraryDetail, element: <LibraryDetailPage /> },
           { path: ROUTES.screenshots, element: <ScreenshotsPage /> },
-          { path: ROUTES.screenshotEditor, element: <ScreenshotEditorPage /> },
+          // Editor workspace: every Edit lands here, addressed by URL.
+          { path: ROUTES.editor, element: <EditorHomePage /> },
+          { path: ROUTES.editorVideo, element: <EditorVideoPage /> },
+          { path: ROUTES.editorImage, element: <EditorImagePage /> },
+          // A fresh capture is not in the vault yet: its image travels in router state.
+          { path: ROUTES.editorCapture, element: <ScreenshotEditorPage /> },
+          // Legacy paths, kept so old navigations land on the new routes.
+          { path: ROUTES.screenshotEditor, element: <LegacyScreenshotEditorRedirect /> },
           { path: ROUTES.videoEditor, element: <VideoEditorPage /> },
           { path: ROUTES.shortcuts, element: <ShortcutsPage /> },
           { path: ROUTES.cloud, element: <CloudPage /> },
