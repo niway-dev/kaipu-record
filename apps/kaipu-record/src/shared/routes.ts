@@ -15,7 +15,15 @@ export const ROUTES = {
   library: "/library",
   libraryDetail: "/library/:assetId",
   screenshots: "/screenshots",
+  /** The Editor workspace: recent items when nothing is open. */
+  editor: "/editor",
+  editorVideo: "/editor/video/:assetId",
+  editorImage: "/editor/image/:assetId",
+  /** A fresh capture that is not in the vault yet; its image travels in router state. */
+  editorCapture: "/editor/capture",
+  /** Legacy, redirects to `editorImage`/`editorCapture`. */
   screenshotEditor: "/screenshot-editor",
+  /** Legacy, redirects to `editorVideo`. */
   videoEditor: "/video-editor",
   shortcuts: "/shortcuts",
   cloud: "/cloud",

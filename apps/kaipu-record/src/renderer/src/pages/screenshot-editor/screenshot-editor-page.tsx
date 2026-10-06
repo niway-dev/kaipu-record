@@ -58,7 +58,8 @@ export function ScreenshotEditorPage(): React.JSX.Element {
   return <ScreenshotEditor key={location.key} source={source} />;
 }
 
-function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Element {
+/** The image editor itself. The Editor workspace routes render it, keyed per item. */
+export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Element {
   const t = useTranslations("screenshots");
   const image = useImageSource(source);
   // A re-opened saved shot is already framed/flattened — start it unframed so the

@@ -63,7 +63,16 @@
     "shortcuts": "Shortcuts",
     "settings": "Settings",
     "account": "Account",
-    "cloud": "Cloud"
+    "cloud": "Cloud",
+    "editor": "Editor"
+  },
+  "editor": {
+    "title": "Editor",
+    "subtitle": "Every Edit in Kaipu opens here. Pick something recent to keep working on it.",
+    "recentTitle": "Recent",
+    "empty": "Nothing to edit yet. Record a video or take a screenshot first.",
+    "edit": "Edit",
+    "editItem": "Edit {title}"
   },
   "settings": {
     "title": "Settings",
