@@ -10,6 +10,7 @@ import { CatalogCache } from "../cloud/catalog-cache";
 import { fetchCloudCatalog } from "../cloud/catalog-client";
 import { LibraryService } from "./library-service";
 import { LibraryVault } from "./library-vault";
+import { TagStoreProvider } from "./tag-store";
 import { resetVaultDirectory, setVaultDirectory, vaultDirectory } from "./vault-location";
 import { deleteVideoEditSession, registerVideoEditSessionHandlers } from "./video-edit-session";
 
@@ -86,6 +87,18 @@ export function registerLibraryVaultHandlers(deps: { auth: AuthHandle; serverUrl
   ipcMain.handle(IPC_CHANNELS.renameLocalRecording, (_event, id: string, title: string) =>
     currentVault().rename(id, title),
   );
+  const tags = new TagStoreProvider(currentVault);
+  ipcMain.handle(
+    IPC_CHANNELS.setTags,
+    async (_event, id: string, next: unknown): Promise<string[]> => {
+      const raw = Array.isArray(next) ? next.filter((t): t is string => typeof t === "string") : [];
+      const stored = await tags.current().set(id, raw, Date.now());
+      return [...stored];
+    },
+  );
+  ipcMain.handle(IPC_CHANNELS.getTagVocabulary, async () => [
+    ...(await tags.current().vocabulary()),
+  ]);
   ipcMain.handle(
     IPC_CHANNELS.backfillLocalRecordingMeta,
     (_event, id: string, meta: RecordingBackfillMeta) => currentVault().backfill(id, meta),

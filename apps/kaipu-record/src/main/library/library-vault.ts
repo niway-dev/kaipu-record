@@ -24,6 +24,10 @@ export interface Sidecar {
   hashedMtimeMs?: number;
   /** Set by `removeLocalCopy`; cleared when a file reappears under this id. */
   localRemovedAt?: number;
+  /** Normalized recording tags (see `normalizeTag` in @kaipu/domain). */
+  tags?: string[];
+  /** Epoch ms of the last tag write — last writer wins when the cloud replica lands. */
+  tagsUpdatedAt?: number;
 }
 
 // Keyed by the sidecar's absolute path (not per-instance), so a re-minted id on a
@@ -119,6 +123,7 @@ export class LibraryVault {
       durationSeconds: meta.durationSeconds ?? 0,
       derivedFromAssetId: meta.derivedFromAssetId ?? null,
       contentSha256: hashIsFresh ? (meta.contentSha256 ?? null) : null,
+      tags: Array.isArray(meta.tags) ? meta.tags.filter((t) => typeof t === "string") : [],
       thumbnailUrl: isImage
         ? // `?v=<mtime>` busts the renderer image cache when a screenshot is
           // overwritten in place (same id/URL) — only the changed item, so the
