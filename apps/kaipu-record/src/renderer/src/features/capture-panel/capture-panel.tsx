@@ -87,34 +87,45 @@ export function CapturePanel(): React.JSX.Element {
             />
           )}
 
-          {/* While a recording is in progress its settings are locked — changing the
-              source/mic mid-recording does nothing, so the controls go inert. */}
-          <div
-            className={styles.lockable}
-            data-locked={isBusy || undefined}
-            inert={isBusy || undefined}
-          >
-            <SourceCard source={setup.selectedSource} variant="compact" onChoose={chooseSource} />
+          {/* Mid-take only the source and mic device stay locked (changing them would
+              restart the encoder or move levels); the three toggles stay live —
+              muting writes silence into the same track, the camera is captured as
+              part of the screen. */}
+          <div className={styles.lockable}>
+            <div
+              className={styles.locked}
+              data-locked={isBusy || undefined}
+              inert={isBusy || undefined}
+            >
+              <SourceCard source={setup.selectedSource} variant="compact" onChoose={chooseSource} />
+            </div>
 
             <RecordingToggles
               variant="compact"
               isMicrophoneEnabled={setup.isMicrophoneEnabled}
               isSystemAudioEnabled={setup.isSystemAudioEnabled}
               isCameraEnabled={setup.isCameraEnabled}
+              isSystemAudioUnavailable={isBusy && activity.systemAudioAvailable === false}
               onToggleMicrophone={setup.toggleMicrophone}
               onToggleSystemAudio={setup.toggleSystemAudio}
               onToggleCamera={setup.toggleCamera}
             />
 
             {setup.isMicrophoneEnabled && setup.microphones.length > 0 && (
-              <MicPicker
-                variant="compact"
-                microphones={setup.microphones}
-                selected={setup.selectedMicrophone}
-                isOpen={setup.isMicrophoneMenuOpen}
-                onToggle={setup.toggleMicrophoneMenu}
-                onSelect={setup.selectMicrophone}
-              />
+              <div
+                className={styles.locked}
+                data-locked={isBusy || undefined}
+                inert={isBusy || undefined}
+              >
+                <MicPicker
+                  variant="compact"
+                  microphones={setup.microphones}
+                  selected={setup.selectedMicrophone}
+                  isOpen={setup.isMicrophoneMenuOpen}
+                  onToggle={setup.toggleMicrophoneMenu}
+                  onSelect={setup.selectMicrophone}
+                />
+              </div>
             )}
           </div>
 

@@ -49,6 +49,11 @@ const styles = stylex.create({
     borderColor: "rgba(246, 5, 92, 0.32)",
     color: tokens.accentPrimary,
   },
+  tileDisabled: {
+    opacity: 0.45,
+    cursor: "not-allowed",
+    filter: "none",
+  },
   icon: {
     display: "flex",
     alignItems: "center",
@@ -81,6 +86,10 @@ export interface StatusToggleProps {
   onText?: string;
   offText?: string;
   onToggle: () => void;
+  /** Not clickable; the tile dims. */
+  disabled?: boolean;
+  /** Native tooltip, e.g. why the tile is disabled. */
+  title?: string;
   /** Consumer overrides, as StyleX styles rather than a className. */
   style?: StyleXStyles;
 }
@@ -93,17 +102,22 @@ export function StatusToggle({
   onText = "ON",
   offText = "OFF",
   onToggle,
+  disabled = false,
+  title,
   style,
 }: StatusToggleProps) {
   return (
     <button
       type="button"
       onClick={onToggle}
+      disabled={disabled}
+      title={title}
       data-active={isActive || undefined}
       {...stylex.props(
         styles.tile,
         compact && styles.tileCompact,
         isActive && styles.tileActive,
+        disabled && styles.tileDisabled,
         style,
       )}
     >

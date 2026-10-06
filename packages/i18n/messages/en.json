@@ -152,6 +152,7 @@
     "recordingState": "Recording",
     "micLabel": "Mic",
     "audioLabel": "Audio",
+    "audioUnavailable": "System audio isn't available for this recording",
     "cameraLabel": "Camera",
     "micTitle": "MICROPHONE",
     "selectMic": "Select microphone",

@@ -24,6 +24,10 @@ export interface StatusToggleItem {
   label: string;
   isActive: boolean;
   onToggle: () => void;
+  /** Not clickable; reads as dimmed. */
+  disabled?: boolean;
+  /** Native tooltip, e.g. why the tile is disabled. */
+  title?: string;
 }
 
 export interface StatusToggleRowProps {
@@ -55,6 +59,8 @@ export function StatusToggleRow({
           onText={onText}
           offText={offText}
           onToggle={item.onToggle}
+          disabled={item.disabled}
+          title={item.title}
         />
       ))}
     </div>

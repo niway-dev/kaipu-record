@@ -7,6 +7,11 @@ interface RecordingTogglesProps {
   isMicrophoneEnabled: boolean;
   isSystemAudioEnabled: boolean;
   isCameraEnabled: boolean;
+  /**
+   * Mid-take, when the recording has no loopback track: the system-audio toggle
+   * is disabled with an explanatory tooltip, since turning it on could not work.
+   */
+  isSystemAudioUnavailable?: boolean;
   variant?: "full" | "compact";
   onToggleMicrophone: () => void;
   onToggleSystemAudio: () => void;
@@ -19,6 +24,7 @@ export function RecordingToggles({
   isMicrophoneEnabled,
   isSystemAudioEnabled,
   isCameraEnabled,
+  isSystemAudioUnavailable = false,
   variant = "full",
   onToggleMicrophone,
   onToggleSystemAudio,
@@ -44,6 +50,8 @@ export function RecordingToggles({
           label: t("audioLabel"),
           isActive: isSystemAudioEnabled,
           onToggle: onToggleSystemAudio,
+          disabled: isSystemAudioUnavailable,
+          title: isSystemAudioUnavailable ? t("audioUnavailable") : undefined,
         },
         {
           id: "camera",
