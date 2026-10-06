@@ -23,6 +23,9 @@ export const SHORTCUT_ACTIONS = [
   "stopRecording",
   "bringToFront",
   "captureScreenshot",
+  "toggleMicrophone",
+  "toggleSystemAudio",
+  "toggleCamera",
 ] as const;
 export type ShortcutAction = (typeof SHORTCUT_ACTIONS)[number];
 
@@ -97,6 +100,32 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
     label: "Capture screenshot",
     description: "Open the area selection to take a screenshot",
     statusWord: "capture",
+  },
+  // Live input toggles: they flip the recording setting with or without a take
+  // (outside a take they change the pre-recording toggle, as clicking it does).
+  {
+    action: "toggleMicrophone",
+    defaultAccelerator: "Command+Control+M",
+    group: "recording",
+    label: "Mute / unmute microphone",
+    description: "Turn your voice on or off, also mid-recording",
+    statusWord: "mic",
+  },
+  {
+    action: "toggleSystemAudio",
+    defaultAccelerator: "Command+Control+A",
+    group: "recording",
+    label: "System audio on / off",
+    description: "Turn what the computer plays on or off, also mid-recording",
+    statusWord: "audio",
+  },
+  {
+    action: "toggleCamera",
+    defaultAccelerator: "Command+Control+K",
+    group: "recording",
+    label: "Show / hide camera",
+    description: "Show or hide the camera bubble, also mid-recording",
+    statusWord: "camera",
   },
 ];
 

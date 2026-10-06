@@ -10,6 +10,9 @@ const settingsWith = (startRecording: string): AppSettings =>
       stopRecording: "Command+Control+S",
       bringToFront: "Command+Control+O",
       captureScreenshot: "Command+Control+X",
+      toggleMicrophone: "Command+Control+M",
+      toggleSystemAudio: "Command+Control+A",
+      toggleCamera: "Command+Control+K",
     },
   }) as AppSettings;
 
@@ -23,6 +26,9 @@ describe("useShortcutLabels", () => {
         stopRecording: "⌃⌘S",
         bringToFront: "⌃⌘O",
         captureScreenshot: "⌃⌘X",
+        toggleMicrophone: "⌃⌘M",
+        toggleSystemAudio: "⌃⌘A",
+        toggleCamera: "⌃⌘K",
       }),
     );
   });
