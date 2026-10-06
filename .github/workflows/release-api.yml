@@ -78,27 +78,23 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      # Pinned for the same reasons as release-web.yml: a tag must deploy with the same
+      # tools every time it runs, and `deploy --secrets-file` needs this version.
       - name: Install Wrangler
-        run: bun add -g wrangler
+        run: bun add -g wrangler@4.148.0
 
       - name: Build packages only
         run: bun run build --filter='@kaipu/*'
 
-      - name: Deploy Backend to Cloudflare Workers
-        uses: cloudflare/wrangler-action@v3.14.1
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: apps/server-hono
-          secrets: |
-            DATABASE_URL
-            BETTER_AUTH_SECRET
-            CORS_ORIGIN
-            R2_ACCOUNT_ID
-            R2_ACCESS_KEY_ID
-            R2_SECRET_ACCESS_KEY
-            R2_BUCKET
-            RESEND_API_KEY
+      # Secrets ship inside the deployed version, in one `wrangler deploy` — see the
+      # note in release-web.yml for why the action's `secrets:` input is not used:
+      # it deploys the old code with the new secrets first, and it fails outright
+      # once a version has been uploaded without being deployed.
+      # `--secrets-file` is additive: a secret left out of the file keeps its value.
+      # Empty values are dropped for that reason: a GitHub secret that went missing must
+      # not blank the value the Worker already has.
+      - name: Write Worker secrets file
+        working-directory: apps/server-hono
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           CORS_ORIGIN: ${{ vars.CORS_ORIGIN }}
@@ -111,3 +107,27 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           # Transactional email (Resend). The API logs and skips sending when unset.
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+        run: |
+          umask 077
+          jq -n \
+            --arg DATABASE_URL "$DATABASE_URL" \
+            --arg CORS_ORIGIN "$CORS_ORIGIN" \
+            --arg BETTER_AUTH_SECRET "$BETTER_AUTH_SECRET" \
+            --arg R2_ACCOUNT_ID "$R2_ACCOUNT_ID" \
+            --arg R2_ACCESS_KEY_ID "$R2_ACCESS_KEY_ID" \
+            --arg R2_SECRET_ACCESS_KEY "$R2_SECRET_ACCESS_KEY" \
+            --arg R2_BUCKET "$R2_BUCKET" \
+            --arg RESEND_API_KEY "$RESEND_API_KEY" \
+            '$ARGS.named | with_entries(select(.value != ""))' > worker-secrets.json
+
+      - name: Deploy Backend to Cloudflare Workers
+        uses: cloudflare/wrangler-action@v3.14.1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/server-hono
+          command: deploy --secrets-file worker-secrets.json
+
+      - name: Remove Worker secrets file
+        if: always()
+        run: rm -f apps/server-hono/worker-secrets.json

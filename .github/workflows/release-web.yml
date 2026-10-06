@@ -78,8 +78,12 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      # Pinned, not `latest`: a release must not change tools between two runs of the
+      # same tag. `deploy --secrets-file` below needs wrangler >= 4.x with that flag,
+      # which the workspace's 4.63.0 lacks; release-api.yml and preview-web.yml pin
+      # the same version. wrangler-action finds this binary and uses it as is.
       - name: Install Wrangler
-        run: bun add -g wrangler
+        run: bun add -g wrangler@4.148.0
 
       - name: Build packages only
         run: bun run build --filter='@kaipu/*'
@@ -93,16 +97,35 @@ jobs:
           VITE_PUBLIC_DOWNLOAD_URL: https://updates.kaipu.app
         run: bun run build
 
+      # Secrets ship INSIDE the deployed version, in one `wrangler deploy`. The action's
+      # `secrets:` input runs `wrangler secret bulk` first, which edits the latest
+      # version and deploys it on its own. Once preview-web.yml has uploaded a version
+      # that is not deployed, Cloudflare refuses that edit, and the release fails
+      # before it deploys anything (web-v0.9.0, 2026-10-06). It was also never atomic:
+      # it deployed the OLD code with the new secrets, then the new code.
+      # `--secrets-file` is additive: a secret left out of the file keeps its value.
+      # Empty values are dropped for that reason: a GitHub secret that went missing must
+      # not blank the value the Worker already has.
+      - name: Write Worker secrets file
+        working-directory: apps/web-hono
+        env:
+          VITE_SERVER_URL: ${{ vars.VITE_SERVER_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          umask 077
+          jq -n \
+            --arg VITE_SERVER_URL "$VITE_SERVER_URL" \
+            --arg DATABASE_URL "$DATABASE_URL" \
+            '$ARGS.named | with_entries(select(.value != ""))' > worker-secrets.json
+
       - name: Deploy to Cloudflare Workers
         uses: cloudflare/wrangler-action@v3.14.1
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: apps/web-hono
-          secrets: |
-            VITE_SERVER_URL
-            DATABASE_URL
-        env:
-          ENVIRONMENT: production
-          VITE_SERVER_URL: ${{ vars.VITE_SERVER_URL }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          command: deploy --secrets-file worker-secrets.json
+
+      - name: Remove Worker secrets file
+        if: always()
+        run: rm -f apps/web-hono/worker-secrets.json
