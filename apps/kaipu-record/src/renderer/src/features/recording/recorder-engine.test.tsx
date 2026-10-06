@@ -62,6 +62,21 @@ let destinationTrack: ReturnType<typeof fakeTrack>;
 let getUserMedia: ReturnType<typeof vi.fn>;
 let audioContextClose: ReturnType<typeof vi.fn>;
 
+/** A GainNode stand-in that records its starting value and every ramp target. */
+interface FakeGain {
+  gain: {
+    value: number;
+    cancelScheduledValues: ReturnType<typeof vi.fn>;
+    setValueAtTime: ReturnType<typeof vi.fn>;
+    linearRampToValueAtTime: ReturnType<typeof vi.fn>;
+  };
+  connect: ReturnType<typeof vi.fn>;
+}
+let gains: FakeGain[];
+/** Ramp targets of a gain, in order. */
+const rampTargets = (gain: FakeGain): number[] =>
+  gain.gain.linearRampToValueAtTime.mock.calls.map((c) => c[0] as number);
+
 beforeEach(() => {
   vi.clearAllMocks(); // module-level mocks (compositor, mediabunny) accumulate across tests
   screenVideoTrack = fakeTrack();
@@ -69,6 +84,7 @@ beforeEach(() => {
   micTrack = fakeTrack();
   destinationTrack = fakeTrack();
   audioContextClose = vi.fn(async () => {});
+  gains = [];
 
   getUserMedia = vi.fn(async (constraints: MediaStreamConstraints) => {
     // The screen request carries video constraints; everything else is the mic.
@@ -88,6 +104,20 @@ beforeEach(() => {
       stream: fakeStream([], [destinationTrack]),
     }));
     createMediaStreamSource = vi.fn(() => ({ connect: vi.fn() }));
+    currentTime = 10;
+    createGain = vi.fn(() => {
+      const node: FakeGain = {
+        gain: {
+          value: 1,
+          cancelScheduledValues: vi.fn(),
+          setValueAtTime: vi.fn(),
+          linearRampToValueAtTime: vi.fn(),
+        },
+        connect: vi.fn(),
+      };
+      gains.push(node);
+      return node;
+    });
     createAnalyser = vi.fn(() => ({
       fftSize: 0,
       smoothingTimeConstant: 0,
@@ -218,6 +248,7 @@ describe("startEngine", () => {
     const handle = await startEngine(baseOptions({ systemAudio: true }));
 
     expect(handle).toBeTruthy(); // recording still starts
+    expect(handle.hasSystemAudio).toBe(false);
     const calls = getUserMedia.mock.calls.map((c) => c[0] as MediaStreamConstraints);
     // It attempted the bundled desktop audio+video call...
     expect(calls.some((c) => Boolean(c.video) && Boolean(c.audio))).toBe(true);
@@ -279,5 +310,109 @@ describe("startEngine", () => {
   it("never buffers the recording in memory (fastStart: 'in-memory' would OOM long recordings)", async () => {
     await startEngine(baseOptions());
     expect(vi.mocked(Mp4OutputFormat).mock.calls.at(-1)![0]).toEqual({ fastStart: false });
+  });
+});
+
+describe("live controls", () => {
+  it("routes each input through its own gain, starting from the settings", async () => {
+    const handle = await startEngine(
+      baseOptions({ microphoneDeviceId: "mic-1", systemAudio: false }),
+    );
+    // mic first (on), then loopback (acquired, but off → gain 0).
+    expect(gains).toHaveLength(2);
+    expect(gains[0].gain.value).toBe(1);
+    expect(gains[1].gain.value).toBe(0);
+    expect(handle.hasSystemAudio).toBe(true);
+  });
+
+  it("acquires loopback even when system audio starts off", async () => {
+    await startEngine(baseOptions({ systemAudio: false }));
+    const first = getUserMedia.mock.calls[0][0] as MediaStreamConstraints;
+    expect(first.video).toBeTruthy();
+    expect(first.audio).toBeTruthy();
+  });
+
+  it("always adds an audio track, even with no input at all", async () => {
+    getUserMedia.mockImplementation(async (constraints: MediaStreamConstraints) => {
+      if (constraints.video && constraints.audio) throw new Error("NotSupportedError");
+      return fakeStream([screenVideoTrack], []);
+    });
+    await startEngine(baseOptions({ microphoneDeviceId: null, systemAudio: false }));
+    expect(gains).toHaveLength(0);
+    expect(lastOutput().addAudioTrack).toHaveBeenCalledTimes(1);
+  });
+
+  it("mutes and unmutes the mic with a short ramp, keeping the device open", async () => {
+    const handle = await startEngine(baseOptions({ microphoneDeviceId: "mic-1" }));
+    const mic = gains[0];
+
+    expect(await handle.setMicrophoneEnabled(false, "mic-1")).toBe("ok");
+    expect(await handle.setMicrophoneEnabled(true, "mic-1")).toBe("ok");
+
+    expect(rampTargets(mic)).toEqual([0, 1]);
+    // ~20 ms ramp from the context's current time (10 s in the fake).
+    expect(mic.gain.linearRampToValueAtTime.mock.calls[0][1]).toBeCloseTo(10.02);
+    expect(micTrack.stop).not.toHaveBeenCalled();
+    expect(getUserMedia).toHaveBeenCalledTimes(2); // screen + mic, no re-acquire
+  });
+
+  it("acquires the mic late when it was off at start, and releases it on stop", async () => {
+    const handle = await startEngine(baseOptions({ microphoneDeviceId: null }));
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
+    const before = gains.length;
+
+    expect(await handle.setMicrophoneEnabled(true, "mic-2")).toBe("ok");
+
+    const micConstraints = getUserMedia.mock.calls[1][0] as {
+      audio: { deviceId: { ideal: string } };
+    };
+    expect(micConstraints.audio.deviceId.ideal).toBe("mic-2");
+    expect(gains).toHaveLength(before + 1);
+    expect(gains.at(-1)!.gain.value).toBe(1);
+
+    await handle.stop();
+    expect(micTrack.stop).toHaveBeenCalled();
+  });
+
+  it("answers unavailable when a late mic cannot be opened, and keeps the take", async () => {
+    const handle = await startEngine(baseOptions({ microphoneDeviceId: null }));
+    getUserMedia.mockRejectedValueOnce(new Error("NotAllowedError"));
+
+    expect(await handle.setMicrophoneEnabled(true, "mic-1")).toBe("unavailable");
+    expect(await handle.setMicrophoneEnabled(true, null)).toBe("unavailable");
+    expect(lastOutput().finalize).not.toHaveBeenCalled();
+  });
+
+  it("muting a mic that was never opened is a no-op", async () => {
+    const handle = await startEngine(baseOptions({ microphoneDeviceId: null }));
+    expect(await handle.setMicrophoneEnabled(false, "mic-1")).toBe("ok");
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
+  });
+
+  it("ramps the system-audio gain", async () => {
+    const handle = await startEngine(baseOptions({ systemAudio: true }));
+    const sys = gains[0];
+    expect(sys.gain.value).toBe(1);
+
+    expect(handle.setSystemAudioEnabled(false)).toBe("ok");
+    expect(handle.setSystemAudioEnabled(true)).toBe("ok");
+    expect(rampTargets(sys)).toEqual([0, 1]);
+  });
+
+  it("answers unavailable for system audio when there is no loopback track", async () => {
+    getUserMedia.mockImplementation(async (constraints: MediaStreamConstraints) => {
+      if (constraints.video && constraints.audio) throw new Error("NotSupportedError");
+      if (constraints.video) return fakeStream([screenVideoTrack], []);
+      return fakeStream([], [micTrack]);
+    });
+    const handle = await startEngine(baseOptions({ systemAudio: true }));
+    expect(handle.setSystemAudioEnabled(true)).toBe("unavailable");
+  });
+
+  it("answers unavailable after stop", async () => {
+    const handle = await startEngine(baseOptions({ microphoneDeviceId: null, systemAudio: true }));
+    await handle.stop();
+    expect(handle.setSystemAudioEnabled(false)).toBe("unavailable");
+    expect(await handle.setMicrophoneEnabled(true, "mic-1")).toBe("unavailable");
   });
 });

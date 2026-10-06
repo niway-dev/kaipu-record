@@ -31,11 +31,33 @@ export interface EngineHandle {
    * within ~1 frame of start; "estimated" if mediabunny's private field is missing.
    */
   firstMediaTimestamp: Promise<FirstMediaTimestamp>;
+  /** True when a loopback (system audio) track was acquired with the screen. */
+  hasSystemAudio: boolean;
+  /**
+   * Mute or unmute the microphone mid-take. Muting ramps its gain to 0 and keeps
+   * the device open (unmute stays instant). When the mic was off at start,
+   * turning it on acquires `deviceId` late; a failed acquisition answers
+   * "unavailable" and the take keeps running.
+   */
+  setMicrophoneEnabled(on: boolean, deviceId: string | null): Promise<LiveToggleResult>;
+  /** Ramp the system-audio gain. "unavailable" when no loopback track exists. */
+  setSystemAudioEnabled(on: boolean): LiveToggleResult;
 }
+
+export type LiveToggleResult = "ok" | "unavailable";
+
+/** Mute/unmute ramp length — long enough to avoid a click, short enough to feel instant. */
+export const GAIN_RAMP_SECONDS = 0.02;
 
 export interface EngineOptions {
   sourceId: string;
+  /** Mic to open at start, or `null` when the mic is off (it can be acquired later). */
   microphoneDeviceId: string | null;
+  /**
+   * Whether system audio starts audible. Loopback is acquired whenever the
+   * platform allows it regardless of this flag: "off" is gain 0, so it can be
+   * turned on mid-take (loopback can only be acquired with the screen, at start).
+   */
   systemAudio: boolean;
   /**
    * Encoder targets resolved from the user's quality preset. All optional — the
@@ -103,22 +125,20 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
   } as unknown as MediaTrackConstraints;
 
   // System (loopback) audio can only be captured *alongside* desktop video in the
-  // same getUserMedia call (a Chromium quirk), and only on platforms that support
-  // it — Windows does, macOS does NOT via this legacy constraint, where the whole
-  // call rejects. So when system audio is requested, try the bundled audio+video
-  // call first and FALL BACK to video-only if it rejects: the recording always
-  // starts (just without system audio on macOS) instead of failing outright. This
-  // is why system audio is genuinely best-effort, matching the mic below.
+  // same getUserMedia call (a Chromium quirk). It records on Windows and in the
+  // PACKAGED macOS app (owner-verified 2026-10-06); a macOS dev build rejects the
+  // bundled call. So always try the audio+video call first — whatever the toggle
+  // says, because "off" is a gain of 0 and the user may turn it on mid-take — and
+  // FALL BACK to video-only if it rejects: the recording always starts (just
+  // without system audio) instead of failing outright.
   let screenStream: MediaStream | null = null;
-  if (options.systemAudio) {
-    try {
-      screenStream = await navigator.mediaDevices.getUserMedia({
-        audio: { mandatory: { chromeMediaSource: "desktop" } } as MediaTrackConstraints,
-        video: videoConstraints,
-      });
-    } catch (error) {
-      console.warn("system audio capture unavailable — recording without it", error);
-    }
+  try {
+    screenStream = await navigator.mediaDevices.getUserMedia({
+      audio: { mandatory: { chromeMediaSource: "desktop" } } as MediaTrackConstraints,
+      video: videoConstraints,
+    });
+  } catch (error) {
+    console.warn("system audio capture unavailable — recording without it", error);
   }
   if (!screenStream) {
     screenStream = await navigator.mediaDevices.getUserMedia({
@@ -154,29 +174,54 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
     encodeTrack = compositor.track;
   }
 
-  // 2. Mic (best-effort) + system-audio (best-effort) → mixed single track.
-  // Every acquired stream is tracked so stop() releases the OS devices (closing
-  // the AudioContext alone does NOT stop the underlying tracks — the mic light
-  // would stay on).
+  // 2. Mic (best-effort) + system-audio (best-effort) → each through its own
+  // GainNode → one mixed track. Mute = gain 0, so the file keeps one continuous
+  // audio track with no gaps. Every acquired stream is tracked so stop() releases
+  // the OS devices (closing the AudioContext alone does NOT stop the underlying
+  // tracks — the mic light would stay on).
   const inputStreams: MediaStream[] = [screenStream];
   const audioContext = new AudioContext();
   const destination = audioContext.createMediaStreamDestination();
-  if (options.microphoneDeviceId) {
+
+  /** Connect a stream through a fresh GainNode starting at `audible ? 1 : 0`. */
+  const connectThroughGain = (stream: MediaStream, audible: boolean): GainNode => {
+    const gain = audioContext.createGain();
+    gain.gain.value = audible ? 1 : 0;
+    audioContext.createMediaStreamSource(stream).connect(gain);
+    gain.connect(destination);
+    return gain;
+  };
+  const rampTo = (gain: GainNode, on: boolean): void => {
+    const now = audioContext.currentTime;
+    gain.gain.cancelScheduledValues(now);
+    gain.gain.setValueAtTime(gain.gain.value, now);
+    gain.gain.linearRampToValueAtTime(on ? 1 : 0, now + GAIN_RAMP_SECONDS);
+  };
+  const acquireMicrophone = async (deviceId: string): Promise<MediaStream | null> => {
     try {
       const mic = await navigator.mediaDevices.getUserMedia({
-        audio: { deviceId: { ideal: options.microphoneDeviceId } },
+        audio: { deviceId: { ideal: deviceId } },
       });
       inputStreams.push(mic);
-      audioContext.createMediaStreamSource(mic).connect(destination);
+      return mic;
     } catch {
-      /* mic unavailable — continue without it */
+      return null; // mic unavailable — continue without it
     }
+  };
+
+  let micGain: GainNode | null = null;
+  if (options.microphoneDeviceId) {
+    const mic = await acquireMicrophone(options.microphoneDeviceId);
+    if (mic) micGain = connectThroughGain(mic, true);
   }
   const systemAudioTrack = screenStream.getAudioTracks()[0];
+  let sysGain: GainNode | null = null;
   if (systemAudioTrack) {
-    const sysStream = new MediaStream([systemAudioTrack]);
-    audioContext.createMediaStreamSource(sysStream).connect(destination);
+    sysGain = connectThroughGain(new MediaStream([systemAudioTrack]), options.systemAudio);
   }
+  // Always present, even with no input connected: the destination then produces
+  // silence. mediabunny cannot add a track after start(), and a mid-take unmute
+  // needs somewhere to go.
   const mixedAudioTrack = destination.stream.getAudioTracks()[0];
 
   // 3. Mic-level analyser tapped off the mix.
@@ -245,6 +290,10 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
   // app gets stuck: window hidden, bar showing, no real recording). Fires at most
   // once, and not for our own teardown (stop() sets the flag first).
   let teardownStarted = false;
+  /** Set by stop(); a live toggle arriving after it is answered "unavailable". */
+  let stopped = false;
+  /** Guards against a second late mic acquisition while one is in flight. */
+  let acquiringMic = false;
   const notifyError = (error: unknown): void => {
     if (teardownStarted) return;
     teardownStarted = true;
@@ -272,7 +321,37 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
     },
     thumbnail,
     firstMediaTimestamp,
+    hasSystemAudio: sysGain !== null,
+    async setMicrophoneEnabled(on, deviceId) {
+      if (stopped) return "unavailable";
+      if (micGain) {
+        rampTo(micGain, on);
+        return "ok";
+      }
+      if (!on) return "ok"; // never acquired, nothing to mute
+      if (!deviceId || acquiringMic) return "unavailable";
+      acquiringMic = true;
+      try {
+        const mic = await acquireMicrophone(deviceId);
+        if (!mic) return "unavailable";
+        if (stopped) {
+          // The take ended while the device was opening — release it at once.
+          mic.getTracks().forEach((t) => t.stop());
+          return "unavailable";
+        }
+        micGain = connectThroughGain(mic, true);
+        return "ok";
+      } finally {
+        acquiringMic = false;
+      }
+    },
+    setSystemAudioEnabled(on) {
+      if (!sysGain || stopped) return "unavailable";
+      rampTo(sysGain, on);
+      return "ok";
+    },
     async stop() {
+      stopped = true;
       teardownStarted = true; // stopping the tracks below would otherwise fire onError
       await output.finalize();
       compositor?.stop(); // cancel the draw loop + release the canvas track
