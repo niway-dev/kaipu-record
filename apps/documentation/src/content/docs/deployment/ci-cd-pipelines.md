@@ -71,6 +71,22 @@ buttons point at the R2 installers.
 1. Installs deps, builds the `@kaipu/*` packages.
 2. Deploys the Worker (`apps/server-hono`) via `cloudflare/wrangler-action`.
 
+### Worker secrets travel with the deploy
+
+Both release jobs write their Worker secrets to a JSON file and run
+`wrangler deploy --secrets-file`, so code and secrets go live as **one** version. Do not
+use the action's `secrets:` input. It runs `wrangler secret bulk` first, which deploys the
+previous code with the new secrets as a separate version, and Cloudflare refuses that edit
+outright when the latest uploaded version is not the deployed one — which is exactly the
+state `preview-web.yml` leaves behind. That is how `web-v0.9.0` failed on 2026-10-06.
+
+`--secrets-file` is additive: a secret missing from the file keeps its current value, and
+the jobs drop empty values so a missing GitHub secret cannot blank one. Removing a secret
+from a Worker is a deliberate `wrangler secret delete`, never a side effect of a release.
+
+The three Worker workflows pin `wrangler@4.148.0`. The workspace still has 4.63.0 for local
+development, which lacks `--secrets-file`; bump both together when the workspace upgrades.
+
 ## First-deploy order (one-time)
 
 Deploy the **API first**, then the **web**. The web Worker reaches the API through a Cloudflare

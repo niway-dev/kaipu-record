@@ -74,9 +74,10 @@ jobs:
       # no wrangler dependency, and npm cannot parse bun's `catalog:` protocol in
       # this workspace's package.json. Installing it with bun first makes the
       # action find a binary instead of reaching for npm. release-web.yml does the
-      # same thing for the same reason.
+      # same thing for the same reason, and pins the same version: the preview is
+      # uploaded with the tool the release deploys with.
       - name: Install Wrangler
-        run: bun add -g wrangler
+        run: bun add -g wrangler@4.148.0
 
       - name: Build packages only
         run: bun run build --filter='@kaipu/*'
@@ -104,11 +105,6 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: apps/web-hono
-          # Without this the action installs its own default (3.90.0) — two
-          # majors behind what this repo uses, through npm, which is the
-          # `catalog:` failure above. Pin it to the version the workspace has.
-          wranglerVersion: "4.63.0"
-          packageManager: bun
           # `versions upload` stages the code without routing traffic to it.
           # `deploy` is what release-web.yml runs; the two must stay distinct.
           command: versions upload --message "${{ inputs.message }}"
