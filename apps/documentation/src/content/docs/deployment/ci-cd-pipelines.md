@@ -125,6 +125,35 @@ Deploys read from the repo's **`production`** Environment:
 > Cloudflare API token does **not** work for it. The R2 account id reuses `CLOUDFLARE_ACCOUNT_ID`,
 > and the bucket name is a plain constant in the workflow (`kaipu-bucket`) — neither is a secret.
 
+## GitHub Environments: who may reach what
+
+The repository is public, so the Environments are the boundary around the secrets, and their
+deployment-branch policies decide which refs may cross it. The reasoning and the audit for the
+day a repository goes public are in the hub's
+[public-repo-production-protection](https://github.com/csdev19/general-knowledge/blob/main/monorepos/public-repo-production-protection.md);
+this is the configuration as applied here (inspected 2026-10-06).
+
+| Environment  | May be declared from                                     | Holds                                                                                 | Declared by                                                                                     |
+| ------------ | -------------------------------------------------------- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `production` | `main` (branch), `desktop-v*`, `web-v*`, `api-v*` (tags) | everything in the table above, plus `RELEASE_PLEASE_TOKEN` and `MAIN_VITE_SERVER_URL` | `release-desktop.yml`, `release-web.yml`, `release-api.yml` (tags); `release-please.yml` (main) |
+| `preview`    | any ref                                                  | the Cloudflare token and account id, a throwaway `DATABASE_URL`                       | `preview-web.yml` — uploads a version, deploys nothing                                          |
+| `testing`    | any ref                                                  | `MAIN_VITE_SERVER_URL` only (a public URL the desktop build inlines)                  | `pr-checks.yml` → `Desktop - E2E tests (macOS)`                                                 |
+
+Rules that follow from the table:
+
+- **A job on a `pull_request` event never declares `production`.** The E2E job used to, only to
+  read `MAIN_VITE_SERVER_URL`; that handed every PR branch the signing keys and the database URL.
+  A PR-time job that needs a value gets it from `testing`; a value only `testing` needs is added
+  there, never to `production`.
+- **The administrator bypass on `production` is off**, so the policy applies to the maintainer
+  too. A one-off manual deploy from another branch means adding that branch to the policy first.
+- **The `main` ruleset requires a pull request** (zero approvals — the maintainer cannot approve
+  their own) and the `Release candidate verified` check; force pushes and deletion are blocked.
+- **Fork pull requests run nothing until approved** (Actions → General, "all external
+  contributors"); a fork's run holds no Environment secrets and a read-only token either way.
+- **Secret scanning, push protection and Dependabot alerts are on.** They were off while the
+  repository was private; nothing fails when they are off, which is why they are listed here.
+
 ## PR checks
 
 Two workflows run on PRs into `main` (neither deploys): `pr-validation.yml` (lint, format
