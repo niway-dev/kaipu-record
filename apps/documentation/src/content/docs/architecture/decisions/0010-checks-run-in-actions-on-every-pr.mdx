@@ -111,11 +111,18 @@ changing what `bun run verify` contains.
 macOS for a Markdown change became the owner's complaint (PR #239). Of the 145 pull requests
 merged into `main` in the 30 days before, 98 changed documentation only.
 
-**Decision.** A `Detect docs-only changes` job runs with the same eligibility as the verify
-parts and outputs `docs_only`. `Desktop E2E (macOS)` skips when it is `true`. `Merge
+**Decision.** A `Classify the change` job runs with the same eligibility as the verify
+parts and outputs `docs_only`. `Desktop - E2E tests (macOS)` skips when it is `true`. `Merge
 requirements` treats that skip as a verdict and reports success when `verify` passed.
-Everything in `verify` (lint, format, types, tests, bundles) still runs on docs-only pull
-requests.
+Everything in `verify` (lint, format, types, tests, bundles, the docs site build) still runs
+on docs-only pull requests.
+
+**Amendment, 2026-10-06.** Job names follow one rule: no prefix when the job covers the whole
+workspace (`Lint, format and workflow rules`, `Build and type-check`, `All checks passed`), and
+`<scope> - <what>` when it covers one part of it (`Desktop - unit tests (1/3)`,
+`Web and API - Workers bundle`, `Documentation - build`). The docs site build is new: before
+it, `apps/documentation` was built nowhere in CI, so a page that failed to compile reached
+`main` unnoticed — on the two of every three pull requests that change documentation.
 
 **Rules that keep the PR #173 deadlock from coming back:**
 
