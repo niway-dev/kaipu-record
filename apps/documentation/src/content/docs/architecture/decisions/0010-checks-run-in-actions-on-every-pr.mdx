@@ -7,13 +7,13 @@ description: With the repository going public, verification moves back from the 
 
 ## Status
 
-| Field         | Value                                                                                                                                                                                                              |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Status        | Accepted — implemented in `pr-checks.yml` and `lefthook.yml`; **not yet exercised on a real pull request** (GitHub Actions was degraded on the day it merged)                                                      |
-| Date          | 2026-10-05                                                                                                                                                                                                         |
-| Supersedes    | [ADR 0004](./0004-local-first-release-verification) — the local-first pre-push gate                                                                                                                                |
-| Amends        | [ADR 0006](./0006-desktop-e2e-in-the-candidate-tier) — the desktop E2E is no longer gated to desktop candidates · [ADR 0005](./0005-draft-ready-release-candidate-readiness) — draft/ready now applies to every PR |
-| Superseded by | —                                                                                                                                                                                                                  |
+| Field         | Value                                                                                                                                                                                                                                                         |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Accepted — implemented in `pr-checks.yml` and `lefthook.yml`. Amended 2026-10-05: docs-only pull requests skip the desktop E2E ([amendment](#amendment-docs-only-pull-requests-skip-the-e2e)); the amendment has not run on a real docs-only pull request yet |
+| Date          | 2026-10-05                                                                                                                                                                                                                                                    |
+| Supersedes    | [ADR 0004](./0004-local-first-release-verification) — the local-first pre-push gate                                                                                                                                                                           |
+| Amends        | [ADR 0006](./0006-desktop-e2e-in-the-candidate-tier) — the desktop E2E is no longer gated to desktop candidates · [ADR 0005](./0005-draft-ready-release-candidate-readiness) — draft/ready now applies to every PR                                            |
+| Superseded by | —                                                                                                                                                                                                                                                             |
 
 ## Context
 
@@ -42,9 +42,10 @@ our hooks.
 1. **Every non-draft pull request to `main` is verified in Actions**: `bun run verify`, the
    web and API bundle builds on Linux, and the Playwright desktop suite against the built
    app on macOS. Release-please candidates are no longer special: they get the same jobs.
-2. **The desktop E2E runs on every pull request, with no path filter.** A filter would need
-   its own job and its own failure mode; on a public repository the run costs nothing. A
-   docs-only pull request waits for it, which is the accepted cost.
+2. **The desktop E2E runs on every pull request that changes more than documentation.**
+   _Amended 2026-10-05, see [Amendment: docs-only pull requests skip the E2E](#amendment-docs-only-pull-requests-skip-the-e2e)._
+   As first accepted, it ran on every pull request with no path filter, and a docs-only pull
+   request waited for it.
 3. **`Merge requirements` stays the one required check**, with the same invariant: a commit
    receives exactly one report, from the run that verified it. It reports when both
    `verify` and the E2E reached a verdict, and stays silent otherwise.
@@ -73,7 +74,8 @@ our hooks.
 - **Path-filter the macOS job to desktop-affecting changes.** Saves wall-clock on docs and
   web pull requests, at the price of a `changes` job whose output the gate must also read
   — the paths-filter deadlock is how PR #173 became unmergeable. Reconsider if waiting on
-  macOS becomes the common complaint.
+  macOS becomes the common complaint. _(Adopted for docs-only changes on 2026-10-05; see the
+  amendment. Web and API pull requests still run it.)_
 - **Run the checks in Actions while the repository is still private.** macOS bills at ten
   times the Linux rate on a private repository; that is the September problem again. The
   change is meant to land together with the repository going public.
@@ -91,8 +93,8 @@ our hooks.
 
 ## Non-goals
 
-Self-hosted runners, changing the release workflows, a path filter, and changing what
-`bun run verify` contains.
+Self-hosted runners, changing the release workflows, a path filter beyond docs-only, and
+changing what `bun run verify` contains.
 
 ## Reopen when
 
@@ -102,3 +104,33 @@ Self-hosted runners, changing the release workflows, a path filter, and changing
   add the path filter, with the gate reading its output.
 - Flaky runners make the required check unreliable often enough that merges routinely
   need a re-run.
+
+## Amendment: docs-only pull requests skip the E2E
+
+**2026-10-05.** The second reopen condition was met on the day this ADR merged: waiting on
+macOS for a Markdown change became the owner's complaint (PR #239). Of the 145 pull requests
+merged into `main` in the 30 days before, 98 changed documentation only.
+
+**Decision.** A `Detect docs-only changes` job runs with the same eligibility as the verify
+parts and outputs `docs_only`. `Desktop E2E (macOS)` skips when it is `true`. `Merge
+requirements` treats that skip as a verdict and reports success when `verify` passed.
+Everything in `verify` (lint, format, types, tests, bundles) still runs on docs-only pull
+requests.
+
+**Rules that keep the PR #173 deadlock from coming back:**
+
+- The filter is a job, never `on.pull_request.paths`. The workflow always runs, so the
+  required check always receives a report.
+- Docs-only is an allowlist that fails toward running the E2E: every changed path, including
+  a renamed file's old path, must be under `apps/documentation/` or end in `.md`/`.mdx`. An
+  empty list, a list at the API's 3000-file cap, or a manual dispatch counts as code. No app
+  imports a Markdown file, which is why `.md` anywhere qualifies; that changes if one ever does.
+- The gate counts the E2E as decided only when this run classified the change as docs-only,
+  or when the classification failed (then it fails, with a message to re-run). A cancelled
+  classification stays silent, like any other superseded run.
+- `scripts/check-workflow-eligibility.ts` runs the real classifier step against file lists
+  and the real gate script against every combination, and fails if a workflow-level path
+  filter appears.
+
+**Reopen when** an app starts importing Markdown at build or run time, or a docs-only pull
+request is found to have broken the desktop app.
