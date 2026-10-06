@@ -410,14 +410,15 @@ jobs:
   # the export path runs in the cloud: on Linux runners it self-skips, as headless Chromium
   # has no H.264 encoder.
   #
-  # `environment: production` is declared only to read MAIN_VITE_SERVER_URL, which the build
-  # inlines into the main bundle. That environment has no protection rules, and no signing
-  # secret is used here — signing stays in the release workflow.
+  # No `environment:` here, on purpose. MAIN_VITE_SERVER_URL is a repository variable: the
+  # build inlines it into the main bundle, it is not a secret, and reading it used to be the
+  # only reason this job declared `production`. That declaration handed every pull request
+  # branch the production Environment, which is exactly what its deployment-branch policy
+  # now forbids — `production` is for `main` and the release tags, nothing else.
   e2e_desktop:
     name: Desktop E2E (macOS)
     runs-on: macos-latest
     timeout-minutes: 30
-    environment: production
     needs: [changes]
     # Same eligibility as `verify`, minus docs-only pull requests. It used to be gated to
     # desktop release candidates because a macOS minute billed at ten; on a public
@@ -463,7 +464,7 @@ jobs:
           MAIN_VITE_SERVER_URL: ${{ vars.MAIN_VITE_SERVER_URL }}
         run: |
           test -n "$MAIN_VITE_SERVER_URL" || {
-            echo "::error::MAIN_VITE_SERVER_URL is not set — add it to the production Environment"
+            echo "::error::MAIN_VITE_SERVER_URL is not set — add it as a repository variable"
             exit 1
           }
           bun run build
