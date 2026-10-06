@@ -14,6 +14,7 @@ These are working hypotheses and recommendations, not validated market findings 
 
 | Read                                                                   | Purpose                                                                                                                    |
 | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| [Product direction and monetization](/marketing/product-direction/)    | Auto Polish, intent-based recording, PR demo and bug report workflows, free/paid boundary, open questions                  |
 | [Positioning and Recordly](/marketing/positioning/)                    | Audience, differentiation, competitive evidence, landing narrative, and pricing tension                                    |
 | [Brand and Kai](/marketing/brand-and-kai/)                             | Keep Kaipu and pink; explore a warmer experience and a supporting mascot                                                   |
 | [AI and automation feasibility](/marketing/ai-and-automation/)         | Captions, audio-based summaries, CLI, and agent-driven editing; current technical constraints                              |
