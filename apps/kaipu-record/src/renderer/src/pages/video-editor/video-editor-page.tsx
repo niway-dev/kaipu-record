@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Navigate, useBlocker, useLocation, useNavigate } from "react-router-dom";
+import { generatePath, Navigate, useBlocker, useLocation, useNavigate } from "react-router-dom";
+import { ROUTES } from "@shared/routes";
 import {
   Maximize2,
   Minimize2,
@@ -122,7 +123,7 @@ export interface VideoEditorSource {
   durationSeconds: number;
 }
 
-function isVideoEditorSource(value: unknown): value is VideoEditorSource {
+export function isVideoEditorSource(value: unknown): value is VideoEditorSource {
   if (typeof value !== "object" || value === null) return false;
   const v = value as Record<string, unknown>;
   return (
@@ -194,12 +195,16 @@ function upsertOverlay(overlays: VideoOverlay[], next: VideoOverlay): VideoOverl
   return i === -1 ? [...overlays, next] : overlays.map((o, idx) => (idx === i ? next : o));
 }
 
+/**
+ * Legacy `/video-editor` route. The editor is addressed by URL now
+ * (`/editor/video/:assetId`); an old navigation that still carries the recording
+ * in router state lands on the new URL, a stateless one on the Editor home.
+ */
 export function VideoEditorPage(): React.JSX.Element {
   const location = useLocation();
   const source = location.state;
-  if (!isVideoEditorSource(source)) return <Navigate to="/library" replace />;
-  // Remount per navigation so a different recording never inherits editor state.
-  return <VideoEditorLoader key={location.key} source={source} />;
+  if (!isVideoEditorSource(source)) return <Navigate to={ROUTES.editor} replace />;
+  return <Navigate to={generatePath(ROUTES.editorVideo, { assetId: source.assetId })} replace />;
 }
 
 /**
@@ -208,8 +213,11 @@ export function VideoEditorPage(): React.JSX.Element {
  * Without this split, `useVideoScene` would receive the fresh fallback scene before
  * the session IPC returns, and re-initializing a hook with a different value isn't
  * possible in React.
+ *
+ * The Editor workspace route renders this, keyed by asset id so a different
+ * recording never inherits editor state.
  */
-function VideoEditorLoader({ source }: { source: VideoEditorSource }): React.JSX.Element {
+export function VideoEditorLoader({ source }: { source: VideoEditorSource }): React.JSX.Element {
   const t = useTranslations("videoEditor");
   // Asset store lives here so it can be populated by the session loader and passed
   // down to the editor without being torn down between the two renders.
@@ -306,7 +314,7 @@ function VideoEditorLoader({ source }: { source: VideoEditorSource }): React.JSX
     return () => {
       cancelled = true;
     };
-  }, []); // [] correct: source is stable per VideoEditorPage's key={location.key}
+  }, []); // [] correct: source is stable per VideoEditorLoader's key (the asset id)
 
   if (resolved === null) {
     // Brief loading state while the session IPC resolves. The editor grows the window
