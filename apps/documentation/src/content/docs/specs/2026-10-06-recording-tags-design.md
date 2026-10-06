@@ -30,6 +30,9 @@ before any adapter sees it.
 | 6   | Filter semantics: selected tags combine with **AND**; the search box also matches tags.                  | Narrowing ("cricut" + "issue-#1232") is the common case; OR can come later.                                                  | —          |
 | 7   | Conflicts: last writer wins per recording, using `tagsUpdatedAt`.                                        | Tags are low-stakes and edited by one person; merging sets would resurrect deleted tags.                                     | —          |
 
+**Monetization (owner, 2026-10-06):** tags are free and local. Turning cloud on is what makes
+them replicate to the cloud, and that replica is part of the paid Cloud plan.
+
 ### Open questions
 
 1. Should tags also apply to **screenshots** (`.png` items)? Default: yes, same sidecar,

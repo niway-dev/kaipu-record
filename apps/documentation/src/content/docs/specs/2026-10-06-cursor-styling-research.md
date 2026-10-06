@@ -20,11 +20,11 @@ half is a capture path that leaves the cursor out of the pixels, plus recording 
 shape. On Electron that means a native capture helper on macOS (ScreenCaptureKit), which is
 exactly how Recordly — also Electron — does it.
 
-| #   | Decision                                                                         | Why                                                                                        | ADR |
-| --- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | --- |
-| 1   | Drop both earlier ideas as standalone projects.                                  | Owner decision.                                                                            | —   |
-| 2   | The target design is "cursor-free capture + cursor track + drawn cursor".        | It is what every product with cursor styling ships; drawing over a recorded cursor fails.  | —   |
-| 3   | Do not start until live-controls Phase B has moved capture to `getDisplayMedia`. | Both change the capture path; Phase B's findings decide whether a native helper is needed. | —   |
+| #   | Decision                                                                    | Why                                                                                       | ADR |
+| --- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | --- |
+| 1   | Drop both earlier ideas as standalone projects.                             | Owner decision.                                                                           | —   |
+| 2   | The target design is "cursor-free capture + cursor track + drawn cursor".   | It is what every product with cursor styling ships; drawing over a recorded cursor fails. | —   |
+| 3   | Start with a capture spike on the packaged build, not with a native module. | The capture path also carries system audio, the source picker and permissions.            | —   |
 
 ### Open questions
 
@@ -63,13 +63,14 @@ real arrow, I-beam or hand. That removes the "two cursors" problem
   [#14337](https://github.com/electron/electron/issues/14337) are still open; the constraint
   has historically been ignored on macOS. A spike would most likely confirm a no.
 - **Native module first.** Right direction, wrong order: it replaces the capture path that
-  system audio, the source picker and permissions ride on. Live-controls Phase B touches that
-  same path first and will say how much of it moves.
+  system audio, the source picker and permissions ride on. Nothing has measured that
+  same path, so the first step is measuring what moves.
 
 ## Plan (when picked up)
 
-1. Read live-controls Phase B's note on the `getDisplayMedia` path (permissions, loopback,
-   whether `cursor` is honored on macOS 13+ with CoreAudio Tap builds).
+1. On a packaged build, check whether a `getDisplayMedia` capture served by
+   `setDisplayMediaRequestHandler` honors `cursor: "never"` on current macOS, and what it
+   does to system audio and permissions.
 2. Prototype a ScreenCaptureKit helper (`showsCursor = false`) that produces frames for the
    existing mediabunny encoder, behind a flag. Measure CPU against the current path.
 3. Extend the cursor track with a `shapeId` per sample and a shape table (image + hotspot),

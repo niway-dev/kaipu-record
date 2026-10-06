@@ -13,8 +13,8 @@ description: "Proposal: let the user mute the microphone, turn system audio on o
 
 > **2026-10-06 — superseded by the [design spec](/specs/2026-10-06-live-recording-controls-design/)**
 > where they differ: no buttons on the floating control bar (the Capture Panel, the Record
-> page and shortcuts carry the toggles), and system audio is unavailable on macOS today, so
-> it needs the Phase B capture change ([ADR 0011](/architecture/decisions/0011-system-audio-acquired-whenever-available/)).
+> page and shortcuts carry the toggles), and system audio is always acquired so its toggle
+> only moves a gain ([ADR 0011](/architecture/decisions/0011-system-audio-acquired-whenever-available/)).
 
 ## Problem
 
