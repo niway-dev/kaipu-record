@@ -78,18 +78,26 @@ sources.
 
 ## Phase 1 — Editor workspace (night shift)
 
-1. **Routes.** Add `ROUTES.editor = "/editor"` with children `video/:id` and `image/:id`, and
-   `capture` for an unsaved screenshot (router state, as today). The page components resolve
-   the item from the library by id (title, duration, asset id) instead of reading router
-   state. Redirect the two old routes, mapping their state to the new URL.
+1. **Routes.** In `shared/routes.ts` (the single route table), add `editor: "/editor"`,
+   `editorVideo: "/editor/video/:assetId"`, `editorImage: "/editor/image/:assetId"` and
+   `editorCapture: "/editor/capture"`. The `:assetId` param works like
+   `libraryDetail: "/library/:assetId"`: `library-detail-page.tsx:54-57` already resolves an
+   item with `useParams` + `useLocalLibrary()`, so the editor pages do the same instead of
+   reading `location.state`. `/editor/capture` keeps router state for a fresh capture that is
+   not in the vault yet (`ImageSource` kind `"blob"`, see
+   `features/screenshots/image-source/types.ts`). Keep `ROUTES.videoEditor` and
+   `ROUTES.screenshotEditor` as redirect routes that map their old state to the new URL.
 2. **Sidebar.** An **Editor** entry between Screenshots and Library (icon `PenLine`), labels in
    `@kaipu/i18n` (en/es). With no item open, `/editor` shows an empty state: the five most
    recent items (video and image) with an Edit action each.
 3. **Entry points.** Every place that opens an editor calls one helper,
-   `openInEditor(item)`, which picks the route by kind: the library detail page, the new card
-   action and context menu, and the screenshot flow after a capture (⌃⌘X).
-4. **Window presets.** The video editor's window exception from #199 applies to
-   `/editor/video/*`; nothing else changes.
+   `openInEditor(item)`, which picks the route by kind. Today's call sites, all string
+   literals: `pages/library-detail/library-detail-page.tsx:160` (image) and `:168` (video),
+   and `features/screenshots/use-screenshot-capture.ts:34` (⌃⌘X capture → `/editor/capture`).
+   Add the Edit action to the library card and its context menu.
+4. **Window presets.** `shared/window-size.ts:76` matches `pathname === ROUTES.videoEditor`
+   exactly. Change it to match any path under `/editor/video/`, and update its tests; nothing
+   else about the presets changes.
 5. **No editor logic changes.** Both editors move as they are; this phase only changes how
    they are reached.
 

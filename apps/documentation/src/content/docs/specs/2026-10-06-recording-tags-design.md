@@ -5,8 +5,7 @@ description: Design for free-form tags on recordings (e.g. kaipu, cricut, issue-
 
 # Recording tags — design
 
-**Status: 🔵 Proposed · 2026-10-06.** Phase 1 (local) can go to the night shift as
-`plan-first`; Phase 2 (cloud) waits for the optional-cloud catalog endpoints.
+**Status: 🔵 Proposed · 2026-10-06.** Phase 1 (local) goes to the night shift; Phase 2 (cloud) waits for the optional-cloud catalog endpoints.
 
 ## Summary (one minute)
 
@@ -123,13 +122,14 @@ over IPC and receives tags on each `LibraryVideo` like any other field.
 - **Library filter bar**: tag chips after the storage and kind chips, ordered by count; a
   "+N" overflow opens the full list. Selecting several tags narrows (AND).
 - **Search box**: matches title or any tag.
-- **Item**: a tag field in the item's detail / rename dialog — type and press Enter or
-  comma, autocomplete from `vocabulary()`, backspace removes the last chip.
+- **Item**: a tag field on the library detail page (`pages/library-detail/library-detail-page.tsx`),
+  under the title, next to the existing rename (`:213`). Type and press Enter or comma,
+  autocomplete from `vocabulary()`, backspace removes the last chip.
 - **Card**: up to two tags shown on hover, with the rest as "+N".
 
 ## Phases
 
-1. **Local** (`plan-first` night shift): domain builder + tests, `SidecarTagStore`, IPC,
+1. **Local** (night shift): domain builder + tests, `SidecarTagStore`, IPC,
    `FilterCriteria.tags`, filter chips, tag editor, search match.
 2. **Cloud**: migration, use cases, routes, `CloudTagStore`, `ReplicatedTagStore`, provider
    switch. Starts after the optional-cloud catalog routes are served.
