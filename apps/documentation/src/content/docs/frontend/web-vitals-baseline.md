@@ -133,6 +133,10 @@ bunx lighthouse http://localhost:4173/ --output=html --output-path=./lh-mobile
 first paint matches the chosen theme, and that EN/ES both render. It is a correctness
 check, not a performance instrument.
 
+> **Bytes have their own log.** Scores move with the machine; bytes do not. The shipped
+> bundle, raw and brotli, with a budget, is tracked in
+> [Web bundle size: the log](/frontend/web-bundle-size/) — that is the page to watch for growth.
+
 ## The log
 
 Append a row per measurement. Never edit an old row — a corrected number is a new row with
