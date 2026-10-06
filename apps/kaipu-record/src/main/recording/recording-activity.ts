@@ -33,11 +33,17 @@ export function applyTick(
   tick: RecordingTick,
 ): { activity: RecordingActivity; changed: boolean } {
   if (!activity.active) return { activity, changed: false };
+  const systemAudioAvailable = tick.systemAudioAvailable ?? activity.systemAudioAvailable;
   const changed =
-    tick.status !== activity.status || tick.elapsedSeconds !== activity.elapsedSeconds;
+    tick.status !== activity.status ||
+    tick.elapsedSeconds !== activity.elapsedSeconds ||
+    systemAudioAvailable !== activity.systemAudioAvailable;
   if (!changed) return { activity, changed: false };
-  return {
-    activity: { ...activity, status: tick.status, elapsedSeconds: tick.elapsedSeconds },
-    changed: true,
+  const next: RecordingActivity = {
+    ...activity,
+    status: tick.status,
+    elapsedSeconds: tick.elapsedSeconds,
   };
+  if (systemAudioAvailable !== undefined) next.systemAudioAvailable = systemAudioAvailable;
+  return { activity: next, changed: true };
 }

@@ -352,6 +352,12 @@ export interface RecordingTick {
   elapsedSeconds: number;
   levels: number[];
   status: RecordingStatus;
+  /**
+   * Whether this take has a loopback (system audio) track. Omitted = unknown,
+   * treated as available. Lets every window disable the system-audio toggle
+   * mid-take when turning it on could not work.
+   */
+  systemAudioAvailable?: boolean;
 }
 
 export type ControlCommand = "pause" | "resume" | "stop";
@@ -361,6 +367,8 @@ export interface RecordingActivity {
   active: boolean;
   status: RecordingStatus;
   elapsedSeconds: number;
+  /** See {@link RecordingTick.systemAudioAvailable}. Only meaningful while active. */
+  systemAudioAvailable?: boolean;
 }
 
 export interface RecordingFinalizeMeta {
