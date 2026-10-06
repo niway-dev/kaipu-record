@@ -138,11 +138,12 @@ check, not a performance instrument.
 Append a row per measurement. Never edit an old row — a corrected number is a new row with
 a note, because the point of the series is the shape of the curve.
 
-| Date       | Commit    | Desktop | Mobile | What changed since the row above                                                         |
-| ---------- | --------- | ------- | ------ | ---------------------------------------------------------------------------------------- |
-| 2026-10-01 | `78f6dea` | 87      | 57     | Baseline. Design complete, no optimization attempted.                                    |
-| 2026-10-01 | `976105a` | 95      | 71     | Same code, first edge measurement: Cloudflare Version URL, brotli + real TTFB.           |
-| 2026-10-02 | `0b6f4c4` | 96      | 100    | The web-ui CSS dedup (#214). **Measured on a different machine — see the caveat below.** |
+| Date       | Commit    | Desktop | Mobile | What changed since the row above                                                                                                                                                          |
+| ---------- | --------- | ------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-10-01 | `78f6dea` | 87      | 57     | Baseline. Design complete, no optimization attempted.                                                                                                                                     |
+| 2026-10-01 | `976105a` | 95      | 71     | Same code, first edge measurement: Cloudflare Version URL, brotli + real TTFB.                                                                                                            |
+| 2026-10-02 | `0b6f4c4` | 96      | 100    | The web-ui CSS dedup (#214). **Measured on a different machine — see the caveat below.**                                                                                                  |
+| 2026-10-06 | `357b84d` | 98      | 83     | **First measurement on production (`kaipu.app`).** Root diet, lazy hydration, real-component product shot. Bytes down 45%; **mobile first paint regressed — see the fourth measurement.** |
 
 ## The third measurement — the CSS dedup, and why the mobile number cannot be trusted
 
@@ -202,3 +203,90 @@ Upload `976105a` as a second Version URL through the
 workflow and measure both URLs back to back on the same host. Two commits, one machine, one
 sitting — that isolates the dedup properly, and it is cheap because the workflow takes a
 `ref`.
+
+## The fourth measurement — production, and a mobile regression that is in the code
+
+Lighthouse 13.5.0 against **https://kaipu.app/** serving `main` at `357b84d`, the first row
+on the real domain (the deploy that landed the `--secrets-file` release fix). Raw reports:
+[desktop](/audits/web-vitals/2026-10-06-production/lighthouse-desktop.html) ·
+[mobile](/audits/web-vitals/2026-10-06-production/lighthouse-mobile.html) ·
+[manifest](/audits/web-vitals/2026-10-06-production/manifest.json).
+
+| Preset                   | Performance | FCP   | LCP   | TBT  | CLS | SEO |
+| ------------------------ | ----------- | ----- | ----- | ---- | --- | --- |
+| Desktop                  | **98**      | 0.9 s | 0.9 s | 0 ms | 0   | 100 |
+| Mobile (Slow 4G, CPU 4×) | **83**      | 3.3 s | 3.3 s | 0 ms | 0   | 100 |
+
+SEO reads 100 for the first time: the real domain carries no `noindex`, which is what rows
+2–3 lost on Version URLs. Desktop is the best number in the series.
+
+### The control that row 3 asked for
+
+Row 3 could not say whether mobile 71 → 100 was the code or the machine. This row settles
+it the way that section proposed: the row-3 commit's Version URL is still live, so it was
+measured again **on this host, in the same sitting, with the same instrument**
+([control](/audits/web-vitals/2026-10-06-production/control-0b6f4c4-mobile.json),
+`benchmarkIndex` 4316 vs 4448 for the production run).
+
+| Mobile preset, same host, same sitting  | Performance | FCP   | LCP   |
+| --------------------------------------- | ----------- | ----- | ----- |
+| `0b6f4c4` (row 3's commit, Version URL) | **98**      | 1.7 s | 1.7 s |
+| `357b84d` (production)                  | **83**      | 3.3 s | 3.3 s |
+
+So row 3's 100 was mostly the machine, as suspected (the honest row-3 number on this host is
+98), and **the drop to 83 is the code**, not the host, not the time of day.
+
+### What improved, in machine-independent bytes
+
+| Mobile preset             | Row 3 (`0b6f4c4`) | Row 4 (`357b84d`) |
+| ------------------------- | ----------------- | ----------------- |
+| Total transferred         | 670 KiB           | **365 KiB**       |
+| Scripts                   | 4 · 311 KiB       | 7 · **159 KiB**   |
+| Main bundle (`main-*.js`) | 295 KiB           | **128 KiB**       |
+| Images                    | 149 KiB (PNG)     | **8 KiB** (SVG)   |
+| Stylesheets               | 2 · 24 KiB        | 3 · 28 KiB        |
+| Fonts                     | 4 · 148 KiB       | 4 · 148 KiB       |
+| Document                  | 34 KiB            | 18 KiB            |
+
+The root diet ([762ca6b](https://github.com/niway-dev/kaipu-record/commit/762ca6b)) halved
+the main bundle; the demo JPGs are gone and the logos are SVG. Everything the three
+`perf`/`chore` commits promised in bytes, they delivered.
+
+### What regressed, and what was ruled out
+
+With the mobile throttling the simulated first paint went from 1.7 s to 3.3 s on fewer bytes.
+The trace behind it (`lighthouse-mobile.json`, `observed*` metrics, and the saved trace) says
+where the time is **not**:
+
+- The document arrives complete in one chunk at 0.46 s (86 KB, `zstd`), the three stylesheets
+  by 0.65 s, the four fonts by 0.98 s, `load` fires at 1.0 s.
+- Between 1.0 s and the first contentful paint at 2.5–2.6 s the main thread does ~100 ms of
+  work. Nothing is downloading, parsing or executing. The filmstrip is uniformly black until
+  the whole above-the-fold hero appears at once.
+- The hero is in the server HTML (text, logos, pills) in both builds; nothing in the CSS hides
+  it (`.kl-reveal` is on two figures below the fold, as before).
+- **Not the Cloudflare Web Analytics beacon**, which appears as a new third-party origin on the
+  real domain: blocked with `--blocked-url-patterns`, the score is the same
+  ([run](/audits/web-vitals/2026-10-06-production/lighthouse-mobile-no-beacon.json)).
+- **Not headless rendering**: a headful Chrome with the real GPU gives 82
+  ([run](/audits/web-vitals/2026-10-06-production/lighthouse-mobile-headful.json)), and the
+  control at 100 in the same mode.
+- **Not the server**: a mobile user agent gets byte-identical HTML to a desktop one.
+- It is not deterministic: of six mobile runs, four observed the first paint at 2.5–2.7 s and
+  two at 0.9–1.6 s. The simulated score follows the observed trace, so the "83" is the
+  common case, not a fluke.
+
+What is left is the renderer: the browser has everything and does not present a frame. The
+candidates are the StyleX stylesheet and the real-component product shot
+([df6efee](https://github.com/niway-dev/kaipu-record/commit/df6efee)) — two more
+`backdrop-filter` layers and the first `transform: scale()` of a full app window into a
+412 px viewport — but that is a hypothesis, not a finding.
+
+### How to settle it
+
+Three landing commits separate the two rows: `df6efee` (product shot), `818ad04` (lazy
+hydration), `762ca6b` (root diet). Upload each as a Version URL through **Preview Web**
+(`ref` input, ~2 min each) and run the mobile preset against the three plus the control in one
+sitting. The first URL that paints late names the commit; the fix is then a matter of reading
+that diff with the trace open. Until that row exists, the post may claim the bytes and the
+desktop number, and must not claim that mobile improved.
