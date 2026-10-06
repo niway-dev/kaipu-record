@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Check, Copy, FileX2, FolderOpen, Pencil, Scissors, Trash2 } from "lucide-react";
-import type { ImageSource } from "@renderer/features/screenshots/image-source";
+import { canOpenInEditor, useOpenInEditor } from "@renderer/features/editor/open-in-editor";
 import { useTransientValue } from "@renderer/ui/use-transient-value";
 import { useLocalLibrary } from "@renderer/features/library/hooks/use-local-library";
 import { useMissingRecordingRecovery } from "@renderer/features/library/hooks/use-missing-recording-recovery";
@@ -75,6 +75,7 @@ export function LibraryDetailPage(): React.JSX.Element {
   const [copied, showCopied] = useTransientValue<true>(2200);
   // Computed before the early returns below: hooks can't be called conditionally,
   // and buildLineage works fine on an empty/loading `videos` list.
+  const { openItem } = useOpenInEditor();
   const lineage = useMemo(() => buildLineage(videos), [videos]);
 
   const back = (): void => {
@@ -145,34 +146,18 @@ export function LibraryDetailPage(): React.JSX.Element {
     }
   };
 
-  // Re-open a saved screenshot in the editor. It's a flat PNG, so the editor treats
-  // it as a new base image (the local source starts with no beautify re-frame). Carry
-  // the `?v=` token from the thumbnail URL so the editor loads the current bytes.
+  // Re-open a saved screenshot in the editor (its URL is /editor/image/:assetId).
   const editScreenshot = (): void => {
     if (!localId) return;
-    const v = video.thumbnailUrl ? Number(new URL(video.thumbnailUrl).searchParams.get("v")) : NaN;
-    const source: ImageSource = {
-      kind: "local",
-      id: localId,
-      title: video.title,
-      version: Number.isFinite(v) ? v : undefined,
-    };
-    navigate("/screenshot-editor", { state: source });
+    openItem(video);
   };
 
   // The editor builds its initial scene from the recording's duration — an older
   // vault item without one (pre-duration-tracking capture) can't be opened.
-  const canEditVideo = localId !== null && video.durationSeconds > 0;
+  const canEditVideo = canOpenInEditor(video);
   const editVideo = (): void => {
-    if (!canEditVideo || !localId) return;
-    navigate("/video-editor", {
-      state: {
-        id: localId,
-        assetId: video.assetId,
-        title: video.title,
-        durationSeconds: video.durationSeconds,
-      },
-    });
+    if (!canEditVideo) return;
+    openItem(video);
   };
 
   return (

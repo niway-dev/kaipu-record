@@ -1,4 +1,4 @@
-import { Film, Trash2 } from "lucide-react";
+import { Film, PenLine, Trash2 } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { formatDuration, formatSize } from "@renderer/features/library/format";
 import type { LibraryVideo } from "@renderer/features/library/types";
@@ -15,6 +15,8 @@ interface VideoRowProps {
   badge?: EditBadgeState;
   onNavigate(): void;
   onDelete(): void;
+  /** Opens the item in the Editor workspace; omitted when it cannot be edited. */
+  onEdit?(): void;
 }
 
 export function VideoRow({
@@ -23,6 +25,7 @@ export function VideoRow({
   badge = null,
   onNavigate,
   onDelete,
+  onEdit,
 }: VideoRowProps): React.JSX.Element {
   const t = useTranslations("library");
 
@@ -66,6 +69,11 @@ export function VideoRow({
       </div>
 
       <div className={styles.actions} onClick={(e) => e.stopPropagation()}>
+        {onEdit && (
+          <button className={styles.action} onClick={onEdit} title={t("edit")}>
+            <PenLine size={15} strokeWidth={1.8} />
+          </button>
+        )}
         {video.id !== null && (
           <button
             className={cx(styles.action, styles.delete)}

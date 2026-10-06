@@ -1,4 +1,4 @@
-import { Film, Trash2, Play } from "lucide-react";
+import { Film, PenLine, Trash2, Play } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { formatDuration, formatSize } from "@renderer/features/library/format";
 import type { LibraryVideo } from "@renderer/features/library/types";
@@ -14,6 +14,8 @@ interface VideoCardProps {
   badge?: EditBadgeState;
   onNavigate(): void;
   onDelete(): void;
+  /** Opens the item in the Editor workspace; omitted when it cannot be edited. */
+  onEdit?(): void;
 }
 
 export function VideoCard({
@@ -21,6 +23,7 @@ export function VideoCard({
   badge = null,
   onNavigate,
   onDelete,
+  onEdit,
 }: VideoCardProps): React.JSX.Element {
   const t = useTranslations("library");
 
@@ -77,6 +80,11 @@ export function VideoCard({
         </span>
 
         <div className={styles.actions} onClick={(e) => e.stopPropagation()}>
+          {onEdit && (
+            <button className={styles.action} onClick={onEdit} title={t("edit")}>
+              <PenLine size={14} strokeWidth={1.8} />
+            </button>
+          )}
           {video.id !== null && (
             <button
               className={cx(styles.action, styles.delete)}

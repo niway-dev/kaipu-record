@@ -13,6 +13,7 @@ import { FilterChip } from "@renderer/features/library/components/filter-chip";
 import { useLocalLibrary } from "@renderer/features/library/hooks/use-local-library";
 import { useLibraryFilters } from "@renderer/features/library/hooks/use-library-filters";
 import { buildLineage, editBadge } from "@renderer/features/library/lineage";
+import { canOpenInEditor, useOpenInEditor } from "@renderer/features/editor/open-in-editor";
 import styles from "./library-page.module.css";
 
 /** The search field's share of the toolbar, moved out of the module: the shared
@@ -29,6 +30,7 @@ const sxLibrary = stylex.create({
 export function LibraryPage(): React.JSX.Element {
   const t = useTranslations("library");
   const navigate = useNavigate();
+  const { openItem } = useOpenInEditor();
   const { videos, isLoading, hasError, refresh, remove } = useLocalLibrary();
   const canShowVaultBanner = hasError && videos.length > 0;
   // Built from the unfiltered `videos`, not `visibleItems`: an export filtered out of
@@ -216,6 +218,7 @@ export function LibraryPage(): React.JSX.Element {
               video={video}
               badge={editBadge(video, lineage)}
               onNavigate={() => navigate(`/library/${video.assetId}`)}
+              onEdit={canOpenInEditor(video) ? () => openItem(video) : undefined}
               onDelete={() => {
                 const { id, title } = video;
                 if (id !== null) setPendingDelete({ id, title });
@@ -233,6 +236,7 @@ export function LibraryPage(): React.JSX.Element {
                 isLast={i === visibleItems.length - 1}
                 badge={editBadge(video, lineage)}
                 onNavigate={() => navigate(`/library/${video.assetId}`)}
+                onEdit={canOpenInEditor(video) ? () => openItem(video) : undefined}
                 onDelete={() => {
                   const { id, title } = video;
                   if (id !== null) setPendingDelete({ id, title });
