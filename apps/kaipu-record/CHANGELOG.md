@@ -1,5 +1,82 @@
 # Changelog
 
+## [0.10.0](https://github.com/niway-dev/kaipu-record/compare/desktop-v0.9.0...desktop-v0.10.0) (2026-10-06)
+
+
+### Features
+
+* **brand:** @kaipu/brand, one logo system shared by desktop and web ([70d196e](https://github.com/niway-dev/kaipu-record/commit/70d196ee66474a61be0e59caa2a791413d1677ac))
+* **brand:** the fox replaces the play arrow in the macOS menu bar ([eedd6ee](https://github.com/niway-dev/kaipu-record/commit/eedd6eeca8b23fcf248cdd79c7a307d29b913da1))
+* **desktop:** each screen declares the window it wants, and gets it back ([2a51798](https://github.com/niway-dev/kaipu-record/commit/2a5179835bcc5e4b022b15a76384fd637c528b47))
+* **desktop:** routes as constants, and a window preset for every screen ([e490ce1](https://github.com/niway-dev/kaipu-record/commit/e490ce1795077299e3219aca1b09f71c8954e998))
+* **desktop:** ship the free tier without a watermark ([289f2ea](https://github.com/niway-dev/kaipu-record/commit/289f2eac92ac4b6ff7b025225dd22809a5414714))
+* **desktop:** the fox lockup replaces the play-arrow mark ([951c6c5](https://github.com/niway-dev/kaipu-record/commit/951c6c516690395a4bb8a1b779d2ec15454de748))
+* **desktop:** the mascot leads the onboarding, at a size that reads ([4a895a0](https://github.com/niway-dev/kaipu-record/commit/4a895a03096aebf1cc55c108d4670a24f0b2829e))
+* **desktop:** the menu-bar icon follows the app's state ([4fd4d30](https://github.com/niway-dev/kaipu-record/commit/4fd4d3080a16e18c008a2e726dc5b297327dac2f))
+* **desktop:** the menu-bar icon follows the selected capture mode ([7d58a76](https://github.com/niway-dev/kaipu-record/commit/7d58a762a13a10af93e8998c92df329db2bb70f5))
+* **desktop:** the window grows from its centre when the editor needs room ([40ff863](https://github.com/niway-dev/kaipu-record/commit/40ff8635697d854da5b21e04830d3a9119a5b4f3))
+* **desktop:** the window grows from its centre when the editor needs room ([eecc25e](https://github.com/niway-dev/kaipu-record/commit/eecc25e7c1705e5ac02bb6ee3b3d841d81a262c2))
+* **editor:** mute as an edit — ranges and the whole video ([2d2a035](https://github.com/niway-dev/kaipu-record/commit/2d2a035b4524b0b99058f0edc11d10f3b75e54ee))
+* **editor:** mute as an edit, the editor's width back to the timeline, one stable window ([e155f25](https://github.com/niway-dev/kaipu-record/commit/e155f25c73400876b80255e2effe8f66e4688eab))
+* **editor:** the editing operations for muted ranges ([e06acbd](https://github.com/niway-dev/kaipu-record/commit/e06acbdae63e38c127949a512bbe7e269be5193a))
+* **editor:** the mute inspector — select a range, delete it from the side panel ([88f2bac](https://github.com/niway-dev/kaipu-record/commit/88f2bac58fd8f6414e73c5959c4cbc993e536ea1))
+* **editor:** the mute UI — a lane, two controls, and the keyboard delete ([ed0b8cb](https://github.com/niway-dev/kaipu-record/commit/ed0b8cbfb5fada20b731a40a52719f23d7f11204))
+* **editor:** the preview hears the muted ranges ([336222d](https://github.com/niway-dev/kaipu-record/commit/336222dba18e0239b154b4f341ca8216ed6486d1))
+* **experiment:** one StyleX button shared by web and the desktop renderer ([be6eed7](https://github.com/niway-dev/kaipu-record/commit/be6eed7b6264fce1caddd5b6b1f6bb7460ba4e32))
+* **experiment:** the shared probe mounts on both main screens ([2f6bacb](https://github.com/niway-dev/kaipu-record/commit/2f6bacbe433b5d77f60227de81bf382a618bf657))
+* free local recordings, Kaipu identity, and growth strategy ([d2c3345](https://github.com/niway-dev/kaipu-record/commit/d2c33458d74b1b43e9e1d5c910ae164ea5aee74d))
+* **kaipu-record:** every Button in the app is the shared one ([690d30b](https://github.com/niway-dev/kaipu-record/commit/690d30bd33fe5abfdfc70d59db9599e082174837))
+* **kaipu-record:** every Button in the app is the shared one ([645bfe1](https://github.com/niway-dev/kaipu-record/commit/645bfe1c08f868b363c01e927fe4cedbc3e4db8e))
+* **kaipu-record:** StyleX atomics reach every build, not just the dev probe ([3189c9b](https://github.com/niway-dev/kaipu-record/commit/3189c9b150fe480ef6d1cc25cf7db058802554f3))
+* **screenshots:** copy a capture to the clipboard automatically, plus three annotation fixes ([edd105d](https://github.com/niway-dev/kaipu-record/commit/edd105dc96036f98aecfa436d0725e140283acc6))
+* **screenshots:** copy a fresh capture to the clipboard on open (per setting) ([5cfabaf](https://github.com/niway-dev/kaipu-record/commit/5cfabaf7aa1005ac26c61efc9114638a2627771a))
+* **settings:** screenshotCopy preference (auto | manual), default auto ([7b85b94](https://github.com/niway-dev/kaipu-record/commit/7b85b9429e7b9dffca0f0e8cfcdea2e7aa0a203d))
+* **styles:** StyleX stages 0-1 — the proven pipeline and typed literal tokens with a light theme ([2deb9ec](https://github.com/niway-dev/kaipu-record/commit/2deb9ecf75de9c8763d89e5acae4d3d94a0fc24e))
+* **tokens:** stage 1 — literal typed tokens and the generated light theme ([90c733c](https://github.com/niway-dev/kaipu-record/commit/90c733c785cd41835f4eb2619bfe76c7c58e1304))
+* **tokens:** typed StyleX token references, generated from the same source ([0554710](https://github.com/niway-dev/kaipu-record/commit/055471061567e41373440e6a2ac406d9e423ee64))
+* **ui:** Badge and Card join the atoms, IconButton is deleted ([a127ac4](https://github.com/niway-dev/kaipu-record/commit/a127ac4afe3e5ac9bb14c9b3b70651ad315ca061))
+* **ui:** Badge and Card join the atoms, IconButton is deleted ([229617f](https://github.com/niway-dev/kaipu-record/commit/229617f71e2365a65ddedbd7487b13c8d18b7417))
+* **ui:** Input and SearchInput join the atoms, PageHeader is deleted ([423bed2](https://github.com/niway-dev/kaipu-record/commit/423bed2f3ef37fc481fcb41c5d8dc60fc02eefc4))
+* **ui:** Input and SearchInput join the atoms, PageHeader is deleted ([5878124](https://github.com/niway-dev/kaipu-record/commit/5878124ea6e0cce83ff6e13d175a8ecc67db5ab9))
+* **ui:** Popover joins the molecules, and the docs catch up with reality ([874d6f5](https://github.com/niway-dev/kaipu-record/commit/874d6f56c19198c3137873fac1d5869fb94622c6))
+* **ui:** Popover joins the molecules, and the docs catch up with reality ([4ddffcb](https://github.com/niway-dev/kaipu-record/commit/4ddffcbe44bf8b2b6de70068ae17d3a58daead4c))
+* **ui:** recording controls move to @kaipu/ui (stage 2b, part 1) ([f40917f](https://github.com/niway-dev/kaipu-record/commit/f40917f8cf50c422198c4d22060c57fb365966d7))
+* **ui:** recording controls move to the shared library as presentational parts ([b22954b](https://github.com/niway-dev/kaipu-record/commit/b22954b4901389b473efaa72535a37991f137832))
+* **ui:** Row and the toast stack move to the shared library ([9c0b664](https://github.com/niway-dev/kaipu-record/commit/9c0b66470df967943cc48ad6723a816c7750b91e))
+* **ui:** Row and the toast stack move to the shared library ([82a1122](https://github.com/niway-dev/kaipu-record/commit/82a1122995567db26d10ccc47268134c692e2a64))
+* **ui:** stage 2b part 2 — shared navigation rail and a real-components landing shot ([97c2212](https://github.com/niway-dev/kaipu-record/commit/97c2212c440993a6593a13e02066a908d384e844))
+* **ui:** the Modal becomes the first molecule, and Toggle sheds Radix ([a2b6545](https://github.com/niway-dev/kaipu-record/commit/a2b6545cf2cfbee1e0fd00a92f690f4089b4aa75))
+* **ui:** the Modal becomes the first molecule, and Toggle sheds Radix ([461d0c7](https://github.com/niway-dev/kaipu-record/commit/461d0c7b717cee5a70bd7e13409172d7ddd1b5fe))
+* **ui:** the navigation rail moves to the shared library ([ab94e49](https://github.com/niway-dev/kaipu-record/commit/ab94e49e159bd5529c51a6f400171efb586ee08b))
+* **ui:** the shared Button becomes an atom, with the boundary that makes it shareable ([0b6f4c4](https://github.com/niway-dev/kaipu-record/commit/0b6f4c4593d3b0a9ceb6fbc4c0a9ba2cf7202bc0))
+* **web:** marketing home, Kai branding, and conversion audit ([08d4b52](https://github.com/niway-dev/kaipu-record/commit/08d4b526e0e4c0a6f7baa09d8c6910ed9532123c))
+
+
+### Bug Fixes
+
+* **annotations:** break a word too long for the text box instead of overflowing ([b28fb22](https://github.com/niway-dev/kaipu-record/commit/b28fb22a6fa7867e53a00dd42f79af10ffc13847))
+* **annotations:** never drag the label whose inline editor is open ([c3b8f7f](https://github.com/niway-dev/kaipu-record/commit/c3b8f7f898a656884636e950839549a766bebdff))
+* **desktop:** bundle @kaipu/domain into the main process ([b950417](https://github.com/niway-dev/kaipu-record/commit/b9504177a8d1a321326f7d02b8e0b9c8f344b707))
+* **desktop:** hold a minimum window size while onboarding is up ([23a2f6a](https://github.com/niway-dev/kaipu-record/commit/23a2f6a434c5e7c89599b9acbd33e70ca683dda5))
+* **desktop:** keep @shared/types free of workspace value imports ([364c0ee](https://github.com/niway-dev/kaipu-record/commit/364c0ee1fb924baeb47d506bec86ada2b918a4ee))
+* **desktop:** resolve the window preset from the route, not from a page's mount ([2655fa3](https://github.com/niway-dev/kaipu-record/commit/2655fa30c6849f0c062e0bcfeab4b45824025154))
+* **desktop:** the light theme reaches the shared components ([9372941](https://github.com/niway-dev/kaipu-record/commit/937294157f17de20d751eff598a4c62fa6b1df6c))
+* **desktop:** the light theme reaches the shared components ([2620999](https://github.com/niway-dev/kaipu-record/commit/2620999edcbaeb3c4cc7dcc448c2878335de749b))
+* **desktop:** the window is the user's; only the video editor changes it ([4cc57b9](https://github.com/niway-dev/kaipu-record/commit/4cc57b99f6565acaa2e8e99527b31271b60f53d2))
+* **experiment:** desktop defines the prefixed tokens; a raw control button ([323ca70](https://github.com/niway-dev/kaipu-record/commit/323ca7044a358104f4aff319d5c99cc84aebc550))
+* **experiment:** the probe clears the fixed nav, and dev matches the scanner ([13d9633](https://github.com/niway-dev/kaipu-record/commit/13d9633a52272ee40df6c485a24adc88a0af2cb8))
+* **kaipu-record:** the E2E suite runs under node, so it runs at all ([62644ec](https://github.com/niway-dev/kaipu-record/commit/62644ec635f1eecb2fdcd2a34b2d4baa558c3c14))
+* **kaipu-record:** the E2E suite runs under node, so it runs at all ([32df7e7](https://github.com/niway-dev/kaipu-record/commit/32df7e74c204132076016fa65c21efeb4288b2aa))
+* **landing:** read the real keyboard shortcuts instead of typed glyphs ([5fcf402](https://github.com/niway-dev/kaipu-record/commit/5fcf4026945429a281d1ea48e05f7ef02b61176b))
+* **landing:** read the real keyboard shortcuts instead of typed glyphs ([dac5772](https://github.com/niway-dev/kaipu-record/commit/dac577283635cf92704d9daffb810b64e2891a59))
+* **screenshots:** hide the resize handles while a text label is being edited ([d056bd4](https://github.com/niway-dev/kaipu-record/commit/d056bd4cc73b340ef78cabed2ce6b5d086d30aff))
+
+
+### Performance Improvements
+
+* **desktop:** the capture panel opens without waiting for every window ([af63d48](https://github.com/niway-dev/kaipu-record/commit/af63d4851e5747fce2f0478dcc647e681e48d1e9))
+* **desktop:** the capture panel opens without waiting for every window ([6f1f630](https://github.com/niway-dev/kaipu-record/commit/6f1f630b9c8f5e3c7ae5bff8605244f079dd795d))
+
 ## [0.9.0](https://github.com/csdev19/kaipu-record-monorepo/compare/desktop-v0.8.0...desktop-v0.9.0) (2026-09-27)
 
 
