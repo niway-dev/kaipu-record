@@ -135,6 +135,12 @@
   background: var(--border);
 }
 
+/* `display: contents` keeps the tag chips flowing in the chip row's wrap while
+   the wrapper still groups them for assistive tech. */
+.tagChips {
+  display: contents;
+}
+
 .storageDotChip {
   width: 7px;
   height: 7px;

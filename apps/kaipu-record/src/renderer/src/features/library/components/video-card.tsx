@@ -9,6 +9,8 @@ import { EditBadge } from "./edit-badge";
 import { cx } from "@renderer/ui/cx";
 import styles from "./video-card.module.css";
 
+const CARD_TAGS_SHOWN = 2;
+
 interface VideoCardProps {
   video: LibraryVideo;
   badge?: EditBadgeState;
@@ -26,6 +28,10 @@ export function VideoCard({
   onEdit,
 }: VideoCardProps): React.JSX.Element {
   const t = useTranslations("library");
+  // Up to two tags in the hover specs line, the rest as "+N" (recording-tags design).
+  const tags = video.tags ?? [];
+  const cardTags = tags.slice(0, CARD_TAGS_SHOWN);
+  const hiddenTags = tags.length - cardTags.length;
 
   return (
     <div
@@ -77,6 +83,8 @@ export function VideoCard({
         <span className={styles.specs}>
           {formatSize(video.fileSizeBytes)}
           {video.kind !== "screenshot" && ` · ${formatDuration(video.durationSeconds)}`}
+          {cardTags.length > 0 && ` · ${cardTags.join(" · ")}`}
+          {hiddenTags > 0 && ` +${hiddenTags}`}
         </span>
 
         <div className={styles.actions} onClick={(e) => e.stopPropagation()}>

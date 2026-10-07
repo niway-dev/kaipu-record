@@ -15,6 +15,14 @@ export interface FilterCriteria {
   storageFilter: StorageFilter;
   sortKey: SortKey;
   searchTerm: string;
+  /** Selected tag chips. An item must carry every one of them (AND). */
+  tags: readonly string[];
+}
+
+/** One tag chip: a tag in use and how many items carry it. */
+export interface TagCount {
+  tag: string;
+  count: number;
 }
 
 export interface StorageCounts {
@@ -29,7 +37,8 @@ export interface KindCounts {
 }
 
 /**
- * Apply the toolbar's storage filter + title search, then sort. Pure: it copies
+ * Apply the toolbar's kind, storage and tag filters + search (title or any tag;
+ * selected tags narrow with AND), then sort. Pure: it copies
  * the input before sorting, so the caller's array is never mutated. This is the
  * whole of the Library page's collection logic, lifted out of the component so
  * it can be exercised without rendering.
@@ -43,7 +52,16 @@ export function selectVisibleVideos(
     if (criteria.kindFilter !== "all" && video.kind !== criteria.kindFilter) return false;
     if (criteria.storageFilter === "local" && !hasLocalCopy(video)) return false;
     if (criteria.storageFilter === "cloud" && !hasCloudCopy(video)) return false;
-    if (term && !video.title.toLowerCase().includes(term)) return false;
+    // No sidecar means no tags: such an item still shows while no tag is selected.
+    const tags = video.tags ?? [];
+    if (!criteria.tags.every((tag) => tags.includes(tag))) return false;
+    if (
+      term &&
+      !video.title.toLowerCase().includes(term) &&
+      !tags.some((tag) => tag.includes(term))
+    ) {
+      return false;
+    }
     return true;
   });
   return [...filtered].sort((a, b) => {
@@ -60,6 +78,17 @@ export function countByStorage(videos: LibraryVideo[]): StorageCounts {
     local: videos.filter(hasLocalCopy).length,
     cloud: videos.filter(hasCloudCopy).length,
   };
+}
+
+/** Tally tags across items for the tag chips: most used first, ties alphabetical. */
+export function countByTag(videos: LibraryVideo[]): TagCount[] {
+  const counts = new Map<string, number>();
+  for (const video of videos) {
+    for (const tag of video.tags ?? []) counts.set(tag, (counts.get(tag) ?? 0) + 1);
+  }
+  return [...counts]
+    .map(([tag, count]) => ({ tag, count }))
+    .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
 }
 
 /** Tally items by kind (recording vs screenshot) for the kind filter chips. */
