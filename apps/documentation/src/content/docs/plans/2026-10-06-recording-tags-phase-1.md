@@ -5,7 +5,7 @@ description: Night-shift plan for NIW2-154 — local tags in the recording sidec
 
 # Recording tags Phase 1 — implementation plan
 
-**Status: 🟡 In progress · 2026-10-06.** Implements Phase 1 (local) of
+**Status: 🟢 Ready to validate · 2026-10-07.** Implements Phase 1 (local) of
 [Recording tags — design](/specs/2026-10-06-recording-tags-design/) (Linear NIW2-154).
 The cloud replica is Phase 2 and out of scope.
 
@@ -29,3 +29,19 @@ The cloud replica is Phase 2 and out of scope.
    last, autocomplete from the vocabulary).
 6. **Tests**: domain builder, sidecar merge (title and hash fields survive), filter
    selection with tags (including items without tags), the tag editor.
+
+## Progress
+
+- 2026-10-06 night: steps 1–4 (domain, vault fields, store, IPC); stopped at the
+  step limit.
+- 2026-10-07 night: rebased on the updated #244; added the missing type import, steps 5
+  and 6 (filter chips, tag search, card tags, tag editor with autocomplete, store and
+  filter tests). Tag chips past the eighth collapse behind "+N"; a selected chip stays
+  visible while collapsed.
+
+## Assumptions
+
+- Tags apply to screenshots too (spec open question 1, default yes): same sidecar,
+  same editor.
+- The tag editor is shown only for items with a local copy; a cloud-only item has no
+  sidecar to write in Phase 1.
