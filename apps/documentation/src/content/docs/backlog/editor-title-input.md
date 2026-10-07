@@ -5,21 +5,33 @@ description: "Proposal: a title input in the screenshot editor's toolbar, prefil
 
 # Editor — name the capture
 
-> **Status: 🔵 Proposed** (2026-09-23). Owner: "when we save a document, show the input
-> with the name; if a capture already has a name we should be able to edit it right
-> there." Future feature, not scheduled.
+> **Status: 🟢 Ready to validate** — implemented 2026-10-07 (NIW2-115). Owner: "when we save
+> a document, show the input with the name; if a capture already has a name we should be
+> able to edit it right there." Validate on a packaged build, then fold into a
+> `desktop/` reference doc.
 
-## Today
+## Shipped (2026-10-07)
 
-`screenshot-editor-page.tsx` computes the title once and never shows it:
+- `features/screenshots/use-capture-title.ts` — the field's rules (committed title,
+  draft, commit / revert / adopt), free of IPC so they are unit-tested.
+- `features/screenshots/capture-title-input.tsx` — the toolbar field: Enter or blur
+  commits, Esc reverts, placeholder = auto title.
+- `screenshot-editor-page.tsx` — Save writes the field (the live draft, so a Save that
+  lands before blur still gets the typed name); on a saved shot a changed commit calls
+  `renameLocalRecording` and reports a failure with a retry; Save copy and the
+  overwrite dialog use the committed title.
+
+## Before
+
+`screenshot-editor-page.tsx` computed the title once and never showed it:
 
 ```ts
 const [baseTitle] = useState(() => source.title ?? `${t("screenshotPrefix")} — ${new Date().toLocaleString()}`);
 ```
 
-Save writes that string. The only way to change it is to find the item in the Library
-afterwards and use the inline rename there (`RecordingTitle`). So every capture is named
-`Screenshot — 23/9/2026, 16:08:31` until someone goes looking for it.
+Save wrote that string. The only way to change it was to find the item in the Library
+afterwards and use the inline rename there (`RecordingTitle`). So every capture was named
+`Screenshot — 23/9/2026, 16:08:31` until someone went looking for it.
 
 ## Proposal
 
