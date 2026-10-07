@@ -128,6 +128,8 @@ export default defineConfig({
             { slug: "backlog/video-editor-annotation-inspector" },
             { slug: "backlog/screenshot-save-strategy" },
             { slug: "backlog/screenshot-scene-doc" },
+            { slug: "backlog/image-tags" },
+            { slug: "backlog/image-viewer-zoom" },
             { slug: "backlog/screenshot-redaction" },
             { slug: "backlog/screenshot-crop" },
             { slug: "backlog/screenshot-freehand" },
