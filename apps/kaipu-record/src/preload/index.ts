@@ -145,6 +145,8 @@ const kaipuApi: KaipuElectronAPI = {
   copyScreenshotById: (id) => ipcRenderer.invoke(IPC_CHANNELS.screenshotCopyById, id),
   readScreenshotBytes: (id) => ipcRenderer.invoke(IPC_CHANNELS.screenshotReadBytes, id),
   saveScreenshot: (png, meta) => ipcRenderer.invoke(IPC_CHANNELS.screenshotSave, png, meta),
+  exportScreenshotFile: (bytes, meta) =>
+    ipcRenderer.invoke(IPC_CHANNELS.screenshotExportFile, bytes, meta),
   onCaptureScreenshotHotkey: (callback) => {
     const listener = (): void => callback();
     ipcRenderer.on(IPC_CHANNELS.screenshotHotkey, listener);

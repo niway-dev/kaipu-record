@@ -54,7 +54,9 @@
     "folderUnusableDetail": "Kaipu can't write there. Pick another folder.",
     "changeFolder": "Change folder",
     "changeFolderTitle": "Change the recordings folder",
-    "changeFolderDetail": "Your current recordings stay in the old folder; from now on Kaipu saves and shows the new folder's contents. You can switch back anytime."
+    "changeFolderDetail": "Your current recordings stay in the old folder; from now on Kaipu saves and shows the new folder's contents. You can switch back anytime.",
+    "exportPdfTitle": "Export as PDF",
+    "pdfFileType": "PDF document"
   },
   "nav": {
     "record": "Record",
@@ -470,6 +472,11 @@
     "copySuffix": "copy",
     "copyError": "Couldn't copy the screenshot to the clipboard.",
     "saveError": "Couldn't save the screenshot.",
+    "exportPdf": "PDF",
+    "exportPdfTitle": "Export as a PDF you can share and zoom",
+    "exportedPdf": "Exported",
+    "exportedPdfTitle": "Exported to “{name}”",
+    "exportPdfError": "Couldn't export the screenshot as PDF.",
     "discardTitle": "Discard unsaved changes",
     "discardBodyNeverSaved": "This screenshot isn't saved to your library. If you leave now, it's lost.",
     "discardBody": "You have unsaved edits. If you leave now, they're lost.",

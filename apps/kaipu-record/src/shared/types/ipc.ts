@@ -286,6 +286,8 @@ export const IPC_CHANNELS = {
   // Read a saved screenshot's PNG bytes by id (for re-opening it in the editor).
   screenshotReadBytes: "screenshot:read-bytes",
   screenshotSave: "screenshot:save",
+  // Write an exported capture (PDF today) to a path the user picks in a save dialog.
+  screenshotExportFile: "screenshot:export-file",
   // Renderer → main: capture done + navigated to the editor, bring the app back.
   screenshotReveal: "screenshot:reveal",
   // Main → renderer: global hotkey fired, run the region capture flow.

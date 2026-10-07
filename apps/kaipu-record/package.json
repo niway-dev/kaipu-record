@@ -37,6 +37,7 @@
     "electron-updater": "^6.3.9",
     "lucide-react": "^1.18.0",
     "mediabunny": "^1.49.0",
+    "pdf-lib": "^1.17.1",
     "posthog-js": "^1.395.0",
     "posthog-node": "^5.38.6",
     "react-router-dom": "^7.17.0",
