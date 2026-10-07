@@ -5,7 +5,7 @@ import type { WindowPresetName } from "../window-size";
  */
 
 import type { SerializedError } from "../analytics";
-import type { AppSettings, ShortcutAction, UpdateStatus } from "./ipc";
+import type { AppSettings, ShortcutAction, TagVocabularyEntry, UpdateStatus } from "./ipc";
 import type { LocalRecording, VaultDirectory } from "./library-storage";
 import type { StorageUsageResult } from "./cloud-storage";
 import type {
