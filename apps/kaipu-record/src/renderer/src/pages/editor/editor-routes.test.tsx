@@ -164,6 +164,19 @@ describe("EditorHomePage", () => {
     await waitFor(() => expect(router.state.location.pathname).toBe("/editor/image/s5"));
   });
 
+  it("shows the library's export state next to an edited recording", async () => {
+    setLibrary([
+      localItem("edited", "recording", 2, { editSavedAt: 1000 }),
+      localItem("plain", "recording", 1),
+    ]);
+    renderAt("/editor");
+
+    await screen.findAllByRole("button", { name: /^Edit Item/ });
+    const badges = screen.getAllByText("Edited · not exported");
+    expect(badges).toHaveLength(1);
+    expect(badges[0].closest("li")).toHaveTextContent("Item edited");
+  });
+
   it("says so when there is nothing to edit", async () => {
     setLibrary([]);
     renderAt("/editor");
