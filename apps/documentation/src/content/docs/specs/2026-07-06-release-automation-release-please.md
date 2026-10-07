@@ -95,11 +95,25 @@ becomes the thing that _creates_ those tags instead of a human.
   "bump-minor-pre-major": true,
   "packages": {
     "apps/kaipu-record": { "release-type": "node", "component": "desktop" },
-    "apps/web-hono":     { "release-type": "node", "component": "web" },
-    "apps/server-hono":  { "release-type": "node", "component": "api" }
+    "apps/web-hono":     { "release-type": "node", "component": "web", "prerelease": true },
+    "apps/server-hono":  { "release-type": "node", "component": "api", "prerelease": true }
   }
 }
 ```
+
+`prerelease: true` on web and api is about GitHub's **Latest** slot, not about their
+stability: the repository has one Latest shared by the three components, the desktop
+app's update link defaults to `/releases/latest`, and only the desktop release carries
+installers. Web and api releases are deploy markers with no assets, so they are
+created as pre-release and never displace the desktop release from Latest.
+`release-desktop.yml` in turn uploads with `prerelease: false` and `make_latest: true`
+(2026-10-07; migrated Linear ticket NIW2-7).
+
+Reopen condition: release-please only honours `prerelease: true` while the version is
+pre-1.0 or carries a pre-release suffix (it ANDs the flag with `major === 0 ||
+preRelease`). When web or api reaches `1.0.0`, their releases become eligible for
+Latest again and this needs a different mechanism (a `make_latest: false` edit in
+their deploy workflows, or an in-app download link that does not go through GitHub).
 
 `.release-please-manifest.json` (repo root) — seeded to the highest existing tag
 per app so release-please always moves forward without colliding with a tag that
