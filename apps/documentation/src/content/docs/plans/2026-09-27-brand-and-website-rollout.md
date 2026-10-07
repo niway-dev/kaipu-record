@@ -5,7 +5,7 @@ description: Execution sequence for preserving Kaipu's meaning, selecting Kai an
 
 # Brand identity and website rollout
 
-**Status: 🟡 In progress · updated 2026-10-01.** Identity documentation, README correction, EN/ES landing copy, the four-moments home, `@kaipu/brand` with the fox, and the menu-bar capture-mode marks are on `main`. The home's Kai section and hero copy ship in [PR #202](https://github.com/niway-dev/kaipu-record/pull/202). Still pending: the desktop bundle icon export, the SVG lockup and favicon crop, and media production. Parent: [Product growth](/backlog/product-growth/).
+**Status: 🟡 In progress · updated 2026-10-07.** Identity documentation, README correction, EN/ES landing copy, the four-moments home, `@kaipu/brand` with the fox, and the menu-bar capture-mode marks are on `main`. The home's Kai section and hero copy ship in [PR #202](https://github.com/niway-dev/kaipu-record/pull/202). The desktop bundle icon export is scripted from `@kaipu/brand` ([NIW2-181](https://linear.app/niway/issue/NIW2-181), [plan](/plans/2026-10-07-app-icon-derivation/)); its Dock/⌘-Tab/DMG check is pending under F. Still pending: the SVG lockup and favicon crop, and media production. Parent: [Product growth](/backlog/product-growth/).
 
 ## Goal and settled inputs
 
@@ -31,6 +31,7 @@ The creator already has new logos and notch-state artwork. First obtain their pa
 - [ ] Test the small symbol at 16/24/32 px, one color, and light/dark; test the full character independently.
 - [x] Select wordmark, small symbol, app icon, monochrome tray mark, and full Kai. Record which source generates each output. Done: `packages/brand/src/index.ts` selects by purpose (`app`, `product`/`micro`, `record`/`screenshot`, `permissions`/`done`); the menu-bar capture-mode marks follow the selected recording or screenshot mode.
 - [ ] If pixel art is selected, normalize its grid and palette; preserve a simpler small-size mark.
+- [x] Export the desktop bundle icon from the selected app mark. Done (NIW2-181): `apps/kaipu-record/scripts/generate-app-icons.sh` (`bun run icons`) derives `build/icon.icns`, `build/icon.png` and `resources/icon.png` from `packages/brand/assets/logo-app.svg` with `sips` + `iconutil`; the dev run sets the Dock icon from `resources/icon.png`; `src/main/app-icon.test.ts` fails when the logo changes without re-running the script. `build/icon.ico` (Windows) is still the old art. See [App icon derivation](/plans/2026-10-07-app-icon-derivation/).
 
 **Existing consumers to inspect:** `apps/web-hono/src/components/kaipu-mark.tsx`, `apps/web-hono/public/favicon*`, `apps/kaipu-record/src/renderer/src/assets/brand/`, `apps/kaipu-record/src/renderer/src/shell/kaipu-mark.tsx`, `apps/kaipu-record/resources/`, desktop packaging icons, and `apps/documentation/public/favicon.svg`.
 
@@ -76,7 +77,7 @@ The [website concept](/marketing/website-concept/) owns the composition and copy
 - [ ] Run `bun run build` in `apps/documentation`; check internal links and status banners.
 - [ ] Review EN/ES headings on mobile, keyboard navigation, contrast, light/dark, reduced motion, and video controls.
 - [ ] Verify the actual download artifact before publishing “no watermark”; enable Windows/source CTAs only when available.
-- [ ] Validate desktop icons/tray/notch in a packaged build if those surfaces change.
+- [ ] Validate desktop icons/tray/notch in a packaged build if those surfaces change. The app icon changed in NIW2-181: check Dock, ⌘-Tab and Finder on a fresh DMG install (`killall Dock` if the cache still holds the old icon).
 - [ ] Update backlog status to 🟢 after implementation, and to ✅ only after production validation.
 
 ## Restart here
