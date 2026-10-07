@@ -18,6 +18,11 @@ import {
   FLAT_BEAUTIFY,
 } from "@renderer/features/screenshots/beautify";
 import { SaveOptionsDialog } from "@renderer/features/screenshots/save-options-dialog";
+import { CaptureTitleInput } from "@renderer/features/screenshots/capture-title-input";
+import {
+  resolveCaptureTitle,
+  useCaptureTitle,
+} from "@renderer/features/screenshots/use-capture-title";
 import {
   AnnotationLayer,
   AnnotationOptions,
@@ -95,8 +100,25 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
   const [autoSaved, setAutoSaved] = useState(false);
   const navigate = useNavigate();
   const [askSave, setAskSave] = useState(false);
-  const [baseTitle] = useState(
+  // The auto title is computed once; the toolbar field starts from it and is
+  // what Save writes. On a saved shot, committing the field renames the vault item
+  // in place — the same IPC the Library's inline rename uses.
+  const [autoTitle] = useState(
     () => source.title ?? `${t("screenshotPrefix")} — ${new Date().toLocaleString()}`,
+  );
+  const renameSaved = async (id: string, next: string): Promise<void> => {
+    try {
+      await window.electronAPI.renameLocalRecording(id, next);
+    } catch (error) {
+      reportError(t("renameError"), error, {
+        context: { phase: "rename", id },
+        retry: () => void renameSaved(id, next),
+      });
+    }
+  };
+  const captureTitle = useCaptureTitle(
+    autoTitle,
+    savedId ? (next) => void renameSaved(savedId, next) : null,
   );
 
   // Unsaved-changes guard. A fresh capture (blob) lives ONLY in memory, so it's
@@ -198,10 +220,13 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
     busy.current = true;
     try {
       const saved = await window.electronAPI.saveScreenshot(await exportPng(), {
-        title: opts.title ?? baseTitle,
+        // The live field, not only its committed value: Save must write what the
+        // user sees even if the field has not blurred yet (e.g. a shortcut).
+        title: opts.title ?? resolveCaptureTitle(captureTitle.draft, captureTitle.autoTitle),
         overwriteId: opts.overwriteId,
       });
       setSavedId(saved.id);
+      captureTitle.adopt(saved.title);
       setDirty(false); // now safely in the vault — leaving no longer loses work
       if (!opts.silent) showFeedback({ kind: "saved", name: saved.title });
       return saved.title;
@@ -273,7 +298,7 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
   };
   const onSaveCopy = (): void => {
     setAskSave(false);
-    void persist({ title: `${baseTitle} (${t("copySuffix")})` });
+    void persist({ title: `${captureTitle.title} (${t("copySuffix")})` });
   };
 
   // "savedAndCopied" lights both indicators at once — that combined state is exactly
@@ -290,6 +315,7 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
     <div className={styles.editor}>
       <div className={styles.toolbar}>
         <AnnotationToolbar tools={tools} onPick={() => scene.select(null)} />
+        <CaptureTitleInput title={captureTitle} />
         <div className={styles.actions}>
           <button
             type="button"
@@ -417,7 +443,7 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
 
       {askSave && (
         <SaveOptionsDialog
-          title={baseTitle}
+          title={captureTitle.title}
           onOverwrite={onOverwrite}
           onSaveCopy={onSaveCopy}
           onCancel={() => setAskSave(false)}
