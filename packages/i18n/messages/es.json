@@ -54,7 +54,9 @@
     "folderUnusableDetail": "Kaipu no puede escribir ahí. Elige otra carpeta.",
     "changeFolder": "Cambiar carpeta",
     "changeFolderTitle": "Cambiar la carpeta de grabaciones",
-    "changeFolderDetail": "Tus grabaciones actuales se quedan en la carpeta anterior; desde ahora Kaipu guarda y muestra las de la carpeta nueva. Puedes volver a la anterior cuando quieras."
+    "changeFolderDetail": "Tus grabaciones actuales se quedan en la carpeta anterior; desde ahora Kaipu guarda y muestra las de la carpeta nueva. Puedes volver a la anterior cuando quieras.",
+    "exportPdfTitle": "Exportar como PDF",
+    "pdfFileType": "Documento PDF"
   },
   "nav": {
     "record": "Grabar",
@@ -470,6 +472,11 @@
     "copySuffix": "copia",
     "copyError": "No pudimos copiar la captura al portapapeles.",
     "saveError": "No pudimos guardar la captura.",
+    "exportPdf": "PDF",
+    "exportPdfTitle": "Exportar como PDF para compartir y hacer zoom",
+    "exportedPdf": "Exportado",
+    "exportedPdfTitle": "Exportado a “{name}”",
+    "exportPdfError": "No pudimos exportar la captura como PDF.",
     "discardTitle": "Descartar cambios sin guardar",
     "discardBodyNeverSaved": "Esta captura no está guardada en tu biblioteca. Si sales ahora, se pierde.",
     "discardBody": "Tienes ediciones sin guardar. Si sales ahora, se pierden.",

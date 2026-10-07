@@ -1,8 +1,12 @@
-import { readFile } from "node:fs/promises";
-import { clipboard, ipcMain, nativeImage } from "electron";
+import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage } from "electron";
+import { createMainTranslator } from "@kaipu/i18n/main";
 import { IPC_CHANNELS } from "@shared/types/ipc";
 import type { LocalRecording } from "@shared/types/library-storage";
+import { exportFileName } from "./export-file-name";
 import { createScreenshotProvider } from "./screenshot-capture";
+import { getAppSettings } from "../infrastructure/settings-store";
 import { currentVault, screenshotFilePath } from "../library";
 
 const provider = createScreenshotProvider();
@@ -88,6 +92,34 @@ export function registerScreenshotHandlers(windows: CaptureWindowHooks): void {
       const saved = await vault.describe(id);
       if (!saved) throw new Error(`screenshot save: could not describe ${id} after writing`);
       return saved;
+    },
+  );
+
+  // Exports (PDF) are files to hand to someone, not library items: they go where
+  // the user says, outside the vault, so the library never has to understand them.
+  ipcMain.handle(
+    IPC_CHANNELS.screenshotExportFile,
+    async (
+      event,
+      bytes: ArrayBuffer,
+      meta: { suggestedName: string; extension: string },
+    ): Promise<{ path: string } | null> => {
+      const window = BrowserWindow.fromWebContents(event.sender);
+      const t = createMainTranslator(getAppSettings().locale);
+      const options: Electron.SaveDialogOptions = {
+        title: t("dialogs.exportPdfTitle"),
+        defaultPath: join(
+          app.getPath("downloads"),
+          exportFileName(meta.suggestedName, meta.extension),
+        ),
+        filters: [{ name: t("dialogs.pdfFileType"), extensions: [meta.extension] }],
+      };
+      const result = window
+        ? await dialog.showSaveDialog(window, options)
+        : await dialog.showSaveDialog(options);
+      if (result.canceled || !result.filePath) return null;
+      await writeFile(result.filePath, Buffer.from(bytes));
+      return { path: result.filePath };
     },
   );
 }
