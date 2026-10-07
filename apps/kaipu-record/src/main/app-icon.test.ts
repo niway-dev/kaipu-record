@@ -21,9 +21,7 @@ describe("app icon", () => {
       .update(Buffer.concat([readFileSync(SOURCE), readFileSync(SCRIPT)]))
       .digest("hex");
     const stamp = readFileSync(STAMP, "utf8").trim();
-    expect(stamp, "run `bun run icons` in apps/kaipu-record and commit the outputs").toBe(
-      expected,
-    );
+    expect(stamp, "run `bun run icons` in apps/kaipu-record and commit the outputs").toBe(expected);
   });
 
   it("ships a macOS .icns and the PNGs the main process and builder read", () => {
