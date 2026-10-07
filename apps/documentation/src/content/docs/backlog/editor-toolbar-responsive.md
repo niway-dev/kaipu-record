@@ -5,7 +5,34 @@ description: The editor's top toolbar packs tools, a 7-swatch color palette, a s
 
 # Screenshot editor toolbar — responsive / scalable layout
 
-> **Status: 🔵 Proposed.**
+> **Status: 🟢 Ready to validate (prod review pending).**
+
+## Decision
+
+Two of the options below shipped, in two steps:
+
+1. **Color + stroke left the row** (option 2, an earlier change): the palette and the
+   stroke/size picker live in the floating `AnnotationOptions` panel over the canvas, so the
+   `COLOR` / `TRAZO` / `TAMAÑO` labels that collided with the pickers are no longer in the
+   toolbar at all. What remains in the row is the tool group and undo / redo / Copy / Save
+   (/ Discard).
+2. **Labels drop when the row cannot hold them** (option 1). The Copy / Save / Discard
+   buttons become icon-only — tooltip and accessible name unchanged — once the row's
+   content would overflow it. The breakpoint is not a fixed pixel width: `useCompactRow`
+   (`apps/kaipu-record/src/renderer/src/ui/use-compact-row.ts`) measures the row's two
+   groups with the labels shown and sets `data-compact` on the row when they do not fit,
+   re-measuring on resize and when a label changes wording or Discard appears. A fixed
+   breakpoint would have to be retuned per translation (Spanish labels are ~30% wider) and
+   per button added, and at the app's 900px floor it would either never fire or strip the
+   labels from a row that still has ~190px to spare.
+
+Checked by `apps/kaipu-record/e2e/screenshot-editor.e2e.ts`: at 1040px (the preset's
+starting width) and 900px (the floor, and the width the window actually opens at) the row
+holds every control on one line with nothing overlapping and the labels on; forced below
+the floor (680px) it collapses to icons rather than overlapping.
+
+Not done, and not needed for now: a second row (option 4) or an overflow menu (option 3).
+Reopen if a control is added that does not fit even icon-only at 900px.
 
 ## Problem
 
