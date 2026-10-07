@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Navigate, useBlocker, useLocation, useNavigate } from "react-router-dom";
-import { Check, Copy, Download, Redo2, Undo2, ZoomIn, ZoomOut } from "lucide-react";
+import { Check, Copy, Download, Redo2, Trash2, Undo2, ZoomIn, ZoomOut } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { useImageSource, type ImageSource } from "@renderer/features/screenshots/image-source";
 import {
@@ -27,6 +27,7 @@ import {
   useEditorScene,
 } from "@renderer/features/screenshots/annotations";
 import { useTransientValue } from "@renderer/ui/use-transient-value";
+import { useCompactRow } from "@renderer/ui/use-compact-row";
 import styles from "./screenshot-editor-page.module.css";
 
 const ZOOM_MIN = 0.5;
@@ -67,6 +68,7 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
   const tools = useAnnotationTools();
   const imgRef = useRef<HTMLImageElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(1);
   // One transient "last action" indicator — copied or saved-with-name — that
   // auto-clears; avoids the illegal "both shown" state two flags allowed.
@@ -282,13 +284,24 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
   const savedName =
     feedback?.kind === "saved" || feedback?.kind === "savedAndCopied" ? feedback.name : null;
 
+  // The toolbar drops the action labels only when the row cannot hold them (see
+  // useCompactRow). The revision names what changes the row's content without
+  // resizing it: the toolbar mounting with the image, a label flipping to its
+  // "done" wording, Discard appearing after an auto-save.
+  useCompactRow(toolbarRef, `${hasImage}:${copied}:${savedName ?? ""}:${autoSaved}`);
+
   // `image` is null on the first render while the reader resolves — render nothing.
   // Moved here (past every hook) so the auto-save effect above stays unconditional.
   if (!image) return <></>;
 
   return (
     <div className={styles.editor}>
-      <div className={styles.toolbar}>
+      <div
+        ref={toolbarRef}
+        className={styles.toolbar}
+        role="toolbar"
+        aria-label={t("editorToolbar")}
+      >
         <AnnotationToolbar tools={tools} onPick={() => scene.select(null)} />
         <div className={styles.actions}>
           <button
@@ -315,16 +328,19 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
             className={styles.secondary}
             data-done={copied}
             disabled={!imageReady}
+            aria-label={copied ? t("copied") : t("copy")}
             title={copied ? t("copiedTitle") : t("copyTitle")}
             onClick={onCopy}
           >
-            {copied ? <Check size={16} /> : <Copy size={16} />} {copied ? t("copied") : t("copy")}
+            {copied ? <Check size={16} /> : <Copy size={16} />}
+            <span className={styles.label}>{copied ? t("copied") : t("copy")}</span>
           </button>
           <button
             type="button"
             className={styles.save}
             data-done={savedName !== null}
             disabled={!imageReady}
+            aria-label={savedName ? t("saved") : t("save")}
             title={
               savedName
                 ? feedback?.kind === "savedAndCopied"
@@ -334,17 +350,19 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
             }
             onClick={onSave}
           >
-            {savedName ? <Check size={16} /> : <Download size={16} />}{" "}
-            {savedName ? t("saved") : t("save")}
+            {savedName ? <Check size={16} /> : <Download size={16} />}
+            <span className={styles.label}>{savedName ? t("saved") : t("save")}</span>
           </button>
           {autoSaved && savedId && (
             <button
               type="button"
               className={styles.secondary}
+              aria-label={t("discardSaved")}
               title={t("discardSavedTitle")}
               onClick={() => void onDiscardSaved()}
             >
-              {t("discardSaved")}
+              <Trash2 size={16} />
+              <span className={styles.label}>{t("discardSaved")}</span>
             </button>
           )}
         </div>
