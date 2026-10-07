@@ -5,7 +5,7 @@ description: Night-shift plan for NIW2-158 — how the auto polish research brie
 
 # Auto polish research — plan
 
-**Status: 🟡 In progress · 2026-10-07.** Plan for
+**Status: 🟢 Ready to validate · 2026-10-07.** Findings written into the brief. Plan for
 [NIW2-158](https://linear.app/niway/issue/NIW2-158). Research only: no product code.
 
 ## Inputs
