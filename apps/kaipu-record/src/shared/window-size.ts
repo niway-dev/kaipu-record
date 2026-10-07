@@ -73,7 +73,9 @@ export type WindowPresetName = keyof typeof WINDOW_PRESETS;
  * window had nothing to shrink it back on the way out.
  */
 export function presetForPath(pathname: string): WindowPresetName {
-  return pathname === ROUTES.videoEditor ? "videoEditor" : "main";
+  // Every video editor URL (`/editor/video/:assetId`) lives under this prefix.
+  const videoEditorPrefix = ROUTES.editorVideo.replace(":assetId", "");
+  return pathname.startsWith(videoEditorPrefix) ? "videoEditor" : "main";
 }
 
 /** True for the one screen that takes the window over. */

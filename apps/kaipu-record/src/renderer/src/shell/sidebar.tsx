@@ -1,5 +1,5 @@
 import { NavLink, matchPath, useLocation } from "react-router-dom";
-import { Video, Library, Camera, Keyboard, Settings, User, Cloud } from "lucide-react";
+import { Video, Library, Camera, Keyboard, Settings, User, Cloud, PenLine } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { KaipuLogo } from "@kaipu/brand";
 import { Rail, type RailItem } from "@kaipu/ui";
@@ -7,7 +7,7 @@ import { ROUTES } from "@shared/routes";
 
 interface NavItem {
   to: string;
-  labelKey: "record" | "screenshots" | "library" | "shortcuts" | "settings" | "cloud";
+  labelKey: "record" | "screenshots" | "editor" | "library" | "shortcuts" | "settings" | "cloud";
   Icon: typeof Video;
   end?: boolean;
 }
@@ -21,6 +21,8 @@ interface LinkItem extends RailItem {
 const NAV: NavItem[] = [
   { to: ROUTES.record, labelKey: "record", Icon: Video, end: true },
   { to: ROUTES.screenshots, labelKey: "screenshots", Icon: Camera },
+  // Active on every /editor/* URL (not `end`), so an open item keeps it lit.
+  { to: ROUTES.editor, labelKey: "editor", Icon: PenLine },
   { to: ROUTES.library, labelKey: "library", Icon: Library },
   { to: ROUTES.shortcuts, labelKey: "shortcuts", Icon: Keyboard },
   { to: ROUTES.settings, labelKey: "settings", Icon: Settings },

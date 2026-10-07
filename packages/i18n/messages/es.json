@@ -63,7 +63,16 @@
     "shortcuts": "Atajos",
     "settings": "Ajustes",
     "account": "Cuenta",
-    "cloud": "Cloud"
+    "cloud": "Cloud",
+    "editor": "Editor"
+  },
+  "editor": {
+    "title": "Editor",
+    "subtitle": "Cada Editar de Kaipu se abre aquí. Elige algo reciente para seguir trabajando.",
+    "recentTitle": "Recientes",
+    "empty": "Aún no hay nada que editar. Graba un video o toma una captura primero.",
+    "edit": "Editar",
+    "editItem": "Editar {title}"
   },
   "settings": {
     "title": "Ajustes",
