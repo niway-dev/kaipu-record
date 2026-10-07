@@ -3,6 +3,8 @@ import { PenLine } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { useLocalLibrary } from "@renderer/features/library/hooks/use-local-library";
 import { KindBadge } from "@renderer/features/library/components/kind-badge";
+import { EditBadge } from "@renderer/features/library/components/edit-badge";
+import { buildLineage, editBadge } from "@renderer/features/library/lineage";
 import { canOpenInEditor, useOpenInEditor } from "@renderer/features/editor/open-in-editor";
 import styles from "./editor-page.module.css";
 
@@ -26,6 +28,10 @@ export function EditorHomePage(): React.JSX.Element {
         .slice(0, RECENT_EDITABLE_COUNT),
     [videos],
   );
+  // The same export-state signal the library shows: this list is "what you are
+  // working on", and whether those edits are in any file yet is the one fact a
+  // visitor of this page needs before picking an item.
+  const lineage = useMemo(() => buildLineage(videos), [videos]);
 
   return (
     <div className={styles.page}>
@@ -46,6 +52,7 @@ export function EditorHomePage(): React.JSX.Element {
               )}
               <span className={styles.rowTitle}>{item.title}</span>
               <KindBadge kind={item.kind} />
+              <EditBadge state={editBadge(item, lineage)} />
               <button
                 type="button"
                 className={styles.edit}
