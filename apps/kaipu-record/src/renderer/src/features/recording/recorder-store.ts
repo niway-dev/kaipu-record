@@ -1,4 +1,4 @@
-import type { LocalRecording } from "@shared/types";
+import type { LocalRecording, RecordingSettings } from "@shared/types";
 import {
   beginCursorTrackSession,
   type CursorTrackSession,
@@ -73,6 +73,8 @@ let stopping = false;
 let cancelRequested = false;
 let sessionCounter = 0;
 let lastResolveInput: (() => StartInput) | null = null;
+/** Unsubscribes the live-settings forwarder of the active take. */
+let stopLiveSettings: (() => void) | null = null;
 
 const listeners = new Set<() => void>();
 const completeListeners = new Set<(recording: LocalRecording) => void>();
@@ -211,6 +213,7 @@ async function beginEngine(input: StartInput): Promise<void> {
     }
 
     engine = handle;
+    stopLiveSettings = forwardLiveSettings(handle, input);
     const activeTrack = cursorTrack;
     void handle.firstMediaTimestamp.then(({ rendererMs, quality }) =>
       activeTrack?.anchor(rendererMs, quality),
@@ -225,6 +228,7 @@ async function beginEngine(input: StartInput): Promise<void> {
         elapsedSeconds: Math.floor(elapsedMs(clock, Date.now()) / 1000),
         levels: paused ? [0, 0, 0, 0, 0] : engine.readLevels(),
         status: paused ? "paused" : "recording",
+        systemAudioAvailable: engine.hasSystemAudio,
       });
     }, 100);
   } catch (error) {
@@ -246,6 +250,56 @@ async function beginEngine(input: StartInput): Promise<void> {
     // immediately usable again; the toast above carries the retry action.
     update({ status: "idle", countdown: null });
   }
+}
+
+/**
+ * While a take runs, forward the user's live toggles (any window, any shortcut —
+ * they all just write `RecordingSettings`) to the engine. When the engine answers
+ * "unavailable", write the setting back to `false` so every surface shows the
+ * truth. Calls are serialized so a quick off/on never lands out of order.
+ * Returns the unsubscribe.
+ */
+function forwardLiveSettings(handle: EngineHandle, input: StartInput): () => void {
+  let micOn = input.microphoneDeviceId !== null;
+  let sysOn = input.systemAudio;
+  let queue: Promise<void> = Promise.resolve();
+  let active = true;
+  const writeBack = (patch: Partial<RecordingSettings>): void => {
+    if (active) window.electronAPI.updateRecordingSettings(patch);
+  };
+
+  // System audio requested but no loopback (e.g. a macOS dev build): the toggle
+  // must not claim "on" for a take that cannot carry it.
+  if (sysOn && !handle.hasSystemAudio) {
+    sysOn = false;
+    writeBack({ isSystemAudioEnabled: false });
+  }
+
+  const unsubscribe = window.electronAPI.onRecordingSettingsChanged((settings) => {
+    if (settings.isMicrophoneEnabled !== micOn) {
+      micOn = settings.isMicrophoneEnabled;
+      const on = micOn;
+      const deviceId = settings.selectedMicrophone?.deviceId ?? null;
+      queue = queue.then(async () => {
+        const result = await handle.setMicrophoneEnabled(on, deviceId);
+        if (result === "unavailable" && on) {
+          micOn = false;
+          writeBack({ isMicrophoneEnabled: false });
+        }
+      });
+    }
+    if (settings.isSystemAudioEnabled !== sysOn) {
+      sysOn = settings.isSystemAudioEnabled;
+      if (handle.setSystemAudioEnabled(sysOn) === "unavailable" && sysOn) {
+        sysOn = false;
+        writeBack({ isSystemAudioEnabled: false });
+      }
+    }
+  });
+  return () => {
+    active = false;
+    unsubscribe();
+  };
 }
 
 export function pauseRecording(): void {
@@ -272,6 +326,8 @@ async function stopRecording(): Promise<void> {
   // Guard re-entry: the user clicking Stop and an engine-failure can both fire.
   if (stopping || !activeEngine || !activeSessionId) return;
   stopping = true;
+  stopLiveSettings?.();
+  stopLiveSettings = null;
   update({ status: "finalizing", countdown: null });
   const durationMs = clock ? elapsedMs(clock, Date.now()) : 0;
   const durationSeconds = Math.floor(durationMs / 1000);

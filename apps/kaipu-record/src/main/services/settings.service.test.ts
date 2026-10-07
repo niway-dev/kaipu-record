@@ -40,6 +40,9 @@ describe("mergeSettings", () => {
       stopRecording: "Command+Control+2",
       bringToFront: "Command+Control+3",
       captureScreenshot: "Command+Control+4",
+      toggleMicrophone: "Command+Control+5",
+      toggleSystemAudio: "Command+Control+6",
+      toggleCamera: "Command+Control+7",
     };
     expect(
       mergeSettings({
@@ -136,7 +139,22 @@ describe("mergeShortcuts", () => {
       stopRecording: DEFAULT_SHORTCUTS.stopRecording,
       bringToFront: DEFAULT_SHORTCUTS.bringToFront,
       captureScreenshot: DEFAULT_SHORTCUTS.captureScreenshot,
+      toggleMicrophone: DEFAULT_SHORTCUTS.toggleMicrophone,
+      toggleSystemAudio: DEFAULT_SHORTCUTS.toggleSystemAudio,
+      toggleCamera: DEFAULT_SHORTCUTS.toggleCamera,
     });
+  });
+
+  it("gives settings stored before the live toggles existed their new defaults", () => {
+    const merged = mergeShortcuts({
+      startRecording: "Command+Control+1",
+      stopRecording: "Command+Control+2",
+      bringToFront: "Command+Control+3",
+      captureScreenshot: "Command+Control+4",
+    });
+    expect(merged.toggleMicrophone).toBe("Command+Control+M");
+    expect(merged.toggleSystemAudio).toBe("Command+Control+A");
+    expect(merged.toggleCamera).toBe("Command+Control+K");
   });
 
   it("ignores non-string bindings", () => {

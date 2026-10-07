@@ -80,4 +80,30 @@ describe("CapturePanel — tabs", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Capture" }));
     expect(screen.queryByRole("button", { name: /Capture Screen/ })).not.toBeInTheDocument();
   });
+
+  it("keeps the three toggles live mid-take while the source card stays locked", async () => {
+    window.electronAPI = {
+      ...realApi,
+      getRecordingState: async () => ({
+        active: true,
+        status: "recording",
+        elapsedSeconds: 5,
+        systemAudioAvailable: false,
+      }),
+    };
+    const { container } = render(<CapturePanel />);
+    await waitFor(() => expect(container.querySelector("[inert]")).not.toBeNull());
+
+    const toggles = screen.getAllByText("OFF").map((el) => el.closest("button")!);
+    expect(toggles).toHaveLength(3);
+    for (const toggle of toggles) expect(toggle.closest("[inert]")).toBeNull();
+    // No loopback in this take → the system-audio tile (second) is disabled.
+    expect(toggles[0]).toBeEnabled();
+    expect(toggles[1]).toBeDisabled();
+    expect(toggles[2]).toBeEnabled();
+    // The source card sits in the locked (inert) wrapper.
+    const locked = container.querySelectorAll("[inert]");
+    expect(locked).toHaveLength(1);
+    expect(locked[0].querySelector("button")).not.toBeNull();
+  });
 });

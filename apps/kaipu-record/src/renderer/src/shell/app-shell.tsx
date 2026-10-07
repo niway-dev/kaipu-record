@@ -10,16 +10,20 @@ import { presetForPath } from "@shared/window-size";
 import { EnvBadge } from "./env-badge";
 import styles from "./app-shell.module.css";
 
-/** action → `shortcuts` namespace status-word keys for the status bar. */
-const STATUS_KEY: Record<
-  ShortcutAction,
-  "statusStart" | "statusStop" | "statusShowApp" | "statusCapture"
+/**
+ * action → `shortcuts` namespace status-word keys for the status bar. The live
+ * input toggles are left out on purpose: seven hints would crowd the bar, and
+ * the Shortcuts page lists every binding.
+ */
+const STATUS_KEY: Partial<
+  Record<ShortcutAction, "statusStart" | "statusStop" | "statusShowApp" | "statusCapture">
 > = {
   startRecording: "statusStart",
   stopRecording: "statusStop",
   bringToFront: "statusShowApp",
   captureScreenshot: "statusCapture",
 };
+const STATUS_BAR_DEFINITIONS = SHORTCUT_DEFINITIONS.filter((def) => STATUS_KEY[def.action]);
 
 /**
  * Main app layout: a fixed icon sidebar plus the active page rendered into <Outlet />,
@@ -50,11 +54,11 @@ export function AppShell(): React.JSX.Element {
       <div className={styles.statusBar}>
         <EnvBadge className={styles.statusEnv} />
         {shortcuts &&
-          SHORTCUT_DEFINITIONS.map((def, i) => (
+          STATUS_BAR_DEFINITIONS.map((def, i) => (
             <React.Fragment key={def.action}>
               {i > 0 && <span className={styles.statusDot}>·</span>}
               <span>
-                <kbd>{shortcuts[def.action]}</kbd> {t(STATUS_KEY[def.action])}
+                <kbd>{shortcuts[def.action]}</kbd> {t(STATUS_KEY[def.action]!)}
               </span>
             </React.Fragment>
           ))}

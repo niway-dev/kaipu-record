@@ -22,6 +22,9 @@ export function useShortcutLabels(): ShortcutLabels | null {
         stopRecording: formatAccelerator(settings.shortcuts.stopRecording),
         bringToFront: formatAccelerator(settings.shortcuts.bringToFront),
         captureScreenshot: formatAccelerator(settings.shortcuts.captureScreenshot),
+        toggleMicrophone: formatAccelerator(settings.shortcuts.toggleMicrophone),
+        toggleSystemAudio: formatAccelerator(settings.shortcuts.toggleSystemAudio),
+        toggleCamera: formatAccelerator(settings.shortcuts.toggleCamera),
       });
     void window.electronAPI.getSettings().then(apply);
     return window.electronAPI.onSettingsChanged(apply);

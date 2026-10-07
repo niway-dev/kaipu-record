@@ -378,6 +378,12 @@ app.whenReady().then(() => {
       stopRecording: () => mainWindow?.webContents.send(IPC_CHANNELS.recordingCommand, "stop"),
       bringToFront: bringAppToFront,
       captureScreenshot: triggerCaptureScreenshot,
+      // Live input toggles write the shared RecordingSettings, never the engine:
+      // mid-take the recorder forwards the change, outside a take it is just the
+      // pre-recording toggle.
+      toggleMicrophone: () => hub?.toggleRecordingSetting("isMicrophoneEnabled"),
+      toggleSystemAudio: () => hub?.toggleRecordingSetting("isSystemAudioEnabled"),
+      toggleCamera: () => hub?.toggleRecordingSetting("isCameraEnabled"),
     },
   });
   onSettingsChanged(() => applyGlobalShortcuts());

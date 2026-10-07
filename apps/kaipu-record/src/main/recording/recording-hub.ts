@@ -24,9 +24,22 @@ import {
   getAppSettings,
 } from "../infrastructure/settings-store";
 
+/** The three input toggles a global shortcut can flip. */
+export type LiveRecordingToggle =
+  | "isMicrophoneEnabled"
+  | "isSystemAudioEnabled"
+  | "isCameraEnabled";
+
 export interface RecordingHubHandle {
   /** True while a recording is active or paused. */
   isActive(): boolean;
+  /**
+   * Flip one of the three input toggles, exactly as clicking it in a window
+   * does (the global shortcuts use this). Mid-take the recorder picks the
+   * change up from the settings broadcast; outside a take it is just the
+   * pre-recording setting.
+   */
+  toggleRecordingSetting(key: LiveRecordingToggle): void;
   /**
    * Hide the camera bubble for the duration of a screenshot capture (it sits
    * always-on-top, so it would otherwise land in the shot) without releasing
@@ -130,7 +143,7 @@ export function registerRecordingHub(
     }
   };
   ipcMain.handle(IPC_CHANNELS.recordingSettingsGet, (): RecordingSettings => settings);
-  ipcMain.on(IPC_CHANNELS.recordingSettingsUpdate, (_e, patch: Partial<RecordingSettings>) => {
+  const applySettingsPatch = (patch: Partial<RecordingSettings>): void => {
     const cameraWasOn = settings.isCameraEnabled;
     Object.assign(settings, patch);
     broadcastSettings();
@@ -149,6 +162,9 @@ export function registerRecordingHub(
         cameraBubble.destroy();
       }
     }
+  };
+  ipcMain.on(IPC_CHANNELS.recordingSettingsUpdate, (_e, patch: Partial<RecordingSettings>) => {
+    applySettingsPatch(patch);
   });
 
   // ── Disk writer ──────────────────────────────────────────────────────
@@ -286,6 +302,7 @@ export function registerRecordingHub(
 
   return {
     isActive: () => activity.active,
+    toggleRecordingSetting: (key) => applySettingsPatch({ [key]: !settings[key] }),
     hideCameraBubbleForCapture: () => {
       if (!cameraBubble.isVisible()) return;
       cameraBubbleHiddenForCapture = true;

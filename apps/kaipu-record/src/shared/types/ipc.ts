@@ -23,6 +23,9 @@ export const SHORTCUT_ACTIONS = [
   "stopRecording",
   "bringToFront",
   "captureScreenshot",
+  "toggleMicrophone",
+  "toggleSystemAudio",
+  "toggleCamera",
 ] as const;
 export type ShortcutAction = (typeof SHORTCUT_ACTIONS)[number];
 
@@ -97,6 +100,32 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
     label: "Capture screenshot",
     description: "Open the area selection to take a screenshot",
     statusWord: "capture",
+  },
+  // Live input toggles: they flip the recording setting with or without a take
+  // (outside a take they change the pre-recording toggle, as clicking it does).
+  {
+    action: "toggleMicrophone",
+    defaultAccelerator: "Command+Control+M",
+    group: "recording",
+    label: "Mute / unmute microphone",
+    description: "Turn your voice on or off, also mid-recording",
+    statusWord: "mic",
+  },
+  {
+    action: "toggleSystemAudio",
+    defaultAccelerator: "Command+Control+A",
+    group: "recording",
+    label: "System audio on / off",
+    description: "Turn what the computer plays on or off, also mid-recording",
+    statusWord: "audio",
+  },
+  {
+    action: "toggleCamera",
+    defaultAccelerator: "Command+Control+K",
+    group: "recording",
+    label: "Show / hide camera",
+    description: "Show or hide the camera bubble, also mid-recording",
+    statusWord: "camera",
   },
 ];
 
@@ -352,6 +381,12 @@ export interface RecordingTick {
   elapsedSeconds: number;
   levels: number[];
   status: RecordingStatus;
+  /**
+   * Whether this take has a loopback (system audio) track. Omitted = unknown,
+   * treated as available. Lets every window disable the system-audio toggle
+   * mid-take when turning it on could not work.
+   */
+  systemAudioAvailable?: boolean;
 }
 
 export type ControlCommand = "pause" | "resume" | "stop";
@@ -361,6 +396,8 @@ export interface RecordingActivity {
   active: boolean;
   status: RecordingStatus;
   elapsedSeconds: number;
+  /** See {@link RecordingTick.systemAudioAvailable}. Only meaningful while active. */
+  systemAudioAvailable?: boolean;
 }
 
 export interface RecordingFinalizeMeta {

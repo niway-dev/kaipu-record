@@ -24,6 +24,9 @@ const status: Record<ShortcutAction, boolean> = {
   stopRecording: false,
   bringToFront: false,
   captureScreenshot: false,
+  toggleMicrophone: false,
+  toggleSystemAudio: false,
+  toggleCamera: false,
 };
 
 function tryRegister(accelerator: string, handler: () => void): boolean {

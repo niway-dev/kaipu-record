@@ -20,12 +20,18 @@ const LABEL_KEY = {
   stopRecording: "stopRecordingLabel",
   bringToFront: "bringToFrontLabel",
   captureScreenshot: "captureScreenshotLabel",
+  toggleMicrophone: "toggleMicrophoneLabel",
+  toggleSystemAudio: "toggleSystemAudioLabel",
+  toggleCamera: "toggleCameraLabel",
 } as const;
 const DESC_KEY = {
   startRecording: "startRecordingDesc",
   stopRecording: "stopRecordingDesc",
   bringToFront: "bringToFrontDesc",
   captureScreenshot: "captureScreenshotDesc",
+  toggleMicrophone: "toggleMicrophoneDesc",
+  toggleSystemAudio: "toggleSystemAudioDesc",
+  toggleCamera: "toggleCameraDesc",
 } as const;
 
 function Section({

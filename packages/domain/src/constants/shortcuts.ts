@@ -20,6 +20,9 @@ export const SHORTCUT_ACTIONS = [
   "stopRecording",
   "bringToFront",
   "captureScreenshot",
+  "toggleMicrophone",
+  "toggleSystemAudio",
+  "toggleCamera",
 ] as const;
 
 export type ShortcutAction = (typeof SHORTCUT_ACTIONS)[number];
@@ -54,12 +57,18 @@ export const DEFAULT_ACCELERATORS: Record<ShortcutPlatform, Record<ShortcutActio
     stopRecording: "Command+Control+S",
     bringToFront: "Command+Control+O",
     captureScreenshot: "Command+Control+X",
+    toggleMicrophone: "Command+Control+M",
+    toggleSystemAudio: "Command+Control+A",
+    toggleCamera: "Command+Control+K",
   },
   windows: {
     startRecording: "Control+Alt+C",
     stopRecording: "Control+Alt+S",
     bringToFront: "Control+Alt+O",
     captureScreenshot: "Control+Alt+X",
+    toggleMicrophone: "Control+Alt+M",
+    toggleSystemAudio: "Control+Alt+A",
+    toggleCamera: "Control+Alt+K",
   },
 };
 
