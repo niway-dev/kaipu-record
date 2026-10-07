@@ -20,6 +20,8 @@ export interface LocalLibrary {
   /** Ask main to re-confirm the cloud catalog against the server now. */
   refreshCloud(): Promise<CatalogRefreshResult>;
   rename(id: string, title: string): Promise<void>;
+  /** Replace a local item's tags (normalized again in main before the sidecar write). */
+  setTags(id: string, tags: readonly string[]): Promise<void>;
   remove(id: string): Promise<void>;
   reveal(id: string): void;
   /** Delete only the local bytes of an asset that also has a verified cloud
@@ -69,6 +71,18 @@ export function useLocalLibrary(): LocalLibrary {
       setVideos((prev) => prev.map((video) => (video.id === id ? { ...video, title } : video)));
     } catch (error) {
       reportError(t("errorRename"), error, { context: { id } });
+    }
+  }, []);
+
+  const setTags = useCallback(async (id: string, tags: readonly string[]) => {
+    try {
+      // Main re-normalizes; show what it actually stored.
+      const stored = await window.electronAPI.setTags(id, tags);
+      setVideos((prev) =>
+        prev.map((video) => (video.id === id ? { ...video, tags: stored } : video)),
+      );
+    } catch (error) {
+      reportError(t("errorTags"), error, { context: { id } });
     }
   }, []);
 
@@ -128,6 +142,7 @@ export function useLocalLibrary(): LocalLibrary {
     refresh,
     refreshCloud,
     rename,
+    setTags,
     remove,
     reveal,
     removeLocalCopy,

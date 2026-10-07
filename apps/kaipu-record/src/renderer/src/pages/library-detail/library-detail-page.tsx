@@ -12,6 +12,7 @@ import { DeleteConfirmDialog } from "@renderer/features/library/components/delet
 import { RecordingPlayer } from "@renderer/features/library/components/recording-player";
 import { ScreenshotViewer } from "@renderer/features/library/components/screenshot-viewer";
 import { RecordingTitle } from "@renderer/features/library/components/recording-title";
+import { TagEditor, useTagVocabulary } from "@renderer/features/library/components/tag-editor";
 import { formatDuration, formatSize, relativeDate } from "@renderer/features/library/format";
 import { buildLineage, editBadge } from "@renderer/features/library/lineage";
 import type { EditingState, RemoveLocalCopyResult } from "@shared/types/library-item";
@@ -54,9 +55,13 @@ export function LibraryDetailPage(): React.JSX.Element {
   const { assetId } = useParams<{ assetId: string }>();
   const location = useLocation();
   const navigate = useNavigate();
-  const { videos, isLoading, refresh, rename, remove, reveal, removeLocalCopy } = useLocalLibrary();
+  const { videos, isLoading, refresh, rename, setTags, remove, reveal, removeLocalCopy } =
+    useLocalLibrary();
 
   const video = videos.find((v) => v.assetId === assetId);
+  // Re-fetched when this item's tags change, so a tag just added elsewhere in
+  // the library (or here) is offered next time.
+  const vocabulary = useTagVocabulary(video?.tags?.join(","));
 
   // A recording can momentarily lag the navigation into its own detail page right
   // after it finalizes; recover (re-list once, then fall back to the Library +
@@ -198,6 +203,13 @@ export function LibraryDetailPage(): React.JSX.Element {
               if (localId) void rename(localId, title);
             }}
           />
+          {localId && (
+            <TagEditor
+              tags={video.tags ?? []}
+              vocabulary={vocabulary}
+              onChange={(next) => void setTags(localId, next)}
+            />
+          )}
           <div className={styles.meta}>
             <StorageMeta video={video} />
             <span className={styles.dot}>·</span>
