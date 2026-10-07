@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/niway-dev/kaipu-record/compare/desktop-v0.10.0...desktop-v0.11.0) (2026-10-07)
+
+
+### Features
+
+* **desktop:** live recording controls — mute mic, system audio and camera mid-take (NIW2-152) ([400c80e](https://github.com/niway-dev/kaipu-record/commit/400c80e4ff0dcb98338b411aea70a02b63b517d7))
+
 ## [0.10.0](https://github.com/niway-dev/kaipu-record/compare/desktop-v0.9.0...desktop-v0.10.0) (2026-10-06)
 
 
