@@ -1,0 +1,92 @@
+.editor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-top: var(--space-sm);
+}
+
+.chips {
+  display: contents;
+  list-style: none;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 4px 2px 8px;
+  border-radius: var(--radius-full, 999px);
+  background: var(--bg-elevated, var(--bg-input));
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  font-size: var(--font-size-xs, 12px);
+}
+
+.remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.remove:hover {
+  color: var(--text-primary);
+}
+
+.field {
+  position: relative;
+}
+
+.input {
+  font-family: var(--font-family);
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-primary);
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  padding: 3px 8px;
+  min-width: 140px;
+  outline: none;
+}
+
+.input:focus {
+  border-style: solid;
+  border-color: var(--accent-primary);
+}
+
+.suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 10;
+  min-width: 100%;
+  list-style: none;
+  padding: 4px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.suggestion {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 4px 8px;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--font-size-xs, 12px);
+  cursor: pointer;
+}
+
+.suggestion:hover {
+  background: var(--bg-hover, var(--border));
+}

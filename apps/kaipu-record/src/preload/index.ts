@@ -53,6 +53,8 @@ const kaipuApi: KaipuElectronAPI = {
   listLocalRecordings: () => ipcRenderer.invoke(IPC_CHANNELS.listLocalRecordings),
   renameLocalRecording: (id, title) =>
     ipcRenderer.invoke(IPC_CHANNELS.renameLocalRecording, id, title),
+  setTags: (id, tags) => ipcRenderer.invoke(IPC_CHANNELS.setTags, id, tags),
+  getTagVocabulary: () => ipcRenderer.invoke(IPC_CHANNELS.getTagVocabulary),
   backfillLocalRecordingMeta: (id, meta) =>
     ipcRenderer.invoke(IPC_CHANNELS.backfillLocalRecordingMeta, id, meta),
   deleteLocalRecording: (id) => ipcRenderer.invoke(IPC_CHANNELS.deleteLocalRecording, id),

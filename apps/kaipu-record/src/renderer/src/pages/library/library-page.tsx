@@ -16,6 +16,9 @@ import { buildLineage, editBadge } from "@renderer/features/library/lineage";
 import { canOpenInEditor, useOpenInEditor } from "@renderer/features/editor/open-in-editor";
 import styles from "./library-page.module.css";
 
+/** Tag chips shown before the "+N" overflow (the most used first). */
+const TAG_CHIPS_SHOWN = 8;
+
 /** The search field's share of the toolbar, moved out of the module: the shared
  *  SearchInput takes StyleX styles, not a className. */
 const sxLibrary = stylex.create({
@@ -46,12 +49,23 @@ export function LibraryPage(): React.JSX.Element {
     setStorageFilter,
     setSortKey,
     setSearchTerm,
+    selectedTags,
+    toggleTag,
     visibleItems,
     counts,
     kindCounts,
+    tagCounts,
     hasActiveFilters,
     clearFilters,
   } = useLibraryFilters(videos);
+
+  const [showAllTags, setShowAllTags] = useState(false);
+  // The most used tags, plus any selected one past the cut so a selection is
+  // always visible (and can be unselected) while the list is collapsed.
+  const shownTags = showAllTags
+    ? tagCounts
+    : tagCounts.filter((entry, i) => i < TAG_CHIPS_SHOWN || selectedTags.includes(entry.tag));
+  const hiddenTagCount = tagCounts.length - shownTags.length;
 
   const [view, setView] = useState<"grid" | "list">("grid");
   const [pendingDelete, setPendingDelete] = useState<{ id: string; title: string } | null>(null);
@@ -155,6 +169,33 @@ export function LibraryPage(): React.JSX.Element {
           <span className={styles.storageDotChip} data-cloud="true" />
           {t("storageCloud")}
         </FilterChip>
+
+        {tagCounts.length > 0 && (
+          <>
+            <span className={styles.chipDivider} aria-hidden />
+            <div className={styles.tagChips} role="group" aria-label={t("tagFilterLabel")}>
+              {shownTags.map(({ tag, count }) => (
+                <FilterChip
+                  key={tag}
+                  active={selectedTags.includes(tag)}
+                  onClick={() => toggleTag(tag)}
+                >
+                  {t("tagChip", { tag, count })}
+                </FilterChip>
+              ))}
+              {hiddenTagCount > 0 && (
+                <FilterChip active={false} onClick={() => setShowAllTags(true)}>
+                  {t("tagsMore", { count: hiddenTagCount })}
+                </FilterChip>
+              )}
+              {showAllTags && tagCounts.length > TAG_CHIPS_SHOWN && (
+                <FilterChip active={false} onClick={() => setShowAllTags(false)}>
+                  {t("tagsLess")}
+                </FilterChip>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
       {canShowVaultBanner && (
