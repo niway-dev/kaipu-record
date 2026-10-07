@@ -1090,8 +1090,8 @@
         "description": "Every capture lands in one library with previews, renaming, and recovery for imported or interrupted recordings."
       },
       "watermark": {
-        "title": "Watermark on exports",
-        "description": "Stamp your exports with a watermark so shared clips carry your mark."
+        "title": "No watermark, on any plan",
+        "description": "The free app records, edits and exports without a watermark. A small \"Made with Kaipu\" badge is there if you want to credit the tool, and it is off by default."
       },
       "shortcuts": {
         "title": "Global keyboard shortcuts",
@@ -1109,21 +1109,25 @@
         "title": "Kaipu Cloud foundations",
         "description": "One library that merges local files with your cloud catalogue, per-account caching, save modes, capacity limits, and removing a local copy while keeping the cloud one."
       },
+      "windowsBeta": {
+        "title": "Windows beta: recording first, screenshots next",
+        "description": "A labelled Windows beta with screen and camera recording, the editor and the library. Screenshots and the screenshot shortcut come in a later beta, and the app says so instead of failing quietly."
+      },
       "cloudUpload": {
         "title": "Finish cloud upload end to end",
         "description": "Upload every capture to Kaipu Cloud automatically, with resumable transfers, clear progress, and retries when the network drops."
       },
       "videoZoom": {
-        "title": "Zoom in videos",
-        "description": "Zoom into a region of a recording so the detail you are pointing at is actually readable for whoever watches it."
+        "title": "Automatic zoom in videos",
+        "description": "Record clean, then let the editor zoom in on every click so the detail you point at is readable. Each zoom is a segment you can move, resize or delete, next to blur and cover regions for anything that should stay private."
       },
       "photoZoom": {
         "title": "Zoom in the image viewer",
         "description": "Zoom and pan inside the screenshot viewer instead of squinting at a scaled-down capture."
       },
       "watermarkUpgrade": {
-        "title": "A better watermark",
-        "description": "More control over the watermark: position, size, opacity, and your own logo instead of a fixed stamp."
+        "title": "Your own watermark on exports",
+        "description": "Stamp exports with your own logo, with control over position, size and opacity. Kaipu's own badge stays optional and off; this is about carrying your brand, not ours."
       },
       "imageTags": {
         "title": "Tags on images",
@@ -1134,8 +1138,8 @@
         "description": "Change the name of a capture once it is already saved, without going out to Finder."
       },
       "saveEveryScreenshot": {
-        "title": "Option to save every screenshot",
-        "description": "An opt-in setting that keeps every screenshot you take in the library automatically, instead of only the ones you save by hand."
+        "title": "Save every screenshot automatically",
+        "description": "A setting that keeps every screenshot in your library the moment you take it, or only once you click Save. Automatic is the default, so a capture is never lost."
       },
       "brandIdentity": {
         "title": "Refreshed logo and identity",

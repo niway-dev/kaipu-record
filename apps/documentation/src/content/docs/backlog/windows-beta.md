@@ -70,7 +70,8 @@ UI telling the truth about screenshots.
 - [ ] Screenshot entry points hidden or disabled with a "coming soon" state on Windows, never a
       silent no-op.
 - [ ] Version gate and auto-update verified against a Windows artifact.
-- [ ] Public roadmap row: "Windows — screenshots" so the gap is visible on purpose.
+- [x] Public roadmap row (`windowsBeta`, 2026-10-07): "recording first, screenshots next", so
+      the gap is visible on purpose. Flip it to shipped when the first beta is downloadable.
 - [ ] Landing: "Download for Windows (beta)" next to the macOS button, with the gap stated.
 
 ## Non-goals

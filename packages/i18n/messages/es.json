@@ -1090,8 +1090,8 @@
         "description": "Cada captura llega a una sola biblioteca con vistas previas, renombrado y recuperación de grabaciones importadas o interrumpidas."
       },
       "watermark": {
-        "title": "Marca de agua en las exportaciones",
-        "description": "Sella tus exportaciones con una marca de agua para que los clips que compartes lleven tu marca."
+        "title": "Sin marca de agua, en cualquier plan",
+        "description": "La app gratuita graba, edita y exporta sin marca de agua. Hay una pequeña insignia \"Hecho con Kaipu\" por si quieres dar crédito a la herramienta, y viene apagada por defecto."
       },
       "shortcuts": {
         "title": "Atajos de teclado globales",
@@ -1109,21 +1109,25 @@
         "title": "Bases de Kaipu Cloud",
         "description": "Una sola biblioteca que combina archivos locales con tu catálogo en la nube, caché por cuenta, modos de guardado, límites de capacidad y quitar la copia local conservando la de la nube."
       },
+      "windowsBeta": {
+        "title": "Beta para Windows: primero grabación, luego capturas",
+        "description": "Una beta para Windows, marcada como tal, con grabación de pantalla y cámara, el editor y la biblioteca. Las capturas y su atajo llegan en una beta posterior, y la app lo dice en vez de fallar en silencio."
+      },
       "cloudUpload": {
         "title": "Terminar la subida a la nube de punta a punta",
         "description": "Subir cada captura a Kaipu Cloud automáticamente, con transferencias reanudables, progreso claro y reintentos cuando se cae la red."
       },
       "videoZoom": {
-        "title": "Zoom en videos",
-        "description": "Acercar una zona de la grabación para que el detalle que señalas se lea de verdad para quien lo ve."
+        "title": "Zoom automático en videos",
+        "description": "Graba limpio y deja que el editor acerque en cada clic para que el detalle que señalas se lea bien. Cada zoom es un segmento que puedes mover, redimensionar o borrar, junto a zonas de desenfoque y cobertura para lo que deba quedar privado."
       },
       "photoZoom": {
         "title": "Zoom en el visor de imágenes",
         "description": "Acercar y desplazar dentro del visor de capturas, en vez de forzar la vista sobre una imagen reducida."
       },
       "watermarkUpgrade": {
-        "title": "Una marca de agua mejor",
-        "description": "Más control sobre la marca de agua: posición, tamaño, opacidad y tu propio logo en lugar de un sello fijo."
+        "title": "Tu propia marca de agua en las exportaciones",
+        "description": "Sella tus exportaciones con tu propio logo, con control de posición, tamaño y opacidad. La insignia de Kaipu sigue siendo opcional y apagada; esto va de llevar tu marca, no la nuestra."
       },
       "imageTags": {
         "title": "Etiquetas en imágenes",
@@ -1134,8 +1138,8 @@
         "description": "Cambiar el nombre de una captura cuando ya está guardada, sin salir a Finder."
       },
       "saveEveryScreenshot": {
-        "title": "Opción de guardar todas las capturas",
-        "description": "Un ajuste opcional que guarda en la biblioteca cada captura que tomas, en vez de solo las que guardas a mano."
+        "title": "Guardar todas las capturas automáticamente",
+        "description": "Un ajuste que guarda cada captura en tu biblioteca en el momento en que la tomas, o solo cuando pulsas Guardar. Automático es el valor por defecto, así que ninguna captura se pierde."
       },
       "brandIdentity": {
         "title": "Logo e identidad renovados",
