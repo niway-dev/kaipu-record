@@ -28,7 +28,11 @@ export class SidecarTagStore implements TagStore {
     return new TagSetBuilder(Array.isArray(meta.tags) ? meta.tags : []).build();
   }
 
-  async set(itemId: string, tags: readonly string[], updatedAt: number): Promise<readonly string[]> {
+  async set(
+    itemId: string,
+    tags: readonly string[],
+    updatedAt: number,
+  ): Promise<readonly string[]> {
     const normalized = new TagSetBuilder(tags).build();
     await this.vault().writeMeta(itemId, { tags: [...normalized], tagsUpdatedAt: updatedAt });
     return normalized;
