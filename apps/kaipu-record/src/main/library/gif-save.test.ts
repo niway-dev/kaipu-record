@@ -6,7 +6,7 @@ import { GIF_MAX_BYTES, GifSaveError, saveGif, validateGifBytes } from "./gif-sa
 import { LibraryVault } from "./library-vault";
 
 const gifBytes = (extra = 16): Uint8Array =>
-  new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, ...new Array(extra).fill(0)]);
+  new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, ...Array.from({ length: extra }, () => 0)]);
 
 const meta = {
   title: "Demo (GIF)",

@@ -141,6 +141,16 @@ async function makeDirty(footer: HTMLElement): Promise<void> {
   });
 }
 
+/**
+ * "Export" opens the export sheet (NIW2-217); "Export video" there runs the MP4 export.
+ * When the metadata guard refuses, no sheet opens and only the first click happens.
+ */
+function clickExportVideo(): void {
+  fireEvent.click(screen.getByRole("button", { name: "Export" }));
+  const video = screen.queryByRole("button", { name: "Export video" });
+  if (video) fireEvent.click(video);
+}
+
 describe("VideoEditorPage — invalid source guard", () => {
   it("redirects to /library when the nav state has no positive duration", () => {
     const router = createMemoryRouter(
@@ -253,7 +263,7 @@ describe("VideoEditorPage — post-export navigation vs. useBlocker", () => {
     const footer = await waitForEditorLoaded();
     await makeDirty(footer); // controller.dirty === true, same as right before a real export
 
-    fireEvent.click(screen.getByRole("button", { name: "Export" }));
+    clickExportVideo();
 
     // startExport's onSaved awaits saveVideoEditSession (mocked, resolves), calls
     // markClean(), flips the bypass ref, then navigates — all async, so wait for the
@@ -274,7 +284,7 @@ describe("VideoEditorPage — post-export navigation vs. useBlocker", () => {
     const footer = await waitForEditorLoaded();
     await makeDirty(footer);
 
-    fireEvent.click(screen.getByRole("button", { name: "Export" }));
+    clickExportVideo();
     await waitFor(() => {
       expect(screen.getByText("library-detail")).toBeInTheDocument();
     });
@@ -337,7 +347,7 @@ describe("VideoEditorPage — handleExport metadata guard", () => {
 
     // Initial scene has one clip so the export button is enabled (not disabled by
     // the empty-timeline guard) — clicking it hits the videoWidth === 0 guard instead.
-    fireEvent.click(screen.getByRole("button", { name: "Export" }));
+    clickExportVideo();
 
     // Wait for the toast first, then assert the negative. A bare
     // `not.toHaveBeenCalled()` after a click passes just as happily when the
@@ -358,7 +368,7 @@ describe("VideoEditorPage — handleExport metadata guard", () => {
     renderEditor();
     await waitForEditorLoaded();
 
-    fireEvent.click(screen.getByRole("button", { name: "Export" }));
+    clickExportVideo();
 
     // Same guard, same toast: waiting for it is what makes the negative below mean
     // "the guard refused" rather than "the handler had not started".
@@ -378,7 +388,7 @@ describe("VideoEditorPage — handleExport metadata guard", () => {
     renderEditor();
     await waitForEditorLoaded();
 
-    fireEvent.click(screen.getByRole("button", { name: "Export" }));
+    clickExportVideo();
 
     await waitFor(() => {
       expect(startExport).toHaveBeenCalledOnce();
