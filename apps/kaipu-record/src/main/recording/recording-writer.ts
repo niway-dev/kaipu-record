@@ -85,6 +85,17 @@ export class RecordingWriter {
     return this.sessions.get(sessionId)?.failed !== undefined;
   }
 
+  /**
+   * Size in bytes of the session's temp file once every queued positional write has landed
+   * (NIW2-218: the Small-file preset checks it against its cap before finalizing).
+   */
+  async stat(sessionId: string): Promise<number> {
+    const session = this.sessions.get(sessionId);
+    if (!session) throw new Error(`No recording session "${sessionId}"`);
+    await session.queue;
+    return (await session.handle.stat()).size;
+  }
+
   async finalize(sessionId: string, meta: RecordingFinalizeMeta): Promise<LocalRecording> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`No recording session "${sessionId}"`);
