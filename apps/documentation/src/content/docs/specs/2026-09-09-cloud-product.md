@@ -65,6 +65,14 @@ The beta starts with controlled access and configurable global capacity; 100 acc
 
 ## Sharing
 
+> **Note (2026-10-09):** the link-only rule below is extended by
+> [Sharing as access modes](/specs/2026-10-09-sharing-access-modes/) and
+> [ADR 0013](/architecture/decisions/0013-sharing-stable-link-plus-access-grants/): one stable
+> link per published revision, with access modes Only me / My organization / Kaipu users with
+> the link / Anyone with the link (the last behind a flag, off in v1). Playback never uses
+> presigned storage URLs ([ADR 0015](/architecture/decisions/0015-shared-media-streamed-with-playback-tokens/)).
+> The text below is kept as originally decided.
+
 Uploading creates a private copy. Sharing requires separate consent and creates a link accessible to anyone who has it, without requiring the viewer to have an account. State this in the dialog. Offer copying and revocation; never claim that a copy already downloaded by a viewer can be retrieved or revoked.
 
 The link points to a published, playable revision, not the editor draft. Editing does not change the link. Update shared version is an explicit action that updates the stable link's target only after confirming the new file. On failure, the previous version remains available. Revocation stops new access; already issued read URLs have a short validity window that must be defined and communicated without promising absolute instantaneous revocation.
