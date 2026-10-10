@@ -97,9 +97,11 @@ import {
 } from "@renderer/features/video-editor/export/use-gif-export";
 import {
   ExportSheet,
+  formatMB,
   type GifSettings,
   type VideoExportChoice,
 } from "@renderer/features/video-editor/components/export-sheet";
+import { PRESETS } from "@renderer/features/video-editor/export/export-presets";
 import { probeSource, type SourceProbe } from "@renderer/features/video-editor/export/probe-source";
 import { useAppSettings } from "@renderer/pages/settings/use-app-settings";
 import { formatSize } from "@renderer/features/library/format";
@@ -652,8 +654,14 @@ function VideoEditor({
           navigate(`/library/${recording.assetId}`);
           // Spec Q9: a destination export is usually dragged somewhere right away.
           if (choice.presetId !== "original") {
+            const cap = PRESETS[choice.presetId].capBytes;
+            // FR8 / Q5: the one size-check retry still came out over the cap — keep the
+            // file, say so with its real size.
+            const overCap = cap !== null && recording.sizeBytes > cap;
             showToast({
-              message: t("exportSaved", { size: formatSize(recording.sizeBytes) }),
+              message: overCap
+                ? t("smallOverCap", { size: formatMB(recording.sizeBytes), cap: formatMB(cap) })
+                : t("exportSaved", { size: formatSize(recording.sizeBytes) }),
               action: {
                 label: t("exportShowInFinder"),
                 onClick: () => void window.electronAPI.revealLocalRecording(recording.id),
@@ -1508,6 +1516,7 @@ function VideoEditor({
           status={videoExport.status}
           fraction={videoExport.fraction}
           error={videoExport.error}
+          title={videoExport.shrinking ? t("makingSmaller") : undefined}
           onCancel={videoExport.cancel}
           onRetry={() => startVideoExport()}
         />
