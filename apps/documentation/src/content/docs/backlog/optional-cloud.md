@@ -5,16 +5,16 @@ description: Status tracker for the optional cloud epic — one library entry pe
 
 # Optional cloud — upload, catalog and share links
 
-> **Status: 🟡 In progress.** Plan 02 (desktop identity + combined library) is merged. Plan 01
-> (server) is partly implemented on `feat/cloud-01-server-quotas`: decisions recorded (Task 0, five
-> values still open as proposals), both real-R2 spikes passed (Task 1/1b), and Tasks 2–9 are done —
-> domain limits and schemas, entitlements (access = verified email), storage and repository ports,
-> R2 tickets, the five cloud tables (applied with `db:push`), Postgres repositories with single-statement
-> atomic reservations, and the application use cases. **Not done:** Task 10 (the `/assets` and
-> `/me/storage` HTTP routes), Task 11 (cron sweep, account purge, `cloud:uploads` command), Task 12
-> (removing the legacy recording vertical) and Task 13 (operations docs, WAF runbook, CI). No cloud
-> endpoint is served yet. Cloud Free also depends on email verification, which the server does not
-> send yet.
+> **Status: 🟡 In progress.** _(Refreshed 2026-10-09 against `origin/main`, NIW2-214.)_ Plan 02
+> (desktop identity + combined library) is merged (#90). Plan 01 (server): Tasks 0–9 merged (#92,
+> via #96) and Task 10 merged (#97) — `/api/v1/assets*` and `/api/v1/me/storage` are served.
+> Task 11 (cron sweep, account purge, `cloud:uploads` command) and Task 13 (operations docs, WAF
+> runbook, CI, migration baseline) are delivered by NIW2-214; Task 12 (removing the legacy
+> recording vertical) moved to NIW2-221. Verification emails are sent (transactional email, #107);
+> production delivery is not yet proven. Entitlements v2 (250 MB trial + approval) is not on
+> `main`: today every verified email gets 1 GB. The desktop does not upload or download yet —
+> that is phase 3, planned in [Cloud 03 — manual transfers](/plans/2026-10-09-cloud-03-manual-transfers/)
+> (awaiting approval).
 > Effort: High (six phases).
 
 ## Where the detail lives
@@ -28,12 +28,14 @@ description: Status tracker for the optional cloud epic — one library entry pe
 - **Detailed plans:**
   - [Cloud 01 — server quotas, revisions and immutable tickets](/plans/2026-09-09-cloud-01-server-quotas-and-revisions/)
   - [Cloud 02 — local identity and the combined library](/plans/2026-09-09-cloud-02-local-identity-and-combined-library/)
+  - [Cloud 03 — manual transfers](/plans/2026-10-09-cloud-03-manual-transfers/) (proposed)
 
 ## What plans 01 and 02 deliver together
 
 - Server: `cloud_asset` / `cloud_revision` model, atomic quota reservation, idempotent upload
   intents, presigned tickets bound to length + type + sha256 + no-overwrite, verified confirm,
-  scheduled sweep, account purge, beta allowlist and global upload switch. The legacy
+  scheduled sweep, account purge, and a global upload switch (no beta allowlist: a verified
+  email is the access rule, plan 01 decision #8). The legacy
   `recording` vertical is replaced.
 - Desktop: stable `assetId` in sidecars (additive), export provenance, lazy content hash, the
   editing-state probe, the "remove local download" operation with its safety policy, a
