@@ -1,0 +1,92 @@
+---
+title: "ADR 0014: Organizations use the Better Auth organization plugin — membership is identity, billing stays outside auth"
+description: Why "my organization" sharing is backed by Better Auth's organization plugin for membership and invitations, and why this clarifies rather than supersedes ADR 0002's rule that billing never lives in auth.
+---
+
+# ADR 0014: Organizations use the Better Auth `organization` plugin — membership is identity, billing stays outside auth
+
+## Status
+
+| Field         | Value                                                                                                          |
+| ------------- | -------------------------------------------------------------------------------------------------------------- |
+| Status        | Proposed — design PR for NIW2-216, awaiting approval; not implemented                                          |
+| Date          | 2026-10-09                                                                                                     |
+| Supersedes    | —                                                                                                              |
+| Clarifies     | [ADR 0002](./0002-plan-entitlements-separate-from-auth) — billing stays out of auth; membership may live in it |
+| Superseded by | —                                                                                                              |
+
+## Context
+
+The "My organization" sharing mode ([ADR 0013](./0013-sharing-stable-link-plus-access-grants))
+needs organizations: create, invite by email, accept, remove, leave, and a reliable "is this
+user a current member of org X". Kaipu has none of it — Better Auth runs with
+`emailAndPassword` and `bearer({ requireSignature: true })` only, on the tables `user`,
+`session`, `account`, `verification`.
+
+ADR 0002 kept the plan out of Better Auth and listed multi-seat / organization **plans** as
+a non-goal. The question is whether using an auth plugin for organizations contradicts it.
+
+## Decision
+
+1. Use the **Better Auth `organization` plugin** for organizations, members and invitations.
+   Configuration: `allowUserToCreateOrganization` for verified users,
+   `requireEmailVerificationOnInvitation: true`, invitation email through `infra-email`
+   (`sendInvitationEmail`), default `invitationExpiresIn` (48 h), teams off.
+2. v1 roles in the UI: `owner` and `member`. The plugin's `admin` exists but is unused.
+3. Membership is **identity / authorization**, which auth owns. Nothing commercial is
+   stored on `organization` or its `metadata`. Org plans and seats, when they come, live in
+   the subscription module (`subscription.referenceId` = org id), per ADR 0002.
+4. The domain never imports Better Auth: sharing reads membership through a read-only port,
+   `IOrganizationMembershipRepository.isMember(userId, orgId)`.
+5. `organizationHooks.afterRemoveMember` (and org deletion) revokes the removed owner's
+   `organization` grants on their shares; rejoining does not restore them.
+6. Sharing never uses the session's `activeOrganizationId`; the share dialog picks the org
+   explicitly.
+7. Org mode ships as its own milestone after Only me + Kaipu users; until then the mode is
+   shown disabled ("coming soon").
+
+## Consequences
+
+**Positive:**
+
+- Invitations, roles, acceptance security and expiry come configured, not rebuilt.
+- The ADR 0002 boundary is sharpened rather than eroded: identity and membership in auth,
+  money outside it.
+
+**Negative:**
+
+- `session` gains `activeOrganizationId`; the plugin's schema must be added to the Drizzle
+  adapter mapping in `base-config.ts`.
+- A new `/api/auth/organization/*` surface needs an access review before launch.
+- The plugin options above are _to verify_ against the pinned `better-auth` 1.4.18.
+
+## Alternatives considered
+
+### Own `organization` / `membership` tables
+
+Rejected. Full control and no auth-schema change, but it rebuilds invitations, roles,
+emails and acceptance security — work ADR 0002 accepted only because billing must not live
+in auth. Membership has no such reason.
+
+### Organization = same verified email domain
+
+Rejected. Wrong for gmail/outlook users, no explicit consent, and not what "my
+organization" means to people.
+
+### Defer organizations entirely
+
+Partly adopted: org mode is a later milestone, but the decision is taken now so the grant
+model and the hooks are designed for it.
+
+## When to revisit
+
+- When org billing (seats) is built: confirm it lands in the subscription module, not on
+  `organization.metadata`.
+- If the plugin's schema or upgrade path conflicts with the Drizzle adapter or the pinned
+  version.
+
+## References
+
+- [Sharing as access modes (spec)](/specs/2026-10-09-sharing-access-modes/)
+- [ADR 0002: Plan entitlements kept as a module separate from auth](./0002-plan-entitlements-separate-from-auth)
+- [Better Auth — organization plugin](https://www.better-auth.com/docs/plugins/organization)
