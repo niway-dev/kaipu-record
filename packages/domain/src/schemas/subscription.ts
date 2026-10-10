@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { FREE_CLOUD_CAPACITY_BYTES, PRO_CLOUD_CAPACITY_BYTES } from "../constants/cloud-limits";
+import { PLAN_IDS, PLANS } from "../constants/plans";
 
 /**
  * Commercial state, kept apart from identity on purpose: Better Auth owns `user`
@@ -9,7 +9,7 @@ import { FREE_CLOUD_CAPACITY_BYTES, PRO_CLOUD_CAPACITY_BYTES } from "../constant
  */
 
 /** The plan is a *name* (shown in Settings). Permissions come from `features`, never from this. */
-export const planSchema = z.enum(["free", "pro"]);
+export const planSchema = z.enum(PLAN_IDS);
 export type Plan = z.infer<typeof planSchema>;
 
 export const subscriptionStatusSchema = z.enum(["active", "canceled", "past_due"]);
@@ -65,7 +65,7 @@ export const FREE_ENTITLEMENTS: Entitlements = {
   features: {
     watermarkRemoval: false,
     cloudUploads: false,
-    cloudStorageBytes: FREE_CLOUD_CAPACITY_BYTES,
+    cloudStorageBytes: PLANS.free.cloudStorageBytes,
   },
 };
 
@@ -101,7 +101,9 @@ export function deriveEntitlements(
     features: {
       watermarkRemoval: proInForce,
       cloudUploads: inputs.cloudAccess,
-      cloudStorageBytes: proInForce ? PRO_CLOUD_CAPACITY_BYTES : FREE_CLOUD_CAPACITY_BYTES,
+      // Capacity comes from the plan table; it never depends on verification — an unverified
+      // account has `cloudUploads: false`, so it gets no cloud whatever its capacity reads.
+      cloudStorageBytes: PLANS[proInForce ? "pro" : "free"].cloudStorageBytes,
     },
   };
 }

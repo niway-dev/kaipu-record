@@ -2,11 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   BYTES_PER_GB,
   DOWNLOAD_URL_TTL_SECONDS,
-  FREE_CLOUD_CAPACITY_BYTES,
   MAX_PENDING_UPLOADS_PER_ACCOUNT,
   MAX_SCREENSHOT_BYTES,
   MAX_VIDEO_BYTES,
-  PRO_CLOUD_CAPACITY_BYTES,
   UPLOAD_TICKET_TTL_SECONDS,
   formatDecimalBytes,
   maxBytesForKind,
@@ -15,8 +13,6 @@ import {
 describe("cloud limits", () => {
   it("uses decimal units: 1 GB is exactly 1,000,000,000 bytes", () => {
     expect(BYTES_PER_GB).toBe(1_000_000_000);
-    expect(FREE_CLOUD_CAPACITY_BYTES).toBe(1_000_000_000);
-    expect(PRO_CLOUD_CAPACITY_BYTES).toBe(25_000_000_000);
     expect(MAX_VIDEO_BYTES).toBe(1_000_000_000);
   });
 

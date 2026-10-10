@@ -25,7 +25,7 @@ describe("deriveEntitlements", () => {
       plan: "free",
       status: "active",
       currentPeriodEnd: null,
-      features: { watermarkRemoval: false, cloudUploads: false, cloudStorageBytes: 1_000_000_000 },
+      features: { watermarkRemoval: false, cloudUploads: false, cloudStorageBytes: 250_000_000 },
     });
   });
 
@@ -77,20 +77,27 @@ describe("cloud entitlements", () => {
     updatedAt: now,
   };
 
-  it("free accounts get 1 GB; cloudUploads follows email verification, not the plan", () => {
+  it("free accounts get 250 MB; cloudUploads follows email verification, not the plan", () => {
     const e = deriveEntitlements(null, now, { cloudAccess: false });
-    expect(e.features.cloudStorageBytes).toBe(1_000_000_000);
+    expect(e.features.cloudStorageBytes).toBe(250_000_000);
     expect(e.features.cloudUploads).toBe(false);
     expect(deriveEntitlements(null, now, { cloudAccess: true }).features.cloudUploads).toBe(true);
   });
 
-  it("pro in force gets 25 GB; a lapsed pro falls back to 1 GB", () => {
+  it("a verified free account gets exactly 250 MB of cloud (NIW2-232)", () => {
+    const e = deriveEntitlements(null, now, { cloudAccess: true });
+    expect(e.plan).toBe("free");
+    expect(e.features.cloudUploads).toBe(true);
+    expect(e.features.cloudStorageBytes).toBe(250_000_000);
+  });
+
+  it("pro in force gets 15 GB; a lapsed pro falls back to 250 MB", () => {
     expect(deriveEntitlements(pro, now, { cloudAccess: true }).features.cloudStorageBytes).toBe(
-      25_000_000_000,
+      15_000_000_000,
     );
     const lapsed = { ...pro, currentPeriodEnd: new Date("2026-01-01T00:00:00Z") };
     expect(deriveEntitlements(lapsed, now, { cloudAccess: true }).features.cloudStorageBytes).toBe(
-      1_000_000_000,
+      250_000_000,
     );
   });
 
@@ -98,7 +105,7 @@ describe("cloud entitlements", () => {
     expect(FREE_ENTITLEMENTS.features).toEqual({
       watermarkRemoval: false,
       cloudUploads: false,
-      cloudStorageBytes: 1_000_000_000,
+      cloudStorageBytes: 250_000_000,
     });
   });
 });
