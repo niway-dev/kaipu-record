@@ -84,6 +84,16 @@ describe("RecordingWriter", () => {
     expect(sidecar.assetId).toMatch(/^[0-9a-f-]{36}$/);
   });
 
+  it("stat() reports the temp file size after queued writes land", async () => {
+    const { writer } = await setup();
+    await writer.create("s1");
+    void writer.write("s1", new TextEncoder().encode("AAAA").buffer, 0);
+    void writer.write("s1", new TextEncoder().encode("BB").buffer, 10);
+    expect(await writer.stat("s1")).toBe(12);
+    await expect(writer.stat("ghost")).rejects.toThrow(/session/i);
+    await writer.abort("s1");
+  });
+
   it("persists the export preset in the sidecar (NIW2-218)", async () => {
     const { writer, vaultDir } = await setup();
     await writer.create("s1");
