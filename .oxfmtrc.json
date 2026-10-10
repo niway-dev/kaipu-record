@@ -9,6 +9,7 @@
     "routeTree.gen.ts",
     "apps/web-hono/src/routeTree.gen.ts",
     "**/worker-configuration.d.ts",
+    "packages/infra-db/src/migrations/**",
     "**/.next/**",
     "**/.wrangler/**",
     "**/.source/**",
