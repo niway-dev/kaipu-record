@@ -12,6 +12,7 @@ import {
 } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import type { LocalRecording } from "@shared/types/library-storage";
+import type { ExportPresetId } from "@shared/types/export-preset";
 import { sha256FileBase64 } from "./content-hash";
 
 const META_DIR = ".kaipu";
@@ -36,6 +37,8 @@ export interface Sidecar {
   hashedMtimeMs?: number;
   /** Set by `removeLocalCopy`; cleared when a file reappears under this id. */
   localRemovedAt?: number;
+  /** Editor exports (NIW2-218): the destination preset; absent on older items. */
+  exportPreset?: ExportPresetId;
   /** GIF exports only (NIW2-217). */
   gifWidth?: number;
   gifHeight?: number;

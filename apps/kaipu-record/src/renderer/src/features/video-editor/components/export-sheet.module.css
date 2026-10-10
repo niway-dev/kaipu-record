@@ -106,3 +106,40 @@
   font-size: 12px;
   color: var(--warning, #f5a524);
 }
+
+/* NIW2-218: destination preset cards (video format only). */
+.presetGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px;
+}
+
+.presetCard {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-modal);
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.presetCard[data-active="true"] {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 1px var(--accent-primary);
+}
+
+.presetName {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.presetMeta {
+  font-size: 11px;
+  color: var(--text-secondary);
+}

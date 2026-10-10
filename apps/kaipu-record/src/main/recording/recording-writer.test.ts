@@ -84,6 +84,21 @@ describe("RecordingWriter", () => {
     expect(sidecar.assetId).toMatch(/^[0-9a-f-]{36}$/);
   });
 
+  it("persists the export preset in the sidecar (NIW2-218)", async () => {
+    const { writer, vaultDir } = await setup();
+    await writer.create("s1");
+    await writer.write("s1", new TextEncoder().encode("AAAA").buffer, 0);
+    await writer.finalize("s1", {
+      title: "Export (vertical)",
+      durationSeconds: 1,
+      durationMs: 1000,
+      derivedFromAssetId: "22222222-2222-4222-8222-222222222222",
+      exportPreset: "vertical",
+    });
+    const sidecar = JSON.parse(await readFile(join(vaultDir, ".kaipu", "rec-fixed.json"), "utf-8"));
+    expect(sidecar.exportPreset).toBe("vertical");
+  });
+
   it("a plain recording has no provenance", async () => {
     const { writer } = await setup();
     await writer.create("s1");
