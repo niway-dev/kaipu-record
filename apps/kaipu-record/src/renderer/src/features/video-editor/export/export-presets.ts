@@ -406,3 +406,41 @@ export function slideFrameCount(
     .filter((s) => s.kind === "slide")
     .reduce((n, s) => n + Math.round(s.duration * slideFps), 0);
 }
+
+/** Share of the cap-proportional bitrate the size-check retry aims for (FR8). */
+export const SHRINK_FACTOR = 0.8;
+
+/**
+ * FR8: the Small-file re-encode after an oversize first attempt. Video bitrate becomes
+ * `V × 0.8 × cap / actual`; when that drops below the current rung's floor, the output
+ * steps one rung down (fps capped at 30 there). At the lowest rung the bitrate just drops.
+ */
+export function shrinkSmallFileTarget(
+  target: ResolvedExportTarget,
+  actualBytes: number,
+  source: { width: number; height: number },
+): ResolvedExportTarget {
+  if (target.capBytes === null || typeof target.videoBitrate !== "number" || actualBytes <= 0) {
+    return target;
+  }
+  const v = Math.floor((target.videoBitrate * SHRINK_FACTOR * target.capBytes) / actualBytes);
+  const short = Math.min(target.width, target.height);
+  const index = SMALL_FILE_LADDER.findIndex((r) => r.shortSide === short);
+  const rung = index >= 0 ? SMALL_FILE_LADDER[index] : null;
+  const floor = rung?.floorBps ?? SMALL_FILE_LADDER[SMALL_FILE_LADDER.length - 1].floorBps;
+  const lower = index >= 0 ? SMALL_FILE_LADDER[index + 1] : undefined;
+  if (v >= floor || !lower) {
+    return { ...target, videoBitrate: Math.max(MIN_SHRUNK_BITRATE, v) };
+  }
+  const size = sizeForShortSide(even(source.width), even(source.height), lower.shortSide);
+  return {
+    ...target,
+    width: size.width,
+    height: size.height,
+    videoBitrate: Math.max(MIN_SHRUNK_BITRATE, v),
+    maxFps: SMALL_FILE_LOW_RUNG_FPS,
+  };
+}
+
+/** Never ask the encoder for less than this, however far over the cap the first try was. */
+const MIN_SHRUNK_BITRATE = 100_000;

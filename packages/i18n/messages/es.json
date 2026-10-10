@@ -720,7 +720,9 @@
     "presetTitleSquare": "{title} (cuadrado)",
     "presetTitleSmall": "{title} ({mb} MB)",
     "exportSaved": "Exportación guardada · {size}",
-    "exportShowInFinder": "Mostrar en Finder"
+    "exportShowInFinder": "Mostrar en Finder",
+    "makingSmaller": "Haciéndolo más liviano…",
+    "smallOverCap": "Quedó en {size}, un poco por encima del límite de {cap}. Recorta unos segundos y vuelve a exportar."
   },
   "panel": {
     "saving": "Guardando…",

@@ -78,6 +78,7 @@ const kaipuApi: KaipuElectronAPI = {
   recordingFinalize: (sessionId, meta) =>
     ipcRenderer.invoke(IPC_CHANNELS.recordingFinalize, sessionId, meta),
   recordingAbort: (sessionId) => ipcRenderer.invoke(IPC_CHANNELS.recordingAbort, sessionId),
+  recordingStat: (sessionId) => ipcRenderer.invoke(IPC_CHANNELS.recordingStat, sessionId),
   recordingReportTick: (tick) => ipcRenderer.send(IPC_CHANNELS.recordingReportTick, tick),
   recordingStart: (info) => ipcRenderer.send(IPC_CHANNELS.recordingStart, info),
   recordingStop: () => ipcRenderer.send(IPC_CHANNELS.recordingStop),

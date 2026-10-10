@@ -306,6 +306,8 @@ export const IPC_CHANNELS = {
   recordingWrite: "recording:write",
   recordingFinalize: "recording:finalize",
   recordingAbort: "recording:abort",
+  /** NIW2-218: byte size of an open writer session's temp file (Small-file size check). */
+  recordingStat: "recording:stat",
   recordingReportTick: "recording:report-tick",
   recordingStart: "recording:start",
   recordingStop: "recording:stop",

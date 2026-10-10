@@ -181,6 +181,8 @@ export interface KaipuElectronAPI {
   recordingFinalize(sessionId: string, meta: RecordingFinalizeMeta): Promise<LocalRecording>;
   /** Discard a failed session (delete temp). */
   recordingAbort(sessionId: string): Promise<void>;
+  /** Byte size of an open session's temp file, after every queued write landed (NIW2-218). */
+  recordingStat(sessionId: string): Promise<number>;
   /** Push a live tick (elapsed/levels/status) to the hub for the bar. */
   recordingReportTick(tick: RecordingTick): void;
   /** Tell the hub recording started: hide main window, show the bar. */

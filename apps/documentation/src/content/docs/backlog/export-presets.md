@@ -5,7 +5,7 @@ description: "NIW2-218: pick a destination before exporting (Original, YouTube 1
 
 # Video editor — export presets per destination
 
-> **Status: 🟡 In progress — delivered as three stacked PRs on top of NIW2-217 (#266).**
+> **Status: 🟢 Ready to validate — implemented as three stacked PRs on top of NIW2-217 (#266): #269 → #271 → this slice.**
 >
 > 1. Pipeline + fast start (`feat/NIW2-218-export-presets`).
 > 2. Preset picker in the export sheet (`feat/NIW2-218-export-presets-ui`).
