@@ -7,16 +7,16 @@ description: Phased implementation with quota, security, editing, and design gat
 
 Date: 2026-09-09. Status: proposed plan, without application changes or deployment. Contracts: [product](/specs/2026-09-09-cloud-product/), [data](/specs/2026-09-09-cloud-data-model/), [design](/specs/2026-09-09-cloud-design-handoff/).
 
-Detailed, task-by-task plans (written 2026-09-10; execute from these, not from the phase summaries below):
+Detailed, task-by-task plans (written 2026-09-10, table refreshed 2026-10-09 against `origin/main`; execute from these, not from the phase summaries below):
 
-| Phase                              | Plan                                                                                                                  | Status                                         |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| 1 — server                         | [Cloud 01 — server quotas, revisions and immutable tickets](/plans/2026-09-09-cloud-01-server-quotas-and-revisions/)  | 🟡 In progress — Tasks 0–9 done, 10–13 pending |
-| 2 — local identity                 | [Cloud 02 — local identity and the combined library](/plans/2026-09-09-cloud-02-local-identity-and-combined-library/) | ✅ Merged (#90)                                |
-| 3 — manual upload and download     | not written yet — after 01/02 land                                                                                    | —                                              |
-| 4 — links and independent deletion | not written yet                                                                                                       | —                                              |
-| 5 — automatic upload               | not written yet                                                                                                       | —                                              |
-| 6 — explicit link updates          | not written yet                                                                                                       | —                                              |
+| Phase                              | Plan                                                                                                                  | Status                                                                                         |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| 1 — server                         | [Cloud 01 — server quotas, revisions and immutable tickets](/plans/2026-09-09-cloud-01-server-quotas-and-revisions/)  | 🟡 In progress — Tasks 0–10 merged (#92/#96, #97); 11 and 13 in NIW2-214; 12 moved to NIW2-221 |
+| 2 — local identity                 | [Cloud 02 — local identity and the combined library](/plans/2026-09-09-cloud-02-local-identity-and-combined-library/) | ✅ Merged (#90)                                                                                |
+| 3 — manual upload and download     | [Cloud 03 — manual transfers](/plans/2026-10-09-cloud-03-manual-transfers/) (NIW2-214)                                | 🔵 Proposed — awaiting the founder's approval                                                  |
+| 4 — links and independent deletion | not written yet                                                                                                       | —                                                                                              |
+| 5 — automatic upload               | not written yet                                                                                                       | —                                                                                              |
+| 6 — explicit link updates          | not written yet                                                                                                       | —                                                                                              |
 
 ## Phase 0 — finalize contracts and design
 

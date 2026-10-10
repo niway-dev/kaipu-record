@@ -11,6 +11,42 @@ description: Where the optional cloud work stands on 2026-09-13, what is merged,
 > [Optional cloud (epic)](/backlog/optional-cloud/); the binding decisions live in
 > [plan 01, Task 0](/plans/2026-09-09-cloud-01-server-quotas-and-revisions/).
 
+## 0. Refresh — state of `origin/main` on 2026-10-09 (NIW2-214)
+
+Sections 1–7 below are the 2026-09-13 snapshot and are kept for their rulings and findings. Where
+they disagree with this section, **this section wins**. Verified against `origin/main` at
+`400c80e`.
+
+| Plan 01 task                                                       | State on `main`                    | Evidence                                                                                                                                                                                |
+| ------------------------------------------------------------------ | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0–9 (decisions, spikes, domain, tickets, tables, repos, use cases) | ✅ Merged (#92, brought in by #96) | `packages/application/src/cloud/*`, `packages/infra-db/src/repositories/cloud-*.ts`, `packages/infra-db/src/schema/cloud.ts`                                                            |
+| 10 (contract, `/assets*`, `/me/storage`, error mapping, events)    | ✅ Merged (#97)                    | `apps/server-hono/src/contract/cloud.contract.ts`, `modules/cloud/`, `modules/me/me.router.ts`, `lib/events.ts`, `lib/storage.ts`                                                       |
+| 11 (cron sweep, purge on account delete, `cloud:uploads`)          | 🟡 NIW2-214, server PR             | Before it: no `scheduled` export, no `triggers` in `wrangler.jsonc`, no `deleteUser`; `CloudAccessRepository.setUploadsEnabled` and `CloudPurgeRepository` exist but nothing calls them |
+| 12 (remove the legacy `recording` vertical)                        | ⬜ Moved to **NIW2-221**           | `contract/recording.contract.ts`, `modules/recording/`, `infra-db/src/schema/recording.ts` still exist                                                                                  |
+| 13 (`backend/cloud-storage.md`, WAF runbook, statuses, CI)         | 🟡 NIW2-214, ops/CI PR             | Before it: no `backend/cloud-storage.md`; root `test:integration` exists but no workflow runs it                                                                                        |
+
+Other facts that changed or were found since the snapshot:
+
+- **Cloud HTTP routes are served** (Task 10). The desktop Cloud page reads real `/me/storage`.
+- **Email verification is wired** (#107 transactional email, #111, #118, #120):
+  `apps/server-hono/src/lib/auth.ts` sends verification and reset emails through Resend. Whether it
+  delivers in production (domain DKIM/SPF, a real inbox) is **not verified**.
+- **No migration SQL is tracked.** `packages/infra-db/drizzle.config.ts` writes to `./src/migrations`,
+  but that folder is not in the repository, so the "`0000`/`0001` applied with `db:migrate`" in
+  section 2 cannot be reproduced from `main`. The baseline is NIW2-214's ops PR.
+- **Entitlements v2 / access states are not on `main`.** Every verified email gets 1 GB
+  automatically (`deriveEntitlements` → `FREE_CLOUD_CAPACITY_BYTES`); the 250 MB trial and approval
+  (plans `2026-09-15-02`/`-03`) are separate work. Proposed default (NIW2-214 Q1): keep
+  `cloud_control.uploads_enabled = false` in production until those land.
+- **The desktop is still inert for transfers.** `main/cloud/{catalog-client,storage-client,storage-usage-service}.ts`
+  read the server, but nothing uploads or downloads; `LibraryItem.transfer` is always `idle`. The
+  upload-mode picker still lets a verified user choose **Automatic**, which nothing implements —
+  phase 3 disables it.
+- **Phase 3 has a plan:** [Cloud 03 — manual transfers](/plans/2026-10-09-cloud-03-manual-transfers/)
+  (awaiting the founder's approval before desktop work starts).
+- Sharing (phase 4) has its own design (NIW2-216); see the note at the top of this page once it
+  merges.
+
 ## 1. Where things stand
 
 ### Pull requests (merge in this order)
@@ -35,6 +71,9 @@ After #91 merges, GitHub retargets #92 to `main`; after #92 merges, this page's 
 - **Server (#92):** everything below the HTTP layer for cloud storage. See section 3.
 
 ### What does not work yet
+
+_(2026-09-13 snapshot — superseded by section 0: routes are served and verification emails are
+sent since then.)_
 
 - No cloud HTTP route is served (`/api/v1/assets*`, `/api/v1/me/storage`) — plan 01 Task 10.
 - No upload, download or share from the desktop — plans 03–05.
@@ -149,10 +188,10 @@ To resume in a new Claude session, a good opening message is:
 | 8    | Postgres repositories; single-statement atomic writes; locked `reconcile`; real-DB tests | ✅ `54aeff8`, fixes `4434426`, `443d990`, `b8ec3fc`                            |
 | 9    | Application use cases over in-memory fakes                                               | ✅ `af03654`, fix `a3a3e27` (**last fix round not independently re-reviewed**) |
 | —    | `me.router` composes cloud access so the server type-checks                              | ✅ `82dc682` (small piece of Task 10's wiring)                                 |
-| 10   | Server contract, `/assets*` and `/me/storage` routes, error mapping, structured events   | ⬜ Not started                                                                 |
-| 11   | Cron sweep, account purge on delete, `cloud:uploads status\|on\|off` admin command       | ⬜ Not started                                                                 |
-| 12   | Remove the legacy recording vertical; migrate the web consumer                           | ⬜ Not started                                                                 |
-| 13   | `backend/cloud-storage.md`, WAF runbook, backlog statuses, CI integration step           | ⬜ Not started                                                                 |
+| 10   | Server contract, `/assets*` and `/me/storage` routes, error mapping, structured events   | ✅ #97 (updated 2026-10-09)                                                    |
+| 11   | Cron sweep, account purge on delete, `cloud:uploads status\|on\|off` admin command       | 🟡 NIW2-214 (updated 2026-10-09)                                               |
+| 12   | Remove the legacy recording vertical; migrate the web consumer                           | ⬜ Moved to NIW2-221 (updated 2026-10-09)                                      |
+| 13   | `backend/cloud-storage.md`, WAF runbook, backlog statuses, CI integration step           | 🟡 NIW2-214 (updated 2026-10-09)                                               |
 
 ## 4. Carried rulings and findings (from the execution ledger)
 
@@ -225,7 +264,8 @@ Never describe these as decided. In code they carry `// PROPOSAL (Task 0) — no
 
 ## 7. After plan 01
 
-- **Plan 03 (desktop manual upload and download)**, not written. Requirements already fixed by the
+- **Plan 03 (desktop manual upload and download)** — written 2026-10-09 as
+  [Cloud 03 — manual transfers](/plans/2026-10-09-cloud-03-manual-transfers/). Requirements already fixed by the
   founder: a local queue uploads one file at a time and queued files reserve nothing; interrupted
   or unconfirmed uploads show **Retry**, which calls `confirm` first and only re-requests a URL with
   the same intent key when the object is missing; `intent-expired` starts a new intent; a `403`
