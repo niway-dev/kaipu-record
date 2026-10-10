@@ -1,0 +1,99 @@
+---
+title: "ADR 0013: Sharing is a stable link plus access grants, decided by one canView policy"
+description: Why a share is split into a stable link pinned to one revision and a set of audience grant rows, and why every view is decided by one pure domain function — so a new access mode is a subject type and a branch, never a new endpoint or table.
+---
+
+# ADR 0013: Sharing is a stable link plus access grants, decided by one `canView` policy
+
+## Status
+
+| Field         | Value                                                                                                 |
+| ------------- | ----------------------------------------------------------------------------------------------------- |
+| Status        | Proposed — design PR for NIW2-216, awaiting approval; not implemented                                 |
+| Date          | 2026-10-09                                                                                            |
+| Supersedes    | — (extends the link-only rule of [cloud product § Sharing](/specs/2026-09-09-cloud-product/#sharing)) |
+| Superseded by | —                                                                                                     |
+
+## Context
+
+The accepted cloud product spec allows one kind of share: anyone with the link, no account.
+The owner now wants access modes — only me, my organization, Kaipu users, anyone with the
+link — and room for specific people by email, expiry and passwords later. Nothing in the code
+models sharing yet: `cloud_asset` / `cloud_revision` have `currentRevisionId` only, and the
+data-model spec's `publishedRevisionId` exists on paper.
+
+Two shapes were possible: one row per share carrying its own token and mode, or a stable
+link with separate audience rows. Drive and Loom both keep one URL and evaluate access at
+view time.
+
+## Decision
+
+1. **`share`** is the stable link: an unguessable slug (≥ 128 bits, base62) pinned to one
+   `ready` revision (`published_revision_id`). At most one active share per asset in v1.
+   Revoked shares stay as tombstones; slugs are never reused. Only **Reset link** rotates
+   the slug (and bumps `slug_version`).
+2. **`share_grant`** rows describe the audience: `subject_type`, `subject_id`, `role`
+   (`viewer` only in v1), `expires_at`, `revoked_at`. No active grant means **Only me**.
+   v1 subject types: `organization`, `kaipu_user`, `public_link`. Reserved and refused by
+   the API in v1: `user`, `email`, `password`. `expires_at` exists but is not settable in v1.
+3. **Changing the mode** revokes the current grants and inserts the new ones in one
+   non-interactive transaction (`db.batch` on neon-http). Last writer wins; no state with two
+   broad grants half-applied.
+4. **One pure function** in `packages/domain`, `canView(viewer, share, grants, ctx)`,
+   decides every view: owner → allow; share revoked / cloud copy deleted / revision not
+   ready → `gone`; any matching active grant → allow; otherwise `sign_in_required` for an
+   anonymous viewer when a signed-in user could match, else `no_access`. `kaipu_user`
+   requires a verified email. `organization` requires both viewer and owner to be current
+   members (read through a domain port, never Better Auth directly). `public_link` is
+   ignored while `SHARING_PUBLIC_LINK_ENABLED` is off (default off in v1).
+5. Adding a mode means adding a `subject_type`, one branch in `canView` and its tests. It
+   never means a new endpoint or a new table.
+
+The truth table and the full contract live in the
+[sharing access modes spec](/specs/2026-10-09-sharing-access-modes/).
+
+## Consequences
+
+**Positive:**
+
+- Narrowing or widening access never breaks a link someone already pasted.
+- NIW2-223 (share by email, request access) attaches `email` / `user` grants to the same
+  link and hooks "request access" into the `no_access` branch.
+- Every access rule is in one tested function; auditing sharing means reading one file.
+
+**Negative:**
+
+- Two tables and a join instead of one row; the resolve path reads the share, its grants and
+  (for org grants) membership on every request.
+- "One active share per asset" is a v1 simplification; multiple links per asset would need
+  the unique index relaxed.
+
+**Neutral:**
+
+- Fair-use (`unavailable`) is deliberately outside `canView`: it depends on counters, not on
+  who the viewer is, and never applies to the owner.
+
+## Alternatives considered
+
+### One row per share with the token and mode on it
+
+Rejected. Changing the mode would either mutate a row that also holds the capability (and
+invite accidental rotation) or create a new link per mode, breaking pasted URLs. Email
+grants would need a second mechanism.
+
+### A table per mode
+
+Rejected. Each mode would grow its own endpoints and checks — the "new code path per mode"
+the owner explicitly asked to avoid.
+
+## When to revisit
+
+- When more than one active link per asset is needed (e.g. per-audience links).
+- When roles beyond `viewer` (commenter, editor) are introduced.
+
+## References
+
+- [Sharing as access modes (spec)](/specs/2026-10-09-sharing-access-modes/)
+- [Optional cloud — product § Sharing](/specs/2026-09-09-cloud-product/#sharing)
+- [Identity, revisions, and .kaipu](/specs/2026-09-09-cloud-data-model/)
+- [ADR 0014](./0014-organizations-via-better-auth-plugin) · [ADR 0015](./0015-shared-media-streamed-with-playback-tokens)

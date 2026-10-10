@@ -1,0 +1,83 @@
+---
+title: "ADR 0015: Shared media is streamed through the Worker with short-lived playback tokens, never presigned storage URLs"
+description: Why a viewer of a shared recording receives an HMAC playback token served by the API Worker instead of a presigned R2 URL — key privacy, a 60-second revocation bound, and the per-request cost that fair-use limits must guard.
+---
+
+# ADR 0015: Shared media is streamed through the Worker with short-lived playback tokens, never presigned storage URLs
+
+## Status
+
+| Field         | Value                                                                 |
+| ------------- | --------------------------------------------------------------------- |
+| Status        | Proposed — design PR for NIW2-216, awaiting approval; not implemented |
+| Date          | 2026-10-09                                                            |
+| Supersedes    | —                                                                     |
+| Superseded by | —                                                                     |
+
+## Context
+
+Owners read their own files through `GET /api/v1/assets/{assetId}/download-url`, a presigned
+R2 GET valid for 600 s. The storage key layout is
+`videos/<userId>/<assetId>/<revisionId>.<ext>` (`buildRevisionStorageKey`). Handing such a
+URL to a public viewer leaks the owner's user id, the asset id, the revision id and the
+storage key — the product spec forbids exposing owner identity or storage keys. A presigned
+URL also cannot be revoked: it works until it expires.
+
+## Decision
+
+1. Shared media and posters are served only by
+   `GET|HEAD /api/v1/public/media/{playbackToken}`: the API Worker streams from R2 with
+   `Range` / `206` support and `Content-Disposition: inline`.
+2. `playbackToken` = HMAC over `(shareId, revisionId, slugVersion, exp)` with the secret
+   `SHARE_TOKEN_HMAC_KEY` (Infisical). TTL **15 min**; the player re-resolves before expiry.
+3. Every media request re-checks that the share is active and `slugVersion` still matches,
+   with the share state cached for at most **60 s**. Revoke, reset and mode narrowing
+   therefore stop open players within 60 s.
+4. The bucket stays private; no storage key, owner id or asset id appears in any public
+   response.
+5. Cost guard: per-IP rate limits (Workers Rate Limiting binding) and per-share / per-owner
+   daily view caps ([ADR 0016](./0016-capacity-is-the-only-visible-storage-limit)).
+6. The Worker needs an R2 binding (today R2 is reached through S3 credentials) and
+   `IStorageService` gains `getObjectStream(key, range)`.
+
+## Consequences
+
+**Positive:**
+
+- Keys and identities stay private without changing the storage-key layout.
+- Revocation has a stated bound (60 s) the UI can promise honestly.
+- Rotating `SHARE_TOKEN_HMAC_KEY` invalidates every outstanding playback token at once.
+
+**Negative:**
+
+- One Worker invocation and one R2 Class B read per range request; a 10-minute video can be
+  dozens of requests. R2 egress is free, requests are not.
+- Streaming with `Range` likely needs a plain Hono route rather than oRPC (_to verify_).
+
+## Alternatives considered
+
+### Presigned R2 URLs
+
+Rejected. Cheaper (no Worker on the media path), but they expose
+`userId/assetId/revisionId` and revocation lags up to the TTL.
+
+### Presigned URLs over an opaque key layout
+
+Rejected for now. Hides identity, but needs a storage-key migration for every existing
+object and still cannot revoke before expiry.
+
+### Public CDN path per share
+
+Rejected. Makes media cacheable by third parties and revocation depends on purges.
+
+## When to revisit
+
+- If Worker request costs from shared playback dominate the bill despite fair-use caps.
+- If server transcoding / HLS arrives: segment URLs may change the delivery shape.
+
+## References
+
+- [Sharing as access modes (spec)](/specs/2026-10-09-sharing-access-modes/)
+- [R2 pricing](https://developers.cloudflare.com/r2/pricing/) ·
+  [Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/) ·
+  [Workers Rate Limiting binding](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)
