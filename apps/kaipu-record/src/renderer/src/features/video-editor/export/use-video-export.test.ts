@@ -109,7 +109,7 @@ describe("useVideoExport", () => {
     });
 
     expect(result.current.status).toBe("error");
-    expect(result.current.error).toBe("No hay nada que exportar");
+    expect(result.current.error).toBe("There's nothing to export");
     expect(window.fetch).not.toHaveBeenCalled();
     expect(window.electronAPI.recordingCreate).not.toHaveBeenCalled();
   });
@@ -173,7 +173,7 @@ describe("useVideoExport", () => {
     act(() => worker.onmessage?.({ data: { type: "error", message: "boom" } } as MessageEvent));
 
     expect(result.current.status).toBe("error");
-    expect(result.current.error).toBe("No pudimos exportar el video.");
+    expect(result.current.error).toBe("Couldn't export the video.");
     expect(window.electronAPI.recordingAbort).toHaveBeenCalledWith(sessionId);
     expect(worker.terminate).toHaveBeenCalledOnce();
   });

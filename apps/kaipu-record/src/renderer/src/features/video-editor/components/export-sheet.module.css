@@ -1,0 +1,108 @@
+/* Export sheet (NIW2-217): format row + GIF controls inside the shared Modal shell. */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.segmented {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-modal);
+  align-self: flex-start;
+}
+
+.segment {
+  border: 0;
+  border-radius: 6px;
+  padding: 5px 12px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: transparent;
+  cursor: pointer;
+}
+
+.segment[data-active="true"] {
+  background: var(--accent-primary);
+  color: #fff;
+}
+
+.segment:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.rangeRow {
+  display: flex;
+  gap: 12px;
+}
+
+.numberField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.numberField input {
+  width: 96px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-modal);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+/* Two stacked range inputs = a mini start/end slider. */
+.slider {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.slider input {
+  width: 100%;
+  accent-color: var(--accent-primary);
+}
+
+.estimate {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.blocked {
+  color: var(--danger, #e5484d);
+}
+
+.warning {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--warning, #f5a524);
+}
