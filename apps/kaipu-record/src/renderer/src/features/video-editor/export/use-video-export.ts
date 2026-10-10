@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { useTranslations } from "@kaipu/i18n";
+import { type Translator, useTranslations } from "@kaipu/i18n";
 import type { LocalRecording } from "@shared/types/library-storage";
 import { captureException } from "@renderer/features/analytics";
 import type { SlideAssetStore } from "../slide-assets";
@@ -43,6 +43,28 @@ export interface StartExportArgs {
   /** Probed source facts (frame rate, audio); conservative defaults when omitted. */
   sourceInfo?: { fps: number; hasAudio: boolean; sampleRate?: number } | null;
   onSaved: (recording: LocalRecording) => void;
+}
+
+/** The exported item's title: "(edited)" for Original, the destination otherwise (spec Q8). */
+export function exportTitle(
+  t: Translator<"videoEditor">,
+  presetId: ExportPresetId,
+  title: string,
+): string {
+  switch (presetId) {
+    case "youtube":
+      return t("presetTitleYoutube", { title });
+    case "vertical":
+      return t("presetTitleVertical", { title });
+    case "square":
+      return t("presetTitleSquare", { title });
+    case "small-10":
+      return t("presetTitleSmall", { title, mb: 10 });
+    case "small-25":
+      return t("presetTitleSmall", { title, mb: 25 });
+    default:
+      return t("editedTitle", { title });
+  }
 }
 
 /** mediabunny's error when a `fastStart: 'reserve'` track outgrows its maximumPacketCount. */
@@ -232,11 +254,12 @@ export function useVideoExport(): VideoExportController {
               if (!activeRef.current) return;
               try {
                 const recording = await window.electronAPI.recordingFinalize(sessionId, {
-                  title: t("editedTitle", { title: args.title }),
+                  title: exportTitle(t, presetId, args.title),
                   durationSeconds: plan.totalDuration,
                   durationMs: plan.totalDuration * 1000,
                   thumbnail,
                   derivedFromAssetId: args.derivedFromAssetId,
+                  exportPreset: presetId,
                 });
                 // Re-check again: cancel() could have run during the finalize await too.
                 if (!activeRef.current) return;

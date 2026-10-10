@@ -13,6 +13,13 @@ import {
   type GifFps,
 } from "../export/gif-messages";
 import type { GifEstimateState } from "../export/use-gif-export";
+import {
+  type ExportFraming,
+  type ExportPresetId,
+  type ExportSourceInfo,
+  PRESETS,
+  resolveExportTarget,
+} from "../export/export-presets";
 import styles from "./export-sheet.module.css";
 
 export type ExportFormat = "video" | "gif";
@@ -23,18 +30,68 @@ export interface GifSettings {
   fps: GifFps;
 }
 
+/** What the user picked for the MP4 export (NIW2-218). */
+export interface VideoExportChoice {
+  presetId: ExportPresetId;
+  /** Fit/Fill for Vertical and Square; null for the others. */
+  framing: ExportFraming | null;
+}
+
+/** One card per destination; Small file covers both caps (10 / 25 MB). */
+type PresetCard = "original" | "youtube" | "vertical" | "square" | "small";
+const PRESET_CARDS: readonly PresetCard[] = ["original", "youtube", "vertical", "square", "small"];
+
+const cardOf = (id: ExportPresetId): PresetCard =>
+  id === "small-10" || id === "small-25" ? "small" : id;
+
+/** Decimal megabytes, as the caps are counted (GitHub/Discord). */
+export function formatMB(bytes: number): string {
+  const mb = bytes / 1_000_000;
+  return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`;
+}
+
+/** Seconds as M:SS. */
+export function formatDuration(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
 export interface ExportSheetProps {
   /** Edited-timeline length in seconds (after cuts, slides included). */
   timelineDuration: number;
   /** Native width of the source video; wider GIF widths are disabled. */
   sourceWidth: number;
   estimate: GifEstimateState;
+  /**
+   * NIW2-218: source facts for the preset estimates (native size, frame rate, whether the
+   * export carries audio). Pure math — the sheet reads no media.
+   */
+  presetSource: ExportSourceInfo;
+  /** Last-used preset and framing (settings), preselected. */
+  initialPreset?: ExportPresetId;
+  initialFraming?: ExportFraming | null;
   /** Called (on every change) with valid GIF settings while GIF is selected — drives the estimate. */
   onGifSettingsChange(settings: GifSettings | null): void;
-  onExportVideo(): void;
+  onExportVideo(choice: VideoExportChoice): void;
   onExportGif(settings: GifSettings): void;
   onCancel(): void;
 }
+
+const PRESET_NAME = {
+  original: "presetOriginal",
+  youtube: "presetYoutube",
+  vertical: "presetVertical",
+  square: "presetSquare",
+  small: "presetSmall",
+} as const satisfies Record<PresetCard, string>;
+
+const PRESET_HINT = {
+  original: "presetOriginalHint",
+  youtube: "presetYoutubeHint",
+  vertical: "presetVerticalHint",
+  square: "presetSquareHint",
+  small: "presetSmallHint",
+} as const satisfies Record<PresetCard, string>;
 
 const round1 = (n: number): number => Math.round(n * 10) / 10;
 
@@ -45,14 +102,18 @@ export function enabledGifWidths(sourceWidth: number): number[] {
 }
 
 /**
- * The editor's export sheet (NIW2-217): a format row (Video (MP4) / GIF) and, for GIF, the
- * range, width and fps controls with a live size estimate and the duration limits. Built so
- * NIW2-218 can add a presets row above the format row.
+ * The editor's export sheet: a format row (Video (MP4) / GIF). For video (NIW2-218), one
+ * card per destination preset with its output size and a size estimate, Fit/Fill for
+ * Vertical and Square, the 10/25 MB cap for Small file and a warning when the cap can't be
+ * met. For GIF (NIW2-217), the range, width and fps controls with a live size estimate.
  */
 export function ExportSheet({
   timelineDuration,
   sourceWidth,
   estimate,
+  presetSource,
+  initialPreset = "original",
+  initialFraming = null,
   onGifSettingsChange,
   onExportVideo,
   onExportGif,
@@ -67,6 +128,40 @@ export function ExportSheet({
   const [end, setEnd] = useState(total);
   const [width, setWidth] = useState<number>(widths.includes(640) ? 640 : widths.at(-1)!);
   const [fps, setFps] = useState<GifFps>(15);
+  const [card, setCard] = useState<PresetCard>(cardOf(initialPreset));
+  const [smallPreset, setSmallPreset] = useState<"small-10" | "small-25">(
+    initialPreset === "small-25" ? "small-25" : "small-10",
+  );
+  // The remembered framing applies to the preset it was chosen on; the other keeps its default.
+  const [framings, setFramings] = useState<Record<"vertical" | "square", ExportFraming>>(() => ({
+    vertical:
+      initialPreset === "vertical" && initialFraming
+        ? initialFraming
+        : PRESETS.vertical.defaultFraming!,
+    square:
+      initialPreset === "square" && initialFraming
+        ? initialFraming
+        : PRESETS.square.defaultFraming!,
+  }));
+  const presetIdOf = (c: PresetCard): ExportPresetId => (c === "small" ? smallPreset : c);
+  const framingOf = (c: PresetCard): ExportFraming | null =>
+    c === "vertical" || c === "square" ? framings[c] : null;
+  const targetOf = (c: PresetCard) =>
+    resolveExportTarget(presetIdOf(c), presetSource, timelineDuration, { framing: framingOf(c) });
+  const selected = targetOf(card);
+  const estimateLine = (target: ReturnType<typeof targetOf>): string => {
+    if (target.presetId === "original" || target.estimateBytes === null) {
+      return t("estimateOriginal");
+    }
+    if (target.capBytes !== null) {
+      return t("estimateSmall", {
+        cap: formatMB(target.capBytes),
+        width: target.width,
+        height: target.height,
+      });
+    }
+    return t("estimateUpTo", { size: formatMB(target.estimateBytes) });
+  };
 
   const problem = gifRangeProblem(start, end, {
     min: GIF_MIN_DURATION_S,
@@ -111,6 +206,98 @@ export function ExportSheet({
           ))}
         </div>
       </div>
+
+      {format === "video" && (
+        <>
+          <div className={styles.field}>
+            <span className={styles.label} id={`${id}-preset`}>
+              {t("presetLabel")}
+            </span>
+            <div className={styles.presetGrid} role="radiogroup" aria-labelledby={`${id}-preset`}>
+              {PRESET_CARDS.map((c) => {
+                const target = targetOf(c);
+                return (
+                  <button
+                    key={c}
+                    type="button"
+                    role="radio"
+                    aria-checked={card === c}
+                    className={styles.presetCard}
+                    data-active={card === c}
+                    onClick={() => setCard(c)}
+                  >
+                    <span className={styles.presetName}>{t(PRESET_NAME[c])}</span>
+                    <span className={styles.presetMeta}>{t(PRESET_HINT[c])}</span>
+                    <span className={styles.presetMeta}>
+                      {t("presetDimensions", { width: target.width, height: target.height })}
+                    </span>
+                    <span className={styles.presetMeta}>{estimateLine(target)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {(card === "vertical" || card === "square") && (
+            <div className={styles.field}>
+              <span className={styles.label} id={`${id}-framing`}>
+                {t("framingLabel")}
+              </span>
+              <div className={styles.segmented} role="radiogroup" aria-labelledby={`${id}-framing`}>
+                {(["fit", "fill"] as const).map((f) => (
+                  <button
+                    key={f}
+                    type="button"
+                    role="radio"
+                    aria-checked={framings[card] === f}
+                    className={styles.segment}
+                    data-active={framings[card] === f}
+                    onClick={() => setFramings((prev) => ({ ...prev, [card]: f }))}
+                  >
+                    {f === "fit" ? t("framingFit") : t("framingFill")}
+                  </button>
+                ))}
+              </div>
+              <span className={styles.hint}>
+                {framings[card] === "fit" ? t("framingFitHint") : t("framingFillHint")}
+              </span>
+            </div>
+          )}
+
+          {card === "small" && (
+            <div className={styles.field}>
+              <span className={styles.label} id={`${id}-cap`}>
+                {t("presetSmallCapLabel")}
+              </span>
+              <div className={styles.segmented} role="radiogroup" aria-labelledby={`${id}-cap`}>
+                {(["small-10", "small-25"] as const).map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    role="radio"
+                    aria-checked={smallPreset === p}
+                    className={styles.segment}
+                    data-active={smallPreset === p}
+                    onClick={() => setSmallPreset(p)}
+                  >
+                    {t("presetSmallCapOption", { mb: p === "small-10" ? 10 : 25 })}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!selected.achievable && (
+            <p className={styles.warning} role="alert">
+              <TriangleAlert size={14} strokeWidth={1.8} />
+              {t("smallNotAchievable", {
+                size: formatMB(selected.estimateBytes ?? 0),
+                duration: formatDuration(selected.maxDurationSec ?? 0),
+              })}
+            </p>
+          )}
+        </>
+      )}
 
       {format === "gif" && (
         <>
@@ -253,8 +440,11 @@ export function ExportSheet({
           {t("cancel")}
         </ModalButton>
         {format === "video" ? (
-          <ModalButton variant="primary" onClick={onExportVideo}>
-            {t("exportVideoAction")}
+          <ModalButton
+            variant="primary"
+            onClick={() => onExportVideo({ presetId: presetIdOf(card), framing: framingOf(card) })}
+          >
+            {selected.achievable ? t("exportVideoAction") : t("exportAnywayAction")}
           </ModalButton>
         ) : (
           <ModalButton

@@ -266,6 +266,7 @@ describe("useVideoExport", () => {
       durationMs: 10_000,
       thumbnail: FAKE_THUMB,
       derivedFromAssetId: null,
+      exportPreset: "original",
     });
     expect(onSaved).toHaveBeenCalledWith(
       expect.objectContaining({ id: "new-rec", title: "My recording (edited)" }),
@@ -348,6 +349,20 @@ describe("useVideoExport", () => {
       framing: "fit",
       videoBitrate: 12_000_000,
     });
+  });
+
+  it("records the preset on the sidecar and titles the item after the destination", async () => {
+    const onSaved = vi.fn();
+    const { result } = renderHook(() => useVideoExport());
+    await act(async () => {
+      await result.current.start(startArgs({ onSaved, presetId: "small-10" }));
+    });
+    act(() => createdWorkers[0].onmessage?.({ data: { type: "done" } } as MessageEvent));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledOnce());
+    expect(window.electronAPI.recordingFinalize).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ title: "My recording (10 MB)", exportPreset: "small-10" }),
+    );
   });
 
   it("FR9: a too-small moov reservation aborts that attempt and retries once without fast start", async () => {
