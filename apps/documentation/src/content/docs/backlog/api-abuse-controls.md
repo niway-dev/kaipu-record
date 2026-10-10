@@ -5,7 +5,10 @@ description: Add explicit rate limits, quotas, request limits, MIME policy, and 
 
 # API abuse controls for cloud recordings
 
-> **Status: 🔵 Proposed.** Blocking production rollout of cloud recordings.
+> **Status: 🟡 In progress** (updated 2026-10-09, NIW2-214). Shipped in the cloud assets API:
+> per-account quota, 3 pending uploads, per-file caps (1 GB video, 25 MB screenshot), a MIME
+> allowlist and paginated listing. Still an operator step: the Cloudflare WAF rate-limiting rules —
+> see the runbook in [Cloud storage (server)](/backend/cloud-storage/#rate-limiting-waf-runbook).
 
 ## Problem
 

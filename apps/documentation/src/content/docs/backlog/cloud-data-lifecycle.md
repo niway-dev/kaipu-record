@@ -5,7 +5,12 @@ description: Define recovery, expiration, cleanup, and privacy guarantees for pe
 
 # Cloud recording lifecycle and account deletion
 
-> **Status: 🔵 Proposed.** Blocking production rollout of cloud recordings.
+> **Status: 🟡 In progress** (updated 2026-10-09, NIW2-214). Implemented for cloud assets:
+> reservations expire and the cron sweep releases them, deletes retry from the cron, and account
+> deletion enqueues a purge of every R2 object (plan 01 Task 11, #268). Moves to 🟢 Ready to
+> validate when #268 merges. Purge jobs stop after `maxAttempts` (10) and wait for an operator;
+> bounded-failure alerting is a dashboard alert on `cloud.sweep.failed`, not code. See
+> [Cloud storage (server)](/backend/cloud-storage/).
 
 ## Problem
 

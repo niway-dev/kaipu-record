@@ -5,7 +5,12 @@ description: Prevent replayed presigned PUTs from overwriting ready recordings a
 
 # R2 upload integrity and immutable tickets
 
-> **Status: 🔵 Proposed.** Blocking production rollout of cloud recordings.
+> **Status: 🟡 In progress** (updated 2026-10-09, NIW2-214). The cloud assets API (plan 01 Tasks
+> 0–10) implements immutable tickets — signed `content-length`, `content-type`,
+> `x-amz-checksum-sha256` and `if-none-match: *` — and a confirm that verifies size, type and
+> sha256; see [Cloud storage (server)](/backend/cloud-storage/). It moves to 🟢 once the legacy
+> `recording` vertical, which still issues the old tickets, is removed (NIW2-221). The problem
+> statement below describes that legacy vertical.
 
 ## Problem
 
