@@ -12,7 +12,13 @@
 import type { CameraPathMessage } from "./export-messages";
 import type { OverlayWindow } from "./export-plan";
 import type { Redaction } from "../privacy/redaction";
-import { applyRedactions, planClipFrame, type Ctx2D, type ScratchCanvas } from "./compose-frame";
+import {
+  applyRedactions,
+  framingRect,
+  planClipFrame,
+  type Ctx2D,
+  type ScratchCanvas,
+} from "./compose-frame";
 
 export interface OutputComposerOptions {
   /** The output canvas context; frames are composed onto it at `width × height`. */
@@ -144,4 +150,67 @@ function drawContained(
   const dw = bitmap.width * scale;
   const dh = bitmap.height * scale;
   ctx.drawImage(bitmap, (w - dw) / 2, (h - dh) / 2, dw, dh);
+}
+
+export interface FrameIntoOptions {
+  /** The target-size output context. */
+  ctx: OffscreenCanvasRenderingContext2D;
+  width: number;
+  height: number;
+  /** What fills the canvas around a Fit frame (NIW2-218 Q2). */
+  padding: "black" | "blur";
+}
+
+/**
+ * NIW2-218 fixed-canvas presets: places a composed VIEW (source-size canvas that already
+ * holds frame → redactions → content-pinned overlays → zoom crop) onto the target canvas.
+ * Privacy is decided upstream, on the view; this step only scales and crops it, so a
+ * redaction always stays on the same content pixels.
+ *
+ * The blurred padding is a downscale → upscale of the view itself (cheap, needs no canvas
+ * filter support), dimmed so the real frame reads as the subject.
+ */
+export function createFramer(opts: FrameIntoOptions): {
+  frame(view: OffscreenCanvas, mode: "fit" | "fill"): void;
+} {
+  const { ctx, width, height, padding } = opts;
+  // ~1/24 of the canvas: upscaling it back with smoothing reads as a strong blur.
+  const tiny = new OffscreenCanvas(
+    Math.max(2, Math.round(width / 24)),
+    Math.max(2, Math.round(height / 24)),
+  );
+  const tinyCtx = tiny.getContext("2d");
+  return {
+    frame(view, mode) {
+      const rect = framingRect(view.width, view.height, width, height, mode);
+      const covers = rect.dx <= 0 && rect.dy <= 0 && rect.dw >= width && rect.dh >= height;
+      if (!covers) {
+        ctx.fillStyle = "#000";
+        ctx.fillRect(0, 0, width, height);
+        if (padding === "blur" && tinyCtx) {
+          const cover = framingRect(view.width, view.height, tiny.width, tiny.height, "fill");
+          tinyCtx.imageSmoothingEnabled = true;
+          tinyCtx.drawImage(
+            view,
+            cover.sx,
+            cover.sy,
+            cover.sw,
+            cover.sh,
+            0,
+            0,
+            tiny.width,
+            tiny.height,
+          );
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = "high";
+          ctx.drawImage(tiny, 0, 0, width, height);
+          ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+          ctx.fillRect(0, 0, width, height);
+        }
+      }
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(view, rect.sx, rect.sy, rect.sw, rect.sh, rect.dx, rect.dy, rect.dw, rect.dh);
+    },
+  };
 }

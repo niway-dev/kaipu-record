@@ -4,6 +4,7 @@ import type { ZoomSegment } from "../zoom/zoom-model";
 import { coverLabelPx, type Redaction } from "../privacy/redaction";
 import {
   applyRedactions,
+  framingRect,
   type Ctx2D,
   cropRectPx,
   planClipFrame,
@@ -187,5 +188,40 @@ describe("applyRedactions", () => {
     const { ctx, log } = fakeCtx();
     applyRedactions(ctx, WORK, [blur({ style: "pixelate" })], W, H, scratch(false).canvas, true);
     expect(log).toContainEqual(["fillRect", 100, 100, 300, 100]);
+  });
+});
+
+describe("framingRect (NIW2-218)", () => {
+  it("Fit: whole 16:9 frame inside 1080×1920, centred vertically with padding", () => {
+    const r = framingRect(1920, 1080, 1080, 1920, "fit");
+    expect(r).toMatchObject({ sx: 0, sy: 0, sw: 1920, sh: 1080, dx: 0, dw: 1080 });
+    expect(r.dh).toBeCloseTo(607.5);
+    expect(r.dy).toBeCloseTo((1920 - 607.5) / 2);
+  });
+
+  it("Fit: a 1662×1080 frame on 1920×1080 gets side (pillar) padding", () => {
+    const r = framingRect(1662, 1080, 1920, 1080, "fit");
+    expect(r.dh).toBe(1080);
+    expect(r.dw).toBeCloseTo(1662);
+    expect(r.dx).toBeCloseTo((1920 - 1662) / 2);
+  });
+
+  it("Fill: 16:9 frame covers 1080×1920, cropping a centred window of the source", () => {
+    const r = framingRect(1920, 1080, 1080, 1920, "fill");
+    expect(r).toMatchObject({ dx: 0, dy: 0, dw: 1080, dh: 1920, sy: 0, sh: 1080 });
+    expect(r.sw).toBeCloseTo(607.5);
+    expect(r.sx + r.sw / 2).toBeCloseTo(960); // centred on the view
+  });
+
+  it("Fill: square canvas from 16:9 crops the sides equally", () => {
+    const r = framingRect(1920, 1080, 1080, 1080, "fill");
+    expect(r.sw).toBe(1080);
+    expect(r.sx).toBe(420);
+  });
+
+  it("identical aspect: Fit and Fill agree and nothing is cropped", () => {
+    expect(framingRect(1280, 720, 1920, 1080, "fit")).toEqual(
+      framingRect(1280, 720, 1920, 1080, "fill"),
+    );
   });
 });
