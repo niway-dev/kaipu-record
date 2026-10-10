@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
 import { ArrowLeft } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { planCopyValues } from "@kaipu/domain/constants";
 import { useTranslations } from "@kaipu/i18n";
 import { KaipuLogo } from "@kaipu/brand";
 import { AuthForm, LEGAL_WEB_URL, type AuthFormMode } from "@renderer/features/auth/auth-form";
@@ -79,9 +80,9 @@ export function AuthPage({ mode }: { mode: AuthFormMode }): React.JSX.Element {
             <KaipuLogo use="product" size={36} />
           </span>
           <h1 className={styles.title}>{t(copy.title)}</h1>
-          <p className={styles.subtitle}>{t(copy.subtitle)}</p>
+          <p className={styles.subtitle}>{t(copy.subtitle, planCopyValues())}</p>
           <p className={styles.cloudTerms}>
-            <strong>{t("cloudPromotion")}</strong> {t("cloudPromotionNote")}{" "}
+            <strong>{t("cloudPromotion", planCopyValues())}</strong> {t("cloudPromotionNote")}{" "}
             <a
               href={`${LEGAL_WEB_URL}/legal/cloud-terms`}
               target="_blank"

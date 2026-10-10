@@ -14,5 +14,5 @@ export function formatBytesDecimal(bytes: number): string {
   return `${value.toFixed(decimals)} ${units[unit]}`;
 }
 
-/** Per-video upload ceiling from the product spec; the server enforces it (cloud plan 01). */
-export const MAX_VIDEO_BYTES = 1_000_000_000;
+/** Per-video upload ceiling — the same constant the server enforces (see the plan table). */
+export { MAX_VIDEO_BYTES } from "@kaipu/domain/constants";

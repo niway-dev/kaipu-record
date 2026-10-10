@@ -3,6 +3,8 @@ title: Cloud 01 — server quotas, revisions and immutable tickets
 description: Task-by-task TDD plan for the server side of optional cloud — atomic quota reservations, idempotent upload intents, size/type/hash-bound presigned tickets, verified confirmation, scheduled cleanup and account purge.
 ---
 
+> **Historical plan numbers.** Capacities in this document are as of its date. Current values: [Plans — Free and Pro](/features/plans/).
+
 # Cloud 01 — Server Quotas, Revisions and Immutable Tickets Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
