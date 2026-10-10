@@ -10,9 +10,16 @@
  *   5. Finalize the MP4 and notify the renderer.
  *
  * Chunks are posted via transferable ArrayBuffers so the renderer can write them to
- * disk without an extra copy. Positions are non-monotonic because mediabunny writes
- * the moov box at the END of the file and then seeks back to patch the ftyp offset —
- * hence `StreamTarget` (positional) is required instead of `AppendOnlyStreamTarget`.
+ * disk without an extra copy. Positions are non-monotonic: with `fastStart: 'reserve'`
+ * (NIW2-218) mediabunny reserves room for the moov box at the START of the file and
+ * seeks back to fill it at finalize (without fast start it writes moov at the end and
+ * patches earlier headers) — hence `StreamTarget` (positional) is required instead of
+ * `AppendOnlyStreamTarget`. Never `'in-memory'`: it buffers the whole file in the worker.
+ *
+ * Presets (NIW2-218, `msg.target`): Original and Small file compose straight onto the
+ * output canvas (same aspect as the source). Fixed-canvas presets compose a source-size
+ * VIEW first (frame → redactions → overlays → zoom crop, exactly as Original) and then
+ * frame it onto the target canvas (Fit/Fill, see `createFramer`).
  *
  * Audio API choice: the WebCodecs-backed `AudioSample`/`AudioSampleSink`/
  * `AudioSampleSource` path is used, NOT the Web-Audio `AudioBuffer` one. The DOM
@@ -52,6 +59,7 @@ import {
   AudioSampleSink,
   AudioSampleSource,
   BlobSource,
+  canEncodeVideo,
   CanvasSink,
   CanvasSource,
   Input,
@@ -64,7 +72,8 @@ import type { StreamTargetChunk } from "mediabunny";
 import type { ExportStartMessage, ExportWorkerMessage } from "./export-messages";
 import { silencedSpansFor } from "../audio-edits";
 import { rebaseVideoTimestamp } from "./rebase-timestamp";
-import { createOutputComposer } from "./compose-output-frame";
+import { createFramer, createOutputComposer } from "./compose-output-frame";
+import { packetCountsFor, slideFrameCount } from "./export-presets";
 
 // ---------------------------------------------------------------------------
 // Typing helper: TypeScript doesn't expose `Worker` on `self` in module workers.
@@ -104,7 +113,11 @@ async function runExport(msg: ExportStartMessage): Promise<void> {
 }
 
 async function runExportWithInput(msg: ExportStartMessage, input: Input): Promise<void> {
-  const { plan, output: size } = msg;
+  const { plan, output: size, target: preset } = msg;
+  // Fixed-canvas presets compose at SOURCE size into a view canvas, then frame it onto the
+  // output. Identity framing (Original, Small file) composes straight onto the output.
+  const framed = preset.framing !== "identity";
+  const composeSize = framed ? msg.source : size;
 
   const videoTrack = await input.getPrimaryVideoTrack();
   if (!videoTrack) throw new Error("source has no video track");
@@ -130,14 +143,31 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
   );
 
   const out = new Output({
-    format: new Mp4OutputFormat({ fastStart: false }),
+    format: new Mp4OutputFormat({ fastStart: preset.fastStart }),
     target,
   });
 
+  // A composite view canvas for the fixed-canvas presets (see the header comment).
+  const view = framed ? new OffscreenCanvas(composeSize.width, composeSize.height) : null;
+  const viewCtx = view ? view.getContext("2d") : ctx;
+  if (!viewCtx) throw new Error("export-worker: no 2D context on the view canvas");
+  const framer = view
+    ? createFramer({ ctx, width: size.width, height: size.height, padding: preset.padding })
+    : null;
+
+  const videoBitrate = preset.videoBitrate === "high" ? QUALITY_HIGH : preset.videoBitrate;
+  // Portrait 1080×1920 needs H.264 level ≥ 4.0; some hardware encoders refuse it. Fall back
+  // to letting the platform pick (software if need be) rather than failing the export.
+  const hardwareOk = await canEncodeVideo("avc", {
+    width: size.width,
+    height: size.height,
+    bitrate: videoBitrate,
+    hardwareAcceleration: "prefer-hardware",
+  }).catch(() => false);
   const videoSource = new CanvasSource(canvas, {
     codec: "avc",
-    bitrate: QUALITY_HIGH,
-    hardwareAcceleration: "prefer-hardware",
+    bitrate: videoBitrate,
+    hardwareAcceleration: hardwareOk ? "prefer-hardware" : "no-preference",
   });
   // Omit frameRate from VideoTrackMetadata so mediabunny does NOT snap all
   // timestamps to a track-wide grid. Timing is driven entirely by the explicit
@@ -146,32 +176,55 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
   // frames are synthesized at plan.slideFps. A track-wide frameRate hint would
   // collapse high-fps clip frame pairs onto a coarser grid, producing
   // zero-duration or duplicate frames in the encoder.
-  out.addVideoTrack(videoSource);
-
+  //
   // A whole-video mute produces a file with NO audio track, not a silent one:
   // smaller, and no dead volume control in the player. This is the same branch a
   // screen-only recording already takes, so nothing downstream is new.
   const audioMuted = plan.audio.audioMuted;
   const audioSource =
     audioTrack && !audioMuted
-      ? new AudioSampleSource({ codec: "aac", bitrate: QUALITY_HIGH })
+      ? new AudioSampleSource({
+          codec: "aac",
+          bitrate: preset.audioBitrate === "high" ? QUALITY_HIGH : preset.audioBitrate,
+        })
       : null;
-  if (audioSource) out.addAudioTrack(audioSource);
 
   // Sample rate / channel count for synthesized slide silence — derived from
   // the source track so it matches the real audio instead of assuming a
   // fixed layout; 48000/2 is only a fallback if the track ever reports 0.
+  // Small file downmixes to mono (preset.audioChannels), silence included.
   const silenceSampleRate = audioTrack ? (await audioTrack.getSampleRate()) || 48000 : 48000;
-  const silenceChannelCount = audioTrack ? (await audioTrack.getNumberOfChannels()) || 2 : 2;
+  const silenceChannelCount =
+    preset.audioChannels ?? (audioTrack ? (await audioTrack.getNumberOfChannels()) || 2 : 2);
+
+  // `maximumPacketCount` for the moov reservation: the renderer's estimate, raised with the
+  // real source rate/sample rate when the worker sees more (too small → the muxer throws
+  // and the hook retries once without fast start).
+  const stats = await videoTrack.computePacketStats(240).catch(() => null);
+  const workerCounts = packetCountsFor({
+    durationSec: plan.totalDuration,
+    fps: stats?.averagePacketRate ?? 30,
+    maxFps: preset.maxFps,
+    slideFrames: slideFrameCount(plan.segments, plan.slideFps),
+    hasAudio: audioSource !== null,
+    sampleRate: silenceSampleRate,
+  });
+  const maxVideoPackets = Math.max(preset.packetCounts.video, workerCounts.video);
+  const maxAudioPackets = Math.max(preset.packetCounts.audio, workerCounts.audio);
+  const reserve = preset.fastStart === "reserve";
+  out.addVideoTrack(videoSource, reserve ? { maximumPacketCount: maxVideoPackets } : {});
+  if (audioSource) {
+    out.addAudioTrack(audioSource, reserve ? { maximumPacketCount: maxAudioPackets } : {});
+  }
 
   await out.start();
 
   // Per-frame composition (fill → zoom/redactions/overlays) is shared with the GIF worker
   // in compose-output-frame.ts so the two exports can never diverge on privacy.
   const compose = createOutputComposer({
-    ctx,
-    width: size.width,
-    height: size.height,
+    ctx: viewCtx,
+    width: composeSize.width,
+    height: composeSize.height,
     camera: msg.camera,
     redactions: plan.redactions,
     overlayWindows: plan.overlayWindows,
@@ -211,11 +264,14 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
     // detect and drop a straddling frame that would regress across a cut boundary.
     // ---------------------------------------------------------------------------
     let prevOutTs: number | null = null;
+    // fps cap (Small file below 1080p): the earliest output time the next kept frame may have.
+    const minFrameGap = preset.maxFps ? 1 / preset.maxFps : 0;
+    let nextSlot: number | null = null;
     for (const segment of plan.segments) {
       if (segment.kind === "clip") {
         const sink = new CanvasSink(videoTrack, {
-          width: size.width,
-          height: size.height,
+          width: composeSize.width,
+          height: composeSize.height,
           // 'contain' letterboxes so the aspect ratio is never distorted.
           fit: "contain",
         });
@@ -231,11 +287,17 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
             prevOutTs,
           );
           if (outTs === null) continue; // straddle/duplicate frame — skip, don't advance prevOutTs
+          // fps cap: drop frames before the next slot. The kept frame's sample lasts until
+          // the next kept one (the muxer derives durations from timestamp deltas), so
+          // timestamps stay monotonic and the timeline length is unchanged.
+          if (nextSlot !== null && outTs < nextSlot - 1e-6) continue;
+          if (minFrameGap > 0) nextSlot = outTs + minFrameGap;
           compose.clip(wrapped.canvas, wrapped.timestamp, wrapped.duration, outTs);
+          if (framer && view) framer.frame(view, preset.framing === "fill" ? "fill" : "fit");
           await sendPosterOnce();
           // Use the frame's own decoded duration so clip frames preserve the
           // source's native cadence without rounding to a fixed grid.
-          await videoSource.add(outTs, wrapped.duration);
+          await videoSource.add(outTs, Math.max(wrapped.duration, minFrameGap));
           reportProgress(outTs);
           prevOutTs = outTs;
         }
@@ -251,6 +313,8 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
         for (let i = 0; i < frameCount; i++) {
           const outTs = segment.timelineStart + i * frameDuration;
           compose.slide(bitmap, outTs);
+          // Slides are always contained ("fit"), never cropped, whatever the clip framing.
+          if (framer && view) framer.frame(view, "fit");
           await sendPosterOnce();
           await videoSource.add(outTs, frameDuration);
           reportProgress(outTs);
@@ -289,11 +353,13 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
               const start = trimmed.timestamp;
               const end = start + trimmed.duration;
               const muted = silenced.some((span) => start < span.end && end > span.start);
-              const emitted = muted ? zeroedLike(trimmed) : trimmed;
+              const shaped = preset.audioChannels === 1 ? downmixToMono(trimmed) : trimmed;
+              const emitted = muted ? zeroedLike(shaped) : shaped;
               emitted.setTimestamp(audioCursor);
               audioCursor += emitted.duration;
               await audioSource.add(emitted);
-              if (emitted !== trimmed) emitted.close();
+              if (emitted !== shaped) emitted.close();
+              if (shaped !== trimmed) shaped.close();
               if (trimmed !== sample) trimmed.close();
             }
             sample.close();
@@ -362,6 +428,30 @@ function zeroedLike(sample: AudioSample): AudioSample {
     data: new Float32Array(sample.numberOfFrames * sample.numberOfChannels),
     format: "f32",
     numberOfChannels: sample.numberOfChannels,
+    sampleRate: sample.sampleRate,
+    timestamp: sample.timestamp,
+  });
+}
+
+/**
+ * Small file (NIW2-218): average every channel into one. A mono source passes through
+ * unchanged; the caller closes a new sample when one is returned.
+ */
+function downmixToMono(sample: AudioSample): AudioSample {
+  const channels = sample.numberOfChannels;
+  if (channels <= 1) return sample;
+  const frames = sample.numberOfFrames;
+  const mono = new Float32Array(frames);
+  const plane = new Float32Array(frames);
+  for (let c = 0; c < channels; c++) {
+    sample.copyTo(plane, { planeIndex: c, format: "f32-planar" });
+    for (let i = 0; i < frames; i++) mono[i] += plane[i];
+  }
+  for (let i = 0; i < frames; i++) mono[i] /= channels;
+  return new AudioSample({
+    data: mono,
+    format: "f32",
+    numberOfChannels: 1,
     sampleRate: sample.sampleRate,
     timestamp: sample.timestamp,
   });
