@@ -225,8 +225,11 @@ thresholds; no "0 GB" on error; i18n parity.
 Not a code PR. The founder (or an operator session he authorises) does, in order:
 
 1. Apply the baseline migration to a Neon branch of production, then production (`db:migrate`).
-2. Seed `cloud_control` with `uploads_enabled = false` (`bun run cloud:uploads status` creates the
-   row; `off` keeps it closed).
+   A database already built with `db:push` must have the baseline **recorded as applied** rather
+   than executed — the procedure is in `backend/cloud-storage.md` (NIW2-214 ops PR).
+2. Seed `cloud_control` with `uploads_enabled = false` by running `bun run cloud:uploads off`
+   against production. A missing row means **enabled**, so this step is what closes uploads;
+   `status` only reads.
 3. Verify R2 private-bucket secrets on the production Worker.
 4. Verify a verification email end to end (Resend DKIM/SPF, a real inbox).
 5. Create the WAF rules per `backend/cloud-storage.md`.
