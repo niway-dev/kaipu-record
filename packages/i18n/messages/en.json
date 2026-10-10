@@ -1032,7 +1032,17 @@
     "approvedPreview": "Your request for more Kaipu Cloud space was approved.",
     "approvedHeading": "You have more Cloud space",
     "approvedBody": "Your request was approved. Your account now has {capacity} of total Kaipu Cloud space.",
-    "approvedButton": "Open Kaipu"
+    "approvedButton": "Open Kaipu",
+    "deletionScheduledSubject": "Your Kaipu account will be deleted on {date}",
+    "deletionScheduledPreview": "Your account will be deleted on {date}. Sign in to cancel.",
+    "deletionScheduledHeading": "Your account is scheduled for deletion",
+    "deletionScheduledBody": "Your account will be deleted on {date}. Sign in to cancel. Until then you are signed out everywhere, share links stop working and nothing new can be uploaded. After that date your account and your Kaipu Cloud files are deleted for good.",
+    "deletionScheduledButton": "Sign in to cancel",
+    "deletionScheduledLocal": "Recordings and screenshots saved on your Mac are never touched.",
+    "deletedSubject": "Your Kaipu account was deleted",
+    "deletedPreview": "Your Kaipu account and its cloud files were deleted.",
+    "deletedHeading": "Your account was deleted",
+    "deletedBody": "Your account was deleted. Your Kaipu Cloud files are being removed from our storage. You can create a new account at any time."
   },
   "seo": {
     "siteTitle": "Kaipu — Screen recordings and screenshots, kept on your Mac",
