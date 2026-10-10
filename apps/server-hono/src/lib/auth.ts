@@ -1,7 +1,10 @@
 import { baseConfig, getCustomSession } from "@kaipu/infra-auth";
 import { describeEmailFailure, EMAIL_TEMPLATE_VALUES, type EmailLocale } from "@kaipu/infra-email";
+import { createDatabaseClient } from "@kaipu/infra-db/client";
+import { CloudPurgeRepository } from "@kaipu/infra-db/repositories";
 import { betterAuth } from "better-auth";
 import { customSession } from "better-auth/plugins";
+import { makeBeforeDeleteUser } from "../cloud/account-deletion";
 import { env } from "../env";
 import { buildResetUrl, buildVerifyUrl, tryGetEmail, webUrl } from "./email";
 
@@ -93,6 +96,18 @@ export const auth = betterAuth({
         });
         throw err;
       }
+    },
+  },
+  // Account deletion (plan 01 Task 11): POST /api/auth/delete-user. The purge is enqueued before
+  // the cascade so the cron can remove the account's R2 objects. Wired here, at the composition
+  // boundary, rather than in infra-auth's base config (plan 2026-09-15-01: hooks live in the app).
+  user: {
+    ...baseConfig.user,
+    deleteUser: {
+      enabled: true,
+      beforeDelete: makeBeforeDeleteUser(
+        new CloudPurgeRepository(createDatabaseClient(env.DATABASE_URL)),
+      ),
     },
   },
   plugins: [...(baseConfig.plugins ?? []), customSession(getCustomSession, baseConfig)],
