@@ -24,6 +24,9 @@ jobs:
   build:
     name: Lint, build & type-check
     runs-on: ubuntu-latest
+    env:
+      # "true"/"false" only — lets steps branch on the secret's presence without exposing it.
+      HAS_TEST_DATABASE: ${{ secrets.TEST_DATABASE_URL != '' }}
     # release-please PRs only bump version + CHANGELOG of already-validated code.
     steps:
       - name: Checkout code
@@ -84,6 +87,20 @@ jobs:
 
       - name: Test packages
         run: bun run test --filter='@kaipu/*'
+
+      # infra-db integration suite against a real Postgres (plan 01 Task 13). It creates and
+      # deletes rows, so TEST_DATABASE_URL must be a dedicated throwaway Neon branch — never dev
+      # or production. Runs only when that repository secret exists; otherwise a notice says so.
+      # `HAS_TEST_DATABASE` is a boolean, so the secret's value never reaches this step's env.
+      - name: Integration tests (infra-db)
+        if: env.HAS_TEST_DATABASE == 'true'
+        env:
+          TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+        run: bun run test:integration
+
+      - name: Integration tests skipped
+        if: env.HAS_TEST_DATABASE != 'true'
+        run: echo "::notice title=Integration tests skipped::Add the TEST_DATABASE_URL repository secret (a throwaway Neon branch) to run bun run test:integration."
 
       - name: Build web app
         working-directory: apps/web-hono
