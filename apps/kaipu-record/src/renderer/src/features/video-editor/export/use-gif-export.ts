@@ -298,14 +298,16 @@ export function useGifExport(): GifExportController {
   );
 
   // Unmount: never leave a worker running behind the page.
-  useEffect(
-    () => () => {
-      workerRef.current?.terminate();
-      estimateWorkerRef.current?.terminate();
-      if (estimateTimerRef.current) clearTimeout(estimateTimerRef.current);
-    },
-    [],
-  );
+  useEffect(() => {
+    const exportWorker = workerRef;
+    const estimateWorker = estimateWorkerRef;
+    const estimateTimer = estimateTimerRef;
+    return () => {
+      exportWorker.current?.terminate();
+      estimateWorker.current?.terminate();
+      if (estimateTimer.current) clearTimeout(estimateTimer.current);
+    };
+  }, []);
 
   return { ...state, start, cancel, estimate, requestEstimate, cancelEstimate };
 }
