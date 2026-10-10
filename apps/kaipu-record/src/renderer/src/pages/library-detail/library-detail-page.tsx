@@ -11,6 +11,7 @@ import { StorageMeta } from "@renderer/features/library/components/storage-meta"
 import { DeleteConfirmDialog } from "@renderer/features/library/components/delete-confirm-dialog";
 import { RecordingPlayer } from "@renderer/features/library/components/recording-player";
 import { ScreenshotViewer } from "@renderer/features/library/components/screenshot-viewer";
+import { GifViewer } from "@renderer/features/library/components/gif-viewer";
 import { RecordingTitle } from "@renderer/features/library/components/recording-title";
 import { TagEditor } from "@renderer/features/library/components/tag-editor";
 import { resolveTags, useTags } from "@renderer/features/library/hooks/use-tags";
@@ -104,6 +105,9 @@ export function LibraryDetailPage(): React.JSX.Element {
 
   const localId = video.id;
   const isScreenshot = video.kind === "screenshot";
+  // NIW2-217: a GIF export plays in an <img>, has no editor and no edit-state line.
+  const isGif = video.kind === "gif";
+  const gifInfo = isGif ? video.gif : null;
   const source = video.derivedFromAssetId
     ? lineage.byAssetId.get(video.derivedFromAssetId)
     : undefined;
@@ -173,6 +177,8 @@ export function LibraryDetailPage(): React.JSX.Element {
 
       {isScreenshot ? (
         <ScreenshotViewer src={video.thumbnailUrl} />
+      ) : isGif ? (
+        localId && <GifViewer id={localId} />
       ) : (
         localId && (
           <>
@@ -222,6 +228,18 @@ export function LibraryDetailPage(): React.JSX.Element {
             )}
             <span className={styles.dot}>·</span>
             <span className={styles.metaItem}>{formatSize(video.fileSizeBytes)}</span>
+            {gifInfo && (
+              <>
+                <span className={styles.dot}>·</span>
+                <span className={styles.metaItem}>
+                  {t("gifSpecs", {
+                    width: gifInfo.width,
+                    height: gifInfo.height,
+                    fps: gifInfo.fps,
+                  })}
+                </span>
+              </>
+            )}
             {video.cloudSizeBytes !== null && video.cloudSizeBytes !== video.fileSizeBytes && (
               <>
                 <span className={styles.dot}>·</span>
@@ -231,7 +249,7 @@ export function LibraryDetailPage(): React.JSX.Element {
               </>
             )}
           </div>
-          {!isScreenshot && badge === null && (
+          {!isScreenshot && !isGif && badge === null && (
             <p className={styles.editingLine}>{t(EDITING_LABEL_KEYS[video.editing])}</p>
           )}
           {(badge === "never-exported" || badge === "stale") && (
@@ -279,7 +297,7 @@ export function LibraryDetailPage(): React.JSX.Element {
               </Button>
             </>
           )}
-          {!isScreenshot && localId && (
+          {!isScreenshot && !isGif && localId && (
             <Button
               variant="outline"
               size="sm"

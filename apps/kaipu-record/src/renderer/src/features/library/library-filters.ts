@@ -6,7 +6,8 @@ import type { LibraryKind, LibraryVideo } from "./types";
 export type StorageFilter = "all" | "local" | "cloud";
 
 /** The kind chip selection — recording / screenshot, plus the "all" pass-through. */
-export type KindFilter = "all" | LibraryKind;
+/** GIFs have no chip of their own (they group under "recording", see `kindGroup`). */
+export type KindFilter = "all" | Exclude<LibraryKind, "gif">;
 
 export type SortKey = "newest" | "oldest" | "largest";
 
@@ -59,7 +60,11 @@ type Facet = "kind" | "storage";
  * selection — the rule behind facet counts (see {@link facetCounts}).
  */
 function matches(video: LibraryVideo, criteria: FilterCriteria, skip?: Facet): boolean {
-  if (skip !== "kind" && criteria.kindFilter !== "all" && video.kind !== criteria.kindFilter) {
+  if (
+    skip !== "kind" &&
+    criteria.kindFilter !== "all" &&
+    kindGroup(video.kind) !== criteria.kindFilter
+  ) {
     return false;
   }
   if (skip !== "storage") {
@@ -114,11 +119,19 @@ export function countByStorage(videos: LibraryVideo[]): StorageCounts {
   };
 }
 
+/**
+ * The filter chip a kind belongs to. GIF exports are grouped under Recordings (NIW2-217:
+ * a badge on the card, no chip of their own).
+ */
+export function kindGroup(kind: LibraryKind): Exclude<LibraryKind, "gif"> {
+  return kind === "gif" ? "recording" : kind;
+}
+
 /** Tally items by kind (recording vs screenshot) for the kind filter chips. */
 export function countByKind(videos: LibraryVideo[]): KindCounts {
   return {
     all: videos.length,
-    recording: videos.filter((v) => v.kind === "recording").length,
+    recording: videos.filter((v) => kindGroup(v.kind) === "recording").length,
     screenshot: videos.filter((v) => v.kind === "screenshot").length,
   };
 }
