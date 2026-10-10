@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { PLANS } from "@kaipu/domain/constants";
 import type { AuthStatus } from "./types/auth";
 import { entitlementsFromStatus, FREE_ENTITLEMENTS, type Entitlements } from "./entitlements";
 
@@ -38,5 +39,15 @@ describe("entitlementsFromStatus", () => {
 
   it("is null in `unknown` when nothing was ever cached", () => {
     expect(entitlementsFromStatus({ kind: "unknown" })).toBeNull();
+  });
+});
+
+describe("FREE_ENTITLEMENTS", () => {
+  // The literal in entitlements.ts must match the domain plan table (it cannot import it).
+  it("mirrors the Free plan in @kaipu/domain: 250 MB, no cloud until verified", () => {
+    expect(FREE_ENTITLEMENTS.plan).toBe(PLANS.free.id);
+    expect(FREE_ENTITLEMENTS.features.cloudStorageBytes).toBe(PLANS.free.cloudStorageBytes);
+    expect(FREE_ENTITLEMENTS.features.cloudStorageBytes).toBe(250_000_000);
+    expect(FREE_ENTITLEMENTS.features.cloudUploads).toBe(false);
   });
 });

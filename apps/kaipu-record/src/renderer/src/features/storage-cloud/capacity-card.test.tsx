@@ -61,7 +61,10 @@ describe("CapacityCard", () => {
   it("shows a skeleton and no figures while loading", () => {
     renderCard({ kind: "loading" });
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
-    expect(screen.queryByText(/MB/)).not.toBeInTheDocument();
+    // The plan's capacity (from entitlements) is known; no usage figure is shown yet.
+    const planLabel = "Plan Free · 250 MB";
+    expect(screen.getByText(planLabel)).toBeInTheDocument();
+    expect(screen.queryAllByText(/MB/).filter((el) => el.textContent !== planLabel)).toEqual([]);
     expect(screen.getByText(/checking your cloud space/i)).toBeInTheDocument();
   });
 
