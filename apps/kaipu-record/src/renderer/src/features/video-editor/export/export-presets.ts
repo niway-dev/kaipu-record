@@ -14,27 +14,19 @@
  *   (the 25 MB cap is "chat with margin", spec Q6 default).
  */
 
-export const EXPORT_PRESET_IDS = [
-  "original",
-  "youtube",
-  "vertical",
-  "square",
-  "small-10",
-  "small-25",
-] as const;
-export type ExportPresetId = (typeof EXPORT_PRESET_IDS)[number];
-
-export function isExportPresetId(value: unknown): value is ExportPresetId {
-  return typeof value === "string" && (EXPORT_PRESET_IDS as readonly string[]).includes(value);
-}
-
-/** How the composed frame lands on a fixed canvas: whole frame + padding, or cover + crop. */
-export const EXPORT_FRAMINGS = ["fit", "fill"] as const;
-export type ExportFraming = (typeof EXPORT_FRAMINGS)[number];
-
-export function isExportFraming(value: unknown): value is ExportFraming {
-  return value === "fit" || value === "fill";
-}
+export {
+  EXPORT_FRAMINGS,
+  EXPORT_PRESET_IDS,
+  isExportFraming,
+  isExportPresetId,
+  type ExportFraming,
+  type ExportPresetId,
+} from "@shared/types/export-preset";
+import {
+  EXPORT_FRAMINGS,
+  type ExportFraming,
+  type ExportPresetId,
+} from "@shared/types/export-preset";
 
 /** What fills the canvas around a Fit frame (spec Q2): black, or a blurred copy of the frame. */
 export type PaddingFill = "black" | "blur";
