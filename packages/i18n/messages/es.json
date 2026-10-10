@@ -1032,7 +1032,17 @@
     "approvedPreview": "Tu solicitud de más espacio en Kaipu Cloud fue aprobada.",
     "approvedHeading": "Tienes más espacio en Cloud",
     "approvedBody": "Tu solicitud fue aprobada. Tu cuenta ahora tiene {capacity} de espacio total en Kaipu Cloud.",
-    "approvedButton": "Abrir Kaipu"
+    "approvedButton": "Abrir Kaipu",
+    "deletionScheduledSubject": "Tu cuenta de Kaipu se eliminará el {date}",
+    "deletionScheduledPreview": "Tu cuenta se eliminará el {date}. Inicia sesión para cancelarlo.",
+    "deletionScheduledHeading": "Tu cuenta está programada para eliminarse",
+    "deletionScheduledBody": "Tu cuenta se eliminará el {date}. Inicia sesión para cancelarlo. Hasta entonces tu sesión está cerrada en todos los dispositivos, los enlaces compartidos dejan de funcionar y no se puede subir nada nuevo. Después de esa fecha tu cuenta y tus archivos de Kaipu Cloud se eliminan definitivamente.",
+    "deletionScheduledButton": "Iniciar sesión para cancelar",
+    "deletionScheduledLocal": "Las grabaciones y capturas guardadas en tu Mac nunca se tocan.",
+    "deletedSubject": "Tu cuenta de Kaipu fue eliminada",
+    "deletedPreview": "Tu cuenta de Kaipu y sus archivos en la nube fueron eliminados.",
+    "deletedHeading": "Tu cuenta fue eliminada",
+    "deletedBody": "Tu cuenta fue eliminada. Tus archivos de Kaipu Cloud se están borrando de nuestro almacenamiento. Puedes crear una cuenta nueva cuando quieras."
   },
   "seo": {
     "siteTitle": "Kaipu — Grabaciones y capturas de pantalla en tu Mac",
