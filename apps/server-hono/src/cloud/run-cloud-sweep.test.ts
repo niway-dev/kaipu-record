@@ -1,5 +1,7 @@
+import type { AccountDeletionNotifier } from "@kaipu/application";
 import type {
   AccountUsage,
+  DueAccountDeletion,
   ICloudAssetRepository,
   ICloudPurgeRepository,
   PurgeJob,
@@ -27,7 +29,12 @@ function revision(overrides: Partial<CloudRevision>): CloudRevision {
 
 /** Only the methods the sweep touches; anything else fails loudly. */
 function fakes(
-  opts: { reserved?: CloudRevision[]; deleting?: CloudRevision[]; jobs?: PurgeJob[] } = {},
+  opts: {
+    reserved?: CloudRevision[];
+    deleting?: CloudRevision[];
+    jobs?: PurgeJob[];
+    due?: DueAccountDeletion[];
+  } = {},
 ) {
   const released: string[] = [];
   const finished: string[] = [];
@@ -84,10 +91,39 @@ function fakes(
     },
   } as unknown as IStorageService;
 
+  const due = [...(opts.due ?? [])];
+  const finalized: string[] = [];
+  const listDue = vi.fn(async (_now: Date, limit: number) => due.slice(0, limit));
+  const deletions = {
+    listDue,
+    async finalize(userId: string) {
+      finalized.push(userId);
+      due.splice(
+        due.findIndex((d) => d.userId === userId),
+        1,
+      );
+      // Mirrors AccountDeletionRepository.finalize: the purge job is enqueued with the delete.
+      jobs.push({ id: `job-${userId}`, userId, attempts: 0, createdAt: NOW });
+      return true;
+    },
+  };
+  const deletedEmails: string[] = [];
+  const notifier: AccountDeletionNotifier = {
+    async deletionScheduled() {},
+    async accountDeleted(to) {
+      deletedEmails.push(to.email);
+    },
+  };
+
   const events: CloudEvent[] = [];
   return {
     assets,
     purge,
+    deletions,
+    notifier,
+    finalized,
+    deletedEmails,
+    listDue,
     storage,
     objects,
     deleted,
@@ -147,6 +183,10 @@ describe("runCloudSweep", () => {
         failedDeletes: 0,
         purged: 1,
         purgeFailed: 0,
+        purgedObjects: 2,
+        purgeUnfinished: 0,
+        accountsDeleted: 0,
+        accountDeletionsFailed: 0,
         reconciled: 2,
       },
     ]);
@@ -159,6 +199,39 @@ describe("runCloudSweep", () => {
     await runCloudSweep({ ...f, now: NOW });
     expect(f.listReservedExpiredBefore).toHaveBeenCalledWith(expect.any(Date), 50);
     expect(f.listAccountsTouchedSince).toHaveBeenCalledWith(new Date(NOW.getTime() - HOUR), 50);
+  });
+
+  it("hard-deletes accounts past their grace period and purges them within the R2 budget", async () => {
+    const due = (userId: string): DueAccountDeletion => ({
+      userId,
+      email: `${userId}@example.com`,
+      locale: "en",
+      requestedAt: new Date(NOW.getTime() - 8 * 24 * HOUR),
+      scheduledAt: new Date(NOW.getTime() - 24 * HOUR),
+    });
+    const f = fakes({ due: [due("gone1"), due("gone2")] });
+    for (let i = 0; i < 150; i++) f.objects.set(`videos/gone1/a/${i}.mp4`, meta(1));
+    for (let i = 0; i < 100; i++) f.objects.set(`img/gone2/a/${i}.png`, meta(1));
+
+    await runCloudSweep({ ...f, now: NOW });
+
+    expect(f.listDue).toHaveBeenCalledWith(NOW, 10);
+    expect(f.finalized).toEqual(["gone1", "gone2"]);
+    expect(f.deletedEmails).toEqual(["gone1@example.com", "gone2@example.com"]);
+    // 200 R2 deletes per tick at most, however many accounts are waiting.
+    expect(f.deleted).toHaveLength(200);
+    expect(f.events[0]).toMatchObject({
+      name: "cloud.sweep",
+      accountsDeleted: 2,
+      purged: 1,
+      purgedObjects: 200,
+      purgeUnfinished: 1,
+    });
+
+    await runCloudSweep({ ...f, now: NOW });
+    expect(f.objects.size).toBe(0);
+    expect(f.done).toEqual(["job-gone1", "job-gone2"]);
+    expect(f.events[1]).toMatchObject({ accountsDeleted: 0, purged: 1, purgedObjects: 50 });
   });
 
   it("is idempotent: a second run over the same state does nothing new", async () => {

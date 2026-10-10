@@ -1,7 +1,12 @@
 import { createDatabaseClient } from "@kaipu/infra-db/client";
-import { CloudAssetRepository, CloudPurgeRepository } from "@kaipu/infra-db/repositories";
+import {
+  AccountDeletionRepository,
+  CloudAssetRepository,
+  CloudPurgeRepository,
+} from "@kaipu/infra-db/repositories";
 import { runCloudSweep } from "./cloud/run-cloud-sweep";
 import { env } from "./env";
+import { makeAccountDeletionNotifier } from "./lib/account-deletion-notifier";
 import { logEvent } from "./lib/events";
 import { tryGetStorage } from "./lib/storage";
 
@@ -21,6 +26,8 @@ export function scheduled(
     runCloudSweep({
       assets: new CloudAssetRepository(db),
       purge: new CloudPurgeRepository(db),
+      deletions: new AccountDeletionRepository(db),
+      notifier: makeAccountDeletionNotifier(),
       storage: tryGetStorage(),
       log: logEvent,
     }),

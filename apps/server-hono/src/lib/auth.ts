@@ -1,18 +1,9 @@
 import { baseConfig, getCustomSession } from "@kaipu/infra-auth";
-import { describeEmailFailure, EMAIL_TEMPLATE_VALUES, type EmailLocale } from "@kaipu/infra-email";
-import { createDatabaseClient } from "@kaipu/infra-db/client";
-import { CloudPurgeRepository } from "@kaipu/infra-db/repositories";
+import { describeEmailFailure, EMAIL_TEMPLATE_VALUES } from "@kaipu/infra-email";
 import { betterAuth } from "better-auth";
 import { customSession } from "better-auth/plugins";
-import { makeBeforeDeleteUser } from "../cloud/account-deletion";
 import { env } from "../env";
-import { buildResetUrl, buildVerifyUrl, tryGetEmail, webUrl } from "./email";
-
-/** Best-effort locale from Accept-Language; English is the documented fallback. */
-function emailLocale(request?: Request): EmailLocale {
-  const header = request?.headers.get("accept-language") ?? "";
-  return header.toLowerCase().startsWith("es") ? "es" : "en";
-}
+import { buildResetUrl, buildVerifyUrl, emailLocale, tryGetEmail, webUrl } from "./email";
 
 // "kaipu-record://app" is the desktop app's own request identity for Better Auth's CSRF
 // origin check — not a real URL scheme Electron navigates to. Electron's main process
@@ -98,17 +89,8 @@ export const auth = betterAuth({
       }
     },
   },
-  // Account deletion (plan 01 Task 11): POST /api/auth/delete-user. The purge is enqueued before
-  // the cascade so the cron can remove the account's R2 objects. Wired here, at the composition
-  // boundary, rather than in infra-auth's base config (plan 2026-09-15-01: hooks live in the app).
-  user: {
-    ...baseConfig.user,
-    deleteUser: {
-      enabled: true,
-      beforeDelete: makeBeforeDeleteUser(
-        new CloudPurgeRepository(createDatabaseClient(env.DATABASE_URL)),
-      ),
-    },
-  },
+  // Account deletion is NOT Better Auth's `deleteUser` (decision 2026-10-10): it is a soft delete
+  // with a 7-day grace period, served by `/api/v1/me/account-deletion` (modules/me) and finished
+  // by the cron (cloud/run-cloud-sweep.ts). Better Auth's immediate delete stays disabled.
   plugins: [...(baseConfig.plugins ?? []), customSession(getCustomSession, baseConfig)],
 });
