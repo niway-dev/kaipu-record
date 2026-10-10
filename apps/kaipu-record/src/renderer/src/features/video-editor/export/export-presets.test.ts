@@ -13,6 +13,7 @@ import {
   packetCountsFor,
   reserveBytes,
   resolveExportTarget,
+  shrinkSmallFileTarget,
   sizeForShortSide,
   slideFrameCount,
 } from "./export-presets";
@@ -225,6 +226,31 @@ describe("Small file ladder (FR6)", () => {
   it("the cap is decimal MB", () => {
     expect(resolveExportTarget("small-10", SOURCES["16:9"], 30).capBytes).toBe(10 * MB);
     expect(resolveExportTarget("small-25", SOURCES["16:9"], 30).capBytes).toBe(25_000_000);
+  });
+});
+
+describe("shrinkSmallFileTarget (FR8)", () => {
+  it("re-targets V × 0.8 × cap / actual on the same rung when that stays above its floor", () => {
+    const t = resolveExportTarget("small-25", SOURCES["16:9"], 30); // 1080p rung
+    const shrunk = shrinkSmallFileTarget(t, 26_000_000, SOURCES["16:9"]);
+    expect(shrunk.height).toBe(t.height);
+    expect(shrunk.videoBitrate).toBe(
+      Math.floor((Number(t.videoBitrate) * 0.8 * 25_000_000) / 26_000_000),
+    );
+  });
+
+  it("steps one rung down (fps ≤ 30) when the new bitrate falls below the rung floor", () => {
+    const t = resolveExportTarget("small-10", SOURCES["16:9"], 120); // 540p rung
+    const shrunk = shrinkSmallFileTarget(t, 14_000_000, SOURCES["16:9"]);
+    expect(shrunk.height).toBe(480);
+    expect(shrunk.width).toBe(852);
+    expect(shrunk.maxFps).toBe(30);
+    expect(Number(shrunk.videoBitrate)).toBeLessThan(Number(t.videoBitrate));
+  });
+
+  it("leaves non-capped targets alone", () => {
+    const t = resolveExportTarget("youtube", SOURCES["16:9"], 60);
+    expect(shrinkSmallFileTarget(t, 999_000_000, SOURCES["16:9"])).toBe(t);
   });
 });
 

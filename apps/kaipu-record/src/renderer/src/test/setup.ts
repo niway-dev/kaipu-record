@@ -136,6 +136,7 @@ window.electronAPI = {
     throw new Error("not implemented in test stub");
   },
   recordingAbort: async () => {},
+  recordingStat: async () => 0,
   recordingReportTick: () => {},
   recordingStart: () => {},
   recordingStop: () => {},

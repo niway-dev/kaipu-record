@@ -13,6 +13,7 @@ import {
   type ExportPresetId,
   type ResolvedExportTarget,
   resolveExportTarget,
+  shrinkSmallFileTarget,
   slideFrameCount,
 } from "./export-presets";
 
@@ -20,6 +21,8 @@ export interface VideoExportState {
   status: "idle" | "exporting" | "error";
   fraction: number;
   error: string | null;
+  /** NIW2-218 FR8: re-encoding a Small file that came out over its cap ("Making it smaller…"). */
+  shrinking?: boolean;
 }
 
 export interface StartExportArgs {
@@ -166,7 +169,8 @@ export function useVideoExport(): VideoExportController {
 
       // One worker run into one fresh writer session. Bitmaps and camera arrays are
       // TRANSFERRED to the worker, so a retry rebuilds them instead of reusing detached ones.
-      const launch = async (runTarget: ResolvedExportTarget): Promise<void> => {
+      // `shrunk`: this run is already the FR8 size-check retry (there is only one).
+      const launch = async (runTarget: ResolvedExportTarget, shrunk = false): Promise<void> => {
         // The poster comes from the worker's first RENDERED frame ("poster" message), never
         // from the source file: the source still holds deleted footage and redacted content.
         // No poster (encode failed) → null, and the vault's self-healing metadata decodes
@@ -237,7 +241,7 @@ export function useVideoExport(): VideoExportController {
               teardown(sessionId);
               sessionIdRef.current = null;
               setState((s) => (s.status === "exporting" ? { ...s, fraction: 0 } : s));
-              void launch({ ...runTarget, fastStart: false }).catch((error: unknown) => {
+              void launch({ ...runTarget, fastStart: false }, shrunk).catch((error: unknown) => {
                 if (activeRef.current) fail(GENERIC_ERROR, error);
               });
               return;
@@ -253,6 +257,24 @@ export function useVideoExport(): VideoExportController {
               await Promise.resolve();
               if (!activeRef.current) return;
               try {
+                // FR8 (Small file): over the cap → abort this attempt (it never reaches the
+                // vault) and re-encode once, smaller. A second overshoot is kept; the page
+                // warns with the real size.
+                if (runTarget.capBytes !== null && !shrunk) {
+                  const size = await window.electronAPI.recordingStat(sessionId);
+                  if (!activeRef.current) return;
+                  if (size > runTarget.capBytes) {
+                    teardown(sessionId);
+                    sessionIdRef.current = null;
+                    setState({ status: "exporting", fraction: 0, error: null, shrinking: true });
+                    const smaller = shrinkSmallFileTarget(runTarget, size, {
+                      width: args.videoWidth,
+                      height: args.videoHeight,
+                    });
+                    await launch(smaller, true);
+                    return;
+                  }
+                }
                 const recording = await window.electronAPI.recordingFinalize(sessionId, {
                   title: exportTitle(t, presetId, args.title),
                   durationSeconds: plan.totalDuration,
