@@ -140,7 +140,7 @@ function createFrameRenderer(msg: GifStartMessage, track: InputVideoTrack | null
 }
 
 async function collect(renderer: FrameRenderer, times: number[]): Promise<Uint8ClampedArray[]> {
-  const frames: Uint8ClampedArray[] = new Array(times.length);
+  const frames: Uint8ClampedArray[] = Array.from({ length: times.length });
   for await (const { i, rgba } of renderer.render(times)) frames[i] = rgba;
   return frames;
 }

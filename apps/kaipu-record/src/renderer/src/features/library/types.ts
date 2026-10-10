@@ -7,7 +7,8 @@ import type {
   TransferState,
 } from "@shared/types/library-item";
 
-export type LibraryKind = "recording" | "screenshot";
+/** "gif" = an animated GIF export (NIW2-217); grouped under Recordings in the filters. */
+export type LibraryKind = "recording" | "screenshot" | "gif";
 
 export interface LibraryVideo {
   /** Local filename id; null for a cloud-only item (nothing to reveal, play or edit locally). */
@@ -31,4 +32,6 @@ export interface LibraryVideo {
   editSavedAt: number | null;
   editExportedSavedAt: number | null;
   tags?: string[];
+  /** GIF exports only: output size and frame rate (NIW2-217). */
+  gif?: { width: number; height: number; fps: number } | null;
 }

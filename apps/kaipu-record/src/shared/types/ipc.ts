@@ -261,6 +261,10 @@ export const IPC_CHANNELS = {
   backfillLocalRecordingMeta: "library:backfill-meta",
   deleteLocalRecording: "library:delete-local",
   revealLocalRecording: "library:reveal-local",
+  /** NIW2-217: save an exported animated GIF into the vault (atomic, validated). */
+  gifSave: "library:gif-save",
+  /** NIW2-217: native drag-out of a vault file (e.g. a GIF into Slack or GitHub). */
+  startFileDrag: "library:start-file-drag",
   getVaultDirectory: "library:get-vault-dir",
   chooseVaultDirectory: "library:choose-vault-dir",
   resetVaultDirectory: "library:reset-vault-dir",
@@ -398,6 +402,18 @@ export interface RecordingActivity {
   elapsedSeconds: number;
   /** See {@link RecordingTick.systemAudioAvailable}. Only meaningful while active. */
   systemAudioAvailable?: boolean;
+}
+
+/** What the GIF export sends with the file bytes (`gifSave`). No path: main picks it. */
+export interface GifSaveMeta {
+  title: string;
+  durationSeconds: number;
+  width: number;
+  height: number;
+  fps: number;
+  /** JPEG of the first frame, or null when the worker could not encode one. */
+  thumbnail: ArrayBuffer | null;
+  derivedFromAssetId: string | null;
 }
 
 export interface RecordingFinalizeMeta {

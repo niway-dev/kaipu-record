@@ -42,6 +42,7 @@ const MIME_BY_EXTENSION: Record<string, string> = {
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
   ".png": "image/png",
+  ".gif": "image/gif",
 };
 
 /**

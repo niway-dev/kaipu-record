@@ -10,8 +10,11 @@ export interface LocalRecording {
    * what the cloud catalog and every cross-device relation use — never `id`.
    */
   assetId: string;
-  /** Discriminates a video recording from a screenshot in the unified vault. */
-  kind: "recording" | "screenshot";
+  /**
+   * Discriminates a video recording, a screenshot and an animated GIF export
+   * (NIW2-217) in the unified vault. GIFs are local-only: never uploaded to the cloud.
+   */
+  kind: "recording" | "screenshot" | "gif";
   title: string;
   /** Absolute path to the media file on disk. */
   filePath: string;
@@ -28,6 +31,8 @@ export interface LocalRecording {
    * current size + mtime. null = not computed yet or stale (never "unknown bytes").
    */
   contentSha256: string | null;
+  /** GIF exports only: output size and frame rate, from the sidecar. */
+  gif?: { width: number; height: number; fps: number } | null;
 }
 
 /** Where recordings are stored, and whether the user picked a custom folder. */

@@ -16,6 +16,7 @@ import type {
 import type {
   ControlCommand,
   RecordingActivity,
+  GifSaveMeta,
   RecordingBackfillMeta,
   RecordingFinalizeMeta,
   RecordingSettings,
@@ -144,6 +145,13 @@ export interface KaipuElectronAPI {
   deleteLocalRecording(id: string): Promise<void>;
   /** Reveal a local recording in the OS file manager. */
   revealLocalRecording(id: string): Promise<void>;
+  /**
+   * NIW2-217: write an exported GIF into the vault as `<id>.gif` (+ sidecar and
+   * thumbnail). Main validates the bytes (GIF89a, ≤ 64 MB) and picks the path.
+   */
+  gifSave(bytes: ArrayBuffer, meta: GifSaveMeta): Promise<LocalRecording>;
+  /** NIW2-217: start a native drag of a vault item's file (call from `dragstart`). */
+  startFileDrag(id: string): void;
 
   /** Current recordings-folder location (custom or platform default). */
   getVaultDirectory(): Promise<VaultDirectory>;
