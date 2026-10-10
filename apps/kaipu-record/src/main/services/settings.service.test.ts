@@ -58,6 +58,8 @@ describe("mergeSettings", () => {
         shortcuts,
         deviceId: "stored-id",
         uploadMode: "manual",
+        lastExportPreset: "vertical",
+        lastExportFraming: "fit",
       }),
     ).toEqual({
       theme: "dark",
@@ -72,7 +74,18 @@ describe("mergeSettings", () => {
       shortcuts,
       deviceId: "stored-id",
       uploadMode: "manual",
+      lastExportPreset: "vertical",
+      lastExportFraming: "fit",
     });
+  });
+
+  it("defaults an unknown export preset/framing (NIW2-218)", () => {
+    expect(mergeSettings({}).lastExportPreset).toBe("original");
+    expect(mergeSettings({}).lastExportFraming).toBeNull();
+    expect(mergeSettings({ lastExportPreset: "tiktok" as never }).lastExportPreset).toBe(
+      "original",
+    );
+    expect(mergeSettings({ lastExportFraming: "stretch" as never }).lastExportFraming).toBeNull();
   });
 
   it('coerces a legacy persisted "system" theme to the dark default', () => {
