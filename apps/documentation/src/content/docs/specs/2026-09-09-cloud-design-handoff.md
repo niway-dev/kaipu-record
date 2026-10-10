@@ -3,6 +3,8 @@ title: Claude Design — cloud, sharing, and video locations
 description: Ready-to-use design brief with surfaces, states, messages, and prototype scenarios.
 ---
 
+> **Historical plan numbers.** Capacities in this document are as of its date. Current values: [Plans — Free and Pro](/features/plans/).
+
 # Claude Design brief
 
 Date: 2026-09-09. Design a proposal and prototype; these features are not implemented. This document is self-contained for design. For binding details, consult [product](/specs/2026-09-09-cloud-product/) and [data and editing](/specs/2026-09-09-cloud-data-model/).

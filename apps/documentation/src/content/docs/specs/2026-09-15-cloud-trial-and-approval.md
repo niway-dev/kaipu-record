@@ -128,9 +128,11 @@ The shared es/en messages now describe the 250 MB trial and manually approved
 expansion. Account settings, signup and the Cloud promotion consume these keys.
 The Cloud offer paragraph uses the same quantities and conditions.
 
-Release this copy together with the real verification, trial quota and request/
-approval flow. The backend currently still derives 1 GB for Free verified
-accounts; this documentation/copy change alone is **not ready for deployment**.
+**2026-10-10 (NIW2-232):** the backend now derives 250 MB for Free verified
+accounts and Pro is 15 GB, both from the plan table in `@kaipu/domain`; the copy
+interpolates those numbers. The current values live on the canonical
+[Plans](/features/plans/) page. The request/approval flow (the 1 GB expansion)
+is still not built.
 
 Future request-state copy, to wire when those states exist:
 
@@ -222,8 +224,8 @@ the queue and redaction boundary.
 ## Decision 4 — Pro capacity
 
 The paid/future Pro entitlement is **15 GB total** (15,000,000,000 decimal
-bytes). The current 25 GB implementation is historical and must be updated when
-this plan is implemented. Add an explicit **`unlimited` plan** for the owner's
+bytes). The 25 GB implementation is historical; since NIW2-232 the code uses
+15 GB from the plan table (see [Plans](/features/plans/)). Add an explicit **`unlimited` plan** for the owner's
 operator account; do not make the admin role bypass storage checks.
 
 Keep the capacity in one configurable entitlement setting/variable rather than
