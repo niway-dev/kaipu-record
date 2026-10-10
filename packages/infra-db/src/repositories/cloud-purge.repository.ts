@@ -12,9 +12,10 @@ export class CloudPurgeRepository implements ICloudPurgeRepository {
   }
 
   /**
-   * Pending jobs whose user row is gone. The job is enqueued BEFORE Better Auth deletes the user,
-   * so if that delete fails the job must not purge a live account's objects: it stays pending
-   * (and consumes no attempts) until the user row really disappears.
+   * Pending jobs whose user row is gone. Account deletion enqueues the job in the same batch that
+   * deletes the user (`AccountDeletionRepository.finalize`); this guard is the second line of
+   * defence: a job whose user still exists never purges a live account's objects. It stays
+   * pending (and consumes no attempts) until the user row really disappears.
    */
   async nextPending(limit: number): Promise<PurgeJob[]> {
     const rows = await this.db
