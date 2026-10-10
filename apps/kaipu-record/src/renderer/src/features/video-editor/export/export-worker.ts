@@ -64,7 +64,7 @@ import type { StreamTargetChunk } from "mediabunny";
 import type { ExportStartMessage, ExportWorkerMessage } from "./export-messages";
 import { silencedSpansFor } from "../audio-edits";
 import { rebaseVideoTimestamp } from "./rebase-timestamp";
-import { applyRedactions, planClipFrame, type Ctx2D, type ScratchCanvas } from "./compose-frame";
+import { createOutputComposer } from "./compose-output-frame";
 
 // ---------------------------------------------------------------------------
 // Typing helper: TypeScript doesn't expose `Worker` on `self` in module workers.
@@ -166,19 +166,17 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
 
   await out.start();
 
-  // v2 composition resources (plans/video-editor-v2/11): a source-resolution work canvas
-  // for redactions + content-pinned overlays before the camera crop, and a scratch canvas
-  // for mosaics. The work canvas is created lazily — a recording with no zoom and no region
-  // never allocates it; the mosaic scratch stays 1×1 until a pixelated region resizes it.
-  const camera = msg.camera;
-  const redactions = plan.redactions;
-  let work: OffscreenCanvas | null = null;
-  let workCtx: OffscreenCanvasRenderingContext2D | null = null;
-  const scratch = new OffscreenCanvas(1, 1);
-  const filterSupported = canvasFilterSupported();
-
-  // Lookup helpers built once, not rebuilt per-frame.
-  const overlayByIds = new Map(msg.overlays.map((o) => [o.overlayId, o]));
+  // Per-frame composition (fill → zoom/redactions/overlays) is shared with the GIF worker
+  // in compose-output-frame.ts so the two exports can never diverge on privacy.
+  const compose = createOutputComposer({
+    ctx,
+    width: size.width,
+    height: size.height,
+    camera: msg.camera,
+    redactions: plan.redactions,
+    overlayWindows: plan.overlayWindows,
+    overlayBitmaps: new Map(msg.overlays.map((o) => [o.overlayId, o.bitmap])),
+  });
   const slideBitmaps = new Map(msg.slides.map((s) => [s.assetId, s.bitmap]));
 
   // Progress is throttled via performance.now() to ~4 Hz (≤250 ms intervals)
@@ -190,17 +188,6 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
     if (now - lastProgressPost < 250) return;
     lastProgressPost = now;
     post({ type: "progress", fraction: Math.min(1, outTs / plan.totalDuration) });
-  };
-
-  // Stamp any overlay whose visibility window covers the current output timestamp.
-  // `target` defaults to the output; clip frames that are composited stamp onto the
-  // source-resolution work canvas instead, BEFORE the crop, so overlays are content-pinned.
-  const stampOverlays = (outTs: number, target: OffscreenCanvasRenderingContext2D = ctx): void => {
-    for (const window of plan.overlayWindows) {
-      if (outTs < window.start || outTs > window.end) continue;
-      const overlay = overlayByIds.get(window.overlayId);
-      if (overlay) target.drawImage(overlay.bitmap, 0, 0, size.width, size.height);
-    }
   };
 
   // Poster = the first composed output frame (see ExportWorkerMessage "poster"). Encoded
@@ -244,49 +231,7 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
             prevOutTs,
           );
           if (outTs === null) continue; // straddle/duplicate frame — skip, don't advance prevOutTs
-          ctx.fillStyle = "#000";
-          ctx.fillRect(0, 0, size.width, size.height);
-          const frame = planClipFrame(
-            camera,
-            redactions,
-            wrapped.timestamp,
-            wrapped.duration,
-            size.width,
-            size.height,
-          );
-          if (frame.mode === "direct") {
-            // Unchanged pre-v2 path: no zoom and no privacy region on this frame.
-            ctx.drawImage(wrapped.canvas, 0, 0);
-            stampOverlays(outTs);
-          } else {
-            if (!work || !workCtx) {
-              work = new OffscreenCanvas(size.width, size.height);
-              workCtx = work.getContext("2d");
-              if (!workCtx) throw new Error("export-worker: no 2D context on the work canvas");
-            }
-            workCtx.filter = "none";
-            workCtx.drawImage(wrapped.canvas, 0, 0);
-            // Source = `work` itself, NOT wrapped.canvas: regions may overlap, and a blur
-            // sampling the decoded frame would paint blurred original pixels over a cover
-            // drawn before it. Self-drawImage is legal in Canvas2D.
-            applyRedactions(
-              workCtx as unknown as Ctx2D,
-              work,
-              frame.redactions,
-              size.width,
-              size.height,
-              scratch as unknown as ScratchCanvas,
-              filterSupported,
-            );
-            stampOverlays(outTs, workCtx);
-            if (frame.crop) {
-              ctx.imageSmoothingQuality = "high";
-              const { sx, sy, sw, sh } = frame.crop;
-              ctx.drawImage(work, sx, sy, sw, sh, 0, 0, size.width, size.height);
-            } else {
-              ctx.drawImage(work, 0, 0);
-            }
-          }
+          compose.clip(wrapped.canvas, wrapped.timestamp, wrapped.duration, outTs);
           await sendPosterOnce();
           // Use the frame's own decoded duration so clip frames preserve the
           // source's native cadence without rounding to a fixed grid.
@@ -305,10 +250,7 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
 
         for (let i = 0; i < frameCount; i++) {
           const outTs = segment.timelineStart + i * frameDuration;
-          ctx.fillStyle = "#000";
-          ctx.fillRect(0, 0, size.width, size.height);
-          if (bitmap) drawContained(ctx, bitmap, size.width, size.height);
-          stampOverlays(outTs);
+          compose.slide(bitmap, outTs);
           await sendPosterOnce();
           await videoSource.add(outTs, frameDuration);
           reportProgress(outTs);
@@ -450,30 +392,6 @@ function trimAudioSample(
   return sample.trim(leadTrim, leadTrim + keepLength);
 }
 
-/**
- * Whether `ctx.filter` blurs on this platform's OffscreenCanvas 2D. Checked once per
- * export; when false, gaussian regions fall back to the mosaic (applyRedactions), so a
- * region is never left unredacted.
- */
-function canvasFilterSupported(): boolean {
-  try {
-    const src = new OffscreenCanvas(3, 1);
-    const sctx = src.getContext("2d");
-    const dst = new OffscreenCanvas(3, 1);
-    const dctx = dst.getContext("2d");
-    if (!sctx || !dctx) return false;
-    sctx.fillStyle = "#fff";
-    sctx.fillRect(1, 0, 1, 1);
-    dctx.filter = "blur(1px)";
-    if (dctx.filter !== "blur(1px)") return false;
-    dctx.drawImage(src, 0, 0);
-    // A working blur spreads the middle white pixel into its neighbours.
-    return dctx.getImageData(0, 0, 1, 1).data[3] > 0;
-  } catch {
-    return false;
-  }
-}
-
 /** Poster width in px; height follows the output aspect (same size generate-thumbnail used). */
 const POSTER_WIDTH = 640;
 
@@ -491,20 +409,4 @@ async function encodePoster(source: OffscreenCanvas): Promise<ArrayBuffer | null
   } catch {
     return null;
   }
-}
-
-/**
- * Draw `bitmap` into `(w × h)` with letterboxing (contain), centred, on a
- * black background that was already filled by the caller.
- */
-function drawContained(
-  ctx: OffscreenCanvasRenderingContext2D,
-  bitmap: ImageBitmap,
-  w: number,
-  h: number,
-): void {
-  const scale = Math.min(w / bitmap.width, h / bitmap.height);
-  const dw = bitmap.width * scale;
-  const dh = bitmap.height * scale;
-  ctx.drawImage(bitmap, (w - dw) / 2, (h - dh) / 2, dw, dh);
 }
