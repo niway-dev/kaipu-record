@@ -103,6 +103,10 @@ window.electronAPI = {
   backfillLocalRecordingMeta: async () => null,
   deleteLocalRecording: async () => {},
   revealLocalRecording: async () => {},
+  gifSave: async () => {
+    throw new Error("gifSave not stubbed in this test");
+  },
+  startFileDrag: () => {},
   getVaultDirectory: async () => ({ path: "/tmp/vault", isCustom: false }),
   chooseVaultDirectory: async () => null,
   resetVaultDirectory: async () => ({ path: "/tmp/vault", isCustom: false }),

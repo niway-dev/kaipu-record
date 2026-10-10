@@ -91,6 +91,15 @@ import { useSourceThumbnails } from "@renderer/features/video-editor/use-source-
 import { useVideoScene } from "@renderer/features/video-editor/use-video-scene";
 import { useVideoTools } from "@renderer/features/video-editor/annotations/video-tools";
 import { useVideoExport } from "@renderer/features/video-editor/export/use-video-export";
+import {
+  useGifExport,
+  type GifJobArgs,
+} from "@renderer/features/video-editor/export/use-gif-export";
+import {
+  ExportSheet,
+  type GifSettings,
+} from "@renderer/features/video-editor/components/export-sheet";
+import { formatSize } from "@renderer/features/library/format";
 import { VideoAnnotationLayer } from "@renderer/features/video-editor/annotations/video-annotation-layer";
 import {
   EditorToolbar,
@@ -400,6 +409,7 @@ function VideoEditor({
   );
   const videoTools = useVideoTools();
   const videoExport = useVideoExport();
+  const gifExport = useGifExport();
   const mediaUrl = `kaipu-media://recording/${source.id}`;
   const thumbnails = useSourceThumbnails(mediaUrl, source.durationSeconds);
   const selection = useEditorSelection();
@@ -568,7 +578,7 @@ function VideoEditor({
   // memoized — the box can resize between renders) and hands off to the export
   // hook, which owns the whole worker/writer pipeline. `markClean` runs before
   // navigating so `useBlocker` doesn't intercept this programmatic navigation.
-  const handleExport = useCallback(() => {
+  const startVideoExport = useCallback(() => {
     const video = playback.videoRef.current;
     if (!video) return;
     // videoWidth/videoHeight are 0 until the browser has decoded the stream's
@@ -629,6 +639,97 @@ function VideoEditor({
     autosave,
     cameraPath,
   ]);
+
+  // NIW2-217: "Export" opens the export sheet (format choice). The metadata guard runs
+  // here too, so the sheet never offers a GIF of a 0×0 stream.
+  const [exportSheetOpen, setExportSheetOpen] = useState(false);
+  const lastGifSettingsRef = useRef<GifSettings | null>(null);
+  const handleExport = useCallback(() => {
+    const video = playback.videoRef.current;
+    if (!video) return;
+    if (video.videoWidth === 0 || video.videoHeight === 0) {
+      showToast({ message: t("videoStillLoading") });
+      return;
+    }
+    setExportSheetOpen(true);
+  }, [playback, t]);
+
+  const closeExportSheet = useCallback(() => {
+    gifExport.cancelEstimate();
+    setExportSheetOpen(false);
+  }, [gifExport]);
+
+  // Shared job inputs for the GIF estimate and export; null while the video is loading.
+  const gifJobArgs = useCallback(
+    (settings: GifSettings): GifJobArgs | null => {
+      const video = playback.videoRef.current;
+      if (!video || video.videoWidth === 0 || video.videoHeight === 0) return null;
+      return {
+        scene,
+        sourceId: source.id,
+        videoWidth: video.videoWidth,
+        videoHeight: video.videoHeight,
+        previewWidth: video.clientWidth,
+        slideAssets: assetStoreRef.current,
+        cameraPath,
+        range: settings.range,
+        width: settings.width,
+        fps: settings.fps,
+      };
+    },
+    [playback, scene, source.id, assetStoreRef, cameraPath],
+  );
+
+  const handleGifSettingsChange = useCallback(
+    (settings: GifSettings | null) => {
+      const args = settings ? gifJobArgs(settings) : null;
+      if (args) gifExport.requestEstimate(args);
+      else gifExport.cancelEstimate();
+    },
+    [gifJobArgs, gifExport],
+  );
+
+  const startGifExport = useCallback(
+    (settings: GifSettings) => {
+      const args = gifJobArgs(settings);
+      if (!args) {
+        showToast({ message: t("videoStillLoading") });
+        return;
+      }
+      lastGifSettingsRef.current = settings;
+      setExportSheetOpen(false);
+      void gifExport.start({
+        ...args,
+        title: source.title,
+        derivedFromAssetId: source.assetId,
+        onSaved: async (recording) => {
+          // Same session save as the MP4 export (stamped as exported), but the user stays
+          // in the editor: GIF users often export several ranges in a row (FR 11).
+          autosave.cancel();
+          try {
+            const sessionJson = serializeSession(scene);
+            const assets = assetStoreRef.current
+              .entries()
+              .map((a) => ({ assetId: a.assetId, bytes: a.bytes }));
+            await window.electronAPI.saveVideoEditSession(source.id, sessionJson, assets, true);
+            controller.markClean();
+          } catch (error) {
+            captureException(error, { context: "video-edit-session-save" });
+          }
+          showToast({
+            message: t("gifSaved", { size: formatSize(recording.sizeBytes) }),
+            action: {
+              label: t("gifOpen"),
+              // Unsaved edits made after the export still go through the discard guard.
+              onClick: () => navigate(`/library/${recording.assetId}`),
+            },
+            durationMs: 8000,
+          });
+        },
+      });
+    },
+    [gifJobArgs, gifExport, source, autosave, scene, assetStoreRef, controller, navigate, t],
+  );
 
   const handleDeleteOverlay = useCallback(() => {
     // Same rationale as handleDeleteSelected: don't touch scene/selection while a
@@ -882,7 +983,13 @@ function VideoEditor({
       if (isEditingTarget(e.target)) return;
       // Don't fire editor shortcuts behind the discard-changes modal or the export
       // dialog — both block the scene from being safely mutated or played while open.
-      if (blocker.state === "blocked" || videoExport.status !== "idle") return;
+      if (
+        blocker.state === "blocked" ||
+        videoExport.status !== "idle" ||
+        gifExport.status !== "idle" ||
+        exportSheetOpen
+      )
+        return;
       if (e.key === " ") {
         e.preventDefault();
         playback.toggle();
@@ -941,6 +1048,8 @@ function VideoEditor({
     controller,
     blocker.state,
     videoExport.status,
+    gifExport.status,
+    exportSheetOpen,
     splitDisabled,
     deleteDisabled,
     handleSplit,
@@ -972,7 +1081,11 @@ function VideoEditor({
         onAddImage={handleAddImage}
         tool={videoTools.tool}
         onExport={handleExport}
-        exportDisabled={videoExport.status === "exporting" || scene.items.length === 0}
+        exportDisabled={
+          videoExport.status === "exporting" ||
+          gifExport.status === "exporting" ||
+          scene.items.length === 0
+        }
       >
         {/* Not interactive — a reminder, not a control (plans/video-editor-v2/08 § PR 10
             polish, W12's "ORIGINAL UNTOUCHED" pill). The original recording on disk and
@@ -1324,13 +1437,42 @@ function VideoEditor({
           </ModalActions>
         </ModalOverlay>
       )}
+      {exportSheetOpen && (
+        <ExportSheet
+          timelineDuration={playback.duration}
+          sourceWidth={playback.videoRef.current?.videoWidth ?? 0}
+          estimate={gifExport.estimate}
+          onGifSettingsChange={handleGifSettingsChange}
+          onExportVideo={() => {
+            closeExportSheet();
+            startVideoExport();
+          }}
+          onExportGif={startGifExport}
+          onCancel={closeExportSheet}
+        />
+      )}
       {videoExport.status !== "idle" && (
         <ExportDialog
           status={videoExport.status}
           fraction={videoExport.fraction}
           error={videoExport.error}
           onCancel={videoExport.cancel}
-          onRetry={handleExport}
+          onRetry={startVideoExport}
+        />
+      )}
+      {gifExport.status !== "idle" && (
+        <ExportDialog
+          status={gifExport.status}
+          fraction={gifExport.fraction}
+          error={gifExport.error}
+          title={t("exportingGif")}
+          errorTitle={t("gifExportError")}
+          onCancel={gifExport.cancel}
+          onRetry={() => {
+            const settings = lastGifSettingsRef.current;
+            gifExport.cancel();
+            if (settings) startGifExport(settings);
+          }}
         />
       )}
     </div>

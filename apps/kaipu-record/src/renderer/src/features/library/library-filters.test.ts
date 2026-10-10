@@ -153,3 +153,18 @@ describe("countByKind", () => {
     expect(countByKind([])).toEqual({ all: 0, recording: 0, screenshot: 0 });
   });
 });
+
+describe("GIF exports (NIW2-217)", () => {
+  const gif = video({ id: "g", title: "Gif", createdAt: 150, kind: "gif" });
+
+  it("group under Recordings in the kind filter and the counts", () => {
+    const all = [newest, shot, gif];
+    expect(selectVisibleVideos(all, { ...base, kindFilter: "recording" }).map((v) => v.id)).toEqual(
+      ["a", "g"],
+    );
+    expect(
+      selectVisibleVideos(all, { ...base, kindFilter: "screenshot" }).map((v) => v.id),
+    ).toEqual(["s"]);
+    expect(countByKind(all)).toEqual({ all: 3, recording: 2, screenshot: 1 });
+  });
+});

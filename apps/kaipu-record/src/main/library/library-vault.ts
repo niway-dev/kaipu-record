@@ -1,5 +1,15 @@
 import { basename, join } from "node:path";
-import { access, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdir,
+  open,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import type { LocalRecording } from "@shared/types/library-storage";
 import { sha256FileBase64 } from "./content-hash";
@@ -8,7 +18,9 @@ const META_DIR = ".kaipu";
 /** Known video containers, in preference order — `.mp4` is what we now write. */
 const VIDEO_EXTS = [".mp4", ".webm"] as const;
 const IMAGE_EXTS = [".png"] as const;
-const ALL_EXTS = [...VIDEO_EXTS, ...IMAGE_EXTS] as const;
+/** Animated GIF exports (NIW2-217). Local-only; thumbnail in `.kaipu/<id>.jpg` like videos. */
+const GIF_EXTS = [".gif"] as const;
+const ALL_EXTS = [...VIDEO_EXTS, ...IMAGE_EXTS, ...GIF_EXTS] as const;
 
 /** Version 2 adds identity + provenance + hash cache. Every field stays optional so a v1 file reads fine. */
 export interface Sidecar {
@@ -24,6 +36,10 @@ export interface Sidecar {
   hashedMtimeMs?: number;
   /** Set by `removeLocalCopy`; cleared when a file reappears under this id. */
   localRemovedAt?: number;
+  /** GIF exports only (NIW2-217). */
+  gifWidth?: number;
+  gifHeight?: number;
+  gifFps?: number;
 }
 
 // Keyed by the sidecar's absolute path (not per-instance), so a re-minted id on a
@@ -103,6 +119,7 @@ export class LibraryVault {
       return null;
     }
     const isImage = IMAGE_EXTS.some((ext) => filePath.endsWith(ext));
+    const isGif = GIF_EXTS.some((ext) => filePath.endsWith(ext));
     const meta = await this.ensureIdentity(id);
     const hashIsFresh =
       meta.contentSha256 !== undefined &&
@@ -111,7 +128,7 @@ export class LibraryVault {
     return {
       id,
       assetId: meta.assetId,
-      kind: isImage ? "screenshot" : "recording",
+      kind: isImage ? "screenshot" : isGif ? "gif" : "recording",
       title: meta.title ?? humanizeId(id),
       filePath,
       createdAt: meta.createdAt ?? info.birthtimeMs,
@@ -119,6 +136,10 @@ export class LibraryVault {
       durationSeconds: meta.durationSeconds ?? 0,
       derivedFromAssetId: meta.derivedFromAssetId ?? null,
       contentSha256: hashIsFresh ? (meta.contentSha256 ?? null) : null,
+      gif:
+        isGif && meta.gifWidth && meta.gifHeight
+          ? { width: meta.gifWidth, height: meta.gifHeight, fps: meta.gifFps ?? 0 }
+          : null,
       thumbnailUrl: isImage
         ? // `?v=<mtime>` busts the renderer image cache when a screenshot is
           // overwritten in place (same id/URL) — only the changed item, so the
@@ -274,6 +295,31 @@ export class LibraryVault {
     await this.writeMeta(id, { durationSeconds: meta.durationSeconds });
     if (meta.thumbnail) await this.writeThumbnail(id, Buffer.from(meta.thumbnail));
     return this.describe(id);
+  }
+
+  /**
+   * Writes a GIF export as `<id>.gif`, atomically: `<id>.gif.part` → fsync → rename. A
+   * failure removes the `.part`, so no partial file is ever listed (`.part` is not a known
+   * extension) or left behind.
+   */
+  async writeGif(id: string, bytes: Uint8Array): Promise<string> {
+    await mkdir(this.directory, { recursive: true });
+    const target = join(this.directory, `${id}${GIF_EXTS[0]}`);
+    const part = `${target}.part`;
+    try {
+      const handle = await open(part, "w");
+      try {
+        await handle.writeFile(bytes);
+        await handle.sync();
+      } finally {
+        await handle.close();
+      }
+      await rename(part, target);
+    } catch (error) {
+      await rm(part, { force: true }).catch(() => {});
+      throw error;
+    }
+    return target;
   }
 
   /** Writes a screenshot PNG as `<id>.png` in the vault root. */

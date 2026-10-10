@@ -1,8 +1,8 @@
 import { join } from "node:path";
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell } from "electron";
 import { IPC_CHANNELS } from "@shared/types";
-import type { RecordingBackfillMeta, VaultDirectory } from "@shared/types";
+import type { GifSaveMeta, RecordingBackfillMeta, VaultDirectory } from "@shared/types";
 import { createMainTranslator } from "@kaipu/i18n/main";
 import type { AuthHandle } from "../infrastructure/auth-store";
 import { getAppSettings } from "../infrastructure/settings-store";
@@ -10,6 +10,8 @@ import { CatalogCache } from "../cloud/catalog-cache";
 import { fetchCloudCatalog } from "../cloud/catalog-client";
 import { LibraryService } from "./library-service";
 import { LibraryVault } from "./library-vault";
+import { saveGif } from "./gif-save";
+import { timestampId } from "../recording/recording-writer";
 import { resetVaultDirectory, setVaultDirectory, vaultDirectory } from "./vault-location";
 import { deleteVideoEditSession, registerVideoEditSessionHandlers } from "./video-edit-session";
 
@@ -98,6 +100,29 @@ export function registerLibraryVaultHandlers(deps: { auth: AuthHandle; serverUrl
   ipcMain.handle(IPC_CHANNELS.revealLocalRecording, async (_event, id: string) =>
     shell.showItemInFolder(await currentVault().filePath(id)),
   );
+  // NIW2-217: GIF export. Bytes are validated (GIF89a, ≤ 64 MB) and the path is chosen here.
+  ipcMain.handle(IPC_CHANNELS.gifSave, async (_event, bytes: ArrayBuffer, meta: GifSaveMeta) => {
+    const recording = await saveGif(
+      { vaultDir: () => vaultDirectory().path, newId: () => timestampId(Date.now()) },
+      bytes,
+      meta,
+    );
+    broadcastLibraryChanged();
+    return recording;
+  });
+  // NIW2-217: drag a vault file out (e.g. a GIF into Slack or a GitHub comment). The id is
+  // resolved inside the vault — the renderer never names a path.
+  ipcMain.on(IPC_CHANNELS.startFileDrag, (event, id: string) => {
+    void (async () => {
+      if (typeof id !== "string" || /[\\/]|\.\./.test(id)) return;
+      const vault = currentVault();
+      const file = await vault.filePath(id);
+      // macOS refuses a drag without an icon; the poster is there for videos and GIFs.
+      const icon = nativeImage.createFromPath(vault.thumbnailPath(id));
+      if (icon.isEmpty()) return;
+      event.sender.startDrag({ file, icon: icon.resize({ width: 96 }) });
+    })().catch((error) => console.error("file drag failed", error));
+  });
 
   ipcMain.handle(IPC_CHANNELS.getVaultDirectory, (): VaultDirectory => vaultDirectory());
   // shell.openPath resolves with an error string ("" on success) rather than rejecting.
