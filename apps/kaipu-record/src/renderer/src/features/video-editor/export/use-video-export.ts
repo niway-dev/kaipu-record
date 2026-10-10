@@ -8,6 +8,13 @@ import type { CameraPath } from "../zoom/camera-path";
 import { buildExportPlan } from "./export-plan";
 import type { ExportStartMessage, ExportWorkerMessage } from "./export-messages";
 import { rasterizeOverlays } from "./overlay-raster";
+import {
+  type ExportFraming,
+  type ExportPresetId,
+  type ResolvedExportTarget,
+  resolveExportTarget,
+  slideFrameCount,
+} from "./export-presets";
 
 export interface VideoExportState {
   status: "idle" | "exporting" | "error";
@@ -29,8 +36,17 @@ export interface StartExportArgs {
   slideAssets: SlideAssetStore;
   /** v2: the preview's camera path (useCameraPath). Sent whenever the plan has a zoom. */
   cameraPath: CameraPath | null;
+  /** NIW2-218: destination preset; Original (today's output + fast start) when omitted. */
+  presetId?: ExportPresetId;
+  /** Fit/Fill for Vertical and Square; the preset's default when omitted. */
+  framing?: ExportFraming | null;
+  /** Probed source facts (frame rate, audio); conservative defaults when omitted. */
+  sourceInfo?: { fps: number; hasAudio: boolean; sampleRate?: number } | null;
   onSaved: (recording: LocalRecording) => void;
 }
+
+/** mediabunny's error when a `fastStart: 'reserve'` track outgrows its maximumPacketCount. */
+const PACKET_RESERVE_ERROR = /maximum packet count/i;
 
 export interface VideoExportController extends VideoExportState {
   start(args: StartExportArgs): Promise<void>;
@@ -100,9 +116,35 @@ export function useVideoExport(): VideoExportController {
         setState({ status: "error", fraction: 0, error: message });
       };
 
+      const presetId: ExportPresetId = args.presetId ?? "original";
+      const target = resolveExportTarget(
+        presetId,
+        {
+          width: args.videoWidth,
+          height: args.videoHeight,
+          fps: args.sourceInfo?.fps ?? 30,
+          hasAudio: (args.sourceInfo?.hasAudio ?? true) && !plan.audio.audioMuted,
+          sampleRate: args.sourceInfo?.sampleRate,
+        },
+        plan.totalDuration,
+        {
+          framing: args.framing ?? null,
+          slideFrames: slideFrameCount(plan.segments, plan.slideFps),
+        },
+      );
+
+      let sourceBlob: Blob;
       try {
         const sourceResponse = await fetch(`kaipu-media://recording/${args.sourceId}`);
-        const sourceBlob = await sourceResponse.blob();
+        sourceBlob = await sourceResponse.blob();
+      } catch (error) {
+        fail(GENERIC_ERROR, error);
+        return;
+      }
+
+      // One worker run into one fresh writer session. Bitmaps and camera arrays are
+      // TRANSFERRED to the worker, so a retry rebuilds them instead of reusing detached ones.
+      const launch = async (runTarget: ResolvedExportTarget): Promise<void> => {
         // The poster comes from the worker's first RENDERED frame ("poster" message), never
         // from the source file: the source still holds deleted footage and redacted content.
         // No poster (encode failed) → null, and the vault's self-healing metadata decodes
@@ -157,7 +199,7 @@ export function useVideoExport(): VideoExportController {
 
         worker.onmessage = (event: MessageEvent<ExportWorkerMessage>) => {
           const msg = event.data;
-          if (!activeRef.current) return;
+          if (!activeRef.current || workerRef.current !== worker) return;
           if (msg.type === "chunk") {
             window.electronAPI.recordingWrite(sessionId, msg.data, msg.position);
           } else if (msg.type === "poster") {
@@ -165,6 +207,19 @@ export function useVideoExport(): VideoExportController {
           } else if (msg.type === "progress") {
             setState((s) => (s.status === "exporting" ? { ...s, fraction: msg.fraction } : s));
           } else if (msg.type === "error") {
+            if (runTarget.fastStart === "reserve" && PACKET_RESERVE_ERROR.test(msg.message)) {
+              // FR9 fallback: the moov reservation was too small. Drop this attempt (its
+              // session is aborted, nothing reaches the vault) and redo it once with moov
+              // at the end — the user still gets a file, just without fast start.
+              captureException(new Error(msg.message), { context: "video-export-fast-start" });
+              teardown(sessionId);
+              sessionIdRef.current = null;
+              setState((s) => (s.status === "exporting" ? { ...s, fraction: 0 } : s));
+              void launch({ ...runTarget, fastStart: false }).catch((error: unknown) => {
+                if (activeRef.current) fail(GENERIC_ERROR, error);
+              });
+              return;
+            }
             fail(GENERIC_ERROR, new Error(msg.message));
           } else if (msg.type === "done") {
             void (async () => {
@@ -219,7 +274,9 @@ export function useVideoExport(): VideoExportController {
           plan,
           overlays,
           slides,
-          output: { width: args.videoWidth, height: args.videoHeight },
+          output: { width: runTarget.width, height: runTarget.height },
+          source: { width: args.videoWidth, height: args.videoHeight },
+          target: runTarget,
           camera,
         };
         worker.postMessage(startMessage, [
@@ -227,6 +284,10 @@ export function useVideoExport(): VideoExportController {
           ...slides.map((s) => s.bitmap),
           ...(camera ? [camera.cx.buffer, camera.cy.buffer, camera.scale.buffer] : []),
         ]);
+      };
+
+      try {
+        await launch(target);
       } catch (error) {
         fail(GENERIC_ERROR, error);
       }

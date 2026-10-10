@@ -311,4 +311,96 @@ describe("useVideoExport", () => {
     });
     expect(createdWorkers[0].postMessage.mock.calls[0][0].camera).toBeNull();
   });
+
+  it("Original by default: source-size output, QUALITY_HIGH, moov reserved at the front", async () => {
+    const { result } = renderHook(() => useVideoExport());
+    await act(async () => {
+      await result.current.start(startArgs());
+    });
+    const [message] = createdWorkers[0].postMessage.mock.calls[0];
+    expect(message.output).toEqual({ width: 1280, height: 720 });
+    expect(message.source).toEqual({ width: 1280, height: 720 });
+    expect(message.target).toMatchObject({
+      presetId: "original",
+      framing: "identity",
+      videoBitrate: "high",
+      fastStart: "reserve",
+    });
+    expect(message.target.packetCounts.video).toBeGreaterThan(0);
+  });
+
+  it("passes the resolved preset target (size, framing) through to the worker", async () => {
+    const { result } = renderHook(() => useVideoExport());
+    await act(async () => {
+      await result.current.start(
+        startArgs({
+          presetId: "vertical",
+          framing: "fit",
+          sourceInfo: { fps: 60, hasAudio: true, sampleRate: 48000 },
+        }),
+      );
+    });
+    const [message] = createdWorkers[0].postMessage.mock.calls[0];
+    expect(message.output).toEqual({ width: 1080, height: 1920 });
+    expect(message.source).toEqual({ width: 1280, height: 720 });
+    expect(message.target).toMatchObject({
+      presetId: "vertical",
+      framing: "fit",
+      videoBitrate: 12_000_000,
+    });
+  });
+
+  it("FR9: a too-small moov reservation aborts that attempt and retries once without fast start", async () => {
+    const onSaved = vi.fn();
+    const { result } = renderHook(() => useVideoExport());
+    await act(async () => {
+      await result.current.start(startArgs({ onSaved }));
+    });
+    const create = window.electronAPI.recordingCreate as ReturnType<typeof vi.fn>;
+    const firstSession = create.mock.calls[0][0] as string;
+    const first = createdWorkers[0];
+
+    act(() =>
+      first.onmessage?.({
+        data: {
+          type: "error",
+          message: "Track #1 has already reached the maximum packet count (100).",
+        },
+      } as MessageEvent),
+    );
+
+    expect(first.terminate).toHaveBeenCalledOnce();
+    expect(window.electronAPI.recordingAbort).toHaveBeenCalledWith(firstSession);
+    await waitFor(() => expect(createdWorkers).toHaveLength(2));
+    const second = createdWorkers[1];
+    const secondSession = create.mock.calls[1][0] as string;
+    expect(secondSession).not.toBe(firstSession);
+    expect(second.postMessage.mock.calls[0][0].target.fastStart).toBe(false);
+    expect(result.current.status).toBe("exporting");
+
+    // A stray message from the dead first worker is ignored.
+    act(() => first.onmessage?.({ data: { type: "done" } } as MessageEvent));
+    act(() => second.onmessage?.({ data: { type: "done" } } as MessageEvent));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledOnce());
+    expect(window.electronAPI.recordingFinalize).toHaveBeenCalledOnce();
+    expect(window.electronAPI.recordingFinalize).toHaveBeenCalledWith(
+      secondSession,
+      expect.anything(),
+    );
+  });
+
+  it("a second packet-count error (already without fast start) is a real failure", async () => {
+    const { result } = renderHook(() => useVideoExport());
+    await act(async () => {
+      await result.current.start(startArgs());
+    });
+    const packetError = {
+      data: { type: "error", message: "already reached the maximum packet count" },
+    } as MessageEvent;
+    act(() => createdWorkers[0].onmessage?.(packetError));
+    await waitFor(() => expect(createdWorkers).toHaveLength(2));
+    act(() => createdWorkers[1].onmessage?.(packetError));
+    expect(result.current.status).toBe("error");
+    expect(createdWorkers).toHaveLength(2);
+  });
 });
