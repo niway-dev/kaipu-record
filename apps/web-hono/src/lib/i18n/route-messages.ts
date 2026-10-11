@@ -33,6 +33,7 @@ const ROUTE_SLICES: ReadonlyArray<{
   { path: "/legal", slices: [...MARKETING_CHROME, "legal"] },
   { path: "/auth", slices: APP_CHROME },
   { path: "/recordings", slices: [...APP_CHROME, "recordings"] },
+  { path: "/account", slices: [...APP_CHROME, "account", "storageCloud"] },
 ];
 
 function normalizePath(pathname: string): string {

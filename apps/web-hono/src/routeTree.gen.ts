@@ -24,6 +24,7 @@ import { Route as AuthLoginRouteImport } from './routes/auth/login'
 import { Route as AuthForgotPasswordRouteImport } from './routes/auth/forgot-password'
 import { Route as AuthEmailVerifiedRouteImport } from './routes/auth/email-verified'
 import { Route as AuthenticatedRecordingsIndexRouteImport } from './routes/_authenticated/recordings/index'
+import { Route as AuthenticatedAccountIndexRouteImport } from './routes/_authenticated/account/index'
 import { Route as ApiV1SplatRouteImport } from './routes/api/v1/$'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
@@ -102,6 +103,12 @@ const AuthenticatedRecordingsIndexRoute =
     path: '/recordings/',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedAccountIndexRoute =
+  AuthenticatedAccountIndexRouteImport.update({
+    id: '/account/',
+    path: '/account/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const ApiV1SplatRoute = ApiV1SplatRouteImport.update({
   id: '/api/v1/$',
   path: '/api/v1/$',
@@ -129,6 +136,7 @@ export interface FileRoutesByFullPath {
   '/legal/terms-and-conditions': typeof LegalTermsAndConditionsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/v1/$': typeof ApiV1SplatRoute
+  '/account/': typeof AuthenticatedAccountIndexRoute
   '/recordings/': typeof AuthenticatedRecordingsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -147,6 +155,7 @@ export interface FileRoutesByTo {
   '/legal/terms-and-conditions': typeof LegalTermsAndConditionsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/v1/$': typeof ApiV1SplatRoute
+  '/account': typeof AuthenticatedAccountIndexRoute
   '/recordings': typeof AuthenticatedRecordingsIndexRoute
 }
 export interface FileRoutesById {
@@ -167,6 +176,7 @@ export interface FileRoutesById {
   '/legal/terms-and-conditions': typeof LegalTermsAndConditionsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/v1/$': typeof ApiV1SplatRoute
+  '/_authenticated/account/': typeof AuthenticatedAccountIndexRoute
   '/_authenticated/recordings/': typeof AuthenticatedRecordingsIndexRoute
 }
 export interface FileRouteTypes {
@@ -187,6 +197,7 @@ export interface FileRouteTypes {
     | '/legal/terms-and-conditions'
     | '/api/auth/$'
     | '/api/v1/$'
+    | '/account/'
     | '/recordings/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -205,6 +216,7 @@ export interface FileRouteTypes {
     | '/legal/terms-and-conditions'
     | '/api/auth/$'
     | '/api/v1/$'
+    | '/account'
     | '/recordings'
   id:
     | '__root__'
@@ -224,6 +236,7 @@ export interface FileRouteTypes {
     | '/legal/terms-and-conditions'
     | '/api/auth/$'
     | '/api/v1/$'
+    | '/_authenticated/account/'
     | '/_authenticated/recordings/'
   fileRoutesById: FileRoutesById
 }
@@ -348,6 +361,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedRecordingsIndexRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/account/': {
+      id: '/_authenticated/account/'
+      path: '/account'
+      fullPath: '/account/'
+      preLoaderRoute: typeof AuthenticatedAccountIndexRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/api/v1/$': {
       id: '/api/v1/$'
       path: '/api/v1/$'
@@ -366,10 +386,12 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteChildren {
+  AuthenticatedAccountIndexRoute: typeof AuthenticatedAccountIndexRoute
   AuthenticatedRecordingsIndexRoute: typeof AuthenticatedRecordingsIndexRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
+  AuthenticatedAccountIndexRoute: AuthenticatedAccountIndexRoute,
   AuthenticatedRecordingsIndexRoute: AuthenticatedRecordingsIndexRoute,
 }
 
