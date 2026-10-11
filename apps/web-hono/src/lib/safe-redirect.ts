@@ -6,7 +6,9 @@
 export function safeRedirectPath(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   if (!value.startsWith("/") || value.startsWith("//") || value.includes("\\")) return undefined;
-  // Control characters can smuggle a second slash past the checks above.
-  if (/[\u0000-\u001f]/.test(value)) return undefined;
+  // Control characters (tab, newline, ...) can smuggle a second slash past the checks above.
+  for (let i = 0; i < value.length; i += 1) {
+    if (value.charCodeAt(i) <= 0x1f) return undefined;
+  }
   return value;
 }
