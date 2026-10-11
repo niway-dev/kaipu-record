@@ -6,11 +6,12 @@ import { getAuthSession } from "@/lib/auth/get-auth-session";
 
 export const Route = createFileRoute("/_authenticated")({
   head: () => NOINDEX,
-  beforeLoad: async () => {
+  beforeLoad: async ({ location }) => {
     const session = await getAuthSession();
 
     if (!session) {
-      throw redirect({ to: "/auth/login" });
+      // `location.href` is the path plus its search, so the visitor returns to where they were.
+      throw redirect({ to: "/auth/login", search: { redirect: location.href } });
     }
     return { session, isAuthenticated: true };
   },
