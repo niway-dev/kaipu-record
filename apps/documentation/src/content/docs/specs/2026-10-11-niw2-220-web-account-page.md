@@ -11,6 +11,7 @@ description: Authenticated /account page (profile, sign-in methods, plan and sto
 ## Problem
 
 The web app has no account page; the header menu only shows the email and Sign out. A signed-in user can't see:
+
 - whether their email is verified (and therefore why cloud is locked);
 - which sign-in methods the account has;
 - their plan and storage.
@@ -20,6 +21,7 @@ They also can't ask to delete the account.
 ## Goal
 
 An authenticated `/account` page with four sections:
+
 1. **Profile:** name, email, verification badge, resend verification.
 2. **Sign-in methods:** list the methods and change the password.
 3. **Plan and storage:** the same states and numbers as the desktop capacity card.
@@ -28,6 +30,7 @@ An authenticated `/account` page with four sections:
 ## Scope of this ticket
 
 **In:**
+
 - Route `apps/web-hono/src/routes/_authenticated/account/index.tsx`, and an "Account" item in `components/user-menu.tsx` above Sign out.
 - **Profile:**
   - edit the name with `authClient.updateUser` (trimmed, 1–80 characters);
@@ -57,6 +60,7 @@ An authenticated `/account` page with four sections:
 - `redirect` search param on the `_authenticated` login redirect (same-origin paths only), honoured by `sign-in-form.tsx`.
 
 **Out of scope (owned elsewhere — do not implement):**
+
 - The server-side account deletion, the soft-delete grace period, the purge hook, `scheduled.ts` and the **wrangler cron trigger**. They belong to **NIW2-214 / PR #268**. Don't touch `wrangler.jsonc`, `infra-auth` hooks, or that PR.
 - Google provider config, linking and set-password (NIW2-215 / NIW2-219).
 - Billing, email change, 2FA/passkeys, session list, data export, per-kind usage breakdown.
@@ -72,6 +76,7 @@ An authenticated `/account` page with four sections:
 ## Testing rule: mocked data only (Cristian, 2026-10-11)
 
 **No test or QA step in this ticket touches a real database, R2 bucket, Infisical, Neon branch or deployed API. That includes dev.**
+
 - Unit tests:
   - `capacity-view`: all 8 states, over-quota, clamping, the 90% notice;
   - byte formatter;
@@ -120,7 +125,7 @@ Medium. One PR is fine. If it gets large, split in two: (a) move the shared capa
 
 ## Change log
 
-| Date       | Change | Approved by |
-| ---------- | ------ | ----------- |
-| 2026-10-10 | Decisions Q1–Q12 (Linear comment) | Cristian |
+| Date       | Change                                                                                            | Approved by                                                                      |
+| ---------- | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| 2026-10-10 | Decisions Q1–Q12 (Linear comment)                                                                 | Cristian                                                                         |
 | 2026-10-11 | Server deletion stays in NIW2-214/#268; UI behind a port and a flag; mocked data only; land human | Cristian ("¿puedes hacer una base de datos mocked? para que no peligre el test") |
