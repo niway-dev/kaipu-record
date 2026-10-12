@@ -7,12 +7,12 @@ description: Schema changes ship as reviewed, versioned SQL files in the reposit
 
 ## Status
 
-| Field         | Value                                                                                                                                                                     |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status        | Accepted — files, scripts, CI drift check and CODEOWNERS are in the repository. Not yet in effect on production: the owner must mark the baseline as applied (see below). |
-| Date          | 2026-10-12                                                                                                                                                                |
-| Supersedes    | The "ships with `db:push`" convention in [Commands](/commands/)                                                                                                           |
-| Superseded by | —                                                                                                                                                                         |
+| Field         | Value                                                                                                                                                                                                                                                                                                                     |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Proposed — drafted on the NIW2-328 branch together with the files, scripts, CI drift check and CODEOWNERS it describes. Becomes Accepted when that branch merges and the owner has marked the baseline as applied on production (see below). Design: [spec 2026-10-12](/specs/2026-10-12-scheduled-jobs-and-migrations/). |
+| Date          | 2026-10-12                                                                                                                                                                                                                                                                                                                |
+| Supersedes    | The "ships with `db:push`" convention in [Commands](/commands/)                                                                                                                                                                                                                                                           |
+| Superseded by | —                                                                                                                                                                                                                                                                                                                         |
 
 ## Context
 
@@ -96,13 +96,17 @@ data-retention risk.
 ## Owner procedure: mark the baseline as applied on production
 
 Do this **once**, before the first `db:migrate` against production. The baseline describes
-tables that already exist, so it must be recorded as applied without being run.
+tables that already exist, so it must be recorded as applied without being run. Rehearse the
+whole procedure on a Neon branch of production first (a copy-on-write snapshot, zero risk),
+then repeat it on production.
 
 1. **Check production matches the baseline.** With the production URL (see
-   [Commands](/commands/) for the inline `DATABASE_URL` convention), run `drizzle-kit push`
-   from `packages/infra-db` and read the plan it prints, then **answer no / abort**. The
-   expected plan is "No changes detected" for the baseline's tables, plus only the changes
-   `0001` makes. Anything else is drift: stop and reconcile it in the schema first.
+   [Commands](/commands/) for the inline `DATABASE_URL` convention), run
+   `drizzle-kit push --strict --verbose` from `packages/infra-db`, read the statements it
+   prints, then **answer no / abort**. `--strict` is what makes this a read-only check: without
+   it, `push` applies non-destructive statements immediately and only asks about data loss.
+   The expected list is exactly the statements of `0001_integrity.sql` and nothing else.
+   Anything else is drift: stop and reconcile it in the schema first.
 2. **Check for orphan rows** (they block the new foreign keys). Both queries must return no rows:
 
    ```sql
