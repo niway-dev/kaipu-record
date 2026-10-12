@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
+import { scheduled } from "./jobs/scheduled";
 import { auth } from "./lib/auth";
 import { appRouter } from "./router";
 
@@ -40,4 +41,5 @@ app.all("/api/v1/*", async (c) => {
   return c.notFound();
 });
 
-export default app;
+// Cron triggers (wrangler.jsonc `triggers.crons`) call `scheduled`; HTTP goes to the Hono app.
+export default { fetch: app.fetch, scheduled } satisfies ExportedHandler;

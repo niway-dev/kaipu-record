@@ -2,7 +2,10 @@ import { baseConfig, getCustomSession } from "@kaipu/infra-auth";
 import { describeEmailFailure, EMAIL_TEMPLATE_VALUES, type EmailLocale } from "@kaipu/infra-email";
 import { betterAuth } from "better-auth";
 import { customSession } from "better-auth/plugins";
+import { createDatabaseClient } from "@kaipu/infra-db/client";
+import { CloudPurgeRepository } from "@kaipu/infra-db/repositories";
 import { env } from "../env";
+import { enqueuePurgeBeforeUserDelete } from "./account-deletion";
 import { buildResetUrl, buildVerifyUrl, tryGetEmail, webUrl } from "./email";
 
 /** Best-effort locale from Accept-Language; English is the documented fallback. */
@@ -24,6 +27,16 @@ function emailLocale(request?: Request): EmailLocale {
 export const auth = betterAuth({
   ...baseConfig,
   trustedOrigins: [...env.CORS_ORIGIN, "kaipu-record://app"],
+  // Queue the R2 purge while the user row still exists; the scheduled handler drains it.
+  databaseHooks: {
+    user: {
+      delete: {
+        before: enqueuePurgeBeforeUserDelete(
+          new CloudPurgeRepository(createDatabaseClient(env.DATABASE_URL)),
+        ),
+      },
+    },
+  },
   emailAndPassword: {
     ...baseConfig.emailAndPassword,
     enabled: true,

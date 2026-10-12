@@ -272,6 +272,7 @@ export function makeFakePurge(): ICloudPurgeRepository & {
   const state = { jobs: [] as PurgeJob[], done: [] as string[], errors: [] as string[] };
   return Object.assign(state, {
     async enqueue(userId: string) {
+      if (state.jobs.some((j) => j.userId === userId && !state.done.includes(j.id))) return;
       state.jobs.push({ id: crypto.randomUUID(), userId, attempts: 0, createdAt: new Date() });
     },
     async nextPending(limit: number) {

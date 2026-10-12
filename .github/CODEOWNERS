@@ -1,3 +1,10 @@
 # Every path is owned by the maintainer. GitHub requests their review on every pull
 # request, and the `main` ruleset can require it.
 * @csdev19
+
+# The database schema and its migrations: a migration is applied to production by hand, and a
+# reviewed schema change is the only gate before it (ADR 0011). Listed explicitly so the rule
+# survives a future change to the default owner above.
+/packages/infra-db/src/schema/ @csdev19
+/packages/infra-db/src/migrations/ @csdev19
+/packages/infra-db/drizzle.config.ts @csdev19

@@ -9,3 +9,4 @@ export { setAutoUploadExclusion } from "./set-auto-upload-exclusion";
 export { sweepExpiredReservations } from "./sweep-expired-reservations";
 export { retryPendingDeletes } from "./retry-pending-deletes";
 export { purgeAccountObjects } from "./purge-account-objects";
+export { enqueueAccountPurge } from "./enqueue-account-purge";

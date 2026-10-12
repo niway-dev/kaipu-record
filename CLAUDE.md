@@ -214,7 +214,8 @@ rather than crashing. That silence is why the check exists.
 
 ## Common Commands
 
-- `bun run db:push` — Push Drizzle schema to DB (run from monorepo root, NOT from packages/infra-db/)
+- `bun run db:generate` / `bun run db:migrate` — Generate and apply committed migrations (ADR 0011; run from monorepo root, NOT from packages/infra-db/)
+- `bun run db:push` — Dev-only schema sync to a throwaway database; never production
 - `bun run db:studio` — Open Drizzle Studio to inspect DB
 - `bun run rebuild:native` — Rebuild the desktop app's native deps for Electron (see above)
 

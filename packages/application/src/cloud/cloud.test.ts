@@ -14,6 +14,7 @@ import { cancelUpload } from "./cancel-upload";
 import { confirmUpload } from "./confirm-upload";
 import { createUploadIntent } from "./create-upload-intent";
 import { deleteCloudCopy } from "./delete-cloud-copy";
+import { enqueueAccountPurge } from "./enqueue-account-purge";
 import { makeFakeAccess, makeFakeAssets, makeFakePurge, makeFakeStorage } from "./fakes";
 import { getAssetDownloadUrl } from "./get-asset-download-url";
 import { getStorageUsage } from "./get-storage-usage";
@@ -890,5 +891,21 @@ describe("sweeps", () => {
       failed: 0,
     });
     expect([...storage.objects.keys()]).toEqual(["videos/other/a/r.mp4"]);
+  });
+
+  it("enqueues one purge job per deleted account, and the purge then removes its objects", async () => {
+    const storage = makeFakeStorage();
+    const purge = makeFakePurge();
+    storage.land("videos/u1/a/r.mp4", { sizeBytes: 1 });
+    storage.land("img/u1/a/t.jpg", { sizeBytes: 1 });
+    storage.land("videos/u2/a/r.mp4", { sizeBytes: 1 });
+    await enqueueAccountPurge({ purge, userId: "u1" });
+    await enqueueAccountPurge({ purge, userId: "u1" }); // retried delete: no duplicate job
+    expect(purge.jobs.map((j) => j.userId)).toEqual(["u1"]);
+    expect(await purgeAccountObjects({ purge, storage, limit: 5, maxAttempts: 3 })).toEqual({
+      done: 1,
+      failed: 0,
+    });
+    expect([...storage.objects.keys()]).toEqual(["videos/u2/a/r.mp4"]);
   });
 });

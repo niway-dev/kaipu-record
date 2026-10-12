@@ -2,8 +2,10 @@ import { relations } from "drizzle-orm";
 import {
   bigint,
   boolean,
+  foreignKey,
   index,
   integer,
+  type PgTableExtraConfigValue,
   primaryKey,
   text,
   timestamp,
@@ -40,8 +42,17 @@ export const cloudAssetTable = createTable(
       .notNull(),
     deletedAt: timestamp("deleted_at"),
   },
-  (t) => [
+  (t): PgTableExtraConfigValue[] => [
     primaryKey({ columns: [t.userId, t.assetId] }),
+    // Circular with cloud_revision's FK; legal because the column is nullable (null until the
+    // first confirm). Set null, not cascade: losing a revision must never delete the asset.
+    // `derived_from_asset_id` has no FK: it would need a composite (user, asset) reference whose
+    // SET NULL would also null the NOT NULL user_id — recorded in the technical-debt ledger.
+    foreignKey({
+      columns: [t.currentRevisionId],
+      foreignColumns: [cloudRevisionTable.revisionId],
+      name: "cloud_asset_current_revision_fk",
+    }).onDelete("set null"),
     index("cloud_asset_user_created_idx").on(t.userId, t.createdAt),
   ],
 );
@@ -73,7 +84,14 @@ export const cloudRevisionTable = createTable(
       .$onUpdate(() => /* @__PURE__ */ new Date())
       .notNull(),
   },
-  (t) => [
+  (t): PgTableExtraConfigValue[] => [
+    // Composite, because the asset's primary key is (user, asset). Cascade: a revision has no
+    // meaning without its asset. Hard deletes of assets do not happen today (tombstones only).
+    foreignKey({
+      columns: [t.userId, t.assetId],
+      foreignColumns: [cloudAssetTable.userId, cloudAssetTable.assetId],
+      name: "cloud_revision_asset_fk",
+    }).onDelete("cascade"),
     uniqueIndex("cloud_revision_user_intent_idx").on(t.userId, t.intentKey),
     index("cloud_revision_user_asset_idx").on(t.userId, t.assetId),
     index("cloud_revision_status_ticket_idx").on(t.status, t.ticketExpiresAt),

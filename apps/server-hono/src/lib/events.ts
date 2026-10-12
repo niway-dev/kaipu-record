@@ -28,7 +28,7 @@ export type CloudEvent =
       purgeFailed: number;
       reconciled: number;
     }
-  | { name: "cloud.sweep.failed"; error: string };
+  | { name: "cloud.sweep.failed"; job: string; error: string };
 
 export function logEvent(event: CloudEvent): void {
   console.log(JSON.stringify({ ts: new Date().toISOString(), ...event }));
