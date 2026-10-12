@@ -1,9 +1,9 @@
 import { copyFile, open, mkdir, rename, unlink, type FileHandle } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { LocalRecording } from "@shared/types/library-storage";
 import type { RecordingFinalizeMeta } from "@shared/types/ipc";
 import { LibraryVault } from "../library/library-vault";
+import { assertSafeId, resolveInside } from "../security/safe-path";
 
 export interface RecordingWriterDeps {
   /** Current vault directory (can change at runtime). */
@@ -52,7 +52,8 @@ export class RecordingWriter {
   }
 
   async create(sessionId: string): Promise<{ tempPath: string }> {
-    const tempPath = join(this.tempDir, `kaipu-rec-${sessionId}.mp4.part`);
+    assertSafeId(sessionId, "session id");
+    const tempPath = resolveInside(this.tempDir, `kaipu-rec-${sessionId}.mp4.part`);
     const handle = await open(tempPath, "w+");
     this.sessions.set(sessionId, { handle, tempPath, queue: Promise.resolve() });
     return { tempPath };
@@ -61,6 +62,7 @@ export class RecordingWriter {
   async write(sessionId: string, data: ArrayBuffer, position: number): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`No recording session "${sessionId}"`);
+    if (!Number.isSafeInteger(position) || position < 0) throw new Error("Invalid write position");
     const buf = Buffer.from(data);
     const op = session.queue.then(() => session.handle.write(buf, 0, buf.byteLength, position));
     // The queue tail must never reject, or a single failed write would poison

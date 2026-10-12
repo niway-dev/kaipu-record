@@ -3,6 +3,7 @@ import { access, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "n
 import { randomUUID } from "node:crypto";
 import type { LocalRecording } from "@shared/types/library-storage";
 import { sha256FileBase64 } from "./content-hash";
+import { assertSafeId, isSafeId, resolveInside } from "../security/safe-path";
 
 const META_DIR = ".kaipu";
 /** Known video containers, in preference order — `.mp4` is what we now write. */
@@ -55,10 +56,25 @@ export class LibraryVault {
   /** Resolve an id to its real file; if none exists yet, default to `.mp4`. */
   async filePath(id: string): Promise<string> {
     for (const ext of ALL_EXTS) {
-      const candidate = join(this.directory, `${id}${ext}`);
+      const candidate = this.inVault(id, ext);
       if (await exists(candidate)) return candidate;
     }
-    return join(this.directory, `${id}${VIDEO_EXTS[0]}`);
+    return this.inVault(id, VIDEO_EXTS[0]);
+  }
+
+  /**
+   * Every path derived from an id goes through here: the id must be a safe file
+   * name AND the resolved path must stay inside the vault. Throws otherwise, so
+   * a hostile id from IPC can never address a file outside the vault.
+   */
+  private inVault(id: string, suffix: string): string {
+    assertSafeId(id, "recording id");
+    return resolveInside(this.directory, `${id}${suffix}`);
+  }
+
+  private inMeta(id: string, suffix: string): string {
+    assertSafeId(id, "recording id");
+    return resolveInside(this.metaDirectory(), `${id}${suffix}`);
   }
 
   private metaDirectory(): string {
@@ -66,16 +82,16 @@ export class LibraryVault {
   }
 
   sidecarPath(id: string): string {
-    return join(this.metaDirectory(), `${id}.json`);
+    return this.inMeta(id, ".json");
   }
 
   thumbnailPath(id: string): string {
-    return join(this.metaDirectory(), `${id}.jpg`);
+    return this.inMeta(id, ".jpg");
   }
 
   /** Cursor event track written at record time (video-editor v2 auto-zoom). */
   cursorTrackPath(id: string): string {
-    return join(this.metaDirectory(), `${id}.cursor.json`);
+    return this.inMeta(id, ".cursor.json");
   }
 
   async list(): Promise<LocalRecording[]> {
@@ -87,7 +103,10 @@ export class LibraryVault {
     const entries = await readdir(this.directory);
     const ids = entries
       .filter((f) => ALL_EXTS.some((ext) => f.endsWith(ext)))
-      .map((f) => basename(f, ALL_EXTS.find((ext) => f.endsWith(ext))!));
+      .map((f) => basename(f, ALL_EXTS.find((ext) => f.endsWith(ext))!))
+      // A file whose name is not a safe id (hidden, odd characters) cannot be
+      // addressed over IPC, so it is not listed rather than failing the whole list.
+      .filter(isSafeId);
     const described = await Promise.all(ids.map((id) => this.describe(id)));
     return described
       .filter((r): r is LocalRecording => r !== null)
@@ -279,7 +298,7 @@ export class LibraryVault {
   /** Writes a screenshot PNG as `<id>.png` in the vault root. */
   async writeImage(id: string, png: Buffer): Promise<void> {
     await mkdir(this.directory, { recursive: true });
-    await writeFile(join(this.directory, `${id}.png`), png);
+    await writeFile(this.inVault(id, ".png"), png);
   }
 
   /** Updates the user-facing title without touching the video file. */

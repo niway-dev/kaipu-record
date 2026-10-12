@@ -1,10 +1,11 @@
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow } from "electron";
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { IPC_CHANNELS } from "@shared/types";
 import type { AppSettings } from "@shared/types";
 import { mergeSettings } from "../services/settings.service";
+import { secureIpc } from "../security/ipc-guard";
 
 /**
  * Persisted app settings + their OS side effects. The pure merge/validate logic
@@ -118,8 +119,8 @@ export function registerSettings(): void {
   load();
   applySideEffects();
 
-  ipcMain.handle(IPC_CHANNELS.getSettings, (): AppSettings => settings);
-  ipcMain.handle(IPC_CHANNELS.updateSettings, (_e, patch: Partial<AppSettings>): AppSettings => {
+  secureIpc.handle(IPC_CHANNELS.getSettings, (): AppSettings => settings);
+  secureIpc.handle(IPC_CHANNELS.updateSettings, (_e, patch: Partial<AppSettings>): AppSettings => {
     settings = mergeSettings({ ...settings, ...patch });
     persist();
     applySideEffects();

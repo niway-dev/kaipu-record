@@ -1,5 +1,6 @@
-import { desktopCapturer, ipcMain } from "electron";
+import { desktopCapturer } from "electron";
 import type { ScreenSource } from "@shared/types/electron-api";
+import { secureIpc } from "./security/ipc-guard";
 
 /**
  * Registers `recording:get-screen-sources`: enumerates screens and windows via
@@ -16,7 +17,7 @@ import type { ScreenSource } from "@shared/types/electron-api";
  * (System Settings → Privacy & Security → Screen Recording).
  */
 export function registerRecordingSourceHandlers(): void {
-  ipcMain.handle(
+  secureIpc.handle(
     "recording:get-screen-sources",
     async (_event, options?: { withThumbnails?: boolean }): Promise<ScreenSource[]> => {
       // Test isolation, the same idea as the throwaway `--user-data-dir` and seeded vault

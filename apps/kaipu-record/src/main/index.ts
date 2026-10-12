@@ -42,6 +42,8 @@ import {
   WINDOW_PRESETS,
   type WindowPresetName,
 } from "@shared/window-size";
+import { secureIpc } from "./security/ipc-guard";
+import { isTrayMode, isWindowPresetName } from "./security/ipc-args";
 
 let mainWindow: BrowserWindow | null = null;
 let capturePanel: CapturePanelWindow | null = null;
@@ -292,11 +294,11 @@ app.whenReady().then(() => {
   });
 
   // IPC test
-  ipcMain.on("ping", () => console.log("pong"));
+  secureIpc.on("ping", () => console.log("pong"));
 
   // The app shell finished mounting and registered its IPC listeners — flush any
   // window-triggered actions that arrived while it was still loading.
-  ipcMain.on(IPC_CHANNELS.appReady, (event) => {
+  secureIpc.on(IPC_CHANNELS.appReady, (event) => {
     if (event.sender !== mainWindow?.webContents) return;
     rendererReady = true;
     const queued = pendingRendererSends;
@@ -316,29 +318,29 @@ app.whenReady().then(() => {
   registerAnalyticsIpc();
 
   // Capture Panel → show the main window (the panel's "Open ↗" button).
-  ipcMain.on("capture-panel:open-main", () => {
+  secureIpc.on("capture-panel:open-main", () => {
     capturePanel?.hide();
     showMainWindow();
   });
 
   // Capture Panel "Start" → open the main window and tell its Record page to start.
-  ipcMain.on(IPC_CHANNELS.recordingRequestStart, triggerStartRecording);
+  secureIpc.on(IPC_CHANNELS.recordingRequestStart, triggerStartRecording);
 
   // Capture Panel "Change" → open the main window and open its source picker.
-  ipcMain.on(IPC_CHANNELS.recordingRequestSourcePicker, triggerChooseSource);
+  secureIpc.on(IPC_CHANNELS.recordingRequestSourcePicker, triggerChooseSource);
 
   // Capture Panel "Capture Screen" → dismiss the panel and run the same interactive
   // region capture as the ⌘⌃X hotkey.
-  ipcMain.on(IPC_CHANNELS.screenshotRequestCapture, () => {
+  secureIpc.on(IPC_CHANNELS.screenshotRequestCapture, () => {
     capturePanel?.hide();
     triggerCaptureScreenshot();
   });
 
   // App version for the renderer-side version gate.
-  ipcMain.handle(IPC_CHANNELS.getAppVersion, () => app.getVersion());
+  secureIpc.handle(IPC_CHANNELS.getAppVersion, () => app.getVersion());
 
   // Per-action registration state of the global shortcuts (for the Settings UI).
-  ipcMain.handle(IPC_CHANNELS.shortcutsGetStatus, () => getShortcutStatus());
+  secureIpc.handle(IPC_CHANNELS.shortcutsGetStatus, () => getShortcutStatus());
   // While the Settings UI captures a new binding, release the global shortcuts so
   // the combo reaches the renderer (and doesn't fire the action being rebound).
   // `resume` only arrives from the React effect cleanup — if the window is closed
@@ -346,7 +348,7 @@ app.whenReady().then(() => {
   // shortcuts (including the ⌘⌃O rescue) would stay dead until a settings change
   // or relaunch. Re-register when the suspending window is destroyed as a backstop.
   let shortcutsSuspendedBy: Electron.WebContents | null = null;
-  ipcMain.on(IPC_CHANNELS.shortcutsSuspend, (event) => {
+  secureIpc.on(IPC_CHANNELS.shortcutsSuspend, (event) => {
     unregisterGlobalShortcuts();
     if (shortcutsSuspendedBy !== event.sender) {
       shortcutsSuspendedBy = event.sender;
@@ -358,7 +360,7 @@ app.whenReady().then(() => {
       });
     }
   });
-  ipcMain.on(IPC_CHANNELS.shortcutsResume, () => {
+  secureIpc.on(IPC_CHANNELS.shortcutsResume, () => {
     applyGlobalShortcuts();
     shortcutsSuspendedBy = null;
   });
@@ -452,7 +454,8 @@ app.whenReady().then(() => {
   let appliedPreset: WindowPresetName | null = null;
   let boundsBeforeEditor: Electron.Rectangle | null = null;
 
-  ipcMain.on(IPC_CHANNELS.windowApplyPreset, (_event, name: WindowPresetName) => {
+  secureIpc.on(IPC_CHANNELS.windowApplyPreset, (_event, name: WindowPresetName) => {
+    if (!isWindowPresetName(name)) return;
     if (!mainWindow || mainWindow.isDestroyed()) return;
     if (name === appliedPreset) return;
     const previous = appliedPreset;
@@ -503,18 +506,20 @@ app.whenReady().then(() => {
   });
 
   // The menu bar mirrors the capture panel's selected mode.
-  ipcMain.on(IPC_CHANNELS.traySetMode, (_event, mode: TrayState) => setTrayState(mode));
+  secureIpc.on(IPC_CHANNELS.traySetMode, (_event, mode: TrayState) => {
+    if (isTrayMode(mode)) setTrayState(mode);
+  });
 
   // Onboarding mode: same treatment for the first-run takeover.
-  ipcMain.on(IPC_CHANNELS.windowSetOnboardingMode, (_event, active: boolean) =>
-    setWindowFloor(active, ONBOARDING_MIN_WIDTH, ONBOARDING_MIN_HEIGHT),
+  secureIpc.on(IPC_CHANNELS.windowSetOnboardingMode, (_event, active: boolean) =>
+    setWindowFloor(active === true, ONBOARDING_MIN_WIDTH, ONBOARDING_MIN_HEIGHT),
   );
 
   // Auto-update (packaged builds only). Silent download; renderer shows a restart banner.
   initAutoUpdater();
-  ipcMain.handle(IPC_CHANNELS.updateGetStatus, () => getUpdateStatus());
-  ipcMain.handle(IPC_CHANNELS.updateCheck, () => checkForUpdatesNow());
-  ipcMain.on(IPC_CHANNELS.updateInstall, () => installDownloadedUpdate());
+  secureIpc.handle(IPC_CHANNELS.updateGetStatus, () => getUpdateStatus());
+  secureIpc.handle(IPC_CHANNELS.updateCheck, () => checkForUpdatesNow());
+  secureIpc.on(IPC_CHANNELS.updateInstall, () => installDownloadedUpdate());
 
   // macOS media permissions (onboarding + settings).
   registerPermissionHandlers();

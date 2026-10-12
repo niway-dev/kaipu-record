@@ -1,9 +1,11 @@
 import { readFile } from "node:fs/promises";
-import { clipboard, ipcMain, nativeImage } from "electron";
+import { clipboard, nativeImage } from "electron";
 import { IPC_CHANNELS } from "@shared/types/ipc";
 import type { LocalRecording } from "@shared/types/library-storage";
 import { createScreenshotProvider } from "./screenshot-capture";
 import { currentVault, screenshotFilePath } from "../library";
+import { secureIpc } from "../security/ipc-guard";
+import { assertSafeId } from "../security/safe-path";
 
 const provider = createScreenshotProvider();
 
@@ -32,7 +34,7 @@ export function registerScreenshotHandlers(windows: CaptureWindowHooks): void {
   // hidden on cancel). Ignore captures until the current one settles.
   let capturing = false;
 
-  ipcMain.handle(IPC_CHANNELS.screenshotCapture, async () => {
+  secureIpc.handle(IPC_CHANNELS.screenshotCapture, async () => {
     if (process.platform !== "darwin" || capturing) return null;
     capturing = true;
     windows.beforeCapture();
@@ -54,29 +56,31 @@ export function registerScreenshotHandlers(windows: CaptureWindowHooks): void {
     };
   });
 
-  ipcMain.on(IPC_CHANNELS.screenshotReveal, () => windows.reveal());
+  secureIpc.on(IPC_CHANNELS.screenshotReveal, () => windows.reveal());
 
-  ipcMain.handle(IPC_CHANNELS.screenshotCopy, async (_e, png: ArrayBuffer) => {
+  secureIpc.handle(IPC_CHANNELS.screenshotCopy, async (_e, png: ArrayBuffer) => {
     clipboard.writeImage(nativeImage.createFromBuffer(Buffer.from(png)));
   });
 
-  ipcMain.handle(IPC_CHANNELS.screenshotCopyById, async (_e, id: string) => {
+  secureIpc.handle(IPC_CHANNELS.screenshotCopyById, async (_e, id: string) => {
     const buf = await readFile(await screenshotFilePath(id));
     clipboard.writeImage(nativeImage.createFromBuffer(buf));
   });
 
-  ipcMain.handle(IPC_CHANNELS.screenshotReadBytes, async (_e, id: string): Promise<ArrayBuffer> => {
+  secureIpc.handle(IPC_CHANNELS.screenshotReadBytes, async (_e, id: string): Promise<ArrayBuffer> => {
     const buf = await readFile(await screenshotFilePath(id));
     return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
   });
 
-  ipcMain.handle(
+  secureIpc.handle(
     IPC_CHANNELS.screenshotSave,
     async (
       _e,
       png: ArrayBuffer,
       meta: { title: string; overwriteId?: string },
     ): Promise<LocalRecording> => {
+      if (meta.overwriteId !== undefined) assertSafeId(meta.overwriteId, "screenshot id");
+      if (typeof meta.title !== "string") throw new Error("Invalid title");
       const id = meta.overwriteId ?? screenshotId();
       const vault = currentVault();
       await vault.writeImage(id, Buffer.from(png));

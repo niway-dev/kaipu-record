@@ -1,7 +1,9 @@
-import { BrowserWindow, ipcMain, screen } from "electron";
+import { BrowserWindow, screen } from "electron";
 import type { Rectangle } from "electron";
 import { join } from "path";
 import { is } from "@electron-toolkit/utils";
+import { secureIpc } from "./security/ipc-guard";
+import { finiteNumber } from "./security/ipc-args";
 
 const PANEL_WIDTH = 340;
 const PANEL_MIN_HEIGHT = 180;
@@ -124,7 +126,8 @@ export class CapturePanelWindow {
   }
 
   private registerIpc(): void {
-    ipcMain.on("capture-panel:resize", (_event, height: number) => {
+    secureIpc.on("capture-panel:resize", (_event, height: number) => {
+      if (finiteNumber(height) === null) return;
       if (this.window && !this.window.isDestroyed()) {
         const clamped = Math.max(PANEL_MIN_HEIGHT, Math.min(Math.round(height), PANEL_MAX_HEIGHT));
         this.window.setContentSize(PANEL_WIDTH, clamped);

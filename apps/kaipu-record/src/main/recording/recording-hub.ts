@@ -1,4 +1,4 @@
-import { app, BrowserWindow, desktopCapturer, ipcMain, screen, systemPreferences } from "electron";
+import { app, BrowserWindow, desktopCapturer, screen, systemPreferences } from "electron";
 import { IPC_CHANNELS } from "@shared/types";
 import type {
   ControlCommand,
@@ -23,6 +23,9 @@ import {
   forceRegularPolicy,
   getAppSettings,
 } from "../infrastructure/settings-store";
+import { secureIpc } from "../security/ipc-guard";
+import { assertSafeId } from "../security/safe-path";
+import { sanitizeRecordingSettingsPatch } from "../security/ipc-args";
 
 /** The three input toggles a global shortcut can flip. */
 export type LiveRecordingToggle =
@@ -125,7 +128,7 @@ export function registerRecordingHub(
       }
     }
   };
-  ipcMain.handle(IPC_CHANNELS.recordingGetState, (): RecordingActivity => activity);
+  secureIpc.handle(IPC_CHANNELS.recordingGetState, (): RecordingActivity => activity);
 
   // Shared recording settings — single source of truth, mirrored to every window.
   const settings: RecordingSettings = {
@@ -142,7 +145,7 @@ export function registerRecordingHub(
       }
     }
   };
-  ipcMain.handle(IPC_CHANNELS.recordingSettingsGet, (): RecordingSettings => settings);
+  secureIpc.handle(IPC_CHANNELS.recordingSettingsGet, (): RecordingSettings => settings);
   const applySettingsPatch = (patch: Partial<RecordingSettings>): void => {
     const cameraWasOn = settings.isCameraEnabled;
     Object.assign(settings, patch);
@@ -163,8 +166,8 @@ export function registerRecordingHub(
       }
     }
   };
-  ipcMain.on(IPC_CHANNELS.recordingSettingsUpdate, (_e, patch: Partial<RecordingSettings>) => {
-    applySettingsPatch(patch);
+  secureIpc.on(IPC_CHANNELS.recordingSettingsUpdate, (_e, patch: Partial<RecordingSettings>) => {
+    applySettingsPatch(sanitizeRecordingSettingsPatch(patch));
   });
 
   // ── Disk writer ──────────────────────────────────────────────────────
@@ -172,11 +175,12 @@ export function registerRecordingHub(
   // "stop" is sent once per recording (writes are fire-and-forget and keep
   // arriving after the first failure). Reset on each new session.
   let stoppedForWriteFailure = false;
-  ipcMain.handle(IPC_CHANNELS.recordingCreate, (_e, sessionId: string) => {
+  secureIpc.handle(IPC_CHANNELS.recordingCreate, (_e, sessionId: string) => {
+    assertSafeId(sessionId, "session id");
     stoppedForWriteFailure = false;
     return writer.create(sessionId);
   });
-  ipcMain.on(
+  secureIpc.on(
     IPC_CHANNELS.recordingWrite,
     (_e, sessionId: string, data: ArrayBuffer, position: number) => {
       void writer.write(sessionId, data, position).catch((error) => {
@@ -193,7 +197,7 @@ export function registerRecordingHub(
       });
     },
   );
-  ipcMain.handle(
+  secureIpc.handle(
     IPC_CHANNELS.recordingFinalize,
     async (_e, sessionId: string, meta: RecordingFinalizeMeta) => {
       let recording;
@@ -225,15 +229,17 @@ export function registerRecordingHub(
       return recording;
     },
   );
-  ipcMain.handle(IPC_CHANNELS.recordingAbort, (_e, sessionId: string) => {
+  secureIpc.handle(IPC_CHANNELS.recordingAbort, (_e, sessionId: string) => {
     cursorTracks.discard(sessionId);
     clickSessions.delete(sessionId);
     stopHookIfIdle();
     return writer.abort(sessionId);
   });
-  ipcMain.handle(
+  secureIpc.handle(
     IPC_CHANNELS.cursorTrackStart,
     async (_e, sessionId: string, sourceId: string): Promise<{ enabled: boolean }> => {
+      assertSafeId(sessionId, "session id");
+      if (typeof sourceId !== "string" || sourceId.length > 500) return { enabled: false };
       const display = pickCapturedDisplay(
         sourceId,
         await displayIdForSource(sourceId),
@@ -245,21 +251,21 @@ export function registerRecordingHub(
       return { enabled: true };
     },
   );
-  ipcMain.handle(IPC_CHANNELS.cursorClockNow, () => performance.now());
-  ipcMain.on(
+  secureIpc.handle(IPC_CHANNELS.cursorClockNow, () => performance.now());
+  secureIpc.on(
     IPC_CHANNELS.cursorTrackAnchor,
     (_e, sessionId: string, t0MainMs: number, quality: "exact" | "estimated") =>
       cursorTracks.get(sessionId)?.setAnchor(t0MainMs, quality),
   );
-  ipcMain.on(IPC_CHANNELS.cursorTrackPause, (_e, sessionId: string, atMainMs: number) =>
+  secureIpc.on(IPC_CHANNELS.cursorTrackPause, (_e, sessionId: string, atMainMs: number) =>
     cursorTracks.get(sessionId)?.pause(atMainMs),
   );
-  ipcMain.on(IPC_CHANNELS.cursorTrackResume, (_e, sessionId: string, atMainMs: number) =>
+  secureIpc.on(IPC_CHANNELS.cursorTrackResume, (_e, sessionId: string, atMainMs: number) =>
     cursorTracks.get(sessionId)?.resume(atMainMs),
   );
 
   // ── Window orchestration ────────────────────────────────────────────
-  ipcMain.on(IPC_CHANNELS.recordingStart, (_e, info: RecordingStartInfo) => {
+  secureIpc.on(IPC_CHANNELS.recordingStart, (_e, info: RecordingStartInfo) => {
     activity = startedActivity();
     getMainWindow()?.hide();
     // The main window is now hidden; force the app to stay in the Dock/Cmd+Tab so
@@ -285,16 +291,16 @@ export function registerRecordingHub(
     app.focus({ steal: true });
     broadcastActivity();
   };
-  ipcMain.on(IPC_CHANNELS.recordingStop, applyStopWindowState);
+  secureIpc.on(IPC_CHANNELS.recordingStop, applyStopWindowState);
 
   // ── Relay ────────────────────────────────────────────────────────────
-  ipcMain.on(IPC_CHANNELS.recordingReportTick, (_e, tick: RecordingTick) => {
+  secureIpc.on(IPC_CHANNELS.recordingReportTick, (_e, tick: RecordingTick) => {
     bar.send(IPC_CHANNELS.controlTick, tick);
     const next = applyTick(activity, tick);
     activity = next.activity;
     if (next.changed) broadcastActivity();
   });
-  ipcMain.on(IPC_CHANNELS.controlCommand, (_e, command: ControlCommand) => {
+  secureIpc.on(IPC_CHANNELS.controlCommand, (_e, command: ControlCommand) => {
     getMainWindow()?.webContents.send(IPC_CHANNELS.recordingCommand, command);
   });
 

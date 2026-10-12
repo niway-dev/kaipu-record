@@ -5,6 +5,7 @@ import { extname } from "node:path";
 import { Readable } from "node:stream";
 import { recordingFilePath, screenshotFilePath, thumbnailFilePath } from "./library";
 import { parseByteRange } from "./media-range";
+import { isSafeId } from "./security/safe-path";
 
 /**
  * Privileged, streamable protocol for local vault media.
@@ -13,10 +14,6 @@ import { parseByteRange } from "./media-range";
  * `registerMediaScheme()` must run BEFORE `app.whenReady`; `registerMediaProtocol()` after.
  */
 export const MEDIA_SCHEME = "kaipu-media";
-
-function isUnsafeId(id: string): boolean {
-  return id.length === 0 || id.includes("/") || id.includes("\\") || id.includes("..");
-}
 
 export function registerMediaScheme(): void {
   protocol.registerSchemesAsPrivileged([
@@ -85,8 +82,13 @@ async function streamFile(target: string, rangeHeader: string | null): Promise<R
 export function registerMediaProtocol(): void {
   protocol.handle(MEDIA_SCHEME, async (request) => {
     const url = new URL(request.url);
-    const id = decodeURIComponent(url.pathname.replace(/^\/+/, ""));
-    if (isUnsafeId(id)) return new Response("Invalid recording id", { status: 400 });
+    let id: string;
+    try {
+      id = decodeURIComponent(url.pathname.replace(/^\/+/, ""));
+    } catch {
+      return new Response("Invalid recording id", { status: 400 });
+    }
+    if (!isSafeId(id)) return new Response("Invalid recording id", { status: 400 });
 
     // Screenshots are overwritten in place; freshness is handled by the `?v=<mtime>`
     // version token on the URL (see LibraryVault.describe), so normal caching is fine.

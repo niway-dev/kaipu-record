@@ -1,10 +1,12 @@
-import { desktopCapturer, ipcMain, shell, systemPreferences } from "electron";
+import { desktopCapturer, shell, systemPreferences } from "electron";
 import {
   IPC_CHANNELS,
   type AccessibilityStatus,
   type PermissionKind,
   type PermissionStatus,
 } from "@shared/types";
+import { secureIpc } from "./security/ipc-guard";
+import { isPermissionKind } from "./security/ipc-args";
 
 /**
  * Registers the OS media-permission IPC handlers used by the onboarding flow and
@@ -126,11 +128,11 @@ async function requestPermission(kind: PermissionKind): Promise<boolean> {
 }
 
 export function registerPermissionHandlers(): void {
-  ipcMain.handle(
+  secureIpc.handle(
     IPC_CHANNELS.accessibilityStatus,
     (): AccessibilityStatus => accessibilityStatus(),
   );
-  ipcMain.handle(IPC_CHANNELS.accessibilityRequest, async (): Promise<AccessibilityStatus> => {
+  secureIpc.handle(IPC_CHANNELS.accessibilityRequest, async (): Promise<AccessibilityStatus> => {
     if (!isMac()) return "not-required";
     // `true` adds the app to the list and shows the system prompt the first time.
     if (systemPreferences.isTrustedAccessibilityClient(true)) return "granted";
@@ -138,20 +140,22 @@ export function registerPermissionHandlers(): void {
     return accessibilityStatus();
   });
 
-  ipcMain.handle(IPC_CHANNELS.checkPermissions, async (): Promise<PermissionStatus> => {
+  secureIpc.handle(IPC_CHANNELS.checkPermissions, async (): Promise<PermissionStatus> => {
     return checkAllPermissions();
   });
 
-  ipcMain.handle(
+  secureIpc.handle(
     IPC_CHANNELS.requestPermission,
     async (_event, kind: PermissionKind): Promise<boolean> => {
+      if (!isPermissionKind(kind)) throw new Error("Invalid permission kind");
       return requestPermission(kind);
     },
   );
 
-  ipcMain.handle(
+  secureIpc.handle(
     IPC_CHANNELS.openSystemSettings,
     async (_event, kind: PermissionKind): Promise<void> => {
+      if (!isPermissionKind(kind)) throw new Error("Invalid permission kind");
       await openSettingsPane(kind);
     },
   );

@@ -8,12 +8,13 @@
  * Registration: call `registerVideoEditSessionHandlers()` from main/library/index.ts
  * right after `registerLibraryVaultHandlers()` so all library IPC stays in one module.
  */
-import { ipcMain } from "electron";
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { IPC_CHANNELS } from "@shared/types/ipc";
 import { LibraryVault } from "./library-vault";
 import { vaultDirectory } from "./vault-location";
+import { assertSafeId, resolveInside } from "../security/safe-path";
+import { secureIpc } from "../security/ipc-guard";
 
 // ── Path helpers ─────────────────────────────────────────────────────────────
 
@@ -22,15 +23,18 @@ function metaDir(): string {
 }
 
 function sessionPath(id: string): string {
-  return join(metaDir(), `${id}.edit.json`);
+  assertSafeId(id, "recording id");
+  return resolveInside(metaDir(), `${id}.edit.json`);
 }
 
 function assetsDir(id: string): string {
-  return join(metaDir(), `${id}.assets`);
+  assertSafeId(id, "recording id");
+  return resolveInside(metaDir(), `${id}.assets`);
 }
 
 function assetPath(id: string, assetId: string): string {
-  return join(assetsDir(id), `${assetId}.png`);
+  assertSafeId(assetId, "asset id");
+  return resolveInside(assetsDir(id), `${assetId}.png`);
 }
 
 /**
@@ -39,7 +43,8 @@ function assetPath(id: string, assetId: string): string {
  * a saved session still matches its source without ever hashing.
  */
 export function sessionMetaPath(vaultDir: string, id: string): string {
-  return join(vaultDir, ".kaipu", `${id}.edit.meta.json`);
+  assertSafeId(id, "recording id");
+  return resolveInside(join(vaultDir, ".kaipu"), `${id}.edit.meta.json`);
 }
 
 export interface SessionMeta {
@@ -101,6 +106,11 @@ async function readExportedSavedAt(id: string): Promise<number | null> {
 // atomic-write/prune/delete behaviour directly against a temp vault dir.
 export async function saveSession(id: string, payload: SavePayload): Promise<void> {
   const { sessionJson, assets, exported = false } = payload;
+
+  // Validate every id before the first byte is written: a bad asset id must not
+  // leave a half-saved session behind.
+  assertSafeId(id, "recording id");
+  for (const asset of assets) assertSafeId(asset.assetId, "asset id");
 
   // Atomic session JSON write (temp + rename so a crash never truncates the file).
   const sp = sessionPath(id);
@@ -221,7 +231,7 @@ export async function deleteVideoEditSession(id: string): Promise<void> {
 // ── IPC registration ──────────────────────────────────────────────────────────
 
 export function registerVideoEditSessionHandlers(): void {
-  ipcMain.handle(
+  secureIpc.handle(
     IPC_CHANNELS.videoEditSaveSession,
     (
       _event,
@@ -232,5 +242,5 @@ export function registerVideoEditSessionHandlers(): void {
     ) => saveSession(id, { sessionJson, assets, exported }),
   );
 
-  ipcMain.handle(IPC_CHANNELS.videoEditLoadSession, (_event, id: string) => loadSession(id));
+  secureIpc.handle(IPC_CHANNELS.videoEditLoadSession, (_event, id: string) => loadSession(id));
 }

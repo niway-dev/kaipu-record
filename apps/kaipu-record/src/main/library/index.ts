@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { app, BrowserWindow, dialog, shell } from "electron";
 import { IPC_CHANNELS } from "@shared/types";
 import type { RecordingBackfillMeta, VaultDirectory } from "@shared/types";
 import { createMainTranslator } from "@kaipu/i18n/main";
@@ -12,6 +12,7 @@ import { LibraryService } from "./library-service";
 import { LibraryVault } from "./library-vault";
 import { resetVaultDirectory, setVaultDirectory, vaultDirectory } from "./vault-location";
 import { deleteVideoEditSession, registerVideoEditSessionHandlers } from "./video-edit-session";
+import { secureIpc } from "../security/ipc-guard";
 
 /** Tell every window the vault folder changed so open pages re-list. */
 function broadcastLibraryChanged(): void {
@@ -49,7 +50,7 @@ export async function screenshotFilePath(id: string): Promise<string> {
 
 /** Absolute path to a recording's thumbnail jpg (may not exist). */
 export function thumbnailFilePath(id: string): string {
-  return join(vaultDirectory().path, ".kaipu", `${id}.jpg`);
+  return currentVault().thumbnailPath(id);
 }
 
 export function registerLibraryVaultHandlers(deps: { auth: AuthHandle; serverUrl: string }): void {
@@ -61,13 +62,13 @@ export function registerLibraryVaultHandlers(deps: { auth: AuthHandle; serverUrl
     fetchCatalog: (token) => fetchCloudCatalog({ serverUrl: deps.serverUrl }, token),
   });
 
-  ipcMain.handle(IPC_CHANNELS.listLibraryItems, () => service.list());
-  ipcMain.handle(IPC_CHANNELS.refreshCloudCatalog, async () => {
+  secureIpc.handle(IPC_CHANNELS.listLibraryItems, () => service.list());
+  secureIpc.handle(IPC_CHANNELS.refreshCloudCatalog, async () => {
     const result = await service.refreshCatalog();
     if (result.ok) broadcastLibraryChanged();
     return result;
   });
-  ipcMain.handle(IPC_CHANNELS.removeLocalCopy, async (_event, id: string) => {
+  secureIpc.handle(IPC_CHANNELS.removeLocalCopy, async (_event, id: string) => {
     const result = await service.removeLocalCopy(id);
     if (result.ok) broadcastLibraryChanged();
     return result;
@@ -79,36 +80,36 @@ export function registerLibraryVaultHandlers(deps: { auth: AuthHandle; serverUrl
     if (userId) void service.refreshCatalog().then((r) => r.ok && broadcastLibraryChanged());
   });
 
-  ipcMain.handle(IPC_CHANNELS.listLocalRecordings, () => currentVault().list());
-  ipcMain.handle(IPC_CHANNELS.loadCursorTrack, (_event, id: string) =>
+  secureIpc.handle(IPC_CHANNELS.listLocalRecordings, () => currentVault().list());
+  secureIpc.handle(IPC_CHANNELS.loadCursorTrack, (_event, id: string) =>
     currentVault().readCursorTrack(id),
   );
-  ipcMain.handle(IPC_CHANNELS.renameLocalRecording, (_event, id: string, title: string) =>
+  secureIpc.handle(IPC_CHANNELS.renameLocalRecording, (_event, id: string, title: string) =>
     currentVault().rename(id, title),
   );
-  ipcMain.handle(
+  secureIpc.handle(
     IPC_CHANNELS.backfillLocalRecordingMeta,
     (_event, id: string, meta: RecordingBackfillMeta) => currentVault().backfill(id, meta),
   );
-  ipcMain.handle(IPC_CHANNELS.deleteLocalRecording, async (_event, id: string) => {
+  secureIpc.handle(IPC_CHANNELS.deleteLocalRecording, async (_event, id: string) => {
     await currentVault().remove(id);
     // Best-effort: a missing session must never block the delete.
     await deleteVideoEditSession(id).catch(() => {});
   });
-  ipcMain.handle(IPC_CHANNELS.revealLocalRecording, async (_event, id: string) =>
+  secureIpc.handle(IPC_CHANNELS.revealLocalRecording, async (_event, id: string) =>
     shell.showItemInFolder(await currentVault().filePath(id)),
   );
 
-  ipcMain.handle(IPC_CHANNELS.getVaultDirectory, (): VaultDirectory => vaultDirectory());
+  secureIpc.handle(IPC_CHANNELS.getVaultDirectory, (): VaultDirectory => vaultDirectory());
   // shell.openPath resolves with an error string ("" on success) rather than rejecting.
-  ipcMain.handle(IPC_CHANNELS.openVaultDirectory, async (): Promise<void> => {
+  secureIpc.handle(IPC_CHANNELS.openVaultDirectory, async (): Promise<void> => {
     const { path } = vaultDirectory();
     await mkdir(path, { recursive: true });
     const error = await shell.openPath(path);
     if (error) console.error("failed to open the recordings folder", error);
   });
 
-  ipcMain.handle(
+  secureIpc.handle(
     IPC_CHANNELS.chooseVaultDirectory,
     async (event): Promise<VaultDirectory | null> => {
       const window = BrowserWindow.fromWebContents(event.sender);
@@ -159,7 +160,7 @@ export function registerLibraryVaultHandlers(deps: { auth: AuthHandle; serverUrl
     },
   );
 
-  ipcMain.handle(IPC_CHANNELS.resetVaultDirectory, (): VaultDirectory => {
+  secureIpc.handle(IPC_CHANNELS.resetVaultDirectory, (): VaultDirectory => {
     resetVaultDirectory();
     broadcastLibraryChanged();
     return vaultDirectory();

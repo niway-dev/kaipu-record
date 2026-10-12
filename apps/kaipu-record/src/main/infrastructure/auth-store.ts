@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, safeStorage } from "electron";
+import { app, BrowserWindow, safeStorage } from "electron";
 import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { FREE_ENTITLEMENTS, type Entitlements } from "@shared/entitlements";
@@ -14,6 +14,7 @@ import {
   signUpWithPassword,
   type AuthClientConfig,
 } from "../services/auth-client";
+import { secureIpc } from "../security/ipc-guard";
 
 function tokenFilePath(): string {
   return join(app.getPath("userData"), "auth.enc");
@@ -158,7 +159,7 @@ export function registerAuth(
     }
   }
 
-  ipcMain.handle(IPC_CHANNELS.authGetStatus, async (): Promise<AuthStatus> => {
+  secureIpc.handle(IPC_CHANNELS.authGetStatus, async (): Promise<AuthStatus> => {
     if (!token) return { kind: "signed-out" };
     try {
       const identity = await getSession(config, token);
@@ -232,7 +233,7 @@ export function registerAuth(
   // thrown out of `ipcMain.handle` down to its `.message`, which would strip the structured
   // `kind` the renderer needs to pick the right error copy. `requireMainWindow` deliberately
   // still throws — that is a programming/security error, not a user-facing auth outcome.
-  ipcMain.handle(
+  secureIpc.handle(
     IPC_CHANNELS.authSignIn,
     async (event, credentials: AuthCredentials): Promise<AuthAttemptResult> => {
       requireMainWindow(event);
@@ -247,7 +248,7 @@ export function registerAuth(
     },
   );
 
-  ipcMain.handle(
+  secureIpc.handle(
     IPC_CHANNELS.authSignUp,
     async (event, input: SignUpInput): Promise<AuthAttemptResult> => {
       requireMainWindow(event);
@@ -259,7 +260,7 @@ export function registerAuth(
     },
   );
 
-  ipcMain.handle(
+  secureIpc.handle(
     IPC_CHANNELS.authResendVerification,
     async (event): Promise<{ ok: true; sentAt: number } | { ok: false }> => {
       requireMainWindow(event);
@@ -288,7 +289,7 @@ export function registerAuth(
     },
   );
 
-  ipcMain.handle(IPC_CHANNELS.authSignOut, async (event): Promise<void> => {
+  secureIpc.handle(IPC_CHANNELS.authSignOut, async (event): Promise<void> => {
     requireMainWindow(event);
     const outgoingToken = token;
     token = null;

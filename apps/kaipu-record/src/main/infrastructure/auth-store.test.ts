@@ -40,6 +40,16 @@ vi.mock("electron", () => ({
   },
 }));
 
+// Sender trust (our own page, top frame) is covered in security/; these tests
+// exercise the handlers' own logic, so the guard is a passthrough here.
+vi.mock("../security/ipc-guard", () => ({
+  secureIpc: {
+    handle: (channel: string, fn: (event: { sender: unknown }, ...args: unknown[]) => unknown) => {
+      mockState.handlers.set(channel, fn);
+    },
+  },
+}));
+
 import * as authClient from "../services/auth-client";
 import { registerAuth } from "./auth-store";
 
