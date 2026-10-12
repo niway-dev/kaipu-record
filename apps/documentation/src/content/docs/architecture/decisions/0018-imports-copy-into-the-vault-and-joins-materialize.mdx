@@ -1,0 +1,76 @@
+---
+title: "ADR 0018: Imported files are copied into the vault, and joining recordings materializes a new recording"
+description: A file dragged in from outside the app becomes a library item by being copied into the vault, never referenced by path. Joining several recordings produces a new recording at once, edited afterwards like any other, instead of a multi-source project.
+---
+
+# ADR 0018: Imported files are copied into the vault, and joining recordings materializes a new recording
+
+## Status
+
+| Field         | Value                                                      |
+| ------------- | ---------------------------------------------------------- |
+| Status        | Proposed                                                   |
+| Date          | 2026-10-12                                                 |
+| Supersedes    | —                                                          |
+| Superseded by | —                                                          |
+| Spec          | [Editor compose](/specs/2026-10-12-editor-compose-design/) |
+
+## Context
+
+The Editor workspace (PR #244) gives every edit one place. The owner wants two creation
+actions on top of it, **New image** and **New video**, fed by dragging items from the library
+or files from Finder. Two facts of the current app shape the choice:
+
+- The vault is the source of truth (`desktop/library-vault`): every item is a file in the
+  vault with a sidecar, played through `kaipu-media://`, thumbnailed and uploaded from there.
+  Nothing in the app reads media from anywhere else.
+- The video editor's scene, preview and export all assume **one source**: `ClipItem` has no
+  source id, the preview is one `<video>`, and the export worker builds one `Input`.
+
+A multi-source project (the earlier spec's Phase 2) changes all three at once and has to
+rebase every source's cursor track onto one timeline. Screen Studio, the closest reference,
+does not join recordings at all.
+
+## Decision
+
+1. **A file from outside the app is copied into the vault** (atomic copy, sidecar with
+   `origin: "import"` and the original filename, duplicate detection by content hash) and
+   becomes an ordinary library item before any editor uses it. No item references a path
+   outside the vault.
+2. **Joining recordings materializes a new recording immediately.** An export worker that
+   reads N inputs in sequence writes one new recording (`derivedFromAssetId` = the first
+   source, `joinedFrom` = all of them in the sidecar). The user then edits it in the existing
+   single-source editor. The joined recording has no cursor track in this version.
+
+## Alternatives rejected
+
+| Alternative                                                     | Why not                                                                                                                                                                  |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Reference the external file by path                             | The item breaks when the user moves or deletes the file; `kaipu-media://`, thumbnails, sidecars and cloud upload all assume the vault; a second kind of item everywhere. |
+| Multi-source project now (`ClipItem.sourceId`, N-video preview) | Three subsystems change together, plus cursor-track rebasing, to serve a use ("join two takes and polish") that the materialized join covers. Kept as the later Phase B. |
+| Join by container concatenation without re-encoding             | Only works when codec, resolution, frame rate and audio layout match exactly, which a 1440p and a 1080p recording, or one with and one without a mic, do not.            |
+
+## Consequences
+
+- Every import costs disk equal to the file's size. Accepted for the same reason as ADR 0003:
+  the vault copy is the asset of record.
+- An imported video has no cursor track and no Kaipu metadata: no auto-zoom proposals, no
+  click highlights. Manual zoom, trim, overlays and blur work.
+- A joined recording loses its sources' cursor tracks for the same reason. If that becomes a
+  complaint, Phase B (projects) recovers it; the N-input worker built here is reused by it.
+- The export worker gains N inputs and must not hold them all in memory; it reads by range
+  from `kaipu-media://` (spike before the plan).
+- The library gets a drop target, so import is useful on its own, before any compose UI.
+
+## Non-goals
+
+- Picture-in-picture or split screen.
+- Watching or syncing a folder outside the vault.
+- Editing the order or trim of sources after a join (that is Phase B).
+
+## Reopen if
+
+- Users join recordings and then ask for auto-zoom on the result, or for re-ordering after the
+  join: build projects (Phase B) on top of the N-input worker.
+- Disk use from imports becomes a complaint: offer "import by moving" as an explicit choice,
+  still into the vault.
