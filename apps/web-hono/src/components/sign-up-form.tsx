@@ -1,5 +1,5 @@
 import { useForm } from "@tanstack/react-form";
-import { useNavigate, useRouter } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import z from "zod";
 
@@ -12,7 +12,6 @@ import { useTranslations } from "@kaipu/i18n";
 
 export default function SignUpForm() {
   const navigate = useNavigate();
-  const router = useRouter();
   const t = useTranslations("auth");
 
   const form = useForm({
@@ -30,9 +29,10 @@ export default function SignUpForm() {
         },
         {
           onSuccess: async () => {
-            await router.invalidate();
-            navigate({ to: "/recordings" });
-            toast.success(t("signUpSuccess"));
+            // The API only issues a session once the email is verified, so there is nothing
+            // to load yet: send the user to sign in after they follow the emailed link.
+            toast.success(t("signUpCheckEmail"));
+            navigate({ to: "/auth/login" });
           },
           onError: (error) => {
             toast.error(error.error.message || error.error.statusText);

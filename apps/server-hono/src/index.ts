@@ -2,6 +2,8 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { auth } from "./lib/auth";
+import { env } from "./env";
+import { isRequestAllowed } from "./middleware/csrf";
 import { appRouter } from "./router";
 
 const app = new Hono();
@@ -30,7 +32,15 @@ app.get("/api/v1/health", (c) =>
 // oRPC OpenAPIHandler — REST-style URLs at /api/v1/*
 const openAPIHandler = new OpenAPIHandler(appRouter);
 
+// Cookie-authenticated writes must come from our own origins (CSRF). Bearer-token clients
+// (desktop) send no cookie and pass through.
+const allowedOrigins = [...env.CORS_ORIGIN, ...(env.PUBLIC_WEB_URL ? [env.PUBLIC_WEB_URL] : [])];
+
 app.all("/api/v1/*", async (c) => {
+  if (!isRequestAllowed(c.req.raw, { allowedOrigins })) {
+    return c.json({ error: "Cross-site request rejected" }, 403);
+  }
+
   const { matched, response } = await openAPIHandler.handle(c.req.raw, {
     prefix: "/api/v1",
     context: { headers: c.req.raw.headers },

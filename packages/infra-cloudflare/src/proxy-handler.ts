@@ -21,6 +21,11 @@ export function createProxyHandler(options: ProxyOptions): (request: Request) =>
       const targetUrl = `${backendUrl}${url.pathname}${url.search}`;
       const proxiedRequest = new Request(targetUrl, request);
 
+      // Client-supplied address headers are untrusted; the API reads cf-connecting-ip, which the
+      // Cloudflare edge sets. Drop the spoofable ones so nothing downstream can trust them.
+      proxiedRequest.headers.delete("x-forwarded-for");
+      proxiedRequest.headers.delete("x-real-ip");
+
       if (forwardedHeaders) {
         proxiedRequest.headers.set("x-forwarded-host", url.host);
         proxiedRequest.headers.set("x-forwarded-proto", url.protocol.replace(":", ""));

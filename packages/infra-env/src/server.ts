@@ -4,7 +4,7 @@ import { commaSeparatedList } from "./transforms";
 export const serverEnvSchema = z.object({
   DATABASE_URL: z.string().min(1),
   CORS_ORIGIN: commaSeparatedList,
-  BETTER_AUTH_SECRET: z.string().min(1),
+  BETTER_AUTH_SECRET: z.string().min(32, "BETTER_AUTH_SECRET must be at least 32 characters"),
   // Cloudflare R2 (S3-compatible) credentials for cloud recordings. Optional so
   // the API still boots without cloud storage configured — the recording
   // endpoints report "not configured" until these are set as Worker secrets.

@@ -65,6 +65,8 @@ export const auth = betterAuth({
   },
   emailVerification: {
     sendOnSignUp: true,
+    // Sign-in is blocked until verified; resend the link when an unverified user tries.
+    sendOnSignIn: true,
     autoSignInAfterVerification: false,
     // Decision 2026-09-15: verification links last 24 hours.
     expiresIn: 60 * 60 * 24,

@@ -42,6 +42,7 @@ function errorCopyKey(
   | "errorInvalidCredentials"
   | "errorEmailTaken"
   | "errorPasswordTooShort"
+  | "errorEmailNotVerified"
   | "errorNetwork"
   | "errorUnknown" {
   switch (err.kind) {
@@ -51,6 +52,8 @@ function errorCopyKey(
       return "errorEmailTaken";
     case "password-too-short":
       return "errorPasswordTooShort";
+    case "email-not-verified":
+      return "errorEmailNotVerified";
     case "network":
       return "errorNetwork";
     case "unknown":

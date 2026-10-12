@@ -1,0 +1,123 @@
+---
+title: "ADR 0017: Authentication rate limits are counted in Postgres, with a Cloudflare zone rule as the outer layer"
+description: Better Auth's limiter on the Workers API keeps its counters in the existing Neon Postgres database (storage "database", table kaipu_rate_limit), keyed by the cf-connecting-ip address, instead of per-isolate memory, Workers KV, the Workers Rate Limiting binding or a Durable Object. A Cloudflare rate-limiting rule on the sign-in path is the cheap outer layer for the web.
+---
+
+# ADR 0017: Authentication rate limits are counted in Postgres, with a Cloudflare zone rule as the outer layer
+
+## Status
+
+| Field         | Value                                                                                                                                                                                                                                                                   |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Proposed — designed in [Authentication hardening](/specs/2026-10-12-auth-hardening/) (NIW2-324). The branch holds an unverified WIP implementation of the configuration and table; nothing has run in production. Numbering note: 0011–0016 are taken on other open branches (NIW2-328 drafts 0011; `design/*` branches hold 0011–0016), so this record takes 0017. |
+| Date          | 2026-10-12                                                                                                                                                                                                                                                             |
+| Supersedes    | —                                                                                                                                                                                                                                                                      |
+| Amends        | —                                                                                                                                                                                                                                                                      |
+| Superseded by | —                                                                                                                                                                                                                                                                      |
+
+## Context
+
+The API runs on Cloudflare Workers and authenticates with Better Auth. Better Auth ships a rate
+limiter for its own endpoints (sign-in, sign-up, password reset, verification resend) and the
+limiter needs a counter store. Its default store is process memory. On Workers a request may land
+on any isolate in any location, and isolates share nothing, so an in-memory counter is only ever
+the count that one isolate has seen: an attacker spreading attempts across connections sees no
+limit at all. On top of that, the limiter was off in production because it keys its default on
+`NODE_ENV=production`, which the Worker never sets (audit finding F-3).
+
+The limiter's key is the client address. Better Auth reads `x-forwarded-for` by default, which a
+client controls; the web proxy copied it through unchanged (F-4). Cloudflare sets
+`cf-connecting-ip` at the edge for every proxied request, and a client cannot choose it.
+
+The store has to satisfy four things: counters shared across isolates and locations; an atomic
+check-and-increment, because concurrent requests would otherwise all pass a stale count; coverage
+of the desktop path, which calls the API directly and never passes through the web zone; and a
+cost in bindings, code and money that fits a product with a few sign-ins per minute.
+
+Candidates, with what the documentation says about each:
+
+| Store                                                     | Shared across isolates | Atomic increment                         | Cost to adopt                                                              | What the docs say                                                                                                                                                                              |
+| --------------------------------------------------------- | ---------------------- | ---------------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Memory (Better Auth default)                              | No                     | Yes, within one isolate                  | None                                                                       | Better Auth: "may not be suitable for many use cases, particularly in serverless environments".                                                                                                |
+| Workers KV (as Better Auth `secondaryStorage`)            | Eventually             | No (read-then-write)                     | One namespace binding                                                      | Cloudflare: writes to the same key limited to one per second; propagation up to ~60 s. A login counter is precisely a hot key with concurrent writers.                                       |
+| Workers Rate Limiting binding                             | Per location only      | Yes, per location, eventually synced     | One `ratelimits` entry per rule; periods 10 s or 60 s only                 | Cloudflare: "permissive, eventually consistent, and intentionally designed to not be used as an accurate accounting system"; the docs advise against IP keys. A fine coarse filter, not a limiter you rely on. |
+| Durable Object (one per key, sliding window in storage)  | Yes, globally          | Yes (single-threaded per object)         | A DO class, a binding, a migration, code to write and test; available on the Free plan with SQLite backend | The accurate option. Every auth request becomes a DO round trip; the class is ours to maintain.                                                                                                |
+| Postgres (Better Auth `storage: "database"`)              | Yes, globally          | Yes, since Better Auth 1.7.7             | One table; no binding; no new code beyond the Drizzle schema               | Better Auth 1.7.7: "Fixed concurrent PostgreSQL requests exceeding Drizzle adapter database-backed rate limits." Every auth request already reads this database.                              |
+| Cloudflare zone rate-limiting rule (WAF)                  | Yes, at the edge       | Yes                                      | Dashboard configuration, no code                                            | Cloudflare's documented first line against credential stuffing. Only sees traffic through the `kaipu.app` zone: the desktop app bypasses it, and so does any workers.dev or preview URL.    |
+
+The repository's own backlog ([API abuse controls](/backlog/api-abuse-controls/)) had already
+asked that the zone rule be evaluated first and warned against IP as the only identity for
+authenticated users. That page is about per-user limits on upload and download routes, which this
+decision does not cover.
+
+## Decision
+
+1. **Better Auth's limiter is on explicitly** (`rateLimit.enabled`, independent of `NODE_ENV`;
+   off only under the test runner).
+2. **Counters live in Postgres**, through Better Auth's `storage: "database"`, in a new table
+   `kaipu_rate_limit` (`id`, `key`, `count`, `last_request`) declared in `@kaipu/infra-db` next
+   to the other auth tables and passed to the Drizzle adapter as the `rateLimit` model.
+3. **The key address is `cf-connecting-ip` and nothing else** (`advanced.ipAddress.ipAddressHeaders`).
+   The web proxy deletes inbound `x-forwarded-for` and `x-real-ip` before forwarding, so nothing
+   downstream can be tempted to trust them.
+4. **Per-route rules** are stricter than the global one for sign-in, sign-up, password-reset
+   request, password reset and verification resend. The numbers are in the spec and are the
+   owner's to tune; the structure is the decision.
+5. **A Cloudflare zone rate-limiting rule** on `POST /api/auth/sign-in/email` (and the sign-up and
+   reset paths), keyed by IP, is configured in the dashboard as the outer layer for the web path.
+   It is operational configuration, not code, and it is not what the API relies on.
+6. **Fail mode is fail-closed by construction.** If the database is unreachable the limiter throws
+   before the handler runs; every auth request needs the same database, so nothing is lost by this.
+
+## Alternatives rejected
+
+- **Durable Objects.** The accurate choice and the one most Workers guidance points at for
+  login throttling. Rejected for now because it adds a class, a binding, a migration and a code
+  path to test, for an endpoint that sees a handful of requests per minute and already pays a
+  database round trip. This is the first alternative to reopen (see below).
+- **Workers KV.** One write per second per key and eventual consistency make it the wrong shape
+  for a counter that is written on every attempt and must be read fresh. Also needs a binding.
+- **Workers Rate Limiting binding.** Zero-cost and fast, but per location and documented as
+  permissive; a distributed attacker is counted separately in each colo. Acceptable as an extra
+  filter in front of the real limiter, not as the limiter. Not adopted now to keep one mechanism.
+- **Zone rule only.** Does not see the desktop, workers.dev or preview traffic, and cannot express
+  per-route semantics that depend on the response (Free plan).
+- **Keep memory and set `NODE_ENV=production`.** Turns the limiter on in name only.
+
+## Consequences
+
+- Every Better Auth request now performs a read and a conditional update on Neon in addition to
+  its own queries. At current volume this is invisible; it is the cost that reopens the decision.
+- `kaipu_rate_limit` grows one row per (address, path) and Better Auth never deletes rows. A
+  periodic delete of rows whose `last_request` is older than the longest window belongs with the
+  scheduled jobs in NIW2-328.
+- The table has to exist before the limiter runs: `bun run db:push` today, a committed migration
+  once NIW2-328 lands. Whichever of the two tickets merges second carries it the way the first one
+  established.
+- Correctness of the per-IP key depends on `cf-connecting-ip` being present on every path,
+  including the hop from the web Worker to the API over the Service Binding. If it is missing
+  there, Better Auth warns and does not limit. This must be confirmed in production logs after
+  the first deploy; it is an acceptance criterion in the spec.
+- Users behind one shared address (an office, a campus) share one counter per route. The rule
+  numbers are chosen with that in mind and are easy to change.
+- The zone rule is dashboard state, invisible to the repository. Record its parameters in the
+  production runbook when it is created.
+
+## Non-goals
+
+- Per-user limits on `/api/v1` routes (upload intents, download URLs, deletes). Those are keyed by
+  account, not address, and belong to [API abuse controls](/backlog/api-abuse-controls/).
+- Bot management, managed challenges, leaked-credential checks — paid-plan Cloudflare features
+  that may be added in the dashboard without touching this decision.
+- A generic rate-limiting abstraction in `@kaipu/application`.
+
+## Reopen when
+
+- Sign-in latency or Neon load attributable to the limiter becomes visible — then move the store
+  to a Durable Object (Better Auth `customStorage` with a single atomic `consume`).
+- The API gains a path that must be throttled without a database round trip (for example a
+  health or metadata endpoint under attack).
+- Better Auth changes or deprecates `storage: "database"`, or a release regresses its atomicity.
+- The product starts serving many users from shared addresses and address-keyed limits generate
+  support load — then per-account keys for authenticated routes come first, and this decision may
+  need a second key for sign-in (address + email hash).

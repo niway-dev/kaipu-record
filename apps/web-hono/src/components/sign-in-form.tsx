@@ -30,6 +30,10 @@ export default function SignInForm() {
             toast.success(t("signInSuccess"));
           },
           onError: (error) => {
+            if (error.error.code === "EMAIL_NOT_VERIFIED") {
+              toast.error(t("emailNotVerified"));
+              return;
+            }
             toast.error(error.error.message || error.error.statusText);
           },
         },

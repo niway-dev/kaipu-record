@@ -53,10 +53,18 @@ async function callCredentialEndpoint(
     const body = (await res.json().catch(() => null)) as { code?: string } | null;
     if (body?.code === "PASSWORD_TOO_SHORT")
       throw { kind: "password-too-short" } satisfies AuthError;
+    // The server only issues a session once the email is verified, and re-sends the link on
+    // a sign-in attempt, so the user just needs to be told to check their inbox.
+    if (res.status === 403 && body?.code === "EMAIL_NOT_VERIFIED")
+      throw { kind: "email-not-verified" } satisfies AuthError;
     throw { kind: invalidStatusKind } satisfies AuthError;
   }
 
   const token = res.headers.get("set-auth-token");
+  // A sign-up that succeeds but issues no token is the verify-first flow: the account exists
+  // and a verification email is on its way. Sign-up of an already-registered address answers
+  // the same way (the server avoids revealing which emails exist).
+  if (!token && path === "sign-up/email") throw { kind: "email-not-verified" } satisfies AuthError;
   if (!token)
     throw {
       kind: "unknown",
