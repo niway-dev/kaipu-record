@@ -1,0 +1,69 @@
+---
+title: "ADR 0019: Composed images are layers in the annotation model"
+description: A new image made from several images is the existing image editor with an `image` annotation type. The first image stays the base; each added image is a layer that moves, resizes and orders like any annotation. Layouts are presets that place layers.
+---
+
+# ADR 0019: Composed images are layers in the annotation model
+
+## Status
+
+| Field         | Value                                                      |
+| ------------- | ---------------------------------------------------------- |
+| Status        | Proposed                                                   |
+| Date          | 2026-10-12                                                 |
+| Supersedes    | —                                                          |
+| Superseded by | —                                                          |
+| Spec          | [Editor compose](/specs/2026-10-12-editor-compose-design/) |
+
+## Context
+
+The owner wants **New image**: drop two (or a few) images into the editor and arrange them on
+one canvas. The image editor's document today is `{ beautify, annotations[], crop? }` over
+one implicit base image. Annotations — box, arrow, text, path, blur — already have selection,
+move, resize and z-order. `crop` is relative to the beautified frame including its padding,
+so a crop can already widen the canvas into the background.
+
+The earlier spec proposed fixed layouts (side by side, 2×2, before/after) as the first step
+and left a free canvas as an open question. In the category (CleanShot X, Shottr, Xnapper)
+nobody offers free layers with rotation; the pattern is a few captures on a board.
+
+## Decision
+
+Add `image` to the annotation union:
+`{ kind: "image"; x; y; w; h; assetId; naturalWidth; naturalHeight }`, normalized like every
+other annotation. The base image stays the base; every added image is a layer that the
+existing tools move, resize (aspect locked unless ⇧) and order. Layouts are commands that
+resize the canvas through crop-into-padding and place layers, not a separate mode. The scene
+stores `assetId` references; rendering and export read the bytes from the vault.
+
+## Alternatives rejected
+
+| Alternative                                                | Why not                                                                                                                                                        |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Fixed layouts as the model (cells, each one image)         | A form with templates, not a canvas; every new arrangement is a new template. Kept as presets on top of layers.                                                |
+| A free canvas where every image, base included, is a layer | A second document model and a second editor: new hit testing, new export, a migration of every saved scene. Past what the category offers for a 2–3 image use. |
+| Flatten the second image into the base on drop             | Loses the ability to move or resize it after the drop; one undo away from data loss.                                                                           |
+
+## Consequences
+
+- The base is not a layer: it cannot be moved above another image without a "swap base"
+  command, and it fixes the canvas's natural size. Accepted for 2–3 images.
+- A layer refers to a library item. Deleting that item leaves the scene with a dangling
+  reference: the editor shows a placeholder and export refuses with a message instead of
+  silently dropping the layer.
+- Saved scenes gain a new annotation kind. Older app versions must ignore unknown kinds rather
+  than fail to open the scene (to be verified in the plan; if they fail, the scene version is
+  bumped).
+- Rendering and export draw one more kind; blur annotations must keep applying to what is
+  under them, image layers included.
+
+## Non-goals
+
+- Rotation, masks, blend modes or opacity per layer.
+- More than a handful of images; a board of many screenshots is the free-canvas reopen case.
+
+## Reopen if
+
+- Users routinely compose more than three or four images, or ask to move the base: design the
+  free canvas, with a migration from base + layers.
+- Rotation or per-layer effects are requested more than once.
