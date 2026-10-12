@@ -42,5 +42,8 @@ export type AuthError =
   | { kind: "invalid-credentials" }
   | { kind: "email-taken" }
   | { kind: "password-too-short" }
+  /** The server requires a verified email before it issues a session. Carries no token: the user
+   *  must follow the emailed link, then sign in. Also what a successful sign-up reports. */
+  | { kind: "email-not-verified" }
   | { kind: "network" }
   | { kind: "unknown"; message: string };

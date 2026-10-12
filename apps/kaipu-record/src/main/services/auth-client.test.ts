@@ -36,6 +36,20 @@ describe("signInWithPassword", () => {
     ).rejects.toMatchObject({ kind: "invalid-credentials" });
   });
 
+  it("rejects with email-not-verified on a 403 EMAIL_NOT_VERIFIED body", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(JSON.stringify({ code: "EMAIL_NOT_VERIFIED" }), { status: 403 }),
+        ),
+    );
+    await expect(
+      signInWithPassword(config, { email: "a@b.com", password: "pw" }),
+    ).rejects.toMatchObject({ kind: "email-not-verified" });
+  });
+
   it("rejects with network on a fetch throw", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
     await expect(
@@ -66,6 +80,23 @@ describe("signUpWithPassword", () => {
       email: "new@b.com",
       name: "New",
     });
+  });
+
+  it("reports email-not-verified when sign-up succeeds without issuing a token", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({ token: null, user: { id: "u", email: "n@b.com", name: "N" } }),
+          {
+            status: 200,
+          },
+        ),
+      ),
+    );
+    await expect(
+      signUpWithPassword(config, { email: "n@b.com", password: "long enough", name: "N" }),
+    ).rejects.toMatchObject({ kind: "email-not-verified" });
   });
 
   it("rejects with email-taken on a 422 body", async () => {
