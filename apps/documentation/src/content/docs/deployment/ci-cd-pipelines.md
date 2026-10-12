@@ -109,15 +109,18 @@ Deploys read from the repo's **`production`** Environment:
 | --------------------------------------------------------------------------------------- | -------- | -------------------------------- |
 | `CLOUDFLARE_API_TOKEN`                                                                  | secret   | web + api deploy (wrangler auth) |
 | `CLOUDFLARE_ACCOUNT_ID`                                                                 | secret   | web + api deploy                 |
-| `DATABASE_URL`                                                                          | secret   | web build + web/api Workers      |
+| `DATABASE_URL`                                                                          | secret   | api Worker                       |
 | `BETTER_AUTH_SECRET`                                                                    | secret   | api Worker                       |
 | `CORS_ORIGIN`                                                                           | variable | api Worker                       |
 | `VITE_SERVER_URL`                                                                       | variable | web build + Worker               |
 | `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER` | secrets  | desktop sign/notarize            |
 | `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`                                              | secrets  | desktop → R2 upload (S3 token)   |
 
-> The web app proxies auth/CORS to the backend and never runs Better Auth, so its env is only
-> `DATABASE_URL` + `VITE_SERVER_URL` (+ the build-time `VITE_PUBLIC_DOWNLOAD_URL`). `BETTER_AUTH_*` /
+> The web app proxies auth/CORS to the backend and never runs Better Auth or touches the
+> database, so the web workflows pass only `VITE_SERVER_URL` (+ the build-time
+> `VITE_PUBLIC_DOWNLOAD_URL`). The web Worker keeps whatever `DATABASE_URL` it already holds
+> (secrets files are additive); delete it with `wrangler secret delete` once the env schema stops
+> requiring it. `BETTER_AUTH_*` /
 > `CORS_ORIGIN` live on the **API** only.
 
 > **R2 credentials:** the upload uses R2's S3-compatible API, which needs **R2-specific** keys
@@ -136,7 +139,7 @@ this is the configuration as applied here (inspected 2026-10-06).
 | Environment  | May be declared from                                     | Holds                                                                                 | Declared by                                                                                     |
 | ------------ | -------------------------------------------------------- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | `production` | `main` (branch), `desktop-v*`, `web-v*`, `api-v*` (tags) | everything in the table above, plus `RELEASE_PLEASE_TOKEN` and `MAIN_VITE_SERVER_URL` | `release-desktop.yml`, `release-web.yml`, `release-api.yml` (tags); `release-please.yml` (main) |
-| `preview`    | any ref                                                  | the Cloudflare token and account id, a throwaway `DATABASE_URL`                       | `preview-web.yml` — uploads a version, deploys nothing                                          |
+| `preview`    | any ref                                                  | the Cloudflare token and account id                                                   | `preview-web.yml` — uploads a version, deploys nothing                                          |
 | `testing`    | any ref                                                  | `MAIN_VITE_SERVER_URL` only (a public URL the desktop build inlines)                  | `pr-checks.yml` → `Desktop - E2E tests (macOS)`                                                 |
 
 Rules that follow from the table:
@@ -153,6 +156,31 @@ Rules that follow from the table:
   contributors"); a fork's run holds no Environment secrets and a read-only token either way.
 - **Secret scanning, push protection and Dependabot alerts are on.** They were off while the
   repository was private; nothing fails when they are off, which is why they are listed here.
+
+## Workflow hardening
+
+- **Least-privilege tokens.** Every workflow declares top-level `permissions: contents: read`.
+  Write scopes are granted per job: `release-desktop.yml` gives `contents: write` only to the
+  job that publishes the GitHub Release; `release-please.yml` and `cache-cleanup.yml` declare
+  what they need at the top. Also set the repository default token to read-only (Settings →
+  Actions → General → Workflow permissions).
+- **Third-party actions are pinned to a full commit SHA** with a `# vX.Y.Z` comment. Bump them by
+  resolving the new tag's commit (`gh api repos/<owner>/<action>/commits/<tag> --jq .sha`).
+- **Dispatch inputs are untrusted.** `preview-web.yml` validates `ref` and `message` in a first
+  step and passes them to later steps through `env:`; never put `${{ inputs.* }}` or
+  `${{ github.event.* }}` text inside a `run:` script.
+
+## Public Worker URLs
+
+- **API (`kaipu-api`)** has no custom-domain route, so its `workers.dev` URL is its only public
+  address: the desktop build (`MAIN_VITE_SERVER_URL`) and the console (`CONSOLE_API_URL`) use it.
+  `workers_dev` therefore stays on until the API gets a custom domain and those values move.
+- **Web (`kaipu-web`)** serves `kaipu.app` through custom domains and sets `workers_dev = false`.
+  `preview_urls` stays on for the Preview Web workflow's Version URLs; those URLs are public
+  and run with production secrets and bindings, so put **Cloudflare Access** in front of them
+  (Workers → kaipu-web → Settings → Domains & Routes → Preview URLs).
+- **Console (`kaipu-console`)** has `workers_dev` and `preview_urls` off and one custom domain;
+  put Cloudflare Access in front of `console.kaipu.app` as well.
 
 ## PR checks
 

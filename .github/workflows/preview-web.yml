@@ -49,18 +49,49 @@ jobs:
     environment: preview
 
     steps:
+      # Dispatch inputs are untrusted text. They are validated here and only ever
+      # reach a shell through env vars, never through `${{ }}` inside `run:`.
+      - name: Validate inputs
+        id: inputs
+        env:
+          REF: ${{ inputs.ref }}
+          MESSAGE: ${{ inputs.message }}
+        run: |
+          case "$REF" in
+            ""|-*|*..*|*[!A-Za-z0-9._/-]*)
+              echo "::error::ref must match [A-Za-z0-9._/-]+, may not start with '-' or contain '..'"
+              exit 1
+              ;;
+          esac
+          if [ "${#REF}" -gt 200 ]; then
+            echo "::error::ref is too long"
+            exit 1
+          fi
+          # Safe label charset only: it ends up inside a quoted wrangler argument.
+          case "$MESSAGE" in
+            *[!A-Za-z0-9\ ._:/#@-]*)
+              echo "::error::message may only contain letters, digits, spaces and . _ : / # @ -"
+              exit 1
+              ;;
+          esac
+          if [ "${#MESSAGE}" -gt 100 ]; then
+            echo "::error::message is too long (max 100)"
+            exit 1
+          fi
+          echo "message=$MESSAGE" >> "$GITHUB_OUTPUT"
+
       - name: Checkout the requested ref
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ inputs.ref }}
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.3.4
 
       - name: Cache bun dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.bun/install/cache
           key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
@@ -88,26 +119,19 @@ jobs:
         working-directory: apps/web-hono
         env:
           VITE_SERVER_URL: ${{ vars.VITE_SERVER_URL }}
-          # The release job passes a real DATABASE_URL here. Nothing under
-          # apps/web-hono/src references it — the app reaches data through the
-          # API service binding, not a direct client — so the preview passes a
-          # deliberately unusable value. If some build step turns out to need a
-          # live connection, this fails loudly instead of letting a preview
-          # touch the production database.
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           VITE_PUBLIC_DOWNLOAD_URL: https://updates.kaipu.app
         run: bun run build
 
       - name: Upload version to Cloudflare
         id: upload
-        uses: cloudflare/wrangler-action@v3.14.1
+        uses: cloudflare/wrangler-action@da0e0dfe58b7a431659754fdf3f186c529afbe65 # v3.14.1
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: apps/web-hono
           # `versions upload` stages the code without routing traffic to it.
           # `deploy` is what release-web.yml runs; the two must stay distinct.
-          command: versions upload --message "${{ inputs.message }}"
+          command: versions upload --message "${{ steps.inputs.outputs.message }}"
         env:
           # No ENVIRONMENT here. It existed for Alchemy's state store, Alchemy is
           # deleted, and a job in the `preview` environment announcing
@@ -121,14 +145,16 @@ jobs:
       - name: Report the preview URL
         env:
           OUTPUT: ${{ steps.upload.outputs.command-output }}
+          REF: ${{ inputs.ref }}
+          COMMIT: ${{ github.sha }}
         run: |
           URL=$(printf '%s' "$OUTPUT" | grep -oE 'https://[a-z0-9-]+\.[a-z0-9-]+\.workers\.dev' | head -1)
           VERSION=$(printf '%s' "$OUTPUT" | grep -oE 'Worker Version ID: [0-9a-f-]+' | head -1 | cut -d' ' -f4)
           {
             echo "## Web preview"
             echo
-            echo "- **ref:** \`${{ inputs.ref }}\`"
-            echo "- **commit:** \`${{ github.sha }}\`"
+            echo "- **ref:** \`$REF\`"
+            echo "- **commit:** \`$COMMIT\`"
             if [ -n "$VERSION" ]; then
               echo "- **version id:** \`$VERSION\`"
             fi

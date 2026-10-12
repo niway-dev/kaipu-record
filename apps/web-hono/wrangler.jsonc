@@ -39,6 +39,7 @@
   // bindings, so it reads production data. It is the last look before a tag, not
   // a sandbox.
   "preview_urls": true,
+  "workers_dev": false,
   "services": [
     {
       "binding": "API_SERVICE",
