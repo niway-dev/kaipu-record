@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { MAX_SCREENSHOT_BYTES, MAX_VIDEO_BYTES } from "../constants/cloud-limits";
 import {
   accountPrefixes,
+  assetCursorSchema,
   buildRevisionStorageKey,
   buildThumbnailStorageKey,
   computeMissingBytes,
@@ -148,5 +149,24 @@ describe("pure rules", () => {
       contentSha256: null,
       hasThumbnail: false,
     });
+  });
+});
+
+describe("assetCursorSchema", () => {
+  const encode = (raw: string) =>
+    btoa(raw).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const id = "0b6f8d3e-5c1a-4d7e-9a2b-3c4d5e6f7a8b";
+
+  it("accepts a cursor shaped like the repository encodes it", () => {
+    expect(assetCursorSchema.safeParse(encode(`1760000000000:${id}`)).success).toBe(true);
+  });
+
+  it("rejects malformed, out-of-range and non-uuid cursors", () => {
+    expect(assetCursorSchema.safeParse("not a cursor!").success).toBe(false);
+    expect(assetCursorSchema.safeParse(encode("garbage")).success).toBe(false);
+    expect(assetCursorSchema.safeParse(encode(`abc:${id}`)).success).toBe(false);
+    expect(assetCursorSchema.safeParse(encode(`99999999999999999999:${id}`)).success).toBe(false);
+    expect(assetCursorSchema.safeParse(encode("1760000000000:not-a-uuid")).success).toBe(false);
+    expect(assetCursorSchema.safeParse("A".repeat(300)).success).toBe(false);
   });
 });

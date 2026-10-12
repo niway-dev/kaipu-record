@@ -101,8 +101,10 @@ function decodeCursor(cursor: string): { createdAt: Date; assetId: string } | nu
   const sep = raw.indexOf(":");
   if (sep <= 0) return null;
   const ms = Number(raw.slice(0, sep));
-  if (!Number.isFinite(ms)) return null;
-  return { createdAt: new Date(ms), assetId: raw.slice(sep + 1) };
+  if (!Number.isFinite(ms) || Number.isNaN(new Date(ms).getTime())) return null;
+  const assetId = raw.slice(sep + 1);
+  if (!/^[0-9a-f-]{36}$/i.test(assetId)) return null;
+  return { createdAt: new Date(ms), assetId };
 }
 
 export class CloudAssetRepository implements ICloudAssetRepository {
