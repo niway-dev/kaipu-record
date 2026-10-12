@@ -1,7 +1,13 @@
 export interface ProxyOptions {
   backendUrl: string;
   fetchFn: (request: Request) => Promise<Response>;
+  /** Overwrite `x-forwarded-host`/`x-forwarded-proto` with the values this Worker saw. */
   forwardedHeaders?: boolean;
+  /**
+   * Only paths starting with one of these prefixes are proxied; anything else gets a 404.
+   * Defense in depth on top of the route that mounts the handler.
+   */
+  allowedPathPrefixes?: readonly string[];
   logPrefix?: string;
 }
 
@@ -13,13 +19,30 @@ export interface ProxyOptions {
  * The Service Binding routes requests directly to the API Worker.
  */
 export function createProxyHandler(options: ProxyOptions): (request: Request) => Promise<Response> {
-  const { backendUrl, fetchFn, forwardedHeaders = false, logPrefix = "proxy" } = options;
+  const {
+    backendUrl,
+    fetchFn,
+    forwardedHeaders = false,
+    allowedPathPrefixes,
+    logPrefix = "proxy",
+  } = options;
 
   return async (request: Request): Promise<Response> => {
     try {
       const url = new URL(request.url);
+      if (allowedPathPrefixes && !allowedPathPrefixes.some((p) => url.pathname.startsWith(p))) {
+        return new Response("Not found", { status: 404 });
+      }
       const targetUrl = `${backendUrl}${url.pathname}${url.search}`;
       const proxiedRequest = new Request(targetUrl, request);
+
+      // Client-sent forwarding headers are untrusted: drop them all, on every proxied path,
+      // then (optionally) set the ones the backend may rely on from what this Worker saw.
+      for (const name of [...proxiedRequest.headers.keys()]) {
+        if (name.startsWith("x-forwarded-") || name === "forwarded") {
+          proxiedRequest.headers.delete(name);
+        }
+      }
 
       if (forwardedHeaders) {
         proxiedRequest.headers.set("x-forwarded-host", url.host);

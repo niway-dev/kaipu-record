@@ -30,6 +30,9 @@ export default defineConfig({
       },
     }),
   ],
+  // Never ship source maps: they would publish original sources (sourcesContent). Nothing
+  // uploads them to an error tracker. Set to "hidden" if that changes.
+  build: { sourcemap: false },
   server: {
     port: 3001,
   },

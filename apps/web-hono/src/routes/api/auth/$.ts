@@ -7,6 +7,7 @@ const proxyToBackend = createProxyHandler({
   backendUrl: env.VITE_SERVER_URL,
   fetchFn: apiFetch,
   forwardedHeaders: true,
+  allowedPathPrefixes: ["/api/auth/"],
   logPrefix: "auth-proxy",
 });
 

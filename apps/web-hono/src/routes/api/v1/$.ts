@@ -6,6 +6,8 @@ import { apiFetch } from "@/lib/api-fetch";
 const proxyToBackend = createProxyHandler({
   backendUrl: env.VITE_SERVER_URL,
   fetchFn: apiFetch,
+  forwardedHeaders: true,
+  allowedPathPrefixes: ["/api/v1/"],
   logPrefix: "api-proxy",
 });
 

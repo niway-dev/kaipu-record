@@ -24,7 +24,8 @@ export const useSession = () => {
 
       return data;
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    // Short so a revoked session is noticed quickly; the server re-checks every request anyway.
+    staleTime: 60 * 1000,
     refetchOnWindowFocus: true,
   });
 

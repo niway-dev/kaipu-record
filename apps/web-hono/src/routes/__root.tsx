@@ -1,6 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 
-import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
+import { lazy, Suspense } from "react";
 import {
   HeadContent,
   Outlet,
@@ -9,7 +9,6 @@ import {
   useRouter,
   useRouterState,
 } from "@tanstack/react-router";
-import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 
 import { I18nProvider, type Locale } from "@kaipu/i18n";
 
@@ -23,6 +22,21 @@ import { getLocale } from "@/server-functions/get-locale";
 import { setLocale as setLocaleFn } from "@/server-functions/set-locale";
 import { getLandingTheme } from "@/server-functions/get-landing-theme";
 import { readLandingThemeCookie, type LandingTheme } from "@/lib/landing-theme";
+
+// Devtools exist only in development: `import.meta.env.DEV` is a build-time constant, so the
+// dynamic imports (and the devtools packages) are dropped from production bundles.
+const TanStackRouterDevtools = import.meta.env.DEV
+  ? lazy(() =>
+      import("@tanstack/react-router-devtools").then((m) => ({
+        default: m.TanStackRouterDevtools,
+      })),
+    )
+  : () => null;
+const ReactQueryDevtools = import.meta.env.DEV
+  ? lazy(() =>
+      import("@tanstack/react-query-devtools").then((m) => ({ default: m.ReactQueryDevtools })),
+    )
+  : () => null;
 
 export interface RouterAppContext {
   queryClient: QueryClient;
@@ -169,8 +183,12 @@ function RootDocument() {
             )}
           </div>
         </I18nProvider>
-        <TanStackRouterDevtools position="bottom-left" />
-        <ReactQueryDevtools position="bottom" buttonPosition="bottom-right" />
+        {import.meta.env.DEV ? (
+          <Suspense fallback={null}>
+            <TanStackRouterDevtools position="bottom-left" />
+            <ReactQueryDevtools buttonPosition="bottom-right" />
+          </Suspense>
+        ) : null}
         <Scripts />
       </body>
     </html>
