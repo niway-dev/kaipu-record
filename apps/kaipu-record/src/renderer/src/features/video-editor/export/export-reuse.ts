@@ -11,6 +11,7 @@
  */
 import type { LibraryVideo } from "@renderer/features/library/types";
 import type { VideoScene } from "../scene";
+import { parseSession, serializeSession } from "../session";
 import type { ExportPresetId } from "./export-presets";
 
 /** Share (no editor): the whole source file, as it is on disk. */
@@ -42,9 +43,14 @@ function hash53(text: string): string {
   return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
 }
 
-/** The editor's fingerprint: the scene exactly as the export burns it in. */
+/**
+ * The editor's fingerprint: the scene as the export burns it in. Hashed in its saved form
+ * (a session round-trip), so reopening the editor on the same edit — the scene rebuilt by
+ * `parseSession` — gives the same fingerprint as the in-memory scene that was exported.
+ */
 export function editFingerprint(scene: VideoScene): string {
-  return `edit:${hash53(stableStringify(scene))}`;
+  const saved = parseSession(serializeSession(scene))?.scene ?? scene;
+  return `edit:${hash53(stableStringify(saved))}`;
 }
 
 /** The newest playable MP4 export of each preset whose content matches `fingerprint`. */

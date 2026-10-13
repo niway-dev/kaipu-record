@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { LibraryVideo } from "@renderer/features/library/types";
-import { initialScene } from "../scene";
+import { initialScene, type VideoScene } from "../scene";
+import { parseSession, serializeSession } from "../session";
 import { WHOLE_RECORDING_FINGERPRINT, editFingerprint, findReusableExports } from "./export-reuse";
 
 function exported(
@@ -42,6 +43,17 @@ describe("editFingerprint", () => {
     const scene = initialScene(10);
     const reordered = Object.fromEntries(Object.entries(scene).reverse()) as typeof scene;
     expect(editFingerprint(reordered)).toBe(editFingerprint(scene));
+  });
+
+  it("survives a session save + reload (reopening the editor on the same edit)", () => {
+    const scene: VideoScene = {
+      ...initialScene(10),
+      audioMuted: true,
+      mutedRanges: [{ id: "m1", sourceStart: 1, sourceEnd: 2 }],
+      zoomSensitivity: 40,
+    };
+    const reloaded = parseSession(serializeSession(scene))!.scene;
+    expect(editFingerprint(reloaded)).toBe(editFingerprint(scene));
   });
 
   it("never equals the whole-recording fingerprint", () => {
