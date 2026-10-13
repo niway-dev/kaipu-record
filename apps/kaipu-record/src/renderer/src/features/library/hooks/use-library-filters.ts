@@ -2,9 +2,9 @@ import { useMemo, useState } from "react";
 import type { TagSummary } from "@shared/types";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import {
-  countByKind,
-  countByStorage,
+  facetCounts,
   selectVisibleVideos,
+  type FilterCriteria,
   type KindCounts,
   type KindFilter,
   type SortKey,
@@ -30,8 +30,11 @@ export interface LibraryFilters {
   visibleItems: LibraryVideo[];
   counts: StorageCounts;
   kindCounts: KindCounts;
-  /** Tags carried by at least one item, most used first — the tag chips. */
+  /** Tags carried by at least one item, most used first — the tag chips. Their
+   *  order is fixed by library-wide use, so chips never jump under the pointer. */
   tagsInUse: TagSummary[];
+  /** Per tag id, the facet count: items you would see with that tag added. */
+  tagFacetCounts: ReadonlyMap<string, number>;
   hasActiveFilters: boolean;
   /** Reset the kind/storage/tag filters and search; leave the sort order alone. */
   clearFilters(): void;
@@ -52,8 +55,6 @@ export function useLibraryFilters(
   const [searchTerm, setSearchTerm] = useState("");
   const [tagFilter, setTagFilter] = useState<string[]>([]);
 
-  const counts = useMemo(() => countByStorage(videos), [videos]);
-  const kindCounts = useMemo(() => countByKind(videos), [videos]);
   const tagsInUse = useMemo(() => tags.filter((tag) => tag.count > 0), [tags]);
   const tagText = useMemo(
     () => new Map(tags.map((tag) => [tag.id, `${tag.name.toLowerCase()} ${tag.slug}`])),
@@ -65,18 +66,14 @@ export function useLibraryFilters(
     () => tagFilter.filter((id) => tagsInUse.some((tag) => tag.id === id)),
     [tagFilter, tagsInUse],
   );
-  const visibleItems = useMemo(
-    () =>
-      selectVisibleVideos(videos, {
-        kindFilter,
-        storageFilter,
-        sortKey,
-        searchTerm,
-        tags: selectedTags,
-        tagText,
-      }),
-    [videos, kindFilter, storageFilter, sortKey, searchTerm, selectedTags, tagText],
+  const criteria = useMemo<FilterCriteria>(
+    () => ({ kindFilter, storageFilter, sortKey, searchTerm, tags: selectedTags, tagText }),
+    [kindFilter, storageFilter, sortKey, searchTerm, selectedTags, tagText],
   );
+  const visibleItems = useMemo(() => selectVisibleVideos(videos, criteria), [videos, criteria]);
+  // Counts follow the other filters (disjunctive faceting), so they say what a
+  // click would show instead of what the whole library holds.
+  const facets = useMemo(() => facetCounts(videos, criteria), [videos, criteria]);
 
   const hasActiveFilters =
     kindFilter !== "all" ||
@@ -99,9 +96,10 @@ export function useLibraryFilters(
         current.includes(tag) ? current.filter((t) => t !== tag) : [...current, tag],
       ),
     visibleItems,
-    counts,
-    kindCounts,
+    counts: facets.storage,
+    kindCounts: facets.kind,
     tagsInUse,
+    tagFacetCounts: facets.tags,
     hasActiveFilters,
     clearFilters: () => {
       setKindFilter("all");

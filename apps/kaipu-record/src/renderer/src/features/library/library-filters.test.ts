@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LibraryVideo } from "./types";
-import { countByKind, countByStorage, selectVisibleVideos } from "./library-filters";
+import { countByKind, countByStorage, facetCounts, selectVisibleVideos } from "./library-filters";
 
 function video(overrides: Partial<LibraryVideo> = {}): LibraryVideo {
   return {
@@ -201,5 +201,48 @@ describe("countByKind", () => {
 
   it("returns zeros for an empty library", () => {
     expect(countByKind([])).toEqual({ all: 0, recording: 0, screenshot: 0 });
+  });
+});
+
+describe("facetCounts (disjunctive faceting)", () => {
+  // 3 recordings, 2 screenshots; `example` is on 2 local screenshots, `demo` on one
+  // of them and on a cloud recording.
+  const items = [
+    video({ id: "r1", kind: "recording" }),
+    video({ id: "r2", kind: "recording" }),
+    video({ id: null, kind: "recording", availability: "cloud", tagIds: ["t-demo"] }),
+    video({ id: "s1", kind: "screenshot", tagIds: ["t-example", "t-demo"] }),
+    video({ id: "s2", kind: "screenshot", tagIds: ["t-example"] }),
+  ];
+
+  it("without filters, counts the whole library", () => {
+    const facets = facetCounts(items, base);
+    expect(facets.kind).toEqual({ all: 5, recording: 3, screenshot: 2 });
+    expect(facets.storage).toEqual({ local: 4, cloud: 1 });
+    expect(Object.fromEntries(facets.tags)).toEqual({ "t-example": 2, "t-demo": 2 });
+  });
+
+  it("follows the other groups: a tag filter narrows the kind and storage counts", () => {
+    const facets = facetCounts(items, { ...base, tags: ["t-example"] });
+    expect(facets.kind).toEqual({ all: 2, recording: 0, screenshot: 2 });
+    expect(facets.storage).toEqual({ local: 2, cloud: 0 });
+    // Tags combine with AND: demo counts only items that also carry example.
+    expect(Object.fromEntries(facets.tags)).toEqual({ "t-example": 2, "t-demo": 1 });
+  });
+
+  it("ignores its own group: picking Screenshots never zeroes Recordings", () => {
+    const facets = facetCounts(items, { ...base, kindFilter: "screenshot" });
+    expect(facets.kind).toEqual({ all: 5, recording: 3, screenshot: 2 });
+    expect(facets.storage).toEqual({ local: 2, cloud: 0 });
+  });
+
+  it("ignores its own group for storage too, and follows the search box", () => {
+    const facets = facetCounts(
+      [...items, video({ id: "r3", title: "Demo night", kind: "recording" })],
+      { ...base, storageFilter: "cloud", searchTerm: "demo" },
+    );
+    // Search "demo" finds only the titled recording (no tag text supplied here).
+    expect(facets.storage).toEqual({ local: 1, cloud: 0 });
+    expect(facets.kind).toEqual({ all: 0, recording: 0, screenshot: 0 });
   });
 });

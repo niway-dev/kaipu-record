@@ -67,6 +67,7 @@ export function LibraryPage(): React.JSX.Element {
     counts,
     kindCounts,
     tagsInUse,
+    tagFacetCounts,
     hasActiveFilters,
     clearFilters,
   } = useLibraryFilters(videos, tagApi.tags);
@@ -183,6 +184,7 @@ export function LibraryPage(): React.JSX.Element {
         >
           <span className={styles.storageDotChip} data-cloud="false" />
           {t("storageLocal")}
+          <span className={styles.tagCount}>{counts.local}</span>
         </FilterChip>
         <FilterChip
           active={storageFilter === "cloud"}
@@ -191,6 +193,7 @@ export function LibraryPage(): React.JSX.Element {
         >
           <span className={styles.storageDotChip} data-cloud="true" />
           {t("storageCloud")}
+          <span className={styles.tagCount}>{counts.cloud}</span>
         </FilterChip>
 
         <span className={styles.chipDivider} aria-hidden />
@@ -206,10 +209,11 @@ export function LibraryPage(): React.JSX.Element {
                 <FilterChip
                   key={tag.id}
                   active={selectedTags.includes(tag.id)}
+                  empty={(tagFacetCounts.get(tag.id) ?? 0) === 0}
                   onClick={() => toggleTag(tag.id)}
                 >
                   <TagChip name={tag.name} color={tag.color} />
-                  <span className={styles.tagCount}>{tag.count}</span>
+                  <span className={styles.tagCount}>{tagFacetCounts.get(tag.id) ?? 0}</span>
                 </FilterChip>
               ))}
               {hiddenTagCount > 0 && (
