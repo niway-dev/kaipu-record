@@ -158,6 +158,34 @@
   cursor: help;
 }
 
+/* Icon-only, ghost: it belongs to the tags row, not to the page like Sync. */
+.manageTags {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    color var(--transition),
+    background var(--transition);
+}
+
+.manageTags:hover {
+  color: var(--text-primary);
+  background: var(--bg-input);
+}
+
+.manageTags:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
 /* The tag chips stay on one line and scroll sideways when they outgrow it. */
 .tagScroller {
   display: flex;

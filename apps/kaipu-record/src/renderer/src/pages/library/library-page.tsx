@@ -213,6 +213,16 @@ export function LibraryPage(): React.JSX.Element {
           <span className={styles.groupLabel} title={t("filterTagsHint")}>
             {t("filterTags")}
           </span>
+          {/* At the start of the row so it never moves as tags come and go. */}
+          <button
+            type="button"
+            className={styles.manageTags}
+            aria-label={t("tagsManage")}
+            title={t("tagsManage")}
+            onClick={() => setTagDrawer({ assetId: null, tab: "all" })}
+          >
+            <Tags size={14} strokeWidth={1.8} />
+          </button>
           {/* One line that scrolls sideways when the tags outgrow it. */}
           <div className={styles.tagScroller}>
             {tagsInUse.length === 0 ? (
@@ -231,10 +241,6 @@ export function LibraryPage(): React.JSX.Element {
               ))
             )}
           </div>
-          <FilterChip active={false} onClick={() => setTagDrawer({ assetId: null, tab: "all" })}>
-            <Tags size={13} strokeWidth={1.8} />
-            {t("tagsManage")}
-          </FilterChip>
         </div>
       </div>
 
