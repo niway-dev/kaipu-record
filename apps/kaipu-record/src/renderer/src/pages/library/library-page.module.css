@@ -77,6 +77,32 @@
 
 /* ── Toolbar ────────────────────────────────── */
 
+/* Sticks to the top of the shell's scroll area. The negative top and the
+   matching padding cancel the shell's own padding, so the bar sits flush with
+   the edge and the cards scroll out of sight behind it. */
+.stickyBar {
+  position: sticky;
+  top: calc(var(--space-xl) * -1);
+  z-index: 3;
+  margin: 0 calc(var(--space-xl) * -1);
+  /* Constant padding (not added when stuck) so the bar never changes height
+     and the collection does not jump as it sticks. */
+  padding: var(--space-lg) var(--space-xl) var(--space-sm);
+  background: var(--bg-app);
+  transition: box-shadow var(--transition);
+}
+
+.stickyBar > .toolbar {
+  margin-top: 0;
+}
+
+.stickyBar[data-stuck="true"] {
+  /* Inset line, not a border: a border would add 1px and nudge the cards. */
+  box-shadow:
+    inset 0 -1px 0 var(--border),
+    0 10px 20px -16px rgba(0, 0, 0, 0.8);
+}
+
 .toolbar {
   display: flex;
   align-items: center;

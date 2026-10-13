@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Library,
@@ -85,6 +85,18 @@ export function LibraryPage(): React.JSX.Element {
 
   const [view, setView] = useState<"grid" | "list">("grid");
 
+  // A 0-height marker right above the sticky bar: once it scrolls out of view the
+  // bar is stuck, and gets a divider so the cards do not run into the filters.
+  const stuckSentinel = useRef<HTMLDivElement>(null);
+  const [stuck, setStuck] = useState(false);
+  useEffect(() => {
+    const marker = stuckSentinel.current;
+    if (!marker || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(([entry]) => setStuck(!entry!.isIntersecting));
+    observer.observe(marker);
+    return () => observer.disconnect();
+  }, []);
+
   // The tag drawer: open on an item (by asset id, so it survives a rescan) or on
   // the "all tags" tab alone. The item is looked up in `videos`, not
   // `visibleItems`, so un-tagging it out of a tag filter keeps it in the drawer.
@@ -125,152 +137,157 @@ export function LibraryPage(): React.JSX.Element {
         </button>
       </div>
 
-      <div className={styles.toolbar}>
-        <SearchInput
-          placeholder={t("searchPlaceholder")}
-          value={searchTerm}
-          onSearch={setSearchTerm}
-          icon={<Search size={14} strokeWidth={1.8} />}
-          style={sxLibrary.search}
-        />
-        <SortMenu sort={sortKey} onChange={setSortKey} />
-        <div className={styles.viewToggle}>
-          <button
-            className={styles.viewToggleButton}
-            data-active={view === "grid"}
-            onClick={() => setView("grid")}
-            title={t("galleryView")}
-            type="button"
-          >
-            <LayoutGrid size={15} strokeWidth={1.8} />
-          </button>
-          <button
-            className={styles.viewToggleButton}
-            data-active={view === "list"}
-            onClick={() => setView("list")}
-            title={t("listView")}
-            type="button"
-          >
-            <LayoutList size={15} strokeWidth={1.8} />
-          </button>
-        </div>
-      </div>
-
-      <div className={styles.filterRow}>
-        <div className={styles.filterGroup} role="group" aria-label={t("filterKind")}>
-          <span className={styles.groupLabel} title={t("filterKindHint")}>
-            {t("filterKind")}
-          </span>
-          <FilterChip active={kindFilter === "all"} onClick={() => setKindFilter("all")}>
-            {t("kindAll", { count: kindCounts.all })}
-          </FilterChip>
-          <FilterChip
-            active={kindFilter === "recording"}
-            empty={kindCounts.recording === 0}
-            onClick={() => setKindFilter("recording")}
-          >
-            {t("kindRecordings", { count: kindCounts.recording })}
-          </FilterChip>
-          <FilterChip
-            active={kindFilter === "screenshot"}
-            empty={kindCounts.screenshot === 0}
-            onClick={() => setKindFilter("screenshot")}
-          >
-            {t("kindScreenshots", { count: kindCounts.screenshot })}
-          </FilterChip>
-        </div>
-
-        <div className={styles.filterGroup} role="group" aria-label={t("filterStorage")}>
-          <span className={styles.groupLabel} title={t("filterStorageHint")}>
-            {t("filterStorage")}
-          </span>
-          <FilterChip active={storageFilter === "all"} onClick={() => setStorageFilter("all")}>
-            {t("storageAll")}
-          </FilterChip>
-          <FilterChip
-            active={storageFilter === "local"}
-            empty={counts.local === 0}
-            onClick={() => setStorageFilter("local")}
-          >
-            <span className={styles.storageDotChip} data-cloud="false" />
-            {t("storageLocal")}
-            <span className={styles.tagCount}>{counts.local}</span>
-          </FilterChip>
-          <FilterChip
-            active={storageFilter === "cloud"}
-            empty={counts.cloud === 0}
-            onClick={() => setStorageFilter("cloud")}
-          >
-            <span className={styles.storageDotChip} data-cloud="true" />
-            {t("storageCloud")}
-            <span className={styles.tagCount}>{counts.cloud}</span>
-          </FilterChip>
-        </div>
-      </div>
-
-      <div className={styles.filterRow}>
-        <div className={styles.tagGroup} role="group" aria-label={t("filterTags")}>
-          <span className={styles.groupLabel} title={t("filterTagsHint")}>
-            {t("filterTags")}
-          </span>
-          {/* At the start of the row so it never moves as tags come and go. */}
-          <button
-            type="button"
-            className={styles.manageTags}
-            aria-label={t("tagsManage")}
-            title={t("tagsManage")}
-            onClick={() => setTagDrawer({ assetId: null, tab: "all" })}
-          >
-            <Tags size={14} strokeWidth={1.8} />
-          </button>
-          {/* One line that scrolls sideways when the tags outgrow it. */}
-          <div className={styles.tagScroller}>
-            {tagsInUse.length === 0 ? (
-              <span className={styles.groupEmpty}>{t("filterTagsEmpty")}</span>
-            ) : (
-              tagsInUse.map((tag) => (
-                <FilterChip
-                  key={tag.id}
-                  active={selectedTags.includes(tag.id)}
-                  empty={(tagFacetCounts.get(tag.id) ?? 0) === 0}
-                  onClick={() => toggleTag(tag.id)}
-                >
-                  <TagChip name={tag.name} color={tag.color} />
-                  <span className={styles.tagCount}>{tagFacetCounts.get(tag.id) ?? 0}</span>
-                </FilterChip>
-              ))
-            )}
+      {/* Search, filters and the summary stay in view while the collection scrolls
+          under them; the title above scrolls away to leave room. */}
+      <div ref={stuckSentinel} aria-hidden />
+      <div className={styles.stickyBar} data-stuck={stuck}>
+        <div className={styles.toolbar}>
+          <SearchInput
+            placeholder={t("searchPlaceholder")}
+            value={searchTerm}
+            onSearch={setSearchTerm}
+            icon={<Search size={14} strokeWidth={1.8} />}
+            style={sxLibrary.search}
+          />
+          <SortMenu sort={sortKey} onChange={setSortKey} />
+          <div className={styles.viewToggle}>
+            <button
+              className={styles.viewToggleButton}
+              data-active={view === "grid"}
+              onClick={() => setView("grid")}
+              title={t("galleryView")}
+              type="button"
+            >
+              <LayoutGrid size={15} strokeWidth={1.8} />
+            </button>
+            <button
+              className={styles.viewToggleButton}
+              data-active={view === "list"}
+              onClick={() => setView("list")}
+              title={t("listView")}
+              type="button"
+            >
+              <LayoutList size={15} strokeWidth={1.8} />
+            </button>
           </div>
         </div>
-      </div>
 
-      {canShowVaultBanner && (
-        <div className={styles.vaultBanner} role="status" aria-live="polite">
-          <AlertTriangle size={14} strokeWidth={2} />
-          {t("vaultUnreadableBanner")}
+        <div className={styles.filterRow}>
+          <div className={styles.filterGroup} role="group" aria-label={t("filterKind")}>
+            <span className={styles.groupLabel} title={t("filterKindHint")}>
+              {t("filterKind")}
+            </span>
+            <FilterChip active={kindFilter === "all"} onClick={() => setKindFilter("all")}>
+              {t("kindAll", { count: kindCounts.all })}
+            </FilterChip>
+            <FilterChip
+              active={kindFilter === "recording"}
+              empty={kindCounts.recording === 0}
+              onClick={() => setKindFilter("recording")}
+            >
+              {t("kindRecordings", { count: kindCounts.recording })}
+            </FilterChip>
+            <FilterChip
+              active={kindFilter === "screenshot"}
+              empty={kindCounts.screenshot === 0}
+              onClick={() => setKindFilter("screenshot")}
+            >
+              {t("kindScreenshots", { count: kindCounts.screenshot })}
+            </FilterChip>
+          </div>
+
+          <div className={styles.filterGroup} role="group" aria-label={t("filterStorage")}>
+            <span className={styles.groupLabel} title={t("filterStorageHint")}>
+              {t("filterStorage")}
+            </span>
+            <FilterChip active={storageFilter === "all"} onClick={() => setStorageFilter("all")}>
+              {t("storageAll")}
+            </FilterChip>
+            <FilterChip
+              active={storageFilter === "local"}
+              empty={counts.local === 0}
+              onClick={() => setStorageFilter("local")}
+            >
+              <span className={styles.storageDotChip} data-cloud="false" />
+              {t("storageLocal")}
+              <span className={styles.tagCount}>{counts.local}</span>
+            </FilterChip>
+            <FilterChip
+              active={storageFilter === "cloud"}
+              empty={counts.cloud === 0}
+              onClick={() => setStorageFilter("cloud")}
+            >
+              <span className={styles.storageDotChip} data-cloud="true" />
+              {t("storageCloud")}
+              <span className={styles.tagCount}>{counts.cloud}</span>
+            </FilterChip>
+          </div>
         </div>
-      )}
 
-      {videos.length > 0 && (
-        <div className={styles.summaryBar}>
-          <span>
-            {hasActiveFilters
-              ? t("fileCountOf", { shown: visibleItems.length, total: videos.length })
-              : t("fileCount", { count: visibleItems.length })}
-            {activeFilterNames.length > 0 && (
-              <span className={styles.filteredBy}>
-                {" · "}
-                {t("filteredBy", { filters: activeFilterNames.join(", ") })}
-              </span>
-            )}
-          </span>
-          {hasActiveFilters && (
-            <button className={styles.clearFiltersButton} onClick={clearFilters} type="button">
-              {t("clearFilters")}
+        <div className={styles.filterRow}>
+          <div className={styles.tagGroup} role="group" aria-label={t("filterTags")}>
+            <span className={styles.groupLabel} title={t("filterTagsHint")}>
+              {t("filterTags")}
+            </span>
+            {/* At the start of the row so it never moves as tags come and go. */}
+            <button
+              type="button"
+              className={styles.manageTags}
+              aria-label={t("tagsManage")}
+              title={t("tagsManage")}
+              onClick={() => setTagDrawer({ assetId: null, tab: "all" })}
+            >
+              <Tags size={14} strokeWidth={1.8} />
             </button>
-          )}
+            {/* One line that scrolls sideways when the tags outgrow it. */}
+            <div className={styles.tagScroller}>
+              {tagsInUse.length === 0 ? (
+                <span className={styles.groupEmpty}>{t("filterTagsEmpty")}</span>
+              ) : (
+                tagsInUse.map((tag) => (
+                  <FilterChip
+                    key={tag.id}
+                    active={selectedTags.includes(tag.id)}
+                    empty={(tagFacetCounts.get(tag.id) ?? 0) === 0}
+                    onClick={() => toggleTag(tag.id)}
+                  >
+                    <TagChip name={tag.name} color={tag.color} />
+                    <span className={styles.tagCount}>{tagFacetCounts.get(tag.id) ?? 0}</span>
+                  </FilterChip>
+                ))
+              )}
+            </div>
+          </div>
         </div>
-      )}
+
+        {canShowVaultBanner && (
+          <div className={styles.vaultBanner} role="status" aria-live="polite">
+            <AlertTriangle size={14} strokeWidth={2} />
+            {t("vaultUnreadableBanner")}
+          </div>
+        )}
+
+        {videos.length > 0 && (
+          <div className={styles.summaryBar}>
+            <span>
+              {hasActiveFilters
+                ? t("fileCountOf", { shown: visibleItems.length, total: videos.length })
+                : t("fileCount", { count: visibleItems.length })}
+              {activeFilterNames.length > 0 && (
+                <span className={styles.filteredBy}>
+                  {" · "}
+                  {t("filteredBy", { filters: activeFilterNames.join(", ") })}
+                </span>
+              )}
+            </span>
+            {hasActiveFilters && (
+              <button className={styles.clearFiltersButton} onClick={clearFilters} type="button">
+                {t("clearFilters")}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
 
       {showFullPageError ? (
         <div className={styles.empty}>
