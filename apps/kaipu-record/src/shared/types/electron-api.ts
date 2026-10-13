@@ -5,7 +5,8 @@ import type { WindowPresetName } from "../window-size";
  */
 
 import type { SerializedError } from "../analytics";
-import type { AppSettings, ShortcutAction, TagVocabularyEntry, UpdateStatus } from "./ipc";
+import type { AppSettings, ShortcutAction, TagSummary, UpdateStatus } from "./ipc";
+import type { TagColor } from "@kaipu/domain/constants";
 import type { LocalRecording, VaultDirectory } from "./library-storage";
 import type { StorageUsageResult } from "./cloud-storage";
 import type {
@@ -131,17 +132,16 @@ export interface KaipuElectronAPI {
   listLocalRecordings(): Promise<LocalRecording[]>;
   /** Rename a local recording (updates sidecar metadata; the file is untouched). */
   renameLocalRecording(id: string, title: string): Promise<void>;
-  /**
-   * Replace a local item's tags. Main normalizes them again before writing the
-   * sidecar and resolves to the tags actually stored.
-   */
-  setTags(id: string, tags: readonly string[]): Promise<string[]>;
-  /** Every tag in use, most used first — for autocomplete. */
-  getTagVocabulary(): Promise<TagVocabularyEntry[]>;
-  /** Rename a tag on every item that carries it; resolves to how many items changed. */
-  renameTag(from: string, to: string): Promise<number>;
-  /** Remove a tag from every item; resolves to how many items changed. */
-  deleteTag(tag: string): Promise<number>;
+  /** Every live tag with its item count, most used first. */
+  listTags(): Promise<TagSummary[]>;
+  /** Create a tag; rejects when the name (case-insensitively) is taken. */
+  createTag(name: string, color?: TagColor): Promise<TagSummary>;
+  renameTag(id: string, name: string): Promise<TagSummary>;
+  recolorTag(id: string, color: TagColor): Promise<TagSummary>;
+  /** Delete a tag and take it off every item. */
+  deleteTag(id: string): Promise<void>;
+  /** Replace a local item's tags; resolves to the ids actually stored. */
+  setItemTags(itemId: string, tagIds: readonly string[]): Promise<string[]>;
   /**
    * Persist duration + poster the renderer decoded for a recording that had no
    * sidecar (hand-imported, or an interrupted finalize). Returns the re-described

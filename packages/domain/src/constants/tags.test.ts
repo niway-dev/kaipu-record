@@ -1,59 +1,54 @@
 import { describe, expect, it } from "vitest";
 import {
-  normalizeTag,
-  TAG_MAX_LENGTH,
-  TAGS_PER_ITEM_MAX,
-  TagLimitError,
-  TagSetBuilder,
+  isTagColor,
+  nextTagColor,
+  normalizeTagName,
+  TAG_COLORS,
+  TAG_NAME_MAX_LENGTH,
+  tagSlug,
 } from "./tags";
 
-describe("normalizeTag", () => {
-  it("normalizes the spec's examples", () => {
-    expect(normalizeTag(" Cricut ")).toBe("cricut");
-    expect(normalizeTag("Issue #1232")).toBe("issue-#1232");
-    expect(normalizeTag("video")).toBe("video");
+describe("normalizeTagName", () => {
+  it("trims and collapses whitespace, keeping capitals", () => {
+    expect(normalizeTagName("  Archivos   varios ")).toBe("Archivos varios");
+    expect(normalizeTagName("Cricut")).toBe("Cricut");
   });
 
-  it("collapses whitespace and dashes", () => {
-    expect(normalizeTag("  my   big -- idea  ")).toBe("my-big-idea");
-    expect(normalizeTag("-edge-")).toBe("edge");
+  it("refuses empty, too long, separators and control characters", () => {
+    expect(normalizeTagName("   ")).toBeNull();
+    expect(normalizeTagName("x".repeat(TAG_NAME_MAX_LENGTH + 1))).toBeNull();
+    expect(normalizeTagName("a/b")).toBeNull();
+    expect(normalizeTagName("..\\x")).toBeNull();
+    expect(normalizeTagName("bad\u0007bell")).toBeNull();
   });
 
-  it("rejects path separators, control characters and other symbols", () => {
-    expect(normalizeTag("../x")).toBeNull();
-    expect(normalizeTag("a/b")).toBeNull();
-    expect(normalizeTag("a\\b")).toBeNull();
-    expect(normalizeTag("tab\u0000")).toBeNull();
-    expect(normalizeTag("café")).toBeNull();
-    expect(normalizeTag("#lead")).toBeNull(); // must start with a letter or digit
-  });
-
-  it("rejects empty and over-long tags", () => {
-    expect(normalizeTag("   ")).toBeNull();
-    expect(normalizeTag("a".repeat(TAG_MAX_LENGTH))).toBe("a".repeat(TAG_MAX_LENGTH));
-    expect(normalizeTag("a".repeat(TAG_MAX_LENGTH + 1))).toBeNull();
+  it("refuses a name with nothing left for a slug", () => {
+    expect(normalizeTagName("!!!")).toBeNull();
   });
 });
 
-describe("TagSetBuilder", () => {
-  it("dedupes across spellings and keeps insertion order", () => {
-    const tags = new TagSetBuilder().add("Cricut").add("video").add("cricut ").build();
-    expect(tags).toEqual(["cricut", "video"]);
+describe("tagSlug", () => {
+  it("lowercases and joins words with underscores", () => {
+    expect(tagSlug("Archivos varios")).toBe("archivos_varios");
+    expect(tagSlug("Issue #1232")).toBe("issue_#1232");
+    expect(tagSlug("Demo")).toBe(tagSlug("demo"));
   });
 
-  it("ignores invalid tags", () => {
-    expect(new TagSetBuilder(["ok", "../x", ""]).build()).toEqual(["ok"]);
+  it("keeps accented letters and drops punctuation", () => {
+    expect(tagSlug("Canción  nueva!")).toBe("canción_nueva");
+    expect(tagSlug("v1.2, beta")).toBe("v1_2_beta");
+  });
+});
+
+describe("palette", () => {
+  it("knows its colors", () => {
+    expect(isTagColor("lagoon")).toBe(true);
+    expect(isTagColor("#ff0000")).toBe(false);
   });
 
-  it("removes by any spelling", () => {
-    expect(new TagSetBuilder(["a", "Big Idea"]).remove("big idea").build()).toEqual(["a"]);
-  });
-
-  it("throws past the per-item limit", () => {
-    const builder = new TagSetBuilder();
-    for (let i = 0; i < TAGS_PER_ITEM_MAX; i++) builder.add(`t${i}`);
-    expect(builder.build()).toHaveLength(TAGS_PER_ITEM_MAX);
-    builder.add("one-more");
-    expect(() => builder.build()).toThrow(TagLimitError);
+  it("picks the least used color, palette order on ties", () => {
+    expect(nextTagColor([])).toBe(TAG_COLORS[0]);
+    expect(nextTagColor(["rose"])).toBe("coral");
+    expect(nextTagColor([...TAG_COLORS, "rose"])).toBe("coral");
   });
 });

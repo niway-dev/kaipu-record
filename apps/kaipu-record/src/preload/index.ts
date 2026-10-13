@@ -53,10 +53,12 @@ const kaipuApi: KaipuElectronAPI = {
   listLocalRecordings: () => ipcRenderer.invoke(IPC_CHANNELS.listLocalRecordings),
   renameLocalRecording: (id, title) =>
     ipcRenderer.invoke(IPC_CHANNELS.renameLocalRecording, id, title),
-  setTags: (id, tags) => ipcRenderer.invoke(IPC_CHANNELS.setTags, id, tags),
-  getTagVocabulary: () => ipcRenderer.invoke(IPC_CHANNELS.getTagVocabulary),
-  renameTag: (from, to) => ipcRenderer.invoke(IPC_CHANNELS.renameTag, from, to),
-  deleteTag: (tag) => ipcRenderer.invoke(IPC_CHANNELS.deleteTag, tag),
+  listTags: () => ipcRenderer.invoke(IPC_CHANNELS.listTags),
+  createTag: (name, color) => ipcRenderer.invoke(IPC_CHANNELS.createTag, name, color),
+  renameTag: (id, name) => ipcRenderer.invoke(IPC_CHANNELS.renameTag, id, name),
+  recolorTag: (id, color) => ipcRenderer.invoke(IPC_CHANNELS.recolorTag, id, color),
+  deleteTag: (id) => ipcRenderer.invoke(IPC_CHANNELS.deleteTag, id),
+  setItemTags: (itemId, tagIds) => ipcRenderer.invoke(IPC_CHANNELS.setItemTags, itemId, tagIds),
   backfillLocalRecordingMeta: (id, meta) =>
     ipcRenderer.invoke(IPC_CHANNELS.backfillLocalRecordingMeta, id, meta),
   deleteLocalRecording: (id) => ipcRenderer.invoke(IPC_CHANNELS.deleteLocalRecording, id),

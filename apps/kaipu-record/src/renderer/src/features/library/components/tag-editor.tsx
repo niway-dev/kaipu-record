@@ -1,68 +1,77 @@
-import React, { useEffect, useId, useMemo, useState } from "react";
+import React, { useId, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
-import { normalizeTag, TagSetBuilder, TAGS_PER_ITEM_MAX } from "@kaipu/domain/constants";
+import { normalizeTagName, tagSlug, TAGS_PER_ITEM_MAX } from "@kaipu/domain/constants";
+import type { TagSummary } from "@shared/types";
+import { TagChip } from "../tags/tag-chip";
 import styles from "./tag-editor.module.css";
 
 /** Suggestions shown under the input at most. */
 const SUGGESTIONS_MAX = 6;
 
 interface TagEditorProps {
-  tags: readonly string[];
-  /** Called with the whole next list, already normalized by `TagSetBuilder`. */
-  onChange: (tags: readonly string[]) => void;
-  /** Tags in use across the library (most used first), for autocomplete. */
-  vocabulary: readonly string[];
+  /** The tags the item carries now, in order. */
+  assigned: readonly TagSummary[];
+  /** Every live tag in the library (most used first), for suggestions. */
+  all: readonly TagSummary[];
+  /** Called with the item's whole next list of tag ids. */
+  onAssign(tagIds: readonly string[]): void;
+  /** Create a tag by name; resolves to it (or the existing one with that name). */
+  onCreate(name: string): Promise<TagSummary | null>;
 }
 
 /**
- * Tag field for one library item: chips plus an input. Enter or comma adds the
- * typed tag, Backspace on an empty input removes the last chip, and suggestions
- * come from the library's vocabulary. Every list leaves through `TagSetBuilder`,
- * so `Cricut` and `cricut` can never become two tags.
+ * Tag field for one library item: colored chips plus an input. Enter or comma
+ * adds the typed tag — the existing one when its name matches (`demo` finds
+ * `Demo`), otherwise a new tag. Backspace on an empty input removes the last chip;
+ * suggestions match by name or slug (`#arch` finds `Archivos varios`).
  */
-export function TagEditor({ tags, onChange, vocabulary }: TagEditorProps): React.JSX.Element {
+export function TagEditor({
+  assigned,
+  all,
+  onAssign,
+  onCreate,
+}: TagEditorProps): React.JSX.Element {
   const t = useTranslations("library");
   const [draft, setDraft] = useState("");
   const listId = useId();
-  const atLimit = tags.length >= TAGS_PER_ITEM_MAX;
+  const ids = assigned.map((tag) => tag.id);
+  const atLimit = ids.length >= TAGS_PER_ITEM_MAX;
 
   const suggestions = useMemo(() => {
-    const needle = normalizeTag(draft);
-    if (needle === null) return [];
-    return vocabulary
-      .filter((tag) => tag !== needle && tag.includes(needle) && !tags.includes(tag))
+    const needle = tagSlug(draft.replace(/^#/, ""));
+    if (needle === "") return [];
+    return all
+      .filter((tag) => !ids.includes(tag.id) && tag.slug.includes(needle))
       .slice(0, SUGGESTIONS_MAX);
-  }, [draft, vocabulary, tags]);
+  }, [draft, all, ids]);
 
-  const add = (...raws: string[]): void => {
+  const assign = (tag: TagSummary): void => {
+    if (!ids.includes(tag.id) && !atLimit) onAssign([...ids, tag.id]);
+  };
+
+  const add = async (raw: string): Promise<void> => {
     setDraft("");
-    const builder = new TagSetBuilder(tags);
-    // Stop at the limit instead of letting build() throw: the rest is dropped.
-    for (const raw of raws) {
-      const before = builder.build().length;
-      if (before >= TAGS_PER_ITEM_MAX) break;
-      builder.add(raw);
-    }
-    const next = builder.build();
-    if (next.length !== tags.length) onChange(next);
+    const name = normalizeTagName(raw.replace(/^#/, ""));
+    if (name === null || atLimit) return;
+    const existing = all.find((tag) => tag.slug === tagSlug(name));
+    const tag = existing ?? (await onCreate(name));
+    if (tag) assign(tag);
   };
 
-  const remove = (tag: string): void => {
-    onChange(new TagSetBuilder(tags).remove(tag).build());
-  };
+  const remove = (id: string): void => onAssign(ids.filter((other) => other !== id));
 
   return (
     <div className={styles.editor}>
       <ul className={styles.chips} aria-label={t("tagsLabel")}>
-        {tags.map((tag) => (
-          <li key={tag} className={styles.chip}>
-            {tag}
+        {assigned.map((tag) => (
+          <li key={tag.id} className={styles.chip}>
+            <TagChip name={tag.name} color={tag.color} size="md" />
             <button
               type="button"
               className={styles.remove}
-              aria-label={t("tagsRemove", { tag })}
-              onClick={() => remove(tag)}
+              aria-label={t("tagsRemove", { tag: tag.name })}
+              onClick={() => remove(tag.id)}
             >
               <X size={12} strokeWidth={2} />
             </button>
@@ -84,7 +93,7 @@ export function TagEditor({ tags, onChange, vocabulary }: TagEditorProps): React
             if (value.includes(",")) {
               const pieces = value.split(",");
               const rest = pieces.pop() ?? "";
-              add(...pieces);
+              void pieces.reduce((done, piece) => done.then(() => add(piece)), Promise.resolve());
               setDraft(rest.trimStart());
               return;
             }
@@ -93,9 +102,9 @@ export function TagEditor({ tags, onChange, vocabulary }: TagEditorProps): React
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
-              add(draft);
-            } else if (e.key === "Backspace" && draft === "" && tags.length > 0) {
-              remove(tags[tags.length - 1]);
+              void add(draft);
+            } else if (e.key === "Backspace" && draft === "" && ids.length > 0) {
+              remove(ids[ids.length - 1]!);
             } else if (e.key === "Escape") {
               setDraft("");
             }
@@ -104,17 +113,18 @@ export function TagEditor({ tags, onChange, vocabulary }: TagEditorProps): React
         {suggestions.length > 0 && (
           <ul id={listId} role="listbox" className={styles.suggestions}>
             {suggestions.map((tag) => (
-              <li key={tag} role="option" aria-selected={false}>
+              <li key={tag.id} role="option" aria-selected={false}>
                 <button
                   type="button"
                   className={styles.suggestion}
                   // mousedown, not click: keep the input focused while picking.
                   onMouseDown={(e) => {
                     e.preventDefault();
-                    add(tag);
+                    setDraft("");
+                    assign(tag);
                   }}
                 >
-                  {tag}
+                  <TagChip name={tag.name} color={tag.color} />
                 </button>
               </li>
             ))}
@@ -123,23 +133,4 @@ export function TagEditor({ tags, onChange, vocabulary }: TagEditorProps): React
       </div>
     </div>
   );
-}
-
-/** Loads the library's tag vocabulary once for autocomplete (most used first). */
-export function useTagVocabulary(refreshKey: unknown): string[] {
-  const [vocabulary, setVocabulary] = useState<string[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    window.electronAPI
-      .getTagVocabulary()
-      .then((entries) => {
-        if (!cancelled) setVocabulary(entries.map((entry) => entry.tag));
-      })
-      // Autocomplete is a convenience: without it the field still works.
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [refreshKey]);
-  return vocabulary;
 }

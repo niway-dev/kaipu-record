@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LibraryVideo } from "./types";
-import { countByKind, countByStorage, countByTag, selectVisibleVideos } from "./library-filters";
+import { countByKind, countByStorage, selectVisibleVideos } from "./library-filters";
 
 function video(overrides: Partial<LibraryVideo> = {}): LibraryVideo {
   return {
@@ -132,54 +132,50 @@ describe("selectVisibleVideos", () => {
 });
 
 describe("selectVisibleVideos with tags", () => {
-  const both = video({ id: "both", title: "Cutting mat", tags: ["cricut", "video", "kaipu"] });
-  const cricutOnly = video({ id: "cricut", title: "Vinyl", tags: ["cricut"] });
-  const issue = video({ id: "issue", title: "Bug repro", tags: ["issue-#1232", "video"] });
-  // An item without a sidecar has no `tags` at all.
+  // Tags are referenced by id; names and slugs come from the registry.
+  const tagText = new Map([
+    ["t-cricut", "cricut cricut"],
+    ["t-video", "video video"],
+    ["t-kaipu", "kaipu kaipu"],
+    ["t-issue", "issue #1232 issue_#1232"],
+  ]);
+  const both = video({
+    id: "both",
+    title: "Cutting mat",
+    tagIds: ["t-cricut", "t-video", "t-kaipu"],
+  });
+  const cricutOnly = video({ id: "cricut", title: "Vinyl", tagIds: ["t-cricut"] });
+  const issue = video({ id: "issue", title: "Bug repro", tagIds: ["t-issue", "t-video"] });
+  // An item without a sidecar has no tags at all.
   const noSidecar = video({ id: "bare", title: "Hand imported" });
   const all = [both, cricutOnly, issue, noSidecar];
+  const withTags = { ...base, tagText };
 
   it("narrows with AND: every selected tag must be on the item", () => {
-    const result = selectVisibleVideos(all, { ...base, tags: ["cricut", "video"] });
+    const result = selectVisibleVideos(all, { ...withTags, tags: ["t-cricut", "t-video"] });
     expect(result.map((v) => v.id)).toEqual(["both"]);
   });
 
   it("keeps items with no tags (and no sidecar) while no tag is selected", () => {
-    const result = selectVisibleVideos(all, base);
+    const result = selectVisibleVideos(all, withTags);
     expect(result.map((v) => v.id)).toContain("bare");
     expect(result).toHaveLength(4);
   });
 
-  it("matches the search term against tags as well as the title", () => {
-    expect(selectVisibleVideos(all, { ...base, searchTerm: "1232" }).map((v) => v.id)).toEqual([
+  it("matches the search term against tag names and slugs as well as the title", () => {
+    expect(selectVisibleVideos(all, { ...withTags, searchTerm: "1232" }).map((v) => v.id)).toEqual([
       "issue",
     ]);
     expect(
-      selectVisibleVideos(all, { ...base, searchTerm: "Cricut" })
+      selectVisibleVideos(all, { ...withTags, searchTerm: "#Cricut" })
         .map((v) => v.id)
         .sort(),
     ).toEqual(["both", "cricut"]);
   });
 
   it("combines tags with the other filters", () => {
-    const result = selectVisibleVideos(all, { ...base, tags: ["video"], searchTerm: "bug" });
+    const result = selectVisibleVideos(all, { ...withTags, tags: ["t-video"], searchTerm: "bug" });
     expect(result.map((v) => v.id)).toEqual(["issue"]);
-  });
-});
-
-describe("countByTag", () => {
-  it("counts tags most used first, ties alphabetical, skipping untagged items", () => {
-    const items = [
-      video({ tags: ["video", "cricut"] }),
-      video({ tags: ["cricut"] }),
-      video({ tags: ["kaipu"] }),
-      video(),
-    ];
-    expect(countByTag(items)).toEqual([
-      { tag: "cricut", count: 2 },
-      { tag: "kaipu", count: 1 },
-      { tag: "video", count: 1 },
-    ]);
   });
 });
 

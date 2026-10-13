@@ -20,6 +20,6 @@ export function toLibraryVideo(item: LibraryItem): LibraryVideo {
     derivedFromAssetId: item.derivedFromAssetId,
     editSavedAt: item.editSavedAt,
     editExportedSavedAt: item.editExportedSavedAt,
-    tags: item.local?.tags ?? [],
+    tagIds: item.local?.tagIds ?? [],
   };
 }

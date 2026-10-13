@@ -21,6 +21,8 @@ import { FilterChip } from "@renderer/features/library/components/filter-chip";
 import { TagPanel, type TagPanelTab } from "@renderer/features/library/components/tag-panel";
 import { useLocalLibrary } from "@renderer/features/library/hooks/use-local-library";
 import { useLibraryFilters } from "@renderer/features/library/hooks/use-library-filters";
+import { resolveTags, useTags } from "@renderer/features/library/hooks/use-tags";
+import { TagChip } from "@renderer/features/library/tags/tag-chip";
 import { buildLineage, editBadge } from "@renderer/features/library/lineage";
 import { canOpenInEditor, useOpenInEditor } from "@renderer/features/editor/open-in-editor";
 import styles from "./library-page.module.css";
@@ -43,8 +45,8 @@ export function LibraryPage(): React.JSX.Element {
   const t = useTranslations("library");
   const navigate = useNavigate();
   const { openItem } = useOpenInEditor();
-  const { videos, isLoading, hasError, refresh, remove, setTags, renameTag, deleteTag } =
-    useLocalLibrary();
+  const { videos, isLoading, hasError, refresh, remove, setTags } = useLocalLibrary();
+  const tagApi = useTags();
   const canShowVaultBanner = hasError && videos.length > 0;
   // Built from the unfiltered `videos`, not `visibleItems`: an export filtered out of
   // the current view must still count toward its source's badge.
@@ -64,18 +66,18 @@ export function LibraryPage(): React.JSX.Element {
     visibleItems,
     counts,
     kindCounts,
-    tagCounts,
+    tagsInUse,
     hasActiveFilters,
     clearFilters,
-  } = useLibraryFilters(videos);
+  } = useLibraryFilters(videos, tagApi.tags);
 
   const [showAllTags, setShowAllTags] = useState(false);
   // The most used tags, plus any selected one past the cut so a selection is
   // always visible (and can be unselected) while the list is collapsed.
   const shownTags = showAllTags
-    ? tagCounts
-    : tagCounts.filter((entry, i) => i < TAG_CHIPS_SHOWN || selectedTags.includes(entry.tag));
-  const hiddenTagCount = tagCounts.length - shownTags.length;
+    ? tagsInUse
+    : tagsInUse.filter((tag, i) => i < TAG_CHIPS_SHOWN || selectedTags.includes(tag.id));
+  const hiddenTagCount = tagsInUse.length - shownTags.length;
 
   const [view, setView] = useState<"grid" | "list">("grid");
 
@@ -197,16 +199,17 @@ export function LibraryPage(): React.JSX.Element {
           {t("tagsManage")}
         </FilterChip>
 
-        {tagCounts.length > 0 && (
+        {tagsInUse.length > 0 && (
           <>
             <div className={styles.tagChips} role="group" aria-label={t("tagFilterLabel")}>
-              {shownTags.map(({ tag, count }) => (
+              {shownTags.map((tag) => (
                 <FilterChip
-                  key={tag}
-                  active={selectedTags.includes(tag)}
-                  onClick={() => toggleTag(tag)}
+                  key={tag.id}
+                  active={selectedTags.includes(tag.id)}
+                  onClick={() => toggleTag(tag.id)}
                 >
-                  {t("tagChip", { tag, count })}
+                  <TagChip name={tag.name} color={tag.color} />
+                  <span className={styles.tagCount}>{tag.count}</span>
                 </FilterChip>
               ))}
               {hiddenTagCount > 0 && (
@@ -214,7 +217,7 @@ export function LibraryPage(): React.JSX.Element {
                   {t("tagsMore", { count: hiddenTagCount })}
                 </FilterChip>
               )}
-              {showAllTags && tagCounts.length > TAG_CHIPS_SHOWN && (
+              {showAllTags && tagsInUse.length > TAG_CHIPS_SHOWN && (
                 <FilterChip active={false} onClick={() => setShowAllTags(false)}>
                   {t("tagsLess")}
                 </FilterChip>
@@ -288,6 +291,7 @@ export function LibraryPage(): React.JSX.Element {
               onEdit={canOpenInEditor(video) ? () => openItem(video) : undefined}
               onTags={video.id !== null ? () => openTagPanel(video.assetId) : undefined}
               selected={video.assetId === taggingId}
+              tags={resolveTags(video.tagIds, tagApi.byId)}
               onDelete={() => {
                 const { id, title } = video;
                 if (id !== null) setPendingDelete({ id, title });
@@ -308,6 +312,7 @@ export function LibraryPage(): React.JSX.Element {
                 onEdit={canOpenInEditor(video) ? () => openItem(video) : undefined}
                 onTags={video.id !== null ? () => openTagPanel(video.assetId) : undefined}
                 selected={video.assetId === taggingId}
+                tags={resolveTags(video.tagIds, tagApi.byId)}
                 onDelete={() => {
                   const { id, title } = video;
                   if (id !== null) setPendingDelete({ id, title });
@@ -320,15 +325,17 @@ export function LibraryPage(): React.JSX.Element {
       {tagDrawer && (
         <TagPanel
           video={tagging}
-          tagCounts={tagCounts}
+          tags={tagApi.tags}
           initialTab={tagDrawer.tab}
-          onChange={(next) => {
+          onAssign={(next) => {
             if (tagging?.id) void setTags(tagging.id, next);
           }}
-          onRenameTag={renameTag}
-          onDeleteTag={deleteTag}
-          onFilterTag={(tag) => {
-            if (!selectedTags.includes(tag)) toggleTag(tag);
+          onCreate={tagApi.create}
+          onRename={tagApi.rename}
+          onRecolor={tagApi.recolor}
+          onDelete={tagApi.remove}
+          onFilterTag={(id) => {
+            if (!selectedTags.includes(id)) toggleTag(id);
             setTagDrawer(null);
           }}
           onOpenDetails={() => tagging && navigate(`/library/${tagging.assetId}`)}

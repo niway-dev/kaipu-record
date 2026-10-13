@@ -1,16 +1,15 @@
 import { useMemo, useState } from "react";
+import type { TagSummary } from "@shared/types";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import {
   countByKind,
   countByStorage,
-  countByTag,
   selectVisibleVideos,
   type KindCounts,
   type KindFilter,
   type SortKey,
   type StorageCounts,
   type StorageFilter,
-  type TagCount,
 } from "@renderer/features/library/library-filters";
 
 export interface LibraryFilters {
@@ -22,17 +21,17 @@ export interface LibraryFilters {
   setStorageFilter(filter: StorageFilter): void;
   setSortKey(key: SortKey): void;
   setSearchTerm(term: string): void;
-  /** Selected tag chips (AND), in the order they were picked. */
+  /** Selected tag ids (AND), in the order they were picked. */
   selectedTags: readonly string[];
-  /** Select or unselect one tag chip. */
-  toggleTag(tag: string): void;
+  /** Select or unselect one tag chip, by tag id. */
+  toggleTag(tagId: string): void;
 
   /** Filtered + sorted collection for the current criteria. */
   visibleItems: LibraryVideo[];
   counts: StorageCounts;
   kindCounts: KindCounts;
-  /** Tags in use across the library, most used first — the tag chips. */
-  tagCounts: TagCount[];
+  /** Tags carried by at least one item, most used first — the tag chips. */
+  tagsInUse: TagSummary[];
   hasActiveFilters: boolean;
   /** Reset the kind/storage/tag filters and search; leave the sort order alone. */
   clearFilters(): void;
@@ -43,7 +42,10 @@ export interface LibraryFilters {
  * actual filtering/sorting/counting lives in pure `library-filters` helpers; this
  * hook is just the React state wiring around them.
  */
-export function useLibraryFilters(videos: LibraryVideo[]): LibraryFilters {
+export function useLibraryFilters(
+  videos: LibraryVideo[],
+  tags: readonly TagSummary[] = [],
+): LibraryFilters {
   const [kindFilter, setKindFilter] = useState<KindFilter>("all");
   const [storageFilter, setStorageFilter] = useState<StorageFilter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("newest");
@@ -52,12 +54,16 @@ export function useLibraryFilters(videos: LibraryVideo[]): LibraryFilters {
 
   const counts = useMemo(() => countByStorage(videos), [videos]);
   const kindCounts = useMemo(() => countByKind(videos), [videos]);
-  const tagCounts = useMemo(() => countByTag(videos), [videos]);
-  // A selected tag that no item carries any more (its last use was removed)
-  // would hide everything with no chip left to unselect it: drop it.
+  const tagsInUse = useMemo(() => tags.filter((tag) => tag.count > 0), [tags]);
+  const tagText = useMemo(
+    () => new Map(tags.map((tag) => [tag.id, `${tag.name.toLowerCase()} ${tag.slug}`])),
+    [tags],
+  );
+  // A selected tag that no item carries any more (its last use was removed, or it
+  // was deleted) would hide everything with no chip left to unselect it: drop it.
   const selectedTags = useMemo(
-    () => tagFilter.filter((tag) => tagCounts.some((entry) => entry.tag === tag)),
-    [tagFilter, tagCounts],
+    () => tagFilter.filter((id) => tagsInUse.some((tag) => tag.id === id)),
+    [tagFilter, tagsInUse],
   );
   const visibleItems = useMemo(
     () =>
@@ -67,8 +73,9 @@ export function useLibraryFilters(videos: LibraryVideo[]): LibraryFilters {
         sortKey,
         searchTerm,
         tags: selectedTags,
+        tagText,
       }),
-    [videos, kindFilter, storageFilter, sortKey, searchTerm, selectedTags],
+    [videos, kindFilter, storageFilter, sortKey, searchTerm, selectedTags, tagText],
   );
 
   const hasActiveFilters =
@@ -94,7 +101,7 @@ export function useLibraryFilters(videos: LibraryVideo[]): LibraryFilters {
     visibleItems,
     counts,
     kindCounts,
-    tagCounts,
+    tagsInUse,
     hasActiveFilters,
     clearFilters: () => {
       setKindFilter("all");

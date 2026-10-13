@@ -12,7 +12,8 @@ import { DeleteConfirmDialog } from "@renderer/features/library/components/delet
 import { RecordingPlayer } from "@renderer/features/library/components/recording-player";
 import { ScreenshotViewer } from "@renderer/features/library/components/screenshot-viewer";
 import { RecordingTitle } from "@renderer/features/library/components/recording-title";
-import { TagEditor, useTagVocabulary } from "@renderer/features/library/components/tag-editor";
+import { TagEditor } from "@renderer/features/library/components/tag-editor";
+import { resolveTags, useTags } from "@renderer/features/library/hooks/use-tags";
 import { formatDuration, formatSize, relativeDate } from "@renderer/features/library/format";
 import { buildLineage, editBadge } from "@renderer/features/library/lineage";
 import type { EditingState, RemoveLocalCopyResult } from "@shared/types/library-item";
@@ -59,9 +60,7 @@ export function LibraryDetailPage(): React.JSX.Element {
     useLocalLibrary();
 
   const video = videos.find((v) => v.assetId === assetId);
-  // Re-fetched when this item's tags change, so a tag just added elsewhere in
-  // the library (or here) is offered next time.
-  const vocabulary = useTagVocabulary(video?.tags?.join(","));
+  const tagApi = useTags();
 
   // A recording can momentarily lag the navigation into its own detail page right
   // after it finalizes; recover (re-list once, then fall back to the Library +
@@ -205,9 +204,10 @@ export function LibraryDetailPage(): React.JSX.Element {
           />
           {localId && (
             <TagEditor
-              tags={video.tags ?? []}
-              vocabulary={vocabulary}
-              onChange={(next) => void setTags(localId, next)}
+              assigned={resolveTags(video.tagIds, tagApi.byId)}
+              all={tagApi.tags}
+              onAssign={(next) => void setTags(localId, next)}
+              onCreate={tagApi.create}
             />
           )}
           <div className={styles.meta}>

@@ -103,7 +103,14 @@ describe("VideoCard tags", () => {
   it("always shows the first tags, the rest as +N", () => {
     render(
       <VideoCard
-        video={{ ...video, tags: ["a", "b", "c", "d", "e"] }}
+        video={video}
+        tags={["a", "b", "c", "d", "e"].map((name) => ({
+          id: name,
+          name,
+          slug: name,
+          color: "rose" as const,
+          count: 1,
+        }))}
         onNavigate={vi.fn()}
         onDelete={vi.fn()}
       />,

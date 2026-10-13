@@ -1,7 +1,9 @@
 import { Film, PenLine, Tag, Trash2 } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { formatDuration, formatSize } from "@renderer/features/library/format";
+import type { TagSummary } from "@shared/types";
 import type { LibraryVideo } from "@renderer/features/library/types";
+import { TagChip } from "../tags/tag-chip";
 import type { EditBadge as EditBadgeState } from "@renderer/features/library/lineage";
 import { StorageMeta } from "./storage-meta";
 import { KindBadge } from "./kind-badge";
@@ -21,6 +23,8 @@ interface VideoRowProps {
   onTags?(): void;
   /** This item is the one in the tag side panel. */
   selected?: boolean;
+  /** The item's tags, resolved from the registry (name + color). */
+  tags?: readonly TagSummary[];
 }
 
 const ROW_TAGS_SHOWN = 4;
@@ -34,9 +38,9 @@ export function VideoRow({
   onEdit,
   onTags,
   selected = false,
+  tags = [],
 }: VideoRowProps): React.JSX.Element {
   const t = useTranslations("library");
-  const tags = video.tags ?? [];
   const rowTags = tags.slice(0, ROW_TAGS_SHOWN);
 
   return (
@@ -79,8 +83,8 @@ export function VideoRow({
           {rowTags.length > 0 && (
             <ul className={styles.tags} aria-label={t("tagsLabel")}>
               {rowTags.map((tag) => (
-                <li key={tag} className={styles.tag}>
-                  {tag}
+                <li key={tag.id}>
+                  <TagChip name={tag.name} color={tag.color} />
                 </li>
               ))}
               {tags.length > rowTags.length && (

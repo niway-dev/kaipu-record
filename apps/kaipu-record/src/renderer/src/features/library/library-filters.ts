@@ -15,14 +15,10 @@ export interface FilterCriteria {
   storageFilter: StorageFilter;
   sortKey: SortKey;
   searchTerm: string;
-  /** Selected tag chips. An item must carry every one of them (AND). */
+  /** Selected tag ids. An item must carry every one of them (AND). */
   tags: readonly string[];
-}
-
-/** One tag chip: a tag in use and how many items carry it. */
-export interface TagCount {
-  tag: string;
-  count: number;
+  /** Names and slugs by tag id, so the search box also matches tags. */
+  tagText?: ReadonlyMap<string, string>;
 }
 
 export interface StorageCounts {
@@ -53,12 +49,12 @@ export function selectVisibleVideos(
     if (criteria.storageFilter === "local" && !hasLocalCopy(video)) return false;
     if (criteria.storageFilter === "cloud" && !hasCloudCopy(video)) return false;
     // No sidecar means no tags: such an item still shows while no tag is selected.
-    const tags = video.tags ?? [];
+    const tags = video.tagIds ?? [];
     if (!criteria.tags.every((tag) => tags.includes(tag))) return false;
     if (
       term &&
       !video.title.toLowerCase().includes(term) &&
-      !tags.some((tag) => tag.includes(term))
+      !tags.some((id) => criteria.tagText?.get(id)?.includes(term.replace(/^#/, "")))
     ) {
       return false;
     }
@@ -78,17 +74,6 @@ export function countByStorage(videos: LibraryVideo[]): StorageCounts {
     local: videos.filter(hasLocalCopy).length,
     cloud: videos.filter(hasCloudCopy).length,
   };
-}
-
-/** Tally tags across items for the tag chips: most used first, ties alphabetical. */
-export function countByTag(videos: LibraryVideo[]): TagCount[] {
-  const counts = new Map<string, number>();
-  for (const video of videos) {
-    for (const tag of video.tags ?? []) counts.set(tag, (counts.get(tag) ?? 0) + 1);
-  }
-  return [...counts]
-    .map(([tag, count]) => ({ tag, count }))
-    .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
 }
 
 /** Tally items by kind (recording vs screenshot) for the kind filter chips. */

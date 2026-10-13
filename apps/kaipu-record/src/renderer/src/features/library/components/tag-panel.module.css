@@ -207,29 +207,25 @@
 }
 
 .quickTag {
-  padding: 4px 10px;
+  padding: 2px;
+  border: 2px dashed transparent;
   border-radius: 999px;
-  border: 1px solid var(--border);
   background: transparent;
-  color: var(--text-secondary);
-  font-family: var(--font-family);
-  font-size: var(--font-size-xs, 12px);
+  opacity: 0.55;
   cursor: pointer;
   transition:
-    border-color var(--transition),
-    color var(--transition),
-    background var(--transition);
+    opacity var(--transition),
+    transform var(--transition);
 }
 
 .quickTag:hover:not(:disabled) {
-  border-color: var(--border-light);
-  color: var(--text-primary);
+  opacity: 0.85;
+  transform: translateY(-1px);
 }
 
 .quickTag[data-on="true"] {
-  border-color: rgba(246, 5, 92, 0.6);
-  background: rgba(246, 5, 92, 0.14);
-  color: var(--text-primary);
+  opacity: 1;
+  border-color: var(--text-muted);
 }
 
 .quickTag:disabled {
@@ -261,6 +257,7 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
+  overflow: hidden;
   padding: 0;
   border: none;
   background: none;
@@ -270,8 +267,8 @@
   cursor: pointer;
 }
 
-.tagName:hover {
-  color: var(--accent-primary);
+.tagName:hover .slug {
+  color: var(--text-secondary);
 }
 
 .count {
@@ -342,4 +339,66 @@
   font-family: var(--font-family);
   font-size: var(--font-size-sm);
   outline: none;
+}
+
+/* ── Create + palette rows ──────────────── */
+
+.createRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.createInput {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  outline: none;
+}
+
+.createInput:focus {
+  border-color: var(--accent-primary);
+}
+
+.createButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 32px;
+  padding: 0 12px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--accent-primary);
+  color: #fff;
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+
+.createButton:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.tagMain {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+  flex: 1;
+}
+
+.slug {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
 }

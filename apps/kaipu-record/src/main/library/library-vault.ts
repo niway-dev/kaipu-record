@@ -24,9 +24,13 @@ export interface Sidecar {
   hashedMtimeMs?: number;
   /** Set by `removeLocalCopy`; cleared when a file reappears under this id. */
   localRemovedAt?: number;
-  /** Normalized recording tags (see `normalizeTag` in @kaipu/domain). */
+  /** Phase 1 plain-string tags (never released); imported once into the registry. */
   tags?: string[];
-  /** Epoch ms of the last tag write — last writer wins when the cloud replica lands. */
+  /** Ids of the tags in `.kaipu/tags.json` this item carries (ADR 0020). */
+  tagIds?: string[];
+  /** Cached names of `tagIds`, for people and other tools; the ids are the truth. */
+  tagNames?: string[];
+  /** Epoch ms of the last tag write on this item. */
   tagsUpdatedAt?: number;
 }
 
@@ -54,7 +58,7 @@ export class LibraryVault {
   /** Guards `ensureIdentity` so two parallel `describe(id)` calls never mint two ids for the same id. */
   private readonly identityInFlight = new Map<string, Promise<Sidecar & { assetId: string }>>();
 
-  constructor(private readonly directory: string) {}
+  constructor(readonly directory: string) {}
 
   /** Resolve an id to its real file; if none exists yet, default to `.mp4`. */
   async filePath(id: string): Promise<string> {
@@ -123,7 +127,9 @@ export class LibraryVault {
       durationSeconds: meta.durationSeconds ?? 0,
       derivedFromAssetId: meta.derivedFromAssetId ?? null,
       contentSha256: hashIsFresh ? (meta.contentSha256 ?? null) : null,
-      tags: Array.isArray(meta.tags) ? meta.tags.filter((t) => typeof t === "string") : [],
+      tagIds: Array.isArray(meta.tagIds)
+        ? meta.tagIds.filter((t): t is string => typeof t === "string")
+        : [],
       thumbnailUrl: isImage
         ? // `?v=<mtime>` busts the renderer image cache when a screenshot is
           // overwritten in place (same id/URL) — only the changed item, so the

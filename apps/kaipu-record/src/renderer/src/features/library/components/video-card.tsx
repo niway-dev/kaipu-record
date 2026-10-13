@@ -1,7 +1,9 @@
 import { Film, PenLine, Tag, Trash2, Play } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { formatDuration, formatSize } from "@renderer/features/library/format";
+import type { TagSummary } from "@shared/types";
 import type { LibraryVideo } from "@renderer/features/library/types";
+import { TagChip } from "../tags/tag-chip";
 import type { EditBadge as EditBadgeState } from "@renderer/features/library/lineage";
 import { StorageMeta } from "./storage-meta";
 import { KindBadge } from "./kind-badge";
@@ -22,6 +24,8 @@ interface VideoCardProps {
   onTags?(): void;
   /** This item is the one in the tag side panel. */
   selected?: boolean;
+  /** The item's tags, resolved from the registry (name + color). */
+  tags?: readonly TagSummary[];
 }
 
 export function VideoCard({
@@ -32,10 +36,10 @@ export function VideoCard({
   onEdit,
   onTags,
   selected = false,
+  tags = [],
 }: VideoCardProps): React.JSX.Element {
   const t = useTranslations("library");
   // A few tags always visible under the title, the rest as "+N".
-  const tags = video.tags ?? [];
   const cardTags = tags.slice(0, CARD_TAGS_SHOWN);
   const hiddenTags = tags.length - cardTags.length;
 
@@ -115,8 +119,8 @@ export function VideoCard({
         {cardTags.length > 0 && (
           <ul className={styles.tags} aria-label={t("tagsLabel")}>
             {cardTags.map((tag) => (
-              <li key={tag} className={styles.tag}>
-                {tag}
+              <li key={tag.id}>
+                <TagChip name={tag.name} color={tag.color} />
               </li>
             ))}
             {hiddenTags > 0 && <li className={styles.tagMore}>+{hiddenTags}</li>}

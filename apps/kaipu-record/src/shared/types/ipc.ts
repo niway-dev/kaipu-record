@@ -1,3 +1,4 @@
+import type { TagColor } from "@kaipu/domain/constants";
 /**
  * Shared IPC contract between the main and renderer processes.
  *
@@ -258,11 +259,13 @@ export const IPC_CHANNELS = {
   accessibilityRequest: "permissions:accessibility-request",
   listLocalRecordings: "library:list-local",
   renameLocalRecording: "library:rename-local",
-  /** Replace an item's tags (recording-tags design, Phase 1: sidecar only). */
-  setTags: "library:setTags",
-  getTagVocabulary: "library:getTagVocabulary",
-  renameTag: "library:renameTag",
-  deleteTag: "library:deleteTag",
+  /** Tags as entities (ADR 0020): the registry, and which tags an item carries. */
+  listTags: "tags:list",
+  createTag: "tags:create",
+  renameTag: "tags:rename",
+  recolorTag: "tags:recolor",
+  deleteTag: "tags:delete",
+  setItemTags: "tags:setItemTags",
   backfillLocalRecordingMeta: "library:backfill-meta",
   deleteLocalRecording: "library:delete-local",
   revealLocalRecording: "library:reveal-local",
@@ -398,9 +401,12 @@ export interface RecordingTick {
 
 export type ControlCommand = "pause" | "resume" | "stop";
 
-/** One tag in use across the library and how many items carry it. */
-export interface TagVocabularyEntry {
-  tag: string;
+/** A live tag and how many items carry it (ADR 0020). */
+export interface TagSummary {
+  id: string;
+  name: string;
+  slug: string;
+  color: TagColor;
   count: number;
 }
 

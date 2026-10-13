@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { IPC_CHANNELS } from "@shared/types";
-import type { RecordingBackfillMeta, VaultDirectory } from "@shared/types";
+import type { RecordingBackfillMeta, TagSummary, VaultDirectory } from "@shared/types";
 import { createMainTranslator } from "@kaipu/i18n/main";
 import type { AuthHandle } from "../infrastructure/auth-store";
 import { getAppSettings } from "../infrastructure/settings-store";
@@ -10,7 +10,8 @@ import { CatalogCache } from "../cloud/catalog-cache";
 import { fetchCloudCatalog } from "../cloud/catalog-client";
 import { LibraryService } from "./library-service";
 import { LibraryVault } from "./library-vault";
-import { TagStoreProvider } from "./tag-store";
+import { loadDeviceId, VaultTagRepository, type TagRepository } from "./tag-repository";
+import { isTagColor } from "@kaipu/domain/constants";
 import { resetVaultDirectory, setVaultDirectory, vaultDirectory } from "./vault-location";
 import { deleteVideoEditSession, registerVideoEditSessionHandlers } from "./video-edit-session";
 
@@ -87,24 +88,38 @@ export function registerLibraryVaultHandlers(deps: { auth: AuthHandle; serverUrl
   ipcMain.handle(IPC_CHANNELS.renameLocalRecording, (_event, id: string, title: string) =>
     currentVault().rename(id, title),
   );
-  const tags = new TagStoreProvider(currentVault);
-  ipcMain.handle(
-    IPC_CHANNELS.setTags,
-    async (_event, id: string, next: unknown): Promise<string[]> => {
-      const raw = Array.isArray(next) ? next.filter((t): t is string => typeof t === "string") : [];
-      const stored = await tags.current().set(id, raw, Date.now());
-      return [...stored];
-    },
+  // Tags (ADR 0020). Every change re-lists the Library in every window, so cards,
+  // filters and the drawer never disagree about a tag's name or color.
+  let deviceId = "unknown";
+  void loadDeviceId(app.getPath("userData")).then((id) => (deviceId = id));
+  const tags: TagRepository = new VaultTagRepository(currentVault, () => deviceId);
+  const summary = async (id: string): Promise<TagSummary> =>
+    (await tags.list()).find((t) => t.id === id)!;
+  const changed = async <T>(work: Promise<T>): Promise<T> => {
+    const result = await work;
+    broadcastLibraryChanged();
+    return result;
+  };
+  ipcMain.handle(IPC_CHANNELS.listTags, () => tags.list());
+  ipcMain.handle(IPC_CHANNELS.createTag, async (_event, name: unknown, color: unknown) =>
+    summary((await changed(tags.create(String(name), isTagColor(color) ? color : undefined))).id),
   );
-  ipcMain.handle(IPC_CHANNELS.renameTag, (_event, from: unknown, to: unknown) =>
-    tags.current().renameTag(String(from), String(to), Date.now()),
+  ipcMain.handle(IPC_CHANNELS.renameTag, async (_event, id: unknown, name: unknown) =>
+    summary((await changed(tags.rename(String(id), String(name)))).id),
   );
-  ipcMain.handle(IPC_CHANNELS.deleteTag, (_event, tag: unknown) =>
-    tags.current().deleteTag(String(tag), Date.now()),
+  ipcMain.handle(IPC_CHANNELS.recolorTag, async (_event, id: unknown, color: unknown) => {
+    if (!isTagColor(color)) throw new Error("tags: not a palette color");
+    return summary((await changed(tags.recolor(String(id), color))).id);
+  });
+  ipcMain.handle(IPC_CHANNELS.deleteTag, (_event, id: unknown) => changed(tags.remove(String(id))));
+  ipcMain.handle(IPC_CHANNELS.setItemTags, (_event, itemId: unknown, tagIds: unknown) =>
+    changed(
+      tags.assign(
+        String(itemId),
+        Array.isArray(tagIds) ? tagIds.filter((t): t is string => typeof t === "string") : [],
+      ),
+    ),
   );
-  ipcMain.handle(IPC_CHANNELS.getTagVocabulary, async () => [
-    ...(await tags.current().vocabulary()),
-  ]);
   ipcMain.handle(
     IPC_CHANNELS.backfillLocalRecordingMeta,
     (_event, id: string, meta: RecordingBackfillMeta) => currentVault().backfill(id, meta),

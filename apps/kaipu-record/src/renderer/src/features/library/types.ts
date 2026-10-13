@@ -30,5 +30,6 @@ export interface LibraryVideo {
   /** Epoch ms of the last edit-session save, null without a session (see LibraryItem). */
   editSavedAt: number | null;
   editExportedSavedAt: number | null;
-  tags?: string[];
+  /** Ids of the tags this item carries (ADR 0020); resolve with `useTags`. */
+  tagIds?: string[];
 }

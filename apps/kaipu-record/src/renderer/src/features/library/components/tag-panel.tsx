@@ -1,9 +1,15 @@
 import React, { useEffect, useState } from "react";
-import { Check, ExternalLink, Film, Pencil, Trash2, X } from "lucide-react";
+import { Check, ExternalLink, Film, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
-import { normalizeTag, TagSetBuilder, TAGS_PER_ITEM_MAX } from "@kaipu/domain/constants";
+import {
+  nextTagColor,
+  normalizeTagName,
+  TAGS_PER_ITEM_MAX,
+  type TagColor,
+} from "@kaipu/domain/constants";
+import type { TagSummary } from "@shared/types";
 import type { LibraryVideo } from "@renderer/features/library/types";
-import type { TagCount } from "@renderer/features/library/library-filters";
+import { ColorMenu, TagChip } from "../tags/tag-chip";
 import { TagEditor } from "./tag-editor";
 import styles from "./tag-panel.module.css";
 
@@ -15,14 +21,16 @@ export type TagPanelTab = "item" | "all";
 interface TagPanelProps {
   /** The item being tagged; null when the drawer was opened to manage tags only. */
   video: LibraryVideo | null;
-  /** Every tag in use with its item count, most used first. */
-  tagCounts: readonly TagCount[];
+  /** Every live tag, most used first. */
+  tags: readonly TagSummary[];
   initialTab: TagPanelTab;
-  onChange(tags: readonly string[]): void;
-  onRenameTag(from: string, to: string): Promise<void>;
-  onDeleteTag(tag: string): Promise<void>;
+  onAssign(tagIds: readonly string[]): void;
+  onCreate(name: string, color?: TagColor): Promise<TagSummary | null>;
+  onRename(id: string, name: string): Promise<void>;
+  onRecolor(id: string, color: TagColor): Promise<void>;
+  onDelete(id: string): Promise<void>;
   /** Show only the items carrying this tag in the Library. */
-  onFilterTag(tag: string): void;
+  onFilterTag(id: string): void;
   onOpenDetails(): void;
   onClose(): void;
 }
@@ -30,16 +38,18 @@ interface TagPanelProps {
 /**
  * The Library's tag drawer: it slides in over the page from the right, behind a
  * curtain that dims the rest and closes it on click. Two tabs — tag the item it
- * was opened for (typed field plus one-click toggles of the library's tags), or
- * manage every tag in the library (rename, delete, filter by it). Esc closes.
+ * was opened for, or manage every tag (create, recolor, rename, delete, filter).
+ * Esc closes.
  */
 export function TagPanel({
   video,
-  tagCounts,
+  tags,
   initialTab,
-  onChange,
-  onRenameTag,
-  onDeleteTag,
+  onAssign,
+  onCreate,
+  onRename,
+  onRecolor,
+  onDelete,
   onFilterTag,
   onOpenDetails,
   onClose,
@@ -50,8 +60,10 @@ export function TagPanel({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      // Esc inside a text field belongs to that field (clear, cancel a rename).
-      if (e.key !== "Escape" || (e.target as HTMLElement | null)?.tagName === "INPUT") return;
+      // Esc inside a text field belongs to that field (clear, cancel a rename);
+      // a menu that handled it already marked it.
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      if ((e.target as HTMLElement | null)?.tagName === "INPUT") return;
       onClose();
     };
     window.addEventListener("keydown", onKey);
@@ -94,7 +106,7 @@ export function TagPanel({
             className={styles.tab}
             onClick={() => setTab("all")}
           >
-            {t("tagPanelTabAll", { count: tagCounts.length })}
+            {t("tagPanelTabAll", { count: tags.length })}
           </button>
         </div>
 
@@ -102,15 +114,18 @@ export function TagPanel({
           {tab === "item" && video ? (
             <ItemTags
               video={video}
-              tagCounts={tagCounts}
-              onChange={onChange}
+              tags={tags}
+              onAssign={onAssign}
+              onCreate={onCreate}
               onOpenDetails={onOpenDetails}
             />
           ) : (
             <AllTags
-              tagCounts={tagCounts}
-              onRename={onRenameTag}
-              onDelete={onDeleteTag}
+              tags={tags}
+              onCreate={onCreate}
+              onRename={onRename}
+              onRecolor={onRecolor}
+              onDelete={onDelete}
               onFilter={onFilterTag}
             />
           )}
@@ -122,27 +137,26 @@ export function TagPanel({
 
 function ItemTags({
   video,
-  tagCounts,
-  onChange,
+  tags,
+  onAssign,
+  onCreate,
   onOpenDetails,
 }: {
   video: LibraryVideo;
-  tagCounts: readonly TagCount[];
-  onChange(tags: readonly string[]): void;
+  tags: readonly TagSummary[];
+  onAssign(tagIds: readonly string[]): void;
+  onCreate(name: string): Promise<TagSummary | null>;
   onOpenDetails(): void;
 }): React.JSX.Element {
   const t = useTranslations("library");
-  const tags = video.tags ?? [];
-  const atLimit = tags.length >= TAGS_PER_ITEM_MAX;
-  const vocabulary = tagCounts.map((entry) => entry.tag);
-  const quickTags = vocabulary.slice(0, QUICK_TAGS_SHOWN);
+  const ids = video.tagIds ?? [];
+  const assigned = ids.flatMap((id) => tags.filter((tag) => tag.id === id));
+  const atLimit = ids.length >= TAGS_PER_ITEM_MAX;
+  const quickTags = tags.slice(0, QUICK_TAGS_SHOWN);
 
-  const toggle = (tag: string): void => {
-    const builder = new TagSetBuilder(tags);
-    if (tags.includes(tag)) builder.remove(tag);
-    else if (!atLimit) builder.add(tag);
-    else return;
-    onChange(builder.build());
+  const toggle = (id: string): void => {
+    if (ids.includes(id)) onAssign(ids.filter((other) => other !== id));
+    else if (!atLimit) onAssign([...ids, id]);
   };
 
   return (
@@ -166,8 +180,8 @@ function ItemTags({
 
       <section className={styles.section}>
         <span className={styles.label}>{t("tagPanelThisItem")}</span>
-        <TagEditor tags={tags} vocabulary={vocabulary} onChange={onChange} />
-        {tags.length === 0 && <p className={styles.hint}>{t("tagPanelEmpty")}</p>}
+        <TagEditor assigned={assigned} all={tags} onAssign={onAssign} onCreate={onCreate} />
+        {assigned.length === 0 && <p className={styles.hint}>{t("tagPanelEmpty")}</p>}
       </section>
 
       {quickTags.length > 0 && (
@@ -175,18 +189,19 @@ function ItemTags({
           <span className={styles.label}>{t("tagPanelQuick")}</span>
           <div className={styles.quick} role="group" aria-label={t("tagPanelQuick")}>
             {quickTags.map((tag) => {
-              const on = tags.includes(tag);
+              const on = ids.includes(tag.id);
               return (
                 <button
-                  key={tag}
+                  key={tag.id}
                   type="button"
                   className={styles.quickTag}
                   data-on={on}
                   aria-pressed={on}
+                  aria-label={tag.name}
                   disabled={!on && atLimit}
-                  onClick={() => toggle(tag)}
+                  onClick={() => toggle(tag.id)}
                 >
-                  {tag}
+                  <TagChip name={tag.name} color={tag.color} size="md" />
                 </button>
               );
             })}
@@ -197,113 +212,187 @@ function ItemTags({
   );
 }
 
+function CreateTag({
+  tags,
+  onCreate,
+}: {
+  tags: readonly TagSummary[];
+  onCreate(name: string, color?: TagColor): Promise<TagSummary | null>;
+}): React.JSX.Element {
+  const t = useTranslations("library");
+  const [name, setName] = useState("");
+  const [color, setColor] = useState<TagColor>(() => nextTagColor(tags.map((tag) => tag.color)));
+  const clean = normalizeTagName(name);
+  const taken =
+    clean !== null && tags.some((tag) => tag.name.toLowerCase() === clean.toLowerCase());
+
+  const submit = async (): Promise<void> => {
+    if (clean === null || taken) return;
+    const created = await onCreate(clean, color);
+    if (created) {
+      setName("");
+      setColor(nextTagColor([...tags.map((tag) => tag.color), color]));
+    }
+  };
+
+  return (
+    <section className={styles.section}>
+      <span className={styles.label}>{t("tagCreateTitle")}</span>
+      <div className={styles.createRow}>
+        <ColorMenu value={color} onChange={setColor} label={t("tagColorLabel")} />
+        <input
+          className={styles.createInput}
+          value={name}
+          aria-label={t("tagCreateName")}
+          placeholder={t("tagCreatePlaceholder")}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void submit();
+            else if (e.key === "Escape") setName("");
+          }}
+        />
+        <button
+          type="button"
+          className={styles.createButton}
+          disabled={clean === null || taken}
+          onClick={() => void submit()}
+        >
+          <Plus size={14} strokeWidth={2} />
+          {t("tagCreate")}
+        </button>
+      </div>
+      {clean !== null && (
+        <p className={styles.hint}>
+          {taken ? t("tagNameTaken") : <TagChip name={clean} color={color} size="md" />}
+        </p>
+      )}
+    </section>
+  );
+}
+
 function AllTags({
-  tagCounts,
+  tags,
+  onCreate,
   onRename,
+  onRecolor,
   onDelete,
   onFilter,
 }: {
-  tagCounts: readonly TagCount[];
-  onRename(from: string, to: string): Promise<void>;
-  onDelete(tag: string): Promise<void>;
-  onFilter(tag: string): void;
+  tags: readonly TagSummary[];
+  onCreate(name: string, color?: TagColor): Promise<TagSummary | null>;
+  onRename(id: string, name: string): Promise<void>;
+  onRecolor(id: string, color: TagColor): Promise<void>;
+  onDelete(id: string): Promise<void>;
+  onFilter(id: string): void;
 }): React.JSX.Element {
   const t = useTranslations("library");
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [confirming, setConfirming] = useState<string | null>(null);
 
-  if (tagCounts.length === 0) {
-    return <p className={styles.hint}>{t("tagPanelNoTags")}</p>;
-  }
-
-  const commitRename = (from: string): void => {
-    const to = normalizeTag(draft);
+  const commitRename = (tag: TagSummary): void => {
+    const name = normalizeTagName(draft);
     setEditing(null);
-    if (to !== null && to !== from) void onRename(from, to);
+    if (name !== null && name !== tag.name) void onRename(tag.id, name);
   };
 
   return (
-    <ul className={styles.tagList} aria-label={t("tagPanelTabAll", { count: tagCounts.length })}>
-      {tagCounts.map(({ tag, count }) => (
-        <li key={tag} className={styles.tagRow}>
-          {editing === tag ? (
-            <input
-              className={styles.renameInput}
-              value={draft}
-              autoFocus
-              aria-label={t("tagRenameLabel", { tag })}
-              onChange={(e) => setDraft(e.target.value)}
-              onBlur={() => commitRename(tag)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") commitRename(tag);
-                else if (e.key === "Escape") setEditing(null);
-              }}
-            />
-          ) : (
-            <button
-              type="button"
-              className={styles.tagName}
-              title={t("tagFilterBy", { tag })}
-              onClick={() => onFilter(tag)}
-            >
-              {tag}
-              <span className={styles.count}>{count}</span>
-            </button>
-          )}
+    <>
+      <CreateTag tags={tags} onCreate={onCreate} />
 
-          {confirming === tag ? (
-            <span className={styles.confirm}>
-              {t("tagDeleteConfirm", { count })}
-              <button
-                type="button"
-                className={styles.danger}
-                aria-label={t("tagDelete", { tag })}
-                onClick={() => {
-                  setConfirming(null);
-                  void onDelete(tag);
-                }}
-              >
-                <Check size={14} strokeWidth={2} />
-              </button>
-              <button
-                type="button"
-                className={styles.rowAction}
-                aria-label={t("cancel")}
-                onClick={() => setConfirming(null)}
-              >
-                <X size={14} strokeWidth={2} />
-              </button>
-            </span>
-          ) : (
-            editing !== tag && (
-              <span className={styles.rowActions}>
-                <button
-                  type="button"
-                  className={styles.rowAction}
-                  aria-label={t("tagRename", { tag })}
-                  title={t("tagRename", { tag })}
-                  onClick={() => {
-                    setDraft(tag);
-                    setEditing(tag);
-                  }}
-                >
-                  <Pencil size={13} strokeWidth={1.8} />
-                </button>
-                <button
-                  type="button"
-                  className={styles.rowAction}
-                  aria-label={t("tagDelete", { tag })}
-                  title={t("tagDelete", { tag })}
-                  onClick={() => setConfirming(tag)}
-                >
-                  <Trash2 size={13} strokeWidth={1.8} />
-                </button>
+      {tags.length === 0 ? (
+        <p className={styles.hint}>{t("tagPanelNoTags")}</p>
+      ) : (
+        <ul className={styles.tagList} aria-label={t("tagPanelTabAll", { count: tags.length })}>
+          {tags.map((tag) => (
+            <li key={tag.id} className={styles.tagRow}>
+              <span className={styles.tagMain}>
+                <ColorMenu
+                  value={tag.color}
+                  onChange={(color) => void onRecolor(tag.id, color)}
+                  label={t("tagRecolor", { tag: tag.name })}
+                />
+                {editing === tag.id ? (
+                  <input
+                    className={styles.renameInput}
+                    value={draft}
+                    autoFocus
+                    aria-label={t("tagRenameLabel", { tag: tag.name })}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onBlur={() => commitRename(tag)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") commitRename(tag);
+                      else if (e.key === "Escape") setEditing(null);
+                    }}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    className={styles.tagName}
+                    title={t("tagFilterBy", { tag: tag.name })}
+                    onClick={() => onFilter(tag.id)}
+                  >
+                    <TagChip name={tag.name} color={tag.color} size="md" />
+                    <span className={styles.slug}>#{tag.slug}</span>
+                    <span className={styles.count}>{tag.count}</span>
+                  </button>
+                )}
               </span>
-            )
-          )}
-        </li>
-      ))}
-    </ul>
+
+              {confirming === tag.id ? (
+                <span className={styles.confirm}>
+                  {t("tagDeleteConfirm", { count: tag.count })}
+                  <button
+                    type="button"
+                    className={styles.danger}
+                    aria-label={t("tagDelete", { tag: tag.name })}
+                    onClick={() => {
+                      setConfirming(null);
+                      void onDelete(tag.id);
+                    }}
+                  >
+                    <Check size={14} strokeWidth={2} />
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.rowAction}
+                    aria-label={t("cancel")}
+                    onClick={() => setConfirming(null)}
+                  >
+                    <X size={14} strokeWidth={2} />
+                  </button>
+                </span>
+              ) : (
+                editing !== tag.id && (
+                  <span className={styles.rowActions}>
+                    <button
+                      type="button"
+                      className={styles.rowAction}
+                      aria-label={t("tagRename", { tag: tag.name })}
+                      title={t("tagRename", { tag: tag.name })}
+                      onClick={() => {
+                        setDraft(tag.name);
+                        setEditing(tag.id);
+                      }}
+                    >
+                      <Pencil size={13} strokeWidth={1.8} />
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.rowAction}
+                      aria-label={t("tagDelete", { tag: tag.name })}
+                      title={t("tagDelete", { tag: tag.name })}
+                      onClick={() => setConfirming(tag.id)}
+                    >
+                      <Trash2 size={13} strokeWidth={1.8} />
+                    </button>
+                  </span>
+                )
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
   );
 }

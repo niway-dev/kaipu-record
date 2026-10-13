@@ -14,13 +14,7 @@
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  padding: 2px 4px 2px 8px;
-  border-radius: var(--radius-full, 999px);
-  background: var(--bg-elevated, var(--bg-input));
-  border: 1px solid var(--border);
-  color: var(--text-primary);
-  font-size: var(--font-size-xs, 12px);
+  gap: 1px;
 }
 
 .remove {
