@@ -1,4 +1,4 @@
-import { Film, PenLine, Trash2, Play } from "lucide-react";
+import { Film, PenLine, Tag, Trash2, Play } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { formatDuration, formatSize } from "@renderer/features/library/format";
 import type { LibraryVideo } from "@renderer/features/library/types";
@@ -9,7 +9,7 @@ import { EditBadge } from "./edit-badge";
 import { cx } from "@renderer/ui/cx";
 import styles from "./video-card.module.css";
 
-const CARD_TAGS_SHOWN = 2;
+const CARD_TAGS_SHOWN = 3;
 
 interface VideoCardProps {
   video: LibraryVideo;
@@ -18,6 +18,10 @@ interface VideoCardProps {
   onDelete(): void;
   /** Opens the item in the Editor workspace; omitted when it cannot be edited. */
   onEdit?(): void;
+  /** Opens the tag side panel for this item; omitted when it cannot be tagged. */
+  onTags?(): void;
+  /** This item is the one in the tag side panel. */
+  selected?: boolean;
 }
 
 export function VideoCard({
@@ -26,9 +30,11 @@ export function VideoCard({
   onNavigate,
   onDelete,
   onEdit,
+  onTags,
+  selected = false,
 }: VideoCardProps): React.JSX.Element {
   const t = useTranslations("library");
-  // Up to two tags in the hover specs line, the rest as "+N" (recording-tags design).
+  // A few tags always visible under the title, the rest as "+N".
   const tags = video.tags ?? [];
   const cardTags = tags.slice(0, CARD_TAGS_SHOWN);
   const hiddenTags = tags.length - cardTags.length;
@@ -36,6 +42,7 @@ export function VideoCard({
   return (
     <div
       className={styles.card}
+      data-selected={selected}
       onClick={onNavigate}
       role="button"
       tabIndex={0}
@@ -83,11 +90,24 @@ export function VideoCard({
         <span className={styles.specs}>
           {formatSize(video.fileSizeBytes)}
           {video.kind !== "screenshot" && ` · ${formatDuration(video.durationSeconds)}`}
-          {cardTags.length > 0 && ` · ${cardTags.join(" · ")}`}
-          {hiddenTags > 0 && ` +${hiddenTags}`}
         </span>
+        {cardTags.length > 0 && (
+          <ul className={styles.tags} aria-label={t("tagsLabel")}>
+            {cardTags.map((tag) => (
+              <li key={tag} className={styles.tag}>
+                {tag}
+              </li>
+            ))}
+            {hiddenTags > 0 && <li className={styles.tagMore}>+{hiddenTags}</li>}
+          </ul>
+        )}
 
         <div className={styles.actions} onClick={(e) => e.stopPropagation()}>
+          {onTags && (
+            <button className={styles.action} onClick={onTags} title={t("tagsEdit")}>
+              <Tag size={14} strokeWidth={1.8} />
+            </button>
+          )}
           {onEdit && (
             <button className={styles.action} onClick={onEdit} title={t("edit")}>
               <PenLine size={14} strokeWidth={1.8} />

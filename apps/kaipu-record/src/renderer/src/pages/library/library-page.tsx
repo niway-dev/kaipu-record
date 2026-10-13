@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Library, LayoutGrid, LayoutList, AlertTriangle, RefreshCw, Search } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
@@ -10,6 +10,7 @@ import { VideoRow } from "@renderer/features/library/components/video-row";
 import { DeleteConfirmDialog } from "@renderer/features/library/components/delete-confirm-dialog";
 import { SortMenu } from "@renderer/features/library/components/sort-menu";
 import { FilterChip } from "@renderer/features/library/components/filter-chip";
+import { TagPanel } from "@renderer/features/library/components/tag-panel";
 import { useLocalLibrary } from "@renderer/features/library/hooks/use-local-library";
 import { useLibraryFilters } from "@renderer/features/library/hooks/use-library-filters";
 import { buildLineage, editBadge } from "@renderer/features/library/lineage";
@@ -34,7 +35,7 @@ export function LibraryPage(): React.JSX.Element {
   const t = useTranslations("library");
   const navigate = useNavigate();
   const { openItem } = useOpenInEditor();
-  const { videos, isLoading, hasError, refresh, remove } = useLocalLibrary();
+  const { videos, isLoading, hasError, refresh, remove, setTags } = useLocalLibrary();
   const canShowVaultBanner = hasError && videos.length > 0;
   // Built from the unfiltered `videos`, not `visibleItems`: an export filtered out of
   // the current view must still count toward its source's badge.
@@ -68,6 +69,17 @@ export function LibraryPage(): React.JSX.Element {
   const hiddenTagCount = tagCounts.length - shownTags.length;
 
   const [view, setView] = useState<"grid" | "list">("grid");
+
+  // The item in the tag side panel, by asset id so it survives a rescan. Looked up
+  // in `videos` (not `visibleItems`) so un-tagging it out of a tag filter keeps
+  // the panel open on it.
+  const [taggingId, setTaggingId] = useState<string | null>(null);
+  const tagging = taggingId ? (videos.find((v) => v.assetId === taggingId) ?? null) : null;
+  // Same vocabulary as the tag filter chips: already counted from `videos`.
+  const vocabulary = useMemo(() => tagCounts.map((entry) => entry.tag), [tagCounts]);
+  const closeTagPanel = useCallback(() => setTaggingId(null), []);
+  const toggleTagPanel = (assetId: string): void =>
+    setTaggingId((current) => (current === assetId ? null : assetId));
   const [pendingDelete, setPendingDelete] = useState<{ id: string; title: string } | null>(null);
 
   const confirmDelete = (): void => {
@@ -216,77 +228,97 @@ export function LibraryPage(): React.JSX.Element {
         </div>
       )}
 
-      {showFullPageError ? (
-        <div className={styles.empty}>
-          <AlertTriangle size={48} className={styles.emptyIcon} />
-          <h3 className={styles.emptyTitle}>{t("errorTitle")}</h3>
-          <p className={styles.emptySubtitle}>{t("errorSubtitle")}</p>
-          <Button variant="primary" onClick={() => void refresh()}>
-            <RefreshCw size={15} strokeWidth={1.8} />
-            {t("retry")}
-          </Button>
-        </div>
-      ) : visibleItems.length === 0 ? (
-        <div className={styles.empty}>
-          <Library size={48} className={styles.emptyIcon} />
-          {videos.length === 0 ? (
-            <>
-              <h3 className={styles.emptyTitle}>{isLoading ? t("loadingList") : t("empty")}</h3>
-              {!isLoading && (
+      <div className={styles.body} data-panel={tagging !== null}>
+        <div className={styles.collection}>
+          {showFullPageError ? (
+            <div className={styles.empty}>
+              <AlertTriangle size={48} className={styles.emptyIcon} />
+              <h3 className={styles.emptyTitle}>{t("errorTitle")}</h3>
+              <p className={styles.emptySubtitle}>{t("errorSubtitle")}</p>
+              <Button variant="primary" onClick={() => void refresh()}>
+                <RefreshCw size={15} strokeWidth={1.8} />
+                {t("retry")}
+              </Button>
+            </div>
+          ) : visibleItems.length === 0 ? (
+            <div className={styles.empty}>
+              <Library size={48} className={styles.emptyIcon} />
+              {videos.length === 0 ? (
                 <>
-                  <p className={styles.emptySubtitle}>{t("emptySubtitle")}</p>
-                  <Button variant="primary" onClick={() => navigate("/")}>
-                    {t("goRecord")}
+                  <h3 className={styles.emptyTitle}>{isLoading ? t("loadingList") : t("empty")}</h3>
+                  {!isLoading && (
+                    <>
+                      <p className={styles.emptySubtitle}>{t("emptySubtitle")}</p>
+                      <Button variant="primary" onClick={() => navigate("/")}>
+                        {t("goRecord")}
+                      </Button>
+                    </>
+                  )}
+                </>
+              ) : (
+                <>
+                  <h3 className={styles.emptyTitle}>{t("noMatch")}</h3>
+                  <p className={styles.emptySubtitle}>{t("noMatchSubtitle")}</p>
+                  <Button variant="ghost" onClick={clearFilters}>
+                    {t("clearFilters")}
                   </Button>
                 </>
               )}
-            </>
+            </div>
+          ) : view === "grid" ? (
+            <div className={styles.grid}>
+              {visibleItems.map((video) => (
+                <VideoCard
+                  key={video.assetId}
+                  video={video}
+                  badge={editBadge(video, lineage)}
+                  onNavigate={() => navigate(`/library/${video.assetId}`)}
+                  onEdit={canOpenInEditor(video) ? () => openItem(video) : undefined}
+                  onTags={video.id !== null ? () => toggleTagPanel(video.assetId) : undefined}
+                  selected={video.assetId === taggingId}
+                  onDelete={() => {
+                    const { id, title } = video;
+                    if (id !== null) setPendingDelete({ id, title });
+                  }}
+                />
+              ))}
+            </div>
           ) : (
-            <>
-              <h3 className={styles.emptyTitle}>{t("noMatch")}</h3>
-              <p className={styles.emptySubtitle}>{t("noMatchSubtitle")}</p>
-              <Button variant="ghost" onClick={clearFilters}>
-                {t("clearFilters")}
-              </Button>
-            </>
+            <div className={styles.scrollContainer}>
+              <div className={styles.listContainer}>
+                {visibleItems.map((video, i) => (
+                  <VideoRow
+                    key={video.assetId}
+                    video={video}
+                    isLast={i === visibleItems.length - 1}
+                    badge={editBadge(video, lineage)}
+                    onNavigate={() => navigate(`/library/${video.assetId}`)}
+                    onEdit={canOpenInEditor(video) ? () => openItem(video) : undefined}
+                    onTags={video.id !== null ? () => toggleTagPanel(video.assetId) : undefined}
+                    selected={video.assetId === taggingId}
+                    onDelete={() => {
+                      const { id, title } = video;
+                      if (id !== null) setPendingDelete({ id, title });
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
           )}
         </div>
-      ) : view === "grid" ? (
-        <div className={styles.grid}>
-          {visibleItems.map((video) => (
-            <VideoCard
-              key={video.assetId}
-              video={video}
-              badge={editBadge(video, lineage)}
-              onNavigate={() => navigate(`/library/${video.assetId}`)}
-              onEdit={canOpenInEditor(video) ? () => openItem(video) : undefined}
-              onDelete={() => {
-                const { id, title } = video;
-                if (id !== null) setPendingDelete({ id, title });
-              }}
-            />
-          ))}
-        </div>
-      ) : (
-        <div className={styles.scrollContainer}>
-          <div className={styles.listContainer}>
-            {visibleItems.map((video, i) => (
-              <VideoRow
-                key={video.assetId}
-                video={video}
-                isLast={i === visibleItems.length - 1}
-                badge={editBadge(video, lineage)}
-                onNavigate={() => navigate(`/library/${video.assetId}`)}
-                onEdit={canOpenInEditor(video) ? () => openItem(video) : undefined}
-                onDelete={() => {
-                  const { id, title } = video;
-                  if (id !== null) setPendingDelete({ id, title });
-                }}
-              />
-            ))}
-          </div>
-        </div>
-      )}
+
+        {tagging && (
+          <TagPanel
+            video={tagging}
+            vocabulary={vocabulary}
+            onChange={(next) => {
+              if (tagging.id !== null) void setTags(tagging.id, next);
+            }}
+            onOpenDetails={() => navigate(`/library/${tagging.assetId}`)}
+            onClose={closeTagPanel}
+          />
+        )}
+      </div>
 
       {pendingDelete && (
         <DeleteConfirmDialog
