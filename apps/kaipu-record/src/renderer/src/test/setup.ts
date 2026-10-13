@@ -168,6 +168,7 @@ window.electronAPI = {
   saveScreenshot: async () => {
     throw new Error("not implemented in test stub");
   },
+  exportScreenshotFile: async () => null,
   onCaptureScreenshotHotkey: () => () => {},
   saveVideoEditSession: async () => {},
   loadVideoEditSession: async () => null,

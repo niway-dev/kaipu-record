@@ -281,6 +281,16 @@ export interface KaipuElectronAPI {
     png: ArrayBuffer,
     meta: { title: string; overwriteId?: string },
   ): Promise<LocalRecording>;
+  /**
+   * Ask where to put an exported capture (a native save dialog seeded with
+   * `suggestedName`.`extension`) and write `bytes` there. Resolves the written
+   * path, or null when the user cancelled. Exports live outside the vault: they
+   * are files to hand to someone, not library items.
+   */
+  exportScreenshotFile(
+    bytes: ArrayBuffer,
+    meta: { suggestedName: string; extension: string },
+  ): Promise<{ path: string } | null>;
 
   // ── Analytics ─────────────────────────────────────────────────────────
   /** Forward a serialized exception (+ origin/context) to the main-process sink. */
