@@ -1,7 +1,7 @@
-import { useEffect, useId, useRef, useState } from "react";
-import { Check, Star, TriangleAlert } from "lucide-react";
+import { Fragment, useEffect, useId, useRef, useState } from "react";
+import { Check, Star, TriangleAlert, X } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
-import { ModalActions, ModalButton, ModalOverlay, ModalText, ModalTitle } from "@kaipu/ui";
+import { ModalOverlay, ModalText } from "@kaipu/ui";
 import { formatSize } from "@renderer/features/library/format";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import type { ReusableExports } from "../export/export-reuse";
@@ -17,14 +17,19 @@ import {
 } from "../export/gif-messages";
 import type { GifEstimateState } from "../export/use-gif-export";
 import {
-  EXPORT_PRESET_IDS,
   type ExportFraming,
   type ExportPresetId,
   type ExportSourceInfo,
   PRESETS,
+  type ResolvedExportTarget,
   resolveExportTarget,
 } from "../export/export-presets";
+import { addsBarsAt169, formatMB, sizeKindOf } from "../export/export-size";
+import { FramingPreview } from "./framing-preview";
+import { SizeMeter } from "./size-meter";
 import styles from "./export-sheet.module.css";
+
+export { formatMB };
 
 export type ExportFormat = "video" | "gif";
 
@@ -43,12 +48,6 @@ export interface VideoExportChoice {
 
 /** The row marked ⭐ Recommended; always first in the list. */
 const RECOMMENDED_PRESET: ExportPresetId = "balanced";
-
-/** Decimal megabytes, as the caps are counted (GitHub/Discord). */
-export function formatMB(bytes: number): string {
-  const mb = bytes / 1_000_000;
-  return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`;
-}
 
 /** Seconds as M:SS. */
 export function formatDuration(seconds: number): string {
@@ -69,15 +68,25 @@ export interface ExportSheetProps {
   presetSource: ExportSourceInfo;
   /**
    * The preselected row: Settings → Export quality (Balanced unless the user chose
-   * Maximum). Another row applies to this export only.
+   * Maximum), or the row a "Share a light copy" shortcut asks for. Another row applies to
+   * this export only.
    */
   defaultPreset?: ExportPresetId;
-  /** Heading; "Export" when omitted (Share passes its own). */
+  /** Heading; "Export" when omitted (Share passes "Share a copy"). */
   title?: string;
+  /** The recording's title, for the subtitle (title · duration · resolution). */
+  sourceTitle?: string;
+  /**
+   * The original file's size: drives the before/after meter and "N% lighter". Without it
+   * the meter is left out (the estimates still show on every row).
+   */
+  sourceSizeBytes?: number | null;
+  /** A frame of the recording, for the Vertical / Feeds framing preview. */
+  thumbnailUrl?: string | null;
   /**
    * Files that already are what a row would produce (same source, preset and content, see
-   * `findReusableExports`). Those rows say "Already exported" and open the file instead of
-   * encoding it again.
+   * `findReusableExports`). Those rows say "Already exported · Open" and open the file
+   * instead of encoding it again.
    */
   reusable?: ReusableExports;
   onOpenExisting?(recording: LibraryVideo): void;
@@ -90,6 +99,17 @@ export interface ExportSheetProps {
   gifEnabled?: boolean;
 }
 
+/**
+ * The list, grouped by what the user is about to do with the file rather than by format:
+ * nobody looks for "Small file", they look for where they will paste it.
+ */
+const GROUPS = [
+  { label: "presetGroupRecommended", rows: ["balanced"] },
+  { label: "presetGroupShare", rows: ["small-10", "small-25"] },
+  { label: "presetGroupPost", rows: ["youtube", "vertical", "square"] },
+  { label: "presetGroupKeep", rows: ["maximum"] },
+] as const satisfies ReadonlyArray<{ label: string; rows: readonly ExportPresetId[] }>;
+
 const PRESET_NAME = {
   balanced: "presetBalanced",
   youtube: "presetYoutube",
@@ -100,6 +120,7 @@ const PRESET_NAME = {
   maximum: "presetMaximum",
 } as const satisfies Record<ExportPresetId, string>;
 
+/** Where the file works, under the row's name. */
 const PRESET_HINT = {
   balanced: "presetBalancedHint",
   youtube: "presetYoutubeHint",
@@ -110,6 +131,63 @@ const PRESET_HINT = {
   maximum: "presetMaximumHint",
 } as const satisfies Record<ExportPresetId, string>;
 
+/** The one-line explanation the selected row opens with. */
+const PRESET_SAY = {
+  balanced: "presetBalancedSay",
+  youtube: "presetYoutubeSay",
+  vertical: "presetVerticalSay",
+  square: "presetSquareSay",
+  "small-10": "presetGithubSay",
+  "small-25": "presetChatSay",
+  maximum: "presetMaximumSay",
+} as const satisfies Record<ExportPresetId, string>;
+
+type FactKey =
+  | "factTextReadable"
+  | "factPlaysEverywhere"
+  | "factUnderLimit"
+  | "factUploadsFast"
+  | "factPlaysInline"
+  | "factBlackBars"
+  | "factNothingLost"
+  | "factHeavy";
+
+interface Fact {
+  key: FactKey;
+  /** Amber: a trade-off the user should see, not a benefit. */
+  warn?: boolean;
+}
+
+/**
+ * The ✓ chips under the selected row. Only what holds for THIS source: "Under the limit"
+ * only while the cap is reachable, the 16:9 bars only when the recording isn't 16:9.
+ */
+export function presetFacts(target: ResolvedExportTarget, source: ExportSourceInfo): Fact[] {
+  switch (target.presetId) {
+    case "balanced":
+      return [{ key: "factTextReadable" }, { key: "factPlaysEverywhere" }];
+    case "small-10":
+      return [
+        ...(target.achievable ? [{ key: "factUnderLimit" as const }] : []),
+        { key: "factTextReadable" },
+        { key: "factUploadsFast" },
+      ];
+    case "small-25":
+      return [
+        ...(target.achievable ? [{ key: "factUnderLimit" as const }] : []),
+        { key: "factPlaysInline" },
+      ];
+    case "youtube":
+      return addsBarsAt169(source.width, source.height)
+        ? [{ key: "factBlackBars", warn: true }]
+        : [];
+    case "maximum":
+      return [{ key: "factNothingLost" }, { key: "factHeavy", warn: true }];
+    default:
+      return [];
+  }
+}
+
 const round1 = (n: number): number => Math.round(n * 10) / 10;
 
 /** Which width options are usable: never wider than the source, but at least one. */
@@ -119,12 +197,14 @@ export function enabledGifWidths(sourceWidth: number): number[] {
 }
 
 /**
- * The editor's export sheet: a format row (Video (MP4) / GIF). For video (NIW2-218), one
- * list with the recommended Balanced row first and Maximum quality last, each row with its
- * output size and a size estimate. Row-specific options (Fit/Fill for Vertical and Square,
- * the warning when a size cap can't be met) appear only for the selected row, and Enter
- * exports the selected row. For GIF (NIW2-217), the range, width and fps controls with a
- * live size estimate.
+ * The export sheet, shared by the editor's Export ("Export") and the library's Share
+ * ("Share a copy"). For video (NIW2-218 export redesign): a before/after size meter for the
+ * selected row, then the rows grouped by intent — Recommended, Share in a tool, Post, Keep —
+ * each with where it works, its size in MB and its output dimensions. The selected row opens
+ * with a one-line explanation, ✓ facts, and for Vertical / Feeds a framing preview with
+ * Fill / Fit. Enter exports the selected row. Never "bitrate" or "fps": MB, where it works,
+ * whether text stays readable. For GIF (NIW2-217, on hold), the range, width and fps
+ * controls with a live size estimate.
  */
 export function ExportSheet({
   timelineDuration,
@@ -133,6 +213,9 @@ export function ExportSheet({
   presetSource,
   defaultPreset = RECOMMENDED_PRESET,
   title,
+  sourceTitle,
+  sourceSizeBytes,
+  thumbnailUrl,
   reusable = {},
   onOpenExisting,
   onGifSettingsChange,
@@ -160,13 +243,27 @@ export function ExportSheet({
   const targetOf = (p: ExportPresetId) =>
     resolveExportTarget(p, presetSource, timelineDuration, { framing: framingOf(p) });
   const selected = targetOf(presetId);
-  const estimateLine = (target: ReturnType<typeof targetOf>): string => {
-    if (target.estimateBytes === null) return t("estimateMaximum");
-    if (target.capBytes !== null) {
-      return t("estimateSmall", { cap: formatMB(target.capBytes) });
-    }
-    return t("estimateUpTo", { size: formatMB(target.estimateBytes) });
+
+  // "~9.2 MB", "up to ~78 MB", or "Full size" for Maximum (no estimate behind it).
+  const sizeText = (target: ResolvedExportTarget): string => {
+    const kind = sizeKindOf(target.presetId);
+    if (kind === "full" || target.estimateBytes === null) return t("sizeFull");
+    const size = formatMB(target.estimateBytes);
+    return kind === "up-to" ? t("sizeUpTo", { size }) : t("sizeAbout", { size });
   };
+  const meterLabel = (target: ResolvedExportTarget): string => {
+    const kind = sizeKindOf(target.presetId);
+    if (kind === "full" || target.estimateBytes === null) return t("meterFull");
+    const size = formatMB(target.estimateBytes);
+    return kind === "up-to" ? t("meterUpTo", { size }) : t("sizeAbout", { size });
+  };
+  // Amber when the copy would be no lighter than the original (or Maximum, which keeps it all).
+  const isHeavy = (target: ResolvedExportTarget): boolean =>
+    target.presetId === "maximum" ||
+    (sourceSizeBytes != null &&
+      target.estimateBytes !== null &&
+      target.estimateBytes >= sourceSizeBytes);
+
   // Reuse only applies when the host can open the file.
   const existingOf = (p: ExportPresetId): LibraryVideo | undefined =>
     onOpenExisting ? reusable[p] : undefined;
@@ -194,6 +291,13 @@ export function ExportSheet({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [format]);
 
+  // The list scrolls; keep the selected row (and its opened details) in view — also when
+  // the sheet opens on a row below the fold, e.g. GitHub from "Share a light copy".
+  const rowRefs = useRef(new Map<ExportPresetId, HTMLDivElement>());
+  useEffect(() => {
+    rowRefs.current.get(presetId)?.scrollIntoView?.({ block: "nearest" });
+  }, [presetId]);
+
   const problem = gifRangeProblem(start, end, {
     min: GIF_MIN_DURATION_S,
     max: GIF_MAX_DURATION_S,
@@ -213,141 +317,225 @@ export function ExportSheet({
 
   const overWarn = estimate.status === "ready" && (estimate.bytes ?? 0) > GIF_WARN_BYTES;
 
+  const renderRow = (p: ExportPresetId): React.JSX.Element => {
+    const target = targetOf(p);
+    const active = presetId === p;
+    const existing = existingOf(p);
+    const facts = presetFacts(target, presetSource);
+    const framing = framingOf(p);
+    const sizeId = `${id}-${p}-size`;
+    return (
+      // The whole card selects its row on click (the radio inside is the keyboard and
+      // screen-reader control; this is only a bigger mouse target).
+      <div
+        key={p}
+        ref={(el) => {
+          if (el) rowRefs.current.set(p, el);
+          else rowRefs.current.delete(p);
+        }}
+        className={styles.row}
+        data-active={active}
+        onClick={() => setPresetId(p)}
+      >
+        <div className={styles.rowHead}>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={active}
+            aria-describedby={sizeId}
+            className={styles.rowRadio}
+            onClick={() => setPresetId(p)}
+          >
+            <span className={styles.radioDot} aria-hidden />
+            <span className={styles.rowText}>
+              <span className={styles.rowName}>
+                {t(PRESET_NAME[p])}
+                {p === RECOMMENDED_PRESET && (
+                  <span className={styles.recommended}>
+                    <Star size={11} strokeWidth={1} fill="currentColor" aria-hidden />
+                    {t("presetRecommended")}
+                  </span>
+                )}
+              </span>
+              <span className={styles.rowWhere}>{t(PRESET_HINT[p])}</span>
+            </span>
+          </button>
+          {existing && (
+            <button
+              type="button"
+              className={styles.exportedBadge}
+              aria-label={t("openExportedLabel", { name: t(PRESET_NAME[p]) })}
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenExisting?.(existing);
+              }}
+            >
+              <Check size={11} strokeWidth={2.4} aria-hidden />
+              {t("alreadyExportedOpen")}
+            </button>
+          )}
+          <span className={styles.rowSize} id={sizeId}>
+            <span className={styles.rowMb} data-heavy={isHeavy(target)}>
+              {sizeText(target)}
+            </span>
+            <span className={styles.rowDims}>
+              {t("presetDimensions", { width: target.width, height: target.height })}
+            </span>
+          </span>
+        </div>
+
+        {active && (
+          <div className={styles.rowDetail}>
+            <p className={styles.say}>{t(PRESET_SAY[p])}</p>
+
+            {(p === "vertical" || p === "square") && framing && (
+              <div className={styles.framing}>
+                <FramingPreview
+                  canvas={PRESETS[p].canvas!}
+                  source={{ width: presetSource.width, height: presetSource.height }}
+                  framing={framing}
+                  thumbnailUrl={thumbnailUrl ?? null}
+                />
+                <div className={styles.framingControls}>
+                  <div
+                    className={styles.segmented}
+                    role="radiogroup"
+                    aria-label={t("framingLabel")}
+                  >
+                    {(["fill", "fit"] as const).map((f) => (
+                      <button
+                        key={f}
+                        type="button"
+                        role="radio"
+                        aria-checked={framing === f}
+                        className={styles.segment}
+                        data-active={framing === f}
+                        onClick={() => setFramings((prev) => ({ ...prev, [p]: f }))}
+                      >
+                        {f === "fit" ? t("framingFit") : t("framingFill")}
+                      </button>
+                    ))}
+                  </div>
+                  <span className={styles.hint}>
+                    {framing === "fit" ? t("framingFitHint") : t("framingFillHint")}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {facts.length > 0 && (
+              <ul className={styles.facts}>
+                {facts.map((f) => (
+                  <li key={f.key} className={styles.fact} data-warn={f.warn === true}>
+                    <Check size={11} strokeWidth={2.4} aria-hidden />
+                    {t(f.key, {
+                      cap: target.capBytes !== null ? formatMB(target.capBytes) : "",
+                    })}
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {!existing && !target.achievable && (
+              <p className={styles.warning} role="alert">
+                <TriangleAlert size={14} strokeWidth={1.8} />
+                {t("smallNotAchievable", {
+                  size: formatMB(target.estimateBytes ?? 0),
+                  duration: formatDuration(target.maxDurationSec ?? 0),
+                })}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const primaryLabel = selectedExisting
+    ? t("openExported")
+    : !selected.achievable
+      ? t("exportAnywayAction")
+      : sizeKindOf(presetId) === "full"
+        ? t("exportFullAction")
+        : t("exportSizeAction", { size: sizeText(selected) });
+
   return (
-    <ModalOverlay onCancel={onCancel} labelledBy={`${id}-title`}>
-      <ModalTitle id={`${id}-title`}>{title ?? t("exportSheetTitle")}</ModalTitle>
+    <ModalOverlay onCancel={onCancel} labelledBy={`${id}-title`} size="wide">
+      <header className={styles.header}>
+        <div className={styles.headerText}>
+          <h3 id={`${id}-title`} className={styles.title}>
+            {title ?? t("exportSheetTitle")}
+          </h3>
+          {sourceTitle !== undefined && (
+            <p className={styles.subtitle}>
+              {t("exportSheetSubtitle", {
+                title: sourceTitle,
+                duration: formatDuration(timelineDuration),
+                width: presetSource.width,
+                height: presetSource.height,
+              })}
+            </p>
+          )}
+        </div>
+        <button
+          type="button"
+          className={styles.close}
+          aria-label={t("closeSheet")}
+          onClick={onCancel}
+        >
+          <X size={14} strokeWidth={1.8} />
+        </button>
+      </header>
 
       {gifEnabled && (
-        <div className={styles.field}>
-          <span className={styles.label} id={`${id}-format`}>
-            {t("exportFormatLabel")}
-          </span>
-          <div className={styles.segmented} role="radiogroup" aria-labelledby={`${id}-format`}>
-            {(["video", "gif"] as const).map((f) => (
-              <button
-                key={f}
-                type="button"
-                role="radio"
-                aria-checked={format === f}
-                className={styles.segment}
-                data-active={format === f}
-                onClick={() => setFormat(f)}
-              >
-                {f === "video" ? t("formatVideo") : t("formatGif")}
-              </button>
-            ))}
+        <div className={styles.body}>
+          <div className={styles.field}>
+            <span className={styles.label} id={`${id}-format`}>
+              {t("exportFormatLabel")}
+            </span>
+            <div className={styles.segmented} role="radiogroup" aria-labelledby={`${id}-format`}>
+              {(["video", "gif"] as const).map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  role="radio"
+                  aria-checked={format === f}
+                  className={styles.segment}
+                  data-active={format === f}
+                  onClick={() => setFormat(f)}
+                >
+                  {f === "video" ? t("formatVideo") : t("formatGif")}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       )}
 
       {format === "video" && (
         <>
-          <div className={styles.field}>
-            <span className={styles.label} id={`${id}-preset`}>
-              {t("presetLabel")}
-            </span>
-            <div className={styles.presetList} role="radiogroup" aria-labelledby={`${id}-preset`}>
-              {EXPORT_PRESET_IDS.map((p) => {
-                const target = targetOf(p);
-                const active = presetId === p;
-                const existing = existingOf(p);
-                return (
-                  <div key={p} className={styles.presetItem}>
-                    <div className={styles.presetLine}>
-                      <button
-                        type="button"
-                        role="radio"
-                        aria-checked={active}
-                        className={styles.presetRow}
-                        data-active={active}
-                        onClick={() => setPresetId(p)}
-                      >
-                        <span className={styles.presetText}>
-                          <span className={styles.presetName}>
-                            {t(PRESET_NAME[p])}
-                            {p === RECOMMENDED_PRESET && (
-                              <span className={styles.recommended}>
-                                <Star size={11} strokeWidth={2} aria-hidden />
-                                {t("presetRecommended")}
-                              </span>
-                            )}
-                          </span>
-                          <span className={styles.presetMeta}>{t(PRESET_HINT[p])}</span>
-                        </span>
-                        <span className={styles.presetFacts}>
-                          <span className={styles.presetMeta}>
-                            {t("presetDimensions", { width: target.width, height: target.height })}
-                          </span>
-                          {existing ? (
-                            <span className={styles.exported}>
-                              <Check size={11} strokeWidth={2.2} aria-hidden />
-                              {t("alreadyExported")}
-                            </span>
-                          ) : (
-                            <span className={styles.presetMeta}>{estimateLine(target)}</span>
-                          )}
-                        </span>
-                      </button>
-                      {existing && (
-                        <button
-                          type="button"
-                          className={styles.openExisting}
-                          aria-label={t("openExportedLabel", { name: t(PRESET_NAME[p]) })}
-                          onClick={() => onOpenExisting?.(existing)}
-                        >
-                          {t("openExported")}
-                        </button>
-                      )}
-                    </div>
-
-                    {active && (p === "vertical" || p === "square") && (
-                      <div className={styles.rowOptions}>
-                        <div
-                          className={styles.segmented}
-                          role="radiogroup"
-                          aria-label={t("framingLabel")}
-                        >
-                          {(["fit", "fill"] as const).map((f) => (
-                            <button
-                              key={f}
-                              type="button"
-                              role="radio"
-                              aria-checked={framings[p] === f}
-                              className={styles.segment}
-                              data-active={framings[p] === f}
-                              onClick={() => setFramings((prev) => ({ ...prev, [p]: f }))}
-                            >
-                              {f === "fit" ? t("framingFit") : t("framingFill")}
-                            </button>
-                          ))}
-                        </div>
-                        <span className={styles.hint}>
-                          {framings[p] === "fit" ? t("framingFitHint") : t("framingFillHint")}
-                        </span>
-                      </div>
-                    )}
-
-                    {active && !existing && !target.achievable && (
-                      <div className={styles.rowOptions}>
-                        <p className={styles.warning} role="alert">
-                          <TriangleAlert size={14} strokeWidth={1.8} />
-                          {t("smallNotAchievable", {
-                            size: formatMB(target.estimateBytes ?? 0),
-                            duration: formatDuration(target.maxDurationSec ?? 0),
-                          })}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+          {sourceSizeBytes != null && sourceSizeBytes > 0 && (
+            <div className={styles.meter}>
+              <SizeMeter
+                originalBytes={sourceSizeBytes}
+                resultBytes={selected.presetId === "maximum" ? null : selected.estimateBytes}
+                label={meterLabel(selected)}
+              />
             </div>
+          )}
+          <div className={styles.list} role="radiogroup" aria-label={t("presetLabel")}>
+            {GROUPS.map((group) => (
+              <Fragment key={group.label}>
+                <div className={styles.groupLabel}>{t(group.label)}</div>
+                {group.rows.map((p) => renderRow(p))}
+              </Fragment>
+            ))}
           </div>
         </>
       )}
 
       {format === "gif" && (
-        <>
+        <div className={styles.body}>
           <div className={styles.field}>
             <span className={styles.label}>{t("gifRangeLabel")}</span>
             <div className={styles.rangeRow}>
@@ -479,31 +667,32 @@ export function ExportSheet({
               {t("gifSizeWarning")}
             </p>
           )}
-        </>
+        </div>
       )}
 
-      <ModalActions>
-        <ModalButton variant="ghost" onClick={onCancel}>
+      <footer className={styles.footer}>
+        <span className={styles.note}>{format === "video" ? t("exportSheetNote") : null}</span>
+        <button type="button" className={styles.cancel} onClick={onCancel}>
           {t("cancel")}
-        </ModalButton>
+        </button>
         {format === "video" ? (
-          <ModalButton variant="primary" onClick={exportSelected}>
-            {selectedExisting
-              ? t("openExported")
-              : selected.achievable
-                ? t("exportVideoAction")
-                : t("exportAnywayAction")}
-          </ModalButton>
+          <button type="button" className={styles.primary} onClick={exportSelected}>
+            {primaryLabel}
+            <kbd className={styles.enterKey} aria-hidden>
+              ↵
+            </kbd>
+          </button>
         ) : (
-          <ModalButton
-            variant="primary"
+          <button
+            type="button"
+            className={styles.primary}
             disabled={!valid}
             onClick={() => valid && onExportGif({ range: { start, end }, width, fps })}
           >
             {t("exportGifAction")}
-          </ModalButton>
+          </button>
         )}
-      </ModalActions>
+      </footer>
     </ModalOverlay>
   );
 }

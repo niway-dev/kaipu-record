@@ -1,6 +1,16 @@
 import { useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Check, Copy, FileX2, FolderOpen, Pencil, Scissors, Trash2 } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  Copy,
+  FileX2,
+  FolderOpen,
+  Leaf,
+  Pencil,
+  Scissors,
+  Trash2,
+} from "lucide-react";
 import { canOpenInEditor, useOpenInEditor } from "@renderer/features/editor/open-in-editor";
 import { useTransientValue } from "@renderer/ui/use-transient-value";
 import { useLocalLibrary } from "@renderer/features/library/hooks/use-local-library";
@@ -12,7 +22,13 @@ import { DeleteConfirmDialog } from "@renderer/features/library/components/delet
 import { RecordingPlayer } from "@renderer/features/library/components/recording-player";
 import { ScreenshotViewer } from "@renderer/features/library/components/screenshot-viewer";
 import { GifViewer } from "@renderer/features/library/components/gif-viewer";
-import { ShareRecording } from "@renderer/features/library/components/share-recording";
+import {
+  ShareButton,
+  useShareRecording,
+} from "@renderer/features/library/components/share-recording";
+import { resolveExportTarget } from "@renderer/features/video-editor/export/export-presets";
+import { formatMB, isHeavyToSend } from "@renderer/features/video-editor/export/export-size";
+import type { SourceProbe } from "@renderer/features/video-editor/export/probe-source";
 import { RecordingTitle } from "@renderer/features/library/components/recording-title";
 import { TagEditor } from "@renderer/features/library/components/tag-editor";
 import { resolveTags, useTags } from "@renderer/features/library/hooks/use-tags";
@@ -83,6 +99,19 @@ export function LibraryDetailPage(): React.JSX.Element {
   // and buildLineage works fine on an empty/loading `videos` list.
   const { openItem } = useOpenInEditor();
   const lineage = useMemo(() => buildLineage(videos), [videos]);
+
+  // NIW2-218: Share — the core action — opens from the button and from the "heavy to send"
+  // banner. Reading the file up front only when the banner needs its estimate.
+  const shareable =
+    video && video.id !== null && video.kind === "recording" ? { ...video, id: video.id } : null;
+  const heavy = shareable !== null && isHeavyToSend(shareable.fileSizeBytes);
+  const share = useShareRecording({
+    video: shareable,
+    exports: video ? (lineage.exportsOf.get(video.assetId) ?? []) : [],
+    onSaved: () => void refresh(),
+    onOpenExisting: (existing) => navigate(`/library/${existing.assetId}`),
+    prefetch: heavy,
+  });
 
   const back = (): void => {
     navigate("/library");
@@ -228,7 +257,9 @@ export function LibraryDetailPage(): React.JSX.Element {
               </>
             )}
             <span className={styles.dot}>·</span>
-            <span className={styles.metaItem}>{formatSize(video.fileSizeBytes)}</span>
+            <span className={styles.metaItem} data-heavy={heavy}>
+              {formatSize(video.fileSizeBytes)}
+            </span>
             {gifInfo && (
               <>
                 <span className={styles.dot}>·</span>
@@ -284,13 +315,14 @@ export function LibraryDetailPage(): React.JSX.Element {
         <div className={styles.actions}>
           {/* NIW2-218: Share — the core action. This page is also where a fresh recording
               lands (`fromRecording`), so it is the post-recording entry point too. */}
-          {!isScreenshot && !isGif && localId && (
-            <ShareRecording
-              video={{ ...video, id: localId }}
-              exports={exports}
-              onSaved={() => void refresh()}
-              onOpenExisting={(existing) => navigate(`/library/${existing.assetId}`)}
-            />
+          {shareable && (
+            <ShareButton
+              onClick={() => share.open()}
+              disabled={share.probing}
+              title={t("shareHint")}
+            >
+              {t("share")}
+            </ShareButton>
           )}
           {isScreenshot && localId && (
             <>
@@ -340,6 +372,14 @@ export function LibraryDetailPage(): React.JSX.Element {
         </div>
       </div>
 
+      {heavy && (
+        <HeavyToSendBanner
+          sizeBytes={video.fileSizeBytes}
+          githubEstimateBytes={githubEstimate(share.probe)}
+          onMakeLightCopy={() => share.open("small-10")}
+        />
+      )}
+
       {exports.length > 0 && (
         <section className={styles.exports} aria-labelledby="exports-heading">
           <h2 id="exports-heading" className={styles.exportsHeading}>
@@ -365,6 +405,8 @@ export function LibraryDetailPage(): React.JSX.Element {
         </section>
       )}
 
+      {share.ui}
+
       {confirmingDelete && (
         <DeleteConfirmDialog
           title={video.title}
@@ -372,6 +414,47 @@ export function LibraryDetailPage(): React.JSX.Element {
           onConfirm={doDelete}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * What the GitHub · Jira · Linear row would weigh, from the same math as the sheet; null
+ * until the file is read, or when the cap can't be met (then "about N MB for GitHub" would
+ * be false).
+ */
+function githubEstimate(probe: SourceProbe | null): number | null {
+  if (!probe) return null;
+  const target = resolveExportTarget("small-10", probe, probe.durationSec);
+  return target.achievable ? target.estimateBytes : null;
+}
+
+/**
+ * NIW2-218: a recording over 25 MB is heavy to send anywhere. Say so where the user looks
+ * at it, with what Share would make of it, and open the sheet on the GitHub row.
+ */
+function HeavyToSendBanner({
+  sizeBytes,
+  githubEstimateBytes,
+  onMakeLightCopy,
+}: {
+  sizeBytes: number;
+  githubEstimateBytes: number | null;
+  onMakeLightCopy(): void;
+}): React.JSX.Element {
+  const t = useTranslations("library");
+  return (
+    <div className={styles.heavyBanner}>
+      <Leaf size={17} strokeWidth={1.8} className={styles.heavyIcon} aria-hidden />
+      <p className={styles.heavyText}>
+        <strong>{t("heavyBannerTitle", { size: formatMB(sizeBytes) })}</strong>{" "}
+        {githubEstimateBytes !== null
+          ? t("heavyBannerBody", { estimate: formatMB(githubEstimateBytes) })
+          : t("heavyBannerBodyNoEstimate")}
+      </p>
+      <button type="button" className={styles.heavyAction} onClick={onMakeLightCopy}>
+        {t("heavyBannerAction")}
+      </button>
     </div>
   );
 }

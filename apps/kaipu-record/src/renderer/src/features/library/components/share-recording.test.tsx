@@ -76,11 +76,11 @@ describe("ShareRecording", () => {
     renderShare();
     fireEvent.click(screen.getByRole("button", { name: "Share" }));
 
-    expect(await screen.findByRole("heading", { name: "Prepare a file to share" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Share a copy" })).toBeVisible();
     expect(probe).toHaveBeenCalledWith("rec-1");
-    const balanced = screen.getByRole("radio", { name: /Balanced 1080p/ });
+    const balanced = screen.getByRole("radio", { name: /^Balanced/ });
     expect(balanced).toHaveAttribute("aria-checked", "true");
-    expect(balanced.textContent).toContain("1662×1080");
+    expect(screen.getByText("Demo · 0:12 · 1662×1080")).toBeInTheDocument();
     // MP4 only: no GIF format switch here.
     expect(screen.queryByRole("radio", { name: "GIF" })).toBeNull();
   });
@@ -88,8 +88,8 @@ describe("ShareRecording", () => {
   it("exports through the same pipeline with a trivial plan: one clip, nothing else", async () => {
     renderShare();
     fireEvent.click(screen.getByRole("button", { name: "Share" }));
-    fireEvent.click(await screen.findByRole("radio", { name: /YouTube 16:9/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Export video" }));
+    fireEvent.click(await screen.findByRole("radio", { name: /^YouTube/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Export / }));
 
     expect(exportController.start).toHaveBeenCalledOnce();
     const [args] = exportController.start.mock.calls[0] as unknown as [
@@ -109,7 +109,7 @@ describe("ShareRecording", () => {
       expect.objectContaining({ kind: "clip", sourceStart: 0, sourceEnd: 12.4 }),
     ]);
     expect(args.scene.overlays).toEqual([]);
-    expect(screen.queryByRole("heading", { name: "Prepare a file to share" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Share a copy" })).toBeNull();
   });
 
   it("offers an existing whole-recording export instead of encoding it again", async () => {
@@ -123,8 +123,8 @@ describe("ShareRecording", () => {
     };
     const props = renderShare({ exports: [existing] });
     fireEvent.click(screen.getByRole("button", { name: "Share" }));
-    const balanced = await screen.findByRole("radio", { name: /Balanced 1080p/ });
-    expect(balanced.textContent).toContain("Already exported");
+    await screen.findByRole("radio", { name: /^Balanced/ });
+    expect(screen.getByRole("button", { name: "Open the existing Balanced file" })).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "Open" }));
     expect(props.onOpenExisting).toHaveBeenCalledWith(existing);
@@ -141,8 +141,8 @@ describe("ShareRecording", () => {
     };
     renderShare({ exports: [edited] });
     fireEvent.click(screen.getByRole("button", { name: "Share" }));
-    const balanced = await screen.findByRole("radio", { name: /Balanced 1080p/ });
-    expect(balanced.textContent).not.toContain("Already exported");
+    await screen.findByRole("radio", { name: /^Balanced/ });
+    expect(screen.queryByText("Already exported · Open")).toBeNull();
   });
 
   it("says so when the file can't be read, and opens nothing", async () => {

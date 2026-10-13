@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Share2 } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { Button } from "@kaipu/ui";
@@ -11,6 +11,7 @@ import {
   type VideoExportChoice,
 } from "@renderer/features/video-editor/components/export-sheet";
 import { ExportDialog } from "@renderer/features/video-editor/components/export-dialog";
+import type { ExportPresetId } from "@renderer/features/video-editor/export/export-presets";
 import {
   WHOLE_RECORDING_FINGERPRINT,
   findReusableExports,
@@ -35,46 +36,87 @@ export interface ShareRecordingProps {
   onOpenExisting(existing: LibraryVideo): void;
 }
 
+export interface ShareRecordingController {
+  /**
+   * Opens the sheet: on `preset` when given (a "light copy" shortcut asks for GitHub), else
+   * on Settings → Export quality.
+   */
+  open(preset?: ExportPresetId): void;
+  /** True while the file is being read for the first open. */
+  probing: boolean;
+  /** The file's size, frame rate and duration once read; null before (or when unreadable). */
+  probe: SourceProbe | null;
+  /** The sheet and the progress dialog; render it once, anywhere on the page. */
+  ui: React.ReactNode;
+}
+
 /**
- * Share (NIW2-218), "Prepare an optimized file to share": the editor's export sheet for the
- * whole recording, without opening the editor. It runs the SAME export worker with a trivial
- * plan — one clip over the whole file, no overlays, no slides, no zoom — so there is no second
- * pipeline, and the result is a new library item derived from this one (ADR 0003: the
- * recording itself is never touched). Share by link (cloud) joins this button later.
+ * Share (NIW2-218), "Share a copy": the editor's export sheet for the whole recording,
+ * without opening the editor. It runs the SAME export worker with a trivial plan — one clip
+ * over the whole file, no overlays, no slides, no zoom — so there is no second pipeline, and
+ * the result is a new library item derived from this one (ADR 0003: the recording itself is
+ * never touched). Share by link (cloud) joins this later.
+ *
+ * A hook rather than a button so a page can open it from more than one place (the Share
+ * button, the "heavy to send" banner). `prefetch` reads the file up front, for a page that
+ * shows an estimate before anyone clicks.
  */
-export function ShareRecording({
+export function useShareRecording({
   video,
   exports,
   onSaved,
   onOpenExisting,
-}: ShareRecordingProps): React.JSX.Element {
+  prefetch = false,
+}: Omit<ShareRecordingProps, "video"> & {
+  /** null while there is nothing to share (still loading, a screenshot, no local copy). */
+  video: (LibraryVideo & { id: string }) | null;
+  prefetch?: boolean;
+}): ShareRecordingController {
   const t = useTranslations("library");
   const tEditor = useTranslations("videoEditor");
   const appSettings = useAppSettings();
   const videoExport = useVideoExport();
   const [probing, setProbing] = useState(false);
   const [probe, setProbe] = useState<SourceProbe | null>(null);
-  const [sheetOpen, setSheetOpen] = useState(false);
+  // The open sheet and the row it starts on; null while closed.
+  const [sheet, setSheet] = useState<{ preset: ExportPresetId | undefined } | null>(null);
   // The preset Retry reuses (FR12).
   const lastChoiceRef = useRef<VideoExportChoice>({ presetId: "balanced", framing: null });
 
+  const usable = (p: SourceProbe | null): p is SourceProbe =>
+    p !== null && p.width > 0 && p.height > 0 && p.durationSec > 0;
+
+  const videoId = video?.id ?? null;
+  // A probe belongs to one file: forget it when the page moves to another recording.
+  useEffect(() => {
+    setProbe(null);
+    if (!prefetch || !videoId) return;
+    let alive = true;
+    void probeSource(videoId).then((result) => {
+      if (alive && usable(result)) setProbe((current) => current ?? result);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [prefetch, videoId]);
+
   // The sheet's estimates need the real size, rate and duration; there is no <video> to ask
   // here, so read them from the file (container metadata + a few packets).
-  const open = async (): Promise<void> => {
-    if (probing) return;
+  const open = async (preset?: ExportPresetId): Promise<void> => {
+    if (probing || !video) return;
     setProbing(true);
     const result = probe ?? (await probeSource(video.id));
     setProbing(false);
-    if (!result || result.width === 0 || result.height === 0 || result.durationSec <= 0) {
+    if (!usable(result)) {
       showToast({ message: t("shareReadError") });
       return;
     }
     setProbe(result);
-    setSheetOpen(true);
+    setSheet({ preset });
   };
 
   const start = (choice: VideoExportChoice = lastChoiceRef.current): void => {
-    if (!probe) return;
+    if (!probe || !video) return;
     lastChoiceRef.current = choice;
     void videoExport.start({
       scene: initialScene(probe.durationSec),
@@ -101,22 +143,14 @@ export function ShareRecording({
     });
   };
 
-  return (
+  const ui = (
     <>
-      <Button
-        variant="primary"
-        size="sm"
-        onClick={() => void open()}
-        disabled={probing}
-        title={t("shareHint")}
-      >
-        <Share2 size={15} strokeWidth={1.8} />
-        {t("share")}
-      </Button>
-
-      {sheetOpen && probe && (
+      {sheet && probe && video && (
         <ExportSheet
           title={t("shareTitle")}
+          sourceTitle={video.title}
+          sourceSizeBytes={video.fileSizeBytes}
+          thumbnailUrl={video.thumbnailUrl ?? null}
           timelineDuration={probe.durationSec}
           sourceWidth={probe.width}
           estimate={IDLE_GIF_ESTIMATE}
@@ -128,19 +162,19 @@ export function ShareRecording({
             hasAudio: probe.hasAudio,
             sampleRate: probe.sampleRate,
           }}
-          defaultPreset={appSettings.settings?.exportQuality}
+          defaultPreset={sheet.preset ?? appSettings.settings?.exportQuality}
           reusable={findReusableExports(exports, WHOLE_RECORDING_FINGERPRINT)}
           onOpenExisting={(existing) => {
-            setSheetOpen(false);
+            setSheet(null);
             onOpenExisting(existing);
           }}
           onGifSettingsChange={() => {}}
           onExportVideo={(choice) => {
-            setSheetOpen(false);
+            setSheet(null);
             start(choice);
           }}
           onExportGif={() => {}}
-          onCancel={() => setSheetOpen(false)}
+          onCancel={() => setSheet(null)}
         />
       )}
 
@@ -155,5 +189,41 @@ export function ShareRecording({
         />
       )}
     </>
+  );
+
+  return { open: (preset) => void open(preset), probing, probe, ui };
+}
+
+/** The Share button with its sheet, for a page that opens Share from one place only. */
+export function ShareRecording(props: ShareRecordingProps): React.JSX.Element {
+  const t = useTranslations("library");
+  const share = useShareRecording(props);
+  return (
+    <>
+      <ShareButton onClick={() => share.open()} disabled={share.probing} title={t("shareHint")}>
+        {t("share")}
+      </ShareButton>
+      {share.ui}
+    </>
+  );
+}
+
+/** The primary Share button (icon + label), shared by the page and `ShareRecording`. */
+export function ShareButton({
+  onClick,
+  disabled,
+  title,
+  children,
+}: {
+  onClick(): void;
+  disabled?: boolean;
+  title?: string;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <Button variant="primary" size="sm" onClick={onClick} disabled={disabled} title={title}>
+      <Share2 size={15} strokeWidth={1.8} />
+      {children}
+    </Button>
   );
 }

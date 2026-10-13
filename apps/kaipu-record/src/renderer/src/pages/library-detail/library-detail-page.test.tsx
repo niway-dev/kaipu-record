@@ -2,8 +2,22 @@ import { act, render, screen, waitFor, fireEvent } from "@testing-library/react"
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LibraryItem } from "@shared/types/library-item";
+import { DEFAULT_SETTINGS } from "@shared/types";
 import { dismissToast, getToasts } from "@renderer/ui/toast-store";
 import { LibraryDetailPage } from "./library-detail-page";
+
+// Share reads the file through mediabunny; here only the facts it returns matter.
+const probe = vi.hoisted(() =>
+  vi.fn(async () => ({
+    width: 2560,
+    height: 1440,
+    durationSec: 78,
+    fps: 30,
+    hasAudio: true,
+    sampleRate: 48000,
+  })),
+);
+vi.mock("@renderer/features/video-editor/export/probe-source", () => ({ probeSource: probe }));
 
 /** A cloud-only screenshot: no local file at all. Exercises the actions that
  *  require a local copy (Reveal, Edit, Copy, Delete) and confirms they are all
@@ -475,5 +489,61 @@ describe("LibraryDetailPage — lineage and edit badge", () => {
     renderDetail("exp");
     await waitForLoaded();
     expect(screen.queryByText(/edits are not shown here/i)).toBeNull();
+  });
+});
+
+describe("LibraryDetailPage — heavy to send (NIW2-218)", () => {
+  const withSize = (sizeBytes: number): LibraryItem => ({
+    ...exportedOnlyItem,
+    local: { ...exportedOnlyItem.local!, sizeBytes },
+    cloud: null,
+    availability: "local",
+  });
+
+  beforeEach(() => {
+    window.electronAPI.onLibraryChanged = () => () => {};
+    window.electronAPI.getSettings = vi.fn().mockResolvedValue(DEFAULT_SETTINGS);
+    probe.mockClear();
+  });
+
+  it("over 25 MB: amber size, and a banner with the GitHub estimate that opens the sheet on that row", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [withSize(119_000_000)],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+    renderDetail("asset-b");
+    await waitForLoaded();
+
+    expect(screen.getByText("113 MB")).toHaveAttribute("data-heavy", "true");
+    expect(screen.getByText("119 MB is heavy to send.")).toBeInTheDocument();
+    // The estimate is the GitHub row's: the cap's 92 % budget.
+    expect(await screen.findByText(/about 9\.2 MB for GitHub or Jira/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Make a light copy →" }));
+    expect(await screen.findByRole("heading", { name: "Share a copy" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /^GitHub/ })).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("up to 25 MB: no banner, no amber, and the file isn't read until Share", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [withSize(20_000_000)],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+    renderDetail("asset-b");
+    await waitForLoaded();
+
+    expect(screen.queryByText(/heavy to send/)).toBeNull();
+    expect(screen.getByText("19 MB")).toHaveAttribute("data-heavy", "false");
+    expect(probe).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Share" }));
+    expect(await screen.findByRole("heading", { name: "Share a copy" })).toBeInTheDocument();
+    // Share itself opens on Settings → Export quality.
+    expect(screen.getByRole("radio", { name: /^Balanced/ })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
   });
 });

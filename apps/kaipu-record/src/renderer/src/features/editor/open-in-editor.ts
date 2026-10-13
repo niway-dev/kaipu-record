@@ -15,7 +15,8 @@ import type { VideoEditorSource } from "@renderer/pages/video-editor/video-edito
 export type EditableItem = Pick<
   LibraryVideo,
   "id" | "assetId" | "kind" | "title" | "durationSeconds" | "thumbnailUrl"
->;
+> &
+  Partial<Pick<LibraryVideo, "fileSizeBytes">>;
 
 /**
  * Whether an item can open in an editor: it needs a local copy, and a video
@@ -41,6 +42,8 @@ export function videoSourceFor(item: EditableItem): VideoEditorSource | null {
     assetId: item.assetId,
     title: item.title,
     durationSeconds: item.durationSeconds,
+    ...(item.fileSizeBytes ? { sizeBytes: item.fileSizeBytes } : {}),
+    ...(item.thumbnailUrl ? { thumbnailUrl: item.thumbnailUrl } : {}),
   };
 }
 
