@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { TriangleAlert } from "lucide-react";
+import { Star, TriangleAlert } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { ModalActions, ModalButton, ModalOverlay, ModalText, ModalTitle } from "@kaipu/ui";
 import { formatSize } from "@renderer/features/library/format";
@@ -15,6 +15,7 @@ import {
 } from "../export/gif-messages";
 import type { GifEstimateState } from "../export/use-gif-export";
 import {
+  EXPORT_PRESET_IDS,
   type ExportFraming,
   type ExportPresetId,
   type ExportSourceInfo,
@@ -38,12 +39,8 @@ export interface VideoExportChoice {
   framing: ExportFraming | null;
 }
 
-/** One card per destination; Small file covers both caps (10 / 25 MB). */
-type PresetCard = "original" | "youtube" | "vertical" | "square" | "small";
-const PRESET_CARDS: readonly PresetCard[] = ["original", "youtube", "vertical", "square", "small"];
-
-const cardOf = (id: ExportPresetId): PresetCard =>
-  id === "small-10" || id === "small-25" ? "small" : id;
+/** The row marked ⭐ Recommended; always first in the list. */
+const RECOMMENDED_PRESET: ExportPresetId = "balanced";
 
 /** Decimal megabytes, as the caps are counted (GitHub/Discord). */
 export function formatMB(bytes: number): string {
@@ -68,9 +65,11 @@ export interface ExportSheetProps {
    * export carries audio). Pure math — the sheet reads no media.
    */
   presetSource: ExportSourceInfo;
-  /** Last-used preset and framing (settings), preselected. */
-  initialPreset?: ExportPresetId;
-  initialFraming?: ExportFraming | null;
+  /**
+   * The preselected row: Settings → Export quality (Balanced unless the user chose
+   * Maximum). Another row applies to this export only.
+   */
+  defaultPreset?: ExportPresetId;
   /** Called (on every change) with valid GIF settings while GIF is selected — drives the estimate. */
   onGifSettingsChange(settings: GifSettings | null): void;
   onExportVideo(choice: VideoExportChoice): void;
@@ -81,20 +80,24 @@ export interface ExportSheetProps {
 }
 
 const PRESET_NAME = {
-  original: "presetOriginal",
+  balanced: "presetBalanced",
   youtube: "presetYoutube",
   vertical: "presetVertical",
   square: "presetSquare",
-  small: "presetSmall",
-} as const satisfies Record<PresetCard, string>;
+  "small-10": "presetGithub",
+  "small-25": "presetChat",
+  maximum: "presetMaximum",
+} as const satisfies Record<ExportPresetId, string>;
 
 const PRESET_HINT = {
-  original: "presetOriginalHint",
+  balanced: "presetBalancedHint",
   youtube: "presetYoutubeHint",
   vertical: "presetVerticalHint",
   square: "presetSquareHint",
-  small: "presetSmallHint",
-} as const satisfies Record<PresetCard, string>;
+  "small-10": "presetGithubHint",
+  "small-25": "presetChatHint",
+  maximum: "presetMaximumHint",
+} as const satisfies Record<ExportPresetId, string>;
 
 const round1 = (n: number): number => Math.round(n * 10) / 10;
 
@@ -106,17 +109,18 @@ export function enabledGifWidths(sourceWidth: number): number[] {
 
 /**
  * The editor's export sheet: a format row (Video (MP4) / GIF). For video (NIW2-218), one
- * card per destination preset with its output size and a size estimate, Fit/Fill for
- * Vertical and Square, the 10/25 MB cap for Small file and a warning when the cap can't be
- * met. For GIF (NIW2-217), the range, width and fps controls with a live size estimate.
+ * list with the recommended Balanced row first and Maximum quality last, each row with its
+ * output size and a size estimate. Row-specific options (Fit/Fill for Vertical and Square,
+ * the warning when a size cap can't be met) appear only for the selected row, and Enter
+ * exports the selected row. For GIF (NIW2-217), the range, width and fps controls with a
+ * live size estimate.
  */
 export function ExportSheet({
   timelineDuration,
   sourceWidth,
   estimate,
   presetSource,
-  initialPreset = "original",
-  initialFraming = null,
+  defaultPreset = RECOMMENDED_PRESET,
   onGifSettingsChange,
   onExportVideo,
   onExportGif,
@@ -132,40 +136,42 @@ export function ExportSheet({
   const [end, setEnd] = useState(total);
   const [width, setWidth] = useState<number>(widths.includes(640) ? 640 : widths.at(-1)!);
   const [fps, setFps] = useState<GifFps>(15);
-  const [card, setCard] = useState<PresetCard>(cardOf(initialPreset));
-  const [smallPreset, setSmallPreset] = useState<"small-10" | "small-25">(
-    initialPreset === "small-25" ? "small-25" : "small-10",
-  );
-  // The remembered framing applies to the preset it was chosen on; the other keeps its default.
-  const [framings, setFramings] = useState<Record<"vertical" | "square", ExportFraming>>(() => ({
-    vertical:
-      initialPreset === "vertical" && initialFraming
-        ? initialFraming
-        : PRESETS.vertical.defaultFraming!,
-    square:
-      initialPreset === "square" && initialFraming
-        ? initialFraming
-        : PRESETS.square.defaultFraming!,
-  }));
-  const presetIdOf = (c: PresetCard): ExportPresetId => (c === "small" ? smallPreset : c);
-  const framingOf = (c: PresetCard): ExportFraming | null =>
-    c === "vertical" || c === "square" ? framings[c] : null;
-  const targetOf = (c: PresetCard) =>
-    resolveExportTarget(presetIdOf(c), presetSource, timelineDuration, { framing: framingOf(c) });
-  const selected = targetOf(card);
+  const [presetId, setPresetId] = useState<ExportPresetId>(defaultPreset);
+  const [framings, setFramings] = useState<Record<"vertical" | "square", ExportFraming>>({
+    vertical: PRESETS.vertical.defaultFraming!,
+    square: PRESETS.square.defaultFraming!,
+  });
+  const framingOf = (p: ExportPresetId): ExportFraming | null =>
+    p === "vertical" || p === "square" ? framings[p] : null;
+  const targetOf = (p: ExportPresetId) =>
+    resolveExportTarget(p, presetSource, timelineDuration, { framing: framingOf(p) });
+  const selected = targetOf(presetId);
   const estimateLine = (target: ReturnType<typeof targetOf>): string => {
-    if (target.presetId === "original" || target.estimateBytes === null) {
-      return t("estimateOriginal");
-    }
+    if (target.estimateBytes === null) return t("estimateMaximum");
     if (target.capBytes !== null) {
-      return t("estimateSmall", {
-        cap: formatMB(target.capBytes),
-        width: target.width,
-        height: target.height,
-      });
+      return t("estimateSmall", { cap: formatMB(target.capBytes) });
     }
     return t("estimateUpTo", { size: formatMB(target.estimateBytes) });
   };
+  const exportSelected = (): void => onExportVideo({ presetId, framing: framingOf(presetId) });
+
+  // Enter exports the selected row. The modal focuses its overlay on mount, so this is a
+  // document listener; Enter on a button or field keeps its own meaning (a row button
+  // selects that row).
+  const exportSelectedRef = useRef(exportSelected);
+  exportSelectedRef.current = exportSelected;
+  useEffect(() => {
+    if (format !== "video") return;
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (e.key !== "Enter" || e.defaultPrevented) return;
+      const el = e.target as HTMLElement | null;
+      if (el?.closest("button, input, select, textarea")) return;
+      e.preventDefault();
+      exportSelectedRef.current();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [format]);
 
   const problem = gifRangeProblem(start, end, {
     min: GIF_MIN_DURATION_S,
@@ -219,89 +225,83 @@ export function ExportSheet({
             <span className={styles.label} id={`${id}-preset`}>
               {t("presetLabel")}
             </span>
-            <div className={styles.presetGrid} role="radiogroup" aria-labelledby={`${id}-preset`}>
-              {PRESET_CARDS.map((c) => {
-                const target = targetOf(c);
+            <div className={styles.presetList} role="radiogroup" aria-labelledby={`${id}-preset`}>
+              {EXPORT_PRESET_IDS.map((p) => {
+                const target = targetOf(p);
+                const active = presetId === p;
                 return (
-                  <button
-                    key={c}
-                    type="button"
-                    role="radio"
-                    aria-checked={card === c}
-                    className={styles.presetCard}
-                    data-active={card === c}
-                    onClick={() => setCard(c)}
-                  >
-                    <span className={styles.presetName}>{t(PRESET_NAME[c])}</span>
-                    <span className={styles.presetMeta}>{t(PRESET_HINT[c])}</span>
-                    <span className={styles.presetMeta}>
-                      {t("presetDimensions", { width: target.width, height: target.height })}
-                    </span>
-                    <span className={styles.presetMeta}>{estimateLine(target)}</span>
-                  </button>
+                  <div key={p} className={styles.presetItem}>
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      className={styles.presetRow}
+                      data-active={active}
+                      onClick={() => setPresetId(p)}
+                    >
+                      <span className={styles.presetText}>
+                        <span className={styles.presetName}>
+                          {t(PRESET_NAME[p])}
+                          {p === RECOMMENDED_PRESET && (
+                            <span className={styles.recommended}>
+                              <Star size={11} strokeWidth={2} aria-hidden />
+                              {t("presetRecommended")}
+                            </span>
+                          )}
+                        </span>
+                        <span className={styles.presetMeta}>{t(PRESET_HINT[p])}</span>
+                      </span>
+                      <span className={styles.presetFacts}>
+                        <span className={styles.presetMeta}>
+                          {t("presetDimensions", { width: target.width, height: target.height })}
+                        </span>
+                        <span className={styles.presetMeta}>{estimateLine(target)}</span>
+                      </span>
+                    </button>
+
+                    {active && (p === "vertical" || p === "square") && (
+                      <div className={styles.rowOptions}>
+                        <div
+                          className={styles.segmented}
+                          role="radiogroup"
+                          aria-label={t("framingLabel")}
+                        >
+                          {(["fit", "fill"] as const).map((f) => (
+                            <button
+                              key={f}
+                              type="button"
+                              role="radio"
+                              aria-checked={framings[p] === f}
+                              className={styles.segment}
+                              data-active={framings[p] === f}
+                              onClick={() => setFramings((prev) => ({ ...prev, [p]: f }))}
+                            >
+                              {f === "fit" ? t("framingFit") : t("framingFill")}
+                            </button>
+                          ))}
+                        </div>
+                        <span className={styles.hint}>
+                          {framings[p] === "fit" ? t("framingFitHint") : t("framingFillHint")}
+                        </span>
+                      </div>
+                    )}
+
+                    {active && !target.achievable && (
+                      <div className={styles.rowOptions}>
+                        <p className={styles.warning} role="alert">
+                          <TriangleAlert size={14} strokeWidth={1.8} />
+                          {t("smallNotAchievable", {
+                            size: formatMB(target.estimateBytes ?? 0),
+                            duration: formatDuration(target.maxDurationSec ?? 0),
+                          })}
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>
           </div>
-
-          {(card === "vertical" || card === "square") && (
-            <div className={styles.field}>
-              <span className={styles.label} id={`${id}-framing`}>
-                {t("framingLabel")}
-              </span>
-              <div className={styles.segmented} role="radiogroup" aria-labelledby={`${id}-framing`}>
-                {(["fit", "fill"] as const).map((f) => (
-                  <button
-                    key={f}
-                    type="button"
-                    role="radio"
-                    aria-checked={framings[card] === f}
-                    className={styles.segment}
-                    data-active={framings[card] === f}
-                    onClick={() => setFramings((prev) => ({ ...prev, [card]: f }))}
-                  >
-                    {f === "fit" ? t("framingFit") : t("framingFill")}
-                  </button>
-                ))}
-              </div>
-              <span className={styles.hint}>
-                {framings[card] === "fit" ? t("framingFitHint") : t("framingFillHint")}
-              </span>
-            </div>
-          )}
-
-          {card === "small" && (
-            <div className={styles.field}>
-              <span className={styles.label} id={`${id}-cap`}>
-                {t("presetSmallCapLabel")}
-              </span>
-              <div className={styles.segmented} role="radiogroup" aria-labelledby={`${id}-cap`}>
-                {(["small-10", "small-25"] as const).map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    role="radio"
-                    aria-checked={smallPreset === p}
-                    className={styles.segment}
-                    data-active={smallPreset === p}
-                    onClick={() => setSmallPreset(p)}
-                  >
-                    {t("presetSmallCapOption", { mb: p === "small-10" ? 10 : 25 })}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {!selected.achievable && (
-            <p className={styles.warning} role="alert">
-              <TriangleAlert size={14} strokeWidth={1.8} />
-              {t("smallNotAchievable", {
-                size: formatMB(selected.estimateBytes ?? 0),
-                duration: formatDuration(selected.maxDurationSec ?? 0),
-              })}
-            </p>
-          )}
         </>
       )}
 
@@ -446,10 +446,7 @@ export function ExportSheet({
           {t("cancel")}
         </ModalButton>
         {format === "video" ? (
-          <ModalButton
-            variant="primary"
-            onClick={() => onExportVideo({ presetId: presetIdOf(card), framing: framingOf(card) })}
-          >
+          <ModalButton variant="primary" onClick={exportSelected}>
             {selected.achievable ? t("exportVideoAction") : t("exportAnywayAction")}
           </ModalButton>
         ) : (

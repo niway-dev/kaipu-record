@@ -10,7 +10,7 @@ import type { TagColor } from "@kaipu/domain/constants";
 
 import { DEFAULT_QUALITY, type RecordingQuality } from "../recording-quality";
 import type { Locale } from "@kaipu/i18n";
-import type { ExportFraming, ExportPresetId } from "./export-preset";
+import type { ExportPresetId, ExportQuality } from "./export-preset";
 
 /**
  * "system" (follow the OS appearance) is a deliberate non-goal for now — the
@@ -203,10 +203,11 @@ export interface AppSettings {
   deviceId: string;
   /** Upload preference for this device. See {@link UploadMode}. */
   uploadMode: UploadMode;
-  /** NIW2-218: the export preset preselected in the editor's export sheet (last used). */
-  lastExportPreset: ExportPresetId;
-  /** NIW2-218: last Fit/Fill chosen for Vertical/Square; null = the preset's default. */
-  lastExportFraming: ExportFraming | null;
+  /**
+   * NIW2-218: the row the export sheet preselects (Settings → Export quality). Picking
+   * another row in the sheet applies to that export only; nothing is remembered.
+   */
+  exportQuality: ExportQuality;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -226,8 +227,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   shortcuts: DEFAULT_SHORTCUTS,
   deviceId: "",
   uploadMode: "local-only",
-  lastExportPreset: "original",
-  lastExportFraming: null,
+  // Literal on purpose (preload bundle); equals DEFAULT_EXPORT_QUALITY in ./export-preset.
+  exportQuality: "balanced",
 };
 
 /**

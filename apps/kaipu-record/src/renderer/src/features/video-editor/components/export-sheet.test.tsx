@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ExportSheet, enabledGifWidths } from "./export-sheet";
 
@@ -29,10 +29,10 @@ describe("ExportSheet", () => {
     expect(props.onExportVideo).toHaveBeenCalled();
   });
 
-  it("keeps today's MP4 export one click away (Original preselected on first use)", () => {
+  it("exports the recommended Balanced row in one click by default", () => {
     const props = renderSheet();
     fireEvent.click(screen.getByRole("button", { name: "Export video" }));
-    expect(props.onExportVideo).toHaveBeenCalledWith({ presetId: "original", framing: null });
+    expect(props.onExportVideo).toHaveBeenCalledWith({ presetId: "balanced", framing: null });
     expect(props.onGifSettingsChange).toHaveBeenLastCalledWith(null);
   });
 
@@ -94,50 +94,80 @@ describe("enabledGifWidths", () => {
 });
 
 describe("presets (NIW2-218)", () => {
-  const card = (name: RegExp) => screen.getByRole("radio", { name });
+  const row = (name: RegExp) => screen.getByRole("radio", { name });
 
-  it("shows one card per destination with its size", () => {
-    renderSheet();
-    expect(card(/^Original/).getAttribute("aria-checked")).toBe("true");
-    expect(card(/YouTube 16:9/).textContent).toContain("1920×1080");
-    expect(card(/Vertical 9:16/).textContent).toContain("1080×1920");
-    expect(card(/Square 1:1/).textContent).toContain("1080×1080");
-    expect(card(/Small file/).textContent).toContain("GitHub · Discord · chat");
+  it("lists every row, recommended Balanced first and Maximum last, each with size and estimate", () => {
+    renderSheet({ presetSource: { width: 1662, height: 1080, fps: 30, hasAudio: true } });
+    const names = within(screen.getByRole("radiogroup", { name: "Destination" }))
+      .getAllByRole("radio")
+      .map((r) => r.textContent ?? "");
+    expect(names[0]).toMatch(/^Balanced 1080p/);
+    expect(names.at(-1)).toMatch(/^Maximum quality/);
+    expect(row(/Balanced 1080p/).getAttribute("aria-checked")).toBe("true");
+    expect(row(/Balanced 1080p/).textContent).toContain("Recommended");
+    expect(row(/Balanced 1080p/).textContent).toContain("1662×1080");
+    expect(row(/YouTube 16:9/).textContent).toContain("1920×1080");
+    expect(row(/Vertical 9:16/).textContent).toContain("1080×1920");
+    expect(row(/Square 1:1/).textContent).toContain("1080×1080");
+    expect(row(/^GitHub/).textContent).toContain("≤ 10 MB");
+    expect(row(/Chat \/ Discord/).textContent).toContain("≤ 25 MB");
+    expect(row(/Maximum quality/).textContent).toContain("1662×1080");
   });
 
-  it("preselects the last-used preset and framing", () => {
-    const props = renderSheet({ initialPreset: "square", initialFraming: "fill" });
-    expect(card(/Square 1:1/).getAttribute("aria-checked")).toBe("true");
+  it("preselects the Settings default (Maximum) and exports it", () => {
+    const props = renderSheet({ defaultPreset: "maximum" });
+    expect(row(/Maximum quality/).getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Export video" }));
+    expect(props.onExportVideo).toHaveBeenCalledWith({ presetId: "maximum", framing: null });
+  });
+
+  it("Enter exports the selected row; Enter on a row only selects it", () => {
+    const props = renderSheet();
+    fireEvent.keyDown(screen.getByRole("alertdialog"), { key: "Enter" });
+    expect(props.onExportVideo).toHaveBeenCalledWith({ presetId: "balanced", framing: null });
+
+    fireEvent.click(row(/YouTube 16:9/));
+    fireEvent.keyDown(row(/YouTube 16:9/), { key: "Enter" });
+    expect(props.onExportVideo).toHaveBeenCalledOnce();
+    fireEvent.keyDown(screen.getByRole("alertdialog"), { key: "Enter" });
+    expect(props.onExportVideo).toHaveBeenLastCalledWith({ presetId: "youtube", framing: null });
+  });
+
+  it("offers Fit/Fill only under the selected Vertical or Square row, with their defaults", () => {
+    renderSheet();
+    expect(screen.queryByRole("radio", { name: "Fit" })).toBeNull();
+    fireEvent.click(row(/YouTube 16:9/));
+    expect(screen.queryByRole("radio", { name: "Fit" })).toBeNull();
+    fireEvent.click(row(/Vertical 9:16/));
     expect(screen.getByRole("radio", { name: "Fill" }).getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(row(/Square 1:1/));
+    expect(screen.getByRole("radio", { name: "Fit" }).getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(screen.getByRole("radio", { name: "Fill" }));
+    expect(screen.getAllByRole("radio", { name: "Fill" })).toHaveLength(1);
+  });
+
+  it("passes the chosen framing with the export", () => {
+    const props = renderSheet();
+    fireEvent.click(row(/Square 1:1/));
+    fireEvent.click(screen.getByRole("radio", { name: "Fill" }));
     fireEvent.click(screen.getByRole("button", { name: "Export video" }));
     expect(props.onExportVideo).toHaveBeenCalledWith({ presetId: "square", framing: "fill" });
   });
 
-  it("offers Fit/Fill only on Vertical and Square, with their defaults", () => {
-    renderSheet();
-    expect(screen.queryByRole("radio", { name: "Fit" })).toBeNull();
-    fireEvent.click(card(/YouTube 16:9/));
-    expect(screen.queryByRole("radio", { name: "Fit" })).toBeNull();
-    fireEvent.click(card(/Vertical 9:16/));
-    expect(screen.getByRole("radio", { name: "Fill" }).getAttribute("aria-checked")).toBe("true");
-    fireEvent.click(card(/Square 1:1/));
-    expect(screen.getByRole("radio", { name: "Fit" }).getAttribute("aria-checked")).toBe("true");
-  });
-
-  it("updates the estimate instantly from pure math", () => {
+  it("estimates every row from pure math", () => {
     renderSheet({ timelineDuration: 60 });
-    // (8 Mbps + 128 kbps) × 60 s / 8 ≈ 61 MB, plus the moov reservation.
-    expect(card(/YouTube 16:9/).textContent).toMatch(/up to ~61 MB/);
-    expect(card(/^Original/).textContent).toContain("Same quality as the source");
-    fireEvent.click(card(/Small file/));
-    expect(card(/Small file/).textContent).toContain("≤ 10 MB · 1280×720");
-    fireEvent.click(screen.getByRole("radio", { name: "25 MB" }));
-    expect(card(/Small file/).textContent).toMatch(/≤ 25 MB/);
+    // (3 Mbps + 128 kbps) × 60 s / 8 ≈ 23 MB, plus the moov reservation.
+    expect(row(/Balanced 1080p/).textContent).toMatch(/up to ~24 MB/);
+    // (8 Mbps + 128 kbps) × 60 s / 8 ≈ 61 MB.
+    expect(row(/YouTube 16:9/).textContent).toMatch(/up to ~61 MB/);
+    expect(row(/Maximum quality/).textContent).toContain("Same quality as the source");
+    expect(row(/^GitHub/).textContent).toContain("1280×720");
   });
 
-  it("warns when the cap can't be met and still allows exporting", () => {
+  it("warns under the selected capped row when the cap can't be met, and still allows exporting", () => {
     const props = renderSheet({ timelineDuration: 900 });
-    fireEvent.click(card(/Small file/));
+    expect(screen.queryByRole("alert")).toBeNull();
+    fireEvent.click(row(/^GitHub/));
     expect(screen.getByRole("alert").textContent).toMatch(/Fits up to ~\d+:\d\d/);
     fireEvent.click(screen.getByRole("button", { name: "Export anyway (over limit)" }));
     expect(props.onExportVideo).toHaveBeenCalledWith({ presetId: "small-10", framing: null });

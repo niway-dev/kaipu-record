@@ -1,7 +1,7 @@
 /**
- * Export presets per destination (NIW2-218): every number behind "YouTube 16:9",
- * "Vertical 9:16", "Square 1:1" and "Small file" lives in this one table, so updating a
- * platform limit is a one-line change.
+ * Export presets per destination (NIW2-218): every number behind "Balanced 1080p",
+ * "YouTube 16:9", "Vertical 9:16", "Square 1:1", the size-capped GitHub / Chat rows and
+ * "Maximum quality" lives in this one table, so updating a platform limit is a one-line change.
  *
  * WORKER-BUNDLE INVARIANT: pure and DOM-free. The export worker imports it too.
  *
@@ -19,6 +19,7 @@ export {
   EXPORT_PRESET_IDS,
   isExportFraming,
   isExportPresetId,
+  normalizeExportPresetId,
   type ExportFraming,
   type ExportPresetId,
 } from "@shared/types/export-preset";
@@ -41,6 +42,19 @@ export const SIZE_BUDGET_RATIO = 0.92;
 const BITRATE_1080_LOW_FPS = 8_000_000;
 const BITRATE_1080_HIGH_FPS = 12_000_000;
 const PIXELS_1080 = 1920 * 1080;
+
+/**
+ * Balanced 1080p, the recommended default (NIW2-218 update 2026-10-10): ~3 Mbps video +
+ * 128 kbps audio (~23 MB/min), at most 30 fps, short side capped at 1080 and never upscaled.
+ *
+ * PENDING, not measured yet: the quality probe on a real Kaipu export with zoom pans (small
+ * text while panning) at ~3 Mbps and lower, and a check via `onEncoderConfig` that
+ * VideoToolbox keeps `bitrateMode: "variable"` with `prefer-hardware`. Adjust these three
+ * numbers if the probe shows softening.
+ */
+export const BALANCED_VIDEO_BITRATE = 3_000_000;
+export const BALANCED_MAX_SHORT_SIDE = 1080;
+export const BALANCED_MAX_FPS = 30;
 
 /** AAC for the fixed presets: 128 kbps, source channels (stereo for every recording today). */
 export const FIXED_AUDIO_BITRATE = 128_000;
@@ -75,7 +89,7 @@ interface FixedCanvas {
 
 export interface PresetDefinition {
   id: ExportPresetId;
-  /** null = the source's own size (Original) or the ladder (Small file). */
+  /** null = the source's own size (Balanced, Maximum) or the ladder (Small file). */
   canvas: FixedCanvas | null;
   /** Framings the user may choose; empty = no choice. */
   framings: readonly ExportFraming[];
@@ -87,8 +101,8 @@ export interface PresetDefinition {
 }
 
 export const PRESETS: Record<ExportPresetId, PresetDefinition> = {
-  original: {
-    id: "original",
+  balanced: {
+    id: "balanced",
     canvas: null,
     framings: [],
     defaultFraming: null,
@@ -135,6 +149,14 @@ export const PRESETS: Record<ExportPresetId, PresetDefinition> = {
     padding: "black",
     capBytes: 25 * MB,
   },
+  maximum: {
+    id: "maximum",
+    canvas: null,
+    framings: [],
+    defaultFraming: null,
+    padding: "black",
+    capBytes: null,
+  },
 };
 
 export interface ExportSourceInfo {
@@ -152,10 +174,10 @@ export interface ResolvedExportTarget {
   presetId: ExportPresetId;
   width: number;
   height: number;
-  /** "identity": the output IS the composed source frame (Original, Small file). */
+  /** "identity": the output IS the composed source frame, maybe scaled (Balanced, Maximum, Small file). */
   framing: ExportFraming | "identity";
   padding: PaddingFill;
-  /** bits/s, or "high" = mediabunny QUALITY_HIGH (Original keeps today's behaviour). */
+  /** bits/s, or "high" = mediabunny QUALITY_HIGH (Maximum keeps the pre-preset export). */
   videoBitrate: number | "high";
   audioBitrate: number | "high";
   /** Downmix to this many channels; null keeps the source layout. */
@@ -166,7 +188,7 @@ export interface ResolvedExportTarget {
   fastStart: "reserve" | false;
   /** `maximumPacketCount` per track for the reserve. */
   packetCounts: { video: number; audio: number };
-  /** Upper-bound size estimate in bytes; null when unknown (Original: QUALITY_HIGH). */
+  /** Upper-bound size estimate in bytes; null when unknown (Maximum: QUALITY_HIGH). */
   estimateBytes: number | null;
   capBytes: number | null;
   /** false only for a Small-file cap that can't be met even at the lowest rung. */
@@ -252,7 +274,11 @@ export function resolveExportTarget(
   const srcW = even(source.width);
   const srcH = even(source.height);
 
-  if (presetId === "original") {
+  if (presetId === "balanced") {
+    return resolveBalanced(source, srcW, srcH, d, sampleRate, slideFrames);
+  }
+
+  if (presetId === "maximum") {
     const packetCounts = packetCountsFor({
       durationSec: d,
       fps: source.fps,
@@ -321,6 +347,53 @@ export function resolveExportTarget(
   }
 
   return resolveSmallFile(preset, source, srcW, srcH, d, sampleRate, slideFrames);
+}
+
+/** Balanced: the source aspect, short side ≤ 1080 (never upscaled), ≤ 30 fps, ~3 Mbps. */
+function resolveBalanced(
+  source: ExportSourceInfo,
+  srcW: number,
+  srcH: number,
+  d: number,
+  sampleRate: number,
+  slideFrames: number,
+): ResolvedExportTarget {
+  const srcShort = Math.min(srcW, srcH);
+  const shortSide = Math.min(srcShort, BALANCED_MAX_SHORT_SIDE);
+  const size =
+    srcShort > BALANCED_MAX_SHORT_SIDE
+      ? sizeForShortSide(srcW, srcH, BALANCED_MAX_SHORT_SIDE)
+      : { width: srcW, height: srcH };
+  // A source below 1080p gets proportionally fewer bits for its fewer pixels.
+  const videoBitrate = Math.round(
+    BALANCED_VIDEO_BITRATE * Math.min(1, (shortSide / BALANCED_MAX_SHORT_SIDE) ** 2),
+  );
+  const audioBitrate = source.hasAudio ? FIXED_AUDIO_BITRATE : 0;
+  const packetCounts = packetCountsFor({
+    durationSec: d,
+    fps: source.fps,
+    maxFps: BALANCED_MAX_FPS,
+    slideFrames,
+    hasAudio: source.hasAudio,
+    sampleRate,
+  });
+  return {
+    presetId: "balanced",
+    width: size.width,
+    height: size.height,
+    framing: "identity",
+    padding: "black",
+    videoBitrate,
+    audioBitrate: FIXED_AUDIO_BITRATE,
+    audioChannels: null,
+    maxFps: BALANCED_MAX_FPS,
+    fastStart: "reserve",
+    packetCounts,
+    estimateBytes: Math.ceil(((videoBitrate + audioBitrate) * d) / 8 + reserveBytes(packetCounts)),
+    capBytes: null,
+    achievable: true,
+    maxDurationSec: null,
+  };
 }
 
 function resolveSmallFile(

@@ -69,8 +69,7 @@ const STUB_SETTINGS = {
   shortcuts: DEFAULT_SHORTCUTS,
   deviceId: "",
   uploadMode: "local-only",
-  lastExportPreset: "original",
-  lastExportFraming: null,
+  exportQuality: "balanced",
 } as const;
 
 // Vitest does not expose `afterEach` as a global (globals: false), so

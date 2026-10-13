@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  BALANCED_MAX_FPS,
+  BALANCED_VIDEO_BITRATE,
   EXPORT_PRESET_IDS,
+  FIXED_AUDIO_BITRATE,
   type ExportSourceInfo,
   MB,
   PACKET_MARGIN,
@@ -10,6 +13,7 @@ import {
   fixedVideoBitrate,
   isExportFraming,
   isExportPresetId,
+  normalizeExportPresetId,
   packetCountsFor,
   reserveBytes,
   resolveExportTarget,
@@ -44,6 +48,19 @@ describe("ids and guards", () => {
     expect(isExportFraming("fill")).toBe(true);
     expect(isExportFraming("stretch")).toBe(false);
   });
+
+  it("puts the recommended Balanced first and Maximum last (the sheet's order)", () => {
+    expect(EXPORT_PRESET_IDS[0]).toBe("balanced");
+    expect(EXPORT_PRESET_IDS.at(-1)).toBe("maximum");
+  });
+
+  it('reads the legacy "original" (older sidecars) as Maximum', () => {
+    expect(isExportPresetId("original")).toBe(false);
+    expect(normalizeExportPresetId("original")).toBe("maximum");
+    expect(normalizeExportPresetId("square")).toBe("square");
+    expect(normalizeExportPresetId("tiktok")).toBeNull();
+    expect(normalizeExportPresetId(undefined)).toBeNull();
+  });
 });
 
 describe("even", () => {
@@ -57,8 +74,8 @@ describe("even", () => {
 
 describe("resolveExportTarget — dimensions per preset × source aspect", () => {
   for (const [name, source] of Object.entries(SOURCES)) {
-    it(`${name}: Original keeps the native size with QUALITY_HIGH`, () => {
-      const t = resolveExportTarget("original", source, 60);
+    it(`${name}: Maximum keeps the native size with QUALITY_HIGH`, () => {
+      const t = resolveExportTarget("maximum", source, 60);
       expect([t.width, t.height]).toEqual([source.width, source.height]);
       expect(t.videoBitrate).toBe("high");
       expect(t.audioBitrate).toBe("high");
@@ -109,9 +126,49 @@ describe("framing", () => {
     );
   });
 
-  it("Original and Small file are identity (no framing)", () => {
-    expect(resolveExportTarget("original", SOURCES["16:9"], 10).framing).toBe("identity");
+  it("Balanced, Maximum and Small file are identity (no framing)", () => {
+    expect(resolveExportTarget("balanced", SOURCES["16:9"], 10).framing).toBe("identity");
+    expect(resolveExportTarget("maximum", SOURCES["16:9"], 10).framing).toBe("identity");
     expect(resolveExportTarget("small-10", SOURCES["16:9"], 10).framing).toBe("identity");
+  });
+});
+
+describe("Balanced 1080p (recommended default)", () => {
+  it("keeps a 1080p-or-smaller source at its own size (never upscales)", () => {
+    expect(pick(resolveExportTarget("balanced", SOURCES.macbook, 60))).toEqual([1662, 1080]);
+    expect(pick(resolveExportTarget("balanced", SOURCES["16:9"], 60))).toEqual([1920, 1080]);
+    expect(pick(resolveExportTarget("balanced", SOURCES.small720, 60))).toEqual([1280, 720]);
+  });
+
+  it("caps a bigger source at 1080 on its short side, at the source aspect", () => {
+    expect(pick(resolveExportTarget("balanced", src(3840, 2160), 60))).toEqual([1920, 1080]);
+    expect(pick(resolveExportTarget("balanced", SOURCES.ultrawide, 60))).toEqual([3840, 1080]);
+    expect(pick(resolveExportTarget("balanced", src(2160, 3840), 60))).toEqual([1080, 1920]);
+  });
+
+  it("targets ~3 Mbps + 128 kbps at ≤ 30 fps (~23 MB a minute)", () => {
+    const t = resolveExportTarget("balanced", src(1920, 1080, { fps: 60 }), 60);
+    expect(t.videoBitrate).toBe(BALANCED_VIDEO_BITRATE);
+    expect(t.audioBitrate).toBe(FIXED_AUDIO_BITRATE);
+    expect(t.audioChannels).toBeNull();
+    expect(t.maxFps).toBe(BALANCED_MAX_FPS);
+    expect(t.fastStart).toBe("reserve");
+    expect(t.estimateBytes! / MB).toBeGreaterThan(23);
+    expect(t.estimateBytes! / MB).toBeLessThan(24);
+  });
+
+  it("gives a source below 1080p proportionally fewer bits", () => {
+    const t = resolveExportTarget("balanced", SOURCES.small720, 60);
+    expect(t.videoBitrate).toBe(Math.round(BALANCED_VIDEO_BITRATE * (720 / 1080) ** 2));
+  });
+
+  it("leaves the audio share out of the estimate for a silent export", () => {
+    const withAudio = resolveExportTarget("balanced", SOURCES["16:9"], 60);
+    const silent = resolveExportTarget("balanced", { ...SOURCES["16:9"], hasAudio: false }, 60);
+    expect(withAudio.estimateBytes! - silent.estimateBytes!).toBeGreaterThan(
+      (FIXED_AUDIO_BITRATE * 60) / 8 - 50_000,
+    );
+    expect(silent.packetCounts.audio).toBe(0);
   });
 });
 

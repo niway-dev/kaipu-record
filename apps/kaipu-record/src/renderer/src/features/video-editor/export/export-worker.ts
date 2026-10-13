@@ -16,9 +16,9 @@
  * patches earlier headers) — hence `StreamTarget` (positional) is required instead of
  * `AppendOnlyStreamTarget`. Never `'in-memory'`: it buffers the whole file in the worker.
  *
- * Presets (NIW2-218, `msg.target`): Original and Small file compose straight onto the
+ * Presets (NIW2-218, `msg.target`): Balanced, Maximum and Small file compose straight onto the
  * output canvas (same aspect as the source). Fixed-canvas presets compose a source-size
- * VIEW first (frame → redactions → overlays → zoom crop, exactly as Original) and then
+ * VIEW first (frame → redactions → overlays → zoom crop, exactly as Maximum) and then
  * frame it onto the target canvas (Fit/Fill, see `createFramer`).
  *
  * Audio API choice: the WebCodecs-backed `AudioSample`/`AudioSampleSink`/
@@ -115,7 +115,7 @@ async function runExport(msg: ExportStartMessage): Promise<void> {
 async function runExportWithInput(msg: ExportStartMessage, input: Input): Promise<void> {
   const { plan, output: size, target: preset } = msg;
   // Fixed-canvas presets compose at SOURCE size into a view canvas, then frame it onto the
-  // output. Identity framing (Original, Small file) composes straight onto the output.
+  // output. Identity framing (Balanced, Maximum, Small file) composes straight onto the output.
   const framed = preset.framing !== "identity";
   const composeSize = framed ? msg.source : size;
 
