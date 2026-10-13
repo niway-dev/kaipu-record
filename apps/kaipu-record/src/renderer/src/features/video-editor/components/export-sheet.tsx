@@ -20,15 +20,14 @@ import {
   type ExportFraming,
   type ExportPresetId,
   type ExportSourceInfo,
-  GITHUB_LIMIT_BYTES,
-  type GithubFit,
-  githubFit,
+  isQualityTier,
   PRESETS,
   type ResolvedExportTarget,
   resolveExportTarget,
 } from "../export/export-presets";
 import { addsBarsAt169, formatMB, sizeKindOf } from "../export/export-size";
 import { FramingPreview } from "./framing-preview";
+import { GithubFitChips } from "./github-fit-chips";
 import { SizeMeter } from "./size-meter";
 import styles from "./export-sheet.module.css";
 
@@ -146,17 +145,9 @@ type FactKey =
   | "factTextReadable"
   | "factPlaysEverywhere"
   | "factSmallest"
-  | "factFitsGithub"
-  | "factGithubTooBig"
   | "factBlackBars"
   | "factNothingLost"
   | "factHeavy";
-
-/** Where a tier's copy lands against GitHub's limits — said, never enforced. */
-const GITHUB_FIT_FACT = {
-  fits: { key: "factFitsGithub" },
-  "too-big": { key: "factGithubTooBig", warn: true },
-} as const satisfies Record<GithubFit, Fact>;
 
 interface Fact {
   key: FactKey;
@@ -165,18 +156,15 @@ interface Fact {
 }
 
 /**
- * The chips under the selected row. Only what holds for THIS source and length: whether the
- * tier's copy fits GitHub (from its estimate), the 16:9 bars only when the recording isn't
- * 16:9.
+ * The ✓ chips under the selected row. Only what holds for THIS source: the 16:9 bars only
+ * when the recording isn't 16:9. (The tiers' GitHub fit is its own pair of chips.)
  */
 export function presetFacts(target: ResolvedExportTarget, source: ExportSourceInfo): Fact[] {
-  const fit = (): Fact[] =>
-    target.estimateBytes === null ? [] : [GITHUB_FIT_FACT[githubFit(target.estimateBytes)]];
   switch (target.presetId) {
     case "balanced":
-      return [{ key: "factTextReadable" }, { key: "factPlaysEverywhere" }, ...fit()];
+      return [{ key: "factTextReadable" }, { key: "factPlaysEverywhere" }];
     case "light":
-      return [{ key: "factTextReadable" }, { key: "factSmallest" }, ...fit()];
+      return [{ key: "factTextReadable" }, { key: "factSmallest" }];
     case "youtube":
       return addsBarsAt169(source.width, source.height)
         ? [{ key: "factBlackBars", warn: true }]
@@ -432,10 +420,14 @@ export function ExportSheet({
                     ) : (
                       <Check size={11} strokeWidth={2.4} aria-hidden />
                     )}
-                    {t(f.key, { limit: formatMB(GITHUB_LIMIT_BYTES) })}
+                    {t(f.key)}
                   </li>
                 ))}
               </ul>
+            )}
+
+            {isQualityTier(p) && target.estimateBytes !== null && (
+              <GithubFitChips bytes={target.estimateBytes} />
             )}
           </div>
         )}

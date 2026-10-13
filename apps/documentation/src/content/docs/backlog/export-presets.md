@@ -59,11 +59,12 @@ The internal preset ids and numbers:
 - Slides are always contained (Fit), never cropped.
 - Fit/Fill show only under the selected row.
 - **GitHub fit chips** on Balanced and Light, from the estimate (and on the Ready card, from the
-  real size): "✓ Fits GitHub (100 MB)", or amber "Too big for GitHub — export a shorter part".
-  Owner decision: teams are assumed to be on a paid GitHub plan (100 MB, see
-  [GitHub's docs](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/attaching-files));
-  the free plan's 10 MB is not checked — free-plan sharing will go through a Kaipu cloud link
-  later. A chip never blocks the export and never lowers the quality: the tier is the floor.
+  real size): two small chips side by side, one per plan
+  ([GitHub's limits](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/attaching-files)).
+  "✓ GitHub Free · 10 MB", or muted "GitHub Free · over 10 MB"; "✓ GitHub Pro / Team /
+  Enterprise · 100 MB", or amber "Too big for GitHub — export a shorter part". The heavy-file
+  banner and the Recording saved card go by the paid limit (teams are assumed to be on one).
+  A chip never blocks the export and never lowers the quality: the tier is the floor.
 - **Settings → Export quality** (right below Recording quality, `AppSettings.exportQuality`,
   "balanced" | "maximum", sanitized like `recordingQuality`) picks the preselected row. Default
   Balanced for everyone, including people who record at Maximum. Another row applies to that one
@@ -88,7 +89,7 @@ exporting “…”" instead of a sheet. Cards stack in the top-right corner of 
 - **Progress:** "Making a lighter copy…", the preset and output size, a progress bar,
   "64% · about 25 s left" (projected from the rate so far), "119 MB → ~9.7 MB", and Cancel. A failure turns it into an error card with Retry.
 - **Ready to share:** the real size ("Ready to share · 8.1 MB"), "93% lighter than the original.",
-  for the tiers the GitHub fit from the real size ("Fits GitHub (100 MB)", or amber "Too big"),
+  for the tiers the two GitHub plan chips from the real size,
   the before/after meter, and a file chip that drags out natively under the item's title
   ("Demo (light).mp4"), not its vault id — main hard-links the vault file into a temp folder
   under that name and cleans it on the next drag and on quit. Buttons: **View file** (the

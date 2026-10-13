@@ -207,18 +207,25 @@ export const PRESETS: Record<ExportPresetId, PresetDefinition> = {
 };
 
 /**
- * GitHub's video attachment limit on paid plans (source above) — owner decision 2026-10-13:
- * teams are assumed to be on one. The free plan's 10 MB is deliberately not checked: sharing
- * there will go through a Kaipu cloud link later, not through squeezing the file. The sheet,
- * the banner and the Ready card say whether a copy fits; none of them blocks an export or
- * lowers the quality to fit — the tier IS the floor.
+ * GitHub's video attachment limits (source above): 10 MB on Free, 100 MB on Pro / Team /
+ * Enterprise. The sheet and the Ready card show both, side by side (owner decision
+ * 2026-10-13); the banner and the Recording saved card go by the paid limit, since teams are
+ * assumed to be on one. None of them blocks an export or lowers the quality to fit — the
+ * tier IS the floor. (Free-plan sharing of bigger files will go through a Kaipu cloud link.)
  */
-export const GITHUB_LIMIT_BYTES = 100 * MB;
+export const GITHUB_FREE_LIMIT_BYTES = 10 * MB;
+export const GITHUB_PAID_LIMIT_BYTES = 100 * MB;
 
 export type GithubFit = "fits" | "too-big";
 
+/** Against the paid limit (100 MB). */
 export function githubFit(bytes: number): GithubFit {
-  return bytes <= GITHUB_LIMIT_BYTES ? "fits" : "too-big";
+  return bytes <= GITHUB_PAID_LIMIT_BYTES ? "fits" : "too-big";
+}
+
+/** Whether a file of `bytes` attaches on GitHub Free and on the paid plans. */
+export function githubPlans(bytes: number): { free: boolean; paid: boolean } {
+  return { free: bytes <= GITHUB_FREE_LIMIT_BYTES, paid: bytes <= GITHUB_PAID_LIMIT_BYTES };
 }
 
 export interface ExportSourceInfo {

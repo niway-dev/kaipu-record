@@ -865,9 +865,12 @@
     "presetLightSay": "Texto legible, el archivo más pequeño.",
     "presetTitleLight": "{title} (liviano)",
     "factSmallest": "El archivo más pequeño",
-    "factFitsGithub": "Entra en GitHub ({limit})",
     "factGithubTooBig": "Demasiado grande para GitHub: exporta una parte más corta",
-    "recordingSavedMeterNoGithub": "~{size} copia liviana"
+    "recordingSavedMeterNoGithub": "~{size} copia liviana",
+    "githubFitLabel": "Entra en GitHub",
+    "githubFree": "GitHub Free · {limit}",
+    "githubFreeOver": "GitHub Free · supera {limit}",
+    "githubPaid": "GitHub Pro / Team / Enterprise · {limit}"
   },
   "panel": {
     "saving": "Guardando…",

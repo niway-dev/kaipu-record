@@ -865,9 +865,12 @@
     "presetLightSay": "Readable text, smallest file.",
     "presetTitleLight": "{title} (light)",
     "factSmallest": "Smallest file",
-    "factFitsGithub": "Fits GitHub ({limit})",
     "factGithubTooBig": "Too big for GitHub — export a shorter part",
-    "recordingSavedMeterNoGithub": "~{size} light copy"
+    "recordingSavedMeterNoGithub": "~{size} light copy",
+    "githubFitLabel": "Fits GitHub",
+    "githubFree": "GitHub Free · {limit}",
+    "githubFreeOver": "GitHub Free · over {limit}",
+    "githubPaid": "GitHub Pro / Team / Enterprise · {limit}"
   },
   "panel": {
     "saving": "Saving…",

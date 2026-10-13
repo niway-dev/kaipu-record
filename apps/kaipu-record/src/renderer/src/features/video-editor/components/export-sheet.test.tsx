@@ -240,16 +240,36 @@ describe("presets (NIW2-218 export redesign)", () => {
     expect(props.onExportVideo).toHaveBeenCalledWith({ presetId: "square", framing: "fill" });
   });
 
-  it("says whether a tier's copy fits GitHub (100 MB) from its estimate", () => {
+  it("shows both GitHub plans for a tier, from its estimate", () => {
+    // One minute of Light (~9.7 MB) fits both.
     renderSheet({ timelineDuration: 60, defaultPreset: "light" });
-    expect(screen.getByText("Fits GitHub (100 MB)")).toBeInTheDocument();
+    expect(screen.getByText("GitHub Free · 10 MB")).toHaveAttribute("data-fits", "true");
+    expect(screen.getByText("GitHub Pro / Team / Enterprise · 100 MB")).toHaveAttribute(
+      "data-fits",
+      "true",
+    );
+  });
+
+  it("over 10 MB: GitHub Free is muted as 'over', the paid plans still fit", () => {
+    // One minute of Balanced (~16 MB).
+    renderSheet({ timelineDuration: 60 });
+    const free = screen.getByText("GitHub Free · over 10 MB");
+    expect(free).toHaveAttribute("data-fits", "false");
+    expect(free).not.toHaveAttribute("data-warn", "true");
+    expect(screen.getByText("GitHub Pro / Team / Enterprise · 100 MB")).toBeInTheDocument();
+  });
+
+  it("no GitHub chips on the POST or KEEP rows", () => {
+    renderSheet({ defaultPreset: "youtube" });
+    expect(screen.queryByText(/GitHub Free/)).toBeNull();
   });
 
   it("over GitHub's 100 MB: warns in amber but never blocks or lowers the quality", () => {
     // 15 minutes of Light ≈ 142 MB.
     const props = renderSheet({ timelineDuration: 900, defaultPreset: "light" });
-    const fact = screen.getByText("Too big for GitHub — export a shorter part");
-    expect(fact.closest("li")).toHaveAttribute("data-warn", "true");
+    expect(screen.getByText("GitHub Free · over 10 MB")).toBeInTheDocument();
+    const paid = screen.getByText("Too big for GitHub — export a shorter part");
+    expect(paid).toHaveAttribute("data-warn", "true");
     expect(sizeOf(/^Light/)).toContain("1280×720");
     fireEvent.click(exportButton());
     expect(props.onExportVideo).toHaveBeenCalledWith({ presetId: "light", framing: null });

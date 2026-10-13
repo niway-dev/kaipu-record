@@ -11,6 +11,7 @@ import {
   even,
   fixedVideoBitrate,
   githubFit,
+  githubPlans,
   isExportFraming,
   isExportPresetId,
   normalizeExportPresetId,
@@ -249,6 +250,14 @@ describe("githubFit (100 MB, paid plans)", () => {
     expect(githubFit(resolveExportTarget("light", src(2560, 1440), 720).estimateBytes!)).toBe(
       "too-big",
     );
+  });
+});
+
+describe("githubPlans (Free 10 MB, Pro / Team / Enterprise 100 MB)", () => {
+  it("answers both plans, decimal", () => {
+    expect(githubPlans(10 * MB)).toEqual({ free: true, paid: true });
+    expect(githubPlans(10 * MB + 1)).toEqual({ free: false, paid: true });
+    expect(githubPlans(100 * MB + 1)).toEqual({ free: false, paid: false });
   });
 });
 

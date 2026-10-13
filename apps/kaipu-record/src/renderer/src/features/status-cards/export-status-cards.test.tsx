@@ -97,7 +97,9 @@ describe("ExportReadyCard", () => {
     expect(screen.getByText("Ready to share · 8.1 MB")).toBeInTheDocument();
     expect(screen.getByText("93% lighter than the original.")).toBeInTheDocument();
     expect(screen.getByText("Original 119 MB")).toBeInTheDocument();
-    expect(screen.getByText("Fits GitHub (100 MB)")).toBeInTheDocument();
+    // 8.1 MB: fits both plans.
+    expect(screen.getByText("GitHub Free · 10 MB")).toHaveAttribute("data-fits", "true");
+    expect(screen.getByText("GitHub Pro / Team / Enterprise · 100 MB")).toBeInTheDocument();
   });
 
   it("says nothing about GitHub for a POST row, and warns when a tier's copy is over 100 MB", () => {

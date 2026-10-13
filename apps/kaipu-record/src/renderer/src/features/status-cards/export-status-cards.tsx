@@ -2,6 +2,7 @@ import { CircleCheck, FolderOpen, GripVertical, TriangleAlert } from "lucide-rea
 import { useNavigate } from "react-router-dom";
 import { useTranslations } from "@kaipu/i18n";
 import { PRESET_NAME } from "@renderer/features/video-editor/components/export-sheet";
+import { GithubFitChips } from "@renderer/features/video-editor/components/github-fit-chips";
 import { SizeMeter } from "@renderer/features/video-editor/components/size-meter";
 import {
   cancelVideoExport,
@@ -11,12 +12,7 @@ import {
   retryVideoExport,
   useExportRunner,
 } from "@renderer/features/video-editor/export/export-runner";
-import {
-  GITHUB_LIMIT_BYTES,
-  type GithubFit,
-  githubFit,
-  isQualityTier,
-} from "@renderer/features/video-editor/export/export-presets";
+import { githubPlans, isQualityTier } from "@renderer/features/video-editor/export/export-presets";
 import {
   exportEtaSeconds,
   formatMB,
@@ -139,12 +135,6 @@ export function ExportProgressCard({
   );
 }
 
-/** Where a tier's finished copy lands against GitHub's limits (its real size, not the estimate). */
-const GITHUB_FIT_TEXT = {
-  fits: "factFitsGithub",
-  "too-big": "factGithubTooBig",
-} as const satisfies Record<GithubFit, string>;
-
 /**
  * "Ready to share": the finished export with its real size against the original, a file
  * chip the user drags straight into GitHub, Slack or Finder (a native drag, under the
@@ -157,13 +147,13 @@ export function ExportReadyCard({ ready }: { ready: ReadyExport }): React.JSX.El
   const { job, recording } = ready;
   const size = recording.sizeBytes;
   const lighter = percentLighter(size, job.sourceSizeBytes);
-  // The quality tiers are the "share in a tool" files: say whether this one fits GitHub
-  // (100 MB, paid plans). It never blocks anything.
-  const fit = isQualityTier(job.presetId) ? githubFit(size) : null;
-  const fitText = fit && t(GITHUB_FIT_TEXT[fit], { limit: formatMB(GITHUB_LIMIT_BYTES) });
+  // The quality tiers are the "share in a tool" files: say where on GitHub this one attaches,
+  // from its real size. It never blocks anything.
+  const tier = isQualityTier(job.presetId);
+  const fitsGithubFree = githubPlans(size).free;
   const extension = recording.filePath.match(/\.[a-z0-9]+$/i)?.[0] ?? ".mp4";
   const fileName = `${recording.title}${extension}`;
-  const hint = fit === "fits" ? t("readyDragHintTool") : t("readyDragHint");
+  const hint = tier && fitsGithubFree ? t("readyDragHintTool") : t("readyDragHint");
   const title = t("readyTitle", { size: formatMB(size) });
 
   return (
@@ -178,7 +168,7 @@ export function ExportReadyCard({ ready }: { ready: ReadyExport }): React.JSX.El
       {lighter !== null && (
         <StatusCardText>{t("readyLighter", { percent: lighter })}</StatusCardText>
       )}
-      {fitText && <StatusCardText warn={fit !== "fits"}>{fitText}</StatusCardText>}
+      {tier && <GithubFitChips bytes={size} />}
       {job.sourceSizeBytes !== null && job.sourceSizeBytes > 0 && (
         <SizeMeter originalBytes={job.sourceSizeBytes} resultBytes={size} label={formatMB(size)} />
       )}
