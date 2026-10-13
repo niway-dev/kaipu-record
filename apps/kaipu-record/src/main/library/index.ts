@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { extname, join } from "node:path";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell } from "electron";
 import { IPC_CHANNELS } from "@shared/types";
@@ -13,6 +13,8 @@ import { LibraryVault } from "./library-vault";
 import { loadDeviceId, VaultTagRepository, type TagRepository } from "./tag-repository";
 import { isTagColor } from "@kaipu/domain/constants";
 import { saveGif } from "./gif-save";
+import { createDragCopy } from "./drag-copies";
+import { friendlyDragName } from "./drag-name";
 import { timestampId } from "../recording/recording-writer";
 import { resetVaultDirectory, setVaultDirectory, vaultDirectory } from "./vault-location";
 import { deleteVideoEditSession, registerVideoEditSessionHandlers } from "./video-edit-session";
@@ -146,7 +148,10 @@ export function registerLibraryVaultHandlers(deps: { auth: AuthHandle; serverUrl
   });
   // NIW2-217: drag a vault file out (e.g. a GIF into Slack or a GitHub comment). The id is
   // resolved inside the vault — the renderer never names a path.
-  ipcMain.on(IPC_CHANNELS.startFileDrag, (event, id: string) => {
+  // NIW2-218: when the renderer sends the item's title, the dragged file carries it instead of
+  // the vault id. The vault keeps its id name; the friendly file is a hard link (no extra
+  // space) in a temp folder, cleaned on the next drag and on quit.
+  ipcMain.on(IPC_CHANNELS.startFileDrag, (event, id: string, name?: unknown) => {
     void (async () => {
       if (typeof id !== "string" || /[\\/]|\.\./.test(id)) return;
       const vault = currentVault();
@@ -154,7 +159,11 @@ export function registerLibraryVaultHandlers(deps: { auth: AuthHandle; serverUrl
       // macOS refuses a drag without an icon; the poster is there for videos and GIFs.
       const icon = nativeImage.createFromPath(vault.thumbnailPath(id));
       if (icon.isEmpty()) return;
-      event.sender.startDrag({ file, icon: icon.resize({ width: 96 }) });
+      const dragFile =
+        typeof name === "string" && name.length > 0
+          ? await createDragCopy(file, friendlyDragName(name, extname(file)))
+          : file;
+      event.sender.startDrag({ file: dragFile, icon: icon.resize({ width: 96 }) });
     })().catch((error) => console.error("file drag failed", error));
   });
 
