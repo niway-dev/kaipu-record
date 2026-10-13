@@ -1,0 +1,42 @@
+/*
+ * The capture's name, in the toolbar's middle stretch. Reads as a label until
+ * focused, then as a field — the toolbar stays calm while the name is editable.
+ */
+
+.field {
+  flex: 1;
+  min-width: 0;
+  max-width: 520px;
+  margin: 0 var(--space-md);
+}
+
+.input {
+  width: 100%;
+  height: 34px;
+  padding: 0 var(--space-md);
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  outline: none;
+  text-overflow: ellipsis;
+  transition:
+    background var(--transition),
+    border-color var(--transition);
+}
+
+.input::placeholder {
+  color: var(--text-muted);
+}
+
+.input:hover {
+  border-color: var(--border);
+}
+
+.input:focus {
+  background: var(--bg-input);
+  border-color: var(--accent-primary);
+}
