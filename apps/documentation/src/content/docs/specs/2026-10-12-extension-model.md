@@ -1,11 +1,11 @@
 ---
 title: "Extension model: feature tables linked to any entity, and server-side hooks"
-description: "Proposed design for how a new feature gets its own tables related to an existing row by a real foreign key, how that relation is approved, and how our own code reacts to domain events through a registered, audited, kill-switchable hook — with no uploaded scripts. Awaiting five owner answers."
+description: "Proposed design for how a new feature gets its own tables related to an existing row by a real foreign key, how that relation is approved, and how our own code reacts to domain events through a registered, audited, kill-switchable hook — with no uploaded scripts. Accepted by the owner on 2026-10-12."
 ---
 
 # Extension model: feature tables linked to any entity, and server-side hooks
 
-**Status: 🔵 Proposed — awaiting owner answers.** Linear
+**Status: ✅ Accepted — owner decisions 2026-10-12 (see Approved decisions).** Linear
 [NIW2-329](https://linear.app/niway/issue/NIW2-329). Nothing in this document is
 implemented; every code block is illustrative. The approval gate depends on
 committed migrations, which belong to
@@ -673,6 +673,33 @@ and moves `runAll` into the queue consumer. `emit`, the registry, the port and
   handlers configured from the database, `eval`, `new Function`, remote
   modules, or Better Auth's generic `hooks.before/after` request hooks (which
   see raw requests and are a different, broader surface).
+
+## Approved decisions
+
+Owner (Cristian), 2026-10-12. All eight recommended answers were approved; they
+override any alternative discussed elsewhere in this document.
+
+1. **Who writes the custom script:** our team only. Handlers are registered
+   functions in this repo; no third-party or uploaded code.
+2. **Who uses it with us:** end users. Extension tables anchor on `user.id`.
+   Organizations would reopen ADR 0002 and are out of scope.
+3. **What "approve" means:** pull-request review with CODEOWNERS and CI. There
+   is no in-product approval flow.
+4. **Staging database:** migrations are tested on a throwaway Neon branch if
+   branching exists, otherwise on an ephemeral Postgres in CI.
+5. **Retention and deletion:** do not promise full deletion until account purge
+   is at-least-once and backed by R2 lifecycle rules.
+6. **Handler write scope:** a handler writes only its own feature tables, through
+   ports.
+7. **At-least-once delivery:** no event needs it at first; account purge gets it
+   once decision 5 is in place.
+8. **Destructive migrations:** need the owner's approval through a
+   `migration:destructive` label.
+
+Repo rules for whoever implements this: no `db:push` or migrations against any
+non-local database; the approval gate depends on committed migrations
+(NIW2-328), so land the gate after that ticket's migration tooling is on `main`.
+Implementation tasks are split into their own tickets and PRs.
 
 ## How each owner answer changes the design
 
