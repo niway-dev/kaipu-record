@@ -96,6 +96,12 @@ export function registerLibraryVaultHandlers(deps: { auth: AuthHandle; serverUrl
       return [...stored];
     },
   );
+  ipcMain.handle(IPC_CHANNELS.renameTag, (_event, from: unknown, to: unknown) =>
+    tags.current().renameTag(String(from), String(to), Date.now()),
+  );
+  ipcMain.handle(IPC_CHANNELS.deleteTag, (_event, tag: unknown) =>
+    tags.current().deleteTag(String(tag), Date.now()),
+  );
   ipcMain.handle(IPC_CHANNELS.getTagVocabulary, async () => [
     ...(await tags.current().vocabulary()),
   ]);

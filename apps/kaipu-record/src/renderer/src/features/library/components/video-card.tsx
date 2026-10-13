@@ -86,6 +86,27 @@ export function VideoCard({
         <div className={styles.metaLine}>
           <StorageMeta video={video} />
           <EditBadge state={badge} />
+          <div className={styles.actions} onClick={(e) => e.stopPropagation()}>
+            {onTags && (
+              <button className={styles.action} onClick={onTags} title={t("tagsEdit")}>
+                <Tag size={14} strokeWidth={1.8} />
+              </button>
+            )}
+            {onEdit && (
+              <button className={styles.action} onClick={onEdit} title={t("edit")}>
+                <PenLine size={14} strokeWidth={1.8} />
+              </button>
+            )}
+            {video.id !== null && (
+              <button
+                className={cx(styles.action, styles.delete)}
+                onClick={onDelete}
+                title={t("delete")}
+              >
+                <Trash2 size={14} strokeWidth={1.8} />
+              </button>
+            )}
+          </div>
         </div>
         <span className={styles.specs}>
           {formatSize(video.fileSizeBytes)}
@@ -101,28 +122,6 @@ export function VideoCard({
             {hiddenTags > 0 && <li className={styles.tagMore}>+{hiddenTags}</li>}
           </ul>
         )}
-
-        <div className={styles.actions} onClick={(e) => e.stopPropagation()}>
-          {onTags && (
-            <button className={styles.action} onClick={onTags} title={t("tagsEdit")}>
-              <Tag size={14} strokeWidth={1.8} />
-            </button>
-          )}
-          {onEdit && (
-            <button className={styles.action} onClick={onEdit} title={t("edit")}>
-              <PenLine size={14} strokeWidth={1.8} />
-            </button>
-          )}
-          {video.id !== null && (
-            <button
-              className={cx(styles.action, styles.delete)}
-              onClick={onDelete}
-              title={t("delete")}
-            >
-              <Trash2 size={14} strokeWidth={1.8} />
-            </button>
-          )}
-        </div>
       </div>
     </div>
   );

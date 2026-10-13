@@ -22,6 +22,10 @@ export interface LocalLibrary {
   rename(id: string, title: string): Promise<void>;
   /** Replace a local item's tags (normalized again in main before the sidecar write). */
   setTags(id: string, tags: readonly string[]): Promise<void>;
+  /** Rename a tag across the library, then re-list. */
+  renameTag(from: string, to: string): Promise<void>;
+  /** Remove a tag from every item, then re-list. */
+  deleteTag(tag: string): Promise<void>;
   remove(id: string): Promise<void>;
   reveal(id: string): void;
   /** Delete only the local bytes of an asset that also has a verified cloud
@@ -86,6 +90,30 @@ export function useLocalLibrary(): LocalLibrary {
     }
   }, []);
 
+  const renameTag = useCallback(
+    async (from: string, to: string) => {
+      try {
+        await window.electronAPI.renameTag(from, to);
+      } catch (error) {
+        reportError(t("errorTags"), error, { context: { phase: "rename-tag" } });
+      }
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const deleteTag = useCallback(
+    async (tag: string) => {
+      try {
+        await window.electronAPI.deleteTag(tag);
+      } catch (error) {
+        reportError(t("errorTags"), error, { context: { phase: "delete-tag" } });
+      }
+      await refresh();
+    },
+    [refresh],
+  );
+
   const remove = useCallback(async (id: string) => {
     try {
       await window.electronAPI.deleteLocalRecording(id);
@@ -143,6 +171,8 @@ export function useLocalLibrary(): LocalLibrary {
     refreshCloud,
     rename,
     setTags,
+    renameTag,
+    deleteTag,
     remove,
     reveal,
     removeLocalCopy,

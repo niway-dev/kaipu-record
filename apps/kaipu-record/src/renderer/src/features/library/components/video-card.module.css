@@ -136,7 +136,11 @@
 }
 
 .metaLine {
-  margin-top: 5px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: 28px;
+  margin-top: 3px;
 }
 
 .specs {
@@ -157,9 +161,7 @@
 /* ── Actions (revealed on hover) ──────── */
 
 .actions {
-  position: absolute;
-  top: 11px;
-  right: 11px;
+  margin-left: auto;
   display: flex;
   gap: 4px;
   opacity: 0;

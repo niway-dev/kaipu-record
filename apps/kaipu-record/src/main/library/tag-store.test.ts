@@ -126,6 +126,47 @@ describe("SidecarTagStore", () => {
   });
 });
 
+describe("SidecarTagStore rename and delete", () => {
+  let directory: string;
+  let vault: LibraryVault;
+  let store: SidecarTagStore;
+
+  beforeEach(async () => {
+    directory = await mkdtemp(join(tmpdir(), "kaipu-tags-"));
+    vault = new LibraryVault(directory);
+    store = new SidecarTagStore(() => vault);
+    for (const id of ["one", "two", "three"]) {
+      await writeFile(join(directory, `${id}.webm`), Buffer.alloc(16));
+    }
+    await store.set("one", ["bug", "demo"], 1);
+    await store.set("two", ["bug", "issue"], 1);
+    await store.set("three", ["demo"], 1);
+  });
+
+  afterEach(async () => {
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  it("renames a tag on every item that carries it, merging with an existing one", async () => {
+    expect(await store.renameTag("bug", "Issue", 2)).toBe(2);
+    expect(await store.get("one")).toEqual(["demo", "issue"]);
+    expect(await store.get("two")).toEqual(["issue"]);
+    expect(await store.get("three")).toEqual(["demo"]);
+  });
+
+  it("refuses to rename to something that is not a tag", async () => {
+    await expect(store.renameTag("bug", "  ", 2)).rejects.toThrow(/valid tag/);
+    expect(await store.get("one")).toEqual(["bug", "demo"]);
+  });
+
+  it("deletes a tag from every item and leaves the rest", async () => {
+    expect(await store.deleteTag("demo", 2)).toBe(2);
+    expect(await store.get("one")).toEqual(["bug"]);
+    expect(await store.get("three")).toEqual([]);
+    expect((await store.vocabulary()).map((entry) => entry.tag)).toEqual(["bug", "issue"]);
+  });
+});
+
 describe("foldVocabulary", () => {
   it("breaks count ties alphabetically", () => {
     expect(foldVocabulary([["b", "a"], ["c"]])).toEqual([

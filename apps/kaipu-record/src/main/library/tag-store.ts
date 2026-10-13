@@ -1,4 +1,4 @@
-import { TagSetBuilder } from "@kaipu/domain/constants";
+import { normalizeTag, TagSetBuilder } from "@kaipu/domain/constants";
 import type { TagVocabularyEntry } from "@shared/types";
 import type { LibraryVault } from "./library-vault";
 
@@ -12,6 +12,13 @@ export interface TagStore {
   set(itemId: string, tags: readonly string[], updatedAt: number): Promise<readonly string[]>;
   /** Every tag in use with how many items carry it, most used first. */
   vocabulary(): Promise<readonly TagVocabularyEntry[]>;
+  /**
+   * Rename a tag on every item that carries it. Renaming onto a tag an item
+   * already has merges the two. Returns how many items changed.
+   */
+  renameTag(from: string, to: string, updatedAt: number): Promise<number>;
+  /** Remove a tag from every item that carries it. Returns how many items changed. */
+  deleteTag(tag: string, updatedAt: number): Promise<number>;
 }
 
 /**
@@ -45,6 +52,37 @@ export class SidecarTagStore implements TagStore {
 
   async vocabulary(): Promise<readonly TagVocabularyEntry[]> {
     return foldVocabulary((await this.vault().list()).map((item) => item.tags ?? []));
+  }
+
+  async renameTag(from: string, to: string, updatedAt: number): Promise<number> {
+    const source = normalizeTag(from);
+    const target = normalizeTag(to);
+    if (source === null || target === null) throw new Error("tags: not a valid tag name");
+    if (source === target) return 0;
+    return this.rewrite(source, (tags) => tags.remove(source).add(target), updatedAt);
+  }
+
+  async deleteTag(tag: string, updatedAt: number): Promise<number> {
+    const source = normalizeTag(tag);
+    if (source === null) return 0;
+    return this.rewrite(source, (tags) => tags.remove(source), updatedAt);
+  }
+
+  /** Apply `change` to every item carrying `tag`, one sidecar at a time. */
+  private async rewrite(
+    tag: string,
+    change: (tags: TagSetBuilder) => TagSetBuilder,
+    updatedAt: number,
+  ): Promise<number> {
+    const vault = this.vault();
+    let changed = 0;
+    for (const item of await vault.list()) {
+      if (!item.tags?.includes(tag)) continue;
+      const next = change(new TagSetBuilder(item.tags)).build();
+      await vault.writeMeta(item.id, { tags: [...next], tagsUpdatedAt: updatedAt });
+      changed++;
+    }
+    return changed;
   }
 }
 

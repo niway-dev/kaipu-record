@@ -232,26 +232,6 @@
 
 /* ── Collections ────────────────────────────── */
 
-/* The collection, plus the tag side panel beside it when one item is open. */
-.body {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-lg);
-  align-items: start;
-}
-
-.body[data-panel="true"] {
-  grid-template-columns: minmax(0, 1fr) 280px;
-}
-
-.collection {
-  min-width: 0;
-}
-
-.body[data-panel="true"] .grid {
-  grid-template-columns: repeat(2, 1fr);
-}
-
 .grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

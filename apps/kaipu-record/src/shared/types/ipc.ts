@@ -261,6 +261,8 @@ export const IPC_CHANNELS = {
   /** Replace an item's tags (recording-tags design, Phase 1: sidecar only). */
   setTags: "library:setTags",
   getTagVocabulary: "library:getTagVocabulary",
+  renameTag: "library:renameTag",
+  deleteTag: "library:deleteTag",
   backfillLocalRecordingMeta: "library:backfill-meta",
   deleteLocalRecording: "library:delete-local",
   revealLocalRecording: "library:reveal-local",

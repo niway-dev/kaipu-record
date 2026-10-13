@@ -138,6 +138,10 @@ export interface KaipuElectronAPI {
   setTags(id: string, tags: readonly string[]): Promise<string[]>;
   /** Every tag in use, most used first — for autocomplete. */
   getTagVocabulary(): Promise<TagVocabularyEntry[]>;
+  /** Rename a tag on every item that carries it; resolves to how many items changed. */
+  renameTag(from: string, to: string): Promise<number>;
+  /** Remove a tag from every item; resolves to how many items changed. */
+  deleteTag(tag: string): Promise<number>;
   /**
    * Persist duration + poster the renderer decoded for a recording that had no
    * sidecar (hand-imported, or an interrupted finalize). Returns the re-described
