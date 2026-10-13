@@ -56,7 +56,11 @@ test("a muted recording exports with no audio track at all", async () => {
       .toBeGreaterThan(0);
 
     await page.getByRole("button", { name: "Export" }).click();
-    await page.getByRole("button", { name: "Export video" }).click();
+    // The sheet's primary action carries the size ("Export ~24 MB").
+    await page
+      .getByRole("alertdialog")
+      .getByRole("button", { name: /^Export( |$)/ })
+      .click();
     await expect
       .poll(() => page.evaluate(() => location.hash), { timeout: 90_000 })
       .toMatch(/^#\/library\/.+/);

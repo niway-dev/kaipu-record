@@ -139,6 +139,10 @@ export interface VideoEditorSource {
   assetId: string;
   title: string;
   durationSeconds: number;
+  /** The recording's file size, for the export sheet's before/after meter. */
+  sizeBytes?: number;
+  /** Its poster frame, for the export sheet's framing preview. */
+  thumbnailUrl?: string | null;
 }
 
 export function isVideoEditorSource(value: unknown): value is VideoEditorSource {
@@ -1486,6 +1490,9 @@ function VideoEditor({
       )}
       {exportSheetOpen && (
         <ExportSheet
+          sourceTitle={source.title}
+          sourceSizeBytes={source.sizeBytes ?? null}
+          thumbnailUrl={source.thumbnailUrl ?? null}
           timelineDuration={playback.duration}
           sourceWidth={playback.videoRef.current?.videoWidth ?? 0}
           estimate={gifExport.estimate}

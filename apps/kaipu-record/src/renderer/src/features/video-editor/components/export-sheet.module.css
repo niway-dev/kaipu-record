@@ -1,4 +1,4 @@
-/* Export sheet (NIW2-217): format row + GIF controls inside the shared Modal shell. */
+/* GIF controls (NIW2-217, on hold behind GIF_EXPORT_ENABLED) and the shared segmented control. */
 .field {
   display: flex;
   flex-direction: column;
@@ -107,119 +107,357 @@
   color: var(--warning, #f5a524);
 }
 
-/* NIW2-218: one list of presets, recommended first; options open under the selected row. */
-.presetList {
+/* ── Export sheet (NIW2-218 export redesign): header · meter · grouped list · footer ── */
+
+.header {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-height: 52vh;
+  align-items: flex-start;
+  gap: var(--space-md);
+  padding: 18px 20px 0;
+}
+
+.headerText {
+  flex: 1;
+  min-width: 0;
+}
+
+.title {
+  font-size: 18px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.subtitle {
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.close {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.close:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+/* Padded block for the GIF controls (the wide modal has no padding of its own). */
+.body {
+  padding: 16px 20px 0;
+}
+
+.meter {
+  padding: 16px 20px 4px;
+}
+
+/* The list scrolls on its own; header, meter and footer stay put. */
+.list {
+  flex: 1;
+  min-height: 0;
+  max-height: 470px;
   overflow-y: auto;
-}
-
-.presetItem {
   display: flex;
   flex-direction: column;
+  gap: 6px;
+  padding: 14px 20px 0;
 }
 
-.presetRow {
+.groupLabel {
+  margin: 7px 0 1px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.groupLabel:first-child {
+  margin-top: 0;
+}
+
+.row {
+  flex-shrink: 0;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  cursor: pointer;
+  transition: border-color var(--transition);
+}
+
+.row:hover {
+  border-color: var(--border-light);
+}
+
+.row[data-active="true"] {
+  border-color: var(--accent-primary-ring);
+  background: var(--accent-primary-soft);
+}
+
+.rowHead {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  width: 100%;
-  padding: 7px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--bg-modal);
-  color: var(--text-primary);
+  gap: var(--space-md);
+  padding: 11px 14px;
+}
+
+.rowRadio {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
   font: inherit;
   text-align: left;
   cursor: pointer;
 }
 
-.presetRow[data-active="true"] {
-  border-color: var(--accent-primary);
-  box-shadow: 0 0 0 1px var(--accent-primary);
+.rowRadio:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 4px;
+  border-radius: 4px;
 }
 
-.presetText,
-.presetFacts {
+.radioDot {
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-light);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rowRadio[aria-checked="true"] .radioDot {
+  border-color: var(--accent-primary);
+}
+
+.rowRadio[aria-checked="true"] .radioDot::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+}
+
+.rowText {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
   min-width: 0;
 }
 
-.presetFacts {
-  align-items: flex-end;
-  flex-shrink: 0;
-  text-align: right;
-}
-
-.presetName {
+.rowName {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  font-weight: 600;
+  gap: 7px;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
 }
 
-.presetMeta {
-  font-size: 11px;
+.rowWhere {
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
 }
 
 .recommended {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--accent-primary);
-  background: color-mix(in srgb, var(--accent-primary) 14%, transparent);
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--tone-heavy);
 }
 
-/* Fit/Fill and the cap warning, under the selected row only. */
-.rowOptions {
+/* "✓ Already exported · Open": the file is there, open it instead of encoding again. */
+.exportedBadge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--tone-saving) 40%, transparent);
+  background: transparent;
+  color: var(--tone-saving);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.exportedBadge:hover {
+  background: color-mix(in srgb, var(--tone-saving) 10%, transparent);
+}
+
+.rowSize {
+  flex-shrink: 0;
+  min-width: 92px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin: 6px 0 4px 10px;
-  text-align: left;
+  align-items: flex-end;
+  gap: 2px;
+  text-align: right;
 }
 
-/* A row whose file already exists: "✓ Already exported" + an Open button beside it. */
-.presetLine {
+.rowMb {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.rowMb[data-heavy="true"] {
+  color: var(--tone-heavy);
+}
+
+.rowDims {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* The selected row's details, aligned with its name (past the radio dot). */
+.rowDetail {
   display: flex;
-  align-items: stretch;
-  gap: 4px;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 14px 13px 43px;
+  cursor: default;
 }
 
-.presetLine .presetRow {
-  flex: 1;
+.say {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.framing {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.framingControls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   min-width: 0;
 }
 
-.exported {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--success, #30a46c);
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0;
+  margin: 0;
 }
 
-.openExisting {
-  flex-shrink: 0;
-  padding: 0 10px;
-  border-radius: 8px;
+.fact {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 999px;
   border: 1px solid var(--border);
-  background: var(--bg-modal);
-  color: var(--accent-primary);
+  background: var(--bg-input);
+  font-size: 11.5px;
+  color: var(--text-primary);
+}
+
+.fact[data-warn="true"] {
+  color: var(--tone-heavy);
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-top: 14px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--border);
+}
+
+.note {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.cancel,
+.primary {
+  height: 38px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 15px;
+  border-radius: var(--radius-lg);
   font: inherit;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--font-size-base);
+  white-space: nowrap;
   cursor: pointer;
+  transition: background-color var(--transition);
+}
+
+.cancel {
+  border: 1px solid var(--border-light);
+  background: transparent;
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.cancel:hover {
+  background: var(--bg-card-hover);
+}
+
+.primary {
+  border: 0;
+  background: var(--accent-primary);
+  color: #fff;
+  font-weight: var(--font-weight-semibold);
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--accent-primary-hover);
+}
+
+.primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.enterKey {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: rgba(255, 255, 255, 0.75);
+}
+.rowDetail .warning {
+  margin: 0;
 }

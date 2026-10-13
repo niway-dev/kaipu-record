@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LocalRecording } from "@shared/types/library-storage";
@@ -147,13 +147,13 @@ async function makeDirty(footer: HTMLElement): Promise<void> {
 }
 
 /**
- * "Export" opens the export sheet (NIW2-217); "Export video" there runs the MP4 export.
- * When the metadata guard refuses, no sheet opens and only the first click happens.
+ * "Export" opens the export sheet (NIW2-217); its primary "Export ~N MB" runs the MP4
+ * export. When the metadata guard refuses, no sheet opens and only the first click happens.
  */
 function clickExportVideo(): void {
   fireEvent.click(screen.getByRole("button", { name: "Export" }));
-  const video = screen.queryByRole("button", { name: "Export video" });
-  if (video) fireEvent.click(video);
+  const sheet = screen.queryByRole("alertdialog");
+  if (sheet) fireEvent.click(within(sheet).getByRole("button", { name: /^Export( |$)/ }));
 }
 
 describe("VideoEditorPage — legacy /video-editor redirect", () => {
