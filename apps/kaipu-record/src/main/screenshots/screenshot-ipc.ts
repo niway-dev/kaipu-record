@@ -4,7 +4,7 @@ import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage } from "ele
 import { createMainTranslator } from "@kaipu/i18n/main";
 import { IPC_CHANNELS } from "@shared/types/ipc";
 import type { LocalRecording } from "@shared/types/library-storage";
-import { exportFileName } from "./export-file-name";
+import { assertExportPayload, exportFileName } from "./export-file-name";
 import { createScreenshotProvider } from "./screenshot-capture";
 import { getAppSettings } from "../infrastructure/settings-store";
 import { currentVault, screenshotFilePath } from "../library";
@@ -101,16 +101,18 @@ export function registerScreenshotHandlers(windows: CaptureWindowHooks): void {
     IPC_CHANNELS.screenshotExportFile,
     async (
       event,
-      bytes: ArrayBuffer,
+      bytes: unknown,
       meta: { suggestedName: string; extension: string },
     ): Promise<{ path: string } | null> => {
+      // Validate before any dialog: main decides which bytes reach the user's disk.
+      assertExportPayload(bytes, meta?.extension);
       const window = BrowserWindow.fromWebContents(event.sender);
       const t = createMainTranslator(getAppSettings().locale);
       const options: Electron.SaveDialogOptions = {
         title: t("dialogs.exportPdfTitle"),
         defaultPath: join(
           app.getPath("downloads"),
-          exportFileName(meta.suggestedName, meta.extension),
+          exportFileName(String(meta.suggestedName ?? ""), meta.extension),
         ),
         filters: [{ name: t("dialogs.pdfFileType"), extensions: [meta.extension] }],
       };

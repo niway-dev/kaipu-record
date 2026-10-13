@@ -261,7 +261,7 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
     busy.current = true;
     try {
       const written = await window.electronAPI.exportScreenshotFile(await exportAs("pdf"), {
-        suggestedName: baseTitle,
+        suggestedName: resolveCaptureTitle(captureTitle.draft, captureTitle.autoTitle),
         extension: "pdf",
       });
       if (written) showFeedback({ kind: "exported", name: fileName(written.path) });
