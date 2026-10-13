@@ -5,7 +5,7 @@ description: Design for muting the microphone, turning system (playback) audio o
 
 # Live recording controls — design
 
-**Status: 🔵 Proposed · 2026-10-06.** Supersedes the proposal in
+**Status: 🟢 Ready to validate · implemented by PR #243 (merged 2026-10-07).** Designed 2026-10-06. Supersedes the proposal in
 [backlog/live-recording-controls](/backlog/live-recording-controls/) where the two differ
 (surfaces, system audio). One phase, meant for the night shift.
 

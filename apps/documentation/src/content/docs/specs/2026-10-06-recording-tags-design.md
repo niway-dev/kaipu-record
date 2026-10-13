@@ -5,7 +5,7 @@ description: Design for free-form tags on recordings (e.g. kaipu, cricut, issue-
 
 # Recording tags — design
 
-**Status: 🔵 Proposed · 2026-10-06.** Phase 1 (local) goes to the night shift; Phase 2 (cloud) waits for the optional-cloud catalog endpoints.
+**Status: 🟡 In progress · Phase 1 implemented in PR #245 (in review).** Designed 2026-10-06. Phase 1 (local) goes to the night shift; Phase 2 (cloud) waits for the optional-cloud catalog endpoints.
 
 ## Summary (one minute)
 

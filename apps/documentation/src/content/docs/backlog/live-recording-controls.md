@@ -5,7 +5,7 @@ description: "Proposal: let the user mute the microphone, turn system audio on o
 
 # Live recording controls
 
-> **Status: 🔵 Proposed** (2026-09-23). Owner request after the video editor v2 wave:
+> **Status: 🟢 Ready to validate** (shipped in PR #243, 2026-10-07; proposed 2026-09-23). Owner request after the video editor v2 wave:
 > "I want to change the recording settings while the recording is happening — mute,
 > turn audio on or off, and the camera." Not scheduled. Parent reference:
 > [Recording pipeline](/desktop/recording-pipeline/) · sibling:

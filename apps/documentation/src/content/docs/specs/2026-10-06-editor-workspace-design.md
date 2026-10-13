@@ -5,7 +5,7 @@ description: Design with variants for a single Editor view in the desktop app �
 
 # Editor workspace — design
 
-**Status: 🔵 Proposed · 2026-10-06.** Phase 1 is sized for one night-shift run. Phases 2 and
+**Status: 🟡 In progress · Phase 1 implemented in PR #244 (in review); Phases 2 and 3 not started.** Designed 2026-10-06. Phase 1 is sized for one night-shift run. Phases 2 and
 3 are larger and go through `plan-first`. Extends the idea in
 [backlog/standalone-editor](/backlog/standalone-editor/).
 
