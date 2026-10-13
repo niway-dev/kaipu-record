@@ -19,24 +19,27 @@ export type RoadmapStatus = (typeof ROADMAP_STATUSES)[number];
  */
 export const ROADMAP_ITEMS = [
   // Shipped — newest first, so the top of the group is the freshest news.
+  { id: "watermark", status: "shipped" },
+  { id: "saveEveryScreenshot", status: "shipped" },
+  { id: "videoZoom", status: "shipped" },
   { id: "accounts", status: "shipped" },
   { id: "cloudFoundation", status: "shipped" },
   { id: "screenshotAnnotations", status: "shipped" },
   { id: "library", status: "shipped" },
   { id: "themeAndLanguages", status: "shipped" },
   { id: "videoEditor", status: "shipped" },
-  { id: "watermark", status: "shipped" },
   { id: "shortcuts", status: "shipped" },
   { id: "screenAndCamera", status: "shipped" },
 
   // Planned — this order is the order shown, not a commitment to dates.
+  // Every planned item has a design doc in the docs site (backlog/) before it is
+  // built; the public-roadmap-page doc maps each id to its doc.
+  { id: "windowsBeta", status: "planned" },
   { id: "cloudUpload", status: "planned" },
-  { id: "videoZoom", status: "planned" },
   { id: "photoZoom", status: "planned" },
-  { id: "watermarkUpgrade", status: "planned" },
   { id: "imageTags", status: "planned" },
+  { id: "watermarkUpgrade", status: "planned" },
   { id: "renameOnSave", status: "planned" },
-  { id: "saveEveryScreenshot", status: "planned" },
   { id: "brandIdentity", status: "planned" },
 ] as const satisfies readonly { id: string; status: RoadmapStatus }[];
 

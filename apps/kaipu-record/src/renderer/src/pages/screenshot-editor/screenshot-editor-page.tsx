@@ -1,6 +1,16 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Navigate, useBlocker, useLocation, useNavigate } from "react-router-dom";
-import { Check, Copy, Download, Redo2, Trash2, Undo2, ZoomIn, ZoomOut } from "lucide-react";
+import {
+  Check,
+  Copy,
+  Download,
+  FileText,
+  Redo2,
+  Trash2,
+  Undo2,
+  ZoomIn,
+  ZoomOut,
+} from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { useImageSource, type ImageSource } from "@renderer/features/screenshots/image-source";
 import {
@@ -18,14 +28,19 @@ import {
   FLAT_BEAUTIFY,
 } from "@renderer/features/screenshots/beautify";
 import { SaveOptionsDialog } from "@renderer/features/screenshots/save-options-dialog";
+import { CaptureTitleInput } from "@renderer/features/screenshots/capture-title-input";
+import {
+  resolveCaptureTitle,
+  useCaptureTitle,
+} from "@renderer/features/screenshots/use-capture-title";
 import {
   AnnotationLayer,
   AnnotationOptions,
   AnnotationToolbar,
-  compositeScene,
   useAnnotationTools,
   useEditorScene,
 } from "@renderer/features/screenshots/annotations";
+import { exportScene, type ExportFormat } from "@renderer/features/screenshots/export";
 import { useTransientValue } from "@renderer/ui/use-transient-value";
 import { useCompactRow } from "@renderer/ui/use-compact-row";
 import styles from "./screenshot-editor-page.module.css";
@@ -40,9 +55,14 @@ const FEEDBACK_MS = 2600;
 type Feedback =
   | { kind: "copied" }
   | { kind: "saved"; name: string }
+  // A PDF went to a path the user picked; `name` is the file name there.
+  | { kind: "exported"; name: string }
   // Both auto actions fired on open. One indicator, not two: `feedback` holds a
   // single value on purpose, so the combined outcome needs its own kind.
   | { kind: "savedAndCopied"; name: string };
+
+/** The last path segment, whichever separator the OS used. */
+const fileName = (path: string): string => path.split(/[\\/]/).pop() ?? path;
 
 const clampZoom = (z: number): number =>
   Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 100) / 100));
@@ -97,8 +117,25 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
   const [autoSaved, setAutoSaved] = useState(false);
   const navigate = useNavigate();
   const [askSave, setAskSave] = useState(false);
-  const [baseTitle] = useState(
+  // The auto title is computed once; the toolbar field starts from it and is
+  // what Save writes. On a saved shot, committing the field renames the vault item
+  // in place — the same IPC the Library's inline rename uses.
+  const [autoTitle] = useState(
     () => source.title ?? `${t("screenshotPrefix")} — ${new Date().toLocaleString()}`,
+  );
+  const renameSaved = async (id: string, next: string): Promise<void> => {
+    try {
+      await window.electronAPI.renameLocalRecording(id, next);
+    } catch (error) {
+      reportError(t("renameError"), error, {
+        context: { phase: "rename", id },
+        retry: () => void renameSaved(id, next),
+      });
+    }
+  };
+  const captureTitle = useCaptureTitle(
+    autoTitle,
+    savedId ? (next) => void renameSaved(savedId, next) : null,
   );
 
   // Unsaved-changes guard. A fresh capture (blob) lives ONLY in memory, so it's
@@ -152,15 +189,17 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
 
   const zoomBy = (delta: number): void => setZoom((z) => clampZoom(z + delta));
 
-  // Composite the beautify frame + annotations to a PNG — what Copy and Save export.
-  // Only ever invoked once `imageReady` is true (see the guards below), which itself
-  // can only happen once `image` has resolved, so the non-null assert is safe.
-  const exportPng = async (): Promise<ArrayBuffer> =>
-    compositeScene(
-      { beautify: scene.beautify.state, annotations: scene.annotations, crop: scene.crop },
-      await image!.getBytes(),
-      imgRef.current?.clientWidth ?? 0,
-    );
+  // Composite the beautify frame + annotations and encode them as `format`: PNG is
+  // what Copy and Save use, PDF what Export writes. Only ever invoked once
+  // `imageReady` is true (see the guards below), which itself can only happen once
+  // `image` has resolved, so the non-null assert is safe.
+  const exportAs = async (format: ExportFormat): Promise<ArrayBuffer> =>
+    exportScene(format, {
+      scene: { beautify: scene.beautify.state, annotations: scene.annotations, crop: scene.crop },
+      bytes: await image!.getBytes(),
+      displayedW: imgRef.current?.clientWidth ?? 0,
+    });
+  const exportPng = (): Promise<ArrayBuffer> => exportAs("png");
 
   /**
    * Export the scene and put it on the clipboard. Reports its own failures; the
@@ -200,10 +239,13 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
     busy.current = true;
     try {
       const saved = await window.electronAPI.saveScreenshot(await exportPng(), {
-        title: opts.title ?? baseTitle,
+        // The live field, not only its committed value: Save must write what the
+        // user sees even if the field has not blurred yet (e.g. a shortcut).
+        title: opts.title ?? resolveCaptureTitle(captureTitle.draft, captureTitle.autoTitle),
         overwriteId: opts.overwriteId,
       });
       setSavedId(saved.id);
+      captureTitle.adopt(saved.title);
       setDirty(false); // now safely in the vault — leaving no longer loses work
       if (!opts.silent) showFeedback({ kind: "saved", name: saved.title });
       return saved.title;
@@ -216,6 +258,30 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
         retry: () => void persist(opts),
       });
       return null;
+    } finally {
+      busy.current = false;
+    }
+  };
+
+  /**
+   * Export a PDF to a path the user picks. Independent of the vault: it neither
+   * binds the editor to a saved item nor clears `dirty` — a shared file is not a
+   * library copy. A cancelled dialog is not an error and shows nothing.
+   */
+  const onExportPdf = async (): Promise<void> => {
+    if (busy.current || !imageReady) return;
+    busy.current = true;
+    try {
+      const written = await window.electronAPI.exportScreenshotFile(await exportAs("pdf"), {
+        suggestedName: resolveCaptureTitle(captureTitle.draft, captureTitle.autoTitle),
+        extension: "pdf",
+      });
+      if (written) showFeedback({ kind: "exported", name: fileName(written.path) });
+    } catch (error) {
+      reportError(t("exportPdfError"), error, {
+        context: { phase: "export", format: "pdf" },
+        retry: () => void onExportPdf(),
+      });
     } finally {
       busy.current = false;
     }
@@ -275,7 +341,7 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
   };
   const onSaveCopy = (): void => {
     setAskSave(false);
-    void persist({ title: `${baseTitle} (${t("copySuffix")})` });
+    void persist({ title: `${captureTitle.title} (${t("copySuffix")})` });
   };
 
   // "savedAndCopied" lights both indicators at once — that combined state is exactly
@@ -283,12 +349,16 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
   const copied = feedback?.kind === "copied" || feedback?.kind === "savedAndCopied";
   const savedName =
     feedback?.kind === "saved" || feedback?.kind === "savedAndCopied" ? feedback.name : null;
+  const exportedName = feedback?.kind === "exported" ? feedback.name : null;
 
   // The toolbar drops the action labels only when the row cannot hold them (see
   // useCompactRow). The revision names what changes the row's content without
   // resizing it: the toolbar mounting with the image, a label flipping to its
-  // "done" wording, Discard appearing after an auto-save.
-  useCompactRow(toolbarRef, `${hasImage}:${copied}:${savedName ?? ""}:${autoSaved}`);
+  // "done" wording (Saved, Exported), Discard appearing after an auto-save.
+  useCompactRow(
+    toolbarRef,
+    `${hasImage}:${copied}:${savedName ?? ""}:${exportedName ?? ""}:${autoSaved}`,
+  );
 
   // `image` is null on the first render while the reader resolves — render nothing.
   // Moved here (past every hook) so the auto-save effect above stays unconditional.
@@ -303,6 +373,7 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
         aria-label={t("editorToolbar")}
       >
         <AnnotationToolbar tools={tools} onPick={() => scene.select(null)} />
+        <CaptureTitleInput title={captureTitle} />
         <div className={styles.actions}>
           <button
             type="button"
@@ -352,6 +423,19 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
           >
             {savedName ? <Check size={16} /> : <Download size={16} />}
             <span className={styles.label}>{savedName ? t("saved") : t("save")}</span>
+          </button>
+          <button
+            type="button"
+            className={styles.secondary}
+            data-done={exportedName !== null}
+            disabled={!imageReady}
+            title={
+              exportedName ? t("exportedPdfTitle", { name: exportedName }) : t("exportPdfTitle")
+            }
+            onClick={() => void onExportPdf()}
+          >
+            {exportedName ? <Check size={16} /> : <FileText size={16} />}
+            <span className={styles.label}>{exportedName ? t("exportedPdf") : t("exportPdf")}</span>
           </button>
           {autoSaved && savedId && (
             <button
@@ -435,7 +519,7 @@ function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Elemen
 
       {askSave && (
         <SaveOptionsDialog
-          title={baseTitle}
+          title={captureTitle.title}
           onOverwrite={onOverwrite}
           onSaveCopy={onSaveCopy}
           onCancel={() => setAskSave(false)}

@@ -12,6 +12,46 @@ import {
 import type { Annotation, Scene } from "./scene";
 
 /**
+ * Longest canvas side the compositor will rasterize to. Chromium caps a canvas
+ * at 16384 px per side and a few hundred megapixels of area; a Retina capture at
+ * 3× would blow past the area limit and `toBlob` would silently return null.
+ * 8192 keeps a 2880-wide shot at 2× and smaller shots at 3×.
+ */
+export const MAX_RASTER_SIDE = 8192;
+
+/**
+ * The raster scale actually used for a `requested` multiplier on a frame of
+ * `w`×`h` px: the largest integer ≤ `requested` that keeps both sides under
+ * MAX_RASTER_SIDE, never below 1. Pure, exported for tests.
+ */
+export function clampRasterScale(requested: number, w: number, h: number): number {
+  const wanted = Math.max(1, Math.floor(requested));
+  const longest = Math.max(w, h, 1);
+  const fits = Math.floor(MAX_RASTER_SIDE / longest);
+  return Math.max(1, Math.min(wanted, fits));
+}
+
+export interface CompositeOptions {
+  /**
+   * Resolution multiplier over the frame's natural pixels. 1 (the default) is what
+   * Copy/Save use — the PNG matches the shot 1:1. Exporters that embed a raster
+   * into a zoomable container (PDF) ask for 2–3× so annotations stay crisp when
+   * zoomed; clamped by `clampRasterScale`.
+   */
+  rasterScale?: number;
+}
+
+export interface CompositeResult {
+  /** PNG bytes. */
+  png: ArrayBuffer;
+  /** The frame (crop window) in natural px — the PNG is `width*scale` × `height*scale`. */
+  width: number;
+  height: number;
+  /** The raster scale actually applied after clamping. */
+  scale: number;
+}
+
+/**
  * Composite the editor scene (beautify frame + annotations) to a PNG, at the
  * screenshot's natural resolution. Builds a self-contained SVG that mirrors the
  * live preview (same rough paths, same gradient/shadow) with the screenshot
@@ -26,6 +66,21 @@ export async function compositeScene(
   bytes: ArrayBuffer,
   displayedW: number,
 ): Promise<ArrayBuffer> {
+  return (await compositeSceneAt(scene, bytes, displayedW)).png;
+}
+
+/**
+ * `compositeScene` with a resolution multiplier, returning the frame geometry
+ * alongside the bytes. The SVG is vector (only the shot is a bitmap), so drawing
+ * it onto a larger canvas keeps every annotation stroke and the frame edges sharp
+ * at that scale — the shot itself is upsampled.
+ */
+export async function compositeSceneAt(
+  scene: Scene,
+  bytes: ArrayBuffer,
+  displayedW: number,
+  options: CompositeOptions = {},
+): Promise<CompositeResult> {
   const href = await bytesToDataUrl(bytes);
   // Decode the PNG for its TRUE pixel size (Retina-safe — `getSize` can differ).
   const { width: naturalW, height: naturalH } = await imageSize(href);
@@ -40,7 +95,9 @@ export async function compositeScene(
   const outW = Math.round(c.w * fullW);
   const outH = Math.round(c.h * fullH);
   const svg = buildSvg(scene, { href, naturalW, naturalH, pad, radius, scale });
-  return rasterize(svg, outW, outH);
+  const rasterScale = clampRasterScale(options.rasterScale ?? 1, outW, outH);
+  const png = await rasterize(svg, outW, outH, rasterScale);
+  return { png, width: outW, height: outH, scale: rasterScale };
 }
 
 function imageSize(url: string): Promise<{ width: number; height: number }> {
@@ -220,19 +277,25 @@ function bytesToDataUrl(bytes: ArrayBuffer): Promise<string> {
   });
 }
 
-function rasterize(svg: string, w: number, h: number): Promise<ArrayBuffer> {
+/**
+ * Draw the SVG (authored at `w`×`h`) onto a canvas `k` times larger. `drawImage`
+ * with an explicit destination size re-renders the vector content at the target
+ * resolution rather than scaling a bitmap, which is what makes the high-DPI
+ * raster worth embedding.
+ */
+function rasterize(svg: string, w: number, h: number, k: number): Promise<ArrayBuffer> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement("canvas");
-      canvas.width = w;
-      canvas.height = h;
+      canvas.width = w * k;
+      canvas.height = h * k;
       const ctx = canvas.getContext("2d");
       if (!ctx) {
         reject(new Error("compositor: no 2D context"));
         return;
       }
-      ctx.drawImage(img, 0, 0);
+      ctx.drawImage(img, 0, 0, w * k, h * k);
       canvas.toBlob((blob) => {
         if (!blob) {
           reject(new Error("compositor: toBlob failed"));
