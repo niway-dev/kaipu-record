@@ -34,6 +34,11 @@ export class SidecarTagStore implements TagStore {
     updatedAt: number,
   ): Promise<readonly string[]> {
     const normalized = new TagSetBuilder(tags).build();
+    // The id comes from the renderer: only an item that exists right now gets a
+    // sidecar. Otherwise a deleted or unknown id would leave an orphan sidecar.
+    if (!(await this.vault().hasMedia(itemId))) {
+      throw new Error(`tags: no library item "${itemId}"`);
+    }
     await this.vault().writeMeta(itemId, { tags: [...normalized], tagsUpdatedAt: updatedAt });
     return normalized;
   }

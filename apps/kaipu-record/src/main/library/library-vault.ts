@@ -185,14 +185,29 @@ export class LibraryVault {
     }
   }
 
-  /** Merge fields into the sidecar (used by rename and by finalize). */
+  /**
+   * Merge fields into the sidecar (used by rename, finalize and tags). Atomic
+   * (temp + rename): a crash mid-write never leaves a truncated sidecar, which
+   * would read back as `{}` and lose the item's title, identity and tags.
+   */
   async writeMeta(id: string, meta: Sidecar): Promise<void> {
     const current = await this.sidecar(id);
     await mkdir(this.metaDirectory(), { recursive: true });
+    const target = this.sidecarPath(id);
     await writeFile(
-      this.sidecarPath(id),
+      `${target}.tmp`,
       JSON.stringify({ ...current, ...meta, sidecarVersion: 2 }, null, 2),
     );
+    await rename(`${target}.tmp`, target);
+  }
+
+  /** Whether `id` names a media file in the vault right now (not deleted, not unknown). */
+  async hasMedia(id: string): Promise<boolean> {
+    if (!isPlainItemId(id)) return false;
+    for (const ext of ALL_EXTS) {
+      if (await exists(join(this.directory, `${id}${ext}`))) return true;
+    }
+    return false;
   }
 
   /**
@@ -326,4 +341,12 @@ export class LibraryVault {
 function humanizeId(id: string): string {
   const cleaned = id.replace(/[-_]+/g, " ").trim();
   return cleaned ? cleaned.replace(/\b\w/g, (c) => c.toUpperCase()) : "Recording";
+}
+
+/**
+ * An item id is a bare file stem: no path separators, no leading dot. Anything
+ * else could address a file outside the vault when joined into a path.
+ */
+export function isPlainItemId(id: string): boolean {
+  return id.length > 0 && !id.startsWith(".") && !/[\\/]/.test(id) && basename(id) === id;
 }

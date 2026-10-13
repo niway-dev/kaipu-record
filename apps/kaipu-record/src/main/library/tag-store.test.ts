@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TagLimitError, TAGS_PER_ITEM_MAX } from "@kaipu/domain/constants";
@@ -85,6 +85,21 @@ describe("SidecarTagStore", () => {
     const tooMany = Array.from({ length: TAGS_PER_ITEM_MAX + 1 }, (_, i) => `t${i}`);
     await expect(store.set("clip", tooMany, 2)).rejects.toBeInstanceOf(TagLimitError);
     expect((await readSidecar("clip")).tags).toEqual(["keep"]);
+  });
+
+  it("refuses an unknown, deleted or path-like id and writes no sidecar", async () => {
+    await writeRecording("gone");
+    await rm(join(directory, "gone.webm"));
+    for (const id of ["missing", "gone", "../clip", "a/b", ".kaipu", ""]) {
+      await expect(store.set(id, ["x"], 1)).rejects.toThrow(/no library item/);
+    }
+    await expect(readdir(join(directory, ".kaipu"))).rejects.toThrow();
+  });
+
+  it("writes the sidecar atomically, leaving no temp file behind", async () => {
+    await writeRecording("clip");
+    await store.set("clip", ["a"], 1);
+    expect(await readdir(join(directory, ".kaipu"))).toEqual(["clip.json"]);
   });
 
   it("returns no tags for an item without a sidecar", async () => {
