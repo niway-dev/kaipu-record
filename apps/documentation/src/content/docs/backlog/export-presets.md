@@ -1,14 +1,14 @@
 ---
 title: "Video editor — export presets per destination"
-description: "NIW2-218: one export sheet grouped by intent — Balanced (recommended, 1080p · 15 fps · 2 Mbps), Light (720p · 15 fps · 1.2 Mbps) for GitHub · Jira · Linear · Slack, YouTube, Reels · TikTok · Shorts, Feeds, Maximum quality — quality tiers measured on screen text, with fast start. Exports run in the background with in-app progress and Ready to share cards; Share exports the whole recording from its library page."
+description: "NIW2-218: one export sheet grouped by intent — Balanced (recommended, 1080p · 24 fps · AVC quantizer 30), Light (the same at quantizer 33) for GitHub · Jira · Linear · Slack, YouTube, Reels · TikTok · Shorts, Feeds, Maximum quality — constant-quality tiers measured on screen text, 10 s keyframes, fast start. Exports run in the background with in-app progress and Ready to share cards; Share exports the whole recording from its library page."
 ---
 
 # Video editor — export presets per destination
 
 > **Status: 🟢 Ready to validate — stacked PRs on top of NIW2-217 (#266): #269 → #271 → #272 →
-> export quality → Share button → redesign → background export → quality tiers.** The tier numbers
-> were measured with ffmpeg VideoToolbox; the in-app WebCodecs path still needs the owner's eye
-> (below).
+> export quality → Share button → redesign → background export → quality tiers → quantizer
+> encoding.** The encoder settings come from a spike on the app's own WebCodecs path, watched by
+> the owner (below).
 >
 > 1. Pipeline + fast start (`feat/NIW2-218-export-presets`).
 > 2. Preset picker in the export sheet (`feat/NIW2-218-export-presets-ui`).
@@ -22,6 +22,8 @@ description: "NIW2-218: one export sheet grouped by intent — Balanced (recomme
 >    share and Recording saved cards (`feat/NIW2-218-background-export`). Design: Claude Design
 >    project `71546ef1-baf5-42e9-8fcc-9b9b44f2c7ab`, file `Kaipu Export.dc.html`.
 > 7. Quality tiers replace the size-capped Small-file rows (`feat/NIW2-218-quality-tiers`).
+> 8. Quantizer encoding: the tiers move to constant quality at 24 fps, every preset to 10 s
+>    keyframes, mediabunny to 1.61 (`feat/NIW2-218-quantizer-encoding`).
 >
 > Unit, hook and component tests pass; real exports (WebCodecs in the worker, VideoToolbox rate
 > control, `ffprobe` on the outputs, playback in Safari/Chrome/QuickTime) still need a pass on the
@@ -32,7 +34,7 @@ description: "NIW2-218: one export sheet grouped by intent — Balanced (recomme
 
 One sheet, shared by the editor's Export (titled "Export") and the library's Share ("Share a
 copy"), subtitled with the recording's title · duration · resolution. A before/after meter shows
-the selected row's estimate against the original's size ("~9.7 MB · 92% lighter"). The rows are
+the selected row's estimate against the original's size ("~5.9 MB · 95% lighter"). The rows are
 grouped by what the user is about to do — **Recommended** (Balanced), **Share in a tool** (Light,
 for GitHub · Jira · Linear · Slack), **Post** (YouTube, Reels · TikTok · Shorts, Feeds), **Keep**
 (Maximum quality). Each row shows where it works, its size
@@ -40,19 +42,23 @@ in MB ("~" for the quality tiers, "up to ~" for the fixed canvases, "Full size" 
 Maximum, which has no estimate) and its output dimensions. The selected row opens with a one-line
 explanation and ✓ facts; Reels and Feeds add a framing preview with Fill / Fit. The copy never
 says bitrate or fps. The selected row is preselected from Settings → Export quality (or Light,
-from a "light copy" shortcut), and Enter exports it ("Export ~9.7 MB ↵").
+from a "light copy" shortcut), and Enter exports it ("Export ~5.9 MB ↵").
 
 The internal preset ids and numbers:
 
-| Row                             | Output                                           | Bitrate                                | Notes                                               |
-| ------------------------------- | ------------------------------------------------ | -------------------------------------- | --------------------------------------------------- |
-| ⭐ **Balanced** (`balanced`)    | Source aspect, short side ≤ 1080, never upscaled | 2 Mbps (fewer below 1080p), ≤ 15 fps   | Recommended default, ~16 MB/min. AAC 128 kbps.      |
-| **Light** (`light`)             | Source aspect, short side ≤ 720, never upscaled  | 1.2 Mbps (fewer below 720p), ≤ 15 fps  | ~9 MB/min. Mono AAC 64 kbps (with fallbacks).       |
-| **YouTube 16:9**                | 1920×1080                                        | 8 Mbps ≤ 30 fps, 12 Mbps above         | Always Fit, black padding.                          |
-| **Vertical 9:16**               | 1080×1920                                        | 8 / 12 Mbps                            | Fill (default) or Fit with a blurred-frame padding. |
-| **Square 1:1**                  | 1080×1080                                        | 4.5 / 6.75 Mbps (pixel-scaled)         | Fit (default) or Fill.                              |
-| **Maximum quality** (`maximum`) | Source's native size                             | `QUALITY_HIGH` (the pre-preset export) | Was "Original". Fast start.                         |
+| Row                             | Output                                           | Rate control                                          | Notes                                                      |
+| ------------------------------- | ------------------------------------------------ | ----------------------------------------------------- | ---------------------------------------------------------- |
+| ⭐ **Balanced** (`balanced`)    | Source aspect, short side ≤ 1080, never upscaled | AVC quantizer 30, ≤ 24 fps (fallback 2.5 Mbps)        | Recommended default, estimated ~7 MB/min. AAC 128 kbps.    |
+| **Light** (`light`)             | Same as Balanced                                 | AVC quantizer 33, ≤ 24 fps (fallback 1.6 Mbps)        | Estimated ~5.7 MB/min. AAC 128 kbps.                       |
+| **YouTube 16:9**                | 1920×1080                                        | 8 Mbps ≤ 30 fps, 12 Mbps above                        | Always Fit, black padding. Keyframe every 2 s (see below). |
+| **Vertical 9:16**               | 1080×1920                                        | 8 / 12 Mbps                                           | Fill (default) or Fit with a blurred-frame padding.        |
+| **Square 1:1**                  | 1080×1080                                        | 4.5 / 6.75 Mbps (pixel-scaled)                        | Fit (default) or Fill.                                     |
+| **Maximum quality** (`maximum`) | Source's native size                             | mediabunny's `'high'` level as a bitrate (pre-preset) | Was "Original". Fast start.                                |
 
+- Every preset but YouTube puts a keyframe every 10 s (mediabunny's default is 2 s). These are
+  files to upload or attach, not streams, so the only cost is coarser seeking; on mostly static
+  screen content the 2 s keyframes were most of the file. YouTube's upload guide asks for a short
+  closed GOP and that preset targets a fixed bitrate anyway, so it keeps 2 s.
 - Fixed canvases always output the exact preset size (upscaling a smaller source).
 - Audio on fixed presets is AAC 128 kbps at the source layout and sample rate.
 - **Fill** crops a centred window of the composed (zoomed) view, so it follows the zoom camera.
@@ -75,8 +81,9 @@ The internal preset ids and numbers:
   "(vertical)", "(square)", "(light)"). Older sidecars say `"original"` (read as `maximum`) or
   `"small-10"` / `"small-25"` (read as `light`), via `normalizeExportPresetId`.
 - "Already exported" compares the content fingerprint **plus the preset's encode revision**
-  (`encodeFingerprint`, `ENCODE_REVISION`): a Balanced file made with the old 30 fps · 3 Mbps
-  numbers, or an old Small-file export now read as Light, is never offered as the new encode.
+  (`encodeFingerprint`, `ENCODE_REVISION`, now `q30-24fps-kfi10` / `q33-24fps-kfi10`): a
+  Balanced or Light file from the bitrate tiers (15 fps), the old 30 fps · 3 Mbps Balanced, or an
+  old Small-file export now read as Light, is never offered as the new encode.
 
 ## Background exports and status cards
 
@@ -87,7 +94,7 @@ exporting “…”" instead of a sheet. Cards stack in the top-right corner of 
 (`features/status-cards/`, mounted at the app root):
 
 - **Progress:** "Making a lighter copy…", the preset and output size, a progress bar,
-  "64% · about 25 s left" (projected from the rate so far), "119 MB → ~9.7 MB", and Cancel. A failure turns it into an error card with Retry.
+  "64% · about 25 s left" (projected from the rate so far), "119 MB → ~5.9 MB", and Cancel. A failure turns it into an error card with Retry.
 - **Ready to share:** the real size ("Ready to share · 8.1 MB"), "93% lighter than the original.",
   for the tiers the two GitHub plan chips from the real size,
   the before/after meter, and a file chip that drags out natively under the item's title
@@ -96,7 +103,7 @@ exporting “…”" instead of a sheet. Cards stack in the top-right corner of 
   exported item's Library page), **Show in Finder**, **Done**. It replaces the old "Export saved"
   toast.
 - **Recording saved:** right after a recording over 10 MB, its page shows "Recording saved" with
-  the Light estimate on a before/after bar ("~9.7 MB · fits GitHub", GitHub only when it fits)
+  the Light estimate on a before/after bar ("~5.9 MB · fits GitHub", GitHub only when it fits)
   and **Share a light copy**, which opens the sheet on the Light row. Hides after 8 s (paused while hovered); Settings →
   Export quality → "Offer a light copy after recording" turns it off
   (`AppSettings.showRecordingSavedCard`). The card component is generic, for a future "uploaded
@@ -115,7 +122,7 @@ stops or 2 s.
 an export, next to Edit video / Reveal / Delete. That page is also where a recording lands the
 moment it stops (`fromRecording`), so it is the "right after recording" entry point too. Over 25
 MB the size shows in amber and a teal banner says "119 MB is heavy to send. Share makes a lighter
-copy — about 13 MB, small enough for GitHub or Jira." (the Light estimate; GitHub is promised
+copy — about 7.6 MB, small enough for GitHub or Jira." (the Light estimate; GitHub is promised
 only when it fits) with "Make a light copy →" (the sheet on the Light row).
 Share exports the **whole file as it is on disk**: no edits applied, even when the recording has an
 edit session. The editor's Export keeps applying the edits.
@@ -166,39 +173,46 @@ rate. Never `'in-memory'` (it buffers the whole file — the OOM in the fable au
 throws "maximum packet count", the hook aborts that attempt's writer session and retries **once**
 with `fastStart: false` (logged to `captureException`).
 
-**Quality tiers.** A tier is a quality floor, not a size target: short side ≤ the tier's (never
-upscaled), ≤ 15 fps, its bitrate (scaled down by pixel count for a smaller source). The size is
-whatever the duration makes it — `(video + audio) × D / 8` plus the moov reservation — and the
-sheet says whether it fits GitHub. They replace the size-capped Small-file rows (the ladder down to
-480p at 250 kbps, the "Export anyway" warning and the post-export shrink-and-retry), which turned a
-2:51 terminal recording into an unreadable 852×480 at 245 kbps.
+**Quality tiers.** A tier is a quality floor, not a size target: short side ≤ 1080 (never
+upscaled), ≤ 24 fps, AVC in quantizer mode (constant quality, like x264's CRF) on the hardware
+encoder. They replace the size-capped Small-file rows (the ladder down to 480p at 250 kbps, the
+"Export anyway" warning and the post-export shrink-and-retry), which turned a 2:51 terminal
+recording into an unreadable 852×480 at 245 kbps.
+
+- **Encoder choice** (`video-encoding.ts`, probed in the worker with `canEncodeVideo`): hardware
+  AVC in quantizer mode → hardware AVC at the tier's fallback bitrate (still 10 s keyframes) →
+  whatever the platform offers, at the bitrate. The last one is Chromium's software H.264 in
+  practice: the export still finishes, and the renderer logs it to `captureException`
+  (`video-export-software-encoder`; a tier on hardware without quantizer mode logs
+  `video-export-no-quantizer`). No UI for either yet.
+- **Size estimate.** Quantizer mode has no bitrate, so the "~" estimate is a per-minute rate of
+  video at 1920×1080, scaled by pixel count, plus audio and the moov reservation: 6 MB/min for
+  Balanced (measured 5.4 on a web-app demo and 2.0 on a terminal recording — set high on
+  purpose) and 4.7 MB/min for Light. The Ready card's GitHub chips use the real size.
+- **Frame-rate cap** (`frame-rate-cap.ts`): each frame goes to its nearest 1/24 s slot and the
+  first one in a slot is kept, so 30, 48 and 60 fps sources all land on 24 fps. The previous
+  rule ("no sooner than 1/fps after the last kept frame") halved anything slower than twice the
+  cap: a 30 fps recording, the default, would have exported at 15 fps. Slides are synthesized at
+  the cap.
 
 ## Measured / to measure
 
-- **Tier numbers (2026-10-13), measured with ffmpeg `h264_videotoolbox`** — the same macOS
-  hardware encoder as the app, but **not** the in-app WebCodecs path — on the owner's real 1440p
-  terminal recording (scrolling small mono text), 20 s clips:
-
-  | Output                | Result                           |
-  | --------------------- | -------------------------------- |
-  | 480p · 24 fps · 250k  | blocks, unreadable               |
-  | 720p · 30 fps · 1.2M  | unreadable                       |
-  | 720p · 30 fps · 1.8M  | readable, with ghosting          |
-  | 720p · 15 fps · 800k  | readable but smudged             |
-  | 720p · 15 fps · 1.2M  | clean, ~9 MB/min → **Light**     |
-  | 1080p · 15 fps · 1.2M | smudged                          |
-  | 1080p · 15 fps · 2M   | clean, ~16 MB/min → **Balanced** |
-  | 1080p · 30 fps · 3M   | smudged (the previous Balanced)  |
-  | 1080p · 30 fps · 4M   | still smudged                    |
-
-  Frame rate matters more than resolution for screen recordings, and VideoToolbox lands almost
-  exactly on the target bitrate (size ≈ bitrate × duration), so the estimates hold. **Pending:**
-  the owner's eye on real exports through the app (WebCodecs in the worker), and the owner's
-  call on Light vs the 1080p tier — the numbers are one table (`QUALITY_TIERS`), so a change is
-  one line.
-
-- The moov reservation is an upper bound (~35 bytes per packet): ≈ 100 KB on a 2-minute Light
-  export.
+- **Encoder settings (spike, 2026-10-13, owner-validated).** The owner's real recordings were
+  encoded inside Electron's Chromium through WebCodecs — the app's own path — and compared with
+  ffmpeg libx264. Hardware AVC at quantizer 30 with 10 s keyframes matches x264
+  `-preset slow -crf 28` at about the same size, with clean small text; 15 fps stutters on zooms
+  (hence 24); 720p smudges text (hence 1080p); software H.264, HEVC, VP9 and AV1 were rejected.
+  The owner picked `full-gen_avc-hw-q30-kfi10-24fps.mp4`. The full record, with every variant,
+  size and VMAF, is the
+  [encoding benchmark](/architecture/encoding-benchmark-2026-10/) (PR #289). Light's
+  quantizer 33 is interpolated between the measured 32 and 34; the owner has not watched one.
+- **This branch, same harness, real code** (`chooseVideoEncoding` and the frame-rate cap on
+  mediabunny 1.61): the 2:51 terminal recording (2560×1440, ~48 fps) came out at 1920×1080,
+  23.9 fps, a keyframe every 10 s, quantizer mode on VideoToolbox, 6.1 MB of video (the old
+  2 Mbps Balanced: 18.7 MB), encoded in 17 s.
+- **Pending:** the owner's eye on real exports through the app, a q33 Light file, and a
+  platform without VideoToolbox (Windows) to see which branch of the encoder choice it takes.
+- The moov reservation is an upper bound (~35 bytes per packet): ≈ 200 KB on a 1-minute export.
 - To measure on the Mac mini: export-time cost of the composite path on fixed presets (expected
   +10–30 %), and whether `elst` appears (the first output frame is clamped to t = 0, so it
   shouldn't).
