@@ -20,6 +20,9 @@ import {
   type ExportFraming,
   type ExportPresetId,
   type ExportSourceInfo,
+  GITHUB_LIMIT_BYTES,
+  type GithubFit,
+  githubFit,
   PRESETS,
   type ResolvedExportTarget,
   resolveExportTarget,
@@ -105,7 +108,7 @@ export interface ExportSheetProps {
  */
 const GROUPS = [
   { label: "presetGroupRecommended", rows: ["balanced"] },
-  { label: "presetGroupShare", rows: ["small-10", "small-25"] },
+  { label: "presetGroupShare", rows: ["light"] },
   { label: "presetGroupPost", rows: ["youtube", "vertical", "square"] },
   { label: "presetGroupKeep", rows: ["maximum"] },
 ] as const satisfies ReadonlyArray<{ label: string; rows: readonly ExportPresetId[] }>;
@@ -115,8 +118,7 @@ export const PRESET_NAME = {
   youtube: "presetYoutube",
   vertical: "presetVertical",
   square: "presetSquare",
-  "small-10": "presetGithub",
-  "small-25": "presetChat",
+  light: "presetLight",
   maximum: "presetMaximum",
 } as const satisfies Record<ExportPresetId, string>;
 
@@ -126,8 +128,7 @@ const PRESET_HINT = {
   youtube: "presetYoutubeHint",
   vertical: "presetVerticalHint",
   square: "presetSquareHint",
-  "small-10": "presetGithubHint",
-  "small-25": "presetChatHint",
+  light: "presetLightHint",
   maximum: "presetMaximumHint",
 } as const satisfies Record<ExportPresetId, string>;
 
@@ -137,20 +138,25 @@ const PRESET_SAY = {
   youtube: "presetYoutubeSay",
   vertical: "presetVerticalSay",
   square: "presetSquareSay",
-  "small-10": "presetGithubSay",
-  "small-25": "presetChatSay",
+  light: "presetLightSay",
   maximum: "presetMaximumSay",
 } as const satisfies Record<ExportPresetId, string>;
 
 type FactKey =
   | "factTextReadable"
   | "factPlaysEverywhere"
-  | "factUnderLimit"
-  | "factUploadsFast"
-  | "factPlaysInline"
+  | "factSmallest"
+  | "factFitsGithub"
+  | "factGithubTooBig"
   | "factBlackBars"
   | "factNothingLost"
   | "factHeavy";
+
+/** Where a tier's copy lands against GitHub's limits — said, never enforced. */
+const GITHUB_FIT_FACT = {
+  fits: { key: "factFitsGithub" },
+  "too-big": { key: "factGithubTooBig", warn: true },
+} as const satisfies Record<GithubFit, Fact>;
 
 interface Fact {
   key: FactKey;
@@ -159,24 +165,18 @@ interface Fact {
 }
 
 /**
- * The ✓ chips under the selected row. Only what holds for THIS source: "Under the limit"
- * only while the cap is reachable, the 16:9 bars only when the recording isn't 16:9.
+ * The chips under the selected row. Only what holds for THIS source and length: whether the
+ * tier's copy fits GitHub (from its estimate), the 16:9 bars only when the recording isn't
+ * 16:9.
  */
 export function presetFacts(target: ResolvedExportTarget, source: ExportSourceInfo): Fact[] {
+  const fit = (): Fact[] =>
+    target.estimateBytes === null ? [] : [GITHUB_FIT_FACT[githubFit(target.estimateBytes)]];
   switch (target.presetId) {
     case "balanced":
-      return [{ key: "factTextReadable" }, { key: "factPlaysEverywhere" }];
-    case "small-10":
-      return [
-        ...(target.achievable ? [{ key: "factUnderLimit" as const }] : []),
-        { key: "factTextReadable" },
-        { key: "factUploadsFast" },
-      ];
-    case "small-25":
-      return [
-        ...(target.achievable ? [{ key: "factUnderLimit" as const }] : []),
-        { key: "factPlaysInline" },
-      ];
+      return [{ key: "factTextReadable" }, { key: "factPlaysEverywhere" }, ...fit()];
+    case "light":
+      return [{ key: "factTextReadable" }, { key: "factSmallest" }, ...fit()];
     case "youtube":
       return addsBarsAt169(source.width, source.height)
         ? [{ key: "factBlackBars", warn: true }]
@@ -427,23 +427,15 @@ export function ExportSheet({
               <ul className={styles.facts}>
                 {facts.map((f) => (
                   <li key={f.key} className={styles.fact} data-warn={f.warn === true}>
-                    <Check size={11} strokeWidth={2.4} aria-hidden />
-                    {t(f.key, {
-                      cap: target.capBytes !== null ? formatMB(target.capBytes) : "",
-                    })}
+                    {f.warn ? (
+                      <TriangleAlert size={11} strokeWidth={2} aria-hidden />
+                    ) : (
+                      <Check size={11} strokeWidth={2.4} aria-hidden />
+                    )}
+                    {t(f.key, { limit: formatMB(GITHUB_LIMIT_BYTES) })}
                   </li>
                 ))}
               </ul>
-            )}
-
-            {!existing && !target.achievable && (
-              <p className={styles.warning} role="alert">
-                <TriangleAlert size={14} strokeWidth={1.8} />
-                {t("smallNotAchievable", {
-                  size: formatMB(target.estimateBytes ?? 0),
-                  duration: formatDuration(target.maxDurationSec ?? 0),
-                })}
-              </p>
             )}
           </div>
         )}
@@ -453,11 +445,9 @@ export function ExportSheet({
 
   const primaryLabel = selectedExisting
     ? t("openExported")
-    : !selected.achievable
-      ? t("exportAnywayAction")
-      : sizeKindOf(presetId) === "full"
-        ? t("exportFullAction")
-        : t("exportSizeAction", { size: sizeText(selected) });
+    : sizeKindOf(presetId) === "full"
+      ? t("exportFullAction")
+      : t("exportSizeAction", { size: sizeText(selected) });
 
   return (
     <ModalOverlay onCancel={onCancel} labelledBy={`${id}-title`} size="wide">

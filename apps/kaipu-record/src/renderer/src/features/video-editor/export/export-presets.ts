@@ -1,17 +1,15 @@
 /**
- * Export presets per destination (NIW2-218): every number behind "Balanced 1080p",
- * "YouTube 16:9", "Vertical 9:16", "Square 1:1", the size-capped GitHub / Chat rows and
- * "Maximum quality" lives in this one table, so updating a platform limit is a one-line change.
+ * Export presets per destination (NIW2-218): every number behind "Balanced", "Light",
+ * "YouTube", "Reels · TikTok · Shorts", "Feeds" and "Maximum quality" lives in this one
+ * table, so updating a platform limit or a quality tier is a one-line change.
  *
  * WORKER-BUNDLE INVARIANT: pure and DOM-free. The export worker imports it too.
  *
  * Sources (verified 2026-10-08, see the NIW2-218 spec):
  * - YouTube: https://support.google.com/youtube/answer/1722171 — 8 Mbps @ 1080p ≤ 30 fps,
  *   12 Mbps @ 1080p > 30 fps, AAC, moov at the front ("Fast Start").
- * - GitHub free attachments: 10 MB videos —
+ * - GitHub attachments: videos up to 100 MB on paid plans (10 MB on free ones) —
  *   https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/attaching-files
- * - Discord (no Nitro): 20 MB — https://support.discord.com/hc/en-us/articles/25444343291031
- *   (the 25 MB cap is "chat with margin", spec Q6 default).
  */
 
 export {
@@ -32,34 +30,99 @@ import {
 /** What fills the canvas around a Fit frame (spec Q2): black, or a blurred copy of the frame. */
 export type PaddingFill = "black" | "blur";
 
-/** Decimal megabytes, as GitHub and Discord count them. */
+/** Decimal megabytes, as GitHub counts them (and Finder shows them). */
 export const MB = 1_000_000;
-
-/** Share of the cap the encoder may target: room for container overhead + VBR overshoot. */
-export const SIZE_BUDGET_RATIO = 0.92;
 
 /** Video bitrate for a 1920×1080 (or 1080×1920) frame, per YouTube's recommendation. */
 const BITRATE_1080_LOW_FPS = 8_000_000;
 const BITRATE_1080_HIGH_FPS = 12_000_000;
 const PIXELS_1080 = 1920 * 1080;
 
-/**
- * Balanced 1080p, the recommended default (NIW2-218 update 2026-10-10): ~3 Mbps video +
- * 128 kbps audio (~23 MB/min), at most 30 fps, short side capped at 1080 and never upscaled.
- *
- * PENDING, not measured yet: the quality probe on a real Kaipu export with zoom pans (small
- * text while panning) at ~3 Mbps and lower, and a check via `onEncoderConfig` that
- * VideoToolbox keeps `bitrateMode: "variable"` with `prefer-hardware`. Adjust these three
- * numbers if the probe shows softening.
- */
-export const BALANCED_VIDEO_BITRATE = 3_000_000;
-export const BALANCED_MAX_SHORT_SIDE = 1080;
-export const BALANCED_MAX_FPS = 30;
-
-/** AAC for the fixed presets: 128 kbps, source channels (stereo for every recording today). */
+/** AAC for the fixed presets and Balanced: 128 kbps, source channels (stereo today). */
 export const FIXED_AUDIO_BITRATE = 128_000;
-/** AAC for Small file: mono 64 kbps — speech-quality, half the bits of stereo. */
-export const SMALL_AUDIO_BITRATE = 64_000;
+/** AAC for Light: mono 64 kbps — speech-quality, half the bits of stereo. */
+export const LIGHT_AUDIO_BITRATE = 64_000;
+
+/**
+ * Quality tiers for screen recordings (NIW2-218 quality tiers, owner decision 2026-10-13).
+ * They replace the size-capped "Small file" rows: those squeezed a long recording down to
+ * 480p at 250 kbps to hit 10 MB, and a 2:51 terminal recording came out unreadable. A tier
+ * is a quality floor instead — its size is whatever the duration makes it, and the sheet
+ * says whether that fits GitHub.
+ *
+ * Measured 2026-10-13 with ffmpeg `h264_videotoolbox` (the same macOS hardware encoder the
+ * app uses, though not the identical WebCodecs path) on the owner's real 1440p terminal
+ * recording — scrolling small mono text — in 20 s clips:
+ *
+ * | Output                 | Result                     |
+ * | ---------------------- | -------------------------- |
+ * | 480p · 24 fps · 250k   | blocks, unreadable         |
+ * | 720p · 30 fps · 1.2M   | unreadable                 |
+ * | 720p · 30 fps · 1.8M   | readable, with ghosting    |
+ * | 720p · 15 fps · 800k   | readable but smudged       |
+ * | 720p · 15 fps · 1.2M   | clean (~9 MB/min) → Light  |
+ * | 1080p · 15 fps · 1.2M  | smudged                    |
+ * | 1080p · 15 fps · 2M    | clean (~16 MB/min) → Balanced |
+ * | 1080p · 30 fps · 3M    | smudged (the old Balanced) |
+ * | 1080p · 30 fps · 4M    | still smudged              |
+ *
+ * Frame rate matters more than resolution for screen content, and VideoToolbox lands almost
+ * exactly on the target bitrate (size ≈ bitrate × duration), so the estimates hold. PENDING:
+ * the owner's eye on the in-app WebCodecs path, which these numbers were not measured on.
+ *
+ * Balanced is the measured "Sharp" tier (1080p · 15 fps · 2 Mbps): the recommended row and a
+ * separate Sharp row would encode the same file, so there is one row.
+ */
+export interface QualityTier {
+  /** Short side of the output, at the source aspect, never upscaled. */
+  maxShortSide: number;
+  maxFps: number;
+  /** Video bits/s at `maxShortSide`; a smaller source gets proportionally fewer. */
+  videoBitrate: number;
+  audioBitrate: number;
+  /** Downmix to mono; null keeps the source layout. */
+  audioChannels: 1 | null;
+}
+
+export const QUALITY_TIERS = {
+  balanced: {
+    maxShortSide: 1080,
+    maxFps: 15,
+    videoBitrate: 2_000_000,
+    audioBitrate: FIXED_AUDIO_BITRATE,
+    audioChannels: null,
+  },
+  light: {
+    maxShortSide: 720,
+    maxFps: 15,
+    videoBitrate: 1_200_000,
+    audioBitrate: LIGHT_AUDIO_BITRATE,
+    audioChannels: 1,
+  },
+} as const satisfies Record<"balanced" | "light", QualityTier>;
+
+export type QualityTierId = keyof typeof QUALITY_TIERS;
+
+export function isQualityTier(presetId: ExportPresetId): presetId is QualityTierId {
+  return presetId in QUALITY_TIERS;
+}
+
+/**
+ * What changed in an encode since the sidecars that might match it. "Already exported" only
+ * reuses a file encoded the same way: the tiers changed on 2026-10-13, so a Balanced or Light
+ * file must carry this revision in its fingerprint (older Balanced files and the old Small-file
+ * exports, now read as Light, never match). Bump a revision when its numbers change.
+ */
+export const ENCODE_REVISION: Partial<Record<ExportPresetId, string>> = {
+  balanced: "15fps-2m",
+  light: "15fps-1.2m",
+};
+
+/** The fingerprint a file of `presetId` records: its content plus the encode revision. */
+export function encodeFingerprint(contentFingerprint: string, presetId: ExportPresetId): string {
+  const revision = ENCODE_REVISION[presetId];
+  return revision ? `${contentFingerprint}#${revision}` : contentFingerprint;
+}
 
 export interface AudioEncoding {
   numberOfChannels: number;
@@ -69,9 +132,9 @@ export interface AudioEncoding {
 /**
  * The AAC configurations to try, best first. Chromium's encoder on macOS refuses some
  * layouts (mono 64 kbps at 44.1 kHz, seen 2026-10-13), and an unsupported config fails the
- * whole export, so the worker asks `canEncodeAudio` and takes the first that works. The
- * Small-file fallbacks stay cheap: keeping the source channels at 64 kbps first, then 96 and
- * 128 kbps. The size post-check absorbs the few extra bits.
+ * whole export, so the worker asks `canEncodeAudio` and takes the first that works. Light's
+ * fallbacks stay cheap: keeping the source channels at 64 kbps first, then 96 and 128 kbps —
+ * a few hundred KB a minute at most.
  */
 export function audioEncodingCandidates(
   target: Pick<ResolvedExportTarget, "audioBitrate" | "audioChannels">,
@@ -100,20 +163,6 @@ export const PACKET_MARGIN = 1.33;
 /** AAC frames per packet. */
 const AAC_FRAMES_PER_PACKET = 1024;
 
-/**
- * Small-file ladder: short side of the output (at the source aspect) and the lowest
- * video bitrate that still reads well for screen content at that size.
- */
-export const SMALL_FILE_LADDER = [
-  { shortSide: 1080, floorBps: 1_200_000 },
-  { shortSide: 720, floorBps: 600_000 },
-  { shortSide: 540, floorBps: 350_000 },
-  { shortSide: 480, floorBps: 250_000 },
-] as const;
-
-/** fps cap on every Small-file rung below 1080p. */
-export const SMALL_FILE_LOW_RUNG_FPS = 30;
-
 interface FixedCanvas {
   width: number;
   height: number;
@@ -121,33 +170,24 @@ interface FixedCanvas {
 
 export interface PresetDefinition {
   id: ExportPresetId;
-  /** null = the source's own size (Balanced, Maximum) or the ladder (Small file). */
+  /** null = the source's own aspect (the quality tiers, Maximum). */
   canvas: FixedCanvas | null;
   /** Framings the user may choose; empty = no choice. */
   framings: readonly ExportFraming[];
   defaultFraming: ExportFraming | null;
   /** Padding behind a Fit frame. */
   padding: PaddingFill;
-  /** Small file cap in bytes; null for the others. */
-  capBytes: number | null;
 }
 
 export const PRESETS: Record<ExportPresetId, PresetDefinition> = {
-  balanced: {
-    id: "balanced",
-    canvas: null,
-    framings: [],
-    defaultFraming: null,
-    padding: "black",
-    capBytes: null,
-  },
+  balanced: { id: "balanced", canvas: null, framings: [], defaultFraming: null, padding: "black" },
+  light: { id: "light", canvas: null, framings: [], defaultFraming: null, padding: "black" },
   youtube: {
     id: "youtube",
     canvas: { width: 1920, height: 1080 },
     framings: [],
     defaultFraming: "fit",
     padding: "black",
-    capBytes: null,
   },
   vertical: {
     id: "vertical",
@@ -155,7 +195,6 @@ export const PRESETS: Record<ExportPresetId, PresetDefinition> = {
     framings: EXPORT_FRAMINGS,
     defaultFraming: "fill",
     padding: "blur",
-    capBytes: null,
   },
   square: {
     id: "square",
@@ -163,33 +202,24 @@ export const PRESETS: Record<ExportPresetId, PresetDefinition> = {
     framings: EXPORT_FRAMINGS,
     defaultFraming: "fit",
     padding: "blur",
-    capBytes: null,
   },
-  "small-10": {
-    id: "small-10",
-    canvas: null,
-    framings: [],
-    defaultFraming: null,
-    padding: "black",
-    capBytes: 10 * MB,
-  },
-  "small-25": {
-    id: "small-25",
-    canvas: null,
-    framings: [],
-    defaultFraming: null,
-    padding: "black",
-    capBytes: 25 * MB,
-  },
-  maximum: {
-    id: "maximum",
-    canvas: null,
-    framings: [],
-    defaultFraming: null,
-    padding: "black",
-    capBytes: null,
-  },
+  maximum: { id: "maximum", canvas: null, framings: [], defaultFraming: null, padding: "black" },
 };
+
+/**
+ * GitHub's video attachment limit on paid plans (source above) — owner decision 2026-10-13:
+ * teams are assumed to be on one. The free plan's 10 MB is deliberately not checked: sharing
+ * there will go through a Kaipu cloud link later, not through squeezing the file. The sheet,
+ * the banner and the Ready card say whether a copy fits; none of them blocks an export or
+ * lowers the quality to fit — the tier IS the floor.
+ */
+export const GITHUB_LIMIT_BYTES = 100 * MB;
+
+export type GithubFit = "fits" | "too-big";
+
+export function githubFit(bytes: number): GithubFit {
+  return bytes <= GITHUB_LIMIT_BYTES ? "fits" : "too-big";
+}
 
 export interface ExportSourceInfo {
   width: number;
@@ -206,7 +236,7 @@ export interface ResolvedExportTarget {
   presetId: ExportPresetId;
   width: number;
   height: number;
-  /** "identity": the output IS the composed source frame, maybe scaled (Balanced, Maximum, Small file). */
+  /** "identity": the output IS the composed source frame, maybe scaled (the tiers, Maximum). */
   framing: ExportFraming | "identity";
   padding: PaddingFill;
   /** bits/s, or "high" = mediabunny QUALITY_HIGH (Maximum keeps the pre-preset export). */
@@ -220,13 +250,8 @@ export interface ResolvedExportTarget {
   fastStart: "reserve" | false;
   /** `maximumPacketCount` per track for the reserve. */
   packetCounts: { video: number; audio: number };
-  /** Upper-bound size estimate in bytes; null when unknown (Maximum: QUALITY_HIGH). */
+  /** Size estimate in bytes; null when unknown (Maximum: QUALITY_HIGH). */
   estimateBytes: number | null;
-  capBytes: number | null;
-  /** false only for a Small-file cap that can't be met even at the lowest rung. */
-  achievable: boolean;
-  /** Small file: the longest duration that fits the cap at the lowest rung. */
-  maxDurationSec: number | null;
 }
 
 /** Round down to an even integer (H.264 needs even dimensions), at least 2. */
@@ -306,8 +331,8 @@ export function resolveExportTarget(
   const srcW = even(source.width);
   const srcH = even(source.height);
 
-  if (presetId === "balanced") {
-    return resolveBalanced(source, srcW, srcH, d, sampleRate, slideFrames);
+  if (isQualityTier(presetId)) {
+    return resolveTier(presetId, source, srcW, srcH, d, sampleRate, slideFrames);
   }
 
   if (presetId === "maximum") {
@@ -333,9 +358,6 @@ export function resolveExportTarget(
       fastStart: "reserve",
       packetCounts,
       estimateBytes: null,
-      capBytes: null,
-      achievable: true,
-      maxDurationSec: null,
     };
   }
 
@@ -372,17 +394,19 @@ export function resolveExportTarget(
       estimateBytes: Math.ceil(
         ((videoBitrate + audioBitrate) * d) / 8 + reserveBytes(packetCounts),
       ),
-      capBytes: null,
-      achievable: true,
-      maxDurationSec: null,
     };
   }
 
-  return resolveSmallFile(preset, source, srcW, srcH, d, sampleRate, slideFrames);
+  // Every preset is a tier, Maximum or a fixed canvas.
+  throw new Error(`export preset without a resolver: ${presetId}`);
 }
 
-/** Balanced: the source aspect, short side ≤ 1080 (never upscaled), ≤ 30 fps, ~3 Mbps. */
-function resolveBalanced(
+/**
+ * A quality tier: the source aspect, short side ≤ the tier's (never upscaled), ≤ its fps,
+ * its bitrate. Size ≈ (video + audio) × duration — VideoToolbox lands on target (measured).
+ */
+function resolveTier(
+  presetId: QualityTierId,
   source: ExportSourceInfo,
   srcW: number,
   srcH: number,
@@ -390,115 +414,39 @@ function resolveBalanced(
   sampleRate: number,
   slideFrames: number,
 ): ResolvedExportTarget {
+  const tier: QualityTier = QUALITY_TIERS[presetId];
   const srcShort = Math.min(srcW, srcH);
-  const shortSide = Math.min(srcShort, BALANCED_MAX_SHORT_SIDE);
+  const shortSide = Math.min(srcShort, tier.maxShortSide);
   const size =
-    srcShort > BALANCED_MAX_SHORT_SIDE
-      ? sizeForShortSide(srcW, srcH, BALANCED_MAX_SHORT_SIDE)
+    srcShort > tier.maxShortSide
+      ? sizeForShortSide(srcW, srcH, tier.maxShortSide)
       : { width: srcW, height: srcH };
-  // A source below 1080p gets proportionally fewer bits for its fewer pixels.
+  // A source below the tier's size gets proportionally fewer bits for its fewer pixels.
   const videoBitrate = Math.round(
-    BALANCED_VIDEO_BITRATE * Math.min(1, (shortSide / BALANCED_MAX_SHORT_SIDE) ** 2),
+    tier.videoBitrate * Math.min(1, (shortSide / tier.maxShortSide) ** 2),
   );
-  const audioBitrate = source.hasAudio ? FIXED_AUDIO_BITRATE : 0;
+  const audioBitrate = source.hasAudio ? tier.audioBitrate : 0;
   const packetCounts = packetCountsFor({
     durationSec: d,
     fps: source.fps,
-    maxFps: BALANCED_MAX_FPS,
+    maxFps: tier.maxFps,
     slideFrames,
     hasAudio: source.hasAudio,
     sampleRate,
   });
   return {
-    presetId: "balanced",
+    presetId,
     width: size.width,
     height: size.height,
     framing: "identity",
     padding: "black",
     videoBitrate,
-    audioBitrate: FIXED_AUDIO_BITRATE,
-    audioChannels: null,
-    maxFps: BALANCED_MAX_FPS,
+    audioBitrate: tier.audioBitrate,
+    audioChannels: tier.audioChannels,
+    maxFps: tier.maxFps,
     fastStart: "reserve",
     packetCounts,
     estimateBytes: Math.ceil(((videoBitrate + audioBitrate) * d) / 8 + reserveBytes(packetCounts)),
-    capBytes: null,
-    achievable: true,
-    maxDurationSec: null,
-  };
-}
-
-function resolveSmallFile(
-  preset: PresetDefinition,
-  source: ExportSourceInfo,
-  srcW: number,
-  srcH: number,
-  d: number,
-  sampleRate: number,
-  slideFrames: number,
-): ResolvedExportTarget {
-  const cap = preset.capBytes ?? 10 * MB;
-  const budget = cap * SIZE_BUDGET_RATIO;
-  const audioBps = source.hasAudio ? SMALL_AUDIO_BITRATE : 0;
-  const srcShort = Math.min(srcW, srcH);
-
-  // Never above the source's short side. A source smaller than the lowest rung keeps its
-  // own size with the lowest rung's floor.
-  const lowest = SMALL_FILE_LADDER[SMALL_FILE_LADDER.length - 1];
-  const rungs = SMALL_FILE_LADDER.filter((r) => r.shortSide <= srcShort);
-  const candidates =
-    rungs.length > 0 ? rungs : [{ shortSide: srcShort, floorBps: lowest.floorBps }];
-
-  const evaluate = (rung: { shortSide: number; floorBps: number }) => {
-    const maxFps = rung.shortSide < 1080 ? SMALL_FILE_LOW_RUNG_FPS : null;
-    const packetCounts = packetCountsFor({
-      durationSec: d,
-      fps: source.fps,
-      maxFps,
-      slideFrames,
-      hasAudio: source.hasAudio,
-      sampleRate,
-    });
-    // The moov reservation sits inside the cap too.
-    const available = budget - reserveBytes(packetCounts);
-    const v = d > 0 ? (available * 8 - audioBps * d) / d : Number.POSITIVE_INFINITY;
-    return { rung, maxFps, packetCounts, v };
-  };
-
-  const evaluated = candidates.map(evaluate);
-  const chosen = evaluated.find((e) => e.v >= e.rung.floorBps);
-  const pick = chosen ?? evaluated[evaluated.length - 1];
-  const size = sizeForShortSide(srcW, srcH, pick.rung.shortSide);
-  const fpsForCeiling = pick.maxFps !== null ? Math.min(pick.maxFps, source.fps) : source.fps;
-  // Short clips get a huge budget; never exceed what the fixed presets would use at this size.
-  const ceiling = fixedVideoBitrate(size.width, size.height, fpsForCeiling);
-  const achievable = chosen !== undefined;
-  const videoBitrate = achievable
-    ? Math.max(pick.rung.floorBps, Math.min(Math.floor(pick.v), ceiling))
-    : pick.rung.floorBps;
-
-  const contentBytes = ((videoBitrate + audioBps) * d) / 8 + reserveBytes(pick.packetCounts);
-  const estimateBytes = Math.ceil(achievable ? Math.min(cap, contentBytes) : contentBytes);
-  // Longest duration that fits at the floor (reservation ignored: it scales with d too,
-  // and it's a hint, not a promise).
-  const maxDurationSec = Math.floor((budget * 8) / (pick.rung.floorBps + audioBps));
-
-  return {
-    presetId: preset.id,
-    width: size.width,
-    height: size.height,
-    framing: "identity",
-    padding: "black",
-    videoBitrate,
-    audioBitrate: SMALL_AUDIO_BITRATE,
-    audioChannels: 1,
-    maxFps: pick.maxFps,
-    fastStart: "reserve",
-    packetCounts: pick.packetCounts,
-    estimateBytes,
-    capBytes: cap,
-    achievable,
-    maxDurationSec,
   };
 }
 
@@ -511,41 +459,3 @@ export function slideFrameCount(
     .filter((s) => s.kind === "slide")
     .reduce((n, s) => n + Math.round(s.duration * slideFps), 0);
 }
-
-/** Share of the cap-proportional bitrate the size-check retry aims for (FR8). */
-export const SHRINK_FACTOR = 0.8;
-
-/**
- * FR8: the Small-file re-encode after an oversize first attempt. Video bitrate becomes
- * `V × 0.8 × cap / actual`; when that drops below the current rung's floor, the output
- * steps one rung down (fps capped at 30 there). At the lowest rung the bitrate just drops.
- */
-export function shrinkSmallFileTarget(
-  target: ResolvedExportTarget,
-  actualBytes: number,
-  source: { width: number; height: number },
-): ResolvedExportTarget {
-  if (target.capBytes === null || typeof target.videoBitrate !== "number" || actualBytes <= 0) {
-    return target;
-  }
-  const v = Math.floor((target.videoBitrate * SHRINK_FACTOR * target.capBytes) / actualBytes);
-  const short = Math.min(target.width, target.height);
-  const index = SMALL_FILE_LADDER.findIndex((r) => r.shortSide === short);
-  const rung = index >= 0 ? SMALL_FILE_LADDER[index] : null;
-  const floor = rung?.floorBps ?? SMALL_FILE_LADDER[SMALL_FILE_LADDER.length - 1].floorBps;
-  const lower = index >= 0 ? SMALL_FILE_LADDER[index + 1] : undefined;
-  if (v >= floor || !lower) {
-    return { ...target, videoBitrate: Math.max(MIN_SHRUNK_BITRATE, v) };
-  }
-  const size = sizeForShortSide(even(source.width), even(source.height), lower.shortSide);
-  return {
-    ...target,
-    width: size.width,
-    height: size.height,
-    videoBitrate: Math.max(MIN_SHRUNK_BITRATE, v),
-    maxFps: SMALL_FILE_LOW_RUNG_FPS,
-  };
-}
-
-/** Never ask the encoder for less than this, however far over the cap the first try was. */
-const MIN_SHRUNK_BITRATE = 100_000;
