@@ -1,6 +1,6 @@
 ---
 title: "Video editor — export presets per destination"
-description: "NIW2-218: one export list — Balanced 1080p (recommended default), YouTube 16:9, Vertical 9:16, Square 1:1, GitHub ≤ 10 MB, Chat / Discord ≤ 25 MB, Maximum quality — each producing a file that fits, with the moov box at the front (fast start). The default comes from Settings → Export quality, and Share exports the whole recording from its library page."
+description: "NIW2-218: one export sheet grouped by intent — Balanced (recommended), GitHub · Jira · Linear ≤ 10 MB, Slack · Discord ≤ 25 MB, YouTube, Reels · TikTok · Shorts, Feeds, Maximum quality — each producing a file that fits, with fast start. Exports run in the background with in-app progress and Ready to share cards; Share exports the whole recording from its library page."
 ---
 
 # Video editor — export presets per destination
@@ -15,6 +15,10 @@ description: "NIW2-218: one export list — Balanced 1080p (recommended default)
 >    (`feat/NIW2-218-export-quality`).
 > 5. Share button on the recording's page + "already exported → reuse"
 >    (`feat/NIW2-218-share-button`).
+> 6. Export flow redesign (owner, 2026-10-13): the sheet redesign and the "heavy to send" banner
+>    (`feat/NIW2-218-share-sheet-design`), then background exports with the progress, Ready to
+>    share and Recording saved cards (`feat/NIW2-218-background-export`). Design: Claude Design
+>    project `71546ef1-baf5-42e9-8fcc-9b9b44f2c7ab`, file `Kaipu Export.dc.html`.
 >
 > Unit, hook and component tests pass; real exports (WebCodecs in the worker, VideoToolbox rate
 > control, `ffprobe` on the outputs, playback in Safari/Chrome/QuickTime) still need a pass on the
@@ -23,8 +27,19 @@ description: "NIW2-218: one export list — Balanced 1080p (recommended default)
 
 ## What the user gets
 
-One list, in this order. The selected row is preselected from Settings → Export quality, and
-Enter exports it.
+One sheet, shared by the editor's Export (titled "Export") and the library's Share ("Share a
+copy"), subtitled with the recording's title · duration · resolution. A before/after meter shows
+the selected row's estimate against the original's size ("~9.2 MB · 92% lighter"). The rows are
+grouped by what the user is about to do — **Recommended** (Balanced), **Share in a tool** (GitHub ·
+Jira · Linear, Slack · Discord), **Post** (YouTube, Reels · TikTok · Shorts, Feeds), **Keep**
+(Maximum quality) — and named after where the file goes. Each row shows where it works, its size
+in MB ("~" for Balanced and the capped rows, "up to ~" for the fixed canvases, "Full size" for
+Maximum, which has no estimate) and its output dimensions. The selected row opens with a one-line
+explanation and ✓ facts; Reels and Feeds add a framing preview with Fill / Fit. The copy never
+says bitrate or fps. The selected row is preselected from Settings → Export quality (or GitHub,
+from a "light copy" shortcut), and Enter exports it ("Export ~9.2 MB ↵").
+
+The internal preset ids and numbers:
 
 | Row                                | Output                                           | Bitrate                                | Notes                                                   |
 | ---------------------------------- | ------------------------------------------------ | -------------------------------------- | ------------------------------------------------------- |
@@ -51,30 +66,63 @@ Enter exports it.
   "(vertical)", "(square)", "(10 MB)" / "(25 MB)"). Older sidecars say `"original"`; readers
   treat it as `maximum` (`normalizeExportPresetId`).
 
+## Background exports and status cards
+
+Exports run in the background (`export/export-runner.ts`, a module singleton like the recorder
+store): Export closes the sheet, and the export keeps running while the user moves around the app
+or keeps editing. **One at a time** — a second Export or Share while one runs shows "Already
+exporting “…”" instead of a sheet. Cards stack in the top-right corner of the window
+(`features/status-cards/`, mounted at the app root):
+
+- **Progress:** "Making a lighter copy…" (or "Making it smaller…" during the size-check retry),
+  the preset and output size, a progress bar, "64% · about 25 s left" (projected from the rate
+  so far), "119 MB → ~9.2 MB", and Cancel. A failure turns it into an error card with Retry.
+- **Ready to share:** the real size ("Ready to share · 8.1 MB"), "93% lighter than the original —
+  under the 10 MB limit" (the limit only for capped rows; over it, the real size in amber), the
+  before/after meter, and a file chip that drags out natively under the item's title
+  ("Demo (10 MB).mp4"), not its vault id — main hard-links the vault file into a temp folder
+  under that name and cleans it on the next drag and on quit. Buttons: **View file** (the
+  exported item's Library page), **Show in Finder**, **Done**. It replaces the old "Export saved"
+  toast.
+- **Recording saved:** right after a recording over GitHub's 10 MB limit, its page shows
+  "Recording saved" with the GitHub estimate on a before/after bar and **Share a light copy**,
+  which opens the sheet on the GitHub row. Hides after 8 s (paused while hovered); Settings →
+  Export quality → "Offer a light copy after recording" turns it off
+  (`AppSettings.showRecordingSavedCard`). The card component is generic, for a future "uploaded
+  to the cloud" card.
+
+From the editor, the user stays in the editor; when the export finishes, the edit session is
+stamped as exported only if it still holds the exported edit (the user may have kept editing, or
+left). Leaving the editor with unsaved edits keeps the discard guard. Closing the window or
+quitting while an export runs asks first ("Cancel export and close / quit"); on confirm, main asks
+the renderer to cancel (its writer session is aborted, no temp file left) and closes after it
+stops or 2 s.
+
 ## Share (export without the editor)
 
-A **Share** button (primary, first in the actions) sits on the library item page of every local
-recording, raw or already an export. That page is also where a recording lands the moment it
-stops (`fromRecording`), so it is the "right after recording" entry point too — there is no
-separate playback screen. Share opens the same export sheet, titled "Prepare a file to share",
-for the **whole file as it is on disk**: no edits applied, even when the recording has an edit
-session. The editor's Export keeps applying the edits.
+**Share** is the primary button on the library item page of every local recording, raw or already
+an export, next to Edit video / Reveal / Delete. That page is also where a recording lands the
+moment it stops (`fromRecording`), so it is the "right after recording" entry point too. Over 25
+MB the size shows in amber and a teal banner says "119 MB is heavy to send. Share makes a lighter
+copy — about 9.2 MB for GitHub or Jira." with "Make a light copy →" (the sheet on the GitHub row).
+Share exports the **whole file as it is on disk**: no edits applied, even when the recording has an
+edit session. The editor's Export keeps applying the edits.
 
 - Same export worker, trivial plan: `initialScene(duration)` — one clip over the whole file,
   no overlays, slides or zoom. No second pipeline (`features/library/components/share-recording.tsx`).
 - Without a `<video>` element to ask, `probeSource` reads the display size, exact duration (the
   sidecar's is floored), frame rate and audio layout from the file.
 - The result is a new library item derived from the shared one (ADR 0003). Balanced and Maximum
-  are titled "(for sharing)"; destination rows keep their suffix. The page re-lists, so it shows
-  under Exports, and the toast offers "Show in Finder".
+  are titled "(for sharing)"; destination rows keep their suffix. It shows under Exports, and the
+  Ready to share card takes over.
 - Share by link (cloud) is not built; it joins this button once NIW2-214/216/222 land. No
-  background auto-export.
+  auto-export after recording: the Recording saved card only offers it.
 
 ### Already exported → reuse
 
 Each MP4 export now records **what** it encoded in its sidecar, `exportFingerprint`: `"whole"`
 for Share, `"edit:<hash>"` (a hash of the scene with sorted keys) for the editor. A sheet row
-shows "✓ Already exported" with an **Open** button — and the main button, and Enter, open it —
+shows a "✓ Already exported · Open" badge — and the main button, and Enter, open it —
 when a local MP4 export of the same source (`derivedFromAssetId`) has the same preset
 (`exportPreset`) and the same fingerprint (`findReusableExports` in `export-reuse.ts`). Open
 goes to that item's page.
@@ -113,7 +161,7 @@ fixed-preset rate for that size so a short clip doesn't get a pointlessly high b
 is still allowed ("Export anyway"). After the worker is done, the hook stats the temp file
 (`recordingStat` IPC); over the cap it aborts that session and re-encodes once at
 `V × 0.8 × cap / actual` (or one rung lower), showing "Making it smaller…". A second overshoot is
-kept, with a toast giving its real size.
+kept, and the Ready to share card gives its real size.
 
 ## Measured / to measure
 
@@ -133,5 +181,6 @@ kept, with a toast giving its real size.
 ## Not in v1
 
 Server transcoding, HLS/DASH, direct publishing, HEVC/VP9/AV1, custom resolution/bitrate,
-screenshot presets, batch export, share by link (cloud), background auto-export after recording,
+screenshot presets, batch export, more than one export at a time, share by link (cloud),
+auto-export after recording,
 a background system for the video editor (padding is black or a blurred copy of the frame).

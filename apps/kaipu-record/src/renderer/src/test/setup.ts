@@ -70,6 +70,7 @@ const STUB_SETTINGS = {
   deviceId: "",
   uploadMode: "local-only",
   exportQuality: "balanced",
+  showRecordingSavedCard: true,
 } as const;
 
 // Vitest does not expose `afterEach` as a global (globals: false), so
@@ -120,6 +121,8 @@ window.electronAPI = {
     throw new Error("gifSave not stubbed in this test");
   },
   startFileDrag: () => {},
+  setExportActive: () => {},
+  onExportCommand: () => () => {},
   getVaultDirectory: async () => ({ path: "/tmp/vault", isCustom: false }),
   chooseVaultDirectory: async () => null,
   resetVaultDirectory: async () => ({ path: "/tmp/vault", isCustom: false }),

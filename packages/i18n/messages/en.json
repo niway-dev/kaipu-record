@@ -56,7 +56,12 @@
     "changeFolderTitle": "Change the recordings folder",
     "changeFolderDetail": "Your current recordings stay in the old folder; from now on Kaipu saves and shows the new folder's contents. You can switch back anytime.",
     "exportPdfTitle": "Export as PDF",
-    "pdfFileType": "PDF document"
+    "pdfFileType": "PDF document",
+    "exportInProgress": "An export is still running",
+    "closeCancelsExportDetail": "Closing the window cancels it. The original recording isn't touched.",
+    "quitCancelsExportDetail": "Quitting cancels it. The original recording isn't touched.",
+    "cancelExportAndClose": "Cancel export and close",
+    "cancelExportAndQuit": "Cancel export and quit"
   },
   "nav": {
     "record": "Record",
@@ -147,7 +152,9 @@
     "accountMovedDetail": "Session, capacity and uploads live in the Cloud section of the sidebar.",
     "goToCloud": "Go to Cloud",
     "navCloudNote": "Your account and cloud capacity now live in the Cloud section.",
-    "screenshotsDescription": "How captures are saved on this device."
+    "screenshotsDescription": "How captures are saved on this device.",
+    "recordingSavedCard": "Offer a light copy after recording",
+    "recordingSavedCardDescription": "When a recording is over 10 MB, its page shows a card to make a copy small enough for GitHub. It hides after 8 seconds."
   },
   "record": {
     "readyToRecord": "Ready to record",
@@ -809,7 +816,6 @@
     "presetTitleShare": "{title} (for sharing)",
     "openExported": "Open",
     "openExportedLabel": "Open the existing {name} file",
-    "exportSaved": "Export saved · {size}",
     "exportShowInFinder": "Show in Finder",
     "makingSmaller": "Making it smaller…",
     "smallOverCap": "Came out at {size}, a bit over the {cap} limit. Trim a few seconds and export again.",
@@ -844,7 +850,33 @@
     "exportSizeAction": "Export {size}",
     "exportFullAction": "Export",
     "alreadyExportedOpen": "Already exported · Open",
-    "closeSheet": "Close"
+    "closeSheet": "Close",
+    "exportProgressTitle": "Making a lighter copy…",
+    "exportProgressTitleFull": "Exporting at full quality…",
+    "exportProgressPercent": "{percent}%",
+    "exportProgressEta": "{percent}% · about {eta} left",
+    "etaSeconds": "{seconds} s",
+    "etaMinutes": "{minutes} min",
+    "exportProgressSizes": "{from} → {to}",
+    "exportProgressRetryNote": "If it comes out over the limit, we shrink it once more automatically.",
+    "exportBusy": "Already exporting “{title}”. Wait for it to finish, or cancel it in the top-right corner.",
+    "readyTitle": "Ready to share · {size}",
+    "readyLighter": "{percent}% lighter than the original.",
+    "readyLighterUnderLimit": "{percent}% lighter than the original — under the {cap} limit.",
+    "readyOverLimit": "Came out at {size}, a bit over the {cap} limit. Trim a few seconds and export again.",
+    "readyDragHintTool": "Drag it into a GitHub or Jira comment",
+    "readyDragHintChat": "Drag it into Slack or Discord",
+    "readyDragHint": "Drag it anywhere",
+    "readyDragLabel": "Drag {name} out of Kaipu",
+    "readyViewFile": "View file",
+    "readyDone": "Done",
+    "recordingSavedTitle": "Recording saved",
+    "recordingSavedMeter": "~{size} for GitHub",
+    "recordingSavedBody": "Want to send it? We can make a copy that's {percent}% lighter. Text stays readable.",
+    "recordingSavedBodyNoEstimate": "Want to send it? We can make a lighter copy for GitHub. Text stays readable.",
+    "recordingSavedShare": "Share a light copy",
+    "recordingSavedFooter": "Auto-hides in 8 s · Turn off in Settings → Export quality",
+    "dismissCard": "Dismiss"
   },
   "panel": {
     "saving": "Saving…",

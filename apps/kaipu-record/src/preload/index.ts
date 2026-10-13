@@ -64,7 +64,13 @@ const kaipuApi: KaipuElectronAPI = {
   deleteLocalRecording: (id) => ipcRenderer.invoke(IPC_CHANNELS.deleteLocalRecording, id),
   revealLocalRecording: (id) => ipcRenderer.invoke(IPC_CHANNELS.revealLocalRecording, id),
   gifSave: (bytes, meta) => ipcRenderer.invoke(IPC_CHANNELS.gifSave, bytes, meta),
-  startFileDrag: (id) => ipcRenderer.send(IPC_CHANNELS.startFileDrag, id),
+  startFileDrag: (id, name) => ipcRenderer.send(IPC_CHANNELS.startFileDrag, id, name),
+  setExportActive: (active) => ipcRenderer.send(IPC_CHANNELS.exportActive, active),
+  onExportCommand: (callback) => {
+    const listener = (_e: IpcRendererEvent, command: "cancel"): void => callback(command);
+    ipcRenderer.on(IPC_CHANNELS.exportCommand, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.exportCommand, listener);
+  },
   getVaultDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.getVaultDirectory),
   chooseVaultDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.chooseVaultDirectory),
   resetVaultDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.resetVaultDirectory),

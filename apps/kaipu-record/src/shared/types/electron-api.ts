@@ -161,8 +161,16 @@ export interface KaipuElectronAPI {
    * thumbnail). Main validates the bytes (GIF89a, ≤ 64 MB) and picks the path.
    */
   gifSave(bytes: ArrayBuffer, meta: GifSaveMeta): Promise<LocalRecording>;
-  /** NIW2-217: start a native drag of a vault item's file (call from `dragstart`). */
-  startFileDrag(id: string): void;
+  /**
+   * NIW2-217: start a native drag of a vault item's file (call from `dragstart`).
+   * NIW2-218: `name` drags it under a friendly file name ("Demo (10 MB).mp4") instead of the
+   * vault id — main sanitizes it and drags a temporary link to the vault file.
+   */
+  startFileDrag(id: string, name?: string): void;
+  /** NIW2-218: tell main whether a background export is running (close/quit confirmation). */
+  setExportActive(active: boolean): void;
+  /** NIW2-218: main asks to cancel the running export (the user confirmed close/quit). */
+  onExportCommand(callback: (command: "cancel") => void): () => void;
 
   /** Current recordings-folder location (custom or platform default). */
   getVaultDirectory(): Promise<VaultDirectory>;

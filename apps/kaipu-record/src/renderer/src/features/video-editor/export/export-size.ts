@@ -53,3 +53,15 @@ export function addsBarsAt169(width: number, height: number): boolean {
   if (width <= 0 || height <= 0) return false;
   return Math.abs(width / height - 16 / 9) > 0.01;
 }
+
+/**
+ * Seconds left, from the rate so far: `elapsed × (1 − f) / f`. Null until there is enough
+ * to go on (a few percent and a couple of seconds), so the first guess isn't wild. Rounded
+ * so it doesn't flicker: 5 s steps under a minute, whole minutes above.
+ */
+export function exportEtaSeconds(fraction: number, elapsedMs: number): number | null {
+  if (fraction < 0.03 || fraction >= 1 || elapsedMs < 2000) return null;
+  const left = (elapsedMs * (1 - fraction)) / fraction / 1000;
+  if (left < 60) return Math.max(5, Math.ceil(left / 5) * 5);
+  return Math.round(left / 60) * 60;
+}

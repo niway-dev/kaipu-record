@@ -110,7 +110,7 @@ const GROUPS = [
   { label: "presetGroupKeep", rows: ["maximum"] },
 ] as const satisfies ReadonlyArray<{ label: string; rows: readonly ExportPresetId[] }>;
 
-const PRESET_NAME = {
+export const PRESET_NAME = {
   balanced: "presetBalanced",
   youtube: "presetYoutube",
   vertical: "presetVertical",

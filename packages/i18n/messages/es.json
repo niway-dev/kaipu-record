@@ -56,7 +56,12 @@
     "changeFolderTitle": "Cambiar la carpeta de grabaciones",
     "changeFolderDetail": "Tus grabaciones actuales se quedan en la carpeta anterior; desde ahora Kaipu guarda y muestra las de la carpeta nueva. Puedes volver a la anterior cuando quieras.",
     "exportPdfTitle": "Exportar como PDF",
-    "pdfFileType": "Documento PDF"
+    "pdfFileType": "Documento PDF",
+    "exportInProgress": "Hay una exportación en curso",
+    "closeCancelsExportDetail": "Si cierras la ventana, se cancela. La grabación original no se toca.",
+    "quitCancelsExportDetail": "Si sales, se cancela. La grabación original no se toca.",
+    "cancelExportAndClose": "Cancelar exportación y cerrar",
+    "cancelExportAndQuit": "Cancelar exportación y salir"
   },
   "nav": {
     "record": "Grabar",
@@ -147,7 +152,9 @@
     "accountMovedDetail": "La sesión, la capacidad y las subidas viven en la sección Cloud del menú lateral.",
     "goToCloud": "Ir a Cloud",
     "navCloudNote": "La cuenta y la capacidad en cloud viven ahora en la sección Cloud.",
-    "screenshotsDescription": "Cómo se guardan las capturas en este dispositivo."
+    "screenshotsDescription": "Cómo se guardan las capturas en este dispositivo.",
+    "recordingSavedCard": "Ofrecer una copia liviana al terminar de grabar",
+    "recordingSavedCardDescription": "Cuando una grabación pesa más de 10 MB, su página muestra una tarjeta para crear una copia que entre en GitHub. Se oculta a los 8 segundos."
   },
   "record": {
     "readyToRecord": "Todo listo para grabar",
@@ -809,7 +816,6 @@
     "presetTitleShare": "{title} (para compartir)",
     "openExported": "Abrir",
     "openExportedLabel": "Abrir el archivo {name} existente",
-    "exportSaved": "Exportación guardada · {size}",
     "exportShowInFinder": "Mostrar en Finder",
     "makingSmaller": "Haciéndolo más liviano…",
     "smallOverCap": "Quedó en {size}, un poco por encima del límite de {cap}. Recorta unos segundos y vuelve a exportar.",
@@ -844,7 +850,33 @@
     "exportSizeAction": "Exportar {size}",
     "exportFullAction": "Exportar",
     "alreadyExportedOpen": "Ya exportado · Abrir",
-    "closeSheet": "Cerrar"
+    "closeSheet": "Cerrar",
+    "exportProgressTitle": "Creando una copia más liviana…",
+    "exportProgressTitleFull": "Exportando en calidad máxima…",
+    "exportProgressPercent": "{percent}%",
+    "exportProgressEta": "{percent}% · faltan unos {eta}",
+    "etaSeconds": "{seconds} s",
+    "etaMinutes": "{minutes} min",
+    "exportProgressSizes": "{from} → {to}",
+    "exportProgressRetryNote": "Si queda por encima del límite, la achicamos una vez más automáticamente.",
+    "exportBusy": "Ya se está exportando “{title}”. Espera a que termine o cancélala arriba a la derecha.",
+    "readyTitle": "Lista para compartir · {size}",
+    "readyLighter": "{percent}% más liviana que el original.",
+    "readyLighterUnderLimit": "{percent}% más liviana que el original, por debajo del límite de {cap}.",
+    "readyOverLimit": "Quedó en {size}, un poco por encima del límite de {cap}. Recorta unos segundos y vuelve a exportar.",
+    "readyDragHintTool": "Arrástrala a un comentario de GitHub o Jira",
+    "readyDragHintChat": "Arrástrala a Slack o Discord",
+    "readyDragHint": "Arrástrala a donde quieras",
+    "readyDragLabel": "Arrastrar {name} fuera de Kaipu",
+    "readyViewFile": "Ver archivo",
+    "readyDone": "Listo",
+    "recordingSavedTitle": "Grabación guardada",
+    "recordingSavedMeter": "~{size} para GitHub",
+    "recordingSavedBody": "¿Quieres enviarla? Podemos crear una copia {percent}% más liviana. El texto se sigue leyendo.",
+    "recordingSavedBodyNoEstimate": "¿Quieres enviarla? Podemos crear una copia más liviana para GitHub. El texto se sigue leyendo.",
+    "recordingSavedShare": "Compartir una copia liviana",
+    "recordingSavedFooter": "Se oculta en 8 s · Desactívalo en Ajustes → Calidad de exportación",
+    "dismissCard": "Descartar"
   },
   "panel": {
     "saving": "Guardando…",

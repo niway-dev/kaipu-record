@@ -95,5 +95,9 @@ export function mergeSettings(stored: Partial<AppSettings> | null | undefined): 
     // Files written before NIW2-218's Export quality still carry `lastExportPreset` /
     // `lastExportFraming`; rebuilding the object here drops them.
     exportQuality: sanitizeExportQuality(safe.exportQuality),
+    showRecordingSavedCard:
+      typeof safe.showRecordingSavedCard === "boolean"
+        ? safe.showRecordingSavedCard
+        : DEFAULT_SETTINGS.showRecordingSavedCard,
   };
 }

@@ -21,6 +21,12 @@ vi.mock("@renderer/features/video-editor/export/use-video-export", () => ({
   useVideoExport: () => exportController,
 }));
 
+const busy = vi.hoisted(() => vi.fn(() => false));
+vi.mock("@renderer/features/video-editor/export/export-runner", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  isVideoExportBusy: busy,
+}));
+
 const PROBE = {
   width: 1662,
   height: 1080,
@@ -64,6 +70,8 @@ beforeEach(() => {
   probe.mockResolvedValue(PROBE);
   exportController.status = "idle";
   exportController.start.mockClear();
+  busy.mockReturnValue(false);
+  probe.mockClear();
   window.electronAPI.getSettings = vi.fn().mockResolvedValue(DEFAULT_SETTINGS);
 });
 
@@ -161,9 +169,27 @@ describe("ShareRecording", () => {
     expect(screen.queryByRole("alertdialog")).toBeNull();
   });
 
-  it("shows the progress dialog while exporting", () => {
-    exportController.status = "exporting";
+  it("one export at a time: while one runs, Share says so instead of opening a sheet", async () => {
+    busy.mockReturnValue(true);
     renderShare();
-    expect(screen.getByText("Exporting video…")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Share" }));
+    await waitFor(() =>
+      expect(getToasts()).toContainEqual(
+        expect.objectContaining({ message: expect.stringMatching(/^Already exporting/) }),
+      ),
+    );
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(probe).not.toHaveBeenCalled();
+  });
+
+  it("closes the sheet when the export starts: it runs in the background", async () => {
+    renderShare();
+    fireEvent.click(screen.getByRole("button", { name: "Share" }));
+    await screen.findByRole("heading", { name: "Share a copy" });
+    fireEvent.click(screen.getByRole("button", { name: /^Export / }));
+    expect(exportController.start).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceSizeBytes: 1000 }),
+    );
+    expect(screen.queryByRole("alertdialog")).toBeNull();
   });
 });

@@ -27,7 +27,14 @@ import {
   useShareRecording,
 } from "@renderer/features/library/components/share-recording";
 import { resolveExportTarget } from "@renderer/features/video-editor/export/export-presets";
-import { formatMB, isHeavyToSend } from "@renderer/features/video-editor/export/export-size";
+import {
+  formatMB,
+  isHeavyToSend,
+  SHARE_LIMIT_BYTES,
+} from "@renderer/features/video-editor/export/export-size";
+import { RecordingSavedCard } from "@renderer/features/status-cards/recording-saved-card";
+import { StatusCardPortal } from "@renderer/features/status-cards/status-stack";
+import { useAppSettings } from "@renderer/pages/settings/use-app-settings";
 import type { SourceProbe } from "@renderer/features/video-editor/export/probe-source";
 import { RecordingTitle } from "@renderer/features/library/components/recording-title";
 import { TagEditor } from "@renderer/features/library/components/tag-editor";
@@ -105,12 +112,22 @@ export function LibraryDetailPage(): React.JSX.Element {
   const shareable =
     video && video.id !== null && video.kind === "recording" ? { ...video, id: video.id } : null;
   const heavy = shareable !== null && isHeavyToSend(shareable.fileSizeBytes);
+  // "Recording saved" (NIW2-218): only on the page a fresh recording lands on, only when
+  // the file is too heavy for GitHub, and only once per arrival (dismissed or timed out).
+  const { settings } = useAppSettings();
+  const [savedCardDismissedFor, setSavedCardDismissedFor] = useState<string | null>(null);
+  const showSavedCard =
+    Boolean(fromRecording) &&
+    shareable !== null &&
+    shareable.fileSizeBytes > SHARE_LIMIT_BYTES &&
+    settings?.showRecordingSavedCard === true &&
+    savedCardDismissedFor !== location.key;
   const share = useShareRecording({
     video: shareable,
     exports: video ? (lineage.exportsOf.get(video.assetId) ?? []) : [],
     onSaved: () => void refresh(),
     onOpenExisting: (existing) => navigate(`/library/${existing.assetId}`),
-    prefetch: heavy,
+    prefetch: heavy || showSavedCard,
   });
 
   const back = (): void => {
@@ -406,6 +423,21 @@ export function LibraryDetailPage(): React.JSX.Element {
       )}
 
       {share.ui}
+
+      {showSavedCard && (
+        <StatusCardPortal>
+          <RecordingSavedCard
+            durationSeconds={share.probe?.durationSec ?? video.durationSeconds}
+            sizeBytes={video.fileSizeBytes}
+            dimensions={
+              share.probe ? { width: share.probe.width, height: share.probe.height } : null
+            }
+            githubEstimateBytes={githubEstimate(share.probe)}
+            onShare={() => share.open("small-10")}
+            onDismiss={() => setSavedCardDismissedFor(location.key)}
+          />
+        </StatusCardPortal>
+      )}
 
       {confirmingDelete && (
         <DeleteConfirmDialog
