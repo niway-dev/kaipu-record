@@ -1,0 +1,62 @@
+---
+title: "ADR 0020: Tags are entities with stable ids, kept in a registry inside the vault"
+description: A tag has a UUID, a unique name, a lowercase slug and a color, and lives in .kaipu/tags.json inside the vault; items reference tags by id. The app reaches tags only through a TagRepository port. Supersedes ADR 0012's plain-string tags.
+---
+
+# ADR 0020: Tags are entities with stable ids, kept in a registry inside the vault
+
+## Status
+
+| Field         | Value                                                                                                                    |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Status        | Proposed — [tags as entities design](/specs/2026-10-13-tags-as-entities-design/); not implemented                        |
+| Date          | 2026-10-13                                                                                                               |
+| Supersedes    | ADR 0012 (PR #241) — tags as plain strings in each sidecar. Its reopen condition is met: tags now need color and rename. |
+| Superseded by | —                                                                                                                        |
+
+## Context
+
+Phase 1 (PR #245) stored tags as `tags: string[]` in each recording's sidecar, as ADR 0012
+decided. Reviewing it, the owner asked for tags that are fun (colors), can be created on
+their own, renamed and deleted, and later synced to the cloud without changing the model.
+With the name as identity, a rename rewrites every sidecar that holds it and cannot be
+reconciled between two devices; a color has nowhere to live; a tag with no items cannot exist.
+
+## Decision
+
+1. A tag is a record: `id` (UUID v7, minted on any device), `name` (display, unique
+   case-insensitively), `slug` (lowercase, `_`-joined, derived from the name, used for typing
+   and search), `color` (a palette name), `createdAt/updatedAt`, `createdOn/updatedOn`
+   (device ids), `deletedAt` (tombstone).
+2. The local registry is `<vault>/.kaipu/tags.json`, written atomically by the main process.
+   It lives in the vault so tags travel with the folder.
+3. Sidecars store `tagIds`, plus `tagNames` as a cached, non-authoritative copy so the files
+   stay readable by people and other tools.
+4. The app reads and writes tags only through a `TagRepository` port (list, create, rename,
+   recolor, remove, assign). The renderer uses IPC; adapters live in the main process; a
+   provider composes them. A parity test suite runs the same scenarios against every adapter.
+
+## Alternatives rejected
+
+- **Keep names as identity, add a `{name → color}` file.** Smallest change, but a rename stays
+  N writes and cannot be merged across devices — the failure Bear users report.
+- **Registry in `userData` instead of the vault.** Survives changing the vault folder, but a
+  copied vault arrives with ids nobody knows. Filesystem-first says the vault is the product.
+- **Numeric ids.** Need a central allocator; UUIDs can be created offline on any device.
+
+## Consequences
+
+- Rename and recolor are one registry write; items are untouched.
+- A vault copied without `tags.json` shows tag names from the sidecar cache, greyed, until a
+  registry or a cloud pull restores them.
+- Phase 1's string format must not ship: PR #245 is reworked before it merges, so there is no
+  data migration.
+
+## Non-goals
+
+Hierarchies, team vocabularies, emoji per tag, automatic tagging, a change-history log.
+
+## Reopen when
+
+- Tags must be shared between users or teams (identity and permissions change).
+- Several vaults must share one tag vocabulary on the same machine.
