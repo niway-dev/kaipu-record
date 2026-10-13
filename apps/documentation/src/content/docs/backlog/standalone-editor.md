@@ -10,6 +10,9 @@ description: "Owner idea: an editor window that does not start from a Kaipu capt
 > or to join two videos." Recorded here so it is not lost; **not** designed. It is an
 > architectural change and gets its own brainstorming session before a spec.
 
+> **2026-10-06 — designed:** see the [Editor workspace spec](/specs/2026-10-06-editor-workspace-design/)
+> (one Editor view first, then a video from several videos and an image from several images).
+
 ## What it would mean
 
 Today both editors are reached **from a capture**: the screenshot editor from ⌃⌘X or a

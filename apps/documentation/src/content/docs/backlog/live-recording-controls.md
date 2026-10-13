@@ -5,11 +5,16 @@ description: "Proposal: let the user mute the microphone, turn system audio on o
 
 # Live recording controls
 
-> **Status: 🔵 Proposed** (2026-09-23). Owner request after the video editor v2 wave:
+> **Status: 🟢 Ready to validate** (shipped in PR #243, 2026-10-07; proposed 2026-09-23). Owner request after the video editor v2 wave:
 > "I want to change the recording settings while the recording is happening — mute,
 > turn audio on or off, and the camera." Not scheduled. Parent reference:
 > [Recording pipeline](/desktop/recording-pipeline/) · sibling:
 > [Roadmap → Video editor v2 wave](./roadmap#video-editor-v2-wave-2026-09-22--23).
+
+> **2026-10-06 — superseded by the [design spec](/specs/2026-10-06-live-recording-controls-design/)**
+> where they differ: no buttons on the floating control bar (the Capture Panel, the Record
+> page and shortcuts carry the toggles), and system audio is always acquired so its toggle
+> only moves a gain ([ADR 0011](/architecture/decisions/0011-system-audio-acquired-whenever-available/)).
 
 ## Problem
 

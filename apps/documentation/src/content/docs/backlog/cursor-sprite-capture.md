@@ -11,6 +11,10 @@ description: "Future improvement for the video editor's auto-zoom: exclude the O
 > [When to pick this up](#when-to-pick-this-up) is met. Design background:
 > [plan 12 — capture resolution and cursor sprite](/plans/video-editor-v2/12-capture-resolution-and-cursor-sprite/).
 
+> **2026-10-06 — the owner dropped Spike A and the native-module-first option.** Research on
+> how established tools do cursor styling, and the plan, are in
+> [Cursor follow and styling — research](/specs/2026-10-06-cursor-styling-research/).
+
 ## The gap
 
 Video editor v2 records the cursor track (position at 125 Hz, clicks when

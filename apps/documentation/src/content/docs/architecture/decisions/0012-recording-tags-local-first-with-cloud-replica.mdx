@@ -1,0 +1,65 @@
+---
+title: "ADR 0012: Recording tags live in the local sidecar; the cloud holds a replica behind one tag store"
+description: Tags on recordings are stored in the recording's .kaipu/<id>.json sidecar as the source of truth, replicated to the cloud catalog when cloud is on, and accessed through a TagStore port whose adapter the app never chooses itself.
+---
+
+# ADR 0012: Recording tags live in the local sidecar; the cloud holds a replica behind one tag store
+
+## Status
+
+| Field         | Value                                                                                       |
+| ------------- | ------------------------------------------------------------------------------------------- |
+| Status        | Proposed — [recording tags spec](/specs/2026-10-06-recording-tags-design/); not implemented |
+| Date          | 2026-10-06                                                                                  |
+| Supersedes    | —                                                                                           |
+| Superseded by | —                                                                                           |
+
+## Context
+
+The owner wants free-form tags on recordings (`kaipu`, `cricut`, `issue-#1232`) to filter the
+library, stored "in the same file" locally and in a database when cloud is on, with builders
+and an adapter so the app does not care where the data comes from.
+
+The [filesystem-first ADR](/desktop/filesystem-first-monetization/) makes the vault the
+source of truth and sells only the network layer. Per-recording metadata already lives in
+`.kaipu/<id>.json`, merged by `LibraryVault.writeMeta`.
+
+## Decision
+
+1. Tags are a `tags: string[]` field (plus `tagsUpdatedAt`) in the recording's sidecar. That
+   file is the source of truth on every device.
+2. When cloud is on, tags are replicated to `cloud_asset.tags` (Postgres `text[]`, GIN index).
+   Writes go local first, then to the cloud with retry. Conflicts: last writer wins per
+   recording.
+3. The app reads and writes through a `TagStore` port. A `TagStoreProvider` in the main
+   process returns the sidecar adapter, or a replicating store composed of the sidecar and
+   cloud adapters, from the cloud setting. The renderer only uses IPC.
+4. A pure `TagSetBuilder` in `@kaipu/domain` normalizes every tag before any adapter sees it,
+   on desktop and server alike.
+
+## Alternatives rejected
+
+- **Exclusive modes (local file _or_ cloud database).** What the request first described. In
+  cloud mode, tags disappear offline and the vault stops being self-describing — against the
+  filesystem-first ADR.
+- **A separate local tag index file (`.kaipu/tags.json`).** One more file to keep consistent
+  with the sidecars; the vault already reads every sidecar when it scans.
+- **Normalized tag tables (`tag`, `asset_tag`).** Needed for renaming or coloring tags, which
+  are out of scope; a join for a feature with no tag-level data.
+
+## Consequences
+
+- Tags survive moving or copying the vault folder, and work with no account.
+- Cloud-only items get their tags from the catalog, which is why the replica is mandatory once
+  cloud is on.
+- A tag rename across the library means rewriting every sidecar that holds it; acceptable
+  until a rename feature exists.
+
+## Non-goals
+
+Tag colors, hierarchies, shared team vocabularies, automatic tagging.
+
+## Reopen when
+
+- Tags need their own attributes (color, description, rename) — then they become an entity.
+- Libraries grow large enough that folding sidecars for the vocabulary is measurably slow.
