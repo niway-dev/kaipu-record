@@ -8,6 +8,12 @@ import type { ExportPlan } from "./export-plan";
 /** GIF frame rates offered in the export sheet. 30 fps is ruled out (browser delay clamp). */
 export type GifFps = 10 | 15;
 /** GIF widths offered in the export sheet (never wider than the source). */
+/**
+ * GIF export is on hold (owner, 2026-10-13): the export sheet hides the format choice and
+ * offers MP4 only. The pipeline stays; flip this to bring GIF back (see NIW2-217, NIW2-371).
+ */
+export const GIF_EXPORT_ENABLED = false;
+
 export const GIF_WIDTHS = [480, 640, 800] as const;
 export type GifWidth = (typeof GIF_WIDTHS)[number];
 export const GIF_FPS_OPTIONS: readonly GifFps[] = [10, 15];

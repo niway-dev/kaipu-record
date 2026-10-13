@@ -5,6 +5,7 @@ import { ModalActions, ModalButton, ModalOverlay, ModalText, ModalTitle } from "
 import { formatSize } from "@renderer/features/library/format";
 import { gifRangeProblem } from "../export/export-plan";
 import {
+  GIF_EXPORT_ENABLED,
   GIF_FPS_OPTIONS,
   GIF_MAX_DURATION_S,
   GIF_MIN_DURATION_S,
@@ -34,6 +35,8 @@ export interface ExportSheetProps {
   onExportVideo(): void;
   onExportGif(settings: GifSettings): void;
   onCancel(): void;
+  /** Show the Video / GIF format choice. Defaults to `GIF_EXPORT_ENABLED` (off while on hold). */
+  gifEnabled?: boolean;
 }
 
 const round1 = (n: number): number => Math.round(n * 10) / 10;
@@ -57,6 +60,7 @@ export function ExportSheet({
   onExportVideo,
   onExportGif,
   onCancel,
+  gifEnabled = GIF_EXPORT_ENABLED,
 }: ExportSheetProps): React.JSX.Element {
   const t = useTranslations("videoEditor");
   const id = useId();
@@ -91,26 +95,28 @@ export function ExportSheet({
     <ModalOverlay onCancel={onCancel} labelledBy={`${id}-title`}>
       <ModalTitle id={`${id}-title`}>{t("exportSheetTitle")}</ModalTitle>
 
-      <div className={styles.field}>
-        <span className={styles.label} id={`${id}-format`}>
-          {t("exportFormatLabel")}
-        </span>
-        <div className={styles.segmented} role="radiogroup" aria-labelledby={`${id}-format`}>
-          {(["video", "gif"] as const).map((f) => (
-            <button
-              key={f}
-              type="button"
-              role="radio"
-              aria-checked={format === f}
-              className={styles.segment}
-              data-active={format === f}
-              onClick={() => setFormat(f)}
-            >
-              {f === "video" ? t("formatVideo") : t("formatGif")}
-            </button>
-          ))}
+      {gifEnabled && (
+        <div className={styles.field}>
+          <span className={styles.label} id={`${id}-format`}>
+            {t("exportFormatLabel")}
+          </span>
+          <div className={styles.segmented} role="radiogroup" aria-labelledby={`${id}-format`}>
+            {(["video", "gif"] as const).map((f) => (
+              <button
+                key={f}
+                type="button"
+                role="radio"
+                aria-checked={format === f}
+                className={styles.segment}
+                data-active={format === f}
+                onClick={() => setFormat(f)}
+              >
+                {f === "video" ? t("formatVideo") : t("formatGif")}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {format === "gif" && (
         <>

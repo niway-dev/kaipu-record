@@ -13,6 +13,7 @@ function renderSheet(overrides: Partial<Parameters<typeof ExportSheet>[0]> = {})
     onExportVideo: vi.fn(),
     onExportGif: vi.fn(),
     onCancel: vi.fn(),
+    gifEnabled: true,
     ...overrides,
   };
   render(<ExportSheet {...props} />);
@@ -20,6 +21,13 @@ function renderSheet(overrides: Partial<Parameters<typeof ExportSheet>[0]> = {})
 }
 
 describe("ExportSheet", () => {
+  it("offers MP4 only while GIF export is on hold", () => {
+    const props = renderSheet({ gifEnabled: undefined });
+    expect(screen.queryByRole("radio", { name: "GIF" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Export video" }));
+    expect(props.onExportVideo).toHaveBeenCalled();
+  });
+
   it("keeps today's MP4 export one click away", () => {
     const props = renderSheet();
     fireEvent.click(screen.getByRole("button", { name: "Export video" }));
