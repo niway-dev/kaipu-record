@@ -120,25 +120,69 @@
 
 /* ── Filter chips ───────────────────────────── */
 
-.chipRow {
+/* Filters: one row for type + location, one for tags. Each group carries a
+   short label; its title attribute explains what the group does. */
+.filterRow {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-xs);
+  gap: var(--space-xs) var(--space-lg);
   margin-top: var(--space-md);
 }
 
-.chipDivider {
-  width: 1px;
-  align-self: stretch;
-  margin: 2px var(--space-xs);
-  background: var(--border);
+.filterRow + .filterRow {
+  margin-top: var(--space-sm);
 }
 
-/* `display: contents` keeps the tag chips flowing in the chip row's wrap while
-   the wrapper still groups them for assistive tech. */
-.tagChips {
-  display: contents;
+.filterGroup,
+.tagGroup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.tagGroup {
+  flex: 1;
+}
+
+.groupLabel {
+  flex-shrink: 0;
+  min-width: 64px;
+  margin-right: 2px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  cursor: help;
+}
+
+/* The tag chips stay on one line and scroll sideways when they outgrow it. */
+.tagScroller {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  padding-bottom: 2px;
+  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+}
+
+.tagScroller > * {
+  flex-shrink: 0;
+}
+
+.groupEmpty {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
+.filteredBy {
+  letter-spacing: 0.04em;
+  text-transform: none;
 }
 
 .storageDotChip {

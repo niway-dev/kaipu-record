@@ -27,9 +27,6 @@ import { buildLineage, editBadge } from "@renderer/features/library/lineage";
 import { canOpenInEditor, useOpenInEditor } from "@renderer/features/editor/open-in-editor";
 import styles from "./library-page.module.css";
 
-/** Tag chips shown before the "+N" overflow (the most used first). */
-const TAG_CHIPS_SHOWN = 8;
-
 /** The search field's share of the toolbar, moved out of the module: the shared
  *  SearchInput takes StyleX styles, not a className. */
 const sxLibrary = stylex.create({
@@ -72,13 +69,19 @@ export function LibraryPage(): React.JSX.Element {
     clearFilters,
   } = useLibraryFilters(videos, tagApi.tags);
 
-  const [showAllTags, setShowAllTags] = useState(false);
-  // The most used tags, plus any selected one past the cut so a selection is
-  // always visible (and can be unselected) while the list is collapsed.
-  const shownTags = showAllTags
-    ? tagsInUse
-    : tagsInUse.filter((tag, i) => i < TAG_CHIPS_SHOWN || selectedTags.includes(tag.id));
-  const hiddenTagCount = tagsInUse.length - shownTags.length;
+  // What the summary line says is narrowing the list, so changed counts read as
+  // "filtered", not "files went missing".
+  const activeFilterNames = [
+    ...(kindFilter === "recording" ? [t("filterNameRecordings")] : []),
+    ...(kindFilter === "screenshot" ? [t("filterNameScreenshots")] : []),
+    ...(storageFilter === "local" ? [t("storageLocal")] : []),
+    ...(storageFilter === "cloud" ? [t("storageCloud")] : []),
+    ...selectedTags.flatMap((id) => {
+      const tag = tagApi.byId.get(id);
+      return tag ? [`#${tag.slug}`] : [];
+    }),
+    ...(searchTerm.trim() ? [`"${searchTerm.trim()}"`] : []),
+  ];
 
   const [view, setView] = useState<"grid" | "list">("grid");
 
@@ -153,59 +156,69 @@ export function LibraryPage(): React.JSX.Element {
         </div>
       </div>
 
-      <div className={styles.chipRow}>
-        <FilterChip active={kindFilter === "all"} onClick={() => setKindFilter("all")}>
-          {t("kindAll", { count: kindCounts.all })}
-        </FilterChip>
-        <FilterChip
-          active={kindFilter === "recording"}
-          empty={kindCounts.recording === 0}
-          onClick={() => setKindFilter("recording")}
-        >
-          {t("kindRecordings", { count: kindCounts.recording })}
-        </FilterChip>
-        <FilterChip
-          active={kindFilter === "screenshot"}
-          empty={kindCounts.screenshot === 0}
-          onClick={() => setKindFilter("screenshot")}
-        >
-          {t("kindScreenshots", { count: kindCounts.screenshot })}
-        </FilterChip>
+      <div className={styles.filterRow}>
+        <div className={styles.filterGroup} role="group" aria-label={t("filterKind")}>
+          <span className={styles.groupLabel} title={t("filterKindHint")}>
+            {t("filterKind")}
+          </span>
+          <FilterChip active={kindFilter === "all"} onClick={() => setKindFilter("all")}>
+            {t("kindAll", { count: kindCounts.all })}
+          </FilterChip>
+          <FilterChip
+            active={kindFilter === "recording"}
+            empty={kindCounts.recording === 0}
+            onClick={() => setKindFilter("recording")}
+          >
+            {t("kindRecordings", { count: kindCounts.recording })}
+          </FilterChip>
+          <FilterChip
+            active={kindFilter === "screenshot"}
+            empty={kindCounts.screenshot === 0}
+            onClick={() => setKindFilter("screenshot")}
+          >
+            {t("kindScreenshots", { count: kindCounts.screenshot })}
+          </FilterChip>
+        </div>
 
-        <span className={styles.chipDivider} aria-hidden />
+        <div className={styles.filterGroup} role="group" aria-label={t("filterStorage")}>
+          <span className={styles.groupLabel} title={t("filterStorageHint")}>
+            {t("filterStorage")}
+          </span>
+          <FilterChip active={storageFilter === "all"} onClick={() => setStorageFilter("all")}>
+            {t("storageAll")}
+          </FilterChip>
+          <FilterChip
+            active={storageFilter === "local"}
+            empty={counts.local === 0}
+            onClick={() => setStorageFilter("local")}
+          >
+            <span className={styles.storageDotChip} data-cloud="false" />
+            {t("storageLocal")}
+            <span className={styles.tagCount}>{counts.local}</span>
+          </FilterChip>
+          <FilterChip
+            active={storageFilter === "cloud"}
+            empty={counts.cloud === 0}
+            onClick={() => setStorageFilter("cloud")}
+          >
+            <span className={styles.storageDotChip} data-cloud="true" />
+            {t("storageCloud")}
+            <span className={styles.tagCount}>{counts.cloud}</span>
+          </FilterChip>
+        </div>
+      </div>
 
-        <FilterChip active={storageFilter === "all"} onClick={() => setStorageFilter("all")}>
-          {t("storageAll")}
-        </FilterChip>
-        <FilterChip
-          active={storageFilter === "local"}
-          empty={counts.local === 0}
-          onClick={() => setStorageFilter("local")}
-        >
-          <span className={styles.storageDotChip} data-cloud="false" />
-          {t("storageLocal")}
-          <span className={styles.tagCount}>{counts.local}</span>
-        </FilterChip>
-        <FilterChip
-          active={storageFilter === "cloud"}
-          empty={counts.cloud === 0}
-          onClick={() => setStorageFilter("cloud")}
-        >
-          <span className={styles.storageDotChip} data-cloud="true" />
-          {t("storageCloud")}
-          <span className={styles.tagCount}>{counts.cloud}</span>
-        </FilterChip>
-
-        <span className={styles.chipDivider} aria-hidden />
-        <FilterChip active={false} onClick={() => setTagDrawer({ assetId: null, tab: "all" })}>
-          <Tags size={13} strokeWidth={1.8} />
-          {t("tagsManage")}
-        </FilterChip>
-
-        {tagsInUse.length > 0 && (
-          <>
-            <div className={styles.tagChips} role="group" aria-label={t("tagFilterLabel")}>
-              {shownTags.map((tag) => (
+      <div className={styles.filterRow}>
+        <div className={styles.tagGroup} role="group" aria-label={t("filterTags")}>
+          <span className={styles.groupLabel} title={t("filterTagsHint")}>
+            {t("filterTags")}
+          </span>
+          {/* One line that scrolls sideways when the tags outgrow it. */}
+          <div className={styles.tagScroller}>
+            {tagsInUse.length === 0 ? (
+              <span className={styles.groupEmpty}>{t("filterTagsEmpty")}</span>
+            ) : (
+              tagsInUse.map((tag) => (
                 <FilterChip
                   key={tag.id}
                   active={selectedTags.includes(tag.id)}
@@ -215,20 +228,14 @@ export function LibraryPage(): React.JSX.Element {
                   <TagChip name={tag.name} color={tag.color} />
                   <span className={styles.tagCount}>{tagFacetCounts.get(tag.id) ?? 0}</span>
                 </FilterChip>
-              ))}
-              {hiddenTagCount > 0 && (
-                <FilterChip active={false} onClick={() => setShowAllTags(true)}>
-                  {t("tagsMore", { count: hiddenTagCount })}
-                </FilterChip>
-              )}
-              {showAllTags && tagsInUse.length > TAG_CHIPS_SHOWN && (
-                <FilterChip active={false} onClick={() => setShowAllTags(false)}>
-                  {t("tagsLess")}
-                </FilterChip>
-              )}
-            </div>
-          </>
-        )}
+              ))
+            )}
+          </div>
+          <FilterChip active={false} onClick={() => setTagDrawer({ assetId: null, tab: "all" })}>
+            <Tags size={13} strokeWidth={1.8} />
+            {t("tagsManage")}
+          </FilterChip>
+        </div>
       </div>
 
       {canShowVaultBanner && (
@@ -240,7 +247,17 @@ export function LibraryPage(): React.JSX.Element {
 
       {videos.length > 0 && (
         <div className={styles.summaryBar}>
-          <span>{t("fileCount", { count: visibleItems.length })}</span>
+          <span>
+            {hasActiveFilters
+              ? t("fileCountOf", { shown: visibleItems.length, total: videos.length })
+              : t("fileCount", { count: visibleItems.length })}
+            {activeFilterNames.length > 0 && (
+              <span className={styles.filteredBy}>
+                {" · "}
+                {t("filteredBy", { filters: activeFilterNames.join(", ") })}
+              </span>
+            )}
+          </span>
           {hasActiveFilters && (
             <button className={styles.clearFiltersButton} onClick={clearFilters} type="button">
               {t("clearFilters")}
