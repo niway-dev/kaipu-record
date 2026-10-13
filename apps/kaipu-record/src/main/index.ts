@@ -284,6 +284,12 @@ app.whenReady().then(() => {
   // Set app user model id for windows
   electronApp.setAppUserModelId("com.niway.kaipu-record");
 
+  // A dev run is Electron's own bundle, so the Dock and ⌘-Tab would show
+  // Electron's icon. Give it the brand icon (derived by scripts/generate-app-icons.sh).
+  // Packaged builds keep the bundle's .icns: overriding it there would hide a
+  // stale bundle icon instead of surfacing it.
+  if (process.platform === "darwin" && !app.isPackaged) app.dock?.setIcon(icon);
+
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.
   // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
