@@ -62,16 +62,37 @@ export function getAppSettings(): AppSettings {
   return settings;
 }
 
+type ActivationPolicy = "regular" | "accessory";
+
+/**
+ * The activation policy this process last applied, or `null` before the first
+ * call. Both policy setters go through `setActivationPolicy` and return early
+ * when the policy is unchanged, because the transition itself is not free on
+ * macOS: `app.dock.show()` on an active app briefly activates the Dock and
+ * re-transforms the process into a foreground app, and AppKit orders every
+ * window out and back in while it does. Seen by the user as "the main window
+ * disappears when focus moves to the camera bubble" — the camera-on path
+ * re-asserts the policy, and each re-assertion was a blur → hide → show cycle.
+ * See backlog/bug-main-window-hides-on-blur.
+ */
+let appliedPolicy: ActivationPolicy | null = null;
+
+function setActivationPolicy(policy: ActivationPolicy): void {
+  if (process.platform !== "darwin") return;
+  if (appliedPolicy === policy) return;
+  appliedPolicy = policy;
+  app.setActivationPolicy(policy);
+  if (policy === "regular") app.dock?.show();
+}
+
 /**
  * macOS Dock + Cmd+Tab visibility from the current settings. Exported so the
  * recording hub can re-assert it after hiding/showing the main window (hide/show
  * cycles, and showing a floating panel, can otherwise drop the app from the
- * switcher).
+ * switcher). Idempotent: a call that changes nothing touches no AppKit state.
  */
 export function applyDockPolicy(): void {
-  if (process.platform !== "darwin") return;
-  app.setActivationPolicy(settings.showInDock ? "regular" : "accessory");
-  if (settings.showInDock) app.dock?.show();
+  setActivationPolicy(settings.showInDock ? "regular" : "accessory");
 }
 
 /**
@@ -81,9 +102,7 @@ export function applyDockPolicy(): void {
  * Pair with `applyDockPolicy()` to restore the preference afterwards.
  */
 export function forceRegularPolicy(): void {
-  if (process.platform !== "darwin") return;
-  app.setActivationPolicy("regular");
-  app.dock?.show();
+  setActivationPolicy("regular");
 }
 
 /** Push the current settings to every window so renderer consumers stay in sync
