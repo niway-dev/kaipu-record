@@ -1,6 +1,6 @@
 ---
 title: "Video editor — export presets per destination"
-description: "NIW2-218: one export list — Balanced 1080p (recommended default), YouTube 16:9, Vertical 9:16, Square 1:1, GitHub ≤ 10 MB, Chat / Discord ≤ 25 MB, Maximum quality — each producing a file that fits, with the moov box at the front (fast start). The default comes from Settings → Export quality."
+description: "NIW2-218: one export list — Balanced 1080p (recommended default), YouTube 16:9, Vertical 9:16, Square 1:1, GitHub ≤ 10 MB, Chat / Discord ≤ 25 MB, Maximum quality — each producing a file that fits, with the moov box at the front (fast start). The default comes from Settings → Export quality, and Share exports the whole recording from its library page."
 ---
 
 # Video editor — export presets per destination
@@ -13,6 +13,8 @@ description: "NIW2-218: one export list — Balanced 1080p (recommended default)
 > 3. Small-file post-export size check + retry (`feat/NIW2-218-small-file`).
 > 4. One list with Balanced recommended + Maximum, Settings → Export quality
 >    (`feat/NIW2-218-export-quality`).
+> 5. Share button on the recording's page + "already exported → reuse"
+>    (`feat/NIW2-218-share-button`).
 >
 > Unit, hook and component tests pass; real exports (WebCodecs in the worker, VideoToolbox rate
 > control, `ffprobe` on the outputs, playback in Safari/Chrome/QuickTime) still need a pass on the
@@ -48,6 +50,39 @@ Enter exports it.
   title suffix depends on the preset ("(edited)" for Balanced and Maximum, "(YouTube)",
   "(vertical)", "(square)", "(10 MB)" / "(25 MB)"). Older sidecars say `"original"`; readers
   treat it as `maximum` (`normalizeExportPresetId`).
+
+## Share (export without the editor)
+
+A **Share** button (primary, first in the actions) sits on the library item page of every local
+recording, raw or already an export. That page is also where a recording lands the moment it
+stops (`fromRecording`), so it is the "right after recording" entry point too — there is no
+separate playback screen. Share opens the same export sheet, titled "Prepare a file to share",
+for the **whole file as it is on disk**: no edits applied, even when the recording has an edit
+session. The editor's Export keeps applying the edits.
+
+- Same export worker, trivial plan: `initialScene(duration)` — one clip over the whole file,
+  no overlays, slides or zoom. No second pipeline (`features/library/components/share-recording.tsx`).
+- Without a `<video>` element to ask, `probeSource` reads the display size, exact duration (the
+  sidecar's is floored), frame rate and audio layout from the file.
+- The result is a new library item derived from the shared one (ADR 0003). Balanced and Maximum
+  are titled "(for sharing)"; destination rows keep their suffix. The page re-lists, so it shows
+  under Exports, and the toast offers "Show in Finder".
+- Share by link (cloud) is not built; it joins this button once NIW2-214/216/222 land. No
+  background auto-export.
+
+### Already exported → reuse
+
+Each MP4 export now records **what** it encoded in its sidecar, `exportFingerprint`: `"whole"`
+for Share, `"edit:<hash>"` (a hash of the scene with sorted keys) for the editor. A sheet row
+shows "✓ Already exported" with an **Open** button — and the main button, and Enter, open it —
+when a local MP4 export of the same source (`derivedFromAssetId`) has the same preset
+(`exportPreset`) and the same fingerprint (`findReusableExports` in `export-reuse.ts`). Open
+goes to that item's page.
+
+Why a fingerprint rather than the session stamps (`editExportedSavedAt === editSavedAt`): the
+stamp only says the newest export carries the current edit. An older export with the same preset
+may hold an earlier cut, and reusing it would ship the wrong video. Exports made before this
+change have no fingerprint and are never reused — the safe answer is to encode again.
 
 ## How it works
 
@@ -98,5 +133,5 @@ kept, with a toast giving its real size.
 ## Not in v1
 
 Server transcoding, HLS/DASH, direct publishing, HEVC/VP9/AV1, custom resolution/bitrate,
-screenshot presets, export from the library without the editor, batch export, a background system
-for the video editor (padding is black or a blurred copy of the frame).
+screenshot presets, batch export, share by link (cloud), background auto-export after recording,
+a background system for the video editor (padding is black or a blurred copy of the frame).
