@@ -12,7 +12,7 @@ import {
 } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import type { LocalRecording } from "@shared/types/library-storage";
-import type { StoredExportPresetId } from "@shared/types/export-preset";
+import { normalizeExportPresetId, type StoredExportPresetId } from "@shared/types/export-preset";
 import { sha256FileBase64 } from "./content-hash";
 
 const META_DIR = ".kaipu";
@@ -47,6 +47,8 @@ export interface Sidecar {
   tagsUpdatedAt?: number;
   /** Editor exports (NIW2-218): the destination preset; absent on older items. */
   exportPreset?: StoredExportPresetId;
+  /** What the export encoded ("whole" or "edit:<hash>"); see RecordingFinalizeMeta. */
+  exportFingerprint?: string;
   /** GIF exports only (NIW2-217). */
   gifWidth?: number;
   gifHeight?: number;
@@ -154,6 +156,7 @@ export class LibraryVault {
         isGif && meta.gifWidth && meta.gifHeight
           ? { width: meta.gifWidth, height: meta.gifHeight, fps: meta.gifFps ?? 0 }
           : null,
+      export: describeExport(meta),
       thumbnailUrl: isImage
         ? // `?v=<mtime>` busts the renderer image cache when a screenshot is
           // overwritten in place (same id/URL) — only the changed item, so the
@@ -391,6 +394,16 @@ export class LibraryVault {
     await rm(target);
     await this.writeMeta(id, { localRemovedAt: Date.now() });
   }
+}
+
+/** An MP4 export's preset + fingerprint (NIW2-218), or null for anything that isn't one. */
+function describeExport(meta: Sidecar): LocalRecording["export"] {
+  const preset = normalizeExportPresetId(meta.exportPreset);
+  if (!preset) return null;
+  return {
+    preset,
+    fingerprint: typeof meta.exportFingerprint === "string" ? meta.exportFingerprint : null,
+  };
 }
 
 function humanizeId(id: string): string {

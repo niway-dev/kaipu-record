@@ -1,7 +1,15 @@
 import { ALL_FORMATS, Input, UrlSource } from "mediabunny";
 
-/** Source facts the export presets need (NIW2-218) that the `<video>` element doesn't expose. */
+/**
+ * Source facts the export presets need (NIW2-218): what the `<video>` element doesn't expose
+ * in the editor, and everything Share needs where there is no `<video>` to ask.
+ */
 export interface SourceProbe {
+  /** Display size of the video track (what `<video>.videoWidth/videoHeight` report); 0 if none. */
+  width: number;
+  height: number;
+  /** Exact duration in seconds (the sidecar's `durationSeconds` is floored). */
+  durationSec: number;
   /** Average frame rate over the first packets. */
   fps: number;
   /** Whether the recording has an audio track at all (mute is applied by the caller). */
@@ -27,6 +35,9 @@ export async function probeSource(sourceId: string): Promise<SourceProbe | null>
     const audio = await input.getPrimaryAudioTrack();
     const stats = video ? await video.computePacketStats(SAMPLE_PACKETS) : null;
     return {
+      width: video ? await video.getDisplayWidth() : 0,
+      height: video ? await video.getDisplayHeight() : 0,
+      durationSec: await input.computeDuration(),
       fps: stats && stats.averagePacketRate > 0 ? stats.averagePacketRate : 30,
       hasAudio: audio !== null,
       sampleRate: audio ? (await audio.getSampleRate()) || 48000 : 48000,

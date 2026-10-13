@@ -459,6 +459,12 @@ export interface RecordingFinalizeMeta {
   derivedFromAssetId?: string | null;
   /** NIW2-218: the export preset that produced this file (sidecar `exportPreset`). */
   exportPreset?: ExportPresetId;
+  /**
+   * NIW2-218: what was encoded, so the same export can be reused instead of encoded again
+   * (sidecar `exportFingerprint`): `"whole"` = the source file as it is on disk (Share),
+   * `"edit:<hash>"` = the editor's scene at export time.
+   */
+  exportFingerprint?: string;
 }
 
 /**

@@ -381,6 +381,38 @@ describe("useVideoExport", () => {
     );
   });
 
+  it("records what was encoded, and titles a whole-recording Share export (NIW2-218)", async () => {
+    const onSaved = vi.fn();
+    const { result } = renderHook(() => useVideoExport());
+    await act(async () => {
+      await result.current.start(startArgs({ onSaved, fingerprint: "whole" }));
+    });
+    act(() => createdWorkers[0].onmessage?.({ data: { type: "done" } } as MessageEvent));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledOnce());
+    expect(window.electronAPI.recordingFinalize).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        title: "My recording (for sharing)",
+        exportPreset: "balanced",
+        exportFingerprint: "whole",
+      }),
+    );
+  });
+
+  it("keeps the (edited) title for an editor export with an edit fingerprint", async () => {
+    const onSaved = vi.fn();
+    const { result } = renderHook(() => useVideoExport());
+    await act(async () => {
+      await result.current.start(startArgs({ onSaved, fingerprint: "edit:abc" }));
+    });
+    act(() => createdWorkers[0].onmessage?.({ data: { type: "done" } } as MessageEvent));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledOnce());
+    expect(window.electronAPI.recordingFinalize).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ title: "My recording (edited)", exportFingerprint: "edit:abc" }),
+    );
+  });
+
   describe("FR8 Small-file size check", () => {
     const done = { data: { type: "done" } } as MessageEvent;
 

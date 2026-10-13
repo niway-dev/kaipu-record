@@ -12,6 +12,7 @@ import { DeleteConfirmDialog } from "@renderer/features/library/components/delet
 import { RecordingPlayer } from "@renderer/features/library/components/recording-player";
 import { ScreenshotViewer } from "@renderer/features/library/components/screenshot-viewer";
 import { GifViewer } from "@renderer/features/library/components/gif-viewer";
+import { ShareRecording } from "@renderer/features/library/components/share-recording";
 import { RecordingTitle } from "@renderer/features/library/components/recording-title";
 import { TagEditor } from "@renderer/features/library/components/tag-editor";
 import { resolveTags, useTags } from "@renderer/features/library/hooks/use-tags";
@@ -281,6 +282,16 @@ export function LibraryDetailPage(): React.JSX.Element {
         </div>
 
         <div className={styles.actions}>
+          {/* NIW2-218: Share — the core action. This page is also where a fresh recording
+              lands (`fromRecording`), so it is the post-recording entry point too. */}
+          {!isScreenshot && !isGif && localId && (
+            <ShareRecording
+              video={{ ...video, id: localId }}
+              exports={exports}
+              onSaved={() => void refresh()}
+              onOpenExisting={(existing) => navigate(`/library/${existing.assetId}`)}
+            />
+          )}
           {isScreenshot && localId && (
             <>
               <Button variant="outline" size="sm" onClick={editScreenshot}>
