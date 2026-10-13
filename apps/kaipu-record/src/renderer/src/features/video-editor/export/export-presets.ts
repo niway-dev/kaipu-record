@@ -61,6 +61,38 @@ export const FIXED_AUDIO_BITRATE = 128_000;
 /** AAC for Small file: mono 64 kbps — speech-quality, half the bits of stereo. */
 export const SMALL_AUDIO_BITRATE = 64_000;
 
+export interface AudioEncoding {
+  numberOfChannels: number;
+  bitrate: number;
+}
+
+/**
+ * The AAC configurations to try, best first. Chromium's encoder on macOS refuses some
+ * layouts (mono 64 kbps at 44.1 kHz, seen 2026-10-13), and an unsupported config fails the
+ * whole export, so the worker asks `canEncodeAudio` and takes the first that works. The
+ * Small-file fallbacks stay cheap: keeping the source channels at 64 kbps first, then 96 and
+ * 128 kbps. The size post-check absorbs the few extra bits.
+ */
+export function audioEncodingCandidates(
+  target: Pick<ResolvedExportTarget, "audioBitrate" | "audioChannels">,
+  sourceChannels: number,
+): AudioEncoding[] {
+  const bitrate = target.audioBitrate === "high" ? FIXED_AUDIO_BITRATE : target.audioBitrate;
+  const channels = target.audioChannels ?? sourceChannels;
+  const candidates: AudioEncoding[] = [{ numberOfChannels: channels, bitrate }];
+  if (target.audioChannels !== null) {
+    for (const fallback of [bitrate, 96_000, FIXED_AUDIO_BITRATE]) {
+      candidates.push({ numberOfChannels: sourceChannels, bitrate: fallback });
+    }
+  }
+  return candidates.filter(
+    (c, i) =>
+      candidates.findIndex(
+        (o) => o.numberOfChannels === c.numberOfChannels && o.bitrate === c.bitrate,
+      ) === i,
+  );
+}
+
 /** Upper bound of the moov bytes mediabunny reserves per packet with `fastStart: 'reserve'`. */
 export const RESERVE_BYTES_PER_PACKET = 35;
 /** Safety margin on predicted packet counts (mediabunny's own recommendation is ~33%). */

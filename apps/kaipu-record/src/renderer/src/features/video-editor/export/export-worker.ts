@@ -59,6 +59,7 @@ import {
   AudioSampleSink,
   AudioSampleSource,
   BlobSource,
+  canEncodeAudio,
   canEncodeVideo,
   CanvasSink,
   CanvasSource,
@@ -73,7 +74,12 @@ import type { ExportStartMessage, ExportWorkerMessage } from "./export-messages"
 import { silencedSpansFor } from "../audio-edits";
 import { rebaseVideoTimestamp } from "./rebase-timestamp";
 import { createFramer, createOutputComposer } from "./compose-output-frame";
-import { packetCountsFor, slideFrameCount } from "./export-presets";
+import {
+  audioEncodingCandidates,
+  packetCountsFor,
+  slideFrameCount,
+  type AudioEncoding,
+} from "./export-presets";
 
 // ---------------------------------------------------------------------------
 // Typing helper: TypeScript doesn't expose `Worker` on `self` in module workers.
@@ -181,21 +187,27 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
   // smaller, and no dead volume control in the player. This is the same branch a
   // screen-only recording already takes, so nothing downstream is new.
   const audioMuted = plan.audio.audioMuted;
+  // Sample rate / channel count for synthesized slide silence — derived from
+  // the source track so it matches the real audio instead of assuming a
+  // fixed layout; 48000/2 is only a fallback if the track ever reports 0.
+  const silenceSampleRate = audioTrack ? (await audioTrack.getSampleRate()) || 48000 : 48000;
+  const sourceChannels = audioTrack ? (await audioTrack.getNumberOfChannels()) || 2 : 2;
+  // An explicit AAC config (every preset but Maximum) is checked against the encoder first:
+  // Small file asks for mono 64 kbps, which Chromium's AAC encoder on macOS refuses.
+  const audioEncoding =
+    preset.audioBitrate === "high" || !audioTrack || audioMuted
+      ? null
+      : await pickAudioEncoding(audioEncodingCandidates(preset, sourceChannels), silenceSampleRate);
   const audioSource =
     audioTrack && !audioMuted
       ? new AudioSampleSource({
           codec: "aac",
-          bitrate: preset.audioBitrate === "high" ? QUALITY_HIGH : preset.audioBitrate,
+          bitrate: audioEncoding?.bitrate ?? QUALITY_HIGH,
         })
       : null;
-
-  // Sample rate / channel count for synthesized slide silence — derived from
-  // the source track so it matches the real audio instead of assuming a
-  // fixed layout; 48000/2 is only a fallback if the track ever reports 0.
-  // Small file downmixes to mono (preset.audioChannels), silence included.
-  const silenceSampleRate = audioTrack ? (await audioTrack.getSampleRate()) || 48000 : 48000;
-  const silenceChannelCount =
-    preset.audioChannels ?? (audioTrack ? (await audioTrack.getNumberOfChannels()) || 2 : 2);
+  // Downmix (Small file) only when the encoder took the mono config; silence matches it.
+  const downmix = audioEncoding?.numberOfChannels === 1 && sourceChannels !== 1;
+  const silenceChannelCount = audioEncoding?.numberOfChannels ?? sourceChannels;
 
   // `maximumPacketCount` for the moov reservation: the renderer's estimate, raised with the
   // real source rate/sample rate when the worker sees more (too small → the muxer throws
@@ -353,7 +365,7 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
               const start = trimmed.timestamp;
               const end = start + trimmed.duration;
               const muted = silenced.some((span) => start < span.end && end > span.start);
-              const shaped = preset.audioChannels === 1 ? downmixToMono(trimmed) : trimmed;
+              const shaped = downmix ? downmixToMono(trimmed) : trimmed;
               const emitted = muted ? zeroedLike(shaped) : shaped;
               emitted.setTimestamp(audioCursor);
               audioCursor += emitted.duration;
@@ -437,6 +449,18 @@ function zeroedLike(sample: AudioSample): AudioSample {
  * Small file (NIW2-218): average every channel into one. A mono source passes through
  * unchanged; the caller closes a new sample when one is returned.
  */
+/** The first AAC config the platform encoder accepts; the last one when none says yes. */
+async function pickAudioEncoding(
+  candidates: AudioEncoding[],
+  sampleRate: number,
+): Promise<AudioEncoding> {
+  for (const candidate of candidates) {
+    const ok = await canEncodeAudio("aac", { ...candidate, sampleRate }).catch(() => false);
+    if (ok) return candidate;
+  }
+  return candidates[candidates.length - 1]!;
+}
+
 function downmixToMono(sample: AudioSample): AudioSample {
   const channels = sample.numberOfChannels;
   if (channels <= 1) return sample;

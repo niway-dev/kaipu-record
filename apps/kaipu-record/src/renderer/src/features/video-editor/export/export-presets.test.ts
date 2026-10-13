@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  audioEncodingCandidates,
   BALANCED_MAX_FPS,
   BALANCED_VIDEO_BITRATE,
   EXPORT_PRESET_IDS,
@@ -362,5 +363,30 @@ describe("slideFrameCount", () => {
         30,
       ),
     ).toBe(75);
+  });
+});
+
+describe("audioEncodingCandidates", () => {
+  it("tries mono 64 kbps first for Small file, then keeps the source channels", () => {
+    expect(audioEncodingCandidates({ audioBitrate: 64_000, audioChannels: 1 }, 2)).toEqual([
+      { numberOfChannels: 1, bitrate: 64_000 },
+      { numberOfChannels: 2, bitrate: 64_000 },
+      { numberOfChannels: 2, bitrate: 96_000 },
+      { numberOfChannels: 2, bitrate: 128_000 },
+    ]);
+  });
+
+  it("keeps a single config when the preset keeps the source layout", () => {
+    expect(audioEncodingCandidates({ audioBitrate: 128_000, audioChannels: null }, 2)).toEqual([
+      { numberOfChannels: 2, bitrate: 128_000 },
+    ]);
+  });
+
+  it("drops duplicates when the source is already mono", () => {
+    expect(audioEncodingCandidates({ audioBitrate: 64_000, audioChannels: 1 }, 1)).toEqual([
+      { numberOfChannels: 1, bitrate: 64_000 },
+      { numberOfChannels: 1, bitrate: 96_000 },
+      { numberOfChannels: 1, bitrate: 128_000 },
+    ]);
   });
 });
