@@ -9,6 +9,7 @@ import { createTray, rebuildTrayMenu, setTrayState, type TrayState } from "./tra
 import { registerRecordingSourceHandlers } from "./recording-sources";
 import { registerPermissionHandlers } from "./permissions";
 import { registerLibraryVaultHandlers } from "./library";
+import { cleanupDragCopies } from "./library/drag-copies";
 import { registerCloudStorageHandlers } from "./cloud";
 import { registerMediaProtocol, registerMediaScheme } from "./media-protocol";
 import { registerRecordingHub, type RecordingHubHandle } from "./recording/recording-hub";
@@ -57,6 +58,12 @@ let closingWithRecording = false;
  *  guard — lets the second `before-quit` (after the recording finalizes) pass
  *  straight through instead of prompting again. */
 let quittingWithRecording = false;
+/** Mirrors the renderer's `exportActive` message: true while a video export is writing. */
+let exportActive = false;
+/** True once the user confirmed "Cancel export and close" — lets the second `close` pass. */
+let closingWithExport = false;
+/** Same, for "Cancel export and quit" on `before-quit`. */
+let quittingWithExport = false;
 /** Set true when the renderer sends `appReady` (its IPC listeners are up), reset
  *  to false whenever a new main window is created. */
 let rendererReady = false;
@@ -94,6 +101,27 @@ const BASE_MIN_HEIGHT = 560;
 const ONBOARDING_MIN_WIDTH = BASE_MIN_WIDTH;
 const ONBOARDING_MIN_HEIGHT = 700;
 
+/** Ask the renderer to cancel its export, then run `done` once it reports the export stopped
+ *  (`exportActive: false`) or after 2 s, whichever comes first. */
+function cancelExportThen(done: () => void): void {
+  let finished = false;
+  const finish = (): void => {
+    if (finished) return;
+    finished = true;
+    // Whatever won, the confirmed cancel is final: don't let the guards prompt a second time.
+    exportActive = false;
+    clearTimeout(timeout);
+    ipcMain.removeListener(IPC_CHANNELS.exportActive, onActive);
+    done();
+  };
+  const onActive = (_event: unknown, active: unknown): void => {
+    if (active !== true) finish();
+  };
+  const timeout = setTimeout(finish, 2000);
+  ipcMain.on(IPC_CHANNELS.exportActive, onActive);
+  mainWindow?.webContents.send(IPC_CHANNELS.exportCommand, "cancel");
+}
+
 /**
  * Create the main window. `showOnReady` defaults to true; pass false when
  * recreating it solely to run the capture flow (the renderer reveals it after a
@@ -103,6 +131,7 @@ function createWindow(showOnReady = true): void {
   // A fresh window's renderer hasn't registered its IPC listeners yet; block
   // sends until it signals `appReady`.
   rendererReady = false;
+  exportActive = false;
   // Create the browser window.
   mainWindow = new BrowserWindow({
     title: "Kaipu Record",
@@ -128,6 +157,8 @@ function createWindow(showOnReady = true): void {
   mainWindow.on("closed", () => {
     mainWindow = null;
     closingWithRecording = false;
+    closingWithExport = false;
+    exportActive = false;
   });
 
   // Closing the window mid-recording (the red button, or Cmd+W where the app
@@ -160,12 +191,35 @@ function createWindow(showOnReady = true): void {
     });
   });
 
+  // The export runs in this window's renderer, so closing the window destroys it mid-write and
+  // leaves a `.part` file behind. Confirm, then ask the renderer to cancel (it deletes the
+  // `.part`) and close once it reports the export stopped — with a timeout so the window is
+  // never stuck. The recording guard above has priority and returns first.
+  mainWindow.on("close", (event) => {
+    if (closingWithExport || !exportActive || hub?.isActive()) return;
+    event.preventDefault();
+    const t = createMainTranslator(getAppSettings().locale);
+    const choice = dialog.showMessageBoxSync(mainWindow!, {
+      type: "warning",
+      buttons: [t("dialogs.cancel"), t("dialogs.cancelExportAndClose")],
+      defaultId: 0,
+      cancelId: 0,
+      message: t("dialogs.exportInProgress"),
+      detail: t("dialogs.closeCancelsExportDetail"),
+    });
+    if (choice !== 1) return;
+    closingWithExport = true;
+    cancelExportThen(() => mainWindow?.close());
+  });
+
   // If the renderer crashes/OOMs mid-recording there is no `recordingStop` IPC
   // coming — without this the hub's activity would stay "active" forever (bar
   // stuck, Dock policy never restored, Capture Panel permanently locked).
   mainWindow.webContents.on("render-process-gone", (_event, details) => {
     console.error("main renderer process gone", details.reason);
     hub?.forceReset();
+    // The renderer that owned the export is gone; nothing is left to cancel.
+    exportActive = false;
   });
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -295,6 +349,15 @@ app.whenReady().then(() => {
   // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
   app.on("browser-window-created", (_, window) => {
     optimizer.watchWindowShortcuts(window);
+  });
+
+  // Drag copies left by a previous run (crash, force quit) are stale; best-effort.
+  cleanupDragCopies().catch(() => {});
+
+  // The renderer reports when a video export starts and stops (NIW2-218); the close and quit
+  // guards read it. Registered once, not per window.
+  ipcMain.on(IPC_CHANNELS.exportActive, (_event, active: unknown) => {
+    exportActive = active === true;
   });
 
   // IPC test
@@ -577,12 +640,33 @@ app.on("before-quit", (event) => {
     return;
   }
 
+  // Same hazard as the window close guard, on Cmd+Q / tray Quit: quitting mid-export would
+  // leave a `.part` behind. Confirm, cancel the export cleanly, then quit (2 s timeout). With
+  // no main window there is no renderer running an export, so just quit.
+  if (!quittingWithExport && exportActive && mainWindow) {
+    event.preventDefault();
+    const t = createMainTranslator(getAppSettings().locale);
+    const choice = dialog.showMessageBoxSync({
+      type: "warning",
+      buttons: [t("dialogs.cancel"), t("dialogs.cancelExportAndQuit")],
+      defaultId: 0,
+      cancelId: 0,
+      message: t("dialogs.exportInProgress"),
+      detail: t("dialogs.quitCancelsExportDetail"),
+    });
+    if (choice !== 1) return;
+    quittingWithExport = true;
+    cancelExportThen(() => app.quit());
+    return;
+  }
+
   // The app lives in the menu bar — keep the tray reference alive and release it
   // only on quit so the icon isn't garbage-collected. Flush analytics best-effort
   // (fire-and-forget: client already flushes on every capture so nothing is lost).
   unregisterGlobalShortcuts();
   tray?.destroy();
   tray = null;
+  cleanupDragCopies().catch(() => {});
   void shutdownMainAnalytics();
 });
 
