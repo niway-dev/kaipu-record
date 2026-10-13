@@ -38,47 +38,62 @@ const BITRATE_1080_LOW_FPS = 8_000_000;
 const BITRATE_1080_HIGH_FPS = 12_000_000;
 const PIXELS_1080 = 1920 * 1080;
 
-/** AAC for the fixed presets and Balanced: 128 kbps, source channels (stereo today). */
+/** AAC for every preset but Maximum: 128 kbps, source channels (stereo today). */
 export const FIXED_AUDIO_BITRATE = 128_000;
-/** AAC for Light: mono 64 kbps — speech-quality, half the bits of stereo. */
-export const LIGHT_AUDIO_BITRATE = 64_000;
 
 /**
- * Quality tiers for screen recordings (NIW2-218 quality tiers, owner decision 2026-10-13).
- * They replace the size-capped "Small file" rows: those squeezed a long recording down to
- * 480p at 250 kbps to hit 10 MB, and a 2:51 terminal recording came out unreadable. A tier
- * is a quality floor instead — its size is whatever the duration makes it, and the sheet
- * says whether that fits GitHub.
+ * Seconds between keyframes. mediabunny's default is 2 s, and on screen recordings — mostly
+ * static — those keyframes were most of the file (spike 2026-10-13: the same terminal clip at
+ * q30 weighed 3.4 MB with a keyframe every 2 s and 1.3 MB with one every 10 s, same quality).
+ * These are files people upload or attach, not live streams, so seek granularity is the only
+ * cost: a player decodes from the previous keyframe, at most 10 s back.
+ */
+export const KEY_FRAME_INTERVAL_SEC = 10;
+/**
+ * YouTube's upload guide asks for a short closed GOP ("GOP of half the frame rate"), and the
+ * YouTube preset targets a fixed bitrate, so a longer interval would save it nothing: it keeps
+ * mediabunny's 2 s default.
+ */
+export const YOUTUBE_KEY_FRAME_INTERVAL_SEC = 2;
+
+/** Pixels the tier rates below were measured at. */
+const TIER_REFERENCE_PIXELS = 1920 * 1080;
+
+/**
+ * Quality tiers for screen recordings (NIW2-218; encoding settings from the 2026-10-13 spike,
+ * owner-validated). A tier is a quality floor, not a size target: its size is whatever the
+ * duration makes it, and the sheet says whether that fits GitHub.
  *
- * Measured 2026-10-13 with ffmpeg `h264_videotoolbox` (the same macOS hardware encoder the
- * app uses, though not the identical WebCodecs path) on the owner's real 1440p terminal
- * recording — scrolling small mono text — in 20 s clips:
+ * The spike encoded the owner's real recordings inside Electron's Chromium through WebCodecs
+ * (the app's own path) and compared them with ffmpeg libx264:
+ * - AVC on the hardware encoder (VideoToolbox) in quantizer mode (constant quality, like x264's
+ *   CRF) with a keyframe every 10 s matches x264 `-preset slow -crf 28` at about the same size.
+ *   A 78 s 1080p web-app demo at 24 fps: q28 = 8.41 MB, q30 = 6.96 MB, x264 crf28 = 7.89 MB
+ *   (video only). The 171 s terminal recording: 18.7 MB at the old 2 Mbps VBR, ~5.5 MB at q30,
+ *   with clean small text.
+ * - 720p smudges text (keep 1080p), and 15 fps stutters on zooms and animations (24 fps).
+ * - Chromium's software H.264 (OpenH264) leaves text unreadable and has no quantizer mode; HEVC
+ *   does not play in Chrome; VP9 and AV1 in software lost on size or speed.
+ * The owner picked q30 at 24 fps (`full-gen_avc-hw-q30-kfi10-24fps.mp4`) → Balanced.
  *
- * | Output                 | Result                     |
- * | ---------------------- | -------------------------- |
- * | 480p · 24 fps · 250k   | blocks, unreadable         |
- * | 720p · 30 fps · 1.2M   | unreadable                 |
- * | 720p · 30 fps · 1.8M   | readable, with ghosting    |
- * | 720p · 15 fps · 800k   | readable but smudged       |
- * | 720p · 15 fps · 1.2M   | clean (~9 MB/min) → Light  |
- * | 1080p · 15 fps · 1.2M  | smudged                    |
- * | 1080p · 15 fps · 2M    | clean (~16 MB/min) → Balanced |
- * | 1080p · 30 fps · 3M    | smudged (the old Balanced) |
- * | 1080p · 30 fps · 4M    | still smudged              |
- *
- * Frame rate matters more than resolution for screen content, and VideoToolbox lands almost
- * exactly on the target bitrate (size ≈ bitrate × duration), so the estimates hold. PENDING:
- * the owner's eye on the in-app WebCodecs path, which these numbers were not measured on.
- *
- * Balanced is the measured "Sharp" tier (1080p · 15 fps · 2 Mbps): the recommended row and a
- * separate Sharp row would encode the same file, so there is one row.
+ * Quantizer mode has no bitrate, so the size estimate comes from a measured rate per minute of
+ * video at 1080p, scaled by pixel count — set above the measurements, since screen content
+ * varies more than a bitrate-targeted encode would: Balanced measured 5.4 MB/min on the
+ * web-app demo and 2.0 MB/min on the terminal recording, and estimates 6 MB/min.
  */
 export interface QualityTier {
   /** Short side of the output, at the source aspect, never upscaled. */
   maxShortSide: number;
   maxFps: number;
-  /** Video bits/s at `maxShortSide`; a smaller source gets proportionally fewer. */
-  videoBitrate: number;
+  /** AVC quantizer (0–51, lower is better), used where the encoder supports quantizer mode. */
+  quantizer: number;
+  /**
+   * Video bits/s at 1920×1080 where quantizer mode is unsupported (the encoder then targets
+   * this bitrate, still with a keyframe every 10 s); scaled by pixel count.
+   */
+  fallbackBitrate: number;
+  /** Estimated video bytes per minute at 1920×1080, scaled by pixel count. */
+  videoBytesPerMinute: number;
   audioBitrate: number;
   /** Downmix to mono; null keeps the source layout. */
   audioChannels: 1 | null;
@@ -87,17 +102,26 @@ export interface QualityTier {
 export const QUALITY_TIERS = {
   balanced: {
     maxShortSide: 1080,
-    maxFps: 15,
-    videoBitrate: 2_000_000,
+    maxFps: 24,
+    quantizer: 30,
+    // The old 2 Mbps @ 15 fps tier, scaled toward 24 fps. Not measured in quantizer's place.
+    fallbackBitrate: 2_500_000,
+    videoBytesPerMinute: 6 * MB,
     audioBitrate: FIXED_AUDIO_BITRATE,
     audioChannels: null,
   },
   light: {
-    maxShortSide: 720,
-    maxFps: 15,
-    videoBitrate: 1_200_000,
-    audioBitrate: LIGHT_AUDIO_BITRATE,
-    audioChannels: 1,
+    maxShortSide: 1080,
+    maxFps: 24,
+    // Interpolated between the measured q32 and q34 (sizes 0.83× and 0.69–0.73× of q30 on the
+    // spike's clips); the owner has not watched a q33 file.
+    quantizer: 33,
+    // The old 1.2 Mbps @ 15 fps tier, scaled toward 24 fps. Not measured in quantizer's place.
+    fallbackBitrate: 1_600_000,
+    // ~0.78× Balanced, from the same q32/q34 interpolation.
+    videoBytesPerMinute: 4.7 * MB,
+    audioBitrate: FIXED_AUDIO_BITRATE,
+    audioChannels: null,
   },
 } as const satisfies Record<"balanced" | "light", QualityTier>;
 
@@ -109,13 +133,14 @@ export function isQualityTier(presetId: ExportPresetId): presetId is QualityTier
 
 /**
  * What changed in an encode since the sidecars that might match it. "Already exported" only
- * reuses a file encoded the same way: the tiers changed on 2026-10-13, so a Balanced or Light
- * file must carry this revision in its fingerprint (older Balanced files and the old Small-file
- * exports, now read as Light, never match). Bump a revision when its numbers change.
+ * reuses a file encoded the same way: the tiers moved to quantizer encoding at 24 fps on
+ * 2026-10-13, so a Balanced or Light file must carry this revision in its fingerprint (the
+ * bitrate-tier files, older Balanced files and the old Small-file exports, now read as Light,
+ * never match). Bump a revision when its numbers change.
  */
 export const ENCODE_REVISION: Partial<Record<ExportPresetId, string>> = {
-  balanced: "15fps-2m",
-  light: "15fps-1.2m",
+  balanced: "q30-24fps-kfi10",
+  light: "q33-24fps-kfi10",
 };
 
 /** The fingerprint a file of `presetId` records: its content plus the encode revision. */
@@ -132,9 +157,10 @@ export interface AudioEncoding {
 /**
  * The AAC configurations to try, best first. Chromium's encoder on macOS refuses some
  * layouts (mono 64 kbps at 44.1 kHz, seen 2026-10-13), and an unsupported config fails the
- * whole export, so the worker asks `canEncodeAudio` and takes the first that works. Light's
- * fallbacks stay cheap: keeping the source channels at 64 kbps first, then 96 and 128 kbps —
- * a few hundred KB a minute at most.
+ * whole export, so the worker asks `canEncodeAudio` and takes the first that works. A mono
+ * target's fallbacks stay cheap: keeping the source channels at its bitrate first, then 96 and
+ * 128 kbps — a few hundred KB a minute at most. (No preset downmixes since the tiers moved to
+ * stereo 128 kbps on 2026-10-13; the path stays for a tier that wants it.)
  */
 export function audioEncodingCandidates(
   target: Pick<ResolvedExportTarget, "audioBitrate" | "audioChannels">,
@@ -246,8 +272,15 @@ export interface ResolvedExportTarget {
   /** "identity": the output IS the composed source frame, maybe scaled (the tiers, Maximum). */
   framing: ExportFraming | "identity";
   padding: PaddingFill;
-  /** bits/s, or "high" = mediabunny QUALITY_HIGH (Maximum keeps the pre-preset export). */
+  /**
+   * bits/s, or "high" = mediabunny's 'high' quality level as a bitrate (Maximum keeps the
+   * pre-preset export). For a tier, the fallback where quantizer mode is unsupported.
+   */
   videoBitrate: number | "high";
+  /** AVC quantizer (constant quality); null = bitrate-driven. Only the quality tiers set it. */
+  quantizer: number | null;
+  /** Seconds between keyframes. */
+  keyFrameInterval: number;
   audioBitrate: number | "high";
   /** Downmix to this many channels; null keeps the source layout. */
   audioChannels: 1 | null;
@@ -257,7 +290,7 @@ export interface ResolvedExportTarget {
   fastStart: "reserve" | false;
   /** `maximumPacketCount` per track for the reserve. */
   packetCounts: { video: number; audio: number };
-  /** Size estimate in bytes; null when unknown (Maximum: QUALITY_HIGH). */
+  /** Size estimate in bytes; null when unknown (Maximum: no target behind it). */
   estimateBytes: number | null;
 }
 
@@ -359,6 +392,8 @@ export function resolveExportTarget(
       framing: "identity",
       padding: "black",
       videoBitrate: "high",
+      quantizer: null,
+      keyFrameInterval: KEY_FRAME_INTERVAL_SEC,
       audioBitrate: "high",
       audioChannels: null,
       maxFps: null,
@@ -393,6 +428,9 @@ export function resolveExportTarget(
       framing,
       padding: preset.padding,
       videoBitrate,
+      quantizer: null,
+      keyFrameInterval:
+        presetId === "youtube" ? YOUTUBE_KEY_FRAME_INTERVAL_SEC : KEY_FRAME_INTERVAL_SEC,
       audioBitrate: FIXED_AUDIO_BITRATE,
       audioChannels: null,
       maxFps: null,
@@ -409,8 +447,9 @@ export function resolveExportTarget(
 }
 
 /**
- * A quality tier: the source aspect, short side ≤ the tier's (never upscaled), ≤ its fps,
- * its bitrate. Size ≈ (video + audio) × duration — VideoToolbox lands on target (measured).
+ * A quality tier: the source aspect, short side ≤ the tier's (never upscaled), ≤ its fps, its
+ * quantizer. Quantizer mode has no bitrate to multiply, so the estimate is the tier's measured
+ * rate per minute (scaled by pixel count) plus audio — a "~" figure, set high on purpose.
  */
 function resolveTier(
   presetId: QualityTierId,
@@ -423,15 +462,14 @@ function resolveTier(
 ): ResolvedExportTarget {
   const tier: QualityTier = QUALITY_TIERS[presetId];
   const srcShort = Math.min(srcW, srcH);
-  const shortSide = Math.min(srcShort, tier.maxShortSide);
   const size =
     srcShort > tier.maxShortSide
       ? sizeForShortSide(srcW, srcH, tier.maxShortSide)
       : { width: srcW, height: srcH };
-  // A source below the tier's size gets proportionally fewer bits for its fewer pixels.
-  const videoBitrate = Math.round(
-    tier.videoBitrate * Math.min(1, (shortSide / tier.maxShortSide) ** 2),
-  );
+  // A smaller frame (or a wider one) gets proportionally fewer (or more) bytes.
+  const pixelScale = (size.width * size.height) / TIER_REFERENCE_PIXELS;
+  const videoBitrate = Math.round(tier.fallbackBitrate * pixelScale);
+  const videoBytes = (tier.videoBytesPerMinute * pixelScale * d) / 60;
   const audioBitrate = source.hasAudio ? tier.audioBitrate : 0;
   const packetCounts = packetCountsFor({
     durationSec: d,
@@ -448,12 +486,14 @@ function resolveTier(
     framing: "identity",
     padding: "black",
     videoBitrate,
+    quantizer: tier.quantizer,
+    keyFrameInterval: KEY_FRAME_INTERVAL_SEC,
     audioBitrate: tier.audioBitrate,
     audioChannels: tier.audioChannels,
     maxFps: tier.maxFps,
     fastStart: "reserve",
     packetCounts,
-    estimateBytes: Math.ceil(((videoBitrate + audioBitrate) * d) / 8 + reserveBytes(packetCounts)),
+    estimateBytes: Math.ceil(videoBytes + (audioBitrate * d) / 8 + reserveBytes(packetCounts)),
   };
 }
 

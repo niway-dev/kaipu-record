@@ -65,8 +65,8 @@ describe("findReusableExports", () => {
   const whole = WHOLE_RECORDING_FINGERPRINT;
 
   it("finds the newest export per preset with the same content", () => {
-    const old = exported("old", 1, { preset: "balanced", fingerprint: "whole#15fps-2m" });
-    const fresh = exported("new", 2, { preset: "balanced", fingerprint: "whole#15fps-2m" });
+    const old = exported("old", 1, { preset: "balanced", fingerprint: "whole#q30-24fps-kfi10" });
+    const fresh = exported("new", 2, { preset: "balanced", fingerprint: "whole#q30-24fps-kfi10" });
     const yt = exported("yt", 3, { preset: "youtube", fingerprint: whole });
     const found = findReusableExports([old, fresh, yt], whole);
     expect(found.balanced?.assetId).toBe("new");
@@ -75,7 +75,10 @@ describe("findReusableExports", () => {
   });
 
   it("never reuses a file with different content (an edit vs the whole recording, an older edit)", () => {
-    const edit = exported("edit", 1, { preset: "balanced", fingerprint: "edit:abc#15fps-2m" });
+    const edit = exported("edit", 1, {
+      preset: "balanced",
+      fingerprint: "edit:abc#q30-24fps-kfi10",
+    });
     expect(findReusableExports([edit], whole)).toEqual({});
     expect(findReusableExports([edit], "edit:def")).toEqual({});
     expect(findReusableExports([edit], "edit:abc").balanced?.assetId).toBe("edit");
@@ -85,9 +88,17 @@ describe("findReusableExports", () => {
     // Before the quality tiers: Balanced was 30 fps · 3 Mbps, and small-10 reads as Light.
     const oldBalanced = exported("old-balanced", 1, { preset: "balanced", fingerprint: whole });
     const oldSmall = exported("old-small", 2, { preset: "light", fingerprint: whole });
-    const fresh = exported("light", 3, { preset: "light", fingerprint: "whole#15fps-1.2m" });
+    const fresh = exported("light", 3, { preset: "light", fingerprint: "whole#q33-24fps-kfi10" });
     expect(findReusableExports([oldBalanced, oldSmall], whole)).toEqual({});
     expect(findReusableExports([oldBalanced, oldSmall, fresh], whole).light?.assetId).toBe("light");
+  });
+
+  it("never reuses a bitrate-tier file (15 fps) once the tiers encode by quantizer", () => {
+    const bitrateTier = exported("bitrate-tier", 1, {
+      preset: "balanced",
+      fingerprint: "whole#15fps-2m",
+    });
+    expect(findReusableExports([bitrateTier], whole)).toEqual({});
   });
 
   it("skips exports without a fingerprint, GIFs and files that aren't on this device", () => {

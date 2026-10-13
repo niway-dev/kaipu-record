@@ -21,7 +21,7 @@ function renderSheet(overrides: Partial<Parameters<typeof ExportSheet>[0]> = {})
   return props;
 }
 
-/** The footer's primary action: "Export ~16 MB ↵", "Export", "Open ↵"… */
+/** The footer's primary action: "Export ~7.2 MB ↵", "Export", "Open ↵"… */
 const exportButton = (): HTMLElement => screen.getByRole("button", { name: /^Export( |$)/ });
 
 describe("ExportSheet", () => {
@@ -139,23 +139,23 @@ describe("presets (NIW2-218 export redesign)", () => {
 
   it("estimates every row from pure math, 'up to' only for the fixed canvases", () => {
     renderSheet({ timelineDuration: 60 });
-    // (2 Mbps + 128 kbps) × 60 s / 8 ≈ 16 MB, plus the moov reservation.
-    expect(sizeOf(/^Balanced/)).toMatch(/^~16 MB/);
+    // 6 MB/min of q30 video + 128 kbps × 60 s / 8 ≈ 7 MB, plus the moov reservation.
+    expect(sizeOf(/^Balanced/)).toMatch(/^~7\.2 MB/);
     // (8 Mbps + 128 kbps) × 60 s / 8 ≈ 61 MB.
     expect(sizeOf(/^YouTube/)).toMatch(/^up to ~61 MB/);
-    // (1.2 Mbps + 64 kbps) × 60 s / 8 ≈ 9.5 MB, plus the moov reservation.
-    expect(sizeOf(/^Light/)).toMatch(/^~9\.7 MB/);
-    expect(sizeOf(/^Light/)).toContain("1280×720");
+    // 4.7 MB/min of q33 video + the same audio ≈ 5.7 MB, plus the moov reservation.
+    expect(sizeOf(/^Light/)).toMatch(/^~5\.9 MB/);
+    expect(sizeOf(/^Light/)).toContain("1920×1080");
   });
 
   it("shows the before/after meter for the selected row against the original's size", () => {
     renderSheet({ timelineDuration: 60, sourceSizeBytes: 119_000_000 });
     expect(screen.getByText("Original 119 MB")).toBeInTheDocument();
-    expect(screen.getByText("~16 MB", { selector: "strong" })).toBeInTheDocument();
-    expect(screen.getByText(/86% lighter/)).toBeInTheDocument();
+    expect(screen.getByText("~7.2 MB", { selector: "strong" })).toBeInTheDocument();
+    expect(screen.getByText(/94% lighter/)).toBeInTheDocument();
 
     fireEvent.click(row(/^Light/));
-    expect(screen.getByText(/92% lighter/)).toBeInTheDocument();
+    expect(screen.getByText(/95% lighter/)).toBeInTheDocument();
     fireEvent.click(row(/^YouTube/));
     expect(screen.getByText("Up to ~61 MB")).toBeInTheDocument();
     fireEvent.click(row(/^Maximum quality/));
@@ -169,7 +169,7 @@ describe("presets (NIW2-218 export redesign)", () => {
 
   it("puts the size on the primary button and Enter exports the selected row", () => {
     const props = renderSheet({ timelineDuration: 60 });
-    expect(exportButton().textContent).toBe("Export ~16 MB↵");
+    expect(exportButton().textContent).toBe("Export ~7.2 MB↵");
     fireEvent.keyDown(screen.getByRole("alertdialog"), { key: "Enter" });
     expect(props.onExportVideo).toHaveBeenCalledWith({ presetId: "balanced", framing: null });
 
@@ -241,7 +241,7 @@ describe("presets (NIW2-218 export redesign)", () => {
   });
 
   it("shows both GitHub plans for a tier, from its estimate", () => {
-    // One minute of Light (~9.7 MB) fits both.
+    // One minute of Light (~5.9 MB) fits both.
     renderSheet({ timelineDuration: 60, defaultPreset: "light" });
     expect(screen.getByText("GitHub Free · 10 MB")).toHaveAttribute("data-fits", "true");
     expect(screen.getByText("GitHub Pro / Team / Enterprise · 100 MB")).toHaveAttribute(
@@ -251,8 +251,8 @@ describe("presets (NIW2-218 export redesign)", () => {
   });
 
   it("over 10 MB: GitHub Free is muted as 'over', the paid plans still fit", () => {
-    // One minute of Balanced (~16 MB).
-    renderSheet({ timelineDuration: 60 });
+    // Two minutes of Balanced (~14 MB).
+    renderSheet({ timelineDuration: 120 });
     const free = screen.getByText("GitHub Free · over 10 MB");
     expect(free).toHaveAttribute("data-fits", "false");
     expect(free).not.toHaveAttribute("data-warn", "true");
@@ -265,12 +265,12 @@ describe("presets (NIW2-218 export redesign)", () => {
   });
 
   it("over GitHub's 100 MB: warns in amber but never blocks or lowers the quality", () => {
-    // 15 minutes of Light ≈ 142 MB.
-    const props = renderSheet({ timelineDuration: 900, defaultPreset: "light" });
+    // 20 minutes of Light ≈ 117 MB.
+    const props = renderSheet({ timelineDuration: 1200, defaultPreset: "light" });
     expect(screen.getByText("GitHub Free · over 10 MB")).toBeInTheDocument();
     const paid = screen.getByText("Too big for GitHub — export a shorter part");
     expect(paid).toHaveAttribute("data-warn", "true");
-    expect(sizeOf(/^Light/)).toContain("1280×720");
+    expect(sizeOf(/^Light/)).toContain("1920×1080");
     fireEvent.click(exportButton());
     expect(props.onExportVideo).toHaveBeenCalledWith({ presetId: "light", framing: null });
   });

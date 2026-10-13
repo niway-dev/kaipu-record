@@ -7,6 +7,7 @@
  */
 import type { ExportPlan } from "./export-plan";
 import type { ResolvedExportTarget } from "./export-presets";
+import type { VideoEncodingChoice } from "./video-encoding";
 
 /** A CameraPath's arrays (transferred — the renderer sends COPIES, see use-video-export). */
 export interface CameraPathMessage {
@@ -53,6 +54,11 @@ export type ExportWorkerMessage =
    * showed footage the edit deleted and — with video-editor v2 — content it redacted.
    */
   | { type: "poster"; data: ArrayBuffer }
+  /**
+   * The video encoder the worker settled on, sent once before encoding. The renderer logs a
+   * software fallback (and a tier without quantizer mode) — the worker has no analytics.
+   */
+  | { type: "encoder"; choice: VideoEncodingChoice }
   | { type: "progress"; fraction: number }
   | { type: "done" }
   | { type: "error"; message: string };

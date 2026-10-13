@@ -13,6 +13,7 @@ import {
   githubFit,
   githubPlans,
   isExportFraming,
+  KEY_FRAME_INTERVAL_SEC,
   isExportPresetId,
   normalizeExportPresetId,
   packetCountsFor,
@@ -20,6 +21,7 @@ import {
   resolveExportTarget,
   sizeForShortSide,
   slideFrameCount,
+  YOUTUBE_KEY_FRAME_INTERVAL_SEC,
 } from "./export-presets";
 
 const src = (width: number, height: number, extra: Partial<ExportSourceInfo> = {}) => ({
@@ -77,10 +79,11 @@ describe("even", () => {
 
 describe("resolveExportTarget — dimensions per preset × source aspect", () => {
   for (const [name, source] of Object.entries(SOURCES)) {
-    it(`${name}: Maximum keeps the native size with QUALITY_HIGH`, () => {
+    it(`${name}: Maximum keeps the native size at the 'high' bitrate`, () => {
       const t = resolveExportTarget("maximum", source, 60);
       expect([t.width, t.height]).toEqual([source.width, source.height]);
       expect(t.videoBitrate).toBe("high");
+      expect(t.quantizer).toBeNull();
       expect(t.audioBitrate).toBe("high");
       expect(t.framing).toBe("identity");
       expect(t.fastStart).toBe("reserve");
@@ -136,7 +139,7 @@ describe("framing", () => {
   });
 });
 
-describe("Balanced (recommended default, the measured 1080p · 15 fps · 2 Mbps tier)", () => {
+describe("Balanced (recommended default: 1080p · 24 fps · AVC q30, keyframe every 10 s)", () => {
   it("keeps a 1080p-or-smaller source at its own size (never upscales)", () => {
     expect(pick(resolveExportTarget("balanced", SOURCES.macbook, 60))).toEqual([1662, 1080]);
     expect(pick(resolveExportTarget("balanced", SOURCES["16:9"], 60))).toEqual([1920, 1080]);
@@ -149,21 +152,29 @@ describe("Balanced (recommended default, the measured 1080p · 15 fps · 2 Mbps 
     expect(pick(resolveExportTarget("balanced", src(2160, 3840), 60))).toEqual([1080, 1920]);
   });
 
-  it("targets 2 Mbps + 128 kbps at ≤ 15 fps (~16 MB a minute)", () => {
+  it("encodes q30 at ≤ 24 fps, 2.5 Mbps as the fallback, ~7 MB a minute with audio", () => {
     const t = resolveExportTarget("balanced", src(1920, 1080, { fps: 60 }), 60);
-    expect(t.videoBitrate).toBe(2_000_000);
+    expect(t.quantizer).toBe(30);
+    expect(t.videoBitrate).toBe(2_500_000);
+    expect(t.keyFrameInterval).toBe(KEY_FRAME_INTERVAL_SEC);
+    expect(KEY_FRAME_INTERVAL_SEC).toBe(10);
     expect(t.audioBitrate).toBe(FIXED_AUDIO_BITRATE);
     expect(t.audioChannels).toBeNull();
-    expect(t.maxFps).toBe(15);
+    expect(t.maxFps).toBe(24);
     expect(t.fastStart).toBe("reserve");
-    expect(t.estimateBytes! / MB).toBeGreaterThan(15.9);
-    expect(t.estimateBytes! / MB).toBeLessThan(16.2); // + the moov reservation
+    // 6 MB of video (the measured 5.4, rounded up) + 0.96 MB of AAC + the moov reservation.
+    expect(t.estimateBytes! / MB).toBeGreaterThan(7.1);
+    expect(t.estimateBytes! / MB).toBeLessThan(7.2);
   });
 
-  it("gives a source below 1080p proportionally fewer bits", () => {
-    const t = resolveExportTarget("balanced", SOURCES.small720, 60);
-    expect(t.videoBitrate).toBe(
-      Math.round(QUALITY_TIERS.balanced.videoBitrate * (720 / 1080) ** 2),
+  it("scales the estimate and the fallback by pixel count", () => {
+    const small = resolveExportTarget("balanced", SOURCES.small720, 60);
+    const scale = (1280 * 720) / (1920 * 1080);
+    expect(small.videoBitrate).toBe(Math.round(QUALITY_TIERS.balanced.fallbackBitrate * scale));
+    const silent = resolveExportTarget("balanced", { ...SOURCES.small720, hasAudio: false }, 60);
+    expect(silent.estimateBytes! - reserveBytes(silent.packetCounts)).toBeCloseTo(
+      QUALITY_TIERS.balanced.videoBytesPerMinute * scale,
+      -1,
     );
   });
 
@@ -174,6 +185,16 @@ describe("Balanced (recommended default, the measured 1080p · 15 fps · 2 Mbps 
       (FIXED_AUDIO_BITRATE * 60) / 8 - 50_000,
     );
     expect(silent.packetCounts.audio).toBe(0);
+  });
+});
+
+describe("keyframes", () => {
+  it("every preset puts a keyframe every 10 s, except YouTube (2 s, its upload guide)", () => {
+    for (const id of EXPORT_PRESET_IDS) {
+      const t = resolveExportTarget(id, SOURCES["16:9"], 60);
+      expect(t.keyFrameInterval).toBe(id === "youtube" ? YOUTUBE_KEY_FRAME_INTERVAL_SEC : 10);
+    }
+    expect(YOUTUBE_KEY_FRAME_INTERVAL_SEC).toBe(2);
   });
 });
 
@@ -189,6 +210,7 @@ describe("bitrates (FR5)", () => {
   it("fixed presets use 128 kbps AAC and keep the source cadence", () => {
     const t = resolveExportTarget("youtube", src(1920, 1080, { fps: 60 }), 10);
     expect(t.videoBitrate).toBe(12_000_000);
+    expect(t.quantizer).toBeNull();
     expect(t.audioBitrate).toBe(128_000);
     expect(t.audioChannels).toBeNull();
     expect(t.maxFps).toBeNull();
@@ -213,27 +235,34 @@ describe("size estimate (FR7)", () => {
   });
 });
 
-describe("Light (720p · 15 fps · 1.2 Mbps, mono 64 kbps)", () => {
-  it("caps the short side at 720, never upscales, at the source aspect", () => {
-    expect(pick(resolveExportTarget("light", src(2560, 1440), 60))).toEqual([1280, 720]);
-    expect(pick(resolveExportTarget("light", SOURCES.macbook, 60))).toEqual([1108, 720]);
-    expect(pick(resolveExportTarget("light", SOURCES.portrait, 60))).toEqual([720, 1280]);
+describe("Light (Balanced at q33)", () => {
+  it("is Balanced's size, frame rate and audio at a higher quantizer", () => {
+    const light = resolveExportTarget("light", src(2560, 1440, { fps: 60 }), 60);
+    const balanced = resolveExportTarget("balanced", src(2560, 1440, { fps: 60 }), 60);
+    expect(pick(light)).toEqual([1920, 1080]);
+    expect(pick(light)).toEqual(pick(balanced));
+    expect(light.quantizer).toBe(33);
+    expect(light.videoBitrate).toBe(1_600_000);
+    expect(light.maxFps).toBe(24);
+    expect(light.keyFrameInterval).toBe(10);
+    expect(light.audioBitrate).toBe(FIXED_AUDIO_BITRATE);
+    expect(light.audioChannels).toBeNull();
+    expect(light.estimateBytes!).toBeLessThan(balanced.estimateBytes!);
+    expect(light.estimateBytes! / MB).toBeGreaterThan(5.8);
+    expect(light.estimateBytes! / MB).toBeLessThan(5.9);
+  });
+
+  it("caps the short side at 1080, never upscales, at the source aspect", () => {
+    expect(pick(resolveExportTarget("light", SOURCES.macbook, 60))).toEqual([1662, 1080]);
+    expect(pick(resolveExportTarget("light", SOURCES.portrait, 60))).toEqual([1080, 1920]);
     expect(pick(resolveExportTarget("light", src(960, 540), 60))).toEqual([960, 540]);
   });
 
-  it("targets ~9 MB a minute at ≤ 15 fps, whatever the length — the tier is the floor", () => {
-    const minute = resolveExportTarget("light", src(2560, 1440, { fps: 60 }), 60);
-    expect(minute.videoBitrate).toBe(1_200_000);
-    expect(minute.audioBitrate).toBe(64_000);
-    expect(minute.audioChannels).toBe(1);
-    expect(minute.maxFps).toBe(15);
-    expect(minute.estimateBytes! / MB).toBeGreaterThan(9.4);
-    expect(minute.estimateBytes! / MB).toBeLessThan(9.7); // + the moov reservation
-    // The owner's 2:51 terminal recording: same quality, just a bigger file (no squeeze).
+  it("the owner's 2:51 terminal recording: a bigger file, same quality — the tier is the floor", () => {
     const long = resolveExportTarget("light", src(2560, 1440), 171);
-    expect(long.videoBitrate).toBe(1_200_000);
-    expect(pick(long)).toEqual([1280, 720]);
-    expect(long.estimateBytes! / MB).toBeGreaterThan(26);
+    expect(long.quantizer).toBe(33);
+    expect(pick(long)).toEqual([1920, 1080]);
+    expect(long.estimateBytes! / MB).toBeGreaterThan(16);
   });
 });
 
@@ -243,11 +272,11 @@ describe("githubFit (100 MB, paid plans)", () => {
     expect(githubFit(100 * MB + 1)).toBe("too-big");
   });
 
-  it("ten minutes of Light fit; twelve do not", () => {
-    expect(githubFit(resolveExportTarget("light", src(2560, 1440), 600).estimateBytes!)).toBe(
+  it("seventeen minutes of Light fit; eighteen do not", () => {
+    expect(githubFit(resolveExportTarget("light", src(2560, 1440), 17 * 60).estimateBytes!)).toBe(
       "fits",
     );
-    expect(githubFit(resolveExportTarget("light", src(2560, 1440), 720).estimateBytes!)).toBe(
+    expect(githubFit(resolveExportTarget("light", src(2560, 1440), 18 * 60).estimateBytes!)).toBe(
       "too-big",
     );
   });
@@ -263,8 +292,8 @@ describe("githubPlans (Free 10 MB, Pro / Team / Enterprise 100 MB)", () => {
 
 describe("encodeFingerprint", () => {
   it("adds the tiers' encode revision, so files made with older numbers never match", () => {
-    expect(encodeFingerprint("whole", "light")).toBe("whole#15fps-1.2m");
-    expect(encodeFingerprint("edit:abc", "balanced")).toBe("edit:abc#15fps-2m");
+    expect(encodeFingerprint("whole", "light")).toBe("whole#q33-24fps-kfi10");
+    expect(encodeFingerprint("edit:abc", "balanced")).toBe("edit:abc#q30-24fps-kfi10");
     // Unchanged encodes keep the bare fingerprint (their older files still match).
     expect(encodeFingerprint("whole", "youtube")).toBe("whole");
     expect(encodeFingerprint("whole", "maximum")).toBe("whole");
@@ -304,9 +333,9 @@ describe("packetCountsFor (FR9 maximumPacketCount)", () => {
     expect(packetCountsFor({ ...base, fps: 60, maxFps: 30 }).audio).toBe(0);
   });
 
-  it("the reservation stays small (< 2% of a 2-minute Light export)", () => {
+  it("the reservation stays small (< 4% of a 2-minute Light export)", () => {
     const t = resolveExportTarget("light", SOURCES["16:9"], 120);
-    expect(reserveBytes(t.packetCounts)).toBeLessThan(0.02 * t.estimateBytes!);
+    expect(reserveBytes(t.packetCounts)).toBeLessThan(0.04 * t.estimateBytes!);
   });
 });
 

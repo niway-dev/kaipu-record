@@ -132,7 +132,7 @@
     "exportQuality": "Export quality",
     "exportQualityGroup": "Export quality",
     "exportQualityBalanced": "Balanced",
-    "exportQualityBalancedCaption": "Recommended. Crisp screen text at about 16 MB a minute: up to 1080p, 15 fps.",
+    "exportQualityBalancedCaption": "Recommended. Crisp screen text at about 7 MB a minute: up to 1080p, 24 fps.",
     "exportQualityMaximum": "Maximum quality",
     "exportQualityMaximumCaption": "Native size and the highest bitrate. Larger files.",
     "exportQualityNote": "Preselected in the export window. You can pick another option for a single export.",

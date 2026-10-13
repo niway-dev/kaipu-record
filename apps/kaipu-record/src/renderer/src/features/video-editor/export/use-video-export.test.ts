@@ -316,7 +316,7 @@ describe("useVideoExport", () => {
     expect(createdWorkers[0].postMessage.mock.calls[0][0].camera).toBeNull();
   });
 
-  it("Balanced by default: source size (≤ 1080p), explicit bitrate, ≤ 15 fps, moov at the front", async () => {
+  it("Balanced by default: source size (≤ 1080p), q30, ≤ 24 fps, moov at the front", async () => {
     const { result } = renderHook(() => useVideoExport());
     await act(async () => {
       await result.current.start(startArgs());
@@ -327,14 +327,17 @@ describe("useVideoExport", () => {
     expect(message.target).toMatchObject({
       presetId: "balanced",
       framing: "identity",
-      maxFps: 15,
+      quantizer: 30,
+      keyFrameInterval: 10,
+      maxFps: 24,
       fastStart: "reserve",
     });
+    // The bitrate mediabunny falls back to where quantizer mode is unsupported.
     expect(typeof message.target.videoBitrate).toBe("number");
     expect(message.target.packetCounts.video).toBeGreaterThan(0);
   });
 
-  it("Maximum keeps the native size with QUALITY_HIGH (the pre-preset export)", async () => {
+  it("Maximum keeps the native size at the 'high' bitrate (the pre-preset export)", async () => {
     const { result } = renderHook(() => useVideoExport());
     await act(async () => {
       await result.current.start(startArgs({ presetId: "maximum" }));
@@ -397,7 +400,7 @@ describe("useVideoExport", () => {
         title: "My recording (for sharing)",
         exportPreset: "balanced",
         // The content plus Balanced's encode revision ("already exported" reuse).
-        exportFingerprint: "whole#15fps-2m",
+        exportFingerprint: "whole#q30-24fps-kfi10",
       }),
     );
   });
@@ -414,7 +417,7 @@ describe("useVideoExport", () => {
       expect.any(String),
       expect.objectContaining({
         title: "My recording (edited)",
-        exportFingerprint: "edit:abc#15fps-2m",
+        exportFingerprint: "edit:abc#q30-24fps-kfi10",
       }),
     );
   });

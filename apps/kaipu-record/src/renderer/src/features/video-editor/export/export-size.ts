@@ -29,10 +29,11 @@ export function isHeavyToSend(bytes: number): boolean {
 
 /**
  * How sure the estimate is:
- * - "about": a quality tier (Balanced, Light), where the encoder lands on its bitrate;
+ * - "about": a quality tier (Balanced, Light): constant quality, so the size follows the
+ *   content; the estimate is a measured per-minute rate, set on the high side;
  * - "up-to": a fixed canvas (YouTube, Vertical, Square), whose bitrate is a ceiling that
  *   screen content rarely reaches;
- * - "full": Maximum quality, which has no estimate (QUALITY_HIGH).
+ * - "full": Maximum quality, which has no estimate.
  */
 export type SizeKind = "about" | "up-to" | "full";
 
