@@ -1,0 +1,93 @@
+---
+title: "ADR 0016: Capacity is the only visible storage limit — no credits, invisible fair-use, read-only over quota, no deletion"
+description: The 2026-10-08 storage policy written once — capacity minus used is the only limit users see, shared playback has invisible fair-use caps, over-quota accounts become read-only and nothing is deleted, derived files are free, and inactive free accounts are archived, not erased. Supersedes the trial spec's 60-day deletion rule.
+---
+
+# ADR 0016: Capacity is the only visible storage limit — no credits, invisible fair-use, read-only over quota, no deletion
+
+## Status
+
+| Field         | Value                                                                                                                                                                                     |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Proposed — design PR for NIW2-216, awaiting approval; not implemented                                                                                                                     |
+| Date          | 2026-10-09 (decisions taken by the owner on 2026-10-08)                                                                                                                                   |
+| Supersedes    | The over-quota deletion rule ("may be deleted 60 days after the notice") in [Cloud trial and manual beta expansion](/specs/2026-09-15-cloud-trial-and-approval/) § Reduced-quota behavior |
+| Superseded by | —                                                                                                                                                                                         |
+
+## Context
+
+On 2026-10-08 the owner set the storage policy: no credits, and the only limit a user ever
+sees is `capacity − used`. Its consequences were not written down and partly contradict
+existing documents:
+
+- The trial spec (2026-09-15) says over-quota content may be deleted 60 days after notice,
+  and the published Cloud Terms copy (`legal.cloud` in `packages/i18n/messages/*.json`) says
+  the same.
+- `cloud-limits.ts` counts a persisted thumbnail toward capacity, and
+  `cloud_revision.thumbnail_bytes` feeds accounting.
+- Sharing ([ADR 0013](./0013-sharing-stable-link-plus-access-grants)) needs a cost guard that
+  is not a user-visible quota.
+
+## Decision
+
+1. **The only visible limit is capacity.** Users see `capacity − used`. No credits, no
+   bandwidth or view quota in the UI.
+2. **Invisible fair-use on shared playback.** Per share 1,000 views/day; per owner 5,000/day
+   (free) and 25,000/day (pro); a view is one successful non-owner resolve. Over a cap the
+   watch page shows "temporarily unavailable, try later" to non-owners until 00:00 UTC; the
+   owner still plays; at most one owner email per day; an operator can lift the cap per
+   account in the Console. Caps are server configuration (`PROPOSAL`), never shown as a quota.
+3. **Over quota → read-only, no deletion.** After a downgrade or a capacity reduction, new
+   uploads are blocked; reads, downloads, shares (existing and new) and deletes keep working.
+   Kaipu never deletes a user's files because of quota.
+4. **Derived files are free.** Thumbnails, posters, GIFs and presets are excluded from quota.
+5. **Inactive free accounts are archived, not deleted.** After 12 months without sign-in or
+   upload: shares paused (watch page "unavailable"), uploads blocked, files kept. Two warning
+   emails, 30 and 7 days before. Signing in restores everything.
+
+## Consequences
+
+**Positive:**
+
+- One number to explain to users; no surprise loss of files.
+- Sharing has a cost guard that never appears as a product limit.
+
+**Negative:**
+
+- Storage of over-quota and archived accounts is paid for indefinitely; archiving bounds the
+  serving cost, not the storage cost.
+- Implementation work (separate sub-issue): drop derived bytes from `reconcile()` and the
+  quota SQL (only ever grows free space); over-quota read-only enforcement; the archive job
+  and emails; and the **Cloud Terms copy must change** (legal review) — until it does, the
+  published Terms still describe the 60-day rule.
+
+**Neutral:**
+
+- The trial spec's other reduced-quota rules (restrict new uploads, keep download/delete,
+  global Cloud flag) are unchanged and consistent with this ADR.
+
+## Alternatives considered
+
+### Keep the 60-day deletion rule
+
+Rejected by the owner on 2026-10-08: deleting user files to recover quota is the failure the
+cloud product promise exists to avoid.
+
+### A visible bandwidth / view quota
+
+Rejected: a second number to explain, and it punishes the owner for a link going viral.
+
+### Credits
+
+Rejected on 2026-10-08.
+
+## When to revisit
+
+- If the storage held by archived or over-quota accounts becomes a material cost.
+- If fair-use caps trigger for legitimate use often enough that they read as a quota.
+
+## References
+
+- [Sharing as access modes (spec)](/specs/2026-10-09-sharing-access-modes/)
+- [Cloud trial and manual beta expansion](/specs/2026-09-15-cloud-trial-and-approval/)
+- [Optional cloud — product](/specs/2026-09-09-cloud-product/)

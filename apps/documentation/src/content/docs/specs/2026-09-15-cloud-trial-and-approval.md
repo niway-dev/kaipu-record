@@ -109,6 +109,12 @@ preserving existing files and their download/delete actions. The global Cloud
 control flag can pause new Cloud operations at any time; this is an operational
 switch, separate from per-account deletion policy.
 
+> **Superseded (2026-10-08 decision, recorded 2026-10-09):** the next paragraph's deletion
+> rule no longer applies. Over quota is **read-only, with no deletion** — see
+> [ADR 0016](/architecture/decisions/0016-capacity-is-the-only-visible-storage-limit/). The
+> published Cloud Terms copy still describes the 60-day rule until its own change lands
+> (legal review). The paragraph is kept as originally decided.
+
 Over-quota data follows the published Terms rather than an indefinite grace: the
 account is notified, and content above the effective capacity may be deleted
 **60 days after the notice** if the user does not resolve it (delete files or

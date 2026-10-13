@@ -63,6 +63,11 @@ Do not collapse everything into a `storage` enum that loses information. For exa
 | Editing      | Project available; Source download required; Exported video only; Missing dependencies                  |
 | Sharing      | Private; Link active; Revoking; Link revoked                                                            |
 
+> **Note (2026-10-09):** sharing states now map onto the `share` / `share_grant` model of
+> [Sharing as access modes](/specs/2026-10-09-sharing-access-modes/#data-model); "Link active" means
+> the share has at least one active access grant, and `publishedRevisionId` is
+> `share.published_revision_id`.
+
 Do not mark a file Cloud only because an external drive did not respond: use Local location unavailable and retain its locator. Do not mark cloud as deleted after a timeout/401. When switching accounts, hide the previous account's catalog, links, and tasks; local files remain accessible and are not automatically reassociated with or uploaded to the new account.
 
 ## Uploading an MP4 does not back up the project

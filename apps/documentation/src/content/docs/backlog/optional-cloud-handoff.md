@@ -5,6 +5,10 @@ description: Where the optional cloud work stands on 2026-09-13, what is merged,
 
 # Optional cloud — handoff
 
+> **Stale (noted 2026-10-09):** this snapshot predates the sharing design. For sharing, follow
+> [Sharing as access modes](/specs/2026-10-09-sharing-access-modes/) and ADRs 0013–0016; for
+> over-quota behaviour, [ADR 0016](/architecture/decisions/0016-capacity-is-the-only-visible-storage-limit/).
+
 > **Status: 🟡 In progress.** Snapshot written 2026-09-13 so the work can resume on another
 > machine without the original session. It records repository state, not intentions: anything
 > not listed as merged or implemented is not done. The epic tracker is

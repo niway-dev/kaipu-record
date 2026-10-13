@@ -55,6 +55,10 @@ Acceptance: the local file survives every upload failure; failed downloads are n
 
 ## Phase 4 — links and independent deletion
 
+> **Design (2026-10-09):** the links half of this phase is designed in
+> [Sharing as access modes](/specs/2026-10-09-sharing-access-modes/) (ADRs 0013–0016), which
+> lists its implementation sub-issues.
+
 Add a sharing entity with an unpredictable, revocable token, a public endpoint separate from owner access, and a player. Keep the bucket private; never publish the user's prefix. Limit abuse in link creation/resolution. Define read TTL and effective revocation semantics.
 
 Implement deletion dialogs based on actual evidence, Remove local download only when eligible, durable exclusion from automatic upload after cloud deletion, and storage management. The first release shares a fixed revision; updating an existing link belongs to phase 6.
