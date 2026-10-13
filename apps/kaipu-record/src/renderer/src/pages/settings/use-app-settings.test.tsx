@@ -18,6 +18,7 @@ const SETTINGS: AppSettings = {
   deviceId: "",
   uploadMode: "local-only",
   exportQuality: "balanced",
+  showRecordingSavedCard: true,
 };
 
 describe("useAppSettings", () => {

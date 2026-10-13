@@ -166,6 +166,17 @@ export function RecordingQualitySettingsPage(): React.JSX.Element {
           quality={settings?.exportQuality ?? DEFAULT_EXPORT_QUALITY}
           onChange={(exportQuality) => void update({ exportQuality })}
         />
+        <Row
+          label={t("recordingSavedCard")}
+          description={t("recordingSavedCardDescription")}
+          action={
+            <Toggle
+              aria-label={t("recordingSavedCard")}
+              checked={settings?.showRecordingSavedCard ?? true}
+              onChange={(checked) => void update({ showRecordingSavedCard: checked })}
+            />
+          }
+        />
       </Section>
     </SettingsPanel>
   );

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Share2 } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { Button } from "@kaipu/ui";
@@ -10,14 +10,16 @@ import {
   ExportSheet,
   type VideoExportChoice,
 } from "@renderer/features/video-editor/components/export-sheet";
-import { ExportDialog } from "@renderer/features/video-editor/components/export-dialog";
 import type { ExportPresetId } from "@renderer/features/video-editor/export/export-presets";
 import {
   WHOLE_RECORDING_FINGERPRINT,
   findReusableExports,
 } from "@renderer/features/video-editor/export/export-reuse";
-import { showExportSavedToast } from "@renderer/features/video-editor/export/export-saved-toast";
 import { probeSource, type SourceProbe } from "@renderer/features/video-editor/export/probe-source";
+import {
+  isVideoExportBusy,
+  showExportBusyToast,
+} from "@renderer/features/video-editor/export/export-runner";
 import { useVideoExport } from "@renderer/features/video-editor/export/use-video-export";
 import { createSlideAssetStore } from "@renderer/features/video-editor/slide-assets";
 import { initialScene } from "@renderer/features/video-editor/scene";
@@ -46,7 +48,7 @@ export interface ShareRecordingController {
   probing: boolean;
   /** The file's size, frame rate and duration once read; null before (or when unreadable). */
   probe: SourceProbe | null;
-  /** The sheet and the progress dialog; render it once, anywhere on the page. */
+  /** The sheet; render it once, anywhere on the page. */
   ui: React.ReactNode;
 }
 
@@ -80,8 +82,6 @@ export function useShareRecording({
   const [probe, setProbe] = useState<SourceProbe | null>(null);
   // The open sheet and the row it starts on; null while closed.
   const [sheet, setSheet] = useState<{ preset: ExportPresetId | undefined } | null>(null);
-  // The preset Retry reuses (FR12).
-  const lastChoiceRef = useRef<VideoExportChoice>({ presetId: "balanced", framing: null });
 
   const usable = (p: SourceProbe | null): p is SourceProbe =>
     p !== null && p.width > 0 && p.height > 0 && p.durationSec > 0;
@@ -104,6 +104,11 @@ export function useShareRecording({
   // here, so read them from the file (container metadata + a few packets).
   const open = async (preset?: ExportPresetId): Promise<void> => {
     if (probing || !video) return;
+    // One export at a time: point at the one already running instead of a second sheet.
+    if (isVideoExportBusy()) {
+      showExportBusyToast(tEditor);
+      return;
+    }
     setProbing(true);
     const result = probe ?? (await probeSource(video.id));
     setProbing(false);
@@ -115,14 +120,16 @@ export function useShareRecording({
     setSheet({ preset });
   };
 
-  const start = (choice: VideoExportChoice = lastChoiceRef.current): void => {
+  // Runs in the background (export-runner): the sheet closes, the progress and "Ready to
+  // share" cards take over, and leaving this page does not stop it.
+  const start = (choice: VideoExportChoice): void => {
     if (!probe || !video) return;
-    lastChoiceRef.current = choice;
     void videoExport.start({
       scene: initialScene(probe.durationSec),
       sourceId: video.id,
       title: video.title,
       derivedFromAssetId: video.assetId,
+      sourceSizeBytes: video.fileSizeBytes,
       videoWidth: probe.width,
       videoHeight: probe.height,
       previewWidth: probe.width,
@@ -138,7 +145,6 @@ export function useShareRecording({
         } catch (error) {
           captureException(error, { context: "share-saved" });
         }
-        showExportSavedToast(tEditor, choice.presetId, recording);
       },
     });
   };
@@ -175,17 +181,6 @@ export function useShareRecording({
           }}
           onExportGif={() => {}}
           onCancel={() => setSheet(null)}
-        />
-      )}
-
-      {videoExport.status !== "idle" && (
-        <ExportDialog
-          status={videoExport.status}
-          fraction={videoExport.fraction}
-          error={videoExport.error}
-          title={videoExport.shrinking ? tEditor("makingSmaller") : undefined}
-          onCancel={videoExport.cancel}
-          onRetry={() => start()}
         />
       )}
     </>

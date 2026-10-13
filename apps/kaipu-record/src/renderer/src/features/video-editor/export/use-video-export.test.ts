@@ -4,6 +4,7 @@ import type { LocalRecording } from "@shared/types/library-storage";
 import { initialScene, type VideoScene } from "../scene";
 import { createSlideAssetStore } from "../slide-assets";
 import { useVideoExport } from "./use-video-export";
+import { __resetExportRunnerForTests } from "./export-runner";
 import { buildCameraPath } from "../zoom/camera-path";
 import type { ZoomSegment } from "../zoom/zoom-model";
 
@@ -95,6 +96,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  __resetExportRunnerForTests();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });

@@ -208,6 +208,12 @@ export interface AppSettings {
    * another row in the sheet applies to that export only; nothing is remembered.
    */
   exportQuality: ExportQuality;
+  /**
+   * NIW2-218 export redesign: right after a recording heavier than GitHub's 10 MB limit,
+   * its page shows a "Recording saved" card offering a light copy (auto-hides in 8 s).
+   * Settings → Export turns it off.
+   */
+  showRecordingSavedCard: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -229,6 +235,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   uploadMode: "local-only",
   // Literal on purpose (preload bundle); equals DEFAULT_EXPORT_QUALITY in ./export-preset.
   exportQuality: "balanced",
+  showRecordingSavedCard: true,
 };
 
 /**
@@ -281,6 +288,10 @@ export const IPC_CHANNELS = {
   gifSave: "library:gif-save",
   /** NIW2-217: native drag-out of a vault file (e.g. a GIF into Slack or GitHub). */
   startFileDrag: "library:start-file-drag",
+  /** NIW2-218: renderer → main, whether a background export is running (close/quit guard). */
+  exportActive: "export:active",
+  /** NIW2-218: main → renderer, "cancel" the running export (the user confirmed quitting). */
+  exportCommand: "export:command",
   getVaultDirectory: "library:get-vault-dir",
   chooseVaultDirectory: "library:choose-vault-dir",
   resetVaultDirectory: "library:reset-vault-dir",

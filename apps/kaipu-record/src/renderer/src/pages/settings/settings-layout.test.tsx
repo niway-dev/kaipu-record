@@ -138,4 +138,21 @@ describe("Settings layout", () => {
     getAccessibilityStatus.mockRestore();
     requestAccessibility.mockRestore();
   });
+
+  it("turns the Recording saved card off from the Export quality section (NIW2-218)", async () => {
+    const updateSettings = vi
+      .spyOn(window.electronAPI, "updateSettings")
+      .mockImplementation(async (patch) => ({
+        ...(await window.electronAPI.getSettings()),
+        ...patch,
+      }));
+    renderAt("/settings/recording-quality");
+    const toggle = await screen.findByRole("switch", {
+      name: "Offer a light copy after recording",
+    });
+    await waitFor(() => expect(toggle).toHaveAttribute("aria-checked", "true"));
+    fireEvent.click(toggle);
+    expect(updateSettings).toHaveBeenCalledWith({ showRecordingSavedCard: false });
+    updateSettings.mockRestore();
+  });
 });

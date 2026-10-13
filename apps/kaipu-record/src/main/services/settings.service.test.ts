@@ -59,6 +59,7 @@ describe("mergeSettings", () => {
         deviceId: "stored-id",
         uploadMode: "manual",
         exportQuality: "maximum",
+        showRecordingSavedCard: false,
       }),
     ).toEqual({
       theme: "dark",
@@ -74,6 +75,7 @@ describe("mergeSettings", () => {
       deviceId: "stored-id",
       uploadMode: "manual",
       exportQuality: "maximum",
+      showRecordingSavedCard: false,
     });
   });
 
@@ -82,6 +84,15 @@ describe("mergeSettings", () => {
     expect(mergeSettings({}).exportQuality).toBe("balanced");
     expect(mergeSettings({ exportQuality: "maximum" }).exportQuality).toBe("maximum");
     expect(mergeSettings({ exportQuality: "original" as never }).exportQuality).toBe("balanced");
+  });
+
+  it("shows the Recording saved card by default and keeps a boolean choice (NIW2-218)", () => {
+    expect(DEFAULT_SETTINGS.showRecordingSavedCard).toBe(true);
+    expect(mergeSettings({}).showRecordingSavedCard).toBe(true);
+    expect(mergeSettings({ showRecordingSavedCard: false }).showRecordingSavedCard).toBe(false);
+    expect(mergeSettings({ showRecordingSavedCard: "no" as never }).showRecordingSavedCard).toBe(
+      true,
+    );
   });
 
   it("drops the last-used export preset keys older settings files carry (NIW2-218)", () => {
