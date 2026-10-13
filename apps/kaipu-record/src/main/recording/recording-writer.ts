@@ -132,6 +132,9 @@ export class RecordingWriter {
       createdAt: this.now(),
       derivedFromAssetId: meta.derivedFromAssetId ?? null,
       ...(meta.exportPreset ? { exportPreset: meta.exportPreset } : {}),
+      ...(isFingerprint(meta.exportFingerprint)
+        ? { exportFingerprint: meta.exportFingerprint }
+        : {}),
     });
     if (meta.thumbnail) await vault.writeThumbnail(id, Buffer.from(meta.thumbnail));
 
@@ -148,6 +151,11 @@ export class RecordingWriter {
     await unlink(session.tempPath).catch(() => {});
     this.sessions.delete(sessionId);
   }
+}
+
+/** A renderer-supplied export fingerprint: a short token ("whole" or "edit:<hash>"). */
+function isFingerprint(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= 64;
 }
 
 /** Default id: sortable, filesystem-safe, second-resolution timestamp. */

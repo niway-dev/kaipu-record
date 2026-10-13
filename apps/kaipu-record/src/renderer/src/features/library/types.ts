@@ -1,5 +1,6 @@
 /** Presentational types for the library UI. */
 
+import type { LocalRecording } from "@shared/types/library-storage";
 import type {
   Availability,
   Comparison,
@@ -35,4 +36,6 @@ export interface LibraryVideo {
   tagIds?: string[];
   /** GIF exports only: output size and frame rate (NIW2-217). */
   gif?: { width: number; height: number; fps: number } | null;
+  /** MP4 exports only: preset + what was encoded, for "already exported" reuse (NIW2-218). */
+  export?: LocalRecording["export"];
 }

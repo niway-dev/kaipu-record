@@ -1,8 +1,10 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { Star, TriangleAlert } from "lucide-react";
+import { Check, Star, TriangleAlert } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { ModalActions, ModalButton, ModalOverlay, ModalText, ModalTitle } from "@kaipu/ui";
 import { formatSize } from "@renderer/features/library/format";
+import type { LibraryVideo } from "@renderer/features/library/types";
+import type { ReusableExports } from "../export/export-reuse";
 import { gifRangeProblem } from "../export/export-plan";
 import {
   GIF_EXPORT_ENABLED,
@@ -70,6 +72,15 @@ export interface ExportSheetProps {
    * Maximum). Another row applies to this export only.
    */
   defaultPreset?: ExportPresetId;
+  /** Heading; "Export" when omitted (Share passes its own). */
+  title?: string;
+  /**
+   * Files that already are what a row would produce (same source, preset and content, see
+   * `findReusableExports`). Those rows say "Already exported" and open the file instead of
+   * encoding it again.
+   */
+  reusable?: ReusableExports;
+  onOpenExisting?(recording: LibraryVideo): void;
   /** Called (on every change) with valid GIF settings while GIF is selected — drives the estimate. */
   onGifSettingsChange(settings: GifSettings | null): void;
   onExportVideo(choice: VideoExportChoice): void;
@@ -121,6 +132,9 @@ export function ExportSheet({
   estimate,
   presetSource,
   defaultPreset = RECOMMENDED_PRESET,
+  title,
+  reusable = {},
+  onOpenExisting,
   onGifSettingsChange,
   onExportVideo,
   onExportGif,
@@ -153,7 +167,14 @@ export function ExportSheet({
     }
     return t("estimateUpTo", { size: formatMB(target.estimateBytes) });
   };
-  const exportSelected = (): void => onExportVideo({ presetId, framing: framingOf(presetId) });
+  // Reuse only applies when the host can open the file.
+  const existingOf = (p: ExportPresetId): LibraryVideo | undefined =>
+    onOpenExisting ? reusable[p] : undefined;
+  const selectedExisting = existingOf(presetId);
+  const exportSelected = (): void => {
+    if (selectedExisting) onOpenExisting?.(selectedExisting);
+    else onExportVideo({ presetId, framing: framingOf(presetId) });
+  };
 
   // Enter exports the selected row. The modal focuses its overlay on mount, so this is a
   // document listener; Enter on a button or field keeps its own meaning (a row button
@@ -194,7 +215,7 @@ export function ExportSheet({
 
   return (
     <ModalOverlay onCancel={onCancel} labelledBy={`${id}-title`}>
-      <ModalTitle id={`${id}-title`}>{t("exportSheetTitle")}</ModalTitle>
+      <ModalTitle id={`${id}-title`}>{title ?? t("exportSheetTitle")}</ModalTitle>
 
       {gifEnabled && (
         <div className={styles.field}>
@@ -229,35 +250,55 @@ export function ExportSheet({
               {EXPORT_PRESET_IDS.map((p) => {
                 const target = targetOf(p);
                 const active = presetId === p;
+                const existing = existingOf(p);
                 return (
                   <div key={p} className={styles.presetItem}>
-                    <button
-                      type="button"
-                      role="radio"
-                      aria-checked={active}
-                      className={styles.presetRow}
-                      data-active={active}
-                      onClick={() => setPresetId(p)}
-                    >
-                      <span className={styles.presetText}>
-                        <span className={styles.presetName}>
-                          {t(PRESET_NAME[p])}
-                          {p === RECOMMENDED_PRESET && (
-                            <span className={styles.recommended}>
-                              <Star size={11} strokeWidth={2} aria-hidden />
-                              {t("presetRecommended")}
+                    <div className={styles.presetLine}>
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        className={styles.presetRow}
+                        data-active={active}
+                        onClick={() => setPresetId(p)}
+                      >
+                        <span className={styles.presetText}>
+                          <span className={styles.presetName}>
+                            {t(PRESET_NAME[p])}
+                            {p === RECOMMENDED_PRESET && (
+                              <span className={styles.recommended}>
+                                <Star size={11} strokeWidth={2} aria-hidden />
+                                {t("presetRecommended")}
+                              </span>
+                            )}
+                          </span>
+                          <span className={styles.presetMeta}>{t(PRESET_HINT[p])}</span>
+                        </span>
+                        <span className={styles.presetFacts}>
+                          <span className={styles.presetMeta}>
+                            {t("presetDimensions", { width: target.width, height: target.height })}
+                          </span>
+                          {existing ? (
+                            <span className={styles.exported}>
+                              <Check size={11} strokeWidth={2.2} aria-hidden />
+                              {t("alreadyExported")}
                             </span>
+                          ) : (
+                            <span className={styles.presetMeta}>{estimateLine(target)}</span>
                           )}
                         </span>
-                        <span className={styles.presetMeta}>{t(PRESET_HINT[p])}</span>
-                      </span>
-                      <span className={styles.presetFacts}>
-                        <span className={styles.presetMeta}>
-                          {t("presetDimensions", { width: target.width, height: target.height })}
-                        </span>
-                        <span className={styles.presetMeta}>{estimateLine(target)}</span>
-                      </span>
-                    </button>
+                      </button>
+                      {existing && (
+                        <button
+                          type="button"
+                          className={styles.openExisting}
+                          aria-label={t("openExportedLabel", { name: t(PRESET_NAME[p]) })}
+                          onClick={() => onOpenExisting?.(existing)}
+                        >
+                          {t("openExported")}
+                        </button>
+                      )}
+                    </div>
 
                     {active && (p === "vertical" || p === "square") && (
                       <div className={styles.rowOptions}>
@@ -286,7 +327,7 @@ export function ExportSheet({
                       </div>
                     )}
 
-                    {active && !target.achievable && (
+                    {active && !existing && !target.achievable && (
                       <div className={styles.rowOptions}>
                         <p className={styles.warning} role="alert">
                           <TriangleAlert size={14} strokeWidth={1.8} />
@@ -447,7 +488,11 @@ export function ExportSheet({
         </ModalButton>
         {format === "video" ? (
           <ModalButton variant="primary" onClick={exportSelected}>
-            {selected.achievable ? t("exportVideoAction") : t("exportAnywayAction")}
+            {selectedExisting
+              ? t("openExported")
+              : selected.achievable
+                ? t("exportVideoAction")
+                : t("exportAnywayAction")}
           </ModalButton>
         ) : (
           <ModalButton

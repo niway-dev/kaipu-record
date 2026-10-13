@@ -16,6 +16,7 @@ import {
   shrinkSmallFileTarget,
   slideFrameCount,
 } from "./export-presets";
+import { WHOLE_RECORDING_FINGERPRINT } from "./export-reuse";
 
 export interface VideoExportState {
   status: "idle" | "exporting" | "error";
@@ -45,17 +46,24 @@ export interface StartExportArgs {
   framing?: ExportFraming | null;
   /** Probed source facts (frame rate, audio); conservative defaults when omitted. */
   sourceInfo?: { fps: number; hasAudio: boolean; sampleRate?: number } | null;
+  /**
+   * What this export encodes, recorded on the sidecar for "already exported" reuse:
+   * `editFingerprint(scene)` from the editor, `WHOLE_RECORDING_FINGERPRINT` from Share.
+   */
+  fingerprint?: string;
   onSaved: (recording: LocalRecording) => void;
 }
 
 /**
- * The exported item's title: "(edited)" for the quality rows (Balanced, Maximum), the
- * destination otherwise (spec Q8).
+ * The exported item's title: the destination for the destination rows (spec Q8). The
+ * quality rows (Balanced, Maximum) say "(edited)" from the editor and "(for sharing)" from
+ * Share, which encodes the recording without edits.
  */
 export function exportTitle(
   t: Translator<"videoEditor">,
   presetId: ExportPresetId,
   title: string,
+  fingerprint?: string,
 ): string {
   switch (presetId) {
     case "youtube":
@@ -69,7 +77,9 @@ export function exportTitle(
     case "small-25":
       return t("presetTitleSmall", { title, mb: 25 });
     default:
-      return t("editedTitle", { title });
+      return fingerprint === WHOLE_RECORDING_FINGERPRINT
+        ? t("presetTitleShare", { title })
+        : t("editedTitle", { title });
   }
 }
 
@@ -279,12 +289,13 @@ export function useVideoExport(): VideoExportController {
                   }
                 }
                 const recording = await window.electronAPI.recordingFinalize(sessionId, {
-                  title: exportTitle(t, presetId, args.title),
+                  title: exportTitle(t, presetId, args.title, args.fingerprint),
                   durationSeconds: plan.totalDuration,
                   durationMs: plan.totalDuration * 1000,
                   thumbnail,
                   derivedFromAssetId: args.derivedFromAssetId,
                   exportPreset: presetId,
+                  ...(args.fingerprint ? { exportFingerprint: args.fingerprint } : {}),
                 });
                 // Re-check again: cancel() could have run during the finalize await too.
                 if (!activeRef.current) return;

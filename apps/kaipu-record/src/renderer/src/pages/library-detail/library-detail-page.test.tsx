@@ -144,6 +144,20 @@ describe("LibraryDetailPage", () => {
     expect(screen.queryByRole("button", { name: /^copy$/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /delete/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /remove local download/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Share" })).toBeNull();
+  });
+
+  it("offers Share on a local recording, raw or already an export (NIW2-218)", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [exportedOnlyItem],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+
+    renderDetail("asset-b");
+    await waitForLoaded();
+
+    expect(screen.getByRole("button", { name: "Share" })).toBeEnabled();
   });
 
   it("Edit video lands on the recording's Editor URL", async () => {

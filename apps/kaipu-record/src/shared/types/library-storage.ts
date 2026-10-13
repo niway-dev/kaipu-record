@@ -1,3 +1,5 @@
+import type { ExportPresetId } from "./export-preset";
+
 /**
  * A recording stored in the local vault, as returned by the main process.
  * Pure type — safe to import from both main and renderer.
@@ -38,6 +40,12 @@ export interface LocalRecording {
   tagIds?: string[];
   /** GIF exports only: output size and frame rate, from the sidecar. */
   gif?: { width: number; height: number; fps: number } | null;
+  /**
+   * MP4 exports (NIW2-218): the preset that produced the file (a legacy "original" reads as
+   * "maximum") and what was encoded (`RecordingFinalizeMeta.exportFingerprint`; null on
+   * exports made before it existed). null for everything else.
+   */
+  export?: { preset: ExportPresetId; fingerprint: string | null } | null;
 }
 
 /** Where recordings are stored, and whether the user picked a custom folder. */

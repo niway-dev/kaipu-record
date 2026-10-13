@@ -98,11 +98,15 @@ import {
 } from "@renderer/features/video-editor/export/use-gif-export";
 import {
   ExportSheet,
-  formatMB,
   type GifSettings,
   type VideoExportChoice,
 } from "@renderer/features/video-editor/components/export-sheet";
-import { PRESETS } from "@renderer/features/video-editor/export/export-presets";
+import {
+  editFingerprint,
+  findReusableExports,
+} from "@renderer/features/video-editor/export/export-reuse";
+import { showExportSavedToast } from "@renderer/features/video-editor/export/export-saved-toast";
+import { useSourceExports } from "@renderer/features/video-editor/export/use-source-exports";
 import { probeSource, type SourceProbe } from "@renderer/features/video-editor/export/probe-source";
 import { useAppSettings } from "@renderer/pages/settings/use-app-settings";
 import { formatSize } from "@renderer/features/library/format";
@@ -632,6 +636,8 @@ function VideoEditor({
         presetId: choice.presetId,
         framing: choice.framing,
         sourceInfo: sourceProbe,
+        // What this file carries, so the sheet can offer it again while the edit is unchanged.
+        fingerprint: editFingerprint(scene),
         onSaved: async (recording) => {
           // This save supersedes whatever the autosave still had queued; dropping it
           // avoids a second write of the same scene right before unmount.
@@ -660,24 +666,7 @@ function VideoEditor({
           // markClean()'s state updates get batched.
           bypassBlockerRef.current = true;
           navigate(`/library/${recording.assetId}`);
-          // Spec Q9: a shareable export is usually dragged somewhere right away. Maximum
-          // quality is the pre-preset export and keeps its quiet navigation.
-          if (choice.presetId !== "maximum") {
-            const cap = PRESETS[choice.presetId].capBytes;
-            // FR8 / Q5: the one size-check retry still came out over the cap — keep the
-            // file, say so with its real size.
-            const overCap = cap !== null && recording.sizeBytes > cap;
-            showToast({
-              message: overCap
-                ? t("smallOverCap", { size: formatMB(recording.sizeBytes), cap: formatMB(cap) })
-                : t("exportSaved", { size: formatSize(recording.sizeBytes) }),
-              action: {
-                label: t("exportShowInFinder"),
-                onClick: () => void window.electronAPI.revealLocalRecording(recording.id),
-              },
-              durationMs: 8000,
-            });
-          }
+          showExportSavedToast(t, choice.presetId, recording);
         },
       });
     },
@@ -699,6 +688,8 @@ function VideoEditor({
   // NIW2-217: "Export" opens the export sheet (format choice). The metadata guard runs
   // here too, so the sheet never offers a GIF of a 0×0 stream.
   const [exportSheetOpen, setExportSheetOpen] = useState(false);
+  // NIW2-218 "already exported → reuse": this source's exports, re-read when the sheet opens.
+  const sourceExports = useSourceExports(source.assetId, exportSheetOpen);
   const lastGifSettingsRef = useRef<GifSettings | null>(null);
   const handleExport = useCallback(() => {
     const video = playback.videoRef.current;
@@ -1508,6 +1499,13 @@ function VideoEditor({
           // Settings → Export quality; another row applies to this export only and is
           // never remembered, nor written to the edit session (FR13).
           defaultPreset={appSettings.settings?.exportQuality}
+          // A row whose file already carries exactly this edit opens it instead of encoding.
+          reusable={findReusableExports(sourceExports, editFingerprint(scene))}
+          onOpenExisting={(existing) => {
+            closeExportSheet();
+            // Edits not yet written still go through the discard guard.
+            navigate(`/library/${existing.assetId}`);
+          }}
           onGifSettingsChange={handleGifSettingsChange}
           onExportVideo={(choice) => {
             closeExportSheet();

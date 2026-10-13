@@ -173,3 +173,58 @@ describe("presets (NIW2-218)", () => {
     expect(props.onExportVideo).toHaveBeenCalledWith({ presetId: "small-10", framing: null });
   });
 });
+
+describe("already exported → reuse (NIW2-218)", () => {
+  const existing = {
+    id: "local-yt",
+    assetId: "asset-yt",
+    kind: "recording" as const,
+    title: "Demo (YouTube)",
+    createdAt: 1,
+    durationSeconds: 12,
+    fileSizeBytes: 100,
+    cloudSizeBytes: null,
+    availability: "local" as const,
+    comparison: "same" as const,
+    editing: "exported-only" as const,
+    transfer: { state: "idle" as const },
+    derivedFromAssetId: "source",
+    editSavedAt: null,
+    editExportedSavedAt: null,
+    export: { preset: "youtube" as const, fingerprint: "whole" },
+  };
+
+  it("marks the row and opens the existing file instead of encoding", () => {
+    const onOpenExisting = vi.fn();
+    const props = renderSheet({ reusable: { youtube: existing }, onOpenExisting });
+    const row = screen.getByRole("radio", { name: /YouTube 16:9/ });
+    expect(row.textContent).toContain("Already exported");
+    expect(row.textContent).not.toMatch(/up to/);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open the existing YouTube 16:9 file" }));
+    expect(onOpenExisting).toHaveBeenCalledWith(existing);
+
+    fireEvent.click(row);
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    expect(onOpenExisting).toHaveBeenCalledTimes(2);
+    fireEvent.keyDown(screen.getByRole("alertdialog"), { key: "Enter" });
+    expect(onOpenExisting).toHaveBeenCalledTimes(3);
+    expect(props.onExportVideo).not.toHaveBeenCalled();
+  });
+
+  it("other rows still export", () => {
+    const props = renderSheet({ reusable: { youtube: existing }, onOpenExisting: vi.fn() });
+    fireEvent.click(screen.getByRole("button", { name: "Export video" }));
+    expect(props.onExportVideo).toHaveBeenCalledWith({ presetId: "balanced", framing: null });
+  });
+
+  it("ignores reuse when the host can't open files", () => {
+    renderSheet({ reusable: { youtube: existing } });
+    expect(screen.queryByText("Already exported")).toBeNull();
+  });
+
+  it("takes a custom title (Share)", () => {
+    renderSheet({ title: "Prepare a file to share" });
+    expect(screen.getByRole("heading", { name: "Prepare a file to share" })).toBeInTheDocument();
+  });
+});

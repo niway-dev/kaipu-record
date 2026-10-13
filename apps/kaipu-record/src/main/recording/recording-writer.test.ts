@@ -104,9 +104,11 @@ describe("RecordingWriter", () => {
       durationMs: 1000,
       derivedFromAssetId: "22222222-2222-4222-8222-222222222222",
       exportPreset: "vertical",
+      exportFingerprint: "edit:abc123",
     });
     const sidecar = JSON.parse(await readFile(join(vaultDir, ".kaipu", "rec-fixed.json"), "utf-8"));
     expect(sidecar.exportPreset).toBe("vertical");
+    expect(sidecar.exportFingerprint).toBe("edit:abc123");
   });
 
   it("a plain recording has no provenance", async () => {
@@ -115,5 +117,21 @@ describe("RecordingWriter", () => {
     await writer.write("s1", new TextEncoder().encode("A").buffer, 0);
     const rec = await writer.finalize("s1", { title: "Rec", durationSeconds: 1, durationMs: 1000 });
     expect(rec.derivedFromAssetId).toBeNull();
+    expect(rec.export).toBeNull();
+  });
+
+  it("drops a fingerprint that isn't a short token", async () => {
+    const { writer, vaultDir } = await setup();
+    await writer.create("s1");
+    await writer.write("s1", new TextEncoder().encode("A").buffer, 0);
+    await writer.finalize("s1", {
+      title: "Rec",
+      durationSeconds: 1,
+      durationMs: 1000,
+      exportPreset: "balanced",
+      exportFingerprint: "x".repeat(65),
+    });
+    const sidecar = JSON.parse(await readFile(join(vaultDir, ".kaipu", "rec-fixed.json"), "utf-8"));
+    expect(sidecar).not.toHaveProperty("exportFingerprint");
   });
 });
