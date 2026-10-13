@@ -605,7 +605,7 @@ function VideoEditor({
     };
   }, [source.id]);
   // The preset Retry reuses (FR12).
-  const lastVideoChoiceRef = useRef<VideoExportChoice>({ presetId: "original", framing: null });
+  const lastVideoChoiceRef = useRef<VideoExportChoice>({ presetId: "balanced", framing: null });
 
   const startVideoExport = useCallback(
     (choice: VideoExportChoice = lastVideoChoiceRef.current) => {
@@ -660,8 +660,9 @@ function VideoEditor({
           // markClean()'s state updates get batched.
           bypassBlockerRef.current = true;
           navigate(`/library/${recording.assetId}`);
-          // Spec Q9: a destination export is usually dragged somewhere right away.
-          if (choice.presetId !== "original") {
+          // Spec Q9: a shareable export is usually dragged somewhere right away. Maximum
+          // quality is the pre-preset export and keeps its quiet navigation.
+          if (choice.presetId !== "maximum") {
             const cap = PRESETS[choice.presetId].capBytes;
             // FR8 / Q5: the one size-check retry still came out over the cap — keep the
             // file, say so with its real size.
@@ -1504,15 +1505,12 @@ function VideoEditor({
             hasAudio: (sourceProbe?.hasAudio ?? true) && !scene.audioMuted,
             sampleRate: sourceProbe?.sampleRate,
           }}
-          initialPreset={appSettings.settings?.lastExportPreset}
-          initialFraming={appSettings.settings?.lastExportFraming}
+          // Settings → Export quality; another row applies to this export only and is
+          // never remembered, nor written to the edit session (FR13).
+          defaultPreset={appSettings.settings?.exportQuality}
           onGifSettingsChange={handleGifSettingsChange}
           onExportVideo={(choice) => {
             closeExportSheet();
-            // Remembered app-wide (FR2), never in the edit session (FR13).
-            void appSettings
-              .update({ lastExportPreset: choice.presetId, lastExportFraming: choice.framing })
-              .catch(() => {});
             startVideoExport(choice);
           }}
           onExportGif={startGifExport}

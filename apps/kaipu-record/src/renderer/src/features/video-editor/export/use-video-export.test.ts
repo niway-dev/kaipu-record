@@ -267,7 +267,7 @@ describe("useVideoExport", () => {
       durationMs: 10_000,
       thumbnail: FAKE_THUMB,
       derivedFromAssetId: null,
-      exportPreset: "original",
+      exportPreset: "balanced",
     });
     expect(onSaved).toHaveBeenCalledWith(
       expect.objectContaining({ id: "new-rec", title: "My recording (edited)" }),
@@ -314,7 +314,7 @@ describe("useVideoExport", () => {
     expect(createdWorkers[0].postMessage.mock.calls[0][0].camera).toBeNull();
   });
 
-  it("Original by default: source-size output, QUALITY_HIGH, moov reserved at the front", async () => {
+  it("Balanced by default: source size (≤ 1080p), explicit bitrate, ≤ 30 fps, moov at the front", async () => {
     const { result } = renderHook(() => useVideoExport());
     await act(async () => {
       await result.current.start(startArgs());
@@ -323,12 +323,27 @@ describe("useVideoExport", () => {
     expect(message.output).toEqual({ width: 1280, height: 720 });
     expect(message.source).toEqual({ width: 1280, height: 720 });
     expect(message.target).toMatchObject({
-      presetId: "original",
+      presetId: "balanced",
       framing: "identity",
-      videoBitrate: "high",
+      maxFps: 30,
       fastStart: "reserve",
     });
+    expect(typeof message.target.videoBitrate).toBe("number");
     expect(message.target.packetCounts.video).toBeGreaterThan(0);
+  });
+
+  it("Maximum keeps the native size with QUALITY_HIGH (the pre-preset export)", async () => {
+    const { result } = renderHook(() => useVideoExport());
+    await act(async () => {
+      await result.current.start(startArgs({ presetId: "maximum" }));
+    });
+    const [message] = createdWorkers[0].postMessage.mock.calls[0];
+    expect(message.output).toEqual({ width: 1280, height: 720 });
+    expect(message.target).toMatchObject({
+      presetId: "maximum",
+      videoBitrate: "high",
+      maxFps: null,
+    });
   });
 
   it("passes the resolved preset target (size, framing) through to the worker", async () => {

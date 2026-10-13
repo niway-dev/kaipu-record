@@ -16,8 +16,7 @@ const SETTINGS: AppSettings = {
   shortcuts: DEFAULT_SHORTCUTS,
   deviceId: "",
   uploadMode: "local-only",
-  lastExportPreset: "original",
-  lastExportFraming: null,
+  exportQuality: "balanced",
 };
 
 describe("I18nRoot theme application", () => {

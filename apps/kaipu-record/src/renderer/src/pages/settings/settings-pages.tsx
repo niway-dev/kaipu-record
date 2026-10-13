@@ -23,12 +23,13 @@ import {
   writeDevUpdateScenario,
 } from "@renderer/features/updater/dev-update-simulator";
 import { DEFAULT_QUALITY } from "@shared/recording-quality";
-import type { PermissionKind } from "@shared/types";
+import { DEFAULT_EXPORT_QUALITY, type PermissionKind } from "@shared/types";
 import { useAppSettings } from "./use-app-settings";
 import { LanguageSettings } from "./language-settings";
 import { ThemeSettings } from "./theme-settings";
 import { UpdateSettings } from "./update-settings";
 import { RecordingQualitySettings } from "./recording-quality-settings";
+import { ExportQualitySettings } from "./export-quality-settings";
 import { ScreenshotCopySettings } from "./screenshot-copy-settings";
 import { ScreenshotSaveSettings } from "./screenshot-save-settings";
 import { BrandBadgeSettings } from "./brand-badge-settings";
@@ -40,6 +41,7 @@ import styles from "./settings-page.module.css";
  *   • General           → AppSettings.locale / theme (+ a pointer to /cloud for the account)
  *   • Permissions       → window.electronAPI permission bridge (+ macOS Accessibility)
  *   • Recording quality → AppSettings.recordingQuality → encoder
+ *                         + AppSettings.exportQuality → export sheet's preselected row
  *   • Recording         → AppSettings.showBarInRecording / showBrandBadge
  *   • Files             → the real on-disk recordings vault
  *   • App               → Dock policy, replay the first-run flow
@@ -157,6 +159,12 @@ export function RecordingQualitySettingsPage(): React.JSX.Element {
         <RecordingQualitySettings
           quality={settings?.recordingQuality ?? DEFAULT_QUALITY}
           onChange={(recordingQuality) => void update({ recordingQuality })}
+        />
+      </Section>
+      <Section title={t("exportQuality")}>
+        <ExportQualitySettings
+          quality={settings?.exportQuality ?? DEFAULT_EXPORT_QUALITY}
+          onChange={(exportQuality) => void update({ exportQuality })}
         />
       </Section>
     </SettingsPanel>

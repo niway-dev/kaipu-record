@@ -39,7 +39,7 @@ export interface StartExportArgs {
   slideAssets: SlideAssetStore;
   /** v2: the preview's camera path (useCameraPath). Sent whenever the plan has a zoom. */
   cameraPath: CameraPath | null;
-  /** NIW2-218: destination preset; Original (today's output + fast start) when omitted. */
+  /** NIW2-218: destination preset; Balanced (the Settings default) when omitted. */
   presetId?: ExportPresetId;
   /** Fit/Fill for Vertical and Square; the preset's default when omitted. */
   framing?: ExportFraming | null;
@@ -48,7 +48,10 @@ export interface StartExportArgs {
   onSaved: (recording: LocalRecording) => void;
 }
 
-/** The exported item's title: "(edited)" for Original, the destination otherwise (spec Q8). */
+/**
+ * The exported item's title: "(edited)" for the quality rows (Balanced, Maximum), the
+ * destination otherwise (spec Q8).
+ */
 export function exportTitle(
   t: Translator<"videoEditor">,
   presetId: ExportPresetId,
@@ -141,7 +144,7 @@ export function useVideoExport(): VideoExportController {
         setState({ status: "error", fraction: 0, error: message });
       };
 
-      const presetId: ExportPresetId = args.presetId ?? "original";
+      const presetId: ExportPresetId = args.presetId ?? "balanced";
       const target = resolveExportTarget(
         presetId,
         {
