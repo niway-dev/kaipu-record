@@ -1,12 +1,12 @@
 import { useCallback } from "react";
-import { useNavigate } from "react-router-dom";
 import { useTranslations } from "@kaipu/i18n";
 import { getRecorderSnapshot } from "@renderer/features/recording/recorder-store";
+import { useOpenInEditor } from "@renderer/features/editor/open-in-editor";
 import { showToast } from "@renderer/ui/toast-store";
 import type { ImageSource } from "./image-source";
 
 export function useScreenshotCapture(): { capture: () => Promise<void> } {
-  const navigate = useNavigate();
+  const { openCapture } = useOpenInEditor();
   const t = useTranslations("screenshots");
   const capture = useCallback(async () => {
     // A recording — including its countdown/starting phase — must never be
@@ -31,8 +31,8 @@ export function useScreenshotCapture(): { capture: () => Promise<void> } {
     };
     // Navigate first (synchronous in the router), THEN ask main to bring the app
     // back — so it reappears already on the editor, not the previous page.
-    navigate("/screenshot-editor", { state: source });
+    openCapture(source);
     window.electronAPI.revealAfterCapture();
-  }, [navigate]);
+  }, [openCapture]);
   return { capture };
 }

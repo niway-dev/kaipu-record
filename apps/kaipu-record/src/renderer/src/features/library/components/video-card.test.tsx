@@ -98,3 +98,38 @@ describe("VideoCard", () => {
     expect(screen.getByText(/edited · not exported/i)).toBeInTheDocument();
   });
 });
+
+describe("VideoCard tags", () => {
+  it("always shows the first tags, the rest as +N", () => {
+    render(
+      <VideoCard
+        video={video}
+        tags={["a", "b", "c", "d", "e"].map((name) => ({
+          id: name,
+          name,
+          slug: name,
+          color: "rose" as const,
+          count: 1,
+        }))}
+        onNavigate={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    const list = screen.getByRole("list", { name: "Tags" });
+    expect([...list.querySelectorAll("li")].map((li) => li.textContent)).toEqual([
+      "a",
+      "b",
+      "c",
+      "+2",
+    ]);
+  });
+
+  it("opens the tag panel from its own button without navigating", async () => {
+    const onNavigate = vi.fn();
+    const onTags = vi.fn();
+    render(<VideoCard video={video} onNavigate={onNavigate} onDelete={vi.fn()} onTags={onTags} />);
+    await userEvent.click(screen.getByTitle("Tags"));
+    expect(onTags).toHaveBeenCalledOnce();
+    expect(onNavigate).not.toHaveBeenCalled();
+  });
+});

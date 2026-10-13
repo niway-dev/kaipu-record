@@ -22,14 +22,22 @@ describe("presetForPath", () => {
       ROUTES.cloud,
       ROUTES.settings,
       "/settings/general",
-      // The screenshot editor shares the window too: only video takes it over.
+      // The screenshot editor and the Editor home share the window too: only video
+      // takes it over.
       ROUTES.screenshotEditor,
+      ROUTES.editor,
+      "/editor/image/asset-1",
+      ROUTES.editorCapture,
     ];
     for (const path of sidebar) expect(presetForPath(path), path).toBe("main");
   });
 
   it("gives only the video editor its own", () => {
-    expect(presetForPath(ROUTES.videoEditor)).toBe("videoEditor");
+    expect(presetForPath("/editor/video/asset-1")).toBe("videoEditor");
+  });
+
+  it("leaves the legacy /video-editor redirect on main (it redirects at once)", () => {
+    expect(presetForPath(ROUTES.videoEditor)).toBe("main");
   });
 
   it("falls back to main for an unrecognised path", () => {

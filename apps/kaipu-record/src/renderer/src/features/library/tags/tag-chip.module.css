@@ -1,0 +1,132 @@
+/*
+ * Tag colors. Each palette name (ADR 0020) maps to one hue; fill, border and
+ * text are mixed from it so every chip stays readable on cards and in the drawer.
+ */
+
+.chip {
+  --tag: #fb7185;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 1px 8px 1px 6px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--tag) 45%, transparent);
+  background: color-mix(in srgb, var(--tag) 16%, transparent);
+  color: color-mix(in srgb, var(--tag) 62%, var(--text-primary));
+  font-family: var(--font-family);
+  font-size: 11px;
+  font-weight: var(--font-weight-medium);
+  line-height: 17px;
+  white-space: nowrap;
+}
+
+.chip[data-size="md"] {
+  padding: 3px 10px 3px 8px;
+  font-size: 12px;
+}
+
+.dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--tag);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tag) 25%, transparent);
+}
+
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+[data-color="rose"] {
+  --tag: #fb7185;
+}
+[data-color="coral"] {
+  --tag: #fb923c;
+}
+[data-color="amber"] {
+  --tag: #fbbf24;
+}
+[data-color="lime"] {
+  --tag: #a3e635;
+}
+[data-color="mint"] {
+  --tag: #34d399;
+}
+[data-color="lagoon"] {
+  --tag: #2dd4bf;
+}
+[data-color="sky"] {
+  --tag: #38bdf8;
+}
+[data-color="iris"] {
+  --tag: #818cf8;
+}
+[data-color="orchid"] {
+  --tag: #c084fc;
+}
+[data-color="slate"] {
+  --tag: #94a3b8;
+}
+
+/* ── Mini color menu ─────────────────────── */
+
+.menuAnchor {
+  position: relative;
+  display: inline-flex;
+}
+
+.swatchButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+
+.swatchButton:hover {
+  border-color: var(--border-light);
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: repeat(5, 22px);
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-modal, var(--bg-card));
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+/* No `--tag` default here: it would override the palette rules above (same
+ * specificity, later in the file) and paint every swatch the same color. */
+.swatch {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  background: var(--tag);
+  cursor: pointer;
+  transition: transform var(--transition);
+}
+
+.swatch:hover {
+  transform: scale(1.12);
+}
+
+.swatch[aria-checked="true"] {
+  border-color: var(--text-primary);
+}

@@ -106,6 +106,7 @@ function renderDetail(assetId: string) {
     [
       { path: "/library/:assetId", element: <LibraryDetailPage /> },
       { path: "/library", element: <div>library-page</div> },
+      { path: "/editor/video/:assetId", element: <div>editor-video</div> },
     ],
     { initialEntries: [`/library/${assetId}`] },
   );
@@ -143,6 +144,20 @@ describe("LibraryDetailPage", () => {
     expect(screen.queryByRole("button", { name: /^copy$/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /delete/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /remove local download/i })).toBeNull();
+  });
+
+  it("Edit video lands on the recording's Editor URL", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [exportedOnlyItem],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+
+    const router = renderDetail("asset-b");
+    await waitForLoaded();
+    fireEvent.click(screen.getByRole("button", { name: "Edit video" }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/editor/video/asset-b"));
   });
 
   it("shows Remove local download for a local-and-cloud, same-bytes, exported-only item", async () => {

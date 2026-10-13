@@ -28,6 +28,11 @@ export interface LocalRecording {
    * current size + mtime. null = not computed yet or stale (never "unknown bytes").
    */
   contentSha256: string | null;
+  /**
+   * Ids of the tags this item carries (ADR 0020); `[]` without any. Optional so
+   * older callers and fixtures that build a `LocalRecording` by hand stay valid.
+   */
+  tagIds?: string[];
 }
 
 /** Where recordings are stored, and whether the user picked a custom folder. */
