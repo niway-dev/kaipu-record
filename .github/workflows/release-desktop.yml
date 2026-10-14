@@ -33,8 +33,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Read-only by default; only the job that publishes the Release is granted write.
 permissions:
-  contents: write # create the GitHub Release and upload assets
+  contents: read
 
 jobs:
   # Release gate (ADR 0004): the same `bun run verify` the Lefthook pre-push runs, on the
@@ -46,15 +47,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.3.4
 
       - name: Cache bun dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.bun/install/cache
           key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
@@ -69,7 +70,7 @@ jobs:
       # eats the repository's 10 GB budget. Turbo validates each task's own input hash, so
       # an entry that predates the current code is partially reused, never wrongly reused.
       - name: Cache turbo outputs
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: .turbo
           key: ${{ runner.os }}-turbo-${{ hashFiles('bun.lock', 'turbo.json') }}
@@ -88,12 +89,14 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 60
     environment: production # the signing secrets live in this Environment
+    permissions:
+      contents: write # create the GitHub Release and upload assets
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.3.4
 
@@ -159,7 +162,7 @@ jobs:
 
       - name: Upload Playwright artifacts on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: playwright-report
           path: |
@@ -253,7 +256,7 @@ jobs:
         # be a redundant ~500 MB copy that counts against the Actions storage
         # quota. Manual runs have neither, so keep a short-lived artifact for them.
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: kaipu-record-macos
           path: |
@@ -266,7 +269,7 @@ jobs:
         # Only on tag pushes — a manual dispatch has no tag to release against,
         # so it just exercises the build/sign/notarize path.
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           # Draft so a human reviews/writes notes before it reaches testers.
           # Flip to `draft: false` once the pipeline is trusted.
