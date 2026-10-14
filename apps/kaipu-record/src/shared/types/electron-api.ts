@@ -301,6 +301,8 @@ export interface KaipuElectronAPI {
   copyScreenshotById(id: string): Promise<void>;
   /** Read a saved screenshot's PNG bytes by id (re-opening it in the editor). */
   readScreenshotBytes(id: string): Promise<ArrayBuffer>;
+  /** The image on the system clipboard as PNG, or null when it holds no image. */
+  readClipboardImage(): Promise<{ png: ArrayBuffer; width: number; height: number } | null>;
   /**
    * Write a PNG into the vault and return the stored item. With `overwriteId` it
    * replaces that existing screenshot (keeping its createdAt); without, it creates

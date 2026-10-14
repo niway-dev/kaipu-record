@@ -79,7 +79,17 @@
     "recentTitle": "Recientes",
     "empty": "Aún no hay nada que editar. Graba un video o toma una captura primero.",
     "edit": "Editar",
-    "editItem": "Editar {title}"
+    "editItem": "Editar {title}",
+    "new": "Nuevo",
+    "newTitle": "Empezar desde una imagen del portapapeles",
+    "newHeading": "Nueva imagen",
+    "newSubtitle": "Edita cualquier imagen que hayas copiado: una foto, una imagen de la web, una captura de otra app.",
+    "pasteTitle": "Pega una imagen",
+    "pasteHint": "Copia una imagen donde sea y luego pulsa {shortcut} aquí.",
+    "pasteButton": "Pegar desde el portapapeles",
+    "pasteEmpty": "No hay ninguna imagen en el portapapeles. Copia una e inténtalo de nuevo.",
+    "pasteError": "No se pudo abrir esa imagen. Intenta copiarla de nuevo.",
+    "pastedTitle": "Imagen pegada — {date}"
   },
   "settings": {
     "title": "Ajustes",

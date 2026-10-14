@@ -186,6 +186,7 @@ window.electronAPI = {
   copyImageToClipboard: async () => {},
   copyScreenshotById: async () => {},
   readScreenshotBytes: async () => new ArrayBuffer(0),
+  readClipboardImage: async () => null,
   saveScreenshot: async () => {
     throw new Error("not implemented in test stub");
   },

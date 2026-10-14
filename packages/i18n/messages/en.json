@@ -79,7 +79,17 @@
     "recentTitle": "Recent",
     "empty": "Nothing to edit yet. Record a video or take a screenshot first.",
     "edit": "Edit",
-    "editItem": "Edit {title}"
+    "editItem": "Edit {title}",
+    "new": "New",
+    "newTitle": "Start from an image on your clipboard",
+    "newHeading": "New image",
+    "newSubtitle": "Edit any image you have copied: a photo, a picture from the web, a screenshot from another app.",
+    "pasteTitle": "Paste an image",
+    "pasteHint": "Copy an image anywhere, then press {shortcut} here.",
+    "pasteButton": "Paste from clipboard",
+    "pasteEmpty": "There is no image on the clipboard. Copy one, then try again.",
+    "pasteError": "Couldn't open that image. Try copying it again.",
+    "pastedTitle": "Pasted image — {date}"
   },
   "settings": {
     "title": "Settings",

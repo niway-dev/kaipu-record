@@ -5,6 +5,7 @@ import {
   Copy,
   Download,
   FileText,
+  ImagePlus,
   Redo2,
   Trash2,
   Undo2,
@@ -16,7 +17,9 @@ import { useImageSource, type ImageSource } from "@renderer/features/screenshots
 import {
   type AutoActions,
   autoActionsOnOpen,
+  openKindOf,
 } from "@renderer/features/screenshots/auto-capture-policy";
+import { ROUTES } from "@shared/routes";
 import { DiscardChangesDialog } from "@renderer/features/screenshots/discard-changes-dialog";
 import { reportError } from "@renderer/features/analytics";
 import { useAppSettings } from "@renderer/pages/settings/use-app-settings";
@@ -82,10 +85,14 @@ export function ScreenshotEditorPage(): React.JSX.Element {
 /** The image editor itself. The Editor workspace routes render it, keyed per item. */
 export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Element {
   const t = useTranslations("screenshots");
+  const tEditor = useTranslations("editor");
   const image = useImageSource(source);
   // A re-opened saved shot is already framed/flattened — start it unframed so the
   // editor doesn't beautify it twice; a fresh capture gets the default frame.
-  const scene = useEditorScene(source.kind === "local" ? FLAT_BEAUTIFY : DEFAULT_BEAUTIFY);
+  // A pasted image is the user's own picture (often a photo), not a screenshot to
+  // show off, so it opens unframed too.
+  const openKind = openKindOf(source);
+  const scene = useEditorScene(openKind === "capture" ? DEFAULT_BEAUTIFY : FLAT_BEAUTIFY);
   const tools = useAnnotationTools();
   const imgRef = useRef<HTMLImageElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -111,7 +118,7 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
     autoActionsRef.current = autoActionsOnOpen(
       settings.screenshotSave,
       settings.screenshotCopy,
-      source.kind,
+      openKind,
     );
   }
   // True once THIS editor created the item on open — enables Discard.
@@ -376,6 +383,18 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
         <AnnotationToolbar tools={tools} onPick={() => scene.select(null)} />
         <CaptureTitleInput title={captureTitle} />
         <div className={styles.actions}>
+          {/* Leaving goes through the unsaved-changes guard like any navigation. */}
+          <button
+            type="button"
+            className={styles.secondary}
+            aria-label={tEditor("new")}
+            title={tEditor("newTitle")}
+            onClick={() => navigate(ROUTES.editorNew)}
+          >
+            <ImagePlus size={16} />
+            <span className={styles.label}>{tEditor("new")}</span>
+          </button>
+          <span className={styles.divider} />
           <button
             type="button"
             className={styles.iconBtn}

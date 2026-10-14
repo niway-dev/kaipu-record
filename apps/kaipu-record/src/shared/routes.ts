@@ -19,6 +19,8 @@ export const ROUTES = {
   editor: "/editor",
   editorVideo: "/editor/video/:assetId",
   editorImage: "/editor/image/:assetId",
+  /** An empty editor waiting for an image pasted from the clipboard. */
+  editorNew: "/editor/new",
   /** A fresh capture that is not in the vault yet; its image travels in router state. */
   editorCapture: "/editor/capture",
   /** Legacy, redirects to `editorImage`/`editorCapture`. */

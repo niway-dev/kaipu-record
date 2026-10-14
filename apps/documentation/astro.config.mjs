@@ -99,6 +99,7 @@ export default defineConfig({
             { slug: "backlog/bug-control-bar-hides-last-terminal-line" },
             { slug: "backlog/dock-and-app-switcher" },
             { slug: "backlog/standalone-editor" },
+            { slug: "backlog/editor-new-from-clipboard" },
             { slug: "backlog/version-gate" },
             { slug: "backlog/auto-update" },
             { slug: "backlog/shared-tokens-package" },

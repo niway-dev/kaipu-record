@@ -69,6 +69,18 @@ export function registerScreenshotHandlers(windows: CaptureWindowHooks): void {
     clipboard.writeImage(nativeImage.createFromBuffer(buf));
   });
 
+  ipcMain.handle(IPC_CHANNELS.clipboardReadImage, () => {
+    const img = clipboard.readImage();
+    if (img.isEmpty()) return null;
+    const png = img.toPNG();
+    const { width, height } = img.getSize();
+    return {
+      png: png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength),
+      width,
+      height,
+    };
+  });
+
   ipcMain.handle(IPC_CHANNELS.screenshotReadBytes, async (_e, id: string): Promise<ArrayBuffer> => {
     const buf = await readFile(await screenshotFilePath(id));
     return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);

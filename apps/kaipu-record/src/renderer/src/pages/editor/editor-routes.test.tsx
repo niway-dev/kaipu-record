@@ -73,6 +73,7 @@ function renderAt(entry: string | { pathname: string; state: unknown }) {
   const router = createMemoryRouter(
     [
       { path: "/editor", element: <EditorHomePage /> },
+      { path: "/editor/new", element: <div>editor-new</div> },
       { path: "/editor/video/:assetId", element: <EditorVideoPage /> },
       { path: "/editor/image/:assetId", element: <EditorImagePage /> },
       { path: "/editor/capture", element: <div>editor-capture</div> },
@@ -181,5 +182,12 @@ describe("EditorHomePage", () => {
     setLibrary([]);
     renderAt("/editor");
     expect(await screen.findByText(/Nothing to edit yet/)).toBeInTheDocument();
+  });
+
+  it("offers New, which opens the empty editor waiting for a paste", async () => {
+    setLibrary([]);
+    const router = renderAt("/editor");
+    fireEvent.click(await screen.findByRole("link", { name: "New" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/editor/new"));
   });
 });

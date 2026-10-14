@@ -1,5 +1,7 @@
 import React, { useMemo } from "react";
-import { PenLine } from "lucide-react";
+import { Link } from "react-router-dom";
+import { ImagePlus, PenLine } from "lucide-react";
+import { ROUTES } from "@shared/routes";
 import { useTranslations } from "@kaipu/i18n";
 import { useLocalLibrary } from "@renderer/features/library/hooks/use-local-library";
 import { KindBadge } from "@renderer/features/library/components/kind-badge";
@@ -35,7 +37,13 @@ export function EditorHomePage(): React.JSX.Element {
 
   return (
     <div className={styles.page}>
-      <h1 className={styles.title}>{t("title")}</h1>
+      <div className={styles.header}>
+        <h1 className={styles.title}>{t("title")}</h1>
+        <Link to={ROUTES.editorNew} className={styles.newButton} title={t("newTitle")}>
+          <ImagePlus size={16} strokeWidth={1.8} />
+          {t("new")}
+        </Link>
+      </div>
       <p className={styles.subtitle}>{t("subtitle")}</p>
 
       <h2 className={styles.sectionTitle}>{t("recentTitle")}</h2>
