@@ -68,7 +68,7 @@ function args(overrides: Partial<StartExportArgs> = {}): StartExportArgs {
     previewWidth: 2560,
     slideAssets: createSlideAssetStore(),
     cameraPath: null,
-    presetId: "small-10",
+    presetId: "light",
     onSaved: vi.fn(),
     ...overrides,
   };
@@ -104,16 +104,16 @@ describe("export runner (NIW2-218 background export)", () => {
     expect(status).toBe("exporting");
     expect(attemptStartedAt).not.toBeNull();
     expect(job).toMatchObject({
-      presetId: "small-10",
+      presetId: "light",
       sourceTitle: "Demo",
       sourceAssetId: "asset-src",
       sourceSizeBytes: 119_000_000,
-      capBytes: 10_000_000,
       width: 1280,
       height: 720,
     });
-    expect(job!.estimateBytes).toBeGreaterThan(9_000_000);
-    expect(job!.estimateBytes).toBeLessThanOrEqual(10_000_000);
+    // 78 s of Light: ~1.26 Mbps × 78 s.
+    expect(job!.estimateBytes).toBeGreaterThan(12_000_000);
+    expect(job!.estimateBytes).toBeLessThan(13_000_000);
   });
 
   it("runs one export at a time", async () => {
@@ -121,7 +121,7 @@ describe("export runner (NIW2-218 background export)", () => {
     expect(isVideoExportBusy()).toBe(true);
     expect(await startVideoExport(args({ presetId: "youtube" }), t)).toBe(false);
     expect(workers).toHaveLength(1);
-    expect(getExportSnapshot().job?.presetId).toBe("small-10");
+    expect(getExportSnapshot().job?.presetId).toBe("light");
   });
 
   it("tells main while an export runs, so closing or quitting asks first", async () => {
@@ -138,7 +138,7 @@ describe("export runner (NIW2-218 background export)", () => {
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(RECORDING));
     const snapshot = getExportSnapshot();
     expect(snapshot.status).toBe("idle");
-    expect(snapshot.ready).toMatchObject({ recording: RECORDING, job: { presetId: "small-10" } });
+    expect(snapshot.ready).toMatchObject({ recording: RECORDING, job: { presetId: "light" } });
     expect(isVideoExportBusy()).toBe(false);
 
     dismissReadyExport();
@@ -176,7 +176,7 @@ describe("export runner (NIW2-218 background export)", () => {
     workers[0].onmessage?.({ data: { type: "error", message: "boom" } } as MessageEvent);
     expect(getExportSnapshot()).toMatchObject({ status: "error", error: "exportGenericError" });
     // The failed job stays described, for the error card.
-    expect(getExportSnapshot().job?.presetId).toBe("small-10");
+    expect(getExportSnapshot().job?.presetId).toBe("light");
 
     retryVideoExport();
     await waitFor(() => expect(workers).toHaveLength(2));
@@ -189,11 +189,11 @@ describe("export runner (NIW2-218 background export)", () => {
     await startVideoExport(args({ slideAssets: store }), t);
     expect(entries).toHaveBeenCalledOnce();
     store.dispose();
-    // An FR8 retry (over the cap) launches again without asking the store.
-    window.electronAPI.recordingStat = vi.fn(async () => 12_000_000);
-    finish(workers[0]);
+    // The FR9 fallback (moov reservation too small) launches again without asking the store.
+    workers[0].onmessage?.({
+      data: { type: "error", message: "Exceeded maximum packet count" },
+    } as MessageEvent);
     await waitFor(() => expect(workers).toHaveLength(2));
-    expect(getExportSnapshot().shrinking).toBe(true);
     expect(entries).toHaveBeenCalledOnce();
   });
 });

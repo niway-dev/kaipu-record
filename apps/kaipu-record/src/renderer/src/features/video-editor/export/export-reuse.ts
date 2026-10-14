@@ -12,7 +12,7 @@
 import type { LibraryVideo } from "@renderer/features/library/types";
 import type { VideoScene } from "../scene";
 import { parseSession, serializeSession } from "../session";
-import type { ExportPresetId } from "./export-presets";
+import { encodeFingerprint, type ExportPresetId } from "./export-presets";
 
 /** Share (no editor): the whole source file, as it is on disk. */
 export const WHOLE_RECORDING_FINGERPRINT = "whole";
@@ -69,7 +69,9 @@ export function findReusableExports(
   const newestFirst = [...exports].sort((a, b) => b.createdAt - a.createdAt);
   for (const e of newestFirst) {
     if (e.kind !== "recording" || e.id === null || !e.export) continue;
-    if (e.export.fingerprint !== fingerprint) continue;
+    // Same content AND the same encode: an older file of this preset made with different
+    // numbers (or an old Small-file export, now read as Light) never matches.
+    if (e.export.fingerprint !== encodeFingerprint(fingerprint, e.export.preset)) continue;
     found[e.export.preset] ??= e;
   }
   return found;

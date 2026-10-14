@@ -7,7 +7,7 @@ function renderCard(overrides: Partial<Parameters<typeof RecordingSavedCard>[0]>
     durationSeconds: 78,
     sizeBytes: 119_000_000,
     dimensions: { width: 2560, height: 1440 },
-    githubEstimateBytes: 9_200_000,
+    lightEstimateBytes: 9_200_000,
     onShare: vi.fn(),
     onDismiss: vi.fn(),
     ...overrides,
@@ -24,14 +24,14 @@ describe("RecordingSavedCard", () => {
     renderCard();
     expect(screen.getByText("Recording saved")).toBeInTheDocument();
     expect(screen.getByText("1:18 · 2560×1440 · 119 MB")).toBeInTheDocument();
-    expect(screen.getByText("~9.2 MB for GitHub")).toBeInTheDocument();
+    expect(screen.getByText("~9.2 MB · fits GitHub")).toBeInTheDocument();
     expect(screen.getByText(/a copy that's 92% lighter/)).toBeInTheDocument();
   });
 
   it("words it without numbers until the file is read", () => {
-    renderCard({ githubEstimateBytes: null, dimensions: null });
+    renderCard({ lightEstimateBytes: null, dimensions: null });
     expect(screen.getByText("1:18 · 119 MB")).toBeInTheDocument();
-    expect(screen.getByText(/a lighter copy for GitHub/)).toBeInTheDocument();
+    expect(screen.getByText(/We can make a lighter copy/)).toBeInTheDocument();
   });
 
   it("Share a light copy opens Share (and closes the card)", () => {

@@ -16,7 +16,7 @@
  * patches earlier headers) — hence `StreamTarget` (positional) is required instead of
  * `AppendOnlyStreamTarget`. Never `'in-memory'`: it buffers the whole file in the worker.
  *
- * Presets (NIW2-218, `msg.target`): Balanced, Maximum and Small file compose straight onto the
+ * Presets (NIW2-218, `msg.target`): Balanced, Light and Maximum compose straight onto the
  * output canvas (same aspect as the source). Fixed-canvas presets compose a source-size
  * VIEW first (frame → redactions → overlays → zoom crop, exactly as Maximum) and then
  * frame it onto the target canvas (Fit/Fill, see `createFramer`).
@@ -121,7 +121,7 @@ async function runExport(msg: ExportStartMessage): Promise<void> {
 async function runExportWithInput(msg: ExportStartMessage, input: Input): Promise<void> {
   const { plan, output: size, target: preset } = msg;
   // Fixed-canvas presets compose at SOURCE size into a view canvas, then frame it onto the
-  // output. Identity framing (Balanced, Maximum, Small file) composes straight onto the output.
+  // output. Identity framing (Balanced, Light, Maximum) composes straight onto the output.
   const framed = preset.framing !== "identity";
   const composeSize = framed ? msg.source : size;
 
@@ -193,7 +193,7 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
   const silenceSampleRate = audioTrack ? (await audioTrack.getSampleRate()) || 48000 : 48000;
   const sourceChannels = audioTrack ? (await audioTrack.getNumberOfChannels()) || 2 : 2;
   // An explicit AAC config (every preset but Maximum) is checked against the encoder first:
-  // Small file asks for mono 64 kbps, which Chromium's AAC encoder on macOS refuses.
+  // Light asks for mono 64 kbps, which Chromium's AAC encoder on macOS refuses.
   const audioEncoding =
     preset.audioBitrate === "high" || !audioTrack || audioMuted
       ? null
@@ -205,7 +205,7 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
           bitrate: audioEncoding?.bitrate ?? QUALITY_HIGH,
         })
       : null;
-  // Downmix (Small file) only when the encoder took the mono config; silence matches it.
+  // Downmix (Light) only when the encoder took the mono config; silence matches it.
   const downmix = audioEncoding?.numberOfChannels === 1 && sourceChannels !== 1;
   const silenceChannelCount = audioEncoding?.numberOfChannels ?? sourceChannels;
 
@@ -276,7 +276,7 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
     // detect and drop a straddling frame that would regress across a cut boundary.
     // ---------------------------------------------------------------------------
     let prevOutTs: number | null = null;
-    // fps cap (Small file below 1080p): the earliest output time the next kept frame may have.
+    // fps cap (the quality tiers, 15 fps): the earliest output time the next kept frame may have.
     const minFrameGap = preset.maxFps ? 1 / preset.maxFps : 0;
     let nextSlot: number | null = null;
     for (const segment of plan.segments) {
@@ -446,7 +446,7 @@ function zeroedLike(sample: AudioSample): AudioSample {
 }
 
 /**
- * Small file (NIW2-218): average every channel into one. A mono source passes through
+ * Light (NIW2-218): average every channel into one. A mono source passes through
  * unchanged; the caller closes a new sample when one is returned.
  */
 /** The first AAC config the platform encoder accepts; the last one when none says yes. */

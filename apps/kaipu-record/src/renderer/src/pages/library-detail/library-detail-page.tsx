@@ -26,7 +26,10 @@ import {
   ShareButton,
   useShareRecording,
 } from "@renderer/features/library/components/share-recording";
-import { resolveExportTarget } from "@renderer/features/video-editor/export/export-presets";
+import {
+  githubFit,
+  resolveExportTarget,
+} from "@renderer/features/video-editor/export/export-presets";
 import {
   formatMB,
   isHeavyToSend,
@@ -392,8 +395,8 @@ export function LibraryDetailPage(): React.JSX.Element {
       {heavy && (
         <HeavyToSendBanner
           sizeBytes={video.fileSizeBytes}
-          githubEstimateBytes={githubEstimate(share.probe)}
-          onMakeLightCopy={() => share.open("small-10")}
+          lightEstimateBytes={lightEstimate(share.probe)}
+          onMakeLightCopy={() => share.open("light")}
         />
       )}
 
@@ -432,8 +435,8 @@ export function LibraryDetailPage(): React.JSX.Element {
             dimensions={
               share.probe ? { width: share.probe.width, height: share.probe.height } : null
             }
-            githubEstimateBytes={githubEstimate(share.probe)}
-            onShare={() => share.open("small-10")}
+            lightEstimateBytes={lightEstimate(share.probe)}
+            onShare={() => share.open("light")}
             onDismiss={() => setSavedCardDismissedFor(location.key)}
           />
         </StatusCardPortal>
@@ -450,28 +453,24 @@ export function LibraryDetailPage(): React.JSX.Element {
   );
 }
 
-/**
- * What the GitHub · Jira · Linear row would weigh, from the same math as the sheet; null
- * until the file is read, or when the cap can't be met (then "about N MB for GitHub" would
- * be false).
- */
-function githubEstimate(probe: SourceProbe | null): number | null {
+/** What a Light copy would weigh, from the same math as the sheet; null until the file is read. */
+function lightEstimate(probe: SourceProbe | null): number | null {
   if (!probe) return null;
-  const target = resolveExportTarget("small-10", probe, probe.durationSec);
-  return target.achievable ? target.estimateBytes : null;
+  return resolveExportTarget("light", probe, probe.durationSec).estimateBytes;
 }
 
 /**
  * NIW2-218: a recording over 25 MB is heavy to send anywhere. Say so where the user looks
- * at it, with what Share would make of it, and open the sheet on the GitHub row.
+ * at it, with what a Light copy would weigh, and open the sheet on the Light row. GitHub is
+ * promised only when the Light copy fits its 10 MB.
  */
 function HeavyToSendBanner({
   sizeBytes,
-  githubEstimateBytes,
+  lightEstimateBytes,
   onMakeLightCopy,
 }: {
   sizeBytes: number;
-  githubEstimateBytes: number | null;
+  lightEstimateBytes: number | null;
   onMakeLightCopy(): void;
 }): React.JSX.Element {
   const t = useTranslations("library");
@@ -480,9 +479,11 @@ function HeavyToSendBanner({
       <Leaf size={17} strokeWidth={1.8} className={styles.heavyIcon} aria-hidden />
       <p className={styles.heavyText}>
         <strong>{t("heavyBannerTitle", { size: formatMB(sizeBytes) })}</strong>{" "}
-        {githubEstimateBytes !== null
-          ? t("heavyBannerBody", { estimate: formatMB(githubEstimateBytes) })
-          : t("heavyBannerBodyNoEstimate")}
+        {lightEstimateBytes === null
+          ? t("heavyBannerBodyNoEstimate")
+          : githubFit(lightEstimateBytes) === "fits"
+            ? t("heavyBannerBody", { estimate: formatMB(lightEstimateBytes) })
+            : t("heavyBannerBodyNoGithub", { estimate: formatMB(lightEstimateBytes) })}
       </p>
       <button type="button" className={styles.heavyAction} onClick={onMakeLightCopy}>
         {t("heavyBannerAction")}

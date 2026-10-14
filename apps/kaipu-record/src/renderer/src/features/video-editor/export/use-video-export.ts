@@ -23,7 +23,7 @@ export interface VideoExportController extends VideoExportState {
  */
 export function useVideoExport(): VideoExportController {
   const t = useTranslations("videoEditor");
-  const { status, fraction, error, shrinking } = useExportRunner();
+  const { status, fraction, error } = useExportRunner();
   const start = useCallback((args: StartExportArgs) => startVideoExport(args, t), [t]);
-  return { status, fraction, error, shrinking, start, cancel: cancelVideoExport };
+  return { status, fraction, error, start, cancel: cancelVideoExport };
 }

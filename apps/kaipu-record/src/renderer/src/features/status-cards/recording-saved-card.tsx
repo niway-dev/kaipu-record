@@ -3,6 +3,7 @@ import { Share2, Video } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { formatDuration } from "@renderer/features/video-editor/components/export-sheet";
 import { SizeMeter } from "@renderer/features/video-editor/components/size-meter";
+import { githubFit } from "@renderer/features/video-editor/export/export-presets";
 import { formatMB, percentLighter } from "@renderer/features/video-editor/export/export-size";
 import { StatusCard, StatusCardActions, StatusCardButton, StatusCardText } from "./status-card";
 
@@ -14,23 +15,22 @@ export interface RecordingSavedCardProps {
   sizeBytes: number;
   /** Width × height once the file has been read; left out until then. */
   dimensions: { width: number; height: number } | null;
-  /** What the GitHub · Jira · Linear row would weigh; null until known (or unreachable). */
-  githubEstimateBytes: number | null;
+  /** What a Light copy would weigh; null until the file is read. */
+  lightEstimateBytes: number | null;
   onShare(): void;
   onDismiss(): void;
 }
 
 /**
  * "Recording saved" (NIW2-218 export redesign): right after a recording heavier than
- * GitHub's limit, its page offers a copy light enough to attach, with the saving on a
- * before/after bar. Hides itself after 8 s — paused while the pointer is on it — and
+ * GitHub's limit, its page offers a Light copy, with the saving on a before/after bar. Hides itself after 8 s — paused while the pointer is on it — and
  * Settings → Export quality turns it off.
  */
 export function RecordingSavedCard({
   durationSeconds,
   sizeBytes,
   dimensions,
-  githubEstimateBytes,
+  lightEstimateBytes,
   onShare,
   onDismiss,
 }: RecordingSavedCardProps): React.JSX.Element {
@@ -44,7 +44,7 @@ export function RecordingSavedCard({
     return () => clearTimeout(timer);
   }, [hovered]);
 
-  const lighter = percentLighter(githubEstimateBytes, sizeBytes);
+  const lighter = percentLighter(lightEstimateBytes, sizeBytes);
   const subtitle = [
     formatDuration(durationSeconds),
     dimensions && t("presetDimensions", dimensions),
@@ -66,11 +66,16 @@ export function RecordingSavedCard({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {githubEstimateBytes !== null && (
+      {lightEstimateBytes !== null && (
         <SizeMeter
           originalBytes={sizeBytes}
-          resultBytes={githubEstimateBytes}
-          label={t("recordingSavedMeter", { size: formatMB(githubEstimateBytes) })}
+          resultBytes={lightEstimateBytes}
+          // GitHub only when the Light copy really fits its 10 MB.
+          label={
+            githubFit(lightEstimateBytes) === "fits"
+              ? t("recordingSavedMeter", { size: formatMB(lightEstimateBytes) })
+              : t("recordingSavedMeterNoGithub", { size: formatMB(lightEstimateBytes) })
+          }
         />
       )}
       <StatusCardText>

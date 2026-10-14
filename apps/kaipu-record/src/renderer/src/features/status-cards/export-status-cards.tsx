@@ -2,6 +2,7 @@ import { CircleCheck, FolderOpen, GripVertical, TriangleAlert } from "lucide-rea
 import { useNavigate } from "react-router-dom";
 import { useTranslations } from "@kaipu/i18n";
 import { PRESET_NAME } from "@renderer/features/video-editor/components/export-sheet";
+import { GithubFitChips } from "@renderer/features/video-editor/components/github-fit-chips";
 import { SizeMeter } from "@renderer/features/video-editor/components/size-meter";
 import {
   cancelVideoExport,
@@ -11,6 +12,7 @@ import {
   retryVideoExport,
   useExportRunner,
 } from "@renderer/features/video-editor/export/export-runner";
+import { githubPlans, isQualityTier } from "@renderer/features/video-editor/export/export-presets";
 import {
   exportEtaSeconds,
   formatMB,
@@ -31,7 +33,6 @@ export function ExportStatusCards(): React.JSX.Element {
           status={runner.status}
           fraction={runner.fraction}
           error={runner.error}
-          shrinking={runner.shrinking === true}
           attemptStartedAt={runner.attemptStartedAt}
         />
       )}
@@ -45,7 +46,6 @@ export interface ExportProgressCardProps {
   status: "exporting" | "error";
   fraction: number;
   error: string | null;
-  shrinking: boolean;
   attemptStartedAt: number | null;
   /** Injected in tests; Date.now otherwise. */
   now?: () => number;
@@ -53,15 +53,13 @@ export interface ExportProgressCardProps {
 
 /**
  * The export running in the background: what it makes, how far along, about how long is
- * left, and the size it is heading for. Cancel stops it; nothing reaches the Library. The
- * "Making it smaller…" retry (a capped row that came out over its limit) shows here too.
+ * left, and the size it is heading for. Cancel stops it; nothing reaches the Library.
  */
 export function ExportProgressCard({
   job,
   status,
   fraction,
   error,
-  shrinking,
   attemptStartedAt,
   now = Date.now,
 }: ExportProgressCardProps): React.JSX.Element {
@@ -106,11 +104,8 @@ export function ExportProgressCard({
       : kind === "up-to"
         ? t("sizeUpTo", { size: formatMB(job.estimateBytes) })
         : t("sizeAbout", { size: formatMB(job.estimateBytes) });
-  const title = shrinking
-    ? t("makingSmaller")
-    : job.presetId === "maximum"
-      ? t("exportProgressTitleFull")
-      : t("exportProgressTitle");
+  const title =
+    job.presetId === "maximum" ? t("exportProgressTitleFull") : t("exportProgressTitle");
 
   return (
     <StatusCard label={title} title={title} subtitle={subtitle}>
@@ -132,9 +127,6 @@ export function ExportProgressCard({
           </span>
         )}
       </div>
-      {job.capBytes !== null && !shrinking && (
-        <p className={styles.note}>{t("exportProgressRetryNote")}</p>
-      )}
       <StatusCardActions>
         <span className={styles.spacer} />
         <StatusCardButton onClick={cancelVideoExport}>{t("cancel")}</StatusCardButton>
@@ -142,12 +134,6 @@ export function ExportProgressCard({
     </StatusCard>
   );
 }
-
-/** What to tell the user about where the copy can go, by row. */
-const DRAG_HINT = {
-  "small-10": "readyDragHintTool",
-  "small-25": "readyDragHintChat",
-} as const;
 
 /**
  * "Ready to share": the finished export with its real size against the original, a file
@@ -161,20 +147,13 @@ export function ExportReadyCard({ ready }: { ready: ReadyExport }): React.JSX.El
   const { job, recording } = ready;
   const size = recording.sizeBytes;
   const lighter = percentLighter(size, job.sourceSizeBytes);
-  const overCap = job.capBytes !== null && size > job.capBytes;
-  const summary = overCap
-    ? t("readyOverLimit", { size: formatMB(size), cap: formatMB(job.capBytes!) })
-    : lighter === null
-      ? null
-      : job.capBytes !== null
-        ? t("readyLighterUnderLimit", { percent: lighter, cap: formatMB(job.capBytes) })
-        : t("readyLighter", { percent: lighter });
+  // The quality tiers are the "share in a tool" files: say where on GitHub this one attaches,
+  // from its real size. It never blocks anything.
+  const tier = isQualityTier(job.presetId);
+  const fitsGithubFree = githubPlans(size).free;
   const extension = recording.filePath.match(/\.[a-z0-9]+$/i)?.[0] ?? ".mp4";
   const fileName = `${recording.title}${extension}`;
-  const hint =
-    job.presetId === "small-10" || job.presetId === "small-25"
-      ? t(DRAG_HINT[job.presetId])
-      : t("readyDragHint");
+  const hint = tier && fitsGithubFree ? t("readyDragHintTool") : t("readyDragHint");
   const title = t("readyTitle", { size: formatMB(size) });
 
   return (
@@ -186,7 +165,10 @@ export function ExportReadyCard({ ready }: { ready: ReadyExport }): React.JSX.El
       onDismiss={dismissReadyExport}
       dismissLabel={t("readyDone")}
     >
-      {summary && <StatusCardText warn={overCap}>{summary}</StatusCardText>}
+      {lighter !== null && (
+        <StatusCardText>{t("readyLighter", { percent: lighter })}</StatusCardText>
+      )}
+      {tier && <GithubFitChips bytes={size} />}
       {job.sourceSizeBytes !== null && job.sourceSizeBytes > 0 && (
         <SizeMeter originalBytes={job.sourceSizeBytes} resultBytes={size} label={formatMB(size)} />
       )}

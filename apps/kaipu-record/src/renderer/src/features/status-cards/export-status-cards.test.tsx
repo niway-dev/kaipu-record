@@ -10,12 +10,11 @@ import {
 import { ExportProgressCard, ExportReadyCard } from "./export-status-cards";
 
 const JOB: ExportJobInfo = {
-  presetId: "small-10",
+  presetId: "light",
   sourceTitle: "Demo",
   sourceAssetId: "asset-src",
   sourceSizeBytes: 119_000_000,
   estimateBytes: 9_200_000,
-  capBytes: 10_000_000,
   width: 1280,
   height: 720,
 };
@@ -24,7 +23,7 @@ const RECORDING: LocalRecording = {
   id: "new-rec",
   assetId: "asset-new",
   kind: "recording",
-  title: "Demo (10 MB)",
+  title: "Demo (light)",
   filePath: "/vault/new-rec.mp4",
   createdAt: 1,
   sizeBytes: 8_100_000,
@@ -54,7 +53,6 @@ describe("ExportProgressCard", () => {
     status: "exporting" as const,
     fraction: 0.64,
     error: null,
-    shrinking: false,
     attemptStartedAt: 0,
     now: () => 36_000,
   };
@@ -62,11 +60,10 @@ describe("ExportProgressCard", () => {
   it("shows what it makes, how far along, about how long is left, and where the size is heading", () => {
     render(<ExportProgressCard {...props} />);
     expect(screen.getByText("Making a lighter copy…")).toBeInTheDocument();
-    expect(screen.getByText("GitHub · Jira · Linear · 1280×720")).toBeInTheDocument();
+    expect(screen.getByText("Light · 1280×720")).toBeInTheDocument();
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "64");
     expect(screen.getByText("64% · about 25 s left")).toBeInTheDocument();
     expect(screen.getByText("119 MB → ~9.2 MB")).toBeInTheDocument();
-    expect(screen.getByText(/we shrink it once more/)).toBeInTheDocument();
   });
 
   it("shows only the percent until the rate is known", () => {
@@ -74,17 +71,11 @@ describe("ExportProgressCard", () => {
     expect(screen.getByText("1%")).toBeInTheDocument();
   });
 
-  it("says 'Making it smaller…' during the size-check retry", () => {
-    render(<ExportProgressCard {...props} shrinking />);
-    expect(screen.getByText("Making it smaller…")).toBeInTheDocument();
-    expect(screen.queryByText(/we shrink it once more/)).toBeNull();
-  });
-
   it("says 'up to' for a fixed canvas and nothing about sizes without the original's", () => {
     const { rerender } = render(
       <ExportProgressCard
         {...props}
-        job={{ ...JOB, presetId: "youtube", capBytes: null, estimateBytes: 61_000_000 }}
+        job={{ ...JOB, presetId: "youtube", estimateBytes: 61_000_000 }}
       />,
     );
     expect(screen.getByText("119 MB → up to ~61 MB")).toBeInTheDocument();
@@ -101,16 +92,17 @@ describe("ExportProgressCard", () => {
 });
 
 describe("ExportReadyCard", () => {
-  it("reports the real size against the original and the limit", () => {
+  it("reports the real size against the original, and that a tier's copy fits GitHub", () => {
     inRouter(<ExportReadyCard ready={{ job: JOB, recording: RECORDING }} />);
     expect(screen.getByText("Ready to share · 8.1 MB")).toBeInTheDocument();
-    expect(
-      screen.getByText("93% lighter than the original — under the 10 MB limit."),
-    ).toBeInTheDocument();
+    expect(screen.getByText("93% lighter than the original.")).toBeInTheDocument();
     expect(screen.getByText("Original 119 MB")).toBeInTheDocument();
+    // 8.1 MB: fits both plans.
+    expect(screen.getByText("GitHub Free · 10 MB")).toHaveAttribute("data-fits", "true");
+    expect(screen.getByText("GitHub Pro / Team / Enterprise · 100 MB")).toBeInTheDocument();
   });
 
-  it("leaves the limit out for an uncapped row, and warns when a capped one came out over", () => {
+  it("says nothing about GitHub for a POST row, and warns when a tier's copy is over 100 MB", () => {
     const { unmount } = render(
       <RouterProvider
         router={createMemoryRouter([
@@ -118,32 +110,37 @@ describe("ExportReadyCard", () => {
             path: "/",
             element: (
               <ExportReadyCard
-                ready={{
-                  job: { ...JOB, presetId: "balanced", capBytes: null },
-                  recording: RECORDING,
-                }}
+                ready={{ job: { ...JOB, presetId: "youtube" }, recording: RECORDING }}
               />
             ),
           },
         ])}
       />,
     );
-    expect(screen.getByText("93% lighter than the original.")).toBeInTheDocument();
+    expect(screen.queryByText(/GitHub/)).toBeNull();
     unmount();
     inRouter(
-      <ExportReadyCard ready={{ job: JOB, recording: { ...RECORDING, sizeBytes: 10_400_000 } }} />,
+      <ExportReadyCard
+        ready={{
+          job: { ...JOB, sourceSizeBytes: 900_000_000 },
+          recording: { ...RECORDING, sizeBytes: 140_000_000 },
+        }}
+      />,
     );
-    expect(screen.getByText(/a bit over the 10 MB limit/)).toBeInTheDocument();
+    expect(screen.getByText("Too big for GitHub — export a shorter part")).toHaveAttribute(
+      "data-warn",
+      "true",
+    );
   });
 
   it("drags the file out under the item's title, not its vault id", () => {
     const startFileDrag = vi.spyOn(window.electronAPI, "startFileDrag");
     inRouter(<ExportReadyCard ready={{ job: JOB, recording: RECORDING }} />);
-    const chip = screen.getByRole("button", { name: "Drag Demo (10 MB).mp4 out of Kaipu" });
+    const chip = screen.getByRole("button", { name: "Drag Demo (light).mp4 out of Kaipu" });
     expect(chip).toHaveAttribute("draggable", "true");
     expect(screen.getByText("Drag it into a GitHub or Jira comment")).toBeInTheDocument();
     fireEvent.dragStart(chip);
-    expect(startFileDrag).toHaveBeenCalledWith("new-rec", "Demo (10 MB)");
+    expect(startFileDrag).toHaveBeenCalledWith("new-rec", "Demo (light)");
     startFileDrag.mockRestore();
   });
 
