@@ -19,6 +19,10 @@ export type RoadmapStatus = (typeof ROADMAP_STATUSES)[number];
  */
 export const ROADMAP_ITEMS = [
   // Shipped — newest first, so the top of the group is the freshest news.
+  { id: "exportPresets", status: "shipped" },
+  { id: "captureTags", status: "shipped" },
+  { id: "screenshotPdf", status: "shipped" },
+  { id: "captureTitle", status: "shipped" },
   { id: "watermark", status: "shipped" },
   { id: "saveEveryScreenshot", status: "shipped" },
   { id: "videoZoom", status: "shipped" },
@@ -37,9 +41,7 @@ export const ROADMAP_ITEMS = [
   { id: "windowsBeta", status: "planned" },
   { id: "cloudUpload", status: "planned" },
   { id: "photoZoom", status: "planned" },
-  { id: "imageTags", status: "planned" },
   { id: "watermarkUpgrade", status: "planned" },
-  { id: "renameOnSave", status: "planned" },
   { id: "brandIdentity", status: "planned" },
 ] as const satisfies readonly { id: string; status: RoadmapStatus }[];
 
