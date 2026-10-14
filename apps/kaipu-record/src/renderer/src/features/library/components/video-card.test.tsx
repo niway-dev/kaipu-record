@@ -11,7 +11,7 @@ const video: LibraryVideo = {
   title: "My Recording",
   createdAt: Date.now() - 3_600_000,
   durationSeconds: 95,
-  fileSizeBytes: 32 * 1024 * 1024,
+  fileSizeBytes: 32_000_000,
   cloudSizeBytes: null,
   thumbnailUrl: null,
   availability: "local",

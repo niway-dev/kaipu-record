@@ -16,10 +16,15 @@
  * patches earlier headers) — hence `StreamTarget` (positional) is required instead of
  * `AppendOnlyStreamTarget`. Never `'in-memory'`: it buffers the whole file in the worker.
  *
- * Presets (NIW2-218, `msg.target`): Balanced, Maximum and Small file compose straight onto the
+ * Presets (NIW2-218, `msg.target`): Balanced, Light and Maximum compose straight onto the
  * output canvas (same aspect as the source). Fixed-canvas presets compose a source-size
  * VIEW first (frame → redactions → overlays → zoom crop, exactly as Maximum) and then
  * frame it onto the target canvas (Fit/Fill, see `createFramer`).
+ *
+ * Encoding (NIW2-218): AVC with a keyframe every 10 s (2 s for YouTube). The quality tiers
+ * use quantizer mode (constant quality) on the hardware encoder, at most 24 fps; everything
+ * else, and a platform without quantizer support, targets a bitrate. `pickVideoEncoding` probes
+ * the encoder first and the renderer logs a software fallback (video-encoding.ts).
  *
  * Audio API choice: the WebCodecs-backed `AudioSample`/`AudioSampleSink`/
  * `AudioSampleSource` path is used, NOT the Web-Audio `AudioBuffer` one. The DOM
@@ -66,7 +71,7 @@ import {
   Input,
   Mp4OutputFormat,
   Output,
-  QUALITY_HIGH,
+  Quality,
   StreamTarget,
 } from "mediabunny";
 import type { StreamTargetChunk } from "mediabunny";
@@ -79,7 +84,10 @@ import {
   packetCountsFor,
   slideFrameCount,
   type AudioEncoding,
+  type ResolvedExportTarget,
 } from "./export-presets";
+import { cappedSlideFps, createFrameRateCap } from "./frame-rate-cap";
+import { chooseVideoEncoding, type VideoEncodingChoice } from "./video-encoding";
 
 // ---------------------------------------------------------------------------
 // Typing helper: TypeScript doesn't expose `Worker` on `self` in module workers.
@@ -121,7 +129,7 @@ async function runExport(msg: ExportStartMessage): Promise<void> {
 async function runExportWithInput(msg: ExportStartMessage, input: Input): Promise<void> {
   const { plan, output: size, target: preset } = msg;
   // Fixed-canvas presets compose at SOURCE size into a view canvas, then frame it onto the
-  // output. Identity framing (Balanced, Maximum, Small file) composes straight onto the output.
+  // output. Identity framing (Balanced, Light, Maximum) composes straight onto the output.
   const framed = preset.framing !== "identity";
   const composeSize = framed ? msg.source : size;
 
@@ -161,27 +169,24 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
     ? createFramer({ ctx, width: size.width, height: size.height, padding: preset.padding })
     : null;
 
-  const videoBitrate = preset.videoBitrate === "high" ? QUALITY_HIGH : preset.videoBitrate;
-  // Portrait 1080×1920 needs H.264 level ≥ 4.0; some hardware encoders refuse it. Fall back
-  // to letting the platform pick (software if need be) rather than failing the export.
-  const hardwareOk = await canEncodeVideo("avc", {
-    width: size.width,
-    height: size.height,
-    bitrate: videoBitrate,
-    hardwareAcceleration: "prefer-hardware",
-  }).catch(() => false);
+  // Hardware AVC in quantizer mode for the tiers, else at the bitrate, else whatever the
+  // platform offers (see video-encoding.ts). Portrait 1080×1920 needs H.264 level ≥ 4.0, which
+  // some hardware encoders refuse: that also lands on the platform's pick rather than failing.
+  const encoding = await pickVideoEncoding(preset, size);
+  post({ type: "encoder", choice: encoding });
   const videoSource = new CanvasSource(canvas, {
     codec: "avc",
-    bitrate: videoBitrate,
-    hardwareAcceleration: hardwareOk ? "prefer-hardware" : "no-preference",
+    quality: videoQuality(encoding),
+    keyFrameInterval: encoding.keyFrameInterval,
+    hardwareAcceleration: encoding.hardwareAcceleration,
   });
   // Omit frameRate from VideoTrackMetadata so mediabunny does NOT snap all
   // timestamps to a track-wide grid. Timing is driven entirely by the explicit
   // timestamp+duration pairs passed to videoSource.add(...): clip frames keep
-  // the source's native cadence (wrapped.duration from CanvasSink), and slide
-  // frames are synthesized at plan.slideFps. A track-wide frameRate hint would
-  // collapse high-fps clip frame pairs onto a coarser grid, producing
-  // zero-duration or duplicate frames in the encoder.
+  // the source's own timestamps (thinned by the preset's fps cap, frame-rate-cap.ts),
+  // and slide frames are synthesized at plan.slideFps (or the cap, if lower). A
+  // track-wide frameRate hint would collapse high-fps clip frame pairs onto a
+  // coarser grid, producing zero-duration or duplicate frames in the encoder.
   //
   // A whole-video mute produces a file with NO audio track, not a silent one:
   // smaller, and no dead volume control in the player. This is the same branch a
@@ -193,7 +198,7 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
   const silenceSampleRate = audioTrack ? (await audioTrack.getSampleRate()) || 48000 : 48000;
   const sourceChannels = audioTrack ? (await audioTrack.getNumberOfChannels()) || 2 : 2;
   // An explicit AAC config (every preset but Maximum) is checked against the encoder first:
-  // Small file asks for mono 64 kbps, which Chromium's AAC encoder on macOS refuses.
+  // Light asks for mono 64 kbps, which Chromium's AAC encoder on macOS refuses.
   const audioEncoding =
     preset.audioBitrate === "high" || !audioTrack || audioMuted
       ? null
@@ -202,10 +207,12 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
     audioTrack && !audioMuted
       ? new AudioSampleSource({
           codec: "aac",
-          bitrate: audioEncoding?.bitrate ?? QUALITY_HIGH,
+          quality: audioEncoding
+            ? new Quality({ bitrate: audioEncoding.bitrate })
+            : new Quality("high"),
         })
       : null;
-  // Downmix (Small file) only when the encoder took the mono config; silence matches it.
+  // Downmix (Light) only when the encoder took the mono config; silence matches it.
   const downmix = audioEncoding?.numberOfChannels === 1 && sourceChannels !== 1;
   const silenceChannelCount = audioEncoding?.numberOfChannels ?? sourceChannels;
 
@@ -276,9 +283,10 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
     // detect and drop a straddling frame that would regress across a cut boundary.
     // ---------------------------------------------------------------------------
     let prevOutTs: number | null = null;
-    // fps cap (Small file below 1080p): the earliest output time the next kept frame may have.
+    // fps cap (the quality tiers, 24 fps): one frame per 1/maxFps slot, see frame-rate-cap.ts.
+    const cap = createFrameRateCap(preset.maxFps);
     const minFrameGap = preset.maxFps ? 1 / preset.maxFps : 0;
-    let nextSlot: number | null = null;
+    const slideFps = cappedSlideFps(plan.slideFps, preset.maxFps);
     for (const segment of plan.segments) {
       if (segment.kind === "clip") {
         const sink = new CanvasSink(videoTrack, {
@@ -299,31 +307,33 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
             prevOutTs,
           );
           if (outTs === null) continue; // straddle/duplicate frame — skip, don't advance prevOutTs
-          // fps cap: drop frames before the next slot. The kept frame's sample lasts until
+          // fps cap: drop a frame whose slot is taken. The kept frame's sample lasts until
           // the next kept one (the muxer derives durations from timestamp deltas), so
           // timestamps stay monotonic and the timeline length is unchanged.
-          if (nextSlot !== null && outTs < nextSlot - 1e-6) continue;
-          if (minFrameGap > 0) nextSlot = outTs + minFrameGap;
+          if (!cap.keep(outTs)) continue;
           compose.clip(wrapped.canvas, wrapped.timestamp, wrapped.duration, outTs);
           if (framer && view) framer.frame(view, preset.framing === "fill" ? "fill" : "fit");
           await sendPosterOnce();
-          // Use the frame's own decoded duration so clip frames preserve the
-          // source's native cadence without rounding to a fixed grid.
+          // The frame's own decoded duration (at least one cap slot); the muxer
+          // stretches it to the next kept frame anyway.
           await videoSource.add(outTs, Math.max(wrapped.duration, minFrameGap));
           reportProgress(outTs);
           prevOutTs = outTs;
         }
       } else {
-        // Slide segment: synthesize fixed-cadence frames at plan.slideFps. These are
+        // Slide segment: synthesize fixed-cadence frames at slideFps. These are
         // already monotonic by construction (fixed cadence from segment.timelineStart),
         // so they don't need rebaseVideoTimestamp's clamp/skip — just keep prevOutTs
         // current so a following clip segment's boundary check has the right value.
+        // They go through the cap too: the first one may share a slot with the clip
+        // frame before it.
         const bitmap = slideBitmaps.get(segment.assetId);
-        const frameDuration = 1 / plan.slideFps;
-        const frameCount = Math.round(segment.duration * plan.slideFps);
+        const frameDuration = 1 / slideFps;
+        const frameCount = Math.round(segment.duration * slideFps);
 
         for (let i = 0; i < frameCount; i++) {
           const outTs = segment.timelineStart + i * frameDuration;
+          if (!cap.keep(outTs)) continue;
           compose.slide(bitmap, outTs);
           // Slides are always contained ("fit"), never cropped, whatever the clip framing.
           if (framer && view) framer.frame(view, "fit");
@@ -446,16 +456,66 @@ function zeroedLike(sample: AudioSample): AudioSample {
 }
 
 /**
- * Small file (NIW2-218): average every channel into one. A mono source passes through
+ * Light (NIW2-218): average every channel into one. A mono source passes through
  * unchanged; the caller closes a new sample when one is returned.
  */
+/**
+ * Probes the hardware AVC encoder for the preset's rate control and picks per
+ * video-encoding.ts. The quantizer probe passes a quantizer-only Quality: with a bitrate
+ * fallback in it, `canEncodeVideo` would say yes whenever the bitrate alone works.
+ */
+async function pickVideoEncoding(
+  preset: ResolvedExportTarget,
+  size: { width: number; height: number },
+): Promise<VideoEncodingChoice> {
+  const probe = (quality: Quality): Promise<boolean> =>
+    canEncodeVideo("avc", {
+      width: size.width,
+      height: size.height,
+      quality,
+      hardwareAcceleration: "prefer-hardware",
+      frameRate: preset.maxFps ?? undefined,
+    }).catch(() => false);
+  const hardwareQuantizer =
+    preset.quantizer !== null && (await probe(new Quality({ quantizer: preset.quantizer })));
+  const hardwareBitrate = hardwareQuantizer || (await probe(bitrateQuality(preset.videoBitrate)));
+  return chooseVideoEncoding(preset, { hardwareQuantizer, hardwareBitrate });
+}
+
+/**
+ * The bitrate as a mediabunny Quality. Maximum's "high" stays bitrate-driven
+ * (`preferBitrate`): since mediabunny 1.52 a bare quality level would switch to quantizer mode,
+ * and Maximum is meant to be the pre-preset export.
+ */
+function bitrateQuality(bitrate: number | "high"): Quality {
+  return bitrate === "high"
+    ? new Quality({ quality: "high", preferBitrate: true })
+    : new Quality({ bitrate });
+}
+
+/** Quantizer with the bitrate as mediabunny's fallback, or the bitrate alone. */
+function videoQuality(choice: VideoEncodingChoice): Quality {
+  if (
+    choice.rateControl === "quantizer" &&
+    choice.quantizer !== null &&
+    choice.bitrate !== "high"
+  ) {
+    return new Quality({ quantizer: choice.quantizer, bitrate: choice.bitrate });
+  }
+  return bitrateQuality(choice.bitrate);
+}
+
 /** The first AAC config the platform encoder accepts; the last one when none says yes. */
 async function pickAudioEncoding(
   candidates: AudioEncoding[],
   sampleRate: number,
 ): Promise<AudioEncoding> {
   for (const candidate of candidates) {
-    const ok = await canEncodeAudio("aac", { ...candidate, sampleRate }).catch(() => false);
+    const ok = await canEncodeAudio("aac", {
+      numberOfChannels: candidate.numberOfChannels,
+      sampleRate,
+      quality: new Quality({ bitrate: candidate.bitrate }),
+    }).catch(() => false);
     if (ok) return candidate;
   }
   return candidates[candidates.length - 1]!;

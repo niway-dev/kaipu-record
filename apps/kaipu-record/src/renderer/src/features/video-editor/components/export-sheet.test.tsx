@@ -21,7 +21,7 @@ function renderSheet(overrides: Partial<Parameters<typeof ExportSheet>[0]> = {})
   return props;
 }
 
-/** The footer's primary action: "Export ~24 MB ↵", "Export", "Open ↵"… */
+/** The footer's primary action: "Export ~7.2 MB ↵", "Export", "Open ↵"… */
 const exportButton = (): HTMLElement => screen.getByRole("button", { name: /^Export( |$)/ });
 
 describe("ExportSheet", () => {
@@ -82,7 +82,7 @@ describe("ExportSheet", () => {
   });
 
   it("shows the estimate and warns above 10 MB", () => {
-    renderSheet({ estimate: { status: "ready", bytes: 12 * 1024 * 1024, frameCount: 180 } });
+    renderSheet({ estimate: { status: "ready", bytes: 12_000_000, frameCount: 180 } });
     fireEvent.click(screen.getByRole("radio", { name: "GIF" }));
     expect(screen.getByText(/≈ 12/)).toBeInTheDocument();
     expect(screen.getByText(/GitHub won't accept it/)).toBeInTheDocument();
@@ -110,8 +110,7 @@ describe("presets (NIW2-218 export redesign)", () => {
       "Recommended",
       "Balanced",
       "Share in a tool",
-      "GitHub · Jira · Linear",
-      "Slack · Discord",
+      "Light",
       "Post",
       "YouTube",
       "Reels · TikTok · Shorts",
@@ -121,7 +120,7 @@ describe("presets (NIW2-218 export redesign)", () => {
     ].map((label) => text.indexOf(label));
     expect(order.every((index) => index >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
-    expect(within(list).getAllByRole("radio")).toHaveLength(7);
+    expect(within(list).getAllByRole("radio")).toHaveLength(6);
   });
 
   it("gives each row where it works, its size in MB and its output dimensions", () => {
@@ -133,30 +132,30 @@ describe("presets (NIW2-218 export redesign)", () => {
     expect(sizeOf(/^YouTube/)).toContain("1920×1080");
     expect(sizeOf(/^Reels/)).toContain("1080×1920");
     expect(sizeOf(/^Feeds/)).toContain("1080×1080");
-    expect(row(/^GitHub/).textContent).toContain("Attach to an issue or a PR");
+    expect(row(/^Light/).textContent).toContain("GitHub · Jira · Linear · Slack");
     expect(sizeOf(/^Maximum quality/)).toContain("1662×1080");
     expect(sizeOf(/^Maximum quality/)).toContain("Full size");
   });
 
   it("estimates every row from pure math, 'up to' only for the fixed canvases", () => {
     renderSheet({ timelineDuration: 60 });
-    // (3 Mbps + 128 kbps) × 60 s / 8 ≈ 23 MB, plus the moov reservation.
-    expect(sizeOf(/^Balanced/)).toMatch(/^~24 MB/);
+    // 6 MB/min of q30 video + 128 kbps × 60 s / 8 ≈ 7 MB, plus the moov reservation.
+    expect(sizeOf(/^Balanced/)).toMatch(/^~7\.2 MB/);
     // (8 Mbps + 128 kbps) × 60 s / 8 ≈ 61 MB.
     expect(sizeOf(/^YouTube/)).toMatch(/^up to ~61 MB/);
-    // The cap's budget: 10 MB × 0.92.
-    expect(sizeOf(/^GitHub/)).toMatch(/^~9\.2 MB/);
-    expect(sizeOf(/^GitHub/)).toContain("1280×720");
+    // 4.7 MB/min of q33 video + the same audio ≈ 5.7 MB, plus the moov reservation.
+    expect(sizeOf(/^Light/)).toMatch(/^~5\.9 MB/);
+    expect(sizeOf(/^Light/)).toContain("1920×1080");
   });
 
   it("shows the before/after meter for the selected row against the original's size", () => {
     renderSheet({ timelineDuration: 60, sourceSizeBytes: 119_000_000 });
     expect(screen.getByText("Original 119 MB")).toBeInTheDocument();
-    expect(screen.getByText("~24 MB", { selector: "strong" })).toBeInTheDocument();
-    expect(screen.getByText(/80% lighter/)).toBeInTheDocument();
+    expect(screen.getByText("~7.2 MB", { selector: "strong" })).toBeInTheDocument();
+    expect(screen.getByText(/94% lighter/)).toBeInTheDocument();
 
-    fireEvent.click(row(/^GitHub/));
-    expect(screen.getByText(/92% lighter/)).toBeInTheDocument();
+    fireEvent.click(row(/^Light/));
+    expect(screen.getByText(/95% lighter/)).toBeInTheDocument();
     fireEvent.click(row(/^YouTube/));
     expect(screen.getByText("Up to ~61 MB")).toBeInTheDocument();
     fireEvent.click(row(/^Maximum quality/));
@@ -170,7 +169,7 @@ describe("presets (NIW2-218 export redesign)", () => {
 
   it("puts the size on the primary button and Enter exports the selected row", () => {
     const props = renderSheet({ timelineDuration: 60 });
-    expect(exportButton().textContent).toBe("Export ~24 MB↵");
+    expect(exportButton().textContent).toBe("Export ~7.2 MB↵");
     fireEvent.keyDown(screen.getByRole("alertdialog"), { key: "Enter" });
     expect(props.onExportVideo).toHaveBeenCalledWith({ presetId: "balanced", framing: null });
 
@@ -191,13 +190,13 @@ describe("presets (NIW2-218 export redesign)", () => {
 
   it("opens the selected row with its explanation and facts", () => {
     renderSheet({ presetSource: { width: 1662, height: 1080, fps: 30, hasAudio: true } });
-    expect(screen.getByText(/at a fraction of the weight/)).toBeInTheDocument();
+    expect(screen.getByText(/Crisp text that stays light/)).toBeInTheDocument();
     expect(screen.getByText("Text stays readable")).toBeInTheDocument();
 
-    fireEvent.click(row(/^GitHub/));
-    expect(screen.queryByText(/at a fraction of the weight/)).toBeNull();
-    expect(screen.getByText("Under the 10 MB limit")).toBeInTheDocument();
-    expect(screen.getByText("Uploads in seconds")).toBeInTheDocument();
+    fireEvent.click(row(/^Light/));
+    expect(screen.queryByText(/Crisp text that stays light/)).toBeNull();
+    expect(screen.getByText("Readable text, smallest file.")).toBeInTheDocument();
+    expect(screen.getByText("Smallest file")).toBeInTheDocument();
 
     // Not 16:9 → YouTube adds bars, and says so.
     fireEvent.click(row(/^YouTube/));
@@ -241,14 +240,39 @@ describe("presets (NIW2-218 export redesign)", () => {
     expect(props.onExportVideo).toHaveBeenCalledWith({ presetId: "square", framing: "fill" });
   });
 
-  it("warns under the selected capped row when the cap can't be met, and still allows exporting", () => {
-    const props = renderSheet({ timelineDuration: 900 });
-    expect(screen.queryByRole("alert")).toBeNull();
-    fireEvent.click(row(/^GitHub/));
-    expect(screen.getByRole("alert").textContent).toMatch(/Fits up to ~\d+:\d\d/);
-    expect(screen.queryByText(/^Under the/)).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Export anyway (over limit)" }));
-    expect(props.onExportVideo).toHaveBeenCalledWith({ presetId: "small-10", framing: null });
+  it("shows both GitHub plans for a tier, from its estimate", () => {
+    // One minute of Light (~5.9 MB) fits both.
+    renderSheet({ timelineDuration: 60, defaultPreset: "light" });
+    expect(screen.getByText("GitHub Free · 10 MB")).toHaveAttribute("data-fits", "true");
+    expect(screen.getByText("GitHub Pro / Team / Enterprise · 100 MB")).toHaveAttribute(
+      "data-fits",
+      "true",
+    );
+  });
+
+  it("over 10 MB: GitHub Free is muted as 'over', the paid plans still fit", () => {
+    // Two minutes of Balanced (~14 MB).
+    renderSheet({ timelineDuration: 120 });
+    const free = screen.getByText("GitHub Free · over 10 MB");
+    expect(free).toHaveAttribute("data-fits", "false");
+    expect(free).not.toHaveAttribute("data-warn", "true");
+    expect(screen.getByText("GitHub Pro / Team / Enterprise · 100 MB")).toBeInTheDocument();
+  });
+
+  it("no GitHub chips on the POST or KEEP rows", () => {
+    renderSheet({ defaultPreset: "youtube" });
+    expect(screen.queryByText(/GitHub Free/)).toBeNull();
+  });
+
+  it("over GitHub's 100 MB: warns in amber but never blocks or lowers the quality", () => {
+    // 20 minutes of Light ≈ 117 MB.
+    const props = renderSheet({ timelineDuration: 1200, defaultPreset: "light" });
+    expect(screen.getByText("GitHub Free · over 10 MB")).toBeInTheDocument();
+    const paid = screen.getByText("Too big for GitHub — export a shorter part");
+    expect(paid).toHaveAttribute("data-warn", "true");
+    expect(sizeOf(/^Light/)).toContain("1920×1080");
+    fireEvent.click(exportButton());
+    expect(props.onExportVideo).toHaveBeenCalledWith({ presetId: "light", framing: null });
   });
 
   it("subtitles the sheet with the title, duration and resolution", () => {

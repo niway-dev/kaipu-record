@@ -7,11 +7,10 @@
  */
 export const EXPORT_PRESET_IDS = [
   "balanced",
+  "light",
   "youtube",
   "vertical",
   "square",
-  "small-10",
-  "small-25",
   "maximum",
 ] as const;
 export type ExportPresetId = (typeof EXPORT_PRESET_IDS)[number];
@@ -22,9 +21,11 @@ export function isExportPresetId(value: unknown): value is ExportPresetId {
 
 /**
  * Ids older sidecars may still carry. "original" was the native-size `QUALITY_HIGH` export
- * before Balanced became the default; it is today's "maximum".
+ * before Balanced became the default; it is today's "maximum". "small-10" / "small-25" were
+ * the size-capped rows the quality tiers replaced; they read as "light", the tier that took
+ * their place. ("Already exported" still never reuses them: see `ENCODE_REVISION`.)
  */
-export type LegacyExportPresetId = "original";
+export type LegacyExportPresetId = "original" | "small-10" | "small-25";
 
 /** What a sidecar's `exportPreset` may hold: a current id, or a legacy one. */
 export type StoredExportPresetId = ExportPresetId | LegacyExportPresetId;
@@ -32,6 +33,7 @@ export type StoredExportPresetId = ExportPresetId | LegacyExportPresetId;
 /** A sidecar's `exportPreset` as a current id; null when absent or unknown. */
 export function normalizeExportPresetId(value: unknown): ExportPresetId | null {
   if (value === "original") return "maximum";
+  if (value === "small-10" || value === "small-25") return "light";
   return isExportPresetId(value) ? value : null;
 }
 

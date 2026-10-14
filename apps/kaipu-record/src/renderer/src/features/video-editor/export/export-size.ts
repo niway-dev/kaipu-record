@@ -3,17 +3,23 @@
  * original, never in bitrates. Every number comes from `resolveExportTarget`; these helpers
  * only decide how to say it.
  */
-import { type ExportPresetId, PRESETS } from "./export-presets";
+import { type ExportPresetId, MB, PRESETS } from "./export-presets";
 
-/** GitHub · Jira · Linear accept up to this; above it a recording needs a lighter copy to attach. */
-export const SHARE_LIMIT_BYTES = PRESETS["small-10"].capBytes!;
+/**
+ * Above this, right after recording, the "Recording saved" card offers a light copy (owner
+ * decision: a file over 10 MB is worth slimming before sending, whatever GitHub's limit).
+ */
+export const SHARE_LIMIT_BYTES = 10 * MB;
 
-/** Above the chat cap a file is heavy to send anywhere: amber size, "heavy to send" banner. */
-export const HEAVY_TO_SEND_BYTES = PRESETS["small-25"].capBytes!;
+/**
+ * Above this a file is heavy to send anywhere — chat apps included: amber size and the
+ * "heavy to send" banner on its page.
+ */
+export const HEAVY_TO_SEND_BYTES = 25 * MB;
 
-/** Decimal megabytes, as the caps are counted (GitHub/Discord). */
+/** Decimal megabytes, as GitHub counts them and Finder shows them. */
 export function formatMB(bytes: number): string {
-  const mb = bytes / 1_000_000;
+  const mb = bytes / MB;
   return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`;
 }
 
@@ -23,10 +29,11 @@ export function isHeavyToSend(bytes: number): boolean {
 
 /**
  * How sure the estimate is:
- * - "about": a capped row (the encoder aims at the cap) or Balanced;
+ * - "about": a quality tier (Balanced, Light): constant quality, so the size follows the
+ *   content; the estimate is a measured per-minute rate, set on the high side;
  * - "up-to": a fixed canvas (YouTube, Vertical, Square), whose bitrate is a ceiling that
  *   screen content rarely reaches;
- * - "full": Maximum quality, which has no estimate (QUALITY_HIGH).
+ * - "full": Maximum quality, which has no estimate.
  */
 export type SizeKind = "about" | "up-to" | "full";
 

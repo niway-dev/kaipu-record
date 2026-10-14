@@ -6,15 +6,12 @@ describe("ExportQualitySettings", () => {
   it("checks the current quality and shows its caption", () => {
     render(<ExportQualitySettings quality="balanced" onChange={vi.fn()} />);
 
-    expect(screen.getByRole("radio", { name: /Balanced 1080p/ })).toHaveAttribute(
-      "aria-checked",
-      "true",
-    );
+    expect(screen.getByRole("radio", { name: /Balanced/ })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("radio", { name: /Maximum quality/ })).toHaveAttribute(
       "aria-checked",
       "false",
     );
-    expect(screen.getByText(/about half the size/)).toBeInTheDocument();
+    expect(screen.getByText(/about 7 MB a minute/)).toBeInTheDocument();
   });
 
   it("writes the picked quality", () => {

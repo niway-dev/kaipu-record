@@ -507,7 +507,7 @@ describe("LibraryDetailPage — heavy to send (NIW2-218)", () => {
     probe.mockClear();
   });
 
-  it("over 25 MB: amber size, and a banner with the GitHub estimate that opens the sheet on that row", async () => {
+  it("over 25 MB: amber size, and a banner with the Light estimate that opens the sheet on that row", async () => {
     window.electronAPI.listLibraryItems = vi.fn(async () => ({
       items: [withSize(119_000_000)],
       vaultError: null,
@@ -516,14 +516,16 @@ describe("LibraryDetailPage — heavy to send (NIW2-218)", () => {
     renderDetail("asset-b");
     await waitForLoaded();
 
-    expect(screen.getByText("113 MB")).toHaveAttribute("data-heavy", "true");
+    expect(screen.getByText("119 MB")).toHaveAttribute("data-heavy", "true");
     expect(screen.getByText("119 MB is heavy to send.")).toBeInTheDocument();
-    // The estimate is the GitHub row's: the cap's 92 % budget.
-    expect(await screen.findByText(/about 9\.2 MB for GitHub or Jira/)).toBeInTheDocument();
+    // The Light row's estimate for 78 s, which fits GitHub's 100 MB.
+    expect(
+      await screen.findByText(/about 7.6 MB, small enough for GitHub or Jira/),
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Make a light copy →" }));
     expect(await screen.findByRole("heading", { name: "Share a copy" })).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /^GitHub/ })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("radio", { name: /^Light/ })).toHaveAttribute("aria-checked", "true");
   });
 
   it("up to 25 MB: no banner, no amber, and the file isn't read until Share", async () => {
@@ -536,7 +538,7 @@ describe("LibraryDetailPage — heavy to send (NIW2-218)", () => {
     await waitForLoaded();
 
     expect(screen.queryByText(/heavy to send/)).toBeNull();
-    expect(screen.getByText("19 MB")).toHaveAttribute("data-heavy", "false");
+    expect(screen.getByText("20 MB")).toHaveAttribute("data-heavy", "false");
     expect(probe).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Share" }));
@@ -578,14 +580,14 @@ describe("LibraryDetailPage — Recording saved card (NIW2-218)", () => {
     }));
   });
 
-  it("right after recording a file over 10 MB, offers a light copy that opens Share on GitHub", async () => {
+  it("right after recording a file over 10 MB, offers a light copy that opens Share on Light", async () => {
     window.electronAPI.getSettings = vi.fn().mockResolvedValue(DEFAULT_SETTINGS);
     renderFresh(true);
     const card = await screen.findByRole("region", { name: "Recording saved" });
-    expect(await screen.findByText("~9.2 MB for GitHub")).toBeInTheDocument();
+    expect(await screen.findByText("~7.6 MB · fits GitHub")).toBeInTheDocument();
     fireEvent.click(within(card).getByRole("button", { name: "Share a light copy" }));
     expect(await screen.findByRole("heading", { name: "Share a copy" })).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /^GitHub/ })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("radio", { name: /^Light/ })).toHaveAttribute("aria-checked", "true");
     expect(screen.queryByRole("region", { name: "Recording saved" })).toBeNull();
   });
 

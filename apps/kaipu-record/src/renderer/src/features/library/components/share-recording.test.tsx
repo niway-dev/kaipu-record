@@ -127,7 +127,7 @@ describe("ShareRecording", () => {
       assetId: "asset-2",
       title: "Demo (for sharing)",
       derivedFromAssetId: "asset-1",
-      export: { preset: "balanced", fingerprint: "whole" },
+      export: { preset: "balanced", fingerprint: "whole#q30-24fps-kfi10" },
     };
     const props = renderShare({ exports: [existing] });
     fireEvent.click(screen.getByRole("button", { name: "Share" }));

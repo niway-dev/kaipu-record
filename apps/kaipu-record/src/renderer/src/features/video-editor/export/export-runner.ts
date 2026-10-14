@@ -12,19 +12,18 @@ import { rasterizeOverlays } from "./overlay-raster";
 import {
   type ExportFraming,
   type ExportPresetId,
+  encodeFingerprint,
   type ResolvedExportTarget,
   resolveExportTarget,
-  shrinkSmallFileTarget,
   slideFrameCount,
 } from "./export-presets";
 import { WHOLE_RECORDING_FINGERPRINT } from "./export-reuse";
+import type { VideoEncodingChoice } from "./video-encoding";
 
 export interface VideoExportState {
   status: "idle" | "exporting" | "error";
   fraction: number;
   error: string | null;
-  /** NIW2-218 FR8: re-encoding a Small file that came out over its cap ("Making it smaller…"). */
-  shrinking?: boolean;
 }
 
 export interface StartExportArgs {
@@ -70,9 +69,7 @@ export interface ExportJobInfo {
   sourceSizeBytes: number | null;
   /** The size estimate for this export (`resolveExportTarget`); null for Maximum. */
   estimateBytes: number | null;
-  /** GitHub / chat cap, for "under the 10 MB limit"; null for the uncapped rows. */
-  capBytes: number | null;
-  /** Output size of the first attempt. */
+  /** Output size. */
   width: number;
   height: number;
 }
@@ -109,10 +106,8 @@ export function exportTitle(
       return t("presetTitleVertical", { title });
     case "square":
       return t("presetTitleSquare", { title });
-    case "small-10":
-      return t("presetTitleSmall", { title, mb: 10 });
-    case "small-25":
-      return t("presetTitleSmall", { title, mb: 25 });
+    case "light":
+      return t("presetTitleLight", { title });
     default:
       return fingerprint === WHOLE_RECORDING_FINGERPRINT
         ? t("presetTitleShare", { title })
@@ -203,6 +198,29 @@ export function cancelVideoExport(): void {
   set({ ...IDLE, ready: snapshot.ready });
 }
 
+/**
+ * Logs an export that did not get the encoder it was tuned for — not an error for the user
+ * (the file is still made), but something to learn about: no hardware H.264 means Chromium's
+ * software encoder (blurry small text), and a tier without quantizer mode means its "~"
+ * estimate was not measured for this encode.
+ */
+function reportEncoderChoice(choice: VideoEncodingChoice, target: ResolvedExportTarget): void {
+  if (!choice.softwareFallback && !choice.quantizerUnsupported) return;
+  const message = choice.softwareFallback
+    ? "export: no hardware H.264 encoder, the platform picked one (likely software)"
+    : "export: hardware H.264 without quantizer mode, encoding at the fallback bitrate";
+  captureException(new Error(message), {
+    context: choice.softwareFallback
+      ? "video-export-software-encoder"
+      : "video-export-no-quantizer",
+    presetId: target.presetId,
+    width: target.width,
+    height: target.height,
+    rateControl: choice.rateControl,
+    bitrate: choice.bitrate,
+  });
+}
+
 /** Re-runs the last export (the error card's Retry, FR12). */
 export function retryVideoExport(): void {
   if (!lastStart || active) return;
@@ -264,7 +282,6 @@ export async function startVideoExport(
     sourceAssetId: args.derivedFromAssetId,
     sourceSizeBytes: args.sourceSizeBytes ?? null,
     estimateBytes: presetId === "maximum" ? null : target.estimateBytes,
-    capBytes: target.capBytes,
     width: target.width,
     height: target.height,
   };
@@ -275,7 +292,6 @@ export async function startVideoExport(
     status: "exporting",
     fraction: 0,
     error: null,
-    shrinking: false,
     job,
     attemptStartedAt: Date.now(),
     ready: null,
@@ -287,7 +303,7 @@ export async function startVideoExport(
     sessionId = null;
     active = false;
     teardown(id);
-    set({ status: "error", fraction: 0, error: message, shrinking: false, attemptStartedAt: null });
+    set({ status: "error", fraction: 0, error: message, attemptStartedAt: null });
   };
 
   // The editor's slide store is disposed when the editor unmounts, and the export may
@@ -308,8 +324,7 @@ export async function startVideoExport(
 
   // One worker run into one fresh writer session. Bitmaps and camera arrays are
   // TRANSFERRED to the worker, so a retry rebuilds them instead of reusing detached ones.
-  // `shrunk`: this run is already the FR8 size-check retry (there is only one).
-  const launch = async (runTarget: ResolvedExportTarget, shrunk = false): Promise<void> => {
+  const launch = async (runTarget: ResolvedExportTarget): Promise<void> => {
     // The poster comes from the worker's first RENDERED frame ("poster" message), never
     // from the source file: the source still holds deleted footage and redacted content.
     // No poster (encode failed) → null, and the vault's self-healing metadata decodes
@@ -361,6 +376,8 @@ export async function startVideoExport(
         window.electronAPI.recordingWrite(id, msg.data, msg.position);
       } else if (msg.type === "poster") {
         poster = msg.data;
+      } else if (msg.type === "encoder") {
+        reportEncoderChoice(msg.choice, runTarget);
       } else if (msg.type === "progress") {
         if (snapshot.status === "exporting") set({ fraction: msg.fraction });
       } else if (msg.type === "error") {
@@ -372,7 +389,7 @@ export async function startVideoExport(
           teardown(id);
           sessionId = null;
           if (snapshot.status === "exporting") set({ fraction: 0, attemptStartedAt: Date.now() });
-          void launch({ ...runTarget, fastStart: false }, shrunk).catch((error: unknown) => {
+          void launch({ ...runTarget, fastStart: false }).catch((error: unknown) => {
             if (active) fail(GENERIC_ERROR, error);
           });
           return;
@@ -387,24 +404,6 @@ export async function startVideoExport(
           await Promise.resolve();
           if (!active) return;
           try {
-            // FR8 (Small file): over the cap → abort this attempt (it never reaches the
-            // vault) and re-encode once, smaller. A second overshoot is kept; the Ready
-            // card says so with the real size.
-            if (runTarget.capBytes !== null && !shrunk) {
-              const size = await window.electronAPI.recordingStat(id);
-              if (!active) return;
-              if (size > runTarget.capBytes) {
-                teardown(id);
-                sessionId = null;
-                set({ fraction: 0, shrinking: true, attemptStartedAt: Date.now() });
-                const smaller = shrinkSmallFileTarget(runTarget, size, {
-                  width: args.videoWidth,
-                  height: args.videoHeight,
-                });
-                await launch(smaller, true);
-                return;
-              }
-            }
             const recording = await window.electronAPI.recordingFinalize(id, {
               title: exportTitle(t, presetId, args.title, args.fingerprint),
               durationSeconds: plan.totalDuration,
@@ -412,7 +411,11 @@ export async function startVideoExport(
               thumbnail,
               derivedFromAssetId: args.derivedFromAssetId,
               exportPreset: presetId,
-              ...(args.fingerprint ? { exportFingerprint: args.fingerprint } : {}),
+              // The content plus the preset's encode revision, so "already exported" never
+              // reuses a file a different encode produced (see ENCODE_REVISION).
+              ...(args.fingerprint
+                ? { exportFingerprint: encodeFingerprint(args.fingerprint, presetId) }
+                : {}),
             });
             // Re-check again: cancel() could have run during the finalize await too.
             if (!active) return;
