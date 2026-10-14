@@ -2,7 +2,8 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { LibraryItem } from "@shared/types/library-item";
-import { EditorHomePage, RECENT_EDITABLE_COUNT } from "./editor-home-page";
+import { EditorHomePage } from "./editor-home-page";
+import { RECENT_PAGE_SIZE } from "./recent-editable";
 import { EditorImagePage, EditorVideoPage, LegacyScreenshotEditorRedirect } from "./editor-routes";
 
 // The editors themselves are out of scope here (they are covered by their own
@@ -137,32 +138,64 @@ describe("EditorHomePage", () => {
     window.electronAPI.onLibraryChanged = () => () => {};
   });
 
-  it("lists the five most recent editable items, newest first, and opens one", async () => {
+  it("lists every editable item, last worked on first, a page at a time, and opens one", async () => {
+    const now = Date.now();
+    const hour = 3_600_000;
     setLibrary([
-      localItem("old", "recording", 1),
-      localItem("r2", "recording", 2),
-      localItem("s3", "screenshot", 3),
-      localItem("r4", "recording", 4),
-      localItem("s5", "screenshot", 5),
-      localItem("r6", "recording", 6),
+      // Recorded long ago but edited just now: the last thing worked on.
+      localItem("edited", "recording", now - 100 * hour, { editSavedAt: now - hour }),
+      ...Array.from({ length: 9 }, (_, i) =>
+        localItem(`r${i}`, i % 3 === 0 ? "screenshot" : "recording", now - (i + 2) * hour),
+      ),
       // Not editable: cloud-only, and a recording without a duration.
-      localItem("cloud", "recording", 7, { local: null, availability: "cloud" }),
-      localItem("nodur", "recording", 8, { durationSeconds: 0 }),
+      localItem("cloud", "recording", now, { local: null, availability: "cloud" }),
+      localItem("nodur", "recording", now, { durationSeconds: 0 }),
     ]);
     const router = renderAt("/editor");
 
     const edits = await screen.findAllByRole("button", { name: /^Edit Item/ });
-    expect(edits).toHaveLength(RECENT_EDITABLE_COUNT);
-    expect(edits.map((b) => b.getAttribute("aria-label"))).toEqual([
-      "Edit Item r6",
-      "Edit Item s5",
-      "Edit Item r4",
-      "Edit Item s3",
-      "Edit Item r2",
-    ]);
+    expect(edits).toHaveLength(RECENT_PAGE_SIZE);
+    expect(edits[0]).toHaveAccessibleName("Edit Item edited");
+    expect(edits[0].closest("li")).toHaveTextContent("Edited 1 hour ago");
+    expect(edits[1].closest("li")).toHaveTextContent("Created 2 hours ago");
+    expect(screen.getByText("1–8 of 10")).toBeInTheDocument();
 
-    fireEvent.click(edits[1]);
-    await waitFor(() => expect(router.state.location.pathname).toBe("/editor/image/s5"));
+    fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+    expect(screen.getByText("9–10 of 10")).toBeInTheDocument();
+    expect(
+      screen
+        .getAllByRole("button", { name: /^Edit Item/ })
+        .map((b) => b.getAttribute("aria-label")),
+    ).toEqual(["Edit Item r7", "Edit Item r8"]);
+    expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit Item r7" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/editor/video/r7"));
+  });
+
+  it("filters to recordings never edited, back on the first page", async () => {
+    const now = Date.now();
+    setLibrary([
+      localItem("edited", "recording", now - 5000, { editSavedAt: now - 1000 }),
+      localItem("fresh", "recording", now - 4000),
+      localItem("shot", "screenshot", now - 3000),
+      ...Array.from({ length: 8 }, (_, i) => localItem(`old${i}`, "screenshot", now - 9000 - i)),
+    ]);
+    renderAt("/editor");
+    fireEvent.click(await screen.findByRole("button", { name: "Next page" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Not edited" }));
+    expect(screen.getByRole("button", { name: "Not edited" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(
+      screen
+        .getAllByRole("button", { name: /^Edit Item/ })
+        .map((b) => b.getAttribute("aria-label")),
+    ).toEqual(["Edit Item fresh"]);
+    // One page only: no pager.
+    expect(screen.queryByRole("navigation", { name: "Pages" })).not.toBeInTheDocument();
   });
 
   it("shows the library's export state next to an edited recording", async () => {

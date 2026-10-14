@@ -100,6 +100,7 @@ export default defineConfig({
             { slug: "backlog/dock-and-app-switcher" },
             { slug: "backlog/standalone-editor" },
             { slug: "backlog/editor-new-from-clipboard" },
+            { slug: "backlog/editor-home-recent" },
             { slug: "backlog/version-gate" },
             { slug: "backlog/auto-update" },
             { slug: "backlog/shared-tokens-package" },

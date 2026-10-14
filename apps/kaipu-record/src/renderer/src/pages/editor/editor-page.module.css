@@ -144,13 +144,100 @@
   background: var(--bg-input);
 }
 
-.rowTitle {
+.rowText {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rowTitle {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-primary);
+}
+
+.rowMeta {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
+/* ── List header: section title + filters ────────── */
+
+.listHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.filter {
+  padding: var(--space-xs) var(--space-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.filter:hover {
+  background: var(--bg-input);
+  color: var(--text-primary);
+}
+
+.filter[aria-pressed="true"] {
+  background: var(--bg-input);
+  border-color: var(--border-light);
+  color: var(--text-primary);
+}
+
+/* ── Pager ───────────────────────────────────────── */
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-xs);
+}
+
+.pagerRange {
+  margin-right: var(--space-sm);
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.pagerButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.pagerButton:hover:not(:disabled) {
+  background: var(--bg-input);
+}
+
+.pagerButton:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .edit {
