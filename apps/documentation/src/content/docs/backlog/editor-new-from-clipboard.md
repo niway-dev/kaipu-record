@@ -13,7 +13,7 @@ description: "A New button in the Editor opens an empty page that takes a pasted
 
 ## What it does
 
-- **New** sits in the Editor home's header and in the image editor's toolbar. It opens
+- **New image** sits in the Editor home's header and in the image editor's toolbar. It opens
   `/editor/new`, an empty page that waits for an image.
 - **⌘V** on that page, or its **Paste from clipboard** button, brings in the clipboard
   image and opens the image editor on it. The New page replaces itself in history, so
@@ -38,7 +38,11 @@ description: "A New button in the Editor opens an empty page that takes a pasted
   z-order) and a canvas size of its own.
 - **⌘V inside an open image editor** (replace the image, or add it as a layer) — the
   second half of the collage question.
-- **New in the video editor** — the request was about images.
+- **New video** — wanted (owner, 2026-10-14: "I also want this for videos, but not
+  yet"). The button is labelled **New image** on purpose so a **New video** can sit
+  beside it later. Open question for then: what a video "new" starts from (a pasted
+  clip, a file from disk, an empty timeline), which is the [standalone editor](./standalone-editor)
+  import question.
 - **Drag a file from Finder onto the New page** — cheap to add later with the same
   decode path.
 

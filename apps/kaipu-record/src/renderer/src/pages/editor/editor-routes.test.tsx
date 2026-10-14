@@ -184,10 +184,10 @@ describe("EditorHomePage", () => {
     expect(await screen.findByText(/Nothing to edit yet/)).toBeInTheDocument();
   });
 
-  it("offers New, which opens the empty editor waiting for a paste", async () => {
+  it("offers New image, which opens the empty editor waiting for a paste", async () => {
     setLibrary([]);
     const router = renderAt("/editor");
-    fireEvent.click(await screen.findByRole("link", { name: "New" }));
+    fireEvent.click(await screen.findByRole("link", { name: "New image" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/editor/new"));
   });
 });
