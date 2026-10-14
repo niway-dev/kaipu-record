@@ -343,18 +343,30 @@ describe("VideoEditorPage — background export vs. useBlocker", () => {
   });
 
   it("blocks a normal (non-export) navigation while dirty", async () => {
-    const router = renderEditor();
-    const footer = await waitForEditorLoaded();
-    await makeDirty(footer);
+    // The blocker only fires while an edit has not reached the session file. Autosave
+    // writes AUTOSAVE_DEBOUNCE_MS after the edit, and on a slow CI runner that window
+    // closed before `navigate` ran, so the write landed, nothing blocked, and the test
+    // waited for a dialog that correctly never came. A write that never resolves keeps
+    // the edit unwritten for the whole test, whatever the runner's speed.
+    const save = vi
+      .spyOn(window.electronAPI, "saveVideoEditSession")
+      .mockReturnValue(new Promise(() => {}));
+    try {
+      const router = renderEditor();
+      const footer = await waitForEditorLoaded();
+      await makeDirty(footer);
 
-    await act(async () => {
-      await router.navigate("/library/rec-1");
-    });
+      await act(async () => {
+        await router.navigate("/library/rec-1");
+      });
 
-    expect(await screen.findByText(DISCARD_DIALOG_TITLE)).toBeInTheDocument();
-    // Navigation is paused mid-flight: still on the editor, not the target route.
-    expect(screen.queryByText("library-detail")).toBeNull();
-    expect(startExport).not.toHaveBeenCalled();
+      expect(await screen.findByText(DISCARD_DIALOG_TITLE)).toBeInTheDocument();
+      // Navigation is paused mid-flight: still on the editor, not the target route.
+      expect(screen.queryByText("library-detail")).toBeNull();
+      expect(startExport).not.toHaveBeenCalled();
+    } finally {
+      save.mockRestore();
+    }
   });
 
   it("never blocks navigation when the editor is clean", async () => {
