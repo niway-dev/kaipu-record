@@ -265,13 +265,23 @@ jobs:
       - name: Upload artifacts to GitHub Release
         # Only on tag pushes — a manual dispatch has no tag to release against,
         # so it just exercises the build/sign/notarize path.
+        #
+        # release-please already created this release (published, Latest) when the
+        # release PR merged; this step only attaches the files. The flags below are
+        # explicit because the action *updates* an existing release with whatever it
+        # is given: `prerelease: true` here used to flip the release to pre-release,
+        # GitHub then handed Latest back to the newest non-prerelease release — one
+        # with no DMG — and the in-app "Update" link (`shared/version-gate.ts`
+        # defaults to /releases/latest) landed on a page with nothing to download.
+        # The web/api releases are marked pre-release in release-please-config.json
+        # for the same reason: the repo has a single Latest, and only the desktop
+        # release carries installers.
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          # Draft so a human reviews/writes notes before it reaches testers.
-          # Flip to `draft: false` once the pipeline is trusted.
-          draft: true
-          prerelease: true
+          draft: false
+          prerelease: false
+          make_latest: true
           fail_on_unmatched_files: true
           files: |
             apps/kaipu-record/dist/*.dmg
