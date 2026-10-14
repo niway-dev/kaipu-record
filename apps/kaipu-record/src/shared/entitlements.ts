@@ -1,3 +1,4 @@
+import type { PlanId } from "@kaipu/domain/constants";
 import type { AuthStatus } from "./types/auth";
 
 /**
@@ -12,7 +13,7 @@ import type { AuthStatus } from "./types/auth";
  * touching every call site.
  */
 export interface Entitlements {
-  plan: "free" | "pro";
+  plan: PlanId;
   status: "active" | "canceled" | "past_due";
   /** ISO timestamp, or null when the grant does not lapse on its own. */
   currentPeriodEnd: string | null;
@@ -30,12 +31,17 @@ export interface Entitlements {
   };
 }
 
-/** The account before anyone paid — and what an unreachable server falls back to on first run. */
+/**
+ * The account before anyone paid — and what an unreachable server falls back to on first run.
+ * `cloudStorageBytes` is a LITERAL copy of `PLANS.free.cloudStorageBytes` (250 MB): this file is
+ * reachable from the preload bundle, which cannot take value imports from workspace packages
+ * (CLAUDE.md). entitlements.test.ts pins it to the domain plan table.
+ */
 export const FREE_ENTITLEMENTS: Entitlements = {
   plan: "free",
   status: "active",
   currentPeriodEnd: null,
-  features: { watermarkRemoval: false, cloudUploads: false, cloudStorageBytes: 1_000_000_000 },
+  features: { watermarkRemoval: false, cloudUploads: false, cloudStorageBytes: 250_000_000 },
 };
 
 /** The entitlements a status carries, if any: signed-in always, `unknown` when cached, signed-out never. */

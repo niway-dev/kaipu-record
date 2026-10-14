@@ -1,6 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { AlertTriangle, CloudOff, KeyRound, PauseCircle, RefreshCw } from "lucide-react";
+import { PLANS } from "@kaipu/domain/constants";
 import { useTranslations, type Translator } from "@kaipu/i18n";
 import type { AuthStatus } from "@shared/types/auth";
 import { entitlementsFromStatus } from "@shared/entitlements";
@@ -87,7 +88,7 @@ export function CapacityCard({
     view.kind === "usage"
       ? view.usage.capacityBytes
       : (entitlements?.features.cloudStorageBytes ?? null);
-  const plan = entitlements?.plan === "pro" ? t("planPro") : t("planFree");
+  const plan = t(PLANS[entitlements?.plan ?? "free"].nameKey);
   const signIn = (): void => void navigate("/sign-in", { state: { from: "/cloud" } });
 
   // Only the in-flight attempt is component state. Whether a mail was ever sent comes from the
