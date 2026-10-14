@@ -101,6 +101,7 @@ export default defineConfig({
             { slug: "backlog/standalone-editor" },
             { slug: "backlog/editor-new-from-clipboard" },
             { slug: "backlog/editor-home-recent" },
+            { slug: "backlog/editor-home-second-opinion" },
             { slug: "backlog/version-gate" },
             { slug: "backlog/auto-update" },
             { slug: "backlog/shared-tokens-package" },

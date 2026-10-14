@@ -5,8 +5,13 @@ description: "The Editor home lists every editable item ordered by when it was l
 
 # Editor home — Recent: last worked on first, filters, pages
 
-> **Status: 🟢 Ready to validate** (2026-10-14, branch `feat/editor-recent-pagination`,
-> stacked on `feat/paste-image-editor`). Owner: "Recent worries me a bit because it is
+> **Status: 🟡 Rethinking** (2026-10-14). The owner tried this version and rejected it:
+> it lists every file, so it became a second Library. A
+> [brief for a second opinion](./editor-home-second-opinion) describes the problem;
+> the design below is what was tried, not what will ship.
+>
+> Original ask (branch `feat/editor-recent-pagination`, stacked on
+> `feat/paste-image-editor`). Owner: "Recent worries me a bit because it is
 > only five, and each new one pushes the next out. I don't want another Library — I
 > just want to know which one I edited last."
 
