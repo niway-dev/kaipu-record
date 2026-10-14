@@ -38,8 +38,6 @@ export interface VideoExportController extends VideoExportState {
 }
 
 const IDLE_STATE: VideoExportState = { status: "idle", fraction: 0, error: null };
-const GENERIC_ERROR = "No pudimos exportar el video.";
-const EMPTY_TIMELINE_ERROR = "No hay nada que exportar";
 
 /**
  * Orchestrates a video export end to end: builds the render plan, rasterizes
@@ -52,6 +50,7 @@ const EMPTY_TIMELINE_ERROR = "No hay nada que exportar";
 export function useVideoExport(): VideoExportController {
   const t = useTranslations("videoEditor");
   const [state, setState] = useState<VideoExportState>(IDLE_STATE);
+  const GENERIC_ERROR = t("exportGenericError");
   const workerRef = useRef<Worker | null>(null);
   const sessionIdRef = useRef<string | null>(null);
   // Guards against a stray worker message landing after cancel() already tore
@@ -85,7 +84,7 @@ export function useVideoExport(): VideoExportController {
       try {
         plan = buildExportPlan(args.scene);
       } catch {
-        setState({ status: "error", fraction: 0, error: EMPTY_TIMELINE_ERROR });
+        setState({ status: "error", fraction: 0, error: t("exportEmptyTimeline") });
         return;
       }
 
@@ -232,7 +231,7 @@ export function useVideoExport(): VideoExportController {
         fail(GENERIC_ERROR, error);
       }
     },
-    [teardown, t],
+    [teardown, t, GENERIC_ERROR],
   );
 
   return { ...state, start, cancel };

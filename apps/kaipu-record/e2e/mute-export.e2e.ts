@@ -56,6 +56,7 @@ test("a muted recording exports with no audio track at all", async () => {
       .toBeGreaterThan(0);
 
     await page.getByRole("button", { name: "Export" }).click();
+    await page.getByRole("button", { name: "Export video" }).click();
     await expect
       .poll(() => page.evaluate(() => location.hash), { timeout: 90_000 })
       .toMatch(/^#\/library\/.+/);

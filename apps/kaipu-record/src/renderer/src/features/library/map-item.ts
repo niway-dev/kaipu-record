@@ -21,5 +21,6 @@ export function toLibraryVideo(item: LibraryItem): LibraryVideo {
     editSavedAt: item.editSavedAt,
     editExportedSavedAt: item.editExportedSavedAt,
     tagIds: item.local?.tagIds ?? [],
+    gif: item.local?.gif ?? null,
   };
 }
