@@ -55,11 +55,6 @@ export function TopNav({ page = "home" }: { page?: MarketingPage }) {
           >
             {t("homeNavProduct")}
           </a>
-          {onHome && (
-            <a href="#files" className={styles.tab}>
-              {t("homeNavYourFiles")}
-            </a>
-          )}
           <a
             href={onHome ? "/features" : "#top"}
             className={`${styles.tab} ${onHome ? "" : styles.tabActive}`}
