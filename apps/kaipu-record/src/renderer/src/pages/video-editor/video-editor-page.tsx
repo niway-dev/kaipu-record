@@ -93,13 +93,25 @@ import { useVideoScene } from "@renderer/features/video-editor/use-video-scene";
 import { useVideoTools } from "@renderer/features/video-editor/annotations/video-tools";
 import { useVideoExport } from "@renderer/features/video-editor/export/use-video-export";
 import {
+  isVideoExportBusy,
+  showExportBusyToast,
+} from "@renderer/features/video-editor/export/export-runner";
+import {
   useGifExport,
   type GifJobArgs,
 } from "@renderer/features/video-editor/export/use-gif-export";
 import {
   ExportSheet,
   type GifSettings,
+  type VideoExportChoice,
 } from "@renderer/features/video-editor/components/export-sheet";
+import {
+  editFingerprint,
+  findReusableExports,
+} from "@renderer/features/video-editor/export/export-reuse";
+import { useSourceExports } from "@renderer/features/video-editor/export/use-source-exports";
+import { probeSource, type SourceProbe } from "@renderer/features/video-editor/export/probe-source";
+import { useAppSettings } from "@renderer/pages/settings/use-app-settings";
 import { formatSize } from "@renderer/features/library/format";
 import { VideoAnnotationLayer } from "@renderer/features/video-editor/annotations/video-annotation-layer";
 import {
@@ -130,6 +142,10 @@ export interface VideoEditorSource {
   assetId: string;
   title: string;
   durationSeconds: number;
+  /** The recording's file size, for the export sheet's before/after meter. */
+  sizeBytes?: number;
+  /** Its poster frame, for the export sheet's framing preview. */
+  thumbnailUrl?: string | null;
 }
 
 export function isVideoEditorSource(value: unknown): value is VideoEditorSource {
@@ -376,15 +392,7 @@ function VideoEditor({
   // React 19 batches the state updates that a render-time boolean would depend on.
   // Refs sidestep the batching entirely.
   const pendingSaveRef = autosave.pendingRef;
-  // Set to true right before the post-export `navigate()` so that programmatic
-  // navigation always proceeds, regardless of batching timing. Normal in-app
-  // navigation (e.g. the sidebar) never touches this ref, so it still blocks while a
-  // write is pending.
-  const bypassBlockerRef = useRef(false);
-  const shouldBlock = useCallback(
-    () => pendingSaveRef.current && !bypassBlockerRef.current,
-    [pendingSaveRef],
-  );
+  const shouldBlock = useCallback(() => pendingSaveRef.current, [pendingSaveRef]);
   const blocker = useBlocker(shouldBlock);
   // The preview hears the scene's muting so scrubbing matches the export. Memoised on
   // the two fields rather than passed as `scene`: the scene object changes on every
@@ -586,77 +594,125 @@ function VideoEditor({
   // memoized — the box can resize between renders) and hands off to the export
   // hook, which owns the whole worker/writer pipeline. `markClean` runs before
   // navigating so `useBlocker` doesn't intercept this programmatic navigation.
-  const startVideoExport = useCallback(() => {
-    const video = playback.videoRef.current;
-    if (!video) return;
-    // videoWidth/videoHeight are 0 until the browser has decoded the stream's
-    // metadata (loadedmetadata). Starting the export before that hands the worker
-    // a 0×0 OffscreenCanvas, which produces a corrupt file — refuse early.
-    if (video.videoWidth === 0 || video.videoHeight === 0) {
-      showToast({ message: t("videoStillLoading") });
-      return;
-    }
-    void videoExport.start({
-      scene,
-      sourceId: source.id,
-      title: source.title,
-      derivedFromAssetId: source.assetId,
-      videoWidth: video.videoWidth,
-      videoHeight: video.videoHeight,
-      previewWidth: video.clientWidth,
-      slideAssets: assetStoreRef.current,
-      cameraPath,
-      onSaved: async (recording) => {
-        // This save supersedes whatever the autosave still had queued; dropping it
-        // avoids a second write of the same scene right before unmount.
-        autosave.cancel();
-        // Persist the session before navigating away so reopening the editor on the
-        // original recording restores cuts/overlays/slides. Non-fatal if it fails —
-        // the export already succeeded and the user lands on the new recording.
-        try {
-          const sessionJson = serializeSession(scene);
-          const assets = assetStoreRef.current
-            .entries()
-            .map((a) => ({ assetId: a.assetId, bytes: a.bytes }));
-          // `true`: this scene is exactly what was just burned into `recording`, so the
-          // write stamps it as exported. Without it the save below would bump `savedAt`
-          // past the export and the library would show "not exported" on a recording
-          // the user exported seconds ago.
-          await window.electronAPI.saveVideoEditSession(source.id, sessionJson, assets, true);
-        } catch (error) {
-          // Session save failure is non-fatal — the export already succeeded.
-          captureException(error, { context: "video-edit-session-save" });
-        }
-        controller.markClean();
-        // Set BEFORE navigate(): react-router calls the blocker predicate
-        // synchronously inside navigate(), ahead of React re-rendering — the ref
-        // guarantees the predicate observes the bypass regardless of how
-        // markClean()'s state updates get batched.
-        bypassBlockerRef.current = true;
-        navigate(`/library/${recording.assetId}`);
-      },
+  const appSettings = useAppSettings();
+  // NIW2-218: frame rate + audio layout for the preset estimates and bitrates. Probed once
+  // per source; until it resolves the presets assume 30 fps with audio (conservative).
+  const [sourceProbe, setSourceProbe] = useState<SourceProbe | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void probeSource(source.id).then((probe) => {
+      if (alive) setSourceProbe(probe);
     });
-  }, [
-    playback,
-    videoExport,
-    scene,
-    source,
-    controller,
-    navigate,
-    assetStoreRef,
-    autosave,
-    cameraPath,
-  ]);
+    return () => {
+      alive = false;
+    };
+  }, [source.id]);
+  // The scene as it is now, for an export that finishes after the user kept editing (or
+  // left): see `onSaved` below.
+  const sceneRef = useRef(scene);
+  sceneRef.current = scene;
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const startVideoExport = useCallback(
+    (choice: VideoExportChoice) => {
+      const video = playback.videoRef.current;
+      if (!video) return;
+      // videoWidth/videoHeight are 0 until the browser has decoded the stream's
+      // metadata (loadedmetadata). Starting the export before that hands the worker
+      // a 0×0 OffscreenCanvas, which produces a corrupt file — refuse early.
+      if (video.videoWidth === 0 || video.videoHeight === 0) {
+        showToast({ message: t("videoStillLoading") });
+        return;
+      }
+      // What this file carries, so the sheet can offer it again while the edit is unchanged,
+      // and the session save below: taken NOW, because the export runs in the background
+      // and the user can keep editing (or leave) while it encodes.
+      const fingerprint = editFingerprint(scene);
+      const sessionJson = serializeSession(scene);
+      const assets = assetStoreRef.current
+        .entries()
+        .map((a) => ({ assetId: a.assetId, bytes: a.bytes }));
+      void videoExport.start({
+        scene,
+        sourceId: source.id,
+        title: source.title,
+        derivedFromAssetId: source.assetId,
+        sourceSizeBytes: source.sizeBytes ?? null,
+        videoWidth: video.videoWidth,
+        videoHeight: video.videoHeight,
+        previewWidth: video.clientWidth,
+        slideAssets: assetStoreRef.current,
+        cameraPath,
+        presetId: choice.presetId,
+        framing: choice.framing,
+        sourceInfo: sourceProbe,
+        fingerprint,
+        // NIW2-218 export redesign: the export runs in the background and the user stays in
+        // the editor; the "Ready to share" card takes it from here. What is left is stamping
+        // the edit session as exported — the stamp clears the library's "not exported"
+        // badge — but only while the session still holds the edit that was exported.
+        onSaved: async () => {
+          if (mountedRef.current) {
+            // Still here: edited since the export started → that newer edit is what the
+            // autosave writes, and it is rightly not exported.
+            if (editFingerprint(sceneRef.current) !== fingerprint) return;
+            // This save supersedes whatever the autosave still had queued.
+            autosave.cancel();
+          } else {
+            // Left the editor: its unmount flush wrote the latest edit (or Discard dropped
+            // it). Stamp only if what is on disk is the edit that was exported.
+            const saved = await window.electronAPI.loadVideoEditSession(source.id);
+            const savedScene = saved ? parseSession(saved.sessionJson)?.scene : null;
+            if (savedScene && editFingerprint(savedScene) !== fingerprint) return;
+          }
+          try {
+            // `true`: this scene is exactly what was just burned into the file, so the write
+            // stamps it as exported.
+            await window.electronAPI.saveVideoEditSession(source.id, sessionJson, assets, true);
+            if (mountedRef.current) controller.markClean();
+          } catch (error) {
+            // Session save failure is non-fatal — the export already succeeded.
+            captureException(error, { context: "video-edit-session-save" });
+          }
+        },
+      });
+    },
+    [
+      t,
+      sourceProbe,
+      playback,
+      videoExport,
+      scene,
+      source,
+      controller,
+      assetStoreRef,
+      autosave,
+      cameraPath,
+    ],
+  );
 
   // NIW2-217: "Export" opens the export sheet (format choice). The metadata guard runs
   // here too, so the sheet never offers a GIF of a 0×0 stream.
   const [exportSheetOpen, setExportSheetOpen] = useState(false);
+  // NIW2-218 "already exported → reuse": this source's exports, re-read when the sheet opens.
+  const sourceExports = useSourceExports(source.assetId, exportSheetOpen);
   const lastGifSettingsRef = useRef<GifSettings | null>(null);
   const handleExport = useCallback(() => {
     const video = playback.videoRef.current;
     if (!video) return;
     if (video.videoWidth === 0 || video.videoHeight === 0) {
       showToast({ message: t("videoStillLoading") });
+      return;
+    }
+    // One export at a time: say which one is running instead of opening a second sheet.
+    if (isVideoExportBusy()) {
+      showExportBusyToast(t);
       return;
     }
     setExportSheetOpen(true);
@@ -989,15 +1045,10 @@ function VideoEditor({
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (isEditingTarget(e.target)) return;
-      // Don't fire editor shortcuts behind the discard-changes modal or the export
-      // dialog — both block the scene from being safely mutated or played while open.
-      if (
-        blocker.state === "blocked" ||
-        videoExport.status !== "idle" ||
-        gifExport.status !== "idle" ||
-        exportSheetOpen
-      )
-        return;
+      // Don't fire editor shortcuts behind the discard-changes modal, the export sheet or
+      // the GIF export dialog — they block the scene from being safely mutated or played
+      // while open. A video export runs in the background and blocks nothing.
+      if (blocker.state === "blocked" || gifExport.status !== "idle" || exportSheetOpen) return;
       if (e.key === " ") {
         e.preventDefault();
         playback.toggle();
@@ -1055,7 +1106,6 @@ function VideoEditor({
     playback,
     controller,
     blocker.state,
-    videoExport.status,
     gifExport.status,
     exportSheetOpen,
     splitDisabled,
@@ -1089,11 +1139,7 @@ function VideoEditor({
         onAddImage={handleAddImage}
         tool={videoTools.tool}
         onExport={handleExport}
-        exportDisabled={
-          videoExport.status === "exporting" ||
-          gifExport.status === "exporting" ||
-          scene.items.length === 0
-        }
+        exportDisabled={gifExport.status === "exporting" || scene.items.length === 0}
       >
         {/* Not interactive — a reminder, not a control (plans/video-editor-v2/08 § PR 10
             polish, W12's "ORIGINAL UNTOUCHED" pill). The original recording on disk and
@@ -1447,25 +1493,36 @@ function VideoEditor({
       )}
       {exportSheetOpen && (
         <ExportSheet
+          sourceTitle={source.title}
+          sourceSizeBytes={source.sizeBytes ?? null}
+          thumbnailUrl={source.thumbnailUrl ?? null}
           timelineDuration={playback.duration}
           sourceWidth={playback.videoRef.current?.videoWidth ?? 0}
           estimate={gifExport.estimate}
-          onGifSettingsChange={handleGifSettingsChange}
-          onExportVideo={() => {
+          presetSource={{
+            width: playback.videoRef.current?.videoWidth ?? 0,
+            height: playback.videoRef.current?.videoHeight ?? 0,
+            fps: sourceProbe?.fps ?? 30,
+            hasAudio: (sourceProbe?.hasAudio ?? true) && !scene.audioMuted,
+            sampleRate: sourceProbe?.sampleRate,
+          }}
+          // Settings → Export quality; another row applies to this export only and is
+          // never remembered, nor written to the edit session (FR13).
+          defaultPreset={appSettings.settings?.exportQuality}
+          // A row whose file already carries exactly this edit opens it instead of encoding.
+          reusable={findReusableExports(sourceExports, editFingerprint(scene))}
+          onOpenExisting={(existing) => {
             closeExportSheet();
-            startVideoExport();
+            // Edits not yet written still go through the discard guard.
+            navigate(`/library/${existing.assetId}`);
+          }}
+          onGifSettingsChange={handleGifSettingsChange}
+          onExportVideo={(choice) => {
+            closeExportSheet();
+            startVideoExport(choice);
           }}
           onExportGif={startGifExport}
           onCancel={closeExportSheet}
-        />
-      )}
-      {videoExport.status !== "idle" && (
-        <ExportDialog
-          status={videoExport.status}
-          fraction={videoExport.fraction}
-          error={videoExport.error}
-          onCancel={videoExport.cancel}
-          onRetry={startVideoExport}
         />
       )}
       {gifExport.status !== "idle" && (

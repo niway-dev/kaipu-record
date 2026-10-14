@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LocalRecording } from "@shared/types/library-storage";
@@ -32,7 +32,7 @@ function stubDecodedVideoSize(width: number, height: number): void {
 // useBlocker — so the hook is replaced with a controllable stub whose `start` drives
 // onSaved directly, without spinning up a fake Worker.
 const startExport = vi.fn(
-  async (args: { onSaved: (recording: LocalRecording) => void | Promise<void> }) => {
+  async (args: { onSaved: (recording: LocalRecording) => void | Promise<void> }): Promise<void> => {
     await args.onSaved({
       id: "new-rec",
       assetId: "00000000-0000-0000-0000-000000000001",
@@ -147,13 +147,13 @@ async function makeDirty(footer: HTMLElement): Promise<void> {
 }
 
 /**
- * "Export" opens the export sheet (NIW2-217); "Export video" there runs the MP4 export.
- * When the metadata guard refuses, no sheet opens and only the first click happens.
+ * "Export" opens the export sheet (NIW2-217); its primary "Export ~N MB" runs the MP4
+ * export. When the metadata guard refuses, no sheet opens and only the first click happens.
  */
 function clickExportVideo(): void {
   fireEvent.click(screen.getByRole("button", { name: "Export" }));
-  const video = screen.queryByRole("button", { name: "Export video" });
-  if (video) fireEvent.click(video);
+  const sheet = screen.queryByRole("alertdialog");
+  if (sheet) fireEvent.click(within(sheet).getByRole("button", { name: /^Export( |$)/ }));
 }
 
 describe("VideoEditorPage — legacy /video-editor redirect", () => {
@@ -258,7 +258,7 @@ describe("VideoEditorPage — add-image wiring", () => {
   });
 });
 
-describe("VideoEditorPage — post-export navigation vs. useBlocker", () => {
+describe("VideoEditorPage — background export vs. useBlocker", () => {
   beforeEach(() => {
     vi.stubGlobal("Image", FakeImage);
     startExport.mockClear();
@@ -274,26 +274,7 @@ describe("VideoEditorPage — post-export navigation vs. useBlocker", () => {
 
   const DISCARD_DIALOG_TITLE = "Discard the video changes?";
 
-  it("a successful export's onSaved navigates straight to the library item, without the discard-changes dialog", async () => {
-    renderEditor();
-    const footer = await waitForEditorLoaded();
-    await makeDirty(footer); // controller.dirty === true, same as right before a real export
-
-    clickExportVideo();
-
-    // startExport's onSaved awaits saveVideoEditSession (mocked, resolves), calls
-    // markClean(), flips the bypass ref, then navigates — all async, so wait for the
-    // target route's element to land.
-    await waitFor(() => {
-      expect(screen.getByText("library-detail")).toBeInTheDocument();
-    });
-    expect(startExport).toHaveBeenCalledOnce();
-    // The critical regression: if the blocker predicate still read stale `dirty`
-    // state at navigate-time, this dialog would render instead of the route change.
-    expect(screen.queryByText(DISCARD_DIALOG_TITLE)).toBeNull();
-  });
-
-  it("marks the post-export session save as exported, so the library badge clears", async () => {
+  it("an export runs in the background: the user stays in the editor, and the session is stamped as exported", async () => {
     // The global stub is a plain async function, not a spy; wrap it for this test only.
     const save = vi.spyOn(window.electronAPI, "saveVideoEditSession");
     renderEditor();
@@ -301,15 +282,59 @@ describe("VideoEditorPage — post-export navigation vs. useBlocker", () => {
     await makeDirty(footer);
 
     clickExportVideo();
-    await waitFor(() => {
-      expect(screen.getByText("library-detail")).toBeInTheDocument();
-    });
 
-    // The 4th argument is the whole fix. Without it this save bumps `savedAt` past the
-    // export that just produced it and the library shows "not exported" on a recording
-    // the user exported a second ago — which is what the old date comparison did on
-    // every single export.
-    expect(save).toHaveBeenCalledWith(
+    // The 4th argument stamps this scene as the one burned into the file. Without it the
+    // library shows "not exported" on a recording the user exported a second ago.
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(String),
+        expect.any(Array),
+        true,
+      ),
+    );
+    expect(startExport).toHaveBeenCalledOnce();
+    // No navigation: the "Ready to share" card takes over, and the editor stays open.
+    expect(screen.queryByText("library-detail")).toBeNull();
+    expect(screen.queryByText(DISCARD_DIALOG_TITLE)).toBeNull();
+  });
+
+  it("does not stamp the session when the user kept editing while the export ran", async () => {
+    let pending: { onSaved: (recording: LocalRecording) => void | Promise<void> } | null = null;
+    startExport.mockImplementationOnce(async (args) => {
+      pending = args;
+    });
+    const save = vi.spyOn(window.electronAPI, "saveVideoEditSession");
+    save.mockClear();
+    renderEditor();
+    const footer = await waitForEditorLoaded();
+    await makeDirty(footer);
+    clickExportVideo();
+    await waitFor(() => expect(pending).not.toBeNull());
+
+    // Another edit while the export encodes.
+    fireEvent.click(screen.getByRole("button", { name: "Add image" }));
+    fireEvent.change(screen.getByTestId("slide-image-input"), {
+      target: { files: [new File([new Uint8Array([0x89, 0x50])], "y.png", { type: "image/png" })] },
+    });
+    await waitFor(() => expect(footer.querySelectorAll("button")).toHaveLength(3));
+
+    await act(async () => {
+      await pending!.onSaved({
+        id: "new-rec",
+        assetId: "00000000-0000-0000-0000-000000000001",
+        kind: "recording",
+        title: "My recording (edited)",
+        filePath: "/vault/new-rec.mp4",
+        createdAt: 1,
+        sizeBytes: 100,
+        durationSeconds: 10,
+        thumbnailUrl: null,
+        derivedFromAssetId: null,
+        contentSha256: null,
+      });
+    });
+    expect(save).not.toHaveBeenCalledWith(
       expect.any(String),
       expect.any(String),
       expect.any(Array),

@@ -10,6 +10,7 @@ import type { TagColor } from "@kaipu/domain/constants";
 
 import { DEFAULT_QUALITY, type RecordingQuality } from "../recording-quality";
 import type { Locale } from "@kaipu/i18n";
+import type { ExportPresetId, ExportQuality } from "./export-preset";
 
 /**
  * "system" (follow the OS appearance) is a deliberate non-goal for now — the
@@ -202,6 +203,17 @@ export interface AppSettings {
   deviceId: string;
   /** Upload preference for this device. See {@link UploadMode}. */
   uploadMode: UploadMode;
+  /**
+   * NIW2-218: the row the export sheet preselects (Settings → Export quality). Picking
+   * another row in the sheet applies to that export only; nothing is remembered.
+   */
+  exportQuality: ExportQuality;
+  /**
+   * NIW2-218 export redesign: right after a recording heavier than GitHub's 10 MB limit,
+   * its page shows a "Recording saved" card offering a light copy (auto-hides in 8 s).
+   * Settings → Export turns it off.
+   */
+  showRecordingSavedCard: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -221,6 +233,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   shortcuts: DEFAULT_SHORTCUTS,
   deviceId: "",
   uploadMode: "local-only",
+  // Literal on purpose (preload bundle); equals DEFAULT_EXPORT_QUALITY in ./export-preset.
+  exportQuality: "balanced",
+  showRecordingSavedCard: true,
 };
 
 /**
@@ -273,6 +288,10 @@ export const IPC_CHANNELS = {
   gifSave: "library:gif-save",
   /** NIW2-217: native drag-out of a vault file (e.g. a GIF into Slack or GitHub). */
   startFileDrag: "library:start-file-drag",
+  /** NIW2-218: renderer → main, whether a background export is running (close/quit guard). */
+  exportActive: "export:active",
+  /** NIW2-218: main → renderer, "cancel" the running export (the user confirmed quitting). */
+  exportCommand: "export:command",
   getVaultDirectory: "library:get-vault-dir",
   chooseVaultDirectory: "library:choose-vault-dir",
   resetVaultDirectory: "library:reset-vault-dir",
@@ -309,6 +328,8 @@ export const IPC_CHANNELS = {
   recordingWrite: "recording:write",
   recordingFinalize: "recording:finalize",
   recordingAbort: "recording:abort",
+  /** NIW2-218: byte size of an open writer session's temp file (Small-file size check). */
+  recordingStat: "recording:stat",
   recordingReportTick: "recording:report-tick",
   recordingStart: "recording:start",
   recordingStop: "recording:stop",
@@ -447,6 +468,14 @@ export interface RecordingFinalizeMeta {
   thumbnail?: ArrayBuffer | null;
   /** Set by the video editor's export: the asset the render was produced from. */
   derivedFromAssetId?: string | null;
+  /** NIW2-218: the export preset that produced this file (sidecar `exportPreset`). */
+  exportPreset?: ExportPresetId;
+  /**
+   * NIW2-218: what was encoded, so the same export can be reused instead of encoded again
+   * (sidecar `exportFingerprint`): `"whole"` = the source file as it is on disk (Share),
+   * `"edit:<hash>"` = the editor's scene at export time.
+   */
+  exportFingerprint?: string;
 }
 
 /**

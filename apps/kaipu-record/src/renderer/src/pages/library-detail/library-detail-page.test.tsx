@@ -1,9 +1,24 @@
-import { act, render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { act, render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LibraryItem } from "@shared/types/library-item";
+import { DEFAULT_SETTINGS } from "@shared/types";
 import { dismissToast, getToasts } from "@renderer/ui/toast-store";
+import { StatusStackProvider } from "@renderer/features/status-cards/status-stack";
 import { LibraryDetailPage } from "./library-detail-page";
+
+// Share reads the file through mediabunny; here only the facts it returns matter.
+const probe = vi.hoisted(() =>
+  vi.fn(async () => ({
+    width: 2560,
+    height: 1440,
+    durationSec: 78,
+    fps: 30,
+    hasAudio: true,
+    sampleRate: 48000,
+  })),
+);
+vi.mock("@renderer/features/video-editor/export/probe-source", () => ({ probeSource: probe }));
 
 /** A cloud-only screenshot: no local file at all. Exercises the actions that
  *  require a local copy (Reveal, Edit, Copy, Delete) and confirms they are all
@@ -144,6 +159,20 @@ describe("LibraryDetailPage", () => {
     expect(screen.queryByRole("button", { name: /^copy$/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /delete/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /remove local download/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Share" })).toBeNull();
+  });
+
+  it("offers Share on a local recording, raw or already an export (NIW2-218)", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [exportedOnlyItem],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+
+    renderDetail("asset-b");
+    await waitForLoaded();
+
+    expect(screen.getByRole("button", { name: "Share" })).toBeEnabled();
   });
 
   it("Edit video lands on the recording's Editor URL", async () => {
@@ -461,5 +490,120 @@ describe("LibraryDetailPage — lineage and edit badge", () => {
     renderDetail("exp");
     await waitForLoaded();
     expect(screen.queryByText(/edits are not shown here/i)).toBeNull();
+  });
+});
+
+describe("LibraryDetailPage — heavy to send (NIW2-218)", () => {
+  const withSize = (sizeBytes: number): LibraryItem => ({
+    ...exportedOnlyItem,
+    local: { ...exportedOnlyItem.local!, sizeBytes },
+    cloud: null,
+    availability: "local",
+  });
+
+  beforeEach(() => {
+    window.electronAPI.onLibraryChanged = () => () => {};
+    window.electronAPI.getSettings = vi.fn().mockResolvedValue(DEFAULT_SETTINGS);
+    probe.mockClear();
+  });
+
+  it("over 25 MB: amber size, and a banner with the GitHub estimate that opens the sheet on that row", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [withSize(119_000_000)],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+    renderDetail("asset-b");
+    await waitForLoaded();
+
+    expect(screen.getByText("113 MB")).toHaveAttribute("data-heavy", "true");
+    expect(screen.getByText("119 MB is heavy to send.")).toBeInTheDocument();
+    // The estimate is the GitHub row's: the cap's 92 % budget.
+    expect(await screen.findByText(/about 9\.2 MB for GitHub or Jira/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Make a light copy →" }));
+    expect(await screen.findByRole("heading", { name: "Share a copy" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /^GitHub/ })).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("up to 25 MB: no banner, no amber, and the file isn't read until Share", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [withSize(20_000_000)],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+    renderDetail("asset-b");
+    await waitForLoaded();
+
+    expect(screen.queryByText(/heavy to send/)).toBeNull();
+    expect(screen.getByText("19 MB")).toHaveAttribute("data-heavy", "false");
+    expect(probe).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Share" }));
+    expect(await screen.findByRole("heading", { name: "Share a copy" })).toBeInTheDocument();
+    // Share itself opens on Settings → Export quality.
+    expect(screen.getByRole("radio", { name: /^Balanced/ })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+  });
+});
+
+describe("LibraryDetailPage — Recording saved card (NIW2-218)", () => {
+  const heavy: LibraryItem = {
+    ...exportedOnlyItem,
+    local: { ...exportedOnlyItem.local!, sizeBytes: 119_000_000 },
+    cloud: null,
+    availability: "local",
+  };
+
+  function renderFresh(fromRecording: boolean) {
+    const router = createMemoryRouter(
+      [{ path: "/library/:assetId", element: <LibraryDetailPage /> }],
+      { initialEntries: [{ pathname: "/library/asset-b", state: { fromRecording } }] },
+    );
+    render(
+      <StatusStackProvider>
+        <RouterProvider router={router} />
+      </StatusStackProvider>,
+    );
+  }
+
+  beforeEach(() => {
+    window.electronAPI.onLibraryChanged = () => () => {};
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [heavy],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+  });
+
+  it("right after recording a file over 10 MB, offers a light copy that opens Share on GitHub", async () => {
+    window.electronAPI.getSettings = vi.fn().mockResolvedValue(DEFAULT_SETTINGS);
+    renderFresh(true);
+    const card = await screen.findByRole("region", { name: "Recording saved" });
+    expect(await screen.findByText("~9.2 MB for GitHub")).toBeInTheDocument();
+    fireEvent.click(within(card).getByRole("button", { name: "Share a light copy" }));
+    expect(await screen.findByRole("heading", { name: "Share a copy" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /^GitHub/ })).toHaveAttribute("aria-checked", "true");
+    expect(screen.queryByRole("region", { name: "Recording saved" })).toBeNull();
+  });
+
+  it("not when Settings turned it off", async () => {
+    window.electronAPI.getSettings = vi
+      .fn()
+      .mockResolvedValue({ ...DEFAULT_SETTINGS, showRecordingSavedCard: false });
+    renderFresh(true);
+    await waitForLoaded();
+    await act(async () => {});
+    expect(screen.queryByRole("region", { name: "Recording saved" })).toBeNull();
+  });
+
+  it("not when the page was opened from the Library", async () => {
+    window.electronAPI.getSettings = vi.fn().mockResolvedValue(DEFAULT_SETTINGS);
+    renderFresh(false);
+    await waitForLoaded();
+    await act(async () => {});
+    expect(screen.queryByRole("region", { name: "Recording saved" })).toBeNull();
   });
 });

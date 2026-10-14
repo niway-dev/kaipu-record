@@ -182,6 +182,24 @@ describe("LibraryVault", () => {
     expect((await vault.describe("exp"))?.contentSha256).toBeNull();
   });
 
+  it('exposes an MP4 export\'s preset and fingerprint, reading the legacy "original" as maximum (NIW2-218)', async () => {
+    await writeRecording("share");
+    await writeSidecar("share", { exportPreset: "balanced", exportFingerprint: "whole" });
+    await writeRecording("legacy");
+    await writeSidecar("legacy", { exportPreset: "original" });
+    await writeRecording("plain");
+    await writeSidecar("plain", { exportPreset: "tiktok" });
+    expect((await vault.describe("share"))?.export).toEqual({
+      preset: "balanced",
+      fingerprint: "whole",
+    });
+    expect((await vault.describe("legacy"))?.export).toEqual({
+      preset: "maximum",
+      fingerprint: null,
+    });
+    expect((await vault.describe("plain"))?.export).toBeNull();
+  });
+
   it("ensureContentHash computes once, caches by size+mtime, and recomputes after a change", async () => {
     await writeRecording("h", 100);
     const first = await vault.ensureContentHash("h");

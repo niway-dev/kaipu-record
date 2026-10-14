@@ -58,6 +58,17 @@ const styles = stylex.create({
     animationDuration: "250ms",
     animationTimingFunction: "ease",
   },
+  // A sheet with its own layout (header, scrolling list, footer): wider, no padding of
+  // its own, left-aligned, and never taller than the window.
+  dialogWide: {
+    maxWidth: "620px",
+    maxHeight: "100%",
+    padding: 0,
+    textAlign: "left",
+    display: "flex",
+    flexDirection: "column",
+    overflow: "hidden",
+  },
   icon: {
     width: "44px",
     height: "44px",
@@ -150,10 +161,13 @@ const hovers = stylex.create({
 export function ModalOverlay({
   onCancel,
   labelledBy,
+  size = "default",
   children,
 }: {
   onCancel: () => void;
   labelledBy?: string;
+  /** "wide": a 620px sheet that lays out its own padding (e.g. the export sheet). */
+  size?: "default" | "wide";
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -175,7 +189,10 @@ export function ModalOverlay({
       {...stylex.props(styles.overlay)}
     >
       {/* Stops a click inside the card from reaching the backdrop's dismiss. */}
-      <div onClick={(e) => e.stopPropagation()} {...stylex.props(styles.dialog)}>
+      <div
+        onClick={(e) => e.stopPropagation()}
+        {...stylex.props(styles.dialog, size === "wide" && styles.dialogWide)}
+      >
         {children}
       </div>
     </div>

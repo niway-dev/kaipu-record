@@ -4,6 +4,7 @@ import type { LocalRecording } from "@shared/types/library-storage";
 import { initialScene, type VideoScene } from "../scene";
 import { createSlideAssetStore } from "../slide-assets";
 import { useVideoExport } from "./use-video-export";
+import { __resetExportRunnerForTests } from "./export-runner";
 import { buildCameraPath } from "../zoom/camera-path";
 import type { ZoomSegment } from "../zoom/zoom-model";
 
@@ -76,6 +77,7 @@ beforeEach(() => {
   window.electronAPI.recordingCreate = vi.fn(async () => ({ tempPath: "/tmp/export.mp4.part" }));
   window.electronAPI.recordingWrite = vi.fn();
   window.electronAPI.recordingAbort = vi.fn(async () => {});
+  window.electronAPI.recordingStat = vi.fn(async () => 1_000);
   window.electronAPI.recordingFinalize = vi.fn(
     async (): Promise<LocalRecording> => ({
       id: "new-rec",
@@ -94,6 +96,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  __resetExportRunnerForTests();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -266,6 +269,7 @@ describe("useVideoExport", () => {
       durationMs: 10_000,
       thumbnail: FAKE_THUMB,
       derivedFromAssetId: null,
+      exportPreset: "balanced",
     });
     expect(onSaved).toHaveBeenCalledWith(
       expect.objectContaining({ id: "new-rec", title: "My recording (edited)" }),
@@ -310,5 +314,240 @@ describe("useVideoExport", () => {
       await result.current.start(startArgs({ cameraPath: buildCameraPath([], null, 10) }));
     });
     expect(createdWorkers[0].postMessage.mock.calls[0][0].camera).toBeNull();
+  });
+
+  it("Balanced by default: source size (≤ 1080p), explicit bitrate, ≤ 30 fps, moov at the front", async () => {
+    const { result } = renderHook(() => useVideoExport());
+    await act(async () => {
+      await result.current.start(startArgs());
+    });
+    const [message] = createdWorkers[0].postMessage.mock.calls[0];
+    expect(message.output).toEqual({ width: 1280, height: 720 });
+    expect(message.source).toEqual({ width: 1280, height: 720 });
+    expect(message.target).toMatchObject({
+      presetId: "balanced",
+      framing: "identity",
+      maxFps: 30,
+      fastStart: "reserve",
+    });
+    expect(typeof message.target.videoBitrate).toBe("number");
+    expect(message.target.packetCounts.video).toBeGreaterThan(0);
+  });
+
+  it("Maximum keeps the native size with QUALITY_HIGH (the pre-preset export)", async () => {
+    const { result } = renderHook(() => useVideoExport());
+    await act(async () => {
+      await result.current.start(startArgs({ presetId: "maximum" }));
+    });
+    const [message] = createdWorkers[0].postMessage.mock.calls[0];
+    expect(message.output).toEqual({ width: 1280, height: 720 });
+    expect(message.target).toMatchObject({
+      presetId: "maximum",
+      videoBitrate: "high",
+      maxFps: null,
+    });
+  });
+
+  it("passes the resolved preset target (size, framing) through to the worker", async () => {
+    const { result } = renderHook(() => useVideoExport());
+    await act(async () => {
+      await result.current.start(
+        startArgs({
+          presetId: "vertical",
+          framing: "fit",
+          sourceInfo: { fps: 60, hasAudio: true, sampleRate: 48000 },
+        }),
+      );
+    });
+    const [message] = createdWorkers[0].postMessage.mock.calls[0];
+    expect(message.output).toEqual({ width: 1080, height: 1920 });
+    expect(message.source).toEqual({ width: 1280, height: 720 });
+    expect(message.target).toMatchObject({
+      presetId: "vertical",
+      framing: "fit",
+      videoBitrate: 12_000_000,
+    });
+  });
+
+  it("records the preset on the sidecar and titles the item after the destination", async () => {
+    const onSaved = vi.fn();
+    const { result } = renderHook(() => useVideoExport());
+    await act(async () => {
+      await result.current.start(startArgs({ onSaved, presetId: "small-10" }));
+    });
+    act(() => createdWorkers[0].onmessage?.({ data: { type: "done" } } as MessageEvent));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledOnce());
+    expect(window.electronAPI.recordingFinalize).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ title: "My recording (10 MB)", exportPreset: "small-10" }),
+    );
+  });
+
+  it("records what was encoded, and titles a whole-recording Share export (NIW2-218)", async () => {
+    const onSaved = vi.fn();
+    const { result } = renderHook(() => useVideoExport());
+    await act(async () => {
+      await result.current.start(startArgs({ onSaved, fingerprint: "whole" }));
+    });
+    act(() => createdWorkers[0].onmessage?.({ data: { type: "done" } } as MessageEvent));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledOnce());
+    expect(window.electronAPI.recordingFinalize).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        title: "My recording (for sharing)",
+        exportPreset: "balanced",
+        exportFingerprint: "whole",
+      }),
+    );
+  });
+
+  it("keeps the (edited) title for an editor export with an edit fingerprint", async () => {
+    const onSaved = vi.fn();
+    const { result } = renderHook(() => useVideoExport());
+    await act(async () => {
+      await result.current.start(startArgs({ onSaved, fingerprint: "edit:abc" }));
+    });
+    act(() => createdWorkers[0].onmessage?.({ data: { type: "done" } } as MessageEvent));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledOnce());
+    expect(window.electronAPI.recordingFinalize).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ title: "My recording (edited)", exportFingerprint: "edit:abc" }),
+    );
+  });
+
+  describe("FR8 Small-file size check", () => {
+    const done = { data: { type: "done" } } as MessageEvent;
+
+    it("under the cap: finalizes the first attempt", async () => {
+      const onSaved = vi.fn();
+      const { result } = renderHook(() => useVideoExport());
+      await act(async () => {
+        await result.current.start(startArgs({ onSaved, presetId: "small-10" }));
+      });
+      act(() => createdWorkers[0].onmessage?.(done));
+      await waitFor(() => expect(onSaved).toHaveBeenCalledOnce());
+      expect(window.electronAPI.recordingStat).toHaveBeenCalledOnce();
+      expect(createdWorkers).toHaveLength(1);
+    });
+
+    it("over the cap: aborts the first attempt, re-encodes once smaller, keeps a second overshoot", async () => {
+      window.electronAPI.recordingStat = vi.fn(async () => 12_000_000);
+      const onSaved = vi.fn();
+      const { result } = renderHook(() => useVideoExport());
+      await act(async () => {
+        await result.current.start(startArgs({ onSaved, presetId: "small-10" }));
+      });
+      const create = window.electronAPI.recordingCreate as ReturnType<typeof vi.fn>;
+      const firstSession = create.mock.calls[0][0] as string;
+      const firstTarget = createdWorkers[0].postMessage.mock.calls[0][0].target;
+
+      act(() => createdWorkers[0].onmessage?.(done));
+      await waitFor(() => expect(createdWorkers).toHaveLength(2));
+      expect(window.electronAPI.recordingAbort).toHaveBeenCalledWith(firstSession);
+      expect(result.current.shrinking).toBe(true);
+      const secondTarget = createdWorkers[1].postMessage.mock.calls[0][0].target;
+      expect(secondTarget.videoBitrate).toBeLessThan(firstTarget.videoBitrate);
+
+      // Still over after the retry: kept (no third attempt), finalized from the 2nd session.
+      act(() => createdWorkers[1].onmessage?.(done));
+      await waitFor(() => expect(onSaved).toHaveBeenCalledOnce());
+      expect(createdWorkers).toHaveLength(2);
+      expect(window.electronAPI.recordingStat).toHaveBeenCalledOnce();
+      expect(window.electronAPI.recordingFinalize).toHaveBeenCalledWith(
+        create.mock.calls[1][0],
+        expect.objectContaining({ exportPreset: "small-10" }),
+      );
+      expect(window.electronAPI.recordingFinalize).not.toHaveBeenCalledWith(
+        firstSession,
+        expect.anything(),
+      );
+    });
+
+    it("cancel during the retry leaves no session open and nothing finalized", async () => {
+      window.electronAPI.recordingStat = vi.fn(async () => 12_000_000);
+      const onSaved = vi.fn();
+      const { result } = renderHook(() => useVideoExport());
+      await act(async () => {
+        await result.current.start(startArgs({ onSaved, presetId: "small-10" }));
+      });
+      act(() => createdWorkers[0].onmessage?.(done));
+      await waitFor(() => expect(createdWorkers).toHaveLength(2));
+      const create = window.electronAPI.recordingCreate as ReturnType<typeof vi.fn>;
+      const secondSession = create.mock.calls[1][0] as string;
+
+      act(() => result.current.cancel());
+      expect(createdWorkers[1].terminate).toHaveBeenCalled();
+      expect(window.electronAPI.recordingAbort).toHaveBeenCalledWith(secondSession);
+      act(() => createdWorkers[1].onmessage?.(done));
+      await act(async () => {});
+      expect(window.electronAPI.recordingFinalize).not.toHaveBeenCalled();
+      expect(onSaved).not.toHaveBeenCalled();
+      expect(result.current.status).toBe("idle");
+    });
+
+    it("presets without a cap never stat the file", async () => {
+      const onSaved = vi.fn();
+      const { result } = renderHook(() => useVideoExport());
+      await act(async () => {
+        await result.current.start(startArgs({ onSaved, presetId: "youtube" }));
+      });
+      act(() => createdWorkers[0].onmessage?.(done));
+      await waitFor(() => expect(onSaved).toHaveBeenCalledOnce());
+      expect(window.electronAPI.recordingStat).not.toHaveBeenCalled();
+    });
+  });
+
+  it("FR9: a too-small moov reservation aborts that attempt and retries once without fast start", async () => {
+    const onSaved = vi.fn();
+    const { result } = renderHook(() => useVideoExport());
+    await act(async () => {
+      await result.current.start(startArgs({ onSaved }));
+    });
+    const create = window.electronAPI.recordingCreate as ReturnType<typeof vi.fn>;
+    const firstSession = create.mock.calls[0][0] as string;
+    const first = createdWorkers[0];
+
+    act(() =>
+      first.onmessage?.({
+        data: {
+          type: "error",
+          message: "Track #1 has already reached the maximum packet count (100).",
+        },
+      } as MessageEvent),
+    );
+
+    expect(first.terminate).toHaveBeenCalledOnce();
+    expect(window.electronAPI.recordingAbort).toHaveBeenCalledWith(firstSession);
+    await waitFor(() => expect(createdWorkers).toHaveLength(2));
+    const second = createdWorkers[1];
+    const secondSession = create.mock.calls[1][0] as string;
+    expect(secondSession).not.toBe(firstSession);
+    expect(second.postMessage.mock.calls[0][0].target.fastStart).toBe(false);
+    expect(result.current.status).toBe("exporting");
+
+    // A stray message from the dead first worker is ignored.
+    act(() => first.onmessage?.({ data: { type: "done" } } as MessageEvent));
+    act(() => second.onmessage?.({ data: { type: "done" } } as MessageEvent));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledOnce());
+    expect(window.electronAPI.recordingFinalize).toHaveBeenCalledOnce();
+    expect(window.electronAPI.recordingFinalize).toHaveBeenCalledWith(
+      secondSession,
+      expect.anything(),
+    );
+  });
+
+  it("a second packet-count error (already without fast start) is a real failure", async () => {
+    const { result } = renderHook(() => useVideoExport());
+    await act(async () => {
+      await result.current.start(startArgs());
+    });
+    const packetError = {
+      data: { type: "error", message: "already reached the maximum packet count" },
+    } as MessageEvent;
+    act(() => createdWorkers[0].onmessage?.(packetError));
+    await waitFor(() => expect(createdWorkers).toHaveLength(2));
+    act(() => createdWorkers[1].onmessage?.(packetError));
+    expect(result.current.status).toBe("error");
+    expect(createdWorkers).toHaveLength(2);
   });
 });

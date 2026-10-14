@@ -177,3 +177,56 @@
   color: var(--text-secondary);
   margin-right: 8px;
 }
+
+/* NIW2-218: the size in amber when the file is heavy to send (over 25 MB). */
+.metaItem[data-heavy="true"] {
+  color: var(--tone-heavy);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* "119 MB is heavy to send…": teal, because what it offers is the saving. */
+.heavyBanner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: 11px 14px;
+  border-radius: 9px;
+  border: 1px solid color-mix(in srgb, var(--tone-saving-strong) 32%, transparent);
+  background: color-mix(in srgb, var(--tone-saving-strong) 8%, transparent);
+}
+
+.heavyIcon {
+  flex-shrink: 0;
+  color: var(--tone-saving);
+}
+
+.heavyText {
+  flex: 1;
+  margin: 0;
+  font-size: var(--font-size-base);
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.heavyText strong {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.heavyAction {
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--tone-saving);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.heavyAction:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

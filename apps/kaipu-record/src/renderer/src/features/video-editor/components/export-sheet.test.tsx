@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ExportSheet, enabledGifWidths } from "./export-sheet";
 
@@ -9,6 +9,7 @@ function renderSheet(overrides: Partial<Parameters<typeof ExportSheet>[0]> = {})
     timelineDuration: 12,
     sourceWidth: 1920,
     estimate: IDLE,
+    presetSource: { width: 1920, height: 1080, fps: 30, hasAudio: true, sampleRate: 48000 },
     onGifSettingsChange: vi.fn(),
     onExportVideo: vi.fn(),
     onExportGif: vi.fn(),
@@ -20,18 +21,21 @@ function renderSheet(overrides: Partial<Parameters<typeof ExportSheet>[0]> = {})
   return props;
 }
 
+/** The footer's primary action: "Export ~24 MB ↵", "Export", "Open ↵"… */
+const exportButton = (): HTMLElement => screen.getByRole("button", { name: /^Export( |$)/ });
+
 describe("ExportSheet", () => {
   it("offers MP4 only while GIF export is on hold", () => {
     const props = renderSheet({ gifEnabled: undefined });
     expect(screen.queryByRole("radio", { name: "GIF" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Export video" }));
+    fireEvent.click(exportButton());
     expect(props.onExportVideo).toHaveBeenCalled();
   });
 
-  it("keeps today's MP4 export one click away", () => {
+  it("exports the recommended Balanced row in one click by default", () => {
     const props = renderSheet();
-    fireEvent.click(screen.getByRole("button", { name: "Export video" }));
-    expect(props.onExportVideo).toHaveBeenCalled();
+    fireEvent.click(exportButton());
+    expect(props.onExportVideo).toHaveBeenCalledWith({ presetId: "balanced", framing: null });
     expect(props.onGifSettingsChange).toHaveBeenLastCalledWith(null);
   });
 
@@ -89,5 +93,232 @@ describe("enabledGifWidths", () => {
   it("keeps at least the smallest width for tiny sources", () => {
     expect(enabledGifWidths(1920)).toEqual([480, 640, 800]);
     expect(enabledGifWidths(320)).toEqual([480]);
+  });
+});
+
+describe("presets (NIW2-218 export redesign)", () => {
+  const row = (name: RegExp) => screen.getByRole("radio", { name });
+  /** The size column the row is described by: "~9.2 MB" + "1280×720". */
+  const sizeOf = (name: RegExp): string =>
+    document.getElementById(row(name).getAttribute("aria-describedby")!)!.textContent ?? "";
+
+  it("groups the rows by intent: Recommended, Share in a tool, Post, Keep", () => {
+    renderSheet({ presetSource: { width: 1662, height: 1080, fps: 30, hasAudio: true } });
+    const list = screen.getByRole("radiogroup", { name: "Destination" });
+    const text = list.textContent ?? "";
+    const order = [
+      "Recommended",
+      "Balanced",
+      "Share in a tool",
+      "GitHub · Jira · Linear",
+      "Slack · Discord",
+      "Post",
+      "YouTube",
+      "Reels · TikTok · Shorts",
+      "Feeds",
+      "Keep",
+      "Maximum quality",
+    ].map((label) => text.indexOf(label));
+    expect(order.every((index) => index >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(within(list).getAllByRole("radio")).toHaveLength(7);
+  });
+
+  it("gives each row where it works, its size in MB and its output dimensions", () => {
+    renderSheet({ presetSource: { width: 1662, height: 1080, fps: 30, hasAudio: true } });
+    expect(row(/^Balanced/).getAttribute("aria-checked")).toBe("true");
+    expect(row(/^Balanced/).textContent).toContain("Recommended");
+    expect(row(/^Balanced/).textContent).toContain("Good for almost anything");
+    expect(sizeOf(/^Balanced/)).toContain("1662×1080");
+    expect(sizeOf(/^YouTube/)).toContain("1920×1080");
+    expect(sizeOf(/^Reels/)).toContain("1080×1920");
+    expect(sizeOf(/^Feeds/)).toContain("1080×1080");
+    expect(row(/^GitHub/).textContent).toContain("Attach to an issue or a PR");
+    expect(sizeOf(/^Maximum quality/)).toContain("1662×1080");
+    expect(sizeOf(/^Maximum quality/)).toContain("Full size");
+  });
+
+  it("estimates every row from pure math, 'up to' only for the fixed canvases", () => {
+    renderSheet({ timelineDuration: 60 });
+    // (3 Mbps + 128 kbps) × 60 s / 8 ≈ 23 MB, plus the moov reservation.
+    expect(sizeOf(/^Balanced/)).toMatch(/^~24 MB/);
+    // (8 Mbps + 128 kbps) × 60 s / 8 ≈ 61 MB.
+    expect(sizeOf(/^YouTube/)).toMatch(/^up to ~61 MB/);
+    // The cap's budget: 10 MB × 0.92.
+    expect(sizeOf(/^GitHub/)).toMatch(/^~9\.2 MB/);
+    expect(sizeOf(/^GitHub/)).toContain("1280×720");
+  });
+
+  it("shows the before/after meter for the selected row against the original's size", () => {
+    renderSheet({ timelineDuration: 60, sourceSizeBytes: 119_000_000 });
+    expect(screen.getByText("Original 119 MB")).toBeInTheDocument();
+    expect(screen.getByText("~24 MB", { selector: "strong" })).toBeInTheDocument();
+    expect(screen.getByText(/80% lighter/)).toBeInTheDocument();
+
+    fireEvent.click(row(/^GitHub/));
+    expect(screen.getByText(/92% lighter/)).toBeInTheDocument();
+    fireEvent.click(row(/^YouTube/));
+    expect(screen.getByText("Up to ~61 MB")).toBeInTheDocument();
+    fireEvent.click(row(/^Maximum quality/));
+    expect(screen.queryByText(/lighter/)).toBeNull();
+  });
+
+  it("leaves the meter out without the original's size", () => {
+    renderSheet();
+    expect(screen.queryByText(/^Original/)).toBeNull();
+  });
+
+  it("puts the size on the primary button and Enter exports the selected row", () => {
+    const props = renderSheet({ timelineDuration: 60 });
+    expect(exportButton().textContent).toBe("Export ~24 MB↵");
+    fireEvent.keyDown(screen.getByRole("alertdialog"), { key: "Enter" });
+    expect(props.onExportVideo).toHaveBeenCalledWith({ presetId: "balanced", framing: null });
+
+    fireEvent.click(row(/^YouTube/));
+    fireEvent.keyDown(row(/^YouTube/), { key: "Enter" });
+    expect(props.onExportVideo).toHaveBeenCalledOnce();
+    fireEvent.keyDown(screen.getByRole("alertdialog"), { key: "Enter" });
+    expect(props.onExportVideo).toHaveBeenLastCalledWith({ presetId: "youtube", framing: null });
+  });
+
+  it("preselects the Settings default (Maximum) and exports it", () => {
+    const props = renderSheet({ defaultPreset: "maximum" });
+    expect(row(/^Maximum quality/).getAttribute("aria-checked")).toBe("true");
+    expect(exportButton().textContent).toBe("Export↵");
+    fireEvent.click(exportButton());
+    expect(props.onExportVideo).toHaveBeenCalledWith({ presetId: "maximum", framing: null });
+  });
+
+  it("opens the selected row with its explanation and facts", () => {
+    renderSheet({ presetSource: { width: 1662, height: 1080, fps: 30, hasAudio: true } });
+    expect(screen.getByText(/at a fraction of the weight/)).toBeInTheDocument();
+    expect(screen.getByText("Text stays readable")).toBeInTheDocument();
+
+    fireEvent.click(row(/^GitHub/));
+    expect(screen.queryByText(/at a fraction of the weight/)).toBeNull();
+    expect(screen.getByText("Under the 10 MB limit")).toBeInTheDocument();
+    expect(screen.getByText("Uploads in seconds")).toBeInTheDocument();
+
+    // Not 16:9 → YouTube adds bars, and says so.
+    fireEvent.click(row(/^YouTube/));
+    expect(screen.getByText("Black bars if the screen isn't 16:9")).toBeInTheDocument();
+  });
+
+  it("says nothing about bars when the recording already is 16:9", () => {
+    renderSheet({ defaultPreset: "youtube" });
+    expect(screen.queryByText("Black bars if the screen isn't 16:9")).toBeNull();
+  });
+
+  it("offers Fill / Fit with a framing preview only under Reels or Feeds, with their defaults", () => {
+    renderSheet({ thumbnailUrl: "kaipu-media://thumb/rec-1.jpg" });
+    expect(screen.queryByRole("radio", { name: /^Fit/ })).toBeNull();
+    fireEvent.click(row(/^YouTube/));
+    expect(screen.queryByTestId("framing-preview")).toBeNull();
+
+    fireEvent.click(row(/^Reels/));
+    expect(screen.getByRole("radio", { name: "Fill · crop the sides" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(screen.getByTestId("framing-preview")).toHaveAttribute("data-framing", "fill");
+    expect(screen.getByText(/edges of your recording are cut off/)).toBeInTheDocument();
+
+    fireEvent.click(row(/^Feeds/));
+    expect(screen.getByRole("radio", { name: "Fit · show all" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    fireEvent.click(screen.getByRole("radio", { name: "Fill · crop the sides" }));
+    expect(screen.getByTestId("framing-preview")).toHaveAttribute("data-framing", "fill");
+    expect(screen.getAllByTestId("framing-preview")).toHaveLength(1);
+  });
+
+  it("passes the chosen framing with the export", () => {
+    const props = renderSheet();
+    fireEvent.click(row(/^Feeds/));
+    fireEvent.click(screen.getByRole("radio", { name: "Fill · crop the sides" }));
+    fireEvent.click(exportButton());
+    expect(props.onExportVideo).toHaveBeenCalledWith({ presetId: "square", framing: "fill" });
+  });
+
+  it("warns under the selected capped row when the cap can't be met, and still allows exporting", () => {
+    const props = renderSheet({ timelineDuration: 900 });
+    expect(screen.queryByRole("alert")).toBeNull();
+    fireEvent.click(row(/^GitHub/));
+    expect(screen.getByRole("alert").textContent).toMatch(/Fits up to ~\d+:\d\d/);
+    expect(screen.queryByText(/^Under the/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Export anyway (over limit)" }));
+    expect(props.onExportVideo).toHaveBeenCalledWith({ presetId: "small-10", framing: null });
+  });
+
+  it("subtitles the sheet with the title, duration and resolution", () => {
+    renderSheet({ sourceTitle: "Recording — 10/12/2026", timelineDuration: 78 });
+    expect(screen.getByText("Recording — 10/12/2026 · 1:18 · 1920×1080")).toBeInTheDocument();
+  });
+
+  it("closes from the ✕ and from Cancel", () => {
+    const props = renderSheet();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(props.onCancel).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("already exported → reuse (NIW2-218)", () => {
+  const existing = {
+    id: "local-yt",
+    assetId: "asset-yt",
+    kind: "recording" as const,
+    title: "Demo (YouTube)",
+    createdAt: 1,
+    durationSeconds: 12,
+    fileSizeBytes: 100,
+    cloudSizeBytes: null,
+    availability: "local" as const,
+    comparison: "same" as const,
+    editing: "exported-only" as const,
+    transfer: { state: "idle" as const },
+    derivedFromAssetId: "source",
+    editSavedAt: null,
+    editExportedSavedAt: null,
+    export: { preset: "youtube" as const, fingerprint: "whole" },
+  };
+
+  it("badges the row and opens the existing file instead of encoding", () => {
+    const onOpenExisting = vi.fn();
+    const props = renderSheet({ reusable: { youtube: existing }, onOpenExisting });
+    const badge = screen.getByRole("button", { name: "Open the existing YouTube file" });
+    expect(badge.textContent).toBe("Already exported · Open");
+
+    fireEvent.click(badge);
+    expect(onOpenExisting).toHaveBeenCalledWith(existing);
+    // The badge opens the file; it doesn't select the row.
+    expect(screen.getByRole("radio", { name: /^YouTube/ })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+
+    fireEvent.click(screen.getByRole("radio", { name: /^YouTube/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    expect(onOpenExisting).toHaveBeenCalledTimes(2);
+    fireEvent.keyDown(screen.getByRole("alertdialog"), { key: "Enter" });
+    expect(onOpenExisting).toHaveBeenCalledTimes(3);
+    expect(props.onExportVideo).not.toHaveBeenCalled();
+  });
+
+  it("other rows still export", () => {
+    const props = renderSheet({ reusable: { youtube: existing }, onOpenExisting: vi.fn() });
+    fireEvent.click(exportButton());
+    expect(props.onExportVideo).toHaveBeenCalledWith({ presetId: "balanced", framing: null });
+  });
+
+  it("ignores reuse when the host can't open files", () => {
+    renderSheet({ reusable: { youtube: existing } });
+    expect(screen.queryByText("Already exported · Open")).toBeNull();
+  });
+
+  it("takes a custom title (Share)", () => {
+    renderSheet({ title: "Share a copy" });
+    expect(screen.getByRole("heading", { name: "Share a copy" })).toBeInTheDocument();
   });
 });

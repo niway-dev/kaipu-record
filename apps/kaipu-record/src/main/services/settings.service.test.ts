@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_SETTINGS, DEFAULT_SHORTCUTS } from "@shared/types";
+import { DEFAULT_EXPORT_QUALITY, DEFAULT_SETTINGS, DEFAULT_SHORTCUTS } from "@shared/types";
 import { DEFAULT_QUALITY, QUALITY_PRESETS } from "@shared/recording-quality";
 import { DEFAULT_LOCALE } from "@kaipu/i18n";
 import { isValidTheme, mergeSettings, mergeShortcuts } from "./settings.service";
@@ -58,6 +58,8 @@ describe("mergeSettings", () => {
         shortcuts,
         deviceId: "stored-id",
         uploadMode: "manual",
+        exportQuality: "maximum",
+        showRecordingSavedCard: false,
       }),
     ).toEqual({
       theme: "dark",
@@ -72,7 +74,35 @@ describe("mergeSettings", () => {
       shortcuts,
       deviceId: "stored-id",
       uploadMode: "manual",
+      exportQuality: "maximum",
+      showRecordingSavedCard: false,
     });
+  });
+
+  it("defaults Export quality to Balanced and sanitizes it (NIW2-218)", () => {
+    expect(DEFAULT_SETTINGS.exportQuality).toBe(DEFAULT_EXPORT_QUALITY);
+    expect(mergeSettings({}).exportQuality).toBe("balanced");
+    expect(mergeSettings({ exportQuality: "maximum" }).exportQuality).toBe("maximum");
+    expect(mergeSettings({ exportQuality: "original" as never }).exportQuality).toBe("balanced");
+  });
+
+  it("shows the Recording saved card by default and keeps a boolean choice (NIW2-218)", () => {
+    expect(DEFAULT_SETTINGS.showRecordingSavedCard).toBe(true);
+    expect(mergeSettings({}).showRecordingSavedCard).toBe(true);
+    expect(mergeSettings({ showRecordingSavedCard: false }).showRecordingSavedCard).toBe(false);
+    expect(mergeSettings({ showRecordingSavedCard: "no" as never }).showRecordingSavedCard).toBe(
+      true,
+    );
+  });
+
+  it("drops the last-used export preset keys older settings files carry (NIW2-218)", () => {
+    const merged = mergeSettings({
+      lastExportPreset: "vertical",
+      lastExportFraming: "fill",
+    } as never);
+    expect(merged).not.toHaveProperty("lastExportPreset");
+    expect(merged).not.toHaveProperty("lastExportFraming");
+    expect(merged.exportQuality).toBe("balanced");
   });
 
   it('coerces a legacy persisted "system" theme to the dark default', () => {

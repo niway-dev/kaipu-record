@@ -12,6 +12,7 @@ import {
   type Theme,
   UPLOAD_MODES,
   type UploadMode,
+  sanitizeExportQuality,
 } from "@shared/types";
 import { sanitizeQuality } from "@shared/recording-quality";
 import { DEFAULT_LOCALE, isLocale } from "@kaipu/i18n";
@@ -91,5 +92,12 @@ export function mergeSettings(stored: Partial<AppSettings> | null | undefined): 
     shortcuts: mergeShortcuts(safe.shortcuts),
     deviceId: typeof safe.deviceId === "string" ? safe.deviceId : "",
     uploadMode: isValidUploadMode(safe.uploadMode) ? safe.uploadMode : DEFAULT_SETTINGS.uploadMode,
+    // Files written before NIW2-218's Export quality still carry `lastExportPreset` /
+    // `lastExportFraming`; rebuilding the object here drops them.
+    exportQuality: sanitizeExportQuality(safe.exportQuality),
+    showRecordingSavedCard:
+      typeof safe.showRecordingSavedCard === "boolean"
+        ? safe.showRecordingSavedCard
+        : DEFAULT_SETTINGS.showRecordingSavedCard,
   };
 }

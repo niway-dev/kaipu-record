@@ -32,8 +32,13 @@ export function initAnalytics(deviceId: string): void {
   if (deviceId) posthog.identify(deviceId);
 }
 
-/** Send an exception with the full technical payload (developer channel). No-op if disabled. */
+/**
+ * Send an exception with the full technical payload (developer channel). No-op if disabled.
+ * In development it is also printed: the CSP blocks PostHog there, so otherwise a caught
+ * error (an export failure, say) leaves no trace anywhere.
+ */
 export function captureException(error: unknown, context?: Record<string, unknown>): void {
+  if (import.meta.env.DEV) console.error("[captureException]", context ?? {}, error);
   if (!started) return;
   posthog.captureException(error, context);
 }

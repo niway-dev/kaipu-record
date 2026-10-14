@@ -56,9 +56,20 @@ test("a muted recording exports with no audio track at all", async () => {
       .toBeGreaterThan(0);
 
     await page.getByRole("button", { name: "Export" }).click();
-    await page.getByRole("button", { name: "Export video" }).click();
+    // The sheet's primary action carries the size ("Export ~24 MB").
+    await page
+      .getByRole("alertdialog")
+      .getByRole("button", { name: /^Export( |$)/ })
+      .click();
+    // The export runs in the background (NIW2-218): success = the "Ready to share" card,
+    // whose View file opens the new recording's detail route. The router is a hash router,
+    // so poll location.hash (a bare hash change does not reliably fire Playwright's
+    // navigation events). Give the encode a generous window.
+    const ready = page.getByRole("region", { name: /^Ready to share/ });
+    await expect(ready).toBeVisible({ timeout: 90_000 });
+    await ready.getByRole("button", { name: "View file" }).click();
     await expect
-      .poll(() => page.evaluate(() => location.hash), { timeout: 90_000 })
+      .poll(() => page.evaluate(() => location.hash), { timeout: 15_000 })
       .toMatch(/^#\/library\/.+/);
 
     const newAssetId = (await page.evaluate(() => location.hash)).replace("#/library/", "");

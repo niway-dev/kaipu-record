@@ -17,6 +17,8 @@ const SETTINGS: AppSettings = {
   shortcuts: DEFAULT_SHORTCUTS,
   deviceId: "",
   uploadMode: "local-only",
+  exportQuality: "balanced",
+  showRecordingSavedCard: true,
 };
 
 describe("useAppSettings", () => {
