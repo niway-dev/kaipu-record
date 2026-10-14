@@ -2,7 +2,7 @@
  * Lazy transactional email singleton — mirrors lib/storage.ts: the Worker boots
  * without RESEND_API_KEY, and send hooks become logged no-ops.
  */
-import { EmailService, ResendEmailProvider } from "@kaipu/infra-email";
+import { type EmailLocale, EmailService, ResendEmailProvider } from "@kaipu/infra-email";
 
 import { env } from "../env";
 
@@ -37,4 +37,14 @@ export function tryGetEmail(): EmailService | null {
 
 export function webUrl(): string {
   return (env.PUBLIC_WEB_URL ?? "https://kaipu.app").replace(/\/$/, "");
+}
+
+/** Best-effort locale from Accept-Language; English is the documented fallback. */
+export function emailLocale(request?: Request | { headers: Headers }): EmailLocale {
+  const header = request?.headers.get("accept-language") ?? "";
+  return header.toLowerCase().startsWith("es") ? "es" : "en";
+}
+
+export function toEmailLocale(locale: string): EmailLocale {
+  return locale === "es" ? "es" : "en";
 }

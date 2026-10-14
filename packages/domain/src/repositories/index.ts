@@ -11,3 +11,8 @@ export type {
   PurgeJob,
 } from "./cloud-asset.repository";
 export type { IManualPlanGrantRepository } from "./manual-plan-grant.repository";
+export type {
+  IAccountDeletionRepository,
+  AccountDeletion,
+  DueAccountDeletion,
+} from "./account-deletion.repository";

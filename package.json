@@ -52,6 +52,7 @@
     "db:generate": "bash scripts/with-env.sh --tags db-scripts -- turbo run db:generate -F @kaipu/infra-db",
     "db:migrate": "bash scripts/with-env.sh --tags db-scripts -- turbo run db:migrate -F @kaipu/infra-db",
     "plan": "bash scripts/with-env.sh --tags db-scripts -- bun apps/server-hono/scripts/plan.ts",
+    "cloud:uploads": "bash scripts/with-env.sh --tags db-scripts -- bun apps/server-hono/scripts/cloud-uploads.ts",
     "test": "turbo run test",
     "test:integration": "bash scripts/with-env.sh --tags db-scripts -- turbo run test:integration -F @kaipu/infra-db"
   },

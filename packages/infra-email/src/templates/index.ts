@@ -1,3 +1,5 @@
+import { AccountDeletedEmail } from "./account-deleted";
+import { AccountDeletionScheduledEmail } from "./account-deletion-scheduled";
 import { ExpansionApprovedEmail } from "./expansion-approved";
 import { emailT } from "./i18n";
 import { ResetPasswordEmail } from "./reset-password";
@@ -21,6 +23,14 @@ export const EmailTemplateMap: {
   [EMAIL_TEMPLATE_VALUES.EXPANSION_APPROVED]: {
     subject: (d) => emailT(d.locale)("approvedSubject", { capacity: d.capacityLabel }),
     component: ExpansionApprovedEmail,
+  },
+  [EMAIL_TEMPLATE_VALUES.ACCOUNT_DELETION_SCHEDULED]: {
+    subject: (d) => emailT(d.locale)("deletionScheduledSubject", { date: d.dateLabel }),
+    component: AccountDeletionScheduledEmail,
+  },
+  [EMAIL_TEMPLATE_VALUES.ACCOUNT_DELETED]: {
+    subject: (d) => emailT(d.locale)("deletedSubject"),
+    component: AccountDeletedEmail,
   },
 };
 

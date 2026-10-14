@@ -26,6 +26,10 @@ export type CloudEvent =
       failedDeletes: number;
       purged: number;
       purgeFailed: number;
+      purgedObjects: number;
+      purgeUnfinished: number;
+      accountsDeleted: number;
+      accountDeletionsFailed: number;
       reconciled: number;
     }
   | { name: "cloud.sweep.failed"; error: string };

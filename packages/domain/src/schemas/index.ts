@@ -77,3 +77,10 @@ export {
   type StorageUsage,
   type UploadVerificationReason,
 } from "./cloud-asset";
+
+// Account deletion (soft delete with a grace period)
+export {
+  accountDeletionStatusSchema,
+  AccountDeletionScheduledError,
+  type AccountDeletionStatus,
+} from "./account-deletion";

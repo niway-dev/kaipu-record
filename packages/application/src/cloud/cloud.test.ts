@@ -883,12 +883,35 @@ describe("sweeps", () => {
     expect(await purgeAccountObjects({ purge, storage, limit: 5, maxAttempts: 3 })).toEqual({
       done: 0,
       failed: 1,
+      deletedObjects: 0,
+      unfinished: 0,
     });
     storage.failDeletes = false;
     expect(await purgeAccountObjects({ purge, storage, limit: 5, maxAttempts: 3 })).toEqual({
       done: 1,
       failed: 0,
+      deletedObjects: 2,
+      unfinished: 0,
     });
     expect([...storage.objects.keys()]).toEqual(["videos/other/a/r.mp4"]);
+  });
+
+  it("caps R2 deletes per call across jobs and finishes on later calls without using attempts", async () => {
+    const storage = makeFakeStorage();
+    const purge = makeFakePurge();
+    for (let i = 0; i < 3; i++) storage.land(`videos/a/x/${i}.mp4`, { sizeBytes: 1 });
+    for (let i = 0; i < 2; i++) storage.land(`img/b/x/${i}.png`, { sizeBytes: 1 });
+    await purge.enqueue("a");
+    await purge.enqueue("b");
+    const run = () =>
+      purgeAccountObjects({ purge, storage, limit: 5, maxAttempts: 3, maxObjects: 2 });
+
+    expect(await run()).toEqual({ done: 0, failed: 0, deletedObjects: 2, unfinished: 2 });
+    expect(storage.deletes).toHaveLength(2);
+    // "a" finishes with its last key; "b" gets the remaining budget and stays pending.
+    expect(await run()).toEqual({ done: 1, failed: 0, deletedObjects: 2, unfinished: 1 });
+    expect(await run()).toEqual({ done: 1, failed: 0, deletedObjects: 1, unfinished: 0 });
+    expect(storage.objects.size).toBe(0);
+    expect(purge.jobs.every((j) => j.attempts === 0)).toBe(true);
   });
 });

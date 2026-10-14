@@ -1,15 +1,9 @@
 import { baseConfig, getCustomSession } from "@kaipu/infra-auth";
-import { describeEmailFailure, EMAIL_TEMPLATE_VALUES, type EmailLocale } from "@kaipu/infra-email";
+import { describeEmailFailure, EMAIL_TEMPLATE_VALUES } from "@kaipu/infra-email";
 import { betterAuth } from "better-auth";
 import { customSession } from "better-auth/plugins";
 import { env } from "../env";
-import { buildResetUrl, buildVerifyUrl, tryGetEmail, webUrl } from "./email";
-
-/** Best-effort locale from Accept-Language; English is the documented fallback. */
-function emailLocale(request?: Request): EmailLocale {
-  const header = request?.headers.get("accept-language") ?? "";
-  return header.toLowerCase().startsWith("es") ? "es" : "en";
-}
+import { buildResetUrl, buildVerifyUrl, emailLocale, tryGetEmail, webUrl } from "./email";
 
 // "kaipu-record://app" is the desktop app's own request identity for Better Auth's CSRF
 // origin check — not a real URL scheme Electron navigates to. Electron's main process
@@ -95,5 +89,8 @@ export const auth = betterAuth({
       }
     },
   },
+  // Account deletion is NOT Better Auth's `deleteUser` (decision 2026-10-10): it is a soft delete
+  // with a 7-day grace period, served by `/api/v1/me/account-deletion` (modules/me) and finished
+  // by the cron (cloud/run-cloud-sweep.ts). Better Auth's immediate delete stays disabled.
   plugins: [...(baseConfig.plugins ?? []), customSession(getCustomSession, baseConfig)],
 });

@@ -8,4 +8,9 @@
   "observability": {
     "enabled": true,
   },
+  // Cloud sweep (src/scheduled.ts): releases expired reservations, retries deletes, drains the
+  // account purge queue, reconciles accounting. PROPOSAL (plan 01 Task 0) — not approved.
+  "triggers": {
+    "crons": ["*/15 * * * *"],
+  },
 }

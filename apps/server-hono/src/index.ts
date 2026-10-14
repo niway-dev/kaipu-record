@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { auth } from "./lib/auth";
 import { appRouter } from "./router";
+import { scheduled } from "./scheduled";
 
 const app = new Hono();
 
@@ -40,4 +41,5 @@ app.all("/api/v1/*", async (c) => {
   return c.notFound();
 });
 
-export default app;
+// `scheduled` runs the cloud sweep on the cron in wrangler.jsonc (plan 01 Task 11).
+export default { fetch: app.fetch, scheduled } satisfies ExportedHandler;
