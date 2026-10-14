@@ -50,6 +50,9 @@ export function Closing() {
         </span>
 
         <nav className={styles.links}>
+          <Link to="/features" className={styles.link}>
+            {t("homeNavFeatures")}
+          </Link>
           <Link to="/roadmap" className={styles.link}>
             {tRoadmap("navLabel")}
           </Link>

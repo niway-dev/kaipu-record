@@ -260,6 +260,7 @@
     "homeRailTotal": "04",
     "homeNavProduct": "Product",
     "homeNavYourFiles": "Your files",
+    "homeNavFeatures": "Features",
     "homeHeroEyebrow": "Screen recording & screenshots for Mac",
     "homeHeroBadgeMac": "Mac app",
     "homeHeroBadgeRest": "Local · no account",
@@ -1278,6 +1279,10 @@
       "cookies": {
         "title": "Cookies and local storage | Kaipu Record",
         "description": "The session and preference cookies Kaipu Record uses, and how to manage them."
+      },
+      "features": {
+        "title": "Features | Kaipu Record",
+        "description": "Everything Kaipu Record does: screen and camera recording, annotated screenshots, an editor with automatic zoom, light exports and a searchable library."
       }
     }
   },
@@ -1365,6 +1370,206 @@
       "brandIdentity": {
         "title": "Refreshed logo and identity",
         "description": "A sharper logo and a consistent visual identity across the app, the site and the installers."
+      }
+    }
+  },
+  "features": {
+    "eyebrow": "Features · {count} features · 4 chapters",
+    "title": "Everything Kaipu does.",
+    "serif": "Capture it. Make it clear. Find it again.",
+    "lead": "The home page is the 30-second version. This is the whole list: every feature in Kaipu today, grouped by the moment you’d reach for it.",
+    "indexLabel": "Chapters",
+    "count": "{count, plural, one {# feature} other {# features}}",
+    "linkFiles": "Your files",
+    "linkPrivate": "Private by design",
+    "linkNext": "Coming next",
+    "chapters": {
+      "record": {
+        "name": "Record",
+        "line": "Screen, voice, system audio and a camera bubble.",
+        "title": "Show what happened.",
+        "serif": "One take. No setup.",
+        "intro": "Start from the menu bar or a shortcut, talk while you show it, stop. It’s already in your library."
+      },
+      "capture": {
+        "name": "Capture",
+        "line": "Screenshots with arrows, boxes and notes.",
+        "title": "Sometimes a screenshot says it all.",
+        "serif": "Point at it. Literally.",
+        "intro": "Select an area, mark what matters, blur what shouldn’t be seen, and send it before the moment passes."
+      },
+      "edit": {
+        "name": "Edit",
+        "line": "Zoom, trim, mute, hide, then export.",
+        "title": "A small tweak. A clearer idea.",
+        "serif": "Cut what’s extra. Zoom into what matters.",
+        "intro": "Just enough editing to make it clear. Every change can be undone, and your original is never touched."
+      },
+      "find": {
+        "name": "Find",
+        "line": "One library, tags and search.",
+        "title": "Useful now. Easy to find later.",
+        "serif": "Explain it once. It stays explained.",
+        "intro": "Next week, you won’t have to record it again. Everything you made is one search away."
+      }
+    },
+    "items": {
+      "screenCamera": {
+        "title": "Screen and camera recording",
+        "body": "Your screen, your voice, system audio and a floating camera bubble you can drag anywhere, in high quality.",
+        "d1": "Mic, system audio and camera on separate switches",
+        "d2": "The camera bubble stays on top while you work",
+        "d3": "Pause and resume without starting over"
+      },
+      "startAnywhere": {
+        "title": "Start from anywhere",
+        "body": "A capture panel in the menu bar, and global shortcuts that work from any app. Rebind any of them.",
+        "k1": "Start",
+        "k2": "Stop",
+        "k3": "Screenshot",
+        "k4": "Show app"
+      },
+      "micPicker": {
+        "title": "Microphone picker",
+        "body": "Choose any input. Plug in a headset and the list updates on its own."
+      },
+      "recordingQuality": {
+        "title": "Recording quality presets",
+        "body": "Trade file size for sharpness before you start, or set resolution and frame rate yourself.",
+        "c1": "Light",
+        "c2": "Balanced",
+        "c3": "Maximum quality"
+      },
+      "alreadySaved": {
+        "title": "Already saved",
+        "body": "When you stop, it’s in your library. A file missing its thumbnail or duration is repaired on its own."
+      },
+      "annotations": {
+        "title": "Annotations",
+        "body": "Arrows, boxes, a freehand pen and handwritten-style notes on top of any screenshot.",
+        "d1": "Multi-line labels that wrap on their own",
+        "d2": "Double-click a label to edit it in place",
+        "d3": "Seven colors and three stroke widths per mark"
+      },
+      "captureModes": {
+        "title": "Select an area",
+        "body": "Drag over the part of the screen you need, from a shortcut or the menu bar."
+      },
+      "blurFrame": {
+        "title": "Blur and frame",
+        "body": "Blur a detail, then set the shot on a background with padding, a shadow and rounded corners so it looks finished."
+      },
+      "nameIt": {
+        "title": "Name it as you make it",
+        "body": "A pre-filled title you can edit before saving, and rename later."
+      },
+      "copyPngPdf": {
+        "title": "Copy, PNG or PDF",
+        "body": "Copied to the clipboard as the editor opens, saved as a PNG, or exported as a sharp one-page PDF.",
+        "c1": "Copy",
+        "c2": ".png",
+        "c3": ".pdf"
+      },
+      "saveEvery": {
+        "title": "Save every screenshot, or only some",
+        "body": "By default every capture is kept. Prefer to choose? Switch to saving only when you click Save."
+      },
+      "autoZoom": {
+        "title": "Automatic zoom",
+        "body": "The editor suggests a zoom wherever you clicked or paused, so the detail you point at is readable.",
+        "d1": "Each zoom follows the cursor, or locks on one spot",
+        "d2": "Add your own, or remove any suggestion",
+        "d3": "Every zoom shows why it’s there: a click, a pause or you"
+      },
+      "trim": {
+        "title": "Trim and cut",
+        "body": "Remove the start, the end, and anything in between.",
+        "d1": "Split at the playhead and delete a piece",
+        "d2": "Undo and redo every step",
+        "d3": "A history slider to go back further"
+      },
+      "mute": {
+        "title": "Mute a cough",
+        "body": "Silence a stretch of audio, or the whole recording. The picture keeps playing."
+      },
+      "cover": {
+        "title": "Blur and cover",
+        "body": "Hide an API key or a customer name for exactly as long as it’s on screen. Cover leaves no trace."
+      },
+      "original": {
+        "title": "Your original stays untouched",
+        "body": "An edit is saved as a new item in your library. The recording you made is never changed."
+      },
+      "export": {
+        "title": "Export for where it’s going",
+        "body": "Pick where the video is going and get a file that fits, or keep Balanced. Maximum quality is one setting away.",
+        "c1": "GitHub · Jira · Linear",
+        "c2": "Slack · Discord",
+        "c3": "YouTube",
+        "c4": "Reels · TikTok · Shorts",
+        "c5": "Feeds"
+      },
+      "share": {
+        "title": "Share in one click",
+        "body": "Share straight from the library. If that version is already exported, Kaipu reuses it instead of encoding again."
+      },
+      "background": {
+        "title": "Exports run in the background",
+        "body": "Keep working while it encodes. A “Ready to share” card appears when it’s done: drag the file straight into Slack, GitHub or Finder, under a friendly name."
+      },
+      "library": {
+        "title": "One library for everything",
+        "body": "Recordings and screenshots side by side, with previews, badges, filters and search.",
+        "d1": "Filter by type, by tag, or by this Mac and the cloud",
+        "d2": "Search by title or tag name",
+        "d3": "Sort by newest, oldest or largest"
+      },
+      "tags": {
+        "title": "Colored tags",
+        "body": "Create tags, give each a color, and filter the library by tag.",
+        "c1": "bug",
+        "c2": "onboarding",
+        "c3": "release",
+        "c4": "design"
+      },
+      "rename": {
+        "title": "Rename anything",
+        "body": "Give anything a better name. An edited video is its own item, linked back to the recording it came from."
+      }
+    },
+    "private": {
+      "eyebrow": "Private by design",
+      "title": "Yours, without an account.",
+      "serif": "No watermark. No screen in the analytics.",
+      "items": {
+        "noAccount": {
+          "title": "Works without an account",
+          "body": "Record, capture, edit and export with no sign-up. Accounts exist only for the optional cloud."
+        },
+        "noWatermark": {
+          "title": "No watermark, on any plan",
+          "body": "An optional “Made with Kaipu” badge exists, and it’s off by default."
+        },
+        "analytics": {
+          "title": "Analytics never see your screen",
+          "body": "Usage analytics never record your screen or your clicks in the app."
+        },
+        "languages": {
+          "title": "Light, dark, English, Spanish",
+          "body": "Both themes are first-class, and the whole app is in English and Spanish."
+        }
+      }
+    },
+    "next": {
+      "badge": "Planned",
+      "title": "Coming next",
+      "note": "Not shipped yet. No dates: we’ll say when.",
+      "roadmapLink": "See the roadmap",
+      "items": {
+        "windows": "Windows beta",
+        "cloudUpload": "Cloud upload with resumable transfers",
+        "imageZoom": "Zoom and pan in the image viewer",
+        "ownWatermark": "Your own logo as a watermark"
       }
     }
   }

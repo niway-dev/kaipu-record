@@ -29,6 +29,7 @@ const ROUTE_SLICES: ReadonlyArray<{
   slices: readonly MessageSlice[];
 }> = [
   { path: "/", exact: true, slices: [...MARKETING_CHROME, "record", "nav"] },
+  { path: "/features", slices: [...MARKETING_CHROME, "features"] },
   { path: "/roadmap", slices: MARKETING_CHROME },
   { path: "/legal", slices: [...MARKETING_CHROME, "legal"] },
   { path: "/auth", slices: APP_CHROME },

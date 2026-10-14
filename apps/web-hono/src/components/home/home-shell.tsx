@@ -4,7 +4,7 @@ import { useRouteContext } from "@tanstack/react-router";
 import { ChapterStrip } from "./chapter-strip";
 import { Rail } from "./rail";
 import { StickyCta } from "./sticky-cta";
-import { TopNav } from "./top-nav";
+import { TopNav, type MarketingPage } from "./top-nav";
 import "@/styles/landing.css";
 
 /**
@@ -22,12 +22,19 @@ import "@/styles/landing.css";
  * so the first paint is already the visitor's theme — no flash, nothing to
  * correct on hydration.
  */
-export function HomeShell({ children }: { children: ReactNode }) {
+export function HomeShell({
+  children,
+  page = "home",
+}: {
+  children: ReactNode;
+  /** Which marketing page this is — the top bar marks it as current. */
+  page?: MarketingPage;
+}) {
   const { landingTheme } = useRouteContext({ from: "__root__" });
 
   return (
     <div data-kl data-kl-theme={landingTheme}>
-      <TopNav />
+      <TopNav page={page} />
       <ChapterStrip />
       <Rail />
       <main>{children}</main>

@@ -30,13 +30,27 @@ describe("slicesForPath", () => {
     expect(slicesForPath("/auth/login")).toContain("auth");
   });
 
+  it("ships the features catalogue only to the features page", () => {
+    expect(slicesForPath("/features")).toContain("features");
+    expect(slicesForPath("/features")).toContain("landing");
+    expect(slicesForPath("/")).not.toContain("features");
+    expect(slicesForPath("/roadmap")).not.toContain("features");
+  });
+
   it("sends nothing for a route with no rule", () => {
     expect(slicesForPath("/does-not-exist")).toEqual([]);
   });
 
   it("only names namespaces that exist in the catalog", () => {
     const known = new Set(Object.keys(en));
-    for (const path of ["/", "/roadmap", "/legal/cookies", "/auth/login", "/recordings"]) {
+    for (const path of [
+      "/",
+      "/features",
+      "/roadmap",
+      "/legal/cookies",
+      "/auth/login",
+      "/recordings",
+    ]) {
       for (const slice of slicesForPath(path)) {
         expect(known.has(slice.split(".")[0] ?? "")).toBe(true);
       }

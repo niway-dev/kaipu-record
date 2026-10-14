@@ -260,6 +260,7 @@
     "homeRailTotal": "04",
     "homeNavProduct": "Producto",
     "homeNavYourFiles": "Tus archivos",
+    "homeNavFeatures": "Funciones",
     "homeHeroEyebrow": "Grabación de pantalla y capturas para Mac",
     "homeHeroBadgeMac": "App para Mac",
     "homeHeroBadgeRest": "Local · sin cuenta",
@@ -1278,6 +1279,10 @@
       "cookies": {
         "title": "Cookies y almacenamiento local | Kaipu Record",
         "description": "Cookies de sesión y preferencias que usa Kaipu Record, y cómo gestionarlas."
+      },
+      "features": {
+        "title": "Funciones | Kaipu Record",
+        "description": "Todo lo que hace Kaipu Record: grabación de pantalla y cámara, capturas anotadas, un editor con zoom automático, exports livianos y una biblioteca con búsqueda."
       }
     }
   },
@@ -1365,6 +1370,206 @@
       "brandIdentity": {
         "title": "Logo e identidad renovados",
         "description": "Un logo más definido y una identidad visual consistente entre la app, el sitio y los instaladores."
+      }
+    }
+  },
+  "features": {
+    "eyebrow": "Funciones · {count} funciones · 4 capítulos",
+    "title": "Todo lo que hace Kaipu.",
+    "serif": "Captúralo. Explícalo. Vuelve a encontrarlo.",
+    "lead": "La página de inicio es la versión de 30 segundos. Esta es la lista completa: cada función de Kaipu hoy, agrupada según el momento en que la usarías.",
+    "indexLabel": "Capítulos",
+    "count": "{count, plural, one {# función} other {# funciones}}",
+    "linkFiles": "Tus archivos",
+    "linkPrivate": "Privado por diseño",
+    "linkNext": "Lo que viene",
+    "chapters": {
+      "record": {
+        "name": "Grabar",
+        "line": "Pantalla, voz, audio del sistema y una burbuja de cámara.",
+        "title": "Muestra lo que pasó.",
+        "serif": "Una toma. Sin preparar nada.",
+        "intro": "Empieza desde la barra de menú o con un atajo, habla mientras lo muestras y detente. Ya está en tu biblioteca."
+      },
+      "capture": {
+        "name": "Capturar",
+        "line": "Capturas con flechas, recuadros y notas.",
+        "title": "A veces una captura lo dice todo.",
+        "serif": "Señálalo. Literalmente.",
+        "intro": "Selecciona un área, marca lo importante, difumina lo que no debe verse y envíala antes de que pase el momento."
+      },
+      "edit": {
+        "name": "Editar",
+        "line": "Zoom, cortes, silencio, ocultar y exportar.",
+        "title": "Un pequeño ajuste. Una idea más clara.",
+        "serif": "Quita lo que sobra. Acércate a lo importante.",
+        "intro": "La edición justa para que se entienda. Cada cambio se puede deshacer y tu original nunca se toca."
+      },
+      "find": {
+        "name": "Encontrar",
+        "line": "Una biblioteca, etiquetas y búsqueda.",
+        "title": "Útil ahora. Fácil de encontrar después.",
+        "serif": "Explícalo una vez. Queda explicado.",
+        "intro": "La próxima semana no tendrás que grabarlo de nuevo. Todo lo que hiciste está a una búsqueda de distancia."
+      }
+    },
+    "items": {
+      "screenCamera": {
+        "title": "Grabación de pantalla y cámara",
+        "body": "Tu pantalla, tu voz, el audio del sistema y una burbuja de cámara flotante que puedes mover a donde quieras, en alta calidad.",
+        "d1": "Micrófono, audio del sistema y cámara con interruptores separados",
+        "d2": "La burbuja de cámara queda encima mientras trabajas",
+        "d3": "Pausa y reanuda sin empezar de nuevo"
+      },
+      "startAnywhere": {
+        "title": "Empieza desde cualquier lugar",
+        "body": "Un panel de captura en la barra de menú y atajos globales que funcionan desde cualquier app. Puedes cambiar cualquiera.",
+        "k1": "Empezar",
+        "k2": "Detener",
+        "k3": "Captura",
+        "k4": "Mostrar app"
+      },
+      "micPicker": {
+        "title": "Selector de micrófono",
+        "body": "Elige cualquier entrada. Conecta unos audífonos y la lista se actualiza sola."
+      },
+      "recordingQuality": {
+        "title": "Calidades de grabación",
+        "body": "Elige entre tamaño de archivo y nitidez antes de empezar, o ajusta tú la resolución y los cuadros por segundo.",
+        "c1": "Ligera",
+        "c2": "Equilibrada",
+        "c3": "Calidad máxima"
+      },
+      "alreadySaved": {
+        "title": "Ya está guardado",
+        "body": "Cuando te detienes, ya está en tu biblioteca. Si a un archivo le falta la miniatura o la duración, se repara solo."
+      },
+      "annotations": {
+        "title": "Anotaciones",
+        "body": "Flechas, recuadros, lápiz libre y notas con letra manuscrita sobre cualquier captura.",
+        "d1": "Etiquetas de varias líneas que se ajustan solas",
+        "d2": "Doble clic en una etiqueta para editarla ahí mismo",
+        "d3": "Siete colores y tres grosores por marca"
+      },
+      "captureModes": {
+        "title": "Selecciona un área",
+        "body": "Arrastra sobre la parte de la pantalla que necesitas, con un atajo o desde la barra de menú."
+      },
+      "blurFrame": {
+        "title": "Difumina y enmarca",
+        "body": "Difumina un detalle y pon la captura sobre un fondo con margen, sombra y esquinas redondeadas para que se vea terminada."
+      },
+      "nameIt": {
+        "title": "Ponle nombre al hacerla",
+        "body": "Un título ya escrito que puedes editar antes de guardar, y renombrar después."
+      },
+      "copyPngPdf": {
+        "title": "Copiar, PNG o PDF",
+        "body": "Se copia al portapapeles al abrir el editor, se guarda como PNG o se exporta como un PDF nítido de una página.",
+        "c1": "Copiar",
+        "c2": ".png",
+        "c3": ".pdf"
+      },
+      "saveEvery": {
+        "title": "Guarda todas las capturas, o solo algunas",
+        "body": "Por defecto se guarda cada captura. ¿Prefieres elegir? Cambia a guardar solo cuando pulsas Guardar."
+      },
+      "autoZoom": {
+        "title": "Zoom automático",
+        "body": "El editor sugiere un zoom donde hiciste clic o te detuviste, para que se lea el detalle que señalas.",
+        "d1": "Cada zoom sigue al cursor o se fija en un punto",
+        "d2": "Agrega los tuyos o quita cualquier sugerencia",
+        "d3": "Cada zoom muestra por qué está: un clic, una pausa o tú"
+      },
+      "trim": {
+        "title": "Recortar y cortar",
+        "body": "Quita el inicio, el final y cualquier parte en medio.",
+        "d1": "Divide en el cabezal y borra un trozo",
+        "d2": "Deshaz y rehaz cada paso",
+        "d3": "Un historial para volver más atrás"
+      },
+      "mute": {
+        "title": "Silencia una tos",
+        "body": "Silencia un tramo del audio o la grabación completa. La imagen sigue."
+      },
+      "cover": {
+        "title": "Difuminar y tapar",
+        "body": "Oculta una clave de API o el nombre de un cliente justo mientras está en pantalla. Tapar no deja rastro."
+      },
+      "original": {
+        "title": "Tu original no se toca",
+        "body": "Una edición se guarda como un elemento nuevo en tu biblioteca. La grabación que hiciste nunca cambia."
+      },
+      "export": {
+        "title": "Exporta para donde va a ir",
+        "body": "Elige a dónde va el video y obtén un archivo que cabe, o deja Equilibrada. La calidad máxima está a un ajuste de distancia.",
+        "c1": "GitHub · Jira · Linear",
+        "c2": "Slack · Discord",
+        "c3": "YouTube",
+        "c4": "Reels · TikTok · Shorts",
+        "c5": "Feeds"
+      },
+      "share": {
+        "title": "Comparte con un clic",
+        "body": "Comparte directo desde la biblioteca. Si esa versión ya está exportada, Kaipu la reutiliza en vez de codificarla de nuevo."
+      },
+      "background": {
+        "title": "Los exports corren en segundo plano",
+        "body": "Sigue trabajando mientras se codifica. Al terminar aparece una tarjeta “Listo para compartir”: arrastra el archivo directo a Slack, GitHub o Finder, con un nombre legible."
+      },
+      "library": {
+        "title": "Una biblioteca para todo",
+        "body": "Grabaciones y capturas juntas, con vistas previas, insignias, filtros y búsqueda.",
+        "d1": "Filtra por tipo, por etiqueta, o por esta Mac y la nube",
+        "d2": "Busca por título o por nombre de etiqueta",
+        "d3": "Ordena por más nuevo, más antiguo o más pesado"
+      },
+      "tags": {
+        "title": "Etiquetas de colores",
+        "body": "Crea etiquetas, dale un color a cada una y filtra la biblioteca por etiqueta.",
+        "c1": "bug",
+        "c2": "onboarding",
+        "c3": "release",
+        "c4": "diseño"
+      },
+      "rename": {
+        "title": "Renombra lo que sea",
+        "body": "Dale a cualquier cosa un mejor nombre. Un video editado es su propio elemento, enlazado a la grabación de la que salió."
+      }
+    },
+    "private": {
+      "eyebrow": "Privado por diseño",
+      "title": "Tuyo, sin una cuenta.",
+      "serif": "Sin marca de agua. Sin tu pantalla en las analíticas.",
+      "items": {
+        "noAccount": {
+          "title": "Funciona sin cuenta",
+          "body": "Graba, captura, edita y exporta sin registrarte. Las cuentas existen solo para la nube opcional."
+        },
+        "noWatermark": {
+          "title": "Sin marca de agua, en cualquier plan",
+          "body": "Existe un sello opcional “Hecho con Kaipu”, y viene apagado."
+        },
+        "analytics": {
+          "title": "Las analíticas nunca ven tu pantalla",
+          "body": "Las analíticas de uso nunca graban tu pantalla ni tus clics en la app."
+        },
+        "languages": {
+          "title": "Claro, oscuro, inglés, español",
+          "body": "Los dos temas están cuidados por igual, y toda la app está en inglés y en español."
+        }
+      }
+    },
+    "next": {
+      "badge": "Planeado",
+      "title": "Lo que viene",
+      "note": "Todavía no está disponible. Sin fechas: avisaremos cuando esté.",
+      "roadmapLink": "Ver el roadmap",
+      "items": {
+        "windows": "Beta para Windows",
+        "cloudUpload": "Subida a la nube con transferencias que se reanudan",
+        "imageZoom": "Zoom y desplazamiento en el visor de imágenes",
+        "ownWatermark": "Tu propio logo como marca de agua"
       }
     }
   }
