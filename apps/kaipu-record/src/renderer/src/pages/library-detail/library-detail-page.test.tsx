@@ -520,7 +520,7 @@ describe("LibraryDetailPage — heavy to send (NIW2-218)", () => {
     expect(screen.getByText("119 MB is heavy to send.")).toBeInTheDocument();
     // The Light row's estimate for 78 s, which fits GitHub's 100 MB.
     expect(
-      await screen.findByText(/about 13 MB, small enough for GitHub or Jira/),
+      await screen.findByText(/about 7.6 MB, small enough for GitHub or Jira/),
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Make a light copy →" }));
@@ -584,7 +584,7 @@ describe("LibraryDetailPage — Recording saved card (NIW2-218)", () => {
     window.electronAPI.getSettings = vi.fn().mockResolvedValue(DEFAULT_SETTINGS);
     renderFresh(true);
     const card = await screen.findByRole("region", { name: "Recording saved" });
-    expect(await screen.findByText("~13 MB · fits GitHub")).toBeInTheDocument();
+    expect(await screen.findByText("~7.6 MB · fits GitHub")).toBeInTheDocument();
     fireEvent.click(within(card).getByRole("button", { name: "Share a light copy" }));
     expect(await screen.findByRole("heading", { name: "Share a copy" })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: /^Light/ })).toHaveAttribute("aria-checked", "true");

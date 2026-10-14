@@ -132,7 +132,7 @@
     "exportQuality": "Calidad de exportación",
     "exportQualityGroup": "Calidad de exportación",
     "exportQualityBalanced": "Equilibrado",
-    "exportQualityBalancedCaption": "Recomendado. Texto de pantalla nítido a unos 16 MB por minuto: hasta 1080p, 15 fps.",
+    "exportQualityBalancedCaption": "Recomendado. Texto de pantalla nítido a unos 7 MB por minuto: hasta 1080p, 24 fps.",
     "exportQualityMaximum": "Calidad máxima",
     "exportQualityMaximumCaption": "Tamaño nativo y el mayor bitrate. Archivos más pesados.",
     "exportQualityNote": "Se preselecciona en la ventana de exportación. Puedes elegir otra opción para una sola exportación.",

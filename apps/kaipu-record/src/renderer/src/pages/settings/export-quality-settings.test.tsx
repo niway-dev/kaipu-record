@@ -11,7 +11,7 @@ describe("ExportQualitySettings", () => {
       "aria-checked",
       "false",
     );
-    expect(screen.getByText(/about 16 MB a minute/)).toBeInTheDocument();
+    expect(screen.getByText(/about 7 MB a minute/)).toBeInTheDocument();
   });
 
   it("writes the picked quality", () => {

@@ -4,6 +4,7 @@ import type { Translator } from "@kaipu/i18n";
 import type { LocalRecording } from "@shared/types/library-storage";
 import { initialScene, type VideoScene } from "../scene";
 import { createSlideAssetStore } from "../slide-assets";
+import type { VideoEncodingChoice } from "./video-encoding";
 import {
   __resetExportRunnerForTests,
   cancelVideoExport,
@@ -19,6 +20,9 @@ import {
 // `useVideoExport` in use-video-export.test.ts. Here: what makes the runner app-level —
 // one export at a time, the job the cards describe, the Ready card, Retry, and telling
 // main an export is running.
+
+const { captureException } = vi.hoisted(() => ({ captureException: vi.fn() }));
+vi.mock("@renderer/features/analytics", () => ({ captureException }));
 
 class FakeWorker {
   onmessage: ((event: MessageEvent) => void) | null = null;
@@ -93,6 +97,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  captureException.mockClear();
   __resetExportRunnerForTests();
   vi.unstubAllGlobals();
 });
@@ -108,12 +113,50 @@ describe("export runner (NIW2-218 background export)", () => {
       sourceTitle: "Demo",
       sourceAssetId: "asset-src",
       sourceSizeBytes: 119_000_000,
-      width: 1280,
-      height: 720,
+      width: 1920,
+      height: 1080,
     });
-    // 78 s of Light: ~1.26 Mbps × 78 s.
-    expect(job!.estimateBytes).toBeGreaterThan(12_000_000);
-    expect(job!.estimateBytes).toBeLessThan(13_000_000);
+    // 78 s of Light: 4.7 MB/min of video + 128 kbps of audio + the moov reservation.
+    expect(job!.estimateBytes).toBeGreaterThan(7_400_000);
+    expect(job!.estimateBytes).toBeLessThan(7_800_000);
+  });
+
+  it("logs an export without hardware H.264 or without quantizer mode, and nothing else", async () => {
+    const choice: VideoEncodingChoice = {
+      rateControl: "quantizer",
+      quantizer: 33,
+      bitrate: 1_600_000,
+      hardwareAcceleration: "prefer-hardware",
+      keyFrameInterval: 10,
+      softwareFallback: false,
+      quantizerUnsupported: false,
+    };
+    const send = (c: VideoEncodingChoice): void =>
+      workers[0]!.onmessage?.({ data: { type: "encoder", choice: c } } as MessageEvent);
+    await startVideoExport(args(), t);
+    send(choice);
+    expect(captureException).not.toHaveBeenCalled();
+
+    send({ ...choice, rateControl: "bitrate", quantizer: null, quantizerUnsupported: true });
+    expect(captureException).toHaveBeenLastCalledWith(
+      expect.any(Error),
+      expect.objectContaining({ context: "video-export-no-quantizer", presetId: "light" }),
+    );
+
+    send({
+      ...choice,
+      rateControl: "bitrate",
+      quantizer: null,
+      hardwareAcceleration: "no-preference",
+      softwareFallback: true,
+      quantizerUnsupported: true,
+    });
+    expect(captureException).toHaveBeenLastCalledWith(
+      expect.any(Error),
+      expect.objectContaining({ context: "video-export-software-encoder", width: 1920 }),
+    );
+    // Logged, not failed: the export keeps going.
+    expect(getExportSnapshot().status).toBe("exporting");
   });
 
   it("runs one export at a time", async () => {

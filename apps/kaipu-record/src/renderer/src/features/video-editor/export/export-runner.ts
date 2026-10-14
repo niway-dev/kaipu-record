@@ -18,6 +18,7 @@ import {
   slideFrameCount,
 } from "./export-presets";
 import { WHOLE_RECORDING_FINGERPRINT } from "./export-reuse";
+import type { VideoEncodingChoice } from "./video-encoding";
 
 export interface VideoExportState {
   status: "idle" | "exporting" | "error";
@@ -197,6 +198,29 @@ export function cancelVideoExport(): void {
   set({ ...IDLE, ready: snapshot.ready });
 }
 
+/**
+ * Logs an export that did not get the encoder it was tuned for — not an error for the user
+ * (the file is still made), but something to learn about: no hardware H.264 means Chromium's
+ * software encoder (blurry small text), and a tier without quantizer mode means its "~"
+ * estimate was not measured for this encode.
+ */
+function reportEncoderChoice(choice: VideoEncodingChoice, target: ResolvedExportTarget): void {
+  if (!choice.softwareFallback && !choice.quantizerUnsupported) return;
+  const message = choice.softwareFallback
+    ? "export: no hardware H.264 encoder, the platform picked one (likely software)"
+    : "export: hardware H.264 without quantizer mode, encoding at the fallback bitrate";
+  captureException(new Error(message), {
+    context: choice.softwareFallback
+      ? "video-export-software-encoder"
+      : "video-export-no-quantizer",
+    presetId: target.presetId,
+    width: target.width,
+    height: target.height,
+    rateControl: choice.rateControl,
+    bitrate: choice.bitrate,
+  });
+}
+
 /** Re-runs the last export (the error card's Retry, FR12). */
 export function retryVideoExport(): void {
   if (!lastStart || active) return;
@@ -352,6 +376,8 @@ export async function startVideoExport(
         window.electronAPI.recordingWrite(id, msg.data, msg.position);
       } else if (msg.type === "poster") {
         poster = msg.data;
+      } else if (msg.type === "encoder") {
+        reportEncoderChoice(msg.choice, runTarget);
       } else if (msg.type === "progress") {
         if (snapshot.status === "exporting") set({ fraction: msg.fraction });
       } else if (msg.type === "error") {
