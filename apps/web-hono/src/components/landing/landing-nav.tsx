@@ -15,6 +15,12 @@ export function LandingNav() {
       </Link>
       <div className="flex items-center gap-3">
         <Link
+          to="/features"
+          className="text-sm font-medium text-[var(--kaipu-text-secondary)] underline-offset-4 transition hover:text-[var(--kaipu-text-primary)] hover:underline"
+        >
+          {t("homeNavFeatures")}
+        </Link>
+        <Link
           to="/roadmap"
           className="text-sm font-medium text-[var(--kaipu-text-secondary)] underline-offset-4 transition hover:text-[var(--kaipu-text-primary)] hover:underline"
         >

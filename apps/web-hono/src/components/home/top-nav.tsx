@@ -15,9 +15,13 @@ import styles from "./top-nav.module.css";
  * server re-renders with the new answer instead of the client patching it. That
  * is why neither one flashes and why a reload keeps the choice.
  */
-export function TopNav() {
+/** The marketing pages that share this bar. */
+export type MarketingPage = "home" | "features";
+
+export function TopNav({ page = "home" }: { page?: MarketingPage }) {
   const t = useTranslations("landing");
   const tRoadmap = useTranslations("roadmap");
+  const onHome = page === "home";
   const locale = useLocale();
   const setLocale = useSetLocale();
   const router = useRouter();
@@ -38,17 +42,25 @@ export function TopNav() {
         left and right edges instead of on the viewport's.
       */}
       <div className={styles.inner}>
-        <a href="#top" className={styles.brand}>
+        <a href={onHome ? "#top" : "/"} className={styles.brand}>
           <KaipuLogo use="product" size={30} />
           {t("navBrand")}
         </a>
 
         <nav className={styles.center}>
-          <a href="#top" className={`${styles.tab} ${styles.tabActive}`}>
+          <a
+            href={onHome ? "#top" : "/"}
+            className={`${styles.tab} ${onHome ? styles.tabActive : ""}`}
+            aria-current={onHome ? "page" : undefined}
+          >
             {t("homeNavProduct")}
           </a>
-          <a href="#files" className={styles.tab}>
-            {t("homeNavYourFiles")}
+          <a
+            href={onHome ? "/features" : "#top"}
+            className={`${styles.tab} ${onHome ? "" : styles.tabActive}`}
+            aria-current={onHome ? undefined : "page"}
+          >
+            {t("homeNavFeatures")}
           </a>
           <a href="/roadmap" className={styles.tab}>
             {tRoadmap("navLabel")}
