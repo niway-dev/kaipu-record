@@ -27,44 +27,7 @@ export const recordingBaseSchema = z.object({
 });
 export type RecordingBase = z.infer<typeof recordingBaseSchema>;
 
-/**
- * Input to begin an upload: the client declares the file it is about to send so
- * the server can mint a presigned URL and attach a row to the account.
- */
-export const createRecordingUploadSchema = z.object({
-  title: z.string().min(1, "Title is required").max(500),
-  kind: recordingKindSchema,
-  contentType: z.string().min(1).max(255),
-  sizeBytes: z.number().int().positive(),
-  durationSeconds: z.number().int().nonnegative().default(0),
-});
-export type CreateRecordingUpload = z.infer<typeof createRecordingUploadSchema>;
-
 // --- Pure rules (no I/O) ---------------------------------------------------
-
-/** Hard cap on a single upload (2 GiB) — a presigned PUT is one request. */
-export const MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024;
-
-/** A positive size within the single-request cap. */
-export function isWithinUploadLimit(sizeBytes: number): boolean {
-  return sizeBytes > 0 && sizeBytes <= MAX_UPLOAD_BYTES;
-}
-
-/** Thrown when a requested upload exceeds `MAX_UPLOAD_BYTES`. */
-export class UploadLimitExceededError extends Error {
-  constructor(sizeBytes: number) {
-    super(`Recording exceeds the maximum upload size (${sizeBytes} > ${MAX_UPLOAD_BYTES} bytes)`);
-    this.name = "UploadLimitExceededError";
-  }
-}
-
-/** Thrown when confirming a recording whose object was never actually uploaded to storage. */
-export class RecordingNotUploadedError extends Error {
-  constructor(storageKey: string) {
-    super(`No object was found in storage for "${storageKey}" — upload it before confirming`);
-    this.name = "RecordingNotUploadedError";
-  }
-}
 
 const EXTENSION_BY_CONTENT_TYPE: Record<string, string> = {
   "video/webm": "webm",

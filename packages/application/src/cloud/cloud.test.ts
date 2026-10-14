@@ -654,6 +654,104 @@ describe("cancelUpload", () => {
   });
 });
 
+describe("ticket window (re-PUT with a still-valid ticket)", () => {
+  const WINDOW_MS = (UPLOAD_TICKET_TTL_SECONDS + RESERVATION_GRACE_SECONDS) * 1000;
+  const INSIDE = new Date(NOW.getTime() + 60_000);
+  const AFTER = new Date(NOW.getTime() + WINDOW_MS + 1000);
+
+  async function reserve() {
+    const assets = makeFakeAssets();
+    const storage = makeFakeStorage();
+    const input = intent();
+    const r = await createUploadIntent({
+      assets,
+      access: makeFakeAccess(),
+      storage,
+      userId: "u1",
+      entitlements: grant,
+      input,
+      now: NOW,
+    });
+    return { assets, storage, input, r, key: assets.revisions.get(r.revisionId)!.storageKey };
+  }
+
+  it("cancelUpload inside the window keeps the reservation and the object; the sweep settles it later", async () => {
+    const { assets, storage, input, r, key } = await reserve();
+    storage.land(key, { sizeBytes: 600 });
+    expect(
+      await cancelUpload({
+        assets,
+        storage,
+        userId: "u1",
+        assetId: input.assetId,
+        revisionId: r.revisionId,
+        now: INSIDE,
+      }),
+    ).toEqual({ released: false });
+    expect(assets.revisions.get(r.revisionId)?.status).toBe("reserved");
+    expect(await assets.usage("u1")).toEqual({
+      usedBytes: 0,
+      reservedBytes: 600,
+      pendingUploads: 1,
+    });
+    expect(storage.objects.has(key)).toBe(true);
+
+    expect(await sweepExpiredReservations({ assets, storage, now: AFTER, limit: 10 })).toEqual({
+      released: 1,
+      deletedObjects: 1,
+    });
+    expect(await assets.usage("u1")).toEqual({ usedBytes: 0, reservedBytes: 0, pendingUploads: 0 });
+  });
+
+  it("cancelUpload after the window closes releases and deletes", async () => {
+    const { assets, storage, input, r, key } = await reserve();
+    storage.land(key, { sizeBytes: 600 });
+    expect(
+      await cancelUpload({
+        assets,
+        storage,
+        userId: "u1",
+        assetId: input.assetId,
+        revisionId: r.revisionId,
+        now: AFTER,
+      }),
+    ).toEqual({ released: true });
+    expect(storage.objects.has(key)).toBe(false);
+  });
+
+  it("deleteCloudCopy inside the window hides the asset but defers the object delete and keeps quota", async () => {
+    const { assets, storage, input, r, key } = await reserve();
+    storage.land(key, { sizeBytes: 600, contentType: "video/mp4", checksumSha256: SHA });
+    await confirmUpload({
+      assets,
+      storage,
+      userId: "u1",
+      assetId: input.assetId,
+      revisionId: r.revisionId,
+      now: NOW,
+    });
+    expect(
+      await deleteCloudCopy({ assets, storage, userId: "u1", assetId: input.assetId, now: INSIDE }),
+    ).toEqual({ deleted: true, physicallyRemoved: false });
+    expect(storage.objects.has(key)).toBe(true);
+    expect(assets.revisions.get(r.revisionId)?.status).toBe("deleting");
+    expect((await assets.usage("u1")).usedBytes).toBe(600);
+
+    // Too early for the retry job as well; it settles once the window has closed.
+    expect(await retryPendingDeletes({ assets, storage, limit: 10, now: INSIDE })).toEqual({
+      finished: 0,
+      failed: 0,
+    });
+    expect(storage.objects.has(key)).toBe(true);
+    expect(await retryPendingDeletes({ assets, storage, limit: 10, now: AFTER })).toEqual({
+      finished: 1,
+      failed: 0,
+    });
+    expect(storage.objects.has(key)).toBe(false);
+    expect((await assets.usage("u1")).usedBytes).toBe(0);
+  });
+});
+
 describe("list / download / delete / usage", () => {
   async function readyAsset(
     assets: ReturnType<typeof makeFakeAssets>,

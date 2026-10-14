@@ -1,10 +1,8 @@
 import type { CreateRecordingData, IRecordingRepository } from "@kaipu/domain/repositories";
 import type { RecordingBase } from "@kaipu/domain/schemas";
 import type { IStorageService } from "@kaipu/domain/services";
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import { confirmRecording } from "./confirm-recording";
-import { createRecordingUpload } from "./create-recording-upload";
 import { deleteRecording } from "./delete-recording";
 import { getRecordingDownloadUrl } from "./get-recording-download-url";
 import { listRecordings } from "./list-recordings";
@@ -60,7 +58,6 @@ function makeFakeStorage(): IStorageService & {
   deletes: string[];
   heads: string[];
   existingKeys: Set<string>;
-  failNextUpload: boolean;
 } {
   // `Object.assign` mutates and returns the same `state` object the methods
   // close over, so a test flipping `storage.failNextUpload` afterwards (rather
@@ -71,14 +68,9 @@ function makeFakeStorage(): IStorageService & {
     deletes: [] as string[],
     heads: [] as string[],
     existingKeys: new Set<string>(),
-    failNextUpload: false,
   };
   return Object.assign(state, {
     async createUploadUrl(key: string) {
-      if (state.failNextUpload) {
-        state.failNextUpload = false;
-        throw new Error("R2 presign failed");
-      }
       state.uploads.push(key);
       return `https://r2.example/${key}?sig=up`;
     },
@@ -108,108 +100,36 @@ function makeFakeStorage(): IStorageService & {
   });
 }
 
-const INPUT = {
-  title: "Demo",
-  kind: "recording" as const,
-  contentType: "video/webm",
-  sizeBytes: 1000,
-  durationSeconds: 12,
-};
-
-/** Create a recording and simulate the client's PUT actually landing in R2. */
+/** Seed a ready recording owned by `userId` whose object exists in storage. */
 async function createAndUpload(
   repo: ReturnType<typeof makeFakeRepo>,
   storage: ReturnType<typeof makeFakeStorage>,
   userId: string,
 ) {
-  const result = await createRecordingUpload({ repo, storage, userId, input: INPUT });
-  storage.existingKeys.add(result.recording.storageKey);
-  return result;
+  const id = crypto.randomUUID();
+  const storageKey = `videos/${userId}/${id}.webm`;
+  await repo.create({
+    id,
+    userId,
+    kind: "recording",
+    title: "Demo",
+    storageKey,
+    contentType: "video/webm",
+    sizeBytes: 1000,
+    durationSeconds: 12,
+  });
+  const recording = await repo.markReady(id, userId);
+  if (!recording) throw new Error("seed failed");
+  storage.existingKeys.add(storageKey);
+  return { recording };
 }
-
-describe("createRecordingUpload", () => {
-  let repo: ReturnType<typeof makeFakeRepo>;
-  let storage: ReturnType<typeof makeFakeStorage>;
-  beforeEach(() => {
-    repo = makeFakeRepo();
-    storage = makeFakeStorage();
-  });
-
-  it("attaches a pending recording to the account and signs its key", async () => {
-    const { recording, uploadUrl } = await createRecordingUpload({
-      repo,
-      storage,
-      userId: "u1",
-      input: INPUT,
-    });
-
-    expect(recording.userId).toBe("u1");
-    expect(recording.status).toBe("pending");
-    expect(recording.title).toBe("Demo");
-    expect(recording.storageKey).toBe(`videos/u1/${recording.id}.webm`);
-    // The presigned key matches the row's stored key.
-    expect(storage.uploads).toEqual([recording.storageKey]);
-    expect(uploadUrl).toContain(recording.storageKey);
-  });
-
-  it("rejects an over-limit upload before touching storage", async () => {
-    await expect(
-      createRecordingUpload({
-        repo,
-        storage,
-        userId: "u1",
-        input: { ...INPUT, sizeBytes: 3 * 1024 * 1024 * 1024 },
-      }),
-    ).rejects.toThrow(/maximum upload size/);
-    expect(repo.rows.size).toBe(0);
-    expect(storage.uploads).toHaveLength(0);
-  });
-
-  it("cleans up the row when presigning fails after the insert", async () => {
-    storage.failNextUpload = true;
-    await expect(
-      createRecordingUpload({ repo, storage, userId: "u1", input: INPUT }),
-    ).rejects.toThrow(/R2 presign failed/);
-    // No orphaned pending row left behind.
-    expect(repo.rows.size).toBe(0);
-  });
-});
-
-describe("confirmRecording", () => {
-  it("flips pending -> ready for the owner once the object exists, null for a stranger", async () => {
-    const repo = makeFakeRepo();
-    const storage = makeFakeStorage();
-    const { recording } = await createAndUpload(repo, storage, "u1");
-
-    expect(await confirmRecording({ repo, storage, userId: "u2", id: recording.id })).toBeNull();
-    const ready = await confirmRecording({ repo, storage, userId: "u1", id: recording.id });
-    expect(ready?.status).toBe("ready");
-  });
-
-  it("refuses to confirm when the object was never uploaded", async () => {
-    const repo = makeFakeRepo();
-    const storage = makeFakeStorage();
-    // Not calling createAndUpload's helper: the key never lands in `existingKeys`.
-    const { recording } = await createRecordingUpload({
-      repo,
-      storage,
-      userId: "u1",
-      input: INPUT,
-    });
-
-    await expect(
-      confirmRecording({ repo, storage, userId: "u1", id: recording.id }),
-    ).rejects.toThrow(/No object was found in storage/);
-    expect(repo.rows.get(recording.id)?.status).toBe("pending");
-  });
-});
 
 describe("listRecordings", () => {
   it("returns only the caller's recordings", async () => {
     const repo = makeFakeRepo();
     const storage = makeFakeStorage();
-    await createRecordingUpload({ repo, storage, userId: "u1", input: INPUT });
-    await createRecordingUpload({ repo, storage, userId: "u2", input: INPUT });
+    await createAndUpload(repo, storage, "u1");
+    await createAndUpload(repo, storage, "u2");
 
     const mine = await listRecordings({ repo, userId: "u1" });
     expect(mine).toHaveLength(1);
@@ -218,7 +138,7 @@ describe("listRecordings", () => {
 });
 
 describe("getRecordingDownloadUrl", () => {
-  it("signs a download once ready, null for a stranger or a still-pending recording", async () => {
+  it("signs a download for the owner, null for a stranger", async () => {
     const repo = makeFakeRepo();
     const storage = makeFakeStorage();
     const { recording } = await createAndUpload(repo, storage, "u1");
@@ -226,11 +146,6 @@ describe("getRecordingDownloadUrl", () => {
     expect(
       await getRecordingDownloadUrl({ repo, storage, userId: "u2", id: recording.id }),
     ).toBeNull();
-    expect(
-      await getRecordingDownloadUrl({ repo, storage, userId: "u1", id: recording.id }),
-    ).toBeNull();
-
-    await confirmRecording({ repo, storage, userId: "u1", id: recording.id });
     const dl = await getRecordingDownloadUrl({ repo, storage, userId: "u1", id: recording.id });
     expect(dl?.downloadUrl).toContain(recording.storageKey);
     expect(storage.downloads).toEqual([recording.storageKey]);
