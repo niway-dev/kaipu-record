@@ -53,6 +53,7 @@ const kaipuApi: KaipuElectronAPI = {
   listLocalRecordings: () => ipcRenderer.invoke(IPC_CHANNELS.listLocalRecordings),
   renameLocalRecording: (id, title) =>
     ipcRenderer.invoke(IPC_CHANNELS.renameLocalRecording, id, title),
+  markOpenedInEditor: (id) => ipcRenderer.invoke(IPC_CHANNELS.markOpenedInEditor, id),
   listTags: () => ipcRenderer.invoke(IPC_CHANNELS.listTags),
   createTag: (name, color) => ipcRenderer.invoke(IPC_CHANNELS.createTag, name, color),
   renameTag: (id, name) => ipcRenderer.invoke(IPC_CHANNELS.renameTag, id, name),
@@ -160,6 +161,7 @@ const kaipuApi: KaipuElectronAPI = {
   copyScreenshotById: (id) => ipcRenderer.invoke(IPC_CHANNELS.screenshotCopyById, id),
   readScreenshotBytes: (id) => ipcRenderer.invoke(IPC_CHANNELS.screenshotReadBytes, id),
   readClipboardImage: () => ipcRenderer.invoke(IPC_CHANNELS.clipboardReadImage),
+  peekClipboardImage: () => ipcRenderer.invoke(IPC_CHANNELS.clipboardPeekImage),
   saveScreenshot: (png, meta) => ipcRenderer.invoke(IPC_CHANNELS.screenshotSave, png, meta),
   exportScreenshotFile: (bytes, meta) =>
     ipcRenderer.invoke(IPC_CHANNELS.screenshotExportFile, bytes, meta),

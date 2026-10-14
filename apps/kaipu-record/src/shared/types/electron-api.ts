@@ -133,6 +133,8 @@ export interface KaipuElectronAPI {
   listLocalRecordings(): Promise<LocalRecording[]>;
   /** Rename a local recording (updates sidecar metadata; the file is untouched). */
   renameLocalRecording(id: string, title: string): Promise<void>;
+  /** Stamp a vault item as opened in an editor now (orders the Editor home). */
+  markOpenedInEditor(id: string): Promise<void>;
   /** Every live tag with its item count, most used first. */
   listTags(): Promise<TagSummary[]>;
   /** Create a tag; rejects when the name (case-insensitively) is taken. */
@@ -303,6 +305,8 @@ export interface KaipuElectronAPI {
   readScreenshotBytes(id: string): Promise<ArrayBuffer>;
   /** The image on the system clipboard as PNG, or null when it holds no image. */
   readClipboardImage(): Promise<{ png: ArrayBuffer; width: number; height: number } | null>;
+  /** The clipboard image's size, or null when it holds no image. No bytes cross IPC. */
+  peekClipboardImage(): Promise<{ width: number; height: number } | null>;
   /**
    * Write a PNG into the vault and return the stored item. With `overwriteId` it
    * replaces that existing screenshot (keeping its createdAt); without, it creates
@@ -310,7 +314,8 @@ export interface KaipuElectronAPI {
    */
   saveScreenshot(
     png: ArrayBuffer,
-    meta: { title: string; overwriteId?: string },
+    /** `manual`: the user pressed Save (stamps the Editor home's "Saved"), not the auto-save. */
+    meta: { title: string; overwriteId?: string; manual?: boolean },
   ): Promise<LocalRecording>;
   /**
    * Ask where to put an exported capture (a native save dialog seeded with

@@ -274,6 +274,8 @@ export const IPC_CHANNELS = {
   accessibilityRequest: "permissions:accessibility-request",
   listLocalRecordings: "library:list-local",
   renameLocalRecording: "library:rename-local",
+  // Editor home: stamp an item as opened in an editor (sidecar `editorOpenedAt`).
+  markOpenedInEditor: "library:mark-opened-in-editor",
   /** Tags as entities (ADR 0020): the registry, and which tags an item carries. */
   listTags: "tags:list",
   createTag: "tags:create",
@@ -319,6 +321,8 @@ export const IPC_CHANNELS = {
   screenshotSave: "screenshot:save",
   // Read the image on the system clipboard as PNG (the Editor's New → Paste).
   clipboardReadImage: "clipboard:read-image",
+  // The clipboard image's size without sending its bytes (the Editor home peek).
+  clipboardPeekImage: "clipboard:peek-image",
   // Write an exported capture (PDF today) to a path the user picks in a save dialog.
   screenshotExportFile: "screenshot:export-file",
   // Renderer → main: capture done + navigated to the editor, bring the app back.

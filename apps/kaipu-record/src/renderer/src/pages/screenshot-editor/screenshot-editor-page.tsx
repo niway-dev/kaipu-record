@@ -248,6 +248,8 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
         // user sees even if the field has not blurred yet (e.g. a shortcut).
         title: opts.title ?? resolveCaptureTitle(captureTitle.draft, captureTitle.autoTitle),
         overwriteId: opts.overwriteId,
+        // Only the auto-save on open is silent; every other save is the user's.
+        manual: !opts.silent,
       });
       setSavedId(saved.id);
       captureTitle.adopt(saved.title);

@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import { generatePath, Navigate, useLocation, useParams } from "react-router-dom";
 import { useTranslations } from "@kaipu/i18n";
 import { ROUTES } from "@shared/routes";
@@ -39,6 +39,17 @@ function useStableSource<T>(key: string | undefined, next: T | null): T | null {
   return ref.current.key === key ? ref.current.value : null;
 }
 
+/**
+ * Stamp the item as opened in an editor, once per item per visit. It is what puts
+ * an item on the Editor home's Continue list; a failure only costs that ordering,
+ * so it is not reported.
+ */
+function useMarkOpened(id: string | null | undefined): void {
+  useEffect(() => {
+    if (id) void window.electronAPI.markOpenedInEditor(id).catch(() => {});
+  }, [id]);
+}
+
 function Loading(): React.JSX.Element {
   const t = useTranslations("common");
   return (
@@ -52,6 +63,7 @@ function Loading(): React.JSX.Element {
 export function EditorVideoPage(): React.JSX.Element {
   const { item, isLoading } = useItemFromParams();
   const source = useStableSource(item?.assetId, item ? videoSourceFor(item) : null);
+  useMarkOpened(source?.id);
   if (isLoading && !source) return <Loading />;
   // Unknown id, cloud-only item or a recording without a duration: back to the
   // Editor home rather than a dead end.
@@ -65,6 +77,7 @@ export function EditorVideoPage(): React.JSX.Element {
 export function EditorImagePage(): React.JSX.Element {
   const { item, isLoading } = useItemFromParams();
   const source = useStableSource(item?.assetId, item ? imageSourceFor(item) : null);
+  useMarkOpened(source?.kind === "local" ? source.id : null);
   if (isLoading && !source) return <Loading />;
   if (!item || !source) return <Navigate to={ROUTES.editor} replace />;
   return <ScreenshotEditor key={item.assetId} source={source} />;

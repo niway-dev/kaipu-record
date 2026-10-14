@@ -58,16 +58,17 @@ Sí existen y persisten: `settings-store.ts` registra ambos handlers, el preload
 
 ### Library / vault
 
-| Canal                      | Dir | En `electronAPI`              | Registrador        |
-| -------------------------- | --- | ----------------------------- | ------------------ |
-| `library:list-local`       | r→m | `listLocalRecordings()`       | `library/index.ts` |
-| `library:rename-local`     | r→m | `renameLocalRecording(id, t)` | `library/index.ts` |
-| `library:delete-local`     | r→m | `deleteLocalRecording(id)`    | `library/index.ts` |
-| `library:reveal-local`     | r→m | `revealLocalRecording(id)`    | `library/index.ts` |
-| `library:get-vault-dir`    | r→m | `getVaultDirectory()`         | `library/index.ts` |
-| `library:choose-vault-dir` | r→m | `chooseVaultDirectory()`      | `library/index.ts` |
-| `library:reset-vault-dir`  | r→m | `resetVaultDirectory()`       | `library/index.ts` |
-| `library:changed`          | m→r | `onLibraryChanged(cb)`        | `library/index.ts` |
+| Canal                           | Dir | En `electronAPI`              | Registrador        |
+| ------------------------------- | --- | ----------------------------- | ------------------ |
+| `library:list-local`            | r→m | `listLocalRecordings()`       | `library/index.ts` |
+| `library:rename-local`          | r→m | `renameLocalRecording(id, t)` | `library/index.ts` |
+| `library:mark-opened-in-editor` | r→m | `markOpenedInEditor(id)`      | `library/index.ts` |
+| `library:delete-local`          | r→m | `deleteLocalRecording(id)`    | `library/index.ts` |
+| `library:reveal-local`          | r→m | `revealLocalRecording(id)`    | `library/index.ts` |
+| `library:get-vault-dir`         | r→m | `getVaultDirectory()`         | `library/index.ts` |
+| `library:choose-vault-dir`      | r→m | `chooseVaultDirectory()`      | `library/index.ts` |
+| `library:reset-vault-dir`       | r→m | `resetVaultDirectory()`       | `library/index.ts` |
+| `library:changed`               | m→r | `onLibraryChanged(cb)`        | `library/index.ts` |
 
 ### Screenshots
 
@@ -79,6 +80,7 @@ Sí existen y persisten: `settings-store.ts` registra ambos handlers, el preload
 | `screenshot:read-bytes`      | r→m | `readScreenshotBytes(id)`       | `screenshots/` |
 | `screenshot:save`            | r→m | `saveScreenshot(bytes, meta)`   | `screenshots/` |
 | `clipboard:read-image`       | r→m | `readClipboardImage()`          | `screenshots/` |
+| `clipboard:peek-image`       | r→m | `peekClipboardImage()`          | `screenshots/` |
 | `screenshot:reveal`          | r→m | `revealAfterCapture()`          | `screenshots/` |
 | `screenshot:hotkey`          | m→r | `onCaptureScreenshotHotkey(cb)` | `index.ts`     |
 | `screenshot:request-capture` | r→m | `requestCaptureScreenshot()`    | `index.ts`     |

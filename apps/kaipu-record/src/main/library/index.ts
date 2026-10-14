@@ -92,6 +92,10 @@ export function registerLibraryVaultHandlers(deps: { auth: AuthHandle; serverUrl
   ipcMain.handle(IPC_CHANNELS.renameLocalRecording, (_event, id: string, title: string) =>
     currentVault().rename(id, title),
   );
+  // No broadcast: the stamp only reorders the Editor home, which re-lists on mount.
+  ipcMain.handle(IPC_CHANNELS.markOpenedInEditor, (_event, id: string) =>
+    currentVault().markOpenedInEditor(id),
+  );
   // Tags (ADR 0020). Every change re-lists the Library in every window, so cards,
   // filters and the drawer never disagree about a tag's name or color.
   let deviceId = "unknown";

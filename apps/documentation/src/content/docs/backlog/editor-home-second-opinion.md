@@ -9,11 +9,13 @@ description: "Self-contained brief on the Editor home page (/editor) of Kaipu Re
 **PR** [#299](https://github.com/niway-dev/kaipu-record/pull/299) (draft, stacked on [#297](https://github.com/niway-dev/kaipu-record/pull/297))
 **Check** `vitest run` (desktop) → exit 0, 1690 tests, which covers the list logic (`recent-editable.test.ts`) and the page (`editor-routes.test.tsx`). **No check covers whether the design is any good**, which is the question this brief asks.
 
-> **Status: open design question.** The owner tried PR #299 in the running app and
+> **Status: answered (2026-10-14).** The second opinion came back as the Claude Design
+> file _Kaipu Editor Home v2_. The owner adopted it, and it is implemented in
+> [Editor home](./editor-home-recent). Kept as the record of why v1 was replaced.
+>
+> Original status: open design question. The owner tried PR #299 in the running app and
 > rejected it: "it's all the videos… it didn't turn out as a usability improvement;
-> it really became a Library… it's confusing." This brief exists so someone with no
-> context can propose a better design. Nothing here is settled except what the
-> _Decisions_ table marks as settled.
+> it really became a Library… it's confusing."
 
 ## Intent
 
