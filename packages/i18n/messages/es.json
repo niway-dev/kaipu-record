@@ -1310,6 +1310,22 @@
         "title": "Biblioteca de grabaciones",
         "description": "Cada captura llega a una sola biblioteca con vistas previas, renombrado y recuperación de grabaciones importadas o interrumpidas."
       },
+      "exportPresets": {
+        "title": "Exporta para donde va a ir",
+        "description": "Elige un destino como GitHub, Slack o YouTube, o deja Equilibrado, y obtén un archivo que cabe. Compartir reutiliza una exportación que ya hiciste, las exportaciones corren en segundo plano con progreso, y Máxima calidad está a un ajuste de distancia."
+      },
+      "captureTags": {
+        "title": "Etiquetas de colores para tus capturas",
+        "description": "Etiqueta grabaciones y capturas, dale un color a cada etiqueta y filtra o busca en la biblioteca por etiqueta para que un historial largo siga siendo fácil de encontrar."
+      },
+      "screenshotPdf": {
+        "title": "Exportar capturas como PDF",
+        "description": "Guarda una captura anotada como un PDF nítido de una página, listo para enviar o imprimir, junto al PNG de siempre."
+      },
+      "captureTitle": {
+        "title": "Ponle nombre a una captura al hacerla",
+        "description": "Un campo de título en el editor de capturas, ya rellenado y editable antes y después de guardar, para nombrar cada captura donde la haces."
+      },
       "watermark": {
         "title": "Sin marca de agua, en cualquier plan",
         "description": "La app gratuita graba, edita y exporta sin marca de agua. Hay una pequeña insignia \"Hecho con Kaipu\" por si quieres dar crédito a la herramienta, y viene apagada por defecto."
@@ -1349,14 +1365,6 @@
       "watermarkUpgrade": {
         "title": "Tu propia marca de agua en las exportaciones",
         "description": "Sella tus exportaciones con tu propio logo, con control de posición, tamaño y opacidad. La insignia de Kaipu sigue siendo opcional y apagada; esto va de llevar tu marca, no la nuestra."
-      },
-      "imageTags": {
-        "title": "Etiquetas en imágenes",
-        "description": "Etiquetar capturas y agruparlas por etiqueta, para que una biblioteca larga siga siendo navegable."
-      },
-      "renameOnSave": {
-        "title": "Renombrar una imagen después de guardarla",
-        "description": "Cambiar el nombre de una captura cuando ya está guardada, sin salir a Finder."
       },
       "saveEveryScreenshot": {
         "title": "Guardar todas las capturas automáticamente",

@@ -6,7 +6,7 @@ description: The /roadmap page that shows what Kaipu Record already ships and wh
 # Public roadmap page
 
 > **Status: 🟢 Ready to validate.** The page builds clean and its content was refreshed on
-> 2026-10-07 (see [refresh log](#refresh-log)). It has not been reviewed in production or on
+> 2026-10-14 (see [refresh log](#refresh-log)). It has not been reviewed in production or on
 > a real device yet.
 
 A public timeline at `https://kaipu.app/roadmap`, grouped by **state** rather than by date.
@@ -44,6 +44,17 @@ says what we hope to build, a shipped one says what the download does today. The
 `saveEveryScreenshot` row, for example, was planned as "opt-in" and shipped with automatic
 save as the default.
 
+### Shipped rows and their docs
+
+Shipped rows added on 2026-10-14 point at the doc that describes what the download does:
+
+| Id              | Doc                                                             |
+| --------------- | --------------------------------------------------------------- |
+| `exportPresets` | [Export presets per destination](./export-presets)              |
+| `captureTags`   | [Tags as entities](/specs/2026-10-13-tags-as-entities-design/)  |
+| `screenshotPdf` | [Screenshot export formats](./export-formats)                   |
+| `captureTitle`  | [Editor — name the capture before saving](./editor-title-input) |
+
 ### Planned rows and their design docs
 
 | Id                 | Design doc                                                                                          |
@@ -51,9 +62,7 @@ save as the default.
 | `windowsBeta`      | [Windows beta — recording first, screenshots later](./windows-beta)                                 |
 | `cloudUpload`      | [Cloud recordings upload](./cloud-recordings-upload) · [desktop sync gap](./desktop-cloud-sync-gap) |
 | `photoZoom`        | [Zoom and pan in the image viewer](./image-viewer-zoom)                                             |
-| `imageTags`        | [Tags on images](./image-tags)                                                                      |
 | `watermarkUpgrade` | None yet — reworded on 2026-10-07 (below); needs a doc before building                              |
-| `renameOnSave`     | [Editor — name the capture before saving](./editor-title-input)                                     |
 | `brandIdentity`    | [Brand and website rollout](/plans/2026-09-27-brand-and-website-rollout/)                           |
 
 Two guardrails make a half-finished edit fail loudly instead of shipping:
@@ -97,6 +106,22 @@ Source of truth checked against `main` (backlog index, feature docs, and the des
   screenshot gap on purpose, which is the checklist item in that doc.
 - **Design docs written** for the two planned rows that had none:
   [tags on images](./image-tags) and [zoom and pan in the image viewer](./image-viewer-zoom).
+
+### 2026-10-14
+
+Source of truth checked against `main` (merged PRs since 2026-10-07 and the backlog index):
+
+- **Added to shipped:** `exportPresets` (NIW2-218: destination presets, Balanced and Maximum
+  quality, Share button reusing existing exports, redesigned share sheet, background exports
+  with progress and Ready to share cards; #286 and the stacked PRs under it), `captureTags`
+  (recording tags #245 and tags as colored entities #282), `screenshotPdf` (#259) and
+  `captureTitle` (#256).
+- **Retired planned rows:** `renameOnSave` became `captureTitle` (shipped, #256) and
+  `imageTags` became `captureTags` (shipped): tags live in the vault sidecar, so screenshots
+  carry them like recordings. The [tags on images](./image-tags) design doc is superseded by
+  that work.
+- **Deliberately not listed:** GIF export (#266, on hold behind a flag), export quality
+  tiers and the 24 fps encoder (open PRs), cloud upload and the account page (open PRs).
 
 ## What to validate in production
 

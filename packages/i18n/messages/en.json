@@ -1310,6 +1310,22 @@
         "title": "Library of recordings",
         "description": "Every capture lands in one library with previews, renaming, and recovery for imported or interrupted recordings."
       },
+      "exportPresets": {
+        "title": "Export for where it is going",
+        "description": "Pick a destination such as GitHub, Slack or YouTube, or keep Balanced, and get a file that fits. Share reuses an export you already made, exports run in the background with progress, and Maximum quality is one setting away."
+      },
+      "captureTags": {
+        "title": "Colored tags for your captures",
+        "description": "Tag recordings and screenshots, give each tag a color, then filter and search the library by tag so a long history stays findable."
+      },
+      "screenshotPdf": {
+        "title": "Export screenshots as PDF",
+        "description": "Save an annotated screenshot as a sharp one-page PDF, ready to send or print, next to the usual PNG."
+      },
+      "captureTitle": {
+        "title": "Name a screenshot as you make it",
+        "description": "A title field in the screenshot editor, filled in for you and editable before and after saving, so captures are named where you make them."
+      },
       "watermark": {
         "title": "No watermark, on any plan",
         "description": "The free app records, edits and exports without a watermark. A small \"Made with Kaipu\" badge is there if you want to credit the tool, and it is off by default."
@@ -1349,14 +1365,6 @@
       "watermarkUpgrade": {
         "title": "Your own watermark on exports",
         "description": "Stamp exports with your own logo, with control over position, size and opacity. Kaipu's own badge stays optional and off; this is about carrying your brand, not ours."
-      },
-      "imageTags": {
-        "title": "Tags on images",
-        "description": "Tag screenshots and group them by tag, so a long library stays findable."
-      },
-      "renameOnSave": {
-        "title": "Rename an image after saving",
-        "description": "Change the name of a capture once it is already saved, without going out to Finder."
       },
       "saveEveryScreenshot": {
         "title": "Save every screenshot automatically",
