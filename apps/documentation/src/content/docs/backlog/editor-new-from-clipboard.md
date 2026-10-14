@@ -13,7 +13,7 @@ description: "A New button in the Editor opens an empty page that takes a pasted
 
 ## What it does
 
-- **New image** sits in the Editor home's header and in the image editor's toolbar. It opens
+- **New image** sits in the Editor home's header. It opens
   `/editor/new`, an empty page that waits for an image.
 - **⌘V** on that page, or its **Paste from clipboard** button, brings in the clipboard
   image and opens the image editor on it. The New page replaces itself in history, so
@@ -33,6 +33,11 @@ description: "A New button in the Editor opens an empty page that takes a pasted
 
 ## Not in this slice
 
+- **New image in the image editor's toolbar** — tried and removed. The toolbar is sized
+  to fit one row with labels at 900px (the E2E toolbar tests pin it); one more labelled
+  button sent it compact at 900px and pushed Save and PDF off the row below the window
+  floor. It needs a place outside the action row, or the
+  [responsive toolbar](./editor-toolbar-responsive) work, first.
 - **Collage / several images on one canvas** — the owner found it interesting but not
   needed now. It needs images as scene elements (an annotation kind with move, scale and
   z-order) and a canvas size of its own.
@@ -53,5 +58,5 @@ description: "A New button in the Editor opens an empty page that takes a pasted
    back and press ⌘V: the image editor opens on it, no frame, title "Pasted image — …".
 3. Press **Save**: it lands in the Library. Nothing was saved or copied before that,
    even with auto-save and auto-copy on in Settings → Screenshots.
-4. Copy some text, press **New** in the editor toolbar (confirm discarding), then
+4. Copy some text, go back to **Editor**, press **New image**, then
    **Paste from clipboard**: the page says there is no image on the clipboard.
