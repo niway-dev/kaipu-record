@@ -16,6 +16,11 @@ const PANEL_INITIAL_HEIGHT = 380;
  * It is created ahead of the first click (`prewarm`) and only revealed once it
  * has painted. Created on the click instead, the first open showed an empty
  * transparent window while the renderer loaded and React mounted.
+ *
+ * It must open over a full-screen app on the Space the user is on. Without
+ * `visibleOnFullScreen`, macOS cannot place it over a full-screen Space, moves it
+ * to a black Space of its own, and — because the window is reused — every later
+ * open lands there too until the app restarts. The control bar sets the same.
  */
 export class CapturePanelWindow {
   private window: BrowserWindow | null = null;
@@ -88,6 +93,9 @@ export class CapturePanelWindow {
       frame: false,
       resizable: false,
       movable: false,
+      minimizable: false,
+      maximizable: false,
+      fullscreenable: false,
       alwaysOnTop: true,
       skipTaskbar: true,
       transparent: true,
@@ -97,6 +105,8 @@ export class CapturePanelWindow {
         sandbox: false,
       },
     });
+    this.window.setAlwaysOnTop(true, "screen-saver");
+    this.window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
 
     if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
       void this.window.loadURL(`${process.env["ELECTRON_RENDERER_URL"]}/?mode=capture`);
