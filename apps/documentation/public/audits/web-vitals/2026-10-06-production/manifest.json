@@ -1,0 +1,186 @@
+{
+  "status": "fourth-measurement",
+  "taken": "2026-10-06T22:07:46.755Z",
+  "description": "Lighthouse 13.5.0 against production (https://kaipu.app/) serving main at 357b84d, the first measurement on the real domain. Includes a same-sitting control: the row-3 commit (0b6f4c4) re-measured on its still-live Version URL on this host, which is what isolates code from machine. See /frontend/web-vitals-baseline/.",
+  "commit": "357b84d",
+  "lighthouse_version": "13.5.0",
+  "chromium_binary": "Google Chrome, headless=new unless the run name says headful",
+  "caveat": "Mobile regressed against the same-sitting control (83 vs 98). The document, stylesheets, scripts and fonts are all loaded by ~1.0 s in the trace, yet the first contentful paint lands at 2.5-2.6 s in most runs and 0.9-1.6 s in others; the main thread is idle in between. Not caused by the Cloudflare Web Analytics beacon (blocked: same score) nor by headless rendering (headful: same score). Cause not identified; bisect over the three landing commits since 0b6f4c4 is the next step.",
+  "runs": {
+    "desktop": {
+      "json": "lighthouse-desktop.json",
+      "json_sha256": "3bb5092e8a7d8c7f4b9faff4789ca75ebcfba6aa433fd6a1123f292723a0333d",
+      "form_factor": "desktop",
+      "throttling_method": "simulate",
+      "throttling": {
+        "rttMs": 40,
+        "throughputKbps": 10240,
+        "requestLatencyMs": 0,
+        "downloadThroughputKbps": 0,
+        "uploadThroughputKbps": 0,
+        "cpuSlowdownMultiplier": 1
+      },
+      "benchmark_index": 4394,
+      "target_url": "https://kaipu.app/",
+      "scores": {
+        "performance": 98,
+        "accessibility": 96,
+        "best-practices": 100,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "metrics": {
+        "fcp_ms": 854,
+        "lcp_ms": 854,
+        "tbt_ms": 0,
+        "cls": 0.00024440612275535326,
+        "speed_index_ms": 930,
+        "observed_fcp_ms": 894,
+        "observed_load_ms": 1182
+      },
+      "bytes": {
+        "total_kib": 366
+      },
+      "html": "lighthouse-desktop.html",
+      "html_sha256": "805743b0a21ae86710104c77be8f26229dffc939dc4bd806c26e348ebf0e7573"
+    },
+    "mobile": {
+      "json": "lighthouse-mobile.json",
+      "json_sha256": "bd330bdb67580823d1f0727f00001723464a546b64a4c8500b9628697f0343cc",
+      "form_factor": "mobile",
+      "throttling_method": "simulate",
+      "throttling": {
+        "rttMs": 150,
+        "throughputKbps": 1638.4,
+        "requestLatencyMs": 562.5,
+        "downloadThroughputKbps": 1474.5600000000002,
+        "uploadThroughputKbps": 675,
+        "cpuSlowdownMultiplier": 4
+      },
+      "benchmark_index": 4448,
+      "target_url": "https://kaipu.app/",
+      "scores": {
+        "performance": 83,
+        "accessibility": 96,
+        "best-practices": 100,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "metrics": {
+        "fcp_ms": 3296,
+        "lcp_ms": 3296,
+        "tbt_ms": 0,
+        "cls": 0,
+        "speed_index_ms": 4963,
+        "observed_fcp_ms": 2667,
+        "observed_load_ms": 962
+      },
+      "bytes": {
+        "total_kib": 365
+      },
+      "html": "lighthouse-mobile.html",
+      "html_sha256": "c3143ce515e8d0fb066cf9f3f944dc566ade3767a8885f3eddb657ce9fdf4dd1"
+    },
+    "mobile_headful": {
+      "json": "lighthouse-mobile-headful.json",
+      "json_sha256": "bf9f00c2246a7b70dc62fa0a8ccdd38fe7571da01eb400496e77a3d4880b6c09",
+      "form_factor": "mobile",
+      "throttling_method": "simulate",
+      "throttling": {
+        "rttMs": 150,
+        "throughputKbps": 1638.4,
+        "requestLatencyMs": 562.5,
+        "downloadThroughputKbps": 1474.5600000000002,
+        "uploadThroughputKbps": 675,
+        "cpuSlowdownMultiplier": 4
+      },
+      "benchmark_index": 4327,
+      "target_url": "https://kaipu.app/",
+      "scores": {
+        "performance": 82
+      },
+      "metrics": {
+        "fcp_ms": 3304,
+        "lcp_ms": 3379,
+        "tbt_ms": 0,
+        "cls": 0,
+        "speed_index_ms": 4853,
+        "observed_fcp_ms": 2529,
+        "observed_load_ms": 1006
+      },
+      "bytes": {
+        "total_kib": 366
+      }
+    },
+    "mobile_no_beacon": {
+      "json": "lighthouse-mobile-no-beacon.json",
+      "json_sha256": "512bd9d1ce69f24901df18f2cbbf7473e998a35f452b24cfd095350bae3e67bf",
+      "form_factor": "mobile",
+      "throttling_method": "simulate",
+      "throttling": {
+        "rttMs": 150,
+        "throughputKbps": 1638.4,
+        "requestLatencyMs": 562.5,
+        "downloadThroughputKbps": 1474.5600000000002,
+        "uploadThroughputKbps": 675,
+        "cpuSlowdownMultiplier": 4
+      },
+      "benchmark_index": 4346.5,
+      "target_url": "https://kaipu.app/",
+      "scores": {
+        "performance": 83,
+        "accessibility": 96,
+        "best-practices": 100,
+        "seo": 100,
+        "agentic-browsing": 100
+      },
+      "metrics": {
+        "fcp_ms": 3300,
+        "lcp_ms": 3300,
+        "tbt_ms": 0,
+        "cls": 0,
+        "speed_index_ms": 4859,
+        "observed_fcp_ms": 2592,
+        "observed_load_ms": 1001
+      },
+      "bytes": {
+        "total_kib": 355
+      }
+    },
+    "control_0b6f4c4_mobile": {
+      "json": "control-0b6f4c4-mobile.json",
+      "json_sha256": "b7d08fd2a4e246a45c1c4d99e589d99cd484c6cff9c682ea4772f30185d6f1e7",
+      "form_factor": "mobile",
+      "throttling_method": "simulate",
+      "throttling": {
+        "rttMs": 150,
+        "throughputKbps": 1638.4,
+        "requestLatencyMs": 562.5,
+        "downloadThroughputKbps": 1474.5600000000002,
+        "uploadThroughputKbps": 675,
+        "cpuSlowdownMultiplier": 4
+      },
+      "benchmark_index": 4316,
+      "target_url": "https://9503d39c-kaipu-web.cristiansotomayor-dev.workers.dev/",
+      "scores": {
+        "performance": 98,
+        "accessibility": 96,
+        "best-practices": 100,
+        "seo": 66,
+        "agentic-browsing": 100
+      },
+      "metrics": {
+        "fcp_ms": 1676,
+        "lcp_ms": 1676,
+        "tbt_ms": 93,
+        "cls": 0.0002879385442135096,
+        "speed_index_ms": 2789,
+        "observed_fcp_ms": 1521,
+        "observed_load_ms": 1815
+      },
+      "bytes": {
+        "total_kib": 670
+      }
+    }
+  }
+}

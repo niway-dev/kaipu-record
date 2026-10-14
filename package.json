@@ -39,6 +39,7 @@
     "format:tracked": "git ls-files | grep -E '\\.(ts|tsx|js|jsx|json|jsonc|md|mdx)$' | xargs oxfmt --write",
     "check": "bun run lint && bun run format",
     "check-workflows": "bun scripts/check-workflow-eligibility.ts",
+    "measure:web-bundle": "node scripts/measure-web-bundle.mjs",
     "verify": "bun run check-workflows && bun run lint && oxfmt --check . && bun run build --filter='@kaipu/*' && bun run check-types && bun run test",
     "verify:local": "bun run lint && oxfmt --check . && bun run build --filter='@kaipu/*' && bun run check-types",
     "dev": "turbo run dev",
