@@ -46,3 +46,20 @@ export function formatDecimalBytes(bytes: number): string {
 function trim(value: number): string {
   return String(Math.round(value * 100) / 100);
 }
+
+/**
+ * Decimal byte formatting for the capacity views (1 GB = 1,000,000,000 bytes), as the product
+ * states quotas: B, KB, MB, GB, TB with at most one decimal. Desktop and web share it so they
+ * print identical numbers. `formatDecimalBytes` above is the two-decimal MB/GB variant.
+ */
+export function formatBytesDecimal(bytes: number): string {
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let value = Math.max(0, bytes);
+  let unit = 0;
+  while (value >= 1000 && unit < units.length - 1) {
+    value /= 1000;
+    unit += 1;
+  }
+  const decimals = unit === 0 || value >= 10 || Number.isInteger(value) ? 0 : 1;
+  return `${value.toFixed(decimals)} ${units[unit]}`;
+}

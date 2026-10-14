@@ -3,12 +3,14 @@ import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useTranslations } from "@kaipu/i18n";
 
 import SignInForm from "@/components/sign-in-form";
+import { safeRedirectPath } from "@/lib/safe-redirect";
 
 function LoginPage() {
   const t = useTranslations("auth");
+  const { redirect: redirectTo } = Route.useSearch();
   return (
     <div className="mx-auto w-full mt-10 max-w-md p-6">
-      <SignInForm />
+      <SignInForm redirectTo={redirectTo} />
       <div className="mt-4 text-center text-sm text-muted-foreground">
         {t("needAccount")}{" "}
         <Link to="/auth/signup" className="text-primary hover:underline">
@@ -27,10 +29,14 @@ function LoginPage() {
 export const Route = createFileRoute("/auth/login")({
   head: () => NOINDEX,
   component: LoginPage,
+  validateSearch: (search: Record<string, unknown>): { redirect?: string } => {
+    const target = safeRedirectPath(search.redirect);
+    return target ? { redirect: target } : {};
+  },
   beforeLoad: async (ctx) => {
     const { isAuthenticated } = ctx.context;
     if (isAuthenticated) {
-      throw redirect({ to: "/recordings" });
+      throw redirect({ href: ctx.search.redirect ?? "/recordings" });
     }
   },
 });

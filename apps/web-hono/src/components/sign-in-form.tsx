@@ -7,7 +7,7 @@ import { useTranslations } from "@kaipu/i18n";
 import CloudPromotion from "@/components/cloud-promotion";
 import { authClient } from "@/lib/auth/auth-client";
 
-export default function SignInForm() {
+export default function SignInForm({ redirectTo }: { redirectTo?: string }) {
   const navigate = useNavigate();
   const router = useRouter();
   const t = useTranslations("auth");
@@ -26,7 +26,9 @@ export default function SignInForm() {
         {
           onSuccess: async () => {
             await router.invalidate();
-            navigate({ to: "/recordings" });
+            // `redirectTo` was validated as a same-origin path by the login route.
+            if (redirectTo) router.history.push(redirectTo);
+            else navigate({ to: "/recordings" });
             toast.success(t("signInSuccess"));
           },
           onError: (error) => {

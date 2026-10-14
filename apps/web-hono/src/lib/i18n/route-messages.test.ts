@@ -30,13 +30,29 @@ describe("slicesForPath", () => {
     expect(slicesForPath("/auth/login")).toContain("auth");
   });
 
+  it("gives the account page the account copy and the shared capacity copy", () => {
+    const slices = slicesForPath("/account");
+    expect(slices).toContain("account");
+    expect(slices).toContain("storageCloud");
+    expect(slices).toContain("auth");
+    expect(slicesForPath("/account/")).toEqual(slices);
+    expect(slicesForPath("/recordings")).not.toContain("storageCloud");
+  });
+
   it("sends nothing for a route with no rule", () => {
     expect(slicesForPath("/does-not-exist")).toEqual([]);
   });
 
   it("only names namespaces that exist in the catalog", () => {
     const known = new Set(Object.keys(en));
-    for (const path of ["/", "/roadmap", "/legal/cookies", "/auth/login", "/recordings"]) {
+    for (const path of [
+      "/",
+      "/roadmap",
+      "/legal/cookies",
+      "/auth/login",
+      "/recordings",
+      "/account",
+    ]) {
       for (const slice of slicesForPath(path)) {
         expect(known.has(slice.split(".")[0] ?? "")).toBe(true);
       }
