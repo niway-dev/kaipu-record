@@ -11,6 +11,7 @@ import {
   SquareArrowOutUpRight,
 } from "lucide-react";
 import { ROUTES } from "@shared/routes";
+import { KaipuLogo } from "@kaipu/brand";
 import { useLocale, useTranslations } from "@kaipu/i18n";
 import { useLocalLibrary } from "@renderer/features/library/hooks/use-local-library";
 import { EditBadge } from "@renderer/features/library/components/edit-badge";
@@ -65,7 +66,7 @@ export function EditorHomePage(): React.JSX.Element {
     <div className={styles.home}>
       <div className={styles.homeHeader}>
         <div>
-          <h1 className={styles.title}>{t("title")}</h1>
+          <h1 className={styles.homeTitle}>{t("title")}</h1>
           <p className={styles.homeSubtitle}>
             {t(tab === "images" ? "subtitleImages" : "subtitleVideos")}
           </p>
@@ -90,7 +91,7 @@ export function EditorHomePage(): React.JSX.Element {
 
       {tab === "images" && <StartImage onPaste={() => void paste.pasteFromClipboard()} />}
       {tab === "images" && paste.empty && (
-        <p role="alert" className={styles.pasteEmpty}>
+        <p role="alert" className={styles.homeAlert}>
           {t("pasteEmpty")}
         </p>
       )}
@@ -123,7 +124,9 @@ function StartImage({ onPaste }: { onPaste: () => void }): React.JSX.Element {
         <p className={styles.startBody}>{t("startBody", { shortcut: PASTE_SHORTCUT })}</p>
         {clip && (
           <div className={styles.clipPeek}>
-            <ClipboardPaste size={16} aria-hidden className={styles.clipIcon} />
+            <span className={styles.clipThumb} aria-hidden>
+              <ClipboardPaste size={15} />
+            </span>
             <span className={styles.clipText}>
               <span className={styles.clipTitle}>{t("clipboardImage")}</span>
               <span className={styles.clipMeta}>
@@ -311,8 +314,8 @@ function EmptyContinue({ tab }: { tab: EditorTab }): React.JSX.Element {
   const shortcuts = useShortcutLabels();
   return (
     <section className={styles.emptyContinue}>
-      <span className={styles.emptyIcon} aria-hidden>
-        {tab === "images" ? <ImageIcon size={26} /> : <Film size={26} />}
+      <span className={styles.emptyMark} aria-hidden>
+        <KaipuLogo use="product" size={64} />
       </span>
       <div>
         <h2 className={styles.emptyTitle}>{t("emptyTitle")}</h2>
