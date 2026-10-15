@@ -1,5 +1,5 @@
 {
-  "apps/kaipu-record": "0.10.0",
+  "apps/kaipu-record": "0.11.0",
   "apps/web-hono": "0.9.0",
   "apps/server-hono": "0.4.0"
 }
