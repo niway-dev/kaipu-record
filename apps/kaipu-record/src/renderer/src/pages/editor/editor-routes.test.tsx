@@ -1,8 +1,9 @@
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { LibraryItem } from "@shared/types/library-item";
-import { EditorHomePage, RECENT_EDITABLE_COUNT } from "./editor-home-page";
+import { EditorHomePage } from "./editor-home-page";
+import { CONTINUE_ROWS, SHOW_OLDER_STEP } from "./editor-continue";
 import { EditorImagePage, EditorVideoPage, LegacyScreenshotEditorRedirect } from "./editor-routes";
 
 // The editors themselves are out of scope here (they are covered by their own
@@ -22,11 +23,17 @@ vi.mock("@renderer/pages/screenshot-editor/screenshot-editor-page", () => ({
   ),
 }));
 
+interface Stamps {
+  editorOpenedAt?: number;
+  editorSavedAt?: number;
+}
+
 function localItem(
   assetId: string,
   kind: "recording" | "screenshot",
   createdAt: number,
   over: Partial<LibraryItem> = {},
+  stamps: Stamps = {},
 ): LibraryItem {
   const durationSeconds = kind === "recording" ? 12 : 0;
   return {
@@ -50,6 +57,7 @@ function localItem(
       thumbnailUrl: null,
       derivedFromAssetId: null,
       contentSha256: null,
+      ...stamps,
     },
     cloud: null,
     availability: "local",
@@ -73,9 +81,11 @@ function renderAt(entry: string | { pathname: string; state: unknown }) {
   const router = createMemoryRouter(
     [
       { path: "/editor", element: <EditorHomePage /> },
+      { path: "/editor/new", element: <div>editor-new</div> },
       { path: "/editor/video/:assetId", element: <EditorVideoPage /> },
       { path: "/editor/image/:assetId", element: <EditorImagePage /> },
       { path: "/editor/capture", element: <div>editor-capture</div> },
+      { path: "/library", element: <div>library</div> },
       { path: "/screenshot-editor", element: <LegacyScreenshotEditorRedirect /> },
     ],
     { initialEntries: [entry] },
@@ -87,6 +97,7 @@ function renderAt(entry: string | { pathname: string; state: unknown }) {
 describe("Editor workspace routes", () => {
   beforeEach(() => {
     window.electronAPI.onLibraryChanged = () => () => {};
+    window.electronAPI.markOpenedInEditor = vi.fn(async () => {});
   });
 
   it("resolves /editor/video/:assetId from the library (so a reload reopens it)", async () => {
@@ -99,6 +110,20 @@ describe("Editor workspace routes", () => {
     setLibrary([localItem("s1", "screenshot", 1)]);
     renderAt("/editor/image/s1");
     expect(await screen.findByText("image-editor:local:local-s1")).toBeInTheDocument();
+  });
+
+  it("stamps the opened item, once, so the Editor home can list it", async () => {
+    setLibrary([localItem("s1", "screenshot", 1)]);
+    renderAt("/editor/image/s1");
+    await screen.findByText("image-editor:local:local-s1");
+    expect(window.electronAPI.markOpenedInEditor).toHaveBeenCalledExactlyOnceWith("local-s1");
+  });
+
+  it("stamps a recording opened in the video editor", async () => {
+    setLibrary([localItem("a1", "recording", 1)]);
+    renderAt("/editor/video/a1");
+    await screen.findByText("video-editor:a1:local-a1");
+    expect(window.electronAPI.markOpenedInEditor).toHaveBeenCalledExactlyOnceWith("local-a1");
   });
 
   it("falls back to the Editor home for an unknown or cloud-only item", async () => {
@@ -132,54 +157,104 @@ describe("Editor workspace routes", () => {
 });
 
 describe("EditorHomePage", () => {
+  const now = Date.now();
+  const hour = 3_600_000;
+
   beforeEach(() => {
     window.electronAPI.onLibraryChanged = () => () => {};
+    window.electronAPI.peekClipboardImage = vi.fn(async () => null);
   });
 
-  it("lists the five most recent editable items, newest first, and opens one", async () => {
+  it("lists only what was worked on in an editor, the last one as the large card", async () => {
     setLibrary([
-      localItem("old", "recording", 1),
-      localItem("r2", "recording", 2),
-      localItem("s3", "screenshot", 3),
-      localItem("r4", "recording", 4),
-      localItem("s5", "screenshot", 5),
-      localItem("r6", "recording", 6),
-      // Not editable: cloud-only, and a recording without a duration.
-      localItem("cloud", "recording", 7, { local: null, availability: "cloud" }),
-      localItem("nodur", "recording", 8, { durationSeconds: 0 }),
+      // Captured, never opened in the editor: stays in the Library only.
+      localItem("captured", "screenshot", now),
+      localItem("saved", "screenshot", now - 9 * hour, {}, { editorSavedAt: now - hour }),
+      localItem("opened", "screenshot", now - 9 * hour, {}, { editorOpenedAt: now - 3 * hour }),
+      localItem("rec", "recording", now - 9 * hour, { editSavedAt: now - 5 * hour }),
+    ]);
+    renderAt("/editor");
+
+    const hero = await screen.findByRole("button", { name: "Open Item saved" });
+    expect(hero.parentElement).toHaveTextContent("Last worked on");
+    expect(hero.parentElement).toHaveTextContent("Saved 1 hour ago");
+    expect(
+      screen.getByRole("button", { name: "Open Item opened" }).closest("li"),
+    ).toHaveTextContent("Opened 3 hours ago");
+    expect(screen.queryByText("Item captured")).not.toBeInTheDocument();
+    // The video is on the other tab, with its own count.
+    expect(screen.queryByText("Item rec")).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Images/ })).toHaveTextContent("2");
+    expect(screen.getByRole("tab", { name: /Videos/ })).toHaveTextContent("1");
+  });
+
+  it("opens on the tab holding the most recent work, and resumes a video from it", async () => {
+    setLibrary([
+      localItem("shot", "screenshot", now - 9 * hour, {}, { editorSavedAt: now - 4 * hour }),
+      localItem("rec", "recording", now - 9 * hour, { editSavedAt: now - hour }),
     ]);
     const router = renderAt("/editor");
 
-    const edits = await screen.findAllByRole("button", { name: /^Edit Item/ });
-    expect(edits).toHaveLength(RECENT_EDITABLE_COUNT);
-    expect(edits.map((b) => b.getAttribute("aria-label"))).toEqual([
-      "Edit Item r6",
-      "Edit Item s5",
-      "Edit Item r4",
-      "Edit Item s3",
-      "Edit Item r2",
-    ]);
-
-    fireEvent.click(edits[1]);
-    await waitFor(() => expect(router.state.location.pathname).toBe("/editor/image/s5"));
+    const resume = await screen.findByRole("button", { name: "Resume Item rec" });
+    expect(screen.getByRole("tab", { name: /Videos/ })).toHaveAttribute("aria-selected", "true");
+    expect(resume.parentElement).toHaveTextContent("Edited 1 hour ago");
+    fireEvent.click(resume);
+    await waitFor(() => expect(router.state.location.pathname).toBe("/editor/video/rec"));
   });
 
-  it("shows the library's export state next to an edited recording", async () => {
-    setLibrary([
-      localItem("edited", "recording", 2, { editSavedAt: 1000 }),
-      localItem("plain", "recording", 1),
-    ]);
+  it("shows four rows under the card, and Show older adds more in place", async () => {
+    setLibrary(
+      Array.from({ length: 12 }, (_, i) =>
+        localItem(`s${i}`, "screenshot", 1, {}, { editorSavedAt: now - (i + 1) * hour }),
+      ),
+    );
     renderAt("/editor");
+    await screen.findByRole("button", { name: "Open Item s0" });
+    const rows = () => screen.queryAllByRole("listitem");
+    expect(rows()).toHaveLength(CONTINUE_ROWS);
 
-    await screen.findAllByRole("button", { name: /^Edit Item/ });
-    const badges = screen.getAllByText("Edited · not exported");
-    expect(badges).toHaveLength(1);
-    expect(badges[0].closest("li")).toHaveTextContent("Item edited");
+    fireEvent.click(screen.getByRole("button", { name: "Show older · 7" }));
+    expect(rows()).toHaveLength(CONTINUE_ROWS + SHOW_OLDER_STEP);
+    fireEvent.click(screen.getByRole("button", { name: "Show older · 2" }));
+    expect(rows()).toHaveLength(11);
+
+    fireEvent.click(screen.getByRole("button", { name: "Show less" }));
+    expect(rows()).toHaveLength(CONTINUE_ROWS);
   });
 
-  it("says so when there is nothing to edit", async () => {
+  it("explains an empty Continue, and offers the Library for videos", async () => {
+    setLibrary([localItem("captured", "screenshot", now)]);
+    renderAt("/editor");
+    expect(await screen.findByText("Nothing to continue yet")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Screenshots you only captured stay in your Library/),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: /Videos/ }));
+    const empty = screen.getByText("Nothing to continue yet").closest("section")!;
+    expect(within(empty).getByRole("link", { name: "Choose from Library" })).toHaveAttribute(
+      "href",
+      "/library",
+    );
+  });
+
+  it("offers New image, and pastes the clipboard image it sees straight into the editor", async () => {
     setLibrary([]);
-    renderAt("/editor");
-    expect(await screen.findByText(/Nothing to edit yet/)).toBeInTheDocument();
+    window.electronAPI.peekClipboardImage = vi.fn(async () => ({ width: 1440, height: 900 }));
+    window.electronAPI.readClipboardImage = vi.fn(async () => ({
+      png: new ArrayBuffer(4),
+      width: 1440,
+      height: 900,
+    }));
+    const router = renderAt("/editor");
+
+    expect(await screen.findByRole("link", { name: "New image" })).toHaveAttribute(
+      "href",
+      "/editor/new",
+    );
+    expect(await screen.findByText("1440 × 900")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^Paste/ }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/editor/capture"));
+    expect(router.state.location.state).toMatchObject({ kind: "blob", origin: "paste" });
   });
 });

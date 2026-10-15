@@ -53,6 +53,10 @@ export interface Sidecar {
   gifWidth?: number;
   gifHeight?: number;
   gifFps?: number;
+  /** Epoch ms the item was last opened in an editor (the Editor home's "Opened"). */
+  editorOpenedAt?: number;
+  /** Screenshots: epoch ms of the last manual Save from the image editor ("Saved"). */
+  editorSavedAt?: number;
 }
 
 // Keyed by the sidecar's absolute path (not per-instance), so a re-minted id on a
@@ -157,6 +161,8 @@ export class LibraryVault {
           ? { width: meta.gifWidth, height: meta.gifHeight, fps: meta.gifFps ?? 0 }
           : null,
       export: describeExport(meta),
+      editorOpenedAt: typeof meta.editorOpenedAt === "number" ? meta.editorOpenedAt : null,
+      editorSavedAt: typeof meta.editorSavedAt === "number" ? meta.editorSavedAt : null,
       thumbnailUrl: isImage
         ? // `?v=<mtime>` busts the renderer image cache when a screenshot is
           // overwritten in place (same id/URL) — only the changed item, so the
@@ -363,6 +369,11 @@ export class LibraryVault {
   /** Updates the user-facing title without touching the video file. */
   async rename(id: string, title: string): Promise<void> {
     await this.writeMeta(id, { title });
+  }
+
+  /** Stamp "opened in an editor now" — what the Editor home's Continue list orders by. */
+  async markOpenedInEditor(id: string, at = Date.now()): Promise<void> {
+    await this.writeMeta(id, { editorOpenedAt: at });
   }
 
   /**

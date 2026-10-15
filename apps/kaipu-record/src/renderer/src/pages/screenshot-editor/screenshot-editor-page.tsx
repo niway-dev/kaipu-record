@@ -16,6 +16,7 @@ import { useImageSource, type ImageSource } from "@renderer/features/screenshots
 import {
   type AutoActions,
   autoActionsOnOpen,
+  openKindOf,
 } from "@renderer/features/screenshots/auto-capture-policy";
 import { DiscardChangesDialog } from "@renderer/features/screenshots/discard-changes-dialog";
 import { reportError } from "@renderer/features/analytics";
@@ -85,7 +86,10 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
   const image = useImageSource(source);
   // A re-opened saved shot is already framed/flattened — start it unframed so the
   // editor doesn't beautify it twice; a fresh capture gets the default frame.
-  const scene = useEditorScene(source.kind === "local" ? FLAT_BEAUTIFY : DEFAULT_BEAUTIFY);
+  // A pasted image is the user's own picture (often a photo), not a screenshot to
+  // show off, so it opens unframed too.
+  const openKind = openKindOf(source);
+  const scene = useEditorScene(openKind === "capture" ? DEFAULT_BEAUTIFY : FLAT_BEAUTIFY);
   const tools = useAnnotationTools();
   const imgRef = useRef<HTMLImageElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -111,7 +115,7 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
     autoActionsRef.current = autoActionsOnOpen(
       settings.screenshotSave,
       settings.screenshotCopy,
-      source.kind,
+      openKind,
     );
   }
   // True once THIS editor created the item on open — enables Discard.
@@ -244,6 +248,8 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
         // user sees even if the field has not blurred yet (e.g. a shortcut).
         title: opts.title ?? resolveCaptureTitle(captureTitle.draft, captureTitle.autoTitle),
         overwriteId: opts.overwriteId,
+        // Only the auto-save on open is silent; every other save is the user's.
+        manual: !opts.silent,
       });
       setSavedId(saved.id);
       captureTitle.adopt(saved.title);

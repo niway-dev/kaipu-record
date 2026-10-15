@@ -69,6 +69,23 @@ export function registerScreenshotHandlers(windows: CaptureWindowHooks): void {
     clipboard.writeImage(nativeImage.createFromBuffer(buf));
   });
 
+  ipcMain.handle(IPC_CHANNELS.clipboardPeekImage, () => {
+    const img = clipboard.readImage();
+    return img.isEmpty() ? null : img.getSize();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.clipboardReadImage, () => {
+    const img = clipboard.readImage();
+    if (img.isEmpty()) return null;
+    const png = img.toPNG();
+    const { width, height } = img.getSize();
+    return {
+      png: png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength),
+      width,
+      height,
+    };
+  });
+
   ipcMain.handle(IPC_CHANNELS.screenshotReadBytes, async (_e, id: string): Promise<ArrayBuffer> => {
     const buf = await readFile(await screenshotFilePath(id));
     return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
@@ -79,16 +96,20 @@ export function registerScreenshotHandlers(windows: CaptureWindowHooks): void {
     async (
       _e,
       png: ArrayBuffer,
-      meta: { title: string; overwriteId?: string },
+      meta: { title: string; overwriteId?: string; manual?: boolean },
     ): Promise<LocalRecording> => {
       const id = meta.overwriteId ?? screenshotId();
       const vault = currentVault();
       await vault.writeImage(id, Buffer.from(png));
+      const now = Date.now();
       // Preserve the original createdAt when overwriting; stamp it for a new item.
-      await vault.writeMeta(
-        id,
-        meta.overwriteId ? { title: meta.title } : { title: meta.title, createdAt: Date.now() },
-      );
+      // A save the user asked for (not the capture's auto-save) is editor work, so
+      // it puts the shot on the Editor home's Continue list.
+      await vault.writeMeta(id, {
+        title: meta.title,
+        ...(meta.overwriteId ? {} : { createdAt: now }),
+        ...(meta.manual ? { editorSavedAt: now } : {}),
+      });
       const saved = await vault.describe(id);
       if (!saved) throw new Error(`screenshot save: could not describe ${id} after writing`);
       return saved;

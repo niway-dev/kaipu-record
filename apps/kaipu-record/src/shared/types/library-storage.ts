@@ -46,6 +46,13 @@ export interface LocalRecording {
    * exports made before it existed). null for everything else.
    */
   export?: { preset: ExportPresetId; fingerprint: string | null } | null;
+  /**
+   * The Editor home's activity stamps: when the item was last opened in an editor,
+   * and (screenshots) when it was last saved from the image editor by hand. null
+   * when never; optional for the same reason as `tagIds`.
+   */
+  editorOpenedAt?: number | null;
+  editorSavedAt?: number | null;
 }
 
 /** Where recordings are stored, and whether the user picked a custom folder. */

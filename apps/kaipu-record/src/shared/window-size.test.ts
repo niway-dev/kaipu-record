@@ -28,6 +28,7 @@ describe("presetForPath", () => {
       ROUTES.editor,
       "/editor/image/asset-1",
       ROUTES.editorCapture,
+      ROUTES.editorNew,
     ];
     for (const path of sidebar) expect(presetForPath(path), path).toBe("main");
   });

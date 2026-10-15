@@ -102,6 +102,7 @@ window.electronAPI = {
   openSystemSettings: async () => {},
   listLocalRecordings: async () => [],
   renameLocalRecording: async () => {},
+  markOpenedInEditor: async () => {},
   listTags: async () => [],
   createTag: async (name) => ({
     id: `tag-${name}`,
@@ -186,6 +187,8 @@ window.electronAPI = {
   copyImageToClipboard: async () => {},
   copyScreenshotById: async () => {},
   readScreenshotBytes: async () => new ArrayBuffer(0),
+  readClipboardImage: async () => null,
+  peekClipboardImage: async () => null,
   saveScreenshot: async () => {
     throw new Error("not implemented in test stub");
   },

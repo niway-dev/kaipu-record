@@ -23,5 +23,7 @@ export function toLibraryVideo(item: LibraryItem): LibraryVideo {
     tagIds: item.local?.tagIds ?? [],
     gif: item.local?.gif ?? null,
     export: item.local?.export ?? null,
+    editorOpenedAt: item.local?.editorOpenedAt ?? null,
+    editorSavedAt: item.local?.editorSavedAt ?? null,
   };
 }

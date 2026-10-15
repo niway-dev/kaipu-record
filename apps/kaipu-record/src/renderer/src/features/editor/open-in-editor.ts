@@ -66,8 +66,12 @@ export function imageSourceFor(item: EditableItem): ImageSource | null {
 export interface OpenInEditor {
   /** Open a library item in its editor. No-op when the item cannot be edited. */
   openItem(item: EditableItem): void;
-  /** Open an image that is not in the vault yet (a fresh capture). */
-  openCapture(source: ImageSource): void;
+  /**
+   * Open an image that is not in the vault yet (a fresh capture, a paste). With
+   * `replace`, the editor takes the current history entry's place — for a page
+   * that only exists to pick the image, like the Editor's New.
+   */
+  openCapture(source: ImageSource, options?: { replace?: boolean }): void;
 }
 
 export function useOpenInEditor(): OpenInEditor {
@@ -79,7 +83,8 @@ export function useOpenInEditor(): OpenInEditor {
     [navigate],
   );
   const openCapture = useCallback(
-    (source: ImageSource) => navigate(ROUTES.editorCapture, { state: source }),
+    (source: ImageSource, options?: { replace?: boolean }) =>
+      navigate(ROUTES.editorCapture, { state: source, replace: options?.replace ?? false }),
     [navigate],
   );
   return { openItem, openCapture };

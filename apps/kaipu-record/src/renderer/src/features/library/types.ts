@@ -32,6 +32,9 @@ export interface LibraryVideo {
   /** Epoch ms of the last edit-session save, null without a session (see LibraryItem). */
   editSavedAt: number | null;
   editExportedSavedAt: number | null;
+  /** Editor home stamps (sidecar): last opened in an editor; last manual image Save. */
+  editorOpenedAt?: number | null;
+  editorSavedAt?: number | null;
   /** Ids of the tags this item carries (ADR 0020); resolve with `useTags`. */
   tagIds?: string[];
   /** GIF exports only: output size and frame rate (NIW2-217). */

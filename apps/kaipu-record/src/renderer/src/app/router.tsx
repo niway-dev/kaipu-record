@@ -22,6 +22,7 @@ import { ScreenshotsPage } from "@renderer/pages/screenshots/screenshots-page";
 import { ScreenshotEditorPage } from "@renderer/pages/screenshot-editor/screenshot-editor-page";
 import { VideoEditorPage } from "@renderer/pages/video-editor/video-editor-page";
 import { EditorHomePage } from "@renderer/pages/editor/editor-home-page";
+import { EditorNewPage } from "@renderer/pages/editor/editor-new-page";
 import {
   EditorImagePage,
   EditorVideoPage,
@@ -66,6 +67,8 @@ const router = createHashRouter([
           { path: ROUTES.screenshots, element: <ScreenshotsPage /> },
           // Editor workspace: every Edit lands here, addressed by URL.
           { path: ROUTES.editor, element: <EditorHomePage /> },
+          // New: an empty editor that opens the image editor on a pasted image.
+          { path: ROUTES.editorNew, element: <EditorNewPage /> },
           { path: ROUTES.editorVideo, element: <EditorVideoPage /> },
           { path: ROUTES.editorImage, element: <EditorImagePage /> },
           // A fresh capture is not in the vault yet: its image travels in router state.
