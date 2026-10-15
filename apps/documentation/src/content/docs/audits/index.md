@@ -24,12 +24,12 @@ sidebar:
    channels, the **hot paths** (anything per frame, per pointer move, per interval, per list) and
    which files have no tests. The result is `feature-map.md`. Diff it against the previous run's map
    to see what grew.
-2. **Audit (8 agents, read-only, Opus).** Two per feature, each with one lens:
+2. **Audit (8 agents, read-only, Opus).** Two per feature, all sharing one brief (below). Each must
+   give `file:line`, trigger → consequence, try to refute the finding first, and mark it `confirmed`
+   (full path traced) or `plausible`. Each agent has one lens:
    - **A — performance, optimizations, resource leaks, observability.** Quantify costs (syscalls per
      list, renders per pointer move, bytes copied per chunk) and say what would measure them.
    - **B — error handling, bugs, logic flaws, races, data integrity.**
-     All eight share one brief (below). Each must give `file:line`, trigger → consequence, try to refute
-     the finding first, and mark it `confirmed` (full path traced) or `plausible`.
 3. **Consolidate (orchestrator).** Merge the eight finding files into `report.md`: a one-minute
    summary, the cross-cutting themes, a prioritized fix list, and every finding grouped by feature.
    Findings already in an earlier audit are referenced, not repeated.
