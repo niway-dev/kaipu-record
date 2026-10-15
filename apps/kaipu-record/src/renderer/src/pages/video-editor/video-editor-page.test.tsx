@@ -343,18 +343,35 @@ describe("VideoEditorPage — background export vs. useBlocker", () => {
   });
 
   it("blocks a normal (non-export) navigation while dirty", async () => {
-    const router = renderEditor();
-    const footer = await waitForEditorLoaded();
-    await makeDirty(footer);
+    // The blocker only fires while an edit is pending, i.e. not yet written. Two
+    // things make that depend on the runner's speed; either one lets the navigation
+    // through, which is how this failed on CI:
+    //  - autosave writes AUTOSAVE_DEBOUNCE_MS after the edit and clears the flag, so a
+    //    write that never resolves keeps the edit pending for the whole test;
+    //  - the flag is set in a passive effect that runs a moment AFTER the commit
+    //    `makeDirty` waits for. Navigating in that gap finds nothing pending and goes
+    //    through. The "Saving…" chip is set by the same effect, so waiting for it
+    //    proves the flag is up.
+    const save = vi
+      .spyOn(window.electronAPI, "saveVideoEditSession")
+      .mockReturnValue(new Promise(() => {}));
+    try {
+      const router = renderEditor();
+      const footer = await waitForEditorLoaded();
+      await makeDirty(footer);
+      expect(await screen.findByText("Saving…")).toBeInTheDocument();
 
-    await act(async () => {
-      await router.navigate("/library/rec-1");
-    });
+      await act(async () => {
+        await router.navigate("/library/rec-1");
+      });
 
-    expect(await screen.findByText(DISCARD_DIALOG_TITLE)).toBeInTheDocument();
-    // Navigation is paused mid-flight: still on the editor, not the target route.
-    expect(screen.queryByText("library-detail")).toBeNull();
-    expect(startExport).not.toHaveBeenCalled();
+      expect(await screen.findByText(DISCARD_DIALOG_TITLE)).toBeInTheDocument();
+      // Navigation is paused mid-flight: still on the editor, not the target route.
+      expect(screen.queryByText("library-detail")).toBeNull();
+      expect(startExport).not.toHaveBeenCalled();
+    } finally {
+      save.mockRestore();
+    }
   });
 
   it("never blocks navigation when the editor is clean", async () => {
