@@ -7,8 +7,9 @@ sidebar:
 
 # Audit report — 2026-10-15
 
-> **Status: 🔵 Findings open.** `main` at `d36b19dd`. 8 read-only auditors (Opus), two per feature,
+> **Status: 🟡 Plans written, none shipped.** `main` at `d36b19dd`. 8 read-only auditors (Opus), two per feature,
 > over the [feature map](/audits/2026-10-15/feature-map/). Method: [Pre-deploy audits](/audits/).
+> Every finding maps to one implementation plan: [fix plans index](/plans/audit-2026-10-15/00-index/).
 
 ## Read this first (one minute)
 
@@ -47,7 +48,7 @@ code; magnitudes come from micro-benchmarks outside the app, **not from measurin
 Recording itself is **not** the culprit: the 8 ms cursor poll, the 100 ms tick and the chunk stream
 are each well under 1 % of a core and bounded for a 1 h take (REC-A summary).
 
-**Fix order.**
+**Fix order.** Each batch's plans are listed in the [fix plans index](/plans/audit-2026-10-15/00-index/).
 
 | #   | Batch                                                                                                                                                                                          | Findings                                                                    | Effort | Why this order                                                           |
 | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------ |
