@@ -61,6 +61,10 @@ export default defineConfig({
           autogenerate: { directory: "plans" },
         },
         {
+          label: "Audits",
+          autogenerate: { directory: "audits" },
+        },
+        {
           label: "Backlog",
           items: [
             "backlog/deploy-environments",
