@@ -36,9 +36,12 @@ export interface WindowSizePreset {
  *
  * A screen having an ideal size does not mean it should impose it on arrival.
  * The main window keeps ONE size, which the user owns, and each screen lays its
- * content out inside whatever it is given. The video editor is the single
- * exception, because its layout genuinely needs the room, and leaving it
- * restores the size the window had before rather than a preset.
+ * content out inside whatever it is given. The Editor workspace (`/editor` and
+ * everything under it) is the single exception: the video editor's layout
+ * genuinely needs the room, and the home, New image and the image editor share
+ * its window so moving within the workspace never resizes it. Entering it from
+ * a sidebar page grows the window; leaving it restores the size the window had
+ * before rather than a preset. Owner decision, 2026-10-15.
  */
 export const WINDOW_PRESETS = {
   /**

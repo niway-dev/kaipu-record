@@ -9,7 +9,8 @@
 
 /* Every editor route fills the window it is given, like the video editor's
    `.page { height: 100% }`: the window preset sizes the frame, the page owns
-   the inside. Nothing here scrolls the shell's <main>. */
+   the inside, and the last section (`.continue`) takes the leftover room. A
+   list longer than the window still scrolls the shell's <main>. */
 .page {
   display: flex;
   flex-direction: column;
@@ -288,6 +289,8 @@
 /* ── Home: Continue ──────────────────────────────── */
 
 .continue {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   margin-top: 28px;

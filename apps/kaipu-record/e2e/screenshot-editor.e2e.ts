@@ -143,6 +143,24 @@ for (const width of [1440, 1180]) {
   });
 }
 
+// A display too small for the editor floor: `fitPresetToDisplay` clamps the floor to the
+// work area, so the image editor still runs at 900px on a small laptop with the labels on.
+// The guard the `main`-preset era had at 900 stays, reached by clearing the floor.
+test("the editor toolbar keeps one row, labels on, at 900px below the editor floor", async () => {
+  const { app, page, teardown } = await launchApp();
+  try {
+    await openScreenshotEditor(page);
+    await resizeWindow(app, page, 900, { belowFloor: true });
+    expect(await measureToolbar(page)).toEqual<ToolbarLayout>({
+      ...ONE_CLEAN_ROW,
+      compact: "false",
+    });
+    await expect(page.getByRole("toolbar").getByText("Save", { exact: true })).toBeVisible();
+  } finally {
+    await teardown();
+  }
+});
+
 // Narrower than the app allows — a display too small for the floor, or a control added
 // later — the row gives up the action labels rather than overlapping.
 test("below the window floor the editor toolbar drops the action labels instead of overlapping", async () => {

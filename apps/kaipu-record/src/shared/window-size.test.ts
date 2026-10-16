@@ -11,8 +11,9 @@ import {
 const BIG = { width: 3840, height: 2160 };
 
 describe("presetForPath", () => {
-  it("gives every sidebar screen the SAME preset", () => {
-    // This is the point: navigating between them must not resize the window.
+  it("gives every sidebar page except the Editor the main preset", () => {
+    // Navigating between these must not resize the window; the Editor entry is the
+    // one sidebar link that takes the window over (next test).
     const sidebar = [
       ROUTES.record,
       ROUTES.library,
