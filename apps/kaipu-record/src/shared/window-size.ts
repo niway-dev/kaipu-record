@@ -42,16 +42,18 @@ export interface WindowSizePreset {
  */
 export const WINDOW_PRESETS = {
   /**
-   * Every screen but one: the sidebar pages AND the screenshot editor, whose
-   * canvas and panel fit here without taking the window over.
+   * Every sidebar page. Content lays itself out inside whatever the user gives it.
    */
   main: { width: 1040, height: 760, minWidth: 900, minHeight: 670 },
   /**
-   * The only exception. A preview, an inspector and five timeline lanes do not
-   * fit the shared window, and below this the lanes stop being readable rather
-   * than merely narrow.
+   * The only exception: the whole Editor workspace (`/editor` and everything
+   * under it). The video editor sets the size — a preview, an inspector and five
+   * timeline lanes do not fit the shared window, and below this the lanes stop
+   * being readable rather than merely narrow — and the image editor, the Editor
+   * home and New image share it, so moving between the home and an open item
+   * never resizes the window mid-session.
    */
-  videoEditor: { width: 1440, height: 900, minWidth: 1180, minHeight: 760 },
+  editor: { width: 1440, height: 900, minWidth: 1180, minHeight: 760 },
   /**
    * The first-run takeover does not reflow — a 96px mark, a headline, a two-line
    * subtitle and a 2x2 grid of permission cards.
@@ -64,23 +66,27 @@ export type WindowPresetName = keyof typeof WINDOW_PRESETS;
 /**
  * Which preset a path wants.
  *
- * Only the video editor asks for something of its own; every other route is
- * `main`, and main treats a repeat as a no-op, so navigating anywhere else —
- * including into and out of the screenshot editor — never touches the window.
+ * Only the Editor workspace asks for something of its own; every other route is
+ * `main`, and main treats a repeat as a no-op, so navigating between sidebar
+ * pages never touches the window. The legacy `/screenshot-editor` and
+ * `/video-editor` paths stay on `main`: they redirect at once, and the path
+ * they land on picks the preset.
  *
  * Still resolved from the path rather than requested by each page on mount: the
  * pages mount and unmount under a shell that does not, so a page that grew the
  * window had nothing to shrink it back on the way out.
  */
 export function presetForPath(pathname: string): WindowPresetName {
-  // Every video editor URL (`/editor/video/:assetId`) lives under this prefix.
-  const videoEditorPrefix = ROUTES.editorVideo.replace(":assetId", "");
-  return pathname.startsWith(videoEditorPrefix) ? "videoEditor" : "main";
+  // `/editor` itself and everything under it: `/editor/video/:id`,
+  // `/editor/image/:id`, `/editor/new`, `/editor/capture`. The slash is part of
+  // the prefix so an unrelated `/editor-ish` route would not match.
+  const isEditor = pathname === ROUTES.editor || pathname.startsWith(`${ROUTES.editor}/`);
+  return isEditor ? "editor" : "main";
 }
 
-/** True for the one screen that takes the window over. */
+/** True for the one workspace that takes the window over. */
 export function isEditorPreset(name: WindowPresetName): boolean {
-  return name === "videoEditor";
+  return name === "editor";
 }
 
 /**
