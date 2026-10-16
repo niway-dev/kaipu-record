@@ -122,10 +122,11 @@ async function resizeWindow(
 
 const ONE_CLEAN_ROW = { overflows: false, overlaps: [], outside: [], rowSpread: 0 };
 
-// The window the editor lives in: WINDOW_PRESETS.main (shared/window-size.ts) names 1040
-// as its starting width and 900 as the floor the window refuses to shrink below. Both
-// must hold one clean row, and with room to spare the action labels stay.
-for (const width of [1040, 900]) {
+// The window the editor lives in: WINDOW_PRESETS.editor (shared/window-size.ts) names 1440
+// as its starting width and 1180 as the floor the window refuses to shrink below — every
+// /editor route shares it. Both must hold one clean row, and with room to spare the
+// action labels stay.
+for (const width of [1440, 1180]) {
   test(`the editor toolbar keeps one row, labels on, at ${width}px`, async () => {
     const { app, page, teardown } = await launchApp();
     try {

@@ -7,10 +7,15 @@
  * for text on the accent (see button.module.css).
  */
 
+/* Every editor route fills the window it is given, like the video editor's
+   `.page { height: 100% }`: the window preset sizes the frame, the page owns
+   the inside. Nothing here scrolls the shell's <main>. */
 .page {
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
+  height: 100%;
+  min-height: 0;
 }
 
 .title {
@@ -85,6 +90,8 @@
   flex-direction: column;
   max-width: 860px;
   width: 100%;
+  height: 100%;
+  min-height: 0;
   margin: 0 auto;
   /* The shell already pads the page by --space-xl (24px); this tops it up to the
      design's 26px / 34px. */
