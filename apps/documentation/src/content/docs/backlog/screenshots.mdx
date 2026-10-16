@@ -122,6 +122,12 @@ like the macOS screenshot widget but lands in our own editor.
 
 ## 3. Capture engine
 
+> **Superseded on 2026-10-15** by the
+> [screenshot capture modes design](/specs/2026-10-15-screenshot-capture-modes-design/) and
+> ADR 0022: three modes (area, screen, frame), native `screencapture` on macOS,
+> `desktopCapturer` on Windows, one shared overlay. The text below is kept as the record of
+> the v1 decision.
+
 macOS exposes screenshots and recording as **separate** capabilities. The
 `Cmd+Shift+5` panel offers both, but we never invoke that panel — we call the
 screenshot path directly, so there is **no recording involved**.
