@@ -7,7 +7,10 @@ description: "Ship the working Windows build as a recording-only beta instead of
 
 > **Status: 🔵 Proposed → owner approved the direction** (2026-09-27). The Windows build exists
 > and records; screenshots are not ported yet. Decision: ship what works as a labelled beta.
-> Parent: [Product growth](./product-growth).
+> Parent: [Product growth](./product-growth). **Design (2026-10-15):**
+> [Windows release design](/specs/2026-10-15-windows-release-design/) and ADR 0023 turn the
+> steps below into tickets; screenshots on Windows come from the
+> [screenshot capture modes design](/specs/2026-10-15-screenshot-capture-modes-design/).
 
 ## Why now
 

@@ -1,0 +1,82 @@
+---
+title: "ADR 0023: One desktop release workflow with a build job per OS and a single publish job; Windows ships unsigned until a signing service exists, behind a hook that needs no workflow change"
+description: Desktop releases keep one workflow and one tag. Each OS builds in its own job and uploads artifacts; one publish job writes the shared R2 feed and the GitHub Release. Windows is verified by build and manual QA, not E2E. Signing is a no-op hook until secrets exist.
+---
+
+# ADR 0023: One desktop release workflow with a build job per OS and a single publish job; Windows ships unsigned until a signing service exists
+
+## Status
+
+| Field         | Value                                                                                                                  |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Status        | Proposed — [Windows release design](/specs/2026-10-15-windows-release-design/); not implemented                        |
+| Date          | 2026-10-15                                                                                                             |
+| Amends        | ADR 0006 (desktop E2E in the candidate tier): the gate stays macOS-only; Windows is not E2E-verified by this decision. |
+| Superseded by | —                                                                                                                      |
+
+## Context
+
+The desktop app builds for Windows from a laptop (`bun run build:win`) but the release
+workflow has one macOS job that builds, tests, signs, notarizes, publishes to R2 and creates a
+draft GitHub Release. The owner approved a recording-first Windows beta on 2026-09-27 and now
+wants it in the pipeline. Three things stand in the way of copying the macOS job: a second job
+creating the same draft release races the first (drafts carry no tag to match on); the R2 feed
+writer only knows macOS file names; and there is no Windows signing certificate, nor a cheap
+one available to an individual outside the US and Canada.
+
+## Decision
+
+1. **One workflow, one tag, a build job per OS, one publisher.** `release-desktop.yml` keeps
+   `verify`, gains `build-win` beside `build-mac`, and both upload their `dist/` as workflow
+   artifacts. A `publish` job that needs both downloads them and alone writes R2
+   (`updates/`, `download/<v>/`, `download/latest/`), prunes, and creates the GitHub Release.
+   Build jobs never touch the release.
+2. **The feed is shared.** `latest.yml`, the NSIS installer and its blockmap live next to
+   `latest-mac.yml` under the same generic-provider URL. No second bucket or domain.
+3. **Windows is verified by build and manual QA.** The macOS Playwright suite remains the
+   release gate (ADR 0006). `build-win` proves the native rebuild and the bundle; a manual
+   checklist on real hardware proves the product before the roadmap row flips.
+4. **Signing is a hook, not a vendor.** `electron-builder.yml` points `win.signtoolOptions.sign`
+   at `scripts/sign-windows.cjs`. With no `WIN_SIGN_*` secrets it does nothing and prints a
+   visible warning; with secrets it signs through the chosen vendor and fails the build on
+   error. The first beta ships unsigned with a SmartScreen walkthrough on the download page.
+
+## Alternatives rejected
+
+- **Copy the macOS job wholesale, including its publish steps.** Two drafts per tag, two
+  prunes racing, and a Windows failure after macOS already published half a release.
+- **A separate `release-desktop-windows.yml` with its own tag.** Two versions of one product;
+  release-please would need a second component for the same `package.json`.
+- **A Windows Playwright lane now.** Doubles the slowest job's minutes for a beta with no
+  users; ADR 0006's reopen condition is the right trigger.
+- **Wait for a certificate before any Windows release.** The backlog already rejected it: the
+  objection "is there a Windows version?" costs more each week than a labelled unsigned beta.
+- **Hard-code Azure Trusted Signing in `electron-builder.yml`.** The owner is not eligible as
+  an individual today; a vendor baked into config becomes a workflow change when it changes.
+
+## Consequences
+
+- The macOS job loses its publish steps; a manual dispatch still builds both platforms and
+  skips publishing, as today.
+- A failed Windows build blocks the whole release until fixed forward (same rule as `verify`:
+  do not delete tags).
+- Windows users of the beta see SmartScreen once per install until signing exists; the
+  download page owns that explanation.
+- The prune script and the `download/<v>/` layout gain one file per version; nothing else in
+  the feed changes for macOS.
+- Nothing E2E-covers Windows; regressions reach the manual checklist first.
+
+## Non-goals
+
+- Linux, MSIX, winget, per-machine installs.
+- Choosing the signing vendor (an owner purchase recorded on the design's open question 1).
+- Feature parity between the platforms before the beta ships.
+
+## Reopen when
+
+- Windows installs exceed one in five active installs for a month, or a Windows-only
+  regression ships twice: add the Windows Playwright lane and amend ADR 0006.
+- A signing vendor is chosen: the hook gets its implementation, this ADR gains a "Measured"
+  note with the first signed build, and the SmartScreen section leaves the download page.
+- GitHub ships first-class multi-job release creation that cannot double-draft, or
+  `softprops/action-gh-release` matches drafts by tag: the single-publisher constraint can relax.
