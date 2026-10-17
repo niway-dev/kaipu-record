@@ -19,7 +19,7 @@ const settingsWith = (startRecording: string): AppSettings =>
 describe("useShortcutLabels", () => {
   it("returns the bindings from settings as formatted labels", async () => {
     const { result } = renderHook(() => useShortcutLabels());
-    // The test stub's settings carry DEFAULT_SHORTCUTS (Command+Control+C/S/O/X).
+    // The test stub's settings carry the macOS defaults (Command+Control+C/S/O/X).
     await waitFor(() =>
       expect(result.current).toEqual({
         startRecording: "⌃⌘C",

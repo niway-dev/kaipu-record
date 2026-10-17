@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import * as i18n from "@kaipu/i18n";
-import { DEFAULT_SHORTCUTS, type KaipuElectronAPI, type PermissionStatus } from "@shared/types";
+import { defaultShortcutsFor } from "@shared/shortcut-defaults";
+import { type KaipuElectronAPI, type PermissionStatus } from "@shared/types";
 import { OnboardingOverlay } from "./onboarding-overlay";
 
 function mockElectronAPI(overrides: Partial<KaipuElectronAPI> = {}): {
@@ -30,7 +31,7 @@ function mockElectronAPI(overrides: Partial<KaipuElectronAPI> = {}): {
     // The overlay raises the window's minimum size while it is mounted.
     setOnboardingWindowMode: vi.fn(),
     // The Done step reads the live start-recording binding.
-    getSettings: vi.fn().mockResolvedValue({ shortcuts: DEFAULT_SHORTCUTS }),
+    getSettings: vi.fn().mockResolvedValue({ shortcuts: defaultShortcutsFor("darwin") }),
     onSettingsChanged: vi.fn(() => () => {}),
     ...overrides,
   } as unknown as KaipuElectronAPI;

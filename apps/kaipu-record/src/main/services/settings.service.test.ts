@@ -1,8 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_EXPORT_QUALITY, DEFAULT_SETTINGS, DEFAULT_SHORTCUTS } from "@shared/types";
+import { DEFAULT_EXPORT_QUALITY, DEFAULT_SETTINGS } from "@shared/types";
+import { defaultShortcutsFor } from "@shared/shortcut-defaults";
 import { DEFAULT_QUALITY, QUALITY_PRESETS } from "@shared/recording-quality";
 import { DEFAULT_LOCALE } from "@kaipu/i18n";
-import { isValidTheme, mergeSettings, mergeShortcuts } from "./settings.service";
+import {
+  isValidTheme,
+  mergeSettings as mergeSettingsFor,
+  mergeShortcuts as mergeShortcutsFor,
+} from "./settings.service";
+
+// Pin the platform so these tests do not depend on the machine running them.
+const DEFAULT_SHORTCUTS = defaultShortcutsFor("darwin");
+const mergeSettings = (stored: Parameters<typeof mergeSettingsFor>[0]) =>
+  mergeSettingsFor(stored, "darwin");
+const mergeShortcuts = (stored: unknown) => mergeShortcutsFor(stored, "darwin");
+const MAC_SETTINGS = { ...DEFAULT_SETTINGS, shortcuts: DEFAULT_SHORTCUTS };
 
 describe("DEFAULT_SETTINGS", () => {
   // `@shared/types` cannot import the i18n package (preload bundle), so its
@@ -30,8 +42,8 @@ describe("isValidTheme", () => {
 
 describe("mergeSettings", () => {
   it("returns the defaults when nothing is stored", () => {
-    expect(mergeSettings(null)).toEqual(DEFAULT_SETTINGS);
-    expect(mergeSettings(undefined)).toEqual(DEFAULT_SETTINGS);
+    expect(mergeSettings(null)).toEqual(MAC_SETTINGS);
+    expect(mergeSettings(undefined)).toEqual(MAC_SETTINGS);
   });
 
   it("keeps valid stored values", () => {
@@ -147,7 +159,7 @@ describe("mergeSettings", () => {
         launchAtLogin: "yes" as never,
         showInDock: 1 as never,
       }),
-    ).toEqual(DEFAULT_SETTINGS);
+    ).toEqual(MAC_SETTINGS);
   });
 });
 
@@ -189,6 +201,19 @@ describe("mergeShortcuts", () => {
 
   it("ignores non-string bindings", () => {
     expect(mergeShortcuts({ bringToFront: 42 }).bringToFront).toBe(DEFAULT_SHORTCUTS.bringToFront);
+  });
+});
+
+describe("platform-specific shortcut defaults", () => {
+  it("gives a Windows user Control+Alt defaults", () => {
+    expect(mergeSettingsFor(null, "win32").shortcuts).toEqual(defaultShortcutsFor("win32"));
+    expect(mergeSettingsFor(null, "win32").shortcuts.startRecording).toBe("Control+Alt+C");
+  });
+
+  it("keeps a stored binding and fills the rest with the platform's defaults", () => {
+    const merged = mergeShortcutsFor({ startRecording: "Control+Alt+G" }, "win32");
+    expect(merged.startRecording).toBe("Control+Alt+G");
+    expect(merged.stopRecording).toBe("Control+Alt+S");
   });
 });
 
