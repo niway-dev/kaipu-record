@@ -216,7 +216,7 @@ describe("mergeShortcuts", () => {
     });
     expect(merged.captureScreenshot).toBe("Command+Control+4");
     expect(merged.captureScreen).toBe("Command+Control+Shift+X");
-    expect(merged.captureFrame).toBe("Command+Control+F");
+    expect(merged.captureFrame).toBe("Command+Control+Shift+F");
   });
 
   it("ignores non-string bindings", () => {

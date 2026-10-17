@@ -116,7 +116,7 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
   },
   {
     action: "captureFrame",
-    defaultAccelerator: "Command+Control+F",
+    defaultAccelerator: "Command+Control+Shift+F",
     group: "app",
     label: "Capture frame",
     description: "Capture what is inside a remembered frame",
