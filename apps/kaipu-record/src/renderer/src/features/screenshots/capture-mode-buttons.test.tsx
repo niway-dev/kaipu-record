@@ -112,6 +112,8 @@ describe("CaptureModeButtons — page hero", () => {
       "Recording in progress · 00:02:14. Screenshots are paused until you stop.",
     );
     expect(screen.getByText("Capture is off while you record.")).toBeInTheDocument();
+    // The hook the recording dim (opacity, no pointer events) is styled on.
+    expect(screen.getByRole("status").closest("section")).toHaveAttribute("data-busy", "true");
     for (const name of [/^Capture · Area/, /^Area/, /^Screen/, /^Frame/]) {
       expect(screen.getByRole("button", { name })).toBeDisabled();
     }

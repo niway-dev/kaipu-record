@@ -13,7 +13,7 @@
   --picker-accent-glow: 0 0 0 3px rgba(246, 5, 92, 0.12);
   --picker-amber-bg: rgba(245, 158, 11, 0.12);
   --picker-amber-line: rgba(245, 158, 11, 0.35);
-  --picker-off-bg: var(--bg-card-hover);
+  --picker-off-bg: var(--border);
   --picker-off-text: var(--text-muted);
 
   font-family: var(--font-family);
@@ -198,10 +198,18 @@
   cursor: default;
 }
 
-/* Unavailable on this platform: dimmed, the reason in place of the shortcut. A recording
-   greys the text instead, so the banner, not the cards, reads as the cause. */
+/* Unavailable on this platform: dimmed, the reason in place of the shortcut. */
 .card[data-unavailable] {
   opacity: 0.55;
+}
+
+/* A recording pauses every mode: the same dim as an unavailable one, and no pointer
+   interaction at all (no hover tint), so only the banner reads as live. */
+.hero[data-busy] .card,
+.panel[data-busy] .row {
+  opacity: 0.55;
+  cursor: default;
+  pointer-events: none;
 }
 
 .cardHead {
@@ -407,7 +415,7 @@
 }
 
 .row[data-unavailable] {
-  opacity: 0.6;
+  opacity: 0.55;
 }
 
 .rowIcon {

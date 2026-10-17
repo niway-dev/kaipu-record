@@ -27,16 +27,21 @@ export interface ShortcutCapture {
  *
  * `supported` is `null` when it is not known yet (the screenshot IPC not registered); the
  * stored mode is then trusted.
+ *
+ * `recording`: a take is active or paused. The capture is still sent so the renderer's
+ * recording block answers it ("finish the recording first"), but nothing is remembered: a
+ * shortcut that did not capture must not change the default.
  */
 export function resolveShortcutCapture(
   action: CaptureShortcut,
   stored: CaptureMode,
   supported: readonly CaptureMode[] | null,
+  recording = false,
 ): ShortcutCapture {
   const serves = (mode: CaptureMode): boolean => supported === null || supported.includes(mode);
   if (action === "captureScreenshot") {
     return { mode: serves(stored) || !serves("area") ? stored : "area", remember: false };
   }
   const mode = SHORTCUT_MODE[action];
-  return { mode, remember: serves(mode) && mode !== stored };
+  return { mode, remember: !recording && serves(mode) && mode !== stored };
 }
