@@ -4,8 +4,11 @@
  * it once per file and per hash algorithm, so it must be cheap and idempotent.
  *
  * Contract:
- *  - No WIN_SIGN_VENDOR: do nothing and warn once per process. The build ships
- *    unsigned, visibly.
+ *  - No WIN_SIGN_VENDOR and no other signing variable: do nothing and warn once
+ *    per process. The build ships unsigned, visibly.
+ *  - No WIN_SIGN_VENDOR but another signing variable set: throw, naming the
+ *    variables (never their values). Secrets exist, so an unsigned release would
+ *    be a mistake — most likely a forgotten WIN_SIGN_VENDOR (spec, Failure 4).
  *  - WIN_SIGN_VENDOR set to a vendor this script does not implement: throw. A
  *    release must never ship unsigned while a vendor is configured.
  *  - Any signing error propagates. Nothing is swallowed.
@@ -15,6 +18,9 @@
  * Replace the body of a vendor entry to wire a real one.
  *
  * GitHub resolves an absent secret to "", so "" counts as unset everywhere.
+ * Only the variables in SIGNING_ENV_KEYS count — not every WIN_SIGN_* / AZURE_*
+ * name: hosted Windows runners set unrelated AZURE_* variables of their own
+ * (e.g. AZURE_EXTENSION_DIR), which must not fail an unsigned build.
  */
 
 const UNSIGNED_WARNING = "::warning::Windows build is unsigned — no WIN_SIGN_VENDOR configured";
@@ -78,7 +84,6 @@ const VENDORS = {
 };
 
 let warnedUnsigned = false;
-let warnedStray = false;
 
 /** Core of the hook; `configuration.path` is the file to sign. `env` is injectable for tests. */
 async function signWithEnv(configuration, env) {
@@ -86,16 +91,17 @@ async function signWithEnv(configuration, env) {
   const vendor = values.WIN_SIGN_VENDOR;
 
   if (vendor === undefined) {
+    const stray = Object.keys(values);
+    if (stray.length > 0) {
+      throw new Error(
+        `Signing variables are set (${stray.join(", ")}) but WIN_SIGN_VENDOR is empty. ` +
+          "Refusing to build an unsigned release while signing secrets exist: set " +
+          "WIN_SIGN_VENDOR, or remove these variables to ship unsigned on purpose.",
+      );
+    }
     if (!warnedUnsigned) {
       warnedUnsigned = true;
       console.warn(UNSIGNED_WARNING);
-    }
-    const stray = Object.keys(values);
-    if (stray.length > 0 && !warnedStray) {
-      warnedStray = true;
-      console.warn(
-        `::warning::Signing variables are set (${stray.join(", ")}) but WIN_SIGN_VENDOR is empty — build stays unsigned`,
-      );
     }
     return;
   }
