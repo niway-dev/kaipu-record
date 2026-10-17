@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { DEFAULT_SETTINGS, type AppSettings } from "@shared/types";
 import type { CaptureRect, OverlayState } from "@shared/types/screenshot-capture";
 import {
@@ -27,16 +27,25 @@ function query(ui: OverlayQuery["ui"], overrides: Partial<OverlayQuery> = {}): O
   };
 }
 
-function fakeApi(frames: Record<string, CaptureRect> = {}) {
+/** Main's first state message, as it reaches an overlay: the frame is on display 42. */
+const FRAME_ON_42: OverlayState = { hoverDisplayId: null, frameDisplayId: 42 };
+
+function fakeApi(
+  frames: Record<string, CaptureRect> = {},
+  initialState: OverlayState = FRAME_ON_42,
+) {
   let settings: AppSettings = { ...DEFAULT_SETTINGS, screenshotFrame: frames };
+  let state = initialState;
   let stateListener: ((state: OverlayState) => void) | null = null;
   let ackListener: (() => void) | null = null;
   const api = {
     captureOverlay: {
       answer: vi.fn(),
       hover: vi.fn(),
+      chooseFrameDisplay: vi.fn(),
       onState: vi.fn((cb: (state: OverlayState) => void) => {
         stateListener = cb;
+        cb(state);
         return () => {
           stateListener = null;
         };
@@ -58,7 +67,12 @@ function fakeApi(frames: Record<string, CaptureRect> = {}) {
   return {
     api,
     answer: api.captureOverlay.answer,
-    pushState: (state: OverlayState) => act(() => stateListener?.(state)),
+    chooseFrameDisplay: api.captureOverlay.chooseFrameDisplay,
+    pushState: (patch: Partial<OverlayState>) =>
+      act(() => {
+        state = { ...state, ...patch };
+        stateListener?.(state);
+      }),
     requestHiddenAck: () => ackListener?.(),
   };
 }
@@ -363,6 +377,91 @@ describe("FrameBox", () => {
 
     press("Enter");
     await waitFor(() => expect(answer).toHaveBeenCalledOnce());
+  });
+});
+
+describe("Frame on several displays", () => {
+  it("offers 'Click to move the frame here' on a display without the frame, and a click asks main", () => {
+    const { api, chooseFrameDisplay, answer } = fakeApi({}, { ...FRAME_ON_42, frameDisplayId: 7 });
+    render(<CaptureOverlay query={query("frame")} api={api} />);
+
+    expect(screen.queryByTestId("capture-frame")).toBeNull();
+    fireEvent.click(screen.getByText("Click to move the frame here"));
+
+    expect(chooseFrameDisplay).toHaveBeenCalledExactlyOnceWith(42);
+    expect(answer).not.toHaveBeenCalled();
+  });
+
+  it("shows only the dim sheet until main says where the frame is", () => {
+    const { api } = fakeApi({}, { ...FRAME_ON_42, frameDisplayId: null });
+    render(<CaptureOverlay query={query("frame")} api={api} />);
+
+    expect(screen.queryByTestId("capture-frame")).toBeNull();
+    expect(screen.queryByText("Click to move the frame here")).toBeNull();
+  });
+
+  it("renders the frame on its own display with that display's remembered geometry", async () => {
+    const remembered = { x: 100, y: 120, width: 400, height: 300 };
+    const { api } = fakeApi({ "42": remembered, "7": { x: 0, y: 25, width: 50, height: 50 } });
+    render(<CaptureOverlay query={query("frame")} api={api} />);
+
+    await screen.findByTestId("capture-frame");
+    expect(frameGeometry()).toEqual(remembered);
+    expect(screen.queryByText("Click to move the frame here")).toBeNull();
+  });
+
+  it("moves the frame between two overlays when main changes frameDisplayId", async () => {
+    const remembered7 = { x: 10, y: 30, width: 200, height: 100 };
+    const a = fakeApi({ "7": remembered7 }, { ...FRAME_ON_42, frameDisplayId: 7 });
+    const b = fakeApi({ "7": remembered7 }, { ...FRAME_ON_42, frameDisplayId: 7 });
+    render(
+      <>
+        <div data-testid="overlay-7">
+          <CaptureOverlay query={query("frame", { displayId: 7 })} api={a.api} />
+        </div>
+        <div data-testid="overlay-42">
+          <CaptureOverlay query={query("frame", { displayId: 42 })} api={b.api} />
+        </div>
+      </>,
+    );
+    const inside = (id: string) => within(screen.getByTestId(id));
+    await waitFor(() => expect(inside("overlay-7").getByTestId("capture-frame")).toBeTruthy());
+    expect(inside("overlay-42").queryByTestId("capture-frame")).toBeNull();
+    expect(inside("overlay-42").getByText("Click to move the frame here")).toBeTruthy();
+
+    a.pushState({ frameDisplayId: 42 });
+    b.pushState({ frameDisplayId: 42 });
+
+    await waitFor(() => expect(inside("overlay-42").getByTestId("capture-frame")).toBeTruthy());
+    expect(inside("overlay-7").queryByTestId("capture-frame")).toBeNull();
+    expect(inside("overlay-7").getByText("Click to move the frame here")).toBeTruthy();
+    // Moving away persisted nothing.
+    expect(a.api.updateSettings).not.toHaveBeenCalled();
+    expect(b.api.updateSettings).not.toHaveBeenCalled();
+  });
+
+  it("answers from the active overlay on Enter, and Esc cancels once from either", async () => {
+    const active = fakeApi();
+    const idle = fakeApi({}, { ...FRAME_ON_42, frameDisplayId: 42 });
+    render(<CaptureOverlay query={query("frame")} api={active.api} />);
+    await screen.findByTestId("capture-frame");
+
+    press("Enter");
+    await waitFor(() => expect(active.answer).toHaveBeenCalledOnce());
+    expect(active.answer).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "rect", displayId: 42 }),
+    );
+
+    cleanup();
+    const other = fakeApi({}, { ...FRAME_ON_42, frameDisplayId: 7 });
+    render(<CaptureOverlay query={query("frame")} api={other.api} />);
+    press("Escape");
+    press("Escape");
+    expect(other.answer).toHaveBeenCalledExactlyOnceWith({ kind: "cancelled" });
+    // The hint overlay never answers on Enter.
+    press("Enter");
+    expect(other.answer).toHaveBeenCalledOnce();
+    expect(idle.answer).not.toHaveBeenCalled();
   });
 });
 

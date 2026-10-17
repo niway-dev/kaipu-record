@@ -50,6 +50,8 @@ export interface CaptureOverlayBridge {
   answer(answer: OverlayAnswer): void;
   /** The pointer entered this display (its id) or left it (`null`). */
   hover(displayId: number | null): void;
+  /** Frame mode: ask main to move the one frame to this display. */
+  chooseFrameDisplay(displayId: number): void;
   /** Main's hover broadcast, so only one display highlights. Returns an unsubscribe fn. */
   onState(callback: (state: OverlayState) => void): () => void;
   /** Main hid the overlays and asks for an ack after the next frame. Returns an unsubscribe fn. */

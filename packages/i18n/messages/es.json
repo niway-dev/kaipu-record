@@ -568,6 +568,7 @@
   "screenshots": {
     "overlay": {
       "captureDisplay": "Capturar esta pantalla · {index}",
+      "moveFrameHere": "Clic para mover el marco aquí",
       "capture": "Capturar",
       "frame": "Marco de captura"
     },

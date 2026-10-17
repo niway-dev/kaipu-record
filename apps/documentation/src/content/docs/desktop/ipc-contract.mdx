@@ -72,37 +72,39 @@ Sí existen y persisten: `settings-store.ts` registra ambos handlers, el preload
 
 ### Screenshots
 
-| Canal                           | Dir      | En `electronAPI`                                                      | Registrador    |
-| ------------------------------- | -------- | --------------------------------------------------------------------- | -------------- |
-| `screenshot:capture`            | r→m      | `captureScreenshot(mode)`                                             | `screenshots/` |
-| `screenshot:supported-modes`    | r→m      | `screenshotSupportedModes()`                                          | `screenshots/` |
-| `screenshot:copy`               | r→m      | `copyImageToClipboard(bytes)`                                         | `screenshots/` |
-| `screenshot:copy-by-id`         | r→m      | `copyScreenshotById(id)`                                              | `screenshots/` |
-| `screenshot:read-bytes`         | r→m      | `readScreenshotBytes(id)`                                             | `screenshots/` |
-| `screenshot:save`               | r→m      | `saveScreenshot(bytes, meta)`                                         | `screenshots/` |
-| `clipboard:read-image`          | r→m      | `readClipboardImage()`                                                | `screenshots/` |
-| `clipboard:peek-image`          | r→m      | `peekClipboardImage()`                                                | `screenshots/` |
-| `screenshot:reveal`             | r→m      | `revealAfterCapture()`                                                | `screenshots/` |
-| `screenshot:hotkey`             | m→r      | `onCaptureScreenshotHotkey(cb)`                                       | `index.ts`     |
-| `screenshot:request-capture`    | r→m      | `requestCaptureScreenshot(mode)`                                      | `index.ts`     |
-| `screenshot:overlay-answer`     | o→m      | `captureOverlay.answer(answer)`                                       | `screenshots/` |
-| `screenshot:overlay-hover`      | o→m      | `captureOverlay.hover(id)`                                            | `screenshots/` |
-| `screenshot:overlay-state`      | m→o      | `captureOverlay.onState(cb)`                                          | `screenshots/` |
-| `screenshot:overlay-hidden-ack` | m→o, o→m | `captureOverlay.onHiddenAckRequest(cb)`, `captureOverlay.hiddenAck()` | `screenshots/` |
+| Canal                              | Dir      | En `electronAPI`                                                      | Registrador    |
+| ---------------------------------- | -------- | --------------------------------------------------------------------- | -------------- |
+| `screenshot:capture`               | r→m      | `captureScreenshot(mode)`                                             | `screenshots/` |
+| `screenshot:supported-modes`       | r→m      | `screenshotSupportedModes()`                                          | `screenshots/` |
+| `screenshot:copy`                  | r→m      | `copyImageToClipboard(bytes)`                                         | `screenshots/` |
+| `screenshot:copy-by-id`            | r→m      | `copyScreenshotById(id)`                                              | `screenshots/` |
+| `screenshot:read-bytes`            | r→m      | `readScreenshotBytes(id)`                                             | `screenshots/` |
+| `screenshot:save`                  | r→m      | `saveScreenshot(bytes, meta)`                                         | `screenshots/` |
+| `clipboard:read-image`             | r→m      | `readClipboardImage()`                                                | `screenshots/` |
+| `clipboard:peek-image`             | r→m      | `peekClipboardImage()`                                                | `screenshots/` |
+| `screenshot:reveal`                | r→m      | `revealAfterCapture()`                                                | `screenshots/` |
+| `screenshot:hotkey`                | m→r      | `onCaptureScreenshotHotkey(cb)`                                       | `index.ts`     |
+| `screenshot:request-capture`       | r→m      | `requestCaptureScreenshot(mode)`                                      | `index.ts`     |
+| `screenshot:overlay-answer`        | o→m      | `captureOverlay.answer(answer)`                                       | `screenshots/` |
+| `screenshot:overlay-hover`         | o→m      | `captureOverlay.hover(id)`                                            | `screenshots/` |
+| `screenshot:overlay-state`         | m→o      | `captureOverlay.onState(cb)`                                          | `screenshots/` |
+| `screenshot:overlay-frame-display` | o→m      | `captureOverlay.chooseFrameDisplay(id)`                               | `screenshots/` |
+| `screenshot:overlay-hidden-ack`    | m→o, o→m | `captureOverlay.onHiddenAckRequest(cb)`, `captureOverlay.hiddenAck()` | `screenshots/` |
 
 Payloads of the capture channels (`CaptureMode` is `"area" | "screen" | "frame"`; types live in
 `src/shared/types/screenshot-capture.ts`). `o` is a capture overlay window, one per display.
 
-| Canal                           | Payload                                                                                                                                           | Answer                                                                                                                                  |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `screenshot:capture`            | `{ mode: CaptureMode }`; any other value rejects                                                                                                  | `CaptureResult`: `{ kind: "captured", png, width, height, mode }`, `{ kind: "cancelled" }` or `{ kind: "unsupported", mode, platform }` |
-| `screenshot:supported-modes`    | none                                                                                                                                              | `CaptureMode[]`: the modes the platform's provider serves (`[]` on an unsupported platform)                                             |
-| `screenshot:hotkey`             | `{ mode: CaptureMode }`, sent by the three global capture shortcuts                                                                               | none                                                                                                                                    |
-| `screenshot:request-capture`    | `{ mode: CaptureMode }` from the tray panel; an invalid mode falls back to `"area"`                                                               | none (main hides the panel and broadcasts `screenshot:hotkey`)                                                                          |
-| `screenshot:overlay-answer`     | `OverlayAnswer`: `{ kind: "rect", displayId, rect }`, `{ kind: "display", displayId }` or `{ kind: "cancelled" }`; `rect` is display-relative DIP | none (the first valid answer wins)                                                                                                      |
-| `screenshot:overlay-hover`      | `{ displayId: number \| null }`                                                                                                                   | none                                                                                                                                    |
-| `screenshot:overlay-state`      | `{ hoverDisplayId: number \| null }` to every overlay                                                                                             | none                                                                                                                                    |
-| `screenshot:overlay-hidden-ack` | main to overlay: none (reply after your next animation frame); overlay to main: none                                                              | capture waits for every reply or a 250 ms cap, then settles 80 ms more                                                                  |
+| Canal                              | Payload                                                                                                                                           | Answer                                                                                                                                  |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `screenshot:capture`               | `{ mode: CaptureMode }`; any other value rejects                                                                                                  | `CaptureResult`: `{ kind: "captured", png, width, height, mode }`, `{ kind: "cancelled" }` or `{ kind: "unsupported", mode, platform }` |
+| `screenshot:supported-modes`       | none                                                                                                                                              | `CaptureMode[]`: the modes the platform's provider serves (`[]` on an unsupported platform)                                             |
+| `screenshot:hotkey`                | `{ mode: CaptureMode }`, sent by the three global capture shortcuts                                                                               | none                                                                                                                                    |
+| `screenshot:request-capture`       | `{ mode: CaptureMode }` from the tray panel; an invalid mode falls back to `"area"`                                                               | none (main hides the panel and broadcasts `screenshot:hotkey`)                                                                          |
+| `screenshot:overlay-answer`        | `OverlayAnswer`: `{ kind: "rect", displayId, rect }`, `{ kind: "display", displayId }` or `{ kind: "cancelled" }`; `rect` is display-relative DIP | none (the first valid answer wins)                                                                                                      |
+| `screenshot:overlay-hover`         | `{ displayId: number \| null }`                                                                                                                   | none                                                                                                                                    |
+| `screenshot:overlay-state`         | `{ hoverDisplayId: number \| null, frameDisplayId: number \| null }` to every overlay                                                             | none                                                                                                                                    |
+| `screenshot:overlay-frame-display` | `{ displayId: number }`: Frame only, move the one frame to this display                                                                           | main validates the sender and that the id is a picked display, then rebroadcasts `screenshot:overlay-state`; ignored in other modes     |
+| `screenshot:overlay-hidden-ack`    | main to overlay: none (reply after your next animation frame); overlay to main: none                                                              | capture waits for every reply or a 250 ms cap, then settles 80 ms more                                                                  |
 
 The global shortcut actions that feed `screenshot:hotkey` are `captureScreenshot` (Area),
 `captureScreen` and `captureFrame`; each sends its own mode. Analytics: the handler of

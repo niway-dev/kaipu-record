@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { KaipuElectronAPI } from "@shared/types/electron-api";
 import type { CaptureRect, OverlayAnswer } from "@shared/types/screenshot-capture";
+import { useTranslations } from "@kaipu/i18n";
 import { AreaDrag } from "./area-drag";
 import { FrameBox } from "./frame-box";
 import type { OverlayQuery } from "./overlay-query";
@@ -122,8 +123,52 @@ export function CaptureOverlay({
   return <FrameMode query={query} api={api} send={send} />;
 }
 
-/** Frame mode: load the remembered frame for this display, persist it on confirm. */
+/**
+ * Frame mode with several displays: exactly one overlay (main's `frameDisplayId`) shows the
+ * Frame box; every other one offers "Click to move the frame here". Until main's first
+ * state arrives nothing but the dim sheet shows, so a frame never flashes on the wrong display.
+ */
 function FrameMode({
+  query,
+  api,
+  send,
+}: {
+  query: OverlayQuery;
+  api: CaptureOverlayApi;
+  send: SendAnswer;
+}): React.JSX.Element {
+  const bridge = api.captureOverlay;
+  // undefined until main's first state message.
+  const [frameDisplayId, setFrameDisplayId] = useState<number | null | undefined>(undefined);
+
+  useEffect(() => bridge.onState((state) => setFrameDisplayId(state.frameDisplayId)), [bridge]);
+
+  if (frameDisplayId === undefined || frameDisplayId === null) {
+    return <div className={styles.sheet} />;
+  }
+  if (frameDisplayId !== query.displayId) {
+    return (
+      <div
+        className={`${styles.sheet} ${styles.chooser}`}
+        onClick={() => bridge.chooseFrameDisplay(query.displayId)}
+      >
+        <MoveFrameHint />
+      </div>
+    );
+  }
+  return <ActiveFrame query={query} api={api} send={send} />;
+}
+
+function MoveFrameHint(): React.JSX.Element {
+  const t = useTranslations("screenshots");
+  return <span className={styles.chooserLabel}>{t("overlay.moveFrameHere")}</span>;
+}
+
+/**
+ * The display that holds the frame: load its remembered geometry, persist it on confirm.
+ * Mounting is what loads it; unmounting (the frame moved away) persists nothing.
+ */
+function ActiveFrame({
   query,
   api,
   send,
