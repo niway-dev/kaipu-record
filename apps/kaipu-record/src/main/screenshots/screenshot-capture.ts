@@ -31,6 +31,8 @@ export interface Deps {
   tempPath(): string;
   /** Every connected display, in Electron's order. */
   getDisplays(): Promise<Display[]>;
+  /** Short pause so a window hidden just before a no-overlay capture is off screen. */
+  settle(): Promise<void>;
 }
 
 const realDeps: Deps = {
@@ -49,6 +51,7 @@ const realDeps: Deps = {
   // Note: no Date.now()/Math.random() in plan code is fine here — this is runtime, not a workflow.
   tempPath: () => join(tmpdir(), `kaipu-shot-${process.hrtime.bigint()}.png`),
   // Loaded lazily so importing this module (tests, type checks) never needs Electron.
+  settle: () => new Promise((resolve) => setTimeout(resolve, 80)),
   getDisplays: async () => (await import("electron")).screen.getAllDisplays(),
 };
 
@@ -85,7 +88,11 @@ export class MacProvider implements ScreenshotCaptureProvider {
   ): Promise<Rectangle | null> {
     const displays = await this.deps.getDisplays();
     // One display: nothing to choose, so Screen skips the overlay entirely.
-    if (mode === "screen" && displays.length === 1) return displays[0]!.bounds;
+    if (mode === "screen" && displays.length === 1) {
+      // No overlay to wait on, but `beforeCapture` just hid the app: let it leave the screen.
+      await this.deps.settle();
+      return displays[0]!.bounds;
+    }
     const answer = await overlay.pick(mode, displays);
     if (answer.kind === "cancelled") return null;
     const display = displays.find((candidate) => candidate.id === answer.displayId);
@@ -98,9 +105,12 @@ export class MacProvider implements ScreenshotCaptureProvider {
     await this.deps.runCli("screencapture", [...flags, target]);
     // No file: Esc in Apple's own picker, or `-R` refused the rectangle.
     if (!(await this.deps.fileExists(target))) return { kind: "cancelled" };
-    const png = await this.deps.readPng(target);
-    await rm(target, { force: true }).catch(() => {});
-    return { kind: "captured", png, mode };
+    try {
+      const png = await this.deps.readPng(target);
+      return { kind: "captured", png, mode };
+    } finally {
+      await rm(target, { force: true }).catch(() => {});
+    }
   }
 }
 

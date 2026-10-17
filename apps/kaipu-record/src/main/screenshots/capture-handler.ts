@@ -57,6 +57,9 @@ export function createCaptureHandler(
     let result: ProviderResult = { kind: "cancelled" };
     try {
       result = await deps.provider.capture({ mode, overlay: deps.overlay });
+    } catch (error) {
+      // The renderer has no catch around this call: answer cancelled instead of throwing.
+      console.error("screenshot capture failed", error);
     } finally {
       capturing = false;
       deps.windows.afterCapture(result.kind === "captured");
