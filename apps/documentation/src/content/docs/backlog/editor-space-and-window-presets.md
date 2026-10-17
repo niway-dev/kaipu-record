@@ -38,13 +38,19 @@ make 1040 the minimum — two legible cards in a smaller window beat forcing the
 
 ### What shipped
 
-- **One preset for every screen** — Record, Library, Screenshots, Shortcuts, Cloud, Settings,
-  **and the screenshot editor** (its canvas and panel fit). Navigating among them never touches
-  the window. Starting size 1040×760, minimum 900×670 — the minimum is what the UI needs, not the
-  largest screen's.
-- **The video editor is the single exception.** Entering it remembers the user's bounds and
-  grows the window (1440×900, floor 1180×760 — below that the lanes stop being readable, not
-  merely narrow). Leaving restores _exactly those bounds_, not a preset.
+- **One preset for every sidebar screen** — Record, Library, Screenshots, Shortcuts, Cloud,
+  Settings. Navigating among them never touches the window. Starting size 1040×760, minimum
+  900×670 — the minimum is what the UI needs, not the largest screen's.
+- **The Editor workspace is the single exception.** Entering any `/editor` route remembers the
+  user's bounds and grows the window (1440×900, floor 1180×760 — below that the video editor's
+  lanes stop being readable, not merely narrow). Leaving the workspace restores _exactly those
+  bounds_, not a preset.
+  - _As shipped in #199_ only `/editor/video/*` took the window; the screenshot editor stayed on
+    the shared preset. _Since #302 (2026-10-15, owner decision)_ the Editor home, New image, the
+    image editor and `/editor/capture` share the editor window, so moving between the home and
+    an open item never resizes it. The cost, accepted knowingly: the sidebar's Editor entry and
+    a screenshot capture now grow the window, and a display narrower than 1180 px clamps the
+    floor to what it has.
 - **Resolved from the route, not from a page's mount.** The pages mount and unmount under a
   shell that does not, so a page growing the window on mount had nothing to shrink it back —
   that was the original "it stays huge" bug. `presetForPath` answers on every navigation; main
