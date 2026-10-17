@@ -27,6 +27,8 @@ export function useScreenshotCapture(): { capture: (mode?: CaptureMode) => Promi
             shot.platform === "win32" ? "captureUnsupportedWindows" : "captureUnsupported",
           ),
         });
+        // Bring the window forward so the toast is visible even from the tray.
+        window.electronAPI.revealAfterCapture();
         return;
       }
       // A fresh capture is an in-memory blob source; the editor resolves it generically.

@@ -35,7 +35,7 @@ import {
 } from "./shortcuts/global-shortcuts";
 import { initMainAnalytics, shutdownMainAnalytics } from "./services/analytics.service";
 import { registerAnalyticsIpc } from "./services/analytics-ipc";
-import type { CaptureRequestPayload } from "@shared/types/screenshot-capture";
+import { isCaptureMode, type CaptureRequestPayload } from "@shared/types/screenshot-capture";
 import { registerScreenshotHandlers } from "./screenshots/screenshot-ipc";
 import {
   boundsAroundCenter,
@@ -399,9 +399,9 @@ app.whenReady().then(() => {
 
   // Capture Panel "Capture Screen" → dismiss the panel and run the same interactive
   // region capture as the ⌘⌃X hotkey.
-  ipcMain.on(IPC_CHANNELS.screenshotRequestCapture, (_event, request: CaptureRequestPayload) => {
+  ipcMain.on(IPC_CHANNELS.screenshotRequestCapture, (_event, request?: { mode?: unknown }) => {
     capturePanel?.hide();
-    triggerCaptureScreenshot(request);
+    triggerCaptureScreenshot({ mode: isCaptureMode(request?.mode) ? request.mode : "area" });
   });
 
   // App version for the renderer-side version gate.

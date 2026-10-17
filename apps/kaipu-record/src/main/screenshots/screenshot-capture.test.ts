@@ -62,6 +62,15 @@ describe.each([
   });
 });
 
+describe("supports", () => {
+  it("Mac serves only area for now; Windows and others serve nothing", () => {
+    const mac = new MacProvider();
+    expect(MODES.map((m) => mac.supports(m))).toEqual([true, false, false]);
+    expect(new WindowsProvider().supports()).toBe(false);
+    expect(new UnsupportedProvider().supports()).toBe(false);
+  });
+});
+
 describe("createScreenshotProvider", () => {
   it("picks the provider by platform", () => {
     expect(createScreenshotProvider("darwin")).toBeInstanceOf(MacProvider);

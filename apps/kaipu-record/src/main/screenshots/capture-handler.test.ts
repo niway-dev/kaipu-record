@@ -8,11 +8,12 @@ const overlay: OverlayPort = { pick: async () => ({ kind: "cancelled" }) };
 function setup(
   capture: ScreenshotCaptureProvider["capture"],
   platform: NodeJS.Platform = "darwin",
+  supports: (mode: string) => boolean = () => true,
 ) {
   const windows = { beforeCapture: vi.fn(), afterCapture: vi.fn(), reveal: vi.fn() };
   const handler = createCaptureHandler({
     platform,
-    provider: { capture },
+    provider: { capture, supports },
     overlay,
     windows,
     measure: () => ({ width: 3, height: 2 }),
@@ -41,12 +42,17 @@ describe("createCaptureHandler", () => {
   });
 
   it("answers unsupported with the platform it ran on", async () => {
-    const { handler } = setup(async ({ mode }) => ({ kind: "unsupported", mode }), "win32");
+    const capture = vi.fn();
+    const { handler, windows } = setup(capture, "win32", () => false);
     expect(await handler({ mode: "screen" })).toEqual({
       kind: "unsupported",
       mode: "screen",
       platform: "win32",
     });
+    // The app window must not flicker for an answer that needs no capture.
+    expect(windows.beforeCapture).not.toHaveBeenCalled();
+    expect(windows.afterCapture).not.toHaveBeenCalled();
+    expect(capture).not.toHaveBeenCalled();
   });
 
   it("rejects an unknown mode before touching the windows", async () => {

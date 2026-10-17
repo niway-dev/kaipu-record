@@ -1,5 +1,5 @@
 import {
-  CAPTURE_MODES,
+  isCaptureMode,
   type CaptureMode,
   type CaptureResult,
 } from "@shared/types/screenshot-capture";
@@ -30,10 +30,10 @@ interface CaptureHandlerDeps {
 }
 
 function assertCaptureMode(value: unknown): CaptureMode {
-  if (!CAPTURE_MODES.includes(value as CaptureMode)) {
+  if (!isCaptureMode(value)) {
     throw new Error(`screenshot capture: unknown mode ${JSON.stringify(value)}`);
   }
-  return value as CaptureMode;
+  return value;
 }
 
 /** Builds the `screenshot:capture` handler: validates, guards re-entrancy, answers a typed result. */
@@ -47,6 +47,10 @@ export function createCaptureHandler(
 
   return async (request) => {
     const mode = assertCaptureMode(request?.mode);
+    // Answer before touching any window: an unsupported mode must not hide the app.
+    if (!deps.provider.supports(mode)) {
+      return { kind: "unsupported", mode, platform: deps.platform };
+    }
     if (capturing) return { kind: "cancelled" };
     capturing = true;
     deps.windows.beforeCapture();
