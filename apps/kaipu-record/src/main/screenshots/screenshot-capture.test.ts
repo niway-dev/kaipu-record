@@ -228,6 +228,7 @@ describe("WindowsProvider", () => {
   /** A fake image of `size` whose crop records the rectangle and tags its PNG. */
   const image = (size: { width: number; height: number }, tag: string): CapturedImage => ({
     getSize: () => size,
+    isEmpty: () => size.width === 0 || size.height === 0,
     crop: (rect) => {
       crops.push(rect);
       return image({ width: rect.width, height: rect.height }, `${tag}-crop`);
@@ -357,6 +358,30 @@ describe("WindowsProvider", () => {
     });
     expect(warn).toHaveBeenCalled();
     expect(log.at(-1)).toBe("destroyAll");
+  });
+
+  it("an empty thumbnail is not a match: cancelled with a warning, nothing cropped", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    sources = [{ display_id: "1", thumbnail: image({ width: 0, height: 0 }, "empty") }];
+    expect(await provider().capture({ mode: "screen", overlay: fake })).toEqual({
+      kind: "cancelled",
+    });
+    expect(warn).toHaveBeenCalled();
+    expect(crops).toEqual([]);
+    expect(log.at(-1)).toBe("destroyAll");
+  });
+
+  it("an image reporting isEmpty() is not a match even with a size", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    sources = [
+      {
+        display_id: "1",
+        thumbnail: { ...image({ width: 1920, height: 1080 }, "x"), isEmpty: () => true },
+      },
+    ];
+    expect(await provider().capture({ mode: "screen", overlay: fake })).toEqual({
+      kind: "cancelled",
+    });
   });
 
   it("cancel at pick answers cancelled, captures nothing, and still destroys", async () => {

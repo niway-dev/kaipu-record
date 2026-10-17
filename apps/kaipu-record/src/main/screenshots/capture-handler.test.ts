@@ -142,6 +142,22 @@ describe("createCaptureHandler", () => {
     expect(capture).toHaveBeenCalledTimes(2);
   });
 
+  it("releases the guard and restores the window when hiding the windows throws", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const capture = vi.fn().mockResolvedValue({ kind: "cancelled" });
+    const { handler, windows } = setup(capture);
+    windows.beforeCapture.mockImplementationOnce(() => {
+      throw new Error("hide failed");
+    });
+    expect(await handler({ mode: "area" })).toEqual({ kind: "cancelled" });
+    expect(logged).toHaveBeenCalled();
+    expect(windows.afterCapture).toHaveBeenCalledWith(false);
+    expect(capture).not.toHaveBeenCalled();
+    // The next request is not turned away by a stuck guard.
+    expect(await handler({ mode: "area" })).toEqual({ kind: "cancelled" });
+    expect(capture).toHaveBeenCalledTimes(1);
+  });
+
   it("answers cancelled, logs, releases the guard and restores the window when the provider throws", async () => {
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     const capture = vi.fn().mockRejectedValueOnce(new Error("boom"));

@@ -67,9 +67,10 @@ export function createCaptureHandler(
     }
     if (capturing) return { kind: "cancelled" };
     capturing = true;
-    deps.windows.beforeCapture();
     let result: ProviderResult = { kind: "cancelled" };
     try {
+      // Inside the try: a throw while hiding windows must still release the guard.
+      deps.windows.beforeCapture();
       result = await deps.provider.capture({ mode, overlay: deps.overlay });
     } catch (error) {
       // The renderer has no catch around this call: answer cancelled instead of throwing.

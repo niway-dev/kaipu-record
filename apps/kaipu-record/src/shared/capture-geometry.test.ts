@@ -111,6 +111,22 @@ describe("clampFrameToDisplay", () => {
     expect(clamped).toEqual({ x: 1120, y: 480, width: 800, height: 600 });
   });
 
+  it("clamps against a display at a negative origin, in display-relative space", () => {
+    const left = display({ x: -1920, y: 0, width: 1920, height: 1080 });
+    expect(clampFrameToDisplay({ x: 1500, y: 900, width: 800, height: 600 }, left)).toEqual({
+      x: 1120,
+      y: 480,
+      width: 800,
+      height: 600,
+    });
+    expect(clampFrameToDisplay({ x: -300, y: -50, width: 400, height: 300 }, left)).toEqual({
+      x: 0,
+      y: 0,
+      width: 400,
+      height: 300,
+    });
+  });
+
   it("shrinks an oversized frame to the work area, respecting its origin", () => {
     const d = display(full1080, 1, { x: 0, y: 25, width: 1920, height: 1055 });
     const clamped = clampFrameToDisplay({ x: 0, y: 0, width: 3000, height: 3000 }, d);
