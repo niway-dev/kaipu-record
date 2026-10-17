@@ -1,5 +1,42 @@
 # Changelog
 
+## [0.12.0](https://github.com/niway-dev/kaipu-record/compare/desktop-v0.11.0...desktop-v0.12.0) (2026-10-17)
+
+
+### Features
+
+* **desktop:** Area, Screen and Frame entry points with their shortcuts ([320f15b](https://github.com/niway-dev/kaipu-record/commit/320f15b9cd7066f4426227b6ebd552c74e6e47ba))
+* **desktop:** capture geometry helpers for display crops and frames ([8e548a6](https://github.com/niway-dev/kaipu-record/commit/8e548a69ee7ef60083a24939727cb311263d06c6))
+* **desktop:** capture overlay renderer with display chooser, frame box and area drag ([0c49043](https://github.com/niway-dev/kaipu-record/commit/0c49043eb1b32911daba60a37cd4a31970054536))
+* **desktop:** capture overlay windows, one per display, behind the overlay port ([7b74d86](https://github.com/niway-dev/kaipu-record/commit/7b74d86a290ae7a5b4609db9ce75292cc374bf2a))
+* **desktop:** Frame shortcut default avoids macOS Enter Full Screen ([cb384b5](https://github.com/niway-dev/kaipu-record/commit/cb384b5b7635a901602a0b558f5444fe848f558b))
+* **desktop:** mode cards and tray rows only select the mode; the button and shortcuts capture ([3dc0fc2](https://github.com/niway-dev/kaipu-record/commit/3dc0fc23a92ea992843f1819ae0d81acce6a7a95))
+* **desktop:** one current screenshot mode, remembered and shared by page, tray and shortcuts ([dbbbd83](https://github.com/niway-dev/kaipu-record/commit/dbbbd837eb460ea6aaafbcc52ab243ba6a816f05))
+* **desktop:** one Frame at a time; click another display to move it there ([689ebc9](https://github.com/niway-dev/kaipu-record/commit/689ebc9e718d2af1183110f12592fbc47b98bb68))
+* **desktop:** Screen and Frame screenshot modes on macOS through the overlay ([6e84db2](https://github.com/niway-dev/kaipu-record/commit/6e84db2c9c58220f407d237201de92517d2b6659))
+* **desktop:** screenshot capture modes — Area, Screen and Frame on macOS and Windows ([3e928df](https://github.com/niway-dev/kaipu-record/commit/3e928df80829fd791d8c6be1c3986b0368884ecb))
+* **desktop:** screenshot mode picker hero and tray rows from the design ([ce1166b](https://github.com/niway-dev/kaipu-record/commit/ce1166b74dba955259b376bb84e4698857b806c9))
+* **desktop:** typed screenshot capture contract and per-platform providers ([e0b6ace](https://github.com/niway-dev/kaipu-record/commit/e0b6acea47d8963aa7437294a60ae781a0dec6c4))
+* **desktop:** Windows screenshot backend through desktopCapturer with DPI-aware crops ([5a3b87f](https://github.com/niway-dev/kaipu-record/commit/5a3b87ff5fc245d2c8d28ec2d2cbf130c55f5f36))
+
+
+### Bug Fixes
+
+* **desktop:** address the review of the editor window preset ([fb57fb7](https://github.com/niway-dev/kaipu-record/commit/fb57fb71fa364f6a14239995c0e741cc416c02e9))
+* **desktop:** answer unsupported captures before hiding the app ([59437d9](https://github.com/niway-dev/kaipu-record/commit/59437d952d060ee44db25c0d7f1c548c6b498eb4))
+* **desktop:** any digit picks its display, hover race, first-click overlays ([e55735f](https://github.com/niway-dev/kaipu-record/commit/e55735fbcea2f50f0d86f17c01dee24f71253a23))
+* **desktop:** cancel the overlay pick when a renderer crashes; full overlay query ([c265c4d](https://github.com/niway-dev/kaipu-record/commit/c265c4dd083426e34242e2e69c29d41cae72b3b5))
+* **desktop:** capture handler releases its guard if hiding throws; empty thumbnails cancel; recording blocks every mode (test) ([bf03cfc](https://github.com/niway-dev/kaipu-record/commit/bf03cfcac34ee3eeb1a370b5842424e8b1c36921))
+* **desktop:** editor home and New image fill the editor window; E2E follows the preset ([41b75fa](https://github.com/niway-dev/kaipu-record/commit/41b75fa59e590ed513c4957dc61032e38f6dd5c3))
+* **desktop:** every /editor route shares the editor window preset ([900ab5e](https://github.com/niway-dev/kaipu-record/commit/900ab5ed7caf7c778cdf27c219bd013598a06119))
+* **desktop:** every /editor route shares the editor window preset ([2283ae0](https://github.com/niway-dev/kaipu-record/commit/2283ae0e06f4052b4f3732ec4445f3086bb23bb2))
+* **desktop:** keyboard focus follows the frame display ([c590bec](https://github.com/niway-dev/kaipu-record/commit/c590bec88c246a883f3a1a12be2cc83223700854))
+* **desktop:** overlay query carries the initial frame display ([74be480](https://github.com/niway-dev/kaipu-record/commit/74be4806d966b89d342e763d9c7a45297f8be2e2))
+* **desktop:** overlay watchdog, main-side Escape, answer before persisting the frame ([8ee8db4](https://github.com/niway-dev/kaipu-record/commit/8ee8db40369ef5d11b5314ce1d97476f22f655ff))
+* **desktop:** seamless marching ants, real recording dim, no mode change while recording ([4e9fc53](https://github.com/niway-dev/kaipu-record/commit/4e9fc538a9333df851e559497e88f1847d7d1e84))
+* **desktop:** settle after hiding the overlay; gone display cancels; provider throw reports failed ([67afd8d](https://github.com/niway-dev/kaipu-record/commit/67afd8d3a9f55c037bf76267734fd8459d95778a))
+* **desktop:** settle before the no-overlay capture, answer cancelled on a provider throw ([23fb3c0](https://github.com/niway-dev/kaipu-record/commit/23fb3c08106ab42e1b91998d745507c0dd47358d))
+
 ## [0.11.0](https://github.com/niway-dev/kaipu-record/compare/desktop-v0.10.0...desktop-v0.11.0) (2026-10-15)
 
 
