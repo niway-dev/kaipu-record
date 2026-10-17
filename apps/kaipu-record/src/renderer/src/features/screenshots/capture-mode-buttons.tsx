@@ -31,7 +31,7 @@ export interface PickerRecording {
 interface CaptureModeButtonsProps {
   /** `panel`: the tray's button and compact rows. `page`: the Screenshots page hero. */
   variant: "panel" | "page";
-  /** Capture with `mode` now. A card or row has already made it current. */
+  /** Capture with `mode` now. Only the primary button calls it; cards and rows just select. */
   onCapture: (mode: CaptureMode) => void;
   /** Current bindings as display labels; a missing one just hides that hint. */
   shortcuts: ShortcutLabels | null;
@@ -44,8 +44,8 @@ interface CaptureModeButtonsProps {
 /**
  * The screenshot mode picker, shared by the tray panel and the Screenshots page: one
  * primary button that captures with the CURRENT mode, and the three modes (Area, Screen,
- * Frame) as cards or rows that each capture too — clicking one makes it current and
- * captures with it in one click.
+ * Frame) as cards or rows that only select: clicking one makes it current (remembered)
+ * and never captures. The button and the shortcuts capture.
  *
  * A mode the platform cannot serve stays visible but disabled, with the reason in place
  * of its shortcut: hiding it would leave no explanation, and a live button would be a
@@ -85,10 +85,11 @@ export function CaptureModeButtons({
     return undefined;
   };
 
-  const pick = (mode: CaptureMode): void => {
-    setMode(mode);
-    onCapture(mode);
-  };
+  const hint = busy
+    ? t("pickerHintRecording")
+    : shortcuts?.captureScreenshot
+      ? t("pickerHint", { shortcut: shortcuts.captureScreenshot })
+      : t("pickerHintNoShortcut");
 
   const elapsed = recording ? formatElapsed(recording.elapsedSeconds * 1000) : "";
 
@@ -133,7 +134,7 @@ export function CaptureModeButtons({
                 data-current={isCurrent || undefined}
                 data-unavailable={!isAvailable || undefined}
                 disabled={busy || !isAvailable}
-                onClick={() => pick(mode)}
+                onClick={() => setMode(mode)}
               >
                 <Icon size={16} className={styles.rowIcon} aria-hidden />
                 <span className={styles.rowName}>{name(mode)}</span>
@@ -176,7 +177,7 @@ export function CaptureModeButtons({
       )}
       <div className={styles.heroTop}>
         {primary}
-        <p className={styles.heroHint}>{busy ? t("pickerHintRecording") : t("pickerHint")}</p>
+        <p className={styles.heroHint}>{hint}</p>
       </div>
       <div className={styles.cards}>
         {CAPTURE_MODES.map((mode) => {
@@ -192,7 +193,7 @@ export function CaptureModeButtons({
               data-current={isCurrent || undefined}
               data-unavailable={!isAvailable || undefined}
               disabled={busy || !isAvailable}
-              onClick={() => pick(mode)}
+              onClick={() => setMode(mode)}
             >
               <span className={styles.cardHead}>
                 <span className={styles.tile}>
@@ -215,7 +216,7 @@ export function CaptureModeButtons({
               <span className={styles.cardFoot}>
                 {!isCurrent && isAvailable && !busy && (
                   <span className={styles.hoverPill} aria-hidden>
-                    {t("captureWith", { mode: name(mode) })}
+                    {t("useMode", { mode: name(mode) })}
                   </span>
                 )}
               </span>

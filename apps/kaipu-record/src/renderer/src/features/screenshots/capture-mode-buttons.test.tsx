@@ -1,4 +1,5 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_SETTINGS, type AppSettings } from "@shared/types";
 import type { CaptureMode } from "@shared/types/screenshot-capture";
@@ -52,18 +53,41 @@ describe("CaptureModeButtons — page hero", () => {
     expect(onCapture).toHaveBeenCalledWith("frame");
   });
 
-  it("a card click makes its mode current and captures with it, in one click", async () => {
+  it("a card click only selects its mode; the primary button then captures with it", async () => {
     const updateSettings = given(ALL, "area");
     const onCapture = vi.fn();
     render(<CaptureModeButtons variant="page" onCapture={onCapture} shortcuts={shortcuts} />);
     await screen.findByRole("button", { name: /^Capture · Area/ });
     const card = screen.getByRole("button", { name: /^Screen/ });
     expect(card).toHaveTextContent("⌃⇧⌘X");
-    expect(card).toHaveTextContent("Capture with Screen");
+    expect(card).toHaveTextContent("Use Screen");
+    expect(screen.getByText("Pick a mode. Capture with the button or ⌃⌘X.")).toBeInTheDocument();
     fireEvent.click(card);
     expect(updateSettings).toHaveBeenCalledWith({ screenshotMode: "screen" });
+    expect(onCapture).not.toHaveBeenCalled();
+    const primary = await screen.findByRole("button", { name: /^Capture · Screen/ });
+    expect(primary).toBeEnabled();
+    fireEvent.click(primary);
+    expect(onCapture).toHaveBeenCalledTimes(1);
     expect(onCapture).toHaveBeenCalledWith("screen");
-    expect(await screen.findByRole("button", { name: /^Capture · Screen/ })).toBeEnabled();
+  });
+
+  it("keyboard activation of a card (Enter, Space) behaves like a click", async () => {
+    const updateSettings = given(ALL, "area");
+    const onCapture = vi.fn();
+    render(<CaptureModeButtons variant="page" onCapture={onCapture} shortcuts={shortcuts} />);
+    await screen.findByRole("button", { name: /^Capture · Area/ });
+    // A native button turns Enter/Space into a click; user-event does the same.
+    const user = userEvent.setup();
+    const card = screen.getByRole("button", { name: /^Frame/ });
+    card.focus();
+    await user.keyboard("{Enter}");
+    expect(updateSettings).toHaveBeenLastCalledWith({ screenshotMode: "frame" });
+    const screenCard = screen.getByRole("button", { name: /^Screen/ });
+    screenCard.focus();
+    await user.keyboard(" ");
+    expect(updateSettings).toHaveBeenLastCalledWith({ screenshotMode: "screen" });
+    expect(onCapture).not.toHaveBeenCalled();
   });
 
   it("a disabled card neither changes the mode nor captures, and says why", async () => {
@@ -145,18 +169,18 @@ describe("CaptureModeButtons — tray panel", () => {
     expect(screen.getByRole("button", { name: /^Frame/ })).toHaveTextContent("⌃⌘X");
     expect(screen.getByRole("button", { name: /^Area/ })).not.toHaveTextContent("⌘");
     expect(screen.getByLabelText("Current")).toBeInTheDocument();
-    expect(
-      screen.getByText("Click a mode to capture. It stays as your default."),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Click a mode to make it your default.")).toBeInTheDocument();
   });
 
-  it("a row click makes its mode current and captures with it", async () => {
+  it("a row click only selects its mode and does not capture", async () => {
     const updateSettings = given(ALL, "area");
     const onCapture = vi.fn();
     render(<CaptureModeButtons variant="panel" onCapture={onCapture} shortcuts={shortcuts} />);
     await screen.findByRole("button", { name: /^Capture · Area/ });
     fireEvent.click(screen.getByRole("button", { name: /^Frame/ }));
     expect(updateSettings).toHaveBeenCalledWith({ screenshotMode: "frame" });
+    expect(onCapture).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole("button", { name: /^Capture · Frame/ }));
     expect(onCapture).toHaveBeenCalledWith("frame");
   });
 
