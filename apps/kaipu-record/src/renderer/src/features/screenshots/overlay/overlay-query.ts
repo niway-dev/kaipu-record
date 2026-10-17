@@ -9,7 +9,7 @@ import {
  * `overlayQuery` in `main/screenshots/capture-overlay-windows.ts`):
  *
  *   ?window=capture-overlay&display=<id>&ui=<mode>&index=<1-based>&count=<n>
- *    &bounds=x,y,w,h&work=x,y,w,h&ids=<id1>,<id2>,…
+ *    &bounds=x,y,w,h&work=x,y,w,h&ids=<id1>,<id2>,…[&frame=<id>]
  *
  * `bounds` and `work` are the display's bounds and work area in DIP, absolute in screen
  * coordinates (x can be negative). The window covers `bounds`, so window-local (0,0) is
@@ -25,6 +25,8 @@ export interface OverlayQuery {
   work: CaptureRect;
   /** Every picked display's id in order: digit N on any overlay picks `ids[N - 1]`. */
   ids: number[];
+  /** Frame only: the display that starts with the frame; null when absent or malformed. */
+  frame: number | null;
 }
 
 function parseIds(value: string | null): number[] | null {
@@ -61,7 +63,16 @@ export function parseOverlayQuery(search: string): OverlayQuery | null {
   if (displayId === null || !isCaptureMode(ui) || index === null || count === null) return null;
   if (!bounds || !work || index < 1 || count < index) return null;
   if (!ids || ids.length !== count || ids[index - 1] !== displayId) return null;
-  return { displayId, ui, index, count, bounds, work, ids };
+  return {
+    displayId,
+    ui,
+    index,
+    count,
+    bounds,
+    work,
+    ids,
+    frame: parseInteger(params.get("frame")),
+  };
 }
 
 /** The work area in the window's own (display-relative) coordinates. */

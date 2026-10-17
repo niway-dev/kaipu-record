@@ -143,13 +143,13 @@ describe("CaptureOverlayWindows: creating the overlays", () => {
       {
         search:
           "?window=capture-overlay&display=1&ui=frame&index=1&count=2" +
-          "&bounds=0,0,1440,900&work=0,25,1440,875&ids=1,2",
+          "&bounds=0,0,1440,900&work=0,25,1440,875&ids=1,2&frame=2",
       },
     );
     expect(created[1].window.loadFile.mock.calls[0][1]).toEqual({
       search:
         "?window=capture-overlay&display=2&ui=frame&index=2&count=2" +
-        "&bounds=1440,0,1440,900&work=1440,25,1440,875&ids=1,2",
+        "&bounds=1440,0,1440,900&work=1440,25,1440,875&ids=1,2&frame=2",
     });
   });
 
