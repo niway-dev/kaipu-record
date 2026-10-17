@@ -1,4 +1,4 @@
-import type { CaptureRect } from "@shared/types/screenshot-capture";
+import { isCaptureMode, type CaptureRect } from "@shared/types/screenshot-capture";
 import {
   type AppSettings,
   DEFAULT_SETTINGS,
@@ -123,5 +123,8 @@ export function mergeSettings(stored: Partial<AppSettings> | null | undefined): 
         ? safe.showRecordingSavedCard
         : DEFAULT_SETTINGS.showRecordingSavedCard,
     screenshotFrame: mergeScreenshotFrames(safe.screenshotFrame),
+    screenshotMode: isCaptureMode(safe.screenshotMode)
+      ? safe.screenshotMode
+      : DEFAULT_SETTINGS.screenshotMode,
   };
 }

@@ -23,6 +23,7 @@ import {
   registerSettings,
   getDeviceId,
   getAppSettings,
+  updateAppSettings,
   applyDockPolicy,
   onSettingsChanged,
 } from "./infrastructure/settings-store";
@@ -36,7 +37,8 @@ import {
 import { initMainAnalytics, shutdownMainAnalytics } from "./services/analytics.service";
 import { registerAnalyticsIpc } from "./services/analytics-ipc";
 import { isCaptureMode, type CaptureRequestPayload } from "@shared/types/screenshot-capture";
-import { registerScreenshotHandlers } from "./screenshots/screenshot-ipc";
+import { registerScreenshotHandlers, type ScreenshotHandlers } from "./screenshots/screenshot-ipc";
+import { resolveShortcutCapture, type CaptureShortcut } from "./screenshots/shortcut-capture";
 import {
   boundsAroundCenter,
   fitPresetToDisplay,
@@ -309,6 +311,24 @@ function triggerCaptureScreenshot(request: CaptureRequestPayload): void {
   sendToRenderer(IPC_CHANNELS.screenshotHotkey, request);
 }
 
+/** Set once the screenshot IPC is registered; until then a shortcut trusts the stored mode. */
+let screenshotHandlers: ScreenshotHandlers | null = null;
+
+/**
+ * A capture shortcut: the generic one captures with the current mode, a mode-specific one
+ * makes its mode current (persisted and broadcast to every window) and captures with it.
+ * See `resolveShortcutCapture`.
+ */
+function triggerShortcutCapture(action: CaptureShortcut): void {
+  const { mode, remember } = resolveShortcutCapture(
+    action,
+    getAppSettings().screenshotMode,
+    screenshotHandlers?.supportedModes() ?? null,
+  );
+  if (remember) updateAppSettings({ screenshotMode: mode });
+  triggerCaptureScreenshot({ mode });
+}
+
 /** Remembers whether the app was visible before a capture, to restore on cancel. */
 let captureWasVisible = false;
 
@@ -447,9 +467,9 @@ app.whenReady().then(() => {
       startRecording: triggerStartRecording,
       stopRecording: () => mainWindow?.webContents.send(IPC_CHANNELS.recordingCommand, "stop"),
       bringToFront: bringAppToFront,
-      captureScreenshot: () => triggerCaptureScreenshot({ mode: "area" }),
-      captureScreen: () => triggerCaptureScreenshot({ mode: "screen" }),
-      captureFrame: () => triggerCaptureScreenshot({ mode: "frame" }),
+      captureScreenshot: () => triggerShortcutCapture("captureScreenshot"),
+      captureScreen: () => triggerShortcutCapture("captureScreen"),
+      captureFrame: () => triggerShortcutCapture("captureFrame"),
       // Live input toggles write the shared RecordingSettings, never the engine:
       // mid-take the recorder forwards the change, outside a take it is just the
       // pre-recording toggle.
@@ -467,7 +487,7 @@ app.whenReady().then(() => {
   registerCloudStorageHandlers({ auth, serverUrl: authServerUrl });
 
   // Screenshots: capture/copy/save IPC handlers.
-  registerScreenshotHandlers(captureWindowHooks);
+  screenshotHandlers = registerScreenshotHandlers(captureWindowHooks);
 
   /**
    * Raise the window's minimum size for a screen that cannot reflow, growing the
