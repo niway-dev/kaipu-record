@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.10.0](https://github.com/niway-dev/kaipu-record/compare/web-v0.9.0...web-v0.10.0) (2026-10-17)
+
+
+### Features
+
+* **roadmap:** refresh the public roadmap (2026-10-14) ([1dcb64f](https://github.com/niway-dev/kaipu-record/commit/1dcb64f45028184fd89ec8f1685f0aef873c05d3))
+* **roadmap:** refresh the public roadmap against what shipped ([58459b6](https://github.com/niway-dev/kaipu-record/commit/58459b66d89b78940c3c4e975b9371d0bea6e084))
+* **roadmap:** refresh the public roadmap against what shipped ([7e4fbd3](https://github.com/niway-dev/kaipu-record/commit/7e4fbd3add6c6fea98908b79239ab8d5e4eb5661))
+* **web:** /features page, the full catalogue of what Kaipu ships ([7e2e0fa](https://github.com/niway-dev/kaipu-record/commit/7e2e0faaca620d79ea161744ce6569f671a1db53))
+* **web:** /features page, the full catalogue of what Kaipu ships ([1857556](https://github.com/niway-dev/kaipu-record/commit/18575563073956ec6a00bb31db81300fa61aa122))
+
+
+### Bug Fixes
+
+* **web:** top bar shows the same three tabs on every marketing page ([f52e365](https://github.com/niway-dev/kaipu-record/commit/f52e3658978cc928c3c744b0010cea124fb4dcc5))
+
 ## [0.9.0](https://github.com/niway-dev/kaipu-record/compare/web-v0.8.0...web-v0.9.0) (2026-10-05)
 
 
