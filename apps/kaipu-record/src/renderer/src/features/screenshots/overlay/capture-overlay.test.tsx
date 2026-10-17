@@ -150,11 +150,27 @@ describe("CaptureOverlay", () => {
   });
 });
 
+describe("display label", () => {
+  it.each(["area", "screen", "frame"] as const)("names the display on the %s overlay", (ui) => {
+    const { api } = fakeApi();
+    render(<CaptureOverlay query={query(ui)} api={api} />);
+    expect(screen.getByText("Display 2")).toBeInTheDocument();
+  });
+});
+
 describe("ScreenChooser", () => {
   it("labels this display with its number", () => {
     const { api } = fakeApi();
     render(<CaptureOverlay query={query("screen")} api={api} />);
     expect(screen.getByRole("button", { name: "Capture this display · 2" })).toBeInTheDocument();
+  });
+
+  it("shows the number tile and the display's DIP size in its pill", () => {
+    const { api } = fakeApi();
+    render(<CaptureOverlay query={query("screen")} api={api} />);
+    const pill = screen.getByRole("button", { name: "Capture this display · 2" });
+    expect(within(pill).getByText("2")).toBeInTheDocument();
+    expect(within(pill).getByText("1600 × 1000")).toBeInTheDocument();
   });
 
   it("answers display 2 when 2 is pressed on display 1's overlay", () => {
@@ -224,6 +240,18 @@ describe("ScreenChooser", () => {
 });
 
 describe("FrameBox", () => {
+  it("draws the toolbar under the frame: Capture plus the key hint, centered", async () => {
+    const { api } = fakeApi({ "42": { x: 100, y: 120, width: 400, height: 300 } });
+    render(<CaptureOverlay query={query("frame")} api={api} />);
+    await screen.findByTestId("capture-frame");
+    const hint = screen.getByText("Enter to capture · Esc to cancel");
+    const toolbar = hint.parentElement as HTMLElement;
+    expect(within(toolbar).getByRole("button", { name: "Capture" })).toBeInTheDocument();
+    // Centered on the frame (x 100 + 400 / 2), 10 DIP under its bottom edge (120 + 300).
+    expect(toolbar.style.left).toBe("300px");
+    expect(toolbar.style.top).toBe("430px");
+  });
+
   it("opens on the remembered frame and answers it, display-relative, on Enter", async () => {
     const remembered = { x: 100, y: 120, width: 400, height: 300 };
     const other = { x: 0, y: 0, width: 50, height: 50 };

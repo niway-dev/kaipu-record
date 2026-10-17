@@ -66,8 +66,22 @@ export function ScreenChooser({ query, bridge, send }: ScreenChooserProps): Reac
       onPointerLeave={() => report(null)}
       onClick={pick}
     >
-      <button type="button" className={styles.chooserLabel}>
-        {t("overlay.captureDisplay", { index })}
+      {/* The label alone names the button: the number tile and the size are decoration. */}
+      <button
+        type="button"
+        className={styles.chooserPill}
+        aria-label={t("overlay.captureDisplay", { index })}
+      >
+        <span className={styles.chooserNumber} aria-hidden>
+          {index}
+        </span>
+        <span className={styles.chooserText} aria-hidden>
+          <span className={styles.chooserTitle}>{t("overlay.captureDisplay", { index })}</span>
+          {/* DIP size from the query; the physical pixel count is not known here. */}
+          <span className={styles.chooserSize}>
+            {query.bounds.width} × {query.bounds.height}
+          </span>
+        </span>
       </button>
     </div>
   );

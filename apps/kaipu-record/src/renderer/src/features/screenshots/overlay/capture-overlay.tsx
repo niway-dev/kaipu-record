@@ -118,9 +118,30 @@ export function CaptureOverlay({
     [bridge],
   );
 
-  if (query.ui === "screen") return <ScreenChooser query={query} bridge={bridge} send={send} />;
-  if (query.ui === "area") return <AreaDrag query={query} send={send} />;
-  return <FrameMode query={query} api={api} send={send} />;
+  const body =
+    query.ui === "screen" ? (
+      <ScreenChooser query={query} bridge={bridge} send={send} />
+    ) : query.ui === "area" ? (
+      <AreaDrag query={query} send={send} />
+    ) : (
+      <FrameMode query={query} api={api} send={send} />
+    );
+  return (
+    <>
+      {body}
+      <DisplayLabel index={query.index} />
+    </>
+  );
+}
+
+/** "DISPLAY N" in the bottom-left corner of every overlay, so each display says which it is. */
+function DisplayLabel({ index }: { index: number }): React.JSX.Element {
+  const t = useTranslations("screenshots");
+  return (
+    <span className={styles.displayLabel} aria-hidden>
+      {t("overlay.displayLabel", { index })}
+    </span>
+  );
 }
 
 /**
@@ -170,7 +191,7 @@ function FrameMode({
 
 function MoveFrameHint(): React.JSX.Element {
   const t = useTranslations("screenshots");
-  return <span className={styles.chooserLabel}>{t("overlay.moveFrameHere")}</span>;
+  return <span className={styles.movePill}>{t("overlay.moveFrameHere")}</span>;
 }
 
 /**

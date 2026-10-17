@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Camera } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { clampFrameToDisplay } from "@shared/capture-geometry";
 import type { CaptureRect } from "@shared/types/screenshot-capture";
@@ -10,10 +11,14 @@ import styles from "./capture-overlay.module.css";
 
 /** How close (DIP) the pointer must be to a handle to grab it. */
 const HANDLE_HIT_DIP = 8;
-/** Room the Capture button needs below the frame before it moves inside. */
-const BUTTON_ROOM_DIP = 44;
+/** Gap between the frame's bottom edge and the toolbar under it. */
+const TOOLBAR_GAP_DIP = 10;
+/** Room the toolbar (44 DIP tall plus its gap) needs below the frame before it moves inside. */
+const TOOLBAR_ROOM_DIP = 56;
+/** About half the toolbar's width: how far its center stays from a display edge. */
+const TOOLBAR_HALF_WIDTH_DIP = 170;
 /** Room the size pill needs above the frame before it moves inside. */
-const PILL_ROOM_DIP = 24;
+const PILL_ROOM_DIP = 30;
 
 /**
  * The frame this overlay opens with: the remembered one for this display, else a
@@ -141,8 +146,13 @@ export function FrameBox({ query, remembered, onConfirm }: FrameBoxProps): React
   };
 
   const handles = cropHandles(toCrop(frame, area), size);
-  const buttonInside = frame.y + frame.height + BUTTON_ROOM_DIP > query.bounds.height;
+  const toolbarInside = frame.y + frame.height + TOOLBAR_ROOM_DIP > query.bounds.height;
   const pillInside = frame.y - PILL_ROOM_DIP < 0;
+  // Centered under the frame, but kept on the display when the frame hugs a side edge.
+  const toolbarCenter = Math.min(
+    Math.max(frame.x + frame.width / 2, TOOLBAR_HALF_WIDTH_DIP),
+    Math.max(TOOLBAR_HALF_WIDTH_DIP, query.bounds.width - TOOLBAR_HALF_WIDTH_DIP),
+  );
 
   return (
     <div
@@ -156,9 +166,23 @@ export function FrameBox({ query, remembered, onConfirm }: FrameBoxProps): React
         role="group"
         aria-label={t("overlay.frame")}
         data-testid="capture-frame"
-        className={`${styles.box} ${styles.frame}`}
+        className={styles.frameBox}
         style={{ left: frame.x, top: frame.y, width: frame.width, height: frame.height }}
       />
+      {/* Marching ants over the pink border; drawn in window pixels so the dashes keep
+          their length whatever the frame's size. */}
+      <svg
+        className={styles.ants}
+        aria-hidden
+        style={{ left: frame.x, top: frame.y, width: frame.width, height: frame.height }}
+      >
+        <rect
+          x={0.5}
+          y={0.5}
+          width={Math.max(0, frame.width - 1)}
+          height={Math.max(0, frame.height - 1)}
+        />
+      </svg>
       {handles.map((handle) => (
         <div
           key={handle.id}
@@ -171,30 +195,32 @@ export function FrameBox({ query, remembered, onConfirm }: FrameBoxProps): React
         />
       ))}
       <div
-        className={styles.pill}
+        className={styles.sizePill}
         style={{
           left: frame.x,
-          top: pillInside ? frame.y + 6 : frame.y - PILL_ROOM_DIP,
-          marginLeft: pillInside ? 6 : 0,
+          top: pillInside ? frame.y + 8 : frame.y - PILL_ROOM_DIP,
+          marginLeft: pillInside ? 8 : 0,
         }}
       >
         {frame.width} × {frame.height}
       </div>
-      <button
-        type="button"
-        className={styles.captureButton}
+      <div
+        className={styles.toolbar}
         style={{
-          right: query.bounds.width - (frame.x + frame.width) + (buttonInside ? 8 : 0),
-          top: buttonInside
-            ? frame.y + frame.height - BUTTON_ROOM_DIP + 4
-            : frame.y + frame.height + 8,
+          left: toolbarCenter,
+          top: toolbarInside
+            ? frame.y + frame.height - TOOLBAR_ROOM_DIP
+            : frame.y + frame.height + TOOLBAR_GAP_DIP,
         }}
-        // Pressing the button must not start a frame move.
+        // Pressing the toolbar must not start a frame move.
         onPointerDown={(event) => event.stopPropagation()}
-        onClick={() => onConfirm(frame)}
       >
-        {t("overlay.capture")}
-      </button>
+        <button type="button" className={styles.captureButton} onClick={() => onConfirm(frame)}>
+          <Camera size={14} aria-hidden />
+          {t("overlay.capture")}
+        </button>
+        <span className={styles.toolbarHint}>{t("overlay.hint")}</span>
+      </div>
     </div>
   );
 }
