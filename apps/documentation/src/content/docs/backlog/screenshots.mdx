@@ -388,3 +388,20 @@ Following the app's main/preload/renderer split:
   saved) — composite once, use for both Copy and Save.
 - Large captures on the clipboard: PNG buffers can be big; that's expected for
   screenshots.
+
+## Capture modes — QA
+
+Not yet executed. Screen and Frame on macOS need a real desktop (overlays, Spaces,
+several displays), so these are manual checks.
+
+- [ ] One display: Screen captures it directly, with no overlay.
+- [ ] Two displays: Screen shows the chooser; pressing a digit or clicking picks that display and the shot is of it.
+- [ ] One Retina display and one non-Retina display: each shot has the right pixel size and no offset.
+- [ ] Frame on each display: the shot matches the frame box exactly, including on a display left of or above the main one.
+- [ ] Frame is remembered across two captures in a row.
+- [ ] Esc in the Screen overlay restores the app to where it was.
+- [ ] Esc in the Frame overlay restores the app to where it was.
+- [ ] Esc in the Area selector restores the app to where it was.
+- [ ] The overlay is never visible in the resulting shot.
+- [ ] A full-screen app on another Space is covered by the overlay and captured correctly (toggle the Space during the pick).
+- [ ] After a cancelled or failed capture, the next Screen/Frame capture works (the overlay session is not stuck).
