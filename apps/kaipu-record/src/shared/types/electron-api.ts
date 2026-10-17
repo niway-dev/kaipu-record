@@ -54,9 +54,9 @@ export type AccessibilityStatus = "granted" | "denied" | "not-required";
 export type AuthAttemptResult = { ok: true; status: AuthStatus } | { ok: false; error: AuthError };
 
 export interface KaipuElectronAPI {
-  /** The running app version (`app.getVersion()`), used by the version gate. */
   /** Host OS (`process.platform`), exposed because the renderer must not read `process` itself. */
   readonly platform: string;
+  /** The running app version (`app.getVersion()`), used by the version gate. */
   getAppVersion(): Promise<string>;
   /** Tell main the app shell has mounted and its IPC listeners are registered,
    *  so any window-triggered action queued during load can be flushed. */
@@ -175,11 +175,6 @@ export interface KaipuElectronAPI {
   setExportActive(active: boolean): void;
   /** NIW2-218: main asks to cancel the running export (the user confirmed close/quit). */
   onExportCommand(callback: (command: "cancel") => void): () => void;
-  /**
-   * Windows: main asks to show the one-time "Kaipu keeps running in the tray" hint,
-   * the first time the window comes back after a close hid it. Returns an unsubscribe fn.
-   */
-  onTrayHint(callback: () => void): () => void;
 
   /** Current recordings-folder location (custom or platform default). */
   getVaultDirectory(): Promise<VaultDirectory>;

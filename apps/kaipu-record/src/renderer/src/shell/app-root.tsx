@@ -1,6 +1,5 @@
 import React, { useEffect } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
-import { useTranslations } from "@kaipu/i18n";
 import { subscribeRecordingComplete } from "@renderer/features/recording/recorder-store";
 import {
   useVersionGate,
@@ -11,7 +10,6 @@ import { useUpdateStatus, UpdateBanner } from "@renderer/features/updater";
 import { useScreenshotCapture } from "@renderer/features/screenshots/use-screenshot-capture";
 import { StatusStackProvider } from "@renderer/features/status-cards/status-stack";
 import { cancelVideoExport } from "@renderer/features/video-editor/export/export-runner";
-import { showToast } from "@renderer/ui/toast-store";
 import styles from "./app-root.module.css";
 
 /**
@@ -25,7 +23,6 @@ export function AppRoot(): React.JSX.Element {
   const gate = useVersionGate();
   const update = useUpdateStatus();
   const { capture } = useScreenshotCapture();
-  const tTray = useTranslations("tray");
 
   // A global "start recording" (the hotkey or the Capture Panel) can arrive on any
   // route — the recorder lives on the Record page, so bring the user there and
@@ -71,16 +68,6 @@ export function AppRoot(): React.JSX.Element {
   // Closing the window or quitting mid-export: main confirmed with the user and asks the
   // export to stop cleanly (its writer session aborted, no temp file left behind).
   useEffect(() => window.electronAPI.onExportCommand(() => cancelVideoExport()), []);
-
-  // Windows: the first close hid the window to the tray. Main sends this once, when the
-  // window next comes back, so the user learns where Kaipu went and how to quit it.
-  useEffect(
-    () =>
-      window.electronAPI.onTrayHint(() =>
-        showToast({ message: tTray("closedToTray"), durationMs: 8000 }),
-      ),
-    [tTray],
-  );
 
   // Signal main that our IPC listeners (above) are registered — LAST effect, so
   // it runs after them. Main defers window-triggered actions (start/capture/

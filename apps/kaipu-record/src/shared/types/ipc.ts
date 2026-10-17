@@ -213,8 +213,8 @@ export interface AppSettings {
   showRecordingSavedCard: boolean;
   /**
    * Windows: closing the main window hides it to the tray. The first time it does,
-   * the app says so once ("Kaipu keeps running in the tray"); this records that the
-   * hint was shown, so it shows once per install.
+   * the app says so once with a native notification ("Kaipu is still running"); this
+   * records that the notification was shown, so it shows once per install.
    */
   trayHintShown: boolean;
 }
@@ -262,8 +262,6 @@ export const IPC_CHANNELS = {
   windowApplyPreset: "window:apply-preset",
   /** The capture panel's selected mode, mirrored by the menu-bar icon. */
   traySetMode: "tray:set-mode",
-  /** Main → renderer: show the one-time "Kaipu keeps running in the tray" hint (Windows). */
-  trayHint: "tray:hint",
   updateGetStatus: "update:get-status",
   updateStatus: "update:status",
   updateInstall: "update:install",

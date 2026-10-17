@@ -4,6 +4,7 @@ import {
   handleMainWindowClose,
   isQuitShortcut,
   shouldQuitOnAllWindowsClosed,
+  shouldShowTrayHint,
 } from "./window-close-policy";
 
 describe("closeAction", () => {
@@ -120,5 +121,31 @@ describe("isQuitShortcut", () => {
 
   it("acts on key down only", () => {
     expect(isQuitShortcut(key({ type: "keyUp" }), "win32")).toBe(false);
+  });
+});
+
+describe("shouldShowTrayHint", () => {
+  const ctx = (overrides: Partial<Parameters<typeof shouldShowTrayHint>[0]> = {}) => ({
+    platform: "win32" as NodeJS.Platform,
+    trayHintShown: false,
+    notificationSupported: true,
+    ...overrides,
+  });
+
+  it("shows the hint the first time the window hides on Windows", () => {
+    expect(shouldShowTrayHint(ctx())).toBe(true);
+  });
+
+  it("shows it once: not after it was shown", () => {
+    expect(shouldShowTrayHint(ctx({ trayHintShown: true }))).toBe(false);
+  });
+
+  it("does not spend the hint when notifications are unsupported", () => {
+    expect(shouldShowTrayHint(ctx({ notificationSupported: false }))).toBe(false);
+  });
+
+  it("never shows on macOS or Linux, which do not hide to the tray", () => {
+    expect(shouldShowTrayHint(ctx({ platform: "darwin" }))).toBe(false);
+    expect(shouldShowTrayHint(ctx({ platform: "linux" }))).toBe(false);
   });
 });

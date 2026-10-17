@@ -78,3 +78,24 @@ export function handleMainWindowClose(
   hide();
   return true;
 }
+
+export interface TrayHintContext {
+  platform: NodeJS.Platform;
+  /** The one-time hint was already shown on an earlier hide (persisted setting). */
+  trayHintShown: boolean;
+  /** `Notification.isSupported()`: without notifications the hint cannot be shown. */
+  notificationSupported: boolean;
+}
+
+/**
+ * Whether hiding the main window to the tray shows the one-time "Kaipu keeps running
+ * in the tray" notification. Only Windows hides to the tray, and the hint is spent
+ * only when it can actually be shown.
+ */
+export function shouldShowTrayHint({
+  platform,
+  trayHintShown,
+  notificationSupported,
+}: TrayHintContext): boolean {
+  return platform === "win32" && !trayHintShown && notificationSupported;
+}

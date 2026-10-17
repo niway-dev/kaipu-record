@@ -4,6 +4,8 @@ import { useTranslations } from "@kaipu/i18n";
 import { useScreenshotCapture } from "@renderer/features/screenshots/use-screenshot-capture";
 import { RecentScreenshots } from "@renderer/features/screenshots/recent-screenshots";
 import { useShortcutLabels } from "@renderer/features/shortcuts/use-shortcut-labels";
+import { formatAccelerator } from "@renderer/features/shortcuts/keyboard-accelerator";
+import { defaultShortcutsFor } from "@shared/shortcut-defaults";
 import styles from "./screenshots-page.module.css";
 
 export function ScreenshotsPage(): React.JSX.Element {
@@ -21,7 +23,11 @@ export function ScreenshotsPage(): React.JSX.Element {
         </button>
         <p className={styles.hint}>{t("captureHint")}</p>
         <span className={styles.shortcut}>
-          {t("globalShortcut", { shortcut: labels?.captureScreenshot ?? "⌃⌘X" })}
+          {t("globalShortcut", {
+            shortcut:
+              labels?.captureScreenshot ??
+              formatAccelerator(defaultShortcutsFor(window.electronAPI.platform).captureScreenshot),
+          })}
         </span>
       </div>
       <RecentScreenshots />

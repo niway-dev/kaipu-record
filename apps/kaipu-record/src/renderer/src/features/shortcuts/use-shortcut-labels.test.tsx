@@ -51,4 +51,19 @@ describe("useShortcutLabels", () => {
     act(() => subscriber?.(settingsWith("Command+Control+G")));
     await waitFor(() => expect(result.current?.startRecording).toBe("⌃⌘G"));
   });
+
+  it("renders Windows-style text labels when the bridge reports win32", async () => {
+    const api = window.electronAPI as { platform: string };
+    const original = api.platform;
+    api.platform = "win32";
+    window.electronAPI.getSettings = vi.fn(async () =>
+      settingsWith("Control+Alt+C"),
+    ) as unknown as typeof window.electronAPI.getSettings;
+    try {
+      const { result } = renderHook(() => useShortcutLabels());
+      await waitFor(() => expect(result.current?.startRecording).toBe("Ctrl+Alt+C"));
+    } finally {
+      api.platform = original;
+    }
+  });
 });
