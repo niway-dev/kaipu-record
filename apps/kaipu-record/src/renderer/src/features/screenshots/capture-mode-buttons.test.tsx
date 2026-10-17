@@ -151,10 +151,9 @@ describe("CaptureModeButtons — page hero", () => {
   });
 
   it("renders nothing disabled when the platform serves all three modes, Windows included", async () => {
-    vi.spyOn(window.navigator, "userAgent", "get").mockReturnValue(
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-    );
     given(ALL, "frame");
+    // The platform comes from the bridge, never from the user agent.
+    window.electronAPI = { ...window.electronAPI, platform: "win32" };
     render(
       <CaptureModeButtons
         enabledModes={ALL}
