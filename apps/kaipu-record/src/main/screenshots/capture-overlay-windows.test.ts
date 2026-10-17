@@ -115,6 +115,7 @@ describe("CaptureOverlayWindows: creating the overlays", () => {
       alwaysOnTop: true,
       fullscreenable: false,
       focusable: true,
+      acceptFirstMouse: true,
       webPreferences: { sandbox: false },
     });
     expect(String((first.options.webPreferences as { preload: string }).preload)).toMatch(
@@ -134,13 +135,13 @@ describe("CaptureOverlayWindows: creating the overlays", () => {
       {
         search:
           "?window=capture-overlay&display=1&ui=frame&index=1&count=2" +
-          "&bounds=0,0,1440,900&work=0,25,1440,875",
+          "&bounds=0,0,1440,900&work=0,25,1440,875&ids=1,2",
       },
     );
     expect(created[1].window.loadFile.mock.calls[0][1]).toEqual({
       search:
         "?window=capture-overlay&display=2&ui=frame&index=2&count=2" +
-        "&bounds=1440,0,1440,900&work=1440,25,1440,875",
+        "&bounds=1440,0,1440,900&work=1440,25,1440,875&ids=1,2",
     });
   });
 
@@ -150,7 +151,7 @@ describe("CaptureOverlayWindows: creating the overlays", () => {
     expect(created[0].window.loadFile.mock.calls[0][1]).toEqual({
       search:
         "?window=capture-overlay&display=3&ui=screen&index=1&count=1" +
-        "&bounds=-1920,0,1440,900&work=-1920,25,1440,875",
+        "&bounds=-1920,0,1440,900&work=-1920,25,1440,875&ids=3",
     });
   });
 
@@ -297,6 +298,27 @@ describe("CaptureOverlayWindows: answers", () => {
         hoverDisplayId: 2,
       });
     }
+  });
+
+  it("ignores a late 'left' from a display that is no longer the hovered one", () => {
+    void overlays().pick("screen", [left, right]);
+    const [first, second] = created.map(({ window }) => window);
+
+    first.send(IPC_CHANNELS.screenshotOverlayHover, { displayId: 1 });
+    // The pointer crosses to display 2; display 1's "left" arrives after 2's "entered".
+    second.send(IPC_CHANNELS.screenshotOverlayHover, { displayId: 2 });
+    first.send(IPC_CHANNELS.screenshotOverlayHover, { displayId: null });
+
+    const states = second.webContents.send.mock.calls
+      .filter(([channel]) => channel === IPC_CHANNELS.screenshotOverlayState)
+      .map(([, state]) => state);
+    expect(states).toEqual([{ hoverDisplayId: 1 }, { hoverDisplayId: 2 }]);
+
+    // The hovered display's own window can still clear it.
+    second.send(IPC_CHANNELS.screenshotOverlayHover, { displayId: null });
+    expect(second.webContents.send).toHaveBeenLastCalledWith(IPC_CHANNELS.screenshotOverlayState, {
+      hoverDisplayId: null,
+    });
   });
 
   it("a second pick while one is up answers cancelled and leaves the first alone", async () => {

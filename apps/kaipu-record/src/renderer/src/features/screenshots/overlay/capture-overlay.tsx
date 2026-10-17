@@ -7,6 +7,9 @@ import type { OverlayQuery } from "./overlay-query";
 import { ScreenChooser } from "./screen-chooser";
 import styles from "./capture-overlay.module.css";
 
+/** How long the hide ack waits for an animation frame before answering anyway. */
+export const HIDDEN_ACK_FALLBACK_MS = 50;
+
 /** The slice of the preload bridge the overlay uses; tests pass a fake. */
 export type CaptureOverlayApi = Pick<
   KaipuElectronAPI,
@@ -68,11 +71,24 @@ export function CaptureOverlay({
   }, [send]);
 
   // Main hid the window and waits until this renderer has drawn one more frame, so its
-  // last painted frame cannot end up in the shot.
+  // last painted frame cannot end up in the shot. A hidden window may never run its
+  // animation frames, so a short timer races the frame; main's 250 ms cap stays the
+  // safety net behind both.
   useEffect(
     () =>
       bridge.onHiddenAckRequest(() => {
-        requestAnimationFrame(() => bridge.hiddenAck());
+        let sent = false;
+        let frame = 0;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const ack = (): void => {
+          if (sent) return;
+          sent = true;
+          clearTimeout(timer);
+          cancelAnimationFrame(frame);
+          bridge.hiddenAck();
+        };
+        frame = requestAnimationFrame(ack);
+        timer = setTimeout(ack, HIDDEN_ACK_FALLBACK_MS);
       }),
     [bridge],
   );

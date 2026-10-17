@@ -9,20 +9,28 @@ import {
  * `overlayQuery` in `main/screenshots/capture-overlay-windows.ts`):
  *
  *   ?window=capture-overlay&display=<id>&ui=<mode>&index=<1-based>&count=<n>
- *    &bounds=x,y,w,h&work=x,y,w,h
+ *    &bounds=x,y,w,h&work=x,y,w,h&ids=<id1>,<id2>,…
  *
  * `bounds` and `work` are the display's bounds and work area in DIP, absolute in screen
  * coordinates (x can be negative). The window covers `bounds`, so window-local (0,0) is
- * `bounds.x, bounds.y`.
+ * `bounds.x, bounds.y`. `ids` lists every picked display in order.
  */
 export interface OverlayQuery {
   displayId: number;
   ui: CaptureMode;
-  /** 1-based position of this display among the picked ones: the chooser's number key. */
+  /** 1-based position of this display among the picked ones: its chooser number. */
   index: number;
   count: number;
   bounds: CaptureRect;
   work: CaptureRect;
+  /** Every picked display's id in order: digit N on any overlay picks `ids[N - 1]`. */
+  ids: number[];
+}
+
+function parseIds(value: string | null): number[] | null {
+  if (!value) return null;
+  const ids = value.split(",").map((part) => parseInteger(part));
+  return ids.every((id): id is number => id !== null) ? ids : null;
 }
 
 function parseRect(value: string | null): CaptureRect | null {
@@ -49,9 +57,11 @@ export function parseOverlayQuery(search: string): OverlayQuery | null {
   const count = parseInteger(params.get("count"));
   const bounds = parseRect(params.get("bounds"));
   const work = parseRect(params.get("work"));
+  const ids = parseIds(params.get("ids"));
   if (displayId === null || !isCaptureMode(ui) || index === null || count === null) return null;
   if (!bounds || !work || index < 1 || count < index) return null;
-  return { displayId, ui, index, count, bounds, work };
+  if (!ids || ids.length !== count || ids[index - 1] !== displayId) return null;
+  return { displayId, ui, index, count, bounds, work, ids };
 }
 
 /** The work area in the window's own (display-relative) coordinates. */

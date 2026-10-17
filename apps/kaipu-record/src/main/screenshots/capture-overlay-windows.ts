@@ -90,19 +90,21 @@ function rectParam({ x, y, width, height }: Rectangle): string {
 
 /**
  * The overlay's render-target query: everything the renderer needs to draw, so it never
- * has to ask main. `index` is 1-based among the picked displays (the Screen chooser's
- * number key); `bounds` and `work` are the display's bounds and work area in DIP.
+ * has to ask main. `index` is 1-based among the picked displays; `bounds` and `work` are
+ * the display's bounds and work area in DIP. `ids` lists every picked display in order,
+ * so whichever overlay has keyboard focus can map the digit N to the N-th display.
  */
 export function overlayQuery(
   ui: OverlayUi,
   display: Display,
   index: number,
-  count: number,
+  displayIds: readonly number[],
 ): string {
   return (
     `?window=capture-overlay&display=${display.id}&ui=${ui}` +
-    `&index=${index}&count=${count}` +
-    `&bounds=${rectParam(display.bounds)}&work=${rectParam(display.workArea)}`
+    `&index=${index}&count=${displayIds.length}` +
+    `&bounds=${rectParam(display.bounds)}&work=${rectParam(display.workArea)}` +
+    `&ids=${displayIds.join(",")}`
   );
 }
 
@@ -174,9 +176,10 @@ export class CaptureOverlayWindows implements OverlayPort {
         0,
         displays.findIndex((display) => contains(display.bounds, cursor)),
       );
+      const displayIds = displays.map((display) => display.id);
       displays.forEach((display, index) => {
         this.entries.push(
-          this.createOverlay(ui, display, index + 1, displays.length, index === focused),
+          this.createOverlay(ui, display, index + 1, displayIds, index === focused),
         );
       });
     });
@@ -237,7 +240,7 @@ export class CaptureOverlayWindows implements OverlayPort {
     ui: OverlayUi,
     display: Display,
     index: number,
-    count: number,
+    displayIds: readonly number[],
     focus: boolean,
   ): OverlayEntry {
     const darwin = this.deps.platform === "darwin";
@@ -258,6 +261,9 @@ export class CaptureOverlayWindows implements OverlayPort {
       enableLargerThanScreen: true,
       alwaysOnTop: true,
       focusable: true,
+      // macOS: the first click on an overlay that is not the key window must act (pick
+      // that display, grab a handle), not merely make the window key.
+      acceptFirstMouse: true,
       webPreferences: {
         preload: join(__dirname, "../preload/index.js"),
         sandbox: false,
@@ -282,7 +288,7 @@ export class CaptureOverlayWindows implements OverlayPort {
       if (this.entries.includes(entry)) this.destroyAll();
     });
 
-    this.deps.loadRenderer(window, overlayQuery(ui, display, index, count));
+    this.deps.loadRenderer(window, overlayQuery(ui, display, index, displayIds));
     return entry;
   }
 
@@ -325,6 +331,13 @@ export class CaptureOverlayWindows implements OverlayPort {
     return this.entries.filter(({ window }) => !window.isDestroyed());
   }
 
+  private displayOf(event: SenderEvent): number | null {
+    const entry = this.liveEntries().find(
+      ({ window }) => window.webContents.id === event.sender.id,
+    );
+    return entry ? entry.displayId : null;
+  }
+
   private ownsSender(event: SenderEvent): boolean {
     return this.liveEntries().some(({ window }) => window.webContents.id === event.sender.id);
   }
@@ -341,6 +354,9 @@ export class CaptureOverlayWindows implements OverlayPort {
       const displayId = (payload as { displayId?: unknown } | undefined)?.displayId;
       const next =
         isFiniteNumber(displayId) && this.session.displayIds.has(displayId) ? displayId : null;
+      // Two renderers race when the pointer crosses displays: A's "left" can arrive after
+      // B's "entered". Only the hovered display's own window may clear the hover.
+      if (next === null && this.displayOf(event) !== this.hoverDisplayId) return;
       if (next === this.hoverDisplayId) return;
       this.hoverDisplayId = next;
       for (const { window } of this.liveEntries()) {
