@@ -1,10 +1,8 @@
-import type { Display, Rectangle } from "electron";
+import type { Display } from "electron";
+import type { OverlayAnswer } from "@shared/types/screenshot-capture";
 
-/** What the user picked on an overlay. */
-export type OverlayAnswer =
-  | { kind: "rect"; displayId: number; rect: Rectangle /* DIP, display-relative */ }
-  | { kind: "display"; displayId: number }
-  | { kind: "cancelled" };
+/** What the user picked on an overlay; shared with the overlay renderer. */
+export type { OverlayAnswer };
 
 /** The picking UI a provider may use; main-only, so Electron types are fine. */
 export interface OverlayPort {

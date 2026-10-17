@@ -21,3 +21,25 @@ export type CaptureResult =
   | { kind: "captured"; png: ArrayBuffer; width: number; height: number; mode: CaptureMode }
   | { kind: "cancelled" }
   | { kind: "unsupported"; mode: CaptureMode; platform: NodeJS.Platform };
+
+/** A DIP rectangle; structurally the same as Electron's `Rectangle`. */
+export interface CaptureRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * What the user picked on a capture overlay (renderer → main). `rect` is display-relative
+ * DIP, which is the overlay window's own coordinate space: the window covers the display.
+ */
+export type OverlayAnswer =
+  | { kind: "rect"; displayId: number; rect: CaptureRect }
+  | { kind: "display"; displayId: number }
+  | { kind: "cancelled" };
+
+/** Main → every overlay: the display the pointer is over, so only that one highlights. */
+export interface OverlayState {
+  hoverDisplayId: number | null;
+}

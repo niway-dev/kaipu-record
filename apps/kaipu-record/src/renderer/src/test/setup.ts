@@ -71,6 +71,7 @@ const STUB_SETTINGS = {
   uploadMode: "local-only",
   exportQuality: "balanced",
   showRecordingSavedCard: true,
+  screenshotFrame: {},
 } as const;
 
 // Vitest does not expose `afterEach` as a global (globals: false), so
@@ -181,6 +182,13 @@ window.electronAPI = {
   reportException: () => {},
   captureScreenshot: async () => ({ kind: "cancelled" }),
   revealAfterCapture: () => {},
+  captureOverlay: {
+    answer: () => {},
+    hover: () => {},
+    onState: () => () => {},
+    onHiddenAckRequest: () => () => {},
+    hiddenAck: () => {},
+  },
   applyWindowPreset: () => {},
   setTrayMode: () => {},
   setOnboardingWindowMode: () => {},

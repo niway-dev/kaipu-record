@@ -11,6 +11,7 @@ import type { TagColor } from "@kaipu/domain/constants";
 import { DEFAULT_QUALITY, type RecordingQuality } from "../recording-quality";
 import type { Locale } from "@kaipu/i18n";
 import type { ExportPresetId, ExportQuality } from "./export-preset";
+import type { CaptureRect } from "./screenshot-capture";
 
 /**
  * "system" (follow the OS appearance) is a deliberate non-goal for now — the
@@ -214,6 +215,12 @@ export interface AppSettings {
    * Settings → Export turns it off.
    */
   showRecordingSavedCard: boolean;
+  /**
+   * Frame capture mode: the last frame the user confirmed, per display id (`String(id)`),
+   * in display-relative DIP. Re-clamped to the display's work area when the overlay
+   * opens, so a frame remembered before a resolution change is moved, not dropped.
+   */
+  screenshotFrame: Record<string, CaptureRect>;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -236,6 +243,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // Literal on purpose (preload bundle); equals DEFAULT_EXPORT_QUALITY in ./export-preset.
   exportQuality: "balanced",
   showRecordingSavedCard: true,
+  screenshotFrame: {},
 };
 
 /**

@@ -4,7 +4,13 @@ import type { WindowPresetName } from "../window-size";
  * `src/preload`, typed for the renderer via `src/preload/index.d.ts`). Pure types.
  */
 
-import type { CaptureMode, CaptureRequestPayload, CaptureResult } from "./screenshot-capture";
+import type {
+  CaptureMode,
+  CaptureRequestPayload,
+  CaptureResult,
+  OverlayAnswer,
+  OverlayState,
+} from "./screenshot-capture";
 import type { SerializedError } from "../analytics";
 import type { AppSettings, ShortcutAction, TagSummary, UpdateStatus } from "./ipc";
 import type { TagColor } from "@kaipu/domain/constants";
@@ -33,6 +39,23 @@ export interface ScreenSource {
   name: string;
   thumbnail: string;
   type: "screen" | "window";
+}
+
+/**
+ * The capture overlay window's bridge (`?window=capture-overlay`, one per display). The
+ * overlay only answers what the user picked; main captures the pixels.
+ */
+export interface CaptureOverlayBridge {
+  /** Send the user's pick. Main keeps the first valid answer and ignores the rest. */
+  answer(answer: OverlayAnswer): void;
+  /** The pointer entered this display (its id) or left it (`null`). */
+  hover(displayId: number | null): void;
+  /** Main's hover broadcast, so only one display highlights. Returns an unsubscribe fn. */
+  onState(callback: (state: OverlayState) => void): () => void;
+  /** Main hid the overlays and asks for an ack after the next frame. Returns an unsubscribe fn. */
+  onHiddenAckRequest(callback: () => void): () => void;
+  /** Answer `onHiddenAckRequest`: this overlay has painted its last frame. */
+  hiddenAck(): void;
 }
 
 /** macOS media permissions the recorder cares about. */
@@ -277,6 +300,8 @@ export interface KaipuElectronAPI {
    * window for the duration of the capture so the app isn't in the shot.
    */
   revealAfterCapture(): void;
+  /** Only used by the capture overlay windows; see `CaptureOverlayBridge`. */
+  captureOverlay: CaptureOverlayBridge;
   /**
    * Toggle "editor mode" window sizing: when active, main raises the minimum
    * size and grows the window so the screenshot editor has room; inactive
