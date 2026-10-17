@@ -362,8 +362,10 @@ export const IPC_CHANNELS = {
   screenshotOverlayAnswer: "screenshot:overlay-answer",
   // Overlay → main: the pointer is over this display (`{ displayId: number | null }`).
   screenshotOverlayHover: "screenshot:overlay-hover",
-  // Main → every overlay: `{ hoverDisplayId: number | null }`, so only one highlights.
+  // Main → every overlay: `{ hoverDisplayId, frameDisplayId }` (each `number | null`).
   screenshotOverlayState: "screenshot:overlay-state",
+  // Overlay → main (Frame): "move the frame to this display" (`{ displayId: number }`).
+  screenshotOverlayFrameDisplay: "screenshot:overlay-frame-display",
   // Main → overlay (no payload): "reply after your next animation frame"; overlay → main
   // on the same channel (no payload). Capture waits for every reply or a 250 ms cap.
   screenshotOverlayHiddenAck: "screenshot:overlay-hidden-ack",

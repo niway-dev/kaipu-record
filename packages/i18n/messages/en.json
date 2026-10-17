@@ -568,6 +568,7 @@
   "screenshots": {
     "overlay": {
       "captureDisplay": "Capture this display · {index}",
+      "moveFrameHere": "Click to move the frame here",
       "capture": "Capture",
       "frame": "Capture frame"
     },

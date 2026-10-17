@@ -188,6 +188,7 @@ window.electronAPI = {
   captureOverlay: {
     answer: () => {},
     hover: () => {},
+    chooseFrameDisplay: () => {},
     onState: () => () => {},
     onHiddenAckRequest: () => () => {},
     hiddenAck: () => {},

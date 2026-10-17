@@ -39,7 +39,12 @@ export type OverlayAnswer =
   | { kind: "display"; displayId: number }
   | { kind: "cancelled" };
 
-/** Main → every overlay: the display the pointer is over, so only that one highlights. */
+/**
+ * Main → every overlay. `hoverDisplayId`: the display the pointer is over, so only that
+ * one highlights (Screen). `frameDisplayId`: the one display that shows the Frame box;
+ * `null` in every other mode.
+ */
 export interface OverlayState {
   hoverDisplayId: number | null;
+  frameDisplayId: number | null;
 }

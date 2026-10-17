@@ -72,6 +72,7 @@ vi.mock("electron", () => ({
   screen: {
     on: (event: string, listener: never) => screenListeners.set(event, listener),
     getCursorScreenPoint: () => ({ x: 2000, y: 100 }),
+    getPrimaryDisplay: () => ({ id: 1 }),
   },
 }));
 vi.mock("@electron-toolkit/utils", () => ({ is: { dev: false } }));
@@ -303,6 +304,7 @@ describe("CaptureOverlayWindows: answers", () => {
     for (const window of [first, second]) {
       expect(window.webContents.send).toHaveBeenCalledWith(IPC_CHANNELS.screenshotOverlayState, {
         hoverDisplayId: 2,
+        frameDisplayId: null,
       });
     }
   });
@@ -319,12 +321,89 @@ describe("CaptureOverlayWindows: answers", () => {
     const states = second.webContents.send.mock.calls
       .filter(([channel]) => channel === IPC_CHANNELS.screenshotOverlayState)
       .map(([, state]) => state);
-    expect(states).toEqual([{ hoverDisplayId: 1 }, { hoverDisplayId: 2 }]);
+    expect(states).toEqual([
+      { hoverDisplayId: 1, frameDisplayId: null },
+      { hoverDisplayId: 2, frameDisplayId: null },
+    ]);
 
     // The hovered display's own window can still clear it.
     second.send(IPC_CHANNELS.screenshotOverlayHover, { displayId: null });
     expect(second.webContents.send).toHaveBeenLastCalledWith(IPC_CHANNELS.screenshotOverlayState, {
       hoverDisplayId: null,
+      frameDisplayId: null,
+    });
+  });
+
+  describe("Frame display (one frame at a time)", () => {
+    const states = (window: FakeWindow) =>
+      window.webContents.send.mock.calls
+        .filter(([channel]) => channel === IPC_CHANNELS.screenshotOverlayState)
+        .map(([, state]) => state);
+    const pickFrame = (cursor: { x: number; y: number }, primaryDisplayId: number | null = 1) => {
+      const port = new CaptureOverlayWindows({
+        platform: "darwin",
+        cursorPoint: () => cursor,
+        primaryDisplayId: () => primaryDisplayId,
+      });
+      void port.pick("frame", [left, right]);
+      const [first, second] = created.map(({ window }) => window);
+      first.paint();
+      second.paint();
+      return { first, second };
+    };
+
+    it("starts on the display under the cursor and sends it as each window is shown", () => {
+      const { first, second } = pickFrame({ x: 1500, y: 100 });
+
+      expect(states(first)).toEqual([{ hoverDisplayId: null, frameDisplayId: 2 }]);
+      expect(states(second)).toEqual([{ hoverDisplayId: null, frameDisplayId: 2 }]);
+    });
+
+    it("falls back to the primary display when the cursor is on none of them", () => {
+      const { first } = pickFrame({ x: 5000, y: 5000 }, 2);
+
+      expect(states(first)).toEqual([{ hoverDisplayId: null, frameDisplayId: 2 }]);
+    });
+
+    it("moves the frame and rebroadcasts when a valid overlay asks", () => {
+      const { first, second } = pickFrame({ x: 100, y: 100 });
+      expect(states(first).at(-1)?.frameDisplayId).toBe(1);
+
+      second.send(IPC_CHANNELS.screenshotOverlayFrameDisplay, { displayId: 2 });
+
+      for (const window of [first, second]) {
+        expect(window.webContents.send).toHaveBeenLastCalledWith(
+          IPC_CHANNELS.screenshotOverlayState,
+          { hoverDisplayId: null, frameDisplayId: 2 },
+        );
+      }
+    });
+
+    it("ignores an unknown display id, a malformed payload and a foreign sender", () => {
+      const { first, second } = pickFrame({ x: 100, y: 100 });
+      const before = states(first).length;
+
+      second.send(IPC_CHANNELS.screenshotOverlayFrameDisplay, { displayId: 99 });
+      second.send(IPC_CHANNELS.screenshotOverlayFrameDisplay, { displayId: "2" });
+      second.send(IPC_CHANNELS.screenshotOverlayFrameDisplay, undefined);
+      ipcListeners.get(IPC_CHANNELS.screenshotOverlayFrameDisplay)?.(
+        { sender: { id: 99999 } },
+        { displayId: 2 },
+      );
+      // Already the frame display: nothing new to say.
+      first.send(IPC_CHANNELS.screenshotOverlayFrameDisplay, { displayId: 1 });
+
+      expect(states(first)).toHaveLength(before);
+    });
+
+    it("broadcasts frameDisplayId null for a non-frame pick, and ignores a move request", () => {
+      void overlays().pick("screen", [left, right]);
+      const [first, second] = created.map(({ window }) => window);
+      first.paint();
+
+      expect(states(first)).toEqual([{ hoverDisplayId: null, frameDisplayId: null }]);
+      second.send(IPC_CHANNELS.screenshotOverlayFrameDisplay, { displayId: 2 });
+      expect(states(first)).toHaveLength(1);
     });
   });
 

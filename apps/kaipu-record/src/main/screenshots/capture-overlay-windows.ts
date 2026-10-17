@@ -3,6 +3,7 @@ import type { BrowserWindowConstructorOptions, Display, Rectangle } from "electr
 import { join } from "path";
 import { is } from "@electron-toolkit/utils";
 import { IPC_CHANNELS } from "@shared/types/ipc";
+import type { OverlayState } from "@shared/types/screenshot-capture";
 import type { OverlayAnswer, OverlayPort } from "./overlay-port";
 
 export type OverlayUi = "area" | "screen" | "frame";
@@ -70,6 +71,8 @@ export interface CaptureOverlayDeps {
   };
   /** Where the pointer is, so the overlay under it takes keyboard focus (Esc, Enter, 1/2/3). */
   cursorPoint(): { x: number; y: number };
+  /** The primary display, the Frame's fallback when no picked display holds the pointer. */
+  primaryDisplayId(): number | null;
   /** Watchdog: abandon the pick if the overlays have not all painted within this long. */
   readyTimeoutMs: number;
 }
@@ -88,6 +91,7 @@ const electronDeps = (): CaptureOverlayDeps => ({
   ipc: ipcMain as unknown as CaptureOverlayDeps["ipc"],
   screen: screen as unknown as CaptureOverlayDeps["screen"],
   cursorPoint: () => screen.getCursorScreenPoint(),
+  primaryDisplayId: () => screen.getPrimaryDisplay().id,
   readyTimeoutMs: OVERLAY_READY_TIMEOUT_MS,
 });
 
@@ -186,6 +190,8 @@ export class CaptureOverlayWindows implements OverlayPort {
   private hiddenWait: HiddenWait | null = null;
   private hiding: Promise<void> | null = null;
   private hoverDisplayId: number | null = null;
+  /** Frame mode only: the one display that shows the frame; `null` in every other mode. */
+  private frameDisplayId: number | null = null;
 
   constructor(deps: Partial<CaptureOverlayDeps> = {}) {
     this.deps = { ...electronDeps(), ...deps };
@@ -204,10 +210,20 @@ export class CaptureOverlayWindows implements OverlayPort {
       };
       this.hoverDisplayId = null;
       const cursor = this.deps.cursorPoint();
-      const focused = Math.max(
-        0,
-        displays.findIndex((display) => contains(display.bounds, cursor)),
-      );
+      const underCursor = displays.findIndex((display) => contains(display.bounds, cursor));
+      const focused = Math.max(0, underCursor);
+      // One frame at a time: it starts where the pointer is, else on the primary display
+      // (else the first picked one), and the user moves it by clicking another display.
+      if (ui === "frame") {
+        const primary = this.deps.primaryDisplayId();
+        this.frameDisplayId = (
+          displays[underCursor] ??
+          displays.find((display) => display.id === primary) ??
+          displays[0]
+        ).id;
+      } else {
+        this.frameDisplayId = null;
+      }
       const displayIds = displays.map((display) => display.id);
       displays.forEach((display, index) => {
         this.entries.push(
@@ -268,6 +284,7 @@ export class CaptureOverlayWindows implements OverlayPort {
     const session = this.session;
     this.session = null;
     this.hoverDisplayId = null;
+    this.frameDisplayId = null;
     if (session?.watchdog) clearTimeout(session.watchdog);
     for (const { window } of entries) {
       if (!window.isDestroyed()) window.destroy();
@@ -320,6 +337,8 @@ export class CaptureOverlayWindows implements OverlayPort {
       this.setSpaceBehavior(window, true);
       window.show();
       if (focus) window.focus();
+      // A renderer that loaded after the last broadcast still learns where the frame is.
+      this.sendState(window);
       const session = this.session;
       session.shown += 1;
       if (session.shown >= this.entries.length && session.watchdog) {
@@ -372,6 +391,18 @@ export class CaptureOverlayWindows implements OverlayPort {
     this.answer({ kind: "cancelled" });
   }
 
+  private sendState(window: OverlayWindow): void {
+    const state: OverlayState = {
+      hoverDisplayId: this.hoverDisplayId,
+      frameDisplayId: this.frameDisplayId,
+    };
+    window.webContents.send(IPC_CHANNELS.screenshotOverlayState, state);
+  }
+
+  private broadcastState(): void {
+    for (const { window } of this.liveEntries()) this.sendState(window);
+  }
+
   private answer(answer: OverlayAnswer): void {
     const settle = this.session?.settle;
     if (!this.session || !settle) return;
@@ -420,9 +451,17 @@ export class CaptureOverlayWindows implements OverlayPort {
       if (next === null && this.displayOf(event) !== this.hoverDisplayId) return;
       if (next === this.hoverDisplayId) return;
       this.hoverDisplayId = next;
-      for (const { window } of this.liveEntries()) {
-        window.webContents.send(IPC_CHANNELS.screenshotOverlayState, { hoverDisplayId: next });
-      }
+      this.broadcastState();
+    });
+
+    // Frame mode: a click on a display that does not hold the frame moves it there.
+    this.deps.ipc.on(IPC_CHANNELS.screenshotOverlayFrameDisplay, (event, payload) => {
+      if (!this.session?.settle || this.frameDisplayId === null || !this.ownsSender(event)) return;
+      const displayId = (payload as { displayId?: unknown } | undefined)?.displayId;
+      if (!isFiniteNumber(displayId) || !this.session.displayIds.has(displayId)) return;
+      if (displayId === this.frameDisplayId) return;
+      this.frameDisplayId = displayId;
+      this.broadcastState();
     });
 
     this.deps.ipc.on(IPC_CHANNELS.screenshotOverlayHiddenAck, (event) => {
