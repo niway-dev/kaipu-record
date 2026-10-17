@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { DEFAULT_SETTINGS, type AppSettings } from "@shared/types";
 import type { CaptureRect, OverlayState } from "@shared/types/screenshot-capture";
-import { CaptureOverlay, type CaptureOverlayApi } from "./capture-overlay";
+import { CaptureOverlay, HIDDEN_ACK_FALLBACK_MS, type CaptureOverlayApi } from "./capture-overlay";
 import type { OverlayQuery } from "./overlay-query";
 
 // A 1600×1000 display whose work area loses a 25 px menu bar at the top.
@@ -10,7 +10,16 @@ const BOUNDS = { x: 0, y: 0, width: 1600, height: 1000 };
 const WORK = { x: 0, y: 25, width: 1600, height: 975 };
 
 function query(ui: OverlayQuery["ui"], overrides: Partial<OverlayQuery> = {}): OverlayQuery {
-  return { displayId: 42, ui, index: 2, count: 3, bounds: BOUNDS, work: WORK, ...overrides };
+  return {
+    displayId: 42,
+    ui,
+    index: 2,
+    count: 3,
+    bounds: BOUNDS,
+    work: WORK,
+    ids: [7, 42, 9],
+    ...overrides,
+  };
 }
 
 function fakeApi(frames: Record<string, CaptureRect> = {}) {
@@ -49,8 +58,8 @@ function fakeApi(frames: Record<string, CaptureRect> = {}) {
   };
 }
 
-const press = (key: string): void => {
-  fireEvent.keyDown(window, { key });
+const press = (key: string, init: KeyboardEventInit = {}): void => {
+  fireEvent.keyDown(window, { key, ...init });
 };
 
 function frameGeometry(): CaptureRect {
@@ -94,6 +103,31 @@ describe("CaptureOverlay", () => {
     frames.forEach((cb) => cb(0));
     expect(api.captureOverlay.hiddenAck).toHaveBeenCalledOnce();
   });
+
+  it("acks after a short timer when the hidden window never runs a frame, and only once", () => {
+    vi.useFakeTimers();
+    try {
+      const frames: FrameRequestCallback[] = [];
+      vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
+        frames.push(cb);
+        return frames.length;
+      });
+      const { api, requestHiddenAck } = fakeApi();
+      render(<CaptureOverlay query={query("area")} api={api} />);
+
+      requestHiddenAck();
+      vi.advanceTimersByTime(HIDDEN_ACK_FALLBACK_MS - 1);
+      expect(api.captureOverlay.hiddenAck).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(api.captureOverlay.hiddenAck).toHaveBeenCalledOnce();
+
+      // A frame that does arrive late does not ack a second time.
+      frames.forEach((cb) => cb(0));
+      expect(api.captureOverlay.hiddenAck).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe("ScreenChooser", () => {
@@ -103,16 +137,27 @@ describe("ScreenChooser", () => {
     expect(screen.getByRole("button", { name: "Capture this display · 2" })).toBeInTheDocument();
   });
 
-  it("answers this display on its number key, and ignores the other numbers", () => {
+  it("answers display 2 when 2 is pressed on display 1's overlay", () => {
     const { api, answer } = fakeApi();
-    render(<CaptureOverlay query={query("screen")} api={api} />);
-
-    press("1");
-    press("3");
-    expect(answer).not.toHaveBeenCalled();
+    // Display 1 (id 7) has keyboard focus; display 2 is id 42.
+    render(<CaptureOverlay query={query("screen", { displayId: 7, index: 1 })} api={api} />);
 
     press("2");
     expect(answer).toHaveBeenCalledExactlyOnceWith({ kind: "display", displayId: 42 });
+  });
+
+  it("ignores digits past the display count and digits with a modifier", () => {
+    const { api, answer } = fakeApi();
+    render(<CaptureOverlay query={query("screen")} api={api} />);
+
+    press("4");
+    press("0");
+    press("1", { metaKey: true });
+    press("1", { ctrlKey: true });
+    expect(answer).not.toHaveBeenCalled();
+
+    press("3");
+    expect(answer).toHaveBeenCalledExactlyOnceWith({ kind: "display", displayId: 9 });
   });
 
   it("answers this display on a click", () => {
@@ -141,6 +186,20 @@ describe("ScreenChooser", () => {
 
     fireEvent.pointerLeave(sheet);
     expect(api.captureOverlay.hover).toHaveBeenLastCalledWith(null);
+  });
+
+  it("re-reports this display when main's state was cleared by another window's late leave", () => {
+    const { api, pushState } = fakeApi();
+    const { container } = render(<CaptureOverlay query={query("screen")} api={api} />);
+    const sheet = container.firstElementChild as HTMLElement;
+
+    fireEvent.pointerEnter(sheet);
+    pushState({ hoverDisplayId: 42 });
+    // Another display's "left" reached main after our "entered".
+    pushState({ hoverDisplayId: null });
+    fireEvent.pointerMove(sheet);
+
+    expect(api.captureOverlay.hover.mock.calls).toEqual([[42], [42]]);
   });
 });
 
