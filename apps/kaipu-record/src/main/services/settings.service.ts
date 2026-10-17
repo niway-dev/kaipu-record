@@ -105,5 +105,7 @@ export function mergeSettings(
       typeof safe.showRecordingSavedCard === "boolean"
         ? safe.showRecordingSavedCard
         : DEFAULT_SETTINGS.showRecordingSavedCard,
+    trayHintShown:
+      typeof safe.trayHintShown === "boolean" ? safe.trayHintShown : DEFAULT_SETTINGS.trayHintShown,
   };
 }

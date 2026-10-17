@@ -72,6 +72,7 @@ describe("mergeSettings", () => {
         uploadMode: "manual",
         exportQuality: "maximum",
         showRecordingSavedCard: false,
+        trayHintShown: true,
       }),
     ).toEqual({
       theme: "dark",
@@ -88,6 +89,7 @@ describe("mergeSettings", () => {
       uploadMode: "manual",
       exportQuality: "maximum",
       showRecordingSavedCard: false,
+      trayHintShown: true,
     });
   });
 
@@ -105,6 +107,13 @@ describe("mergeSettings", () => {
     expect(mergeSettings({ showRecordingSavedCard: "no" as never }).showRecordingSavedCard).toBe(
       true,
     );
+  });
+
+  it("has not shown the tray hint by default and keeps a boolean flag", () => {
+    expect(DEFAULT_SETTINGS.trayHintShown).toBe(false);
+    expect(mergeSettings({}).trayHintShown).toBe(false);
+    expect(mergeSettings({ trayHintShown: true }).trayHintShown).toBe(true);
+    expect(mergeSettings({ trayHintShown: "yes" as never }).trayHintShown).toBe(false);
   });
 
   it("drops the last-used export preset keys older settings files carry (NIW2-218)", () => {

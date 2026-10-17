@@ -211,6 +211,12 @@ export interface AppSettings {
    * Settings → Export turns it off.
    */
   showRecordingSavedCard: boolean;
+  /**
+   * Windows: closing the main window hides it to the tray. The first time it does,
+   * the app says so once ("Kaipu keeps running in the tray"); this records that the
+   * hint was shown, so it shows once per install.
+   */
+  trayHintShown: boolean;
 }
 
 /**
@@ -236,6 +242,7 @@ export const DEFAULT_SETTINGS: Omit<AppSettings, "shortcuts"> = {
   // Literal on purpose (preload bundle); equals DEFAULT_EXPORT_QUALITY in ./export-preset.
   exportQuality: "balanced",
   showRecordingSavedCard: true,
+  trayHintShown: false,
 };
 
 /**
@@ -255,6 +262,8 @@ export const IPC_CHANNELS = {
   windowApplyPreset: "window:apply-preset",
   /** The capture panel's selected mode, mirrored by the menu-bar icon. */
   traySetMode: "tray:set-mode",
+  /** Main → renderer: show the one-time "Kaipu keeps running in the tray" hint (Windows). */
+  trayHint: "tray:hint",
   updateGetStatus: "update:get-status",
   updateStatus: "update:status",
   updateInstall: "update:install",

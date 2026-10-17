@@ -38,7 +38,8 @@
   },
   "tray": {
     "open": "Open Kaipu Record",
-    "quit": "Quit"
+    "quit": "Quit",
+    "closedToTray": "Kaipu keeps running in the tray — right-click the icon to quit"
   },
   "dialogs": {
     "cancel": "Cancel",
