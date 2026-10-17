@@ -15,7 +15,14 @@ describe("parseOverlayQuery", () => {
       bounds: { x: -1440, y: 0, width: 1440, height: 900 },
       work: { x: -1440, y: 25, width: 1440, height: 875 },
       ids: [7, 42, 9],
+      frame: null,
     });
+  });
+
+  it("reads the frame display, and falls back to null when it is malformed", () => {
+    expect(parseOverlayQuery(`${QUERY}&frame=9`)?.frame).toBe(9);
+    expect(parseOverlayQuery(`${QUERY}&frame=x`)?.frame).toBeNull();
+    expect(parseOverlayQuery(`${QUERY}&frame=`)?.frame).toBeNull();
   });
 
   it("rejects a missing or malformed part", () => {

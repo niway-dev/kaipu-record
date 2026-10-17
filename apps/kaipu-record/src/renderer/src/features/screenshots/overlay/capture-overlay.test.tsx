@@ -23,6 +23,7 @@ function query(ui: OverlayQuery["ui"], overrides: Partial<OverlayQuery> = {}): O
     bounds: BOUNDS,
     work: WORK,
     ids: [7, 42, 9],
+    frame: null,
     ...overrides,
   };
 }
@@ -32,10 +33,10 @@ const FRAME_ON_42: OverlayState = { hoverDisplayId: null, frameDisplayId: 42 };
 
 function fakeApi(
   frames: Record<string, CaptureRect> = {},
-  initialState: OverlayState = FRAME_ON_42,
+  initialState: OverlayState | null = FRAME_ON_42,
 ) {
   let settings: AppSettings = { ...DEFAULT_SETTINGS, screenshotFrame: frames };
-  let state = initialState;
+  let state: OverlayState = initialState ?? { hoverDisplayId: null, frameDisplayId: null };
   let stateListener: ((state: OverlayState) => void) | null = null;
   let ackListener: (() => void) | null = null;
   const api = {
@@ -45,7 +46,7 @@ function fakeApi(
       chooseFrameDisplay: vi.fn(),
       onState: vi.fn((cb: (state: OverlayState) => void) => {
         stateListener = cb;
-        cb(state);
+        if (initialState) cb(state);
         return () => {
           stateListener = null;
         };
@@ -390,6 +391,18 @@ describe("Frame on several displays", () => {
 
     expect(chooseFrameDisplay).toHaveBeenCalledExactlyOnceWith(42);
     expect(answer).not.toHaveBeenCalled();
+  });
+
+  it("renders from the query's frame display before any state arrives", async () => {
+    const own = fakeApi({}, null);
+    render(<CaptureOverlay query={query("frame", { frame: 42 })} api={own.api} />);
+    await screen.findByTestId("capture-frame");
+    cleanup();
+
+    const other = fakeApi({}, null);
+    render(<CaptureOverlay query={query("frame", { frame: 7 })} api={other.api} />);
+    expect(screen.getByText("Click to move the frame here")).toBeTruthy();
+    expect(screen.queryByTestId("capture-frame")).toBeNull();
   });
 
   it("shows only the dim sheet until main says where the frame is", () => {

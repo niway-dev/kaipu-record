@@ -125,8 +125,8 @@ export function CaptureOverlay({
 
 /**
  * Frame mode with several displays: exactly one overlay (main's `frameDisplayId`) shows the
- * Frame box; every other one offers "Click to move the frame here". Until main's first
- * state arrives nothing but the dim sheet shows, so a frame never flashes on the wrong display.
+ * Frame box; every other one offers "Click to move the frame here". Until the query or main's first
+ * state names it, nothing but the dim sheet shows, so a frame never flashes on the wrong display.
  */
 function FrameMode({
   query,
@@ -138,8 +138,10 @@ function FrameMode({
   send: SendAnswer;
 }): React.JSX.Element {
   const bridge = api.captureOverlay;
-  // undefined until main's first state message.
-  const [frameDisplayId, setFrameDisplayId] = useState<number | null | undefined>(undefined);
+  // Seeded from the URL query so the first paint is right; main's state keeps it live.
+  const [frameDisplayId, setFrameDisplayId] = useState<number | null | undefined>(
+    query.frame ?? undefined,
+  );
 
   useEffect(() => bridge.onState((state) => setFrameDisplayId(state.frameDisplayId)), [bridge]);
 

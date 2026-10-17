@@ -127,18 +127,22 @@ function rectParam({ x, y, width, height }: Rectangle): string {
  * has to ask main. `index` is 1-based among the picked displays; `bounds` and `work` are
  * the display's bounds and work area in DIP. `ids` lists every picked display in order,
  * so whichever overlay has keyboard focus can map the digit N to the N-th display.
+ * `frame` (Frame only) is the display that starts with the frame, so each overlay paints
+ * the right thing at once instead of waiting for the first state message.
  */
 export function overlayQuery(
   ui: OverlayUi,
   display: Display,
   index: number,
   displayIds: readonly number[],
+  frameDisplayId: number | null = null,
 ): string {
   return (
     `?window=capture-overlay&display=${display.id}&ui=${ui}` +
     `&index=${index}&count=${displayIds.length}` +
     `&bounds=${rectParam(display.bounds)}&work=${rectParam(display.workArea)}` +
-    `&ids=${displayIds.join(",")}`
+    `&ids=${displayIds.join(",")}` +
+    (ui === "frame" && frameDisplayId !== null ? `&frame=${frameDisplayId}` : "")
   );
 }
 
@@ -368,7 +372,10 @@ export class CaptureOverlayWindows implements OverlayPort {
       this.answer({ kind: "cancelled" });
     });
 
-    this.deps.loadRenderer(window, overlayQuery(ui, display, index, displayIds));
+    this.deps.loadRenderer(
+      window,
+      overlayQuery(ui, display, index, displayIds, this.frameDisplayId),
+    );
     return entry;
   }
 
