@@ -154,6 +154,7 @@ const kaipuApi: KaipuElectronAPI = {
   loadVideoEditSession: (id) => ipcRenderer.invoke(IPC_CHANNELS.videoEditLoadSession, id),
   loadCursorTrack: (id) => ipcRenderer.invoke(IPC_CHANNELS.loadCursorTrack, id),
   captureScreenshot: (mode) => ipcRenderer.invoke(IPC_CHANNELS.screenshotCapture, { mode }),
+  screenshotSupportedModes: () => ipcRenderer.invoke(IPC_CHANNELS.screenshotSupportedModes),
   revealAfterCapture: () => ipcRenderer.send(IPC_CHANNELS.screenshotReveal),
   captureOverlay: {
     answer: (answer) => ipcRenderer.send(IPC_CHANNELS.screenshotOverlayAnswer, answer),

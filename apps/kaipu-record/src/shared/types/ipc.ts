@@ -26,6 +26,8 @@ export const SHORTCUT_ACTIONS = [
   "stopRecording",
   "bringToFront",
   "captureScreenshot",
+  "captureScreen",
+  "captureFrame",
   "toggleMicrophone",
   "toggleSystemAudio",
   "toggleCamera",
@@ -100,9 +102,25 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
     action: "captureScreenshot",
     defaultAccelerator: "Command+Control+X",
     group: "app",
-    label: "Capture screenshot",
-    description: "Open the area selection to take a screenshot",
+    label: "Capture area",
+    description: "Drag an area of the screen to take a screenshot",
     statusWord: "capture",
+  },
+  {
+    action: "captureScreen",
+    defaultAccelerator: "Command+Control+Shift+X",
+    group: "app",
+    label: "Capture screen",
+    description: "Capture one whole display",
+    statusWord: "screen",
+  },
+  {
+    action: "captureFrame",
+    defaultAccelerator: "Command+Control+F",
+    group: "app",
+    label: "Capture frame",
+    description: "Capture what is inside a remembered frame",
+    statusWord: "frame",
   },
   // Live input toggles: they flip the recording setting with or without a take
   // (outside a take they change the pre-recording toggle, as clicking it does).
@@ -320,6 +338,8 @@ export const IPC_CHANNELS = {
   loadCursorTrack: "library:load-cursor-track",
   // Screenshots (renderer ↔ main)
   screenshotCapture: "screenshot:capture",
+  // Which `CaptureMode`s this platform's provider can serve (invoke, answers `CaptureMode[]`).
+  screenshotSupportedModes: "screenshot:supported-modes",
   screenshotCopy: "screenshot:copy",
   // Copy a saved screenshot to the clipboard by id (main reads the file — fetch on
   // the kaipu-media:// scheme doesn't return bytes in the renderer).

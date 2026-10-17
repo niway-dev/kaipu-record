@@ -448,6 +448,8 @@ app.whenReady().then(() => {
       stopRecording: () => mainWindow?.webContents.send(IPC_CHANNELS.recordingCommand, "stop"),
       bringToFront: bringAppToFront,
       captureScreenshot: () => triggerCaptureScreenshot({ mode: "area" }),
+      captureScreen: () => triggerCaptureScreenshot({ mode: "screen" }),
+      captureFrame: () => triggerCaptureScreenshot({ mode: "frame" }),
       // Live input toggles write the shared RecordingSettings, never the engine:
       // mid-take the recorder forwards the change, outside a take it is just the
       // pre-recording toggle.

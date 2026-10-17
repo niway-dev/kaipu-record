@@ -3,6 +3,7 @@ import {
   type CaptureMode,
   type CaptureResult,
 } from "@shared/types/screenshot-capture";
+import type { ScreenshotCapturedProperties } from "@shared/analytics";
 import type { OverlayPort } from "./overlay-port";
 import type { ProviderResult, ScreenshotCaptureProvider } from "./screenshot-capture";
 
@@ -27,6 +28,10 @@ interface CaptureHandlerDeps {
   windows: CaptureWindowHooks;
   /** PNG pixel size; injected so the handler needs no Electron import. */
   measure(png: Buffer): { width: number; height: number };
+  /** Number of connected displays, for the analytics event. */
+  displayCount(): number;
+  /** Receives one `screenshot_captured` payload per answered request (no pixels, no geometry). */
+  track(event: ScreenshotCapturedProperties): void;
 }
 
 function assertCaptureMode(value: unknown): CaptureMode {
@@ -47,8 +52,17 @@ export function createCaptureHandler(
 
   return async (request) => {
     const mode = assertCaptureMode(request?.mode);
+    const report = (outcome: ScreenshotCapturedProperties["outcome"]): void => {
+      try {
+        deps.track({ mode, platform: deps.platform, displays: deps.displayCount(), outcome });
+      } catch (error) {
+        // Analytics must never change what the user sees.
+        console.error("screenshot analytics failed", error);
+      }
+    };
     // Answer before touching any window: an unsupported mode must not hide the app.
     if (!deps.provider.supports(mode)) {
+      report("unsupported");
       return { kind: "unsupported", mode, platform: deps.platform };
     }
     if (capturing) return { kind: "cancelled" };
@@ -64,6 +78,7 @@ export function createCaptureHandler(
       capturing = false;
       deps.windows.afterCapture(result.kind === "captured");
     }
+    report(result.kind);
     switch (result.kind) {
       case "captured": {
         const { png } = result;

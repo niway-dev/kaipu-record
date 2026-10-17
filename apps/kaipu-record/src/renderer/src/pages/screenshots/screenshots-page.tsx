@@ -1,7 +1,7 @@
 import React from "react";
-import { Camera } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { useScreenshotCapture } from "@renderer/features/screenshots/use-screenshot-capture";
+import { CaptureModeButtons } from "@renderer/features/screenshots/capture-mode-buttons";
 import { RecentScreenshots } from "@renderer/features/screenshots/recent-screenshots";
 import { useShortcutLabels } from "@renderer/features/shortcuts/use-shortcut-labels";
 import styles from "./screenshots-page.module.css";
@@ -16,13 +16,12 @@ export function ScreenshotsPage(): React.JSX.Element {
       <h1 className={styles.title}>{t("pageTitle")}</h1>
       <p className={styles.subtitle}>{t("pageSubtitle")}</p>
       <div className={styles.card}>
-        <button className={styles.capture} onClick={() => void capture()} type="button">
-          <Camera size={20} /> {t("captureButton")}
-        </button>
+        <CaptureModeButtons
+          variant="page"
+          onCapture={(mode) => void capture(mode)}
+          shortcuts={labels}
+        />
         <p className={styles.hint}>{t("captureHint")}</p>
-        <span className={styles.shortcut}>
-          {t("globalShortcut", { shortcut: labels?.captureScreenshot ?? "⌃⌘X" })}
-        </span>
       </div>
       <RecentScreenshots />
     </div>

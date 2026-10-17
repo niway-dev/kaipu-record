@@ -173,6 +173,8 @@ window.electronAPI = {
     stopRecording: true,
     bringToFront: true,
     captureScreenshot: true,
+    captureScreen: true,
+    captureFrame: true,
     toggleMicrophone: true,
     toggleSystemAudio: true,
     toggleCamera: true,
@@ -181,6 +183,7 @@ window.electronAPI = {
   resumeShortcuts: () => {},
   reportException: () => {},
   captureScreenshot: async () => ({ kind: "cancelled" }),
+  screenshotSupportedModes: async () => ["area", "screen", "frame"],
   revealAfterCapture: () => {},
   captureOverlay: {
     answer: () => {},

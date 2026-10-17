@@ -1,7 +1,8 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, screen } from "electron";
 import { createMainTranslator } from "@kaipu/i18n/main";
+import { buildScreenshotCapturedProperties, SCREENSHOT_CAPTURED_EVENT } from "@shared/analytics";
 import { IPC_CHANNELS } from "@shared/types/ipc";
 import type { LocalRecording } from "@shared/types/library-storage";
 import { assertExportPayload, exportFileName } from "./export-file-name";
@@ -9,6 +10,7 @@ import { createCaptureHandler, type CaptureWindowHooks } from "./capture-handler
 import { CaptureOverlayWindows } from "./capture-overlay-windows";
 import type { OverlayPort } from "./overlay-port";
 import { createScreenshotProvider } from "./screenshot-capture";
+import { captureMainEvent } from "../services/analytics.service";
 import { getAppSettings } from "../infrastructure/settings-store";
 import { currentVault, screenshotFilePath } from "../library";
 
@@ -34,14 +36,19 @@ const overlay: OverlayPort = {
 };
 
 export function registerScreenshotHandlers(windows: CaptureWindowHooks): void {
+  const provider = createScreenshotProvider(process.platform);
   const handleCapture = createCaptureHandler({
     platform: process.platform,
-    provider: createScreenshotProvider(process.platform),
+    provider,
     overlay,
     windows,
     measure: (png) => nativeImage.createFromBuffer(png).getSize(),
+    displayCount: () => screen.getAllDisplays().length,
+    track: (event) =>
+      captureMainEvent(SCREENSHOT_CAPTURED_EVENT, buildScreenshotCapturedProperties(event)),
   });
   ipcMain.handle(IPC_CHANNELS.screenshotCapture, (_event, request) => handleCapture(request));
+  ipcMain.handle(IPC_CHANNELS.screenshotSupportedModes, () => provider.supportedModes());
 
   ipcMain.on(IPC_CHANNELS.screenshotReveal, () => windows.reveal());
 
