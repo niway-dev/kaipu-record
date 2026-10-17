@@ -62,7 +62,8 @@ UI telling the truth about screenshots.
 6. **Landing and roadmap.** "Download for Windows (beta)" button, the screenshots gap stated,
    and a public-roadmap row "Windows — screenshots".
 7. **Manual QA on real hardware**: record with mic and system audio, camera bubble, export,
-   library, auto-zoom on clicks (the native hook), update.
+   library, auto-zoom on clicks (the native hook), update (including that the app relaunches
+   after the update installs).
 
 ## Checklist before the first public beta
 
@@ -84,7 +85,10 @@ UI telling the truth about screenshots.
 App behaviours on `feat/windows-release` (landed, unvalidated on Windows hardware):
 
 - [ ] Per-platform shortcut defaults: `Control+Alt+<key>` on Windows, shown as `Ctrl+Alt+C`
-      text labels rather than macOS glyphs. 🟡 Landed, unvalidated.
+      text labels rather than macOS glyphs. 🟡 Landed, unvalidated. Caveat: Ctrl+Alt is AltGr.
+      On some layouts (Polish: ą ć ś ó ź) the default letters type accented characters, and a
+      registered global hotkey takes them away from every app while Kaipu runs. Rebind the
+      shortcut if that happens.
 - [ ] Close hides to the tray. The first time, a native notification says Kaipu is still
       running and how to quit it. A second launch brings the running copy back (single
       instance) instead of starting another. 🟡 Landed, unvalidated.
