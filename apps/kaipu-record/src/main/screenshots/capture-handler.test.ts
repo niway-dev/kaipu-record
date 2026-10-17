@@ -3,7 +3,11 @@ import { createCaptureHandler } from "./capture-handler";
 import type { OverlayPort } from "./overlay-port";
 import type { ProviderResult, ScreenshotCaptureProvider } from "./screenshot-capture";
 
-const overlay: OverlayPort = { pick: async () => ({ kind: "cancelled" }) };
+const overlay: OverlayPort = {
+  pick: async () => ({ kind: "cancelled" }),
+  hideAll: async () => {},
+  destroyAll: () => {},
+};
 
 function setup(
   capture: ScreenshotCaptureProvider["capture"],

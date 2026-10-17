@@ -6,6 +6,7 @@ import { IPC_CHANNELS } from "@shared/types/ipc";
 import type { LocalRecording } from "@shared/types/library-storage";
 import { assertExportPayload, exportFileName } from "./export-file-name";
 import { createCaptureHandler, type CaptureWindowHooks } from "./capture-handler";
+import { CaptureOverlayWindows } from "./capture-overlay-windows";
 import type { OverlayPort } from "./overlay-port";
 import { createScreenshotProvider } from "./screenshot-capture";
 import { getAppSettings } from "../infrastructure/settings-store";
@@ -16,16 +17,27 @@ function screenshotId(): string {
   return `screenshot-${new Date().toISOString().replace(/[:.]/g, "-")}`;
 }
 
-/** Stand-in until the overlay windows exist (task 3 replaces it): nothing to pick from. */
-const noOverlay: OverlayPort = {
-  pick: async () => ({ kind: "cancelled" }),
+let overlayWindows: CaptureOverlayWindows | null = null;
+
+/**
+ * The overlay windows, created on first use: `BrowserWindow` and `screen` need a ready
+ * app, and most sessions never open an overlay. Before `ready` a pick answers `cancelled`.
+ */
+const overlay: OverlayPort = {
+  pick: async (ui, displays) => {
+    if (!app.isReady()) return { kind: "cancelled" };
+    overlayWindows ??= new CaptureOverlayWindows();
+    return overlayWindows.pick(ui, displays);
+  },
+  hideAll: async () => overlayWindows?.hideAll(),
+  destroyAll: () => overlayWindows?.destroyAll(),
 };
 
 export function registerScreenshotHandlers(windows: CaptureWindowHooks): void {
   const handleCapture = createCaptureHandler({
     platform: process.platform,
     provider: createScreenshotProvider(process.platform),
-    overlay: noOverlay,
+    overlay,
     windows,
     measure: (png) => nativeImage.createFromBuffer(png).getSize(),
   });
