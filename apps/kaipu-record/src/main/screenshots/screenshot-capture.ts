@@ -3,7 +3,9 @@ import { access, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import type { Display, Rectangle } from "electron";
 import type { CaptureMode } from "@shared/types/screenshot-capture";
+import { toGlobal } from "./capture-geometry";
 import type { OverlayPort } from "./overlay-port";
 
 const execFileAsync = promisify(execFile);
@@ -27,6 +29,8 @@ export interface Deps {
   readPng(path: string): Promise<Buffer>;
   fileExists(path: string): Promise<boolean>;
   tempPath(): string;
+  /** Every connected display, in Electron's order. */
+  getDisplays(): Promise<Display[]>;
 }
 
 const realDeps: Deps = {
@@ -44,28 +48,64 @@ const realDeps: Deps = {
   },
   // Note: no Date.now()/Math.random() in plan code is fine here — this is runtime, not a workflow.
   tempPath: () => join(tmpdir(), `kaipu-shot-${process.hrtime.bigint()}.png`),
+  // Loaded lazily so importing this module (tests, type checks) never needs Electron.
+  getDisplays: async () => (await import("electron")).screen.getAllDisplays(),
 };
 
-/** macOS: Area uses the native `screencapture -i -o -x` region selector. */
+/**
+ * macOS: Area uses the native `screencapture -i -o -x` region selector; Screen and Frame
+ * pick on our overlay, hide it, then capture a global rectangle with `screencapture -R`.
+ */
 export class MacProvider implements ScreenshotCaptureProvider {
   constructor(private readonly deps: Deps = realDeps) {}
 
-  // Only Area for now; the task that wires the Screen/Frame overlay flips these.
-  supports(mode: CaptureMode): boolean {
-    return mode === "area";
+  supports(_mode: CaptureMode): boolean {
+    return true;
   }
 
-  async capture({ mode }: CaptureRequest): Promise<ProviderResult> {
-    // Screen and Frame need our own overlay: a later task wires
-    // `request.overlay.pick(...)` here (pick -> `screencapture -R <bounds> -x`).
-    if (mode !== "area") return { kind: "unsupported", mode };
+  async capture({ mode, overlay }: CaptureRequest): Promise<ProviderResult> {
+    if (mode === "area") return this.grab(["-i", "-o", "-x"], mode);
+    // The overlay session lasts until `destroyAll`, so every path out of here must call it,
+    // or every later pick answers "cancelled".
+    try {
+      const rect = await this.pickRect(mode, overlay);
+      if (!rect) return { kind: "cancelled" };
+      await overlay.hideAll(); // Failure 1: capture only once no overlay is on screen
+      // `-R` takes global points (DIP), not pixels, and handles Retina itself.
+      return await this.grab(["-R", rectArg(rect), "-x"], mode);
+    } finally {
+      overlay.destroyAll();
+    }
+  }
+
+  /** The global DIP rectangle to capture, or null when the user cancelled. */
+  private async pickRect(
+    mode: "screen" | "frame",
+    overlay: OverlayPort,
+  ): Promise<Rectangle | null> {
+    const displays = await this.deps.getDisplays();
+    // One display: nothing to choose, so Screen skips the overlay entirely.
+    if (mode === "screen" && displays.length === 1) return displays[0]!.bounds;
+    const answer = await overlay.pick(mode, displays);
+    if (answer.kind === "cancelled") return null;
+    const display = displays.find((candidate) => candidate.id === answer.displayId);
+    if (!display) return null;
+    return answer.kind === "display" ? display.bounds : toGlobal(answer.rect, display);
+  }
+
+  private async grab(flags: string[], mode: CaptureMode): Promise<ProviderResult> {
     const target = this.deps.tempPath();
-    await this.deps.runCli("screencapture", ["-i", "-o", "-x", target]);
-    if (!(await this.deps.fileExists(target))) return { kind: "cancelled" }; // user pressed Esc
+    await this.deps.runCli("screencapture", [...flags, target]);
+    // No file: Esc in Apple's own picker, or `-R` refused the rectangle.
+    if (!(await this.deps.fileExists(target))) return { kind: "cancelled" };
     const png = await this.deps.readPng(target);
     await rm(target, { force: true }).catch(() => {});
     return { kind: "captured", png, mode };
   }
+}
+
+function rectArg(rect: Rectangle): string {
+  return [rect.x, rect.y, rect.width, rect.height].map(Math.round).join(",");
 }
 
 /** Windows: skeleton until the Windows backend lands; every mode is unsupported. */
