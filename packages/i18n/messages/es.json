@@ -640,6 +640,8 @@
     "beautifyTip": "Tip: las anotaciones se dibujan a mano. El marco queda limpio y nítido.",
     "typePlaceholder": "Escribe…",
     "captureWhileRecording": "Termina la grabación antes de tomar una captura.",
+    "captureUnsupportedWindows": "Las capturas llegan pronto a Windows",
+    "captureUnsupported": "Las capturas no están disponibles en esta plataforma.",
     "imageAlt": "Captura",
     "colorPink": "Rosa",
     "colorBlack": "Negro",

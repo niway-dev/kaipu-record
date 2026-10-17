@@ -67,7 +67,7 @@ export function CapturePanel(): React.JSX.Element {
   const requestStart = (): void => window.electronAPI?.requestStartRecording();
   // Capture from the tray: main dismisses the panel and runs the interactive region
   // select (same flow as the ⌘⌃X hotkey), landing the user in the editor.
-  const requestCapture = (): void => window.electronAPI?.requestCaptureScreenshot();
+  const requestCapture = (): void => window.electronAPI?.requestCaptureScreenshot("area");
 
   return (
     <div ref={rootRef} className={styles.panel}>

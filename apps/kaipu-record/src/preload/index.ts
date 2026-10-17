@@ -3,6 +3,7 @@ import { electronAPI } from "@electron-toolkit/preload";
 import { IPC_CHANNELS } from "@shared/types";
 import type { AppSettings } from "@shared/types";
 import type { AuthStatus } from "@shared/types/auth";
+import type { CaptureRequestPayload } from "@shared/types/screenshot-capture";
 import type { KaipuElectronAPI } from "@shared/types/electron-api";
 import type {
   ControlCommand,
@@ -130,7 +131,8 @@ const kaipuApi: KaipuElectronAPI = {
     return () => ipcRenderer.removeListener(IPC_CHANNELS.recordingSettingsChanged, listener);
   },
   requestStartRecording: () => ipcRenderer.send(IPC_CHANNELS.recordingRequestStart),
-  requestCaptureScreenshot: () => ipcRenderer.send(IPC_CHANNELS.screenshotRequestCapture),
+  requestCaptureScreenshot: (mode) =>
+    ipcRenderer.send(IPC_CHANNELS.screenshotRequestCapture, { mode }),
   getShortcutStatus: () => ipcRenderer.invoke(IPC_CHANNELS.shortcutsGetStatus),
   suspendShortcuts: () => ipcRenderer.send(IPC_CHANNELS.shortcutsSuspend),
   resumeShortcuts: () => ipcRenderer.send(IPC_CHANNELS.shortcutsResume),
@@ -151,7 +153,7 @@ const kaipuApi: KaipuElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.videoEditSaveSession, id, sessionJson, assets, exported),
   loadVideoEditSession: (id) => ipcRenderer.invoke(IPC_CHANNELS.videoEditLoadSession, id),
   loadCursorTrack: (id) => ipcRenderer.invoke(IPC_CHANNELS.loadCursorTrack, id),
-  captureScreenshot: () => ipcRenderer.invoke(IPC_CHANNELS.screenshotCapture),
+  captureScreenshot: (mode) => ipcRenderer.invoke(IPC_CHANNELS.screenshotCapture, { mode }),
   revealAfterCapture: () => ipcRenderer.send(IPC_CHANNELS.screenshotReveal),
   applyWindowPreset: (preset) => ipcRenderer.send(IPC_CHANNELS.windowApplyPreset, preset),
   setTrayMode: (mode) => ipcRenderer.send(IPC_CHANNELS.traySetMode, mode),
@@ -166,7 +168,7 @@ const kaipuApi: KaipuElectronAPI = {
   exportScreenshotFile: (bytes, meta) =>
     ipcRenderer.invoke(IPC_CHANNELS.screenshotExportFile, bytes, meta),
   onCaptureScreenshotHotkey: (callback) => {
-    const listener = (): void => callback();
+    const listener = (_event: unknown, request: CaptureRequestPayload): void => callback(request);
     ipcRenderer.on(IPC_CHANNELS.screenshotHotkey, listener);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.screenshotHotkey, listener);
   },

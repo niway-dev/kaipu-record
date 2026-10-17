@@ -5,58 +5,31 @@ import { createMainTranslator } from "@kaipu/i18n/main";
 import { IPC_CHANNELS } from "@shared/types/ipc";
 import type { LocalRecording } from "@shared/types/library-storage";
 import { assertExportPayload, exportFileName } from "./export-file-name";
+import { createCaptureHandler, type CaptureWindowHooks } from "./capture-handler";
+import type { OverlayPort } from "./overlay-port";
 import { createScreenshotProvider } from "./screenshot-capture";
 import { getAppSettings } from "../infrastructure/settings-store";
 import { currentVault, screenshotFilePath } from "../library";
-
-const provider = createScreenshotProvider();
 
 /** Stable, sortable id; mirrors the recording writer's timestamp scheme. */
 function screenshotId(): string {
   return `screenshot-${new Date().toISOString().replace(/[:.]/g, "-")}`;
 }
 
-/**
- * Window orchestration around a capture, owned by main (which holds the windows).
- * The native `screencapture` overlay floats above everything, so the app must get
- * OUT of the way during a capture instead of coming to the front.
- */
-export interface CaptureWindowHooks {
-  /** Hide the app so it isn't in the shot. Remembers prior visibility. */
-  beforeCapture(): void;
-  /** After the overlay closes: restore prior visibility if the user cancelled. */
-  afterCapture(captured: boolean): void;
-  /** Bring the app to the front (the renderer calls this once it shows the editor). */
-  reveal(): void;
-}
+/** Stand-in until the overlay windows exist (task 3 replaces it): nothing to pick from. */
+const noOverlay: OverlayPort = {
+  pick: async () => ({ kind: "cancelled" }),
+};
 
 export function registerScreenshotHandlers(windows: CaptureWindowHooks): void {
-  // Re-entrancy guard: a second capture while one is in flight would stack native
-  // overlays and clobber the saved window-visibility state (leaving the app stuck
-  // hidden on cancel). Ignore captures until the current one settles.
-  let capturing = false;
-
-  ipcMain.handle(IPC_CHANNELS.screenshotCapture, async () => {
-    if (process.platform !== "darwin" || capturing) return null;
-    capturing = true;
-    windows.beforeCapture();
-    let png: Buffer | null = null;
-    try {
-      png = await provider.captureInteractive();
-    } finally {
-      capturing = false;
-      windows.afterCapture(Boolean(png));
-    }
-    if (!png) return null;
-    const img = nativeImage.createFromBuffer(png);
-    const { width, height } = img.getSize();
-    // Buffer → ArrayBuffer slice for structured-clone across IPC.
-    return {
-      png: png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength),
-      width,
-      height,
-    };
+  const handleCapture = createCaptureHandler({
+    platform: process.platform,
+    provider: createScreenshotProvider(process.platform),
+    overlay: noOverlay,
+    windows,
+    measure: (png) => nativeImage.createFromBuffer(png).getSize(),
   });
+  ipcMain.handle(IPC_CHANNELS.screenshotCapture, (_event, request) => handleCapture(request));
 
   ipcMain.on(IPC_CHANNELS.screenshotReveal, () => windows.reveal());
 

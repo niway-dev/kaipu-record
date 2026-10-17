@@ -640,6 +640,8 @@
     "beautifyTip": "Tip: annotations are drawn by hand. The frame stays clean and crisp.",
     "typePlaceholder": "Type…",
     "captureWhileRecording": "Finish the recording before taking a screenshot.",
+    "captureUnsupportedWindows": "Screenshots are coming to Windows",
+    "captureUnsupported": "Screenshots are not available on this platform.",
     "imageAlt": "Screenshot",
     "colorPink": "Pink",
     "colorBlack": "Black",

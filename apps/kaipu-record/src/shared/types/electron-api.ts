@@ -4,6 +4,7 @@ import type { WindowPresetName } from "../window-size";
  * `src/preload`, typed for the renderer via `src/preload/index.d.ts`). Pure types.
  */
 
+import type { CaptureMode, CaptureRequestPayload, CaptureResult } from "./screenshot-capture";
 import type { SerializedError } from "../analytics";
 import type { AppSettings, ShortcutAction, TagSummary, UpdateStatus } from "./ipc";
 import type { TagColor } from "@kaipu/domain/constants";
@@ -251,7 +252,7 @@ export interface KaipuElectronAPI {
   /** Record page subscribes so a panel "Change" opens its source picker. */
   onRequestChooseSource(callback: () => void): () => void;
   /** Capture Panel → main: run the interactive screenshot capture (same as ⌘⌃X). */
-  requestCaptureScreenshot(): void;
+  requestCaptureScreenshot(mode: CaptureMode): void;
 
   // ── Global shortcuts ──────────────────────────────────────────────────
   /** Per-action registration state of the global shortcuts (false = unavailable). */
@@ -262,13 +263,13 @@ export interface KaipuElectronAPI {
   resumeShortcuts(): void;
 
   // ── Screenshots ───────────────────────────────────────────────────────
-  /** Run the interactive region capture; resolves null if the user cancelled. */
-  captureScreenshot(): Promise<{ png: ArrayBuffer; width: number; height: number } | null>;
+  /** Run a capture in `mode`; always answers captured, cancelled or unsupported. */
+  captureScreenshot(mode: CaptureMode): Promise<CaptureResult>;
   /**
    * Subscribe to the global `⌘⌃X` hotkey broadcast from main. Returns an
    * unsubscribe fn. The renderer owns navigation so it runs the capture flow.
    */
-  onCaptureScreenshotHotkey(callback: () => void): () => void;
+  onCaptureScreenshotHotkey(callback: (request: CaptureRequestPayload) => void): () => void;
   /**
    * Bring the app back to the front after a successful capture. The renderer
    * calls this *after* it has navigated to the editor, so the window reappears
