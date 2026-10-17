@@ -65,6 +65,7 @@ describe("CapturePanel — tabs", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Capture" }));
     fireEvent.click(screen.getByRole("button", { name: /Capture Screen/ }));
     expect(requestCaptureScreenshot).toHaveBeenCalledTimes(1);
+    expect(requestCaptureScreenshot).toHaveBeenCalledWith("area");
   });
 
   it("locks the tabs to Record while a recording is in progress", async () => {
