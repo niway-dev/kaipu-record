@@ -15,14 +15,17 @@ function setup(
   supports: (mode: string) => boolean = () => true,
 ) {
   const windows = { beforeCapture: vi.fn(), afterCapture: vi.fn(), reveal: vi.fn() };
+  const track = vi.fn();
   const handler = createCaptureHandler({
     platform,
-    provider: { capture, supports },
+    provider: { capture, supports, supportedModes: () => [] },
     overlay,
     windows,
     measure: () => ({ width: 3, height: 2 }),
+    displayCount: () => 2,
+    track,
   });
-  return { handler, windows };
+  return { handler, windows, track };
 }
 
 describe("createCaptureHandler", () => {
@@ -57,6 +60,56 @@ describe("createCaptureHandler", () => {
     expect(windows.beforeCapture).not.toHaveBeenCalled();
     expect(windows.afterCapture).not.toHaveBeenCalled();
     expect(capture).not.toHaveBeenCalled();
+  });
+
+  it("reports one event per answered request with only mode, platform, displays and outcome", async () => {
+    const captured = setup(async ({ mode }) => ({ kind: "captured", png: Buffer.from([1]), mode }));
+    await captured.handler({ mode: "screen" });
+    expect(captured.track).toHaveBeenCalledOnce();
+    expect(captured.track).toHaveBeenCalledWith({
+      mode: "screen",
+      platform: "darwin",
+      displays: 2,
+      outcome: "captured",
+    });
+
+    const cancelled = setup(async () => ({ kind: "cancelled" }));
+    await cancelled.handler({ mode: "frame" });
+    expect(cancelled.track).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: "frame", outcome: "cancelled" }),
+    );
+
+    const unsupported = setup(vi.fn(), "win32", () => false);
+    await unsupported.handler({ mode: "area" });
+    expect(unsupported.track).toHaveBeenCalledWith({
+      mode: "area",
+      platform: "win32",
+      displays: 2,
+      outcome: "unsupported",
+    });
+  });
+
+  it("does not report the re-entrant request it turns away, nor an invalid mode", async () => {
+    let finish!: (r: ProviderResult) => void;
+    const { handler, track } = setup(() => new Promise<ProviderResult>((r) => (finish = r)));
+    const first = handler({ mode: "area" });
+    await handler({ mode: "area" });
+    expect(track).not.toHaveBeenCalled();
+    finish({ kind: "cancelled" });
+    await first;
+    expect(track).toHaveBeenCalledOnce();
+    await expect(handler({ mode: "window" })).rejects.toThrow();
+    expect(track).toHaveBeenCalledOnce();
+  });
+
+  it("still answers when analytics throws", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { handler, track } = setup(async () => ({ kind: "cancelled" }));
+    track.mockImplementation(() => {
+      throw new Error("posthog down");
+    });
+    expect(await handler({ mode: "area" })).toEqual({ kind: "cancelled" });
+    expect(logged).toHaveBeenCalled();
   });
 
   it("rejects an unknown mode before touching the windows", async () => {

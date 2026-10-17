@@ -385,6 +385,11 @@ describe("supports", () => {
     expect(MODES.map((m) => mac.supports(m))).toEqual([true, true, true]);
     expect(new UnsupportedProvider().supports()).toBe(false);
   });
+
+  it("lists the supported modes for the renderer", () => {
+    expect(new MacProvider().supportedModes()).toEqual(["area", "screen", "frame"]);
+    expect(new UnsupportedProvider().supportedModes()).toEqual([]);
+  });
 });
 
 describe("createScreenshotProvider", () => {

@@ -40,6 +40,8 @@ describe("mergeSettings", () => {
       stopRecording: "Command+Control+2",
       bringToFront: "Command+Control+3",
       captureScreenshot: "Command+Control+4",
+      captureScreen: "Command+Control+8",
+      captureFrame: "Command+Control+9",
       toggleMicrophone: "Command+Control+5",
       toggleSystemAudio: "Command+Control+6",
       toggleCamera: "Command+Control+7",
@@ -187,6 +189,8 @@ describe("mergeShortcuts", () => {
       stopRecording: DEFAULT_SHORTCUTS.stopRecording,
       bringToFront: DEFAULT_SHORTCUTS.bringToFront,
       captureScreenshot: DEFAULT_SHORTCUTS.captureScreenshot,
+      captureScreen: DEFAULT_SHORTCUTS.captureScreen,
+      captureFrame: DEFAULT_SHORTCUTS.captureFrame,
       toggleMicrophone: DEFAULT_SHORTCUTS.toggleMicrophone,
       toggleSystemAudio: DEFAULT_SHORTCUTS.toggleSystemAudio,
       toggleCamera: DEFAULT_SHORTCUTS.toggleCamera,
@@ -203,6 +207,16 @@ describe("mergeShortcuts", () => {
     expect(merged.toggleMicrophone).toBe("Command+Control+M");
     expect(merged.toggleSystemAudio).toBe("Command+Control+A");
     expect(merged.toggleCamera).toBe("Command+Control+K");
+  });
+
+  it("gives settings stored before Screen and Frame existed their new defaults", () => {
+    const merged = mergeShortcuts({
+      startRecording: "Command+Control+1",
+      captureScreenshot: "Command+Control+4",
+    });
+    expect(merged.captureScreenshot).toBe("Command+Control+4");
+    expect(merged.captureScreen).toBe("Command+Control+Shift+X");
+    expect(merged.captureFrame).toBe("Command+Control+F");
   });
 
   it("ignores non-string bindings", () => {

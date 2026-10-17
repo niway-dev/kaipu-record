@@ -54,6 +54,16 @@ export function captureMainException(
   client.captureException(error, distinctId, buildExceptionProperties(origin, context));
 }
 
+/** Send a product event. No-op without a key, like the exception paths. */
+export function captureMainEvent(event: string, properties: object): void {
+  if (!client) return;
+  client.capture({
+    distinctId,
+    event,
+    properties: { product: DEFAULT_PRODUCT, surface: DEFAULT_SURFACE, ...properties },
+  });
+}
+
 /** Capture an exception forwarded from a secondary window (already serialized). */
 export function captureSerializedException(
   payload: SerializedError,

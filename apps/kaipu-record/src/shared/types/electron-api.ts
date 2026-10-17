@@ -288,8 +288,10 @@ export interface KaipuElectronAPI {
   // ── Screenshots ───────────────────────────────────────────────────────
   /** Run a capture in `mode`; always answers captured, cancelled or unsupported. */
   captureScreenshot(mode: CaptureMode): Promise<CaptureResult>;
+  /** Modes this platform can capture; an absent mode renders its entry point disabled. */
+  screenshotSupportedModes(): Promise<CaptureMode[]>;
   /**
-   * Subscribe to the global `⌘⌃X` hotkey broadcast from main. Returns an
+   * Subscribe to the global capture hotkey broadcast (`{ mode }`) from main. Returns an
    * unsubscribe fn. The renderer owns navigation so it runs the capture flow.
    */
   onCaptureScreenshotHotkey(callback: (request: CaptureRequestPayload) => void): () => void;

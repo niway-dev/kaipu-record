@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { Display, Rectangle } from "electron";
-import type { CaptureMode } from "@shared/types/screenshot-capture";
+import { CAPTURE_MODES, type CaptureMode } from "@shared/types/screenshot-capture";
 import { cropForDisplay, physicalSizeFor, toGlobal } from "./capture-geometry";
 import type { OverlayPort } from "./overlay-port";
 
@@ -21,6 +21,8 @@ export type ProviderResult =
 export interface ScreenshotCaptureProvider {
   /** Whether `capture` can serve `mode`; lets the handler answer before hiding any window. */
   supports(mode: CaptureMode): boolean;
+  /** Every mode `supports` accepts; the renderer asks once to render unsupported entry points disabled. */
+  supportedModes(): CaptureMode[];
   capture(request: CaptureRequest): Promise<ProviderResult>;
 }
 
@@ -105,6 +107,10 @@ export class MacProvider implements ScreenshotCaptureProvider {
     return true;
   }
 
+  supportedModes(): CaptureMode[] {
+    return CAPTURE_MODES.filter((mode) => this.supports(mode));
+  }
+
   async capture({ mode, overlay }: CaptureRequest): Promise<ProviderResult> {
     if (mode === "area") return this.grab(["-i", "-o", "-x"], mode);
     return runWithOverlay(
@@ -186,6 +192,10 @@ export class WindowsProvider implements ScreenshotCaptureProvider {
     return true;
   }
 
+  supportedModes(): CaptureMode[] {
+    return CAPTURE_MODES.filter((mode) => this.supports(mode));
+  }
+
   async capture({ mode, overlay }: CaptureRequest): Promise<ProviderResult> {
     return runWithOverlay(
       overlay,
@@ -228,6 +238,10 @@ export class WindowsProvider implements ScreenshotCaptureProvider {
 export class UnsupportedProvider implements ScreenshotCaptureProvider {
   supports(): boolean {
     return false;
+  }
+
+  supportedModes(): CaptureMode[] {
+    return [];
   }
 
   async capture({ mode }: CaptureRequest): Promise<ProviderResult> {

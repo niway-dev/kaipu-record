@@ -50,47 +50,10 @@
   text-align: center;
 }
 
-/* ── Capture button ─────────────────────────── */
-
-.capture {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-sm);
-  height: 50px;
-  padding: 0 var(--space-xl);
-  background: var(--accent-primary);
-  border: none;
-  border-radius: var(--radius-md);
-  color: #fff;
-  font-family: var(--font-family);
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-semibold);
-  cursor: pointer;
-  transition: background var(--transition);
-  box-shadow: var(--glow-accent);
-}
-
-.capture:hover {
-  background: var(--accent-primary-hover);
-}
-
 /* ── Hint + shortcut ────────────────────────── */
 
 .hint {
   margin: 0;
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
-}
-
-.shortcut {
-  display: inline-flex;
-  align-items: center;
-  padding: var(--space-xs) var(--space-sm);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-input);
-  font-family: var(--font-mono);
-  font-size: var(--font-size-xs);
-  color: var(--text-muted);
-  letter-spacing: 0.05em;
 }
