@@ -152,6 +152,8 @@ function rectArg(rect: Rectangle): string {
 /** The slice of `NativeImage` the Windows backend uses; tests pass plain fakes. */
 export interface CapturedImage {
   getSize(): { width: number; height: number };
+  /** True when the grab produced no pixels (desktopCapturer returns this when it fails). */
+  isEmpty(): boolean;
   crop(rect: Rectangle): CapturedImage;
   toPNG(): Buffer;
 }
@@ -230,7 +232,12 @@ export class WindowsProvider implements ScreenshotCaptureProvider {
     const match =
       sources.find((source) => source.display_id === String(display.id)) ??
       (sources.length === 1 && !sources[0]!.display_id ? sources[0] : undefined);
-    return match?.thumbnail ?? null;
+    const thumbnail = match?.thumbnail;
+    if (!thumbnail) return null;
+    // A failed grab comes back as a 0x0 image: not a match, or the editor opens on nothing.
+    const { width, height } = thumbnail.getSize();
+    if (thumbnail.isEmpty() || width === 0 || height === 0) return null;
+    return thumbnail;
   }
 }
 

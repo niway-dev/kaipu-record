@@ -9,8 +9,9 @@ vi.mock("@renderer/features/editor/open-in-editor", () => ({
   useOpenInEditor: () => ({ openCapture }),
 }));
 vi.mock("@renderer/ui/toast-store", () => ({ showToast: (spec: unknown) => showToast(spec) }));
+let recorderStatus = "idle";
 vi.mock("@renderer/features/recording/recorder-store", () => ({
-  getRecorderSnapshot: () => ({ status: "idle" }),
+  getRecorderSnapshot: () => ({ status: recorderStatus }),
 }));
 vi.mock("@kaipu/i18n", () => ({
   useTranslations: () => (key: string) => key,
@@ -30,7 +31,26 @@ function stubApi(result: CaptureResult) {
 }
 
 describe("useScreenshotCapture", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    recorderStatus = "idle";
+  });
+
+  describe("while the recorder is busy", () => {
+    const modes = ["area", "screen", "frame"] as const;
+    const statuses = ["counting", "starting", "recording", "paused", "finalizing"];
+    for (const status of statuses) {
+      it.each(modes)(`${status}: %s toasts and never calls captureScreenshot`, async (mode) => {
+        recorderStatus = status;
+        const api = stubApi({ kind: "cancelled" });
+        const { result } = renderHook(() => useScreenshotCapture());
+        await act(() => result.current.capture(mode));
+        expect(showToast).toHaveBeenCalledWith({ message: "captureWhileRecording" });
+        expect(api.captureScreenshot).not.toHaveBeenCalled();
+        expect(openCapture).not.toHaveBeenCalled();
+      });
+    }
+  });
 
   it("opens the editor and reveals the app on captured, defaulting to area", async () => {
     const api = stubApi({
