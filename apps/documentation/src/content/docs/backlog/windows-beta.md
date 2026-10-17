@@ -5,7 +5,7 @@ description: "Ship the working Windows build as a recording-only beta instead of
 
 # Windows beta — recording first, screenshots later
 
-> **Status: 🔵 Proposed → owner approved the direction** (2026-09-27). The Windows build exists
+> **Status: 🟡 In progress — CI jobs landed, unvalidated** (owner approved the direction 2026-09-27). The Windows build exists
 > and records; screenshots are not ported yet. Decision: ship what works as a labelled beta.
 > Parent: [Product growth](./product-growth). **Design (2026-10-15):**
 > [Windows release design](/specs/2026-10-15-windows-release-design/) and ADR 0023 turn the
@@ -65,11 +65,11 @@ UI telling the truth about screenshots.
 
 ## Checklist before the first public beta
 
-- [ ] `build:win` reproducible from CI (`release-desktop.yml`), not only from a laptop.
+- [ ] `build:win` reproducible from CI (`release-desktop.yml`), not only from a laptop. 🟡 In progress: the `build-win` and `publish` jobs landed in the workflow; the first manual dispatch (owner) is still pending.
 - [ ] Code signing for Windows, or an explicit SmartScreen warning walkthrough on the download
       page until a certificate exists. An unsigned installer is the objection ScreenKite uses
       against Recordly; do not repeat it silently.
-- [ ] `rebuild:native` runs for `uiohook-napi` on the Windows runner (auto-zoom on clicks).
+- [ ] `rebuild:native` runs for `uiohook-napi` on the Windows runner (auto-zoom on clicks). 🟡 In progress: `build-win` runs it and fails on a stamp mismatch; unverified until the first dispatch.
 - [ ] Screenshot entry points hidden or disabled with a "coming soon" state on Windows, never a
       silent no-op.
 - [ ] Version gate and auto-update verified against a Windows artifact.
