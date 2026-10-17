@@ -39,7 +39,8 @@
   "tray": {
     "open": "Open Kaipu Record",
     "quit": "Quit",
-    "closedToTray": "Kaipu keeps running in the tray — right-click the icon to quit"
+    "closedToTrayTitle": "Kaipu is still running",
+    "closedToTrayBody": "Find it in the system tray. Right-click the icon to quit."
   },
   "dialogs": {
     "cancel": "Cancel",

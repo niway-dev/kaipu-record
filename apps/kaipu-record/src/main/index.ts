@@ -64,6 +64,7 @@ import {
   handleMainWindowClose,
   isQuitShortcut,
   shouldQuitOnAllWindowsClosed,
+  shouldShowTrayHint,
 } from "./window-close-policy";
 
 let mainWindow: BrowserWindow | null = null;
@@ -89,10 +90,6 @@ let quittingWithExport = false;
 /** True once `before-quit` passed every guard: the app is really quitting, so the
  *  main window's `close` must close it rather than hide it to the tray (Windows). */
 let isQuitting = false;
-/** Windows: a close hid the window to the tray and the one-time hint has not been
- *  shown yet. Sent to the renderer the next time the window is shown — a toast in
- *  a hidden window would expire unseen. */
-let trayHintPending = false;
 /** Set true when the renderer sends `appReady` (its IPC listeners are up), reset
  *  to false whenever a new main window is created. */
 let rendererReady = false;
@@ -111,6 +108,22 @@ function sendToRenderer(channel: string, payload?: unknown): void {
   if (!contents) return;
   if (rendererReady) contents.send(channel, payload);
   else pendingRendererSends.push({ channel, payload });
+}
+
+// One running copy per user. Mandatory on Windows: closing the window hides the app
+// to the tray instead of quitting, so double-clicking the desktop shortcut afterwards
+// would otherwise start a second process — a second tray icon, global shortcuts that
+// fail to register because the first copy holds them, and two writers on the same
+// settings file. The second copy quits before creating any window; the first one is
+// told through `second-instance` and brings its window back. The lock is keyed on the
+// userData directory, so E2E launches with their own `--user-data-dir` do not collide.
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    if (app.isReady()) showMainWindow();
+  });
 }
 
 // Must run before `app.whenReady` — privileged scheme registration.
@@ -308,13 +321,31 @@ function createWindow(showOnReady = true): void {
 /**
  * Hide the main window in place of closing it (Windows close-to-tray). Clears the
  * guards' one-shot "closing" flags the way `closed` would, so the next close while
- * recording or exporting asks again. The first time, queue the tray hint.
+ * recording or exporting asks again. The first time, tell the user the app is still
+ * running with a native notification — shown now, as the window disappears, because
+ * that is the moment they might think the app quit. The flag is persisted only once
+ * the notification was actually shown.
  */
 function hideMainWindowToTray(): void {
   closingWithRecording = false;
   closingWithExport = false;
   mainWindow?.hide();
-  if (!getAppSettings().trayHintShown) trayHintPending = true;
+  const settings = getAppSettings();
+  if (
+    !shouldShowTrayHint({
+      platform: process.platform,
+      trayHintShown: settings.trayHintShown,
+      notificationSupported: Notification.isSupported(),
+    })
+  ) {
+    return;
+  }
+  const t = createMainTranslator(settings.locale);
+  new Notification({
+    title: t("tray.closedToTrayTitle"),
+    body: t("tray.closedToTrayBody"),
+  }).show();
+  updateAppSettings({ trayHintShown: true });
 }
 
 /** Show & focus the main window, recreating it if it was closed. */
@@ -326,11 +357,6 @@ function showMainWindow(): void {
   if (mainWindow.isMinimized()) mainWindow.restore();
   mainWindow.show();
   mainWindow.focus();
-  if (trayHintPending) {
-    trayHintPending = false;
-    updateAppSettings({ trayHintShown: true });
-    sendToRenderer(IPC_CHANNELS.trayHint);
-  }
 }
 
 /**
@@ -461,6 +487,9 @@ function openQuietCapture(capture: QuietCapture): void {
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
+  // A second copy is already quitting (see the single-instance lock above).
+  if (!hasSingleInstanceLock) return;
+
   // Set app user model id for windows
   electronApp.setAppUserModelId("com.niway.kaipu-record");
 
@@ -760,6 +789,9 @@ app.whenReady().then(() => {
 // to the vault before the app actually quits. A timeout still quits if the
 // renderer is unresponsive, so the app is never wedged open.
 app.on("before-quit", (event) => {
+  // A second copy quitting at start-up owns nothing: it must not clean up the drag
+  // copies, shortcuts or analytics of the copy that is running.
+  if (!hasSingleInstanceLock) return;
   if (!quittingWithRecording && hub?.isActive()) {
     event.preventDefault();
     const t = createMainTranslator(getAppSettings().locale);

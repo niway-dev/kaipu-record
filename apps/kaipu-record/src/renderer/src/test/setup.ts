@@ -128,7 +128,6 @@ window.electronAPI = {
   startFileDrag: () => {},
   setExportActive: () => {},
   onExportCommand: () => () => {},
-  onTrayHint: () => () => {},
   getVaultDirectory: async () => ({ path: "/tmp/vault", isCustom: false }),
   chooseVaultDirectory: async () => null,
   resetVaultDirectory: async () => ({ path: "/tmp/vault", isCustom: false }),

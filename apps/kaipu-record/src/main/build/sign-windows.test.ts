@@ -37,14 +37,30 @@ describe("sign-windows hook", () => {
     );
   });
 
-  it("warns about stray signing variables but still no-ops", async () => {
+  it("fails when signing variables are set but the vendor is empty, naming them", async () => {
     const { signWithEnv } = loadHook();
-    await expect(
-      signWithEnv(file, { AZURE_CLIENT_ID: "id", WIN_SIGN_ENDPOINT: "" }),
-    ).resolves.toBeUndefined();
-    expect(warn).toHaveBeenCalledTimes(2);
-    expect(String(warn.mock.calls[1][0])).toContain("AZURE_CLIENT_ID");
-    expect(String(warn.mock.calls[1][0])).not.toContain("WIN_SIGN_ENDPOINT");
+    const attempt = signWithEnv(file, {
+      WIN_SIGN_VENDOR: "",
+      AZURE_CLIENT_ID: "secret-id-value",
+      WIN_SIGN_ENDPOINT: "https://endpoint.example",
+      WIN_SIGN_ACCOUNT_NAME: "",
+    });
+    await expect(attempt).rejects.toThrow(
+      /Signing variables are set \(WIN_SIGN_ENDPOINT, AZURE_CLIENT_ID\) but WIN_SIGN_VENDOR is empty/,
+    );
+    // Names only, never values; the empty one does not count.
+    await attempt.catch((error: Error) => {
+      expect(error.message).not.toContain("secret-id-value");
+      expect(error.message).not.toContain("endpoint.example");
+      expect(error.message).not.toContain("WIN_SIGN_ACCOUNT_NAME");
+    });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("ignores unrelated AZURE_* variables the runner sets itself", async () => {
+    const { signWithEnv } = loadHook();
+    await expect(signWithEnv(file, { AZURE_EXTENSION_DIR: "C:\\Azure" })).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledTimes(1);
   });
 
   it("rejects an unknown vendor, naming it and the supported ones", async () => {
