@@ -42,7 +42,7 @@ and auto-copy settings.
 | 5   | The overlay is **live**, not frozen: the desktop stays interactive-looking under a dim sheet. On confirm, main hides every overlay, waits one frame, captures, then destroys them.                                                                              | Apple's `-i`, Windows Snipping Tool and ShareX's region picker are live. Freezing costs a full-resolution capture of every display at open (the capture-panel-latency doc already measured that cost for thumbnails). Freeze stays a later option, not a different design.                                                     | —          |
 | 6   | Frame geometry is per display and clamped to it; a frame cannot span displays. Last size and position are remembered per display id in `AppSettings.screenshotFrame`.                                                                                           | A cross-display crop needs two captures stitched at two scale factors; nothing the owner asked for needs it. Remembering the frame is the point of the mode (repeatable shots of the same spot).                                                                                                                               | —          |
 | 7   | Screen mode with one display captures immediately; with several, each overlay shows "Capture this display · 1/2/3" and hover highlights; click or the number key captures that display.                                                                         | The chooser is in situ, where the user is already looking; the tray panel is a 300 px popover with no room for a thumbnail picker. ShareX's "monitor menu" and CleanShot's per-display sheet work the same way.                                                                                                                | —          |
-| 8   | Entry points: the capture panel's Capture tab becomes three buttons (Area, Screen, Frame); the Screenshots page gets the same three; three global shortcut actions (`captureScreenshot` stays Area; `captureScreen` and `captureFrame` are new, rebindable).    | One button cannot carry three modes without a submenu nobody discovers. Shortcuts follow the existing `SHORTCUT_DEFINITIONS` shape; defaults per platform are decided in the Windows design.                                                                                                                                   | —          |
+| 8   | Entry points: the capture panel's Capture tab becomes three buttons (Area, Screen, Frame); the Screenshots page gets the same three; three global shortcut actions (`captureScreenshot` stays Area; `captureScreen` and `captureFrame` are new, rebindable).    | One button cannot carry three modes without a submenu nobody discovers. Shortcuts follow the existing `SHORTCUT_DEFINITIONS` shape; defaults per platform are decided in the Windows design (Frame is `Command+Control+Shift+F`: `Command+Control+F` is macOS "Enter Full Screen").                                            | —          |
 | 9   | Crop math and DPI math are pure functions in `src/shared` or `src/main/screenshots`, tested against mixed-DPI fixtures (100% + 150%, Retina 2×, a display left of the origin), and tolerant of `desktopCapturer` returning a size other than the one requested. | Every multi-monitor screenshot tool's bug list is DPI arithmetic (EShot 3.0.2, KDE 368939). The docs say the thumbnail "may not match the requested size", so the crop scales by the actual image size, never by the requested one.                                                                                            | —          |
 | 10  | Analytics: one `screenshot_captured` event with `mode`, `platform`, `displays` and `outcome`; no pixels, no coordinates.                                                                                                                                        | The owner wants to know which mode people use before investing in window capture or freeze.                                                                                                                                                                                                                                    | —          |
 
@@ -50,8 +50,10 @@ and auto-copy settings.
 
 1. **Windows shortcut defaults.** Decided in the Windows design (its decision 5); this spec
    only adds two actions. The new actions default to `Command+Control+Shift+X` (Screen) and
-   `Command+Control+F` (Frame) on macOS. The domain package's Windows column carries
-   `Control+Alt+Shift+X` and `Control+Alt+F`, unvalidated like the rest of that column; the
+   `Command+Control+Shift+F` (Frame) on macOS. Frame avoids `Command+Control+F` because macOS
+   uses it for "Enter Full Screen" and a global registration would steal it from every app
+   (changed 2026-10-16). The domain package's Windows column carries
+   `Control+Alt+Shift+X` and `Control+Alt+Shift+F`, unvalidated like the rest of that column; the
    desktop app only reads the macOS defaults until the Windows release branch lands.
 2. **Overlay latency.** Creating one window per display on demand is estimated at 100–250 ms.
    If a packaged build measures above 300 ms on the Mac mini, prewarm one hidden overlay per
@@ -93,7 +95,9 @@ Each line is a test in the implementation plan.
    resolution change: a remembered frame that no longer fits is re-clamped, not dropped.
 9. **Recording in progress blocks every mode**, exactly as the existing hook does for Area.
 10. **The hotkey during onboarding or sign-in** (no main window) does what Area does today:
-    recreate the hidden window first.
+    recreate the hidden window first. Covered by manual QA, no unit test: the path lives in
+    `main/index.ts`, which is not unit-testable (see the QA lines in the
+    [screenshots brief](/backlog/screenshots/)).
 
 ## 1. What exists today
 
@@ -176,16 +180,25 @@ image it actually received.
 
 ### The overlay port
 
+As built in `src/main/screenshots/overlay-port.ts`:
+
 ```ts
 interface OverlayPort {
   /** Show one overlay per display in `ui` mode; resolve with the user's answer. */
   pick(ui: "area" | "screen" | "frame", displays: Display[]): Promise<OverlayAnswer>;
+  /** Hide every overlay; resolves once they are off screen (hidden, one tick, one renderer frame, 250 ms cap). */
+  hideAll(): Promise<void>;
+  /** Destroy every overlay and end the session; safe to call twice. */
+  destroyAll(): void;
 }
 type OverlayAnswer =
-  | { kind: "rect"; displayId: number; rect: Rectangle /* DIP, display-relative */ }
+  | { kind: "rect"; displayId: number; rect: CaptureRect /* DIP, display-relative */ }
   | { kind: "display"; displayId: number }
   | { kind: "cancelled" };
 ```
+
+`pick` never hides or destroys on its own; the provider calls `hideAll()` before grabbing
+pixels and `destroyAll()` in a `finally`.
 
 Implemented by `CaptureOverlayWindows` in `src/main/screenshots/capture-overlay-windows.ts`:
 one `BrowserWindow` per display with `frame: false, transparent: true, resizable: false,
@@ -197,7 +210,7 @@ overlay opens over a full-screen app without blanking the menu bar. Esc anywhere
 `requestAnimationFrame` round-trip in the renderer, which is what "waits one frame" means in
 decision 5.
 
-Renderer: `?window=capture-overlay&display=<id>&ui=<mode>` in `main.tsx`, a `CaptureOverlay`
+Renderer: `?window=capture-overlay&display=<id>&ui=<mode>&index=<n>&count=<n>&bounds=<x,y,w,h>&work=<x,y,w,h>&ids=<id,id,...>` (built by `overlayQuery`; `bounds` and `work` are absolute DIP, `ids` is the ordered display list so the digit keys agree across overlays) in `main.tsx`, a `CaptureOverlay`
 component in `features/screenshots/overlay/` with three children: `AreaDrag`, `ScreenChooser`,
 `FrameBox` (reusing `clampCrop`, `moveCrop`, `resizeCrop`, `hitCropHandle` from
 `annotations/crop.ts`). It talks to main over two channels: `screenshot:overlay-answer`
