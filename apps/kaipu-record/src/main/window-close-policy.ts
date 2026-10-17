@@ -37,6 +37,33 @@ export function shouldQuitOnAllWindowsClosed(platform: NodeJS.Platform): boolean
   return platform === "linux";
 }
 
+/** The parts of Electron's `before-input-event` input that the quit shortcut reads. */
+export interface KeyInput {
+  type: string;
+  key: string;
+  control: boolean;
+  alt: boolean;
+  shift: boolean;
+  meta: boolean;
+}
+
+/**
+ * Windows: Ctrl+Q quits, alongside the tray menu's Quit. Nothing else binds it
+ * there — Electron's default quit role has no accelerator on Windows and the menu
+ * bar is hidden. macOS keeps Cmd+Q through its app menu.
+ */
+export function isQuitShortcut(input: KeyInput, platform: NodeJS.Platform): boolean {
+  return (
+    platform === "win32" &&
+    input.type === "keyDown" &&
+    input.key.toLowerCase() === "q" &&
+    input.control &&
+    !input.alt &&
+    !input.shift &&
+    !input.meta
+  );
+}
+
 /**
  * Apply `closeAction` to a `close` event: when it says hide, prevent the close
  * and call `hide`. Returns whether the window was hidden.
