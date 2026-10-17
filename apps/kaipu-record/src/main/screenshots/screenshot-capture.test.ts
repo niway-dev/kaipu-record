@@ -37,6 +37,7 @@ describe("MacProvider", () => {
       fileExists,
       tempPath: () => "/tmp/x.png",
       getDisplays: async () => [],
+      settle: async () => {},
     });
 
   it("area: returns the captured PNG, silently (-x)", async () => {
@@ -66,9 +67,11 @@ describe("MacProvider", () => {
     let answer: OverlayAnswer;
     let displays: Display[];
     let fake: OverlayPort;
+    let settle: () => Promise<void>;
 
     beforeEach(() => {
       log = [];
+      settle = async () => {};
       answer = { kind: "cancelled" };
       displays = [main];
       fake = {
@@ -95,6 +98,7 @@ describe("MacProvider", () => {
         fileExists,
         tempPath: () => "/tmp/x.png",
         getDisplays: async () => displays,
+        settle,
       });
 
     it("screen with one display skips the overlay and captures its bounds", async () => {
@@ -102,6 +106,17 @@ describe("MacProvider", () => {
       expect(fake.pick).not.toHaveBeenCalled();
       expect(log).toEqual(["hideAll", "runCli:-R 0,0,1440,900 -x /tmp/x.png", "destroyAll"]);
       expect(out).toEqual({ kind: "captured", png: PNG, mode: "screen" });
+    });
+
+    it("one display waits for the settle delay before running screencapture", async () => {
+      let release = (): void => {};
+      settle = () => new Promise<void>((resolve) => (release = resolve));
+      const pending = macProvider().capture({ mode: "screen", overlay: fake });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(runCli).not.toHaveBeenCalled();
+      release();
+      expect((await pending).kind).toBe("captured");
+      expect(runCli).toHaveBeenCalledTimes(1);
     });
 
     it("screen with two displays picks, hides, captures the chosen display, then destroys", async () => {

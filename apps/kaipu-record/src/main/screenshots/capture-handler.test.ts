@@ -89,10 +89,12 @@ describe("createCaptureHandler", () => {
     expect(capture).toHaveBeenCalledTimes(2);
   });
 
-  it("releases the guard and restores the window when the provider throws", async () => {
+  it("answers cancelled, logs, releases the guard and restores the window when the provider throws", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     const capture = vi.fn().mockRejectedValueOnce(new Error("boom"));
     const { handler, windows } = setup(capture);
-    await expect(handler({ mode: "area" })).rejects.toThrow("boom");
+    expect(await handler({ mode: "area" })).toEqual({ kind: "cancelled" });
+    expect(logged).toHaveBeenCalled();
     expect(windows.afterCapture).toHaveBeenCalledWith(false);
     capture.mockResolvedValueOnce({ kind: "cancelled" });
     expect(await handler({ mode: "area" })).toEqual({ kind: "cancelled" });
