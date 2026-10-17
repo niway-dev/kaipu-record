@@ -11,7 +11,7 @@ import type { TagColor } from "@kaipu/domain/constants";
 import { DEFAULT_QUALITY, type RecordingQuality } from "../recording-quality";
 import type { Locale } from "@kaipu/i18n";
 import type { ExportPresetId, ExportQuality } from "./export-preset";
-import type { CaptureRect } from "./screenshot-capture";
+import type { CaptureMode, CaptureRect } from "./screenshot-capture";
 
 /**
  * "system" (follow the OS appearance) is a deliberate non-goal for now — the
@@ -102,8 +102,8 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
     action: "captureScreenshot",
     defaultAccelerator: "Command+Control+X",
     group: "app",
-    label: "Capture area",
-    description: "Drag an area of the screen to take a screenshot",
+    label: "Capture screenshot",
+    description: "Capture with your current mode",
     statusWord: "capture",
   },
   {
@@ -239,6 +239,13 @@ export interface AppSettings {
    * opens, so a frame remembered before a resolution change is moved, not dropped.
    */
   screenshotFrame: Record<string, CaptureRect>;
+  /**
+   * The one current screenshot mode, app-wide. The Screenshots page, the tray panel and the
+   * generic `captureScreenshot` shortcut all capture with it; picking a mode on the page or
+   * the tray, or pressing a mode-specific shortcut (`captureScreen`, `captureFrame`), makes
+   * that mode current. A mode the platform cannot serve stays stored but captures as Area.
+   */
+  screenshotMode: CaptureMode;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -262,6 +269,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   exportQuality: "balanced",
   showRecordingSavedCard: true,
   screenshotFrame: {},
+  screenshotMode: "area",
 };
 
 /**

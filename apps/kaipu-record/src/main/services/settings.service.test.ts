@@ -63,6 +63,7 @@ describe("mergeSettings", () => {
         exportQuality: "maximum",
         showRecordingSavedCard: false,
         screenshotFrame: { "1": { x: 10, y: 20, width: 300, height: 200 } },
+        screenshotMode: "frame",
       }),
     ).toEqual({
       theme: "dark",
@@ -80,6 +81,7 @@ describe("mergeSettings", () => {
       exportQuality: "maximum",
       showRecordingSavedCard: false,
       screenshotFrame: { "1": { x: 10, y: 20, width: 300, height: 200 } },
+      screenshotMode: "frame",
     });
   });
 
@@ -97,6 +99,14 @@ describe("mergeSettings", () => {
         },
       }).screenshotFrame,
     ).toEqual({ "1": { x: -5, y: 0, width: 640, height: 480 } });
+  });
+
+  it("defaults the current screenshot mode to Area and drops an unknown one", () => {
+    expect(DEFAULT_SETTINGS.screenshotMode).toBe("area");
+    expect(mergeSettings({}).screenshotMode).toBe("area");
+    expect(mergeSettings({ screenshotMode: "screen" }).screenshotMode).toBe("screen");
+    expect(mergeSettings({ screenshotMode: "window" as never }).screenshotMode).toBe("area");
+    expect(mergeSettings({ screenshotMode: 2 as never }).screenshotMode).toBe("area");
   });
 
   it("defaults Export quality to Balanced and sanitizes it (NIW2-218)", () => {

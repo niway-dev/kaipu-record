@@ -72,6 +72,7 @@ const STUB_SETTINGS = {
   exportQuality: "balanced",
   showRecordingSavedCard: true,
   screenshotFrame: {},
+  screenshotMode: "area",
 } as const;
 
 // Vitest does not expose `afterEach` as a global (globals: false), so

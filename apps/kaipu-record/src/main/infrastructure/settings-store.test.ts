@@ -133,3 +133,29 @@ describe("activation policy (macOS Dock + Cmd+Tab)", () => {
     expect(mockState.dockShow).not.toHaveBeenCalled();
   });
 });
+
+describe("updateAppSettings (main-side writers)", () => {
+  beforeEach(async () => {
+    mockState.userDataDir = await mkdtemp(join(tmpdir(), "kaipu-settings-"));
+    mockState.handlers.clear();
+  });
+
+  afterEach(async () => {
+    await rm(mockState.userDataDir, { recursive: true, force: true });
+  });
+
+  it("persists the current screenshot mode, notifies listeners, and survives a reload", async () => {
+    const store = await loadStore();
+    store.registerSettings();
+    const seen: string[] = [];
+    store.onSettingsChanged((settings) => seen.push(settings.screenshotMode));
+
+    expect(store.getAppSettings().screenshotMode).toBe("area");
+    expect(store.updateAppSettings({ screenshotMode: "frame" }).screenshotMode).toBe("frame");
+    expect(seen).toEqual(["frame"]);
+
+    const reloaded = await loadStore();
+    reloaded.registerSettings();
+    expect(reloaded.getAppSettings().screenshotMode).toBe("frame");
+  });
+});

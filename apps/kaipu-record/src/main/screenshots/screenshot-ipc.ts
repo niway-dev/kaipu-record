@@ -5,6 +5,7 @@ import { createMainTranslator } from "@kaipu/i18n/main";
 import { buildScreenshotCapturedProperties, SCREENSHOT_CAPTURED_EVENT } from "@shared/analytics";
 import { IPC_CHANNELS } from "@shared/types/ipc";
 import type { LocalRecording } from "@shared/types/library-storage";
+import type { CaptureMode } from "@shared/types/screenshot-capture";
 import { assertExportPayload, exportFileName } from "./export-file-name";
 import { createCaptureHandler, type CaptureWindowHooks } from "./capture-handler";
 import { CaptureOverlayWindows } from "./capture-overlay-windows";
@@ -35,7 +36,13 @@ const overlay: OverlayPort = {
   destroyAll: () => overlayWindows?.destroyAll(),
 };
 
-export function registerScreenshotHandlers(windows: CaptureWindowHooks): void {
+/** What the rest of main needs from the screenshot backend once it is registered. */
+export interface ScreenshotHandlers {
+  /** The modes this platform's provider can serve (the capture shortcuts fall back on it). */
+  supportedModes(): CaptureMode[];
+}
+
+export function registerScreenshotHandlers(windows: CaptureWindowHooks): ScreenshotHandlers {
   const provider = createScreenshotProvider(process.platform);
   const handleCapture = createCaptureHandler({
     platform: process.platform,
@@ -137,4 +144,6 @@ export function registerScreenshotHandlers(windows: CaptureWindowHooks): void {
       return { path: result.filePath };
     },
   );
+
+  return { supportedModes: () => provider.supportedModes() };
 }

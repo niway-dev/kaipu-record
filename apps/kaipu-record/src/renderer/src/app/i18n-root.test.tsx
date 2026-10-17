@@ -19,6 +19,7 @@ const SETTINGS: AppSettings = {
   exportQuality: "balanced",
   showRecordingSavedCard: true,
   screenshotFrame: {},
+  screenshotMode: "area",
 };
 
 describe("I18nRoot theme application", () => {
