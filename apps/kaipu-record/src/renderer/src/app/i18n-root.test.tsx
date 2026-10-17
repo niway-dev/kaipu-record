@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type AppSettings, DEFAULT_SHORTCUTS } from "@shared/types";
+import { defaultShortcutsFor } from "@shared/shortcut-defaults";
+import type { AppSettings } from "@shared/types";
 import { DEFAULT_QUALITY } from "@shared/recording-quality";
 import { I18nRoot } from "./i18n-root";
 
@@ -13,7 +14,7 @@ const SETTINGS: AppSettings = {
   screenshotSave: "auto",
   showBrandBadge: false,
   screenshotCopy: "auto",
-  shortcuts: DEFAULT_SHORTCUTS,
+  shortcuts: defaultShortcutsFor("darwin"),
   deviceId: "",
   uploadMode: "local-only",
   exportQuality: "balanced",

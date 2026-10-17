@@ -44,7 +44,7 @@ vi.mock("@kaipu/i18n", async (importOriginal) => {
   };
 });
 import { DEFAULT_QUALITY } from "@shared/recording-quality";
-import { DEFAULT_SHORTCUTS } from "@shared/types";
+import { defaultShortcutsFor } from "@shared/shortcut-defaults";
 
 // jsdom has no ResizeObserver; components that observe their size (the annotation
 // layer) need a no-op so they can render under test.
@@ -66,7 +66,7 @@ const STUB_SETTINGS = {
   screenshotSave: "auto",
   showBrandBadge: false,
   screenshotCopy: "auto",
-  shortcuts: DEFAULT_SHORTCUTS,
+  shortcuts: defaultShortcutsFor("darwin"),
   deviceId: "",
   uploadMode: "local-only",
   exportQuality: "balanced",
@@ -85,6 +85,7 @@ afterEach(() => {
 // Minimal `window.electronAPI` stub so renderer code that talks to the preload
 // bridge (e.g. usePermissions) works under jsdom. Individual tests can override.
 window.electronAPI = {
+  platform: "darwin",
   getAppVersion: async () => "1.0.0",
   notifyReady: () => {},
   getUpdateStatus: async () => ({ state: "idle" }),

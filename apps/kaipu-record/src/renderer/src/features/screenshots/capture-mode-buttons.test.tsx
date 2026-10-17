@@ -1,8 +1,14 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_SETTINGS, type AppSettings } from "@shared/types";
+import { defaultShortcutsFor } from "@shared/shortcut-defaults";
 import type { CaptureMode } from "@shared/types/screenshot-capture";
 import { CaptureModeButtons } from "./capture-mode-buttons";
+
+const BASE_SETTINGS: AppSettings = {
+  ...DEFAULT_SETTINGS,
+  shortcuts: defaultShortcutsFor("darwin"),
+};
 
 const shortcuts = {
   startRecording: "⌃⌘C",
@@ -25,7 +31,7 @@ afterEach(() => {
 
 /** Main serves `modes` and has `current` stored; returns the settings writer spy. */
 function given(modes: CaptureMode[], current: CaptureMode = "frame") {
-  let settings: AppSettings = { ...DEFAULT_SETTINGS, screenshotMode: current };
+  let settings: AppSettings = { ...BASE_SETTINGS, screenshotMode: current };
   const updateSettings = vi.fn(async (patch: Partial<AppSettings>) => {
     settings = { ...settings, ...patch };
     return settings;

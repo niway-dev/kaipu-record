@@ -102,6 +102,8 @@ export type AuthAttemptResult = { ok: true; status: AuthStatus } | { ok: false; 
 
 export interface KaipuElectronAPI {
   /** The running app version (`app.getVersion()`), used by the version gate. */
+  /** Host OS (`process.platform`), exposed because the renderer must not read `process` itself. */
+  readonly platform: string;
   getAppVersion(): Promise<string>;
   /** Tell main the app shell has mounted and its IPC listeners are registered,
    *  so any window-triggered action queued during load can be flushed. */
