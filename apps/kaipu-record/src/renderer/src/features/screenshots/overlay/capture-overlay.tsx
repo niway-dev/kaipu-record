@@ -151,8 +151,15 @@ function FrameMode({
   if (frameDisplayId !== query.displayId) {
     return (
       <div
+        role="button"
+        tabIndex={0}
         className={`${styles.sheet} ${styles.chooser}`}
         onClick={() => bridge.chooseFrameDisplay(query.displayId)}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          bridge.chooseFrameDisplay(query.displayId);
+        }}
       >
         <MoveFrameHint />
       </div>

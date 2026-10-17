@@ -393,6 +393,19 @@ describe("Frame on several displays", () => {
     expect(answer).not.toHaveBeenCalled();
   });
 
+  it("moves the frame from the hint with Enter or Space, as a button", () => {
+    const { api, chooseFrameDisplay } = fakeApi({}, { ...FRAME_ON_42, frameDisplayId: 7 });
+    render(<CaptureOverlay query={query("frame")} api={api} />);
+    const hint = screen.getByRole("button", { name: "Click to move the frame here" });
+
+    fireEvent.keyDown(hint, { key: "Enter" });
+    fireEvent.keyDown(hint, { key: " " });
+    fireEvent.keyDown(hint, { key: "a" });
+
+    expect(chooseFrameDisplay).toHaveBeenCalledTimes(2);
+    expect(chooseFrameDisplay).toHaveBeenCalledWith(42);
+  });
+
   it("renders from the query's frame display before any state arrives", async () => {
     const own = fakeApi({}, null);
     render(<CaptureOverlay query={query("frame", { frame: 42 })} api={own.api} />);
@@ -453,28 +466,40 @@ describe("Frame on several displays", () => {
     expect(b.api.updateSettings).not.toHaveBeenCalled();
   });
 
-  it("answers from the active overlay on Enter, and Esc cancels once from either", async () => {
+  function renderTwo() {
     const active = fakeApi();
-    const idle = fakeApi({}, { ...FRAME_ON_42, frameDisplayId: 42 });
-    render(<CaptureOverlay query={query("frame")} api={active.api} />);
+    const idle = fakeApi({}, FRAME_ON_42);
+    render(
+      <>
+        <CaptureOverlay query={query("frame")} api={active.api} />
+        <CaptureOverlay query={query("frame", { displayId: 7, index: 1 })} api={idle.api} />
+      </>,
+    );
+    return { active, idle };
+  }
+
+  it("answers from the active overlay on Enter; the hint overlay does not", async () => {
+    const { active, idle } = renderTwo();
     await screen.findByTestId("capture-frame");
 
     press("Enter");
+
     await waitFor(() => expect(active.answer).toHaveBeenCalledOnce());
     expect(active.answer).toHaveBeenCalledWith(
       expect.objectContaining({ kind: "rect", displayId: 42 }),
     );
-
-    cleanup();
-    const other = fakeApi({}, { ...FRAME_ON_42, frameDisplayId: 7 });
-    render(<CaptureOverlay query={query("frame")} api={other.api} />);
-    press("Escape");
-    press("Escape");
-    expect(other.answer).toHaveBeenCalledExactlyOnceWith({ kind: "cancelled" });
-    // The hint overlay never answers on Enter.
-    press("Enter");
-    expect(other.answer).toHaveBeenCalledOnce();
     expect(idle.answer).not.toHaveBeenCalled();
+  });
+
+  it("cancels once from each overlay on Esc, the frame's and the hint's", async () => {
+    const { active, idle } = renderTwo();
+    await screen.findByTestId("capture-frame");
+
+    press("Escape");
+    press("Escape");
+
+    expect(active.answer).toHaveBeenCalledExactlyOnceWith({ kind: "cancelled" });
+    expect(idle.answer).toHaveBeenCalledExactlyOnceWith({ kind: "cancelled" });
   });
 });
 

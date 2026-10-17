@@ -365,6 +365,32 @@ describe("CaptureOverlayWindows: answers", () => {
       expect(states(first)).toEqual([{ hoverDisplayId: null, frameDisplayId: 2 }]);
     });
 
+    it("focuses the frame display's window, not the first one, when the cursor is on none", () => {
+      const { first, second } = pickFrame({ x: 5000, y: 5000 }, 2);
+
+      expect(first.focus).not.toHaveBeenCalled();
+      expect(second.focus).toHaveBeenCalledOnce();
+    });
+
+    it("falls back to the first picked display when the primary is not picked", () => {
+      const { first, second } = pickFrame({ x: 5000, y: 5000 }, 99);
+
+      expect(states(first)).toEqual([{ hoverDisplayId: null, frameDisplayId: 1 }]);
+      expect(first.focus).toHaveBeenCalledOnce();
+      expect(second.focus).not.toHaveBeenCalled();
+    });
+
+    it("focuses the new window when the frame moves", () => {
+      const { first, second } = pickFrame({ x: 100, y: 100 });
+      expect(first.focus).toHaveBeenCalledOnce();
+
+      second.send(IPC_CHANNELS.screenshotOverlayFrameDisplay, { displayId: 2 });
+
+      expect(second.focus).toHaveBeenCalledOnce();
+      first.send(IPC_CHANNELS.screenshotOverlayFrameDisplay, { displayId: 1 });
+      expect(first.focus).toHaveBeenCalledTimes(2);
+    });
+
     it("moves the frame and rebroadcasts when a valid overlay asks", () => {
       const { first, second } = pickFrame({ x: 100, y: 100 });
       expect(states(first).at(-1)?.frameDisplayId).toBe(1);
