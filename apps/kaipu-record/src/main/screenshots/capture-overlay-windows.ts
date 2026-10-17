@@ -196,6 +196,8 @@ export class CaptureOverlayWindows implements OverlayPort {
   private hoverDisplayId: number | null = null;
   /** Frame mode only: the one display that shows the frame; `null` in every other mode. */
   private frameDisplayId: number | null = null;
+  /** The display whose window takes keyboard focus when shown (and when the frame moves). */
+  private focusDisplayId: number | null = null;
 
   constructor(deps: Partial<CaptureOverlayDeps> = {}) {
     this.deps = { ...electronDeps(), ...deps };
@@ -215,7 +217,6 @@ export class CaptureOverlayWindows implements OverlayPort {
       this.hoverDisplayId = null;
       const cursor = this.deps.cursorPoint();
       const underCursor = displays.findIndex((display) => contains(display.bounds, cursor));
-      const focused = Math.max(0, underCursor);
       // One frame at a time: it starts where the pointer is, else on the primary display
       // (else the first picked one), and the user moves it by clicking another display.
       if (ui === "frame") {
@@ -228,11 +229,12 @@ export class CaptureOverlayWindows implements OverlayPort {
       } else {
         this.frameDisplayId = null;
       }
+      // Keyboard focus (Esc, Enter, 1/2/3): the Frame's Enter only works in the window
+      // that holds the frame, so there focus follows the frame, not the pointer.
+      this.focusDisplayId = this.frameDisplayId ?? displays[Math.max(0, underCursor)].id;
       const displayIds = displays.map((display) => display.id);
       displays.forEach((display, index) => {
-        this.entries.push(
-          this.createOverlay(ui, display, index + 1, displayIds, index === focused),
-        );
+        this.entries.push(this.createOverlay(ui, display, index + 1, displayIds));
       });
       // Nothing else rescues a pick whose overlays never paint: the app is hidden and
       // every later capture would answer `cancelled` until restart.
@@ -289,6 +291,7 @@ export class CaptureOverlayWindows implements OverlayPort {
     this.session = null;
     this.hoverDisplayId = null;
     this.frameDisplayId = null;
+    this.focusDisplayId = null;
     if (session?.watchdog) clearTimeout(session.watchdog);
     for (const { window } of entries) {
       if (!window.isDestroyed()) window.destroy();
@@ -302,7 +305,6 @@ export class CaptureOverlayWindows implements OverlayPort {
     display: Display,
     index: number,
     displayIds: readonly number[],
-    focus: boolean,
   ): OverlayEntry {
     const darwin = this.deps.platform === "darwin";
     const window = this.deps.createWindow({
@@ -340,7 +342,7 @@ export class CaptureOverlayWindows implements OverlayPort {
       if (window.isDestroyed() || !this.session?.settle) return;
       this.setSpaceBehavior(window, true);
       window.show();
-      if (focus) window.focus();
+      if (display.id === this.focusDisplayId) window.focus();
       // A renderer that loaded after the last broadcast still learns where the frame is.
       this.sendState(window);
       const session = this.session;
@@ -468,6 +470,10 @@ export class CaptureOverlayWindows implements OverlayPort {
       if (!isFiniteNumber(displayId) || !this.session.displayIds.has(displayId)) return;
       if (displayId === this.frameDisplayId) return;
       this.frameDisplayId = displayId;
+      this.focusDisplayId = displayId;
+      // Enter lives in the window that now holds the frame: make it the key window.
+      const target = this.liveEntries().find((entry) => entry.displayId === displayId);
+      target?.window.focus();
       this.broadcastState();
     });
 

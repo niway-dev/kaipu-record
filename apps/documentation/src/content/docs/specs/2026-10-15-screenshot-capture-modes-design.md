@@ -210,12 +210,13 @@ overlay opens over a full-screen app without blanking the menu bar. Esc anywhere
 `requestAnimationFrame` round-trip in the renderer, which is what "waits one frame" means in
 decision 5.
 
-Renderer: `?window=capture-overlay&display=<id>&ui=<mode>&index=<n>&count=<n>&bounds=<x,y,w,h>&work=<x,y,w,h>&ids=<id,id,...>` (built by `overlayQuery`; `bounds` and `work` are absolute DIP, `ids` is the ordered display list so the digit keys agree across overlays) in `main.tsx`, a `CaptureOverlay`
+Renderer: `?window=capture-overlay&display=<id>&ui=<mode>&index=<n>&count=<n>&bounds=<x,y,w,h>&work=<x,y,w,h>&ids=<id,id,...>[&frame=<id>]` (built by `overlayQuery`; `bounds` and `work` are absolute DIP, `ids` is the ordered display list so the digit keys agree across overlays; `frame` is Frame-only: the display that starts with the frame, so the first paint is right) in `main.tsx`, a `CaptureOverlay`
 component in `features/screenshots/overlay/` with three children: `AreaDrag`, `ScreenChooser`,
 `FrameBox` (reusing `clampCrop`, `moveCrop`, `resizeCrop`, `hitCropHandle` from
 `annotations/crop.ts`). It talks to main over two channels: `screenshot:overlay-answer`
-(renderer → main) and `screenshot:overlay-state` (main → every overlay: hover display id so the
-chooser highlights only one).
+(renderer → main) and `screenshot:overlay-state` (main → every overlay: `{ hoverDisplayId, frameDisplayId }`, so the
+chooser highlights only one display and only one display shows the frame), plus
+`screenshot:overlay-frame-display` (renderer → main) to move the frame.
 
 ### Entry points and shortcuts
 
