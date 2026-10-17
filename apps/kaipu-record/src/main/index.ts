@@ -63,6 +63,7 @@ import {
 import {
   handleMainWindowClose,
   isQuitShortcut,
+  secondInstanceAction,
   shouldQuitOnAllWindowsClosed,
   shouldShowTrayHint,
 } from "./window-close-policy";
@@ -122,7 +123,9 @@ if (!hasSingleInstanceLock) {
   app.quit();
 } else {
   app.on("second-instance", () => {
-    if (app.isReady()) showMainWindow();
+    const action = secondInstanceAction({ ready: app.isReady(), recording: !!hub?.isActive() });
+    if (action === "show") showMainWindow();
+    else if (action === "notify") showAlreadyRecordingNotice();
   });
 }
 
@@ -365,19 +368,22 @@ function showMainWindow(): void {
  * Start button and the global "Start recording" shortcut. The Record page's
  * `startRecording` guards on a selected source / not-already-recording.
  */
+function showAlreadyRecordingNotice(): void {
+  if (!Notification.isSupported()) return;
+  const t = createMainTranslator(getAppSettings().locale);
+  new Notification({
+    title: t("dialogs.alreadyRecordingTitle"),
+    body: t("dialogs.alreadyRecordingBody"),
+  }).show();
+}
+
 function triggerStartRecording(): void {
   if (hub?.isActive()) {
     // Don't un-hide the (deliberately hidden) main window into an active
     // recording — it would get burned into the video with no explanation.
     // Let the user know the shortcut landed instead of silently no-oping.
     capturePanel?.hide();
-    if (Notification.isSupported()) {
-      const t = createMainTranslator(getAppSettings().locale);
-      new Notification({
-        title: t("dialogs.alreadyRecordingTitle"),
-        body: t("dialogs.alreadyRecordingBody"),
-      }).show();
-    }
+    showAlreadyRecordingNotice();
     return;
   }
   capturePanel?.hide();

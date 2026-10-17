@@ -3,6 +3,7 @@ import {
   closeAction,
   handleMainWindowClose,
   isQuitShortcut,
+  secondInstanceAction,
   shouldQuitOnAllWindowsClosed,
   shouldShowTrayHint,
 } from "./window-close-policy";
@@ -152,5 +153,20 @@ describe("shouldShowTrayHint", () => {
   it("never shows on macOS or Linux, which do not hide to the tray", () => {
     expect(shouldShowTrayHint(ctx({ platform: "darwin" }))).toBe(false);
     expect(shouldShowTrayHint(ctx({ platform: "linux" }))).toBe(false);
+  });
+});
+
+describe("secondInstanceAction", () => {
+  it("ignores a second launch before the app is ready", () => {
+    expect(secondInstanceAction({ ready: false, recording: false })).toBe("ignore");
+    expect(secondInstanceAction({ ready: false, recording: true })).toBe("ignore");
+  });
+
+  it("keeps the hidden window hidden during a recording and notifies instead", () => {
+    expect(secondInstanceAction({ ready: true, recording: true })).toBe("notify");
+  });
+
+  it("brings the main window back when idle", () => {
+    expect(secondInstanceAction({ ready: true, recording: false })).toBe("show");
   });
 });

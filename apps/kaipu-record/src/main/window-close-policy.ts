@@ -103,3 +103,23 @@ export function shouldShowTrayHint({
 }: TrayHintContext): boolean {
   return platform === "win32" && !trayHintShown && notificationSupported;
 }
+
+export interface SecondInstanceContext {
+  /** `app.isReady()`: before that there is no window or hub to act on. */
+  ready: boolean;
+  /** A recording is in progress (`hub.isActive()`). */
+  recording: boolean;
+}
+
+/**
+ * What the running copy does when a second launch hands over to it. During a
+ * recording the main window is deliberately hidden, so showing it would burn it
+ * into the video: tell the user the app is already recording instead.
+ */
+export function secondInstanceAction({
+  ready,
+  recording,
+}: SecondInstanceContext): "ignore" | "notify" | "show" {
+  if (!ready) return "ignore";
+  return recording ? "notify" : "show";
+}
