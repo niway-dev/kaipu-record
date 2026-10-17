@@ -71,6 +71,20 @@ describe("CapturePanel — tabs", () => {
     expect(requestCaptureScreenshot.mock.calls).toEqual([["area"], ["screen"], ["frame"]]);
   });
 
+  it("captures with the remembered mode from the Capture tab's primary button", async () => {
+    const requestCaptureScreenshot = vi.fn();
+    const settings = await realApi.getSettings();
+    window.electronAPI = {
+      ...realApi,
+      requestCaptureScreenshot,
+      getSettings: async () => ({ ...settings, screenshotMode: "screen" }),
+    };
+    render(<CapturePanel />);
+    fireEvent.click(screen.getByRole("tab", { name: "Capture" }));
+    fireEvent.click(await screen.findByRole("button", { name: /^Capture · Screen/ }));
+    expect(requestCaptureScreenshot.mock.calls).toEqual([["screen"]]);
+  });
+
   it("locks the tabs to Record while a recording is in progress", async () => {
     window.electronAPI = {
       ...realApi,

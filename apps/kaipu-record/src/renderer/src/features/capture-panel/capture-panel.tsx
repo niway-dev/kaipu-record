@@ -140,8 +140,15 @@ export function CapturePanel(): React.JSX.Element {
           />
         </>
       ) : (
-        // Screenshot mode: Area, Screen and Frame, each handed off to main.
-        <CaptureModeButtons variant="panel" onCapture={requestCapture} shortcuts={shortcuts} />
+        // Screenshot mode: the current-mode button and the Area, Screen and Frame rows,
+        // each handed off to main. `recording` stays wired for the day the tab lock above
+        // lifts; today a recording forces the Record tab, so it is null here in practice.
+        <CaptureModeButtons
+          variant="panel"
+          onCapture={requestCapture}
+          shortcuts={shortcuts}
+          recording={isBusy ? { elapsedSeconds: activity.elapsedSeconds } : null}
+        />
       )}
     </div>
   );
