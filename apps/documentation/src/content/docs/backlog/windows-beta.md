@@ -81,6 +81,18 @@ UI telling the truth about screenshots.
       the gap is visible on purpose. Flip it to shipped when the first beta is downloadable.
 - [ ] Landing: "Download for Windows (beta)" next to the macOS button, with the gap stated.
 
+App behaviours on `feat/windows-release` (landed, unvalidated on Windows hardware):
+
+- [ ] Per-platform shortcut defaults: `Control+Alt+<key>` on Windows, shown as `Ctrl+Alt+C`
+      text labels rather than macOS glyphs. 🟡 Landed, unvalidated.
+- [ ] Close hides to the tray. The first time, a native notification says Kaipu is still
+      running and how to quit it. A second launch brings the running copy back (single
+      instance) instead of starting another. 🟡 Landed, unvalidated.
+- [ ] Quit: `Ctrl+Q` works only while the main window has focus; when the window is hidden in
+      the tray, the tray menu's Quit is the way out. 🟡 Landed, unvalidated.
+- [ ] Tray icon visible on a dark and a light taskbar (light-glyph `.ico` files). 🟡 Landed,
+      unvalidated.
+
 ## Non-goals
 
 - Feature parity before shipping. The beta label is the parity plan.
