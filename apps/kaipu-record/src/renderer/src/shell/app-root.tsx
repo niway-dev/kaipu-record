@@ -47,7 +47,10 @@ export function AppRoot(): React.JSX.Element {
 
   // Global ⌘⌃X hotkey: main brings the window to front and broadcasts this event;
   // we run the region-capture flow here so navigation (useNavigate) is available.
-  useEffect(() => window.electronAPI.onCaptureScreenshotHotkey(capture), [capture]);
+  useEffect(
+    () => window.electronAPI.onCaptureScreenshotHotkey(({ mode }) => void capture(mode)),
+    [capture],
+  );
 
   // A recording finishing is reported by the module-singleton recorder store
   // (see recorder-store.ts), not by whichever page happens to be mounted — the

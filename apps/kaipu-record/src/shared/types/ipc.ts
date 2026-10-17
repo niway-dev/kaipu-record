@@ -11,6 +11,7 @@ import type { TagColor } from "@kaipu/domain/constants";
 import { DEFAULT_QUALITY, type RecordingQuality } from "../recording-quality";
 import type { Locale } from "@kaipu/i18n";
 import type { ExportPresetId, ExportQuality } from "./export-preset";
+import type { CaptureMode, CaptureRect } from "./screenshot-capture";
 
 /**
  * "system" (follow the OS appearance) is a deliberate non-goal for now — the
@@ -25,6 +26,8 @@ export const SHORTCUT_ACTIONS = [
   "stopRecording",
   "bringToFront",
   "captureScreenshot",
+  "captureScreen",
+  "captureFrame",
   "toggleMicrophone",
   "toggleSystemAudio",
   "toggleCamera",
@@ -100,8 +103,24 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
     defaultAccelerator: "Command+Control+X",
     group: "app",
     label: "Capture screenshot",
-    description: "Open the area selection to take a screenshot",
+    description: "Capture with your current mode",
     statusWord: "capture",
+  },
+  {
+    action: "captureScreen",
+    defaultAccelerator: "Command+Control+Shift+X",
+    group: "app",
+    label: "Capture screen",
+    description: "Capture one whole display",
+    statusWord: "screen",
+  },
+  {
+    action: "captureFrame",
+    defaultAccelerator: "Command+Control+Shift+F",
+    group: "app",
+    label: "Capture frame",
+    description: "Capture what is inside a remembered frame",
+    statusWord: "frame",
   },
   // Live input toggles: they flip the recording setting with or without a take
   // (outside a take they change the pre-recording toggle, as clicking it does).
@@ -214,6 +233,19 @@ export interface AppSettings {
    * Settings → Export turns it off.
    */
   showRecordingSavedCard: boolean;
+  /**
+   * Frame capture mode: the last frame the user confirmed, per display id (`String(id)`),
+   * in display-relative DIP. Re-clamped to the display's work area when the overlay
+   * opens, so a frame remembered before a resolution change is moved, not dropped.
+   */
+  screenshotFrame: Record<string, CaptureRect>;
+  /**
+   * The one current screenshot mode, app-wide. The Screenshots page, the tray panel and the
+   * generic `captureScreenshot` shortcut all capture with it; picking a mode on the page or
+   * the tray, or pressing a mode-specific shortcut (`captureScreen`, `captureFrame`), makes
+   * that mode current. A mode the platform cannot serve stays stored but captures as Area.
+   */
+  screenshotMode: CaptureMode;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -236,6 +268,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // Literal on purpose (preload bundle); equals DEFAULT_EXPORT_QUALITY in ./export-preset.
   exportQuality: "balanced",
   showRecordingSavedCard: true,
+  screenshotFrame: {},
+  screenshotMode: "area",
 };
 
 /**
@@ -312,6 +346,8 @@ export const IPC_CHANNELS = {
   loadCursorTrack: "library:load-cursor-track",
   // Screenshots (renderer ↔ main)
   screenshotCapture: "screenshot:capture",
+  // Which `CaptureMode`s this platform's provider can serve (invoke, answers `CaptureMode[]`).
+  screenshotSupportedModes: "screenshot:supported-modes",
   screenshotCopy: "screenshot:copy",
   // Copy a saved screenshot to the clipboard by id (main reads the file — fetch on
   // the kaipu-media:// scheme doesn't return bytes in the renderer).
@@ -329,6 +365,18 @@ export const IPC_CHANNELS = {
   screenshotReveal: "screenshot:reveal",
   // Main → renderer: global hotkey fired, run the region capture flow.
   screenshotHotkey: "screenshot:hotkey",
+  // Capture overlay: one window per display (main/screenshots/capture-overlay-windows.ts).
+  // Overlay → main: the user's pick (`OverlayAnswer`); the first valid one wins.
+  screenshotOverlayAnswer: "screenshot:overlay-answer",
+  // Overlay → main: the pointer is over this display (`{ displayId: number | null }`).
+  screenshotOverlayHover: "screenshot:overlay-hover",
+  // Main → every overlay: `{ hoverDisplayId, frameDisplayId }` (each `number | null`).
+  screenshotOverlayState: "screenshot:overlay-state",
+  // Overlay → main (Frame): "move the frame to this display" (`{ displayId: number }`).
+  screenshotOverlayFrameDisplay: "screenshot:overlay-frame-display",
+  // Main → overlay (no payload): "reply after your next animation frame"; overlay → main
+  // on the same channel (no payload). Capture waits for every reply or a 250 ms cap.
+  screenshotOverlayHiddenAck: "screenshot:overlay-hidden-ack",
   // Recording engine (renderer ↔ main)
   recordingCreate: "recording:create",
   recordingWrite: "recording:write",

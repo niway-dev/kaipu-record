@@ -40,6 +40,8 @@ describe("mergeSettings", () => {
       stopRecording: "Command+Control+2",
       bringToFront: "Command+Control+3",
       captureScreenshot: "Command+Control+4",
+      captureScreen: "Command+Control+8",
+      captureFrame: "Command+Control+9",
       toggleMicrophone: "Command+Control+5",
       toggleSystemAudio: "Command+Control+6",
       toggleCamera: "Command+Control+7",
@@ -60,6 +62,8 @@ describe("mergeSettings", () => {
         uploadMode: "manual",
         exportQuality: "maximum",
         showRecordingSavedCard: false,
+        screenshotFrame: { "1": { x: 10, y: 20, width: 300, height: 200 } },
+        screenshotMode: "frame",
       }),
     ).toEqual({
       theme: "dark",
@@ -76,7 +80,33 @@ describe("mergeSettings", () => {
       uploadMode: "manual",
       exportQuality: "maximum",
       showRecordingSavedCard: false,
+      screenshotFrame: { "1": { x: 10, y: 20, width: 300, height: 200 } },
+      screenshotMode: "frame",
     });
+  });
+
+  it("remembers no frame by default and drops malformed remembered frames", () => {
+    expect(DEFAULT_SETTINGS.screenshotFrame).toEqual({});
+    expect(mergeSettings({}).screenshotFrame).toEqual({});
+    expect(mergeSettings({ screenshotFrame: "nope" as never }).screenshotFrame).toEqual({});
+    expect(
+      mergeSettings({
+        screenshotFrame: {
+          "1": { x: -5, y: 0, width: 640, height: 480 },
+          "2": { x: 0, y: 0, width: 0, height: 480 },
+          "3": { x: 0, y: Number.NaN, width: 10, height: 10 },
+          "4": "big" as never,
+        },
+      }).screenshotFrame,
+    ).toEqual({ "1": { x: -5, y: 0, width: 640, height: 480 } });
+  });
+
+  it("defaults the current screenshot mode to Area and drops an unknown one", () => {
+    expect(DEFAULT_SETTINGS.screenshotMode).toBe("area");
+    expect(mergeSettings({}).screenshotMode).toBe("area");
+    expect(mergeSettings({ screenshotMode: "screen" }).screenshotMode).toBe("screen");
+    expect(mergeSettings({ screenshotMode: "window" as never }).screenshotMode).toBe("area");
+    expect(mergeSettings({ screenshotMode: 2 as never }).screenshotMode).toBe("area");
   });
 
   it("defaults Export quality to Balanced and sanitizes it (NIW2-218)", () => {
@@ -169,6 +199,8 @@ describe("mergeShortcuts", () => {
       stopRecording: DEFAULT_SHORTCUTS.stopRecording,
       bringToFront: DEFAULT_SHORTCUTS.bringToFront,
       captureScreenshot: DEFAULT_SHORTCUTS.captureScreenshot,
+      captureScreen: DEFAULT_SHORTCUTS.captureScreen,
+      captureFrame: DEFAULT_SHORTCUTS.captureFrame,
       toggleMicrophone: DEFAULT_SHORTCUTS.toggleMicrophone,
       toggleSystemAudio: DEFAULT_SHORTCUTS.toggleSystemAudio,
       toggleCamera: DEFAULT_SHORTCUTS.toggleCamera,
@@ -185,6 +217,16 @@ describe("mergeShortcuts", () => {
     expect(merged.toggleMicrophone).toBe("Command+Control+M");
     expect(merged.toggleSystemAudio).toBe("Command+Control+A");
     expect(merged.toggleCamera).toBe("Command+Control+K");
+  });
+
+  it("gives settings stored before Screen and Frame existed their new defaults", () => {
+    const merged = mergeShortcuts({
+      startRecording: "Command+Control+1",
+      captureScreenshot: "Command+Control+4",
+    });
+    expect(merged.captureScreenshot).toBe("Command+Control+4");
+    expect(merged.captureScreen).toBe("Command+Control+Shift+X");
+    expect(merged.captureFrame).toBe("Command+Control+Shift+F");
   });
 
   it("ignores non-string bindings", () => {

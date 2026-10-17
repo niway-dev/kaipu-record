@@ -8,7 +8,8 @@ description: Full design brief for the Screenshots feature — a native screensh
 > **Status: 🟢 Built locally — pending prod validation** (on `feat/screenshots`).
 > The capture → annotate → beautify → copy/save loop, library integration, and
 > re-edit are implemented and unit-tested locally; not yet validated in a packaged
-> build. This doc remains the design brief / source of truth. The checklist below
+> build. Capture modes (area, screen, frame) are 🟡 in progress on
+> `feat/screenshot-capture-modes`: see the [design](/specs/2026-10-15-screenshot-capture-modes-design/). This doc remains the design brief / source of truth. The checklist below
 > tracks exactly what shipped to the branch.
 
 ## 0. What's built (local, pending prod validation)
@@ -121,6 +122,12 @@ like the macOS screenshot widget but lands in our own editor.
   re-editable if we persist the edit document; otherwise it opens the flat PNG).
 
 ## 3. Capture engine
+
+> **Superseded on 2026-10-15** by the
+> [screenshot capture modes design](/specs/2026-10-15-screenshot-capture-modes-design/) and
+> ADR 0022: three modes (area, screen, frame), native `screencapture` on macOS,
+> `desktopCapturer` on Windows, one shared overlay. The text below is kept as the record of
+> the v1 decision.
 
 macOS exposes screenshots and recording as **separate** capabilities. The
 `Cmd+Shift+5` panel offers both, but we never invoke that panel — we call the
@@ -382,3 +389,54 @@ Following the app's main/preload/renderer split:
   saved) — composite once, use for both Copy and Save.
 - Large captures on the clipboard: PNG buffers can be big; that's expected for
   screenshots.
+
+## Capture modes — QA
+
+Not yet executed. Screen and Frame on macOS need a real desktop (overlays, Spaces,
+several displays), so these are manual checks.
+
+- [ ] One display: Screen captures it directly, with no overlay.
+- [ ] Two displays: Screen shows the chooser; pressing a digit or clicking picks that display and the shot is of it.
+- [ ] One Retina display and one non-Retina display: each shot has the right pixel size and no offset.
+- [ ] Frame on each display: the shot matches the frame box exactly, including on a display left of or above the main one.
+- [ ] Frame is remembered across two captures in a row.
+- [ ] Two displays: Frame shows one frame, on the display under the pointer; the other display shows "Click to move the frame here", and clicking it moves the frame there (with that display's remembered size). Enter captures the display the frame is on.
+- [ ] Esc in the Screen overlay restores the app to where it was.
+- [ ] Esc in the Frame overlay restores the app to where it was.
+- [ ] Esc in the Area selector restores the app to where it was.
+- [ ] The overlay is never visible in the resulting shot.
+- [ ] A full-screen app on another Space is covered by the overlay and captured correctly (toggle the Space during the pick).
+- [ ] After a cancelled or failed capture, the next Screen/Frame capture works (the overlay session is not stuck).
+- [ ] Hotkey during onboarding or sign-in (no main window): the overlay opens and the shot lands in the editor, like Area does today.
+- [ ] Close the main window to the tray (macOS), press the Frame hotkey: the window is recreated hidden, the overlay opens and the shot lands in the editor.
+
+## Screenshot mode picker — QA
+
+Not yet executed. Visual and cross-window checks against the Claude Design "Kaipu Screenshot
+Modes" mock; run them with `bun run dev`.
+
+- [ ] Screenshots page: the pink "Capture · Area" button with ⌃⌘X beside it, and three cards; Area carries the CURRENT pill.
+- [ ] Hovering a non-current card shows its border tint and the "CAPTURE WITH SCREEN" (or FRAME) pill bottom-right; the current card shows none.
+- [ ] Clicking the Screen card only selects it (no capture): it shows Current and the button reads "Capture · Screen"; clicking that button then captures the display.
+- [ ] The mode chosen on the page is the tray's current mode (pink dot on its row, button label), and the other way round, without reopening either.
+- [ ] ⌃⌘X captures with the current mode; ⌃⇧⌘F captures Frame and leaves Frame current on the page and in the tray; ⌃⇧⌘X does the same for Screen.
+- [ ] The current mode survives a relaunch.
+- [ ] During a recording, the page greys the button and cards and shows "Recording in progress · HH:MM:SS"; "Stop recording" stops the take.
+- [ ] Tray Capture tab: 44 px button, three 40 px rows with shortcuts in mono, the centered hint; a row click closes the panel and captures with that mode.
+- [ ] Light theme: the hero, cards and rows stay legible.
+- [ ] Shortcuts page: the generic shortcut reads "Capture screenshot — Capture with your current mode".
+- [ ] Frame overlay: pink border with marching ants, pink-bordered handles, size pill above the corner, toolbar centered under the frame; outside the frame is darker than inside.
+- [ ] Screen chooser on two displays: each shows the numbered pill with its size; the hovered one turns pink; "DISPLAY N" sits bottom-left on every overlay.
+
+## Capture modes — Windows QA
+
+Not yet executed. Needs the Windows installer from the release workflow on real hardware.
+
+- [ ] Two displays, one at 100% and one at 150%: Screen chooser, then a shot of each display with the right pixel size.
+- [ ] A single display at 175%: the dim sheet receives clicks, and Frame and Area crops match what was selected.
+- [ ] Area: drag a region; the shot matches it exactly, including across the 150% display.
+- [ ] Screen chooser: number keys pick the matching display.
+- [ ] Frame is remembered across two captures in a row.
+- [ ] Esc in each overlay restores the app to where it was.
+- [ ] The overlay is never visible in the resulting shot.
+- [ ] After a cancelled or failed capture, the next capture works (the overlay session is not stuck).

@@ -45,3 +45,34 @@ export function serializeError(error: unknown): SerializedError {
   }
   return { name: "Error", message: "Unknown error", stack: null };
 }
+
+/** Event name for a finished (or refused) screenshot capture. */
+export const SCREENSHOT_CAPTURED_EVENT = "screenshot_captured";
+
+/** How a capture request ended. */
+export const SCREENSHOT_OUTCOMES = ["captured", "cancelled", "unsupported", "failed"] as const;
+export type ScreenshotOutcome = (typeof SCREENSHOT_OUTCOMES)[number];
+
+/**
+ * The whole payload of `screenshot_captured`. Deliberately closed: no pixels, no
+ * coordinates, no file names. The owner only wants to know which mode people use,
+ * on which platform, with how many displays, and how it ended.
+ */
+export interface ScreenshotCapturedProperties {
+  mode: string;
+  platform: string;
+  displays: number;
+  outcome: ScreenshotOutcome;
+}
+
+/** Copies exactly the four allowed fields, so a caller cannot leak an extra one. */
+export function buildScreenshotCapturedProperties(
+  input: ScreenshotCapturedProperties,
+): ScreenshotCapturedProperties {
+  return {
+    mode: input.mode,
+    platform: input.platform,
+    displays: input.displays,
+    outcome: input.outcome,
+  };
+}

@@ -34,17 +34,19 @@ afterEach(() => {
 });
 
 describe("CapturePanel — tabs", () => {
-  it("defaults to the Record tab (recording controls, not the capture button)", () => {
+  it("defaults to the Record tab (recording controls, not the capture buttons)", () => {
     render(<CapturePanel />);
     expect(screen.getByRole("tab", { name: "Record" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("button", { name: /Start Recording/ })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Capture Screen/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Screen/ })).not.toBeInTheDocument();
   });
 
-  it("switches to the Capture tab and shows the Capture Screen action", () => {
+  it("switches to the Capture tab and shows the Area, Screen and Frame actions", () => {
     render(<CapturePanel />);
     fireEvent.click(screen.getByRole("tab", { name: "Capture" }));
-    expect(screen.getByRole("button", { name: /Capture Screen/ })).toBeInTheDocument();
+    for (const name of [/^Area/, /^Screen/, /^Frame/]) {
+      expect(screen.getByRole("button", { name })).toBeInTheDocument();
+    }
     // Recording controls are no longer mounted on the capture tab.
     expect(screen.queryByRole("button", { name: /Start Recording/ })).not.toBeInTheDocument();
   });
@@ -58,13 +60,29 @@ describe("CapturePanel — tabs", () => {
     expect(requestChooseSource).toHaveBeenCalledTimes(1);
   });
 
-  it("asks main to run the capture when the Capture Screen button is clicked", () => {
+  it("does not capture when a mode row is clicked", () => {
     const requestCaptureScreenshot = vi.fn();
     window.electronAPI = { ...realApi, requestCaptureScreenshot };
     render(<CapturePanel />);
     fireEvent.click(screen.getByRole("tab", { name: "Capture" }));
-    fireEvent.click(screen.getByRole("button", { name: /Capture Screen/ }));
-    expect(requestCaptureScreenshot).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: /^Area/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Screen/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Frame/ }));
+    expect(requestCaptureScreenshot).not.toHaveBeenCalled();
+  });
+
+  it("captures with the remembered mode from the Capture tab's primary button", async () => {
+    const requestCaptureScreenshot = vi.fn();
+    const settings = await realApi.getSettings();
+    window.electronAPI = {
+      ...realApi,
+      requestCaptureScreenshot,
+      getSettings: async () => ({ ...settings, screenshotMode: "screen" }),
+    };
+    render(<CapturePanel />);
+    fireEvent.click(screen.getByRole("tab", { name: "Capture" }));
+    fireEvent.click(await screen.findByRole("button", { name: /^Capture · Screen/ }));
+    expect(requestCaptureScreenshot.mock.calls).toEqual([["screen"]]);
   });
 
   it("locks the tabs to Record while a recording is in progress", async () => {
@@ -78,7 +96,7 @@ describe("CapturePanel — tabs", () => {
     expect(screen.getByRole("tab", { name: "Record" })).toBeDisabled();
     // Clicking the locked Capture tab does not reveal the capture action.
     fireEvent.click(screen.getByRole("tab", { name: "Capture" }));
-    expect(screen.queryByRole("button", { name: /Capture Screen/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Screen/ })).not.toBeInTheDocument();
   });
 
   it("keeps the three toggles live mid-take while the source card stays locked", async () => {

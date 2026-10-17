@@ -1,6 +1,4 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Camera } from "lucide-react";
-import { useTranslations } from "@kaipu/i18n";
 import { RecordingIndicator } from "@renderer/features/recording/components/recording-indicator";
 import { useRecordingSetup } from "@renderer/features/recording/hooks/use-recording-setup";
 import { useRecordingActivity } from "@renderer/features/recording/hooks/use-recording-activity";
@@ -10,14 +8,15 @@ import { SourceCard } from "@renderer/features/recording/components/source-card"
 import { RecordingToggles } from "@renderer/features/recording/components/recording-toggles";
 import { MicPicker } from "@renderer/features/recording/components/mic-picker";
 import { RecordButton } from "@renderer/features/recording/components/record-button";
+import { CaptureModeButtons } from "@renderer/features/screenshots/capture-mode-buttons";
 import { PanelHeader } from "./components/panel-header";
 import { PanelTabs, type PanelTab } from "./components/panel-tabs";
+import type { CaptureMode } from "@shared/types/screenshot-capture";
 import styles from "./capture-panel.module.css";
 
 // Compact composition of the recording controls, shown from the menu-bar tray.
 // Reuses the same dumb components + useRecordingSetup hook as the Record page.
 export function CapturePanel(): React.JSX.Element {
-  const t = useTranslations("panel");
   const rootRef = useRef<HTMLDivElement>(null);
   const setup = useRecordingSetup();
   const shortcuts = useShortcutLabels();
@@ -65,9 +64,10 @@ export function CapturePanel(): React.JSX.Element {
   const chooseSource = (): void => window.electronAPI?.requestChooseSource();
   // Start from the tray: open the main window and have its Record page start.
   const requestStart = (): void => window.electronAPI?.requestStartRecording();
-  // Capture from the tray: main dismisses the panel and runs the interactive region
-  // select (same flow as the ⌘⌃X hotkey), landing the user in the editor.
-  const requestCapture = (): void => window.electronAPI?.requestCaptureScreenshot();
+  // Capture from the tray: main dismisses the panel and runs the chosen mode (same flow as
+  // its global hotkey), landing the user in the editor.
+  const requestCapture = (mode: CaptureMode): void =>
+    window.electronAPI?.requestCaptureScreenshot(mode);
 
   return (
     <div ref={rootRef} className={styles.panel}>
@@ -140,16 +140,15 @@ export function CapturePanel(): React.JSX.Element {
           />
         </>
       ) : (
-        // Screenshot mode: a single action that hands off to the native region select.
-        <button type="button" className={styles.captureButton} onClick={requestCapture}>
-          <span className={styles.captureLabel}>
-            <Camera size={16} />
-            {t("captureScreen")}
-          </span>
-          {shortcuts?.captureScreenshot && (
-            <kbd className={styles.captureShortcut}>{shortcuts.captureScreenshot}</kbd>
-          )}
-        </button>
+        // Screenshot mode: the current-mode button and the Area, Screen and Frame rows,
+        // each handed off to main. `recording` stays wired for the day the tab lock above
+        // lifts; today a recording forces the Record tab, so it is null here in practice.
+        <CaptureModeButtons
+          variant="panel"
+          onCapture={requestCapture}
+          shortcuts={shortcuts}
+          recording={isBusy ? { elapsedSeconds: activity.elapsedSeconds } : null}
+        />
       )}
     </div>
   );

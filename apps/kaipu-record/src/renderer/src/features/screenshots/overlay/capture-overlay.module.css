@@ -1,0 +1,268 @@
+/*
+ * The capture overlay: one full-window sheet per display. The sheet is never fully
+ * transparent, so on Windows it receives the clicks instead of the app underneath.
+ * Styled after the Claude Design "Kaipu Screenshot Modes" overlay: a pink Frame box with
+ * marching ants, dark pills for labels, and the Kaipu accent for actions. The overlay
+ * always sits over arbitrary screen content, so it does not follow the app theme.
+ */
+
+.sheet {
+  --overlay-accent: var(--accent-primary, #f6055c);
+  --overlay-pill-bg: rgba(19, 19, 22, 0.95);
+  --overlay-pill-line: rgba(255, 255, 255, 0.16);
+  --overlay-pill-shadow: 0 24px 50px -20px rgba(0, 0, 0, 0.8);
+  --overlay-muted: #8a8a92;
+
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.25);
+  user-select: none;
+  font-family: var(--font-family);
+  touch-action: none;
+}
+
+.area {
+  cursor: crosshair;
+}
+
+/* ── Screen chooser and "move the frame here" ─────────────────── */
+
+.chooser {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+
+.chooser:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 3px var(--overlay-accent);
+}
+
+/* The hovered display lightens and its pill takes the pink highlight. */
+.chooser[data-highlighted="true"] {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.chooserPill {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px 12px 14px;
+  font-family: inherit;
+  text-align: left;
+  background: var(--overlay-pill-bg);
+  border: 1px solid var(--overlay-pill-line);
+  border-radius: 12px;
+  box-shadow: var(--overlay-pill-shadow);
+  cursor: pointer;
+  transition:
+    border-color var(--transition),
+    box-shadow var(--transition);
+}
+
+.chooser[data-highlighted="true"] .chooserPill {
+  border-color: var(--overlay-accent);
+  box-shadow:
+    0 0 0 3px rgba(246, 5, 92, 0.25),
+    var(--overlay-pill-shadow);
+}
+
+.chooserNumber {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: var(--font-weight-semibold);
+  color: #fff;
+  background: var(--overlay-accent);
+  border-radius: 8px;
+}
+
+.chooserText {
+  display: flex;
+  flex-direction: column;
+}
+
+.chooserTitle {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: #f3f3f5;
+}
+
+.chooserSize {
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--overlay-muted);
+}
+
+/* The other displays in Frame mode: one centered pill, the same chrome as the chooser. */
+.movePill {
+  padding: 12px 18px;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: #f3f3f5;
+  background: var(--overlay-pill-bg);
+  border: 1px solid var(--overlay-pill-line);
+  border-radius: 12px;
+  box-shadow: var(--overlay-pill-shadow);
+  transition: border-color var(--transition);
+}
+
+.chooser:hover .movePill,
+.chooser:focus-visible .movePill {
+  border-color: var(--overlay-accent);
+}
+
+/* ── The Area drag rectangle: a 1 px white border ─────────────── */
+
+.box {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid #fff;
+}
+
+.pill {
+  position: absolute;
+  padding: 2px var(--space-sm);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  white-space: nowrap;
+  background: var(--overlay-pill-bg);
+  border: 1px solid var(--overlay-pill-line);
+  border-radius: 6px;
+  pointer-events: none;
+}
+
+/* ── The Frame box ─────────────────────────────────────────────── */
+
+/* 1.5 px pink border; the huge spread shadow dims everything outside the frame once more. */
+.frameBox {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1.5px solid var(--overlay-accent);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.25);
+  cursor: move;
+}
+
+.ants {
+  position: absolute;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.ants rect {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 1;
+  stroke-dasharray: 6 6;
+  animation: ants 0.7s linear infinite;
+}
+
+@keyframes ants {
+  to {
+    stroke-dashoffset: -12; /* one full 6 + 6 dash period, so the loop is seamless */
+  }
+}
+
+.handle {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  margin: -4.5px 0 0 -4.5px;
+  box-sizing: border-box;
+  background: #fff;
+  border: 1.5px solid var(--overlay-accent);
+  border-radius: 2px;
+}
+
+.sizePill {
+  position: absolute;
+  padding: 4px 8px;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  white-space: nowrap;
+  background: var(--overlay-pill-bg);
+  border: 1px solid var(--overlay-pill-line);
+  border-radius: 6px;
+  pointer-events: none;
+}
+
+.toolbar {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  white-space: nowrap;
+  background: var(--overlay-pill-bg);
+  border: 1px solid var(--overlay-pill-line);
+  border-radius: 10px;
+  box-shadow: 0 20px 44px -16px rgba(0, 0, 0, 0.8);
+  transform: translateX(-50%);
+}
+
+.captureButton {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 13px;
+  font-family: inherit;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: #fff;
+  background: var(--overlay-accent);
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.captureButton:hover {
+  background: #ff3d82;
+}
+
+.toolbarHint {
+  padding: 0 8px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--overlay-muted);
+}
+
+/* ── Every overlay ─────────────────────────────────────────────── */
+
+.displayLabel {
+  position: fixed;
+  left: 10px;
+  bottom: 8px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ants rect {
+    animation: none;
+  }
+
+  .chooser,
+  .chooserPill,
+  .movePill {
+    transition: none;
+  }
+}
