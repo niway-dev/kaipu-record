@@ -329,6 +329,16 @@ export const IPC_CHANNELS = {
   screenshotReveal: "screenshot:reveal",
   // Main → renderer: global hotkey fired, run the region capture flow.
   screenshotHotkey: "screenshot:hotkey",
+  // Capture overlay: one window per display (main/screenshots/capture-overlay-windows.ts).
+  // Overlay → main: the user's pick (`OverlayAnswer`); the first valid one wins.
+  screenshotOverlayAnswer: "screenshot:overlay-answer",
+  // Overlay → main: the pointer is over this display (`{ displayId: number | null }`).
+  screenshotOverlayHover: "screenshot:overlay-hover",
+  // Main → every overlay: `{ hoverDisplayId: number | null }`, so only one highlights.
+  screenshotOverlayState: "screenshot:overlay-state",
+  // Main → overlay (no payload): "reply after your next animation frame"; overlay → main
+  // on the same channel (no payload). Capture waits for every reply or a 250 ms cap.
+  screenshotOverlayHiddenAck: "screenshot:overlay-hidden-ack",
   // Recording engine (renderer ↔ main)
   recordingCreate: "recording:create",
   recordingWrite: "recording:write",

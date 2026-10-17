@@ -9,7 +9,11 @@ import {
 } from "./screenshot-capture";
 
 const MODES: CaptureMode[] = ["area", "screen", "frame"];
-const overlay: OverlayPort = { pick: vi.fn(async () => ({ kind: "cancelled" as const })) };
+const overlay: OverlayPort = {
+  pick: vi.fn(async () => ({ kind: "cancelled" as const })),
+  hideAll: vi.fn(async () => {}),
+  destroyAll: vi.fn(),
+};
 
 describe("MacProvider", () => {
   // Typed with the Deps signatures so the injected object is assignable (vi.fn's
