@@ -7,6 +7,9 @@ import {
   UnsupportedProvider,
   WindowsProvider,
   createScreenshotProvider,
+  type CapturedImage,
+  type ScreenSource,
+  type WindowsDeps,
 } from "./screenshot-capture";
 
 const MODES: CaptureMode[] = ["area", "screen", "frame"];
@@ -194,20 +197,192 @@ describe("MacProvider", () => {
   });
 });
 
-describe.each([
-  ["WindowsProvider", () => new WindowsProvider()],
-  ["UnsupportedProvider", () => new UnsupportedProvider()],
-])("%s", (_name, make) => {
+describe("UnsupportedProvider", () => {
   it.each(MODES)("%s echoes the mode as unsupported", async (mode) => {
-    expect(await make().capture({ mode, overlay })).toEqual({ kind: "unsupported", mode });
+    expect(await new UnsupportedProvider().capture({ mode, overlay })).toEqual({
+      kind: "unsupported",
+      mode,
+    });
+  });
+});
+
+describe("WindowsProvider", () => {
+  const PNG = (tag: string): Buffer => Buffer.from(`png:${tag}`);
+  const display = (
+    id: number,
+    bounds: { x: number; y: number; width: number; height: number },
+    scaleFactor: number,
+  ): Display => ({ id, bounds, workArea: bounds, scaleFactor }) as Display;
+  const primary = display(1, { x: 0, y: 0, width: 1920, height: 1080 }, 1);
+  const hiDpi = display(2, { x: 1920, y: 0, width: 1280, height: 720 }, 1.5);
+
+  let log: string[];
+  let answer: OverlayAnswer;
+  let displays: Display[];
+  let sources: ScreenSource[];
+  let fake: OverlayPort;
+  let settle: () => Promise<void>;
+  let crops: Array<{ x: number; y: number; width: number; height: number }>;
+  let requested: Array<{ width: number; height: number }>;
+
+  /** A fake image of `size` whose crop records the rectangle and tags its PNG. */
+  const image = (size: { width: number; height: number }, tag: string): CapturedImage => ({
+    getSize: () => size,
+    crop: (rect) => {
+      crops.push(rect);
+      return image({ width: rect.width, height: rect.height }, `${tag}-crop`);
+    },
+    toPNG: () => PNG(tag),
+  });
+
+  beforeEach(() => {
+    log = [];
+    crops = [];
+    requested = [];
+    settle = async () => {};
+    answer = { kind: "cancelled" };
+    displays = [primary];
+    sources = [{ display_id: "1", thumbnail: image({ width: 1920, height: 1080 }, "one") }];
+    fake = {
+      pick: vi.fn(async (ui) => {
+        log.push(`pick:${ui}`);
+        return answer;
+      }),
+      hideAll: vi.fn(async () => {
+        log.push("hideAll");
+      }),
+      destroyAll: vi.fn(() => {
+        log.push("destroyAll");
+      }),
+    };
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  const provider = (): WindowsProvider => {
+    const deps: WindowsDeps = {
+      getSources: async (options) => {
+        log.push("getSources");
+        requested.push(options.thumbnailSize);
+        return sources;
+      },
+      getDisplays: async () => displays,
+      settle: () => settle(),
+    };
+    return new WindowsProvider(deps);
+  };
+
+  it("serves every mode", () => {
+    expect(MODES.map((m) => provider().supports(m))).toEqual([true, true, true]);
+  });
+
+  it("area: pick, hide, capture, destroy, in that order, cropped in physical pixels", async () => {
+    answer = { kind: "rect", displayId: 1, rect: { x: 100, y: 50, width: 640, height: 360 } };
+    const out = await provider().capture({ mode: "area", overlay: fake });
+    expect(log).toEqual(["pick:area", "hideAll", "getSources", "destroyAll"]);
+    expect(crops).toEqual([{ x: 100, y: 50, width: 640, height: 360 }]);
+    expect(out).toEqual({ kind: "captured", png: PNG("one-crop"), mode: "area" });
+  });
+
+  it("frame on a 150% display crops 150 physical px for a 100 DIP frame", async () => {
+    displays = [primary, hiDpi];
+    sources = [{ display_id: "2", thumbnail: image({ width: 1920, height: 1080 }, "two") }];
+    answer = { kind: "rect", displayId: 2, rect: { x: 0, y: 0, width: 100, height: 100 } };
+    await provider().capture({ mode: "frame", overlay: fake });
+    expect(requested).toEqual([{ width: 1920, height: 1080 }]);
+    expect(crops).toEqual([{ x: 0, y: 0, width: 150, height: 150 }]);
+  });
+
+  it("an image smaller than requested still crops the right region", async () => {
+    displays = [primary, hiDpi];
+    // Asked for 1920x1080, got 1280x720 (scale 1.0): 100 DIP is now 100 px, not 150.
+    sources = [{ display_id: "2", thumbnail: image({ width: 1280, height: 720 }, "two") }];
+    answer = { kind: "rect", displayId: 2, rect: { x: 640, y: 360, width: 100, height: 100 } };
+    await provider().capture({ mode: "frame", overlay: fake });
+    expect(crops).toEqual([{ x: 640, y: 360, width: 100, height: 100 }]);
+  });
+
+  it("matches the source by display_id when there are two", async () => {
+    displays = [primary, hiDpi];
+    sources = [
+      { display_id: "1", thumbnail: image({ width: 1920, height: 1080 }, "one") },
+      { display_id: "2", thumbnail: image({ width: 1920, height: 1080 }, "two") },
+    ];
+    answer = { kind: "display", displayId: 2 };
+    const out = await provider().capture({ mode: "screen", overlay: fake });
+    expect(out).toEqual({ kind: "captured", png: PNG("two"), mode: "screen" });
+    expect(crops).toEqual([]); // Screen takes the whole thumbnail
+  });
+
+  it("falls back to the lone source when its display_id is empty", async () => {
+    sources = [{ display_id: "", thumbnail: image({ width: 1920, height: 1080 }, "lone") }];
+    const out = await provider().capture({ mode: "screen", overlay: fake });
+    expect(out).toEqual({ kind: "captured", png: PNG("lone"), mode: "screen" });
+  });
+
+  it("does not guess among several sources when none matches", async () => {
+    displays = [primary, hiDpi];
+    sources = [
+      { display_id: "7", thumbnail: image({ width: 1, height: 1 }, "a") },
+      { display_id: "8", thumbnail: image({ width: 1, height: 1 }, "b") },
+    ];
+    answer = { kind: "display", displayId: 2 };
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(await provider().capture({ mode: "screen", overlay: fake })).toEqual({
+      kind: "cancelled",
+    });
+  });
+
+  it("screen with one display skips the overlay, settles, hides and captures", async () => {
+    const out = await provider().capture({ mode: "screen", overlay: fake });
+    expect(fake.pick).not.toHaveBeenCalled();
+    expect(log).toEqual(["hideAll", "getSources", "destroyAll"]);
+    expect(out).toEqual({ kind: "captured", png: PNG("one"), mode: "screen" });
+  });
+
+  it("one display waits for the settle delay before asking for sources", async () => {
+    let release = (): void => {};
+    settle = () => new Promise<void>((resolve) => (release = resolve));
+    const pending = provider().capture({ mode: "screen", overlay: fake });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(log).not.toContain("getSources");
+    release();
+    expect((await pending).kind).toBe("captured");
+  });
+
+  it("an empty source list answers cancelled with a warning and destroys", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    sources = [];
+    expect(await provider().capture({ mode: "screen", overlay: fake })).toEqual({
+      kind: "cancelled",
+    });
+    expect(warn).toHaveBeenCalled();
+    expect(log.at(-1)).toBe("destroyAll");
+  });
+
+  it("cancel at pick answers cancelled, captures nothing, and still destroys", async () => {
+    expect(await provider().capture({ mode: "area", overlay: fake })).toEqual({
+      kind: "cancelled",
+    });
+    expect(log).toEqual(["pick:area", "destroyAll"]);
+  });
+
+  it("destroys the overlay and rethrows when getSources throws", async () => {
+    const throwing = new WindowsProvider({
+      getSources: async () => {
+        throw new Error("boom");
+      },
+      getDisplays: async () => displays,
+      settle,
+    });
+    await expect(throwing.capture({ mode: "screen", overlay: fake })).rejects.toThrow("boom");
+    expect(fake.destroyAll).toHaveBeenCalledTimes(1);
   });
 });
 
 describe("supports", () => {
-  it("Mac serves every mode; Windows and others serve nothing", () => {
+  it("Mac and Windows serve every mode; others serve nothing", () => {
     const mac = new MacProvider();
     expect(MODES.map((m) => mac.supports(m))).toEqual([true, true, true]);
-    expect(new WindowsProvider().supports()).toBe(false);
     expect(new UnsupportedProvider().supports()).toBe(false);
   });
 });
