@@ -60,10 +60,11 @@ describe("useScreenshotCapture", () => {
   });
 
   it("toasts the Windows message on unsupported", async () => {
-    stubApi({ kind: "unsupported", mode: "area", platform: "win32" });
+    const api = stubApi({ kind: "unsupported", mode: "area", platform: "win32" });
     const { result } = renderHook(() => useScreenshotCapture());
     await act(() => result.current.capture());
     expect(showToast).toHaveBeenCalledWith({ message: "captureUnsupportedWindows" });
+    expect(api.revealAfterCapture).toHaveBeenCalled();
     expect(openCapture).not.toHaveBeenCalled();
   });
 

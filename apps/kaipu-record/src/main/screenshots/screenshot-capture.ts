@@ -17,6 +17,8 @@ export type ProviderResult =
   | { kind: "unsupported"; mode: CaptureMode };
 
 export interface ScreenshotCaptureProvider {
+  /** Whether `capture` can serve `mode`; lets the handler answer before hiding any window. */
+  supports(mode: CaptureMode): boolean;
   capture(request: CaptureRequest): Promise<ProviderResult>;
 }
 
@@ -48,6 +50,11 @@ const realDeps: Deps = {
 export class MacProvider implements ScreenshotCaptureProvider {
   constructor(private readonly deps: Deps = realDeps) {}
 
+  // Only Area for now; the task that wires the Screen/Frame overlay flips these.
+  supports(mode: CaptureMode): boolean {
+    return mode === "area";
+  }
+
   async capture({ mode }: CaptureRequest): Promise<ProviderResult> {
     // Screen and Frame need our own overlay: a later task wires
     // `request.overlay.pick(...)` here (pick -> `screencapture -R <bounds> -x`).
@@ -63,6 +70,11 @@ export class MacProvider implements ScreenshotCaptureProvider {
 
 /** Windows: skeleton until the Windows backend lands; every mode is unsupported. */
 export class WindowsProvider implements ScreenshotCaptureProvider {
+  // No mode yet; the Windows backend task flips these.
+  supports(): boolean {
+    return false;
+  }
+
   async capture({ mode }: CaptureRequest): Promise<ProviderResult> {
     return { kind: "unsupported", mode };
   }
@@ -70,6 +82,10 @@ export class WindowsProvider implements ScreenshotCaptureProvider {
 
 /** Any other platform has no capture backend. */
 export class UnsupportedProvider implements ScreenshotCaptureProvider {
+  supports(): boolean {
+    return false;
+  }
+
   async capture({ mode }: CaptureRequest): Promise<ProviderResult> {
     return { kind: "unsupported", mode };
   }
