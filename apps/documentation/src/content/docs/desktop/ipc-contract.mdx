@@ -46,6 +46,11 @@ Sí existen y persisten: `settings-store.ts` registra ambos handlers, el preload
 | `settings:update`  | r→m | `updateSettings(patch)` | `settings-store.ts` |
 | `settings:changed` | m→r | `onSettingsChanged(cb)` | `settings-store.ts` |
 
+`AppSettings.screenshotMode` (`"area" | "screen" | "frame"`, default `"area"`; an unknown
+stored value merges back to `"area"`) is the one current screenshot mode, shared by the
+Screenshots page, the tray panel and the generic capture shortcut. Main-side writers use
+`updateAppSettings(patch)` in `settings-store.ts`, the same path as `settings:update`.
+
 `settings:changed` se emite a **todas** las ventanas tras cada cambio (patrón consultar-al-montar + suscribir), para que consumidores como el hint de atajo de la barra flotante no queden stale.
 
 ### Permisos
@@ -106,8 +111,14 @@ Payloads of the capture channels (`CaptureMode` is `"area" | "screen" | "frame"`
 | `screenshot:overlay-frame-display` | `{ displayId: number }`: Frame only, move the one frame to this display                                                                           | main validates the sender and that the id is a picked display, then rebroadcasts `screenshot:overlay-state`; ignored in other modes     |
 | `screenshot:overlay-hidden-ack`    | main to overlay: none (reply after your next animation frame); overlay to main: none                                                              | capture waits for every reply or a 250 ms cap, then settles 80 ms more                                                                  |
 
-The global shortcut actions that feed `screenshot:hotkey` are `captureScreenshot` (Area),
-`captureScreen` and `captureFrame`; each sends its own mode. Analytics: the handler of
+The global shortcut actions that feed `screenshot:hotkey` are `captureScreenshot`,
+`captureScreen` and `captureFrame`, and main resolves the mode before broadcasting
+(`main/screenshots/shortcut-capture.ts`). `captureScreenshot` captures with the current mode,
+`AppSettings.screenshotMode`, or with `"area"` when the platform cannot serve the stored one.
+`captureScreen` and `captureFrame` capture with their own mode and make it current (main
+writes `screenshotMode` through `updateAppSettings`, which broadcasts `settings:changed`); a
+mode the platform cannot serve is not remembered. The page and the tray make a mode current
+through `settings:update` before they ask for the capture. Analytics: the handler of
 `screenshot:capture` emits one `screenshot_captured` event per answered request with
 `{ mode, platform, displays, outcome }` and nothing else. `outcome` is `captured`,
 `cancelled`, `unsupported` or `failed`; `failed` is a provider throw, which the renderer still
