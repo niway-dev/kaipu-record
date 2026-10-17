@@ -60,7 +60,7 @@ describe("CapturePanel — tabs", () => {
     expect(requestChooseSource).toHaveBeenCalledTimes(1);
   });
 
-  it("asks main to run the clicked mode", () => {
+  it("does not capture when a mode row is clicked", () => {
     const requestCaptureScreenshot = vi.fn();
     window.electronAPI = { ...realApi, requestCaptureScreenshot };
     render(<CapturePanel />);
@@ -68,7 +68,7 @@ describe("CapturePanel — tabs", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Area/ }));
     fireEvent.click(screen.getByRole("button", { name: /^Screen/ }));
     fireEvent.click(screen.getByRole("button", { name: /^Frame/ }));
-    expect(requestCaptureScreenshot.mock.calls).toEqual([["area"], ["screen"], ["frame"]]);
+    expect(requestCaptureScreenshot).not.toHaveBeenCalled();
   });
 
   it("captures with the remembered mode from the Capture tab's primary button", async () => {
