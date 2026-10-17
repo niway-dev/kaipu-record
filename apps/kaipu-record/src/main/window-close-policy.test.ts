@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   closeAction,
   handleMainWindowClose,
+  isQuitShortcut,
   shouldQuitOnAllWindowsClosed,
 } from "./window-close-policy";
 
@@ -77,5 +78,52 @@ describe("handleMainWindowClose", () => {
     const { event, hide } = run("win32", false, true);
     expect(event.preventDefault).not.toHaveBeenCalled();
     expect(hide).not.toHaveBeenCalled();
+  });
+
+  it("hides again once a quit was aborted at a guard and isQuitting was reset", () => {
+    // Quitting: the window-level guard prompts and the user cancels — the quit is
+    // aborted, index.ts resets isQuitting. The next X must hide, not close.
+    const aborted = run("win32", true, true);
+    expect(aborted.hide).not.toHaveBeenCalled();
+    const next = run("win32", false, false);
+    expect(next.event.preventDefault).toHaveBeenCalledOnce();
+    expect(next.hide).toHaveBeenCalledOnce();
+  });
+});
+
+describe("isQuitShortcut", () => {
+  const key = (overrides: Partial<Parameters<typeof isQuitShortcut>[0]> = {}) => ({
+    type: "keyDown",
+    key: "q",
+    control: true,
+    alt: false,
+    shift: false,
+    meta: false,
+    isAutoRepeat: false,
+    ...overrides,
+  });
+
+  it("matches Ctrl+Q on Windows", () => {
+    expect(isQuitShortcut(key(), "win32")).toBe(true);
+    expect(isQuitShortcut(key({ key: "Q" }), "win32")).toBe(true);
+  });
+
+  it("ignores Ctrl+Q on macOS, which quits with Cmd+Q from the app menu", () => {
+    expect(isQuitShortcut(key(), "darwin")).toBe(false);
+  });
+
+  it("ignores Ctrl+Shift+Q, Ctrl+Alt+Q and plain Q", () => {
+    expect(isQuitShortcut(key({ shift: true }), "win32")).toBe(false);
+    expect(isQuitShortcut(key({ alt: true }), "win32")).toBe(false);
+    expect(isQuitShortcut(key({ meta: true }), "win32")).toBe(false);
+    expect(isQuitShortcut(key({ control: false }), "win32")).toBe(false);
+  });
+
+  it("acts on key down only", () => {
+    expect(isQuitShortcut(key({ type: "keyUp" }), "win32")).toBe(false);
+  });
+
+  it("ignores the auto-repeat of a held Ctrl+Q", () => {
+    expect(isQuitShortcut(key({ isAutoRepeat: true }), "win32")).toBe(false);
   });
 });

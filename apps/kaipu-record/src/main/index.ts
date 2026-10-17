@@ -60,7 +60,11 @@ import {
   WINDOW_PRESETS,
   type WindowPresetName,
 } from "@shared/window-size";
-import { handleMainWindowClose, shouldQuitOnAllWindowsClosed } from "./window-close-policy";
+import {
+  handleMainWindowClose,
+  isQuitShortcut,
+  shouldQuitOnAllWindowsClosed,
+} from "./window-close-policy";
 
 let mainWindow: BrowserWindow | null = null;
 let capturePanel: CapturePanelWindow | null = null;
@@ -208,7 +212,12 @@ function createWindow(showOnReady = true): void {
       message: t("dialogs.recordingInProgress"),
       detail: t("dialogs.closeStopsDetail"),
     });
-    if (choice !== 1) return true;
+    if (choice !== 1) {
+      // Cancelling here aborts a quit already past `before-quit`, if one was in
+      // flight: the app keeps running, so the next close must hide again.
+      isQuitting = false;
+      return true;
+    }
     closingWithRecording = true;
     mainWindow?.webContents.send(IPC_CHANNELS.recordingCommand, "stop");
     const finishClose = (): void => mainWindow?.close();
@@ -236,7 +245,12 @@ function createWindow(showOnReady = true): void {
       message: t("dialogs.exportInProgress"),
       detail: t("dialogs.closeCancelsExportDetail"),
     });
-    if (choice !== 1) return true;
+    if (choice !== 1) {
+      // Cancelling here aborts a quit already past `before-quit`, if one was in
+      // flight: the app keeps running, so the next close must hide again.
+      isQuitting = false;
+      return true;
+    }
     closingWithExport = true;
     cancelExportThen(() => mainWindow?.close());
     return true;
@@ -253,6 +267,13 @@ function createWindow(showOnReady = true): void {
       { platform: process.platform, isQuitting, guardTookOver },
       hideMainWindowToTray,
     );
+  });
+
+  // Windows: Ctrl+Q quits, as the tray menu's Quit does (the hidden menu bar binds nothing).
+  mainWindow.webContents.on("before-input-event", (event, input) => {
+    if (!isQuitShortcut(input, process.platform)) return;
+    event.preventDefault();
+    app.quit();
   });
 
   // Windows log-off / shutdown ends the app without `before-quit`; let the close through.
