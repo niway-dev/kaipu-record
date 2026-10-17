@@ -1,0 +1,488 @@
+/*
+ * The screenshot mode picker (Claude Design "Kaipu Screenshot Modes"): the Screenshots
+ * page hero and the tray panel's button + rows. Colours come from the theme tokens; the
+ * accent tints and the shadow are the mock's own values, the same in both themes. The
+ * amber reason pill reuses `--tone-heavy` from base.css.
+ */
+
+.hero,
+.panel {
+  --picker-accent-hover: #ff3d82;
+  --picker-accent-tint: rgba(246, 5, 92, 0.08);
+  --picker-accent-line: rgba(246, 5, 92, 0.6);
+  --picker-accent-glow: 0 0 0 3px rgba(246, 5, 92, 0.12);
+  --picker-amber-bg: rgba(245, 158, 11, 0.12);
+  --picker-amber-line: rgba(245, 158, 11, 0.35);
+  --picker-off-bg: var(--border);
+  --picker-off-text: var(--text-muted);
+
+  font-family: var(--font-family);
+  color: var(--text-primary);
+}
+
+/* ── Primary button (both variants) ─────────────────────────── */
+
+.primary {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-family: inherit;
+  font-weight: var(--font-weight-semibold);
+  color: #fff;
+  background: var(--accent-primary);
+  border: 0;
+  box-shadow: 0 14px 30px -12px rgba(246, 5, 92, 0.95);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    box-shadow var(--transition);
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--picker-accent-hover);
+}
+
+.primary:focus-visible,
+.card:focus-visible,
+.row:focus-visible,
+.bannerLink:focus-visible {
+  outline: 2px solid var(--accent-primary-ring);
+  outline-offset: 2px;
+}
+
+.primary:disabled {
+  cursor: default;
+  color: var(--picker-off-text);
+  background: var(--picker-off-bg);
+  box-shadow: none;
+}
+
+.primaryShortcut {
+  margin-left: 4px;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-normal);
+  color: rgba(255, 255, 255, 0.8);
+  background: none;
+  border: 0;
+  padding: 0;
+}
+
+.primary:disabled .primaryShortcut {
+  color: var(--picker-off-text);
+}
+
+.recIcon {
+  flex-shrink: 0;
+  color: var(--accent-primary);
+}
+
+/* ── Page hero ──────────────────────────────────────────────── */
+
+.hero {
+  width: 100%;
+  padding: 22px;
+  background: var(--bg-modal);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  text-align: left;
+}
+
+.hero .primary {
+  height: 50px;
+  padding: 0 26px;
+  border-radius: 11px;
+  font-size: 15.5px;
+}
+
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-bottom: var(--space-lg);
+  padding: 11px 14px;
+  background: var(--picker-accent-tint);
+  border: 1px solid rgba(246, 5, 92, 0.3);
+  border-radius: 10px;
+}
+
+.bannerText {
+  flex: 1;
+  margin: 0;
+  font-size: var(--font-size-base);
+  color: var(--text-primary);
+}
+
+.bannerText b,
+.trayBanner b {
+  font-weight: var(--font-weight-semibold);
+}
+
+.bannerLink {
+  appearance: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+  color: var(--accent-primary);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.bannerLink:hover {
+  color: var(--picker-accent-hover);
+}
+
+.heroTop {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.heroHint {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--font-size-base);
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.cards {
+  display: flex;
+  gap: 10px;
+}
+
+.card {
+  appearance: none;
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 15px 13px;
+  font-family: inherit;
+  text-align: left;
+  color: inherit;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    border-color var(--transition),
+    box-shadow var(--transition),
+    opacity var(--transition);
+}
+
+.card:hover:not(:disabled):not([data-current]) {
+  background: var(--bg-card-hover);
+  border-color: rgba(246, 5, 92, 0.5);
+}
+
+.card[data-current] {
+  background: var(--picker-accent-tint);
+  border-color: var(--picker-accent-line);
+  box-shadow: var(--picker-accent-glow);
+}
+
+.card:disabled {
+  cursor: default;
+}
+
+/* Unavailable on this platform: dimmed, the reason in place of the shortcut. */
+.card[data-unavailable] {
+  opacity: 0.55;
+}
+
+/* A recording pauses every mode: the same dim as an unavailable one, and no pointer
+   interaction at all (no hover tint), so only the banner reads as live. */
+.hero[data-busy] .card,
+.panel[data-busy] .row {
+  opacity: 0.55;
+  cursor: default;
+  pointer-events: none;
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  color: var(--text-secondary);
+  background: var(--bg-card-hover);
+}
+
+.card[data-current] .tile {
+  color: #fff;
+  background: var(--accent-primary);
+}
+
+.card:disabled .tile {
+  color: var(--picker-off-text);
+}
+
+.cardName {
+  font-size: 15px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.card[data-unavailable] .cardName {
+  color: var(--text-secondary);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.cardLine {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.card:disabled .cardLine {
+  color: var(--picker-off-text);
+}
+
+.cardFoot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  height: 20px;
+  margin-top: auto;
+}
+
+.kbd {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: var(--font-weight-normal);
+  white-space: nowrap;
+  color: var(--text-secondary);
+  background: none;
+  border: 1px solid var(--border-light);
+  border-radius: 5px;
+  padding: 2px 6px;
+}
+
+.card:disabled .kbd {
+  color: var(--picker-off-text);
+  border-color: var(--border);
+}
+
+.currentPill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 6px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--accent-primary);
+  background: var(--accent-primary-tint);
+  border: 1px solid var(--accent-primary-ring);
+  border-radius: 4px;
+}
+
+.currentDot {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+}
+
+.reason {
+  padding: 2px 6px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--tone-heavy);
+  background: var(--picker-amber-bg);
+  border: 1px solid var(--picker-amber-line);
+  border-radius: 4px;
+}
+
+.hoverPill {
+  padding: 3px 7px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: #fff;
+  background: var(--accent-primary);
+  border-radius: 5px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+
+.card:hover .hoverPill,
+.card:focus-visible .hoverPill {
+  opacity: 1;
+}
+
+.note {
+  margin: 10px 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+/* ── Tray panel ─────────────────────────────────────────────── */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.trayBanner {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 10px;
+  padding: 10px 11px;
+  font-size: 12.5px;
+  color: var(--text-primary);
+  background: var(--picker-accent-tint);
+  border: 1px solid rgba(246, 5, 92, 0.3);
+  border-radius: 9px;
+}
+
+.panel .primary {
+  height: 44px;
+  margin-bottom: 10px;
+  border-radius: 9px;
+  font-size: var(--font-size-md);
+  gap: 9px;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.row {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  padding: 0 10px;
+  font-family: inherit;
+  text-align: left;
+  color: inherit;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+
+.row:hover:not(:disabled):not([data-current]) {
+  background: var(--bg-card-hover);
+}
+
+.row[data-current] {
+  background: var(--accent-primary-soft);
+  border-color: rgba(246, 5, 92, 0.45);
+}
+
+.row:disabled {
+  cursor: default;
+}
+
+.row[data-unavailable] {
+  opacity: 0.55;
+}
+
+.rowIcon {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.row[data-current] .rowIcon {
+  color: var(--accent-primary);
+}
+
+.row:disabled .rowIcon {
+  color: var(--picker-off-text);
+}
+
+.rowName {
+  flex: 1;
+  font-size: 13.5px;
+  font-weight: var(--font-weight-medium);
+}
+
+.row[data-unavailable] .rowName {
+  color: var(--text-secondary);
+}
+
+.rowShortcut {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: var(--font-weight-normal);
+  color: var(--text-secondary);
+  background: none;
+  border: 0;
+  padding: 0;
+}
+
+.row:disabled .rowShortcut {
+  color: var(--picker-off-text);
+}
+
+.rowReason {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--tone-heavy);
+}
+
+.trayHint {
+  margin: 10px 0 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+/* A narrow main window: the button over its hint, the cards stacked. */
+@media (max-width: 720px) {
+  .heroTop,
+  .cards {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .primary,
+  .card,
+  .row,
+  .hoverPill {
+    transition: none;
+  }
+}

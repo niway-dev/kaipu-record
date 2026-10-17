@@ -22,6 +22,19 @@ describe("DEFAULT_ACCELERATORS", () => {
     }
   });
 
+  it("binds Area, Screen and Frame capture on both platforms", () => {
+    expect(DEFAULT_ACCELERATORS.mac).toMatchObject({
+      captureScreenshot: "Command+Control+X",
+      captureScreen: "Command+Control+Shift+X",
+      captureFrame: "Command+Control+Shift+F",
+    });
+    expect(DEFAULT_ACCELERATORS.windows).toMatchObject({
+      captureScreenshot: "Control+Alt+X",
+      captureScreen: "Control+Alt+Shift+X",
+      captureFrame: "Control+Alt+Shift+F",
+    });
+  });
+
   it("keeps Command off the Windows column", () => {
     // Command is macOS-only: Electron maps it to nothing on Windows, so such a
     // binding registers as dead rather than failing loudly.

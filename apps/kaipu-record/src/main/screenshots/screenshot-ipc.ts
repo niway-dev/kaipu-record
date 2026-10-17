@@ -1,62 +1,61 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, screen } from "electron";
 import { createMainTranslator } from "@kaipu/i18n/main";
+import { buildScreenshotCapturedProperties, SCREENSHOT_CAPTURED_EVENT } from "@shared/analytics";
 import { IPC_CHANNELS } from "@shared/types/ipc";
 import type { LocalRecording } from "@shared/types/library-storage";
+import type { CaptureMode } from "@shared/types/screenshot-capture";
 import { assertExportPayload, exportFileName } from "./export-file-name";
+import { createCaptureHandler, type CaptureWindowHooks } from "./capture-handler";
+import { CaptureOverlayWindows } from "./capture-overlay-windows";
+import type { OverlayPort } from "./overlay-port";
 import { createScreenshotProvider } from "./screenshot-capture";
+import { captureMainEvent } from "../services/analytics.service";
 import { getAppSettings } from "../infrastructure/settings-store";
 import { currentVault, screenshotFilePath } from "../library";
-
-const provider = createScreenshotProvider();
 
 /** Stable, sortable id; mirrors the recording writer's timestamp scheme. */
 function screenshotId(): string {
   return `screenshot-${new Date().toISOString().replace(/[:.]/g, "-")}`;
 }
 
+let overlayWindows: CaptureOverlayWindows | null = null;
+
 /**
- * Window orchestration around a capture, owned by main (which holds the windows).
- * The native `screencapture` overlay floats above everything, so the app must get
- * OUT of the way during a capture instead of coming to the front.
+ * The overlay windows, created on first use: `BrowserWindow` and `screen` need a ready
+ * app, and most sessions never open an overlay. Before `ready` a pick answers `cancelled`.
  */
-export interface CaptureWindowHooks {
-  /** Hide the app so it isn't in the shot. Remembers prior visibility. */
-  beforeCapture(): void;
-  /** After the overlay closes: restore prior visibility if the user cancelled. */
-  afterCapture(captured: boolean): void;
-  /** Bring the app to the front (the renderer calls this once it shows the editor). */
-  reveal(): void;
+const overlay: OverlayPort = {
+  pick: async (ui, displays) => {
+    if (!app.isReady()) return { kind: "cancelled" };
+    overlayWindows ??= new CaptureOverlayWindows();
+    return overlayWindows.pick(ui, displays);
+  },
+  hideAll: async () => overlayWindows?.hideAll(),
+  destroyAll: () => overlayWindows?.destroyAll(),
+};
+
+/** What the rest of main needs from the screenshot backend once it is registered. */
+export interface ScreenshotHandlers {
+  /** The modes this platform's provider can serve (the capture shortcuts fall back on it). */
+  supportedModes(): CaptureMode[];
 }
 
-export function registerScreenshotHandlers(windows: CaptureWindowHooks): void {
-  // Re-entrancy guard: a second capture while one is in flight would stack native
-  // overlays and clobber the saved window-visibility state (leaving the app stuck
-  // hidden on cancel). Ignore captures until the current one settles.
-  let capturing = false;
-
-  ipcMain.handle(IPC_CHANNELS.screenshotCapture, async () => {
-    if (process.platform !== "darwin" || capturing) return null;
-    capturing = true;
-    windows.beforeCapture();
-    let png: Buffer | null = null;
-    try {
-      png = await provider.captureInteractive();
-    } finally {
-      capturing = false;
-      windows.afterCapture(Boolean(png));
-    }
-    if (!png) return null;
-    const img = nativeImage.createFromBuffer(png);
-    const { width, height } = img.getSize();
-    // Buffer → ArrayBuffer slice for structured-clone across IPC.
-    return {
-      png: png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength),
-      width,
-      height,
-    };
+export function registerScreenshotHandlers(windows: CaptureWindowHooks): ScreenshotHandlers {
+  const provider = createScreenshotProvider(process.platform);
+  const handleCapture = createCaptureHandler({
+    platform: process.platform,
+    provider,
+    overlay,
+    windows,
+    measure: (png) => nativeImage.createFromBuffer(png).getSize(),
+    displayCount: () => screen.getAllDisplays().length,
+    track: (event) =>
+      captureMainEvent(SCREENSHOT_CAPTURED_EVENT, buildScreenshotCapturedProperties(event)),
   });
+  ipcMain.handle(IPC_CHANNELS.screenshotCapture, (_event, request) => handleCapture(request));
+  ipcMain.handle(IPC_CHANNELS.screenshotSupportedModes, () => provider.supportedModes());
 
   ipcMain.on(IPC_CHANNELS.screenshotReveal, () => windows.reveal());
 
@@ -145,4 +144,6 @@ export function registerScreenshotHandlers(windows: CaptureWindowHooks): void {
       return { path: result.filePath };
     },
   );
+
+  return { supportedModes: () => provider.supportedModes() };
 }

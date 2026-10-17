@@ -53,6 +53,31 @@ describe("the desktop shortcut defaults", () => {
     expect(defaultShortcutsFor("linux")).toEqual(defaultShortcutsFor("darwin"));
   });
 
+  it("pins the three capture modes to their documented combos on both platforms", () => {
+    const byAction = Object.fromEntries(
+      SHORTCUT_DEFINITIONS.map((d) => [d.action, d.defaultAccelerator]),
+    );
+    expect(byAction.captureScreenshot).toMatchObject({
+      mac: "Command+Control+X",
+      win: "Control+Alt+X",
+    });
+    expect(byAction.captureScreen).toMatchObject({
+      mac: "Command+Control+Shift+X",
+      win: "Control+Alt+Shift+X",
+    });
+    expect(byAction.captureFrame).toMatchObject({
+      mac: "Command+Control+Shift+F",
+      win: "Control+Alt+Shift+F",
+    });
+  });
+
+  it("keeps the new capture actions in the app group with their status words", () => {
+    const screen = SHORTCUT_DEFINITIONS.find((d) => d.action === "captureScreen");
+    const frame = SHORTCUT_DEFINITIONS.find((d) => d.action === "captureFrame");
+    expect(screen).toMatchObject({ group: "app", statusWord: "screen" });
+    expect(frame).toMatchObject({ group: "app", statusWord: "frame" });
+  });
+
   it("defines every action exactly once", () => {
     const actions = SHORTCUT_DEFINITIONS.map((d) => d.action);
     expect(new Set(actions).size).toBe(actions.length);

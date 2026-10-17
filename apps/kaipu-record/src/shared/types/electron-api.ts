@@ -4,6 +4,13 @@ import type { WindowPresetName } from "../window-size";
  * `src/preload`, typed for the renderer via `src/preload/index.d.ts`). Pure types.
  */
 
+import type {
+  CaptureMode,
+  CaptureRequestPayload,
+  CaptureResult,
+  OverlayAnswer,
+  OverlayState,
+} from "./screenshot-capture";
 import type { SerializedError } from "../analytics";
 import type { AppSettings, ShortcutAction, TagSummary, UpdateStatus } from "./ipc";
 import type { TagColor } from "@kaipu/domain/constants";
@@ -32,6 +39,25 @@ export interface ScreenSource {
   name: string;
   thumbnail: string;
   type: "screen" | "window";
+}
+
+/**
+ * The capture overlay window's bridge (`?window=capture-overlay`, one per display). The
+ * overlay only answers what the user picked; main captures the pixels.
+ */
+export interface CaptureOverlayBridge {
+  /** Send the user's pick. Main keeps the first valid answer and ignores the rest. */
+  answer(answer: OverlayAnswer): void;
+  /** The pointer entered this display (its id) or left it (`null`). */
+  hover(displayId: number | null): void;
+  /** Frame mode: ask main to move the one frame to this display. */
+  chooseFrameDisplay(displayId: number): void;
+  /** Main's hover broadcast, so only one display highlights. Returns an unsubscribe fn. */
+  onState(callback: (state: OverlayState) => void): () => void;
+  /** Main hid the overlays and asks for an ack after the next frame. Returns an unsubscribe fn. */
+  onHiddenAckRequest(callback: () => void): () => void;
+  /** Answer `onHiddenAckRequest`: this overlay has painted its last frame. */
+  hiddenAck(): void;
 }
 
 /** macOS media permissions the recorder cares about. */
@@ -253,7 +279,7 @@ export interface KaipuElectronAPI {
   /** Record page subscribes so a panel "Change" opens its source picker. */
   onRequestChooseSource(callback: () => void): () => void;
   /** Capture Panel → main: run the interactive screenshot capture (same as ⌘⌃X). */
-  requestCaptureScreenshot(): void;
+  requestCaptureScreenshot(mode: CaptureMode): void;
 
   // ── Global shortcuts ──────────────────────────────────────────────────
   /** Per-action registration state of the global shortcuts (false = unavailable). */
@@ -264,13 +290,15 @@ export interface KaipuElectronAPI {
   resumeShortcuts(): void;
 
   // ── Screenshots ───────────────────────────────────────────────────────
-  /** Run the interactive region capture; resolves null if the user cancelled. */
-  captureScreenshot(): Promise<{ png: ArrayBuffer; width: number; height: number } | null>;
+  /** Run a capture in `mode`; always answers captured, cancelled or unsupported. */
+  captureScreenshot(mode: CaptureMode): Promise<CaptureResult>;
+  /** Modes this platform can capture; an absent mode renders its entry point disabled. */
+  screenshotSupportedModes(): Promise<CaptureMode[]>;
   /**
-   * Subscribe to the global `⌘⌃X` hotkey broadcast from main. Returns an
+   * Subscribe to the global capture hotkey broadcast (`{ mode }`) from main. Returns an
    * unsubscribe fn. The renderer owns navigation so it runs the capture flow.
    */
-  onCaptureScreenshotHotkey(callback: () => void): () => void;
+  onCaptureScreenshotHotkey(callback: (request: CaptureRequestPayload) => void): () => void;
   /**
    * Bring the app back to the front after a successful capture. The renderer
    * calls this *after* it has navigated to the editor, so the window reappears
@@ -278,6 +306,8 @@ export interface KaipuElectronAPI {
    * window for the duration of the capture so the app isn't in the shot.
    */
   revealAfterCapture(): void;
+  /** Only used by the capture overlay windows; see `CaptureOverlayBridge`. */
+  captureOverlay: CaptureOverlayBridge;
   /**
    * Toggle "editor mode" window sizing: when active, main raises the minimum
    * size and grows the window so the screenshot editor has room; inactive

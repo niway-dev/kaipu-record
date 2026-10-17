@@ -23,9 +23,9 @@ import {
   registerSettings,
   getDeviceId,
   getAppSettings,
+  updateAppSettings,
   applyDockPolicy,
   onSettingsChanged,
-  updateAppSettings,
 } from "./infrastructure/settings-store";
 import { registerAuth } from "./infrastructure/auth-store";
 import {
@@ -36,7 +36,9 @@ import {
 } from "./shortcuts/global-shortcuts";
 import { initMainAnalytics, shutdownMainAnalytics } from "./services/analytics.service";
 import { registerAnalyticsIpc } from "./services/analytics-ipc";
-import { registerScreenshotHandlers } from "./screenshots/screenshot-ipc";
+import { isCaptureMode, type CaptureRequestPayload } from "@shared/types/screenshot-capture";
+import { registerScreenshotHandlers, type ScreenshotHandlers } from "./screenshots/screenshot-ipc";
+import { resolveShortcutCapture, type CaptureShortcut } from "./screenshots/shortcut-capture";
 import {
   boundsAroundCenter,
   fitPresetToDisplay,
@@ -80,7 +82,7 @@ let isQuitting = false;
 let rendererReady = false;
 /** Window-triggered actions (start/capture/source-picker) that arrived before the
  *  renderer was ready, flushed on `appReady` so they aren't dropped. */
-let pendingRendererSends: string[] = [];
+let pendingRendererSends: Array<{ channel: string; payload?: unknown }> = [];
 
 /**
  * Send a main → renderer channel, or queue it until the renderer signals ready.
@@ -88,11 +90,11 @@ let pendingRendererSends: string[] = [];
  * the app shell's React effects register the matching IPC listeners, so the
  * message was silently dropped (the shortcut "did nothing" the first time).
  */
-function sendToRenderer(channel: string): void {
+function sendToRenderer(channel: string, payload?: unknown): void {
   const contents = mainWindow?.webContents;
   if (!contents) return;
-  if (rendererReady) contents.send(channel);
-  else pendingRendererSends.push(channel);
+  if (rendererReady) contents.send(channel, payload);
+  else pendingRendererSends.push({ channel, payload });
 }
 
 // One running copy per user. Mandatory on Windows: closing the window hides the app
@@ -400,14 +402,33 @@ function bringAppToFront(): void {
  * everything, and `screenshotCapture` then hides the app so it isn't in the shot
  * (see `captureWindowHooks`). The window comes back via `revealAfterCapture`.
  */
-function triggerCaptureScreenshot(): void {
+function triggerCaptureScreenshot(request: CaptureRequestPayload): void {
   // The capture flow runs in the renderer, so the window must exist. If it was
   // closed (macOS keeps the app alive in the tray), recreate it HIDDEN — never
   // show a hidden one: the capture handler hides the window anyway, and bringing
   // it forward here would put the app back in the shot. The renderer reveals it
   // after a successful capture.
   if (!mainWindow || mainWindow.isDestroyed()) createWindow(false);
-  sendToRenderer(IPC_CHANNELS.screenshotHotkey);
+  sendToRenderer(IPC_CHANNELS.screenshotHotkey, request);
+}
+
+/** Set once the screenshot IPC is registered; until then a shortcut trusts the stored mode. */
+let screenshotHandlers: ScreenshotHandlers | null = null;
+
+/**
+ * A capture shortcut: the generic one captures with the current mode, a mode-specific one
+ * makes its mode current (persisted and broadcast to every window) and captures with it.
+ * See `resolveShortcutCapture`.
+ */
+function triggerShortcutCapture(action: CaptureShortcut): void {
+  const { mode, remember } = resolveShortcutCapture(
+    action,
+    getAppSettings().screenshotMode,
+    screenshotHandlers?.supportedModes() ?? null,
+    hub?.isActive() ?? false,
+  );
+  if (remember) updateAppSettings({ screenshotMode: mode });
+  triggerCaptureScreenshot({ mode });
 }
 
 /** Remembers whether the app was visible before a capture, to restore on cancel. */
@@ -475,7 +496,7 @@ app.whenReady().then(() => {
     rendererReady = true;
     const queued = pendingRendererSends;
     pendingRendererSends = [];
-    for (const channel of queued) mainWindow?.webContents.send(channel);
+    for (const { channel, payload } of queued) mainWindow?.webContents.send(channel, payload);
   });
 
   // Persisted app settings (+ apply the Dock/switcher policy and launch-at-login).
@@ -503,9 +524,9 @@ app.whenReady().then(() => {
 
   // Capture Panel "Capture Screen" → dismiss the panel and run the same interactive
   // region capture as the ⌘⌃X hotkey.
-  ipcMain.on(IPC_CHANNELS.screenshotRequestCapture, () => {
+  ipcMain.on(IPC_CHANNELS.screenshotRequestCapture, (_event, request?: { mode?: unknown }) => {
     capturePanel?.hide();
-    triggerCaptureScreenshot();
+    triggerCaptureScreenshot({ mode: isCaptureMode(request?.mode) ? request.mode : "area" });
   });
 
   // App version for the renderer-side version gate.
@@ -551,7 +572,9 @@ app.whenReady().then(() => {
       startRecording: triggerStartRecording,
       stopRecording: () => mainWindow?.webContents.send(IPC_CHANNELS.recordingCommand, "stop"),
       bringToFront: bringAppToFront,
-      captureScreenshot: triggerCaptureScreenshot,
+      captureScreenshot: () => triggerShortcutCapture("captureScreenshot"),
+      captureScreen: () => triggerShortcutCapture("captureScreen"),
+      captureFrame: () => triggerShortcutCapture("captureFrame"),
       // Live input toggles write the shared RecordingSettings, never the engine:
       // mid-take the recorder forwards the change, outside a take it is just the
       // pre-recording toggle.
@@ -569,7 +592,7 @@ app.whenReady().then(() => {
   registerCloudStorageHandlers({ auth, serverUrl: authServerUrl });
 
   // Screenshots: capture/copy/save IPC handlers.
-  registerScreenshotHandlers(captureWindowHooks);
+  screenshotHandlers = registerScreenshotHandlers(captureWindowHooks);
 
   /**
    * Raise the window's minimum size for a screen that cannot reflow, growing the

@@ -1,3 +1,4 @@
+import { isCaptureMode, type CaptureRect } from "@shared/types/screenshot-capture";
 import {
   type AppSettings,
   DEFAULT_SETTINGS,
@@ -64,6 +65,28 @@ export function mergeShortcuts(
   return result;
 }
 
+function isFrameRect(value: unknown): value is CaptureRect {
+  if (!value || typeof value !== "object") return false;
+  const { x, y, width, height } = value as Record<string, unknown>;
+  const finite = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
+  return finite(x) && finite(y) && finite(width) && finite(height) && width > 0 && height > 0;
+}
+
+/**
+ * Keep only well-formed remembered frames (finite, positive size), keyed by display id.
+ * Whether a frame still fits its display is decided when the overlay opens, not here.
+ */
+export function mergeScreenshotFrames(stored: unknown): Record<string, CaptureRect> {
+  if (!stored || typeof stored !== "object" || Array.isArray(stored)) return {};
+  const result: Record<string, CaptureRect> = {};
+  for (const [displayId, value] of Object.entries(stored)) {
+    if (!isFrameRect(value)) continue;
+    const { x, y, width, height } = value;
+    result[displayId] = { x, y, width, height };
+  }
+  return result;
+}
+
 /**
  * Merge persisted (possibly partial or untrusted) settings on top of the
  * defaults, dropping any invalid fields.
@@ -107,5 +130,9 @@ export function mergeSettings(
         : DEFAULT_SETTINGS.showRecordingSavedCard,
     trayHintShown:
       typeof safe.trayHintShown === "boolean" ? safe.trayHintShown : DEFAULT_SETTINGS.trayHintShown,
+    screenshotFrame: mergeScreenshotFrames(safe.screenshotFrame),
+    screenshotMode: isCaptureMode(safe.screenshotMode)
+      ? safe.screenshotMode
+      : DEFAULT_SETTINGS.screenshotMode,
   };
 }

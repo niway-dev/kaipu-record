@@ -130,6 +130,20 @@ function applySideEffects(): void {
 }
 
 /**
+ * Merge `patch` into the persisted settings, then persist, apply side effects, notify
+ * main listeners and broadcast to every window: the same path the renderer's
+ * `updateSettings` takes, for main-side writers (a mode-specific capture shortcut).
+ */
+export function updateAppSettings(patch: Partial<AppSettings>): AppSettings {
+  settings = mergeSettings({ ...settings, ...patch });
+  persist();
+  applySideEffects();
+  for (const listener of settingsListeners) listener(settings);
+  broadcastSettings();
+  return settings;
+}
+
+/**
  * Loads persisted settings, registers the get/update IPC, and applies side
  * effects (Dock policy, launch-at-login). Call once after `app.whenReady`.
  */
@@ -142,18 +156,4 @@ export function registerSettings(): void {
     IPC_CHANNELS.updateSettings,
     (_e, patch: Partial<AppSettings>): AppSettings => updateAppSettings(patch),
   );
-}
-
-/**
- * Merge a patch into the persisted settings, persist it, apply its side effects
- * and notify listeners and every window. The renderer's `updateSettings` IPC and
- * main-process callers share this path.
- */
-export function updateAppSettings(patch: Partial<AppSettings>): AppSettings {
-  settings = mergeSettings({ ...settings, ...patch });
-  persist();
-  applySideEffects();
-  for (const listener of settingsListeners) listener(settings);
-  broadcastSettings();
-  return settings;
 }
