@@ -171,7 +171,7 @@
 
 @keyframes ants {
   to {
-    stroke-dashoffset: -16;
+    stroke-dashoffset: -12; /* one full 6 + 6 dash period, so the loop is seamless */
   }
 }
 

@@ -324,6 +324,7 @@ function triggerShortcutCapture(action: CaptureShortcut): void {
     action,
     getAppSettings().screenshotMode,
     screenshotHandlers?.supportedModes() ?? null,
+    hub?.isActive() ?? false,
   );
   if (remember) updateAppSettings({ screenshotMode: mode });
   triggerCaptureScreenshot({ mode });

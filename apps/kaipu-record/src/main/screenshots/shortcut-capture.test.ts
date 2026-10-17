@@ -45,6 +45,21 @@ describe("resolveShortcutCapture", () => {
     });
   });
 
+  it("never changes the stored mode during a recording; the capture is still sent to be refused", () => {
+    expect(resolveShortcutCapture("captureFrame", "area", ALL, true)).toEqual({
+      mode: "frame",
+      remember: false,
+    });
+    expect(resolveShortcutCapture("captureScreen", "frame", ALL, true)).toEqual({
+      mode: "screen",
+      remember: false,
+    });
+    expect(resolveShortcutCapture("captureScreenshot", "frame", ALL, true)).toEqual({
+      mode: "frame",
+      remember: false,
+    });
+  });
+
   it("never remembers a mode the platform cannot serve", () => {
     expect(resolveShortcutCapture("captureFrame", "area", ["area", "screen"])).toEqual({
       mode: "frame",
