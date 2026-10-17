@@ -12,7 +12,11 @@ export const HIDDEN_ACK_CAP_MS = 250;
 
 /** The slice of `BrowserWindow` the overlays use; a fake implements it in tests. */
 export interface OverlayWindow {
-  readonly webContents: { readonly id: number; send(channel: string, ...args: unknown[]): void };
+  readonly webContents: {
+    readonly id: number;
+    send(channel: string, ...args: unknown[]): void;
+    on(event: "render-process-gone", listener: () => void): void;
+  };
   setAlwaysOnTop(flag: boolean, level?: "screen-saver"): void;
   setVisibleOnAllWorkspaces(
     visible: boolean,
@@ -80,6 +84,28 @@ function contains(bounds: Rectangle, point: { x: number; y: number }): boolean {
   );
 }
 
+function rectParam({ x, y, width, height }: Rectangle): string {
+  return `${x},${y},${width},${height}`;
+}
+
+/**
+ * The overlay's render-target query: everything the renderer needs to draw, so it never
+ * has to ask main. `index` is 1-based among the picked displays (the Screen chooser's
+ * number key); `bounds` and `work` are the display's bounds and work area in DIP.
+ */
+export function overlayQuery(
+  ui: OverlayUi,
+  display: Display,
+  index: number,
+  count: number,
+): string {
+  return (
+    `?window=capture-overlay&display=${display.id}&ui=${ui}` +
+    `&index=${index}&count=${count}` +
+    `&bounds=${rectParam(display.bounds)}&work=${rectParam(display.workArea)}`
+  );
+}
+
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
@@ -117,6 +143,9 @@ function parseAnswer(payload: unknown, displayIds: Set<number>): OverlayAnswer |
  * full-screen app on the Space the user is on, and it joins every Space only while it is
  * shown (the open-only Space toggle, same as `CapturePanelWindow`): kept on while hidden,
  * that membership leaves the app's menu bar black over a full-screen window.
+ *
+ * One instance per process: the constructor registers IPC and `screen` listeners that
+ * live as long as the app. Do not construct one per pick, or the handlers stack up.
  */
 export class CaptureOverlayWindows implements OverlayPort {
   private readonly deps: CaptureOverlayDeps;
@@ -146,7 +175,9 @@ export class CaptureOverlayWindows implements OverlayPort {
         displays.findIndex((display) => contains(display.bounds, cursor)),
       );
       displays.forEach((display, index) => {
-        this.entries.push(this.createOverlay(ui, display, index === focused));
+        this.entries.push(
+          this.createOverlay(ui, display, index + 1, displays.length, index === focused),
+        );
       });
     });
   }
@@ -202,7 +233,13 @@ export class CaptureOverlayWindows implements OverlayPort {
     session?.settle?.({ kind: "cancelled" });
   }
 
-  private createOverlay(ui: OverlayUi, display: Display, focus: boolean): OverlayEntry {
+  private createOverlay(
+    ui: OverlayUi,
+    display: Display,
+    index: number,
+    count: number,
+    focus: boolean,
+  ): OverlayEntry {
     const darwin = this.deps.platform === "darwin";
     const window = this.deps.createWindow({
       ...display.bounds,
@@ -239,11 +276,13 @@ export class CaptureOverlayWindows implements OverlayPort {
       if (focus) window.focus();
     });
     window.on("closed", () => this.forget(entry));
+    // A crashed renderer leaves its window open: invisible, screen-covering and eating
+    // clicks, with no overlay left to press Esc in. Cancel and tear the session down.
+    window.webContents.on("render-process-gone", () => {
+      if (this.entries.includes(entry)) this.destroyAll();
+    });
 
-    this.deps.loadRenderer(
-      window,
-      `?window=capture-overlay&display=${display.id}&ui=${encodeURIComponent(ui)}`,
-    );
+    this.deps.loadRenderer(window, overlayQuery(ui, display, index, count));
     return entry;
   }
 
@@ -258,6 +297,8 @@ export class CaptureOverlayWindows implements OverlayPort {
 
   /** A window that went away on its own (crash, closed by the OS): cancel an open pick. */
   private forget(entry: OverlayEntry): void {
+    // A late `closed` from an earlier session must not cancel the current one.
+    if (!this.entries.includes(entry)) return;
     this.entries = this.entries.filter((candidate) => candidate !== entry);
     // A closed window can no longer ack; stop waiting for it.
     this.ackFrom(null);

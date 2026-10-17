@@ -11,7 +11,14 @@ const screenListeners = new Map<string, (event: unknown, display: Display) => vo
 let nextWebContentsId = 100;
 
 class FakeWindow {
-  webContents = { id: nextWebContentsId++, send: vi.fn() };
+  private renderGone: (() => void) | null = null;
+  webContents = {
+    id: nextWebContentsId++,
+    send: vi.fn(),
+    on: vi.fn((event: string, callback: () => void) => {
+      if (event === "render-process-gone") this.renderGone = callback;
+    }),
+  };
   setAlwaysOnTop = vi.fn();
   setVisibleOnAllWorkspaces = vi.fn();
   show = vi.fn();
@@ -39,6 +46,14 @@ class FakeWindow {
   paint(): void {
     this.readyToShow?.();
   }
+  /** The renderer process dying: Electron keeps the window open and emits this. */
+  crashRenderer(): void {
+    this.renderGone?.();
+  }
+  /** A `closed` event delivered (again, or late) without a fresh destroy. */
+  emitClosed(): void {
+    this.closed?.();
+  }
   /** The renderer sending to main on `channel`. */
   send(channel: string, payload?: unknown): void {
     ipcListeners.get(channel)?.({ sender: { id: this.webContents.id } }, payload);
@@ -58,7 +73,12 @@ vi.mock("@electron-toolkit/utils", () => ({ is: { dev: false } }));
 const { CaptureOverlayWindows, HIDDEN_ACK_CAP_MS } = await import("./capture-overlay-windows");
 
 function display(id: number, x: number, scaleFactor = 2): Display {
-  return { id, bounds: { x, y: 0, width: 1440, height: 900 }, scaleFactor } as Display;
+  return {
+    id,
+    bounds: { x, y: 0, width: 1440, height: 900 },
+    workArea: { x, y: 25, width: 1440, height: 875 },
+    scaleFactor,
+  } as Display;
 }
 const left = display(1, 0);
 const right = display(2, 1440, 1);
@@ -106,15 +126,31 @@ describe("CaptureOverlayWindows: creating the overlays", () => {
     }
   });
 
-  it("loads the overlay render target with the display id and the ui mode", () => {
+  it("loads the overlay render target with everything the renderer needs in the query", () => {
     void overlays().pick("frame", [left, right]);
 
     expect(created[0].window.loadFile).toHaveBeenCalledWith(
       expect.stringMatching(/renderer[/\\]index\.html$/),
-      { search: "?window=capture-overlay&display=1&ui=frame" },
+      {
+        search:
+          "?window=capture-overlay&display=1&ui=frame&index=1&count=2" +
+          "&bounds=0,0,1440,900&work=0,25,1440,875",
+      },
     );
     expect(created[1].window.loadFile.mock.calls[0][1]).toEqual({
-      search: "?window=capture-overlay&display=2&ui=frame",
+      search:
+        "?window=capture-overlay&display=2&ui=frame&index=2&count=2" +
+        "&bounds=1440,0,1440,900&work=1440,25,1440,875",
+    });
+  });
+
+  it("writes negative origins as-is, for a display left of the primary", () => {
+    void overlays().pick("screen", [display(3, -1920)]);
+
+    expect(created[0].window.loadFile.mock.calls[0][1]).toEqual({
+      search:
+        "?window=capture-overlay&display=3&ui=screen&index=1&count=1" +
+        "&bounds=-1920,0,1440,900&work=-1920,25,1440,875",
     });
   });
 
@@ -296,13 +332,39 @@ describe("CaptureOverlayWindows: failures", () => {
     for (const { window } of created) expect(window.destroy).toHaveBeenCalled();
   });
 
-  it("cancels when an overlay closes on its own (crash, OS close)", async () => {
+  it("cancels when an overlay window closes on its own (OS close)", async () => {
     const port = overlays();
     const picked = port.pick("screen", [left, right]);
 
     created[1].window.destroy();
 
     expect(await picked).toEqual({ kind: "cancelled" });
+  });
+
+  it("cancels and destroys every overlay when one renderer crashes", async () => {
+    const port = overlays();
+    const picked = port.pick("frame", [left, right]);
+
+    created[0].window.crashRenderer(); // the window stays open; only the renderer is gone
+
+    expect(await picked).toEqual({ kind: "cancelled" });
+    for (const { window } of created) expect(window.isDestroyed()).toBe(true);
+  });
+
+  it("a crash in an overlay from a finished session leaves the next pick alone", async () => {
+    const port = overlays();
+    void port.pick("screen", [left]);
+    const stale = created[0].window;
+    port.destroyAll();
+    const next = port.pick("screen", [left]);
+    const current = created[1].window;
+
+    stale.crashRenderer();
+    stale.emitClosed(); // a late `closed` from the destroyed window
+    current.send(IPC_CHANNELS.screenshotOverlayAnswer, { kind: "display", displayId: 1 });
+
+    expect(await next).toEqual({ kind: "display", displayId: 1 });
+    expect(current.isDestroyed()).toBe(false);
   });
 });
 
