@@ -5,7 +5,8 @@ description: Design for three screenshot modes (drag an area, capture one displa
 
 # Screenshot capture modes — design
 
-**Status: 🔵 Proposed · 2026-10-15.** Supersedes section 3 ("Capture engine") of the
+**Status: 🟡 In progress · 2026-10-16.** Implementation: PR pending on
+`feat/screenshot-capture-modes`. **Proposed 2026-10-15.** Supersedes section 3 ("Capture engine") of the
 [screenshots brief](/backlog/screenshots/) where they differ: the "mac-only, Path A behind a
 seam" decision becomes "native where the OS has it, our overlay where it does not", and the
 seam grows from one method to a mode request. Linear: parent ticket in the Kaipu project
@@ -48,8 +49,10 @@ and auto-copy settings.
 ### Open questions
 
 1. **Windows shortcut defaults.** Decided in the Windows design (its decision 5); this spec
-   only adds two actions. Until then the new actions default to `Command+Control+Shift+X`
-   (Screen) and `Command+Control+F` (Frame) on macOS.
+   only adds two actions. The new actions default to `Command+Control+Shift+X` (Screen) and
+   `Command+Control+F` (Frame) on macOS. The domain package's Windows column carries
+   `Control+Alt+Shift+X` and `Control+Alt+F`, unvalidated like the rest of that column; the
+   desktop app only reads the macOS defaults until the Windows release branch lands.
 2. **Overlay latency.** Creating one window per display on demand is estimated at 100–250 ms.
    If a packaged build measures above 300 ms on the Mac mini, prewarm one hidden overlay per
    display the way the capture panel is prewarmed (and apply the open-only Space toggle from
