@@ -9,7 +9,7 @@ const shortcuts = {
   bringToFront: "⌃⌘O",
   captureScreenshot: "⌃⌘X",
   captureScreen: "⌃⇧⌘X",
-  captureFrame: "⌃⌘F",
+  captureFrame: "⌃⇧⌘F",
   toggleMicrophone: "⌃⌘M",
   toggleSystemAudio: "⌃⌘A",
   toggleCamera: "⌃⌘K",
@@ -33,7 +33,7 @@ describe("CaptureModeButtons", () => {
     const frame = screen.getByRole("button", { name: /^Frame/ });
     expect(area).toHaveTextContent("⌃⌘X");
     expect(display).toHaveTextContent("⌃⇧⌘X");
-    expect(frame).toHaveTextContent("⌃⌘F");
+    expect(frame).toHaveTextContent("⌃⇧⌘F");
     await waitFor(() => expect(area).toBeEnabled());
   });
 

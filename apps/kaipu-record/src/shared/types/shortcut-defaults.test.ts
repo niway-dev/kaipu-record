@@ -28,7 +28,7 @@ describe("the desktop shortcut defaults", () => {
     );
     expect(byAction.captureScreenshot).toBe("Command+Control+X");
     expect(byAction.captureScreen).toBe("Command+Control+Shift+X");
-    expect(byAction.captureFrame).toBe("Command+Control+F");
+    expect(byAction.captureFrame).toBe("Command+Control+Shift+F");
   });
 
   it("keeps the new capture actions in the app group with their status words", () => {

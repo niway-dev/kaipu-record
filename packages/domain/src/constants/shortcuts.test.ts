@@ -26,12 +26,12 @@ describe("DEFAULT_ACCELERATORS", () => {
     expect(DEFAULT_ACCELERATORS.mac).toMatchObject({
       captureScreenshot: "Command+Control+X",
       captureScreen: "Command+Control+Shift+X",
-      captureFrame: "Command+Control+F",
+      captureFrame: "Command+Control+Shift+F",
     });
     expect(DEFAULT_ACCELERATORS.windows).toMatchObject({
       captureScreenshot: "Control+Alt+X",
       captureScreen: "Control+Alt+Shift+X",
-      captureFrame: "Control+Alt+F",
+      captureFrame: "Control+Alt+Shift+F",
     });
   });
 
