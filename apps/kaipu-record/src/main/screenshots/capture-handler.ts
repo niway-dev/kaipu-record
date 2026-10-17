@@ -68,6 +68,7 @@ export function createCaptureHandler(
     if (capturing) return { kind: "cancelled" };
     capturing = true;
     let result: ProviderResult = { kind: "cancelled" };
+    let failed = false;
     try {
       // Inside the try: a throw while hiding windows must still release the guard.
       deps.windows.beforeCapture();
@@ -75,11 +76,13 @@ export function createCaptureHandler(
     } catch (error) {
       // The renderer has no catch around this call: answer cancelled instead of throwing.
       console.error("screenshot capture failed", error);
+      failed = true;
     } finally {
       capturing = false;
       deps.windows.afterCapture(result.kind === "captured");
     }
-    report(result.kind);
+    // A throw answers `cancelled` to the renderer but is a failure for the owner's numbers.
+    report(failed ? "failed" : result.kind);
     switch (result.kind) {
       case "captured": {
         const { png } = result;

@@ -168,4 +168,17 @@ describe("createCaptureHandler", () => {
     capture.mockResolvedValueOnce({ kind: "cancelled" });
     expect(await handler({ mode: "area" })).toEqual({ kind: "cancelled" });
   });
+
+  it("reports a provider throw as failed, not cancelled", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const { handler, track } = setup(vi.fn().mockRejectedValueOnce(new Error("boom")));
+    expect(await handler({ mode: "frame" })).toEqual({ kind: "cancelled" });
+    expect(track).toHaveBeenCalledOnce();
+    expect(track).toHaveBeenCalledWith({
+      mode: "frame",
+      platform: "darwin",
+      displays: 2,
+      outcome: "failed",
+    });
+  });
 });

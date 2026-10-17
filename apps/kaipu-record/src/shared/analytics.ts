@@ -50,7 +50,7 @@ export function serializeError(error: unknown): SerializedError {
 export const SCREENSHOT_CAPTURED_EVENT = "screenshot_captured";
 
 /** How a capture request ended. */
-export const SCREENSHOT_OUTCOMES = ["captured", "cancelled", "unsupported"] as const;
+export const SCREENSHOT_OUTCOMES = ["captured", "cancelled", "unsupported", "failed"] as const;
 export type ScreenshotOutcome = (typeof SCREENSHOT_OUTCOMES)[number];
 
 /**

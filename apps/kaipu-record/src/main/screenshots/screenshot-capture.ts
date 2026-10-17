@@ -61,6 +61,8 @@ const realDeps: Deps = {
 export interface CaptureTarget {
   display: Display;
   rect: Rectangle | null;
+  /** True when the user picked on our overlay, so `runWithOverlay` waits for it to leave. */
+  viaOverlay: boolean;
 }
 
 /** Shows the overlay in `ui` mode and resolves the answer to a target; null when cancelled. */
@@ -73,11 +75,11 @@ export async function pickTarget(
   if (answer.kind === "cancelled") return null;
   const display = displays.find((candidate) => candidate.id === answer.displayId);
   if (!display) return null;
-  return { display, rect: answer.kind === "rect" ? answer.rect : null };
+  return { display, rect: answer.kind === "rect" ? answer.rect : null, viaOverlay: true };
 }
 
 /**
- * The sequence both backends share: choose → hide every overlay → capture → destroy.
+ * The sequence both backends share: choose → hide every overlay → settle → capture → destroy.
  * `destroyAll` runs on every path out (cancel, throw, success): the overlay session lasts
  * until then, and a skipped call makes every later pick answer "cancelled".
  */
@@ -85,11 +87,21 @@ export async function runWithOverlay(
   overlay: OverlayPort,
   choose: () => Promise<CaptureTarget | null>,
   capture: (target: CaptureTarget) => Promise<ProviderResult>,
+  deps: { settle(): Promise<void>; getDisplays(): Promise<Display[]> },
 ): Promise<ProviderResult> {
   try {
     const target = await choose();
     if (!target) return { kind: "cancelled" };
     await overlay.hideAll(); // Failure 1: capture only once no overlay is on screen
+    // The window server / DWM can keep a hidden transparent window for a few frames.
+    // No overlay was shown (single-display Screen): `choose` already waited for the app.
+    if (target.viaOverlay) await deps.settle();
+    // A display unplugged after the answer would leave stale bounds: cancel, don't grab.
+    const current = await deps.getDisplays();
+    if (!current.some((display) => display.id === target.display.id)) {
+      console.warn(`[screenshot] display ${target.display.id} is gone since the pick`);
+      return { kind: "cancelled" };
+    }
     return await capture(target);
   } finally {
     overlay.destroyAll();
@@ -121,13 +133,14 @@ export class MacProvider implements ScreenshotCaptureProvider {
         if (mode === "screen" && displays.length === 1) {
           // No overlay to wait on, but `beforeCapture` just hid the app: let it leave the screen.
           await this.deps.settle();
-          return { display: displays[0]!, rect: null };
+          return { display: displays[0]!, rect: null, viaOverlay: false };
         }
         return pickTarget(overlay, mode, displays);
       },
       // `-R` takes global points (DIP), not pixels, and handles Retina itself.
       ({ display, rect }) =>
         this.grab(["-R", rectArg(rect ? toGlobal(rect, display) : display.bounds), "-x"], mode),
+      this.deps,
     );
   }
 
@@ -205,7 +218,7 @@ export class WindowsProvider implements ScreenshotCaptureProvider {
         const displays = await this.deps.getDisplays();
         if (mode === "screen" && displays.length === 1) {
           await this.deps.settle(); // the app was just hidden: let it leave the screen
-          return { display: displays[0]!, rect: null };
+          return { display: displays[0]!, rect: null, viaOverlay: false };
         }
         return pickTarget(overlay, mode, displays);
       },
@@ -218,6 +231,7 @@ export class WindowsProvider implements ScreenshotCaptureProvider {
         const shot = rect ? image.crop(cropForDisplay(image.getSize(), display, rect)) : image;
         return { kind: "captured", png: shot.toPNG(), mode };
       },
+      this.deps,
     );
   }
 

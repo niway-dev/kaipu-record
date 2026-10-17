@@ -102,12 +102,14 @@ Payloads of the capture channels (`CaptureMode` is `"area" | "screen" | "frame"`
 | `screenshot:overlay-answer`     | `OverlayAnswer`: `{ kind: "rect", displayId, rect }`, `{ kind: "display", displayId }` or `{ kind: "cancelled" }`; `rect` is display-relative DIP | none (the first valid answer wins)                                                                                                      |
 | `screenshot:overlay-hover`      | `{ displayId: number \| null }`                                                                                                                   | none                                                                                                                                    |
 | `screenshot:overlay-state`      | `{ hoverDisplayId: number \| null }` to every overlay                                                                                             | none                                                                                                                                    |
-| `screenshot:overlay-hidden-ack` | main to overlay: none (reply after your next animation frame); overlay to main: none                                                              | capture waits for every reply or a 250 ms cap                                                                                           |
+| `screenshot:overlay-hidden-ack` | main to overlay: none (reply after your next animation frame); overlay to main: none                                                              | capture waits for every reply or a 250 ms cap, then settles 80 ms more                                                                  |
 
 The global shortcut actions that feed `screenshot:hotkey` are `captureScreenshot` (Area),
 `captureScreen` and `captureFrame`; each sends its own mode. Analytics: the handler of
 `screenshot:capture` emits one `screenshot_captured` event per answered request with
-`{ mode, platform, displays, outcome }` and nothing else.
+`{ mode, platform, displays, outcome }` and nothing else. `outcome` is `captured`,
+`cancelled`, `unsupported` or `failed`; `failed` is a provider throw, which the renderer still
+receives as `cancelled`.
 
 ### Recording — writer (hot path a disco)
 
