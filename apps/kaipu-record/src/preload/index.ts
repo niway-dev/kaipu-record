@@ -3,7 +3,7 @@ import { electronAPI } from "@electron-toolkit/preload";
 import { IPC_CHANNELS } from "@shared/types";
 import type { AppSettings } from "@shared/types";
 import type { AuthStatus } from "@shared/types/auth";
-import type { CaptureRequestPayload } from "@shared/types/screenshot-capture";
+import type { CaptureRequestPayload, OverlayState } from "@shared/types/screenshot-capture";
 import type { KaipuElectronAPI } from "@shared/types/electron-api";
 import type {
   ControlCommand,
@@ -155,6 +155,21 @@ const kaipuApi: KaipuElectronAPI = {
   loadCursorTrack: (id) => ipcRenderer.invoke(IPC_CHANNELS.loadCursorTrack, id),
   captureScreenshot: (mode) => ipcRenderer.invoke(IPC_CHANNELS.screenshotCapture, { mode }),
   revealAfterCapture: () => ipcRenderer.send(IPC_CHANNELS.screenshotReveal),
+  captureOverlay: {
+    answer: (answer) => ipcRenderer.send(IPC_CHANNELS.screenshotOverlayAnswer, answer),
+    hover: (displayId) => ipcRenderer.send(IPC_CHANNELS.screenshotOverlayHover, { displayId }),
+    onState: (callback) => {
+      const listener = (_e: IpcRendererEvent, state: OverlayState): void => callback(state);
+      ipcRenderer.on(IPC_CHANNELS.screenshotOverlayState, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.screenshotOverlayState, listener);
+    },
+    onHiddenAckRequest: (callback) => {
+      const listener = (): void => callback();
+      ipcRenderer.on(IPC_CHANNELS.screenshotOverlayHiddenAck, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.screenshotOverlayHiddenAck, listener);
+    },
+    hiddenAck: () => ipcRenderer.send(IPC_CHANNELS.screenshotOverlayHiddenAck),
+  },
   applyWindowPreset: (preset) => ipcRenderer.send(IPC_CHANNELS.windowApplyPreset, preset),
   setTrayMode: (mode) => ipcRenderer.send(IPC_CHANNELS.traySetMode, mode),
   setOnboardingWindowMode: (active) =>

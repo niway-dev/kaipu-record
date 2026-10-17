@@ -18,6 +18,7 @@ const SETTINGS: AppSettings = {
   uploadMode: "local-only",
   exportQuality: "balanced",
   showRecordingSavedCard: true,
+  screenshotFrame: {},
 };
 
 describe("I18nRoot theme application", () => {

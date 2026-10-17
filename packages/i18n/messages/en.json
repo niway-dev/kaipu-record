@@ -566,6 +566,11 @@
     "heavyBannerBodyNoGithub": "Share makes a lighter copy — about {estimate}, with text that stays readable. The original stays as it is."
   },
   "screenshots": {
+    "overlay": {
+      "captureDisplay": "Capture this display · {index}",
+      "capture": "Capture",
+      "frame": "Capture frame"
+    },
     "overline": "SCREENSHOTS",
     "pageTitle": "Capture and document",
     "pageSubtitle": "Take a screenshot, mark what matters with boxes, arrows and text, and share it. All local, no accounts.",

@@ -19,6 +19,7 @@ const SETTINGS: AppSettings = {
   uploadMode: "local-only",
   exportQuality: "balanced",
   showRecordingSavedCard: true,
+  screenshotFrame: {},
 };
 
 describe("useAppSettings", () => {

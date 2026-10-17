@@ -566,6 +566,11 @@
     "heavyBannerBodyNoGithub": "Compartir crea una copia más liviana: unos {estimate}, con texto que se sigue leyendo. El original queda como está."
   },
   "screenshots": {
+    "overlay": {
+      "captureDisplay": "Capturar esta pantalla · {index}",
+      "capture": "Capturar",
+      "frame": "Marco de captura"
+    },
     "overline": "CAPTURAS",
     "pageTitle": "Captura y documenta",
     "pageSubtitle": "Toma una captura, marca lo importante con cajas, flechas y texto, y compártela. Todo local, sin cuentas.",

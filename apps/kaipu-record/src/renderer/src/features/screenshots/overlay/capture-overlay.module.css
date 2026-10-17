@@ -1,0 +1,91 @@
+/*
+ * The capture overlay: one full-window sheet per display. The sheet is never fully
+ * transparent, so on Windows it receives the clicks instead of the app underneath.
+ * The visuals stay minimal: a 1 px white frame, 8 px handles, a small dark pill.
+ */
+
+.sheet {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.25);
+  user-select: none;
+  font-family: var(--font-family);
+  touch-action: none;
+}
+
+.area {
+  cursor: crosshair;
+}
+
+/* Screen chooser: the hovered display lightens and gets a white outline. */
+.chooser {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+
+.chooser[data-highlighted="true"] {
+  background: rgba(0, 0, 0, 0.1);
+  box-shadow: inset 0 0 0 4px rgba(255, 255, 255, 0.9);
+}
+
+.chooserLabel {
+  padding: var(--space-md) var(--space-xl);
+  font-family: inherit;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: #fff;
+  background: rgba(0, 0, 0, 0.72);
+  border: 0;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+}
+
+/* The frame / the drag rectangle: a 1 px white border. */
+.box {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid #fff;
+}
+
+.frame {
+  cursor: move;
+}
+
+.handle {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  box-sizing: border-box;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.5);
+}
+
+.pill {
+  position: absolute;
+  padding: 2px var(--space-sm);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  white-space: nowrap;
+  background: rgba(0, 0, 0, 0.72);
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+}
+
+.captureButton {
+  position: absolute;
+  padding: var(--space-xs) var(--space-md);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: #fff;
+  background: var(--accent-primary);
+  border: 0;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}

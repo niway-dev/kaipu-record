@@ -59,3 +59,8 @@ body[data-window="capture-panel"] {
 body[data-window="capture-panel"] #root {
   min-height: 0;
 }
+
+/* The capture overlay covers a display exactly; its sheet is fixed, nothing scrolls. */
+body[data-window="capture-overlay"] {
+  overflow: hidden;
+}

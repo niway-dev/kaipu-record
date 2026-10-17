@@ -60,6 +60,7 @@ describe("mergeSettings", () => {
         uploadMode: "manual",
         exportQuality: "maximum",
         showRecordingSavedCard: false,
+        screenshotFrame: { "1": { x: 10, y: 20, width: 300, height: 200 } },
       }),
     ).toEqual({
       theme: "dark",
@@ -76,7 +77,24 @@ describe("mergeSettings", () => {
       uploadMode: "manual",
       exportQuality: "maximum",
       showRecordingSavedCard: false,
+      screenshotFrame: { "1": { x: 10, y: 20, width: 300, height: 200 } },
     });
+  });
+
+  it("remembers no frame by default and drops malformed remembered frames", () => {
+    expect(DEFAULT_SETTINGS.screenshotFrame).toEqual({});
+    expect(mergeSettings({}).screenshotFrame).toEqual({});
+    expect(mergeSettings({ screenshotFrame: "nope" as never }).screenshotFrame).toEqual({});
+    expect(
+      mergeSettings({
+        screenshotFrame: {
+          "1": { x: -5, y: 0, width: 640, height: 480 },
+          "2": { x: 0, y: 0, width: 0, height: 480 },
+          "3": { x: 0, y: Number.NaN, width: 10, height: 10 },
+          "4": "big" as never,
+        },
+      }).screenshotFrame,
+    ).toEqual({ "1": { x: -5, y: 0, width: 640, height: 480 } });
   });
 
   it("defaults Export quality to Balanced and sanitizes it (NIW2-218)", () => {
