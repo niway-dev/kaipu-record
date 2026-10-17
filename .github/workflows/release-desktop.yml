@@ -315,17 +315,37 @@ jobs:
           name: desktop-win
           path: artifacts/win
 
-      # Failure 2 of the Windows release design: a tag must never publish with one
-      # platform missing. upload-artifact already errors on no files; this is the second
-      # lock, on the download side.
-      - name: Fail if either build is empty
+      # Failure 2 of the Windows release design: a tag must never publish with a platform
+      # (or part of one) missing. upload-artifact already errors on no files; this is the
+      # second lock, on the download side. It names every file the R2 copy and the release
+      # depend on, because a directory holding only latest-mac.yml is non-empty yet would
+      # pass `aws s3 cp --include` (no match exits 0) and leave R2 half-written. Nothing
+      # below may write to R2 until all of these exist.
+      - name: Fail if any expected build file is missing
         run: |
-          for dir in artifacts/mac artifacts/win; do
-            test -n "$(ls -A "$dir")" || {
-              echo "::error::${dir} is empty — a platform build produced no artifacts, refusing to publish"
-              exit 1
+          VERSION="$(node -p "require('./apps/kaipu-record/package.json').version")"
+          MISSING=0
+          need() {
+            test -f "$1" || {
+              echo "::error::missing ${1} — a platform build is incomplete, refusing to publish"
+              MISSING=1
             }
-          done
+          }
+          need_glob() {
+            compgen -G "$1" > /dev/null || {
+              echo "::error::no file matches ${1} — a platform build is incomplete, refusing to publish"
+              MISSING=1
+            }
+          }
+          need "artifacts/mac/kaipu-record-${VERSION}-arm64.dmg"
+          need "artifacts/mac/kaipu-record-${VERSION}-x64.dmg"
+          need "artifacts/mac/latest-mac.yml"
+          need_glob "artifacts/mac/*-mac.zip"
+          need_glob "artifacts/mac/*-mac.zip.blockmap"
+          need "artifacts/win/kaipu-record-${VERSION}-setup.exe"
+          need "artifacts/win/kaipu-record-${VERSION}-setup.exe.blockmap"
+          need "artifacts/win/latest.yml"
+          exit "$MISSING"
 
       - name: Publish update feed + installers to R2
         env:
