@@ -7,12 +7,12 @@ description: Desktop releases keep one workflow and one tag. Each OS builds in i
 
 ## Status
 
-| Field         | Value                                                                                                                  |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| Status        | Proposed — [Windows release design](/specs/2026-10-15-windows-release-design/); not implemented                        |
-| Date          | 2026-10-15                                                                                                             |
-| Amends        | ADR 0006 (desktop E2E in the candidate tier): the gate stays macOS-only; Windows is not E2E-verified by this decision. |
-| Superseded by | —                                                                                                                      |
+| Field         | Value                                                                                                                                                                                                   |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Implemented on `feat/windows-release`, PR pending; first dispatch and owner tasks outstanding — [Windows release design](/specs/2026-10-15-windows-release-design/). Not validated on Windows hardware. |
+| Date          | 2026-10-15                                                                                                                                                                                              |
+| Amends        | ADR 0006 (desktop E2E in the candidate tier): the gate stays macOS-only; Windows is not E2E-verified by this decision.                                                                                  |
+| Superseded by | —                                                                                                                                                                                                       |
 
 ## Context
 
@@ -37,9 +37,12 @@ one available to an individual outside the US and Canada.
    release gate (ADR 0006). `build-win` proves the native rebuild and the bundle; a manual
    checklist on real hardware proves the product before the roadmap row flips.
 4. **Signing is a hook, not a vendor.** `electron-builder.yml` points `win.signtoolOptions.sign`
-   at `scripts/sign-windows.cjs`. With no `WIN_SIGN_*` secrets it does nothing and prints a
-   visible warning; with secrets it signs through the chosen vendor and fails the build on
-   error. The first beta ships unsigned with a SmartScreen walkthrough on the download page.
+   at `scripts/sign-windows.cjs`. With no signing variable set it does nothing and prints a
+   visible warning. With signing variables set but no `WIN_SIGN_VENDOR` it fails the build,
+   naming the variables. The vendor entries (`azure`, `sslcom`) are validate-then-fail seams
+   until the owner picks a vendor: setting `WIN_SIGN_VENDOR` today fails the build with the
+   next implementation step, so a release never ships unsigned while a vendor is configured.
+   The first beta ships unsigned with a SmartScreen walkthrough on the download page.
 
 ## Alternatives rejected
 

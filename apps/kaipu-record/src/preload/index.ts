@@ -14,6 +14,7 @@ import type {
 
 // Custom Kaipu bridge. Only methods with a live main-process handler are exposed.
 const kaipuApi: KaipuElectronAPI = {
+  platform: process.platform,
   getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.getAppVersion),
   notifyReady: () => ipcRenderer.send(IPC_CHANNELS.appReady),
   getUpdateStatus: () => ipcRenderer.invoke(IPC_CHANNELS.updateGetStatus),

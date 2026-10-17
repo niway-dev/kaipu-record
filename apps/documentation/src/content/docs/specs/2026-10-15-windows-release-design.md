@@ -5,7 +5,11 @@ description: Design for shipping the Windows desktop build as a labelled beta �
 
 # Windows release — design
 
-**Status: 🔵 Proposed · 2026-10-15.** Executes the owner's decision in
+**Status: 🟡 In progress · 2026-10-16.** Implemented on `feat/windows-release`, PR pending;
+first dispatch and owner tasks outstanding. Code tasks 1–6 are on the branch (CI jobs,
+signing hook, shortcuts, close-to-tray, tray icon); task 7 and owner tasks 8–10 are not done,
+and nothing has been validated on Windows hardware. Decision 8 (the screenshot buttons'
+Coming-to-Windows state) lands with the screenshot capture modes stream. Designed 2026-10-15. Executes the owner's decision in
 [Windows beta — recording first, screenshots later](/backlog/windows-beta/) (2026-09-27) and
 records what that page left open. Linear: parent ticket "Windows release" in the Kaipu
 project, one child per task below; owner-only tasks carry the `owner` label. Screenshots on
@@ -22,27 +26,29 @@ feed uses, so `electron-updater` on Windows works with the generic provider alre
 configured. The first beta ships **unsigned**: the download page explains the SmartScreen
 "More info → Run anyway" click, and a **signing hook** (`scripts/sign-windows.cjs`) is wired
 into electron-builder from day one but does nothing until signing secrets exist, so adding a
-certificate later is a secrets change, not a workflow change. The app gets the four Windows
+certificate later is a secrets change, not a workflow change. Its vendor entries are
+validate-then-fail seams until the owner picks a vendor; implementing the chosen one is a
+change to the hook only. The app gets the four Windows
 behaviours it lacks: per-platform **shortcut defaults** (the current `Command+Control+…`
 means the Windows key), **close hides to the tray** instead of quitting (with a one-time
-toast), a **tray icon that is visible on a dark taskbar**, and a screenshot button that says
+native notification at hide time), a **tray icon that is visible on a dark taskbar**, and a screenshot button that says
 **"Coming to Windows"** instead of doing nothing. The landing gets a "Download for Windows
 (beta)" button and the roadmap row flips when the installer is downloadable. The macOS E2E
 suite remains the release gate; Windows is verified by build plus a manual QA checklist on
 real hardware until there is a reason to pay for a Windows E2E lane.
 
-| #   | Decision                                                                                                                                                                                                                                               | Why                                                                                                                                                                                                                                                  | ADR        |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| 1   | One workflow, three jobs: `verify` → `build-mac` ∥ `build-win` → `publish`. Build jobs upload their `dist/` as workflow artifacts; `publish` (ubuntu) downloads both and does R2 + GitHub Release once.                                                | Two jobs each running `softprops/action-gh-release` with `draft: true` can create two drafts (drafts carry no tag to match on). One publisher, one release, one prune. Reuses ADR 0010's "checks in Actions" shape.                                  | 0023 (new) |
-| 2   | `build-win` on `windows-latest`: checkout, Bun, `bash scripts/rebuild-native.sh`, `bun run build` with `MAIN_VITE_SERVER_URL`, `electron-builder --win --publish never`. No E2E on Windows.                                                            | Git Bash and the MSVC toolchain are on the runner, so the existing scripts run unchanged; `uiohook-napi` rebuilds for Electron's ABI. ADR 0006 keeps the macOS E2E as the gate; a Windows lane is a cost with no user yet.                           | 0023       |
-| 3   | The feed is shared: `updates/latest.yml`, `updates/<name>-<v>-setup.exe`, `.blockmap`; `download/<v>/kaipu-setup.exe`, `download/latest/kaipu-setup.exe`. Prune keeps working: `*-<v>-*` matches the exe too.                                          | `electron-updater`'s generic provider reads `latest.yml` next to `latest-mac.yml` at the same URL; no second bucket, no second domain.                                                                                                               | 0023       |
-| 4   | Ship the first beta unsigned, with a SmartScreen walkthrough on the download page. Signing is a hook (`win.signtoolOptions.sign: scripts/sign-windows.cjs`) that no-ops without `WIN_SIGN_*` secrets and prints a visible notice.                      | The owner's recommendation in the backlog. Azure Artifact Signing admits individuals only in the US and Canada; the alternatives (SSL.com eSigner, Certum, DigiCert KeyLocker) are an owner purchase. The hook keeps the vendor out of the workflow. | 0023       |
-| 5   | Shortcut defaults are per platform. macOS keeps `Command+Control+<key>`; Windows uses `Control+Alt+<key>`. `SHORTCUT_DEFINITIONS` carries `{ mac, win }` and main resolves by `process.platform`; the domain constant gains `.win`.                    | Electron maps `Command` to the Windows key, which Windows reserves. `Control+Alt` is the conventional global-hotkey pair; `Control+Shift+<key>` collides with Chrome, Teams and Office in the focused app. Rebindable either way.                    | —          |
-| 6   | Closing the main window on Windows hides it to the tray; the app keeps running like on macOS. A one-time toast says so; Quit lives in the tray menu and `Ctrl+Q`. `window-all-closed` no longer quits on win32.                                        | A tray app that dies when its window closes loses the global shortcuts and the capture panel, which is the product. Same as Discord, Slack, ShareX.                                                                                                  | —          |
-| 7   | Windows tray icon: a dedicated `.ico` with a light glyph (and a 32 px size); the macOS template PNGs stay macOS-only.                                                                                                                                  | The current icons are black-on-alpha template images; on the default dark Windows taskbar they are invisible. `setTemplateImage` is a no-op there.                                                                                                   | —          |
-| 8   | Screenshot entry points on Windows render disabled with "Coming to Windows" from the `unsupported` answer of the capture contract (screenshot design, decision 2). Never hidden, never a silent no-op.                                                 | The backlog's checklist item. Hidden buttons make the beta look like it lacks the feature by design; a labelled disabled state keeps the roadmap honest.                                                                                             | —          |
-| 9   | Landing: "Download for Windows (beta)" beside the macOS button, linking `download/latest/kaipu-setup.exe`; a short download page section with the SmartScreen steps; roadmap `windowsBeta` → `shipped` in the same PR as the first downloadable build. | The backlog's steps 6 and the roadmap row that already says "recording first, screenshots next".                                                                                                                                                     | —          |
-| 10  | Manual QA on real Windows hardware before the roadmap flips: record with mic + system audio, camera bubble, auto-zoom on clicks (native hook), export, library, tray panel placement, update beta → beta+1.                                            | The only verification Windows gets until a Windows E2E lane exists; it is listed so it cannot be skipped silently.                                                                                                                                   | —          |
+| #   | Decision                                                                                                                                                                                                                                                                                                    | Why                                                                                                                                                                                                                                                  | ADR        |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| 1   | One workflow, three jobs: `verify` → `build-mac` ∥ `build-win` → `publish`. Build jobs upload their `dist/` as workflow artifacts; `publish` (ubuntu) downloads both and does R2 + GitHub Release once.                                                                                                     | Two jobs each running `softprops/action-gh-release` with `draft: true` can create two drafts (drafts carry no tag to match on). One publisher, one release, one prune. Reuses ADR 0010's "checks in Actions" shape.                                  | 0023 (new) |
+| 2   | `build-win` on `windows-latest`: checkout, Bun, `bash scripts/rebuild-native.sh`, `bun run build` with `MAIN_VITE_SERVER_URL`, `electron-builder --win --publish never`. No E2E on Windows.                                                                                                                 | Git Bash and the MSVC toolchain are on the runner, so the existing scripts run unchanged; `uiohook-napi` rebuilds for Electron's ABI. ADR 0006 keeps the macOS E2E as the gate; a Windows lane is a cost with no user yet.                           | 0023       |
+| 3   | The feed is shared: `updates/latest.yml`, `updates/<name>-<v>-setup.exe`, `.blockmap`; `download/<v>/kaipu-setup.exe`, `download/latest/kaipu-setup.exe`. Prune keeps working: `*-<v>-*` matches the exe too.                                                                                               | `electron-updater`'s generic provider reads `latest.yml` next to `latest-mac.yml` at the same URL; no second bucket, no second domain.                                                                                                               | 0023       |
+| 4   | Ship the first beta unsigned, with a SmartScreen walkthrough on the download page. Signing is a hook (`win.signtoolOptions.sign: scripts/sign-windows.cjs`) that no-ops without `WIN_SIGN_*` secrets and prints a visible notice; its vendor entries are validate-then-fail seams until a vendor is picked. | The owner's recommendation in the backlog. Azure Artifact Signing admits individuals only in the US and Canada; the alternatives (SSL.com eSigner, Certum, DigiCert KeyLocker) are an owner purchase. The hook keeps the vendor out of the workflow. | 0023       |
+| 5   | Shortcut defaults are per platform. macOS keeps `Command+Control+<key>`; Windows uses `Control+Alt+<key>`. `SHORTCUT_DEFINITIONS` carries `{ mac, win }` and main resolves by `process.platform`; the domain constant already has a `.windows` key, which this design does not touch.                       | Electron maps `Command` to the Windows key, which Windows reserves. `Control+Alt` is the conventional global-hotkey pair; `Control+Shift+<key>` collides with Chrome, Teams and Office in the focused app. Rebindable either way.                    | —          |
+| 6   | Closing the main window on Windows hides it to the tray; the app keeps running like on macOS. A one-time native notification says so as the window hides; Quit lives in the tray menu and `Ctrl+Q` (focused window only). `window-all-closed` no longer quits on win32.                                     | A tray app that dies when its window closes loses the global shortcuts and the capture panel, which is the product. Same as Discord, Slack, ShareX.                                                                                                  | —          |
+| 7   | Windows tray icon: a dedicated `.ico` with a light glyph (and a 32 px size); the macOS template PNGs stay macOS-only.                                                                                                                                                                                       | The current icons are black-on-alpha template images; on the default dark Windows taskbar they are invisible. `setTemplateImage` is a no-op there.                                                                                                   | —          |
+| 8   | Screenshot entry points on Windows render disabled with "Coming to Windows" from the `unsupported` answer of the capture contract (screenshot design, decision 2). Never hidden, never a silent no-op.                                                                                                      | The backlog's checklist item. Hidden buttons make the beta look like it lacks the feature by design; a labelled disabled state keeps the roadmap honest.                                                                                             | —          |
+| 9   | Landing: "Download for Windows (beta)" beside the macOS button, linking `download/latest/kaipu-setup.exe`; a short download page section with the SmartScreen steps; roadmap `windowsBeta` → `shipped` in the same PR as the first downloadable build.                                                      | The backlog's steps 6 and the roadmap row that already says "recording first, screenshots next".                                                                                                                                                     | —          |
+| 10  | Manual QA on real Windows hardware before the roadmap flips: record with mic + system audio, camera bubble, auto-zoom on clicks (native hook), export, library, tray panel placement, update beta → beta+1.                                                                                                 | The only verification Windows gets until a Windows E2E lane exists; it is listed so it cannot be skipped silently.                                                                                                                                   | —          |
 
 ### Open questions
 
@@ -75,7 +81,9 @@ real hardware until there is a reason to pay for a Windows E2E lane.
 3. **`latest.yml` overwritten by `latest-mac.yml` or vice versa.** Different file names, same
    prefix; the copy uses explicit `--include` lists per platform and never `--recursive *`.
 4. **Unsigned build shipped while secrets exist.** The sign hook fails the build if a
-   `WIN_SIGN_*` secret is set and signing errors; it only no-ops when none is set, and prints
+   signing variable (`WIN_SIGN_*`, `AZURE_*` from the workflow's list) is set while
+   `WIN_SIGN_VENDOR` is empty, naming the variables; with a vendor set, any signing error (and,
+   today, every vendor seam) fails the build. It only no-ops when none is set, and prints
    `::warning::Windows build is unsigned` so the run log says so.
 5. **Shortcuts registered with `Command` on Windows.** `shortcut-defaults.test.ts` asserts no
    Windows default contains `Command` or `Super`, and that every action has a default on both
@@ -164,12 +172,18 @@ stay as short-lived workflow artifacts.
 
 ## 4. The app changes
 
-- `shared/types/ipc.ts`: `defaultAccelerator: { mac: string; win: string }`; `resolveDefault(platform)`
-  in `shared/shortcut-defaults.ts`; the renderer receives resolved strings as it does now.
-  `packages/domain` gets `DEFAULT_ACCELERATORS.win`; `shortcut-defaults.test.ts` pins both.
-- `main/index.ts`: on win32, `close` → `preventDefault` + `hide` + first-time toast; tray menu
-  gains "Quit Kaipu"; `window-all-closed` quits only on linux.
-- `main/tray.ts`: `resources/tray-windows.ico` (light glyph) selected on win32; template PNGs
+- `shared/types/ipc.ts`: `defaultAccelerator: { mac: string; win: string }`; `defaultShortcutsFor(platform)`
+  in `shared/shortcut-defaults.ts`; the renderer receives resolved strings as it does now, and
+  renders them as text labels (`Ctrl+Alt+C`) on Windows, glyphs on macOS.
+  `packages/domain` already has `DEFAULT_ACCELERATORS.windows` and is not touched; `shortcut-defaults.test.ts` pins `.windows`.
+- `main/index.ts`: on win32, `close` → `preventDefault` + `hide` + a first-time native
+  notification shown at hide time (`trayHintShown` persisted once it was shown); `Ctrl+Q` quits
+  while the main window has focus; the tray menu's existing "Quit" item (`tray.quit`) is the
+  path when the window is hidden; `window-all-closed` quits only on linux. A single-instance
+  lock makes a second launch bring the running copy's window back instead of starting a
+  second process.
+- `main/tray.ts`: `resources/tray-windows-recording.ico` and
+  `resources/tray-windows-screenshot.ico` (light glyph) selected on win32; template PNGs
   unchanged on macOS.
 - `scripts/sign-windows.cjs` + `electron-builder.yml` `win.signtoolOptions.sign`.
 - Screenshot "coming soon" state comes from the capture contract (other spec, task 1).
@@ -184,11 +198,11 @@ Code (agent-executable):
    the macOS job into `publish`; add the Windows files; the workflow-lint assertion from
    "Failures" 1.
 3. **Signing hook** — `scripts/sign-windows.cjs` (no-op + warning without secrets; fails loudly
-   with secrets and an error), `electron-builder.yml` wiring, a unit test for the no-op branch.
+   with secrets but no vendor, and on any signing error; vendor entries are seams), `electron-builder.yml` wiring, a unit test for the no-op branch.
 4. **Per-platform shortcut defaults** — `{ mac, win }` in `SHORTCUT_DEFINITIONS`, domain
-   `.win`, resolver, tests from "Failures" 5, the Shortcuts page shows the platform's default.
+   `.windows` (already present), resolver, tests from "Failures" 5, the Shortcuts page shows the platform's default.
 5. **Close to tray on Windows** — `close`/`window-all-closed` behaviour, Quit menu item, the
-   one-time toast, the main-process test from "Failures" 6.
+   one-time notification, the main-process test from "Failures" 6.
 6. **Windows tray icon** — `.ico` asset derived from the brand source (see
    [app icon derivation plan](/plans/2026-10-07-app-icon-derivation/)), selection on win32.
 7. **Landing and roadmap** — "Download for Windows (beta)" button, SmartScreen walkthrough

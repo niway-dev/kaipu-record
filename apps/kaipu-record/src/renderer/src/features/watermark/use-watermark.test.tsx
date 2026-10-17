@@ -1,8 +1,11 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_SETTINGS } from "@shared/types";
+import { defaultShortcutsFor } from "@shared/shortcut-defaults";
 import { DEFAULT_WATERMARK_CONFIG } from "./watermark";
 import { useWatermark } from "./use-watermark";
+
+const SETTINGS = { ...DEFAULT_SETTINGS, shortcuts: defaultShortcutsFor("darwin") };
 
 describe("useWatermark", () => {
   afterEach(() => {
@@ -10,7 +13,7 @@ describe("useWatermark", () => {
   });
 
   it("is off by default with the default config — no watermark on the free app", async () => {
-    vi.spyOn(window.electronAPI, "getSettings").mockResolvedValue(DEFAULT_SETTINGS);
+    vi.spyOn(window.electronAPI, "getSettings").mockResolvedValue(SETTINGS);
     const { result } = renderHook(() => useWatermark());
     expect(result.current.enabled).toBe(false);
     expect(result.current.config).toEqual(DEFAULT_WATERMARK_CONFIG);
@@ -21,7 +24,7 @@ describe("useWatermark", () => {
 
   it("turns on when the user enables the 'Made with Kaipu' badge", async () => {
     vi.spyOn(window.electronAPI, "getSettings").mockResolvedValue({
-      ...DEFAULT_SETTINGS,
+      ...SETTINGS,
       showBrandBadge: true,
     });
     const { result } = renderHook(() => useWatermark());

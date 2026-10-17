@@ -138,12 +138,22 @@ export function registerSettings(): void {
   applySideEffects();
 
   ipcMain.handle(IPC_CHANNELS.getSettings, (): AppSettings => settings);
-  ipcMain.handle(IPC_CHANNELS.updateSettings, (_e, patch: Partial<AppSettings>): AppSettings => {
-    settings = mergeSettings({ ...settings, ...patch });
-    persist();
-    applySideEffects();
-    for (const listener of settingsListeners) listener(settings);
-    broadcastSettings();
-    return settings;
-  });
+  ipcMain.handle(
+    IPC_CHANNELS.updateSettings,
+    (_e, patch: Partial<AppSettings>): AppSettings => updateAppSettings(patch),
+  );
+}
+
+/**
+ * Merge a patch into the persisted settings, persist it, apply its side effects
+ * and notify listeners and every window. The renderer's `updateSettings` IPC and
+ * main-process callers share this path.
+ */
+export function updateAppSettings(patch: Partial<AppSettings>): AppSettings {
+  settings = mergeSettings({ ...settings, ...patch });
+  persist();
+  applySideEffects();
+  for (const listener of settingsListeners) listener(settings);
+  broadcastSettings();
+  return settings;
 }

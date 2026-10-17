@@ -1,14 +1,21 @@
 /**
  * Pure helpers to translate between a browser KeyboardEvent, an Electron
- * accelerator string (e.g. "Command+Control+C"), and a display label (e.g. "⌃⌘C").
- * No Electron imports — safe in the renderer and fully unit-testable.
+ * accelerator string (e.g. "Command+Control+C"), and a display label: macOS glyphs
+ * ("⌃⌘C") on macOS, text ("Ctrl+Alt+C") elsewhere. No Electron imports — safe in
+ * the renderer and fully unit-testable. The functions that depend on the host OS
+ * take it as a parameter, defaulting to the preload bridge's `platform`.
  */
 
 export interface CapturedShortcut {
   /** Electron accelerator, e.g. "Command+Control+C". */
   accelerator: string;
-  /** Display label in macOS order, e.g. "⌃⌘C". */
+  /** Display label for the platform, e.g. "⌃⌘C" (macOS) or "Ctrl+Alt+C" (Windows). */
   label: string;
+}
+
+/** The host OS from the preload bridge; macOS when there is no bridge (a bare test). */
+function bridgePlatform(): string {
+  return typeof window !== "undefined" ? (window.electronAPI?.platform ?? "darwin") : "darwin";
 }
 
 const MODIFIER_KEYS = new Set(["Meta", "Control", "Alt", "Shift", "OS"]);
@@ -23,20 +30,26 @@ function keyToken(code: string): string | null {
 /**
  * Build a shortcut from a keydown event, or null if it isn't bindable: a
  * modifier-only press, an unsupported key, or a combo without Command/Control
- * (required so a global shortcut never swallows plain typing).
+ * (required so a global shortcut never swallows plain typing). On Windows the
+ * meta key is the Windows key, whose combinations the OS reserves, so a combo
+ * that uses it is rejected there.
  */
-export function captureShortcut(event: {
-  code: string;
-  key: string;
-  metaKey: boolean;
-  ctrlKey: boolean;
-  altKey: boolean;
-  shiftKey: boolean;
-}): CapturedShortcut | null {
+export function captureShortcut(
+  event: {
+    code: string;
+    key: string;
+    metaKey: boolean;
+    ctrlKey: boolean;
+    altKey: boolean;
+    shiftKey: boolean;
+  },
+  platform: string = bridgePlatform(),
+): CapturedShortcut | null {
   if (MODIFIER_KEYS.has(event.key)) return null;
   const token = keyToken(event.code);
   if (!token) return null;
   if (!event.metaKey && !event.ctrlKey) return null;
+  if (platform === "win32" && event.metaKey) return null;
 
   const accelParts: string[] = [];
   if (event.metaKey) accelParts.push("Command");
@@ -45,7 +58,8 @@ export function captureShortcut(event: {
   if (event.shiftKey) accelParts.push("Shift");
   accelParts.push(token);
 
-  return { accelerator: accelParts.join("+"), label: formatAccelerator(accelParts.join("+")) };
+  const accelerator = accelParts.join("+");
+  return { accelerator, label: formatAccelerator(accelerator, platform) };
 }
 
 /**
@@ -67,8 +81,8 @@ export function conflictingAction<A extends string>(
   return null;
 }
 
-// Accelerator token → symbol. Includes the cross-platform aliases for completeness.
-const TOKEN_SYMBOLS: Record<string, string> = {
+// Accelerator token → macOS glyph. Includes the cross-platform aliases for completeness.
+const MAC_SYMBOLS: Record<string, string> = {
   Command: "⌘",
   Cmd: "⌘",
   CommandOrControl: "⌘",
@@ -80,18 +94,48 @@ const TOKEN_SYMBOLS: Record<string, string> = {
   Shift: "⇧",
 };
 
-// macOS convention renders modifiers in this order, then the key.
-const SYMBOL_ORDER = ["⌃", "⌥", "⇧", "⌘"];
+// macOS convention renders modifiers in this order, then the key, with no separator.
+const MAC_ORDER = ["⌃", "⌥", "⇧", "⌘"];
 
-/** Render an Electron accelerator as a macOS-style label ("Command+Control+C" → "⌃⌘C"). */
-export function formatAccelerator(accelerator: string): string {
-  const symbols: string[] = [];
+// Accelerator token → Windows key name. `CommandOrControl` is Ctrl off macOS, and
+// `Command` (the meta key) is the Windows key.
+const TEXT_NAMES: Record<string, string> = {
+  Command: "Win",
+  Cmd: "Win",
+  Super: "Win",
+  Meta: "Win",
+  CommandOrControl: "Ctrl",
+  CmdOrCtrl: "Ctrl",
+  Control: "Ctrl",
+  Ctrl: "Ctrl",
+  Alt: "Alt",
+  Option: "Alt",
+  Shift: "Shift",
+};
+
+// Windows convention: Ctrl, Alt, Shift, Win, then the key, joined with "+".
+const TEXT_ORDER = ["Ctrl", "Alt", "Shift", "Win"];
+
+/**
+ * Render an Electron accelerator as a label for `platform`: macOS glyphs on macOS
+ * ("Command+Control+C" → "⌃⌘C"), Windows-style text elsewhere
+ * ("Control+Alt+C" → "Ctrl+Alt+C").
+ */
+export function formatAccelerator(
+  accelerator: string,
+  platform: string = bridgePlatform(),
+): string {
+  const mac = platform === "darwin";
+  const names = mac ? MAC_SYMBOLS : TEXT_NAMES;
+  const order = mac ? MAC_ORDER : TEXT_ORDER;
+  const modifiers: string[] = [];
   let key = "";
   for (const part of accelerator.split("+")) {
-    const symbol = TOKEN_SYMBOLS[part];
-    if (symbol) symbols.push(symbol);
-    else key = part;
+    const name = names[part];
+    if (!name) key = part;
+    else if (!modifiers.includes(name)) modifiers.push(name);
   }
-  symbols.sort((a, b) => SYMBOL_ORDER.indexOf(a) - SYMBOL_ORDER.indexOf(b));
-  return symbols.join("") + key;
+  modifiers.sort((a, b) => order.indexOf(a) - order.indexOf(b));
+  if (mac) return modifiers.join("") + key;
+  return [...modifiers, key].filter(Boolean).join("+");
 }

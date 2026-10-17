@@ -21,6 +21,10 @@ Each row shows a click-to-rebind control. The four actions and their default acc
   reach (the "rescue" backstop).
 - _Capture screenshot_ — `Command+Control+X` (⌃⌘X) — open the region-selection overlay.
 
+Those are the macOS defaults. Windows defaults use `Control+Alt+<same key>` (shown as
+`Ctrl+Alt+C`), resolved per platform by `defaultShortcutsFor` in
+`src/shared/shortcut-defaults.ts`.
+
 These are _global_ (system-wide) shortcuts: they fire even when another app is focused,
 which is the whole point — the user is usually inside the app being recorded. To rebind
 one, the user clicks the control (it reads "Press keys…"), presses a `Command`/`Control`
@@ -31,7 +35,7 @@ inline; a binding another _app_ already owns is flagged "in use by another app".
 ## Under the hood
 
 **Page + capture control.** `ShortcutsPage` reads bindings from
-`useAppSettings()` (`settings.shortcuts`, falling back to `DEFAULT_SHORTCUTS`) and renders a
+`useAppSettings()` (`settings.shortcuts`, falling back to `defaultShortcutsFor(window.electronAPI.platform)`) and renders a
 `ShortcutInput` per row (`shortcuts-page.tsx:45-114`). `ShortcutInput`
 (`src/renderer/src/features/shortcuts/shortcut-input.tsx`) is a button that, while
 "listening", attaches a capture-phase `keydown` listener on `window` (`shortcut-input.tsx:30-55`).
@@ -42,9 +46,11 @@ the renderer instead of firing the action being rebound; on cleanup it calls
 **Pure accelerator logic.** `src/renderer/src/features/shortcuts/keyboard-accelerator.ts`
 holds no Electron imports and is fully unit-testable (see
 `keyboard-accelerator.test.ts`): `captureShortcut` turns a `KeyboardEvent` into an Electron
-accelerator string (requires `Command` or `Control` + a letter/digit, else returns null);
+accelerator string (requires `Command` or `Control` + a letter/digit, else returns null; on
+Windows a combo with the Windows key is rejected, because the OS reserves those);
 `conflictingAction` detects a duplicate against the other bindings _before_ saving;
-`formatAccelerator` renders the macOS-symbol label (⌃⌘C).
+`formatAccelerator` renders the label for the bridge's `platform`: macOS symbols on macOS
+(⌃⌘C), text on Windows (`Ctrl+Alt+C`).
 
 **Persistence path.** A captured accelerator flows `onChange` → `handleChange`
 (`shortcuts-page.tsx:69-79`): it rejects a `conflictingAction` clash, otherwise calls

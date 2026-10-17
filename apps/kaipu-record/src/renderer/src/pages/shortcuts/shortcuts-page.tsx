@@ -6,12 +6,12 @@ import { useAppSettings } from "@renderer/pages/settings/use-app-settings";
 import { ShortcutInput } from "@renderer/features/shortcuts/shortcut-input";
 import { conflictingAction } from "@renderer/features/shortcuts/keyboard-accelerator";
 import {
-  DEFAULT_SHORTCUTS,
   SHORTCUT_DEFINITIONS,
   type ShortcutAction,
   type ShortcutDefinition,
   type ShortcutGroup,
 } from "@shared/types";
+import { defaultShortcutsFor } from "@shared/shortcut-defaults";
 import styles from "./shortcuts-page.module.css";
 
 /** action → `shortcuts` namespace keys (labels/descriptions live in i18n, not the shared defs). */
@@ -60,7 +60,7 @@ const shortcutsInGroup = (group: ShortcutGroup): ShortcutDefinition[] =>
 export function ShortcutsPage(): React.JSX.Element {
   const t = useTranslations("shortcuts");
   const { settings, update } = useAppSettings();
-  const shortcuts = settings?.shortcuts ?? DEFAULT_SHORTCUTS;
+  const shortcuts = settings?.shortcuts ?? defaultShortcutsFor(window.electronAPI.platform);
 
   // On-screen sections, in order. Their rows come from SHORTCUT_DEFINITIONS.
   const GROUPS: ReadonlyArray<{ key: ShortcutGroup; title: string }> = [
