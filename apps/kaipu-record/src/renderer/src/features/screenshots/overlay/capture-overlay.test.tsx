@@ -2,7 +2,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { DEFAULT_SETTINGS, type AppSettings } from "@shared/types";
 import type { CaptureRect, OverlayState } from "@shared/types/screenshot-capture";
-import { CaptureOverlay, HIDDEN_ACK_FALLBACK_MS, type CaptureOverlayApi } from "./capture-overlay";
+import {
+  BEFORE_SEND_TIMEOUT_MS,
+  CaptureOverlay,
+  HIDDEN_ACK_FALLBACK_MS,
+  type CaptureOverlayApi,
+} from "./capture-overlay";
 import type { OverlayQuery } from "./overlay-query";
 
 // A 1600×1000 display whose work area loses a 25 px menu bar at the top.
@@ -290,18 +295,64 @@ describe("FrameBox", () => {
     expect(frameGeometry()).toEqual({ x: 60, y: 25, width: 440, height: 395 });
   });
 
-  it("sends one answer when Esc follows Enter", async () => {
+  it("sends one answer when Esc follows Enter: the pending persist does not block Esc", async () => {
+    const { api, answer } = fakeApi();
+    let finishPersist = (): void => {};
+    api.updateSettings.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishPersist = () => resolve(DEFAULT_SETTINGS);
+        }),
+    );
+    render(<CaptureOverlay query={query("frame")} api={api} />);
+    await screen.findByTestId("capture-frame");
+
+    press("Enter");
+    await waitFor(() => expect(api.updateSettings).toHaveBeenCalled());
+    expect(answer).not.toHaveBeenCalled(); // not answered while the frame is persisting
+    press("Escape");
+    expect(answer).toHaveBeenCalledOnce();
+    expect(answer).toHaveBeenLastCalledWith({ kind: "cancelled" });
+
+    finishPersist(); // the persist ends after the cancel: it must not send a second answer
+    press("Enter");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(answer).toHaveBeenCalledOnce();
+  });
+
+  it("answers once the persist is done, and a second Enter meanwhile is ignored", async () => {
     const { api, answer } = fakeApi();
     render(<CaptureOverlay query={query("frame")} api={api} />);
     await screen.findByTestId("capture-frame");
 
     press("Enter");
-    press("Escape");
     press("Enter");
     await waitFor(() => expect(answer).toHaveBeenCalled());
     expect(answer).toHaveBeenCalledOnce();
     expect(answer.mock.calls[0]![0]).toMatchObject({ kind: "rect" });
     expect(api.updateSettings).toHaveBeenCalledOnce();
+  });
+
+  it("sends the answer after the persist timeout when remembering the frame never resolves", async () => {
+    const { api, answer } = fakeApi();
+    api.updateSettings.mockImplementationOnce(() => new Promise(() => {}));
+    render(<CaptureOverlay query={query("frame")} api={api} />);
+    await screen.findByTestId("capture-frame");
+    vi.useFakeTimers();
+    try {
+      press("Enter");
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(BEFORE_SEND_TIMEOUT_MS - 1);
+      });
+      expect(answer).not.toHaveBeenCalled();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
+      expect(answer).toHaveBeenCalledOnce();
+      expect(answer.mock.calls[0]![0]).toMatchObject({ kind: "rect" });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("still answers when remembering the frame fails", async () => {

@@ -10,12 +10,35 @@ export type OverlayUi = "area" | "screen" | "frame";
 /** How long `hideAll` waits for the renderers' frame acks before capturing anyway. */
 export const HIDDEN_ACK_CAP_MS = 250;
 
+/** How long every overlay has to reach `ready-to-show` before the pick is abandoned. */
+export const OVERLAY_READY_TIMEOUT_MS = 10_000;
+
+/** Chromium's `ERR_ABORTED`: a navigation superseded or cancelled, not a failed load. */
+const ERR_ABORTED = -3;
+
+/** The slice of Electron's `Input` the Escape handler reads. */
+export type OverlayInput = { type: string; key: string };
+
 /** The slice of `BrowserWindow` the overlays use; a fake implements it in tests. */
 export interface OverlayWindow {
   readonly webContents: {
     readonly id: number;
     send(channel: string, ...args: unknown[]): void;
-    on(event: "render-process-gone", listener: () => void): void;
+    on(event: "render-process-gone" | "unresponsive", listener: () => void): void;
+    on(
+      event: "did-fail-load",
+      listener: (
+        event: unknown,
+        errorCode: number,
+        errorDescription: string,
+        validatedURL: string,
+        isMainFrame: boolean,
+      ) => void,
+    ): void;
+    on(
+      event: "before-input-event",
+      listener: (event: { preventDefault(): void }, input: OverlayInput) => void,
+    ): void;
   };
   setAlwaysOnTop(flag: boolean, level?: "screen-saver"): void;
   setVisibleOnAllWorkspaces(
@@ -47,6 +70,8 @@ export interface CaptureOverlayDeps {
   };
   /** Where the pointer is, so the overlay under it takes keyboard focus (Esc, Enter, 1/2/3). */
   cursorPoint(): { x: number; y: number };
+  /** Watchdog: abandon the pick if the overlays have not all painted within this long. */
+  readyTimeoutMs: number;
 }
 
 const electronDeps = (): CaptureOverlayDeps => ({
@@ -63,6 +88,7 @@ const electronDeps = (): CaptureOverlayDeps => ({
   ipc: ipcMain as unknown as CaptureOverlayDeps["ipc"],
   screen: screen as unknown as CaptureOverlayDeps["screen"],
   cursorPoint: () => screen.getCursorScreenPoint(),
+  readyTimeoutMs: OVERLAY_READY_TIMEOUT_MS,
 });
 
 type OverlayEntry = { window: OverlayWindow; displayId: number };
@@ -71,6 +97,10 @@ type PickSession = {
   displayIds: Set<number>;
   /** Set until the first answer settles the pick; cleared after, so later answers are ignored. */
   settle: ((answer: OverlayAnswer) => void) | null;
+  /** Windows that have reached `ready-to-show` and been shown. */
+  shown: number;
+  /** Fires `destroyAll` when the overlays never all paint; cleared once they have. */
+  watchdog: ReturnType<typeof setTimeout> | null;
 };
 
 type HiddenWait = { waiting: Set<number>; done: Promise<void>; finish: () => void };
@@ -169,6 +199,8 @@ export class CaptureOverlayWindows implements OverlayPort {
       this.session = {
         displayIds: new Set(displays.map((display) => display.id)),
         settle: resolve,
+        shown: 0,
+        watchdog: null,
       };
       this.hoverDisplayId = null;
       const cursor = this.deps.cursorPoint();
@@ -182,6 +214,13 @@ export class CaptureOverlayWindows implements OverlayPort {
           this.createOverlay(ui, display, index + 1, displayIds, index === focused),
         );
       });
+      // Nothing else rescues a pick whose overlays never paint: the app is hidden and
+      // every later capture would answer `cancelled` until restart.
+      const session = this.session;
+      session.watchdog = setTimeout(() => {
+        session.watchdog = null;
+        if (this.session === session) this.destroyAll();
+      }, this.deps.readyTimeoutMs);
     });
   }
 
@@ -229,6 +268,7 @@ export class CaptureOverlayWindows implements OverlayPort {
     const session = this.session;
     this.session = null;
     this.hoverDisplayId = null;
+    if (session?.watchdog) clearTimeout(session.watchdog);
     for (const { window } of entries) {
       if (!window.isDestroyed()) window.destroy();
     }
@@ -280,12 +320,33 @@ export class CaptureOverlayWindows implements OverlayPort {
       this.setSpaceBehavior(window, true);
       window.show();
       if (focus) window.focus();
+      const session = this.session;
+      session.shown += 1;
+      if (session.shown >= this.entries.length && session.watchdog) {
+        clearTimeout(session.watchdog);
+        session.watchdog = null;
+      }
     });
     window.on("closed", () => this.forget(entry));
     // A crashed renderer leaves its window open: invisible, screen-covering and eating
     // clicks, with no overlay left to press Esc in. Cancel and tear the session down.
     window.webContents.on("render-process-gone", () => {
       if (this.entries.includes(entry)) this.destroyAll();
+    });
+    // A load that fails or a renderer that hangs leaves a window nobody can answer.
+    window.webContents.on("did-fail-load", (_event, errorCode, _description, _url, isMainFrame) => {
+      if (errorCode === ERR_ABORTED || isMainFrame === false) return;
+      if (this.entries.includes(entry)) this.destroyAll();
+    });
+    window.webContents.on("unresponsive", () => {
+      if (this.entries.includes(entry)) this.destroyAll();
+    });
+    // Esc from main, so cancelling does not depend on which renderer holds keyboard focus.
+    window.webContents.on("before-input-event", (event, input) => {
+      if (input.type !== "keyDown" || input.key !== "Escape") return;
+      if (!this.entries.includes(entry)) return;
+      event.preventDefault();
+      this.answer({ kind: "cancelled" });
     });
 
     this.deps.loadRenderer(window, overlayQuery(ui, display, index, displayIds));

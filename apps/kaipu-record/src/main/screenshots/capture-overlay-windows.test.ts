@@ -12,11 +12,13 @@ let nextWebContentsId = 100;
 
 class FakeWindow {
   private renderGone: (() => void) | null = null;
+  private contentsListeners = new Map<string, (...args: never[]) => void>();
   webContents = {
     id: nextWebContentsId++,
     send: vi.fn(),
-    on: vi.fn((event: string, callback: () => void) => {
-      if (event === "render-process-gone") this.renderGone = callback;
+    on: vi.fn((event: string, callback: (...args: never[]) => void) => {
+      if (event === "render-process-gone") this.renderGone = callback as () => void;
+      this.contentsListeners.set(event, callback);
     }),
   };
   setAlwaysOnTop = vi.fn();
@@ -50,6 +52,10 @@ class FakeWindow {
   crashRenderer(): void {
     this.renderGone?.();
   }
+  /** Emit a `webContents` event (`did-fail-load`, `unresponsive`, `before-input-event`). */
+  emitContents(event: string, ...args: unknown[]): void {
+    (this.contentsListeners.get(event) as ((...a: unknown[]) => void) | undefined)?.(...args);
+  }
   /** A `closed` event delivered (again, or late) without a fresh destroy. */
   emitClosed(): void {
     this.closed?.();
@@ -70,7 +76,8 @@ vi.mock("electron", () => ({
 }));
 vi.mock("@electron-toolkit/utils", () => ({ is: { dev: false } }));
 
-const { CaptureOverlayWindows, HIDDEN_ACK_CAP_MS } = await import("./capture-overlay-windows");
+const { CaptureOverlayWindows, HIDDEN_ACK_CAP_MS, OVERLAY_READY_TIMEOUT_MS } =
+  await import("./capture-overlay-windows");
 
 function display(id: number, x: number, scaleFactor = 2): Display {
   return {
@@ -387,6 +394,136 @@ describe("CaptureOverlayWindows: failures", () => {
 
     expect(await next).toEqual({ kind: "display", displayId: 1 });
     expect(current.isDestroyed()).toBe(false);
+  });
+});
+
+describe("CaptureOverlayWindows: stuck overlays", () => {
+  it("cancels and destroys when an overlay has not painted within the timeout", async () => {
+    vi.useFakeTimers();
+    const port = overlays();
+    const picked = port.pick("frame", [left, right]);
+    created[0].window.paint(); // one of two painted; the other never does
+
+    vi.advanceTimersByTime(OVERLAY_READY_TIMEOUT_MS - 1);
+    expect(created[0].window.isDestroyed()).toBe(false);
+    vi.advanceTimersByTime(1);
+
+    expect(await picked).toEqual({ kind: "cancelled" });
+    for (const { window } of created) expect(window.isDestroyed()).toBe(true);
+  });
+
+  it("honours an injected timeout", async () => {
+    vi.useFakeTimers();
+    const picked = new CaptureOverlayWindows({ platform: "darwin", readyTimeoutMs: 500 }).pick(
+      "area",
+      [left],
+    );
+    vi.advanceTimersByTime(500);
+    expect(await picked).toEqual({ kind: "cancelled" });
+  });
+
+  it("stops watching once every overlay is shown", () => {
+    vi.useFakeTimers();
+    void overlays().pick("frame", [left, right]);
+    created[0].window.paint();
+    created[1].window.paint();
+
+    expect(vi.getTimerCount()).toBe(0);
+    vi.advanceTimersByTime(OVERLAY_READY_TIMEOUT_MS * 2);
+    for (const { window } of created) expect(window.isDestroyed()).toBe(false);
+  });
+
+  it("clears the watchdog when the session is destroyed", () => {
+    vi.useFakeTimers();
+    const port = overlays();
+    void port.pick("frame", [left]);
+    expect(vi.getTimerCount()).toBe(1);
+    port.destroyAll();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("a watchdog from a finished session leaves the next pick alone", async () => {
+    vi.useFakeTimers();
+    const port = overlays();
+    void port.pick("screen", [left]);
+    port.destroyAll();
+    const next = port.pick("screen", [left]);
+    created[1].window.paint();
+    vi.advanceTimersByTime(OVERLAY_READY_TIMEOUT_MS * 2);
+    created[1].window.send(IPC_CHANNELS.screenshotOverlayAnswer, { kind: "display", displayId: 1 });
+    expect(await next).toEqual({ kind: "display", displayId: 1 });
+  });
+
+  it("cancels and destroys every overlay when a main-frame load fails", async () => {
+    const port = overlays();
+    const picked = port.pick("frame", [left, right]);
+
+    created[1].window.emitContents("did-fail-load", {}, -105, "ERR_NAME_NOT_RESOLVED", "x", true);
+
+    expect(await picked).toEqual({ kind: "cancelled" });
+    for (const { window } of created) expect(window.isDestroyed()).toBe(true);
+  });
+
+  it("ignores an aborted navigation and a sub-frame load failure", () => {
+    void overlays().pick("frame", [left]);
+    created[0].window.emitContents("did-fail-load", {}, -3, "ERR_ABORTED", "x", true);
+    created[0].window.emitContents("did-fail-load", {}, -105, "ERR_X", "x", false);
+    expect(created[0].window.isDestroyed()).toBe(false);
+  });
+
+  it("cancels and destroys every overlay when a renderer becomes unresponsive", async () => {
+    const port = overlays();
+    const picked = port.pick("screen", [left, right]);
+
+    created[0].window.emitContents("unresponsive");
+
+    expect(await picked).toEqual({ kind: "cancelled" });
+    for (const { window } of created) expect(window.isDestroyed()).toBe(true);
+  });
+});
+
+describe("CaptureOverlayWindows: Escape handled by main", () => {
+  const input = (key: string, type = "keyDown") => ({ type, key });
+
+  it("answers cancelled on Escape without the renderer, keeping the windows for the cleanup", async () => {
+    const port = overlays();
+    const picked = port.pick("frame", [left, right]);
+    const preventDefault = vi.fn();
+
+    created[1].window.emitContents("before-input-event", { preventDefault }, input("Escape"));
+
+    expect(await picked).toEqual({ kind: "cancelled" });
+    expect(preventDefault).toHaveBeenCalled();
+    port.destroyAll();
+    for (const { window } of created) expect(window.isDestroyed()).toBe(true);
+  });
+
+  it("ignores other keys and key releases", () => {
+    const port = overlays();
+    let settled = false;
+    void port.pick("frame", [left]).then(() => (settled = true));
+    const event = { preventDefault: vi.fn() };
+
+    created[0].window.emitContents("before-input-event", event, input("Enter"));
+    created[0].window.emitContents("before-input-event", event, input("Escape", "keyUp"));
+
+    return Promise.resolve().then(() => {
+      expect(settled).toBe(false);
+      expect(event.preventDefault).not.toHaveBeenCalled();
+    });
+  });
+
+  it("an Escape from a finished session's window leaves the next pick alone", async () => {
+    const port = overlays();
+    void port.pick("screen", [left]);
+    const stale = created[0].window;
+    port.destroyAll();
+    const next = port.pick("screen", [left]);
+
+    stale.emitContents("before-input-event", { preventDefault: vi.fn() }, input("Escape"));
+    created[1].window.send(IPC_CHANNELS.screenshotOverlayAnswer, { kind: "display", displayId: 1 });
+
+    expect(await next).toEqual({ kind: "display", displayId: 1 });
   });
 });
 

@@ -10,6 +10,22 @@ import styles from "./capture-overlay.module.css";
 /** How long the hide ack waits for an animation frame before answering anyway. */
 export const HIDDEN_ACK_FALLBACK_MS = 50;
 
+/** How long `beforeSend` (persisting the Frame) may take before the answer goes out anyway. */
+export const BEFORE_SEND_TIMEOUT_MS = 300;
+
+/** Settles when `work` does, or after `ms`; a rejection is swallowed (it is a convenience). */
+async function bestEffort(work: Promise<void>, ms: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, ms);
+  });
+  try {
+    await Promise.race([work.catch(() => {}), timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** The slice of the preload bridge the overlay uses; tests pass a fake. */
 export type CaptureOverlayApi = Pick<
   KaipuElectronAPI,
@@ -17,8 +33,10 @@ export type CaptureOverlayApi = Pick<
 >;
 
 /**
- * Send `answer` once. `beforeSend` (the Frame box persisting its geometry) runs first;
- * a failure there never blocks the answer, or the user would be stuck under the sheet.
+ * Send `answer` once. `beforeSend` (the Frame box persisting its geometry) runs first,
+ * but a failure or a hang there (it is cut off after `BEFORE_SEND_TIMEOUT_MS`) never blocks
+ * the answer, or the user would be stuck under the sheet. While it runs nothing has been
+ * answered yet, so Esc still cancels at once.
  */
 export type SendAnswer = (answer: OverlayAnswer, beforeSend?: () => Promise<void>) => void;
 
@@ -33,7 +51,8 @@ interface CaptureOverlayProps {
  * answers "this rectangle / this display" or "cancelled"; main captures the pixels.
  *
  * Esc anywhere cancels. Only the first answer is sent: a second Esc, or Enter after a
- * click, does nothing (main also keeps only the first, across every display).
+ * click, does nothing (main also keeps only the first, across every display). Main also
+ * cancels on Esc itself, so this renderer-side handler is not the only way out.
  */
 export function CaptureOverlay({
   query,
@@ -41,19 +60,24 @@ export function CaptureOverlay({
 }: CaptureOverlayProps): React.JSX.Element | null {
   const bridge = api.captureOverlay;
   const answered = useRef(false);
+  const persisting = useRef(false);
 
   const send = useCallback<SendAnswer>(
     (answer, beforeSend) => {
       if (answered.current) return;
-      answered.current = true;
+      if (!beforeSend) {
+        answered.current = true;
+        bridge.answer(answer);
+        return;
+      }
+      // A second confirm while the first is persisting is ignored; Esc is not.
+      if (persisting.current) return;
+      persisting.current = true;
       void (async () => {
-        if (beforeSend) {
-          try {
-            await beforeSend();
-          } catch {
-            // Remembering the frame is a convenience; the capture still goes ahead.
-          }
-        }
+        await bestEffort(beforeSend(), BEFORE_SEND_TIMEOUT_MS);
+        // Esc got in while the frame was being remembered: that cancel already went out.
+        if (answered.current) return;
+        answered.current = true;
         bridge.answer(answer);
       })();
     },
