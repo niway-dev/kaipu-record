@@ -19,8 +19,14 @@ const shortcuts = {
 };
 
 const realApi = window.electronAPI;
+// `platform` is readonly on the bridge type; the stub in test/setup.ts is a plain object.
+const setPlatform = (platform: string): void => {
+  (window.electronAPI as { platform: string }).platform = platform;
+};
+
 afterEach(() => {
   window.electronAPI = realApi;
+  setPlatform("darwin");
   vi.restoreAllMocks();
 });
 
@@ -109,9 +115,7 @@ describe("CaptureModeButtons — page hero", () => {
   });
 
   it("falls back to Area when the current mode is unavailable, and says so", async () => {
-    vi.spyOn(window.navigator, "userAgent", "get").mockReturnValue(
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-    );
+    setPlatform("win32");
     given(["area", "screen"], "frame");
     const onCapture = vi.fn();
     render(<CaptureModeButtons variant="page" onCapture={onCapture} shortcuts={shortcuts} />);
@@ -190,9 +194,7 @@ describe("CaptureModeButtons — tray panel", () => {
   });
 
   it("says Coming to Windows on a Windows machine", async () => {
-    vi.spyOn(window.navigator, "userAgent", "get").mockReturnValue(
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-    );
+    setPlatform("win32");
     given([]);
     render(<CaptureModeButtons variant="panel" onCapture={vi.fn()} shortcuts={shortcuts} />);
     const area = screen.getByRole("button", { name: /^Area/ });

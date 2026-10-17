@@ -66,7 +66,7 @@ export function CaptureModeButtons({
   const t = useTranslations("screenshots");
   const supported = useSupportedCaptureModes();
   const { mode: storedMode, setMode } = useScreenshotMode();
-  const isWindows = /Windows/i.test(navigator.userAgent);
+  const isWindows = window.electronAPI.platform === "win32";
   // Windows is the one platform whose screenshots are announced as upcoming.
   const unavailableLabel = isWindows ? t("comingToWindows") : t("notAvailable");
 

@@ -12,16 +12,21 @@ Entry: the user opens the _Shortcuts_ sidebar page (route `/shortcuts`, register
 sections, _Recording_ and _App_, one row per action
 (`src/renderer/src/pages/shortcuts/shortcuts-page.tsx:32-38`, `116-133`).
 
-Each row shows a click-to-rebind control. The four actions and their default accelerators
+Each row shows a click-to-rebind control. The actions and their default accelerators
 (`src/shared/types/ipc.ts:54-88`):
 
 - _Start recording_ — `Command+Control+C` (⌃⌘C) — begin a recording from anywhere.
 - _Stop recording_ — `Command+Control+S` (⌃⌘S) — end the current recording from anywhere.
 - _Bring Kaipu to front_ — `Command+Control+O` (⌃⌘O) — show the window if it slips out of
   reach (the "rescue" backstop).
-- _Capture screenshot_ — `Command+Control+X` (⌃⌘X) — open the region-selection overlay.
+- _Capture screenshot_ — `Command+Control+X` (⌃⌘X) — capture with the current screenshot mode
+  (Area, Screen or Frame).
+- _Capture screen_ — `Command+Control+Shift+X` (⌃⇧⌘X) — capture one whole display, and make
+  Screen the current mode.
+- _Capture frame_ — `Command+Control+Shift+F` (⌃⇧⌘F) — capture what is inside the remembered
+  frame, and make Frame the current mode.
 
-Those are the macOS defaults. Windows defaults use `Control+Alt+<same key>` (shown as
+Those are the macOS defaults. Windows defaults use `Control+Alt+<same key>` (`Control+Alt+Shift+<key>` for the Screen and Frame rows) (shown as
 `Ctrl+Alt+C`), resolved per platform by `defaultShortcutsFor` in
 `src/shared/shortcut-defaults.ts`.
 
