@@ -131,5 +131,7 @@ export function mergeSettings(
     screenshotFrame: mergeScreenshotFrames(safe.screenshotFrame),
     // A stored "window" reads as Frame while Window mode is off (the file keeps it).
     screenshotMode: toEnabledCaptureMode(safe.screenshotMode),
+    trayHintShown:
+      typeof safe.trayHintShown === "boolean" ? safe.trayHintShown : DEFAULT_SETTINGS.trayHintShown,
   };
 }

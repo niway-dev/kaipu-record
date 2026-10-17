@@ -73,6 +73,7 @@ const STUB_SETTINGS = {
   showRecordingSavedCard: true,
   screenshotFrame: {},
   screenshotMode: "frame",
+  trayHintShown: false,
 } as const;
 
 // Vitest does not expose `afterEach` as a global (globals: false), so
@@ -127,6 +128,7 @@ window.electronAPI = {
   startFileDrag: () => {},
   setExportActive: () => {},
   onExportCommand: () => () => {},
+  onTrayHint: () => () => {},
   getVaultDirectory: async () => ({ path: "/tmp/vault", isCustom: false }),
   chooseVaultDirectory: async () => null,
   resetVaultDirectory: async () => ({ path: "/tmp/vault", isCustom: false }),

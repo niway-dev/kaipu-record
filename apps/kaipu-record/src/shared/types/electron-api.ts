@@ -222,6 +222,11 @@ export interface KaipuElectronAPI {
   setExportActive(active: boolean): void;
   /** NIW2-218: main asks to cancel the running export (the user confirmed close/quit). */
   onExportCommand(callback: (command: "cancel") => void): () => void;
+  /**
+   * Windows: main asks to show the one-time "Kaipu keeps running in the tray" hint,
+   * the first time the window comes back after a close hid it. Returns an unsubscribe fn.
+   */
+  onTrayHint(callback: () => void): () => void;
 
   /** Current recordings-folder location (custom or platform default). */
   getVaultDirectory(): Promise<VaultDirectory>;

@@ -22,6 +22,7 @@ const SETTINGS: AppSettings = {
   showRecordingSavedCard: true,
   screenshotFrame: {},
   screenshotMode: "frame",
+  trayHintShown: false,
 };
 
 describe("useAppSettings", () => {

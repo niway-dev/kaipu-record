@@ -38,7 +38,8 @@
   },
   "tray": {
     "open": "Abrir Kaipu Record",
-    "quit": "Salir"
+    "quit": "Salir",
+    "closedToTray": "Kaipu sigue abierto en la bandeja — clic derecho en el icono para salir"
   },
   "dialogs": {
     "cancel": "Cancelar",

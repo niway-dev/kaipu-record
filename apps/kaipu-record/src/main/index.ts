@@ -25,6 +25,7 @@ import {
   getAppSettings,
   applyDockPolicy,
   onSettingsChanged,
+  updateAppSettings,
 } from "./infrastructure/settings-store";
 import { registerAuth } from "./infrastructure/auth-store";
 import {
@@ -59,6 +60,7 @@ import {
   WINDOW_PRESETS,
   type WindowPresetName,
 } from "@shared/window-size";
+import { handleMainWindowClose, shouldQuitOnAllWindowsClosed } from "./window-close-policy";
 
 let mainWindow: BrowserWindow | null = null;
 let capturePanel: CapturePanelWindow | null = null;
@@ -80,6 +82,13 @@ let exportActive = false;
 let closingWithExport = false;
 /** Same, for "Cancel export and quit" on `before-quit`. */
 let quittingWithExport = false;
+/** True once `before-quit` passed every guard: the app is really quitting, so the
+ *  main window's `close` must close it rather than hide it to the tray (Windows). */
+let isQuitting = false;
+/** Windows: a close hid the window to the tray and the one-time hint has not been
+ *  shown yet. Sent to the renderer the next time the window is shown — a toast in
+ *  a hidden window would expire unseen. */
+let trayHintPending = false;
 /** Set true when the renderer sends `appReady` (its IPC listeners are up), reset
  *  to false whenever a new main window is created. */
 let rendererReady = false;
@@ -184,8 +193,11 @@ function createWindow(showOnReady = true): void {
   // recorder's normal stop path (finalizing what's on disk so far) before
   // actually closing — with a timeout so the window is never stuck if the
   // renderer is unresponsive.
-  mainWindow.on("close", (event) => {
-    if (closingWithRecording || !hub?.isActive()) return;
+  //
+  // Each guard returns whether it took this close over (prevented it), so the
+  // close-to-tray step below never hides over a guard's confirmation.
+  const recordingCloseGuard = (event: Electron.Event): boolean => {
+    if (closingWithRecording || !hub?.isActive()) return false;
     event.preventDefault();
     const t = createMainTranslator(getAppSettings().locale);
     const choice = dialog.showMessageBoxSync(mainWindow!, {
@@ -196,7 +208,7 @@ function createWindow(showOnReady = true): void {
       message: t("dialogs.recordingInProgress"),
       detail: t("dialogs.closeStopsDetail"),
     });
-    if (choice !== 1) return;
+    if (choice !== 1) return true;
     closingWithRecording = true;
     mainWindow?.webContents.send(IPC_CHANNELS.recordingCommand, "stop");
     const finishClose = (): void => mainWindow?.close();
@@ -205,14 +217,15 @@ function createWindow(showOnReady = true): void {
       clearTimeout(timeout);
       finishClose();
     });
-  });
+    return true;
+  };
 
   // The export runs in this window's renderer, so closing the window destroys it mid-write and
   // leaves a `.part` file behind. Confirm, then ask the renderer to cancel (it deletes the
   // `.part`) and close once it reports the export stopped — with a timeout so the window is
   // never stuck. The recording guard above has priority and returns first.
-  mainWindow.on("close", (event) => {
-    if (closingWithExport || !exportActive || hub?.isActive()) return;
+  const exportCloseGuard = (event: Electron.Event): boolean => {
+    if (closingWithExport || !exportActive || hub?.isActive()) return false;
     event.preventDefault();
     const t = createMainTranslator(getAppSettings().locale);
     const choice = dialog.showMessageBoxSync(mainWindow!, {
@@ -223,9 +236,28 @@ function createWindow(showOnReady = true): void {
       message: t("dialogs.exportInProgress"),
       detail: t("dialogs.closeCancelsExportDetail"),
     });
-    if (choice !== 1) return;
+    if (choice !== 1) return true;
     closingWithExport = true;
     cancelExportThen(() => mainWindow?.close());
+    return true;
+  };
+
+  // Windows keeps the app in the tray: a close the guards let through hides the
+  // window instead, unless the app is quitting. A confirmed "Stop and close" /
+  // "Cancel export and close" re-closes with its flag set, passes the guards, and
+  // lands here — so on Windows it hides too. macOS and Linux close as before.
+  mainWindow.on("close", (event) => {
+    const guardTookOver = recordingCloseGuard(event) || exportCloseGuard(event);
+    handleMainWindowClose(
+      event,
+      { platform: process.platform, isQuitting, guardTookOver },
+      hideMainWindowToTray,
+    );
+  });
+
+  // Windows log-off / shutdown ends the app without `before-quit`; let the close through.
+  mainWindow.on("session-end", () => {
+    isQuitting = true;
   });
 
   // If the renderer crashes/OOMs mid-recording there is no `recordingStop` IPC
@@ -252,6 +284,18 @@ function createWindow(showOnReady = true): void {
   }
 }
 
+/**
+ * Hide the main window in place of closing it (Windows close-to-tray). Clears the
+ * guards' one-shot "closing" flags the way `closed` would, so the next close while
+ * recording or exporting asks again. The first time, queue the tray hint.
+ */
+function hideMainWindowToTray(): void {
+  closingWithRecording = false;
+  closingWithExport = false;
+  mainWindow?.hide();
+  if (!getAppSettings().trayHintShown) trayHintPending = true;
+}
+
 /** Show & focus the main window, recreating it if it was closed. */
 function showMainWindow(): void {
   if (!mainWindow || mainWindow.isDestroyed()) {
@@ -261,6 +305,11 @@ function showMainWindow(): void {
   if (mainWindow.isMinimized()) mainWindow.restore();
   mainWindow.show();
   mainWindow.focus();
+  if (trayHintPending) {
+    trayHintPending = false;
+    updateAppSettings({ trayHintShown: true });
+    sendToRenderer(IPC_CHANNELS.trayHint);
+  }
 }
 
 /**
@@ -733,6 +782,9 @@ app.on("before-quit", (event) => {
     return;
   }
 
+  // Every guard passed: this quit is real, so the main window's close must not hide it.
+  isQuitting = true;
+
   // The app lives in the menu bar — keep the tray reference alive and release it
   // only on quit so the icon isn't garbage-collected. Flush analytics best-effort
   // (fire-and-forget: client already flushes on every capture so nothing is lost).
@@ -743,11 +795,10 @@ app.on("before-quit", (event) => {
   void shutdownMainAnalytics();
 });
 
-// Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
+// Quit when all windows are closed on Linux only. macOS keeps the app in the menu
+// bar until Cmd+Q; Windows keeps it in the tray until its Quit item.
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
+  if (shouldQuitOnAllWindowsClosed(process.platform)) {
     app.quit();
   }
 });
