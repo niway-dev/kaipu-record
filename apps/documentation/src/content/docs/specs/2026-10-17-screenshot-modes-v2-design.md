@@ -31,26 +31,28 @@ Windows — the window itself, not the screen around it. **The mode is picked in
 overlay**: a vertical pill attached to the right edge of the selection (or a row inside the
 Screen card) switches between Frame, Window and Screen with a click or the keys 1–3, and the
 mode used to capture becomes the current one. The page and the tray keep one Capture button
-and a row of chips; a chip opens the overlay straight in that mode. **A capture that the
-preferences already save or copy never opens the editor.** Main writes it to the vault and the
-clipboard itself and shows a small always-on-top toast on the display where the shot was taken:
-"Copied to clipboard", size and mode, Annotate and Open in Library, gone after 6 seconds. Only
-when both preferences are manual does the editor open as today, because then someone has to
-decide what to do with the shot.
+and a row of chips; a chip opens the overlay straight in that mode. **The selection carries an action bar**: Capture (Enter) and Copy (⌘C, Ctrl+C on Windows), with a seat
+reserved for Record, because recording a display or a selection is the next feature and will reuse this
+overlay. Capture opens the editor unless saving is automatic; then main saves (and copies, if copying is
+automatic too) and shows a small always-on-top toast on the display where the shot was taken: "Saved to
+Library", size and mode, Annotate and Open in Library, gone after 6 seconds. Copy always finishes
+quietly: clipboard, vault only when saving is automatic, the same toast saying "Copied to clipboard".
+The editor opens only when someone still has to decide what to do with the shot.
 
-| #   | Decision                                                                                                                                                                                                                                                                                                                       | Why                                                                                                                                                                                                                                                                               | ADR        |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| 1   | Three modes: `frame`, `window`, `screen`. `area` is removed; a stored `"area"` migrates to `"frame"`, and `frame` is the default. Frame gains drag-to-draw on the sheet.                                                                                                                                                       | Area and Frame were the same gesture with different memory. One box that can be redrawn or kept does both; a fourth entry in a pill of three is noise.                                                                                                                            | 0024 (new) |
-| 2   | **Window mode runs on our overlay on both platforms.** Main lists on-screen windows through an OS tool with no native module (macOS: `osascript -l JavaScript` + `CGWindowListCopyWindowInfo`; Windows: PowerShell + `EnumWindows`/`DwmGetWindowAttribute`), the overlay highlights and answers a window id plus its rect.     | The design shows one highlight style on both OSes and the pill must work in every mode; Apple's `-w` picker would close our overlay and lose the pill. Measured here 2026-10-17: the macOS listing runs in 30 ms inside a 50 ms process. No native dependency, per the repo rule. | 0024       |
-| 3   | Window pixels are the window's own: macOS `screencapture -l <id> -o -x`; Windows the `window:<hwnd>` source of `desktopCapturer` at the window's physical size. A screen crop at the window rect is the fallback when the source is missing or empty.                                                                          | Both capture the window even where another window covers it, which is what "capture this window" means. The fallback keeps the mode working on a machine where window capture fails, at the cost of showing what is on top.                                                       | 0024       |
-| 4   | The mode is switched **inside the overlay**: a pill attached to the selection (Frame box, highlighted window) or a row in the Screen card; keys 1–3; the answer carries the mode and that mode becomes `screenshotMode`. Esc leaves the previous mode untouched.                                                               | Choosing a mode while looking at the screen is how the native pickers work; picking it beforehand on a page cost a capture every time it was wrong. Remembering only on capture keeps a cancelled experiment from changing the shortcut's meaning.                                | —          |
-| 5   | Page and tray: one Capture button (current mode) plus a chip row Frame · Window · Screen; a chip opens the overlay in that mode. The 0.12.0 cards go.                                                                                                                                                                          | The design's "one button, three chips". Chips that only selected (0.12.0) made people press twice.                                                                                                                                                                                | —          |
-| 6   | **After a capture, main decides.** If `screenshotSave` or `screenshotCopy` is `auto`, main saves and/or copies itself, shows the capture toast and never opens the editor; the main window returns to its pre-capture state. If both are `manual`, the editor opens as today.                                                  | The owner: "if saving is on, it just saves and the window does not show". The two preferences already express the intent; a third setting would restate them. The editor is for deciding or annotating, and when the preferences decided there is nothing to decide.              | 0024       |
-| 7   | The **capture toast** is one frameless, always-on-top `BrowserWindow` (`?window=capture-toast`) at the top-right of the work area of the display the shot came from: thumbnail, title ("Copied to clipboard" / "Saved to Library"), `W × H · Mode`, Annotate, Open in Library or Save to Library, auto-hide 6 s, hover pauses. | Same pattern as the camera bubble; a toast inside the main window would force that window on screen, which is exactly what quiet capture avoids. CleanShot X's quick-access overlay is the reference.                                                                             | —          |
-| 8   | Annotate opens the editor on the saved vault item (`local` source) when the shot was saved, or on the bytes main kept for the toast's lifetime (`blob` with `origin: "quiet"`) when it was only copied. The editor runs no auto action for `origin: "quiet"`.                                                                  | A second auto-save on Annotate would duplicate the Library row; a second copy would re-encode what is already on the clipboard.                                                                                                                                                   | —          |
-| 9   | Shortcuts: `captureScreenshot` captures with the current mode; `captureWindow` is new (`Command+Control+W`, `Control+Alt+W`); `captureScreen` and `captureFrame` stay.                                                                                                                                                         | One generic key plus one per mode, as the design labels them. Area had no key of its own, so none is lost.                                                                                                                                                                        | —          |
-| 10  | Nothing is disabled on Windows. The design's "Frame isn't available on Windows yet" note is stale: 0.12.0 already serves Screen and Frame there, and Window gets its Windows lister in this design.                                                                                                                            | A disabled state would hide a backend that exists. Real-hardware QA, not a label, is what is missing, and it is blocked by the Windows build.                                                                                                                                     | —          |
-| 11  | Analytics: `screenshot_captured` gains `after: "editor" \| "quiet"` and the `window` mode value. No titles, no window names.                                                                                                                                                                                                   | The owner wants to know whether quiet capture is the common path before investing further in the toast.                                                                                                                                                                           | —          |
+| #   | Decision                                                                                                                                                                                                                                                                                                                                                                                                                                  | Why                                                                                                                                                                                                                                                                                                                                                 | ADR        |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| 1   | Three modes: `frame`, `window`, `screen`. `area` is removed; a stored `"area"` migrates to `"frame"`, and `frame` is the default. Frame gains drag-to-draw on the sheet.                                                                                                                                                                                                                                                                  | Area and Frame were the same gesture with different memory. One box that can be redrawn or kept does both; a fourth entry in a pill of three is noise.                                                                                                                                                                                              | 0024 (new) |
+| 2   | **Window mode runs on our overlay on both platforms.** Main lists on-screen windows through an OS tool with no native module (macOS: `osascript -l JavaScript` + `CGWindowListCopyWindowInfo`; Windows: PowerShell + `EnumWindows`/`DwmGetWindowAttribute`), the overlay highlights and answers a window id plus its rect.                                                                                                                | The design shows one highlight style on both OSes and the pill must work in every mode; Apple's `-w` picker would close our overlay and lose the pill. Measured here 2026-10-17: the macOS listing runs in 30 ms inside a 50 ms process. No native dependency, per the repo rule.                                                                   | 0024       |
+| 3   | Window pixels are the window's own: macOS `screencapture -l <id> -o -x`; Windows the `window:<hwnd>` source of `desktopCapturer` at the window's physical size. A screen crop at the window rect is the fallback when the source is missing or empty.                                                                                                                                                                                     | Both capture the window even where another window covers it, which is what "capture this window" means. The fallback keeps the mode working on a machine where window capture fails, at the cost of showing what is on top.                                                                                                                         | 0024       |
+| 4   | The mode is switched **inside the overlay**: a pill attached to the selection (Frame box, highlighted window) or a row in the Screen card; keys 1–3; the answer carries the mode and that mode becomes `screenshotMode`. Esc leaves the previous mode untouched.                                                                                                                                                                          | Choosing a mode while looking at the screen is how the native pickers work; picking it beforehand on a page cost a capture every time it was wrong. Remembering only on capture keeps a cancelled experiment from changing the shortcut's meaning.                                                                                                  | —          |
+| 5   | Page and tray: one Capture button (current mode) plus a chip row Frame · Window · Screen; a chip opens the overlay in that mode. The 0.12.0 cards go.                                                                                                                                                                                                                                                                                     | The design's "one button, three chips". Chips that only selected (0.12.0) made people press twice.                                                                                                                                                                                                                                                  | —          |
+| 6   | **The overlay's action decides, then the preferences.** The selection carries Capture (Enter) and Copy (⌘C / Ctrl+C). Capture opens the editor unless `screenshotSave` is `auto`, in which case main saves, copies if `screenshotCopy` is `auto`, shows the toast and never opens the editor. Copy always finishes quietly: clipboard, vault only if `screenshotSave` is `auto`, toast. The main window returns to its pre-capture state. | The owner: "if saving is on, it just saves and the window does not show" and "when we choose Copy, that's it". The explicit Copy is the per-shot "finish on the clipboard" the owner first asked for as a key; the preferences carry the rest. The editor is for deciding or annotating, and when that is already decided there is nothing to show. | 0024       |
+| 7   | The **capture toast** is one frameless, always-on-top `BrowserWindow` (`?window=capture-toast`) at the top-right of the work area of the display the shot came from: thumbnail, title ("Copied to clipboard" / "Saved to Library"), `W × H · Mode`, Annotate, Open in Library or Save to Library, auto-hide 6 s, hover pauses.                                                                                                            | Same pattern as the camera bubble; a toast inside the main window would force that window on screen, which is exactly what quiet capture avoids. CleanShot X's quick-access overlay is the reference.                                                                                                                                               | —          |
+| 8   | Annotate opens the editor on the saved vault item (`local` source) when the shot was saved, or on the bytes main kept for the toast's lifetime (`blob` with `origin: "quiet"`) when it was only copied. The editor runs no auto action for `origin: "quiet"`.                                                                                                                                                                             | A second auto-save on Annotate would duplicate the Library row; a second copy would re-encode what is already on the clipboard.                                                                                                                                                                                                                     | —          |
+| 9   | Shortcuts: `captureScreenshot` captures with the current mode; `captureWindow` is new (`Command+Control+W`, `Control+Alt+W`); `captureScreen` and `captureFrame` stay.                                                                                                                                                                                                                                                                    | One generic key plus one per mode, as the design labels them. Area had no key of its own, so none is lost.                                                                                                                                                                                                                                          | —          |
+| 10  | Nothing is disabled on Windows. The design's "Frame isn't available on Windows yet" note is stale: 0.12.0 already serves Screen and Frame there, and Window gets its Windows lister in this design.                                                                                                                                                                                                                                       | A disabled state would hide a backend that exists. Real-hardware QA, not a label, is what is missing, and it is blocked by the Windows build.                                                                                                                                                                                                       | —          |
+| 11  | Analytics: `screenshot_captured` gains `after: "editor" \| "quiet"` and the `window` mode value. No titles, no window names.                                                                                                                                                                                                                                                                                                              | The owner wants to know whether quiet capture is the common path before investing further in the toast.                                                                                                                                                                                                                                             | —          |
+| 12  | **Record has a reserved seat in the action bar.** The bar is `Capture · Copy · Record (soon)`; `OverlayAnswer.action` is `"capture" \| "copy"` today and `"record"` later. The overlay is the one picker for "this display or this selection" that the recording feature will reuse.                                                                                                                                                      | The owner: recording a display and a selection is the next feature; building its picker twice would be the mistake. Reserving the seat costs one disabled button and one union member.                                                                                                                                                              | —          |
 
 ### Open questions
 
@@ -62,10 +64,9 @@ decide what to do with the shot.
    Recording permission, which the app has, but the listing runs in a child `osascript` process
    and TCC attribution to the parent app is unverified. The label falls back to the owner name
    ("Safari") when the title is empty; QA confirms which one shows.
-3. **A per-shot override key.** The owner first mentioned a key in the overlay that copies and
-   finishes (⌘B); the updated design has none and the owner's last word was "when we choose
-   copy, that's it", read as the preference deciding. No key in this design; add one later if
-   the preference-driven flow proves too coarse.
+3. **⌘C for Copy, or ⌘B.** The owner first said ⌘B; the action bar uses ⌘C because inside the overlay
+   the app owns the keyboard and C is what everyone presses to copy. One constant to change if the owner
+   prefers B.
 4. **The toast while the app is hidden.** `beforeCapture` hides the app's windows before the
    overlay opens; the toast must still show. If the hook turns out to use `app.hide()` on macOS,
    the toast is shown after `afterCapture` restores the app, which must not bring the main
@@ -77,6 +78,8 @@ decide what to do with the shot.
 - Scrolling capture, OCR, timers, magnifier, freeze, in-overlay annotation.
 - A window chooser as a grid of thumbnails.
 - Changing the editor's tools, the vault layout, or the Library.
+- Recording through the overlay. The Record seat is reserved and disabled; the recording picker is its
+  own design.
 - Linux.
 
 ### Failures this must protect against
@@ -111,6 +114,8 @@ Each line is a test in the implementation plan; the 0.12.0 list still applies.
     box survives a mode switch.
 12. **A hotkey mashed twice, a display unplugged, a recording in progress, onboarding without a
     main window.** Exactly the 0.12.0 guards, re-run for every mode including Window.
+13. **Copy with saving manual never writes the vault; Copy with saving automatic writes it once.** The
+    toast says which happened ("Not saved yet" with a Save button, or "Also saved to your Library").
 
 ## 1. What exists today (desktop 0.12.0)
 
@@ -176,6 +181,8 @@ cancelled`), `OverlayState` (`hoverDisplayId`, `frameDisplayId`).
 ```ts
 // src/shared/types/screenshot-capture.ts
 export const CAPTURE_MODES = ["frame", "window", "screen"] as const; // pill order = keys 1–3
+/** What the user pressed in the action bar. "record" joins when the recording picker lands. */
+export type CaptureAction = "capture" | "copy";
 
 /** One on-screen window as the overlay sees it (display-relative DIP). */
 export interface ListedWindow {
@@ -187,9 +194,9 @@ export interface ListedWindow {
 }
 
 export type OverlayAnswer =
-  | { kind: "rect"; mode: "frame"; displayId: number; rect: CaptureRect }
-  | { kind: "display"; mode: "screen"; displayId: number }
-  | { kind: "window"; mode: "window"; displayId: number; windowId: string; rect: CaptureRect }
+  | { kind: "rect"; mode: "frame"; action: CaptureAction; displayId: number; rect: CaptureRect }
+  | { kind: "display"; mode: "screen"; action: CaptureAction; displayId: number }
+  | { kind: "window"; mode: "window"; action: CaptureAction; displayId: number; windowId: string; rect: CaptureRect }
   | { kind: "cancelled" };
 
 export interface OverlayState {
@@ -234,13 +241,18 @@ The provider branches on `answer.mode`, not on the requested mode: the pill may 
 ```ts
 // src/main/screenshots/after-capture-policy.ts (pure)
 export type AfterCapture = { open: "editor" } | { open: "quiet"; save: boolean; copy: boolean };
-export function decideAfterCapture(save: ScreenshotSaveMode, copy: ScreenshotCopyMode): AfterCapture {
-  if (save === "manual" && copy === "manual") return { open: "editor" };
-  return { open: "quiet", save: save === "auto", copy: copy === "auto" };
+export function decideAfterCapture(
+  action: CaptureAction,
+  save: ScreenshotSaveMode,
+  copy: ScreenshotCopyMode,
+): AfterCapture {
+  if (action === "copy") return { open: "quiet", save: save === "auto", copy: true };
+  if (save === "manual") return { open: "editor" };
+  return { open: "quiet", save: true, copy: copy === "auto" };
 }
 ```
 
-Quiet: main writes the vault through the same function the `screenshot:save` handler uses
+The provider result carries the answer's `action`. Quiet: main writes the vault through the same function the `screenshot:save` handler uses
 (title `Screenshot — <date>`, `manual: false`), copies the PNG with `clipboard.writeImage`,
 shows the toast, and answers the renderer `{ kind: "captured", after: "quiet" }` so the hook
 does nothing but `revealAfterCapture()` to its previous state. Editor: unchanged path.
@@ -255,8 +267,12 @@ does nothing but `revealAfterCapture()` to its previous state. Editor: unchanged
 - `ModePill`: vertical, attached 10 px right of the selection's top-right corner, flips to the
   left when it would leave the display; Frame · Window · Screen with 1/2/3 badges, a divider and
   a Cancel (Esc) button. In Screen the same three live in the card's bottom row.
-- Hint pill at the bottom: "Enter to capture" (Frame) or "Click to capture" · "1–3 switch
-  mode" · "Esc to cancel".
+- `ActionBar`: horizontal, attached 10 px below the selection's bottom-left corner (above it when
+  there is no room): Capture (accent, Enter), Copy (⌘C / Ctrl+C), a divider, and a disabled Record · soon.
+  In Screen it is the card's button row (Capture · n, Copy) plus a "Record this display · soon" line.
+  Enter and ⌘C work without the bar being hovered; the bar never covers the selection.
+- Hint pill at the bottom: "Enter to capture" (Frame) or "Click or Enter to capture" · "⌘C to copy" ·
+  "1–3 switch mode" · "Esc to cancel".
 - Single display and initial mode Screen: capture at once, as 0.12.0 does. Switching to Screen
   inside the overlay always shows the card.
 
@@ -311,13 +327,14 @@ kCGWindowListExcludeDesktopElements`, keep `kCGWindowLayer === 0`, drop our pid,
    tool/cloaked dropped, physical → DIP on a 150 % display, centre-based display assignment, a
    window spanning two displays), 2 s timeout → `[]`, timing log at debug level.
 3. **Overlay v2** — `OverlayState.mode`/`windows`, `screenshot:overlay-mode`, `ModePill`,
-   `WindowPicker` with highlight and label, `ScreenCard` per the design, keys 1–3, "Finding
-   windows…" hint, mode remembered on capture only. Component tests for every keyboard path.
+   `WindowPicker` with highlight and label, `ScreenCard` per the design, `ActionBar` (Capture, Copy,
+   disabled Record) with Enter and ⌘C, the answer's `action`, keys 1–3, "Finding windows…" hint, mode
+   remembered on capture only. Component tests for every keyboard path.
 4. **Window capture backends** — macOS `-l <id> -o -x` with `-R` fallback; Windows window source
    at physical size with crop fallback; provider tests with injected deps. _Windows half
    blocked by the Windows build._
-5. **Quiet capture in main** — `decideAfterCapture` (pure), vault write and clipboard copy from
-   main, `captured.after`, the renderer hook's quiet path, `origin: "quiet"` skipped by
+5. **Quiet capture in main** — `decideAfterCapture(action, save, copy)` (pure), vault write and
+   clipboard copy from main, `captured.after`, the renderer hook's quiet path, `origin: "quiet"` skipped by
    `autoActionsOnOpen`, kept bytes lifecycle (failure 5), analytics `after`.
 6. **Capture toast window** — `capture-toast-window.ts`, `?window=capture-toast` target, the
    React toast from the design (thumbnail, title, meta line, Annotate, Open/Save to Library,
@@ -335,11 +352,14 @@ for the Windows release workflow.
 - Owner, 2026-10-17: "quitamos area solo será frame"; "agregamos windows: si seleccionamos una
   app que se seleccione, así hace mac"; "cuando estamos guardando … se guarda y tenemos un
   widget que avisa que está en portapapeles … si la opción de guardar está pues directamente se
-  guarda pero no se muestra la ventana"; after the design update: "cuando elijamos copiar y ya".
+  guarda pero no se muestra la ventana"; after the design update: "cuando elijamos copiar y ya"; later the same day: "faltan los botones
+  mientras estamos seleccionando … es la siguiente feature: para grabación haremos que sea pantalla y
+  también selección", which put the Capture · Copy · Record bar on the selection.
 - Claude Design "Kaipu Screenshot Modes v2" (read 2026-10-17): modes Frame/Window/Screen with
   the shortcuts above, pill on the selection, Screen card with the mode row, chips on page and
   tray, "Copied to clipboard" toast with Annotate, Open in Library and "Auto-hides in 6 s · Also
-  saved to your Library". Its "Frame isn't available on Windows yet" note is stale (decision 10).
+  saved to your Library". Its "Frame isn't available on Windows yet" note was stale (decision 10) and was removed when the action bar
+  was added to the file on 2026-10-17.
 - Verified here: `screencapture` flags (`-h`), the JXA window listing and its timing.
 - Unverified: PowerShell listing latency (open question 1); TCC attribution of window titles in
   a child process (open question 2); whether `desktopCapturer` window sources on Windows capture

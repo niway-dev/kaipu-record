@@ -1,6 +1,6 @@
 ---
 title: "ADR 0024: Window capture through the OS window list on our overlay; a capture the preferences already handle never opens the editor"
-description: Amends ADR 0022. Area is folded into Frame; Window becomes a mode on both platforms, with the window list fetched by an OS scripting tool (no native module) and the pixels taken by window id; and main decides after a capture — when save or copy is automatic it saves, copies and shows a toast instead of opening the editor.
+description: Amends ADR 0022. Area is folded into Frame; Window becomes a mode on both platforms, with the window list fetched by an OS scripting tool (no native module) and the pixels taken by window id; and the selection carries Capture and Copy (Record reserved) — Copy finishes on the clipboard, Capture opens the editor only when saving is manual, otherwise main saves and shows a toast.
 ---
 
 # ADR 0024: Window capture through the OS window list on our overlay; a capture the preferences already handle never opens the editor
@@ -41,10 +41,14 @@ them, and who decides what happens after a capture.
    size. A screen crop at the window rect is the fallback, never the primary path.
 3. **Area is removed.** Frame draws a new box from a drag on the sheet and still remembers its
    last one per display. Stored `"area"` migrates to `"frame"`, which becomes the default.
-4. **Main decides after a capture.** `decideAfterCapture(save, copy)`: both manual → the editor
-   opens as before; otherwise main saves and/or copies itself and shows one always-on-top
-   capture toast (Annotate, Open/Save to Library, 6 s) on the display the shot came from. No
-   third preference is added; the two existing ones carry the intent.
+4. **The overlay's action decides, then the preferences.** The selection carries Capture and Copy
+   (and a reserved, disabled Record). `decideAfterCapture(action, save, copy)`: Copy always finishes
+   quietly (clipboard; vault only when saving is automatic); Capture opens the editor only when saving
+   is manual, otherwise main saves, copies if copying is automatic, and shows one always-on-top capture
+   toast (Annotate, Open/Save to Library, 6 s) on the display the shot came from. No third preference
+   is added.
+5. **Record keeps a seat in the action bar.** The overlay is the one "this display or this selection"
+   picker; the recording feature reuses it instead of growing a second one.
 
 ## Alternatives rejected
 
@@ -61,6 +65,9 @@ them, and who decides what happens after a capture.
 - **A new "after capture" preference.** It would restate what the save and copy toggles already
   say and create a fourth contradictory state ("quiet, but save manual and copy manual" has
   nothing to show in a toast).
+- **Let the preferences alone decide, with no Copy in the overlay.** It was the first draft of this
+  ADR. The owner wants an explicit "copy and finish" while looking at the selection, and the same
+  bar is where Record will live; a bar with one button would be rebuilt within a release.
 - **A toast inside the main window.** Forces the main window on screen, which is the thing
   quiet capture exists to avoid.
 - **Keep Area as a fourth mode.** Same gesture as Frame with different memory; a fourth entry
@@ -81,8 +88,8 @@ them, and who decides what happens after a capture.
 
 ## Non-goals
 
-- A per-shot override key in the overlay (the owner's first ask, dropped in the updated
-  design); a thumbnail grid; scrolling, OCR, timers, freeze; Linux.
+- Recording through the overlay (the seat is reserved, the picker is its own design); a thumbnail
+  grid; scrolling, OCR, timers, freeze; Linux.
 - Any change to the editor's tools or the vault layout.
 
 ## Reopen when
@@ -93,4 +100,3 @@ them, and who decides what happens after a capture.
   without extra permission (then `screencapture -w`).
 - Analytics show `after: "quiet"` below one in ten captures three months after shipping: the
   toast stays, but no more work goes into it.
-- Users ask for a per-shot "copy and finish" key often enough to appear in support twice.
