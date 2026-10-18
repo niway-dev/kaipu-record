@@ -206,21 +206,31 @@ function parseAnswer(
     if (answer.mode !== undefined && answer.mode !== "screen") return null;
     return { kind: "display", mode: "screen", action, displayId };
   }
-  const rect = parseRect(answer.rect);
-  if (!rect) return null;
-  if (answer.kind === "rect") {
-    if (answer.mode !== undefined && answer.mode !== "frame") return null;
-    return { kind: "rect", mode: "frame", action, displayId, rect };
-  }
   if (answer.kind === "window") {
     if (answer.mode !== undefined && answer.mode !== "window") return null;
     if (typeof answer.windowId !== "string" || answer.windowId === "") return null;
     // Only a window the lister put on that display: a stale or forged id is not captured.
     const { windowId } = answer;
-    if (!windows?.some((listed) => listed.id === windowId && listed.displayId === displayId)) {
-      return null;
-    }
-    return { kind: "window", mode: "window", action, displayId, windowId: answer.windowId, rect };
+    const listed = windows?.find(
+      (candidate) => candidate.id === windowId && candidate.displayId === displayId,
+    );
+    if (!listed) return null;
+    // The geometry comes from main's own list, never from the renderer's copy of it.
+    return {
+      kind: "window",
+      mode: "window",
+      action,
+      displayId,
+      windowId,
+      rect: { ...listed.rect },
+      fullSize: { ...listed.fullSize },
+    };
+  }
+  const rect = parseRect(answer.rect);
+  if (!rect) return null;
+  if (answer.kind === "rect") {
+    if (answer.mode !== undefined && answer.mode !== "frame") return null;
+    return { kind: "rect", mode: "frame", action, displayId, rect };
   }
   return null;
 }
@@ -301,8 +311,10 @@ export class CaptureOverlayWindows implements OverlayPort {
       displays.forEach((display, index) => {
         this.entries.push(this.createOverlay(ui, display, index + 1, displayIds));
       });
-      // Window from the start: list in parallel with the overlays painting.
-      if (ui === "window") this.requestWindows();
+      // Window from the start: list in parallel with the overlays painting. On Windows the
+      // PowerShell lister is slow to start (Add-Type compiles C#), so it starts with every
+      // pick: by the time the user presses 2, the list has usually landed.
+      if (ui === "window" || this.deps.platform === "win32") this.requestWindows();
       // Nothing else rescues a pick whose overlays never paint: the app is hidden and
       // every later capture would answer `cancelled` until restart.
       const session = this.session;

@@ -290,12 +290,13 @@ describe("CaptureOverlayWindows: answers", () => {
       ).toEqual({ kind: "rect", mode: "frame", action: "copy", displayId: 1, rect });
     });
 
-    it("accepts a window answer with its id and rect when that display holds the window", async () => {
+    it("accepts a window answer by id, with main's own rect and whole size, not the renderer's", async () => {
+      const fullSize = { width: 900, height: 400 };
       const port = new CaptureOverlayWindows({
         platform: "darwin",
         windowLister: {
           list: async () => [
-            { id: "4242", title: "Editor", ownerName: "Kaipu", displayId: 1, rect },
+            { id: "4242", title: "Editor", ownerName: "Kaipu", displayId: 1, rect, fullSize },
           ],
         },
       });
@@ -307,7 +308,8 @@ describe("CaptureOverlayWindows: answers", () => {
         action: "capture",
         displayId: 1,
         windowId: "4242",
-        rect,
+        // A renderer that drifted (or lies) about the geometry: main keeps its own list's.
+        rect: { x: 0, y: 0, width: 5000, height: 5000 },
       });
       expect(await picked).toEqual({
         kind: "window",
@@ -316,6 +318,7 @@ describe("CaptureOverlayWindows: answers", () => {
         displayId: 1,
         windowId: "4242",
         rect,
+        fullSize,
       });
     });
 
@@ -565,7 +568,14 @@ describe("CaptureOverlayWindows: answers", () => {
 
 describe("CaptureOverlayWindows: switching mode inside the overlay", () => {
   const rect = { x: 10, y: 20, width: 300, height: 200 };
-  const editor = { id: "4242", title: "Editor", ownerName: "Kaipu", displayId: 1, rect };
+  const editor = {
+    id: "4242",
+    title: "Editor",
+    ownerName: "Kaipu",
+    displayId: 1,
+    rect,
+    fullSize: { width: rect.width, height: rect.height },
+  };
   const states = (window: FakeWindow) =>
     window.webContents.send.mock.calls
       .filter(([channel]) => channel === IPC_CHANNELS.screenshotOverlayState)
@@ -655,6 +665,30 @@ describe("CaptureOverlayWindows: switching mode inside the overlay", () => {
     first.send(IPC_CHANNELS.screenshotOverlayMode, { mode: "window" });
     expect(list).toHaveBeenCalledOnce();
     expect(states(first).at(-1)).toMatchObject({ mode: "window", windows: [editor] });
+  });
+
+  it("Windows: starts the (slow) PowerShell listing when the pick opens, in any mode", async () => {
+    const list = vi.fn(async () => [editor]);
+    const port = new CaptureOverlayWindows({
+      platform: "win32",
+      cursorPoint: () => ({ x: 100, y: 100 }),
+      windowLister: { list } as never,
+    });
+    void port.pick("frame", [left, right]);
+    expect(list).toHaveBeenCalledOnce();
+    created[0].window.paint();
+    await flush();
+    created[0].window.send(IPC_CHANNELS.screenshotOverlayMode, { mode: "window" });
+    expect(list).toHaveBeenCalledOnce();
+    const last = created[1].window.webContents.send.mock.calls
+      .filter(([channel]) => channel === IPC_CHANNELS.screenshotOverlayState)
+      .at(-1)?.[1];
+    expect(last).toMatchObject({ mode: "window", windows: [editor] });
+  });
+
+  it("macOS: waits for Window before listing (osascript answers in ~50 ms)", () => {
+    const { list } = pickWith("frame", { list: async () => [editor] });
+    expect(list).not.toHaveBeenCalled();
   });
 
   it("starts listing at once when the pick opens in Window", async () => {

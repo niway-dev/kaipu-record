@@ -1024,6 +1024,7 @@ describe("WindowPicker", () => {
     ownerName: "Kaipu Record",
     displayId: 42,
     rect: { x: 100, y: 100, width: 600, height: 400 },
+    fullSize: { width: 600, height: 400 },
   };
   const browser = {
     id: "22",
@@ -1031,6 +1032,7 @@ describe("WindowPicker", () => {
     ownerName: "Safari",
     displayId: 42,
     rect: { x: 0, y: 25, width: 1200, height: 800 },
+    fullSize: { width: 1200, height: 800 },
   };
   const elsewhere = {
     id: "33",
@@ -1038,6 +1040,7 @@ describe("WindowPicker", () => {
     ownerName: "Terminal",
     displayId: 7,
     rect: { x: 0, y: 25, width: 1600, height: 975 },
+    fullSize: { width: 1600, height: 975 },
   };
   const WINDOWS: OverlayState = {
     ...SCREEN,

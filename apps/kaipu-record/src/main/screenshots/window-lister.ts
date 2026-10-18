@@ -63,8 +63,25 @@ export interface WindowsListerDeps extends ListerDeps {
   screenToDip?: (rect: CaptureRect) => CaptureRect;
 }
 
-/** A list slower than this is abandoned: the overlay shows "no windows", not a stuck hint. */
-export const WINDOW_LIST_TIMEOUT_MS = 2000;
+/**
+ * A list slower than this is abandoned: the overlay shows "no windows", not a stuck hint.
+ * macOS: osascript answers in ~50 ms (measured), so 2 s is a wide margin.
+ */
+export const MAC_WINDOW_LIST_TIMEOUT_MS = 2000;
+/**
+ * Windows: PowerShell compiles the C# with `Add-Type` on every run. The spec estimates
+ * 300–800 ms cold and names 800 ms as the gate for replacing the script with a native
+ * module (open question 1); NEITHER number has been measured on a Windows machine yet.
+ * A cold start on a slow disk or under Defender scanning can take several seconds, so the
+ * cut-off is 6 s: long enough not to throw away a slow but working list, while the overlay
+ * stays usable in Frame and Screen the whole time.
+ */
+export const WINDOWS_WINDOW_LIST_TIMEOUT_MS = 6000;
+
+/** The lister's timeout on `platform`. */
+export function windowListTimeoutMs(platform: NodeJS.Platform): number {
+  return platform === "win32" ? WINDOWS_WINDOW_LIST_TIMEOUT_MS : MAC_WINDOW_LIST_TIMEOUT_MS;
+}
 /** Windows smaller than this, in DIP, in either dimension, are not offered. */
 export const MIN_WINDOW_SIZE_DIP = 50;
 const WS_EX_TOOLWINDOW = 0x80;
@@ -79,7 +96,8 @@ const LOG = "[window-lister]";
  * Filters raw windows and turns them into what the overlay sees. Drops our own pids and
  * handles, tool, cloaked and invisible windows, non-zero layers, and anything under 50 × 50
  * DIP. `displayId` is the display holding the window's centre (else the largest overlap, else
- * the primary); `rect` is display-relative DIP clamped to that display. A window that lands on
+ * the primary); `rect` is display-relative DIP clamped to that display, `fullSize` the
+ * unclamped DIP size. A window that lands on
  * no display at all clamps to nothing and is dropped. Order is preserved: front first.
  */
 export function toListedWindows(
@@ -117,6 +135,7 @@ export function toListedWindows(
         width: clipped.width,
         height: clipped.height,
       },
+      fullSize: { width: bounds.width, height: bounds.height },
     });
   }
   return listed;
@@ -361,6 +380,7 @@ abstract class ScriptWindowLister implements WindowLister {
   protected abstract readonly label: string;
   protected abstract readonly cmd: string;
   protected abstract readonly args: string[];
+  protected abstract readonly timeoutMs: number;
   protected abstract parse(stdout: string): RawWindow[];
   protected abstract toDip(): Promise<((rect: CaptureRect) => CaptureRect) | undefined>;
 
@@ -371,12 +391,12 @@ abstract class ScriptWindowLister implements WindowLister {
     try {
       const run = async () => {
         const [stdout, self] = await Promise.all([
-          this.deps.runCommand(this.cmd, this.args, { timeoutMs: WINDOW_LIST_TIMEOUT_MS }),
+          this.deps.runCommand(this.cmd, this.args, { timeoutMs: this.timeoutMs }),
           this.deps.getSelf(),
         ]);
         return toListedWindows(this.parse(stdout), displays, self, await this.toDip());
       };
-      const listed = await withTimeout(run(), WINDOW_LIST_TIMEOUT_MS);
+      const listed = await withTimeout(run(), this.timeoutMs);
       console.debug(
         `${LOG} ${this.label}: ${listed.length} windows in ${Math.round(performance.now() - started)} ms`,
       );
@@ -395,6 +415,7 @@ export class MacWindowLister extends ScriptWindowLister {
   protected readonly label = "macOS";
   protected readonly cmd = "osascript";
   protected readonly args = ["-l", "JavaScript", "-e", MAC_WINDOW_LIST_SCRIPT];
+  protected readonly timeoutMs = windowListTimeoutMs("darwin");
 
   constructor(deps: ListerDeps = defaultDeps) {
     super(deps);
@@ -413,6 +434,7 @@ export class MacWindowLister extends ScriptWindowLister {
 export class WindowsWindowLister extends ScriptWindowLister {
   protected readonly label = "Windows";
   protected readonly cmd = "powershell";
+  protected readonly timeoutMs = windowListTimeoutMs("win32");
   // -EncodedCommand (base64 of UTF-16LE) instead of -Command: the script is full of quotes,
   // and Windows command-line quoting between Node and powershell.exe would mangle some of them.
   protected readonly args = [

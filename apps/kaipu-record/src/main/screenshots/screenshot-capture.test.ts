@@ -494,6 +494,22 @@ describe("WindowsProvider", () => {
       expect(warn).not.toHaveBeenCalled();
     });
 
+    it("asks for a window spanning two displays at its whole size, not the clamped rect (failure 9)", async () => {
+      displays = [primary, hiDpi];
+      // Clamped to display 2 the window is 200 × 100 DIP; whole, it is 900 × 400 DIP.
+      answer = { ...winAnswer(2), fullSize: { width: 900, height: 400 } } as OverlayAnswer;
+      windowSources = [
+        {
+          id: "window:9:0",
+          display_id: "",
+          thumbnail: image({ width: 1350, height: 600 }, "whole"),
+        },
+      ];
+      const out = await windowsProvider().capture({ mode: "window", overlay: fake });
+      expect(requested).toEqual([{ width: 1350, height: 600 }]);
+      expect(out).toMatchObject({ kind: "captured", png: PNG("whole") });
+    });
+
     it("ignores a source with the same name but another id (id 9 is not 90)", async () => {
       answer = winAnswer(1);
       windowSources = [

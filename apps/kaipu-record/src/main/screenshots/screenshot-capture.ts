@@ -73,6 +73,8 @@ export interface CaptureTarget {
   action: CaptureAction;
   /** Window mode only: the OS window id the answer named. */
   windowId?: string;
+  /** Window mode only: the whole window's DIP size (`rect` is clamped to `display`). */
+  fullSize?: { width: number; height: number };
   /** True when the user picked on our overlay, so `runWithOverlay` waits for it to leave. */
   viaOverlay: boolean;
 }
@@ -98,6 +100,7 @@ export async function pickTarget(
         mode,
         action,
         windowId: answer.windowId,
+        ...(answer.fullSize ? { fullSize: answer.fullSize } : {}),
         viaOverlay: true,
       };
     case "display":
@@ -284,9 +287,9 @@ export class WindowsProvider implements ScreenshotCaptureProvider {
         }
         return pickTarget(overlay, mode, displays);
       },
-      async ({ display, rect, mode: picked, action, windowId }) => {
+      async ({ display, rect, mode: picked, action, windowId, fullSize }) => {
         if (picked === "window" && windowId && rect) {
-          const win = await this.captureWindow(display, rect, windowId);
+          const win = await this.captureWindow(display, fullSize ?? rect, windowId);
           if (win) return { kind: "captured", png: win.toPNG(), mode: picked, action };
           console.warn(`[screenshot] no window source for ${windowId}; cropping the display`);
         }
@@ -302,17 +305,21 @@ export class WindowsProvider implements ScreenshotCaptureProvider {
     );
   }
 
-  /** The window's own pixels by id (`window:<id>:`), never by name or index; null when unusable. */
+  /**
+   * The window's own pixels by id (`window:<id>:`), never by name or index; null when unusable.
+   * `size` is the whole window in DIP: a window spanning two displays is larger than its
+   * clamped rect, and a thumbnail asked at the clamped size would come back downscaled.
+   */
   private async captureWindow(
     display: Display,
-    rect: Rectangle,
+    size: { width: number; height: number },
     windowId: string,
   ): Promise<CapturedImage | null> {
     const sources = await this.deps.getSources({
       types: ["window"],
       thumbnailSize: {
-        width: Math.round(rect.width * display.scaleFactor),
-        height: Math.round(rect.height * display.scaleFactor),
+        width: Math.round(size.width * display.scaleFactor),
+        height: Math.round(size.height * display.scaleFactor),
       },
     });
     const thumbnail = sources.find((source) =>

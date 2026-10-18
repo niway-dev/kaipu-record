@@ -11,8 +11,10 @@ import {
   type ListerDeps,
   type RawWindow,
   selfWindowHandles,
+  MAC_WINDOW_LIST_TIMEOUT_MS,
   toListedWindows,
-  WINDOW_LIST_TIMEOUT_MS,
+  windowListTimeoutMs,
+  WINDOWS_WINDOW_LIST_TIMEOUT_MS,
   WindowsWindowLister,
 } from "./window-lister";
 
@@ -45,6 +47,7 @@ describe("toListedWindows", () => {
         ownerName: "Notes",
         displayId: 1,
         rect: { x: 100, y: 100, width: 400, height: 300 },
+        fullSize: { width: 400, height: 300 },
       },
     ]);
   });
@@ -139,6 +142,8 @@ describe("toListedWindows", () => {
     const [listed] = toListedWindows([spanning], [main, left], noSelf);
     expect(listed?.displayId).toBe(2);
     expect(listed?.rect).toEqual({ x: 920, y: 100, width: 1000, height: 500 });
+    // The capture asks for the whole window, so it is not downscaled into the clamped rect.
+    expect(listed?.fullSize).toEqual({ width: 1400, height: 500 });
   });
 
   it("assigns by largest overlap when the centre is on no display", () => {
@@ -336,7 +341,7 @@ describe("listers", () => {
     expect(cmd).toBe("osascript");
     expect(args.slice(0, 3)).toEqual(["-l", "JavaScript", "-e"]);
     expect(args[3]).toContain("CGWindowListCopyWindowInfo");
-    expect(options.timeoutMs).toBe(WINDOW_LIST_TIMEOUT_MS);
+    expect(options.timeoutMs).toBe(MAC_WINDOW_LIST_TIMEOUT_MS);
     expect(warn).not.toHaveBeenCalled();
     expect(debug).toHaveBeenCalledWith(expect.stringContaining("[window-lister]"));
   });
@@ -366,10 +371,19 @@ describe("listers", () => {
     const list = await lister.list([display(1, 0, 1280, 720, 1.5)]);
 
     expect(list).toEqual([
-      expect.objectContaining({ id: "111", rect: { x: 0, y: 0, width: 400, height: 200 } }),
+      expect.objectContaining({
+        id: "111",
+        rect: { x: 0, y: 0, width: 400, height: 200 },
+        fullSize: { width: 400, height: 200 },
+      }),
     ]);
-    const [cmd, args] = runCommand.mock.calls[0] as unknown as [string, string[]];
+    const [cmd, args, options] = runCommand.mock.calls[0] as unknown as [
+      string,
+      string[],
+      { timeoutMs: number },
+    ];
     expect(cmd).toBe("powershell");
+    expect(options.timeoutMs).toBe(WINDOWS_WINDOW_LIST_TIMEOUT_MS);
     expect(args).toEqual(
       expect.arrayContaining(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass"]),
     );
@@ -394,6 +408,13 @@ describe("listers", () => {
     expect(warn).toHaveBeenCalledTimes(1);
   });
 
+  it("gives PowerShell longer than osascript: 2 s on macOS, 6 s on Windows", () => {
+    expect(windowListTimeoutMs("darwin")).toBe(2000);
+    expect(windowListTimeoutMs("win32")).toBe(6000);
+    expect(MAC_WINDOW_LIST_TIMEOUT_MS).toBe(2000);
+    expect(WINDOWS_WINDOW_LIST_TIMEOUT_MS).toBe(6000);
+  });
+
   it("a runCommand that never answers resolves [] after the timeout and warns once", async () => {
     vi.useFakeTimers();
     const lister = new MacWindowLister({
@@ -406,7 +427,7 @@ describe("listers", () => {
       settled = true;
     });
 
-    await vi.advanceTimersByTimeAsync(WINDOW_LIST_TIMEOUT_MS - 1);
+    await vi.advanceTimersByTimeAsync(MAC_WINDOW_LIST_TIMEOUT_MS - 1);
     expect(settled).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
 

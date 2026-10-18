@@ -47,6 +47,12 @@ export interface CaptureRect {
   height: number;
 }
 
+/** A DIP size. */
+export interface CaptureSize {
+  width: number;
+  height: number;
+}
+
 /**
  * What the user pressed on the overlay's action bar. `"record"` is reserved: it joins
  * this union when the recording picker reuses the overlay.
@@ -62,8 +68,14 @@ export interface ListedWindow {
   ownerName: string;
   /** The display holding the window's centre. */
   displayId: number;
-  /** Display-relative DIP, clamped to that display. */
+  /** Display-relative DIP, clamped to that display: what the overlay highlights. */
   rect: CaptureRect;
+  /**
+   * The whole window's size in DIP, before the clamp: a window spanning two displays is
+   * larger than `rect`. The Windows window source is requested at this size, so the shot
+   * is not downscaled into the clamped rect.
+   */
+  fullSize: CaptureSize;
 }
 
 /**
@@ -81,7 +93,10 @@ export type OverlayAnswer =
       action: CaptureAction;
       displayId: number;
       windowId: string;
+      /** Main replaces it with its own list's `rect`; the renderer's value is never trusted. */
       rect: CaptureRect;
+      /** Filled by main from its own list (`ListedWindow.fullSize`); the renderer omits it. */
+      fullSize?: CaptureSize;
     }
   | { kind: "cancelled" };
 
