@@ -276,7 +276,8 @@
 
 .filterBar {
   position: sticky;
-  top: 70px; /* under the fixed top bar */
+  /* The fixed top bar is 82px tall here (66px on phones); sit on its bottom border. */
+  top: 81px;
   z-index: 40;
   border-top: 1px solid var(--kl-bd);
   border-bottom: 1px solid var(--kl-bd);
@@ -945,7 +946,7 @@
   }
 
   .filterBar {
-    top: 62px;
+    top: 66px;
   }
 
   .filterInner {

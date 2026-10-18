@@ -5,6 +5,7 @@ import { SUPPORTED_LOCALES, useLocale, useSetLocale, useTranslations } from "@ka
 
 import { downloadUrls } from "@/lib/download";
 import { setLandingTheme } from "@/server-functions/set-landing-theme";
+import { useScrolled } from "./use-scrolled";
 import styles from "./top-nav.module.css";
 
 /**
@@ -39,6 +40,8 @@ export function TopNav({ page = "home" }: { page?: MarketingPage }) {
   const router = useRouter();
   const { landingTheme } = useRouteContext({ from: "__root__" });
   const nextTheme = landingTheme === "dark" ? "light" : "dark";
+  // Transparent over the hero; glass once content scrolls underneath it.
+  const scrolled = useScrolled();
 
   const toggleTheme = async () => {
     await setLandingTheme({ data: nextTheme });
@@ -46,7 +49,7 @@ export function TopNav({ page = "home" }: { page?: MarketingPage }) {
   };
 
   return (
-    <header className={styles.nav}>
+    <header className={styles.nav} data-scrolled={scrolled}>
       {/*
         The bar is full-bleed (it spans the viewport and carries the blur), but
         its CONTENTS sit in the same container as the page below, so the mark on
