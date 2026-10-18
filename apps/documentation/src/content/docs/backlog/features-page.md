@@ -5,8 +5,10 @@ description: A /features page that lists everything Kaipu ships in detail, group
 
 # Features page
 
-> **Status: 🔵 Proposed (2026-10-14).** Option 1 below is the recommendation; the owner has not
-> answered the open questions yet. The Claude Design prompt is ready; no design or code exists.
+> **Status: 🟢 Ready to validate (2026-10-18).** Option 1 shipped as `/features` in PR #296
+> (`apps/web-hono/src/components/features/features-config.ts`). The catalogue was brought up
+> to desktop 0.11–0.13 on 2026-10-18 (see [Catalogue updates](#catalogue-updates)). The
+> sections below keep the proposal and the Claude Design prompt as they were written.
 
 The home sells Kaipu in 30 seconds with four chapters (Record · Capture · Edit · Find) and
 animated mocks. It has no room for the full catalogue: export presets, tags, background
@@ -30,6 +32,32 @@ list should live in a config file like `apps/web-hono/src/components/roadmap/roa
 with copy in `@kaipu/i18n` (en + es parity test), and every shipped roadmap item should link to
 its section on `/features`, so updating one page reminds you of the other.
 
+## Catalogue updates
+
+### 2026-10-18 — desktop 0.11, 0.12 and the pending 0.13
+
+Sources: `apps/kaipu-record/CHANGELOG.md` (0.11.0, 0.12.0), the commits on `main` after
+`desktop-v0.12.0` (screenshot modes v2, PR #309, waiting in the 0.13.0 release PR), the
+[screenshot modes v2 design](/specs/2026-10-17-screenshot-modes-v2-design/) and
+`SHORTCUT_DEFINITIONS` in the desktop app.
+
+| Row (`features-config.ts`) | Change                                                                                         |
+| -------------------------- | ---------------------------------------------------------------------------------------------- |
+| `captureModes`             | "Select an area" → **Frame or Screen**, with the ⌘⌃X / ⌘⌃⇧F / ⌘⌃⇧X chips                       |
+| `quietCapture` (new)       | Copy from the selection without the editor; the toast offers Annotate / Open / Save to Library |
+| `liveControls` (new)       | Mute the mic, system audio or camera mid-take (⌘⌃M / ⌘⌃A / ⌘⌃K)                                |
+| `editorHome` (new)         | The Editor opens on recent work and starts a new image from the clipboard                      |
+| `startAnywhere`            | Chips read `DEFAULT_ACCELERATORS` instead of typed glyphs (they showed ⌃⌘, the app shows ⌘⌃)   |
+| home chapter 02            | "Area · window · full screen" → "Frame · Screen"                                               |
+
+Roadmap: `screenshotModes`, `editorHome` and `liveRecordingControls` join the shipped group;
+the `shortcuts` row no longer promises a pause shortcut. Nothing moved out of `planned`.
+
+Left out on purpose: **Window mode** (in the app, but off behind `WINDOW_MODE_ENABLED`),
+**Record from the selection** (a disabled "soon" seat in the overlay, and no backlog doc yet,
+so it is not in Coming next either) and **GIF export** (on hold behind a flag; the export
+sheet offers MP4 only).
+
 ## Open questions (defaults if unanswered)
 
 1. **Real screenshots or animated mocks?** Default: real app screenshots and short clips —
@@ -40,12 +68,14 @@ its section on `/features`, so updating one page reminds you of the other.
 
 ## Claims to verify before publishing
 
-- **Tags on screenshots.** The copy says recordings _and_ screenshots can be tagged; that comes
-  from the tags plan and was not checked in the app.
+- **Tags on screenshots.** Checked in code on 2026-10-18: the library detail page shows the tag
+  editor for every saved item, screenshots included. The
+  [tags on images](./image-tags) doc still reads 🔵 Proposed; it predates the tags work.
 - **GitHub size chips and the lighter 24 fps export** reach `main` with PRs #288 and #290. Drop
   that line if the page ships first.
-- **Shortcuts** (⌃⌘C start, ⌃⌘S stop, ⌃⌘X capture, ⌃⌘O show app) were read from the app's
-  status bar; say so if they are configurable.
+- **Shortcuts** are configurable (the copy says so). Since 2026-10-18 the page reads the
+  defaults from `DEFAULT_ACCELERATORS` in `@kaipu/domain`, which a desktop test pins to the
+  app's own definitions.
 
 ## Claude Design prompt
 

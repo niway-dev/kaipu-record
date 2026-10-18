@@ -1,11 +1,18 @@
 import {
+  DEFAULT_ACCELERATORS,
+  formatAccelerator,
+  type ShortcutAction,
+} from "@kaipu/domain/constants";
+import {
   Captions,
+  ClipboardCheck,
   ClipboardCopy,
   Crop,
   Droplet,
   Download,
   EyeOff,
   Globe,
+  History,
   AppWindow,
   Layers,
   Library,
@@ -23,6 +30,7 @@ import {
   Square,
   Stamp,
   Tag,
+  ToggleRight,
   Type,
   UploadCloud,
   UserX,
@@ -94,6 +102,14 @@ export interface FeatureChapter {
  */
 type FeatureMessageKey = string;
 
+/**
+ * A shortcut chip's keys, read from the defaults the desktop app registers, so the
+ * page cannot advertise a binding the app no longer ships.
+ */
+function keys(action: ShortcutAction): string {
+  return formatAccelerator(DEFAULT_ACCELERATORS.mac[action]);
+}
+
 export const FEATURE_CHAPTERS = [
   {
     id: "record",
@@ -120,10 +136,21 @@ export const FEATURE_CHAPTERS = [
         title: "items.startAnywhere.title",
         body: "items.startAnywhere.body",
         chips: [
-          { kind: "kbd", prefix: "⌃⌘C", key: "items.startAnywhere.k1" },
-          { kind: "kbd", prefix: "⌃⌘S", key: "items.startAnywhere.k2" },
-          { kind: "kbd", prefix: "⌃⌘X", key: "items.startAnywhere.k3" },
-          { kind: "kbd", prefix: "⌃⌘O", key: "items.startAnywhere.k4" },
+          { kind: "kbd", prefix: keys("startRecording"), key: "items.startAnywhere.k1" },
+          { kind: "kbd", prefix: keys("stopRecording"), key: "items.startAnywhere.k2" },
+          { kind: "kbd", prefix: keys("captureScreenshot"), key: "items.startAnywhere.k3" },
+          { kind: "kbd", prefix: keys("bringToFront"), key: "items.startAnywhere.k4" },
+        ],
+      },
+      {
+        id: "liveControls",
+        icon: ToggleRight,
+        title: "items.liveControls.title",
+        body: "items.liveControls.body",
+        chips: [
+          { kind: "kbd", prefix: keys("toggleMicrophone"), key: "items.liveControls.k1" },
+          { kind: "kbd", prefix: keys("toggleSystemAudio"), key: "items.liveControls.k2" },
+          { kind: "kbd", prefix: keys("toggleCamera"), key: "items.liveControls.k3" },
         ],
       },
       {
@@ -146,6 +173,7 @@ export const FEATURE_CHAPTERS = [
       {
         id: "alreadySaved",
         icon: Save,
+        span: 3,
         title: "items.alreadySaved.title",
         body: "items.alreadySaved.body",
       },
@@ -175,6 +203,20 @@ export const FEATURE_CHAPTERS = [
         icon: Crop,
         title: "items.captureModes.title",
         body: "items.captureModes.body",
+        // Window mode exists in the app but is switched off (WINDOW_MODE_ENABLED), so
+        // it has no chip and no copy here until it ships.
+        chips: [
+          { kind: "kbd", prefix: keys("captureScreenshot"), key: "items.captureModes.k1" },
+          { kind: "kbd", prefix: keys("captureFrame"), key: "items.captureModes.k2" },
+          { kind: "kbd", prefix: keys("captureScreen"), key: "items.captureModes.k3" },
+        ],
+      },
+      {
+        id: "quietCapture",
+        icon: ClipboardCheck,
+        span: 2,
+        title: "items.quietCapture.title",
+        body: "items.quietCapture.body",
       },
       {
         id: "blurFrame",
@@ -202,7 +244,6 @@ export const FEATURE_CHAPTERS = [
       {
         id: "saveEvery",
         icon: RefreshCw,
-        span: 3,
         title: "items.saveEvery.title",
         body: "items.saveEvery.body",
       },
@@ -275,9 +316,15 @@ export const FEATURE_CHAPTERS = [
       {
         id: "background",
         icon: Layers,
-        span: 3,
+        span: 2,
         title: "items.background.title",
         body: "items.background.body",
+      },
+      {
+        id: "editorHome",
+        icon: History,
+        title: "items.editorHome.title",
+        body: "items.editorHome.body",
       },
     ],
   },

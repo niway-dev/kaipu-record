@@ -19,10 +19,13 @@ export type RoadmapStatus = (typeof ROADMAP_STATUSES)[number];
  */
 export const ROADMAP_ITEMS = [
   // Shipped — newest first, so the top of the group is the freshest news.
+  { id: "screenshotModes", status: "shipped" },
+  { id: "editorHome", status: "shipped" },
   { id: "exportPresets", status: "shipped" },
   { id: "captureTags", status: "shipped" },
   { id: "screenshotPdf", status: "shipped" },
   { id: "captureTitle", status: "shipped" },
+  { id: "liveRecordingControls", status: "shipped" },
   { id: "watermark", status: "shipped" },
   { id: "saveEveryScreenshot", status: "shipped" },
   { id: "videoZoom", status: "shipped" },
