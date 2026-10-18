@@ -89,6 +89,8 @@ function display(id: number, x: number, scaleFactor = 2): Display {
   } as Display;
 }
 const left = display(1, 0);
+/** Let pending promise callbacks (the window lister's answer) run. */
+const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 const right = display(2, 1440, 1);
 
 function overlays(platform: NodeJS.Platform = "darwin") {
@@ -278,17 +280,26 @@ describe("CaptureOverlayWindows: answers", () => {
       ).toEqual({ kind: "rect", mode: "frame", action: "copy", displayId: 1, rect });
     });
 
-    it("accepts a window answer with its id and rect", async () => {
-      expect(
-        await answerWith("window", {
-          kind: "window",
-          mode: "window",
-          action: "capture",
-          displayId: 1,
-          windowId: "4242",
-          rect,
-        }),
-      ).toEqual({
+    it("accepts a window answer with its id and rect when that display holds the window", async () => {
+      const port = new CaptureOverlayWindows({
+        platform: "darwin",
+        windowLister: {
+          list: async () => [
+            { id: "4242", title: "Editor", ownerName: "Kaipu", displayId: 1, rect },
+          ],
+        },
+      });
+      const picked = port.pick("window", [left]);
+      await flush();
+      created[0].window.send(IPC_CHANNELS.screenshotOverlayAnswer, {
+        kind: "window",
+        mode: "window",
+        action: "capture",
+        displayId: 1,
+        windowId: "4242",
+        rect,
+      });
+      expect(await picked).toEqual({
         kind: "window",
         mode: "window",
         action: "capture",
@@ -539,6 +550,185 @@ describe("CaptureOverlayWindows: answers", () => {
 
     void port.pick("frame", [left]);
     expect(created).toHaveLength(2);
+  });
+});
+
+describe("CaptureOverlayWindows: switching mode inside the overlay", () => {
+  const rect = { x: 10, y: 20, width: 300, height: 200 };
+  const editor = { id: "4242", title: "Editor", ownerName: "Kaipu", displayId: 1, rect };
+  const states = (window: FakeWindow) =>
+    window.webContents.send.mock.calls
+      .filter(([channel]) => channel === IPC_CHANNELS.screenshotOverlayState)
+      .map(([, state]) => state as Record<string, unknown>);
+
+  function pickWith(
+    ui: "frame" | "window" | "screen",
+    lister: { list: () => Promise<unknown[]> } = { list: async () => [] },
+  ) {
+    const list = vi.fn(lister.list);
+    const port = new CaptureOverlayWindows({
+      platform: "darwin",
+      cursorPoint: () => ({ x: 100, y: 100 }),
+      windowLister: { list } as never,
+    });
+    const picked = port.pick(ui, [left, right]);
+    const [first, second] = created.map(({ window }) => window);
+    first.paint();
+    second.paint();
+    return { port, picked, first, second, list };
+  }
+
+  it("ignores a mode switch from a window that is not an overlay", () => {
+    const { first } = pickWith("frame");
+    const before = states(first).length;
+
+    ipcListeners.get(IPC_CHANNELS.screenshotOverlayMode)?.(
+      { sender: { id: 99_999 } },
+      { mode: "screen" },
+    );
+
+    expect(states(first)).toHaveLength(before);
+  });
+
+  it("ignores an unknown mode and a malformed payload", () => {
+    const { first, second } = pickWith("frame");
+    const before = states(first).length;
+
+    second.send(IPC_CHANNELS.screenshotOverlayMode, { mode: "area" });
+    second.send(IPC_CHANNELS.screenshotOverlayMode, undefined);
+    second.send(IPC_CHANNELS.screenshotOverlayMode, "screen");
+
+    expect(states(first)).toHaveLength(before);
+  });
+
+  it("rebroadcasts the state with the new mode to every overlay", () => {
+    const { first, second } = pickWith("frame");
+
+    second.send(IPC_CHANNELS.screenshotOverlayMode, { mode: "screen" });
+
+    for (const window of [first, second]) {
+      expect(states(window).at(-1)).toEqual({
+        mode: "screen",
+        hoverDisplayId: null,
+        frameDisplayId: null,
+        windows: null,
+      });
+    }
+  });
+
+  it("entering Frame puts the frame on the display that asked, and focuses it", () => {
+    const { first, second } = pickWith("screen");
+
+    second.send(IPC_CHANNELS.screenshotOverlayMode, { mode: "frame" });
+
+    expect(states(first).at(-1)).toMatchObject({ mode: "frame", frameDisplayId: 2 });
+    expect(second.focus).toHaveBeenCalled();
+  });
+
+  it("lists the windows once, the first time Window is entered, and broadcasts them", async () => {
+    const { first, second, list } = pickWith("frame", { list: async () => [editor] });
+    expect(list).not.toHaveBeenCalled();
+
+    first.send(IPC_CHANNELS.screenshotOverlayMode, { mode: "window" });
+    expect(states(second).at(-1)).toMatchObject({ mode: "window", windows: null });
+    await flush();
+
+    for (const window of [first, second]) {
+      expect(states(window).at(-1)).toEqual({
+        mode: "window",
+        hoverDisplayId: null,
+        frameDisplayId: null,
+        windows: [editor],
+      });
+    }
+    first.send(IPC_CHANNELS.screenshotOverlayMode, { mode: "screen" });
+    first.send(IPC_CHANNELS.screenshotOverlayMode, { mode: "window" });
+    expect(list).toHaveBeenCalledOnce();
+    expect(states(first).at(-1)).toMatchObject({ mode: "window", windows: [editor] });
+  });
+
+  it("starts listing at once when the pick opens in Window", async () => {
+    const { first, list } = pickWith("window", { list: async () => [editor] });
+    expect(list).toHaveBeenCalledOnce();
+    await flush();
+    expect(states(first).at(-1)).toMatchObject({ mode: "window", windows: [editor] });
+  });
+
+  it("a lister that rejects answers an empty list, not a stuck overlay", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { first } = pickWith("window", {
+      list: async () => {
+        throw new Error("osascript missing");
+      },
+    });
+    await flush();
+    expect(states(first).at(-1)).toMatchObject({ mode: "window", windows: [] });
+  });
+
+  it("a list that lands after the pick ended is dropped", async () => {
+    let resolveList: (list: unknown[]) => void = () => {};
+    const { port, first } = pickWith("window", {
+      list: () => new Promise((resolve) => (resolveList = resolve)),
+    });
+    port.destroyAll();
+    const sentBefore = first.webContents.send.mock.calls.length;
+
+    resolveList([editor]);
+    await flush();
+
+    expect(first.webContents.send.mock.calls).toHaveLength(sentBefore);
+  });
+
+  it("setWindows pushes a list into every overlay's state", () => {
+    const { port, first, second } = pickWith("window", { list: () => new Promise(() => {}) });
+
+    port.setWindows([editor]);
+
+    for (const window of [first, second]) {
+      expect(states(window).at(-1)).toMatchObject({ windows: [editor] });
+    }
+  });
+
+  it("refuses a window answer for a display that does not hold that window", async () => {
+    const { picked, second } = pickWith("window", { list: async () => [editor] });
+    await flush();
+    const answer = { kind: "window", mode: "window", action: "capture", windowId: "4242", rect };
+
+    second.send(IPC_CHANNELS.screenshotOverlayAnswer, { ...answer, displayId: 2 });
+    second.send(IPC_CHANNELS.screenshotOverlayAnswer, { ...answer, displayId: 1, windowId: "7" });
+    second.send(IPC_CHANNELS.screenshotOverlayAnswer, { kind: "cancelled" });
+
+    expect(await picked).toEqual({ kind: "cancelled" });
+  });
+
+  it("refuses a window answer before the list has arrived", async () => {
+    const { picked, first } = pickWith("window", { list: () => new Promise(() => {}) });
+
+    first.send(IPC_CHANNELS.screenshotOverlayAnswer, {
+      kind: "window",
+      mode: "window",
+      displayId: 1,
+      windowId: "4242",
+      rect,
+    });
+    first.send(IPC_CHANNELS.screenshotOverlayAnswer, { kind: "cancelled" });
+
+    expect(await picked).toEqual({ kind: "cancelled" });
+  });
+
+  it("a new pick starts with the requested mode and no windows", async () => {
+    const { port, first } = pickWith("frame", { list: async () => [editor] });
+    first.send(IPC_CHANNELS.screenshotOverlayMode, { mode: "window" });
+    await flush();
+    port.destroyAll();
+    created.length = 0;
+
+    void port.pick("screen", [left]);
+    created[0].window.paint();
+
+    expect(states(created[0].window)).toEqual([
+      { mode: "screen", hoverDisplayId: null, frameDisplayId: null, windows: null },
+    ]);
   });
 });
 

@@ -7,6 +7,7 @@ const overlay: OverlayPort = {
   pick: async () => ({ kind: "cancelled" }),
   hideAll: async () => {},
   destroyAll: () => {},
+  setWindows: () => {},
 };
 
 function setup(
@@ -16,6 +17,7 @@ function setup(
 ) {
   const windows = { beforeCapture: vi.fn(), afterCapture: vi.fn(), reveal: vi.fn() };
   const track = vi.fn();
+  const rememberMode = vi.fn();
   const handler = createCaptureHandler({
     platform,
     provider: { capture, supports, supportedModes: () => [] },
@@ -24,11 +26,55 @@ function setup(
     measure: () => ({ width: 3, height: 2 }),
     displayCount: () => 2,
     track,
+    rememberMode,
   });
-  return { handler, windows, track };
+  return { handler, windows, track, rememberMode };
 }
 
 describe("createCaptureHandler", () => {
+  it("makes the mode the overlay captured with the current one, only on a captured result", async () => {
+    // The user opened Frame and switched to Screen on the overlay before capturing.
+    const { handler, rememberMode } = setup(async () => ({
+      kind: "captured",
+      png: Buffer.from([1]),
+      mode: "screen",
+      action: "copy",
+    }));
+    await handler({ mode: "frame" });
+    expect(rememberMode).toHaveBeenCalledExactlyOnceWith("screen");
+  });
+
+  it("leaves the current mode untouched after a cancelled pick (Esc)", async () => {
+    const { handler, rememberMode } = setup(async () => ({ kind: "cancelled" }));
+    await handler({ mode: "window" });
+    expect(rememberMode).not.toHaveBeenCalled();
+  });
+
+  it("leaves the current mode untouched when the capture is unsupported or throws", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const unsupported = setup(async () => ({ kind: "unsupported", mode: "window" }));
+    await unsupported.handler({ mode: "frame" });
+    expect(unsupported.rememberMode).not.toHaveBeenCalled();
+
+    const thrown = setup(vi.fn().mockRejectedValueOnce(new Error("boom")));
+    await thrown.handler({ mode: "frame" });
+    expect(thrown.rememberMode).not.toHaveBeenCalled();
+  });
+
+  it("still answers the capture when remembering the mode fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const { handler, rememberMode } = setup(async () => ({
+      kind: "captured",
+      png: Buffer.from([1]),
+      mode: "frame",
+      action: "capture",
+    }));
+    rememberMode.mockImplementation(() => {
+      throw new Error("disk full");
+    });
+    expect(await handler({ mode: "frame" })).toMatchObject({ kind: "captured", mode: "frame" });
+  });
+
   it("answers captured with an ArrayBuffer copy, size and mode", async () => {
     const { handler, windows } = setup(async ({ mode }) => ({
       kind: "captured",

@@ -32,6 +32,12 @@ interface CaptureHandlerDeps {
   displayCount(): number;
   /** Receives one `screenshot_captured` payload per answered request (no pixels, no geometry). */
   track(event: ScreenshotCapturedProperties): void;
+  /**
+   * Make `mode` the current screenshot mode (`AppSettings.screenshotMode`). Called only for
+   * a captured result, with the mode the overlay answered in: switching mode on the overlay
+   * and then cancelling (Esc) leaves the previous mode untouched (spec failure 10).
+   */
+  rememberMode(mode: CaptureMode): void;
 }
 
 function assertCaptureMode(value: unknown): CaptureMode {
@@ -85,6 +91,12 @@ export function createCaptureHandler(
     report(failed ? "failed" : result.kind);
     switch (result.kind) {
       case "captured": {
+        try {
+          deps.rememberMode(result.mode);
+        } catch (error) {
+          // Remembering the mode is a convenience: the shot still reaches the user.
+          console.error("screenshot mode could not be remembered", error);
+        }
         const { png } = result;
         const { width, height } = deps.measure(png);
         // Buffer → ArrayBuffer slice for structured-clone across IPC.

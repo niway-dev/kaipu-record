@@ -14,39 +14,33 @@ const SHORTCUT_MODE: Record<Exclude<CaptureShortcut, "captureScreenshot">, Captu
 };
 
 export interface ShortcutCapture {
-  /** The mode to capture with (sent to the renderer as the hotkey payload). */
+  /** The mode the overlay opens in (sent to the renderer as the hotkey payload). */
   mode: CaptureMode;
-  /** True when this shortcut makes `mode` the current one, so main persists it. */
-  remember: boolean;
 }
 
 /**
- * What a capture shortcut does with the one current screenshot mode:
+ * Which mode a capture shortcut opens the overlay in:
  *
- *   • `captureScreenshot` (the generic ⌃⌘X) captures with the stored current mode. If the
- *     platform cannot serve it, it captures with Frame — the same fallback the page and the
+ *   • `captureScreenshot` (the generic ⌃⌘X) opens with the stored current mode. If the
+ *     platform cannot serve it, it opens with Frame — the same fallback the page and the
  *     tray show — rather than answering "unsupported" for a mode the user cannot pick.
- *   • `captureScreen` / `captureFrame` / `captureWindow` capture with their own mode and make it current,
- *     unless the platform cannot serve it: then nothing is remembered and the capture
- *     answers "unsupported" as before, so the stored mode never becomes one that cannot run.
+ *   • `captureScreen` / `captureFrame` / `captureWindow` open with their own mode.
+ *
+ * No shortcut changes the stored mode by itself: the mode becomes current only once a
+ * capture in it succeeds (the capture handler's `rememberMode`), so a shortcut that ends in
+ * Esc, a recording refusal or "unsupported" leaves the default as it was.
  *
  * `supported` is `null` when it is not known yet (the screenshot IPC not registered); the
  * stored mode is then trusted.
- *
- * `recording`: a take is active or paused. The capture is still sent so the renderer's
- * recording block answers it ("finish the recording first"), but nothing is remembered: a
- * shortcut that did not capture must not change the default.
  */
 export function resolveShortcutCapture(
   action: CaptureShortcut,
   stored: CaptureMode,
   supported: readonly CaptureMode[] | null,
-  recording = false,
 ): ShortcutCapture {
   const serves = (mode: CaptureMode): boolean => supported === null || supported.includes(mode);
   if (action === "captureScreenshot") {
-    return { mode: serves(stored) || !serves("frame") ? stored : "frame", remember: false };
+    return { mode: serves(stored) || !serves("frame") ? stored : "frame" };
   }
-  const mode = SHORTCUT_MODE[action];
-  return { mode, remember: !recording && serves(mode) && mode !== stored };
+  return { mode: SHORTCUT_MODE[action] };
 }

@@ -17,6 +17,7 @@ const overlay: OverlayPort = {
   pick: vi.fn(async () => ({ kind: "cancelled" as const })),
   hideAll: vi.fn(async () => {}),
   destroyAll: vi.fn(),
+  setWindows: vi.fn(),
 };
 
 describe("MacProvider", () => {
@@ -62,6 +63,7 @@ describe("MacProvider", () => {
         destroyAll: vi.fn(() => {
           log.push("destroyAll");
         }),
+        setWindows: vi.fn(),
       };
       runCli = vi.fn(async (_cmd, args) => {
         log.push(`runCli:${args.join(" ")}`);
@@ -332,6 +334,7 @@ describe("WindowsProvider", () => {
       destroyAll: vi.fn(() => {
         log.push("destroyAll");
       }),
+      setWindows: vi.fn(),
     };
   });
   afterEach(() => vi.restoreAllMocks());

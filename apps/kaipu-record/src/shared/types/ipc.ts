@@ -380,8 +380,11 @@ export const IPC_CHANNELS = {
   screenshotOverlayAnswer: "screenshot:overlay-answer",
   // Overlay → main: the pointer is over this display (`{ displayId: number | null }`).
   screenshotOverlayHover: "screenshot:overlay-hover",
-  // Main → every overlay: `{ hoverDisplayId, frameDisplayId }` (each `number | null`).
+  // Main → every overlay: `OverlayState` (`{ mode, hoverDisplayId, frameDisplayId, windows }`).
   screenshotOverlayState: "screenshot:overlay-state",
+  // Overlay → main: switch every overlay to this mode (`{ mode: CaptureMode }`); main
+  // validates, rebroadcasts the state, and lists the windows the first time Window is entered.
+  screenshotOverlayMode: "screenshot:overlay-mode",
   // Overlay → main (Frame): "move the frame to this display" (`{ displayId: number }`).
   screenshotOverlayFrameDisplay: "screenshot:overlay-frame-display",
   // Main → overlay (no payload): "reply after your next animation frame"; overlay → main

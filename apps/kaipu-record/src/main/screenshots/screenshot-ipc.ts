@@ -12,7 +12,7 @@ import { CaptureOverlayWindows } from "./capture-overlay-windows";
 import type { OverlayPort } from "./overlay-port";
 import { createScreenshotProvider } from "./screenshot-capture";
 import { captureMainEvent } from "../services/analytics.service";
-import { getAppSettings } from "../infrastructure/settings-store";
+import { getAppSettings, updateAppSettings } from "../infrastructure/settings-store";
 import { currentVault, screenshotFilePath } from "../library";
 
 /** Stable, sortable id; mirrors the recording writer's timestamp scheme. */
@@ -29,11 +29,14 @@ let overlayWindows: CaptureOverlayWindows | null = null;
 const overlay: OverlayPort = {
   pick: async (ui, displays) => {
     if (!app.isReady()) return { kind: "cancelled" };
+    // The real window listers (macOS JXA, Windows PowerShell) plug in here as
+    // `new CaptureOverlayWindows({ windowLister })`; until then Window lists nothing.
     overlayWindows ??= new CaptureOverlayWindows();
     return overlayWindows.pick(ui, displays);
   },
   hideAll: async () => overlayWindows?.hideAll(),
   destroyAll: () => overlayWindows?.destroyAll(),
+  setWindows: (list) => overlayWindows?.setWindows(list),
 };
 
 /** What the rest of main needs from the screenshot backend once it is registered. */
@@ -53,6 +56,10 @@ export function registerScreenshotHandlers(windows: CaptureWindowHooks): Screens
     displayCount: () => screen.getAllDisplays().length,
     track: (event) =>
       captureMainEvent(SCREENSHOT_CAPTURED_EVENT, buildScreenshotCapturedProperties(event)),
+    // Persisted and broadcast to every window, so the page and the tray follow.
+    rememberMode: (mode) => {
+      if (getAppSettings().screenshotMode !== mode) updateAppSettings({ screenshotMode: mode });
+    },
   });
   ipcMain.handle(IPC_CHANNELS.screenshotCapture, (_event, request) => handleCapture(request));
   ipcMain.handle(IPC_CHANNELS.screenshotSupportedModes, () => provider.supportedModes());

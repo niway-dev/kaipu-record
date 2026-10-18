@@ -54,6 +54,7 @@ function fakeApi(
       answer: vi.fn(),
       hover: vi.fn(),
       chooseFrameDisplay: vi.fn(),
+      setMode: vi.fn(),
       onState: vi.fn((cb: (state: OverlayState) => void) => {
         stateListener = cb;
         if (initialState) cb(state);

@@ -23,7 +23,6 @@ import {
   registerSettings,
   getDeviceId,
   getAppSettings,
-  updateAppSettings,
   applyDockPolicy,
   onSettingsChanged,
 } from "./infrastructure/settings-store";
@@ -315,18 +314,16 @@ function triggerCaptureScreenshot(request: CaptureRequestPayload): void {
 let screenshotHandlers: ScreenshotHandlers | null = null;
 
 /**
- * A capture shortcut: the generic one captures with the current mode, a mode-specific one
- * makes its mode current (persisted and broadcast to every window) and captures with it.
- * See `resolveShortcutCapture`.
+ * A capture shortcut: the generic one opens the overlay in the current mode, a
+ * mode-specific one in its own. The mode becomes current only when a capture in it
+ * succeeds (the capture handler remembers it). See `resolveShortcutCapture`.
  */
 function triggerShortcutCapture(action: CaptureShortcut): void {
-  const { mode, remember } = resolveShortcutCapture(
+  const { mode } = resolveShortcutCapture(
     action,
     getAppSettings().screenshotMode,
     screenshotHandlers?.supportedModes() ?? null,
-    hub?.isActive() ?? false,
   );
-  if (remember) updateAppSettings({ screenshotMode: mode });
   triggerCaptureScreenshot({ mode });
 }
 
