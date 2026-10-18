@@ -63,9 +63,11 @@ export interface ScreenshotCapturedProperties {
   platform: string;
   displays: number;
   outcome: ScreenshotOutcome;
+  /** Only on a captured outcome: whether the editor opened or the capture finished quietly. */
+  after?: "editor" | "quiet";
 }
 
-/** Copies exactly the four allowed fields, so a caller cannot leak an extra one. */
+/** Copies exactly the allowed fields (`after` only when set), so a caller cannot leak an extra one. */
 export function buildScreenshotCapturedProperties(
   input: ScreenshotCapturedProperties,
 ): ScreenshotCapturedProperties {
@@ -74,5 +76,6 @@ export function buildScreenshotCapturedProperties(
     platform: input.platform,
     displays: input.displays,
     outcome: input.outcome,
+    ...(input.after ? { after: input.after } : {}),
   };
 }

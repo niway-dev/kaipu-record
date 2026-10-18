@@ -1,11 +1,19 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KaipuElectronAPI } from "@shared/types/electron-api";
-import type { CaptureRect, OverlayAnswer } from "@shared/types/screenshot-capture";
+import type {
+  CaptureAction,
+  CaptureMode,
+  CaptureRect,
+  OverlayAnswer,
+  OverlayState,
+} from "@shared/types/screenshot-capture";
 import { useTranslations } from "@kaipu/i18n";
-import { AreaDrag } from "./area-drag";
 import { FrameBox } from "./frame-box";
+import { copyKeyLabel, detectKeyPlatform, modeForKey, type KeyPlatform } from "./overlay-keys";
 import type { OverlayQuery } from "./overlay-query";
-import { ScreenChooser } from "./screen-chooser";
+import { ScreenCard } from "./screen-card";
+import type { OverlayChrome } from "./selection-chrome";
+import { WindowPicker } from "./window-picker";
 import styles from "./capture-overlay.module.css";
 
 /** How long the hide ack waits for an animation frame before answering anyway. */
@@ -44,24 +52,67 @@ export type SendAnswer = (answer: OverlayAnswer, beforeSend?: () => Promise<void
 interface CaptureOverlayProps {
   query: OverlayQuery;
   api?: CaptureOverlayApi;
+  /** Which key copies (⌘C or Ctrl+C); detected from the browser when omitted. */
+  platform?: KeyPlatform;
 }
 
 /**
  * The renderer side of one capture overlay window (`?window=capture-overlay`): a
- * full-window dim sheet with the Area drag, Screen chooser or Frame box on top. It only
- * answers "this rectangle / this display" or "cancelled"; main captures the pixels.
+ * full-window dim sheet with the Frame box, the Window picker or the Screen card on top,
+ * in whichever mode main's state says (the initial one comes from the query). It only
+ * answers "this rectangle / this window / this display" with an action, or "cancelled";
+ * main captures the pixels.
  *
- * Esc anywhere cancels. Only the first answer is sent: a second Esc, or Enter after a
- * click, does nothing (main also keeps only the first, across every display). Main also
- * cancels on Esc itself, so this renderer-side handler is not the only way out.
+ * Keys: 1–3 switch the mode (here at once, and on every other overlay through main), Esc
+ * anywhere cancels; Enter and ⌘C / Ctrl+C belong to each mode's UI. Only the first answer
+ * is sent: a second Esc, or Enter after a click, does nothing (main also keeps only the
+ * first, across every display). Main also cancels on Esc itself, so this renderer-side
+ * handler is not the only way out.
  */
 export function CaptureOverlay({
   query,
   api = window.electronAPI,
+  platform: platformProp,
 }: CaptureOverlayProps): React.JSX.Element | null {
   const bridge = api.captureOverlay;
+  const platform = useMemo(() => platformProp ?? detectKeyPlatform(), [platformProp]);
   const answered = useRef(false);
   const persisting = useRef(false);
+  // Seeded from the URL query so the first paint is right; main's broadcast keeps it live.
+  const [state, setState] = useState<OverlayState>(() => ({
+    mode: query.ui,
+    hoverDisplayId: null,
+    frameDisplayId: query.frame,
+    windows: null,
+  }));
+  const mode = state.mode;
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
+  /**
+   * The mode this overlay asked main for and main has not confirmed yet. A broadcast main
+   * sent before it saw the switch (a hover, the window list) still carries the old mode;
+   * applied as-is it would flip the UI back for a frame. Until a broadcast names the
+   * requested mode, the local one stays authoritative and the rest of the state applies.
+   */
+  const requestedMode = useRef<CaptureMode | null>(null);
+
+  useEffect(
+    () =>
+      bridge.onState((incoming) => {
+        const requested = requestedMode.current;
+        if (requested === null || incoming.mode === requested) {
+          requestedMode.current = null;
+          setState(incoming);
+          return;
+        }
+        setState((current) => ({
+          ...incoming,
+          mode: current.mode,
+          frameDisplayId: current.frameDisplayId,
+        }));
+      }),
+    [bridge],
+  );
 
   const send = useCallback<SendAnswer>(
     (answer, beforeSend) => {
@@ -85,15 +136,42 @@ export function CaptureOverlay({
     [bridge],
   );
 
+  const cancel = useCallback(() => send({ kind: "cancelled" }), [send]);
+
+  /**
+   * Re-render in `next` at once and tell main, which switches every other overlay. Entering
+   * Frame puts the frame here until main says otherwise, as main does for the asking display.
+   */
+  const switchMode = useCallback(
+    (next: CaptureMode) => {
+      if (answered.current || persisting.current || next === modeRef.current) return;
+      modeRef.current = next;
+      requestedMode.current = next;
+      setState((current) => ({
+        ...current,
+        mode: next,
+        frameDisplayId: next === "frame" ? query.displayId : null,
+      }));
+      bridge.setMode(next);
+    },
+    [bridge, query.displayId],
+  );
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key !== "Escape") return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        cancel();
+        return;
+      }
+      const next = modeForKey(event);
+      if (!next) return;
       event.preventDefault();
-      send({ kind: "cancelled" });
+      switchMode(next);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [send]);
+  }, [cancel, switchMode]);
 
   // Main hid the window and waits until this renderer has drawn one more frame, so its
   // last painted frame cannot end up in the shot. A hidden window may never run its
@@ -118,19 +196,62 @@ export function CaptureOverlay({
     [bridge],
   );
 
+  const chrome = useMemo<OverlayChrome>(
+    () => ({ mode, platform, onMode: switchMode, onCancel: cancel }),
+    [mode, platform, switchMode, cancel],
+  );
+
   const body =
-    query.ui === "screen" ? (
-      <ScreenChooser query={query} bridge={bridge} send={send} />
-    ) : query.ui === "area" ? (
-      <AreaDrag query={query} send={send} />
+    mode === "screen" ? (
+      <ScreenCard
+        query={query}
+        bridge={bridge}
+        hoverDisplayId={state.hoverDisplayId}
+        chrome={chrome}
+        send={send}
+      />
+    ) : mode === "window" ? (
+      <WindowPicker
+        query={query}
+        bridge={bridge}
+        windows={state.windows}
+        hoverDisplayId={state.hoverDisplayId}
+        cursor={state.cursor ?? null}
+        chrome={chrome}
+        send={send}
+      />
     ) : (
-      <FrameMode query={query} api={api} send={send} />
+      <FrameMode
+        query={query}
+        api={api}
+        frameDisplayId={state.frameDisplayId}
+        chrome={chrome}
+        send={send}
+      />
     );
   return (
     <>
       {body}
+      <HintPill mode={mode} platform={platform} />
       <DisplayLabel index={query.index} />
     </>
+  );
+}
+
+/** The key hint at the bottom of every overlay. */
+function HintPill({
+  mode,
+  platform,
+}: {
+  mode: CaptureMode;
+  platform: KeyPlatform;
+}): React.JSX.Element {
+  const t = useTranslations("screenshots");
+  const copyKey = copyKeyLabel(platform);
+  return (
+    <span className={styles.hintPill} data-testid="hint-pill">
+      {mode === "frame" ? t("overlay.hintFrame", { copyKey }) : t("overlay.hintPick", { copyKey })}
+    </span>
   );
 }
 
@@ -152,21 +273,19 @@ function DisplayLabel({ index }: { index: number }): React.JSX.Element {
 function FrameMode({
   query,
   api,
+  frameDisplayId,
+  chrome,
   send,
 }: {
   query: OverlayQuery;
   api: CaptureOverlayApi;
+  frameDisplayId: number | null;
+  chrome: OverlayChrome;
   send: SendAnswer;
 }): React.JSX.Element {
   const bridge = api.captureOverlay;
-  // Seeded from the URL query so the first paint is right; main's state keeps it live.
-  const [frameDisplayId, setFrameDisplayId] = useState<number | null | undefined>(
-    query.frame ?? undefined,
-  );
 
-  useEffect(() => bridge.onState((state) => setFrameDisplayId(state.frameDisplayId)), [bridge]);
-
-  if (frameDisplayId === undefined || frameDisplayId === null) {
+  if (frameDisplayId === null) {
     return <div className={styles.sheet} />;
   }
   if (frameDisplayId !== query.displayId) {
@@ -186,7 +305,7 @@ function FrameMode({
       </div>
     );
   }
-  return <ActiveFrame query={query} api={api} send={send} />;
+  return <ActiveFrame query={query} api={api} chrome={chrome} send={send} />;
 }
 
 function MoveFrameHint(): React.JSX.Element {
@@ -201,10 +320,12 @@ function MoveFrameHint(): React.JSX.Element {
 function ActiveFrame({
   query,
   api,
+  chrome,
   send,
 }: {
   query: OverlayQuery;
   api: CaptureOverlayApi;
+  chrome: OverlayChrome;
   send: SendAnswer;
 }): React.JSX.Element {
   const key = String(query.displayId);
@@ -227,8 +348,8 @@ function ActiveFrame({
   }, [api, key]);
 
   const confirm = useCallback(
-    (rect: CaptureRect) => {
-      send({ kind: "rect", displayId: query.displayId, rect }, async () => {
+    (rect: CaptureRect, action: CaptureAction) => {
+      send({ kind: "rect", mode: "frame", action, displayId: query.displayId, rect }, async () => {
         // Re-read so another display's remembered frame is kept, not overwritten.
         const current = await api.getSettings();
         await api.updateSettings({
@@ -241,5 +362,5 @@ function ActiveFrame({
 
   // The dim sheet shows while the settings load (a few ms), so the window never flashes.
   if (remembered === undefined) return <div className={styles.sheet} />;
-  return <FrameBox query={query} remembered={remembered} onConfirm={confirm} />;
+  return <FrameBox query={query} remembered={remembered} chrome={chrome} onConfirm={confirm} />;
 }

@@ -3,7 +3,13 @@ import { electronAPI } from "@electron-toolkit/preload";
 import { IPC_CHANNELS } from "@shared/types";
 import type { AppSettings } from "@shared/types";
 import type { AuthStatus } from "@shared/types/auth";
-import type { CaptureRequestPayload, OverlayState } from "@shared/types/screenshot-capture";
+import type {
+  CaptureRequestPayload,
+  CaptureToastPayload,
+  OpenSavedScreenshotRequest,
+  OverlayState,
+  QuietCaptureHandOff,
+} from "@shared/types/screenshot-capture";
 import type { KaipuElectronAPI } from "@shared/types/electron-api";
 import type {
   ControlCommand,
@@ -161,6 +167,7 @@ const kaipuApi: KaipuElectronAPI = {
     hover: (displayId) => ipcRenderer.send(IPC_CHANNELS.screenshotOverlayHover, { displayId }),
     chooseFrameDisplay: (displayId) =>
       ipcRenderer.send(IPC_CHANNELS.screenshotOverlayFrameDisplay, { displayId }),
+    setMode: (mode) => ipcRenderer.send(IPC_CHANNELS.screenshotOverlayMode, { mode }),
     onState: (callback) => {
       const listener = (_e: IpcRendererEvent, state: OverlayState): void => callback(state);
       ipcRenderer.on(IPC_CHANNELS.screenshotOverlayState, listener);
@@ -172,6 +179,29 @@ const kaipuApi: KaipuElectronAPI = {
       return () => ipcRenderer.removeListener(IPC_CHANNELS.screenshotOverlayHiddenAck, listener);
     },
     hiddenAck: () => ipcRenderer.send(IPC_CHANNELS.screenshotOverlayHiddenAck),
+  },
+  captureToast: {
+    onShow: (callback) => {
+      const listener = (_e: IpcRendererEvent, payload: CaptureToastPayload): void =>
+        callback(payload);
+      ipcRenderer.on(IPC_CHANNELS.screenshotToastShow, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.screenshotToastShow, listener);
+    },
+    ready: () => ipcRenderer.send(IPC_CHANNELS.screenshotToastReady),
+    action: (action) => ipcRenderer.send(IPC_CHANNELS.screenshotToastAction, { action }),
+    hover: (paused) => ipcRenderer.send(IPC_CHANNELS.screenshotToastHover, { paused }),
+  },
+  onOpenSavedScreenshot: (callback) => {
+    const listener = (_e: IpcRendererEvent, request: OpenSavedScreenshotRequest): void =>
+      callback(request);
+    ipcRenderer.on(IPC_CHANNELS.screenshotOpenSaved, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.screenshotOpenSaved, listener);
+  },
+  onOpenQuietCapture: (callback) => {
+    const listener = (_e: IpcRendererEvent, capture: QuietCaptureHandOff): void =>
+      callback(capture);
+    ipcRenderer.on(IPC_CHANNELS.screenshotOpenQuietCapture, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.screenshotOpenQuietCapture, listener);
   },
   applyWindowPreset: (preset) => ipcRenderer.send(IPC_CHANNELS.windowApplyPreset, preset),
   setTrayMode: (mode) => ipcRenderer.send(IPC_CHANNELS.traySetMode, mode),

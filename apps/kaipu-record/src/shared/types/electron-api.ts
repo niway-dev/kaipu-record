@@ -8,8 +8,12 @@ import type {
   CaptureMode,
   CaptureRequestPayload,
   CaptureResult,
+  CaptureToastAction,
+  CaptureToastPayload,
+  OpenSavedScreenshotRequest,
   OverlayAnswer,
   OverlayState,
+  QuietCaptureHandOff,
 } from "./screenshot-capture";
 import type { SerializedError } from "../analytics";
 import type { AppSettings, ShortcutAction, TagSummary, UpdateStatus } from "./ipc";
@@ -52,12 +56,29 @@ export interface CaptureOverlayBridge {
   hover(displayId: number | null): void;
   /** Frame mode: ask main to move the one frame to this display. */
   chooseFrameDisplay(displayId: number): void;
-  /** Main's hover broadcast, so only one display highlights. Returns an unsubscribe fn. */
+  /** The mode pill or keys 1–3: ask main to switch every overlay to `mode`. */
+  setMode(mode: CaptureMode): void;
+  /** Main's state broadcast (mode, hover, frame display, window list). Returns an unsubscribe fn. */
   onState(callback: (state: OverlayState) => void): () => void;
   /** Main hid the overlays and asks for an ack after the next frame. Returns an unsubscribe fn. */
   onHiddenAckRequest(callback: () => void): () => void;
   /** Answer `onHiddenAckRequest`: this overlay has painted its last frame. */
   hiddenAck(): void;
+}
+
+/**
+ * The capture toast window's bridge (`?window=capture-toast`). The toast only renders what
+ * main sends and reports what the user pressed; main runs every action.
+ */
+export interface CaptureToastBridge {
+  /** Main's payload for the card (a new capture, or the same one after Save). Returns an unsubscribe fn. */
+  onShow(callback: (payload: CaptureToastPayload) => void): () => void;
+  /** Tell main the listener is up, so it sends the current payload. */
+  ready(): void;
+  /** A button or the ×. */
+  action(action: CaptureToastAction): void;
+  /** The pointer entered (`true`, pause the auto-hide) or left (`false`, restart it) the card. */
+  hover(paused: boolean): void;
 }
 
 /** macOS media permissions the recorder cares about. */
@@ -306,6 +327,18 @@ export interface KaipuElectronAPI {
   revealAfterCapture(): void;
   /** Only used by the capture overlay windows; see `CaptureOverlayBridge`. */
   captureOverlay: CaptureOverlayBridge;
+  /** Only used by the capture toast window; see `CaptureToastBridge`. */
+  captureToast: CaptureToastBridge;
+  /**
+   * The capture toast asked to show a saved screenshot (Annotate, Open in Library). The
+   * renderer navigates, then calls `revealAfterCapture()`. Returns an unsubscribe fn.
+   */
+  onOpenSavedScreenshot(callback: (request: OpenSavedScreenshotRequest) => void): () => void;
+  /**
+   * The capture toast's Annotate on a copy-only capture: open these bytes in the editor
+   * (`origin: "quiet"`), then call `revealAfterCapture()`. Returns an unsubscribe fn.
+   */
+  onOpenQuietCapture(callback: (capture: QuietCaptureHandOff) => void): () => void;
   /**
    * Toggle "editor mode" window sizing: when active, main raises the minimum
    * size and grows the window so the screenshot editor has room; inactive

@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { Display, Rectangle } from "electron";
-import { CAPTURE_MODES, type CaptureMode } from "@shared/types/screenshot-capture";
+import {
+  CAPTURE_MODES,
+  type CaptureAction,
+  type CaptureMode,
+} from "@shared/types/screenshot-capture";
 import { cropForDisplay, physicalSizeFor, toGlobal } from "./capture-geometry";
 import type { OverlayPort } from "./overlay-port";
 
@@ -14,7 +18,7 @@ export type CaptureRequest = { mode: CaptureMode; overlay: OverlayPort };
 
 /** Main-side result; the IPC handler turns it into the renderer's `CaptureResult`. */
 export type ProviderResult =
-  | { kind: "captured"; png: Buffer; mode: CaptureMode }
+  | { kind: "captured"; png: Buffer; mode: CaptureMode; action: CaptureAction }
   | { kind: "cancelled" }
   | { kind: "unsupported"; mode: CaptureMode };
 
@@ -57,10 +61,20 @@ const realDeps: Deps = {
   getDisplays: async () => (await import("electron")).screen.getAllDisplays(),
 };
 
-/** What the user chose: a display, and a display-relative DIP rect inside it (null = all of it). */
+/**
+ * What the user chose: a display, and a display-relative DIP rect inside it (null = all of it).
+ * `mode` and `action` are the overlay's answer, not the requested mode: the user may have
+ * switched mode on the overlay, and backends capture by what they ended in.
+ */
 export interface CaptureTarget {
   display: Display;
   rect: Rectangle | null;
+  mode: CaptureMode;
+  action: CaptureAction;
+  /** Window mode only: the OS window id the answer named. */
+  windowId?: string;
+  /** Window mode only: the whole window's DIP size (`rect` is clamped to `display`). */
+  fullSize?: { width: number; height: number };
   /** True when the user picked on our overlay, so `runWithOverlay` waits for it to leave. */
   viaOverlay: boolean;
 }
@@ -68,14 +82,35 @@ export interface CaptureTarget {
 /** Shows the overlay in `ui` mode and resolves the answer to a target; null when cancelled. */
 export async function pickTarget(
   overlay: OverlayPort,
-  ui: "area" | "screen" | "frame",
+  ui: CaptureMode,
   displays: Display[],
 ): Promise<CaptureTarget | null> {
   const answer = await overlay.pick(ui, displays);
   if (answer.kind === "cancelled") return null;
   const display = displays.find((candidate) => candidate.id === answer.displayId);
   if (!display) return null;
-  return { display, rect: answer.kind === "rect" ? answer.rect : null, viaOverlay: true };
+  const { mode, action } = answer;
+  switch (answer.kind) {
+    case "rect":
+      return { display, rect: answer.rect, mode, action, viaOverlay: true };
+    case "window":
+      return {
+        display,
+        rect: answer.rect,
+        mode,
+        action,
+        windowId: answer.windowId,
+        ...(answer.fullSize ? { fullSize: answer.fullSize } : {}),
+        viaOverlay: true,
+      };
+    case "display":
+      return { display, rect: null, mode, action, viaOverlay: true };
+  }
+}
+
+/** Screen on a lone display needs no overlay: the whole display, captured as asked. */
+function wholeDisplay(display: Display): CaptureTarget {
+  return { display, rect: null, mode: "screen", action: "capture", viaOverlay: false };
 }
 
 /**
@@ -109,8 +144,8 @@ export async function runWithOverlay(
 }
 
 /**
- * macOS: Area uses the native `screencapture -i -o -x` region selector; Screen and Frame
- * pick on our overlay, hide it, then capture a global rectangle with `screencapture -R`.
+ * macOS: every mode picks on our overlay, hides it, then captures a global rectangle with
+ * `screencapture -R`. The backend is chosen by the overlay's answer, not the requested mode.
  */
 export class MacProvider implements ScreenshotCaptureProvider {
   constructor(private readonly deps: Deps = realDeps) {}
@@ -124,7 +159,6 @@ export class MacProvider implements ScreenshotCaptureProvider {
   }
 
   async capture({ mode, overlay }: CaptureRequest): Promise<ProviderResult> {
-    if (mode === "area") return this.grab(["-i", "-o", "-x"], mode);
     return runWithOverlay(
       overlay,
       async () => {
@@ -133,25 +167,54 @@ export class MacProvider implements ScreenshotCaptureProvider {
         if (mode === "screen" && displays.length === 1) {
           // No overlay to wait on, but `beforeCapture` just hid the app: let it leave the screen.
           await this.deps.settle();
-          return { display: displays[0]!, rect: null, viaOverlay: false };
+          return wholeDisplay(displays[0]!);
         }
         return pickTarget(overlay, mode, displays);
       },
       // `-R` takes global points (DIP), not pixels, and handles Retina itself.
-      ({ display, rect }) =>
-        this.grab(["-R", rectArg(rect ? toGlobal(rect, display) : display.bounds), "-x"], mode),
+      (target) => this.captureTarget(target),
       this.deps,
     );
   }
 
-  private async grab(flags: string[], mode: CaptureMode): Promise<ProviderResult> {
+  private async captureTarget({
+    display,
+    rect,
+    mode,
+    action,
+    windowId,
+  }: CaptureTarget): Promise<ProviderResult> {
+    const region = ["-R", rectArg(rect ? toGlobal(rect, display) : display.bounds), "-x"];
+    if (mode === "window" && windowId && rect) {
+      // `-l` captures the window by id, whole and without its shadow (`-o`), even when covered.
+      let byId: ProviderResult;
+      try {
+        byId = await this.grab(["-l", windowId, "-o", "-x"], mode, action);
+      } catch (error) {
+        // A window that closed since the list: `screencapture -l` prints "could not create
+        // image from window" and exits 1, so `runCli` rejects. That is "no file", not a failure.
+        console.warn(`[screenshot] screencapture -l ${windowId} failed`, error);
+        byId = { kind: "cancelled" };
+      }
+      if (byId.kind === "captured") return byId;
+      // The window vanished or `-l` refused it: one retry on the rectangle the user saw.
+      console.warn(`[screenshot] screencapture -l ${windowId} produced no file; using the rect`);
+    }
+    return this.grab(region, mode, action);
+  }
+
+  private async grab(
+    flags: string[],
+    mode: CaptureMode,
+    action: CaptureAction,
+  ): Promise<ProviderResult> {
     const target = this.deps.tempPath();
     await this.deps.runCli("screencapture", [...flags, target]);
-    // No file: Esc in Apple's own picker, or `-R` refused the rectangle.
+    // No file: `-l` or `-R` refused the target.
     if (!(await this.deps.fileExists(target))) return { kind: "cancelled" };
     try {
       const png = await this.deps.readPng(target);
-      return { kind: "captured", png, mode };
+      return { kind: "captured", png, mode, action };
     } finally {
       await rm(target, { force: true }).catch(() => {});
     }
@@ -172,6 +235,8 @@ export interface CapturedImage {
 }
 
 export interface ScreenSource {
+  /** desktopCapturer id: `screen:<n>:0` or `window:<HWND decimal>:0`. Absent in older fakes. */
+  id?: string;
   /** desktopCapturer `display_id`; "" when the platform cannot say. */
   display_id: string;
   thumbnail: CapturedImage;
@@ -179,7 +244,7 @@ export interface ScreenSource {
 
 export interface WindowsDeps {
   getSources(options: {
-    types: ["screen"];
+    types: ["screen"] | ["window"];
     thumbnailSize: { width: number; height: number };
   }): Promise<ScreenSource[]>;
   getDisplays(): Promise<Display[]>;
@@ -218,21 +283,52 @@ export class WindowsProvider implements ScreenshotCaptureProvider {
         const displays = await this.deps.getDisplays();
         if (mode === "screen" && displays.length === 1) {
           await this.deps.settle(); // the app was just hidden: let it leave the screen
-          return { display: displays[0]!, rect: null, viaOverlay: false };
+          return wholeDisplay(displays[0]!);
         }
         return pickTarget(overlay, mode, displays);
       },
-      async ({ display, rect }) => {
+      async ({ display, rect, mode: picked, action, windowId, fullSize }) => {
+        if (picked === "window" && windowId && rect) {
+          const win = await this.captureWindow(display, fullSize ?? rect, windowId);
+          if (win) return { kind: "captured", png: win.toPNG(), mode: picked, action };
+          console.warn(`[screenshot] no window source for ${windowId}; cropping the display`);
+        }
         const image = await this.captureDisplay(display);
         if (!image) {
           console.warn(`[screenshot] no desktopCapturer source for display ${display.id}`);
           return { kind: "cancelled" };
         }
         const shot = rect ? image.crop(cropForDisplay(image.getSize(), display, rect)) : image;
-        return { kind: "captured", png: shot.toPNG(), mode };
+        return { kind: "captured", png: shot.toPNG(), mode: picked, action };
       },
       this.deps,
     );
+  }
+
+  /**
+   * The window's own pixels by id (`window:<id>:`), never by name or index; null when unusable.
+   * `size` is the whole window in DIP: a window spanning two displays is larger than its
+   * clamped rect, and a thumbnail asked at the clamped size would come back downscaled.
+   */
+  private async captureWindow(
+    display: Display,
+    size: { width: number; height: number },
+    windowId: string,
+  ): Promise<CapturedImage | null> {
+    const sources = await this.deps.getSources({
+      types: ["window"],
+      thumbnailSize: {
+        width: Math.round(size.width * display.scaleFactor),
+        height: Math.round(size.height * display.scaleFactor),
+      },
+    });
+    const thumbnail = sources.find((source) =>
+      source.id?.startsWith(`window:${windowId}:`),
+    )?.thumbnail;
+    if (!thumbnail) return null;
+    const { width, height } = thumbnail.getSize();
+    if (thumbnail.isEmpty() || width === 0 || height === 0) return null;
+    return thumbnail;
   }
 
   private async captureDisplay(display: Display): Promise<CapturedImage | null> {

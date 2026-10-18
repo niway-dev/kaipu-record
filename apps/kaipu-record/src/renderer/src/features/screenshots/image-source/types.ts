@@ -28,9 +28,11 @@ export type ImageSource =
       /**
        * Where the bytes came from. A capture (the default) is a fresh screenshot;
        * a paste is an image the user already had, so the editor opens it without
-       * the capture conveniences (frame, auto-save, auto-copy).
+       * the capture conveniences (frame, auto-save, auto-copy). A quiet capture was
+       * already saved and/or copied by main (Annotate on the capture toast), so the
+       * editor runs no auto action for it.
        */
-      origin?: "capture" | "paste";
+      origin?: "capture" | "paste" | "quiet";
     })
   | (ImageSourceBase & { kind: "local"; id: string; version?: number })
   | (ImageSourceBase & { kind: "cloud"; url: string });

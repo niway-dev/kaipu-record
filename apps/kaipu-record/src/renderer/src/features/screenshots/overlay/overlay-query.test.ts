@@ -16,7 +16,13 @@ describe("parseOverlayQuery", () => {
       work: { x: -1440, y: 25, width: 1440, height: 875 },
       ids: [7, 42, 9],
       frame: null,
+      internal: false,
     });
+  });
+
+  it("marks the built-in display", () => {
+    expect(parseOverlayQuery(`${QUERY}&internal=1`)?.internal).toBe(true);
+    expect(parseOverlayQuery(`${QUERY}&internal=0`)?.internal).toBe(false);
   });
 
   it("reads the frame display, and falls back to null when it is malformed", () => {
@@ -26,7 +32,7 @@ describe("parseOverlayQuery", () => {
   });
 
   it("rejects a missing or malformed part", () => {
-    expect(parseOverlayQuery(QUERY.replace("ui=frame", "ui=window"))).toBeNull();
+    expect(parseOverlayQuery(QUERY.replace("ui=frame", "ui=area"))).toBeNull();
     expect(parseOverlayQuery(QUERY.replace("&display=42", ""))).toBeNull();
     expect(parseOverlayQuery(QUERY.replace("bounds=-1440,0,1440,900", "bounds=1,2,3"))).toBeNull();
     expect(parseOverlayQuery(QUERY.replace("work=-1440,25,1440,875", "work=0,0,0,10"))).toBeNull();

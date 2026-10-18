@@ -64,3 +64,11 @@ body[data-window="capture-panel"] #root {
 body[data-window="capture-overlay"] {
   overflow: hidden;
 }
+
+/* The capture toast: a fixed 380 × 150 window the card fills; nothing scrolls. */
+body[data-window="capture-toast"],
+body[data-window="capture-toast"] #root {
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
+}

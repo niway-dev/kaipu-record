@@ -291,6 +291,7 @@ export function ScreenshotsSettingsPage(): React.JSX.Element {
         <ScreenshotSaveSettings />
         <ScreenshotCopySettings />
       </Section>
+      <p className={styles.sectionNote}>{t("screenshotQuietNote")}</p>
     </SettingsPanel>
   );
 }

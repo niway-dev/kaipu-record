@@ -42,6 +42,7 @@ describe("mergeSettings", () => {
       captureScreenshot: "Command+Control+4",
       captureScreen: "Command+Control+8",
       captureFrame: "Command+Control+9",
+      captureWindow: "Command+Control+0",
       toggleMicrophone: "Command+Control+5",
       toggleSystemAudio: "Command+Control+6",
       toggleCamera: "Command+Control+7",
@@ -101,12 +102,17 @@ describe("mergeSettings", () => {
     ).toEqual({ "1": { x: -5, y: 0, width: 640, height: 480 } });
   });
 
-  it("defaults the current screenshot mode to Area and drops an unknown one", () => {
-    expect(DEFAULT_SETTINGS.screenshotMode).toBe("area");
-    expect(mergeSettings({}).screenshotMode).toBe("area");
+  it("defaults the current screenshot mode to Frame", () => {
+    expect(DEFAULT_SETTINGS.screenshotMode).toBe("frame");
+    expect(mergeSettings({}).screenshotMode).toBe("frame");
     expect(mergeSettings({ screenshotMode: "screen" }).screenshotMode).toBe("screen");
-    expect(mergeSettings({ screenshotMode: "window" as never }).screenshotMode).toBe("area");
-    expect(mergeSettings({ screenshotMode: 2 as never }).screenshotMode).toBe("area");
+    expect(mergeSettings({ screenshotMode: "window" }).screenshotMode).toBe("window");
+  });
+
+  it('migrates a stored legacy "area" mode, and drops an unknown one, to Frame', () => {
+    expect(mergeSettings({ screenshotMode: "area" as never }).screenshotMode).toBe("frame");
+    expect(mergeSettings({ screenshotMode: "banana" as never }).screenshotMode).toBe("frame");
+    expect(mergeSettings({ screenshotMode: 2 as never }).screenshotMode).toBe("frame");
   });
 
   it("defaults Export quality to Balanced and sanitizes it (NIW2-218)", () => {
@@ -201,6 +207,7 @@ describe("mergeShortcuts", () => {
       captureScreenshot: DEFAULT_SHORTCUTS.captureScreenshot,
       captureScreen: DEFAULT_SHORTCUTS.captureScreen,
       captureFrame: DEFAULT_SHORTCUTS.captureFrame,
+      captureWindow: DEFAULT_SHORTCUTS.captureWindow,
       toggleMicrophone: DEFAULT_SHORTCUTS.toggleMicrophone,
       toggleSystemAudio: DEFAULT_SHORTCUTS.toggleSystemAudio,
       toggleCamera: DEFAULT_SHORTCUTS.toggleCamera,
@@ -227,6 +234,7 @@ describe("mergeShortcuts", () => {
     expect(merged.captureScreenshot).toBe("Command+Control+4");
     expect(merged.captureScreen).toBe("Command+Control+Shift+X");
     expect(merged.captureFrame).toBe("Command+Control+Shift+F");
+    expect(merged.captureWindow).toBe("Command+Control+W");
   });
 
   it("ignores non-string bindings", () => {

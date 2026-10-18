@@ -5,7 +5,7 @@ description: Second iteration of the screenshot modes. Area is folded into Frame
 
 # Screenshot modes v2 — design
 
-**Status: 🔵 Proposed · 2026-10-17.** Iterates on the
+**Status: 🟡 In progress · 2026-10-18.** Implementation on `feat/screenshot-modes-v2` (tasks 1–7 done, PR pending); macOS and Windows QA pending. Iterates on the
 [capture modes design](/specs/2026-10-15-screenshot-capture-modes-design/) that shipped in
 desktop 0.12.0 (PR #306). Where the two differ this one wins; that spec keeps the contract,
 the geometry and the overlay mechanics that stay. ADR: [0024](/architecture/decisions/0024-window-mode-and-quiet-capture/)
@@ -56,10 +56,14 @@ The editor opens only when someone still has to decide what to do with the shot.
 
 ### Open questions
 
-1. **Windows window-list latency.** PowerShell with `Add-Type` is estimated at 300–800 ms cold.
-   The overlay opens at once and highlights when the list arrives; if the list takes more than
-   800 ms on the first Windows build, replace the script with a native module behind the same
-   `WindowLister` port (the escape hatch ADR 0024 names).
+1. **Windows window-list latency.** PowerShell with `Add-Type` is estimated at 300–800 ms cold;
+   neither that estimate nor the 800 ms gate has been measured on a Windows machine yet. The
+   overlay opens at once and highlights when the list arrives; on Windows the listing starts as
+   soon as the pick opens (not on first entering Window), and the lister timeout is per platform
+   (`MAC_WINDOW_LIST_TIMEOUT_MS` 2 s, `WINDOWS_WINDOW_LIST_TIMEOUT_MS` 6 s), so a slow but working
+   cold start is not thrown away. If the list takes more than 800 ms on the first Windows build,
+   replace the script with a native module behind the same `WindowLister` port (the escape hatch
+   ADR 0024 names).
 2. **Window titles on macOS.** `kCGWindowName` of other apps is only filled with Screen
    Recording permission, which the app has, but the listing runs in a child `osascript` process
    and TCC attribution to the parent app is unverified. The label falls back to the owner name
@@ -87,11 +91,12 @@ The editor opens only when someone still has to decide what to do with the shot.
 Each line is a test in the implementation plan; the 0.12.0 list still applies.
 
 1. **Kaipu's own windows in the Window list.** The lister drops windows owned by this process
-   (pid on both OSes; Electron handles via `getNativeWindowHandle` as a second filter), so the
+   (by pid on both OSes; on Windows only, Electron's `getNativeWindowHandle` HWNDs are a second
+   filter — on macOS that handle is an `NSView*`, not a CGWindowID, so it cannot match), so the
    overlay, the toast and the hidden main window can never be picked.
 2. **The window list arrives late or never.** The overlay is usable in Frame and Screen at
    once; Window shows the sheet and a "Finding windows…" hint until the list lands, and a
-   lister that throws or times out (2 s) answers an empty list, not a stuck overlay.
+   lister that throws or times out (2 s on macOS, 6 s on Windows) answers an empty list, not a stuck overlay.
 3. **A stored `"area"` mode.** Settings merge maps it to `"frame"`; the generic shortcut and
    the page button capture with Frame; no `unsupported` and no crash.
 4. **Quiet save writes exactly one vault item.** With `screenshotSave: auto`, the capture is
@@ -219,11 +224,11 @@ export interface CaptureToastPayload {
   in that mode; entering Window triggers the lister if not yet run), `screenshot:toast-show`
   (main → toast), `screenshot:toast-action` (toast → main, `annotate | open-library | save |
 dismiss`). `screenshot:overlay-state` grows as above.
-- `OverlayPort.pick(ui, displays)` keeps its signature; `ui` is the initial mode. The port gains
-  `setWindows(list)` so main can push the list once it has it.
-- A new port `WindowLister { list(): Promise<RawWindow[]> }` in
+- `OverlayPort.pick(ui, displays)` keeps its signature; `ui` is the initial mode. The overlay
+  windows ask the lister themselves and push the list into the state (no port method).
+- A new port `WindowLister { list(displays: Display[]): Promise<ListedWindow[]> }` in
   `src/main/screenshots/window-lister.ts` with `MacWindowLister` (osascript JXA),
-  `WindowsWindowLister` (PowerShell), and the pure `toListedWindows(raw, displays, selfPids)`
+  `WindowsWindowLister` (PowerShell), and the pure `toListedWindows(raw, displays, self: { pids; handles })`
   that filters, converts to DIP and assigns displays. Tests inject fake raw lists.
 
 ### Backends per mode

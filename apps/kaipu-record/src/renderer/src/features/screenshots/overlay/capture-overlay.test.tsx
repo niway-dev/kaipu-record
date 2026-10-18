@@ -24,19 +24,38 @@ function query(ui: OverlayQuery["ui"], overrides: Partial<OverlayQuery> = {}): O
     work: WORK,
     ids: [7, 42, 9],
     frame: null,
+    internal: false,
     ...overrides,
   };
 }
 
 /** Main's first state message, as it reaches an overlay: the frame is on display 42. */
-const FRAME_ON_42: OverlayState = { hoverDisplayId: null, frameDisplayId: 42 };
+const FRAME_ON_42: OverlayState = {
+  mode: "frame",
+  hoverDisplayId: null,
+  frameDisplayId: 42,
+  windows: null,
+};
+
+/** Main's first state message for a Screen pick. */
+const SCREEN: OverlayState = {
+  mode: "screen",
+  hoverDisplayId: null,
+  frameDisplayId: null,
+  windows: null,
+};
 
 function fakeApi(
   frames: Record<string, CaptureRect> = {},
   initialState: OverlayState | null = FRAME_ON_42,
 ) {
   let settings: AppSettings = { ...DEFAULT_SETTINGS, screenshotFrame: frames };
-  let state: OverlayState = initialState ?? { hoverDisplayId: null, frameDisplayId: null };
+  let state: OverlayState = initialState ?? {
+    mode: "frame",
+    hoverDisplayId: null,
+    frameDisplayId: null,
+    windows: null,
+  };
   let stateListener: ((state: OverlayState) => void) | null = null;
   let ackListener: (() => void) | null = null;
   const api = {
@@ -44,6 +63,7 @@ function fakeApi(
       answer: vi.fn(),
       hover: vi.fn(),
       chooseFrameDisplay: vi.fn(),
+      setMode: vi.fn(),
       onState: vi.fn((cb: (state: OverlayState) => void) => {
         stateListener = cb;
         if (initialState) cb(state);
@@ -68,6 +88,7 @@ function fakeApi(
   return {
     api,
     answer: api.captureOverlay.answer,
+    setMode: api.captureOverlay.setMode,
     chooseFrameDisplay: api.captureOverlay.chooseFrameDisplay,
     pushState: (patch: Partial<OverlayState>) =>
       act(() => {
@@ -98,7 +119,7 @@ afterEach(() => {
 
 describe("CaptureOverlay", () => {
   it("cancels on Esc, and a second Esc does not send a second answer", () => {
-    const { api, answer } = fakeApi();
+    const { api, answer } = fakeApi({}, SCREEN);
     render(<CaptureOverlay query={query("screen")} api={api} />);
 
     press("Escape");
@@ -114,8 +135,8 @@ describe("CaptureOverlay", () => {
       frames.push(cb);
       return frames.length;
     });
-    const { api, requestHiddenAck } = fakeApi();
-    render(<CaptureOverlay query={query("area")} api={api} />);
+    const { api, requestHiddenAck } = fakeApi({}, SCREEN);
+    render(<CaptureOverlay query={query("screen")} api={api} />);
 
     requestHiddenAck();
     expect(api.captureOverlay.hiddenAck).not.toHaveBeenCalled();
@@ -132,8 +153,8 @@ describe("CaptureOverlay", () => {
         frames.push(cb);
         return frames.length;
       });
-      const { api, requestHiddenAck } = fakeApi();
-      render(<CaptureOverlay query={query("area")} api={api} />);
+      const { api, requestHiddenAck } = fakeApi({}, SCREEN);
+      render(<CaptureOverlay query={query("screen")} api={api} />);
 
       requestHiddenAck();
       vi.advanceTimersByTime(HIDDEN_ACK_FALLBACK_MS - 1);
@@ -151,62 +172,135 @@ describe("CaptureOverlay", () => {
 });
 
 describe("display label", () => {
-  it.each(["area", "screen", "frame"] as const)("names the display on the %s overlay", (ui) => {
-    const { api } = fakeApi();
+  it.each(["frame", "window", "screen"] as const)("names the display on the %s overlay", (ui) => {
+    const { api } = fakeApi({}, null);
     render(<CaptureOverlay query={query(ui)} api={api} />);
-    expect(screen.getByText("Display 2")).toBeInTheDocument();
+    // The Screen card names it too; the corner label is on every overlay.
+    expect(screen.getAllByText("Display 2").length).toBeGreaterThanOrEqual(1);
   });
 });
 
-describe("ScreenChooser", () => {
-  it("labels this display with its number", () => {
-    const { api } = fakeApi();
-    render(<CaptureOverlay query={query("screen")} api={api} />);
-    expect(screen.getByRole("button", { name: "Capture this display · 2" })).toBeInTheDocument();
+describe("ScreenCard", () => {
+  const renderScreen = (overrides: Partial<OverlayQuery> = {}, platform?: "mac" | "other") => {
+    const fake = fakeApi({}, SCREEN);
+    const utils = render(
+      <CaptureOverlay query={query("screen", overrides)} api={fake.api} platform={platform} />,
+    );
+    return { ...fake, sheet: screen.getByTestId("screen-card-sheet"), ...utils };
+  };
+
+  it("names this display: number, title, DIP size and kind", () => {
+    renderScreen();
+    const card = screen.getByTestId("screen-card");
+    expect(within(card).getByText("2")).toBeInTheDocument();
+    expect(within(card).getByText("Display 2")).toBeInTheDocument();
+    expect(within(card).getByText("1600 × 1000 · External")).toBeInTheDocument();
+    cleanup();
+
+    renderScreen({ internal: true });
+    expect(screen.getByText("1600 × 1000 · Built-in")).toBeInTheDocument();
   });
 
-  it("shows the number tile and the display's DIP size in its pill", () => {
-    const { api } = fakeApi();
-    render(<CaptureOverlay query={query("screen")} api={api} />);
-    const pill = screen.getByRole("button", { name: "Capture this display · 2" });
-    expect(within(pill).getByText("2")).toBeInTheDocument();
-    expect(within(pill).getByText("1600 × 1000")).toBeInTheDocument();
+  it("offers Capture · n, Copy, the mode row and the reserved Record line", () => {
+    renderScreen();
+    const capture = screen.getByRole("button", { name: "Capture this display · 2" });
+    expect(capture).toHaveTextContent("Capture · 2");
+    expect(screen.getByRole("button", { name: "Copy" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Screen (3)" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByText("Record this display · soon")).toBeInTheDocument();
   });
 
-  it("answers display 2 when 2 is pressed on display 1's overlay", () => {
-    const { api, answer } = fakeApi();
-    // Display 1 (id 7) has keyboard focus; display 2 is id 42.
-    render(<CaptureOverlay query={query("screen", { displayId: 7, index: 1 })} api={api} />);
-
-    press("2");
-    expect(answer).toHaveBeenCalledExactlyOnceWith({ kind: "display", displayId: 42 });
+  it("answers capture from Capture · n and copy from Copy", () => {
+    const { answer } = renderScreen();
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+    expect(answer).toHaveBeenCalledExactlyOnceWith({
+      kind: "display",
+      mode: "screen",
+      action: "copy",
+      displayId: 42,
+    });
   });
 
-  it("ignores digits past the display count and digits with a modifier", () => {
-    const { api, answer } = fakeApi();
-    render(<CaptureOverlay query={query("screen")} api={api} />);
+  it("answers this display on a click anywhere on it", () => {
+    const { answer, sheet } = renderScreen();
+    fireEvent.click(sheet);
+    expect(answer).toHaveBeenCalledExactlyOnceWith({
+      kind: "display",
+      mode: "screen",
+      action: "capture",
+      displayId: 42,
+    });
+  });
 
-    press("4");
-    press("0");
-    press("1", { metaKey: true });
-    press("1", { ctrlKey: true });
+  it("the Record line answers nothing", () => {
+    const { answer } = renderScreen();
+    fireEvent.click(screen.getByText("Record this display · soon"));
     expect(answer).not.toHaveBeenCalled();
-
-    press("3");
-    expect(answer).toHaveBeenCalledExactlyOnceWith({ kind: "display", displayId: 9 });
   });
 
-  it("answers this display on a click", () => {
-    const { api, answer } = fakeApi();
-    render(<CaptureOverlay query={query("screen")} api={api} />);
-    fireEvent.click(screen.getByRole("button", { name: /capture this display/i }));
-    expect(answer).toHaveBeenCalledExactlyOnceWith({ kind: "display", displayId: 42 });
+  it("Enter captures the hovered display, from whichever overlay has the keyboard", () => {
+    const { answer, pushState } = renderScreen({ displayId: 7, index: 1 });
+    pushState({ hoverDisplayId: 9 });
+
+    press("Enter");
+
+    expect(answer).toHaveBeenCalledExactlyOnceWith({
+      kind: "display",
+      mode: "screen",
+      action: "capture",
+      displayId: 9,
+    });
+  });
+
+  it("Enter captures this display when none is hovered", () => {
+    const { answer } = renderScreen();
+    press("Enter");
+    expect(answer).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "capture", displayId: 42 }),
+    );
+  });
+
+  it("⌘C copies on macOS and Ctrl+C elsewhere; the other modifier does nothing", () => {
+    const mac = renderScreen({}, "mac");
+    press("c", { ctrlKey: true });
+    expect(mac.answer).not.toHaveBeenCalled();
+    press("c", { metaKey: true });
+    expect(mac.answer).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ kind: "display", action: "copy", displayId: 42 }),
+    );
+    cleanup();
+
+    const other = renderScreen({}, "other");
+    press("c", { metaKey: true });
+    expect(other.answer).not.toHaveBeenCalled();
+    press("C", { ctrlKey: true });
+    expect(other.answer).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ kind: "display", action: "copy", displayId: 42 }),
+    );
+  });
+
+  it("a digit switches the mode instead of capturing a display", () => {
+    const { answer, setMode } = renderScreen();
+
+    press("1");
+
+    expect(answer).not.toHaveBeenCalled();
+    expect(setMode).toHaveBeenCalledExactlyOnceWith("frame");
+  });
+
+  it("switches mode from the card's mode row without capturing", () => {
+    const { answer, setMode } = renderScreen();
+    fireEvent.click(screen.getByRole("button", { name: "Window (2)" }));
+    expect(setMode).toHaveBeenCalledExactlyOnceWith("window");
+    expect(answer).not.toHaveBeenCalled();
+    expect(screen.getByTestId("window-picker")).toBeInTheDocument();
   });
 
   it("reports hover once and highlights only when main says this display is hovered", () => {
-    const { api, pushState } = fakeApi();
-    const { container } = render(<CaptureOverlay query={query("screen")} api={api} />);
-    const sheet = container.firstElementChild as HTMLElement;
+    const { api, pushState, sheet } = renderScreen();
 
     fireEvent.pointerEnter(sheet);
     fireEvent.pointerMove(sheet);
@@ -225,9 +319,7 @@ describe("ScreenChooser", () => {
   });
 
   it("re-reports this display when main's state was cleared by another window's late leave", () => {
-    const { api, pushState } = fakeApi();
-    const { container } = render(<CaptureOverlay query={query("screen")} api={api} />);
-    const sheet = container.firstElementChild as HTMLElement;
+    const { api, pushState, sheet } = renderScreen();
 
     fireEvent.pointerEnter(sheet);
     pushState({ hoverDisplayId: 42 });
@@ -240,16 +332,131 @@ describe("ScreenChooser", () => {
 });
 
 describe("FrameBox", () => {
-  it("draws the toolbar under the frame: Capture plus the key hint, centered", async () => {
+  it("attaches the action bar under the frame's bottom-left corner: Capture, Copy, Record soon", async () => {
     const { api } = fakeApi({ "42": { x: 100, y: 120, width: 400, height: 300 } });
     render(<CaptureOverlay query={query("frame")} api={api} />);
     await screen.findByTestId("capture-frame");
-    const hint = screen.getByText("Enter to capture · Esc to cancel");
-    const toolbar = hint.parentElement as HTMLElement;
-    expect(within(toolbar).getByRole("button", { name: "Capture" })).toBeInTheDocument();
-    // Centered on the frame (x 100 + 400 / 2), 10 DIP under its bottom edge (120 + 300).
-    expect(toolbar.style.left).toBe("300px");
-    expect(toolbar.style.top).toBe("430px");
+    const bar = screen.getByTestId("action-bar");
+    expect(within(bar).getByRole("button", { name: "Capture" })).toBeInTheDocument();
+    expect(within(bar).getByRole("button", { name: "Copy" })).toBeInTheDocument();
+    expect(within(bar).getByRole("button", { name: "Record · soon" })).toBeDisabled();
+    // The frame's left edge, 10 DIP under its bottom edge (120 + 300).
+    expect(bar).toHaveAttribute("data-side", "below");
+    expect(bar.style.left).toBe("100px");
+    expect(bar.style.top).toBe("430px");
+  });
+
+  it("attaches the mode pill 10 DIP right of the frame's top-right corner, Frame active", async () => {
+    const { api } = fakeApi({ "42": { x: 100, y: 120, width: 400, height: 300 } });
+    render(<CaptureOverlay query={query("frame")} api={api} />);
+    await screen.findByTestId("capture-frame");
+    const pill = screen.getByTestId("mode-pill");
+    expect(pill).toHaveAttribute("data-side", "right");
+    expect(pill.style.left).toBe("510px");
+    expect(pill.style.top).toBe("120px");
+    expect(within(pill).getByRole("button", { name: "Frame (1)" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(within(pill).getByText("Frame")).toBeInTheDocument(); // the active mode's tag
+    expect(within(pill).getByRole("button", { name: "Window (2)" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+  });
+
+  it("flips the pill to the left of the frame near the display's right edge", async () => {
+    const { api } = fakeApi({ "42": { x: 1200, y: 120, width: 380, height: 300 } });
+    render(<CaptureOverlay query={query("frame")} api={api} />);
+    await screen.findByTestId("capture-frame");
+    const pill = screen.getByTestId("mode-pill");
+    expect(pill).toHaveAttribute("data-side", "left");
+    // 10 DIP gap plus the 44 DIP pill, left of x = 1200.
+    expect(pill.style.left).toBe("1146px");
+  });
+
+  it("flips the action bar above the frame near the display's bottom edge", async () => {
+    const { api } = fakeApi({ "42": { x: 100, y: 600, width: 400, height: 380 } });
+    render(<CaptureOverlay query={query("frame")} api={api} />);
+    await screen.findByTestId("capture-frame");
+    const bar = screen.getByTestId("action-bar");
+    expect(bar).toHaveAttribute("data-side", "above");
+    // 10 DIP gap plus the 44 DIP bar, above y = 600: it never covers the frame.
+    expect(bar.style.top).toBe("546px");
+  });
+
+  it("answers copy from the Copy button and from ⌘C, capture from Capture", async () => {
+    const remembered = { x: 100, y: 120, width: 400, height: 300 };
+    const copy = fakeApi({ "42": remembered });
+    render(<CaptureOverlay query={query("frame")} api={copy.api} platform="mac" />);
+    await screen.findByTestId("capture-frame");
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+    await waitFor(() =>
+      expect(copy.answer).toHaveBeenCalledExactlyOnceWith({
+        kind: "rect",
+        mode: "frame",
+        action: "copy",
+        displayId: 42,
+        rect: remembered,
+      }),
+    );
+    cleanup();
+
+    const key = fakeApi({ "42": remembered });
+    render(<CaptureOverlay query={query("frame")} api={key.api} platform="mac" />);
+    await screen.findByTestId("capture-frame");
+    press("c", { metaKey: true });
+    await waitFor(() =>
+      expect(key.answer).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ kind: "rect", action: "copy", rect: remembered }),
+      ),
+    );
+  });
+
+  it("Ctrl+C copies on Windows, without the bar being hovered", async () => {
+    const { api, answer } = fakeApi();
+    render(<CaptureOverlay query={query("frame")} api={api} platform="other" />);
+    await screen.findByTestId("capture-frame");
+    press("c", { ctrlKey: true });
+    await waitFor(() =>
+      expect(answer).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ kind: "rect", action: "copy" }),
+      ),
+    );
+  });
+
+  it("the disabled Record seat answers nothing", async () => {
+    const { api, answer } = fakeApi();
+    render(<CaptureOverlay query={query("frame")} api={api} />);
+    await screen.findByTestId("capture-frame");
+    fireEvent.click(screen.getByRole("button", { name: "Record · soon" }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(answer).not.toHaveBeenCalled();
+  });
+
+  it("the pill's Cancel answers cancelled", async () => {
+    const { api, answer } = fakeApi();
+    render(<CaptureOverlay query={query("frame")} api={api} />);
+    await screen.findByTestId("capture-frame");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(answer).toHaveBeenCalledExactlyOnceWith({ kind: "cancelled" });
+  });
+
+  it("pressing the chrome does not start a frame drag", async () => {
+    const remembered = { x: 100, y: 120, width: 400, height: 300 };
+    const { api } = fakeApi({ "42": remembered });
+    const { container } = render(<CaptureOverlay query={query("frame")} api={api} />);
+    await screen.findByTestId("capture-frame");
+    const sheet = container.firstElementChild as HTMLElement;
+
+    fireEvent.pointerDown(screen.getByTestId("action-bar"), {
+      button: 0,
+      clientX: 900,
+      clientY: 700,
+    });
+    fireEvent.pointerMove(sheet, { clientX: 1000, clientY: 800 });
+
+    expect(frameGeometry()).toEqual(remembered);
   });
 
   it("opens on the remembered frame and answers it, display-relative, on Enter", async () => {
@@ -266,6 +473,8 @@ describe("FrameBox", () => {
     await waitFor(() =>
       expect(answer).toHaveBeenCalledExactlyOnceWith({
         kind: "rect",
+        mode: "frame",
+        action: "capture",
         displayId: 42,
         rect: remembered,
       }),
@@ -296,12 +505,13 @@ describe("FrameBox", () => {
     expect(frameGeometry()).toEqual({ x: 0, y: 25, width: 1600, height: 975 });
   });
 
-  it("opens on a centered third of the display when nothing is remembered", async () => {
+  it("opens on a centered box of 60 % of the work area when nothing is remembered", async () => {
     const { api } = fakeApi();
     render(<CaptureOverlay query={query("frame")} api={api} />);
 
     await screen.findByTestId("capture-frame");
-    expect(frameGeometry()).toEqual({ x: 533, y: 333, width: 533, height: 333 });
+    // Work area 1600 × 975 at y = 25 (the menu bar): 960 × 585, centred in it.
+    expect(frameGeometry()).toEqual({ x: 320, y: 220, width: 960, height: 585 });
   });
 
   it("moves with a body drag and answers the moved frame from the Capture button", async () => {
@@ -319,6 +529,8 @@ describe("FrameBox", () => {
     await waitFor(() =>
       expect(answer).toHaveBeenCalledExactlyOnceWith({
         kind: "rect",
+        mode: "frame",
+        action: "capture",
         displayId: 42,
         rect: { x: 150, y: 140, width: 400, height: 300 },
       }),
@@ -531,32 +743,494 @@ describe("Frame on several displays", () => {
   });
 });
 
-describe("AreaDrag", () => {
-  it("answers the dragged rectangle on release", () => {
-    const { api, answer } = fakeApi();
-    render(<CaptureOverlay query={query("area")} api={api} />);
-    const sheet = screen.getByTestId("capture-area");
+describe("FrameBox drawing on the dim sheet", () => {
+  const REMEMBERED = { x: 100, y: 120, width: 400, height: 300 };
 
-    fireEvent.pointerDown(sheet, { button: 0, clientX: 300, clientY: 250 });
-    fireEvent.pointerMove(sheet, { clientX: 100, clientY: 100 });
+  async function setup(frames: Record<string, CaptureRect> = { "42": REMEMBERED }) {
+    const fake = fakeApi(frames);
+    const { container } = render(<CaptureOverlay query={query("frame")} api={fake.api} />);
+    await screen.findByTestId("capture-frame");
+    return { ...fake, sheet: container.firstElementChild as HTMLElement };
+  }
+
+  it("a drag that starts outside the box draws a new one, and the release keeps it", async () => {
+    const { sheet } = await setup();
+
+    fireEvent.pointerDown(sheet, { button: 0, clientX: 800, clientY: 600 });
+    fireEvent.pointerMove(sheet, { clientX: 1000, clientY: 750 });
+    expect(frameGeometry()).toEqual({ x: 800, y: 600, width: 200, height: 150 });
     expect(screen.getByText("200 × 150")).toBeInTheDocument();
-    fireEvent.pointerUp(sheet, { clientX: 100, clientY: 100 });
+    fireEvent.pointerUp(sheet, { clientX: 1000, clientY: 750 });
 
-    expect(answer).toHaveBeenCalledExactlyOnceWith({
+    expect(frameGeometry()).toEqual({ x: 800, y: 600, width: 200, height: 150 });
+  });
+
+  it("draws in any direction: dragging up and to the left normalises the corners", async () => {
+    const { sheet } = await setup();
+
+    fireEvent.pointerDown(sheet, { button: 0, clientX: 1000, clientY: 750 });
+    fireEvent.pointerMove(sheet, { clientX: 800, clientY: 600 });
+    fireEvent.pointerUp(sheet, { clientX: 800, clientY: 600 });
+
+    expect(frameGeometry()).toEqual({ x: 800, y: 600, width: 200, height: 150 });
+  });
+
+  it("keeps the drawn box inside the work area (never under the menu bar)", async () => {
+    const { sheet } = await setup();
+
+    fireEvent.pointerDown(sheet, { button: 0, clientX: 800, clientY: 600 });
+    fireEvent.pointerMove(sheet, { clientX: 900, clientY: 0 });
+    fireEvent.pointerUp(sheet, { clientX: 900, clientY: 0 });
+
+    expect(frameGeometry()).toEqual({ x: 800, y: 25, width: 100, height: 575 });
+  });
+
+  it("answers the drawn box on Enter, and remembers it for this display", async () => {
+    const { sheet, answer, api } = await setup();
+
+    fireEvent.pointerDown(sheet, { button: 0, clientX: 800, clientY: 600 });
+    fireEvent.pointerMove(sheet, { clientX: 1000, clientY: 750 });
+    fireEvent.pointerUp(sheet, { clientX: 1000, clientY: 750 });
+    press("Enter");
+
+    const drawn = { x: 800, y: 600, width: 200, height: 150 };
+    await waitFor(() =>
+      expect(answer).toHaveBeenCalledExactlyOnceWith({
+        kind: "rect",
+        mode: "frame",
+        action: "capture",
+        displayId: 42,
+        rect: drawn,
+      }),
+    );
+    expect(api.updateSettings).toHaveBeenCalledWith({ screenshotFrame: { "42": drawn } });
+  });
+
+  it("a click on the sheet that barely moves keeps the box it found", async () => {
+    const { sheet, answer } = await setup();
+
+    fireEvent.pointerDown(sheet, { button: 0, clientX: 800, clientY: 600 });
+    fireEvent.pointerMove(sheet, { clientX: 802, clientY: 598 });
+    fireEvent.pointerUp(sheet, { clientX: 802, clientY: 598 });
+
+    expect(frameGeometry()).toEqual(REMEMBERED);
+    expect(answer).not.toHaveBeenCalled();
+  });
+
+  it("still moves from the body and resizes from a handle (a press on the box does not draw)", async () => {
+    const { sheet } = await setup();
+
+    fireEvent.pointerDown(sheet, { button: 0, clientX: 300, clientY: 270 });
+    fireEvent.pointerMove(sheet, { clientX: 350, clientY: 290 });
+    fireEvent.pointerUp(sheet, { clientX: 350, clientY: 290 });
+    expect(frameGeometry()).toEqual({ x: 150, y: 140, width: 400, height: 300 });
+  });
+
+  it("ignores a press from a button other than the primary one", async () => {
+    const { sheet } = await setup();
+
+    fireEvent.pointerDown(sheet, { button: 2, clientX: 800, clientY: 600 });
+    fireEvent.pointerMove(sheet, { clientX: 1000, clientY: 750 });
+    expect(frameGeometry()).toEqual(REMEMBERED);
+  });
+
+  it.each(["1", "x"])(
+    "the %s key mid-drag ends the drag: the half-drawn box is gone and the pointer no longer draws",
+    async (key) => {
+      const { sheet, answer } = await setup();
+
+      fireEvent.pointerDown(sheet, { button: 0, clientX: 800, clientY: 600 });
+      fireEvent.pointerMove(sheet, { clientX: 1000, clientY: 750 });
+      expect(frameGeometry()).toEqual({ x: 800, y: 600, width: 200, height: 150 });
+
+      press(key);
+      expect(frameGeometry()).toEqual(REMEMBERED);
+
+      fireEvent.pointerMove(sheet, { clientX: 1200, clientY: 800 });
+      fireEvent.pointerUp(sheet, { clientX: 1200, clientY: 800 });
+      expect(frameGeometry()).toEqual(REMEMBERED);
+      expect(answer).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ["2", "window"],
+    ["3", "screen"],
+  ] as const)(
+    "the %s key mid-drag switches to %s, and no half-drawn box survives the round trip",
+    async (key, mode) => {
+      const { sheet, answer, setMode, api } = await setup();
+
+      fireEvent.pointerDown(sheet, { button: 0, clientX: 800, clientY: 600 });
+      fireEvent.pointerMove(sheet, { clientX: 1000, clientY: 750 });
+      press(key);
+
+      expect(setMode).toHaveBeenCalledExactlyOnceWith(mode);
+      expect(screen.queryByTestId("capture-frame")).toBeNull();
+      expect(answer).not.toHaveBeenCalled();
+
+      press("1"); // back to Frame: the remembered box, not the half-drawn one
+      expect(setMode).toHaveBeenLastCalledWith("frame");
+      await screen.findByTestId("capture-frame");
+      expect(frameGeometry()).toEqual(REMEMBERED);
+      expect(api.updateSettings).not.toHaveBeenCalled();
+    },
+  );
+
+  it("a key mid-move also ends the move and restores the box", async () => {
+    const { sheet } = await setup();
+
+    fireEvent.pointerDown(sheet, { button: 0, clientX: 300, clientY: 270 });
+    fireEvent.pointerMove(sheet, { clientX: 350, clientY: 290 });
+    press("x");
+    fireEvent.pointerMove(sheet, { clientX: 500, clientY: 400 });
+
+    expect(frameGeometry()).toEqual(REMEMBERED);
+  });
+
+  it("Enter mid-drag ends the drag first, then answers the box as drawn so far", async () => {
+    const { sheet, answer } = await setup();
+
+    fireEvent.pointerDown(sheet, { button: 0, clientX: 800, clientY: 600 });
+    fireEvent.pointerMove(sheet, { clientX: 1000, clientY: 750 });
+    press("Enter");
+    // The pointer keeps moving after the drag ended: it must not change what was answered.
+    fireEvent.pointerMove(sheet, { clientX: 1300, clientY: 900 });
+
+    await waitFor(() => expect(answer).toHaveBeenCalledOnce());
+    expect(answer).toHaveBeenCalledWith({
       kind: "rect",
+      mode: "frame",
+      action: "capture",
       displayId: 42,
-      rect: { x: 100, y: 100, width: 200, height: 150 },
+      rect: { x: 800, y: 600, width: 200, height: 150 },
     });
   });
 
-  it("ignores a click that moves less than 4 px", () => {
-    const { api, answer } = fakeApi();
-    render(<CaptureOverlay query={query("area")} api={api} />);
-    const sheet = screen.getByTestId("capture-area");
+  it("a modifier key alone (the start of a shortcut) does not end the drag", async () => {
+    const { sheet } = await setup();
 
-    fireEvent.pointerDown(sheet, { button: 0, clientX: 300, clientY: 250 });
-    fireEvent.pointerUp(sheet, { clientX: 303, clientY: 247 });
+    fireEvent.pointerDown(sheet, { button: 0, clientX: 800, clientY: 600 });
+    fireEvent.pointerMove(sheet, { clientX: 1000, clientY: 750 });
+    press("Meta");
+    fireEvent.pointerMove(sheet, { clientX: 1100, clientY: 800 });
 
+    expect(frameGeometry()).toEqual({ x: 800, y: 600, width: 300, height: 200 });
+  });
+});
+
+describe("switching mode inside the overlay", () => {
+  it.each([
+    ["frame", FRAME_ON_42],
+    ["window", { ...SCREEN, mode: "window", windows: [] }],
+    ["screen", SCREEN],
+  ] as const)("keys 1–3 switch the mode from %s and tell main", async (ui, state) => {
+    const { api, setMode } = fakeApi({}, state as OverlayState);
+    render(<CaptureOverlay query={query(ui)} api={api} />);
+    if (ui === "frame") await screen.findByTestId("capture-frame");
+
+    for (const key of ["1", "2", "3"]) press(key);
+
+    // Pressed in turn: each key that names a mode not on screen switches to it, else nothing.
+    const expected = {
+      frame: ["window", "screen"],
+      window: ["frame", "window", "screen"],
+      screen: ["frame", "window", "screen"],
+    };
+    expect(setMode.mock.calls.map(([mode]) => mode)).toEqual(expected[ui]);
+  });
+
+  it("re-renders at once in the new mode, before main answers", () => {
+    const { api, setMode } = fakeApi({}, SCREEN);
+    render(<CaptureOverlay query={query("screen")} api={api} />);
+
+    press("2");
+
+    expect(setMode).toHaveBeenCalledExactlyOnceWith("window");
+    expect(screen.getByTestId("window-picker")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Finding windows…");
+  });
+
+  it("follows main's broadcast when another overlay switched the mode", () => {
+    const { api, pushState, setMode } = fakeApi({}, SCREEN);
+    render(<CaptureOverlay query={query("screen")} api={api} />);
+
+    pushState({ mode: "window", windows: [] });
+
+    expect(screen.getByTestId("window-picker")).toBeInTheDocument();
+    expect(setMode).not.toHaveBeenCalled();
+  });
+
+  it("a broadcast sent before main saw the switch does not flip the mode back", () => {
+    const { api, pushState, setMode } = fakeApi({}, SCREEN);
+    render(<CaptureOverlay query={query("screen")} api={api} />);
+
+    press("2");
+    expect(setMode).toHaveBeenCalledExactlyOnceWith("window");
+    // A hover broadcast main sent while it was still in Screen lands after the switch.
+    pushState({ mode: "screen", hoverDisplayId: 42 });
+    expect(screen.getByTestId("window-picker")).toBeInTheDocument();
+    expect(screen.queryByTestId("screen-card")).toBeNull();
+
+    // Main confirms Window; from then on its broadcasts lead again.
+    pushState({ mode: "window", windows: [] });
+    expect(screen.getByTestId("window-picker")).toBeInTheDocument();
+    pushState({ mode: "screen" }); // another overlay switched to Screen
+    expect(screen.getByTestId("screen-card")).toBeInTheDocument();
+  });
+
+  it("ignores a digit with a modifier, and a digit after the pick was answered", () => {
+    const { api, setMode } = fakeApi({}, SCREEN);
+    render(<CaptureOverlay query={query("screen")} api={api} />);
+
+    press("1", { metaKey: true });
+    press("2", { ctrlKey: true });
+    press("1", { altKey: true });
+    expect(setMode).not.toHaveBeenCalled();
+
+    press("Escape");
+    press("1");
+    expect(setMode).not.toHaveBeenCalled();
+  });
+
+  it("the pill switches the mode on a click", async () => {
+    const { api, setMode } = fakeApi();
+    render(<CaptureOverlay query={query("frame")} api={api} />);
+    await screen.findByTestId("capture-frame");
+
+    fireEvent.click(screen.getByRole("button", { name: "Screen (3)" }));
+
+    expect(setMode).toHaveBeenCalledExactlyOnceWith("screen");
+    expect(screen.getByTestId("screen-card")).toBeInTheDocument();
+  });
+
+  it.each([
+    ["frame", FRAME_ON_42],
+    ["window", { ...SCREEN, mode: "window", windows: [] }],
+    ["screen", SCREEN],
+  ] as const)("Esc cancels in %s", (ui, state) => {
+    const { api, answer } = fakeApi({}, state as OverlayState);
+    render(<CaptureOverlay query={query(ui)} api={api} />);
+    press("Escape");
+    expect(answer).toHaveBeenCalledExactlyOnceWith({ kind: "cancelled" });
+  });
+});
+
+describe("hint pill", () => {
+  it("reads 'Enter to capture' in Frame, with the platform's copy key", () => {
+    const { api } = fakeApi();
+    render(<CaptureOverlay query={query("frame")} api={api} platform="mac" />);
+    expect(screen.getByTestId("hint-pill")).toHaveTextContent(
+      "Enter to capture · ⌘C to copy · 1–3 switch mode · Esc to cancel",
+    );
+  });
+
+  it("reads 'Click or Enter to capture' outside Frame, Ctrl+C off macOS", () => {
+    const { api } = fakeApi({}, SCREEN);
+    render(<CaptureOverlay query={query("screen")} api={api} platform="other" />);
+    expect(screen.getByTestId("hint-pill")).toHaveTextContent(
+      "Click or Enter to capture · Ctrl+C to copy · 1–3 switch mode · Esc to cancel",
+    );
+  });
+});
+
+describe("WindowPicker", () => {
+  // Display-relative DIP, front first: the editor sits on top of the browser.
+  const editor = {
+    id: "11",
+    title: "Editor",
+    ownerName: "Kaipu Record",
+    displayId: 42,
+    rect: { x: 100, y: 100, width: 600, height: 400 },
+    fullSize: { width: 600, height: 400 },
+  };
+  const browser = {
+    id: "22",
+    title: "Docs",
+    ownerName: "Safari",
+    displayId: 42,
+    rect: { x: 0, y: 25, width: 1200, height: 800 },
+    fullSize: { width: 1200, height: 800 },
+  };
+  const elsewhere = {
+    id: "33",
+    title: "Terminal",
+    ownerName: "Terminal",
+    displayId: 7,
+    rect: { x: 0, y: 25, width: 1600, height: 975 },
+    fullSize: { width: 1600, height: 975 },
+  };
+  const WINDOWS: OverlayState = {
+    ...SCREEN,
+    mode: "window",
+    windows: [editor, browser, elsewhere],
+  };
+
+  function renderPicker(state: OverlayState = WINDOWS, platform?: "mac" | "other") {
+    const fake = fakeApi({}, state);
+    render(<CaptureOverlay query={query("window")} api={fake.api} platform={platform} />);
+    return { ...fake, sheet: screen.getByTestId("window-picker") };
+  }
+  const highlighted = () => screen.queryByTestId("window-highlight");
+
+  it("says 'Finding windows…' until the list arrives", () => {
+    const { pushState } = renderPicker({ ...WINDOWS, windows: null });
+    expect(screen.getByRole("status")).toHaveTextContent("Finding windows…");
+
+    pushState({ windows: [editor] });
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("says 'No windows on this display' when the list has none here", () => {
+    renderPicker({ ...WINDOWS, windows: [elsewhere] });
+    expect(screen.getByRole("status")).toHaveTextContent("No windows on this display");
+  });
+
+  it("highlights the front-most window under the pointer, with its title and size", () => {
+    const { sheet } = renderPicker();
+
+    fireEvent.pointerMove(sheet, { clientX: 300, clientY: 300 }); // both: the editor is in front
+    expect(highlighted()).toHaveAttribute("data-window-id", "11");
+    expect(screen.getByText("Kaipu Record — Editor · 600 × 400")).toBeInTheDocument();
+    expect(screen.getByTestId("mode-pill")).toBeInTheDocument();
+    expect(screen.getByTestId("action-bar")).toBeInTheDocument();
+
+    fireEvent.pointerMove(sheet, { clientX: 1000, clientY: 700 }); // only the browser
+    expect(highlighted()).toHaveAttribute("data-window-id", "22");
+
+    fireEvent.pointerMove(sheet, { clientX: 1400, clientY: 900 }); // nothing on this display
+    expect(highlighted()).toBeNull();
+  });
+
+  it("keeps the highlight while the pointer crosses the 10 DIP gap to the action bar", () => {
+    const { sheet } = renderPicker();
+    fireEvent.pointerMove(sheet, { clientX: 300, clientY: 300 });
+
+    fireEvent.pointerMove(sheet, { clientX: 300, clientY: 505 }); // just under the editor
+
+    expect(highlighted()).toHaveAttribute("data-window-id", "11");
+  });
+
+  it("a click answers the window under the click", () => {
+    const { sheet, answer } = renderPicker();
+
+    fireEvent.click(sheet, { clientX: 300, clientY: 300 });
+
+    expect(answer).toHaveBeenCalledExactlyOnceWith({
+      kind: "window",
+      mode: "window",
+      action: "capture",
+      displayId: 42,
+      windowId: "11",
+      rect: editor.rect,
+    });
+  });
+
+  it("a click where no window is answers nothing", () => {
+    const { sheet, answer } = renderPicker();
+    fireEvent.click(sheet, { clientX: 1400, clientY: 900 });
     expect(answer).not.toHaveBeenCalled();
+  });
+
+  it("never picks another display's window", () => {
+    const { sheet, answer } = renderPicker({ ...WINDOWS, windows: [elsewhere] });
+    fireEvent.pointerMove(sheet, { clientX: 300, clientY: 300 });
+    fireEvent.click(sheet, { clientX: 300, clientY: 300 });
+    expect(highlighted()).toBeNull();
+    expect(answer).not.toHaveBeenCalled();
+  });
+
+  it("Enter captures and ⌘C copies the highlighted window; with none, they answer nothing", () => {
+    const { sheet, answer } = renderPicker(WINDOWS, "mac");
+    press("Enter");
+    press("c", { metaKey: true });
+    expect(answer).not.toHaveBeenCalled();
+
+    fireEvent.pointerMove(sheet, { clientX: 1000, clientY: 700 });
+    press("c", { metaKey: true });
+    expect(answer).toHaveBeenCalledExactlyOnceWith({
+      kind: "window",
+      mode: "window",
+      action: "copy",
+      displayId: 42,
+      windowId: "22",
+      rect: browser.rect,
+    });
+  });
+
+  it("Enter captures the highlighted window", () => {
+    const { sheet, answer } = renderPicker();
+    fireEvent.pointerMove(sheet, { clientX: 300, clientY: 300 });
+    press("Enter");
+    expect(answer).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "window", action: "capture", windowId: "11" }),
+    );
+  });
+
+  it("Copy in the action bar answers copy; Record answers nothing", () => {
+    const { sheet, answer } = renderPicker();
+    fireEvent.pointerMove(sheet, { clientX: 300, clientY: 300 });
+
+    fireEvent.click(screen.getByRole("button", { name: "Record · soon" }));
+    expect(answer).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+    expect(answer).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ kind: "window", action: "copy", windowId: "11" }),
+    );
+  });
+
+  it("tells main the pointer is on this display, so this overlay gets the keyboard", () => {
+    const { sheet, api } = renderPicker();
+
+    fireEvent.pointerEnter(sheet, { clientX: 300, clientY: 300 });
+    fireEvent.pointerMove(sheet, { clientX: 310, clientY: 300 });
+    fireEvent.pointerMove(sheet, { clientX: 320, clientY: 300 });
+
+    // One message, not one per move.
+    expect(api.captureOverlay.hover).toHaveBeenCalledExactlyOnceWith(42);
+  });
+
+  it("highlights the window under the pointer as soon as the list lands, without a move", () => {
+    const { pushState, answer } = renderPicker({ ...WINDOWS, windows: null });
+    expect(highlighted()).toBeNull();
+
+    // Main reads the pointer (global DIP) when the list lands; this display starts at (0, 0).
+    pushState({ windows: [editor, browser], cursor: { x: 300, y: 300 } });
+
+    expect(highlighted()).toHaveAttribute("data-window-id", "11");
+    press("Enter");
+    expect(answer).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "window", action: "capture", windowId: "11" }),
+    );
+  });
+
+  it("maps main's global pointer into this display, and stops following it once the pointer moves here", () => {
+    const offset = query("window", { bounds: { x: 1600, y: 0, width: 1600, height: 1000 } });
+    const fake = fakeApi({}, { ...WINDOWS, windows: null });
+    render(<CaptureOverlay query={offset} api={fake.api} />);
+    const sheet = screen.getByTestId("window-picker");
+
+    // (300, 300) global is on the display left of this one: nothing here.
+    fake.pushState({ windows: [editor, browser], cursor: { x: 300, y: 300 } });
+    expect(highlighted()).toBeNull();
+
+    // Global (1900, 300) is (300, 300) on this display: the editor.
+    fake.pushState({ cursor: { x: 1900, y: 300 } });
+    expect(highlighted()).toHaveAttribute("data-window-id", "11");
+
+    // The pointer moved here: local tracking decides, a later broadcast does not override it.
+    fireEvent.pointerMove(sheet, { clientX: 1000, clientY: 700 });
+    fake.pushState({ cursor: { x: 1900, y: 300 } });
+    expect(highlighted()).toHaveAttribute("data-window-id", "22");
+  });
+
+  it("drops the highlight when a new list no longer holds that window", () => {
+    const { sheet, pushState } = renderPicker();
+    fireEvent.pointerMove(sheet, { clientX: 300, clientY: 300 });
+    expect(highlighted()).toHaveAttribute("data-window-id", "11");
+
+    pushState({ windows: [browser] });
+
+    expect(highlighted()).toBeNull();
   });
 });

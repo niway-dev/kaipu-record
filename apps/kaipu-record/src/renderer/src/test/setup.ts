@@ -72,7 +72,7 @@ const STUB_SETTINGS = {
   exportQuality: "balanced",
   showRecordingSavedCard: true,
   screenshotFrame: {},
-  screenshotMode: "area",
+  screenshotMode: "frame",
 } as const;
 
 // Vitest does not expose `afterEach` as a global (globals: false), so
@@ -176,6 +176,7 @@ window.electronAPI = {
     captureScreenshot: true,
     captureScreen: true,
     captureFrame: true,
+    captureWindow: true,
     toggleMicrophone: true,
     toggleSystemAudio: true,
     toggleCamera: true,
@@ -184,16 +185,25 @@ window.electronAPI = {
   resumeShortcuts: () => {},
   reportException: () => {},
   captureScreenshot: async () => ({ kind: "cancelled" }),
-  screenshotSupportedModes: async () => ["area", "screen", "frame"],
+  screenshotSupportedModes: async () => ["frame", "window", "screen"],
   revealAfterCapture: () => {},
   captureOverlay: {
     answer: () => {},
     hover: () => {},
     chooseFrameDisplay: () => {},
+    setMode: () => {},
     onState: () => () => {},
     onHiddenAckRequest: () => () => {},
     hiddenAck: () => {},
   },
+  captureToast: {
+    onShow: () => () => {},
+    ready: () => {},
+    action: () => {},
+    hover: () => {},
+  },
+  onOpenSavedScreenshot: () => () => {},
+  onOpenQuietCapture: () => () => {},
   applyWindowPreset: () => {},
   setTrayMode: () => {},
   setOnboardingWindowMode: () => {},

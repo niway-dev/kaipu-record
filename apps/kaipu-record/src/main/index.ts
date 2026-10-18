@@ -8,7 +8,7 @@ import { createMainTranslator } from "@kaipu/i18n/main";
 import { createTray, rebuildTrayMenu, setTrayState, type TrayState } from "./tray";
 import { registerRecordingSourceHandlers } from "./recording-sources";
 import { registerPermissionHandlers } from "./permissions";
-import { registerLibraryVaultHandlers } from "./library";
+import { currentVault, registerLibraryVaultHandlers } from "./library";
 import { cleanupDragCopies } from "./library/drag-copies";
 import { registerCloudStorageHandlers } from "./cloud";
 import { registerMediaProtocol, registerMediaScheme } from "./media-protocol";
@@ -23,7 +23,6 @@ import {
   registerSettings,
   getDeviceId,
   getAppSettings,
-  updateAppSettings,
   applyDockPolicy,
   onSettingsChanged,
 } from "./infrastructure/settings-store";
@@ -39,6 +38,20 @@ import { registerAnalyticsIpc } from "./services/analytics-ipc";
 import { isCaptureMode, type CaptureRequestPayload } from "@shared/types/screenshot-capture";
 import { registerScreenshotHandlers, type ScreenshotHandlers } from "./screenshots/screenshot-ipc";
 import { resolveShortcutCapture, type CaptureShortcut } from "./screenshots/shortcut-capture";
+import {
+  createCaptureToastWindow,
+  saveFromToast,
+  type CaptureToastWindow,
+} from "./screenshots/capture-toast-window";
+import { createCaptureWindowHooks } from "./screenshots/capture-window-hooks";
+import {
+  peekLastQuietCapture,
+  releaseLastQuietCapture,
+  takeLastQuietCapture,
+  type QuietCapture,
+} from "./screenshots/last-quiet-capture";
+import { saveScreenshotToVault } from "./screenshots/screenshot-save";
+import { screenshotTitle } from "@shared/screenshot-title";
 import {
   boundsAroundCenter,
   fitPresetToDisplay,
@@ -315,43 +328,64 @@ function triggerCaptureScreenshot(request: CaptureRequestPayload): void {
 let screenshotHandlers: ScreenshotHandlers | null = null;
 
 /**
- * A capture shortcut: the generic one captures with the current mode, a mode-specific one
- * makes its mode current (persisted and broadcast to every window) and captures with it.
- * See `resolveShortcutCapture`.
+ * A capture shortcut: the generic one opens the overlay in the current mode, a
+ * mode-specific one in its own. The mode becomes current only when a capture in it
+ * succeeds (the capture handler remembers it). See `resolveShortcutCapture`.
  */
 function triggerShortcutCapture(action: CaptureShortcut): void {
-  const { mode, remember } = resolveShortcutCapture(
+  const { mode } = resolveShortcutCapture(
     action,
     getAppSettings().screenshotMode,
     screenshotHandlers?.supportedModes() ?? null,
-    hub?.isActive() ?? false,
   );
-  if (remember) updateAppSettings({ screenshotMode: mode });
   triggerCaptureScreenshot({ mode });
 }
 
-/** Remembers whether the app was visible before a capture, to restore on cancel. */
-let captureWasVisible = false;
+/** The toast after a quiet capture; created once the app is ready. */
+let captureToast: CaptureToastWindow | null = null;
 
 /** Window orchestration handed to the screenshot IPC (hide for the shot, reveal after). */
-const captureWindowHooks = {
-  beforeCapture: (): void => {
-    captureWasVisible = mainWindow?.isVisible() ?? false;
-    capturePanel?.hide();
-    mainWindow?.hide();
-    // The bubble is always-on-top and not content-protected (it's meant to be
-    // captured by a *recording*), so it would otherwise sit inside the native
-    // region-select and land in the screenshot too.
-    hub?.hideCameraBubbleForCapture();
-  },
-  afterCapture: (captured: boolean): void => {
-    // On success the renderer reveals the window once it shows the editor; here we
-    // only need to undo the hide when the user cancelled with the app previously up.
-    if (!captured && captureWasVisible) showMainWindow();
-    hub?.restoreCameraBubbleAfterCapture();
-  },
-  reveal: (): void => bringAppToFront(),
-};
+const captureWindowHooks = createCaptureWindowHooks({
+  mainWindow: () => mainWindow,
+  hideCapturePanel: () => capturePanel?.hide(),
+  dismissToast: () => captureToast?.dismiss(),
+  hideCameraBubble: () => hub?.hideCameraBubbleForCapture(),
+  restoreCameraBubble: () => hub?.restoreCameraBubbleAfterCapture(),
+  showMainWindow,
+  bringAppToFront,
+});
+
+/**
+ * The capture toast asked the main window for a saved screenshot (Annotate, Open in
+ * Library). Routes are keyed by asset id, the toast knows the vault id: resolve it, then
+ * let the renderer navigate and reveal the window itself (`revealAfterCapture`), so it
+ * comes back already on the item — the same hand-off as the capture hotkey.
+ */
+function openSavedScreenshot(target: "editor" | "library", id: string): void {
+  void currentVault()
+    .describe(id)
+    .then((item) => {
+      if (!item) {
+        console.warn(`[screenshot] toast: ${id} is no longer in the vault`);
+        return;
+      }
+      if (!mainWindow || mainWindow.isDestroyed()) createWindow(false);
+      sendToRenderer(IPC_CHANNELS.screenshotOpenSaved, { target, assetId: item.assetId });
+    })
+    .catch((error: unknown) => console.error("[screenshot] toast: open saved failed", error));
+}
+
+/** Annotate on a copy-only toast: hand the kept bytes to the editor (it reveals the window). */
+function openQuietCapture(capture: QuietCapture): void {
+  if (!mainWindow || mainWindow.isDestroyed()) createWindow(false);
+  const { png, width, height, mode } = capture;
+  sendToRenderer(IPC_CHANNELS.screenshotOpenQuietCapture, {
+    png: png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength),
+    width,
+    height,
+    mode,
+  });
+}
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
@@ -422,7 +456,7 @@ app.whenReady().then(() => {
   // region capture as the ⌘⌃X hotkey.
   ipcMain.on(IPC_CHANNELS.screenshotRequestCapture, (_event, request?: { mode?: unknown }) => {
     capturePanel?.hide();
-    triggerCaptureScreenshot({ mode: isCaptureMode(request?.mode) ? request.mode : "area" });
+    triggerCaptureScreenshot({ mode: isCaptureMode(request?.mode) ? request.mode : "frame" });
   });
 
   // App version for the renderer-side version gate.
@@ -471,6 +505,7 @@ app.whenReady().then(() => {
       captureScreenshot: () => triggerShortcutCapture("captureScreenshot"),
       captureScreen: () => triggerShortcutCapture("captureScreen"),
       captureFrame: () => triggerShortcutCapture("captureFrame"),
+      captureWindow: () => triggerShortcutCapture("captureWindow"),
       // Live input toggles write the shared RecordingSettings, never the engine:
       // mid-take the recorder forwards the change, outside a take it is just the
       // pre-recording toggle.
@@ -488,7 +523,21 @@ app.whenReady().then(() => {
   registerCloudStorageHandlers({ auth, serverUrl: authServerUrl });
 
   // Screenshots: capture/copy/save IPC handlers.
-  screenshotHandlers = registerScreenshotHandlers(captureWindowHooks);
+  // The capture toast after a quiet capture (lazy window; shown on the shot's display).
+  const toast = createCaptureToastWindow({
+    takeQuietCapture: takeLastQuietCapture,
+    peekQuietCapture: peekLastQuietCapture,
+    releaseQuietCapture: releaseLastQuietCapture,
+    // manual: false — the editor never opened this shot, so it stays off the Continue list.
+    saveToVault: saveFromToast(saveScreenshotToVault),
+    title: () => screenshotTitle(),
+    openSaved: openSavedScreenshot,
+    openQuietCapture,
+  });
+  captureToast = toast;
+  screenshotHandlers = registerScreenshotHandlers(captureWindowHooks, (request) =>
+    toast.show(request),
+  );
 
   /**
    * Raise the window's minimum size for a screen that cannot reflow, growing the

@@ -1,5 +1,4 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_SETTINGS, type AppSettings } from "@shared/types";
 import type { CaptureMode } from "@shared/types/screenshot-capture";
@@ -12,6 +11,7 @@ const shortcuts = {
   captureScreenshot: "⌃⌘X",
   captureScreen: "⌃⇧⌘X",
   captureFrame: "⌃⇧⌘F",
+  captureWindow: "⌃⌘W",
   toggleMicrophone: "⌃⌘M",
   toggleSystemAudio: "⌃⌘A",
   toggleCamera: "⌃⌘K",
@@ -24,7 +24,7 @@ afterEach(() => {
 });
 
 /** Main serves `modes` and has `current` stored; returns the settings writer spy. */
-function given(modes: CaptureMode[], current: CaptureMode = "area") {
+function given(modes: CaptureMode[], current: CaptureMode = "frame") {
   let settings: AppSettings = { ...DEFAULT_SETTINGS, screenshotMode: current };
   const updateSettings = vi.fn(async (patch: Partial<AppSettings>) => {
     settings = { ...settings, ...patch };
@@ -39,88 +39,59 @@ function given(modes: CaptureMode[], current: CaptureMode = "area") {
   return updateSettings;
 }
 
-const ALL: CaptureMode[] = ["area", "screen", "frame"];
+const ALL: CaptureMode[] = ["frame", "window", "screen"];
 
 describe("CaptureModeButtons — page hero", () => {
-  it("captures with the current mode from the primary button, showing the generic shortcut", async () => {
+  it("renders one Capture button with the generic shortcut and the hero sentence", async () => {
     given(ALL, "frame");
-    const onCapture = vi.fn();
-    render(<CaptureModeButtons variant="page" onCapture={onCapture} shortcuts={shortcuts} />);
-    const primary = await screen.findByRole("button", { name: /^Capture · Frame/ });
+    render(<CaptureModeButtons variant="page" onCapture={vi.fn()} shortcuts={shortcuts} />);
+    const primary = await screen.findByRole("button", { name: /^Capture/ });
+    expect(screen.getAllByRole("button", { name: /^Capture/ })).toHaveLength(1);
     expect(primary).toHaveTextContent("⌃⌘X");
-    expect(screen.getByRole("button", { name: /^Frame/ })).toHaveTextContent("Current");
-    fireEvent.click(primary);
-    expect(onCapture).toHaveBeenCalledWith("frame");
+    expect(
+      screen.getByText(
+        "Opens the selector in your last mode. Switch modes there, or pick one below to jump straight in.",
+      ),
+    ).toBeInTheDocument();
   });
 
-  it("a card click only selects its mode; the primary button then captures with it", async () => {
-    const updateSettings = given(ALL, "area");
+  it("captures with the current mode from the Capture button", async () => {
+    given(ALL, "screen");
     const onCapture = vi.fn();
     render(<CaptureModeButtons variant="page" onCapture={onCapture} shortcuts={shortcuts} />);
-    await screen.findByRole("button", { name: /^Capture · Area/ });
-    const card = screen.getByRole("button", { name: /^Screen/ });
-    expect(card).toHaveTextContent("⌃⇧⌘X");
-    expect(card).toHaveTextContent("Use Screen");
-    expect(screen.getByText("Pick a mode. Capture with the button or ⌃⌘X.")).toBeInTheDocument();
-    fireEvent.click(card);
-    expect(updateSettings).toHaveBeenCalledWith({ screenshotMode: "screen" });
-    expect(onCapture).not.toHaveBeenCalled();
-    const primary = await screen.findByRole("button", { name: /^Capture · Screen/ });
-    expect(primary).toBeEnabled();
-    fireEvent.click(primary);
-    expect(onCapture).toHaveBeenCalledTimes(1);
+    fireEvent.click(await screen.findByRole("button", { name: /^Capture/ }));
     expect(onCapture).toHaveBeenCalledWith("screen");
   });
 
-  it("keyboard activation of a card (Enter, Space) behaves like a click", async () => {
-    const updateSettings = given(ALL, "area");
-    const onCapture = vi.fn();
-    render(<CaptureModeButtons variant="page" onCapture={onCapture} shortcuts={shortcuts} />);
-    await screen.findByRole("button", { name: /^Capture · Area/ });
-    // A native button turns Enter/Space into a click; user-event does the same.
-    const user = userEvent.setup();
-    const card = screen.getByRole("button", { name: /^Frame/ });
-    card.focus();
-    await user.keyboard("{Enter}");
-    expect(updateSettings).toHaveBeenLastCalledWith({ screenshotMode: "frame" });
-    const screenCard = screen.getByRole("button", { name: /^Screen/ });
-    screenCard.focus();
-    await user.keyboard(" ");
-    expect(updateSettings).toHaveBeenLastCalledWith({ screenshotMode: "screen" });
-    expect(onCapture).not.toHaveBeenCalled();
-  });
-
-  it("a disabled card neither changes the mode nor captures, and says why", async () => {
-    const updateSettings = given(["area", "screen"], "area");
-    const onCapture = vi.fn();
-    render(<CaptureModeButtons variant="page" onCapture={onCapture} shortcuts={shortcuts} />);
+  it("shows LAST USED and three chips with their shortcuts; the current one is highlighted", async () => {
+    given(ALL, "window");
+    render(<CaptureModeButtons variant="page" onCapture={vi.fn()} shortcuts={shortcuts} />);
+    await screen.findByRole("button", { name: /^Capture/ });
+    expect(screen.getByText("Last used")).toBeInTheDocument();
     const frame = screen.getByRole("button", { name: /^Frame/ });
-    await waitFor(() => expect(frame).toBeDisabled());
-    expect(frame).toHaveTextContent("Not available on this platform");
-    expect(frame).not.toHaveTextContent("⌃⇧⌘F");
-    fireEvent.click(frame);
-    expect(updateSettings).not.toHaveBeenCalled();
-    expect(onCapture).not.toHaveBeenCalled();
+    const win = screen.getByRole("button", { name: /^Window/ });
+    const screenChip = screen.getByRole("button", { name: /^Screen/ });
+    expect(frame).toHaveTextContent("⌃⇧⌘F");
+    expect(win).toHaveTextContent("⌃⌘W");
+    expect(screenChip).toHaveTextContent("⌃⇧⌘X");
+    expect(win).toHaveAttribute("data-current", "true");
+    expect(frame).not.toHaveAttribute("data-current");
+    expect(screenChip).not.toHaveAttribute("data-current");
   });
 
-  it("falls back to Area when the current mode is unavailable, and says so", async () => {
-    vi.spyOn(window.navigator, "userAgent", "get").mockReturnValue(
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-    );
-    given(["area", "screen"], "frame");
+  it("a chip click captures in that mode and never writes settings", async () => {
+    const updateSettings = given(ALL, "frame");
     const onCapture = vi.fn();
     render(<CaptureModeButtons variant="page" onCapture={onCapture} shortcuts={shortcuts} />);
-    const primary = await screen.findByRole("button", { name: /^Capture · Area/ });
-    expect(
-      screen.getByText("Frame isn’t available on Windows yet, so Capture uses Area."),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^Frame/ })).toHaveTextContent("Coming to Windows");
-    fireEvent.click(primary);
-    expect(onCapture).toHaveBeenCalledWith("area");
+    await screen.findByRole("button", { name: /^Capture/ });
+    fireEvent.click(screen.getByRole("button", { name: /^Screen/ }));
+    expect(onCapture).toHaveBeenCalledTimes(1);
+    expect(onCapture).toHaveBeenCalledWith("screen");
+    expect(updateSettings).not.toHaveBeenCalled();
   });
 
-  it("pauses everything during a recording and offers to stop it", async () => {
-    given(ALL, "area");
+  it("disables the button and the chips during a recording and shows the banner", async () => {
+    given(ALL, "frame");
     const onCapture = vi.fn();
     const onStopRecording = vi.fn();
     render(
@@ -135,10 +106,8 @@ describe("CaptureModeButtons — page hero", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       "Recording in progress · 00:02:14. Screenshots are paused until you stop.",
     );
-    expect(screen.getByText("Capture is off while you record.")).toBeInTheDocument();
-    // The hook the recording dim (opacity, no pointer events) is styled on.
     expect(screen.getByRole("status").closest("section")).toHaveAttribute("data-busy", "true");
-    for (const name of [/^Capture · Area/, /^Area/, /^Screen/, /^Frame/]) {
+    for (const name of [/^Capture/, /^Frame/, /^Window/, /^Screen/]) {
       expect(screen.getByRole("button", { name })).toBeDisabled();
     }
     fireEvent.click(screen.getByRole("button", { name: "Stop recording" }));
@@ -146,7 +115,32 @@ describe("CaptureModeButtons — page hero", () => {
     expect(onCapture).not.toHaveBeenCalled();
   });
 
-  it("disables every mode when main cannot be asked", async () => {
+  it("renders nothing disabled when the platform serves all three modes, Windows included", async () => {
+    vi.spyOn(window.navigator, "userAgent", "get").mockReturnValue(
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+    );
+    given(ALL, "frame");
+    render(<CaptureModeButtons variant="page" onCapture={vi.fn()} shortcuts={shortcuts} />);
+    await screen.findByRole("button", { name: /^Capture/ });
+    await waitFor(() => expect(screen.getByRole("button", { name: /^Window/ })).toBeEnabled());
+    for (const button of screen.getAllByRole("button")) expect(button).toBeEnabled();
+    expect(screen.queryByText(/Not available/)).not.toBeInTheDocument();
+  });
+
+  it("disables the chips with the generic label when the platform serves nothing", async () => {
+    given([], "frame");
+    const onCapture = vi.fn();
+    render(<CaptureModeButtons variant="page" onCapture={onCapture} shortcuts={shortcuts} />);
+    const win = screen.getByRole("button", { name: /^Window/ });
+    await waitFor(() => expect(win).toBeDisabled());
+    expect(win).toHaveTextContent("Not available on this platform");
+    expect(win).not.toHaveTextContent("⌃⌘W");
+    expect(screen.getByRole("button", { name: /^Capture/ })).toBeDisabled();
+    fireEvent.click(win);
+    expect(onCapture).not.toHaveBeenCalled();
+  });
+
+  it("disables everything when main cannot be asked", async () => {
     window.electronAPI = {
       ...realApi,
       screenshotSupportedModes: async () => {
@@ -154,48 +148,45 @@ describe("CaptureModeButtons — page hero", () => {
       },
     };
     render(<CaptureModeButtons variant="page" onCapture={vi.fn()} shortcuts={null} />);
-    await waitFor(() => expect(screen.getByRole("button", { name: /^Area/ })).toBeDisabled());
-    expect(screen.getByRole("button", { name: /^Capture · Area/ })).toBeDisabled();
+    await waitFor(() => expect(screen.getByRole("button", { name: /^Window/ })).toBeDisabled());
+    expect(screen.getByRole("button", { name: /^Capture/ })).toBeDisabled();
   });
 });
 
 describe("CaptureModeButtons — tray panel", () => {
-  it("shows the current-mode button, three rows and the hint", async () => {
-    given(ALL, "frame");
+  it("shows the Capture button, compact chips without shortcuts and the Last used line", async () => {
+    given(ALL, "window");
     render(<CaptureModeButtons variant="panel" onCapture={vi.fn()} shortcuts={shortcuts} />);
-    expect(await screen.findByRole("button", { name: /^Capture · Frame/ })).toBeEnabled();
-    expect(screen.getByRole("button", { name: /^Screen/ })).toHaveTextContent("⌃⇧⌘X");
-    // The generic shortcut belongs to the current mode; Area has none of its own.
-    expect(screen.getByRole("button", { name: /^Frame/ })).toHaveTextContent("⌃⌘X");
-    expect(screen.getByRole("button", { name: /^Area/ })).not.toHaveTextContent("⌘");
-    expect(screen.getByLabelText("Current")).toBeInTheDocument();
-    expect(screen.getByText("Click a mode to make it your default.")).toBeInTheDocument();
+    const primary = await screen.findByRole("button", { name: /^Capture/ });
+    expect(primary).toHaveTextContent("⌃⌘X");
+    for (const name of [/^Frame/, /^Window/, /^Screen/]) {
+      const chip = screen.getByRole("button", { name });
+      expect(chip).toBeEnabled();
+      expect(chip.querySelector("kbd")).toBeNull();
+    }
+    expect(screen.getByRole("button", { name: /^Window/ })).toHaveAttribute("data-current", "true");
+    expect(screen.getByText("Last used: Window. Switch inside the selector.")).toBeInTheDocument();
   });
 
-  it("a row click only selects its mode and does not capture", async () => {
-    const updateSettings = given(ALL, "area");
+  it("a chip click captures in that mode and never writes settings", async () => {
+    const updateSettings = given(ALL, "frame");
     const onCapture = vi.fn();
     render(<CaptureModeButtons variant="panel" onCapture={onCapture} shortcuts={shortcuts} />);
-    await screen.findByRole("button", { name: /^Capture · Area/ });
-    fireEvent.click(screen.getByRole("button", { name: /^Frame/ }));
-    expect(updateSettings).toHaveBeenCalledWith({ screenshotMode: "frame" });
-    expect(onCapture).not.toHaveBeenCalled();
-    fireEvent.click(await screen.findByRole("button", { name: /^Capture · Frame/ }));
-    expect(onCapture).toHaveBeenCalledWith("frame");
+    await screen.findByRole("button", { name: /^Capture/ });
+    fireEvent.click(screen.getByRole("button", { name: /^Window/ }));
+    expect(onCapture.mock.calls).toEqual([["window"]]);
+    expect(updateSettings).not.toHaveBeenCalled();
   });
 
-  it("says Coming to Windows on a Windows machine", async () => {
-    vi.spyOn(window.navigator, "userAgent", "get").mockReturnValue(
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-    );
+  it("disables the chips when the platform serves nothing", async () => {
     given([]);
     render(<CaptureModeButtons variant="panel" onCapture={vi.fn()} shortcuts={shortcuts} />);
-    const area = screen.getByRole("button", { name: /^Area/ });
-    await waitFor(() => expect(area).toBeDisabled());
-    expect(area).toHaveTextContent("Coming to Windows");
+    const frame = screen.getByRole("button", { name: /^Frame/ });
+    await waitFor(() => expect(frame).toBeDisabled());
+    expect(screen.getByText("Not available on this platform")).toBeInTheDocument();
   });
 
-  it("shows the compact recording banner and greys the button", () => {
+  it("shows the compact recording banner and disables the button and chips", () => {
     given(ALL);
     render(
       <CaptureModeButtons
@@ -208,7 +199,7 @@ describe("CaptureModeButtons — tray panel", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       "Recording · 00:02:14 — screenshots paused",
     );
-    expect(screen.getByRole("button", { name: /^Capture · Area/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^Capture/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /^Screen/ })).toBeDisabled();
   });
 });

@@ -59,4 +59,22 @@ describe("screenshot_captured", () => {
       outcome: "captured",
     });
   });
+
+  it("carries after when set and drops anything beyond the allowed fields", () => {
+    const input = {
+      mode: "window",
+      platform: "darwin",
+      displays: 1,
+      outcome: "captured",
+      after: "quiet",
+      title: "secret",
+    } as Parameters<typeof buildScreenshotCapturedProperties>[0];
+    expect(buildScreenshotCapturedProperties(input)).toEqual({
+      mode: "window",
+      platform: "darwin",
+      displays: 1,
+      outcome: "captured",
+      after: "quiet",
+    });
+  });
 });

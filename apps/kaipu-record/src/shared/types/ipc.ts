@@ -28,6 +28,7 @@ export const SHORTCUT_ACTIONS = [
   "captureScreenshot",
   "captureScreen",
   "captureFrame",
+  "captureWindow",
   "toggleMicrophone",
   "toggleSystemAudio",
   "toggleCamera",
@@ -121,6 +122,14 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
     label: "Capture frame",
     description: "Capture what is inside a remembered frame",
     statusWord: "frame",
+  },
+  {
+    action: "captureWindow",
+    defaultAccelerator: "Command+Control+W",
+    group: "app",
+    label: "Capture window",
+    description: "Capture one window, not the screen around it",
+    statusWord: "window",
   },
   // Live input toggles: they flip the recording setting with or without a take
   // (outside a take they change the pre-recording toggle, as clicking it does).
@@ -242,8 +251,9 @@ export interface AppSettings {
   /**
    * The one current screenshot mode, app-wide. The Screenshots page, the tray panel and the
    * generic `captureScreenshot` shortcut all capture with it; picking a mode on the page or
-   * the tray, or pressing a mode-specific shortcut (`captureScreen`, `captureFrame`), makes
-   * that mode current. A mode the platform cannot serve stays stored but captures as Area.
+   * the tray, or pressing a mode-specific shortcut (`captureScreen`, `captureFrame`, `captureWindow`), makes
+   * that mode current. A mode the platform cannot serve stays stored but captures as Frame.
+   * A stored legacy `"area"` is migrated to `"frame"` by the settings merge.
    */
   screenshotMode: CaptureMode;
 }
@@ -269,7 +279,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   exportQuality: "balanced",
   showRecordingSavedCard: true,
   screenshotFrame: {},
-  screenshotMode: "area",
+  screenshotMode: "frame",
 };
 
 /**
@@ -370,13 +380,29 @@ export const IPC_CHANNELS = {
   screenshotOverlayAnswer: "screenshot:overlay-answer",
   // Overlay → main: the pointer is over this display (`{ displayId: number | null }`).
   screenshotOverlayHover: "screenshot:overlay-hover",
-  // Main → every overlay: `{ hoverDisplayId, frameDisplayId }` (each `number | null`).
+  // Main → every overlay: `OverlayState` (`{ mode, hoverDisplayId, frameDisplayId, windows }`).
   screenshotOverlayState: "screenshot:overlay-state",
+  // Overlay → main: switch every overlay to this mode (`{ mode: CaptureMode }`); main
+  // validates, rebroadcasts the state, and lists the windows the first time Window is entered.
+  screenshotOverlayMode: "screenshot:overlay-mode",
   // Overlay → main (Frame): "move the frame to this display" (`{ displayId: number }`).
   screenshotOverlayFrameDisplay: "screenshot:overlay-frame-display",
   // Main → overlay (no payload): "reply after your next animation frame"; overlay → main
   // on the same channel (no payload). Capture waits for every reply or a 250 ms cap.
   screenshotOverlayHiddenAck: "screenshot:overlay-hidden-ack",
+  // Capture toast (main/screenshots/capture-toast-window.ts), shown after a quiet capture.
+  // Main → toast: `CaptureToastPayload` to render; sent again with `saved` after Save.
+  screenshotToastShow: "screenshot:toast-show",
+  // Toast → main: `{ action: "annotate" | "open-library" | "save" | "dismiss" }`.
+  screenshotToastAction: "screenshot:toast-action",
+  // Toast → main: `{ paused: boolean }`, the pointer entered (true) or left (false) the card.
+  screenshotToastHover: "screenshot:toast-hover",
+  // Toast → main (no payload): the toast's listener is up; main sends the current payload.
+  screenshotToastReady: "screenshot:toast-ready",
+  // Main → main window: `OpenSavedScreenshotRequest`, open a saved shot in the editor or Library.
+  screenshotOpenSaved: "screenshot:open-saved",
+  // Main → main window: `QuietCaptureHandOff`, a copy-only capture's bytes for the editor.
+  screenshotOpenQuietCapture: "screenshot:open-quiet-capture",
   // Recording engine (renderer ↔ main)
   recordingCreate: "recording:create",
   recordingWrite: "recording:write",

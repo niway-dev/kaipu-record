@@ -3,10 +3,21 @@ import type { BrowserWindowConstructorOptions, Display, Rectangle } from "electr
 import { join } from "path";
 import { is } from "@electron-toolkit/utils";
 import { IPC_CHANNELS } from "@shared/types/ipc";
-import type { OverlayState } from "@shared/types/screenshot-capture";
-import type { OverlayAnswer, OverlayPort } from "./overlay-port";
+import {
+  isCaptureMode,
+  type CaptureAction,
+  type CaptureMode,
+  type ListedWindow,
+  type OverlayState,
+} from "@shared/types/screenshot-capture";
+import {
+  NO_WINDOWS_LISTER,
+  type OverlayAnswer,
+  type OverlayPort,
+  type WindowLister,
+} from "./overlay-port";
 
-export type OverlayUi = "area" | "screen" | "frame";
+export type OverlayUi = CaptureMode;
 
 /** How long `hideAll` waits for the renderers' frame acks before capturing anyway. */
 export const HIDDEN_ACK_CAP_MS = 250;
@@ -75,6 +86,11 @@ export interface CaptureOverlayDeps {
   primaryDisplayId(): number | null;
   /** Watchdog: abandon the pick if the overlays have not all painted within this long. */
   readyTimeoutMs: number;
+  /**
+   * Window mode's list of on-screen windows, asked once per pick. Production passes the OS
+   * lister (`createWindowLister`); the default finds nothing, so tests never spawn a process.
+   */
+  windowLister: WindowLister;
 }
 
 const electronDeps = (): CaptureOverlayDeps => ({
@@ -93,12 +109,16 @@ const electronDeps = (): CaptureOverlayDeps => ({
   cursorPoint: () => screen.getCursorScreenPoint(),
   primaryDisplayId: () => screen.getPrimaryDisplay().id,
   readyTimeoutMs: OVERLAY_READY_TIMEOUT_MS,
+  windowLister: NO_WINDOWS_LISTER,
 });
 
 type OverlayEntry = { window: OverlayWindow; displayId: number };
 
 type PickSession = {
+  displays: Display[];
   displayIds: Set<number>;
+  /** Set once the window lister has been asked; it is asked at most once per pick. */
+  windowsRequested: boolean;
   /** Set until the first answer settles the pick; cleared after, so later answers are ignored. */
   settle: ((answer: OverlayAnswer) => void) | null;
   /** Windows that have reached `ready-to-show` and been shown. */
@@ -128,7 +148,8 @@ function rectParam({ x, y, width, height }: Rectangle): string {
  * the display's bounds and work area in DIP. `ids` lists every picked display in order,
  * so whichever overlay has keyboard focus can map the digit N to the N-th display.
  * `frame` (Frame only) is the display that starts with the frame, so each overlay paints
- * the right thing at once instead of waiting for the first state message.
+ * the right thing at once instead of waiting for the first state message. `internal=1`
+ * marks the built-in display, which the Screen card labels "Built-in".
  */
 export function overlayQuery(
   ui: OverlayUi,
@@ -142,7 +163,8 @@ export function overlayQuery(
     `&index=${index}&count=${displayIds.length}` +
     `&bounds=${rectParam(display.bounds)}&work=${rectParam(display.workArea)}` +
     `&ids=${displayIds.join(",")}` +
-    (ui === "frame" && frameDisplayId !== null ? `&frame=${frameDisplayId}` : "")
+    (ui === "frame" && frameDisplayId !== null ? `&frame=${frameDisplayId}` : "") +
+    (display.internal ? "&internal=1" : "")
   );
 }
 
@@ -150,28 +172,73 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
-/** Validate a renderer answer: it crosses a process boundary, so its shape is not trusted. */
-function parseAnswer(payload: unknown, displayIds: Set<number>): OverlayAnswer | null {
+function parseAction(value: unknown): CaptureAction | null {
+  // An answer without an action is a plain Capture; anything else must be a known action.
+  if (value === undefined) return "capture";
+  return value === "capture" || value === "copy" ? value : null;
+}
+
+function parseRect(value: unknown): Rectangle | null {
+  if (!value || typeof value !== "object") return null;
+  const { x, y, width, height } = value as Record<string, unknown>;
+  if (![x, y, width, height].every(isFiniteNumber)) return null;
+  if ((width as number) <= 0 || (height as number) <= 0) return null;
+  return { x: x as number, y: y as number, width: width as number, height: height as number };
+}
+
+/**
+ * Validate a renderer answer: it crosses a process boundary, so its shape is not trusted.
+ * Each kind must carry its own mode, because providers capture by `answer.mode`.
+ */
+function parseAnswer(
+  payload: unknown,
+  displayIds: Set<number>,
+  windows: readonly ListedWindow[] | null,
+): OverlayAnswer | null {
   if (!payload || typeof payload !== "object") return null;
   const answer = payload as Record<string, unknown>;
   if (answer.kind === "cancelled") return { kind: "cancelled" };
   if (!isFiniteNumber(answer.displayId) || !displayIds.has(answer.displayId)) return null;
-  if (answer.kind === "display") return { kind: "display", displayId: answer.displayId };
-  if (answer.kind !== "rect" || !answer.rect || typeof answer.rect !== "object") return null;
-  const { x, y, width, height } = answer.rect as Record<string, unknown>;
-  if (![x, y, width, height].every(isFiniteNumber)) return null;
-  if ((width as number) <= 0 || (height as number) <= 0) return null;
-  return {
-    kind: "rect",
-    displayId: answer.displayId,
-    rect: { x: x as number, y: y as number, width: width as number, height: height as number },
-  };
+  const action = parseAction(answer.action);
+  if (!action) return null;
+  const displayId = answer.displayId;
+  if (answer.kind === "display") {
+    if (answer.mode !== undefined && answer.mode !== "screen") return null;
+    return { kind: "display", mode: "screen", action, displayId };
+  }
+  if (answer.kind === "window") {
+    if (answer.mode !== undefined && answer.mode !== "window") return null;
+    if (typeof answer.windowId !== "string" || answer.windowId === "") return null;
+    // Only a window the lister put on that display: a stale or forged id is not captured.
+    const { windowId } = answer;
+    const listed = windows?.find(
+      (candidate) => candidate.id === windowId && candidate.displayId === displayId,
+    );
+    if (!listed) return null;
+    // The geometry comes from main's own list, never from the renderer's copy of it.
+    return {
+      kind: "window",
+      mode: "window",
+      action,
+      displayId,
+      windowId,
+      rect: { ...listed.rect },
+      fullSize: { ...listed.fullSize },
+    };
+  }
+  const rect = parseRect(answer.rect);
+  if (!rect) return null;
+  if (answer.kind === "rect") {
+    if (answer.mode !== undefined && answer.mode !== "frame") return null;
+    return { kind: "rect", mode: "frame", action, displayId, rect };
+  }
+  return null;
 }
 
 /**
  * The capture overlay: one frameless, transparent, always-on-top window per display that
- * draws the Area drag, the Screen chooser or the Frame box (the renderer side lives in
- * `features/screenshots/overlay/`). It only ever answers "this rectangle / this display"
+ * draws the Frame box, the Window picker or the Screen chooser (the renderer side lives in
+ * `features/screenshots/overlay/`). It only ever answers "this rectangle / this window / this display"
  * or "cancelled"; the provider captures the pixels.
  *
  * The provider drives one session: `pick` → answer → `hideAll` → capture → `destroyAll`.
@@ -193,11 +260,15 @@ export class CaptureOverlayWindows implements OverlayPort {
   private session: PickSession | null = null;
   private hiddenWait: HiddenWait | null = null;
   private hiding: Promise<void> | null = null;
+  /** The mode every overlay renders right now. */
+  private mode: CaptureMode = "frame";
   private hoverDisplayId: number | null = null;
   /** Frame mode only: the one display that shows the frame; `null` in every other mode. */
   private frameDisplayId: number | null = null;
   /** The display whose window takes keyboard focus when shown (and when the frame moves). */
   private focusDisplayId: number | null = null;
+  /** Window mode's list: `null` until the lister answers, `[]` when it found none. */
+  private windows: ListedWindow[] | null = null;
 
   constructor(deps: Partial<CaptureOverlayDeps> = {}) {
     this.deps = { ...electronDeps(), ...deps };
@@ -209,12 +280,16 @@ export class CaptureOverlayWindows implements OverlayPort {
 
     return new Promise<OverlayAnswer>((resolve) => {
       this.session = {
+        displays,
         displayIds: new Set(displays.map((display) => display.id)),
+        windowsRequested: false,
         settle: resolve,
         shown: 0,
         watchdog: null,
       };
+      this.mode = ui;
       this.hoverDisplayId = null;
+      this.windows = null;
       const cursor = this.deps.cursorPoint();
       const underCursor = displays.findIndex((display) => contains(display.bounds, cursor));
       // One frame at a time: it starts where the pointer is, else on the primary display
@@ -236,6 +311,10 @@ export class CaptureOverlayWindows implements OverlayPort {
       displays.forEach((display, index) => {
         this.entries.push(this.createOverlay(ui, display, index + 1, displayIds));
       });
+      // Window from the start: list in parallel with the overlays painting. On Windows the
+      // PowerShell lister is slow to start (Add-Type compiles C#), so it starts with every
+      // pick: by the time the user presses 2, the list has usually landed.
+      if (ui === "window" || this.deps.platform === "win32") this.requestWindows();
       // Nothing else rescues a pick whose overlays never paint: the app is hidden and
       // every later capture would answer `cancelled` until restart.
       const session = this.session;
@@ -284,6 +363,39 @@ export class CaptureOverlayWindows implements OverlayPort {
     return done;
   }
 
+  /** Push the list into the state every overlay renders. Ignored when no pick is open. */
+  private setWindows(list: ListedWindow[]): void {
+    if (!this.session) return;
+    this.windows = list;
+    this.broadcastState();
+  }
+
+  /**
+   * Ask the lister once per pick. Failure 2: a lister that throws or rejects answers an
+   * empty list, so Window says "No windows on this display" instead of hanging; a list
+   * that lands after its pick ended is dropped.
+   */
+  private requestWindows(): void {
+    const session = this.session;
+    if (!session || session.windowsRequested) return;
+    session.windowsRequested = true;
+    let listing: Promise<ListedWindow[]>;
+    try {
+      listing = this.deps.windowLister.list(session.displays);
+    } catch (error) {
+      listing = Promise.reject(error);
+    }
+    void listing
+      .then((list) => (Array.isArray(list) ? list : []))
+      .catch((error: unknown) => {
+        console.warn("[screenshot] window list failed", error);
+        return [];
+      })
+      .then((list) => {
+        if (this.session === session) this.setWindows(list);
+      });
+  }
+
   destroyAll(): void {
     const entries = this.entries;
     this.entries = [];
@@ -292,6 +404,7 @@ export class CaptureOverlayWindows implements OverlayPort {
     this.hoverDisplayId = null;
     this.frameDisplayId = null;
     this.focusDisplayId = null;
+    this.windows = null;
     if (session?.watchdog) clearTimeout(session.watchdog);
     for (const { window } of entries) {
       if (!window.isDestroyed()) window.destroy();
@@ -402,8 +515,12 @@ export class CaptureOverlayWindows implements OverlayPort {
 
   private sendState(window: OverlayWindow): void {
     const state: OverlayState = {
+      mode: this.mode,
       hoverDisplayId: this.hoverDisplayId,
       frameDisplayId: this.frameDisplayId,
+      windows: this.windows,
+      // Window: where the pointer is now, so a picker can highlight under a still pointer.
+      ...(this.windows !== null ? { cursor: this.deps.cursorPoint() } : {}),
     };
     window.webContents.send(IPC_CHANNELS.screenshotOverlayState, state);
   }
@@ -439,6 +556,15 @@ export class CaptureOverlayWindows implements OverlayPort {
     return entry ? entry.displayId : null;
   }
 
+  /** Make `displayId`'s overlay the key window (once; `force` re-focuses it anyway). */
+  private focusOn(displayId: number, force = false): void {
+    if (!force && this.focusDisplayId === displayId) return;
+    this.focusDisplayId = displayId;
+    this.liveEntries()
+      .find((entry) => entry.displayId === displayId)
+      ?.window.focus();
+  }
+
   private ownsSender(event: SenderEvent): boolean {
     return this.liveEntries().some(({ window }) => window.webContents.id === event.sender.id);
   }
@@ -446,7 +572,7 @@ export class CaptureOverlayWindows implements OverlayPort {
   private registerListeners(): void {
     this.deps.ipc.on(IPC_CHANNELS.screenshotOverlayAnswer, (event, payload) => {
       if (!this.session?.settle || !this.ownsSender(event)) return;
-      const answer = parseAnswer(payload, this.session.displayIds);
+      const answer = parseAnswer(payload, this.session.displayIds, this.windows);
       if (answer) this.answer(answer);
     });
 
@@ -455,6 +581,12 @@ export class CaptureOverlayWindows implements OverlayPort {
       const displayId = (payload as { displayId?: unknown } | undefined)?.displayId;
       const next =
         isFiniteNumber(displayId) && this.session.displayIds.has(displayId) ? displayId : null;
+      // Window: each overlay highlights the window under the pointer on its own display, and
+      // Enter / ⌘C act on that highlight, so the keyboard follows the pointer across displays.
+      // Only a renderer's report about its own (shown) window moves the focus.
+      if (this.mode === "window" && this.session.settle && next !== null) {
+        if (next === this.displayOf(event)) this.focusOn(next);
+      }
       // Two renderers race when the pointer crosses displays: A's "left" can arrive after
       // B's "entered". Only the hovered display's own window may clear the hover.
       if (next === null && this.displayOf(event) !== this.hoverDisplayId) return;
@@ -470,10 +602,23 @@ export class CaptureOverlayWindows implements OverlayPort {
       if (!isFiniteNumber(displayId) || !this.session.displayIds.has(displayId)) return;
       if (displayId === this.frameDisplayId) return;
       this.frameDisplayId = displayId;
-      this.focusDisplayId = displayId;
       // Enter lives in the window that now holds the frame: make it the key window.
-      const target = this.liveEntries().find((entry) => entry.displayId === displayId);
-      target?.window.focus();
+      this.focusOn(displayId, true);
+      this.broadcastState();
+    });
+
+    // The mode pill (or keys 1–3) on any overlay: every overlay re-renders in that mode.
+    this.deps.ipc.on(IPC_CHANNELS.screenshotOverlayMode, (event, payload) => {
+      if (!this.session?.settle) return;
+      const sender = this.displayOf(event);
+      if (sender === null) return;
+      const mode = (payload as { mode?: unknown } | undefined)?.mode;
+      if (!isCaptureMode(mode) || mode === this.mode) return;
+      this.mode = mode;
+      // The frame lives only in Frame; entering it puts it where the user asked from.
+      this.frameDisplayId = mode === "frame" ? sender : null;
+      if (mode === "frame") this.focusOn(sender, true);
+      if (mode === "window") this.requestWindows();
       this.broadcastState();
     });
 

@@ -150,12 +150,12 @@ describe("updateAppSettings (main-side writers)", () => {
     const seen: string[] = [];
     store.onSettingsChanged((settings) => seen.push(settings.screenshotMode));
 
-    expect(store.getAppSettings().screenshotMode).toBe("area");
-    expect(store.updateAppSettings({ screenshotMode: "frame" }).screenshotMode).toBe("frame");
-    expect(seen).toEqual(["frame"]);
+    expect(store.getAppSettings().screenshotMode).toBe("frame");
+    expect(store.updateAppSettings({ screenshotMode: "screen" }).screenshotMode).toBe("screen");
+    expect(seen).toEqual(["screen"]);
 
     const reloaded = await loadStore();
     reloaded.registerSettings();
-    expect(reloaded.getAppSettings().screenshotMode).toBe("frame");
+    expect(reloaded.getAppSettings().screenshotMode).toBe("screen");
   });
 });

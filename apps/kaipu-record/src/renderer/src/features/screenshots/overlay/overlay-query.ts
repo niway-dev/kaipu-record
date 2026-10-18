@@ -9,11 +9,12 @@ import {
  * `overlayQuery` in `main/screenshots/capture-overlay-windows.ts`):
  *
  *   ?window=capture-overlay&display=<id>&ui=<mode>&index=<1-based>&count=<n>
- *    &bounds=x,y,w,h&work=x,y,w,h&ids=<id1>,<id2>,…[&frame=<id>]
+ *    &bounds=x,y,w,h&work=x,y,w,h&ids=<id1>,<id2>,…[&frame=<id>][&internal=1]
  *
  * `bounds` and `work` are the display's bounds and work area in DIP, absolute in screen
  * coordinates (x can be negative). The window covers `bounds`, so window-local (0,0) is
- * `bounds.x, bounds.y`. `ids` lists every picked display in order.
+ * `bounds.x, bounds.y`. `ids` lists every picked display in order. `internal=1` marks the
+ * built-in display (the Screen card says "Built-in" or "External").
  */
 export interface OverlayQuery {
   displayId: number;
@@ -27,6 +28,8 @@ export interface OverlayQuery {
   ids: number[];
   /** Frame only: the display that starts with the frame; null when absent or malformed. */
   frame: number | null;
+  /** True for the built-in display (a laptop's panel), false for an external one. */
+  internal: boolean;
 }
 
 function parseIds(value: string | null): number[] | null {
@@ -72,6 +75,7 @@ export function parseOverlayQuery(search: string): OverlayQuery | null {
     work,
     ids,
     frame: parseInteger(params.get("frame")),
+    internal: params.get("internal") === "1",
   };
 }
 

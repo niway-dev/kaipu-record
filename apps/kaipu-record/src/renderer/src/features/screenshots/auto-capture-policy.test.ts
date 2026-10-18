@@ -60,6 +60,17 @@ describe("autoActionsOnOpen — the four states", () => {
   });
 });
 
+describe("a quiet capture opened by Annotate", () => {
+  it("runs no auto action, in every state: main already saved and/or copied it", () => {
+    const kind = openKindOf({ kind: "blob", bytes: new ArrayBuffer(1), origin: "quiet" });
+    for (const save of ["auto", "manual"] as const) {
+      for (const copy of ["auto", "manual"] as const) {
+        expect(autoActionsOnOpen(save, copy, kind)).toEqual({ save: false, copy: false });
+      }
+    }
+  });
+});
+
 describe("openKindOf", () => {
   const bytes = new ArrayBuffer(1);
 

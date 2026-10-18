@@ -20,7 +20,7 @@ const SETTINGS: AppSettings = {
   exportQuality: "balanced",
   showRecordingSavedCard: true,
   screenshotFrame: {},
-  screenshotMode: "area",
+  screenshotMode: "frame",
 };
 
 describe("useAppSettings", () => {

@@ -5,22 +5,23 @@ import { createMainTranslator } from "@kaipu/i18n/main";
 import { buildScreenshotCapturedProperties, SCREENSHOT_CAPTURED_EVENT } from "@shared/analytics";
 import { IPC_CHANNELS } from "@shared/types/ipc";
 import type { LocalRecording } from "@shared/types/library-storage";
-import type { CaptureMode } from "@shared/types/screenshot-capture";
+import type { CaptureMode, OverlayAnswer } from "@shared/types/screenshot-capture";
 import { assertExportPayload, exportFileName } from "./export-file-name";
 import { createCaptureHandler, type CaptureWindowHooks } from "./capture-handler";
 import { CaptureOverlayWindows } from "./capture-overlay-windows";
 import type { OverlayPort } from "./overlay-port";
 import { createScreenshotProvider } from "./screenshot-capture";
+import { createWindowLister } from "./window-lister";
 import { captureMainEvent } from "../services/analytics.service";
-import { getAppSettings } from "../infrastructure/settings-store";
-import { currentVault, screenshotFilePath } from "../library";
-
-/** Stable, sortable id; mirrors the recording writer's timestamp scheme. */
-function screenshotId(): string {
-  return `screenshot-${new Date().toISOString().replace(/[:.]/g, "-")}`;
-}
+import { getAppSettings, updateAppSettings } from "../infrastructure/settings-store";
+import { screenshotFilePath } from "../library";
+import { saveScreenshotToVault } from "./screenshot-save";
+import type { CaptureToastShowRequest } from "./capture-toast-window";
+import { deferToastUntilAfterCapture } from "./toast-after-capture";
 
 let overlayWindows: CaptureOverlayWindows | null = null;
+/** Told every overlay answer, so the toast lands on the display the shot came from. */
+let observePick: (answer: OverlayAnswer) => void = () => {};
 
 /**
  * The overlay windows, created on first use: `BrowserWindow` and `screen` need a ready
@@ -29,8 +30,14 @@ let overlayWindows: CaptureOverlayWindows | null = null;
 const overlay: OverlayPort = {
   pick: async (ui, displays) => {
     if (!app.isReady()) return { kind: "cancelled" };
-    overlayWindows ??= new CaptureOverlayWindows();
-    return overlayWindows.pick(ui, displays);
+    // macOS lists through osascript JXA, Windows through PowerShell; other platforms find
+    // nothing. Our own windows are dropped by pid (plus HWND on Windows).
+    overlayWindows ??= new CaptureOverlayWindows({
+      windowLister: createWindowLister(process.platform),
+    });
+    const answer = await overlayWindows.pick(ui, displays);
+    observePick(answer);
+    return answer;
   },
   hideAll: async () => overlayWindows?.hideAll(),
   destroyAll: () => overlayWindows?.destroyAll(),
@@ -42,8 +49,26 @@ export interface ScreenshotHandlers {
   supportedModes(): CaptureMode[];
 }
 
-export function registerScreenshotHandlers(windows: CaptureWindowHooks): ScreenshotHandlers {
+/** Longest side of the toast thumbnail, in px. */
+const TOAST_THUMBNAIL_WIDTH = 160;
+
+export function registerScreenshotHandlers(
+  appWindows: CaptureWindowHooks,
+  /**
+   * The capture toast: called once per quiet capture, after `afterCapture` has put the
+   * windows back, with the display the shot came from.
+   */
+  showToast?: (request: CaptureToastShowRequest) => void,
+): ScreenshotHandlers {
   const provider = createScreenshotProvider(process.platform);
+  const toastSeam = deferToastUntilAfterCapture(
+    appWindows,
+    (request) => showToast?.(request),
+    // No overlay answered (Screen on a lone display): the display under the pointer.
+    () => screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).id,
+  );
+  observePick = toastSeam.onPick;
+  const windows = toastSeam.windows;
   const handleCapture = createCaptureHandler({
     platform: process.platform,
     provider,
@@ -53,6 +78,27 @@ export function registerScreenshotHandlers(windows: CaptureWindowHooks): Screens
     displayCount: () => screen.getAllDisplays().length,
     track: (event) =>
       captureMainEvent(SCREENSHOT_CAPTURED_EVENT, buildScreenshotCapturedProperties(event)),
+    // Persisted and broadcast to every window, so the page and the tray follow.
+    rememberMode: (mode) => {
+      if (getAppSettings().screenshotMode !== mode) updateAppSettings({ screenshotMode: mode });
+    },
+    settings: () => {
+      const { screenshotSave, screenshotCopy } = getAppSettings();
+      return { save: screenshotSave, copy: screenshotCopy };
+    },
+    saveToVault: async (png, title) => {
+      const saved = await saveScreenshotToVault(png, { title, manual: false });
+      return { id: saved.id };
+    },
+    copyToClipboard: (png) => clipboard.writeImage(nativeImage.createFromBuffer(png)),
+    thumbnail: (png) => {
+      const image = nativeImage.createFromBuffer(png);
+      const { width } = image.getSize();
+      return (
+        width > TOAST_THUMBNAIL_WIDTH ? image.resize({ width: TOAST_THUMBNAIL_WIDTH }) : image
+      ).toDataURL();
+    },
+    onQuietCapture: toastSeam.onQuietCapture,
   });
   ipcMain.handle(IPC_CHANNELS.screenshotCapture, (_event, request) => handleCapture(request));
   ipcMain.handle(IPC_CHANNELS.screenshotSupportedModes, () => provider.supportedModes());
@@ -97,21 +143,7 @@ export function registerScreenshotHandlers(windows: CaptureWindowHooks): Screens
       png: ArrayBuffer,
       meta: { title: string; overwriteId?: string; manual?: boolean },
     ): Promise<LocalRecording> => {
-      const id = meta.overwriteId ?? screenshotId();
-      const vault = currentVault();
-      await vault.writeImage(id, Buffer.from(png));
-      const now = Date.now();
-      // Preserve the original createdAt when overwriting; stamp it for a new item.
-      // A save the user asked for (not the capture's auto-save) is editor work, so
-      // it puts the shot on the Editor home's Continue list.
-      await vault.writeMeta(id, {
-        title: meta.title,
-        ...(meta.overwriteId ? {} : { createdAt: now }),
-        ...(meta.manual ? { editorSavedAt: now } : {}),
-      });
-      const saved = await vault.describe(id);
-      if (!saved) throw new Error(`screenshot save: could not describe ${id} after writing`);
-      return saved;
+      return saveScreenshotToVault(Buffer.from(png), meta);
     },
   );
 

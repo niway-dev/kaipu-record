@@ -47,8 +47,8 @@ UI telling the truth about screenshots.
 1. **CI job.** Add a `windows-latest` job to `release-desktop.yml` mirroring the macOS one:
    checkout, `bun install`, `rebuild:native`, `build:win`, upload the `-setup.exe` to the
    release. Run it on a tag first, unsigned, to prove reproducibility.
-2. **Screenshots say "coming soon".** _(Coming-soon state and Windows backend: shipped in desktop
-   0.12.0 (#306); Window mode for Windows is in [modes v2](/specs/2026-10-17-screenshot-modes-v2-design/); all wait for a Windows build to QA.)_ Replace the silent `null` with a platform-aware state:
+2. **Screenshots say "coming soon".** _(Frame, Window and Screen all have Windows backends: Frame and Screen shipped in desktop
+   0.12.0 (#306) and Window with [modes v2](/specs/2026-10-17-screenshot-modes-v2-design/); QA is pending on a Windows build.)_ Replace the silent `null` with a platform-aware state:
    hide the capture tab and the global screenshot shortcut on Windows, or show them disabled
    with a one-line "Coming to Windows" and a link to the public roadmap.
 3. **Signing decision** (owner): buy a code-signing certificate now (an OV certificate is
@@ -71,11 +71,11 @@ UI telling the truth about screenshots.
       page until a certificate exists. An unsigned installer is the objection ScreenKite uses
       against Recordly; do not repeat it silently.
 - [ ] `rebuild:native` runs for `uiohook-napi` on the Windows runner (auto-zoom on clicks).
-- [ ] Screenshot entry points hidden or disabled with a "coming soon" state on Windows, never a
-      silent no-op. The state shipped in desktop 0.12.0 (#306, 2026-10-17): the entry points render disabled with "Coming to Windows" whenever the platform
-      provider reports a mode as unsupported. That branch also contains the Windows backend
-      (`desktopCapturer`), so the state stays dormant once it merges; the tick waits for a
-      packaged Windows build to confirm it.
+- [ ] Screenshot entry points never a silent no-op on Windows. Frame, Window and Screen all have
+      Windows backends (`desktopCapturer`; Frame and Screen in 0.12.0 (#306), Window in modes v2),
+      so the entry points are enabled; the "Coming to Windows" state remains only as the
+      `unsupported` toast of a provider that serves nothing. The tick waits for a packaged
+      Windows build to QA all three modes.
 - [ ] Version gate and auto-update verified against a Windows artifact.
 - [x] Public roadmap row (`windowsBeta`, 2026-10-07): "recording first, screenshots next", so
       the gap is visible on purpose. Flip it to shipped when the first beta is downloadable.
