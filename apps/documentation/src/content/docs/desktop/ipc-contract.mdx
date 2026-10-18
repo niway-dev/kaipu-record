@@ -48,8 +48,9 @@ Sí existen y persisten: `settings-store.ts` registra ambos handlers, el preload
 
 `AppSettings.screenshotMode` (`"frame" | "window" | "screen"`, default `"frame"`; a legacy
 `"area"` or any unknown stored value merges to `"frame"`) is the one current screenshot mode, shared by the
-Screenshots page, the tray panel and the generic capture shortcut. Main-side writers use
-`updateAppSettings(patch)` in `settings-store.ts`, the same path as `settings:update`.
+Screenshots page, the tray panel and the generic capture shortcut. Only main writes it, when a
+capture completes (see § Screenshots), through `updateAppSettings(patch)` in `settings-store.ts`, the
+same path as `settings:update`; no UI control writes it directly.
 
 `settings:changed` se emite a **todas** las ventanas tras cada cambio (patrón consultar-al-montar + suscribir), para que consumidores como el hint de atajo de la barra flotante no queden stale.
 
@@ -160,8 +161,10 @@ shortcut writes `screenshotMode` by itself: the `screenshot:capture` handler wri
 `updateAppSettings` (which broadcasts `settings:changed`), from the `mode` of a `captured`
 result, the mode the user ended in on the overlay. A cancelled, unsupported or failed capture
 leaves it untouched, so a mode switched on the overlay and then cancelled with Esc is not
-remembered. The page and the tray still make a mode current through `settings:update` when a
-mode is picked there. Analytics: the handler of
+remembered. The Screenshots page and the tray panel never write it either: their Capture button
+sends the current mode and each mode chip (Frame, Window, Screen) sends its own, through
+`screenshot:capture` (page) or `screenshot:request-capture` (tray), and main remembers whichever mode
+the capture ends in. Analytics: the handler of
 `screenshot:capture` emits one `screenshot_captured` event per answered request with
 `{ mode, platform, displays, outcome }` and nothing else. `outcome` is `captured`,
 `cancelled`, `unsupported` or `failed`; `failed` is a provider throw, which the renderer still
