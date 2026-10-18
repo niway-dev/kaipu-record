@@ -200,19 +200,53 @@ describe("MacProvider", () => {
         expect(out).toMatchObject({ kind: "captured", action: "copy" });
       });
 
-      it("a window answer is unsupported for now: nothing hidden, nothing grabbed, overlay destroyed", async () => {
-        answer = {
+      describe("window answers", () => {
+        const windowAnswer = (displayId: number): OverlayAnswer => ({
           kind: "window",
           mode: "window",
           action: "capture",
-          displayId: 1,
+          displayId,
           windowId: "77",
-          rect: { x: 0, y: 0, width: 100, height: 100 },
-        };
-        const out = await macProvider().capture({ mode: "frame", overlay: fake });
-        expect(out).toEqual({ kind: "unsupported", mode: "window" });
-        expect(runCli).not.toHaveBeenCalled();
-        expect(log).toEqual(["pick:frame", "destroyAll"]);
+          rect: { x: 100, y: 50, width: 640, height: 360 },
+        });
+
+        it("captures by window id without shadow, inside the overlay sequence", async () => {
+          answer = windowAnswer(1);
+          const out = await macProvider().capture({ mode: "frame", overlay: fake });
+          expect(log).toEqual([
+            "pick:frame",
+            "hideAll",
+            "settle",
+            "runCli:-l 77 -o -x /tmp/x.png",
+            "destroyAll",
+          ]);
+          expect(out).toEqual({ kind: "captured", png: PNG, mode: "window", action: "capture" });
+        });
+
+        it("a missing file retries once with -R at the global rect of the answer's display", async () => {
+          const offset = display(3, 1440, 0, 1920, 1080);
+          displays = [main, offset];
+          answer = windowAnswer(3);
+          let calls = 0;
+          fileExists = vi.fn(async () => ++calls > 1);
+          vi.spyOn(console, "warn").mockImplementation(() => {});
+          const out = await macProvider().capture({ mode: "window", overlay: fake });
+          expect(vi.mocked(runCli).mock.calls.map(([, args]) => args.join(" "))).toEqual([
+            "-l 77 -o -x /tmp/x.png",
+            "-R 1540,50,640,360 -x /tmp/x.png",
+          ]);
+          expect(out.kind).toBe("captured");
+        });
+
+        it("answers cancelled when the -R retry also leaves no file", async () => {
+          answer = windowAnswer(1);
+          fileExists = vi.fn(async () => false);
+          vi.spyOn(console, "warn").mockImplementation(() => {});
+          const out = await macProvider().capture({ mode: "window", overlay: fake });
+          expect(out).toEqual({ kind: "cancelled" });
+          expect(runCli).toHaveBeenCalledTimes(2);
+          expect(fake.destroyAll).toHaveBeenCalledTimes(1);
+        });
       });
 
       it("never shells out to Apple's interactive picker (-i)", async () => {
@@ -352,8 +386,8 @@ describe("WindowsProvider", () => {
     return new WindowsProvider(deps);
   };
 
-  it("serves Frame and Screen, not Window yet", () => {
-    expect(MODES.map((m) => provider().supports(m))).toEqual([true, false, true]);
+  it("serves Frame, Window and Screen", () => {
+    expect(MODES.map((m) => provider().supports(m))).toEqual([true, true, true]);
   });
 
   it("frame: pick, hide, capture, destroy, in that order, cropped in physical pixels", async () => {
@@ -384,20 +418,116 @@ describe("WindowsProvider", () => {
     expect(out).toEqual({ kind: "captured", png: PNG("two"), mode: "screen", action: "capture" });
   });
 
-  it("a window answer is unsupported for now and grabs nothing", async () => {
-    answer = {
+  describe("window answers", () => {
+    const winAnswer = (displayId: number, windowId = "9"): OverlayAnswer => ({
       kind: "window",
       mode: "window",
       action: "capture",
-      displayId: 1,
-      windowId: "9",
-      rect: { x: 0, y: 0, width: 100, height: 100 },
-    };
-    expect(await provider().capture({ mode: "frame", overlay: fake })).toEqual({
-      kind: "unsupported",
-      mode: "window",
+      displayId,
+      windowId,
+      rect: { x: 100, y: 50, width: 200, height: 100 },
     });
-    expect(log).toEqual(["pick:frame", "destroyAll"]);
+    let types: string[][];
+    const windowsProvider = (): WindowsProvider =>
+      new WindowsProvider({
+        getSources: async (options) => {
+          types.push([...options.types]);
+          requested.push(options.thumbnailSize);
+          return options.types[0] === "window" ? windowSources : sources;
+        },
+        getDisplays: async () => displays,
+        settle: () => settle(),
+      });
+    let windowSources: ScreenSource[];
+    let warn: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      types = [];
+      windowSources = [];
+      warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    });
+
+    it("asks for the window source at the window's physical size and matches by id prefix", async () => {
+      displays = [hiDpi];
+      answer = winAnswer(2);
+      windowSources = [
+        {
+          id: "window:99:0",
+          display_id: "",
+          thumbnail: image({ width: 300, height: 150 }, "other"),
+        },
+        { id: "window:9:0", display_id: "", thumbnail: image({ width: 300, height: 150 }, "mine") },
+      ];
+      const out = await windowsProvider().capture({ mode: "window", overlay: fake });
+      expect(types).toEqual([["window"]]);
+      expect(requested).toEqual([{ width: 300, height: 150 }]);
+      expect(crops).toEqual([]);
+      expect(out).toEqual({
+        kind: "captured",
+        png: PNG("mine"),
+        mode: "window",
+        action: "capture",
+      });
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it("ignores a source with the same name but another id (id 9 is not 90)", async () => {
+      answer = winAnswer(1);
+      windowSources = [
+        { id: "window:90:0", display_id: "", thumbnail: image({ width: 200, height: 100 }, "w90") },
+      ];
+      const out = await windowsProvider().capture({ mode: "window", overlay: fake });
+      expect(out).toMatchObject({ kind: "captured", png: PNG("one-crop") });
+      expect(types).toEqual([["window"], ["screen"]]);
+    });
+
+    it("an empty thumbnail falls back to the display crop and warns once", async () => {
+      answer = winAnswer(1);
+      windowSources = [
+        { id: "window:9:0", display_id: "", thumbnail: image({ width: 0, height: 0 }, "empty") },
+      ];
+      const out = await windowsProvider().capture({ mode: "window", overlay: fake });
+      expect(crops).toEqual([{ x: 100, y: 50, width: 200, height: 100 }]);
+      expect(out).toMatchObject({ kind: "captured", mode: "window" });
+      expect(warn).toHaveBeenCalledTimes(1);
+    });
+
+    it("a window answer with no window and no display source is cancelled", async () => {
+      answer = winAnswer(1);
+      sources = [];
+      const out = await windowsProvider().capture({ mode: "window", overlay: fake });
+      expect(out).toEqual({ kind: "cancelled" });
+      expect(fake.destroyAll).toHaveBeenCalledTimes(1);
+    });
+
+    it("a window spanning two displays: by-id returns the whole thumbnail untouched", async () => {
+      displays = [primary, hiDpi];
+      answer = {
+        ...winAnswer(1),
+        rect: { x: 1800, y: 100, width: 400, height: 300 },
+      } as OverlayAnswer;
+      windowSources = [
+        {
+          id: "window:9:0",
+          display_id: "",
+          thumbnail: image({ width: 400, height: 300 }, "whole"),
+        },
+      ];
+      const out = await windowsProvider().capture({ mode: "window", overlay: fake });
+      expect(crops).toEqual([]);
+      expect(out).toMatchObject({ png: PNG("whole") });
+    });
+
+    it("the fallback clamps the crop to the answer's display, never stitching", async () => {
+      displays = [primary, hiDpi];
+      answer = {
+        ...winAnswer(1),
+        rect: { x: 1800, y: 100, width: 400, height: 300 },
+      } as OverlayAnswer;
+      await windowsProvider().capture({ mode: "window", overlay: fake });
+      // 1920 wide display: the part past x = 1920 is dropped (width 120, not 400).
+      expect(crops).toEqual([{ x: 1800, y: 100, width: 120, height: 300 }]);
+    });
   });
 
   it("frame on a 150% display crops 150 physical px for a 100 DIP frame", async () => {
@@ -548,15 +678,15 @@ describe("WindowsProvider", () => {
 });
 
 describe("supports", () => {
-  it("Mac and Windows serve Frame and Screen, not Window yet; others serve nothing", () => {
+  it("Mac and Windows serve every mode; others serve nothing", () => {
     const mac = new MacProvider();
-    expect(MODES.map((m) => mac.supports(m))).toEqual([true, false, true]);
+    expect(MODES.map((m) => mac.supports(m))).toEqual([true, true, true]);
     expect(new UnsupportedProvider().supports()).toBe(false);
   });
 
   it("lists the supported modes for the renderer", () => {
-    expect(new MacProvider().supportedModes()).toEqual(["frame", "screen"]);
-    expect(new WindowsProvider().supportedModes()).toEqual(["frame", "screen"]);
+    expect(new MacProvider().supportedModes()).toEqual(["frame", "window", "screen"]);
+    expect(new WindowsProvider().supportedModes()).toEqual(["frame", "window", "screen"]);
     expect(new UnsupportedProvider().supportedModes()).toEqual([]);
   });
 });

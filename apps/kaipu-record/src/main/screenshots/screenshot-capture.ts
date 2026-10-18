@@ -124,9 +124,6 @@ export async function runWithOverlay(
   try {
     const target = await choose();
     if (!target) return { kind: "cancelled" };
-    // Window pixels arrive with the window backends; until then a window answer is refused
-    // before anything is hidden or grabbed.
-    if (target.mode === "window") return { kind: "unsupported", mode: "window" };
     await overlay.hideAll(); // Failure 1: capture only once no overlay is on screen
     // The window server / DWM can keep a hidden transparent window for a few frames.
     // No overlay was shown (single-display Screen): `choose` already waited for the app.
@@ -150,9 +147,8 @@ export async function runWithOverlay(
 export class MacProvider implements ScreenshotCaptureProvider {
   constructor(private readonly deps: Deps = realDeps) {}
 
-  /** Window needs its lister and `screencapture -l`; neither exists yet. */
-  supports(mode: CaptureMode): boolean {
-    return mode !== "window";
+  supports(_mode: CaptureMode): boolean {
+    return true;
   }
 
   supportedModes(): CaptureMode[] {
@@ -173,14 +169,27 @@ export class MacProvider implements ScreenshotCaptureProvider {
         return pickTarget(overlay, mode, displays);
       },
       // `-R` takes global points (DIP), not pixels, and handles Retina itself.
-      ({ display, rect, mode: picked, action }) =>
-        this.grab(
-          ["-R", rectArg(rect ? toGlobal(rect, display) : display.bounds), "-x"],
-          picked,
-          action,
-        ),
+      (target) => this.captureTarget(target),
       this.deps,
     );
+  }
+
+  private async captureTarget({
+    display,
+    rect,
+    mode,
+    action,
+    windowId,
+  }: CaptureTarget): Promise<ProviderResult> {
+    const region = ["-R", rectArg(rect ? toGlobal(rect, display) : display.bounds), "-x"];
+    if (mode === "window" && windowId && rect) {
+      // `-l` captures the window by id, whole and without its shadow (`-o`), even when covered.
+      const byId = await this.grab(["-l", windowId, "-o", "-x"], mode, action);
+      if (byId.kind === "captured") return byId;
+      // The window vanished or `-l` refused it: one retry on the rectangle the user saw.
+      console.warn(`[screenshot] screencapture -l ${windowId} produced no file; using the rect`);
+    }
+    return this.grab(region, mode, action);
   }
 
   private async grab(
@@ -190,7 +199,7 @@ export class MacProvider implements ScreenshotCaptureProvider {
   ): Promise<ProviderResult> {
     const target = this.deps.tempPath();
     await this.deps.runCli("screencapture", [...flags, target]);
-    // No file: `-R` refused the rectangle.
+    // No file: `-l` or `-R` refused the target.
     if (!(await this.deps.fileExists(target))) return { kind: "cancelled" };
     try {
       const png = await this.deps.readPng(target);
@@ -215,6 +224,8 @@ export interface CapturedImage {
 }
 
 export interface ScreenSource {
+  /** desktopCapturer id: `screen:<n>:0` or `window:<HWND decimal>:0`. Absent in older fakes. */
+  id?: string;
   /** desktopCapturer `display_id`; "" when the platform cannot say. */
   display_id: string;
   thumbnail: CapturedImage;
@@ -222,7 +233,7 @@ export interface ScreenSource {
 
 export interface WindowsDeps {
   getSources(options: {
-    types: ["screen"];
+    types: ["screen"] | ["window"];
     thumbnailSize: { width: number; height: number };
   }): Promise<ScreenSource[]>;
   getDisplays(): Promise<Display[]>;
@@ -246,9 +257,8 @@ const realWindowsDeps: WindowsDeps = {
 export class WindowsProvider implements ScreenshotCaptureProvider {
   constructor(private readonly deps: WindowsDeps = realWindowsDeps) {}
 
-  /** Window needs its lister and the window source; neither exists yet. */
-  supports(mode?: CaptureMode): boolean {
-    return mode !== "window";
+  supports(_mode?: CaptureMode): boolean {
+    return true;
   }
 
   supportedModes(): CaptureMode[] {
@@ -266,7 +276,12 @@ export class WindowsProvider implements ScreenshotCaptureProvider {
         }
         return pickTarget(overlay, mode, displays);
       },
-      async ({ display, rect, mode: picked, action }) => {
+      async ({ display, rect, mode: picked, action, windowId }) => {
+        if (picked === "window" && windowId && rect) {
+          const win = await this.captureWindow(display, rect, windowId);
+          if (win) return { kind: "captured", png: win.toPNG(), mode: picked, action };
+          console.warn(`[screenshot] no window source for ${windowId}; cropping the display`);
+        }
         const image = await this.captureDisplay(display);
         if (!image) {
           console.warn(`[screenshot] no desktopCapturer source for display ${display.id}`);
@@ -277,6 +292,28 @@ export class WindowsProvider implements ScreenshotCaptureProvider {
       },
       this.deps,
     );
+  }
+
+  /** The window's own pixels by id (`window:<id>:`), never by name or index; null when unusable. */
+  private async captureWindow(
+    display: Display,
+    rect: Rectangle,
+    windowId: string,
+  ): Promise<CapturedImage | null> {
+    const sources = await this.deps.getSources({
+      types: ["window"],
+      thumbnailSize: {
+        width: Math.round(rect.width * display.scaleFactor),
+        height: Math.round(rect.height * display.scaleFactor),
+      },
+    });
+    const thumbnail = sources.find((source) =>
+      source.id?.startsWith(`window:${windowId}:`),
+    )?.thumbnail;
+    if (!thumbnail) return null;
+    const { width, height } = thumbnail.getSize();
+    if (thumbnail.isEmpty() || width === 0 || height === 0) return null;
+    return thumbnail;
   }
 
   private async captureDisplay(display: Display): Promise<CapturedImage | null> {

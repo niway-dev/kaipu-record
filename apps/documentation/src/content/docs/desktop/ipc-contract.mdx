@@ -130,8 +130,10 @@ The global shortcut actions that feed `screenshot:hotkey` are `captureScreenshot
 `captureScreen`, `captureFrame` and `captureWindow`, and main resolves the mode before broadcasting
 (`main/screenshots/shortcut-capture.ts`). `captureScreenshot` captures with the current mode,
 `AppSettings.screenshotMode`, or with `"frame"` when the platform cannot serve the stored one.
-`captureScreen`, `captureFrame` and `captureWindow` open the overlay in their own mode (`window`
-is not served yet, so `captureWindow` answers `unsupported` until its backends land). No
+`captureScreen`, `captureFrame` and `captureWindow` open the overlay in their own mode (Window is
+served on both platforms: macOS captures by window id through `screencapture -l`, Windows through
+the `desktopCapturer` window source, and both fall back to a crop of the display when the window
+cannot be grabbed by id). No
 shortcut writes `screenshotMode` by itself: the `screenshot:capture` handler writes it, through
 `updateAppSettings` (which broadcasts `settings:changed`), from the `mode` of a `captured`
 result, the mode the user ended in on the overlay. A cancelled, unsupported or failed capture
