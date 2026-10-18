@@ -5,8 +5,12 @@ description: "Ship the working Windows build as a recording-only beta instead of
 
 # Windows beta — recording first, screenshots later
 
-> **Status: 🟡 In progress — CI jobs landed, unvalidated** (owner approved the direction 2026-09-27). The Windows build exists
-> and records; screenshots are not ported yet. Decision: ship what works as a labelled beta.
+> **Status: 🟡 In progress — beta downloadable, QA pending** (owner approved the direction 2026-09-27).
+> Desktop 0.13.0 shipped the first Windows installer on 2026-10-18, unsigned, at
+> `https://updates.kaipu.app/download/latest/kaipu-setup.exe`
+> ([release](https://github.com/niway-dev/kaipu-record/releases/tag/desktop-v0.13.0)); the
+> landing and /roadmap link to it. Owner QA on Windows hardware (design decision 10) starts
+> on that build. Decision: ship what works as a labelled beta.
 > Parent: [Product growth](./product-growth). **Design (2026-10-15):**
 > [Windows release design](/specs/2026-10-15-windows-release-design/) and ADR 0023 turn the
 > steps below into tickets; screenshots on Windows come from the
@@ -81,8 +85,14 @@ UI telling the truth about screenshots.
       Windows build to QA all three modes.
 - [ ] Version gate and auto-update verified against a Windows artifact.
 - [x] Public roadmap row (`windowsBeta`, 2026-10-07): "recording first, screenshots next", so
-      the gap is visible on purpose. Flip it to shipped when the first beta is downloadable.
-- [ ] Landing: "Download for Windows (beta)" next to the macOS button, with the gap stated.
+      the gap is visible on purpose. The 2026-10-18 per-platform redesign (#316) retired the
+      row: every roadmap row now carries its own Windows cell, and the /roadmap Windows section
+      offers the beta download (2026-10-18). The cells stay `inProgress` until the owner's QA on
+      Windows hardware (design decision 10) confirms each feature; they flip one by one, and
+      [Platform parity](/desktop/platform-parity/) is the tracker for that.
+- [x] Landing: "Download for Windows (beta)" next to the macOS buttons, with a one-line
+      SmartScreen note ("More info", then "Run anyway"), shipped with desktop 0.13.0 on
+      2026-10-18. The installer is unsigned; signing is being applied for (SignPath Foundation).
 
 App behaviours on `feat/windows-release` (landed, unvalidated on Windows hardware):
 

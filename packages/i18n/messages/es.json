@@ -242,7 +242,8 @@
     "heroSubtitle": "Kaipu Record captura tu pantalla y cámara en alta calidad, directo en tu Mac. Privado, rápido y sin cuenta.",
     "downloadMacArm": "Descargar para Mac (Apple Silicon)",
     "downloadMacIntel": "Mac (Intel)",
-    "downloadWindows": "Windows (próximamente)",
+    "downloadWindowsBeta": "Windows (beta)",
+    "downloadWindowsSmartScreen": "La beta de Windows aún no tiene firma de código. Si SmartScreen la detiene, elige “Más información” y luego “Ejecutar de todas formas”.",
     "footerTagline": "Graba. Comparte. Sin vueltas.",
     "homeEyebrow": "Kaipu, en cuatro momentos",
     "homeHeroSerif": "Sigue con lo tuyo.",
@@ -291,7 +292,7 @@
     "homeFilesLabel": "Tus archivos",
     "homeCtaLead": "La próxima vez,",
     "homeCtaSerif": "muéstralo con Kaipu.",
-    "homeCtaFootnote": "macOS 13 o posterior · Te avisamos cuando Windows esté listo.",
+    "homeCtaFootnote": "macOS 13 o posterior · Windows 10 o posterior, 64 bits (beta)",
     "homeMadeIn": "Hecho en Perú",
     "homeRailTotal": "04",
     "homeNavProduct": "Producto",
@@ -307,7 +308,7 @@
     "homeHeroPill4": "Una carpeta, no una nube",
     "homeHeroCtaPrimary": "Descargar Kaipu para Mac",
     "homeHeroCtaSecondary": "Ver cómo funciona",
-    "homeHeroFootnote": "Apple Silicon · Intel · Windows próximamente",
+    "homeHeroFootnote": "Apple Silicon · Intel · Windows beta",
     "homeAppTitle": "Kaipu Record",
     "homeAppDisplay": "Pantalla Retina integrada",
     "homeAppDisplayMeta": "PRINCIPAL · 2560×1600",
@@ -1382,7 +1383,7 @@
       "eyebrow": "Roadmap público",
       "heading": "Qué funciona hoy y en qué plataforma.",
       "serif": "Y qué viene después.",
-      "intro": "Kaipu Record funciona hoy en macOS, y Windows viene en camino. Cada función de abajo muestra dónde ya funciona, dónde se está construyendo y qué está planeado.",
+      "intro": "Kaipu Record funciona en macOS, y Windows está en beta. Cada función de abajo muestra dónde ya funciona, dónde se está construyendo y qué está planeado.",
       "disclaimer": "El orden es una prioridad, no una promesa. Los planes se mueven a medida que aprendemos qué necesita la gente de verdad.",
       "count": "{count, plural, one {# elemento} other {# elementos}}",
       "showing": "{shown} de {total} funciones",
@@ -1420,7 +1421,7 @@
       "win": {
         "name": "Windows",
         "line": "Windows 10 o posterior, 64 bits",
-        "badge": "Muy pronto"
+        "badge": "Beta"
       }
     },
     "filters": {
@@ -1437,14 +1438,14 @@
     },
     "windows": {
       "eyebrow": "Windows",
-      "badge": "Muy pronto",
-      "title": "Kaipu para Windows viene en camino.",
-      "serif": "Primero grabar, luego lo demás.",
-      "body": "La versión de Windows ya graba, edita y guarda tu biblioteca. La estamos preparando para lanzarla como una beta marcada como tal. Hasta que el instalador esté en la página de descarga, cada fila de arriba muestra Windows en progreso o planeado, nunca como lanzado.",
-      "download": "Descargar para Mac",
+      "badge": "Beta",
+      "title": "Kaipu para Windows está en beta.",
+      "serif": "Grabación y capturas, listas para probar.",
+      "body": "La beta de Windows graba tu pantalla, toma capturas, edita y guarda tu biblioteca. Aún no tiene firma de código; la firma está en trámite. Las filas de arriba pasan a lanzado en Windows una por una, a medida que comprobamos cada función en equipos Windows reales.",
+      "download": "Descargar para Windows (beta)",
       "requirements": "Windows 10 o posterior · 64 bits",
-      "smartscreenTitle": "Cuando llegue la beta, verás un aviso de SmartScreen",
-      "smartscreenBody": "La primera beta aún no estará firmada, así que Windows será precavido. Dos clics y pasas.",
+      "smartscreenTitle": "Verás un aviso de SmartScreen",
+      "smartscreenBody": "La beta aún no está firmada, así que Windows es precavido la primera vez que la abres. Dos clics y pasas.",
       "steps": {
         "s1": "Abre el instalador",
         "s2": "Pulsa “Más información”",

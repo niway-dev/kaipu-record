@@ -331,12 +331,12 @@ export function RoadmapLegend() {
 const STEPS = ["s1", "s2", "s3"] as const;
 
 /**
- * Windows, said plainly: on its way, not downloadable. The design's "Download
- * for Windows (beta)" button waits for the installer on the download feed
- * (Windows release design, decision 9); until then the primary action is the
- * Mac download that exists.
+ * Windows, said plainly: a downloadable, unsigned beta (desktop 0.13.0, Windows
+ * release design decision 9). The rows above still show Windows as in progress:
+ * each cell flips to shipped only after the owner's QA on Windows hardware
+ * confirms it (decision 10), so this section is where the beta is offered.
  */
-export function WindowsComingSoon() {
+export function WindowsBeta() {
   const t = useTranslations("roadmap");
 
   return (
@@ -346,13 +346,13 @@ export function WindowsComingSoon() {
         <div {...stylex.props(s.windowsCopy)}>
           <div {...stylex.props(s.windowsEyebrow)}>
             <span {...stylex.props(s.eyebrow)}>{t("windows.eyebrow")}</span>
-            <span {...stylex.props(s.soonBadge)}>{t("windows.badge")}</span>
+            <span {...stylex.props(s.betaBadge)}>{t("windows.badge")}</span>
           </div>
           <h2 {...stylex.props(s.h2)}>{t("windows.title")}</h2>
           <p {...stylex.props(s.h2Serif)}>{t("windows.serif")}</p>
           <p {...stylex.props(s.windowsBody)}>{t("windows.body")}</p>
-          <a href={downloadUrls.macArm64} {...stylex.props(s.download)}>
-            <Apple size={16} aria-hidden />
+          <a href={downloadUrls.windowsX64} {...stylex.props(s.download)}>
+            <PlatformIcon platform="win" size={16} />
             {t("windows.download")}
           </a>
           <p {...stylex.props(s.requirements)}>{t("windows.requirements")}</p>
@@ -889,7 +889,7 @@ const s = stylex.create({
   },
   windowsCopy: { flex: "1 1 0", minWidth: 0, maxWidth: { default: 520, [PHONE]: "none" } },
   windowsEyebrow: { display: "flex", alignItems: "center", gap: 10 },
-  soonBadge: {
+  betaBadge: {
     padding: "3px 9px",
     borderWidth: 1,
     borderStyle: "solid",

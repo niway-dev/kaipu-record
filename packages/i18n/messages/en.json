@@ -242,7 +242,8 @@
     "heroSubtitle": "Kaipu Record captures your screen and camera in high quality, right on your Mac. Private, fast, and account-free.",
     "downloadMacArm": "Download for Mac (Apple Silicon)",
     "downloadMacIntel": "Mac (Intel)",
-    "downloadWindows": "Windows (coming soon)",
+    "downloadWindowsBeta": "Windows (beta)",
+    "downloadWindowsSmartScreen": "The Windows beta is not code-signed yet. If SmartScreen stops it, choose “More info”, then “Run anyway”.",
     "footerTagline": "Record. Share. No fuss.",
     "homeEyebrow": "Kaipu, in four moments",
     "homeHeroSerif": "Get back to work.",
@@ -291,7 +292,7 @@
     "homeFilesLabel": "Your files",
     "homeCtaLead": "Next time,",
     "homeCtaSerif": "show it with Kaipu.",
-    "homeCtaFootnote": "macOS 13 or later · We’ll let you know when Windows is ready.",
+    "homeCtaFootnote": "macOS 13 or later · Windows 10 or later, 64-bit (beta)",
     "homeMadeIn": "Made in Peru",
     "homeRailTotal": "04",
     "homeNavProduct": "Product",
@@ -307,7 +308,7 @@
     "homeHeroPill4": "A folder, not a cloud",
     "homeHeroCtaPrimary": "Download Kaipu for Mac",
     "homeHeroCtaSecondary": "See how it works",
-    "homeHeroFootnote": "Apple Silicon · Intel · Windows coming soon",
+    "homeHeroFootnote": "Apple Silicon · Intel · Windows beta",
     "homeAppTitle": "Kaipu Record",
     "homeAppDisplay": "Built-in Retina Display",
     "homeAppDisplayMeta": "PRIMARY · 2560×1600",
@@ -1382,7 +1383,7 @@
       "eyebrow": "Public roadmap",
       "heading": "What works today, on which platform.",
       "serif": "And what comes next.",
-      "intro": "Kaipu Record runs on macOS today, and Windows is on its way. Every feature below shows where it already works, where it is being built, and what is planned.",
+      "intro": "Kaipu Record runs on macOS, and Windows is in beta. Every feature below shows where it already works, where it is being built, and what is planned.",
       "disclaimer": "Order is a priority, not a promise. Plans move as we learn what people actually need.",
       "count": "{count, plural, one {# item} other {# items}}",
       "showing": "{shown} of {total} features",
@@ -1420,7 +1421,7 @@
       "win": {
         "name": "Windows",
         "line": "Windows 10 or later, 64-bit",
-        "badge": "Coming soon"
+        "badge": "Beta"
       }
     },
     "filters": {
@@ -1437,14 +1438,14 @@
     },
     "windows": {
       "eyebrow": "Windows",
-      "badge": "Coming soon",
-      "title": "Kaipu for Windows is on its way.",
-      "serif": "Recording first, then the rest.",
-      "body": "The Windows build already records, edits and keeps your library. We are getting it ready to ship as a labelled beta. Until the installer is on the download page, every row above shows Windows as in progress or planned, never as shipped.",
-      "download": "Download for Mac",
+      "badge": "Beta",
+      "title": "Kaipu for Windows is in beta.",
+      "serif": "Recording and screenshots, ready to try.",
+      "body": "The Windows beta records your screen, takes screenshots, edits and keeps your library. It is not code-signed yet; signing is in progress. The rows above turn to shipped on Windows one at a time, as each feature is checked on real Windows machines.",
+      "download": "Download for Windows (beta)",
       "requirements": "Windows 10 or later · 64-bit",
-      "smartscreenTitle": "When the beta lands, expect a SmartScreen warning",
-      "smartscreenBody": "The first beta will not be signed yet, so Windows will be cautious. Two clicks get you through.",
+      "smartscreenTitle": "Expect a SmartScreen warning",
+      "smartscreenBody": "The beta is not signed yet, so Windows is cautious the first time you run it. Two clicks get you through.",
       "steps": {
         "s1": "Run the installer",
         "s2": "Click “More info”",
