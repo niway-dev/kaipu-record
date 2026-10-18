@@ -109,3 +109,33 @@ export interface CaptureToastPayload {
   saved: { id: string } | null;
   copied: boolean;
 }
+
+/** What the toast's buttons ask main to do (toast → main, `screenshot:toast-action`). */
+export const CAPTURE_TOAST_ACTIONS = ["annotate", "open-library", "save", "dismiss"] as const;
+export type CaptureToastAction = (typeof CAPTURE_TOAST_ACTIONS)[number];
+
+export function isCaptureToastAction(value: unknown): value is CaptureToastAction {
+  return (CAPTURE_TOAST_ACTIONS as readonly unknown[]).includes(value);
+}
+
+/**
+ * Main → main window (`screenshot:open-saved`): show a saved screenshot, then call
+ * `revealAfterCapture()` so the window comes back already on it. `target: "editor"` is
+ * `/editor/image/:assetId`, `"library"` is `/library/:assetId`.
+ */
+export interface OpenSavedScreenshotRequest {
+  target: "editor" | "library";
+  assetId: string;
+}
+
+/**
+ * Main → main window (`screenshot:open-quiet-capture`): the bytes of a copy-only quiet
+ * capture, handed over once for Annotate. The editor opens them as a `blob` source with
+ * `origin: "quiet"`, so it neither saves nor copies them again.
+ */
+export interface QuietCaptureHandOff {
+  png: ArrayBuffer;
+  width: number;
+  height: number;
+  mode: CaptureMode;
+}
