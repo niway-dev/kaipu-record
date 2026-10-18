@@ -87,8 +87,8 @@ export interface CaptureOverlayDeps {
   /** Watchdog: abandon the pick if the overlays have not all painted within this long. */
   readyTimeoutMs: number;
   /**
-   * Window mode's list of on-screen windows, asked once per pick. The seam for the OS
-   * listers (spec task 2); the default finds nothing.
+   * Window mode's list of on-screen windows, asked once per pick. Production passes the OS
+   * lister (`createWindowLister`); the default finds nothing, so tests never spawn a process.
    */
   windowLister: WindowLister;
 }

@@ -1,5 +1,6 @@
 import type { Display } from "electron";
 import type { CaptureMode, ListedWindow, OverlayAnswer } from "@shared/types/screenshot-capture";
+import type { WindowLister } from "./window-lister";
 
 /** What the user picked on an overlay; shared with the overlay renderer. */
 export type { OverlayAnswer };
@@ -24,17 +25,16 @@ export interface OverlayPort {
 }
 
 /**
- * Where Window mode's list of on-screen windows comes from. The overlay asks once per pick,
- * the first time Window is shown, and renders "Finding windows…" until it answers.
+ * Where Window mode's list of on-screen windows comes from: the port is defined once, in
+ * `window-lister.ts`. The overlay asks once per pick, the first time Window is shown, and
+ * renders "Finding windows…" until it answers. A lister that rejects is treated as an empty
+ * list, never as a stuck overlay.
  *
- * Injection seam: `CaptureOverlayWindows` takes it as `deps.windowLister`. Until the OS
- * listers land (macOS JXA, Windows PowerShell; spec task 2) the default is
- * `NO_WINDOWS_LISTER`, so Window mode shows "No windows on this display" instead of hanging.
- * A lister that rejects is treated as an empty list, never as a stuck overlay.
+ * Injection seam: `CaptureOverlayWindows` takes it as `deps.windowLister`. Production passes
+ * `createWindowLister(process.platform)` (`screenshot-ipc.ts`); the default, used by tests,
+ * is `NO_WINDOWS_LISTER`, so Window mode shows "No windows on this display".
  */
-export interface WindowLister {
-  list(displays: Display[]): Promise<ListedWindow[]>;
-}
+export type { WindowLister };
 
 /** The placeholder lister: finds nothing. */
 export const NO_WINDOWS_LISTER: WindowLister = { list: async () => [] };

@@ -87,7 +87,8 @@ The editor opens only when someone still has to decide what to do with the shot.
 Each line is a test in the implementation plan; the 0.12.0 list still applies.
 
 1. **Kaipu's own windows in the Window list.** The lister drops windows owned by this process
-   (pid on both OSes; Electron handles via `getNativeWindowHandle` as a second filter), so the
+   (by pid on both OSes; on Windows only, Electron's `getNativeWindowHandle` HWNDs are a second
+   filter — on macOS that handle is an `NSView*`, not a CGWindowID, so it cannot match), so the
    overlay, the toast and the hidden main window can never be picked.
 2. **The window list arrives late or never.** The overlay is usable in Frame and Screen at
    once; Window shows the sheet and a "Finding windows…" hint until the list lands, and a
@@ -221,9 +222,9 @@ export interface CaptureToastPayload {
 dismiss`). `screenshot:overlay-state` grows as above.
 - `OverlayPort.pick(ui, displays)` keeps its signature; `ui` is the initial mode. The port gains
   `setWindows(list)` so main can push the list once it has it.
-- A new port `WindowLister { list(): Promise<RawWindow[]> }` in
+- A new port `WindowLister { list(displays: Display[]): Promise<ListedWindow[]> }` in
   `src/main/screenshots/window-lister.ts` with `MacWindowLister` (osascript JXA),
-  `WindowsWindowLister` (PowerShell), and the pure `toListedWindows(raw, displays, selfPids)`
+  `WindowsWindowLister` (PowerShell), and the pure `toListedWindows(raw, displays, self: { pids; handles })`
   that filters, converts to DIP and assigns displays. Tests inject fake raw lists.
 
 ### Backends per mode

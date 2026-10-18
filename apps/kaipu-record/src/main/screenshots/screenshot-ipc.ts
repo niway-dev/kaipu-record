@@ -12,6 +12,7 @@ import { createCaptureHandler, type CaptureWindowHooks } from "./capture-handler
 import { CaptureOverlayWindows } from "./capture-overlay-windows";
 import type { OverlayPort } from "./overlay-port";
 import { createScreenshotProvider } from "./screenshot-capture";
+import { createWindowLister } from "./window-lister";
 import { captureMainEvent } from "../services/analytics.service";
 import { getAppSettings, updateAppSettings } from "../infrastructure/settings-store";
 import { screenshotFilePath } from "../library";
@@ -26,9 +27,11 @@ let overlayWindows: CaptureOverlayWindows | null = null;
 const overlay: OverlayPort = {
   pick: async (ui, displays) => {
     if (!app.isReady()) return { kind: "cancelled" };
-    // The real window listers (macOS JXA, Windows PowerShell) plug in here as
-    // `new CaptureOverlayWindows({ windowLister })`; until then Window lists nothing.
-    overlayWindows ??= new CaptureOverlayWindows();
+    // macOS lists through osascript JXA, Windows through PowerShell; other platforms find
+    // nothing. Our own windows are dropped by pid (plus HWND on Windows).
+    overlayWindows ??= new CaptureOverlayWindows({
+      windowLister: createWindowLister(process.platform),
+    });
     return overlayWindows.pick(ui, displays);
   },
   hideAll: async () => overlayWindows?.hideAll(),
