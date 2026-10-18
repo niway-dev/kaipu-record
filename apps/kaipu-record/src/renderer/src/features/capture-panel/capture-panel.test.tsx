@@ -60,15 +60,15 @@ describe("CapturePanel — tabs", () => {
     expect(requestChooseSource).toHaveBeenCalledTimes(1);
   });
 
-  it("does not capture when a mode row is clicked", () => {
+  it("captures in the chosen mode when a chip is clicked, without touching the stored mode", async () => {
     const requestCaptureScreenshot = vi.fn();
-    window.electronAPI = { ...realApi, requestCaptureScreenshot };
+    const updateSettings = vi.fn();
+    window.electronAPI = { ...realApi, requestCaptureScreenshot, updateSettings };
     render(<CapturePanel />);
     fireEvent.click(screen.getByRole("tab", { name: "Capture" }));
-    fireEvent.click(screen.getByRole("button", { name: /^Frame/ }));
-    fireEvent.click(screen.getByRole("button", { name: /^Window/ }));
-    fireEvent.click(screen.getByRole("button", { name: /^Screen/ }));
-    expect(requestCaptureScreenshot).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole("button", { name: /^Window/ }));
+    expect(requestCaptureScreenshot.mock.calls).toEqual([["window"]]);
+    expect(updateSettings).not.toHaveBeenCalled();
   });
 
   it("captures with the remembered mode from the Capture tab's primary button", async () => {
@@ -81,7 +81,8 @@ describe("CapturePanel — tabs", () => {
     };
     render(<CapturePanel />);
     fireEvent.click(screen.getByRole("tab", { name: "Capture" }));
-    fireEvent.click(await screen.findByRole("button", { name: /^Capture · Screen/ }));
+    await screen.findByText("Last used: Screen. Switch inside the selector.");
+    fireEvent.click(screen.getByRole("button", { name: /^Capture/ }));
     expect(requestCaptureScreenshot.mock.calls).toEqual([["screen"]]);
   });
 
