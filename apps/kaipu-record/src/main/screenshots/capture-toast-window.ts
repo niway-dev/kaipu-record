@@ -25,6 +25,7 @@ export type CaptureToastShowRequest = CaptureToastPayload & { displayId: number 
 export interface ToastWindow {
   readonly webContents: { send(channel: string, payload: unknown): void };
   setAlwaysOnTop(flag: boolean, level: "floating"): void;
+  setContentProtection(enable: boolean): void;
   setVisibleOnAllWorkspaces(
     visible: boolean,
     options: { visibleOnFullScreen: boolean; skipTransformProcessType: boolean },
@@ -239,6 +240,9 @@ export class CaptureToastWindow {
       },
     });
     window.setAlwaysOnTop(true, "floating");
+    // Second guard behind `beforeCapture` dismissing it: excluded from `screencapture` and
+    // `desktopCapturer`, so a toast still on screen never lands in the next shot.
+    window.setContentProtection(true);
     window.on("closed", () => {
       if (this.window !== window) return;
       this.window = null;

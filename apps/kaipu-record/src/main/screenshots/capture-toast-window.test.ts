@@ -29,6 +29,7 @@ class FakeWebContents {
 class FakeWindow {
   webContents = new FakeWebContents();
   setAlwaysOnTop = vi.fn();
+  setContentProtection = vi.fn();
   setVisibleOnAllWorkspaces = vi.fn();
   setBounds = vi.fn();
   showInactive = vi.fn(() => {
@@ -175,6 +176,12 @@ describe("CaptureToastWindow", () => {
       });
       expect(windows[0]!.setAlwaysOnTop).toHaveBeenCalledWith(true, "floating");
       expect(deps.load).toHaveBeenCalledTimes(1);
+    });
+
+    it("is content-protected, so no screenshot or window capture ever contains it", () => {
+      const { toast, windows } = setup();
+      toast.show({ ...COPIED, displayId: 1 });
+      expect(windows[0]!.setContentProtection).toHaveBeenCalledWith(true);
     });
 
     it("is re-targeted by a second capture instead of stacking a second toast", () => {

@@ -76,6 +76,8 @@ describe("createCaptureHandler", () => {
     const unsupported = setup(async () => ({ kind: "unsupported", mode: "window" }));
     await unsupported.handler({ mode: "frame" });
     expect(unsupported.rememberMode).not.toHaveBeenCalled();
+    // Nothing opened: the window comes back as after a cancel.
+    expect(unsupported.windows.afterCapture).toHaveBeenCalledWith("cancelled");
 
     const thrown = setup(vi.fn().mockRejectedValueOnce(new Error("boom")));
     await thrown.handler({ mode: "frame" });
@@ -115,13 +117,13 @@ describe("createCaptureHandler", () => {
     });
     if (out.kind !== "captured") throw new Error("unreachable");
     expect(new Uint8Array(out.png)).toEqual(new Uint8Array([1, 2, 3]));
-    expect(windows.afterCapture).toHaveBeenCalledWith(true);
+    expect(windows.afterCapture).toHaveBeenCalledWith("editor");
   });
 
   it("answers cancelled and restores the window", async () => {
     const { handler, windows } = setup(async () => ({ kind: "cancelled" }));
     expect(await handler({ mode: "frame" })).toEqual({ kind: "cancelled" });
-    expect(windows.afterCapture).toHaveBeenCalledWith(false);
+    expect(windows.afterCapture).toHaveBeenCalledWith("cancelled");
   });
 
   it("answers unsupported with the platform it ran on", async () => {
@@ -233,7 +235,7 @@ describe("createCaptureHandler", () => {
     });
     expect(await handler({ mode: "frame" })).toEqual({ kind: "cancelled" });
     expect(logged).toHaveBeenCalled();
-    expect(windows.afterCapture).toHaveBeenCalledWith(false);
+    expect(windows.afterCapture).toHaveBeenCalledWith("cancelled");
     expect(capture).not.toHaveBeenCalled();
     // The next request is not turned away by a stuck guard.
     expect(await handler({ mode: "frame" })).toEqual({ kind: "cancelled" });
@@ -246,7 +248,7 @@ describe("createCaptureHandler", () => {
     const { handler, windows } = setup(capture);
     expect(await handler({ mode: "frame" })).toEqual({ kind: "cancelled" });
     expect(logged).toHaveBeenCalled();
-    expect(windows.afterCapture).toHaveBeenCalledWith(false);
+    expect(windows.afterCapture).toHaveBeenCalledWith("cancelled");
     capture.mockResolvedValueOnce({ kind: "cancelled" });
     expect(await handler({ mode: "frame" })).toEqual({ kind: "cancelled" });
   });
@@ -293,7 +295,7 @@ describe("createCaptureHandler", () => {
       if (out.kind !== "captured") throw new Error("unreachable");
       expect(out.png.byteLength).toBe(0);
       // The editor will not open: the main window goes back where it was.
-      expect(windows.afterCapture).toHaveBeenCalledWith(false);
+      expect(windows.afterCapture).toHaveBeenCalledWith("quiet");
       // A saved shot is annotated from the vault, so nothing is kept in memory.
       expect(takeLastQuietCapture()).toBeNull();
     });
@@ -308,10 +310,12 @@ describe("createCaptureHandler", () => {
     });
 
     it("Copy with saving manual only copies, never writes the vault, and keeps the bytes once", async () => {
-      const { handler, saveToVault, copyToClipboard } = setup(shot("copy"));
+      const { handler, saveToVault, copyToClipboard, windows } = setup(shot("copy"));
       const out = await handler({ mode: "window" });
       expect(saveToVault).not.toHaveBeenCalled();
       expect(copyToClipboard).toHaveBeenCalledOnce();
+      // Quiet, not cancelled: the window comes back without taking the focus from the app.
+      expect(windows.afterCapture).toHaveBeenCalledExactlyOnceWith("quiet");
       expect(out).toMatchObject({ after: "quiet", saved: null, copied: true, mode: "window" });
       expect(takeLastQuietCapture()).toEqual({
         png: Buffer.from([9, 8, 7]),
@@ -390,7 +394,7 @@ describe("createCaptureHandler", () => {
       if (out.kind !== "captured") throw new Error("unreachable");
       expect(out.after).toBe("editor");
       expect(new Uint8Array(out.png)).toEqual(new Uint8Array([9, 8, 7]));
-      expect(windows.afterCapture).toHaveBeenCalledWith(true);
+      expect(windows.afterCapture).toHaveBeenCalledWith("editor");
       expect(onQuietCapture).not.toHaveBeenCalled();
     });
 

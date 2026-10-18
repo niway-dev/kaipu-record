@@ -45,9 +45,9 @@ export function deferToastUntilAfterCapture(
         pickedDisplayId = null;
         windows.beforeCapture();
       },
-      afterCapture: (editorTakesOver) => {
+      afterCapture: (ending) => {
         try {
-          windows.afterCapture(editorTakesOver);
+          windows.afterCapture(ending);
         } finally {
           flush();
         }

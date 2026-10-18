@@ -15,7 +15,7 @@ function setup() {
   const calls: string[] = [];
   const windows = {
     beforeCapture: vi.fn(() => calls.push("before")),
-    afterCapture: vi.fn((_editor: boolean) => calls.push("after")),
+    afterCapture: vi.fn((_ending: string) => calls.push("after")),
     reveal: vi.fn(() => calls.push("reveal")),
   };
   const showToast = vi.fn(() => calls.push("toast"));
@@ -37,7 +37,7 @@ describe("deferToastUntilAfterCapture", () => {
     seam.onQuietCapture(PAYLOAD);
     expect(showToast).not.toHaveBeenCalled();
 
-    seam.windows.afterCapture(false);
+    seam.windows.afterCapture("quiet");
 
     expect(calls).toEqual(["before", "after", "toast"]);
     expect(showToast).toHaveBeenCalledWith({ ...PAYLOAD, displayId: 3 });
@@ -47,7 +47,7 @@ describe("deferToastUntilAfterCapture", () => {
     const { showToast, seam } = setup();
     seam.windows.beforeCapture();
     seam.onQuietCapture(PAYLOAD);
-    seam.windows.afterCapture(false);
+    seam.windows.afterCapture("quiet");
     expect(showToast).toHaveBeenCalledWith({ ...PAYLOAD, displayId: 7 });
   });
 
@@ -56,7 +56,7 @@ describe("deferToastUntilAfterCapture", () => {
     seam.windows.beforeCapture();
     seam.onQuietCapture(PAYLOAD);
     seam.windows.beforeCapture(); // a new capture starts before the old one finished
-    seam.windows.afterCapture(true);
+    seam.windows.afterCapture("editor");
     expect(showToast).not.toHaveBeenCalled();
   });
 
@@ -64,10 +64,10 @@ describe("deferToastUntilAfterCapture", () => {
     const { showToast, seam } = setup();
     seam.windows.beforeCapture();
     seam.onPick({ kind: "display", mode: "screen", action: "copy", displayId: 3 });
-    seam.windows.afterCapture(false);
+    seam.windows.afterCapture("quiet");
     seam.windows.beforeCapture();
     seam.onQuietCapture(PAYLOAD);
-    seam.windows.afterCapture(false);
+    seam.windows.afterCapture("quiet");
     expect(showToast).toHaveBeenCalledWith({ ...PAYLOAD, displayId: 7 });
   });
 
@@ -78,7 +78,7 @@ describe("deferToastUntilAfterCapture", () => {
     });
     seam.windows.beforeCapture();
     seam.onQuietCapture(PAYLOAD);
-    expect(() => seam.windows.afterCapture(false)).toThrow("window gone");
+    expect(() => seam.windows.afterCapture("quiet")).toThrow("window gone");
     expect(showToast).toHaveBeenCalledTimes(1);
 
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -87,7 +87,7 @@ describe("deferToastUntilAfterCapture", () => {
     });
     seam.windows.beforeCapture();
     seam.onQuietCapture(PAYLOAD);
-    expect(() => seam.windows.afterCapture(false)).not.toThrow();
+    expect(() => seam.windows.afterCapture("quiet")).not.toThrow();
     error.mockRestore();
   });
 

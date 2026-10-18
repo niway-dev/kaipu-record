@@ -13,19 +13,23 @@ import type { OverlayPort } from "./overlay-port";
 import type { ProviderResult, ScreenshotCaptureProvider } from "./screenshot-capture";
 
 /**
+ * How a capture ended, for `afterCapture`: `editor` (the renderer is about to show the
+ * editor and reveals the window itself), `quiet` (main saved and/or copied; the window
+ * comes back where it was, without taking focus), `cancelled` (nothing was captured: Esc,
+ * an unsupported answer or a throw; the window comes back where it was).
+ */
+export type CaptureEnding = "editor" | "quiet" | "cancelled";
+
+/**
  * Window orchestration around a capture, owned by main (which holds the windows).
- * The native `screencapture` overlay floats above everything, so the app must get
- * OUT of the way during a capture instead of coming to the front.
+ * The overlay floats above everything, so the app must get OUT of the way during a
+ * capture instead of coming to the front. Production: `createCaptureWindowHooks`.
  */
 export interface CaptureWindowHooks {
   /** Hide the app so it isn't in the shot. Remembers prior visibility. */
   beforeCapture(): void;
-  /**
-   * After the overlay closes. `editorTakesOver` is true only when the renderer is about
-   * to show the editor (it reveals the window itself); false for a cancel and for a quiet
-   * capture, where the window goes back to its pre-capture visibility.
-   */
-  afterCapture(editorTakesOver: boolean): void;
+  /** After the overlay closes, with how the capture ended. */
+  afterCapture(ending: CaptureEnding): void;
   /** Bring the app to the front (the renderer calls this once it shows the editor). */
   reveal(): void;
 }
@@ -131,7 +135,7 @@ export function createCaptureHandler(
     } finally {
       capturing = false;
       // Only the editor path reveals the window itself; cancel and quiet restore it here.
-      deps.windows.afterCapture(answer.kind === "captured" && answer.after === "editor");
+      deps.windows.afterCapture(answer.kind === "captured" ? answer.after : "cancelled");
     }
     // A throw answers `cancelled` to the renderer but is a failure for the owner's numbers.
     report(

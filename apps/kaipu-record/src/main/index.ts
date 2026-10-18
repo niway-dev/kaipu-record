@@ -38,7 +38,11 @@ import { registerAnalyticsIpc } from "./services/analytics-ipc";
 import { isCaptureMode, type CaptureRequestPayload } from "@shared/types/screenshot-capture";
 import { registerScreenshotHandlers, type ScreenshotHandlers } from "./screenshots/screenshot-ipc";
 import { resolveShortcutCapture, type CaptureShortcut } from "./screenshots/shortcut-capture";
-import { createCaptureToastWindow } from "./screenshots/capture-toast-window";
+import {
+  createCaptureToastWindow,
+  type CaptureToastWindow,
+} from "./screenshots/capture-toast-window";
+import { createCaptureWindowHooks } from "./screenshots/capture-window-hooks";
 import {
   keepLastQuietCapture,
   takeLastQuietCapture,
@@ -335,29 +339,19 @@ function triggerShortcutCapture(action: CaptureShortcut): void {
   triggerCaptureScreenshot({ mode });
 }
 
-/** Remembers whether the app was visible before a capture, to restore on cancel. */
-let captureWasVisible = false;
+/** The toast after a quiet capture; created once the app is ready. */
+let captureToast: CaptureToastWindow | null = null;
 
 /** Window orchestration handed to the screenshot IPC (hide for the shot, reveal after). */
-const captureWindowHooks = {
-  beforeCapture: (): void => {
-    captureWasVisible = mainWindow?.isVisible() ?? false;
-    capturePanel?.hide();
-    mainWindow?.hide();
-    // The bubble is always-on-top and not content-protected (it's meant to be
-    // captured by a *recording*), so it would otherwise sit inside the native
-    // region-select and land in the screenshot too.
-    hub?.hideCameraBubbleForCapture();
-  },
-  afterCapture: (editorTakesOver: boolean): void => {
-    // When the editor opens, the renderer reveals the window once it shows it; here we
-    // only undo the hide when nothing opens (cancel, or a quiet capture) with the app
-    // previously up. A window that was hidden stays hidden.
-    if (!editorTakesOver && captureWasVisible) showMainWindow();
-    hub?.restoreCameraBubbleAfterCapture();
-  },
-  reveal: (): void => bringAppToFront(),
-};
+const captureWindowHooks = createCaptureWindowHooks({
+  mainWindow: () => mainWindow,
+  hideCapturePanel: () => capturePanel?.hide(),
+  dismissToast: () => captureToast?.dismiss(),
+  hideCameraBubble: () => hub?.hideCameraBubbleForCapture(),
+  restoreCameraBubble: () => hub?.restoreCameraBubbleAfterCapture(),
+  showMainWindow,
+  bringAppToFront,
+});
 
 /**
  * The capture toast asked the main window for a saved screenshot (Annotate, Open in
@@ -528,7 +522,7 @@ app.whenReady().then(() => {
 
   // Screenshots: capture/copy/save IPC handlers.
   // The capture toast after a quiet capture (lazy window; shown on the shot's display).
-  const captureToast = createCaptureToastWindow({
+  const toast = createCaptureToastWindow({
     takeQuietCapture: takeLastQuietCapture,
     keepQuietCapture: keepLastQuietCapture,
     saveToVault: async (png, title) => {
@@ -539,8 +533,9 @@ app.whenReady().then(() => {
     openSaved: openSavedScreenshot,
     openQuietCapture,
   });
+  captureToast = toast;
   screenshotHandlers = registerScreenshotHandlers(captureWindowHooks, (request) =>
-    captureToast.show(request),
+    toast.show(request),
   );
 
   /**
