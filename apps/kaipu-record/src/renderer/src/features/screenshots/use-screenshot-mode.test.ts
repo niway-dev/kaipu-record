@@ -22,16 +22,40 @@ describe("useScreenshotMode", () => {
   it("reads the stored current mode", async () => {
     withStoredMode("frame");
     const { result } = renderHook(() => useScreenshotMode());
-    expect(result.current.mode).toBe("area"); // until the settings arrive
+    expect(result.current.mode).toBe("frame"); // until the settings arrive
     await waitFor(() => expect(result.current.mode).toBe("frame"));
   });
 
-  it("persists a new mode and skips a write for the current one", async () => {
-    const updateSettings = withStoredMode("area");
+  it("reads a stored mode other than the default", async () => {
+    withStoredMode("window");
     const { result } = renderHook(() => useScreenshotMode());
-    await waitFor(() => expect(result.current.mode).toBe("area"));
+    await waitFor(() => expect(result.current.mode).toBe("window"));
+  });
 
-    act(() => result.current.setMode("area"));
+  it('never exposes a legacy "area" (or any unknown) stored mode: it reads as Frame', async () => {
+    const getSettings = vi.fn(async () => ({
+      ...DEFAULT_SETTINGS,
+      screenshotMode: "area" as never,
+    }));
+    window.electronAPI = { ...realApi, getSettings };
+    const { result } = renderHook(() => useScreenshotMode());
+    await waitFor(() => expect(getSettings).toHaveBeenCalled());
+    expect(result.current.mode).toBe("frame");
+    window.electronAPI = {
+      ...realApi,
+      getSettings: async () => ({ ...DEFAULT_SETTINGS, screenshotMode: "banana" as never }),
+    };
+    const other = renderHook(() => useScreenshotMode());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(other.result.current.mode).toBe("frame");
+  });
+
+  it("persists a new mode and skips a write for the current one", async () => {
+    const updateSettings = withStoredMode("frame");
+    const { result } = renderHook(() => useScreenshotMode());
+    await waitFor(() => expect(result.current.mode).toBe("frame"));
+
+    act(() => result.current.setMode("frame"));
     expect(updateSettings).not.toHaveBeenCalled();
 
     act(() => result.current.setMode("screen"));

@@ -29,14 +29,24 @@ function query(ui: OverlayQuery["ui"], overrides: Partial<OverlayQuery> = {}): O
 }
 
 /** Main's first state message, as it reaches an overlay: the frame is on display 42. */
-const FRAME_ON_42: OverlayState = { hoverDisplayId: null, frameDisplayId: 42 };
+const FRAME_ON_42: OverlayState = {
+  mode: "frame",
+  hoverDisplayId: null,
+  frameDisplayId: 42,
+  windows: null,
+};
 
 function fakeApi(
   frames: Record<string, CaptureRect> = {},
   initialState: OverlayState | null = FRAME_ON_42,
 ) {
   let settings: AppSettings = { ...DEFAULT_SETTINGS, screenshotFrame: frames };
-  let state: OverlayState = initialState ?? { hoverDisplayId: null, frameDisplayId: null };
+  let state: OverlayState = initialState ?? {
+    mode: "frame",
+    hoverDisplayId: null,
+    frameDisplayId: null,
+    windows: null,
+  };
   let stateListener: ((state: OverlayState) => void) | null = null;
   let ackListener: (() => void) | null = null;
   const api = {
@@ -115,7 +125,7 @@ describe("CaptureOverlay", () => {
       return frames.length;
     });
     const { api, requestHiddenAck } = fakeApi();
-    render(<CaptureOverlay query={query("area")} api={api} />);
+    render(<CaptureOverlay query={query("screen")} api={api} />);
 
     requestHiddenAck();
     expect(api.captureOverlay.hiddenAck).not.toHaveBeenCalled();
@@ -133,7 +143,7 @@ describe("CaptureOverlay", () => {
         return frames.length;
       });
       const { api, requestHiddenAck } = fakeApi();
-      render(<CaptureOverlay query={query("area")} api={api} />);
+      render(<CaptureOverlay query={query("screen")} api={api} />);
 
       requestHiddenAck();
       vi.advanceTimersByTime(HIDDEN_ACK_FALLBACK_MS - 1);
@@ -151,7 +161,7 @@ describe("CaptureOverlay", () => {
 });
 
 describe("display label", () => {
-  it.each(["area", "screen", "frame"] as const)("names the display on the %s overlay", (ui) => {
+  it.each(["frame", "window", "screen"] as const)("names the display on the %s overlay", (ui) => {
     const { api } = fakeApi();
     render(<CaptureOverlay query={query(ui)} api={api} />);
     expect(screen.getByText("Display 2")).toBeInTheDocument();
@@ -179,7 +189,12 @@ describe("ScreenChooser", () => {
     render(<CaptureOverlay query={query("screen", { displayId: 7, index: 1 })} api={api} />);
 
     press("2");
-    expect(answer).toHaveBeenCalledExactlyOnceWith({ kind: "display", displayId: 42 });
+    expect(answer).toHaveBeenCalledExactlyOnceWith({
+      kind: "display",
+      mode: "screen",
+      action: "capture",
+      displayId: 42,
+    });
   });
 
   it("ignores digits past the display count and digits with a modifier", () => {
@@ -193,14 +208,24 @@ describe("ScreenChooser", () => {
     expect(answer).not.toHaveBeenCalled();
 
     press("3");
-    expect(answer).toHaveBeenCalledExactlyOnceWith({ kind: "display", displayId: 9 });
+    expect(answer).toHaveBeenCalledExactlyOnceWith({
+      kind: "display",
+      mode: "screen",
+      action: "capture",
+      displayId: 9,
+    });
   });
 
   it("answers this display on a click", () => {
     const { api, answer } = fakeApi();
     render(<CaptureOverlay query={query("screen")} api={api} />);
     fireEvent.click(screen.getByRole("button", { name: /capture this display/i }));
-    expect(answer).toHaveBeenCalledExactlyOnceWith({ kind: "display", displayId: 42 });
+    expect(answer).toHaveBeenCalledExactlyOnceWith({
+      kind: "display",
+      mode: "screen",
+      action: "capture",
+      displayId: 42,
+    });
   });
 
   it("reports hover once and highlights only when main says this display is hovered", () => {
@@ -266,6 +291,8 @@ describe("FrameBox", () => {
     await waitFor(() =>
       expect(answer).toHaveBeenCalledExactlyOnceWith({
         kind: "rect",
+        mode: "frame",
+        action: "capture",
         displayId: 42,
         rect: remembered,
       }),
@@ -296,12 +323,13 @@ describe("FrameBox", () => {
     expect(frameGeometry()).toEqual({ x: 0, y: 25, width: 1600, height: 975 });
   });
 
-  it("opens on a centered third of the display when nothing is remembered", async () => {
+  it("opens on a centered box of 60 % of the work area when nothing is remembered", async () => {
     const { api } = fakeApi();
     render(<CaptureOverlay query={query("frame")} api={api} />);
 
     await screen.findByTestId("capture-frame");
-    expect(frameGeometry()).toEqual({ x: 533, y: 333, width: 533, height: 333 });
+    // Work area 1600 × 975 at y = 25 (the menu bar): 960 × 585, centred in it.
+    expect(frameGeometry()).toEqual({ x: 320, y: 220, width: 960, height: 585 });
   });
 
   it("moves with a body drag and answers the moved frame from the Capture button", async () => {
@@ -319,6 +347,8 @@ describe("FrameBox", () => {
     await waitFor(() =>
       expect(answer).toHaveBeenCalledExactlyOnceWith({
         kind: "rect",
+        mode: "frame",
+        action: "capture",
         displayId: 42,
         rect: { x: 150, y: 140, width: 400, height: 300 },
       }),
@@ -531,32 +561,154 @@ describe("Frame on several displays", () => {
   });
 });
 
-describe("AreaDrag", () => {
-  it("answers the dragged rectangle on release", () => {
-    const { api, answer } = fakeApi();
-    render(<CaptureOverlay query={query("area")} api={api} />);
-    const sheet = screen.getByTestId("capture-area");
+describe("FrameBox drawing on the dim sheet", () => {
+  const REMEMBERED = { x: 100, y: 120, width: 400, height: 300 };
 
-    fireEvent.pointerDown(sheet, { button: 0, clientX: 300, clientY: 250 });
-    fireEvent.pointerMove(sheet, { clientX: 100, clientY: 100 });
+  async function setup(frames: Record<string, CaptureRect> = { "42": REMEMBERED }) {
+    const fake = fakeApi(frames);
+    const { container } = render(<CaptureOverlay query={query("frame")} api={fake.api} />);
+    await screen.findByTestId("capture-frame");
+    return { ...fake, sheet: container.firstElementChild as HTMLElement };
+  }
+
+  it("a drag that starts outside the box draws a new one, and the release keeps it", async () => {
+    const { sheet } = await setup();
+
+    fireEvent.pointerDown(sheet, { button: 0, clientX: 800, clientY: 600 });
+    fireEvent.pointerMove(sheet, { clientX: 1000, clientY: 750 });
+    expect(frameGeometry()).toEqual({ x: 800, y: 600, width: 200, height: 150 });
     expect(screen.getByText("200 × 150")).toBeInTheDocument();
-    fireEvent.pointerUp(sheet, { clientX: 100, clientY: 100 });
+    fireEvent.pointerUp(sheet, { clientX: 1000, clientY: 750 });
 
-    expect(answer).toHaveBeenCalledExactlyOnceWith({
+    expect(frameGeometry()).toEqual({ x: 800, y: 600, width: 200, height: 150 });
+  });
+
+  it("draws in any direction: dragging up and to the left normalises the corners", async () => {
+    const { sheet } = await setup();
+
+    fireEvent.pointerDown(sheet, { button: 0, clientX: 1000, clientY: 750 });
+    fireEvent.pointerMove(sheet, { clientX: 800, clientY: 600 });
+    fireEvent.pointerUp(sheet, { clientX: 800, clientY: 600 });
+
+    expect(frameGeometry()).toEqual({ x: 800, y: 600, width: 200, height: 150 });
+  });
+
+  it("keeps the drawn box inside the work area (never under the menu bar)", async () => {
+    const { sheet } = await setup();
+
+    fireEvent.pointerDown(sheet, { button: 0, clientX: 800, clientY: 600 });
+    fireEvent.pointerMove(sheet, { clientX: 900, clientY: 0 });
+    fireEvent.pointerUp(sheet, { clientX: 900, clientY: 0 });
+
+    expect(frameGeometry()).toEqual({ x: 800, y: 25, width: 100, height: 575 });
+  });
+
+  it("answers the drawn box on Enter, and remembers it for this display", async () => {
+    const { sheet, answer, api } = await setup();
+
+    fireEvent.pointerDown(sheet, { button: 0, clientX: 800, clientY: 600 });
+    fireEvent.pointerMove(sheet, { clientX: 1000, clientY: 750 });
+    fireEvent.pointerUp(sheet, { clientX: 1000, clientY: 750 });
+    press("Enter");
+
+    const drawn = { x: 800, y: 600, width: 200, height: 150 };
+    await waitFor(() =>
+      expect(answer).toHaveBeenCalledExactlyOnceWith({
+        kind: "rect",
+        mode: "frame",
+        action: "capture",
+        displayId: 42,
+        rect: drawn,
+      }),
+    );
+    expect(api.updateSettings).toHaveBeenCalledWith({ screenshotFrame: { "42": drawn } });
+  });
+
+  it("a click on the sheet that barely moves keeps the box it found", async () => {
+    const { sheet, answer } = await setup();
+
+    fireEvent.pointerDown(sheet, { button: 0, clientX: 800, clientY: 600 });
+    fireEvent.pointerMove(sheet, { clientX: 802, clientY: 598 });
+    fireEvent.pointerUp(sheet, { clientX: 802, clientY: 598 });
+
+    expect(frameGeometry()).toEqual(REMEMBERED);
+    expect(answer).not.toHaveBeenCalled();
+  });
+
+  it("still moves from the body and resizes from a handle (a press on the box does not draw)", async () => {
+    const { sheet } = await setup();
+
+    fireEvent.pointerDown(sheet, { button: 0, clientX: 300, clientY: 270 });
+    fireEvent.pointerMove(sheet, { clientX: 350, clientY: 290 });
+    fireEvent.pointerUp(sheet, { clientX: 350, clientY: 290 });
+    expect(frameGeometry()).toEqual({ x: 150, y: 140, width: 400, height: 300 });
+  });
+
+  it("ignores a press from a button other than the primary one", async () => {
+    const { sheet } = await setup();
+
+    fireEvent.pointerDown(sheet, { button: 2, clientX: 800, clientY: 600 });
+    fireEvent.pointerMove(sheet, { clientX: 1000, clientY: 750 });
+    expect(frameGeometry()).toEqual(REMEMBERED);
+  });
+
+  it.each(["1", "2", "3", "x"])(
+    "the %s key mid-drag ends the drag: the half-drawn box is gone and the pointer no longer draws",
+    async (key) => {
+      const { sheet, answer } = await setup();
+
+      fireEvent.pointerDown(sheet, { button: 0, clientX: 800, clientY: 600 });
+      fireEvent.pointerMove(sheet, { clientX: 1000, clientY: 750 });
+      expect(frameGeometry()).toEqual({ x: 800, y: 600, width: 200, height: 150 });
+
+      press(key);
+      expect(frameGeometry()).toEqual(REMEMBERED);
+
+      fireEvent.pointerMove(sheet, { clientX: 1200, clientY: 800 });
+      fireEvent.pointerUp(sheet, { clientX: 1200, clientY: 800 });
+      expect(frameGeometry()).toEqual(REMEMBERED);
+      expect(answer).not.toHaveBeenCalled();
+    },
+  );
+
+  it("a key mid-move also ends the move and restores the box", async () => {
+    const { sheet } = await setup();
+
+    fireEvent.pointerDown(sheet, { button: 0, clientX: 300, clientY: 270 });
+    fireEvent.pointerMove(sheet, { clientX: 350, clientY: 290 });
+    press("2");
+    fireEvent.pointerMove(sheet, { clientX: 500, clientY: 400 });
+
+    expect(frameGeometry()).toEqual(REMEMBERED);
+  });
+
+  it("Enter mid-drag ends the drag first, then answers the box as drawn so far", async () => {
+    const { sheet, answer } = await setup();
+
+    fireEvent.pointerDown(sheet, { button: 0, clientX: 800, clientY: 600 });
+    fireEvent.pointerMove(sheet, { clientX: 1000, clientY: 750 });
+    press("Enter");
+    // The pointer keeps moving after the drag ended: it must not change what was answered.
+    fireEvent.pointerMove(sheet, { clientX: 1300, clientY: 900 });
+
+    await waitFor(() => expect(answer).toHaveBeenCalledOnce());
+    expect(answer).toHaveBeenCalledWith({
       kind: "rect",
+      mode: "frame",
+      action: "capture",
       displayId: 42,
-      rect: { x: 100, y: 100, width: 200, height: 150 },
+      rect: { x: 800, y: 600, width: 200, height: 150 },
     });
   });
 
-  it("ignores a click that moves less than 4 px", () => {
-    const { api, answer } = fakeApi();
-    render(<CaptureOverlay query={query("area")} api={api} />);
-    const sheet = screen.getByTestId("capture-area");
+  it("a modifier key alone (the start of a shortcut) does not end the drag", async () => {
+    const { sheet } = await setup();
 
-    fireEvent.pointerDown(sheet, { button: 0, clientX: 300, clientY: 250 });
-    fireEvent.pointerUp(sheet, { clientX: 303, clientY: 247 });
+    fireEvent.pointerDown(sheet, { button: 0, clientX: 800, clientY: 600 });
+    fireEvent.pointerMove(sheet, { clientX: 1000, clientY: 750 });
+    press("Meta");
+    fireEvent.pointerMove(sheet, { clientX: 1100, clientY: 800 });
 
-    expect(answer).not.toHaveBeenCalled();
+    expect(frameGeometry()).toEqual({ x: 800, y: 600, width: 300, height: 200 });
   });
 });

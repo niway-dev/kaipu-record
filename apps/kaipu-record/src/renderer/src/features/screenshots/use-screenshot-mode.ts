@@ -1,10 +1,10 @@
 import { useCallback } from "react";
 import { useAppSettings } from "@renderer/pages/settings/use-app-settings";
 import { DEFAULT_SETTINGS } from "@shared/types";
-import type { CaptureMode } from "@shared/types/screenshot-capture";
+import { isCaptureMode, type CaptureMode } from "@shared/types/screenshot-capture";
 
 export interface ScreenshotModeStore {
-  /** The one current screenshot mode (`AppSettings.screenshotMode`); Area until loaded. */
+  /** The one current screenshot mode (`AppSettings.screenshotMode`); Frame until loaded. */
   mode: CaptureMode;
   /** Make `mode` current: persisted by main and broadcast to every window. */
   setMode(mode: CaptureMode): void;
@@ -18,7 +18,10 @@ export interface ScreenshotModeStore {
  */
 export function useScreenshotMode(): ScreenshotModeStore {
   const { settings, update } = useAppSettings();
-  const mode = settings?.screenshotMode ?? DEFAULT_SETTINGS.screenshotMode;
+  // Main's merge already maps a legacy "area" to Frame; this is the renderer's own guard,
+  // so no code path can ever hold a mode that no longer exists.
+  const stored = settings?.screenshotMode;
+  const mode = isCaptureMode(stored) ? stored : DEFAULT_SETTINGS.screenshotMode;
   const setMode = useCallback(
     (next: CaptureMode) => {
       if (next === mode) return;

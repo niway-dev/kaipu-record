@@ -43,7 +43,7 @@ export function ScreenChooser({ query, bridge, send }: ScreenChooserProps): Reac
       const picked = ids[Number(event.key) - 1];
       if (picked === undefined) return;
       event.preventDefault();
-      send({ kind: "display", displayId: picked });
+      send({ kind: "display", mode: "screen", action: "capture", displayId: picked });
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -55,7 +55,7 @@ export function ScreenChooser({ query, bridge, send }: ScreenChooserProps): Reac
     bridge.hover(next);
   };
 
-  const pick = (): void => send({ kind: "display", displayId });
+  const pick = (): void => send({ kind: "display", mode: "screen", action: "capture", displayId });
 
   return (
     <div

@@ -37,7 +37,7 @@ describe("useScreenshotCapture", () => {
   });
 
   describe("while the recorder is busy", () => {
-    const modes = ["area", "screen", "frame"] as const;
+    const modes = ["frame", "window", "screen"] as const;
     const statuses = ["counting", "starting", "recording", "paused", "finalizing"];
     for (const status of statuses) {
       it.each(modes)(`${status}: %s toasts and never calls captureScreenshot`, async (mode) => {
@@ -52,17 +52,17 @@ describe("useScreenshotCapture", () => {
     }
   });
 
-  it("opens the editor and reveals the app on captured, defaulting to area", async () => {
+  it("opens the editor and reveals the app on captured, defaulting to frame", async () => {
     const api = stubApi({
       kind: "captured",
       png: new ArrayBuffer(4),
       width: 10,
       height: 5,
-      mode: "area",
+      mode: "frame",
     });
     const { result } = renderHook(() => useScreenshotCapture());
     await act(() => result.current.capture());
-    expect(api.captureScreenshot).toHaveBeenCalledWith("area");
+    expect(api.captureScreenshot).toHaveBeenCalledWith("frame");
     expect(openCapture).toHaveBeenCalledWith(
       expect.objectContaining({ kind: "blob", width: 10, height: 5 }),
     );
@@ -80,7 +80,7 @@ describe("useScreenshotCapture", () => {
   });
 
   it("toasts the Windows message on unsupported", async () => {
-    const api = stubApi({ kind: "unsupported", mode: "area", platform: "win32" });
+    const api = stubApi({ kind: "unsupported", mode: "frame", platform: "win32" });
     const { result } = renderHook(() => useScreenshotCapture());
     await act(() => result.current.capture());
     expect(showToast).toHaveBeenCalledWith({ message: "captureUnsupportedWindows" });
@@ -89,7 +89,7 @@ describe("useScreenshotCapture", () => {
   });
 
   it("toasts the generic message on another platform", async () => {
-    stubApi({ kind: "unsupported", mode: "area", platform: "linux" });
+    stubApi({ kind: "unsupported", mode: "frame", platform: "linux" });
     const { result } = renderHook(() => useScreenshotCapture());
     await act(() => result.current.capture());
     expect(showToast).toHaveBeenCalledWith({ message: "captureUnsupported" });

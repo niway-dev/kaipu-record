@@ -22,7 +22,8 @@
   touch-action: none;
 }
 
-.area {
+/* Frame: pressing outside the box draws a new one. */
+.drawable {
   cursor: crosshair;
 }
 
@@ -120,28 +121,6 @@
 .chooser:hover .movePill,
 .chooser:focus-visible .movePill {
   border-color: var(--overlay-accent);
-}
-
-/* ── The Area drag rectangle: a 1 px white border ─────────────── */
-
-.box {
-  position: absolute;
-  box-sizing: border-box;
-  border: 1px solid #fff;
-}
-
-.pill {
-  position: absolute;
-  padding: 2px var(--space-sm);
-  font-family: var(--font-mono);
-  font-size: var(--font-size-xs);
-  font-variant-numeric: tabular-nums;
-  color: #fff;
-  white-space: nowrap;
-  background: var(--overlay-pill-bg);
-  border: 1px solid var(--overlay-pill-line);
-  border-radius: 6px;
-  pointer-events: none;
 }
 
 /* ── The Frame box ─────────────────────────────────────────────── */

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { KaipuElectronAPI } from "@shared/types/electron-api";
 import type { CaptureRect, OverlayAnswer } from "@shared/types/screenshot-capture";
 import { useTranslations } from "@kaipu/i18n";
-import { AreaDrag } from "./area-drag";
 import { FrameBox } from "./frame-box";
 import type { OverlayQuery } from "./overlay-query";
 import { ScreenChooser } from "./screen-chooser";
@@ -48,7 +47,7 @@ interface CaptureOverlayProps {
 
 /**
  * The renderer side of one capture overlay window (`?window=capture-overlay`): a
- * full-window dim sheet with the Area drag, Screen chooser or Frame box on top. It only
+ * full-window dim sheet with the Screen chooser or the Frame box on top. It only
  * answers "this rectangle / this display" or "cancelled"; main captures the pixels.
  *
  * Esc anywhere cancels. Only the first answer is sent: a second Esc, or Enter after a
@@ -121,8 +120,6 @@ export function CaptureOverlay({
   const body =
     query.ui === "screen" ? (
       <ScreenChooser query={query} bridge={bridge} send={send} />
-    ) : query.ui === "area" ? (
-      <AreaDrag query={query} send={send} />
     ) : (
       <FrameMode query={query} api={api} send={send} />
     );
@@ -228,13 +225,16 @@ function ActiveFrame({
 
   const confirm = useCallback(
     (rect: CaptureRect) => {
-      send({ kind: "rect", displayId: query.displayId, rect }, async () => {
-        // Re-read so another display's remembered frame is kept, not overwritten.
-        const current = await api.getSettings();
-        await api.updateSettings({
-          screenshotFrame: { ...current.screenshotFrame, [key]: rect },
-        });
-      });
+      send(
+        { kind: "rect", mode: "frame", action: "capture", displayId: query.displayId, rect },
+        async () => {
+          // Re-read so another display's remembered frame is kept, not overwritten.
+          const current = await api.getSettings();
+          await api.updateSettings({
+            screenshotFrame: { ...current.screenshotFrame, [key]: rect },
+          });
+        },
+      );
     },
     [api, key, query.displayId, send],
   );

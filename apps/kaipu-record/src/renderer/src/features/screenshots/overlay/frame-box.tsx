@@ -20,21 +20,27 @@ const TOOLBAR_HALF_WIDTH_DIP = 170;
 /** Room the size pill needs above the frame before it moves inside. */
 const PILL_ROOM_DIP = 30;
 
+/** A press that moves less than this (DIP) on both axes is a click, not a drag. */
+export const MIN_DRAG_DIP = 4;
+/** The share of the work area the first box covers when nothing is remembered. */
+const DEFAULT_BOX_SHARE = 0.6;
+
 /**
  * The frame this overlay opens with: the remembered one for this display, else a
- * centered rectangle one third of the display, either way clamped to the work area
+ * centered box of 60 % of the work area, either way clamped to the work area
  * (Failure 8: a frame remembered before a resolution change is moved, not dropped).
  */
 export function initialFrame(
   query: Pick<OverlayQuery, "displayId" | "bounds" | "work">,
   remembered: CaptureRect | null,
 ): CaptureRect {
-  const { width, height } = query.bounds;
+  const area = workAreaInWindow(query);
+  const margin = (1 - DEFAULT_BOX_SHARE) / 2;
   const fallback = {
-    x: width / 3,
-    y: height / 3,
-    width: width / 3,
-    height: height / 3,
+    x: area.x + area.width * margin,
+    y: area.y + area.height * margin,
+    width: area.width * DEFAULT_BOX_SHARE,
+    height: area.height * DEFAULT_BOX_SHARE,
   };
   return clampFrameToDisplay(remembered ?? fallback, {
     id: query.displayId,
@@ -59,9 +65,38 @@ function toPoint(clientX: number, clientY: number, area: CaptureRect): Pt {
   return { x: (clientX - area.x) / area.width, y: (clientY - area.y) / area.height };
 }
 
-type Drag =
+/** The rectangle spanned by two window points, kept inside the work area, at least 1x1 DIP. */
+export function drawnRect(from: Pt, to: Pt, area: CaptureRect): CaptureRect {
+  const clampX = (value: number): number =>
+    Math.min(Math.max(Math.round(value), area.x), area.x + area.width);
+  const clampY = (value: number): number =>
+    Math.min(Math.max(Math.round(value), area.y), area.y + area.height);
+  const x1 = clampX(from.x);
+  const y1 = clampY(from.y);
+  const x2 = clampX(to.x);
+  const y2 = clampY(to.y);
+  const x = Math.min(Math.min(x1, x2), area.x + area.width - 1);
+  const y = Math.min(Math.min(y1, y2), area.y + area.height - 1);
+  return {
+    x,
+    y,
+    width: Math.max(1, Math.abs(x2 - x1)),
+    height: Math.max(1, Math.abs(y2 - y1)),
+  };
+}
+
+/**
+ * `origin` is the box as it was when the drag began: a key press mid-drag restores it, so
+ * no half-drawn or half-moved box outlives the drag.
+ */
+type Drag = { origin: CaptureRect } & (
   | { kind: "move"; from: Pt; start: CropRect }
-  | { kind: "resize"; handle: HandleId; start: CropRect };
+  | { kind: "resize"; handle: HandleId; start: CropRect }
+  | { kind: "draw"; from: Pt; moved: boolean }
+);
+
+/** Keys that only change what the next key means; they must not cancel a drag. */
+const MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "Meta"]);
 
 interface FrameBoxProps {
   query: OverlayQuery;
@@ -71,8 +106,9 @@ interface FrameBoxProps {
 }
 
 /**
- * Frame mode: a resizable rectangle with eight handles and a draggable body. Enter or
- * Capture confirms it; Esc (handled by the overlay) cancels. Geometry is window-local
+ * Frame mode: a resizable rectangle with eight handles and a draggable body, redrawn from
+ * scratch by dragging on the dim sheet outside it. Enter or Capture confirms it; Esc
+ * (handled by the overlay) cancels. A key press during a drag ends the drag first. Geometry is window-local
  * DIP, which is display-relative because the window covers the display.
  */
 export function FrameBox({ query, remembered, onConfirm }: FrameBoxProps): React.JSX.Element {
@@ -94,9 +130,16 @@ export function FrameBox({ query, remembered, onConfirm }: FrameBoxProps): React
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key !== "Enter") return;
-      event.preventDefault();
-      confirm.current(latest.current);
+      if (MODIFIER_KEYS.has(event.key)) return;
+      // Whatever the key does next (confirm, switch mode, cancel), the drag ends first.
+      const dragging = drag.current;
+      drag.current = null;
+      if (event.key === "Enter") {
+        event.preventDefault();
+        confirm.current(latest.current);
+        return;
+      }
+      if (dragging) setFrame(dragging.origin);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -124,15 +167,38 @@ export function FrameBox({ query, remembered, onConfirm }: FrameBoxProps): React
       event.clientX <= frame.x + frame.width &&
       event.clientY >= frame.y &&
       event.clientY <= frame.y + frame.height;
-    if (handle) drag.current = { kind: "resize", handle, start: crop };
-    else if (inside) drag.current = { kind: "move", from: point, start: crop };
-    else return;
+    const origin = frame;
+    if (handle) drag.current = { origin, kind: "resize", handle, start: crop };
+    else if (inside) drag.current = { origin, kind: "move", from: point, start: crop };
+    else {
+      // The dim sheet: press, drag and release defines a new box.
+      drag.current = {
+        origin,
+        kind: "draw",
+        from: { x: event.clientX, y: event.clientY },
+        moved: false,
+      };
+    }
     event.currentTarget.setPointerCapture?.(event.pointerId);
   };
 
   const onPointerMove = (event: React.PointerEvent<HTMLDivElement>): void => {
     const current = drag.current;
     if (!current) return;
+    if (current.kind === "draw") {
+      const { from } = current;
+      // A click that barely moves keeps the box it found; only a real drag replaces it.
+      if (!current.moved) {
+        const travelled = Math.max(
+          Math.abs(event.clientX - from.x),
+          Math.abs(event.clientY - from.y),
+        );
+        if (travelled < MIN_DRAG_DIP) return;
+        current.moved = true;
+      }
+      setFrame(drawnRect(from, { x: event.clientX, y: event.clientY }, workAreaInWindow(query)));
+      return;
+    }
     const point = toPoint(event.clientX, event.clientY, area);
     const next =
       current.kind === "resize"
@@ -156,7 +222,7 @@ export function FrameBox({ query, remembered, onConfirm }: FrameBoxProps): React
 
   return (
     <div
-      className={styles.sheet}
+      className={`${styles.sheet} ${styles.drawable}`}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={endDrag}

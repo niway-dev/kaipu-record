@@ -1,5 +1,5 @@
 import React from "react";
-import { Camera, CircleDot, Frame, Monitor, SquareDashed, type LucideIcon } from "lucide-react";
+import { AppWindow, Camera, CircleDot, Frame, Monitor, type LucideIcon } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { formatElapsed } from "@renderer/features/recording/elapsed";
 import type { ShortcutLabels } from "@renderer/features/shortcuts/use-shortcut-labels";
@@ -9,19 +9,19 @@ import { useSupportedCaptureModes } from "./use-supported-capture-modes";
 import styles from "./capture-mode-buttons.module.css";
 
 const MODE_ICON: Record<CaptureMode, LucideIcon> = {
-  area: SquareDashed,
-  screen: Monitor,
   frame: Frame,
+  window: AppWindow,
+  screen: Monitor,
 };
 
 const MODE_LABEL = {
-  area: "modeArea",
-  screen: "modeScreen",
   frame: "modeFrame",
+  window: "modeWindow",
+  screen: "modeScreen",
 } as const satisfies Record<CaptureMode, string>;
 
 /** The mode every unavailable current mode falls back to. */
-const FALLBACK_MODE: CaptureMode = "area";
+const FALLBACK_MODE: CaptureMode = "frame";
 
 /** A recording in progress: everything is paused, and the page offers to stop it. */
 export interface PickerRecording {
@@ -43,18 +43,18 @@ interface CaptureModeButtonsProps {
 
 /**
  * The screenshot mode picker, shared by the tray panel and the Screenshots page: one
- * primary button that captures with the CURRENT mode, and the three modes (Area, Screen,
- * Frame) as cards or rows that only select: clicking one makes it current (remembered)
+ * primary button that captures with the CURRENT mode, and the three modes (Frame, Window,
+ * Screen) as cards or rows that only select: clicking one makes it current (remembered)
  * and never captures. The button and the shortcuts capture.
  *
  * A mode the platform cannot serve stays visible but disabled, with the reason in place
  * of its shortcut: hiding it would leave no explanation, and a live button would be a
- * silent no-op. If that mode is the current one, the primary button captures with Area
+ * silent no-op. If that mode is the current one, the primary button captures with Frame
  * and says so.
  *
  * Shortcuts: the generic capture shortcut captures with the current mode, so it is shown
- * on the primary button and on whichever mode is current; Screen and Frame also show
- * their own. Area has no shortcut of its own.
+ * on the primary button and on whichever mode is current; Frame, Window and
+ * Screen also show their own.
  */
 export function CaptureModeButtons({
   variant,
@@ -82,7 +82,7 @@ export function CaptureModeButtons({
     if (mode === current) return shortcuts?.captureScreenshot;
     if (mode === "screen") return shortcuts?.captureScreen;
     if (mode === "frame") return shortcuts?.captureFrame;
-    return undefined;
+    return shortcuts?.captureWindow;
   };
 
   const hint = busy
@@ -154,10 +154,9 @@ export function CaptureModeButtons({
   }
 
   const line: Record<CaptureMode, string> = {
-    // The Space-for-a-window trick is macOS's own selector; the Windows overlay has none.
-    area: isWindows ? t("modeAreaLineBasic") : t("modeAreaLine"),
-    screen: t("modeScreenLine"),
     frame: t("modeFrameLine"),
+    window: t("modeWindowLine"),
+    screen: t("modeScreenLine"),
   };
 
   return (

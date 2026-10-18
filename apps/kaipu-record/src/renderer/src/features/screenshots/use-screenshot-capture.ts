@@ -10,7 +10,7 @@ export function useScreenshotCapture(): { capture: (mode?: CaptureMode) => Promi
   const { openCapture } = useOpenInEditor();
   const t = useTranslations("screenshots");
   const capture = useCallback(
-    async (mode: CaptureMode = "area") => {
+    async (mode: CaptureMode = "frame") => {
       // A recording — including its countdown/starting phase — must never be
       // interrupted by a screenshot: it would race the native region selector
       // against the recording start, and bringing the window forward afterward
