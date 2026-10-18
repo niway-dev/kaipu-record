@@ -5,35 +5,59 @@ description: The /roadmap page that shows what Kaipu Record already ships and wh
 
 # Public roadmap page
 
-> **Status: 🟢 Ready to validate.** The page builds clean and its content was refreshed on
-> 2026-10-14 (see [refresh log](#refresh-log)). It has not been reviewed in production or on
-> a real device yet.
+> **Status: 🟢 Ready to validate.** Redesigned on 2026-10-18 with a state per platform
+> (see [refresh log](#refresh-log)). The page builds clean; it has not been reviewed in
+> production or on a real device yet.
 
-A public timeline at `https://kaipu.app/roadmap`, grouped by **state** rather than by date.
-The goal is to show momentum — what already works today sits above what is planned — without
-committing to delivery dates that age badly the moment a plan moves.
+A public roadmap at `https://kaipu.app/roadmap`: one row per feature, with a **macOS** and a
+**Windows** state on each row, grouped by **state** rather than by date. The goal is to show
+momentum — what already works today sits above what is planned — without committing to
+delivery dates that age badly the moment a plan moves.
+
+The layout comes from the Claude Design project 71546ef1, file `Kaipu Roadmap.dc.html`: a
+summary card per platform, a sticky filter bar (platform + states), the grouped list, a
+legend, and a Windows section. **Only the layout comes from the mockup.** Its states were
+not true — it showed a downloadable Windows beta, Window capture as shipped, an invented
+Continuity Camera row, and auto-zoom as in progress — so every state was checked against
+the repo instead.
 
 ## Where it lives
 
 | Piece           | Path                                                         |
 | --------------- | ------------------------------------------------------------ |
 | Route           | `apps/web-hono/src/routes/roadmap.tsx`                       |
-| Timeline        | `apps/web-hono/src/components/roadmap/roadmap-timeline.tsx`  |
+| Page sections   | `apps/web-hono/src/components/roadmap/roadmap-page.tsx`      |
 | Source of truth | `apps/web-hono/src/components/roadmap/roadmap-config.ts`     |
 | Copy (en + es)  | `roadmap` namespace in `packages/i18n/messages/{en,es}.json` |
-| Entry points    | `LandingNav`, `Footer`, `apps/web-hono/public/sitemap.xml`   |
+| Entry points    | `TopNav`, `Footer`, `apps/web-hono/public/sitemap.xml`       |
 
-The page renders inside `PublicShell` (`LandingNav` + `Footer` + the landing theme) and uses the
-`--kaipu-*` design tokens, so it follows light/dark and the locale switcher like every other
-public page. Its route declares `staticData: { shell: "marketing" }`, which is what tells the
-root document not to add the app `Header` and legal footer on top — see
-[Public page shell](./public-page-shell).
+The page renders inside `HomeShell` with the chapter rail off (`chapterNav={false}`), so it
+shares the home's top bar, `--kl-*` tokens, theme cookie and locale switcher. Its route
+declares `staticData: { shell: "marketing" }`, which tells the root document not to add the
+app `Header` and legal footer on top — see [Public page shell](./public-page-shell).
+
+## What "shipped" means
+
+**Shipped means "in the build you can download today".** There is no downloadable Windows
+build yet (no Windows job in `release-desktop.yml`, no Windows URL in `lib/download.ts`), so
+no Windows cell says shipped: what the Windows build already does is `inProgress`, and the
+Windows section says "coming soon" with the Mac download as its button. A test in
+`roadmap-config.test.ts` pins this.
+
+When the first Windows installer is on the download feed, the same PR flips the Windows
+cells that QA confirmed, puts the "Download for Windows (beta)" button back in
+`WindowsComingSoon`, and updates that test — as the
+[Windows release design](/specs/2026-10-15-windows-release-design/) (decision 9) asks.
+
+With **Both** selected, a row is grouped under its most advanced platform, so the Shipped
+group reads "available somewhere today" and the two cells say where.
 
 ## How to update it
 
-1. Edit `ROADMAP_ITEMS` in `roadmap-config.ts` — add an entry, or change an item's `status`
-   between `shipped`, `inProgress` and `planned`.
-2. Add `items.<id>.title` and `items.<id>.description` to **both** `en.json` and `es.json`.
+1. Edit `ROADMAP_ITEMS` in `roadmap-config.ts` — add an entry, or change its `mac` / `win`
+   state between `shipped`, `inProgress` and `planned`. `note: true` adds a caveat line.
+2. Add `items.<id>.title` and `items.<id>.description` (and `items.<id>.note` when the row
+   has one) to **both** `en.json` and `es.json`.
 3. A **planned** row needs a design doc under `backlog/` before anyone builds it, and a row
    in the table below. A sentence on a public page is a promise; the doc is where the
    promise gets a scope, non-goals and a reopen condition.
@@ -57,13 +81,14 @@ Shipped rows added on 2026-10-14 point at the doc that describes what the downlo
 
 ### Planned rows and their design docs
 
-| Id                 | Design doc                                                                                          |
-| ------------------ | --------------------------------------------------------------------------------------------------- |
-| `windowsBeta`      | [Windows beta — recording first, screenshots later](./windows-beta)                                 |
-| `cloudUpload`      | [Cloud recordings upload](./cloud-recordings-upload) · [desktop sync gap](./desktop-cloud-sync-gap) |
-| `photoZoom`        | [Zoom and pan in the image viewer](./image-viewer-zoom)                                             |
-| `watermarkUpgrade` | None yet — reworded on 2026-10-07 (below); needs a doc before building                              |
-| `brandIdentity`    | [Brand and website rollout](/plans/2026-09-27-brand-and-website-rollout/)                           |
+| Id                 | Design doc                                                                                           |
+| ------------------ | ---------------------------------------------------------------------------------------------------- |
+| Windows column     | [Windows beta — recording first, screenshots later](./windows-beta) — replaces the `windowsBeta` row |
+| `signedInstaller`  | Windows only: [Windows release design](/specs/2026-10-15-windows-release-design/), decision 4        |
+| `cloudUpload`      | [Cloud recordings upload](./cloud-recordings-upload) · [desktop sync gap](./desktop-cloud-sync-gap)  |
+| `photoZoom`        | [Zoom and pan in the image viewer](./image-viewer-zoom)                                              |
+| `watermarkUpgrade` | None yet — reworded on 2026-10-07 (below); needs a doc before building                               |
+| `brandIdentity`    | [Brand and website rollout](/plans/2026-09-27-brand-and-website-rollout/)                            |
 
 Two guardrails make a half-finished edit fail loudly instead of shipping:
 
@@ -72,8 +97,7 @@ Two guardrails make a half-finished edit fail loudly instead of shipping:
 - The `@kaipu/i18n` parity test fails if a key exists in one locale and not the other, or if
   any value is empty.
 
-A status group with no items is not rendered, so `In progress` stays hidden until something
-is actually in flight.
+A state group with no rows (after the filters) is not rendered.
 
 ## Deliberate non-goals
 
@@ -123,10 +147,28 @@ Source of truth checked against `main` (merged PRs since 2026-10-07 and the back
 - **Deliberately not listed:** GIF export (#266, on hold behind a flag), export quality
   tiers and the 24 fps encoder (open PRs), cloud upload and the account page (open PRs).
 
+### 2026-10-18 — per-platform redesign
+
+Implemented the `Kaipu Roadmap.dc.html` layout and moved the page from `PublicShell` to
+`HomeShell`. Every state was checked against `main` (at #312), not taken from the mockup:
+
+- **A state per platform.** macOS keeps the states the list already had. Every Windows cell
+  is `inProgress` or `planned` — see [What "shipped" means](#what-shipped-means).
+- **Added rows:** `systemAudio`, `trayPanel`, `frameCapture` (shipped on macOS, #306),
+  `blurAndBackground` (redaction, #14), `videoMute` (video editor v2), `windowCapture`
+  (`inProgress` on both: built in #309, switched off behind `WINDOW_MODE_ENABLED` in #311)
+  and `signedInstaller` (macOS is signed and notarized; Windows ships unsigned first).
+- **Retired `windowsBeta`:** the Windows column, its summary card and the Windows section
+  now carry it.
+- **Left out of the mockup:** "Touch Bar and Continuity Camera" (not in the code), the
+  "Version 0.13" label (the app is 0.12.0, and a hardcoded version goes stale), the
+  installer size, and the "Help → Send feedback" pointer (not verified).
+
 ## What to validate in production
 
 - The page renders in both themes and both locales (`/roadmap` with the locale switcher).
-- The nav and footer links reach it, and the nav "Download" button still jumps to the landing
-  download section from `/roadmap` (it was a bare `#download` anchor before this change, which
-  did nothing off the landing page).
+- The platform filter and the state chips regroup the list, and the "N of M features"
+  count follows them.
+- On a phone each row stacks its two cells, each labelled macOS / Windows.
+- The top bar marks Roadmap as current, and Home and Features navigate away from it.
 - The page is indexed: it is in `sitemap.xml` and is not marked `noindex`.
