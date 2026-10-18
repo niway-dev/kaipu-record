@@ -4,6 +4,7 @@ import { join } from "path";
 import { is } from "@electron-toolkit/utils";
 import { IPC_CHANNELS } from "@shared/types/ipc";
 import {
+  ENABLED_CAPTURE_MODES,
   isCaptureMode,
   type CaptureAction,
   type CaptureMode,
@@ -91,6 +92,11 @@ export interface CaptureOverlayDeps {
    * lister (`createWindowLister`); the default finds nothing, so tests never spawn a process.
    */
   windowLister: WindowLister;
+  /**
+   * The modes the user can reach. A mode switch to anything else is ignored and the lister
+   * never starts while `window` is missing. Defaults to `ENABLED_CAPTURE_MODES`.
+   */
+  enabledModes: readonly CaptureMode[];
 }
 
 const electronDeps = (): CaptureOverlayDeps => ({
@@ -110,6 +116,7 @@ const electronDeps = (): CaptureOverlayDeps => ({
   primaryDisplayId: () => screen.getPrimaryDisplay().id,
   readyTimeoutMs: OVERLAY_READY_TIMEOUT_MS,
   windowLister: NO_WINDOWS_LISTER,
+  enabledModes: ENABLED_CAPTURE_MODES,
 });
 
 type OverlayEntry = { window: OverlayWindow; displayId: number };
@@ -275,8 +282,10 @@ export class CaptureOverlayWindows implements OverlayPort {
     this.registerListeners();
   }
 
-  pick(ui: OverlayUi, displays: Display[]): Promise<OverlayAnswer> {
+  pick(requested: OverlayUi, displays: Display[]): Promise<OverlayAnswer> {
     if (this.session || displays.length === 0) return Promise.resolve({ kind: "cancelled" });
+    // A disabled mode opens in Frame, the same fallback the page and the tray show.
+    const ui: OverlayUi = this.deps.enabledModes.includes(requested) ? requested : "frame";
 
     return new Promise<OverlayAnswer>((resolve) => {
       this.session = {
@@ -378,6 +387,8 @@ export class CaptureOverlayWindows implements OverlayPort {
   private requestWindows(): void {
     const session = this.session;
     if (!session || session.windowsRequested) return;
+    // Window mode is off: no list is ever needed, so no osascript/powershell is spawned.
+    if (!this.deps.enabledModes.includes("window")) return;
     session.windowsRequested = true;
     let listing: Promise<ListedWindow[]>;
     try {
@@ -613,7 +624,9 @@ export class CaptureOverlayWindows implements OverlayPort {
       const sender = this.displayOf(event);
       if (sender === null) return;
       const mode = (payload as { mode?: unknown } | undefined)?.mode;
-      if (!isCaptureMode(mode) || mode === this.mode) return;
+      if (!isCaptureMode(mode) || !this.deps.enabledModes.includes(mode) || mode === this.mode) {
+        return;
+      }
       this.mode = mode;
       // The frame lives only in Frame; entering it puts it where the user asked from.
       this.frameDisplayId = mode === "frame" ? sender : null;

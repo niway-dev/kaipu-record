@@ -106,7 +106,10 @@ describe("mergeSettings", () => {
     expect(DEFAULT_SETTINGS.screenshotMode).toBe("frame");
     expect(mergeSettings({}).screenshotMode).toBe("frame");
     expect(mergeSettings({ screenshotMode: "screen" }).screenshotMode).toBe("screen");
-    expect(mergeSettings({ screenshotMode: "window" }).screenshotMode).toBe("window");
+  });
+
+  it('reads a stored "window" as Frame while Window mode is off (the flag as shipped)', () => {
+    expect(mergeSettings({ screenshotMode: "window" }).screenshotMode).toBe("frame");
   });
 
   it('migrates a stored legacy "area" mode, and drops an unknown one, to Frame', () => {

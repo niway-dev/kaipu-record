@@ -1,6 +1,7 @@
 import type { Display } from "electron";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IPC_CHANNELS } from "@shared/types/ipc";
+import { CAPTURE_MODES } from "@shared/types/screenshot-capture";
 
 const created: Array<{ options: Record<string, unknown>; window: FakeWindow }> = [];
 const ipcListeners = new Map<
@@ -94,7 +95,7 @@ const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 const right = display(2, 1440, 1);
 
 function overlays(platform: NodeJS.Platform = "darwin") {
-  return new CaptureOverlayWindows({ platform });
+  return new CaptureOverlayWindows({ platform, enabledModes: CAPTURE_MODES });
 }
 
 beforeEach(() => {
@@ -293,6 +294,7 @@ describe("CaptureOverlayWindows: answers", () => {
     it("accepts a window answer by id, with main's own rect and whole size, not the renderer's", async () => {
       const fullSize = { width: 900, height: 400 };
       const port = new CaptureOverlayWindows({
+        enabledModes: CAPTURE_MODES,
         platform: "darwin",
         windowLister: {
           list: async () => [
@@ -437,6 +439,7 @@ describe("CaptureOverlayWindows: answers", () => {
         .map(([, state]) => state);
     const pickFrame = (cursor: { x: number; y: number }, primaryDisplayId: number | null = 1) => {
       const port = new CaptureOverlayWindows({
+        enabledModes: CAPTURE_MODES,
         platform: "darwin",
         cursorPoint: () => cursor,
         primaryDisplayId: () => primaryDisplayId,
@@ -587,6 +590,7 @@ describe("CaptureOverlayWindows: switching mode inside the overlay", () => {
   ) {
     const list = vi.fn(lister.list);
     const port = new CaptureOverlayWindows({
+      enabledModes: CAPTURE_MODES,
       platform: "darwin",
       cursorPoint: () => ({ x: 100, y: 100 }),
       windowLister: { list } as never,
@@ -671,6 +675,7 @@ describe("CaptureOverlayWindows: switching mode inside the overlay", () => {
   it("Windows: starts the (slow) PowerShell listing when the pick opens, in any mode", async () => {
     const list = vi.fn(async () => [editor]);
     const port = new CaptureOverlayWindows({
+      enabledModes: CAPTURE_MODES,
       platform: "win32",
       cursorPoint: () => ({ x: 100, y: 100 }),
       windowLister: { list } as never,
@@ -1064,5 +1069,50 @@ describe("CaptureOverlayWindows: hideAll and destroyAll", () => {
     port.destroyAll();
 
     expect(await picked).toEqual({ kind: "cancelled" });
+  });
+});
+
+describe("CaptureOverlayWindows: Window mode disabled (the flag as shipped)", () => {
+  function pickDefault(platform: NodeJS.Platform, ui: "frame" | "window" | "screen" = "frame") {
+    const list = vi.fn(async () => []);
+    const port = new CaptureOverlayWindows({
+      platform,
+      cursorPoint: () => ({ x: 100, y: 100 }),
+      windowLister: { list } as never,
+    });
+    void port.pick(ui, [left, right]);
+    const [first, second] = created.map(({ window }) => window);
+    first.paint();
+    second.paint();
+    return { first, second, list };
+  }
+  const modes = (window: FakeWindow) =>
+    window.webContents.send.mock.calls
+      .filter(([channel]) => channel === IPC_CHANNELS.screenshotOverlayState)
+      .map(([, state]) => (state as { mode: string }).mode);
+
+  it("ignores a window mode switch and never starts the lister", async () => {
+    const { first, second, list } = pickDefault("darwin");
+    first.send(IPC_CHANNELS.screenshotOverlayMode, { mode: "window" });
+    await flush();
+
+    expect(list).not.toHaveBeenCalled();
+    expect(modes(first)).not.toContain("window");
+    expect(modes(second)).not.toContain("window");
+    // Screen still switches.
+    first.send(IPC_CHANNELS.screenshotOverlayMode, { mode: "screen" });
+    expect(modes(second).at(-1)).toBe("screen");
+  });
+
+  it("does not start the (otherwise eager) Windows lister either", async () => {
+    const { list } = pickDefault("win32");
+    await flush();
+    expect(list).not.toHaveBeenCalled();
+  });
+
+  it("opens in Frame when asked for Window", () => {
+    const { first, list } = pickDefault("darwin", "window");
+    expect(modes(first).at(-1)).toBe("frame");
+    expect(list).not.toHaveBeenCalled();
   });
 });

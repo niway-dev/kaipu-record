@@ -7,11 +7,12 @@ import { ShortcutInput } from "@renderer/features/shortcuts/shortcut-input";
 import { conflictingAction } from "@renderer/features/shortcuts/keyboard-accelerator";
 import {
   DEFAULT_SHORTCUTS,
-  SHORTCUT_DEFINITIONS,
+  activeShortcutDefinitions,
   type ShortcutAction,
   type ShortcutDefinition,
   type ShortcutGroup,
 } from "@shared/types";
+import type { CaptureMode } from "@shared/types/screenshot-capture";
 import styles from "./shortcuts-page.module.css";
 
 /** action → `shortcuts` namespace keys (labels/descriptions live in i18n, not the shared defs). */
@@ -55,20 +56,28 @@ function Section({
   );
 }
 
-const shortcutsInGroup = (group: ShortcutGroup): ShortcutDefinition[] =>
-  SHORTCUT_DEFINITIONS.filter((def) => def.group === group);
+const shortcutsInGroup = (
+  group: ShortcutGroup,
+  enabledModes?: readonly CaptureMode[],
+): readonly ShortcutDefinition[] =>
+  activeShortcutDefinitions(enabledModes).filter((def) => def.group === group);
 
 /**
  * Dedicated page for the global keyboard shortcuts. Each binding is rebindable
  * (click to capture); the main process registers them system-wide and reports,
  * via `getShortcutStatus`, any that another app already owns.
  */
-export function ShortcutsPage(): React.JSX.Element {
+export function ShortcutsPage({
+  enabledModes,
+}: {
+  /** The modes in play; defaults to `ENABLED_CAPTURE_MODES`, so Capture window is hidden. */
+  enabledModes?: readonly CaptureMode[];
+} = {}): React.JSX.Element {
   const t = useTranslations("shortcuts");
   const { settings, update } = useAppSettings();
   const shortcuts = settings?.shortcuts ?? DEFAULT_SHORTCUTS;
 
-  // On-screen sections, in order. Their rows come from SHORTCUT_DEFINITIONS.
+  // On-screen sections, in order. Their rows come from SHORTCUT_DEFINITIONS, minus switched-off actions.
   const GROUPS: ReadonlyArray<{ key: ShortcutGroup; title: string }> = [
     { key: "recording", title: t("groupRecording") },
     { key: "app", title: t("groupApp") },
@@ -152,7 +161,7 @@ export function ShortcutsPage(): React.JSX.Element {
       <div className={styles.sections}>
         {GROUPS.map(({ key, title }) => (
           <Section key={key} title={title}>
-            {shortcutsInGroup(key).map(renderRow)}
+            {shortcutsInGroup(key, enabledModes).map(renderRow)}
           </Section>
         ))}
       </div>

@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import type { Display, Rectangle } from "electron";
 import {
   CAPTURE_MODES,
+  ENABLED_CAPTURE_MODES,
   type CaptureAction,
   type CaptureMode,
 } from "@shared/types/screenshot-capture";
@@ -148,10 +149,13 @@ export async function runWithOverlay(
  * `screencapture -R`. The backend is chosen by the overlay's answer, not the requested mode.
  */
 export class MacProvider implements ScreenshotCaptureProvider {
-  constructor(private readonly deps: Deps = realDeps) {}
+  constructor(
+    private readonly deps: Deps = realDeps,
+    private readonly enabledModes: readonly CaptureMode[] = ENABLED_CAPTURE_MODES,
+  ) {}
 
-  supports(_mode: CaptureMode): boolean {
-    return true;
+  supports(mode: CaptureMode): boolean {
+    return this.enabledModes.includes(mode);
   }
 
   supportedModes(): CaptureMode[] {
@@ -266,10 +270,13 @@ const realWindowsDeps: WindowsDeps = {
  * `desktopCapturer` and crops it to the picked rectangle in physical pixels.
  */
 export class WindowsProvider implements ScreenshotCaptureProvider {
-  constructor(private readonly deps: WindowsDeps = realWindowsDeps) {}
+  constructor(
+    private readonly deps: WindowsDeps = realWindowsDeps,
+    private readonly enabledModes: readonly CaptureMode[] = ENABLED_CAPTURE_MODES,
+  ) {}
 
-  supports(_mode?: CaptureMode): boolean {
-    return true;
+  supports(mode?: CaptureMode): boolean {
+    return mode === undefined || this.enabledModes.includes(mode);
   }
 
   supportedModes(): CaptureMode[] {

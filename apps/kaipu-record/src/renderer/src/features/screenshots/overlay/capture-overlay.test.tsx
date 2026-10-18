@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { DEFAULT_SETTINGS, type AppSettings } from "@shared/types";
-import type { CaptureRect, OverlayState } from "@shared/types/screenshot-capture";
+import {
+  CAPTURE_MODES,
+  type CaptureRect,
+  type OverlayState,
+} from "@shared/types/screenshot-capture";
 import {
   BEFORE_SEND_TIMEOUT_MS,
   CaptureOverlay,
@@ -120,7 +124,7 @@ afterEach(() => {
 describe("CaptureOverlay", () => {
   it("cancels on Esc, and a second Esc does not send a second answer", () => {
     const { api, answer } = fakeApi({}, SCREEN);
-    render(<CaptureOverlay query={query("screen")} api={api} />);
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("screen")} api={api} />);
 
     press("Escape");
     press("Escape");
@@ -136,7 +140,7 @@ describe("CaptureOverlay", () => {
       return frames.length;
     });
     const { api, requestHiddenAck } = fakeApi({}, SCREEN);
-    render(<CaptureOverlay query={query("screen")} api={api} />);
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("screen")} api={api} />);
 
     requestHiddenAck();
     expect(api.captureOverlay.hiddenAck).not.toHaveBeenCalled();
@@ -154,7 +158,7 @@ describe("CaptureOverlay", () => {
         return frames.length;
       });
       const { api, requestHiddenAck } = fakeApi({}, SCREEN);
-      render(<CaptureOverlay query={query("screen")} api={api} />);
+      render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("screen")} api={api} />);
 
       requestHiddenAck();
       vi.advanceTimersByTime(HIDDEN_ACK_FALLBACK_MS - 1);
@@ -174,7 +178,7 @@ describe("CaptureOverlay", () => {
 describe("display label", () => {
   it.each(["frame", "window", "screen"] as const)("names the display on the %s overlay", (ui) => {
     const { api } = fakeApi({}, null);
-    render(<CaptureOverlay query={query(ui)} api={api} />);
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query(ui)} api={api} />);
     // The Screen card names it too; the corner label is on every overlay.
     expect(screen.getAllByText("Display 2").length).toBeGreaterThanOrEqual(1);
   });
@@ -184,7 +188,12 @@ describe("ScreenCard", () => {
   const renderScreen = (overrides: Partial<OverlayQuery> = {}, platform?: "mac" | "other") => {
     const fake = fakeApi({}, SCREEN);
     const utils = render(
-      <CaptureOverlay query={query("screen", overrides)} api={fake.api} platform={platform} />,
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("screen", overrides)}
+        api={fake.api}
+        platform={platform}
+      />,
     );
     return { ...fake, sheet: screen.getByTestId("screen-card-sheet"), ...utils };
   };
@@ -334,7 +343,7 @@ describe("ScreenCard", () => {
 describe("FrameBox", () => {
   it("attaches the action bar under the frame's bottom-left corner: Capture, Copy, Record soon", async () => {
     const { api } = fakeApi({ "42": { x: 100, y: 120, width: 400, height: 300 } });
-    render(<CaptureOverlay query={query("frame")} api={api} />);
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
     await screen.findByTestId("capture-frame");
     const bar = screen.getByTestId("action-bar");
     expect(within(bar).getByRole("button", { name: "Capture" })).toBeInTheDocument();
@@ -348,7 +357,7 @@ describe("FrameBox", () => {
 
   it("attaches the mode pill 10 DIP right of the frame's top-right corner, Frame active", async () => {
     const { api } = fakeApi({ "42": { x: 100, y: 120, width: 400, height: 300 } });
-    render(<CaptureOverlay query={query("frame")} api={api} />);
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
     await screen.findByTestId("capture-frame");
     const pill = screen.getByTestId("mode-pill");
     expect(pill).toHaveAttribute("data-side", "right");
@@ -367,7 +376,7 @@ describe("FrameBox", () => {
 
   it("flips the pill to the left of the frame near the display's right edge", async () => {
     const { api } = fakeApi({ "42": { x: 1200, y: 120, width: 380, height: 300 } });
-    render(<CaptureOverlay query={query("frame")} api={api} />);
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
     await screen.findByTestId("capture-frame");
     const pill = screen.getByTestId("mode-pill");
     expect(pill).toHaveAttribute("data-side", "left");
@@ -377,7 +386,7 @@ describe("FrameBox", () => {
 
   it("flips the action bar above the frame near the display's bottom edge", async () => {
     const { api } = fakeApi({ "42": { x: 100, y: 600, width: 400, height: 380 } });
-    render(<CaptureOverlay query={query("frame")} api={api} />);
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
     await screen.findByTestId("capture-frame");
     const bar = screen.getByTestId("action-bar");
     expect(bar).toHaveAttribute("data-side", "above");
@@ -388,7 +397,14 @@ describe("FrameBox", () => {
   it("answers copy from the Copy button and from ⌘C, capture from Capture", async () => {
     const remembered = { x: 100, y: 120, width: 400, height: 300 };
     const copy = fakeApi({ "42": remembered });
-    render(<CaptureOverlay query={query("frame")} api={copy.api} platform="mac" />);
+    render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("frame")}
+        api={copy.api}
+        platform="mac"
+      />,
+    );
     await screen.findByTestId("capture-frame");
     fireEvent.click(screen.getByRole("button", { name: "Copy" }));
     await waitFor(() =>
@@ -403,7 +419,14 @@ describe("FrameBox", () => {
     cleanup();
 
     const key = fakeApi({ "42": remembered });
-    render(<CaptureOverlay query={query("frame")} api={key.api} platform="mac" />);
+    render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("frame")}
+        api={key.api}
+        platform="mac"
+      />,
+    );
     await screen.findByTestId("capture-frame");
     press("c", { metaKey: true });
     await waitFor(() =>
@@ -415,7 +438,14 @@ describe("FrameBox", () => {
 
   it("Ctrl+C copies on Windows, without the bar being hovered", async () => {
     const { api, answer } = fakeApi();
-    render(<CaptureOverlay query={query("frame")} api={api} platform="other" />);
+    render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("frame")}
+        api={api}
+        platform="other"
+      />,
+    );
     await screen.findByTestId("capture-frame");
     press("c", { ctrlKey: true });
     await waitFor(() =>
@@ -427,7 +457,7 @@ describe("FrameBox", () => {
 
   it("the disabled Record seat answers nothing", async () => {
     const { api, answer } = fakeApi();
-    render(<CaptureOverlay query={query("frame")} api={api} />);
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
     await screen.findByTestId("capture-frame");
     fireEvent.click(screen.getByRole("button", { name: "Record · soon" }));
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -436,7 +466,7 @@ describe("FrameBox", () => {
 
   it("the pill's Cancel answers cancelled", async () => {
     const { api, answer } = fakeApi();
-    render(<CaptureOverlay query={query("frame")} api={api} />);
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
     await screen.findByTestId("capture-frame");
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(answer).toHaveBeenCalledExactlyOnceWith({ kind: "cancelled" });
@@ -445,7 +475,9 @@ describe("FrameBox", () => {
   it("pressing the chrome does not start a frame drag", async () => {
     const remembered = { x: 100, y: 120, width: 400, height: 300 };
     const { api } = fakeApi({ "42": remembered });
-    const { container } = render(<CaptureOverlay query={query("frame")} api={api} />);
+    const { container } = render(
+      <CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />,
+    );
     await screen.findByTestId("capture-frame");
     const sheet = container.firstElementChild as HTMLElement;
 
@@ -463,7 +495,7 @@ describe("FrameBox", () => {
     const remembered = { x: 100, y: 120, width: 400, height: 300 };
     const other = { x: 0, y: 0, width: 50, height: 50 };
     const { api, answer } = fakeApi({ "42": remembered, "7": other });
-    render(<CaptureOverlay query={query("frame")} api={api} />);
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
 
     await screen.findByTestId("capture-frame");
     expect(frameGeometry()).toEqual(remembered);
@@ -491,7 +523,7 @@ describe("FrameBox", () => {
   it("re-clamps a remembered frame that no longer fits the work area", async () => {
     // Remembered on a bigger resolution: it now hangs off the bottom-right corner.
     const { api } = fakeApi({ "42": { x: 1500, y: 900, width: 800, height: 600 } });
-    render(<CaptureOverlay query={query("frame")} api={api} />);
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
 
     await screen.findByTestId("capture-frame");
     expect(frameGeometry()).toEqual({ x: 800, y: 400, width: 800, height: 600 });
@@ -499,7 +531,7 @@ describe("FrameBox", () => {
 
   it("shrinks a remembered frame larger than the work area to fit it", async () => {
     const { api } = fakeApi({ "42": { x: 0, y: 0, width: 2400, height: 1200 } });
-    render(<CaptureOverlay query={query("frame")} api={api} />);
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
 
     await screen.findByTestId("capture-frame");
     expect(frameGeometry()).toEqual({ x: 0, y: 25, width: 1600, height: 975 });
@@ -507,7 +539,7 @@ describe("FrameBox", () => {
 
   it("opens on a centered box of 60 % of the work area when nothing is remembered", async () => {
     const { api } = fakeApi();
-    render(<CaptureOverlay query={query("frame")} api={api} />);
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
 
     await screen.findByTestId("capture-frame");
     // Work area 1600 × 975 at y = 25 (the menu bar): 960 × 585, centred in it.
@@ -516,7 +548,9 @@ describe("FrameBox", () => {
 
   it("moves with a body drag and answers the moved frame from the Capture button", async () => {
     const { api, answer } = fakeApi({ "42": { x: 100, y: 120, width: 400, height: 300 } });
-    const { container } = render(<CaptureOverlay query={query("frame")} api={api} />);
+    const { container } = render(
+      <CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />,
+    );
     await screen.findByTestId("capture-frame");
     const sheet = container.firstElementChild as HTMLElement;
 
@@ -539,7 +573,9 @@ describe("FrameBox", () => {
 
   it("resizes from a corner handle, never past the work area", async () => {
     const { api } = fakeApi({ "42": { x: 100, y: 120, width: 400, height: 300 } });
-    const { container } = render(<CaptureOverlay query={query("frame")} api={api} />);
+    const { container } = render(
+      <CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />,
+    );
     await screen.findByTestId("capture-frame");
     const sheet = container.firstElementChild as HTMLElement;
 
@@ -559,7 +595,7 @@ describe("FrameBox", () => {
           finishPersist = () => resolve(DEFAULT_SETTINGS);
         }),
     );
-    render(<CaptureOverlay query={query("frame")} api={api} />);
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
     await screen.findByTestId("capture-frame");
 
     press("Enter");
@@ -577,7 +613,7 @@ describe("FrameBox", () => {
 
   it("answers once the persist is done, and a second Enter meanwhile is ignored", async () => {
     const { api, answer } = fakeApi();
-    render(<CaptureOverlay query={query("frame")} api={api} />);
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
     await screen.findByTestId("capture-frame");
 
     press("Enter");
@@ -591,7 +627,7 @@ describe("FrameBox", () => {
   it("sends the answer after the persist timeout when remembering the frame never resolves", async () => {
     const { api, answer } = fakeApi();
     api.updateSettings.mockImplementationOnce(() => new Promise(() => {}));
-    render(<CaptureOverlay query={query("frame")} api={api} />);
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
     await screen.findByTestId("capture-frame");
     vi.useFakeTimers();
     try {
@@ -613,7 +649,7 @@ describe("FrameBox", () => {
   it("still answers when remembering the frame fails", async () => {
     const { api, answer } = fakeApi();
     api.updateSettings.mockRejectedValueOnce(new Error("disk full"));
-    render(<CaptureOverlay query={query("frame")} api={api} />);
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
     await screen.findByTestId("capture-frame");
 
     press("Enter");
@@ -624,7 +660,7 @@ describe("FrameBox", () => {
 describe("Frame on several displays", () => {
   it("offers 'Click to move the frame here' on a display without the frame, and a click asks main", () => {
     const { api, chooseFrameDisplay, answer } = fakeApi({}, { ...FRAME_ON_42, frameDisplayId: 7 });
-    render(<CaptureOverlay query={query("frame")} api={api} />);
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
 
     expect(screen.queryByTestId("capture-frame")).toBeNull();
     fireEvent.click(screen.getByText("Click to move the frame here"));
@@ -635,7 +671,7 @@ describe("Frame on several displays", () => {
 
   it("moves the frame from the hint with Enter or Space, as a button", () => {
     const { api, chooseFrameDisplay } = fakeApi({}, { ...FRAME_ON_42, frameDisplayId: 7 });
-    render(<CaptureOverlay query={query("frame")} api={api} />);
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
     const hint = screen.getByRole("button", { name: "Click to move the frame here" });
 
     fireEvent.keyDown(hint, { key: "Enter" });
@@ -648,19 +684,31 @@ describe("Frame on several displays", () => {
 
   it("renders from the query's frame display before any state arrives", async () => {
     const own = fakeApi({}, null);
-    render(<CaptureOverlay query={query("frame", { frame: 42 })} api={own.api} />);
+    render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("frame", { frame: 42 })}
+        api={own.api}
+      />,
+    );
     await screen.findByTestId("capture-frame");
     cleanup();
 
     const other = fakeApi({}, null);
-    render(<CaptureOverlay query={query("frame", { frame: 7 })} api={other.api} />);
+    render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("frame", { frame: 7 })}
+        api={other.api}
+      />,
+    );
     expect(screen.getByText("Click to move the frame here")).toBeTruthy();
     expect(screen.queryByTestId("capture-frame")).toBeNull();
   });
 
   it("shows only the dim sheet until main says where the frame is", () => {
     const { api } = fakeApi({}, { ...FRAME_ON_42, frameDisplayId: null });
-    render(<CaptureOverlay query={query("frame")} api={api} />);
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
 
     expect(screen.queryByTestId("capture-frame")).toBeNull();
     expect(screen.queryByText("Click to move the frame here")).toBeNull();
@@ -669,7 +717,7 @@ describe("Frame on several displays", () => {
   it("renders the frame on its own display with that display's remembered geometry", async () => {
     const remembered = { x: 100, y: 120, width: 400, height: 300 };
     const { api } = fakeApi({ "42": remembered, "7": { x: 0, y: 25, width: 50, height: 50 } });
-    render(<CaptureOverlay query={query("frame")} api={api} />);
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
 
     await screen.findByTestId("capture-frame");
     expect(frameGeometry()).toEqual(remembered);
@@ -683,10 +731,18 @@ describe("Frame on several displays", () => {
     render(
       <>
         <div data-testid="overlay-7">
-          <CaptureOverlay query={query("frame", { displayId: 7 })} api={a.api} />
+          <CaptureOverlay
+            enabledModes={CAPTURE_MODES}
+            query={query("frame", { displayId: 7 })}
+            api={a.api}
+          />
         </div>
         <div data-testid="overlay-42">
-          <CaptureOverlay query={query("frame", { displayId: 42 })} api={b.api} />
+          <CaptureOverlay
+            enabledModes={CAPTURE_MODES}
+            query={query("frame", { displayId: 42 })}
+            api={b.api}
+          />
         </div>
       </>,
     );
@@ -711,8 +767,12 @@ describe("Frame on several displays", () => {
     const idle = fakeApi({}, FRAME_ON_42);
     render(
       <>
-        <CaptureOverlay query={query("frame")} api={active.api} />
-        <CaptureOverlay query={query("frame", { displayId: 7, index: 1 })} api={idle.api} />
+        <CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={active.api} />
+        <CaptureOverlay
+          enabledModes={CAPTURE_MODES}
+          query={query("frame", { displayId: 7, index: 1 })}
+          api={idle.api}
+        />
       </>,
     );
     return { active, idle };
@@ -748,7 +808,9 @@ describe("FrameBox drawing on the dim sheet", () => {
 
   async function setup(frames: Record<string, CaptureRect> = { "42": REMEMBERED }) {
     const fake = fakeApi(frames);
-    const { container } = render(<CaptureOverlay query={query("frame")} api={fake.api} />);
+    const { container } = render(
+      <CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={fake.api} />,
+    );
     await screen.findByTestId("capture-frame");
     return { ...fake, sheet: container.firstElementChild as HTMLElement };
   }
@@ -926,7 +988,7 @@ describe("switching mode inside the overlay", () => {
     ["screen", SCREEN],
   ] as const)("keys 1–3 switch the mode from %s and tell main", async (ui, state) => {
     const { api, setMode } = fakeApi({}, state as OverlayState);
-    render(<CaptureOverlay query={query(ui)} api={api} />);
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query(ui)} api={api} />);
     if (ui === "frame") await screen.findByTestId("capture-frame");
 
     for (const key of ["1", "2", "3"]) press(key);
@@ -942,7 +1004,7 @@ describe("switching mode inside the overlay", () => {
 
   it("re-renders at once in the new mode, before main answers", () => {
     const { api, setMode } = fakeApi({}, SCREEN);
-    render(<CaptureOverlay query={query("screen")} api={api} />);
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("screen")} api={api} />);
 
     press("2");
 
@@ -953,7 +1015,7 @@ describe("switching mode inside the overlay", () => {
 
   it("follows main's broadcast when another overlay switched the mode", () => {
     const { api, pushState, setMode } = fakeApi({}, SCREEN);
-    render(<CaptureOverlay query={query("screen")} api={api} />);
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("screen")} api={api} />);
 
     pushState({ mode: "window", windows: [] });
 
@@ -963,7 +1025,7 @@ describe("switching mode inside the overlay", () => {
 
   it("a broadcast sent before main saw the switch does not flip the mode back", () => {
     const { api, pushState, setMode } = fakeApi({}, SCREEN);
-    render(<CaptureOverlay query={query("screen")} api={api} />);
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("screen")} api={api} />);
 
     press("2");
     expect(setMode).toHaveBeenCalledExactlyOnceWith("window");
@@ -981,7 +1043,7 @@ describe("switching mode inside the overlay", () => {
 
   it("ignores a digit with a modifier, and a digit after the pick was answered", () => {
     const { api, setMode } = fakeApi({}, SCREEN);
-    render(<CaptureOverlay query={query("screen")} api={api} />);
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("screen")} api={api} />);
 
     press("1", { metaKey: true });
     press("2", { ctrlKey: true });
@@ -995,7 +1057,7 @@ describe("switching mode inside the overlay", () => {
 
   it("the pill switches the mode on a click", async () => {
     const { api, setMode } = fakeApi();
-    render(<CaptureOverlay query={query("frame")} api={api} />);
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
     await screen.findByTestId("capture-frame");
 
     fireEvent.click(screen.getByRole("button", { name: "Screen (3)" }));
@@ -1010,7 +1072,7 @@ describe("switching mode inside the overlay", () => {
     ["screen", SCREEN],
   ] as const)("Esc cancels in %s", (ui, state) => {
     const { api, answer } = fakeApi({}, state as OverlayState);
-    render(<CaptureOverlay query={query(ui)} api={api} />);
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query(ui)} api={api} />);
     press("Escape");
     expect(answer).toHaveBeenCalledExactlyOnceWith({ kind: "cancelled" });
   });
@@ -1019,7 +1081,14 @@ describe("switching mode inside the overlay", () => {
 describe("hint pill", () => {
   it("reads 'Enter to capture' in Frame, with the platform's copy key", () => {
     const { api } = fakeApi();
-    render(<CaptureOverlay query={query("frame")} api={api} platform="mac" />);
+    render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("frame")}
+        api={api}
+        platform="mac"
+      />,
+    );
     expect(screen.getByTestId("hint-pill")).toHaveTextContent(
       "Enter to capture · ⌘C to copy · 1–3 switch mode · Esc to cancel",
     );
@@ -1027,7 +1096,14 @@ describe("hint pill", () => {
 
   it("reads 'Click or Enter to capture' outside Frame, Ctrl+C off macOS", () => {
     const { api } = fakeApi({}, SCREEN);
-    render(<CaptureOverlay query={query("screen")} api={api} platform="other" />);
+    render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("screen")}
+        api={api}
+        platform="other"
+      />,
+    );
     expect(screen.getByTestId("hint-pill")).toHaveTextContent(
       "Click or Enter to capture · Ctrl+C to copy · 1–3 switch mode · Esc to cancel",
     );
@@ -1068,7 +1144,14 @@ describe("WindowPicker", () => {
 
   function renderPicker(state: OverlayState = WINDOWS, platform?: "mac" | "other") {
     const fake = fakeApi({}, state);
-    render(<CaptureOverlay query={query("window")} api={fake.api} platform={platform} />);
+    render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("window")}
+        api={fake.api}
+        platform={platform}
+      />,
+    );
     return { ...fake, sheet: screen.getByTestId("window-picker") };
   }
   const highlighted = () => screen.queryByTestId("window-highlight");
@@ -1207,7 +1290,7 @@ describe("WindowPicker", () => {
   it("maps main's global pointer into this display, and stops following it once the pointer moves here", () => {
     const offset = query("window", { bounds: { x: 1600, y: 0, width: 1600, height: 1000 } });
     const fake = fakeApi({}, { ...WINDOWS, windows: null });
-    render(<CaptureOverlay query={offset} api={fake.api} />);
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={offset} api={fake.api} />);
     const sheet = screen.getByTestId("window-picker");
 
     // (300, 300) global is on the display left of this one: nothing here.
@@ -1232,5 +1315,49 @@ describe("WindowPicker", () => {
     pushState({ windows: [browser] });
 
     expect(highlighted()).toBeNull();
+  });
+});
+
+describe("Window mode disabled (the flag as shipped)", () => {
+  it("offers Frame and Screen on the pill, badges 1 and 2", async () => {
+    const { api } = fakeApi({ "42": { x: 100, y: 120, width: 400, height: 300 } });
+    render(<CaptureOverlay query={query("frame")} api={api} />);
+    await screen.findByTestId("capture-frame");
+    const buttons = within(screen.getByTestId("mode-pill")).getAllByRole("button");
+    expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual([
+      "Frame (1)",
+      "Screen (2)",
+      "Cancel",
+    ]);
+  });
+
+  it("offers Frame and Screen on the Screen card's row", () => {
+    const { api } = fakeApi({}, SCREEN);
+    render(<CaptureOverlay query={query("screen")} api={api} />);
+    const row = screen.getByRole("group", { name: "Capture mode" });
+    expect(within(row).getAllByRole("button")).toHaveLength(2);
+    expect(within(row).queryByRole("button", { name: /Window/ })).not.toBeInTheDocument();
+  });
+
+  it("says 1–2 switch mode in the hint", () => {
+    const { api } = fakeApi();
+    render(<CaptureOverlay query={query("frame")} api={api} platform="mac" />);
+    expect(screen.getByTestId("hint-pill")).toHaveTextContent(
+      "Enter to capture · ⌘C to copy · 1–2 switch mode · Esc to cancel",
+    );
+  });
+
+  it("switches with keys 1 and 2, and key 3 does nothing", () => {
+    const { api, setMode } = fakeApi({}, SCREEN);
+    render(<CaptureOverlay query={query("screen")} api={api} />);
+
+    press("3");
+    expect(setMode).not.toHaveBeenCalled();
+    expect(screen.getByTestId("screen-card")).toBeInTheDocument();
+
+    press("2"); // already Screen: no-op
+    expect(setMode).not.toHaveBeenCalled();
+    press("1");
+    expect(setMode).toHaveBeenCalledExactlyOnceWith("frame");
   });
 });

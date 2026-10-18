@@ -5,7 +5,7 @@ description: Second iteration of the screenshot modes. Area is folded into Frame
 
 # Screenshot modes v2 — design
 
-**Status: 🟡 In progress · 2026-10-18.** Implementation on `feat/screenshot-modes-v2` (tasks 1–7 done, PR pending); macOS and Windows QA pending. Iterates on the
+**Status: 🟡 In progress · 2026-10-18.** Implementation on `feat/screenshot-modes-v2` (tasks 1–7 done, PR pending); macOS and Windows QA pending. Window mode shipped behind `WINDOW_MODE_ENABLED = false` (owner found it buggy on 2026-10-18); Frame and Screen are live. Iterates on the
 [capture modes design](/specs/2026-10-15-screenshot-capture-modes-design/) that shipped in
 desktop 0.12.0 (PR #306). Where the two differ this one wins; that spec keeps the contract,
 the geometry and the overlay mechanics that stay. ADR: [0024](/architecture/decisions/0024-window-mode-and-quiet-capture/)

@@ -4,7 +4,11 @@ import type { CaptureAction } from "@shared/types/screenshot-capture";
 import { createCaptureHandler } from "./capture-handler";
 import { clearLastQuietCapture, takeLastQuietCapture } from "./last-quiet-capture";
 import type { OverlayPort } from "./overlay-port";
-import type { ProviderResult, ScreenshotCaptureProvider } from "./screenshot-capture";
+import {
+  MacProvider,
+  type ProviderResult,
+  type ScreenshotCaptureProvider,
+} from "./screenshot-capture";
 
 const overlay: OverlayPort = {
   pick: async () => ({ kind: "cancelled" }),
@@ -68,6 +72,18 @@ describe("createCaptureHandler", () => {
     const { handler, rememberMode } = setup(async () => ({ kind: "cancelled" }));
     await handler({ mode: "window" });
     expect(rememberMode).not.toHaveBeenCalled();
+  });
+
+  it("answers unsupported for a window request when Window is disabled", async () => {
+    const capture = vi.fn();
+    const { handler } = setup(capture, "darwin", (mode) =>
+      new MacProvider().supports(mode as never),
+    );
+    expect(await handler({ mode: "window" })).toMatchObject({
+      kind: "unsupported",
+      mode: "window",
+    });
+    expect(capture).not.toHaveBeenCalled();
   });
 
   it("leaves the current mode untouched when the capture is unsupported or throws", async () => {

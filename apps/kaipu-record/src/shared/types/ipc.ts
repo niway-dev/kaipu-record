@@ -11,7 +11,7 @@ import type { TagColor } from "@kaipu/domain/constants";
 import { DEFAULT_QUALITY, type RecordingQuality } from "../recording-quality";
 import type { Locale } from "@kaipu/i18n";
 import type { ExportPresetId, ExportQuality } from "./export-preset";
-import type { CaptureMode, CaptureRect } from "./screenshot-capture";
+import { ENABLED_CAPTURE_MODES, type CaptureMode, type CaptureRect } from "./screenshot-capture";
 
 /**
  * "system" (follow the OS appearance) is a deliberate non-goal for now — the
@@ -158,6 +158,25 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
     statusWord: "camera",
   },
 ];
+
+/**
+ * Whether `action` is reachable right now. `captureWindow` follows Window mode's flag: the
+ * action stays in the constants (a stored user binding survives), it is just neither
+ * registered nor listed while Window mode is off.
+ */
+export function isShortcutActionEnabled(
+  action: ShortcutAction,
+  enabledModes: readonly CaptureMode[] = ENABLED_CAPTURE_MODES,
+): boolean {
+  return action !== "captureWindow" || enabledModes.includes("window");
+}
+
+/** `SHORTCUT_DEFINITIONS` minus the actions that are switched off: what the UI lists. */
+export function activeShortcutDefinitions(
+  enabledModes: readonly CaptureMode[] = ENABLED_CAPTURE_MODES,
+): readonly ShortcutDefinition[] {
+  return SHORTCUT_DEFINITIONS.filter((def) => isShortcutActionEnabled(def.action, enabledModes));
+}
 
 /** Default accelerators, derived so they can never drift from the definitions. */
 export const DEFAULT_SHORTCUTS: ShortcutSettings = Object.fromEntries(
