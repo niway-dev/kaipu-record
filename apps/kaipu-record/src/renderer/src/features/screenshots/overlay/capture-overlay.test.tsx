@@ -405,7 +405,7 @@ describe("the dim", () => {
     expect(box.className).toContain("frameBox");
     // Inside the box is clear; outside is dimmed once, by the box's shadow.
     expect(rule(".clear")).toContain("rgba(0, 0, 0, 0.01)");
-    expect(rule(".frameBox")).toContain("0 0 0 9999px rgba(0, 0, 0, 0.35)");
+    expect(rule(".frameBox")).toContain("0 0 0 9999px rgba(0, 0, 0, 0.45)");
     expect(rule(".sheet")).toContain("rgba(0, 0, 0, 0.25)");
   });
 });

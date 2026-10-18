@@ -115,7 +115,7 @@
   position: absolute;
   box-sizing: border-box;
   border: 1.5px solid var(--overlay-accent);
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
   cursor: move;
 }
 
@@ -336,7 +336,7 @@
   box-sizing: border-box;
   border: 2px solid var(--overlay-accent);
   border-radius: 6px;
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
   pointer-events: none;
 }
 

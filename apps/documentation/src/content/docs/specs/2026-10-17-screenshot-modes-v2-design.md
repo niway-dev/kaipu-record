@@ -283,7 +283,7 @@ does nothing but `revealAfterCapture()` to its previous state. Editor: unchanged
   toolbar never covers the selection when there is room outside it.
 - Inside the selection is never tinted: with a Frame box or a highlighted window the sheet is
   nearly clear (`rgba(0, 0, 0, 0.01)`, non-zero so transparent windows on Windows still receive
-  clicks) and the box's own shadow carries the whole dim (`0.35`) outside it. Screen and the
+  clicks) and the box's own shadow carries the whole dim (`0.45`, raised from 0.35 at the owner's request on 2026-10-18) outside it. Screen and the
   states with no box keep the uniform `0.25` sheet.
 - Hint pill at the bottom: "Enter to capture" (Frame) or "Click or Enter to capture" · "⌘C to copy" ·
   "1–3 switch mode" · "Esc to cancel".
