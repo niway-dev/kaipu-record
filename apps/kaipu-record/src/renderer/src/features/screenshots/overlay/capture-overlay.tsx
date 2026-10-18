@@ -88,8 +88,31 @@ export function CaptureOverlay({
   const mode = state.mode;
   const modeRef = useRef(mode);
   modeRef.current = mode;
+  /**
+   * The mode this overlay asked main for and main has not confirmed yet. A broadcast main
+   * sent before it saw the switch (a hover, the window list) still carries the old mode;
+   * applied as-is it would flip the UI back for a frame. Until a broadcast names the
+   * requested mode, the local one stays authoritative and the rest of the state applies.
+   */
+  const requestedMode = useRef<CaptureMode | null>(null);
 
-  useEffect(() => bridge.onState(setState), [bridge]);
+  useEffect(
+    () =>
+      bridge.onState((incoming) => {
+        const requested = requestedMode.current;
+        if (requested === null || incoming.mode === requested) {
+          requestedMode.current = null;
+          setState(incoming);
+          return;
+        }
+        setState((current) => ({
+          ...incoming,
+          mode: current.mode,
+          frameDisplayId: current.frameDisplayId,
+        }));
+      }),
+    [bridge],
+  );
 
   const send = useCallback<SendAnswer>(
     (answer, beforeSend) => {
@@ -123,6 +146,7 @@ export function CaptureOverlay({
     (next: CaptureMode) => {
       if (answered.current || persisting.current || next === modeRef.current) return;
       modeRef.current = next;
+      requestedMode.current = next;
       setState((current) => ({
         ...current,
         mode: next,
@@ -187,7 +211,15 @@ export function CaptureOverlay({
         send={send}
       />
     ) : mode === "window" ? (
-      <WindowPicker query={query} windows={state.windows} chrome={chrome} send={send} />
+      <WindowPicker
+        query={query}
+        bridge={bridge}
+        windows={state.windows}
+        hoverDisplayId={state.hoverDisplayId}
+        cursor={state.cursor ?? null}
+        chrome={chrome}
+        send={send}
+      />
     ) : (
       <FrameMode
         query={query}

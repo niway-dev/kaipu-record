@@ -659,6 +659,7 @@ describe("CaptureOverlayWindows: switching mode inside the overlay", () => {
         hoverDisplayId: null,
         frameDisplayId: null,
         windows: [editor],
+        cursor: { x: 100, y: 100 },
       });
     }
     first.send(IPC_CHANNELS.screenshotOverlayMode, { mode: "screen" });
@@ -731,6 +732,33 @@ describe("CaptureOverlayWindows: switching mode inside the overlay", () => {
     for (const window of [first, second]) {
       expect(states(window).at(-1)).toMatchObject({ windows: [editor] });
     }
+  });
+
+  it("Window: the pointer entering another display moves the keyboard to that overlay", async () => {
+    const { first, second } = pickWith("window", { list: async () => [editor] });
+    await flush();
+    // The pick opened with the pointer on the left display (cursorPoint 100, 100).
+    expect(first.focus).toHaveBeenCalled();
+    expect(second.focus).not.toHaveBeenCalled();
+
+    second.send(IPC_CHANNELS.screenshotOverlayHover, { displayId: 2 });
+
+    // Enter and ⌘C act on the highlight of the overlay the pointer is on.
+    expect(second.focus).toHaveBeenCalledOnce();
+    second.send(IPC_CHANNELS.screenshotOverlayHover, { displayId: 2 });
+    expect(second.focus).toHaveBeenCalledOnce();
+  });
+
+  it("Screen: hovering another display does not move the keyboard (Enter follows main's hover)", () => {
+    const { second } = pickWith("screen");
+    second.send(IPC_CHANNELS.screenshotOverlayHover, { displayId: 2 });
+    expect(second.focus).not.toHaveBeenCalled();
+  });
+
+  it("broadcasts the pointer position once the window list has landed", async () => {
+    const { first } = pickWith("window", { list: async () => [editor] });
+    await flush();
+    expect(states(first).at(-1)).toMatchObject({ windows: [editor], cursor: { x: 100, y: 100 } });
   });
 
   it("refuses a window answer for a display that does not hold that window", async () => {

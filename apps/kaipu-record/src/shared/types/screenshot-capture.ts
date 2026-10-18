@@ -104,13 +104,16 @@ export type OverlayAnswer =
  * Main → every overlay. `mode`: the mode every overlay renders right now. `hoverDisplayId`:
  * the display the pointer is over, so only that one highlights (Screen). `frameDisplayId`:
  * the one display that shows the Frame box; `null` in every other mode. `windows`: `null`
- * until the lister answers, `[]` when it found none.
+ * until the lister answers, `[]` when it found none. `cursor`: the pointer in global DIP when
+ * main sent this state, present once `windows` has landed, so the Window picker can
+ * highlight the window under a pointer that has not moved over it yet.
  */
 export interface OverlayState {
   mode: CaptureMode;
   hoverDisplayId: number | null;
   frameDisplayId: number | null;
   windows: ListedWindow[] | null;
+  cursor?: { x: number; y: number };
 }
 
 /** Main → toast window. */

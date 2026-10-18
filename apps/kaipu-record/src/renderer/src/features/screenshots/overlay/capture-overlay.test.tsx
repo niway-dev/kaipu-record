@@ -961,6 +961,24 @@ describe("switching mode inside the overlay", () => {
     expect(setMode).not.toHaveBeenCalled();
   });
 
+  it("a broadcast sent before main saw the switch does not flip the mode back", () => {
+    const { api, pushState, setMode } = fakeApi({}, SCREEN);
+    render(<CaptureOverlay query={query("screen")} api={api} />);
+
+    press("2");
+    expect(setMode).toHaveBeenCalledExactlyOnceWith("window");
+    // A hover broadcast main sent while it was still in Screen lands after the switch.
+    pushState({ mode: "screen", hoverDisplayId: 42 });
+    expect(screen.getByTestId("window-picker")).toBeInTheDocument();
+    expect(screen.queryByTestId("screen-card")).toBeNull();
+
+    // Main confirms Window; from then on its broadcasts lead again.
+    pushState({ mode: "window", windows: [] });
+    expect(screen.getByTestId("window-picker")).toBeInTheDocument();
+    pushState({ mode: "screen" }); // another overlay switched to Screen
+    expect(screen.getByTestId("screen-card")).toBeInTheDocument();
+  });
+
   it("ignores a digit with a modifier, and a digit after the pick was answered", () => {
     const { api, setMode } = fakeApi({}, SCREEN);
     render(<CaptureOverlay query={query("screen")} api={api} />);
@@ -1159,6 +1177,51 @@ describe("WindowPicker", () => {
     expect(answer).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({ kind: "window", action: "copy", windowId: "11" }),
     );
+  });
+
+  it("tells main the pointer is on this display, so this overlay gets the keyboard", () => {
+    const { sheet, api } = renderPicker();
+
+    fireEvent.pointerEnter(sheet, { clientX: 300, clientY: 300 });
+    fireEvent.pointerMove(sheet, { clientX: 310, clientY: 300 });
+    fireEvent.pointerMove(sheet, { clientX: 320, clientY: 300 });
+
+    // One message, not one per move.
+    expect(api.captureOverlay.hover).toHaveBeenCalledExactlyOnceWith(42);
+  });
+
+  it("highlights the window under the pointer as soon as the list lands, without a move", () => {
+    const { pushState, answer } = renderPicker({ ...WINDOWS, windows: null });
+    expect(highlighted()).toBeNull();
+
+    // Main reads the pointer (global DIP) when the list lands; this display starts at (0, 0).
+    pushState({ windows: [editor, browser], cursor: { x: 300, y: 300 } });
+
+    expect(highlighted()).toHaveAttribute("data-window-id", "11");
+    press("Enter");
+    expect(answer).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "window", action: "capture", windowId: "11" }),
+    );
+  });
+
+  it("maps main's global pointer into this display, and stops following it once the pointer moves here", () => {
+    const offset = query("window", { bounds: { x: 1600, y: 0, width: 1600, height: 1000 } });
+    const fake = fakeApi({}, { ...WINDOWS, windows: null });
+    render(<CaptureOverlay query={offset} api={fake.api} />);
+    const sheet = screen.getByTestId("window-picker");
+
+    // (300, 300) global is on the display left of this one: nothing here.
+    fake.pushState({ windows: [editor, browser], cursor: { x: 300, y: 300 } });
+    expect(highlighted()).toBeNull();
+
+    // Global (1900, 300) is (300, 300) on this display: the editor.
+    fake.pushState({ cursor: { x: 1900, y: 300 } });
+    expect(highlighted()).toHaveAttribute("data-window-id", "11");
+
+    // The pointer moved here: local tracking decides, a later broadcast does not override it.
+    fireEvent.pointerMove(sheet, { clientX: 1000, clientY: 700 });
+    fake.pushState({ cursor: { x: 1900, y: 300 } });
+    expect(highlighted()).toHaveAttribute("data-window-id", "22");
   });
 
   it("drops the highlight when a new list no longer holds that window", () => {

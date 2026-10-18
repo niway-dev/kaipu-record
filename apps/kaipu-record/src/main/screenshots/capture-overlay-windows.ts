@@ -518,6 +518,8 @@ export class CaptureOverlayWindows implements OverlayPort {
       hoverDisplayId: this.hoverDisplayId,
       frameDisplayId: this.frameDisplayId,
       windows: this.windows,
+      // Window: where the pointer is now, so a picker can highlight under a still pointer.
+      ...(this.windows !== null ? { cursor: this.deps.cursorPoint() } : {}),
     };
     window.webContents.send(IPC_CHANNELS.screenshotOverlayState, state);
   }
@@ -553,6 +555,15 @@ export class CaptureOverlayWindows implements OverlayPort {
     return entry ? entry.displayId : null;
   }
 
+  /** Make `displayId`'s overlay the key window (once; `force` re-focuses it anyway). */
+  private focusOn(displayId: number, force = false): void {
+    if (!force && this.focusDisplayId === displayId) return;
+    this.focusDisplayId = displayId;
+    this.liveEntries()
+      .find((entry) => entry.displayId === displayId)
+      ?.window.focus();
+  }
+
   private ownsSender(event: SenderEvent): boolean {
     return this.liveEntries().some(({ window }) => window.webContents.id === event.sender.id);
   }
@@ -569,6 +580,12 @@ export class CaptureOverlayWindows implements OverlayPort {
       const displayId = (payload as { displayId?: unknown } | undefined)?.displayId;
       const next =
         isFiniteNumber(displayId) && this.session.displayIds.has(displayId) ? displayId : null;
+      // Window: each overlay highlights the window under the pointer on its own display, and
+      // Enter / ⌘C act on that highlight, so the keyboard follows the pointer across displays.
+      // Only a renderer's report about its own (shown) window moves the focus.
+      if (this.mode === "window" && this.session.settle && next !== null) {
+        if (next === this.displayOf(event)) this.focusOn(next);
+      }
       // Two renderers race when the pointer crosses displays: A's "left" can arrive after
       // B's "entered". Only the hovered display's own window may clear the hover.
       if (next === null && this.displayOf(event) !== this.hoverDisplayId) return;
@@ -584,10 +601,8 @@ export class CaptureOverlayWindows implements OverlayPort {
       if (!isFiniteNumber(displayId) || !this.session.displayIds.has(displayId)) return;
       if (displayId === this.frameDisplayId) return;
       this.frameDisplayId = displayId;
-      this.focusDisplayId = displayId;
       // Enter lives in the window that now holds the frame: make it the key window.
-      const target = this.liveEntries().find((entry) => entry.displayId === displayId);
-      target?.window.focus();
+      this.focusOn(displayId, true);
       this.broadcastState();
     });
 
@@ -601,12 +616,7 @@ export class CaptureOverlayWindows implements OverlayPort {
       this.mode = mode;
       // The frame lives only in Frame; entering it puts it where the user asked from.
       this.frameDisplayId = mode === "frame" ? sender : null;
-      if (mode === "frame") {
-        this.focusDisplayId = sender;
-        this.liveEntries()
-          .find((entry) => entry.displayId === sender)
-          ?.window.focus();
-      }
+      if (mode === "frame") this.focusOn(sender, true);
       if (mode === "window") this.requestWindows();
       this.broadcastState();
     });

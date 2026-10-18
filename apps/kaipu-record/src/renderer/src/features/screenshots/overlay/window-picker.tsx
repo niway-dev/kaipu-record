@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "@kaipu/i18n";
+import type { CaptureOverlayBridge } from "@shared/types/electron-api";
 import type { CaptureAction, CaptureRect, ListedWindow } from "@shared/types/screenshot-capture";
 import type { SendAnswer } from "./capture-overlay";
 import { isCaptureKey, isCopyKey } from "./overlay-keys";
@@ -41,8 +42,13 @@ export function windowLabel(window: ListedWindow): string {
 
 interface WindowPickerProps {
   query: OverlayQuery;
+  bridge: Pick<CaptureOverlayBridge, "hover">;
   /** Main's list: `null` while the lister runs, `[]` when it found none. */
   windows: ListedWindow[] | null;
+  /** Main's word on which display the pointer is over. */
+  hoverDisplayId: number | null;
+  /** The pointer in global DIP when the list landed (main's `OverlayState.cursor`). */
+  cursor: { x: number; y: number } | null;
   chrome: OverlayChrome;
   send: SendAnswer;
 }
@@ -52,10 +58,17 @@ interface WindowPickerProps {
  * its title above it) with the mode pill and the action bar attached. A click captures the
  * window under the click; a click where there is no window answers nothing. Enter and
  * ⌘C / Ctrl+C capture or copy the highlighted one.
+ *
+ * Keyboard focus follows the pointer: entering this display tells main (`hover`), which
+ * makes this overlay the key window, so Enter acts on the highlight the user sees. When the
+ * list lands, the window under the pointer is highlighted at once, even if it never moved.
  */
 export function WindowPicker({
   query,
+  bridge,
   windows,
+  hoverDisplayId,
+  cursor,
   chrome,
   send,
 }: WindowPickerProps): React.JSX.Element {
@@ -73,6 +86,28 @@ export function WindowPicker({
       current ? (onDisplay.find((window) => window.id === current.id) ?? null) : null,
     );
   }, [onDisplay]);
+
+  // Until the pointer moves over this overlay, main's pointer (sent with every state once the
+  // list has landed) decides the highlight, so Enter works on a list that landed under a
+  // still pointer. After the first local pointer event, local tracking alone decides.
+  const pointerSeen = useRef(false);
+  useEffect(() => {
+    if (pointerSeen.current || !cursor) return;
+    setHovered(
+      windowAt(onDisplay, query.displayId, cursor.x - query.bounds.x, cursor.y - query.bounds.y),
+    );
+  }, [cursor, onDisplay, query.displayId, query.bounds]);
+
+  // What main believes is hovered: report only when it disagrees (one message, not one per move).
+  const reported = useRef<number | null>(hoverDisplayId);
+  useEffect(() => {
+    reported.current = hoverDisplayId;
+  }, [hoverDisplayId]);
+  const reportPointerHere = (): void => {
+    if (reported.current === query.displayId) return;
+    reported.current = query.displayId;
+    bridge.hover(query.displayId);
+  };
 
   const answer = (window: ListedWindow, action: CaptureAction): void => {
     send({
@@ -102,6 +137,8 @@ export function WindowPicker({
   }, [platform]);
 
   const track = (event: React.PointerEvent<HTMLDivElement>): void => {
+    pointerSeen.current = true;
+    reportPointerHere();
     const { clientX: x, clientY: y } = event;
     const next = windowAt(onDisplay, query.displayId, x, y);
     if (next?.id === hovered?.id) return;
