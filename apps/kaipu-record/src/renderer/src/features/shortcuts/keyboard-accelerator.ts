@@ -6,16 +6,13 @@
  * take it as a parameter, defaulting to the preload bridge's `platform`.
  */
 
+import { hostPlatform } from "./host-platform";
+
 export interface CapturedShortcut {
   /** Electron accelerator, e.g. "Command+Control+C". */
   accelerator: string;
   /** Display label for the platform, e.g. "⌃⌘C" (macOS) or "Ctrl+Alt+C" (Windows). */
   label: string;
-}
-
-/** The host OS from the preload bridge; macOS when there is no bridge (a bare test). */
-function bridgePlatform(): string {
-  return typeof window !== "undefined" ? (window.electronAPI?.platform ?? "darwin") : "darwin";
 }
 
 const MODIFIER_KEYS = new Set(["Meta", "Control", "Alt", "Shift", "OS"]);
@@ -43,7 +40,7 @@ export function captureShortcut(
     altKey: boolean;
     shiftKey: boolean;
   },
-  platform: string = bridgePlatform(),
+  platform: string = hostPlatform(),
 ): CapturedShortcut | null {
   if (MODIFIER_KEYS.has(event.key)) return null;
   const token = keyToken(event.code);
@@ -121,10 +118,7 @@ const TEXT_ORDER = ["Ctrl", "Alt", "Shift", "Win"];
  * ("Command+Control+C" → "⌃⌘C"), Windows-style text elsewhere
  * ("Control+Alt+C" → "Ctrl+Alt+C").
  */
-export function formatAccelerator(
-  accelerator: string,
-  platform: string = bridgePlatform(),
-): string {
+export function formatAccelerator(accelerator: string, platform: string = hostPlatform()): string {
   const mac = platform === "darwin";
   const names = mac ? MAC_SYMBOLS : TEXT_NAMES;
   const order = mac ? MAC_ORDER : TEXT_ORDER;

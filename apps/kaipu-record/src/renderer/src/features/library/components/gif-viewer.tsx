@@ -1,6 +1,7 @@
 import { ImageOff } from "lucide-react";
 import { useState } from "react";
 import { useTranslations } from "@kaipu/i18n";
+import { isWindowsHost } from "@renderer/features/shortcuts/host-platform";
 import styles from "./screenshot-viewer.module.css";
 
 /**
@@ -20,7 +21,7 @@ export function GifViewer({ id }: { id: string }): React.JSX.Element {
           alt=""
           className={styles.image}
           draggable
-          title={t("gifDragHint")}
+          title={t(isWindowsHost() ? "gifDragHintWindows" : "gifDragHint")}
           onDragStart={(event) => {
             event.preventDefault();
             window.electronAPI.startFileDrag(id);

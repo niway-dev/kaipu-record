@@ -3,8 +3,13 @@ import { ENABLED_CAPTURE_MODES, type CaptureMode } from "@shared/types/screensho
 /** Which modifier means "copy" on the overlay: ⌘C on macOS, Ctrl+C everywhere else. */
 export type KeyPlatform = "mac" | "other";
 
-/** The overlay renderer's platform, from the browser's own report. */
+/**
+ * The overlay renderer's platform: the preload bridge's `platform` first (what
+ * Electron actually runs on), the browser's own report only when there is no bridge.
+ */
 export function detectKeyPlatform(): KeyPlatform {
+  const bridged = typeof window !== "undefined" ? window.electronAPI?.platform : undefined;
+  if (bridged) return bridged === "darwin" ? "mac" : "other";
   return typeof navigator !== "undefined" && /mac/i.test(navigator.platform) ? "mac" : "other";
 }
 

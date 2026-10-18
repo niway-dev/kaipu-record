@@ -101,6 +101,25 @@ describe("Settings layout", () => {
     expect(open).toHaveBeenCalledOnce();
   });
 
+  it("App shows the Dock toggle on macOS", async () => {
+    renderAt("/settings/app");
+    expect(await screen.findByText("Show in Dock & app switcher")).toBeInTheDocument();
+  });
+
+  it("App hides the Dock toggle entirely on Windows, where there is no Dock", async () => {
+    const api = window.electronAPI as { platform: string };
+    const original = api.platform;
+    api.platform = "win32";
+    try {
+      renderAt("/settings/app");
+      await screen.findByRole("button", { name: /replay/i });
+      expect(screen.queryByText("Show in Dock & app switcher")).toBeNull();
+      expect(screen.queryByText(/⌘|Dock/)).toBeNull();
+    } finally {
+      api.platform = original;
+    }
+  });
+
   it("Permissions hides the Accessibility row when it's not required (non-macOS, or the stub default)", async () => {
     renderAt("/settings/permissions");
     await screen.findByRole("heading", { level: 2, name: "Permissions" });

@@ -10,6 +10,7 @@ import {
   Tags,
 } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
+import { isWindowsHost } from "@renderer/features/shortcuts/host-platform";
 import * as stylex from "@stylexjs/stylex";
 import { SearchInput } from "@kaipu/ui";
 import { Button } from "@kaipu/ui";
@@ -197,7 +198,10 @@ export function LibraryPage(): React.JSX.Element {
           </div>
 
           <div className={styles.filterGroup} role="group" aria-label={t("filterStorage")}>
-            <span className={styles.groupLabel} title={t("filterStorageHint")}>
+            <span
+              className={styles.groupLabel}
+              title={t(isWindowsHost() ? "filterStorageHintWindows" : "filterStorageHint")}
+            >
               {t("filterStorage")}
             </span>
             <FilterChip active={storageFilter === "all"} onClick={() => setStorageFilter("all")}>
