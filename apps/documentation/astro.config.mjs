@@ -45,6 +45,7 @@ export default defineConfig({
             { slug: "desktop/ipc-contract" },
             { slug: "desktop/library-vault" },
             { slug: "desktop/permissions-and-onboarding" },
+            { slug: "desktop/platform-parity" },
             { slug: "desktop/electron-vs-tauri" },
           ],
         },

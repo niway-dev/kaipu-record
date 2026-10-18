@@ -11,6 +11,8 @@ description: "Ship the working Windows build as a recording-only beta instead of
 > [Windows release design](/specs/2026-10-15-windows-release-design/) and ADR 0023 turn the
 > steps below into tickets; screenshots on Windows come from the
 > [screenshot capture modes design](/specs/2026-10-15-screenshot-capture-modes-design/).
+> **Per-capability state:** [Platform parity](/desktop/platform-parity/) lists what each
+> platform runs and what is still unverified on Windows hardware.
 
 ## Why now
 
