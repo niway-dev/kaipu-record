@@ -34,9 +34,10 @@ describe("createCaptureHandler", () => {
       kind: "captured",
       png: Buffer.from([1, 2, 3]),
       mode,
+      action: "capture",
     }));
-    const out = await handler({ mode: "area" });
-    expect(out).toMatchObject({ kind: "captured", width: 3, height: 2, mode: "area" });
+    const out = await handler({ mode: "frame" });
+    expect(out).toMatchObject({ kind: "captured", width: 3, height: 2, mode: "frame" });
     if (out.kind !== "captured") throw new Error("unreachable");
     expect(new Uint8Array(out.png)).toEqual(new Uint8Array([1, 2, 3]));
     expect(windows.afterCapture).toHaveBeenCalledWith(true);
@@ -44,7 +45,7 @@ describe("createCaptureHandler", () => {
 
   it("answers cancelled and restores the window", async () => {
     const { handler, windows } = setup(async () => ({ kind: "cancelled" }));
-    expect(await handler({ mode: "area" })).toEqual({ kind: "cancelled" });
+    expect(await handler({ mode: "frame" })).toEqual({ kind: "cancelled" });
     expect(windows.afterCapture).toHaveBeenCalledWith(false);
   });
 
@@ -63,7 +64,12 @@ describe("createCaptureHandler", () => {
   });
 
   it("reports one event per answered request with only mode, platform, displays and outcome", async () => {
-    const captured = setup(async ({ mode }) => ({ kind: "captured", png: Buffer.from([1]), mode }));
+    const captured = setup(async ({ mode }) => ({
+      kind: "captured",
+      png: Buffer.from([1]),
+      mode,
+      action: "capture",
+    }));
     await captured.handler({ mode: "screen" });
     expect(captured.track).toHaveBeenCalledOnce();
     expect(captured.track).toHaveBeenCalledWith({
@@ -80,9 +86,9 @@ describe("createCaptureHandler", () => {
     );
 
     const unsupported = setup(vi.fn(), "win32", () => false);
-    await unsupported.handler({ mode: "area" });
+    await unsupported.handler({ mode: "frame" });
     expect(unsupported.track).toHaveBeenCalledWith({
-      mode: "area",
+      mode: "frame",
       platform: "win32",
       displays: 2,
       outcome: "unsupported",
@@ -92,13 +98,13 @@ describe("createCaptureHandler", () => {
   it("does not report the re-entrant request it turns away, nor an invalid mode", async () => {
     let finish!: (r: ProviderResult) => void;
     const { handler, track } = setup(() => new Promise<ProviderResult>((r) => (finish = r)));
-    const first = handler({ mode: "area" });
-    await handler({ mode: "area" });
+    const first = handler({ mode: "frame" });
+    await handler({ mode: "frame" });
     expect(track).not.toHaveBeenCalled();
     finish({ kind: "cancelled" });
     await first;
     expect(track).toHaveBeenCalledOnce();
-    await expect(handler({ mode: "window" })).rejects.toThrow();
+    await expect(handler({ mode: "area" })).rejects.toThrow();
     expect(track).toHaveBeenCalledOnce();
   });
 
@@ -108,14 +114,14 @@ describe("createCaptureHandler", () => {
     track.mockImplementation(() => {
       throw new Error("posthog down");
     });
-    expect(await handler({ mode: "area" })).toEqual({ kind: "cancelled" });
+    expect(await handler({ mode: "frame" })).toEqual({ kind: "cancelled" });
     expect(logged).toHaveBeenCalled();
   });
 
   it("rejects an unknown mode before touching the windows", async () => {
     const capture = vi.fn();
     const { handler, windows } = setup(capture);
-    await expect(handler({ mode: "window" })).rejects.toThrow(/unknown mode/);
+    await expect(handler({ mode: "area" })).rejects.toThrow(/unknown mode/);
     await expect(handler(undefined)).rejects.toThrow(/unknown mode/);
     expect(windows.beforeCapture).not.toHaveBeenCalled();
     expect(capture).not.toHaveBeenCalled();
@@ -126,8 +132,8 @@ describe("createCaptureHandler", () => {
     const capture = vi.fn(() => new Promise<ProviderResult>((resolve) => (finish = resolve)));
     const { handler, windows } = setup(capture);
 
-    const first = handler({ mode: "area" });
-    expect(await handler({ mode: "area" })).toEqual({ kind: "cancelled" });
+    const first = handler({ mode: "frame" });
+    expect(await handler({ mode: "frame" })).toEqual({ kind: "cancelled" });
     expect(capture).toHaveBeenCalledTimes(1);
     expect(windows.beforeCapture).toHaveBeenCalledTimes(1);
     expect(windows.afterCapture).not.toHaveBeenCalled();
@@ -138,7 +144,7 @@ describe("createCaptureHandler", () => {
 
     // The guard is released afterwards.
     finish = () => {};
-    void handler({ mode: "area" });
+    void handler({ mode: "frame" });
     expect(capture).toHaveBeenCalledTimes(2);
   });
 
@@ -149,12 +155,12 @@ describe("createCaptureHandler", () => {
     windows.beforeCapture.mockImplementationOnce(() => {
       throw new Error("hide failed");
     });
-    expect(await handler({ mode: "area" })).toEqual({ kind: "cancelled" });
+    expect(await handler({ mode: "frame" })).toEqual({ kind: "cancelled" });
     expect(logged).toHaveBeenCalled();
     expect(windows.afterCapture).toHaveBeenCalledWith(false);
     expect(capture).not.toHaveBeenCalled();
     // The next request is not turned away by a stuck guard.
-    expect(await handler({ mode: "area" })).toEqual({ kind: "cancelled" });
+    expect(await handler({ mode: "frame" })).toEqual({ kind: "cancelled" });
     expect(capture).toHaveBeenCalledTimes(1);
   });
 
@@ -162,11 +168,11 @@ describe("createCaptureHandler", () => {
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     const capture = vi.fn().mockRejectedValueOnce(new Error("boom"));
     const { handler, windows } = setup(capture);
-    expect(await handler({ mode: "area" })).toEqual({ kind: "cancelled" });
+    expect(await handler({ mode: "frame" })).toEqual({ kind: "cancelled" });
     expect(logged).toHaveBeenCalled();
     expect(windows.afterCapture).toHaveBeenCalledWith(false);
     capture.mockResolvedValueOnce({ kind: "cancelled" });
-    expect(await handler({ mode: "area" })).toEqual({ kind: "cancelled" });
+    expect(await handler({ mode: "frame" })).toEqual({ kind: "cancelled" });
   });
 
   it("reports a provider throw as failed, not cancelled", async () => {

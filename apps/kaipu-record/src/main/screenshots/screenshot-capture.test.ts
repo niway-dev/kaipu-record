@@ -12,7 +12,7 @@ import {
   type WindowsDeps,
 } from "./screenshot-capture";
 
-const MODES: CaptureMode[] = ["area", "screen", "frame"];
+const MODES: CaptureMode[] = ["frame", "window", "screen"];
 const overlay: OverlayPort = {
   pick: vi.fn(async () => ({ kind: "cancelled" as const })),
   hideAll: vi.fn(async () => {}),
@@ -23,43 +23,15 @@ describe("MacProvider", () => {
   // Typed with the Deps signatures so the injected object is assignable (vi.fn's
   // loose Mock type otherwise fails the typecheck even though it runs fine).
   let runCli: (cmd: string, args: string[]) => Promise<void>;
-  let readPng: (path: string) => Promise<Buffer>;
   let fileExists: (path: string) => Promise<boolean>;
 
   beforeEach(() => {
     runCli = vi.fn(async () => {});
-    readPng = vi.fn(async () => Buffer.from([0x89, 0x50, 0x4e, 0x47])); // PNG magic
     fileExists = vi.fn(async () => true);
   });
   afterEach(() => vi.restoreAllMocks());
 
-  const provider = (): MacProvider =>
-    new MacProvider({
-      runCli,
-      readPng,
-      fileExists,
-      tempPath: () => "/tmp/x.png",
-      getDisplays: async () => [],
-      settle: async () => {},
-    });
-
-  it("area: returns the captured PNG, silently (-x)", async () => {
-    const out = await provider().capture({ mode: "area", overlay });
-    expect(runCli).toHaveBeenCalledWith("screencapture", ["-i", "-o", "-x", "/tmp/x.png"]);
-    expect(out).toEqual({
-      kind: "captured",
-      png: Buffer.from([0x89, 0x50, 0x4e, 0x47]),
-      mode: "area",
-    });
-  });
-
-  it("area: answers cancelled when the user cancels (no file written)", async () => {
-    fileExists = vi.fn(async () => false);
-    expect(await provider().capture({ mode: "area", overlay })).toEqual({ kind: "cancelled" });
-    expect(readPng).not.toHaveBeenCalled();
-  });
-
-  describe("screen and frame through the overlay", () => {
+  describe("through the overlay", () => {
     const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
     const display = (id: number, x: number, y: number, width: number, height: number): Display =>
       ({ id, bounds: { x, y, width, height } }) as Display;
@@ -115,7 +87,7 @@ describe("MacProvider", () => {
         "runCli:-R 0,0,1440,900 -x /tmp/x.png",
         "destroyAll",
       ]);
-      expect(out).toEqual({ kind: "captured", png: PNG, mode: "screen" });
+      expect(out).toEqual({ kind: "captured", png: PNG, mode: "screen", action: "capture" });
     });
 
     it("one display waits for the settle delay before running screencapture", async () => {
@@ -131,7 +103,7 @@ describe("MacProvider", () => {
 
     it("screen with two displays picks, hides, captures the chosen display, then destroys", async () => {
       displays = [main, left];
-      answer = { kind: "display", displayId: 2 };
+      answer = { kind: "display", mode: "screen", action: "capture", displayId: 2 };
       const out = await macProvider().capture({ mode: "screen", overlay: fake });
       expect(log).toEqual([
         "pick:screen",
@@ -145,7 +117,13 @@ describe("MacProvider", () => {
 
     it("frame converts the display-relative rect to global DIP", async () => {
       displays = [main, left];
-      answer = { kind: "rect", displayId: 2, rect: { x: 100, y: 50, width: 640, height: 360 } };
+      answer = {
+        kind: "rect",
+        mode: "frame",
+        action: "capture",
+        displayId: 2,
+        rect: { x: 100, y: 50, width: 640, height: 360 },
+      };
       const out = await macProvider().capture({ mode: "frame", overlay: fake });
       expect(log).toEqual([
         "pick:frame",
@@ -154,11 +132,17 @@ describe("MacProvider", () => {
         "runCli:-R -1820,50,640,360 -x /tmp/x.png",
         "destroyAll",
       ]);
-      expect(out).toEqual({ kind: "captured", png: PNG, mode: "frame" });
+      expect(out).toEqual({ kind: "captured", png: PNG, mode: "frame", action: "capture" });
     });
 
     it("frame with one display still goes through the overlay", async () => {
-      answer = { kind: "rect", displayId: 1, rect: { x: 10, y: 20, width: 30, height: 40 } };
+      answer = {
+        kind: "rect",
+        mode: "frame",
+        action: "capture",
+        displayId: 1,
+        rect: { x: 10, y: 20, width: 30, height: 40 },
+      };
       await macProvider().capture({ mode: "frame", overlay: fake });
       expect(fake.pick).toHaveBeenCalledWith("frame", [main]);
     });
@@ -177,6 +161,64 @@ describe("MacProvider", () => {
         kind: "cancelled",
       });
       expect(log.at(-1)).toBe("destroyAll");
+    });
+
+    describe("capturing by the overlay's answer, not the requested mode", () => {
+      it("a Frame request answered with a display captures the whole display as Screen", async () => {
+        displays = [main, left];
+        answer = { kind: "display", mode: "screen", action: "capture", displayId: 2 };
+        const out = await macProvider().capture({ mode: "frame", overlay: fake });
+        expect(log).toContain("runCli:-R -1920,0,1920,1080 -x /tmp/x.png");
+        expect(out).toEqual({ kind: "captured", png: PNG, mode: "screen", action: "capture" });
+      });
+
+      it("a Screen request answered with a rect crops that rect as Frame", async () => {
+        displays = [main, left];
+        answer = {
+          kind: "rect",
+          mode: "frame",
+          action: "capture",
+          displayId: 1,
+          rect: { x: 10, y: 20, width: 30, height: 40 },
+        };
+        const out = await macProvider().capture({ mode: "screen", overlay: fake });
+        expect(log).toContain("runCli:-R 10,20,30,40 -x /tmp/x.png");
+        expect(out).toEqual({ kind: "captured", png: PNG, mode: "frame", action: "capture" });
+      });
+
+      it("carries the answer's action on the result", async () => {
+        answer = {
+          kind: "rect",
+          mode: "frame",
+          action: "copy",
+          displayId: 1,
+          rect: { x: 1, y: 2, width: 3, height: 4 },
+        };
+        const out = await macProvider().capture({ mode: "frame", overlay: fake });
+        expect(out).toMatchObject({ kind: "captured", action: "copy" });
+      });
+
+      it("a window answer is unsupported for now: nothing hidden, nothing grabbed, overlay destroyed", async () => {
+        answer = {
+          kind: "window",
+          mode: "window",
+          action: "capture",
+          displayId: 1,
+          windowId: "77",
+          rect: { x: 0, y: 0, width: 100, height: 100 },
+        };
+        const out = await macProvider().capture({ mode: "frame", overlay: fake });
+        expect(out).toEqual({ kind: "unsupported", mode: "window" });
+        expect(runCli).not.toHaveBeenCalled();
+        expect(log).toEqual(["pick:frame", "destroyAll"]);
+      });
+
+      it("never shells out to Apple's interactive picker (-i)", async () => {
+        displays = [main, left];
+        answer = { kind: "display", mode: "screen", action: "capture", displayId: 1 };
+        await macProvider().capture({ mode: "frame", overlay: fake });
+        for (const [, args] of vi.mocked(runCli).mock.calls) expect(args).not.toContain("-i");
+      });
     });
 
     it("destroys the overlay and rethrows when runCli throws", async () => {
@@ -201,7 +243,7 @@ describe("MacProvider", () => {
 
     it("waits for the settle delay after hideAll before running screencapture", async () => {
       displays = [main, left];
-      answer = { kind: "display", displayId: 2 };
+      answer = { kind: "display", mode: "screen", action: "capture", displayId: 2 };
       let release = (): void => {};
       settle = () => new Promise<void>((resolve) => (release = resolve));
       const pending = macProvider().capture({ mode: "screen", overlay: fake });
@@ -215,7 +257,7 @@ describe("MacProvider", () => {
     it("answers cancelled with a warning when the picked display is gone after the answer", async () => {
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       displays = [main, left];
-      answer = { kind: "display", displayId: 2 };
+      answer = { kind: "display", mode: "screen", action: "capture", displayId: 2 };
       fake.hideAll = vi.fn(async () => {
         log.push("hideAll");
         displays = [main]; // display 2 unplugged between the answer and the grab
@@ -226,11 +268,6 @@ describe("MacProvider", () => {
       expect(runCli).not.toHaveBeenCalled();
       expect(log.at(-1)).toBe("destroyAll");
       expect(warn).toHaveBeenCalledWith(expect.stringContaining("display 2"));
-    });
-
-    it("area never touches the overlay", async () => {
-      await macProvider().capture({ mode: "area", overlay: fake });
-      expect(log).toEqual(["runCli:-i -o -x /tmp/x.png"]);
     });
   });
 });
@@ -312,22 +349,64 @@ describe("WindowsProvider", () => {
     return new WindowsProvider(deps);
   };
 
-  it("serves every mode", () => {
-    expect(MODES.map((m) => provider().supports(m))).toEqual([true, true, true]);
+  it("serves Frame and Screen, not Window yet", () => {
+    expect(MODES.map((m) => provider().supports(m))).toEqual([true, false, true]);
   });
 
-  it("area: pick, hide, capture, destroy, in that order, cropped in physical pixels", async () => {
-    answer = { kind: "rect", displayId: 1, rect: { x: 100, y: 50, width: 640, height: 360 } };
-    const out = await provider().capture({ mode: "area", overlay: fake });
-    expect(log).toEqual(["pick:area", "hideAll", "settle", "getSources", "destroyAll"]);
+  it("frame: pick, hide, capture, destroy, in that order, cropped in physical pixels", async () => {
+    answer = {
+      kind: "rect",
+      mode: "frame",
+      action: "capture",
+      displayId: 1,
+      rect: { x: 100, y: 50, width: 640, height: 360 },
+    };
+    const out = await provider().capture({ mode: "frame", overlay: fake });
+    expect(log).toEqual(["pick:frame", "hideAll", "settle", "getSources", "destroyAll"]);
     expect(crops).toEqual([{ x: 100, y: 50, width: 640, height: 360 }]);
-    expect(out).toEqual({ kind: "captured", png: PNG("one-crop"), mode: "area" });
+    expect(out).toEqual({
+      kind: "captured",
+      png: PNG("one-crop"),
+      mode: "frame",
+      action: "capture",
+    });
+  });
+
+  it("captures by the overlay's answer: a Frame request answered with a display takes the whole display", async () => {
+    displays = [primary, hiDpi];
+    sources = [{ display_id: "2", thumbnail: image({ width: 1920, height: 1080 }, "two") }];
+    answer = { kind: "display", mode: "screen", action: "capture", displayId: 2 };
+    const out = await provider().capture({ mode: "frame", overlay: fake });
+    expect(crops).toEqual([]);
+    expect(out).toEqual({ kind: "captured", png: PNG("two"), mode: "screen", action: "capture" });
+  });
+
+  it("a window answer is unsupported for now and grabs nothing", async () => {
+    answer = {
+      kind: "window",
+      mode: "window",
+      action: "capture",
+      displayId: 1,
+      windowId: "9",
+      rect: { x: 0, y: 0, width: 100, height: 100 },
+    };
+    expect(await provider().capture({ mode: "frame", overlay: fake })).toEqual({
+      kind: "unsupported",
+      mode: "window",
+    });
+    expect(log).toEqual(["pick:frame", "destroyAll"]);
   });
 
   it("frame on a 150% display crops 150 physical px for a 100 DIP frame", async () => {
     displays = [primary, hiDpi];
     sources = [{ display_id: "2", thumbnail: image({ width: 1920, height: 1080 }, "two") }];
-    answer = { kind: "rect", displayId: 2, rect: { x: 0, y: 0, width: 100, height: 100 } };
+    answer = {
+      kind: "rect",
+      mode: "frame",
+      action: "capture",
+      displayId: 2,
+      rect: { x: 0, y: 0, width: 100, height: 100 },
+    };
     await provider().capture({ mode: "frame", overlay: fake });
     expect(requested).toEqual([{ width: 1920, height: 1080 }]);
     expect(crops).toEqual([{ x: 0, y: 0, width: 150, height: 150 }]);
@@ -337,7 +416,13 @@ describe("WindowsProvider", () => {
     displays = [primary, hiDpi];
     // Asked for 1920x1080, got 1280x720 (scale 1.0): 100 DIP is now 100 px, not 150.
     sources = [{ display_id: "2", thumbnail: image({ width: 1280, height: 720 }, "two") }];
-    answer = { kind: "rect", displayId: 2, rect: { x: 640, y: 360, width: 100, height: 100 } };
+    answer = {
+      kind: "rect",
+      mode: "frame",
+      action: "capture",
+      displayId: 2,
+      rect: { x: 640, y: 360, width: 100, height: 100 },
+    };
     await provider().capture({ mode: "frame", overlay: fake });
     expect(crops).toEqual([{ x: 640, y: 360, width: 100, height: 100 }]);
   });
@@ -348,16 +433,16 @@ describe("WindowsProvider", () => {
       { display_id: "1", thumbnail: image({ width: 1920, height: 1080 }, "one") },
       { display_id: "2", thumbnail: image({ width: 1920, height: 1080 }, "two") },
     ];
-    answer = { kind: "display", displayId: 2 };
+    answer = { kind: "display", mode: "screen", action: "capture", displayId: 2 };
     const out = await provider().capture({ mode: "screen", overlay: fake });
-    expect(out).toEqual({ kind: "captured", png: PNG("two"), mode: "screen" });
+    expect(out).toEqual({ kind: "captured", png: PNG("two"), mode: "screen", action: "capture" });
     expect(crops).toEqual([]); // Screen takes the whole thumbnail
   });
 
   it("falls back to the lone source when its display_id is empty", async () => {
     sources = [{ display_id: "", thumbnail: image({ width: 1920, height: 1080 }, "lone") }];
     const out = await provider().capture({ mode: "screen", overlay: fake });
-    expect(out).toEqual({ kind: "captured", png: PNG("lone"), mode: "screen" });
+    expect(out).toEqual({ kind: "captured", png: PNG("lone"), mode: "screen", action: "capture" });
   });
 
   it("does not guess among several sources when none matches", async () => {
@@ -366,7 +451,7 @@ describe("WindowsProvider", () => {
       { display_id: "7", thumbnail: image({ width: 1, height: 1 }, "a") },
       { display_id: "8", thumbnail: image({ width: 1, height: 1 }, "b") },
     ];
-    answer = { kind: "display", displayId: 2 };
+    answer = { kind: "display", mode: "screen", action: "capture", displayId: 2 };
     vi.spyOn(console, "warn").mockImplementation(() => {});
     expect(await provider().capture({ mode: "screen", overlay: fake })).toEqual({
       kind: "cancelled",
@@ -377,7 +462,7 @@ describe("WindowsProvider", () => {
     const out = await provider().capture({ mode: "screen", overlay: fake });
     expect(fake.pick).not.toHaveBeenCalled();
     expect(log).toEqual(["settle", "hideAll", "getSources", "destroyAll"]);
-    expect(out).toEqual({ kind: "captured", png: PNG("one"), mode: "screen" });
+    expect(out).toEqual({ kind: "captured", png: PNG("one"), mode: "screen", action: "capture" });
   });
 
   it("one display waits for the settle delay before asking for sources", async () => {
@@ -393,7 +478,7 @@ describe("WindowsProvider", () => {
   it("answers cancelled with a warning when the picked display is gone after the answer", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     displays = [primary, hiDpi];
-    answer = { kind: "display", displayId: 2 };
+    answer = { kind: "display", mode: "screen", action: "capture", displayId: 2 };
     fake.hideAll = vi.fn(async () => {
       log.push("hideAll");
       displays = [primary];
@@ -440,10 +525,10 @@ describe("WindowsProvider", () => {
   });
 
   it("cancel at pick answers cancelled, captures nothing, and still destroys", async () => {
-    expect(await provider().capture({ mode: "area", overlay: fake })).toEqual({
+    expect(await provider().capture({ mode: "frame", overlay: fake })).toEqual({
       kind: "cancelled",
     });
-    expect(log).toEqual(["pick:area", "destroyAll"]);
+    expect(log).toEqual(["pick:frame", "destroyAll"]);
   });
 
   it("destroys the overlay and rethrows when getSources throws", async () => {
@@ -460,14 +545,15 @@ describe("WindowsProvider", () => {
 });
 
 describe("supports", () => {
-  it("Mac and Windows serve every mode; others serve nothing", () => {
+  it("Mac and Windows serve Frame and Screen, not Window yet; others serve nothing", () => {
     const mac = new MacProvider();
-    expect(MODES.map((m) => mac.supports(m))).toEqual([true, true, true]);
+    expect(MODES.map((m) => mac.supports(m))).toEqual([true, false, true]);
     expect(new UnsupportedProvider().supports()).toBe(false);
   });
 
   it("lists the supported modes for the renderer", () => {
-    expect(new MacProvider().supportedModes()).toEqual(["area", "screen", "frame"]);
+    expect(new MacProvider().supportedModes()).toEqual(["frame", "screen"]);
+    expect(new WindowsProvider().supportedModes()).toEqual(["frame", "screen"]);
     expect(new UnsupportedProvider().supportedModes()).toEqual([]);
   });
 });

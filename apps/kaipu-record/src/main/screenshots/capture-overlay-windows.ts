@@ -3,10 +3,10 @@ import type { BrowserWindowConstructorOptions, Display, Rectangle } from "electr
 import { join } from "path";
 import { is } from "@electron-toolkit/utils";
 import { IPC_CHANNELS } from "@shared/types/ipc";
-import type { OverlayState } from "@shared/types/screenshot-capture";
+import type { CaptureAction, CaptureMode, OverlayState } from "@shared/types/screenshot-capture";
 import type { OverlayAnswer, OverlayPort } from "./overlay-port";
 
-export type OverlayUi = "area" | "screen" | "frame";
+export type OverlayUi = CaptureMode;
 
 /** How long `hideAll` waits for the renderers' frame acks before capturing anyway. */
 export const HIDDEN_ACK_CAP_MS = 250;
@@ -150,28 +150,54 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
-/** Validate a renderer answer: it crosses a process boundary, so its shape is not trusted. */
+function parseAction(value: unknown): CaptureAction | null {
+  // An answer without an action is a plain Capture; anything else must be a known action.
+  if (value === undefined) return "capture";
+  return value === "capture" || value === "copy" ? value : null;
+}
+
+function parseRect(value: unknown): Rectangle | null {
+  if (!value || typeof value !== "object") return null;
+  const { x, y, width, height } = value as Record<string, unknown>;
+  if (![x, y, width, height].every(isFiniteNumber)) return null;
+  if ((width as number) <= 0 || (height as number) <= 0) return null;
+  return { x: x as number, y: y as number, width: width as number, height: height as number };
+}
+
+/**
+ * Validate a renderer answer: it crosses a process boundary, so its shape is not trusted.
+ * Each kind must carry its own mode, because providers capture by `answer.mode`.
+ */
 function parseAnswer(payload: unknown, displayIds: Set<number>): OverlayAnswer | null {
   if (!payload || typeof payload !== "object") return null;
   const answer = payload as Record<string, unknown>;
   if (answer.kind === "cancelled") return { kind: "cancelled" };
   if (!isFiniteNumber(answer.displayId) || !displayIds.has(answer.displayId)) return null;
-  if (answer.kind === "display") return { kind: "display", displayId: answer.displayId };
-  if (answer.kind !== "rect" || !answer.rect || typeof answer.rect !== "object") return null;
-  const { x, y, width, height } = answer.rect as Record<string, unknown>;
-  if (![x, y, width, height].every(isFiniteNumber)) return null;
-  if ((width as number) <= 0 || (height as number) <= 0) return null;
-  return {
-    kind: "rect",
-    displayId: answer.displayId,
-    rect: { x: x as number, y: y as number, width: width as number, height: height as number },
-  };
+  const action = parseAction(answer.action);
+  if (!action) return null;
+  const displayId = answer.displayId;
+  if (answer.kind === "display") {
+    if (answer.mode !== undefined && answer.mode !== "screen") return null;
+    return { kind: "display", mode: "screen", action, displayId };
+  }
+  const rect = parseRect(answer.rect);
+  if (!rect) return null;
+  if (answer.kind === "rect") {
+    if (answer.mode !== undefined && answer.mode !== "frame") return null;
+    return { kind: "rect", mode: "frame", action, displayId, rect };
+  }
+  if (answer.kind === "window") {
+    if (answer.mode !== undefined && answer.mode !== "window") return null;
+    if (typeof answer.windowId !== "string" || answer.windowId === "") return null;
+    return { kind: "window", mode: "window", action, displayId, windowId: answer.windowId, rect };
+  }
+  return null;
 }
 
 /**
  * The capture overlay: one frameless, transparent, always-on-top window per display that
- * draws the Area drag, the Screen chooser or the Frame box (the renderer side lives in
- * `features/screenshots/overlay/`). It only ever answers "this rectangle / this display"
+ * draws the Frame box, the Window picker or the Screen chooser (the renderer side lives in
+ * `features/screenshots/overlay/`). It only ever answers "this rectangle / this window / this display"
  * or "cancelled"; the provider captures the pixels.
  *
  * The provider drives one session: `pick` → answer → `hideAll` → capture → `destroyAll`.
@@ -193,6 +219,8 @@ export class CaptureOverlayWindows implements OverlayPort {
   private session: PickSession | null = null;
   private hiddenWait: HiddenWait | null = null;
   private hiding: Promise<void> | null = null;
+  /** The mode every overlay renders right now. */
+  private mode: CaptureMode = "frame";
   private hoverDisplayId: number | null = null;
   /** Frame mode only: the one display that shows the frame; `null` in every other mode. */
   private frameDisplayId: number | null = null;
@@ -214,6 +242,7 @@ export class CaptureOverlayWindows implements OverlayPort {
         shown: 0,
         watchdog: null,
       };
+      this.mode = ui;
       this.hoverDisplayId = null;
       const cursor = this.deps.cursorPoint();
       const underCursor = displays.findIndex((display) => contains(display.bounds, cursor));
@@ -402,8 +431,11 @@ export class CaptureOverlayWindows implements OverlayPort {
 
   private sendState(window: OverlayWindow): void {
     const state: OverlayState = {
+      mode: this.mode,
       hoverDisplayId: this.hoverDisplayId,
       frameDisplayId: this.frameDisplayId,
+      // The window lister arrives with its own ticket: until then the list is unknown.
+      windows: null,
     };
     window.webContents.send(IPC_CHANNELS.screenshotOverlayState, state);
   }
