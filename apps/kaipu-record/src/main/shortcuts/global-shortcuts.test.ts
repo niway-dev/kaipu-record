@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CAPTURE_MODES } from "@shared/types/screenshot-capture";
-import { DEFAULT_SHORTCUTS, SHORTCUT_ACTIONS } from "@shared/types";
+import { SHORTCUT_ACTIONS } from "@shared/types";
+import { defaultShortcutsFor } from "@shared/shortcut-defaults";
+
+const DEFAULT_SHORTCUTS = defaultShortcutsFor("darwin");
 
 const register = vi.fn((_accelerator: string, _handler: () => void) => true);
 vi.mock("electron", () => ({

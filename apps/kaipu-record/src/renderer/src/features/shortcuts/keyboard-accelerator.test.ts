@@ -55,6 +55,41 @@ describe("formatAccelerator", () => {
   it("understands the cross-platform aliases", () => {
     expect(formatAccelerator("CommandOrControl+Shift+1")).toBe("⇧⌘1");
   });
+
+  it("defaults to the bridge's platform (darwin in the test stub)", () => {
+    expect(formatAccelerator("Control+Alt+C")).toBe(formatAccelerator("Control+Alt+C", "darwin"));
+  });
+
+  it("renders Windows-style text on Windows, in Ctrl, Alt, Shift, Win order", () => {
+    expect(formatAccelerator("Control+Alt+C", "win32")).toBe("Ctrl+Alt+C");
+    expect(formatAccelerator("Shift+Alt+Control+X", "win32")).toBe("Ctrl+Alt+Shift+X");
+    expect(formatAccelerator("Command+Control+K", "win32")).toBe("Ctrl+Win+K");
+  });
+
+  it("resolves CommandOrControl to Ctrl on Windows", () => {
+    expect(formatAccelerator("CommandOrControl+Shift+1", "win32")).toBe("Ctrl+Shift+1");
+  });
+
+  it("renders the same accelerator with glyphs on macOS and text on Windows", () => {
+    expect(formatAccelerator("Control+Alt+C", "darwin")).toBe("⌃⌥C");
+    expect(formatAccelerator("Control+Alt+C", "win32")).toBe("Ctrl+Alt+C");
+  });
+});
+
+describe("captureShortcut on Windows", () => {
+  it("captures Ctrl+Alt+letter with a text label", () => {
+    expect(captureShortcut(event({ code: "KeyC", ctrlKey: true, altKey: true }), "win32")).toEqual({
+      accelerator: "Control+Alt+C",
+      label: "Ctrl+Alt+C",
+    });
+  });
+
+  it("rejects a combo that uses the Windows key, which the OS reserves", () => {
+    expect(captureShortcut(event({ code: "KeyC", metaKey: true }), "win32")).toBeNull();
+    expect(
+      captureShortcut(event({ code: "KeyC", metaKey: true, ctrlKey: true }), "win32"),
+    ).toBeNull();
+  });
 });
 
 describe("conflictingAction", () => {

@@ -1,8 +1,14 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_SETTINGS, type AppSettings } from "@shared/types";
+import { defaultShortcutsFor } from "@shared/shortcut-defaults";
 import { CAPTURE_MODES } from "@shared/types/screenshot-capture";
 import { useScreenshotMode } from "./use-screenshot-mode";
+
+const BASE_SETTINGS: AppSettings = {
+  ...DEFAULT_SETTINGS,
+  shortcuts: defaultShortcutsFor("darwin"),
+};
 
 const realApi = window.electronAPI;
 afterEach(() => {
@@ -10,7 +16,7 @@ afterEach(() => {
 });
 
 function withStoredMode(mode: AppSettings["screenshotMode"]) {
-  let settings: AppSettings = { ...DEFAULT_SETTINGS, screenshotMode: mode };
+  let settings: AppSettings = { ...BASE_SETTINGS, screenshotMode: mode };
   const updateSettings = vi.fn(async (patch: Partial<AppSettings>) => {
     settings = { ...settings, ...patch };
     return settings;
@@ -45,7 +51,7 @@ describe("useScreenshotMode", () => {
 
   it('never exposes a legacy "area" (or any unknown) stored mode: it reads as Frame', async () => {
     const getSettings = vi.fn(async () => ({
-      ...DEFAULT_SETTINGS,
+      ...BASE_SETTINGS,
       screenshotMode: "area" as never,
     }));
     window.electronAPI = { ...realApi, getSettings };
@@ -54,7 +60,7 @@ describe("useScreenshotMode", () => {
     expect(result.current.mode).toBe("frame");
     window.electronAPI = {
       ...realApi,
-      getSettings: async () => ({ ...DEFAULT_SETTINGS, screenshotMode: "banana" as never }),
+      getSettings: async () => ({ ...BASE_SETTINGS, screenshotMode: "banana" as never }),
     };
     const other = renderHook(() => useScreenshotMode());
     await new Promise((resolve) => setTimeout(resolve, 0));

@@ -22,7 +22,7 @@ const settingsWith = (startRecording: string): AppSettings =>
 describe("useShortcutLabels", () => {
   it("returns the bindings from settings as formatted labels", async () => {
     const { result } = renderHook(() => useShortcutLabels());
-    // The test stub's settings carry DEFAULT_SHORTCUTS (Command+Control+C/S/O/X).
+    // The test stub's settings carry the macOS defaults (Command+Control+C/S/O/X).
     await waitFor(() =>
       expect(result.current).toEqual({
         startRecording: "⌃⌘C",
@@ -56,5 +56,20 @@ describe("useShortcutLabels", () => {
     // is what keeps its Stop-shortcut hint current.
     act(() => subscriber?.(settingsWith("Command+Control+G")));
     await waitFor(() => expect(result.current?.startRecording).toBe("⌃⌘G"));
+  });
+
+  it("renders Windows-style text labels when the bridge reports win32", async () => {
+    const api = window.electronAPI as { platform: string };
+    const original = api.platform;
+    api.platform = "win32";
+    window.electronAPI.getSettings = vi.fn(async () =>
+      settingsWith("Control+Alt+C"),
+    ) as unknown as typeof window.electronAPI.getSettings;
+    try {
+      const { result } = renderHook(() => useShortcutLabels());
+      await waitFor(() => expect(result.current?.startRecording).toBe("Ctrl+Alt+C"));
+    } finally {
+      api.platform = original;
+    }
   });
 });

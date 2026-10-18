@@ -14,6 +14,10 @@ asarUnpack:
   - "**/node_modules/uiohook-napi/**"
 win:
   executableName: kaipu-record
+  # Custom signing hook (read at build time, not packaged). No-ops with a CI
+  # warning without WIN_SIGN_VENDOR; throws for an unknown or unfinished vendor.
+  signtoolOptions:
+    sign: ./scripts/sign-windows.cjs
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}

@@ -83,3 +83,45 @@ cat "$SOURCE" "$SCRIPT" | shasum -a 256 | awk '{print $1}' >"$APP_DIR/build/icon
 
 echo "✓ app icons regenerated from packages/brand/assets/logo-app.svg"
 echo "  build/icon.icns, build/icon.png, resources/icon.png, build/icon.source.sha256"
+
+# Windows tray icons. The macOS menu bar uses black template PNGs that the OS
+# recolours; the Windows taskbar does not, and it is dark by default, so the
+# tray needs a light glyph of its own. Same artwork as the template PNGs (the
+# brand's mono cuts), recoloured white, centred on a transparent square, at the
+# sizes the notification area asks for (16 px at 100 %, 24 at 150 %, 32 at 200 %).
+#
+#   outputs: resources/tray-windows-recording.ico    (Record mode, mono-record.svg)
+#            resources/tray-windows-screenshot.ico   (Screenshot mode, mono-screenshot.svg)
+command -v node >/dev/null || {
+  echo "✗ node not found — needed to pack the Windows tray .ico files." >&2
+  exit 1
+}
+
+# tray_ico <brand svg> <out.ico>
+tray_ico() {
+  local source="$1" out="$2" name w h side glyph
+  name="$(basename "$source" .svg)"
+  w="$(sed -nE '1s/.*<svg[^>]* width="([0-9.]+)".*/\1/p' "$source")"
+  h="$(sed -nE '1s/.*<svg[^>]* height="([0-9.]+)".*/\1/p' "$source")"
+  side=$((w > h ? w : h))
+  glyph="$(tr '\n' ' ' <"$source" |
+    sed -E 's/<\?xml[^>]*\?>//' |
+    sed -E '1s/<svg([^>]*) width="[^"]*"/<svg\1/; 1s/<svg([^>]*) height="[^"]*"/<svg\1/' |
+    sed -E 's/(fill|stroke)="black"/\1="white"/g' |
+    sed -E "1s/<svg /<svg x=\"$(((side - w) / 2))\" y=\"$(((side - h) / 2))\" width=\"$w\" height=\"$h\" /")"
+  local pngs=()
+  for px in 16 24 32; do
+    local svg="$WORK/$name-$px.svg" png="$WORK/$name-$px.png"
+    printf '<svg xmlns="http://www.w3.org/2000/svg" width="%s" height="%s" viewBox="0 0 %s %s">%s</svg>\n' \
+      "$px" "$px" "$side" "$side" "$glyph" >"$svg"
+    sips -s format png "$svg" --out "$png" >/dev/null
+    pngs+=("$png")
+  done
+  node "$APP_DIR/scripts/png-to-ico.mjs" "$out" "${pngs[@]}"
+}
+
+tray_ico "$ROOT/packages/brand/assets/mono-record.svg" "$APP_DIR/resources/tray-windows-recording.ico"
+tray_ico "$ROOT/packages/brand/assets/mono-screenshot.svg" "$APP_DIR/resources/tray-windows-screenshot.ico"
+
+echo "✓ Windows tray icons regenerated from packages/brand/assets/mono-*.svg"
+echo "  resources/tray-windows-recording.ico, resources/tray-windows-screenshot.ico"

@@ -10,16 +10,27 @@ description: "How the /shortcuts page edits and persists global accelerators via
 Entry: the user opens the _Shortcuts_ sidebar page (route `/shortcuts`, registered at
 `src/renderer/src/app/router.tsx:40`). The page lists every global keyboard shortcut in two
 sections, _Recording_ and _App_, one row per action
-(`src/renderer/src/pages/shortcuts/shortcuts-page.tsx:32-38`, `116-133`).
+(`src/renderer/src/pages/shortcuts/shortcuts-page.tsx:81-84`, `161-166`).
 
-Each row shows a click-to-rebind control. The four actions and their default accelerators
-(`src/shared/types/ipc.ts:54-88`):
+Each row shows a click-to-rebind control. The actions and their default accelerators
+(`src/shared/types/ipc.ts:79-162`):
 
 - _Start recording_ — `Command+Control+C` (⌃⌘C) — begin a recording from anywhere.
 - _Stop recording_ — `Command+Control+S` (⌃⌘S) — end the current recording from anywhere.
 - _Bring Kaipu to front_ — `Command+Control+O` (⌃⌘O) — show the window if it slips out of
   reach (the "rescue" backstop).
-- _Capture screenshot_ — `Command+Control+X` (⌃⌘X) — open the region-selection overlay.
+- _Capture screenshot_ — `Command+Control+X` (⌃⌘X) — capture with the current screenshot mode
+  (Frame, Screen, or Window while Window mode is enabled).
+- _Capture screen_ — `Command+Control+Shift+X` (⌃⇧⌘X) — capture one whole display, and make
+  Screen the current mode.
+- _Capture frame_ — `Command+Control+Shift+F` (⌃⇧⌘F) — capture what is inside the remembered
+  frame, and make Frame the current mode.
+- _Capture window_ — `Command+Control+W` (⌃⌘W) — capture one window. Listed and registered only
+  while Window mode is enabled (`ENABLED_CAPTURE_MODES`); otherwise the row is hidden.
+
+Those are the macOS defaults. Windows defaults use `Control+Alt+<same key>` (`Control+Alt+Shift+<key>` for the Screen and Frame rows, `Control+Alt+W` for Window) (shown as
+`Ctrl+Alt+C`), resolved per platform by `defaultShortcutsFor` in
+`src/shared/shortcut-defaults.ts`.
 
 These are _global_ (system-wide) shortcuts: they fire even when another app is focused,
 which is the whole point — the user is usually inside the app being recorded. To rebind
@@ -31,7 +42,7 @@ inline; a binding another _app_ already owns is flagged "in use by another app".
 ## Under the hood
 
 **Page + capture control.** `ShortcutsPage` reads bindings from
-`useAppSettings()` (`settings.shortcuts`, falling back to `DEFAULT_SHORTCUTS`) and renders a
+`useAppSettings()` (`settings.shortcuts`, falling back to `defaultShortcutsFor(window.electronAPI.platform)`) and renders a
 `ShortcutInput` per row (`shortcuts-page.tsx:45-114`). `ShortcutInput`
 (`src/renderer/src/features/shortcuts/shortcut-input.tsx`) is a button that, while
 "listening", attaches a capture-phase `keydown` listener on `window` (`shortcut-input.tsx:30-55`).
@@ -42,9 +53,11 @@ the renderer instead of firing the action being rebound; on cleanup it calls
 **Pure accelerator logic.** `src/renderer/src/features/shortcuts/keyboard-accelerator.ts`
 holds no Electron imports and is fully unit-testable (see
 `keyboard-accelerator.test.ts`): `captureShortcut` turns a `KeyboardEvent` into an Electron
-accelerator string (requires `Command` or `Control` + a letter/digit, else returns null);
+accelerator string (requires `Command` or `Control` + a letter/digit, else returns null; on
+Windows a combo with the Windows key is rejected, because the OS reserves those);
 `conflictingAction` detects a duplicate against the other bindings _before_ saving;
-`formatAccelerator` renders the macOS-symbol label (⌃⌘C).
+`formatAccelerator` renders the label for the bridge's `platform`: macOS symbols on macOS
+(⌃⌘C), text on Windows (`Ctrl+Alt+C`).
 
 **Persistence path.** A captured accelerator flows `onChange` → `handleChange`
 (`shortcuts-page.tsx:69-79`): it rejects a `conflictingAction` clash, otherwise calls

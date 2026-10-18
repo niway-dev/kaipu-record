@@ -101,6 +101,8 @@ export type AccessibilityStatus = "granted" | "denied" | "not-required";
 export type AuthAttemptResult = { ok: true; status: AuthStatus } | { ok: false; error: AuthError };
 
 export interface KaipuElectronAPI {
+  /** Host OS (`process.platform`), exposed because the renderer must not read `process` itself. */
+  readonly platform: string;
   /** The running app version (`app.getVersion()`), used by the version gate. */
   getAppVersion(): Promise<string>;
   /** Tell main the app shell has mounted and its IPC listeners are registered,
