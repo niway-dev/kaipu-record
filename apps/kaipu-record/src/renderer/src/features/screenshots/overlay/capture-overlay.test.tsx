@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { DEFAULT_SETTINGS, type AppSettings } from "@shared/types";
@@ -13,6 +14,7 @@ import {
   type CaptureOverlayApi,
 } from "./capture-overlay";
 import type { OverlayQuery } from "./overlay-query";
+import { toolbarPlacement, toolbarWidth } from "./selection-chrome";
 
 // A 1600×1000 display whose work area loses a 25 px menu bar at the top.
 const BOUNDS = { x: 0, y: 0, width: 1600, height: 1000 };
@@ -341,59 +343,111 @@ describe("ScreenCard", () => {
 });
 
 describe("FrameBox", () => {
-  it("attaches the action bar under the frame's bottom-left corner: Capture, Copy, Record soon", async () => {
+  it("attaches one toolbar under the frame, centred: modes, Capture, Copy, Record soon, Cancel", async () => {
     const { api } = fakeApi({ "42": { x: 100, y: 120, width: 400, height: 300 } });
     render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
     await screen.findByTestId("capture-frame");
-    const bar = screen.getByTestId("action-bar");
-    expect(within(bar).getByRole("button", { name: "Capture" })).toBeInTheDocument();
-    expect(within(bar).getByRole("button", { name: "Copy" })).toBeInTheDocument();
-    expect(within(bar).getByRole("button", { name: "Record · soon" })).toBeDisabled();
-    // The frame's left edge, 10 DIP under its bottom edge (120 + 300).
-    expect(bar).toHaveAttribute("data-side", "below");
-    expect(bar.style.left).toBe("100px");
-    expect(bar.style.top).toBe("430px");
-  });
-
-  it("attaches the mode pill 10 DIP right of the frame's top-right corner, Frame active", async () => {
-    const { api } = fakeApi({ "42": { x: 100, y: 120, width: 400, height: 300 } });
-    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
-    await screen.findByTestId("capture-frame");
-    const pill = screen.getByTestId("mode-pill");
-    expect(pill).toHaveAttribute("data-side", "right");
-    expect(pill.style.left).toBe("510px");
-    expect(pill.style.top).toBe("120px");
-    expect(within(pill).getByRole("button", { name: "Frame (1)" })).toHaveAttribute(
+    const bar = screen.getByTestId("selection-toolbar");
+    const buttons = within(bar).getAllByRole("button");
+    expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual([
+      "Frame (1)",
+      "Window (2)",
+      "Screen (3)",
+      "Capture",
+      "Copy",
+      "Record · soon",
+      "Cancel",
+    ]);
+    expect(within(bar).getByRole("button", { name: "Frame (1)" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
-    expect(within(pill).getByText("Frame")).toBeInTheDocument(); // the active mode's tag
-    expect(within(pill).getByRole("button", { name: "Window (2)" })).toHaveAttribute(
+    expect(within(bar).getByRole("button", { name: "Window (2)" })).toHaveAttribute(
       "aria-pressed",
       "false",
     );
+    expect(within(bar).getByRole("button", { name: "Record · soon" })).toBeDisabled();
+    expect(within(bar).getByRole("button", { name: "Cancel" })).toHaveAttribute(
+      "title",
+      "Cancel · Esc",
+    );
+    // 10 DIP under the bottom edge (120 + 300), centred on the frame (x = 300).
+    const width = toolbarWidth(3, false);
+    expect(bar).toHaveAttribute("data-side", "below");
+    expect(bar.style.left).toBe(`${300 - width / 2}px`);
+    expect(bar.style.top).toBe("430px");
   });
 
-  it("flips the pill to the left of the frame near the display's right edge", async () => {
-    const { api } = fakeApi({ "42": { x: 1200, y: 120, width: 380, height: 300 } });
+  it("prints the mode names only on a selection wide enough for them", async () => {
+    const wide = { x: 100, y: 120, width: 1200, height: 300 };
+    const { api } = fakeApi({ "42": wide });
     render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
     await screen.findByTestId("capture-frame");
-    const pill = screen.getByTestId("mode-pill");
-    expect(pill).toHaveAttribute("data-side", "left");
-    // 10 DIP gap plus the 44 DIP pill, left of x = 1200.
-    expect(pill.style.left).toBe("1146px");
+    expect(within(screen.getByTestId("selection-toolbar")).getByText("Frame")).toBeInTheDocument();
+  });
+});
+
+describe("the dim", () => {
+  const css = readFileSync(
+    "src/renderer/src/features/screenshots/overlay/capture-overlay.module.css",
+    "utf8",
+  );
+  const rule = (selector: string): string =>
+    css.match(new RegExp(`^${selector.replace(".", "\\.")} \\{[^}]*\\}`, "m"))?.[0] ?? "";
+
+  it("clears the Frame sheet and lets the frame box carry the whole dim", async () => {
+    const { api } = fakeApi({ "42": { x: 100, y: 120, width: 400, height: 300 } });
+    const { container } = render(
+      <CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />,
+    );
+    const box = await screen.findByTestId("capture-frame");
+    expect((container.firstElementChild as HTMLElement).className).toContain("clear");
+    expect(box.className).toContain("frameBox");
+    // Inside the box is clear; outside is dimmed once, by the box's shadow.
+    expect(rule(".clear")).toContain("rgba(0, 0, 0, 0.01)");
+    expect(rule(".frameBox")).toContain("0 0 0 9999px rgba(0, 0, 0, 0.45)");
+    expect(rule(".sheet")).toContain("rgba(0, 0, 0, 0.25)");
+  });
+});
+
+describe("toolbarPlacement", () => {
+  const area = { x: 0, y: 25, width: 1600, height: 975 };
+  const width = 600;
+
+  it("sits 10 DIP below the selection, centred on it", () => {
+    const selection = { x: 100, y: 120, width: 400, height: 300 };
+    expect(toolbarPlacement(selection, area, width)).toEqual({
+      side: "below",
+      left: 300 - width / 2,
+      top: 430,
+    });
   });
 
-  it("flips the action bar above the frame near the display's bottom edge", async () => {
-    const { api } = fakeApi({ "42": { x: 100, y: 600, width: 400, height: 380 } });
-    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
-    await screen.findByTestId("capture-frame");
-    const bar = screen.getByTestId("action-bar");
-    expect(bar).toHaveAttribute("data-side", "above");
-    // 10 DIP gap plus the 44 DIP bar, above y = 600: it never covers the frame.
-    expect(bar.style.top).toBe("546px");
+  it("flips above the selection near the work area's bottom edge", () => {
+    const selection = { x: 100, y: 600, width: 400, height: 380 };
+    // 10 DIP gap plus the 44 DIP toolbar, above y = 600: it never covers the selection.
+    expect(toolbarPlacement(selection, area, width)).toMatchObject({ side: "above", top: 546 });
   });
 
+  it("goes inside the bottom edge when neither side has room", () => {
+    const selection = { x: 0, y: 25, width: 1600, height: 975 };
+    // Bottom edge at 1000: 10 DIP of padding above it, the toolbar's 44 DIP height.
+    expect(toolbarPlacement(selection, area, width)).toEqual({
+      side: "inside",
+      left: 500,
+      top: 946,
+    });
+  });
+
+  it("is clamped to the work area at the right and left edges", () => {
+    const right = { x: 1400, y: 120, width: 200, height: 300 };
+    expect(toolbarPlacement(right, area, width).left).toBe(1600 - width);
+    const left = { x: 0, y: 120, width: 100, height: 300 };
+    expect(toolbarPlacement(left, area, width).left).toBe(0);
+  });
+});
+
+describe("FrameBox (chrome and keys)", () => {
   it("answers copy from the Copy button and from ⌘C, capture from Capture", async () => {
     const remembered = { x: 100, y: 120, width: 400, height: 300 };
     const copy = fakeApi({ "42": remembered });
@@ -481,7 +535,7 @@ describe("FrameBox", () => {
     await screen.findByTestId("capture-frame");
     const sheet = container.firstElementChild as HTMLElement;
 
-    fireEvent.pointerDown(screen.getByTestId("action-bar"), {
+    fireEvent.pointerDown(screen.getByTestId("selection-toolbar"), {
       button: 0,
       clientX: 900,
       clientY: 700,
@@ -1175,8 +1229,7 @@ describe("WindowPicker", () => {
     fireEvent.pointerMove(sheet, { clientX: 300, clientY: 300 }); // both: the editor is in front
     expect(highlighted()).toHaveAttribute("data-window-id", "11");
     expect(screen.getByText("Kaipu Record — Editor · 600 × 400")).toBeInTheDocument();
-    expect(screen.getByTestId("mode-pill")).toBeInTheDocument();
-    expect(screen.getByTestId("action-bar")).toBeInTheDocument();
+    expect(screen.getByTestId("selection-toolbar")).toBeInTheDocument();
 
     fireEvent.pointerMove(sheet, { clientX: 1000, clientY: 700 }); // only the browser
     expect(highlighted()).toHaveAttribute("data-window-id", "22");
@@ -1319,14 +1372,17 @@ describe("WindowPicker", () => {
 });
 
 describe("Window mode disabled (the flag as shipped)", () => {
-  it("offers Frame and Screen on the pill, badges 1 and 2", async () => {
+  it("offers Frame and Screen on the toolbar, badges 1 and 2", async () => {
     const { api } = fakeApi({ "42": { x: 100, y: 120, width: 400, height: 300 } });
     render(<CaptureOverlay query={query("frame")} api={api} />);
     await screen.findByTestId("capture-frame");
-    const buttons = within(screen.getByTestId("mode-pill")).getAllByRole("button");
+    const buttons = within(screen.getByTestId("selection-toolbar")).getAllByRole("button");
     expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual([
       "Frame (1)",
       "Screen (2)",
+      "Capture",
+      "Copy",
+      "Record · soon",
       "Cancel",
     ]);
   });

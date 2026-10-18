@@ -269,13 +269,22 @@ does nothing but `revealAfterCapture()` to its previous state. Editor: unchanged
   `state.windows` front to back under the pointer, draws the highlight and the title label,
   click answers), `ScreenCard` (number, name, `W × H · Built-in/External`, "Capture this
   display" with the number key, and the mode row).
-- `ModePill`: vertical, attached 10 px right of the selection's top-right corner, flips to the
-  left when it would leave the display; Frame · Window · Screen with 1/2/3 badges, a divider and
-  a Cancel (Esc) button. In Screen the same three live in the card's bottom row.
-- `ActionBar`: horizontal, attached 10 px below the selection's bottom-left corner (above it when
-  there is no room): Capture (accent, Enter), Copy (⌘C / Ctrl+C), a divider, and a disabled Record · soon.
-  In Screen it is the card's button row (Capture · n, Copy) plus a "Record this display · soon" line.
-  Enter and ⌘C work without the bar being hovered; the bar never covers the selection.
+- `SelectionToolbar`: one horizontal bar replacing the former mode pill and action bar (changed
+  2026-10-18 after the owner's first test: the pill and the bar in opposite corners of a large
+  frame felt like two unrelated boxes). Left to right: a segmented mode group (one button per
+  enabled mode with icon, key badge 1/2 or 1-3, and the name when the selection is wide enough;
+  the active one filled with the accent), a divider, Capture (accent, Enter), Copy (outlined,
+  ⌘C / Ctrl+C), a divider, a disabled Record · soon, a divider, and Cancel (×, "Cancel · Esc").
+  It is centred under the selection's bottom edge with a 10 px gap; above the top edge when
+  there is no room below; inside the selection at the bottom only when neither side has room; and
+  clamped horizontally to the display's work area (`toolbarPlacement`). In Screen the same modes
+  live in the card's bottom row, with the card's own button row (Capture · n, Copy) and a
+  "Record this display · soon" line. Enter and ⌘C work without the toolbar being hovered; the
+  toolbar never covers the selection when there is room outside it.
+- Inside the selection is never tinted: with a Frame box or a highlighted window the sheet is
+  nearly clear (`rgba(0, 0, 0, 0.01)`, non-zero so transparent windows on Windows still receive
+  clicks) and the box's own shadow carries the whole dim (`0.45`, raised from 0.35 at the owner's request on 2026-10-18) outside it. Screen and the
+  states with no box keep the uniform `0.25` sheet.
 - Hint pill at the bottom: "Enter to capture" (Frame) or "Click or Enter to capture" · "⌘C to copy" ·
   "1–3 switch mode" · "Esc to cancel".
 - Single display and initial mode Screen: capture at once, as 0.12.0 does. Switching to Screen

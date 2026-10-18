@@ -22,6 +22,15 @@
   touch-action: none;
 }
 
+/*
+ * With a box to cut out (Frame, a highlighted window) the sheet is nearly clear and the box's
+ * own shadow carries the whole dim, so the inside of the selection is never tinted. The
+ * 0.01 keeps the sheet non-zero so a transparent window on Windows still receives clicks.
+ */
+.clear {
+  background: rgba(0, 0, 0, 0.01);
+}
+
 /* Frame: pressing outside the box draws a new one. */
 .drawable {
   cursor: crosshair;
@@ -101,12 +110,12 @@
 
 /* ── The Frame box ─────────────────────────────────────────────── */
 
-/* 1.5 px pink border; the huge spread shadow dims everything outside the frame once more. */
+/* 1.5 px pink border; the huge spread shadow is the overlay's whole dim outside the frame. */
 .frameBox {
   position: absolute;
   box-sizing: border-box;
   border: 1.5px solid var(--overlay-accent);
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
   cursor: move;
 }
 
@@ -207,93 +216,8 @@
 
 /* ── Chrome attached to the selection (Frame box, highlighted window) ── */
 
-/* The vertical mode pill, 10 DIP beside the selection's top-right corner. */
-.modePill {
-  position: absolute;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  width: 44px;
-  padding: 5px 0;
-  box-sizing: border-box;
-  background: var(--overlay-pill-bg);
-  border: 1px solid var(--overlay-pill-line);
-  border-radius: 12px;
-  box-shadow: var(--overlay-pill-shadow);
-  cursor: default;
-}
-
-.modeButton {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  color: #d4d4da;
-  background: transparent;
-  border: 0;
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-.modeButton:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.modeButton[aria-pressed="true"] {
-  color: #fff;
-  background: var(--overlay-accent);
-}
-
-.modeBadge {
-  position: absolute;
-  right: 1px;
-  bottom: 1px;
-  font-family: var(--font-mono);
-  font-size: 8.5px;
-  line-height: 1;
-  color: var(--overlay-muted);
-}
-
-.modeButton[aria-pressed="true"] .modeBadge {
-  color: rgba(255, 255, 255, 0.85);
-}
-
-/* The active mode's name, outside the pill: right of it, or left when the pill flipped. */
-.modeTag {
-  position: absolute;
-  left: calc(100% + 12px);
-  padding: 3px 7px;
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  color: #fff;
-  background: var(--overlay-accent);
-  border-radius: 5px;
-  pointer-events: none;
-}
-
-.modePill[data-side="left"] .modeTag,
-.modePill[data-side="inside"] .modeTag {
-  right: calc(100% + 12px);
-  left: auto;
-}
-
-.pillDivider {
-  width: 22px;
-  height: 1px;
-  margin: 2px 0;
-  background: var(--overlay-pill-line);
-}
-
-/* The horizontal action bar, 10 DIP below (or above) the selection's bottom-left corner. */
-.actionBar {
+/* The one toolbar, 10 DIP below (or above) the selection, centred on it. */
+.toolbar {
   position: absolute;
   display: flex;
   align-items: center;
@@ -305,6 +229,67 @@
   border-radius: 10px;
   box-shadow: 0 20px 44px -16px rgba(0, 0, 0, 0.8);
   cursor: default;
+}
+
+/* The segmented mode group: one button per enabled mode, the active one filled. */
+.toolbarModes {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.toolbarMode {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 8px;
+  font-family: inherit;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: #d4d4da;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.toolbarMode:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.toolbarMode[aria-pressed="true"] {
+  color: #fff;
+  background: var(--overlay-accent);
+}
+
+.modeBadge {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  line-height: 1;
+  color: var(--overlay-muted);
+}
+
+.toolbarMode[aria-pressed="true"] .modeBadge {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.cancelButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  color: #d4d4da;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.cancelButton:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .barDivider {
@@ -349,9 +334,9 @@
 .windowHighlight {
   position: absolute;
   box-sizing: border-box;
-  background: rgba(246, 5, 92, 0.14);
   border: 2px solid var(--overlay-accent);
   border-radius: 6px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
   pointer-events: none;
 }
 

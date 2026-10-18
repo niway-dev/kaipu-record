@@ -592,6 +592,7 @@
       "soon": "Pronto",
       "recordDisplaySoon": "Grabar esta pantalla · pronto",
       "cancel": "Cancelar",
+      "cancelTitle": "Cancelar · Esc",
       "modes": "Modo de captura",
       "modeKey": "{mode} ({key})",
       "frame": "Marco de captura",

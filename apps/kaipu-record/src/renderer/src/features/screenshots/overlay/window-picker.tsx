@@ -5,7 +5,7 @@ import type { CaptureAction, CaptureRect, ListedWindow } from "@shared/types/scr
 import type { SendAnswer } from "./capture-overlay";
 import { isCaptureKey, isCopyKey } from "./overlay-keys";
 import { workAreaInWindow, type OverlayQuery } from "./overlay-query";
-import { ActionBar, CHROME_GAP_DIP, ModePill, type OverlayChrome } from "./selection-chrome";
+import { CHROME_GAP_DIP, SelectionToolbar, type OverlayChrome } from "./selection-chrome";
 import styles from "./capture-overlay.module.css";
 
 /** Room the title label needs above the highlight before it moves inside. */
@@ -142,7 +142,7 @@ export function WindowPicker({
     const { clientX: x, clientY: y } = event;
     const next = windowAt(onDisplay, query.displayId, x, y);
     if (next?.id === hovered?.id) return;
-    // The pill and the bar sit 10 DIP outside the highlight: crossing that gap on the way
+    // The toolbar sits 10 DIP outside the highlight: crossing that gap on the way
     // to them must not hand the highlight to the window behind (the chrome itself keeps
     // its pointer moves to itself).
     if (hovered) {
@@ -173,7 +173,7 @@ export function WindowPicker({
 
   return (
     <div
-      className={`${styles.sheet} ${styles.windowSheet}`}
+      className={`${styles.sheet} ${hovered ? styles.clear : ""} ${styles.windowSheet}`}
       data-testid="window-picker"
       onPointerMove={track}
       onPointerEnter={track}
@@ -212,9 +212,8 @@ export function WindowPicker({
           >
             {windowLabel(hovered)}
           </div>
-          <ModePill chrome={chrome} selection={hovered.rect} area={area} />
-          <ActionBar
-            platform={platform}
+          <SelectionToolbar
+            chrome={chrome}
             selection={hovered.rect}
             area={area}
             onAction={(action) => answer(hovered, action)}
