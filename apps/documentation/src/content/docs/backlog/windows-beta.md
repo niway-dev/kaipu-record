@@ -47,8 +47,8 @@ UI telling the truth about screenshots.
 1. **CI job.** Add a `windows-latest` job to `release-desktop.yml` mirroring the macOS one:
    checkout, `bun install`, `rebuild:native`, `build:win`, upload the `-setup.exe` to the
    release. Run it on a tag first, unsigned, to prove reproducibility.
-2. **Screenshots say "coming soon".** _(Coming-soon state and Windows backend: built on
-   `feat/screenshot-capture-modes`, pending merge and a Windows build.)_ Replace the silent `null` with a platform-aware state:
+2. **Screenshots say "coming soon".** _(Coming-soon state and Windows backend: shipped in desktop
+   0.12.0 (#306); Window mode for Windows is in [modes v2](/specs/2026-10-17-screenshot-modes-v2-design/); all wait for a Windows build to QA.)_ Replace the silent `null` with a platform-aware state:
    hide the capture tab and the global screenshot shortcut on Windows, or show them disabled
    with a one-line "Coming to Windows" and a link to the public roadmap.
 3. **Signing decision** (owner): buy a code-signing certificate now (an OV certificate is
@@ -72,8 +72,7 @@ UI telling the truth about screenshots.
       against Recordly; do not repeat it silently.
 - [ ] `rebuild:native` runs for `uiohook-napi` on the Windows runner (auto-zoom on clicks).
 - [ ] Screenshot entry points hidden or disabled with a "coming soon" state on Windows, never a
-      silent no-op. The state shipped on `feat/screenshot-capture-modes` (2026-10-16, PR
-      pending): the entry points render disabled with "Coming to Windows" whenever the platform
+      silent no-op. The state shipped in desktop 0.12.0 (#306, 2026-10-17): the entry points render disabled with "Coming to Windows" whenever the platform
       provider reports a mode as unsupported. That branch also contains the Windows backend
       (`desktopCapturer`), so the state stays dormant once it merges; the tick waits for a
       packaged Windows build to confirm it.
