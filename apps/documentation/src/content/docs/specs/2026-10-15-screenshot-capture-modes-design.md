@@ -5,8 +5,9 @@ description: Design for three screenshot modes (drag an area, capture one displa
 
 # Screenshot capture modes — design
 
-**Status: 🟡 In progress · 2026-10-16.** Implementation: PR pending on
-`feat/screenshot-capture-modes`. **Proposed 2026-10-15.** Supersedes section 3 ("Capture engine") of the
+**Status: 🟢 Shipped in desktop 0.12.0 (PR #306, 2026-10-17) · Windows QA pending.** Amended by
+[screenshot modes v2](/specs/2026-10-17-screenshot-modes-v2-design/) (Area folded into Frame, Window mode,
+mode picked inside the overlay, quiet capture with a toast). **Proposed 2026-10-15.** Supersedes section 3 ("Capture engine") of the
 [screenshots brief](/backlog/screenshots/) where they differ: the "mac-only, Path A behind a
 seam" decision becomes "native where the OS has it, our overlay where it does not", and the
 seam grows from one method to a mode request. Linear: parent ticket in the Kaipu project

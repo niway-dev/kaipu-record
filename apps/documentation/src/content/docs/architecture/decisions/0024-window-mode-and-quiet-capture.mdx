@@ -1,0 +1,96 @@
+---
+title: "ADR 0024: Window capture through the OS window list on our overlay; a capture the preferences already handle never opens the editor"
+description: Amends ADR 0022. Area is folded into Frame; Window becomes a mode on both platforms, with the window list fetched by an OS scripting tool (no native module) and the pixels taken by window id; and main decides after a capture — when save or copy is automatic it saves, copies and shows a toast instead of opening the editor.
+---
+
+# ADR 0024: Window capture through the OS window list on our overlay; a capture the preferences already handle never opens the editor
+
+## Status
+
+| Field         | Value                                                                                                                                                                                                                                                                                                                     |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Proposed — [design](/specs/2026-10-17-screenshot-modes-v2-design/)                                                                                                                                                                                                                                                        |
+| Date          | 2026-10-17                                                                                                                                                                                                                                                                                                                |
+| Amends        | [0022](/architecture/decisions/0022-screenshot-capture-native-where-the-os-has-it/): its decision 1 (`area` as a mode, Apple's `-i` picker) and its non-goal "window capture as a mode". Its reopen condition is not what triggered this: the owner used 0.12.0 and changed the product ask. Decisions 2–4 of 0022 stand. |
+| Superseded by | —                                                                                                                                                                                                                                                                                                                         |
+
+## Context
+
+Desktop 0.12.0 shipped three modes (Area, Screen, Frame) behind the contract of ADR 0022.
+After using it the owner asked for three things: fold Area into Frame, add "click a window to
+capture it, like macOS" on both platforms, and stop opening the editor when the preferences
+already save or copy the capture — a small notification instead. The design (Claude Design
+"Kaipu Screenshot Modes v2") also moves the mode choice into the overlay, which means the
+overlay must be able to switch into Window mode without leaving.
+
+Two mechanisms are new and need a decision a later reader will question: where the window
+geometry comes from, since Electron's `desktopCapturer` names windows but never positions
+them, and who decides what happens after a capture.
+
+## Decision
+
+1. **Window mode runs on our overlay on both platforms, with the window list from an OS
+   scripting tool and no native module.** macOS: `osascript -l JavaScript` calling
+   `CGWindowListCopyWindowInfo` (id, owner, title, bounds, layer; 30 ms in a 50 ms process on
+   the development Mac). Windows: a PowerShell script over `EnumWindows`,
+   `DwmGetWindowAttribute(DWMWA_EXTENDED_FRAME_BOUNDS | DWMWA_CLOAKED)` and `GetWindowLongPtr`,
+   converted to DIP with `screen.screenToDipRect`. A `WindowLister` port isolates both; a pure
+   function filters (own process, tool and cloaked windows, tiny windows) and assigns displays.
+2. **Window pixels are taken by window id, not by screen rect.** macOS `screencapture -l <id>
+-o -x`; Windows the `window:<hwnd>` source of `desktopCapturer` at the window's physical
+   size. A screen crop at the window rect is the fallback, never the primary path.
+3. **Area is removed.** Frame draws a new box from a drag on the sheet and still remembers its
+   last one per display. Stored `"area"` migrates to `"frame"`, which becomes the default.
+4. **Main decides after a capture.** `decideAfterCapture(save, copy)`: both manual → the editor
+   opens as before; otherwise main saves and/or copies itself and shows one always-on-top
+   capture toast (Annotate, Open/Save to Library, 6 s) on the display the shot came from. No
+   third preference is added; the two existing ones carry the intent.
+
+## Alternatives rejected
+
+- **Apple's own window picker (`screencapture -w`) on macOS.** Free highlight chrome, but it
+  replaces our overlay the moment the user switches to Window from the pill, and the pill
+  cannot come back. Two picker styles for one feature. Kept as the fallback if the JXA listing
+  ever stops working.
+- **A native module for window enumeration** (`node-window-manager`, koffi over `user32`).
+  Faster on Windows, but a second native dependency with its own Electron ABI rebuild, against
+  the repo's native-dependencies rule, for a list a 20-line script already returns. It is the
+  escape hatch if PowerShell measures above 800 ms on real hardware.
+- **A grid of window thumbnails** (the Teams/Zoom share picker). Needs no geometry, but it is
+  not "click the window you are looking at", which is what was asked.
+- **A new "after capture" preference.** It would restate what the save and copy toggles already
+  say and create a fourth contradictory state ("quiet, but save manual and copy manual" has
+  nothing to show in a toast).
+- **A toast inside the main window.** Forces the main window on screen, which is the thing
+  quiet capture exists to avoid.
+- **Keep Area as a fourth mode.** Same gesture as Frame with different memory; a fourth entry
+  in the pill for no new capability.
+
+## Consequences
+
+- Two more small child-process integrations (`osascript`, `powershell`) with timeouts; a
+  stuck or missing tool degrades to "no windows found", not to a stuck overlay.
+- The provider now branches on the overlay's answer, not on the requested mode, because the
+  mode can change inside the overlay.
+- Main gains a vault-write and clipboard path for screenshots that bypasses the editor; the
+  editor must recognise `origin: "quiet"` and skip its own auto actions.
+- One more floating window kind (`capture-toast`) with the bubble's options and its own
+  positioning rules; `desktop/ipc-contract.mdx` gains three channels.
+- The default mode changes for every existing user (Area → Frame). The first overlay they see
+  is a remembered or default box, not a crosshair.
+
+## Non-goals
+
+- A per-shot override key in the overlay (the owner's first ask, dropped in the updated
+  design); a thumbnail grid; scrolling, OCR, timers, freeze; Linux.
+- Any change to the editor's tools or the vault layout.
+
+## Reopen when
+
+- The PowerShell listing measures above 800 ms from shortcut to first highlight on the first
+  Windows build (then a native module behind the same port).
+- A macOS release removes the JXA bridge or `CGWindowListCopyWindowInfo` stops returning bounds
+  without extra permission (then `screencapture -w`).
+- Analytics show `after: "quiet"` below one in ten captures three months after shipping: the
+  toast stays, but no more work goes into it.
+- Users ask for a per-shot "copy and finish" key often enough to appear in support twice.
