@@ -1135,13 +1135,13 @@
     "eyebrow": "KAIPU / LEGAL",
     "title": "Clear ground rules.",
     "intro": "How the service works, what to expect from Cloud and how we handle your data.",
-    "updated": "Updated September 14, 2026 · Version 2026-09-14",
+    "updated": "Updated October 18, 2026 · Version 2026-10-18",
     "contents": "On this page",
     "navigation": "Legal documents",
     "contact": "Contact",
     "operator": "Niway S.A.C. · Lima, Peru",
     "contactBody": "For support, privacy, account deletion or abuse reports, email us. Include your account email and the reason; do not send passwords or sensitive recordings.",
-    "signupNotice": "By creating your account, you accept the <terms>Terms and conditions</terms> and <cloud>Cloud terms</cloud>. Learn how we handle your data in the <privacy>Privacy policy</privacy>.",
+    "signupNotice": "By creating your account, you confirm that you are at least 18 years old and accept the <terms>Terms and conditions</terms> and <cloud>Cloud terms</cloud>. Learn how we handle your data in the <privacy>Privacy policy</privacy>.",
     "readTerms": "Read the full Cloud terms",
     "print": "Print or save as PDF",
     "home": "Back to Kaipu",
@@ -1178,8 +1178,8 @@
           "body": "Free features, trials, promotions and quotas are offered at Niway's discretion and may be modified or withdrawn, with notice where the Cloud terms require it. They create no right to continued or future capacity or features, have no cash value and cannot be transferred. Using a promotion never results in automatic charges."
         },
         "payment": {
-          "title": "Future paid plans",
-          "body": "If we offer paid plans, we will show price, taxes, limits, billing period, renewal and cancellation terms before purchase. A free account will never become paid without your express acceptance. We may change prices for future periods with notice before the affected renewal; you may cancel before it takes effect. Except where these terms, the purchase conditions or the law provide otherwise, payments are non-refundable."
+          "title": "Paid plans",
+          "body": "Niway may offer paid plans, such as premium Cloud storage or features, as one-time purchases or subscriptions. Before purchase we will show price, taxes, limits, billing period, renewal and cancellation terms. Subscriptions renew automatically for the same period until you cancel; cancellation takes effect at the end of the current period. Payments may be processed by a payment processor or a reseller acting as merchant of record, whose purchase terms also apply. A free account will never become paid without your express acceptance. We may change prices, plans, limits and included features for future periods with notice before the affected renewal; you may cancel before it takes effect. If a paid plan ends, your account returns to the free limits and the Cloud terms on exceeding a limit apply. Except where these terms, the purchase conditions or the law provide otherwise, payments are non-refundable."
         },
         "availability": {
           "title": "Availability and support",
@@ -1213,7 +1213,7 @@
     },
     "privacy": {
       "title": "Privacy policy",
-      "intro": "Recording locally and uploading to Cloud are separate actions. This policy explains what data is processed, why and by whom.",
+      "intro": "Recording locally and uploading to Cloud are separate actions. This policy explains what data is processed, why and by whom, including for accounts, Cloud storage and paid plans.",
       "sections": {
         "controller": {
           "title": "Controller and contact",
@@ -1225,15 +1225,23 @@
         },
         "account": {
           "title": "Account and service data",
-          "body": "We process name, email, verification status, account and session identifiers, dates and credentials protected with hashing. Sessions may include IP address and browser or device information. Cloud processes uploaded files, names, type, size, duration where applicable, dates, revisions, status, quota usage and sharing settings. We also process information you send when requesting support."
+          "body": "We process name, email, verification status, account and session identifiers, dates and credentials protected with hashing. If we offer sign-in through a third-party provider and you use it, we receive the profile data that provider shares, such as name, email and an identifier. When you create an account we record your confirmation that you are of legal age and your acceptance of the legal documents, with their version and date. Sessions may include IP address and browser or device information. We also process your plan, quota usage, preferences, product communications and the information you send when requesting support."
+        },
+        "content": {
+          "title": "Recordings and images you upload",
+          "body": "When you upload to Cloud, we store your videos, screenshots, images, audio and related files, together with their name, type, size, duration where applicable, dates, revisions, status and sharing settings. Files are stored in Cloudflare R2 and their metadata in our database. To provide the service we may create derived files, such as thumbnails, previews, compressed or converted versions and, if you use those features, transcripts. Your content may show your face, voice, screen or information about other people; we process it only to provide the features you use and do not use it to identify people by their biometric features."
+        },
+        "payments": {
+          "title": "Paid plans and payments",
+          "body": "If you buy a paid plan, such as premium Cloud storage or features, payments are handled by a payment processor or a reseller that acts as merchant of record. They collect your card or payment details under their own privacy policy, and Niway does not store full card numbers. We receive and keep what is needed to manage your plan: plan and subscription status, billing period, amounts, currency, taxes, country, billing name and address or tax ID if provided, transaction and invoice identifiers, and limited payment-method details such as brand, last four digits and expiry. We use them to charge, renew and cancel plans, apply entitlements and limits, issue receipts, handle refunds and disputes, prevent fraud and meet tax and accounting obligations."
         },
         "purposes": {
           "title": "How we use data",
-          "body": "We use data to create and secure accounts, authenticate you, host and deliver files, manage limits, provide support, analyze and improve the service, detect abuse and fraud, send service and legal notices, and comply with legal obligations. Processing relies on the contract, legitimate interests, legal obligations or your consent where required. Marketing communications require consent and include a way to opt out. We do not sell personal data or use your recordings for advertising, and we do not use recordings to train general-purpose AI models without your permission. Features you choose to use, such as transcription or AI assistance, process the content needed for them, which may include specialized providers."
+          "body": "We use data to create and secure accounts, authenticate you, host and deliver files, manage plans, payments, limits and entitlements, provide support, analyze and improve the service, develop new features, detect abuse and fraud, send service, billing and legal notices, and comply with legal obligations. Processing relies on the contract, legitimate interests, legal obligations or your consent where required. Marketing communications require consent and include a way to opt out. We do not sell personal data or use your recordings for advertising, and we do not use recordings to train general-purpose AI models without your permission. Features you choose to use, such as transcription or AI assistance, process the content needed for them, which may include specialized providers. If a new feature needs data or a purpose this policy does not cover, we will update the policy and ask for consent where required before using it."
         },
         "providers": {
           "title": "Where data is stored and who processes it",
-          "body": "We use infrastructure and service providers to run Kaipu, currently including Cloudflare (web, API and R2 file storage), Neon (PostgreSQL database for accounts, sessions and Cloud metadata) and PostHog (diagnostics in versions where it is enabled), and may add or replace providers such as email, payment or AI providers as the service evolves. Data may be transferred to and processed in other countries, including the United States and the European Union, under the safeguards required by Peruvian data protection law. We update this policy when material providers change."
+          "body": "We use infrastructure and service providers to run Kaipu, currently including Cloudflare (website, API and R2 file storage; cloudflare.com/privacypolicy), Neon (PostgreSQL database for accounts, sessions, plans and Cloud metadata; neon.com/privacy-policy) and PostHog (diagnostics in versions where it is enabled; posthog.com/privacy). As the service evolves we may add or replace providers, such as for payments, email delivery, support, analytics or AI. Payment processors and merchants of record may act as independent controllers under their own privacy policies. Data may be transferred to and processed in other countries, including the United States and the European Union, under the safeguards required by Peruvian data protection law. We update this policy when material providers change."
         },
         "diagnostics": {
           "title": "App diagnostics",
@@ -1243,9 +1251,13 @@
           "title": "Sharing and access",
           "body": "When you enable or use a sharing feature, people with access to the link may view or download content according to that feature. Links can be forwarded and cannot recall copies already downloaded. Authorized personnel and providers may access data as needed for operation, support, security or legal obligations; access is limited to its purpose. We do not describe Cloud as end-to-end encrypted storage. We may disclose information for valid legal requests or to address incidents and protect rights, within legal limits."
         },
+        "age": {
+          "title": "Age requirement",
+          "body": "Kaipu accounts, Cloud and paid plans are only for people who are at least 18 years old, or the age of majority where they live. When you sign up you confirm that you meet this requirement. We do not knowingly collect personal data from minors. If we learn that an account belongs to a minor, we may close it and delete its data, except what we must keep by law. If you believe a minor has given us data, contact us."
+        },
         "retention": {
           "title": "Retention and deletion",
-          "body": "We retain data while the account is active and afterwards as long as needed for the purposes described, to resolve disputes, prevent abuse, and meet legal, tax or accounting obligations. You may delete files in the app and request account closure by email. Deletion may not be immediate for every copy: backups and logs are overwritten on their normal cycle. Cloud files may also be deleted under the Cloud terms, including over-limit and inactive-account rules. Aggregated or anonymized data may be kept without limit."
+          "body": "We retain data while the account is active and afterwards as long as needed for the purposes described, to resolve disputes, prevent abuse, and meet legal, tax or accounting obligations. Billing and payment records are kept for the period required by tax and accounting law, even after the account is closed. You may delete files in the app and request account closure by email. Deletion may not be immediate for every copy: backups and logs are overwritten on their normal cycle. Cloud files may also be deleted under the Cloud terms, including over-limit and inactive-account rules, or when a paid plan ends and stored content exceeds the limits of your new plan. Aggregated or anonymized data may be kept without limit."
         },
         "rights": {
           "title": "Your rights",
