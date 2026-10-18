@@ -422,7 +422,7 @@ app.whenReady().then(() => {
   // region capture as the ⌘⌃X hotkey.
   ipcMain.on(IPC_CHANNELS.screenshotRequestCapture, (_event, request?: { mode?: unknown }) => {
     capturePanel?.hide();
-    triggerCaptureScreenshot({ mode: isCaptureMode(request?.mode) ? request.mode : "area" });
+    triggerCaptureScreenshot({ mode: isCaptureMode(request?.mode) ? request.mode : "frame" });
   });
 
   // App version for the renderer-side version gate.
@@ -471,6 +471,7 @@ app.whenReady().then(() => {
       captureScreenshot: () => triggerShortcutCapture("captureScreenshot"),
       captureScreen: () => triggerShortcutCapture("captureScreen"),
       captureFrame: () => triggerShortcutCapture("captureFrame"),
+      captureWindow: () => triggerShortcutCapture("captureWindow"),
       // Live input toggles write the shared RecordingSettings, never the engine:
       // mid-take the recorder forwards the change, outside a take it is just the
       // pre-recording toggle.

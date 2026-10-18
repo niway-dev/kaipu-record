@@ -28,6 +28,7 @@ export const SHORTCUT_ACTIONS = [
   "captureScreenshot",
   "captureScreen",
   "captureFrame",
+  "captureWindow",
   "toggleMicrophone",
   "toggleSystemAudio",
   "toggleCamera",
@@ -121,6 +122,14 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
     label: "Capture frame",
     description: "Capture what is inside a remembered frame",
     statusWord: "frame",
+  },
+  {
+    action: "captureWindow",
+    defaultAccelerator: "Command+Control+W",
+    group: "app",
+    label: "Capture window",
+    description: "Capture one window, not the screen around it",
+    statusWord: "window",
   },
   // Live input toggles: they flip the recording setting with or without a take
   // (outside a take they change the pre-recording toggle, as clicking it does).
@@ -242,8 +251,9 @@ export interface AppSettings {
   /**
    * The one current screenshot mode, app-wide. The Screenshots page, the tray panel and the
    * generic `captureScreenshot` shortcut all capture with it; picking a mode on the page or
-   * the tray, or pressing a mode-specific shortcut (`captureScreen`, `captureFrame`), makes
-   * that mode current. A mode the platform cannot serve stays stored but captures as Area.
+   * the tray, or pressing a mode-specific shortcut (`captureScreen`, `captureFrame`, `captureWindow`), makes
+   * that mode current. A mode the platform cannot serve stays stored but captures as Frame.
+   * A stored legacy `"area"` is migrated to `"frame"` by the settings merge.
    */
   screenshotMode: CaptureMode;
 }
@@ -269,7 +279,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   exportQuality: "balanced",
   showRecordingSavedCard: true,
   screenshotFrame: {},
-  screenshotMode: "area",
+  screenshotMode: "frame",
 };
 
 /**

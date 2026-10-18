@@ -26,6 +26,7 @@ const status: Record<ShortcutAction, boolean> = {
   captureScreenshot: false,
   captureScreen: false,
   captureFrame: false,
+  captureWindow: false,
   toggleMicrophone: false,
   toggleSystemAudio: false,
   toggleCamera: false,
