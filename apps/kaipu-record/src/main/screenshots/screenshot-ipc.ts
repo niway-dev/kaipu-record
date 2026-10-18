@@ -5,8 +5,7 @@ import { createMainTranslator } from "@kaipu/i18n/main";
 import { buildScreenshotCapturedProperties, SCREENSHOT_CAPTURED_EVENT } from "@shared/analytics";
 import { IPC_CHANNELS } from "@shared/types/ipc";
 import type { LocalRecording } from "@shared/types/library-storage";
-import type { CaptureToastPayload } from "@shared/types/screenshot-capture";
-import type { CaptureMode } from "@shared/types/screenshot-capture";
+import type { CaptureMode, OverlayAnswer } from "@shared/types/screenshot-capture";
 import { assertExportPayload, exportFileName } from "./export-file-name";
 import { createCaptureHandler, type CaptureWindowHooks } from "./capture-handler";
 import { CaptureOverlayWindows } from "./capture-overlay-windows";
@@ -17,8 +16,12 @@ import { captureMainEvent } from "../services/analytics.service";
 import { getAppSettings, updateAppSettings } from "../infrastructure/settings-store";
 import { screenshotFilePath } from "../library";
 import { saveScreenshotToVault } from "./screenshot-save";
+import type { CaptureToastShowRequest } from "./capture-toast-window";
+import { deferToastUntilAfterCapture } from "./toast-after-capture";
 
 let overlayWindows: CaptureOverlayWindows | null = null;
+/** Told every overlay answer, so the toast lands on the display the shot came from. */
+let observePick: (answer: OverlayAnswer) => void = () => {};
 
 /**
  * The overlay windows, created on first use: `BrowserWindow` and `screen` need a ready
@@ -32,7 +35,9 @@ const overlay: OverlayPort = {
     overlayWindows ??= new CaptureOverlayWindows({
       windowLister: createWindowLister(process.platform),
     });
-    return overlayWindows.pick(ui, displays);
+    const answer = await overlayWindows.pick(ui, displays);
+    observePick(answer);
+    return answer;
   },
   hideAll: async () => overlayWindows?.hideAll(),
   destroyAll: () => overlayWindows?.destroyAll(),
@@ -49,11 +54,22 @@ export interface ScreenshotHandlers {
 const TOAST_THUMBNAIL_WIDTH = 160;
 
 export function registerScreenshotHandlers(
-  windows: CaptureWindowHooks,
-  /** Seam for the capture toast (ticket 06); called once per quiet capture. */
-  onQuietCapture?: (payload: CaptureToastPayload) => void,
+  appWindows: CaptureWindowHooks,
+  /**
+   * The capture toast: called once per quiet capture, after `afterCapture` has put the
+   * windows back, with the display the shot came from.
+   */
+  showToast?: (request: CaptureToastShowRequest) => void,
 ): ScreenshotHandlers {
   const provider = createScreenshotProvider(process.platform);
+  const toastSeam = deferToastUntilAfterCapture(
+    appWindows,
+    (request) => showToast?.(request),
+    // No overlay answered (Screen on a lone display): the display under the pointer.
+    () => screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).id,
+  );
+  observePick = toastSeam.onPick;
+  const windows = toastSeam.windows;
   const handleCapture = createCaptureHandler({
     platform: process.platform,
     provider,
@@ -83,7 +99,7 @@ export function registerScreenshotHandlers(
         width > TOAST_THUMBNAIL_WIDTH ? image.resize({ width: TOAST_THUMBNAIL_WIDTH }) : image
       ).toDataURL();
     },
-    onQuietCapture,
+    onQuietCapture: toastSeam.onQuietCapture,
   });
   ipcMain.handle(IPC_CHANNELS.screenshotCapture, (_event, request) => handleCapture(request));
   ipcMain.handle(IPC_CHANNELS.screenshotSupportedModes, () => provider.supportedModes());

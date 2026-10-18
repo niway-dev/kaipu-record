@@ -390,6 +390,19 @@ export const IPC_CHANNELS = {
   // Main → overlay (no payload): "reply after your next animation frame"; overlay → main
   // on the same channel (no payload). Capture waits for every reply or a 250 ms cap.
   screenshotOverlayHiddenAck: "screenshot:overlay-hidden-ack",
+  // Capture toast (main/screenshots/capture-toast-window.ts), shown after a quiet capture.
+  // Main → toast: `CaptureToastPayload` to render; sent again with `saved` after Save.
+  screenshotToastShow: "screenshot:toast-show",
+  // Toast → main: `{ action: "annotate" | "open-library" | "save" | "dismiss" }`.
+  screenshotToastAction: "screenshot:toast-action",
+  // Toast → main: `{ paused: boolean }`, the pointer entered (true) or left (false) the card.
+  screenshotToastHover: "screenshot:toast-hover",
+  // Toast → main (no payload): the toast's listener is up; main sends the current payload.
+  screenshotToastReady: "screenshot:toast-ready",
+  // Main → main window: `OpenSavedScreenshotRequest`, open a saved shot in the editor or Library.
+  screenshotOpenSaved: "screenshot:open-saved",
+  // Main → main window: `QuietCaptureHandOff`, a copy-only capture's bytes for the editor.
+  screenshotOpenQuietCapture: "screenshot:open-quiet-capture",
   // Recording engine (renderer ↔ main)
   recordingCreate: "recording:create",
   recordingWrite: "recording:write",

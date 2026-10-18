@@ -8,7 +8,7 @@ import { createMainTranslator } from "@kaipu/i18n/main";
 import { createTray, rebuildTrayMenu, setTrayState, type TrayState } from "./tray";
 import { registerRecordingSourceHandlers } from "./recording-sources";
 import { registerPermissionHandlers } from "./permissions";
-import { registerLibraryVaultHandlers } from "./library";
+import { currentVault, registerLibraryVaultHandlers } from "./library";
 import { cleanupDragCopies } from "./library/drag-copies";
 import { registerCloudStorageHandlers } from "./cloud";
 import { registerMediaProtocol, registerMediaScheme } from "./media-protocol";
@@ -38,6 +38,14 @@ import { registerAnalyticsIpc } from "./services/analytics-ipc";
 import { isCaptureMode, type CaptureRequestPayload } from "@shared/types/screenshot-capture";
 import { registerScreenshotHandlers, type ScreenshotHandlers } from "./screenshots/screenshot-ipc";
 import { resolveShortcutCapture, type CaptureShortcut } from "./screenshots/shortcut-capture";
+import { createCaptureToastWindow } from "./screenshots/capture-toast-window";
+import {
+  keepLastQuietCapture,
+  takeLastQuietCapture,
+  type QuietCapture,
+} from "./screenshots/last-quiet-capture";
+import { saveScreenshotToVault } from "./screenshots/screenshot-save";
+import { screenshotTitle } from "@shared/screenshot-title";
 import {
   boundsAroundCenter,
   fitPresetToDisplay,
@@ -351,6 +359,38 @@ const captureWindowHooks = {
   reveal: (): void => bringAppToFront(),
 };
 
+/**
+ * The capture toast asked the main window for a saved screenshot (Annotate, Open in
+ * Library). Routes are keyed by asset id, the toast knows the vault id: resolve it, then
+ * let the renderer navigate and reveal the window itself (`revealAfterCapture`), so it
+ * comes back already on the item — the same hand-off as the capture hotkey.
+ */
+function openSavedScreenshot(target: "editor" | "library", id: string): void {
+  void currentVault()
+    .describe(id)
+    .then((item) => {
+      if (!item) {
+        console.warn(`[screenshot] toast: ${id} is no longer in the vault`);
+        return;
+      }
+      if (!mainWindow || mainWindow.isDestroyed()) createWindow(false);
+      sendToRenderer(IPC_CHANNELS.screenshotOpenSaved, { target, assetId: item.assetId });
+    })
+    .catch((error: unknown) => console.error("[screenshot] toast: open saved failed", error));
+}
+
+/** Annotate on a copy-only toast: hand the kept bytes to the editor (it reveals the window). */
+function openQuietCapture(capture: QuietCapture): void {
+  if (!mainWindow || mainWindow.isDestroyed()) createWindow(false);
+  const { png, width, height, mode } = capture;
+  sendToRenderer(IPC_CHANNELS.screenshotOpenQuietCapture, {
+    png: png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength),
+    width,
+    height,
+    mode,
+  });
+}
+
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
@@ -487,7 +527,21 @@ app.whenReady().then(() => {
   registerCloudStorageHandlers({ auth, serverUrl: authServerUrl });
 
   // Screenshots: capture/copy/save IPC handlers.
-  screenshotHandlers = registerScreenshotHandlers(captureWindowHooks);
+  // The capture toast after a quiet capture (lazy window; shown on the shot's display).
+  const captureToast = createCaptureToastWindow({
+    takeQuietCapture: takeLastQuietCapture,
+    keepQuietCapture: keepLastQuietCapture,
+    saveToVault: async (png, title) => {
+      const saved = await saveScreenshotToVault(png, { title, manual: true });
+      return { id: saved.id };
+    },
+    title: () => screenshotTitle(),
+    openSaved: openSavedScreenshot,
+    openQuietCapture,
+  });
+  screenshotHandlers = registerScreenshotHandlers(captureWindowHooks, (request) =>
+    captureToast.show(request),
+  );
 
   /**
    * Raise the window's minimum size for a screen that cannot reflow, growing the

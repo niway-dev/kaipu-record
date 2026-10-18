@@ -567,6 +567,20 @@
     "heavyBannerBodyNoGithub": "Share makes a lighter copy — about {estimate}, with text that stays readable. The original stays as it is."
   },
   "screenshots": {
+    "toast": {
+      "label": "Capture notification",
+      "copiedTitle": "Copied to clipboard",
+      "savedTitle": "Saved to Library",
+      "meta": "{width} × {height} · {mode}",
+      "pasteWith": "paste with {key}",
+      "annotate": "Annotate",
+      "openInLibrary": "Open in Library",
+      "saveToLibrary": "Save to Library",
+      "dismiss": "Dismiss",
+      "footerAlsoSaved": "Auto-hides in {seconds} s · Also saved to your Library",
+      "footerNotSaved": "Auto-hides in {seconds} s · Not saved yet",
+      "footer": "Auto-hides in {seconds} s"
+    },
     "overlay": {
       "captureDisplay": "Capture this display · {index}",
       "captureNumber": "Capture · {index}",
