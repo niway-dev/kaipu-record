@@ -1,5 +1,51 @@
 # Changelog
 
+## [0.13.0](https://github.com/niway-dev/kaipu-record/compare/desktop-v0.12.0...desktop-v0.13.0) (2026-10-18)
+
+
+### Features
+
+* **desktop:** capture toast card and the main window hand-offs ([12c9a9e](https://github.com/niway-dev/kaipu-record/commit/12c9a9ea00e370448cf143b9653777482cfa65ca))
+* **desktop:** capture toast contract — channels, payloads and bridges ([064e511](https://github.com/niway-dev/kaipu-record/commit/064e511d63a9bc06440934d7218f8da905b05117))
+* **desktop:** capture toast window after a quiet capture ([983a0a0](https://github.com/niway-dev/kaipu-record/commit/983a0a009a42187b4ca153a4d61fe807234d0e49))
+* **desktop:** closing the window on Windows hides it to the tray ([d863c52](https://github.com/niway-dev/kaipu-record/commit/d863c52bf0977f8a8fc5f5d72a972f082e46e749))
+* **desktop:** Frame absorbs Area, draw a box on the dim sheet ([922597a](https://github.com/niway-dev/kaipu-record/commit/922597afc24fed697eb9def5ce387866dd602202))
+* **desktop:** modes v2 contract, frame default and captureWindow shortcut ([910c791](https://github.com/niway-dev/kaipu-record/commit/910c791f137ce061f9dc9449236d0adbc6c330f2))
+* **desktop:** overlay v2 with mode pill, action bar, Window picker and Screen card ([8967126](https://github.com/niway-dev/kaipu-record/commit/8967126b38b12a6e75132e15259f5ae6d71cd33a))
+* **desktop:** page and tray Capture button with last-used mode chips ([ab41733](https://github.com/niway-dev/kaipu-record/commit/ab4173371f07f31808607ab47302490afaad40ae))
+* **desktop:** per-platform shortcut defaults, Control+Alt on Windows ([94570ac](https://github.com/niway-dev/kaipu-record/commit/94570acd7d3f3be058f2941b927e68eea1b7d72a))
+* **desktop:** providers capture by the overlay answer, drop the screencapture -i path ([c991a22](https://github.com/niway-dev/kaipu-record/commit/c991a22db0f0a587a10c1e352e3dc9478e59f8a9))
+* **desktop:** quiet capture in main, policy decides save, copy or editor ([8c8404c](https://github.com/niway-dev/kaipu-record/commit/8c8404ca41f53cdd70fb7acd20224e8dd6ca5644))
+* **desktop:** renderer skips the editor on quiet capture, settings note and IPC docs ([d5b16c9](https://github.com/niway-dev/kaipu-record/commit/d5b16c93618a029e02483d3d894118995dfe58d4))
+* **desktop:** screenshot modes v2 — Frame absorbs Area, Window mode, in-overlay picker, quiet capture with a toast ([e7fd80d](https://github.com/niway-dev/kaipu-record/commit/e7fd80d5156c6cfbd8f51e4930f326c672e2b4f4))
+* **desktop:** switch the overlay mode from any overlay, remember it on capture only ([762c36a](https://github.com/niway-dev/kaipu-record/commit/762c36a51cd66e6cc413049c52723c135d7266fa))
+* **desktop:** window capture backends for macOS and Windows ([be5c131](https://github.com/niway-dev/kaipu-record/commit/be5c131ed9d3effb8083016509fa7c21223bf7ce))
+* **desktop:** window lister for macOS (osascript JXA) and Windows (PowerShell) ([269053c](https://github.com/niway-dev/kaipu-record/commit/269053cbae8256547abdbe1844d289f38c504eae))
+* **desktop:** Windows tray icon with a light glyph ([ca2da8f](https://github.com/niway-dev/kaipu-record/commit/ca2da8f9d1c9c102c228b97673e3fa3196b2a2f9))
+* **desktop:** wire the window lister into the capture overlay ([2816598](https://github.com/niway-dev/kaipu-record/commit/2816598d6ab85a99a2776a00af9de2877f3eeaf2))
+
+
+### Bug Fixes
+
+* **desktop:** a second launch during a recording keeps the window hidden ([2dc5d11](https://github.com/niway-dev/kaipu-record/commit/2dc5d113424e24ac676c6a5a122e4d8cfb82b123))
+* **desktop:** capture spanning windows whole and trust main's window list ([33b9168](https://github.com/niway-dev/kaipu-record/commit/33b91680b56c56f640c8a3396e2aef017c4d159c))
+* **desktop:** Ctrl+Q quits on Windows; an aborted quit keeps close-to-tray ([9ec9fe2](https://github.com/niway-dev/kaipu-record/commit/9ec9fe2ff9b1c127fc42ffd7bf525032e07e50bc))
+* **desktop:** dim the outside of the frame a little more (45 %) ([aa2dc35](https://github.com/niway-dev/kaipu-record/commit/aa2dc353bb48988cdf4c34883ae84c777e038193))
+* **desktop:** disable Window mode behind WINDOW_MODE_ENABLED ([4397849](https://github.com/niway-dev/kaipu-record/commit/4397849a4d8805f9cf9924f2c26977335f562359))
+* **desktop:** disable Window screenshot mode behind WINDOW_MODE_ENABLED ([4086486](https://github.com/niway-dev/kaipu-record/commit/4086486bca374af18faaf6ff58343e125830c9e9))
+* **desktop:** drop the unused setWindows port method and currentMode string ([82bace7](https://github.com/niway-dev/kaipu-record/commit/82bace7ca3868a1d305469056eeecfccfd59ce4d))
+* **desktop:** keep the inside of the frame untinted ([f196b2e](https://github.com/niway-dev/kaipu-record/commit/f196b2e1a014e20cd86d2ccb4cfd91896b743bcd))
+* **desktop:** keep the toast out of the next shot and the focus on the previous app ([26a7c8a](https://github.com/niway-dev/kaipu-record/commit/26a7c8a58857a553b3acc95e1aaf92bcbbf93c43))
+* **desktop:** one selection toolbar for modes and actions ([e455ae2](https://github.com/niway-dev/kaipu-record/commit/e455ae208356b0b06398d2c52d44782cfefee9ff))
+* **desktop:** one selection toolbar for modes and actions; the inside of the frame is never tinted ([70e38ab](https://github.com/niway-dev/kaipu-record/commit/70e38abc7ffe5a6042815bf013d8e0218432be48))
+* **desktop:** platform label from the bridge; Screen and Frame rows in the shortcuts doc ([d704cf6](https://github.com/niway-dev/kaipu-record/commit/d704cf6d798a1a0b18284c0fe18fd82b8e382829))
+* **desktop:** retry a vanished window with -R when screencapture -l exits 1 ([f53a682](https://github.com/niway-dev/kaipu-record/commit/f53a68214a7703788b0dd9cd3feb706b8df7214a))
+* **desktop:** show Windows key names and copy on Windows ([e85d353](https://github.com/niway-dev/kaipu-record/commit/e85d353b5ceff13281075f2da088677f988534f6))
+* **desktop:** single instance, platform-aware shortcut labels, tray notification ([1197417](https://github.com/niway-dev/kaipu-record/commit/1197417f8f08058a65c2e396e65eacb0fbaf44cf))
+* **desktop:** toast Save races, Save off the Continue list, toast timing ([cb22e64](https://github.com/niway-dev/kaipu-record/commit/cb22e648dab78122b0bee34a5089dc40ac9c0f94))
+* **desktop:** Window mode keyboard follows the pointer; no mode flicker ([2f8b47e](https://github.com/niway-dev/kaipu-record/commit/2f8b47e9455ac65fdadc267a9667e790f5a94d88))
+* **desktop:** Windows key names and copy, plus a platform parity table ([d031229](https://github.com/niway-dev/kaipu-record/commit/d031229a3fb191880cde8715f07e437a8814ab35))
+
 ## [0.12.0](https://github.com/niway-dev/kaipu-record/compare/desktop-v0.11.0...desktop-v0.12.0) (2026-10-17)
 
 
