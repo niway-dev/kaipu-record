@@ -1136,13 +1136,13 @@
     "eyebrow": "KAIPU / LEGAL",
     "title": "Las reglas, claras.",
     "intro": "Cómo funciona el servicio, qué puedes esperar de Cloud y cómo tratamos tus datos.",
-    "updated": "Actualizado el 14 de septiembre de 2026 · Versión 2026-09-14",
+    "updated": "Actualizado el 18 de octubre de 2026 · Versión 2026-10-18",
     "contents": "En esta página",
     "navigation": "Documentos legales",
     "contact": "Contacto",
     "operator": "Niway S.A.C. · Lima, Perú",
     "contactBody": "Para soporte, privacidad, eliminación de cuenta o reportes de abuso, escríbenos. Indica el correo de tu cuenta y el motivo; no envíes contraseñas ni grabaciones sensibles.",
-    "signupNotice": "Al crear tu cuenta aceptas los <terms>Términos y condiciones</terms> y las <cloud>Condiciones de Cloud</cloud>. Consulta cómo tratamos tus datos en la <privacy>Política de privacidad</privacy>.",
+    "signupNotice": "Al crear tu cuenta confirmas que tienes al menos 18 años y aceptas los <terms>Términos y condiciones</terms> y las <cloud>Condiciones de Cloud</cloud>. Consulta cómo tratamos tus datos en la <privacy>Política de privacidad</privacy>.",
     "readTerms": "Leer todas las condiciones de Cloud",
     "print": "Imprimir o guardar como PDF",
     "home": "Volver a Kaipu",
@@ -1179,8 +1179,8 @@
           "body": "Las funciones gratuitas, pruebas, promociones y cuotas se ofrecen a criterio de Niway y pueden modificarse o retirarse, con aviso cuando las condiciones de Cloud lo exijan. No generan derecho a capacidad o funciones continuas o futuras, no tienen valor en dinero y no son transferibles. Usar una promoción nunca genera cargos automáticos."
         },
         "payment": {
-          "title": "Planes de pago futuros",
-          "body": "Si ofrecemos planes de pago, mostraremos precio, impuestos, límites, periodo de facturación, renovación y cancelación antes de la compra. Una cuenta gratuita nunca pasará a ser de pago sin tu aceptación expresa. Podemos cambiar precios para periodos futuros avisando antes de la renovación afectada; puedes cancelar antes de que se aplique. Salvo que estos términos, las condiciones de compra o la ley dispongan otra cosa, los pagos no son reembolsables."
+          "title": "Planes de pago",
+          "body": "Niway puede ofrecer planes de pago, como almacenamiento o funciones premium de Cloud, en pagos únicos o suscripciones. Antes de la compra mostraremos precio, impuestos, límites, periodo de facturación, renovación y cancelación. Las suscripciones se renuevan automáticamente por el mismo periodo hasta que las canceles; la cancelación surte efecto al final del periodo en curso. Los pagos pueden procesarse mediante un procesador de pagos o un revendedor que actúe como comerciante registrado, cuyas condiciones de compra también se aplican. Una cuenta gratuita nunca pasará a ser de pago sin tu aceptación expresa. Podemos cambiar precios, planes, límites y funciones incluidas para periodos futuros avisando antes de la renovación afectada; puedes cancelar antes de que se aplique. Si un plan de pago termina, tu cuenta vuelve a los límites gratuitos y se aplican las condiciones de Cloud sobre exceso de límite. Salvo que estos términos, las condiciones de compra o la ley dispongan otra cosa, los pagos no son reembolsables."
         },
         "availability": {
           "title": "Disponibilidad y soporte",
@@ -1214,7 +1214,7 @@
     },
     "privacy": {
       "title": "Política de privacidad",
-      "intro": "Grabar localmente y subir a Cloud son acciones distintas. Aquí explicamos qué datos se procesan, con qué finalidad y quién participa.",
+      "intro": "Grabar localmente y subir a Cloud son acciones distintas. Aquí explicamos qué datos se procesan, con qué finalidad y quién participa, incluidas la cuenta, el almacenamiento en Cloud y los planes de pago.",
       "sections": {
         "controller": {
           "title": "Responsable y contacto",
@@ -1226,15 +1226,23 @@
         },
         "account": {
           "title": "Datos de cuenta y servicio",
-          "body": "Tratamos nombre, correo, estado de verificación, identificadores de cuenta y sesión, fechas y credenciales protegidas mediante hash. Las sesiones pueden incluir dirección IP y datos de navegador o dispositivo. Cloud procesa los archivos que subes, nombres, tipo, tamaño, duración cuando corresponda, fechas, revisiones, estado, uso de cuota y ajustes de compartición. También tratamos la información que envías al pedir soporte."
+          "body": "Tratamos nombre, correo, estado de verificación, identificadores de cuenta y sesión, fechas y credenciales protegidas mediante hash. Si ofrecemos inicio de sesión con un proveedor externo y lo usas, recibimos los datos de perfil que ese proveedor comparte, como nombre, correo e identificador. Al crear la cuenta registramos tu confirmación de que eres mayor de edad y tu aceptación de los documentos legales, con su versión y fecha. Las sesiones pueden incluir dirección IP y datos de navegador o dispositivo. También tratamos tu plan, uso de cuota, preferencias, comunicaciones del producto y la información que envías al pedir soporte."
+        },
+        "content": {
+          "title": "Grabaciones e imágenes que subes",
+          "body": "Cuando subes contenido a Cloud, guardamos tus videos, capturas, imágenes, audio y archivos relacionados, junto con su nombre, tipo, tamaño, duración cuando corresponda, fechas, revisiones, estado y ajustes de compartición. Los archivos se almacenan en Cloudflare R2 y sus metadatos en nuestra base de datos. Para prestar el servicio podemos generar archivos derivados, como miniaturas, vistas previas, versiones comprimidas o convertidas y, si usas esas funciones, transcripciones. Tu contenido puede mostrar tu rostro, tu voz, tu pantalla o información de otras personas; lo tratamos solo para prestar las funciones que usas y no lo usamos para identificar personas por sus rasgos biométricos."
+        },
+        "payments": {
+          "title": "Planes de pago y pagos",
+          "body": "Si compras un plan de pago, como almacenamiento o funciones premium de Cloud, los pagos los gestiona un procesador de pagos o un revendedor que actúa como comerciante registrado (merchant of record). Ellos recogen los datos de tu tarjeta o medio de pago bajo su propia política de privacidad, y Niway no guarda números de tarjeta completos. Recibimos y conservamos lo necesario para gestionar tu plan: plan y estado de suscripción, periodo de facturación, importes, moneda, impuestos, país, nombre y dirección de facturación o identificación tributaria si los proporcionas, identificadores de transacción y de comprobante, y datos limitados del medio de pago como marca, últimos cuatro dígitos y vencimiento. Los usamos para cobrar, renovar y cancelar planes, aplicar beneficios y límites, emitir comprobantes, gestionar reembolsos y disputas, prevenir fraude y cumplir obligaciones tributarias y contables."
         },
         "purposes": {
           "title": "Para qué los usamos",
-          "body": "Usamos datos para crear y proteger cuentas, autenticarte, alojar y entregar archivos, gestionar límites, dar soporte, analizar y mejorar el servicio, detectar abuso y fraude, enviar avisos del servicio y legales, y cumplir obligaciones legales. El tratamiento se basa en el contrato, intereses legítimos, obligaciones legales o tu consentimiento cuando se requiera. Las comunicaciones de marketing requieren consentimiento e incluyen una forma de darse de baja. No vendemos datos personales ni usamos tus grabaciones para publicidad, y no las usamos para entrenar modelos de IA de propósito general sin tu permiso. Las funciones que elijas usar, como transcripción o asistencia con IA, procesan el contenido necesario para ellas, lo que puede incluir proveedores especializados."
+          "body": "Usamos datos para crear y proteger cuentas, autenticarte, alojar y entregar archivos, gestionar planes, pagos, límites y beneficios, dar soporte, analizar y mejorar el servicio, desarrollar nuevas funciones, detectar abuso y fraude, enviar avisos del servicio, de facturación y legales, y cumplir obligaciones legales. El tratamiento se basa en el contrato, intereses legítimos, obligaciones legales o tu consentimiento cuando se requiera. Las comunicaciones de marketing requieren consentimiento e incluyen una forma de darse de baja. No vendemos datos personales ni usamos tus grabaciones para publicidad, y no las usamos para entrenar modelos de IA de propósito general sin tu permiso. Las funciones que elijas usar, como transcripción o asistencia con IA, procesan el contenido necesario para ellas, lo que puede incluir proveedores especializados. Si una nueva función necesita datos o una finalidad que esta política no cubre, actualizaremos la política y pediremos tu consentimiento cuando se requiera antes de usarlos."
         },
         "providers": {
           "title": "Dónde se guarda y quién lo procesa",
-          "body": "Usamos proveedores de infraestructura y servicios para operar Kaipu, actualmente entre ellos Cloudflare (web, API y almacenamiento de archivos R2), Neon (base de datos PostgreSQL de cuentas, sesiones y metadatos de Cloud) y PostHog (diagnóstico en las versiones donde está activado), y podemos agregar o reemplazar proveedores, como de correo, pagos o IA, a medida que el servicio evoluciona. Los datos pueden transferirse y tratarse en otros países, incluidos Estados Unidos y la Unión Europea, con las garantías que exige la normativa peruana de protección de datos. Actualizamos esta política cuando cambian proveedores relevantes."
+          "body": "Usamos proveedores de infraestructura y servicios para operar Kaipu, actualmente entre ellos Cloudflare (sitio web, API y almacenamiento de archivos R2; cloudflare.com/privacypolicy), Neon (base de datos PostgreSQL de cuentas, sesiones, planes y metadatos de Cloud; neon.com/privacy-policy) y PostHog (diagnóstico en las versiones donde está activado; posthog.com/privacy). A medida que el servicio evoluciona podemos agregar o reemplazar proveedores, como de pagos, envío de correo, soporte, analítica o IA. Los procesadores de pago y comerciantes registrados pueden actuar como responsables independientes bajo sus propias políticas de privacidad. Los datos pueden transferirse y tratarse en otros países, incluidos Estados Unidos y la Unión Europea, con las garantías que exige la normativa peruana de protección de datos. Actualizamos esta política cuando cambian proveedores relevantes."
         },
         "diagnostics": {
           "title": "Diagnósticos de la aplicación",
@@ -1244,9 +1252,13 @@
           "title": "Compartición y accesos",
           "body": "Cuando habilitas o usas una función de compartición, las personas con acceso al enlace pueden ver o descargar el contenido según esa función. Un enlace puede reenviarse y no permite recuperar copias ya descargadas. El personal autorizado y los proveedores pueden acceder a datos cuando sea necesario para operación, soporte, seguridad o una obligación legal; limitamos ese acceso a su finalidad. No presentamos Cloud como almacenamiento cifrado de extremo a extremo. Podemos revelar información ante requerimientos legales válidos o para atender incidentes y proteger derechos, dentro de los límites legales."
         },
+        "age": {
+          "title": "Requisito de edad",
+          "body": "Las cuentas de Kaipu, Cloud y los planes de pago son solo para personas de al menos 18 años o la mayoría de edad de su lugar de residencia. Al registrarte confirmas que cumples este requisito. No recopilamos a sabiendas datos personales de menores de edad. Si sabemos que una cuenta pertenece a un menor, podemos cerrarla y eliminar sus datos, salvo lo que debamos conservar por ley. Si crees que un menor nos ha dado datos, escríbenos."
+        },
         "retention": {
           "title": "Conservación y eliminación",
-          "body": "Conservamos los datos mientras la cuenta esté activa y, después, el tiempo necesario para los fines descritos, resolver controversias, prevenir abusos y cumplir obligaciones legales, tributarias o contables. Puedes borrar archivos en la app y pedir el cierre de tu cuenta por correo. La eliminación puede no ser inmediata para todas las copias: las copias de respaldo y los registros se sobrescriben en su ciclo normal. Los archivos de Cloud también pueden eliminarse según las condiciones de Cloud, incluidas las reglas de exceso de límite y cuentas inactivas. Los datos agregados o anonimizados pueden conservarse sin límite."
+          "body": "Conservamos los datos mientras la cuenta esté activa y, después, el tiempo necesario para los fines descritos, resolver controversias, prevenir abusos y cumplir obligaciones legales, tributarias o contables. Los registros de facturación y pago se conservan durante el plazo que exige la normativa tributaria y contable, incluso después de cerrar la cuenta. Puedes borrar archivos en la app y pedir el cierre de tu cuenta por correo. La eliminación puede no ser inmediata para todas las copias: las copias de respaldo y los registros se sobrescriben en su ciclo normal. Los archivos de Cloud también pueden eliminarse según las condiciones de Cloud, incluidas las reglas de exceso de límite y cuentas inactivas, o cuando termina un plan de pago y el contenido guardado supera los límites de tu nuevo plan. Los datos agregados o anonimizados pueden conservarse sin límite."
         },
         "rights": {
           "title": "Tus derechos",
