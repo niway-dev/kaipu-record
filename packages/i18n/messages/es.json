@@ -568,11 +568,25 @@
   "screenshots": {
     "overlay": {
       "captureDisplay": "Capturar esta pantalla · {index}",
+      "captureNumber": "Capturar · {index}",
       "moveFrameHere": "Clic para mover el marco aquí",
       "capture": "Capturar",
+      "copy": "Copiar",
+      "record": "Grabar",
+      "recordSoon": "Grabar · pronto",
+      "soon": "Pronto",
+      "recordDisplaySoon": "Grabar esta pantalla · pronto",
+      "cancel": "Cancelar",
+      "modes": "Modo de captura",
+      "modeKey": "{mode} ({key})",
       "frame": "Marco de captura",
       "displayLabel": "Pantalla {index}",
-      "hint": "Enter para capturar · Esc para cancelar"
+      "builtIn": "Integrada",
+      "external": "Externa",
+      "findingWindows": "Buscando ventanas…",
+      "noWindows": "No hay ventanas en esta pantalla",
+      "hintFrame": "Enter para capturar · {copyKey} para copiar · 1–3 cambia de modo · Esc para cancelar",
+      "hintPick": "Clic o Enter para capturar · {copyKey} para copiar · 1–3 cambia de modo · Esc para cancelar"
     },
     "overline": "CAPTURAS",
     "pageTitle": "Captura y documenta",

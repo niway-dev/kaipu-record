@@ -568,11 +568,25 @@
   "screenshots": {
     "overlay": {
       "captureDisplay": "Capture this display · {index}",
+      "captureNumber": "Capture · {index}",
       "moveFrameHere": "Click to move the frame here",
       "capture": "Capture",
+      "copy": "Copy",
+      "record": "Record",
+      "recordSoon": "Record · soon",
+      "soon": "Soon",
+      "recordDisplaySoon": "Record this display · soon",
+      "cancel": "Cancel",
+      "modes": "Capture mode",
+      "modeKey": "{mode} ({key})",
       "frame": "Capture frame",
       "displayLabel": "Display {index}",
-      "hint": "Enter to capture · Esc to cancel"
+      "builtIn": "Built-in",
+      "external": "External",
+      "findingWindows": "Finding windows…",
+      "noWindows": "No windows on this display",
+      "hintFrame": "Enter to capture · {copyKey} to copy · 1–3 switch mode · Esc to cancel",
+      "hintPick": "Click or Enter to capture · {copyKey} to copy · 1–3 switch mode · Esc to cancel"
     },
     "overline": "SCREENSHOTS",
     "pageTitle": "Capture and document",

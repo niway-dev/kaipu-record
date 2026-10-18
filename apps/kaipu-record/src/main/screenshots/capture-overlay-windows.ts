@@ -148,7 +148,8 @@ function rectParam({ x, y, width, height }: Rectangle): string {
  * the display's bounds and work area in DIP. `ids` lists every picked display in order,
  * so whichever overlay has keyboard focus can map the digit N to the N-th display.
  * `frame` (Frame only) is the display that starts with the frame, so each overlay paints
- * the right thing at once instead of waiting for the first state message.
+ * the right thing at once instead of waiting for the first state message. `internal=1`
+ * marks the built-in display, which the Screen card labels "Built-in".
  */
 export function overlayQuery(
   ui: OverlayUi,
@@ -162,7 +163,8 @@ export function overlayQuery(
     `&index=${index}&count=${displayIds.length}` +
     `&bounds=${rectParam(display.bounds)}&work=${rectParam(display.workArea)}` +
     `&ids=${displayIds.join(",")}` +
-    (ui === "frame" && frameDisplayId !== null ? `&frame=${frameDisplayId}` : "")
+    (ui === "frame" && frameDisplayId !== null ? `&frame=${frameDisplayId}` : "") +
+    (display.internal ? "&internal=1" : "")
   );
 }
 

@@ -1,22 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Camera } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { clampFrameToDisplay } from "@shared/capture-geometry";
-import type { CaptureRect } from "@shared/types/screenshot-capture";
+import type { CaptureAction, CaptureRect } from "@shared/types/screenshot-capture";
 import { cropHandles, hitCropHandle, moveCrop, resizeCrop } from "../annotations/crop";
 import { handleCursor, type HandleId, type Pt, type Size } from "../annotations/handles";
 import type { CropRect } from "../annotations/scene";
+import { isCaptureKey, isCopyKey } from "./overlay-keys";
 import { workAreaInWindow, type OverlayQuery } from "./overlay-query";
+import { ActionBar, ModePill, type OverlayChrome } from "./selection-chrome";
 import styles from "./capture-overlay.module.css";
 
 /** How close (DIP) the pointer must be to a handle to grab it. */
 const HANDLE_HIT_DIP = 8;
-/** Gap between the frame's bottom edge and the toolbar under it. */
-const TOOLBAR_GAP_DIP = 10;
-/** Room the toolbar (44 DIP tall plus its gap) needs below the frame before it moves inside. */
-const TOOLBAR_ROOM_DIP = 56;
-/** About half the toolbar's width: how far its center stays from a display edge. */
-const TOOLBAR_HALF_WIDTH_DIP = 170;
 /** Room the size pill needs above the frame before it moves inside. */
 const PILL_ROOM_DIP = 30;
 
@@ -101,17 +96,24 @@ const MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "Meta"]);
 interface FrameBoxProps {
   query: OverlayQuery;
   remembered: CaptureRect | null;
-  /** The confirmed frame, display-relative DIP. */
-  onConfirm(rect: CaptureRect): void;
+  chrome: OverlayChrome;
+  /** The confirmed frame, display-relative DIP, with the action bar's choice. */
+  onConfirm(rect: CaptureRect, action: CaptureAction): void;
 }
 
 /**
  * Frame mode: a resizable rectangle with eight handles and a draggable body, redrawn from
- * scratch by dragging on the dim sheet outside it. Enter or Capture confirms it; Esc
- * (handled by the overlay) cancels. A key press during a drag ends the drag first. Geometry is window-local
- * DIP, which is display-relative because the window covers the display.
+ * scratch by dragging on the dim sheet outside it, with the mode pill and the action bar
+ * attached. Enter or Capture confirms it, ⌘C / Ctrl+C or Copy confirms it as a copy; Esc
+ * (handled by the overlay) cancels. A key press during a drag ends the drag first. Geometry
+ * is window-local DIP, which is display-relative because the window covers the display.
  */
-export function FrameBox({ query, remembered, onConfirm }: FrameBoxProps): React.JSX.Element {
+export function FrameBox({
+  query,
+  remembered,
+  chrome,
+  onConfirm,
+}: FrameBoxProps): React.JSX.Element {
   const t = useTranslations("screenshots");
   const area = useMemo(() => workAreaInWindow(query), [query]);
   const size: Size = useMemo(() => ({ w: area.width, h: area.height }), [area]);
@@ -127,6 +129,7 @@ export function FrameBox({ query, remembered, onConfirm }: FrameBoxProps): React
   latest.current = frame;
   const confirm = useRef(onConfirm);
   confirm.current = onConfirm;
+  const platform = chrome.platform;
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -134,16 +137,17 @@ export function FrameBox({ query, remembered, onConfirm }: FrameBoxProps): React
       // Whatever the key does next (confirm, switch mode, cancel), the drag ends first.
       const dragging = drag.current;
       drag.current = null;
-      if (event.key === "Enter") {
+      const action = isCaptureKey(event) ? "capture" : isCopyKey(event, platform) ? "copy" : null;
+      if (action) {
         event.preventDefault();
-        confirm.current(latest.current);
+        confirm.current(latest.current, action);
         return;
       }
       if (dragging) setFrame(dragging.origin);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [platform]);
 
   const fromCrop = (crop: CropRect): CaptureRect =>
     clampFrameToDisplay(
@@ -212,13 +216,7 @@ export function FrameBox({ query, remembered, onConfirm }: FrameBoxProps): React
   };
 
   const handles = cropHandles(toCrop(frame, area), size);
-  const toolbarInside = frame.y + frame.height + TOOLBAR_ROOM_DIP > query.bounds.height;
   const pillInside = frame.y - PILL_ROOM_DIP < 0;
-  // Centered under the frame, but kept on the display when the frame hugs a side edge.
-  const toolbarCenter = Math.min(
-    Math.max(frame.x + frame.width / 2, TOOLBAR_HALF_WIDTH_DIP),
-    Math.max(TOOLBAR_HALF_WIDTH_DIP, query.bounds.width - TOOLBAR_HALF_WIDTH_DIP),
-  );
 
   return (
     <div
@@ -270,23 +268,13 @@ export function FrameBox({ query, remembered, onConfirm }: FrameBoxProps): React
       >
         {frame.width} × {frame.height}
       </div>
-      <div
-        className={styles.toolbar}
-        style={{
-          left: toolbarCenter,
-          top: toolbarInside
-            ? frame.y + frame.height - TOOLBAR_ROOM_DIP
-            : frame.y + frame.height + TOOLBAR_GAP_DIP,
-        }}
-        // Pressing the toolbar must not start a frame move.
-        onPointerDown={(event) => event.stopPropagation()}
-      >
-        <button type="button" className={styles.captureButton} onClick={() => onConfirm(frame)}>
-          <Camera size={14} aria-hidden />
-          {t("overlay.capture")}
-        </button>
-        <span className={styles.toolbarHint}>{t("overlay.hint")}</span>
-      </div>
+      <ModePill chrome={chrome} selection={frame} area={area} />
+      <ActionBar
+        platform={platform}
+        selection={frame}
+        area={area}
+        onAction={(action) => onConfirm(frame, action)}
+      />
     </div>
   );
 }

@@ -16,7 +16,13 @@ describe("parseOverlayQuery", () => {
       work: { x: -1440, y: 25, width: 1440, height: 875 },
       ids: [7, 42, 9],
       frame: null,
+      internal: false,
     });
+  });
+
+  it("marks the built-in display", () => {
+    expect(parseOverlayQuery(`${QUERY}&internal=1`)?.internal).toBe(true);
+    expect(parseOverlayQuery(`${QUERY}&internal=0`)?.internal).toBe(false);
   });
 
   it("reads the frame display, and falls back to null when it is malformed", () => {

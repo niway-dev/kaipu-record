@@ -165,6 +165,16 @@ describe("CaptureOverlayWindows: creating the overlays", () => {
     });
   });
 
+  it("marks the built-in display in the query, for the Screen card's label", () => {
+    void overlays().pick("screen", [{ ...left, internal: true } as Display]);
+
+    expect(created[0].window.loadFile.mock.calls[0][1]).toEqual({
+      search:
+        "?window=capture-overlay&display=1&ui=screen&index=1&count=1" +
+        "&bounds=0,0,1440,900&work=0,25,1440,875&ids=1&internal=1",
+    });
+  });
+
   it("is a floating panel on macOS and a plain window on Windows", () => {
     void overlays("darwin").pick("screen", [left]);
     void overlays("win32").pick("screen", [left]);
