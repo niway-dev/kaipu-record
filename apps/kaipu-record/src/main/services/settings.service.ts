@@ -133,5 +133,9 @@ export function mergeSettings(
     screenshotMode: toEnabledCaptureMode(safe.screenshotMode),
     trayHintShown:
       typeof safe.trayHintShown === "boolean" ? safe.trayHintShown : DEFAULT_SETTINGS.trayHintShown,
+    diagnosticsEnabled:
+      typeof safe.diagnosticsEnabled === "boolean"
+        ? safe.diagnosticsEnabled
+        : DEFAULT_SETTINGS.diagnosticsEnabled,
   };
 }

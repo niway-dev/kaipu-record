@@ -1,0 +1,24 @@
+﻿KAIPU RECORD - PRIVACY NOTICE
+
+Recordings, screenshots and exports stay on this computer. They are only sent to Kaipu Cloud when you sign in and choose to upload them.
+
+Diagnostics: to find and fix problems, Kaipu Record sends error reports and technical events (an installation identifier, app and system version, error messages and stack traces, which may include file paths or names) to PostHog. It never sends the video or audio of your recordings.
+
+You can turn diagnostics off at any time in Settings > App > Privacy > Send diagnostics. When off, nothing is sent, and we cannot investigate errors you run into.
+
+Full privacy policy: https://kaipu.app/legal/privacy-policy
+Uninstall: Windows Settings > Apps > Installed apps > Kaipu Record > Uninstall.
+Contact: contacto@niway.dev - Niway S.A.C., Lima, Peru
+
+
+KAIPU RECORD - AVISO DE PRIVACIDAD
+
+Las grabaciones, capturas y exportaciones se quedan en este equipo. Solo se envían a Kaipu Cloud cuando inicias sesión y eliges subirlas.
+
+Diagnósticos: para encontrar y corregir problemas, Kaipu Record envía reportes de error y eventos técnicos (un identificador de instalación, la versión de la app y del sistema, mensajes de error y trazas, que pueden incluir rutas o nombres de archivos) a PostHog. Nunca envía el video ni el audio de tus grabaciones.
+
+Puedes desactivar los diagnósticos cuando quieras en Ajustes > Aplicación > Privacidad > Enviar diagnósticos. Si los apagas, no se envía nada y no podremos revisar los errores que te ocurran.
+
+Política de privacidad completa: https://kaipu.app/legal/privacy-policy
+Desinstalar: Configuración de Windows > Aplicaciones > Aplicaciones instaladas > Kaipu Record > Desinstalar.
+Contacto: contacto@niway.dev - Niway S.A.C., Lima, Perú

@@ -34,7 +34,11 @@ import {
   getShortcutStatus,
   unregisterGlobalShortcuts,
 } from "./shortcuts/global-shortcuts";
-import { initMainAnalytics, shutdownMainAnalytics } from "./services/analytics.service";
+import {
+  initMainAnalytics,
+  setMainAnalyticsEnabled,
+  shutdownMainAnalytics,
+} from "./services/analytics.service";
 import { registerAnalyticsIpc } from "./services/analytics-ipc";
 import { isCaptureMode, type CaptureRequestPayload } from "@shared/types/screenshot-capture";
 import { registerScreenshotHandlers, type ScreenshotHandlers } from "./screenshots/screenshot-ipc";
@@ -542,7 +546,8 @@ app.whenReady().then(() => {
   const authServerUrl = import.meta.env.MAIN_VITE_SERVER_URL;
   if (!authServerUrl) throw new Error("MAIN_VITE_SERVER_URL is not set — check .env");
   const auth = registerAuth({ serverUrl: authServerUrl }, () => mainWindow);
-  initMainAnalytics(getDeviceId());
+  initMainAnalytics(getDeviceId(), getAppSettings().diagnosticsEnabled);
+  onSettingsChanged((settings) => setMainAnalyticsEnabled(settings.diagnosticsEnabled));
   registerAnalyticsIpc();
 
   // Capture Panel → show the main window (the panel's "Open ↗" button).

@@ -23,6 +23,7 @@ const SETTINGS: AppSettings = {
   screenshotFrame: {},
   screenshotMode: "frame",
   trayHintShown: false,
+  diagnosticsEnabled: true,
 };
 
 describe("useAppSettings", () => {

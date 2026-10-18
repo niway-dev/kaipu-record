@@ -34,6 +34,7 @@ import { ExportQualitySettings } from "./export-quality-settings";
 import { ScreenshotCopySettings } from "./screenshot-copy-settings";
 import { ScreenshotSaveSettings } from "./screenshot-save-settings";
 import { BrandBadgeSettings } from "./brand-badge-settings";
+import { DiagnosticsSettings } from "./diagnostics-settings";
 import { Section, SettingsPanel } from "./settings-panel";
 import styles from "./settings-page.module.css";
 
@@ -45,7 +46,7 @@ import styles from "./settings-page.module.css";
  *                         + AppSettings.exportQuality → export sheet's preselected row
  *   • Recording         → AppSettings.showBarInRecording / showBrandBadge
  *   • Files             → the real on-disk recordings vault
- *   • App               → Dock policy, replay the first-run flow
+ *   • App               → Dock policy, replay the first-run flow, diagnostics opt-out
  *   • Developer         → dev-only overrides (stripped from production)
  * Device pickers are still absent (no backend wiring) — see backlog/settings-roadmap.mdx.
  * Re-add a control only once its IPC + persistence is implemented.
@@ -279,6 +280,9 @@ export function AppSettingsPage(): React.JSX.Element {
             </Button>
           }
         />
+      </Section>
+      <Section title={t("privacy")}>
+        <DiagnosticsSettings />
       </Section>
       <Section title={tUpdates("updates")}>
         <UpdateSettings />
