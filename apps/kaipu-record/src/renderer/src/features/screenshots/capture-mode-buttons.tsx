@@ -3,7 +3,7 @@ import { AppWindow, Camera, CircleDot, Frame, Monitor, type LucideIcon } from "l
 import { useTranslations } from "@kaipu/i18n";
 import { formatElapsed } from "@renderer/features/recording/elapsed";
 import type { ShortcutLabels } from "@renderer/features/shortcuts/use-shortcut-labels";
-import { CAPTURE_MODES, type CaptureMode } from "@shared/types/screenshot-capture";
+import { ENABLED_CAPTURE_MODES, type CaptureMode } from "@shared/types/screenshot-capture";
 import { useScreenshotMode } from "./use-screenshot-mode";
 import { useSupportedCaptureModes } from "./use-supported-capture-modes";
 import styles from "./capture-mode-buttons.module.css";
@@ -36,12 +36,14 @@ interface CaptureModeButtonsProps {
   recording?: PickerRecording | null;
   /** The page banner's "Stop recording" link; omitted, the link is not shown. */
   onStopRecording?: () => void;
+  /** The chips on offer; defaults to `ENABLED_CAPTURE_MODES` (Window is off). */
+  enabledModes?: readonly CaptureMode[];
 }
 
 /**
  * The screenshot entry points, shared by the tray panel and the Screenshots page: one
  * Capture button that opens the selector in the last-used mode, and a row of chips (Frame,
- * Window, Screen) that open it directly in that mode.
+ * Screen; Window while it is enabled) that open it directly in that mode.
  *
  * Neither writes the mode: main remembers it when a capture completes, so a chip click
  * that is cancelled changes nothing. The current chip is only a reminder of the mode the
@@ -56,10 +58,11 @@ export function CaptureModeButtons({
   shortcuts,
   recording = null,
   onStopRecording,
+  enabledModes = ENABLED_CAPTURE_MODES,
 }: CaptureModeButtonsProps): React.JSX.Element {
   const t = useTranslations("screenshots");
   const supported = useSupportedCaptureModes();
-  const { mode: current } = useScreenshotMode();
+  const { mode: current } = useScreenshotMode(enabledModes);
 
   // Until main answers, keep everything enabled: the capture itself still answers
   // `unsupported` safely, and a flash of disabled buttons on every open is worse.
@@ -90,7 +93,7 @@ export function CaptureModeButtons({
     </button>
   );
 
-  const chips = CAPTURE_MODES.map((mode) => {
+  const chips = enabledModes.map((mode) => {
     const Icon = MODE_ICON[mode];
     const isAvailable = available(mode);
     const isCurrent = mode === current && !busy;

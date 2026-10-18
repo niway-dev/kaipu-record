@@ -12,6 +12,34 @@ export function isCaptureMode(value: unknown): value is CaptureMode {
   return (CAPTURE_MODES as readonly unknown[]).includes(value);
 }
 
+/**
+ * Owner decision 2026-10-18: Window mode is buggy and stays off until fixed; flip to true
+ * to re-enable. The contract below (`CAPTURE_MODES`, the `window` answer, `ListedWindow`)
+ * is unchanged: only what the user can reach derives from `ENABLED_CAPTURE_MODES`.
+ */
+export const WINDOW_MODE_ENABLED = false as const;
+
+/** The modes a user can reach, in pill order (keys 1..n). */
+export const ENABLED_CAPTURE_MODES: readonly CaptureMode[] = CAPTURE_MODES.filter(
+  (mode) => mode !== "window" || WINDOW_MODE_ENABLED,
+);
+
+/** True for a mode that exists and is currently reachable. */
+export function isEnabledCaptureMode(
+  value: unknown,
+  enabledModes: readonly CaptureMode[] = ENABLED_CAPTURE_MODES,
+): value is CaptureMode {
+  return isCaptureMode(value) && enabledModes.includes(value);
+}
+
+/** A stored or requested mode that may be disabled now, mapped to Frame when it is. */
+export function toEnabledCaptureMode(
+  value: unknown,
+  enabledModes: readonly CaptureMode[] = ENABLED_CAPTURE_MODES,
+): CaptureMode {
+  return isEnabledCaptureMode(value, enabledModes) ? value : "frame";
+}
+
 /** Payload of every channel that asks for a capture (invoke, hotkey, panel request). */
 export interface CaptureRequestPayload {
   mode: CaptureMode;

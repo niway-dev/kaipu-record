@@ -1,4 +1,4 @@
-import { isCaptureMode, type CaptureRect } from "@shared/types/screenshot-capture";
+import { toEnabledCaptureMode, type CaptureRect } from "@shared/types/screenshot-capture";
 import {
   type AppSettings,
   DEFAULT_SETTINGS,
@@ -123,8 +123,7 @@ export function mergeSettings(stored: Partial<AppSettings> | null | undefined): 
         ? safe.showRecordingSavedCard
         : DEFAULT_SETTINGS.showRecordingSavedCard,
     screenshotFrame: mergeScreenshotFrames(safe.screenshotFrame),
-    screenshotMode: isCaptureMode(safe.screenshotMode)
-      ? safe.screenshotMode
-      : DEFAULT_SETTINGS.screenshotMode,
+    // A stored "window" reads as Frame while Window mode is off (the file keeps it).
+    screenshotMode: toEnabledCaptureMode(safe.screenshotMode),
   };
 }

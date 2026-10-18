@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Display } from "electron";
-import type { CaptureMode, OverlayAnswer } from "@shared/types/screenshot-capture";
+import {
+  CAPTURE_MODES,
+  type CaptureMode,
+  type OverlayAnswer,
+} from "@shared/types/screenshot-capture";
 import type { OverlayPort } from "./overlay-port";
 import {
   MacProvider,
@@ -403,10 +407,10 @@ describe("WindowsProvider", () => {
       getDisplays: async () => displays,
       settle: () => settle(),
     };
-    return new WindowsProvider(deps);
+    return new WindowsProvider(deps, CAPTURE_MODES);
   };
 
-  it("serves Frame, Window and Screen", () => {
+  it("serves Frame, Window and Screen when Window is enabled", () => {
     expect(MODES.map((m) => provider().supports(m))).toEqual([true, true, true]);
   });
 
@@ -714,16 +718,36 @@ describe("WindowsProvider", () => {
 });
 
 describe("supports", () => {
-  it("Mac and Windows serve every mode; others serve nothing", () => {
-    const mac = new MacProvider();
+  const realDeps = undefined; // the providers' default deps
+
+  it("Mac and Windows serve every enabled mode; others serve nothing", () => {
+    const mac = new MacProvider(realDeps, CAPTURE_MODES);
     expect(MODES.map((m) => mac.supports(m))).toEqual([true, true, true]);
     expect(new UnsupportedProvider().supports()).toBe(false);
   });
 
-  it("lists the supported modes for the renderer", () => {
-    expect(new MacProvider().supportedModes()).toEqual(["frame", "window", "screen"]);
-    expect(new WindowsProvider().supportedModes()).toEqual(["frame", "window", "screen"]);
+  it("lists the supported modes for the renderer when Window is enabled", () => {
+    expect(new MacProvider(realDeps, CAPTURE_MODES).supportedModes()).toEqual([
+      "frame",
+      "window",
+      "screen",
+    ]);
+    expect(new WindowsProvider(realDeps, CAPTURE_MODES).supportedModes()).toEqual([
+      "frame",
+      "window",
+      "screen",
+    ]);
     expect(new UnsupportedProvider().supportedModes()).toEqual([]);
+  });
+
+  it("with the flag as shipped (Window off), every provider reports Frame and Screen only", () => {
+    for (const provider of [new MacProvider(), new WindowsProvider()]) {
+      expect(provider.supportedModes()).toEqual(["frame", "screen"]);
+      expect(provider.supports("window")).toBe(false);
+      expect(provider.supports("frame")).toBe(true);
+      expect(provider.supports("screen")).toBe(true);
+    }
+    expect(new UnsupportedProvider().supports()).toBe(false);
   });
 });
 

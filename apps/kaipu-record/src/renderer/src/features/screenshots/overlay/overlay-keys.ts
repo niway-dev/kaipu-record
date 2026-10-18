@@ -1,4 +1,4 @@
-import { CAPTURE_MODES, type CaptureMode } from "@shared/types/screenshot-capture";
+import { ENABLED_CAPTURE_MODES, type CaptureMode } from "@shared/types/screenshot-capture";
 
 /** Which modifier means "copy" on the overlay: ⌘C on macOS, Ctrl+C everywhere else. */
 export type KeyPlatform = "mac" | "other";
@@ -26,9 +26,15 @@ export function isCaptureKey(event: KeyboardEvent): boolean {
   );
 }
 
-/** Keys 1–3 with no modifier pick the mode in pill order (`CAPTURE_MODES`). */
-export function modeForKey(event: KeyboardEvent): CaptureMode | null {
+/**
+ * Keys 1..n with no modifier pick the mode in pill order (`enabledModes`, by default
+ * `ENABLED_CAPTURE_MODES`): with Window off, 1 is Frame, 2 is Screen and 3 does nothing.
+ */
+export function modeForKey(
+  event: KeyboardEvent,
+  enabledModes: readonly CaptureMode[] = ENABLED_CAPTURE_MODES,
+): CaptureMode | null {
   if (event.metaKey || event.ctrlKey || event.altKey) return null;
   const index = ["1", "2", "3"].indexOf(event.key);
-  return index < 0 ? null : (CAPTURE_MODES[index] ?? null);
+  return index < 0 ? null : (enabledModes[index] ?? null);
 }

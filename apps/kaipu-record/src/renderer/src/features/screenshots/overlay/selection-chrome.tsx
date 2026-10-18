@@ -1,7 +1,6 @@
 import { AppWindow, Camera, Circle, Copy, Frame, Monitor, X, type LucideIcon } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import {
-  CAPTURE_MODES,
   type CaptureAction,
   type CaptureMode,
   type CaptureRect,
@@ -30,6 +29,8 @@ export const MODE_ICON: Record<CaptureMode, LucideIcon> = {
 /** What every mode's UI needs to draw the pill and the bar and to switch mode. */
 export interface OverlayChrome {
   mode: CaptureMode;
+  /** The modes the pill and the Screen card row offer, in order (keys 1..n). */
+  modes: readonly CaptureMode[];
   platform: KeyPlatform;
   /** Switch every overlay to `mode` (the pill, the Screen card row). */
   onMode(mode: CaptureMode): void;
@@ -88,15 +89,14 @@ export const keepPointer = {
   onClick: (event: React.MouseEvent) => event.stopPropagation(),
 };
 
-/** The three modes as the pill and the Screen card's row label them. */
+/** Every mode's label, as the pill and the Screen card's row print them. */
 function useModeLabels(): Record<CaptureMode, string> {
   const t = useTranslations("screenshots");
   return { frame: t("modeFrame"), window: t("modeWindow"), screen: t("modeScreen") };
 }
 
 /**
- * The vertical mode pill attached to the selection: Frame · Window · Screen with their 1/2/3
- * badges, the active one filled with the accent and tagged with its name, then Cancel.
+ * The vertical mode pill attached to the selection: the enabled modes (Frame · Screen while Window is off) with their 1/2/.. badges, the active one filled with the accent and tagged with its name, then Cancel.
  */
 export function ModePill({
   chrome,
@@ -121,7 +121,7 @@ export function ModePill({
       style={{ left, top }}
       {...keepPointer}
     >
-      {CAPTURE_MODES.map((mode, index) => {
+      {chrome.modes.map((mode, index) => {
         const Icon = MODE_ICON[mode];
         const active = mode === chrome.mode;
         return (
@@ -226,13 +226,13 @@ export function ActionBar({
   );
 }
 
-/** The Screen card's segmented row: the same three modes as the pill. */
+/** The Screen card's segmented row: the same modes as the pill. */
 export function ModeRow({ chrome }: { chrome: OverlayChrome }): React.JSX.Element {
   const t = useTranslations("screenshots");
   const labels = useModeLabels();
   return (
     <div role="group" aria-label={t("overlay.modes")} className={styles.modeRow} {...keepPointer}>
-      {CAPTURE_MODES.map((mode, index) => {
+      {chrome.modes.map((mode, index) => {
         const Icon = MODE_ICON[mode];
         return (
           <button

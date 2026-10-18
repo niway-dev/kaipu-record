@@ -41,12 +41,13 @@ describe("CapturePanel — tabs", () => {
     expect(screen.queryByRole("button", { name: /^Screen/ })).not.toBeInTheDocument();
   });
 
-  it("switches to the Capture tab and shows the Frame, Window and Screen actions", () => {
+  it("switches to the Capture tab and shows the Frame and Screen actions, and no Window (it is off)", () => {
     render(<CapturePanel />);
     fireEvent.click(screen.getByRole("tab", { name: "Capture" }));
-    for (const name of [/^Frame/, /^Window/, /^Screen/]) {
+    for (const name of [/^Frame/, /^Screen/]) {
       expect(screen.getByRole("button", { name })).toBeInTheDocument();
     }
+    expect(screen.queryByRole("button", { name: /^Window/ })).not.toBeInTheDocument();
     // Recording controls are no longer mounted on the capture tab.
     expect(screen.queryByRole("button", { name: /Start Recording/ })).not.toBeInTheDocument();
   });
@@ -66,8 +67,8 @@ describe("CapturePanel — tabs", () => {
     window.electronAPI = { ...realApi, requestCaptureScreenshot, updateSettings };
     render(<CapturePanel />);
     fireEvent.click(screen.getByRole("tab", { name: "Capture" }));
-    fireEvent.click(await screen.findByRole("button", { name: /^Window/ }));
-    expect(requestCaptureScreenshot.mock.calls).toEqual([["window"]]);
+    fireEvent.click(await screen.findByRole("button", { name: /^Screen/ }));
+    expect(requestCaptureScreenshot.mock.calls).toEqual([["screen"]]);
     expect(updateSettings).not.toHaveBeenCalled();
   });
 

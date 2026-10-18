@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KaipuElectronAPI } from "@shared/types/electron-api";
-import type {
-  CaptureAction,
-  CaptureMode,
-  CaptureRect,
-  OverlayAnswer,
-  OverlayState,
+import {
+  ENABLED_CAPTURE_MODES,
+  type CaptureAction,
+  type CaptureMode,
+  type CaptureRect,
+  type OverlayAnswer,
+  type OverlayState,
 } from "@shared/types/screenshot-capture";
 import { useTranslations } from "@kaipu/i18n";
 import { FrameBox } from "./frame-box";
@@ -54,6 +55,8 @@ interface CaptureOverlayProps {
   api?: CaptureOverlayApi;
   /** Which key copies (⌘C or Ctrl+C); detected from the browser when omitted. */
   platform?: KeyPlatform;
+  /** The modes on offer; defaults to `ENABLED_CAPTURE_MODES` (Window is off). */
+  enabledModes?: readonly CaptureMode[];
 }
 
 /**
@@ -63,7 +66,7 @@ interface CaptureOverlayProps {
  * answers "this rectangle / this window / this display" with an action, or "cancelled";
  * main captures the pixels.
  *
- * Keys: 1–3 switch the mode (here at once, and on every other overlay through main), Esc
+ * Keys: 1..n (one per enabled mode) switch the mode (here at once, and on every other overlay through main), Esc
  * anywhere cancels; Enter and ⌘C / Ctrl+C belong to each mode's UI. Only the first answer
  * is sent: a second Esc, or Enter after a click, does nothing (main also keeps only the
  * first, across every display). Main also cancels on Esc itself, so this renderer-side
@@ -73,6 +76,7 @@ export function CaptureOverlay({
   query,
   api = window.electronAPI,
   platform: platformProp,
+  enabledModes = ENABLED_CAPTURE_MODES,
 }: CaptureOverlayProps): React.JSX.Element | null {
   const bridge = api.captureOverlay;
   const platform = useMemo(() => platformProp ?? detectKeyPlatform(), [platformProp]);
@@ -164,14 +168,14 @@ export function CaptureOverlay({
         cancel();
         return;
       }
-      const next = modeForKey(event);
+      const next = modeForKey(event, enabledModes);
       if (!next) return;
       event.preventDefault();
       switchMode(next);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [cancel, switchMode]);
+  }, [cancel, switchMode, enabledModes]);
 
   // Main hid the window and waits until this renderer has drawn one more frame, so its
   // last painted frame cannot end up in the shot. A hidden window may never run its
@@ -197,8 +201,8 @@ export function CaptureOverlay({
   );
 
   const chrome = useMemo<OverlayChrome>(
-    () => ({ mode, platform, onMode: switchMode, onCancel: cancel }),
-    [mode, platform, switchMode, cancel],
+    () => ({ mode, modes: enabledModes, platform, onMode: switchMode, onCancel: cancel }),
+    [mode, enabledModes, platform, switchMode, cancel],
   );
 
   const body =
@@ -210,7 +214,7 @@ export function CaptureOverlay({
         chrome={chrome}
         send={send}
       />
-    ) : mode === "window" ? (
+    ) : mode === "window" && enabledModes.includes("window") ? (
       <WindowPicker
         query={query}
         bridge={bridge}
@@ -232,7 +236,7 @@ export function CaptureOverlay({
   return (
     <>
       {body}
-      <HintPill mode={mode} platform={platform} />
+      <HintPill mode={mode} platform={platform} modeCount={enabledModes.length} />
       <DisplayLabel index={query.index} />
     </>
   );
@@ -242,15 +246,20 @@ export function CaptureOverlay({
 function HintPill({
   mode,
   platform,
+  modeCount,
 }: {
   mode: CaptureMode;
   platform: KeyPlatform;
+  modeCount: number;
 }): React.JSX.Element {
   const t = useTranslations("screenshots");
   const copyKey = copyKeyLabel(platform);
+  const keys = `1–${modeCount}`;
   return (
     <span className={styles.hintPill} data-testid="hint-pill">
-      {mode === "frame" ? t("overlay.hintFrame", { copyKey }) : t("overlay.hintPick", { copyKey })}
+      {mode === "frame"
+        ? t("overlay.hintFrame", { copyKey, keys })
+        : t("overlay.hintPick", { copyKey, keys })}
     </span>
   );
 }
