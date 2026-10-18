@@ -184,7 +184,15 @@ export class MacProvider implements ScreenshotCaptureProvider {
     const region = ["-R", rectArg(rect ? toGlobal(rect, display) : display.bounds), "-x"];
     if (mode === "window" && windowId && rect) {
       // `-l` captures the window by id, whole and without its shadow (`-o`), even when covered.
-      const byId = await this.grab(["-l", windowId, "-o", "-x"], mode, action);
+      let byId: ProviderResult;
+      try {
+        byId = await this.grab(["-l", windowId, "-o", "-x"], mode, action);
+      } catch (error) {
+        // A window that closed since the list: `screencapture -l` prints "could not create
+        // image from window" and exits 1, so `runCli` rejects. That is "no file", not a failure.
+        console.warn(`[screenshot] screencapture -l ${windowId} failed`, error);
+        byId = { kind: "cancelled" };
+      }
       if (byId.kind === "captured") return byId;
       // The window vanished or `-l` refused it: one retry on the rectangle the user saw.
       console.warn(`[screenshot] screencapture -l ${windowId} produced no file; using the rect`);

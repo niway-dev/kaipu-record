@@ -223,23 +223,46 @@ describe("MacProvider", () => {
           expect(out).toEqual({ kind: "captured", png: PNG, mode: "window", action: "capture" });
         });
 
-        it("a missing file retries once with -R at the global rect of the answer's display", async () => {
+        /**
+         * What `screencapture -l <gone id>` really does (checked on macOS 2026-10-18): prints
+         * "could not create image from window", exits 1 and writes no file, so `execFile`
+         * rejects.
+         */
+        const rejectWindowGrab = (): void => {
+          runCli = vi.fn(async (_cmd: string, args: string[]) => {
+            log.push(`runCli:${args.join(" ")}`);
+            if (args[0] === "-l") throw new Error("Command failed: screencapture exited 1");
+          });
+        };
+
+        it("a -l grab that exits non-zero retries once with -R at the global rect of the answer's display", async () => {
           const offset = display(3, 1440, 0, 1920, 1080);
           displays = [main, offset];
           answer = windowAnswer(3);
-          let calls = 0;
-          fileExists = vi.fn(async () => ++calls > 1);
+          rejectWindowGrab();
           vi.spyOn(console, "warn").mockImplementation(() => {});
           const out = await macProvider().capture({ mode: "window", overlay: fake });
           expect(vi.mocked(runCli).mock.calls.map(([, args]) => args.join(" "))).toEqual([
             "-l 77 -o -x /tmp/x.png",
             "-R 1540,50,640,360 -x /tmp/x.png",
           ]);
+          expect(out).toEqual({ kind: "captured", png: PNG, mode: "window", action: "capture" });
+          expect(fake.destroyAll).toHaveBeenCalledTimes(1);
+        });
+
+        it("a -l grab that exits 0 without a file also retries with -R", async () => {
+          answer = windowAnswer(1);
+          let calls = 0;
+          fileExists = vi.fn(async () => ++calls > 1);
+          vi.spyOn(console, "warn").mockImplementation(() => {});
+          const out = await macProvider().capture({ mode: "window", overlay: fake });
+          expect(runCli).toHaveBeenCalledTimes(2);
           expect(out.kind).toBe("captured");
         });
 
         it("answers cancelled when the -R retry also leaves no file", async () => {
           answer = windowAnswer(1);
+          rejectWindowGrab();
           fileExists = vi.fn(async () => false);
           vi.spyOn(console, "warn").mockImplementation(() => {});
           const out = await macProvider().capture({ mode: "window", overlay: fake });
