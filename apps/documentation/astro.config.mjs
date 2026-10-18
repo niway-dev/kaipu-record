@@ -114,6 +114,7 @@ export default defineConfig({
             { slug: "backlog/desktop-cloud-sync-gap" },
             { slug: "backlog/cloud-error-states" },
             { slug: "backlog/legal-documents" },
+            { slug: "backlog/desktop-diagnostics-opt-out" },
             { slug: "backlog/public-roadmap-page" },
             { slug: "backlog/features-page" },
             { slug: "backlog/public-page-shell" },

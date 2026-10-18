@@ -22,6 +22,7 @@ const SETTINGS: AppSettings = {
   screenshotFrame: {},
   screenshotMode: "frame",
   trayHintShown: false,
+  diagnosticsEnabled: true,
 };
 
 describe("I18nRoot theme application", () => {

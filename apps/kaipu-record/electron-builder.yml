@@ -23,6 +23,10 @@ nsis:
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
+  # Shown as the installer's first page: SignPath's signing terms require software that
+  # sends data off the device to show its privacy notice during installation. Kept as
+  # UTF-8 with BOM, or electron-builder rewrites it in place on every build.
+  license: build/installer-privacy-notice.txt
 mac:
   category: public.app-category.video # cosmetic (LSApplicationCategoryType)
   hardenedRuntime: true # REQUIRED to notarize

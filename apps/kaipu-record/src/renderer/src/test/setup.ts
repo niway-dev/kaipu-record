@@ -74,6 +74,7 @@ const STUB_SETTINGS = {
   screenshotFrame: {},
   screenshotMode: "frame",
   trayHintShown: false,
+  diagnosticsEnabled: true,
 } as const;
 
 // Vitest does not expose `afterEach` as a global (globals: false), so

@@ -1,6 +1,9 @@
 import posthog, { type PostHogConfig } from "posthog-js";
 import { DEFAULT_PRODUCT, DEFAULT_SURFACE, type FlagName } from "@shared/analytics";
 
+/** `posthog.init` has run; it cannot be undone, only opted out of. */
+let initialized = false;
+/** Capturing is on: initialized and the user has diagnostics enabled. */
 let started = false;
 
 /** Privacy-locked config. Pure + exported so the privacy guarantees are tested. */
@@ -16,20 +19,31 @@ export function buildPosthogConfig(host: string | undefined): Partial<PostHogCon
 }
 
 /**
- * Initialize PostHog once, in the main window. No-op if the key is absent (the app
- * runs offline-normal) or if already started. Registers identity super-properties
- * so events/errors can be filtered by product/surface across future backends.
+ * Start or stop PostHog in the main window, following Settings → App → Send diagnostics.
+ * No-op if the key is absent (the app runs offline-normal). The first start initializes
+ * and registers identity super-properties so events/errors can be filtered by
+ * product/surface across future backends. While off, PostHog is never initialized (a
+ * launch with diagnostics off makes no request at all) or is opted out of capturing.
  */
-export function initAnalytics(deviceId: string): void {
+export function setAnalyticsEnabled(enabled: boolean, deviceId: string): void {
   const key = import.meta.env.VITE_POSTHOG_KEY;
-  if (!key || started) return;
-  started = true;
-  posthog.init(key, buildPosthogConfig(import.meta.env.VITE_POSTHOG_HOST));
-  posthog.register({
-    product: import.meta.env.VITE_POSTHOG_PRODUCT ?? DEFAULT_PRODUCT,
-    surface: import.meta.env.VITE_POSTHOG_SURFACE ?? DEFAULT_SURFACE,
-  });
-  if (deviceId) posthog.identify(deviceId);
+  if (!key || enabled === started) return;
+  started = enabled;
+  if (!enabled) {
+    posthog.opt_out_capturing();
+    return;
+  }
+  if (!initialized) {
+    initialized = true;
+    posthog.init(key, buildPosthogConfig(import.meta.env.VITE_POSTHOG_HOST));
+    posthog.register({
+      product: import.meta.env.VITE_POSTHOG_PRODUCT ?? DEFAULT_PRODUCT,
+      surface: import.meta.env.VITE_POSTHOG_SURFACE ?? DEFAULT_SURFACE,
+    });
+    if (deviceId) posthog.identify(deviceId);
+  }
+  // The opt-out persists in PostHog's storage, so a later launch has to lift it.
+  if (posthog.has_opted_out_capturing()) posthog.opt_in_capturing();
 }
 
 /**

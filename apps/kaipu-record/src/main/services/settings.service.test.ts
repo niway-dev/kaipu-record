@@ -78,6 +78,7 @@ describe("mergeSettings", () => {
         screenshotFrame: { "1": { x: 10, y: 20, width: 300, height: 200 } },
         screenshotMode: "frame",
         trayHintShown: true,
+        diagnosticsEnabled: false,
       }),
     ).toEqual({
       theme: "dark",
@@ -97,6 +98,7 @@ describe("mergeSettings", () => {
       screenshotFrame: { "1": { x: 10, y: 20, width: 300, height: 200 } },
       screenshotMode: "frame",
       trayHintShown: true,
+      diagnosticsEnabled: false,
     });
   });
 
@@ -153,6 +155,13 @@ describe("mergeSettings", () => {
     expect(mergeSettings({}).trayHintShown).toBe(false);
     expect(mergeSettings({ trayHintShown: true }).trayHintShown).toBe(true);
     expect(mergeSettings({ trayHintShown: "yes" as never }).trayHintShown).toBe(false);
+  });
+
+  it("sends diagnostics by default and keeps a boolean opt-out", () => {
+    expect(DEFAULT_SETTINGS.diagnosticsEnabled).toBe(true);
+    expect(mergeSettings({}).diagnosticsEnabled).toBe(true);
+    expect(mergeSettings({ diagnosticsEnabled: false }).diagnosticsEnabled).toBe(false);
+    expect(mergeSettings({ diagnosticsEnabled: "off" as never }).diagnosticsEnabled).toBe(true);
   });
 
   it("drops the last-used export preset keys older settings files carry (NIW2-218)", () => {

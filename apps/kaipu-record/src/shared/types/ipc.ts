@@ -278,6 +278,13 @@ export interface AppSettings {
    * records that the notification was shown, so it shows once per install.
    */
   trayHintShown: boolean;
+  /**
+   * Send error reports and technical events to PostHog (Settings → App → Privacy).
+   * On by default; off means nothing leaves the device from either process, at the
+   * cost of the team not seeing the errors this install hits. The privacy policy
+   * describes it, and SignPath's signing terms require the opt-out.
+   */
+  diagnosticsEnabled: boolean;
 }
 
 /**
@@ -306,6 +313,7 @@ export const DEFAULT_SETTINGS: Omit<AppSettings, "shortcuts"> = {
   screenshotFrame: {},
   screenshotMode: "frame",
   trayHintShown: false,
+  diagnosticsEnabled: true,
 };
 
 /**

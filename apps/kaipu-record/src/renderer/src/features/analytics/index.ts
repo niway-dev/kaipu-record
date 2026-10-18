@@ -1,4 +1,4 @@
-export { initAnalytics, captureException, captureEvent } from "./analytics-client";
+export { setAnalyticsEnabled, captureException, captureEvent } from "./analytics-client";
 export { useFlag } from "./use-flag";
 export { reportError, type ReportErrorOptions } from "./report-error";
 export { ErrorBoundary } from "./error-boundary";
