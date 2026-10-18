@@ -5,12 +5,14 @@ description: "Ship the working Windows build as a recording-only beta instead of
 
 # Windows beta — recording first, screenshots later
 
-> **Status: 🔵 Proposed → owner approved the direction** (2026-09-27). The Windows build exists
+> **Status: 🟡 In progress — CI jobs landed, unvalidated** (owner approved the direction 2026-09-27). The Windows build exists
 > and records; screenshots are not ported yet. Decision: ship what works as a labelled beta.
 > Parent: [Product growth](./product-growth). **Design (2026-10-15):**
 > [Windows release design](/specs/2026-10-15-windows-release-design/) and ADR 0023 turn the
 > steps below into tickets; screenshots on Windows come from the
 > [screenshot capture modes design](/specs/2026-10-15-screenshot-capture-modes-design/).
+> **Per-capability state:** [Platform parity](/desktop/platform-parity/) lists what each
+> platform runs and what is still unverified on Windows hardware.
 
 ## Why now
 
@@ -62,15 +64,16 @@ UI telling the truth about screenshots.
 6. **Landing and roadmap.** "Download for Windows (beta)" button, the screenshots gap stated,
    and a public-roadmap row "Windows — screenshots".
 7. **Manual QA on real hardware**: record with mic and system audio, camera bubble, export,
-   library, auto-zoom on clicks (the native hook), update.
+   library, auto-zoom on clicks (the native hook), update (including that the app relaunches
+   after the update installs).
 
 ## Checklist before the first public beta
 
-- [ ] `build:win` reproducible from CI (`release-desktop.yml`), not only from a laptop.
+- [ ] `build:win` reproducible from CI (`release-desktop.yml`), not only from a laptop. 🟡 In progress: the `build-win` and `publish` jobs landed in the workflow; the first manual dispatch (owner) is still pending.
 - [ ] Code signing for Windows, or an explicit SmartScreen warning walkthrough on the download
       page until a certificate exists. An unsigned installer is the objection ScreenKite uses
       against Recordly; do not repeat it silently.
-- [ ] `rebuild:native` runs for `uiohook-napi` on the Windows runner (auto-zoom on clicks).
+- [ ] `rebuild:native` runs for `uiohook-napi` on the Windows runner (auto-zoom on clicks). 🟡 In progress: `build-win` runs it and fails on a stamp mismatch; unverified until the first dispatch.
 - [ ] Screenshot entry points never a silent no-op on Windows. Frame, Window and Screen all have
       Windows backends (`desktopCapturer`; Frame and Screen in 0.12.0 (#306), Window in modes v2),
       so the entry points are enabled; the "Coming to Windows" state remains only as the
@@ -80,6 +83,21 @@ UI telling the truth about screenshots.
 - [x] Public roadmap row (`windowsBeta`, 2026-10-07): "recording first, screenshots next", so
       the gap is visible on purpose. Flip it to shipped when the first beta is downloadable.
 - [ ] Landing: "Download for Windows (beta)" next to the macOS button, with the gap stated.
+
+App behaviours on `feat/windows-release` (landed, unvalidated on Windows hardware):
+
+- [ ] Per-platform shortcut defaults: `Control+Alt+<key>` on Windows, shown as `Ctrl+Alt+C`
+      text labels rather than macOS glyphs. 🟡 Landed, unvalidated. Caveat: Ctrl+Alt is AltGr.
+      On some layouts (Polish: ą ć ś ó ź) the default letters type accented characters, and a
+      registered global hotkey takes them away from every app while Kaipu runs. Rebind the
+      shortcut if that happens.
+- [ ] Close hides to the tray. The first time, a native notification says Kaipu is still
+      running and how to quit it. A second launch brings the running copy back (single
+      instance) instead of starting another. 🟡 Landed, unvalidated.
+- [ ] Quit: `Ctrl+Q` works only while the main window has focus; when the window is hidden in
+      the tray, the tray menu's Quit is the way out. 🟡 Landed, unvalidated.
+- [ ] Tray icon visible on a dark and a light taskbar (light-glyph `.ico` files). 🟡 Landed,
+      unvalidated.
 
 ## Non-goals
 

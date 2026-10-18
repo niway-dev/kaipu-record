@@ -8,6 +8,7 @@ import {
   FileText,
   Frame,
   Globe,
+  House,
   Image,
   Keyboard,
   Library,
@@ -16,6 +17,7 @@ import {
   PenLine,
   RefreshCw,
   Scissors,
+  SlidersHorizontal,
   Sparkles,
   Stamp,
   Tag,
@@ -92,6 +94,13 @@ export const ROADMAP_ITEMS = [
     note: true,
   },
   { id: "trayPanel", area: "record", icon: PanelTop, mac: "shipped", win: "inProgress" },
+  {
+    id: "liveRecordingControls",
+    area: "record",
+    icon: SlidersHorizontal,
+    mac: "shipped",
+    win: "inProgress",
+  },
 
   // Capture
   {
@@ -101,7 +110,7 @@ export const ROADMAP_ITEMS = [
     mac: "shipped",
     win: "inProgress",
   },
-  { id: "frameCapture", area: "capture", icon: Frame, mac: "shipped", win: "inProgress" },
+  { id: "screenshotModes", area: "capture", icon: Frame, mac: "shipped", win: "inProgress" },
   {
     id: "windowCapture",
     area: "capture",
@@ -123,6 +132,7 @@ export const ROADMAP_ITEMS = [
 
   // Edit
   { id: "videoEditor", area: "edit", icon: Scissors, mac: "shipped", win: "inProgress" },
+  { id: "editorHome", area: "edit", icon: House, mac: "shipped", win: "inProgress" },
   { id: "videoZoom", area: "edit", icon: ZoomIn, mac: "shipped", win: "inProgress" },
   { id: "videoMute", area: "edit", icon: MicOff, mac: "shipped", win: "inProgress" },
   { id: "exportPresets", area: "edit", icon: Download, mac: "shipped", win: "inProgress" },

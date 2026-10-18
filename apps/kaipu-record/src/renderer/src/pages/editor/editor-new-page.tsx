@@ -1,7 +1,10 @@
 import React from "react";
 import { ClipboardPaste } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
-import { PASTE_SHORTCUT, usePasteToEditor } from "@renderer/features/editor/use-paste-to-editor";
+import {
+  pasteShortcutLabel,
+  usePasteToEditor,
+} from "@renderer/features/editor/use-paste-to-editor";
 import styles from "./editor-page.module.css";
 
 /**
@@ -22,7 +25,7 @@ export function EditorNewPage(): React.JSX.Element {
       <div className={styles.pasteZone}>
         <ClipboardPaste size={32} strokeWidth={1.5} aria-hidden className={styles.pasteIcon} />
         <p className={styles.pasteTitle}>{t("pasteTitle")}</p>
-        <p className={styles.pasteHint}>{t("pasteHint", { shortcut: PASTE_SHORTCUT })}</p>
+        <p className={styles.pasteHint}>{t("pasteHint", { shortcut: pasteShortcutLabel() })}</p>
         <button
           type="button"
           className={styles.pasteButton}

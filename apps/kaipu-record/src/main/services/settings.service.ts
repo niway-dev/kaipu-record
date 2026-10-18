@@ -2,7 +2,6 @@ import { toEnabledCaptureMode, type CaptureRect } from "@shared/types/screenshot
 import {
   type AppSettings,
   DEFAULT_SETTINGS,
-  DEFAULT_SHORTCUTS,
   SCREENSHOT_COPY_MODES,
   SCREENSHOT_SAVE_MODES,
   SHORTCUT_ACTIONS,
@@ -15,6 +14,7 @@ import {
   type UploadMode,
   sanitizeExportQuality,
 } from "@shared/types";
+import { defaultShortcutsFor } from "@shared/shortcut-defaults";
 import { sanitizeQuality } from "@shared/recording-quality";
 import { DEFAULT_LOCALE, isLocale } from "@kaipu/i18n";
 
@@ -49,15 +49,18 @@ export function isValidScreenshotCopyMode(value: unknown): value is ScreenshotCo
  * if it's a non-empty string; anything else falls back to that action's default.
  * (The accelerator's syntactic validity is enforced where it's registered.)
  */
-export function mergeShortcuts(stored: unknown): ShortcutSettings {
+export function mergeShortcuts(
+  stored: unknown,
+  platform: string = process.platform,
+): ShortcutSettings {
+  const defaults = defaultShortcutsFor(platform);
   const safe = (stored && typeof stored === "object" ? stored : {}) as Partial<
     Record<ShortcutAction, unknown>
   >;
   const result = {} as ShortcutSettings;
   for (const action of SHORTCUT_ACTIONS) {
     const value = safe[action];
-    result[action] =
-      typeof value === "string" && value.length > 0 ? value : DEFAULT_SHORTCUTS[action];
+    result[action] = typeof value === "string" && value.length > 0 ? value : defaults[action];
   }
   return result;
 }
@@ -88,7 +91,10 @@ export function mergeScreenshotFrames(stored: unknown): Record<string, CaptureRe
  * Merge persisted (possibly partial or untrusted) settings on top of the
  * defaults, dropping any invalid fields.
  */
-export function mergeSettings(stored: Partial<AppSettings> | null | undefined): AppSettings {
+export function mergeSettings(
+  stored: Partial<AppSettings> | null | undefined,
+  platform: string = process.platform,
+): AppSettings {
   const safe = stored ?? {};
   return {
     theme: isValidTheme(safe.theme) ? safe.theme : DEFAULT_SETTINGS.theme,
@@ -112,7 +118,7 @@ export function mergeSettings(stored: Partial<AppSettings> | null | undefined): 
     screenshotCopy: isValidScreenshotCopyMode(safe.screenshotCopy)
       ? safe.screenshotCopy
       : DEFAULT_SETTINGS.screenshotCopy,
-    shortcuts: mergeShortcuts(safe.shortcuts),
+    shortcuts: mergeShortcuts(safe.shortcuts, platform),
     deviceId: typeof safe.deviceId === "string" ? safe.deviceId : "",
     uploadMode: isValidUploadMode(safe.uploadMode) ? safe.uploadMode : DEFAULT_SETTINGS.uploadMode,
     // Files written before NIW2-218's Export quality still carry `lastExportPreset` /
@@ -125,5 +131,7 @@ export function mergeSettings(stored: Partial<AppSettings> | null | undefined): 
     screenshotFrame: mergeScreenshotFrames(safe.screenshotFrame),
     // A stored "window" reads as Frame while Window mode is off (the file keeps it).
     screenshotMode: toEnabledCaptureMode(safe.screenshotMode),
+    trayHintShown:
+      typeof safe.trayHintShown === "boolean" ? safe.trayHintShown : DEFAULT_SETTINGS.trayHintShown,
   };
 }

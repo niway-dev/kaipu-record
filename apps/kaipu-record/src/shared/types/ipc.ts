@@ -49,8 +49,8 @@ export type ShortcutGroup = "recording" | "app";
  */
 export interface ShortcutDefinition {
   action: ShortcutAction;
-  /** Electron accelerator used when the user hasn't rebound the action. */
-  defaultAccelerator: string;
+  /** Electron accelerators used when the user hasn't rebound the action, per platform. */
+  defaultAccelerator: { mac: string; win: string };
   group: ShortcutGroup;
   /** Title shown on the Shortcuts page (e.g. "Start recording"). */
   label: string;
@@ -62,8 +62,10 @@ export interface ShortcutDefinition {
 
 /**
  * The accelerators are LITERALS here, and deliberately, even though
- * `DEFAULT_ACCELERATORS.mac` in `@kaipu/domain/constants` holds the same pair
- * and the marketing site reads it.
+ * `DEFAULT_ACCELERATORS.mac` and `.windows` in `@kaipu/domain/constants` hold
+ * the same pairs and the marketing site reads them. macOS uses
+ * `Command+Control`; Windows uses `Control+Alt` (`CommandOrControl` would
+ * collapse to plain Ctrl there and bind Ctrl+C, copy, globally).
  *
  * This file is reachable from the PRELOAD bundle, which externalizes workspace
  * packages and then cannot load their TypeScript at runtime — importing one
@@ -77,7 +79,7 @@ export interface ShortcutDefinition {
 export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
   {
     action: "startRecording",
-    defaultAccelerator: "Command+Control+C",
+    defaultAccelerator: { mac: "Command+Control+C", win: "Control+Alt+C" },
     group: "recording",
     label: "Start recording",
     description: "Begin a screen recording from anywhere",
@@ -85,7 +87,7 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
   },
   {
     action: "stopRecording",
-    defaultAccelerator: "Command+Control+S",
+    defaultAccelerator: { mac: "Command+Control+S", win: "Control+Alt+S" },
     group: "recording",
     label: "Stop recording",
     description: "End the current recording from anywhere",
@@ -93,7 +95,7 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
   },
   {
     action: "bringToFront",
-    defaultAccelerator: "Command+Control+O",
+    defaultAccelerator: { mac: "Command+Control+O", win: "Control+Alt+O" },
     group: "app",
     label: "Bring Kaipu to front",
     description: "Show the app window if it slips behind or out of reach",
@@ -101,7 +103,7 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
   },
   {
     action: "captureScreenshot",
-    defaultAccelerator: "Command+Control+X",
+    defaultAccelerator: { mac: "Command+Control+X", win: "Control+Alt+X" },
     group: "app",
     label: "Capture screenshot",
     description: "Capture with your current mode",
@@ -109,7 +111,7 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
   },
   {
     action: "captureScreen",
-    defaultAccelerator: "Command+Control+Shift+X",
+    defaultAccelerator: { mac: "Command+Control+Shift+X", win: "Control+Alt+Shift+X" },
     group: "app",
     label: "Capture screen",
     description: "Capture one whole display",
@@ -117,7 +119,7 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
   },
   {
     action: "captureFrame",
-    defaultAccelerator: "Command+Control+Shift+F",
+    defaultAccelerator: { mac: "Command+Control+Shift+F", win: "Control+Alt+Shift+F" },
     group: "app",
     label: "Capture frame",
     description: "Capture what is inside a remembered frame",
@@ -125,7 +127,7 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
   },
   {
     action: "captureWindow",
-    defaultAccelerator: "Command+Control+W",
+    defaultAccelerator: { mac: "Command+Control+W", win: "Control+Alt+W" },
     group: "app",
     label: "Capture window",
     description: "Capture one window, not the screen around it",
@@ -135,7 +137,7 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
   // (outside a take they change the pre-recording toggle, as clicking it does).
   {
     action: "toggleMicrophone",
-    defaultAccelerator: "Command+Control+M",
+    defaultAccelerator: { mac: "Command+Control+M", win: "Control+Alt+M" },
     group: "recording",
     label: "Mute / unmute microphone",
     description: "Turn your voice on or off, also mid-recording",
@@ -143,7 +145,7 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
   },
   {
     action: "toggleSystemAudio",
-    defaultAccelerator: "Command+Control+A",
+    defaultAccelerator: { mac: "Command+Control+A", win: "Control+Alt+A" },
     group: "recording",
     label: "System audio on / off",
     description: "Turn what the computer plays on or off, also mid-recording",
@@ -151,7 +153,7 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
   },
   {
     action: "toggleCamera",
-    defaultAccelerator: "Command+Control+K",
+    defaultAccelerator: { mac: "Command+Control+K", win: "Control+Alt+K" },
     group: "recording",
     label: "Show / hide camera",
     description: "Show or hide the camera bubble, also mid-recording",
@@ -177,11 +179,6 @@ export function activeShortcutDefinitions(
 ): readonly ShortcutDefinition[] {
   return SHORTCUT_DEFINITIONS.filter((def) => isShortcutActionEnabled(def.action, enabledModes));
 }
-
-/** Default accelerators, derived so they can never drift from the definitions. */
-export const DEFAULT_SHORTCUTS: ShortcutSettings = Object.fromEntries(
-  SHORTCUT_DEFINITIONS.map((d) => [d.action, d.defaultAccelerator]),
-) as ShortcutSettings;
 
 /**
  * How this device treats the cloud. Mutually exclusive, per device, never per account:
@@ -275,9 +272,19 @@ export interface AppSettings {
    * A stored legacy `"area"` is migrated to `"frame"` by the settings merge.
    */
   screenshotMode: CaptureMode;
+  /**
+   * Windows: closing the main window hides it to the tray. The first time it does,
+   * the app says so once with a native notification ("Kaipu is still running"); this
+   * records that the notification was shown, so it shows once per install.
+   */
+  trayHintShown: boolean;
 }
 
-export const DEFAULT_SETTINGS: AppSettings = {
+/**
+ * Defaults for everything except shortcuts, whose defaults depend on the
+ * platform: see `defaultShortcutsFor` in `shared/shortcut-defaults.ts`.
+ */
+export const DEFAULT_SETTINGS: Omit<AppSettings, "shortcuts"> = {
   theme: "dark",
   // Must match DEFAULT_LOCALE in @kaipu/i18n. Kept as a literal on purpose: this
   // module is shared with preload, and importing the i18n package here would pull
@@ -291,7 +298,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   screenshotSave: "auto",
   showBrandBadge: false,
   screenshotCopy: "auto",
-  shortcuts: DEFAULT_SHORTCUTS,
   deviceId: "",
   uploadMode: "local-only",
   // Literal on purpose (preload bundle); equals DEFAULT_EXPORT_QUALITY in ./export-preset.
@@ -299,6 +305,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   showRecordingSavedCard: true,
   screenshotFrame: {},
   screenshotMode: "frame",
+  trayHintShown: false,
 };
 
 /**

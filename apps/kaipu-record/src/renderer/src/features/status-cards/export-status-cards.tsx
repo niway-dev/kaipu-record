@@ -1,6 +1,7 @@
 import { CircleCheck, FolderOpen, GripVertical, TriangleAlert } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useTranslations } from "@kaipu/i18n";
+import { isWindowsHost } from "@renderer/features/shortcuts/host-platform";
 import { PRESET_NAME } from "@renderer/features/video-editor/components/export-sheet";
 import { GithubFitChips } from "@renderer/features/video-editor/components/github-fit-chips";
 import { SizeMeter } from "@renderer/features/video-editor/components/size-meter";
@@ -207,7 +208,7 @@ export function ExportReadyCard({ ready }: { ready: ReadyExport }): React.JSX.El
           onClick={() => void window.electronAPI.revealLocalRecording(recording.id)}
         >
           <FolderOpen size={14} strokeWidth={1.8} />
-          {t("exportShowInFinder")}
+          {t(isWindowsHost() ? "exportShowInFinderWindows" : "exportShowInFinder")}
         </StatusCardButton>
         <StatusCardButton onClick={dismissReadyExport}>{t("readyDone")}</StatusCardButton>
       </StatusCardActions>

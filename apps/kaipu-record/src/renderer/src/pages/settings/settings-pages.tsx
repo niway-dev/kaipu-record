@@ -2,6 +2,7 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { Cloud, Folder, Mic, Monitor, MousePointerClick, Video } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
+import { isWindowsHost } from "@renderer/features/shortcuts/host-platform";
 import { Row } from "@kaipu/ui";
 import { Button } from "@kaipu/ui";
 import { Toggle } from "@kaipu/ui";
@@ -255,16 +256,20 @@ export function AppSettingsPage(): React.JSX.Element {
   return (
     <SettingsPanel title={t("app")} subtitle={t("appDescription")}>
       <Section title={t("app")}>
-        <Row
-          label={t("showInDock")}
-          description={t("showInDockDescription")}
-          action={
-            <Toggle
-              checked={settings?.showInDock ?? true}
-              onChange={(checked) => void update({ showInDock: checked })}
-            />
-          }
-        />
+        {/* The Dock and its activation policy exist only on macOS; on Windows the
+            toggle would change nothing, so it is not shown at all. */}
+        {!isWindowsHost() && (
+          <Row
+            label={t("showInDock")}
+            description={t("showInDockDescription")}
+            action={
+              <Toggle
+                checked={settings?.showInDock ?? true}
+                onChange={(checked) => void update({ showInDock: checked })}
+              />
+            }
+          />
+        )}
         <Row
           label={t("onboarding")}
           description={t("onboardingDescription")}

@@ -38,7 +38,9 @@
   },
   "tray": {
     "open": "Open Kaipu Record",
-    "quit": "Quit"
+    "quit": "Quit",
+    "closedToTrayTitle": "Kaipu is still running",
+    "closedToTrayBody": "Find it in the system tray. Right-click the icon to quit."
   },
   "dialogs": {
     "cancel": "Cancel",
@@ -257,8 +259,8 @@
     "homeChapter2Sub": "Screenshots that explain",
     "homeChapter2Title": "Sometimes a screenshot says it all.",
     "homeChapter2Serif": "Point at it. Literally.",
-    "homeChapter2Body": "Select an area, then add boxes, arrows and handwritten notes. Blur what shouldn’t be seen and frame it on a clean background.",
-    "homeChapter2Pill1": "Area · window · full screen",
+    "homeChapter2Body": "Draw a frame or pick a screen, then add boxes, arrows and handwritten notes. Blur what shouldn’t be seen and set it on a clean background.",
+    "homeChapter2Pill1": "Frame · Screen",
     "homeChapter2Pill2": "Boxes & arrows",
     "homeChapter2Pill3": "Blur",
     "homeChapter2Pill4": "Copy in one click",
@@ -479,6 +481,7 @@
     "filterKindHint": "Video recordings or screenshots",
     "filterStorage": "Location",
     "filterStorageHint": "On this Mac, in the cloud, or both",
+    "filterStorageHintWindows": "On this PC, in the cloud, or both",
     "filterTags": "Tags",
     "filterTagsHint": "Shows what carries every tag you pick",
     "filterTagsEmpty": "No tags yet",
@@ -559,6 +562,7 @@
     "kindGif": "GIF",
     "gifSpecs": "{width}×{height} · {fps} fps",
     "gifDragHint": "Drag into Slack, GitHub or Finder",
+    "gifDragHintWindows": "Drag into Slack, GitHub or File Explorer",
     "gifUnavailable": "GIF unavailable",
     "heavyBannerTitle": "{size} is heavy to send.",
     "heavyBannerBody": "Share makes a lighter copy — about {estimate}, small enough for GitHub or Jira. The original stays as it is.",
@@ -674,6 +678,7 @@
     "strokeAria": "Stroke {n}",
     "deleteAria": "Delete",
     "deleteTitle": "Delete (⌫)",
+    "deleteTitleWindows": "Delete (Del)",
     "toolSelect": "Select",
     "toolPen": "Pen",
     "toolBox": "Box",
@@ -895,6 +900,7 @@
     "openExported": "Open",
     "openExportedLabel": "Open the existing {name} file",
     "exportShowInFinder": "Show in Finder",
+    "exportShowInFinderWindows": "Show in File Explorer",
     "presetBalancedSay": "Crisp text that stays light. Good for almost anything.",
     "presetYoutubeSay": "The standard widescreen size YouTube expects.",
     "presetVerticalSay": "Turns your wide recording into a vertical video.",
@@ -977,6 +983,7 @@
     "hint": "PRESS ↵ TO CONTINUE  ·  ← → TO NAVIGATE",
     "welcomeTitle": "Welcome to Kaipu",
     "welcomeSubtitle": "The simple recorder that does what macOS doesn't — capture your screen with your voice, system audio and meetings.",
+    "welcomeSubtitleWindows": "The simple recorder that does what Windows doesn't — capture your screen with your voice, system audio and meetings.",
     "language": "Language",
     "featScreen": "SCREEN",
     "featVoice": "VOICE",
@@ -1001,7 +1008,8 @@
     "accessibilityGrant": "Allow",
     "doneTitle": "You're all set",
     "donePressPre": "Press",
-    "donePressPost": "anywhere — even from the menu bar — to start recording."
+    "donePressPost": "anywhere — even from the menu bar — to start recording.",
+    "donePressPostWindows": "anywhere — even from the system tray — to start recording."
   },
   "shortcuts": {
     "title": "Shortcuts",
@@ -1456,13 +1464,25 @@
       "betaNote": "A beta can break. Your captures are ordinary files on your disk, so uninstalling never takes them with it."
     },
     "items": {
+      "screenshotModes": {
+        "title": "Screenshot modes: Frame and Screen",
+        "description": "Drag a frame or reuse the last one, or capture a whole display. Pick the mode on the selection itself, then Capture, or Copy to the clipboard without opening the editor; a small card offers Annotate or Open in Library."
+      },
+      "editorHome": {
+        "title": "An Editor that starts where you left off",
+        "description": "The Editor lists what you worked on last, with filters and each video's export state, and opens a pasted image straight in the image editor."
+      },
+      "liveRecordingControls": {
+        "title": "Change inputs while you record",
+        "description": "Mute the microphone, turn system audio on or off and show or hide the camera mid-take, from the capture panel or a global shortcut, without stopping the recording."
+      },
       "screenAndCamera": {
         "title": "Screen and camera recording",
         "description": "Record your screen and your camera in high quality, with a floating camera bubble and quality presets that trade size for sharpness."
       },
       "shortcuts": {
         "title": "Global keyboard shortcuts",
-        "description": "Start, pause and stop a capture from anywhere, without hunting for the window first.",
+        "description": "Start and stop a recording, take a screenshot in the mode you want and bring the app to front, from anywhere. Every shortcut can be rebound.",
         "note": "Windows gets its own defaults (Ctrl+Alt), because the Mac combination lands on the Windows key there."
       },
       "screenshotAnnotations": {
@@ -1541,10 +1561,6 @@
         "title": "Menu bar and tray panel",
         "description": "A capture panel that lives in the menu bar on macOS and in the system tray on Windows."
       },
-      "frameCapture": {
-        "title": "Frame capture",
-        "description": "Draw a box on the screen and capture exactly that. The frame remembers where it was, so repeated shots line up."
-      },
       "windowCapture": {
         "title": "Window capture",
         "description": "Click a window to capture just that window.",
@@ -1588,7 +1604,7 @@
         "line": "Screenshots with arrows, boxes and notes.",
         "title": "Sometimes a screenshot says it all.",
         "serif": "Point at it. Literally.",
-        "intro": "Select an area, mark what matters, blur what shouldn’t be seen, and send it before the moment passes."
+        "intro": "Frame what you need, mark what matters, blur what shouldn’t be seen, and send it before the moment passes."
       },
       "edit": {
         "name": "Edit",
@@ -1621,6 +1637,13 @@
         "k3": "Screenshot",
         "k4": "Show app"
       },
+      "liveControls": {
+        "title": "Change your mind mid-take",
+        "body": "Mute the mic, turn system audio off or hide the camera while you record, from the capture panel or a shortcut. The take keeps going.",
+        "k1": "Mic",
+        "k2": "System audio",
+        "k3": "Camera"
+      },
       "micPicker": {
         "title": "Microphone picker",
         "body": "Choose any input. Plug in a headset and the list updates on its own."
@@ -1644,8 +1667,15 @@
         "d3": "Seven colors and three stroke widths per mark"
       },
       "captureModes": {
-        "title": "Select an area",
-        "body": "Drag over the part of the screen you need, from a shortcut or the menu bar."
+        "title": "Frame or Screen",
+        "body": "Drag a frame over what you need, or keep last time’s. Screen takes a whole display. Switch modes on the selection itself; Kaipu remembers the last one.",
+        "k1": "Current mode",
+        "k2": "Frame",
+        "k3": "Screen"
+      },
+      "quietCapture": {
+        "title": "Copy and keep going",
+        "body": "Press ⌘C on the selection and the shot lands on the clipboard, no editor in the way. With saving on, Capture files it in your library just as quietly. A small card then offers Annotate, Open in Library or Save to Library."
       },
       "blurFrame": {
         "title": "Blur and frame",
@@ -1708,6 +1738,10 @@
       "background": {
         "title": "Exports run in the background",
         "body": "Keep working while it encodes. A “Ready to share” card appears when it’s done: drag the file straight into Slack, GitHub or Finder, under a friendly name."
+      },
+      "editorHome": {
+        "title": "Pick up where you left off",
+        "body": "The Editor opens on what you worked on last, with each video’s export state, and starts a new image straight from the clipboard."
       },
       "library": {
         "title": "One library for everything",

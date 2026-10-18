@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "@kaipu/i18n";
 import { reportError } from "@renderer/features/analytics";
+import { formatAccelerator } from "@renderer/features/shortcuts/keyboard-accelerator";
 import { useOpenInEditor } from "./open-in-editor";
 import {
   decodeToPng,
@@ -9,8 +10,10 @@ import {
   type PastedImage,
 } from "./paste-image";
 
-export const PASTE_SHORTCUT =
-  typeof navigator !== "undefined" && /Mac/i.test(navigator.userAgent) ? "⌘V" : "Ctrl+V";
+/** The paste chord for the host, from the preload bridge: "⌘V" on macOS, "Ctrl+V" on Windows. */
+export function pasteShortcutLabel(): string {
+  return formatAccelerator("CommandOrControl+V");
+}
 
 export interface PasteToEditor {
   /** Read the clipboard through main and open the image editor on its image. */

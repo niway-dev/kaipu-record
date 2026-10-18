@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { DEFAULT_SETTINGS, type AppSettings } from "@shared/types";
+import { defaultShortcutsFor } from "@shared/shortcut-defaults";
 import {
   CAPTURE_MODES,
   type CaptureRect,
@@ -15,6 +16,11 @@ import {
 } from "./capture-overlay";
 import type { OverlayQuery } from "./overlay-query";
 import { toolbarPlacement, toolbarWidth } from "./selection-chrome";
+
+const BASE_SETTINGS: AppSettings = {
+  ...DEFAULT_SETTINGS,
+  shortcuts: defaultShortcutsFor("darwin"),
+};
 
 // A 1600×1000 display whose work area loses a 25 px menu bar at the top.
 const BOUNDS = { x: 0, y: 0, width: 1600, height: 1000 };
@@ -55,7 +61,7 @@ function fakeApi(
   frames: Record<string, CaptureRect> = {},
   initialState: OverlayState | null = FRAME_ON_42,
 ) {
-  let settings: AppSettings = { ...DEFAULT_SETTINGS, screenshotFrame: frames };
+  let settings: AppSettings = { ...BASE_SETTINGS, screenshotFrame: frames };
   let state: OverlayState = initialState ?? {
     mode: "frame",
     hoverDisplayId: null,
@@ -646,7 +652,7 @@ describe("FrameBox (chrome and keys)", () => {
     api.updateSettings.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
-          finishPersist = () => resolve(DEFAULT_SETTINGS);
+          finishPersist = () => resolve(BASE_SETTINGS);
         }),
     );
     render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);

@@ -155,8 +155,7 @@ Implemented the `Kaipu Roadmap.dc.html` layout and moved the page from `PublicSh
 
 - **A state per platform.** macOS keeps the states the list already had. Every Windows cell
   is `inProgress` or `planned` — see [What "shipped" means](#what-shipped-means).
-- **Added rows:** `systemAudio`, `trayPanel`, `frameCapture` (shipped on macOS, #306),
-  `blurAndBackground` (redaction, #14), `videoMute` (video editor v2), `windowCapture`
+- **Added rows:** `systemAudio`, `trayPanel`, `blurAndBackground` (redaction, #14), `videoMute` (video editor v2), `windowCapture`
   (`inProgress` on both: built in #309, switched off behind `WINDOW_MODE_ENABLED` in #311)
   and `signedInstaller` (macOS is signed and notarized; Windows ships unsigned first).
 - **Retired `windowsBeta`:** the Windows column, its summary card and the Windows section
@@ -164,6 +163,11 @@ Implemented the `Kaipu Roadmap.dc.html` layout and moved the page from `PublicSh
 - **Left out of the mockup:** "Touch Bar and Continuity Camera" (not in the code), the
   "Version 0.13" label (the app is 0.12.0, and a hardcoded version goes stale), the
   installer size, and the "Help → Send feedback" pointer (not verified).
+- **Merged with `main` after #313–#314:** the three shipped rows #313 added
+  (`screenshotModes`, `editorHome`, `liveRecordingControls`) take a macOS + Windows state
+  with their copy unchanged. `screenshotModes` replaces this branch's `frameCapture` row,
+  which described the same Frame mode. #305 landed the Windows CI jobs but no download URL,
+  so the Windows cells stay `inProgress`.
 
 ## What to validate in production
 

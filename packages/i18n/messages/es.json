@@ -38,7 +38,9 @@
   },
   "tray": {
     "open": "Abrir Kaipu Record",
-    "quit": "Salir"
+    "quit": "Salir",
+    "closedToTrayTitle": "Kaipu sigue abierto",
+    "closedToTrayBody": "Lo encuentras en la bandeja del sistema. Haz clic derecho en el icono para salir."
   },
   "dialogs": {
     "cancel": "Cancelar",
@@ -257,8 +259,8 @@
     "homeChapter2Sub": "Capturas que explican",
     "homeChapter2Title": "A veces una captura lo dice todo.",
     "homeChapter2Serif": "Señálalo. Literalmente.",
-    "homeChapter2Body": "Selecciona un área y agrega cajas, flechas y notas a mano. Difumina lo que no se debe ver y enmárcalo sobre un fondo limpio.",
-    "homeChapter2Pill1": "Área · ventana · pantalla completa",
+    "homeChapter2Body": "Dibuja un marco o elige una pantalla y agrega cajas, flechas y notas a mano. Difumina lo que no se debe ver y ponlo sobre un fondo limpio.",
+    "homeChapter2Pill1": "Marco · Pantalla",
     "homeChapter2Pill2": "Cajas y flechas",
     "homeChapter2Pill3": "Difuminado",
     "homeChapter2Pill4": "Copiar en un clic",
@@ -479,6 +481,7 @@
     "filterKindHint": "Grabaciones de video o capturas de pantalla",
     "filterStorage": "Ubicación",
     "filterStorageHint": "En esta Mac, en la nube o en ambas",
+    "filterStorageHintWindows": "En esta PC, en la nube o en ambas",
     "filterTags": "Etiquetas",
     "filterTagsHint": "Muestra lo que tiene todas las etiquetas que elijas",
     "filterTagsEmpty": "Aún no hay etiquetas",
@@ -559,6 +562,7 @@
     "kindGif": "GIF",
     "gifSpecs": "{width}×{height} · {fps} fps",
     "gifDragHint": "Arrástralo a Slack, GitHub o Finder",
+    "gifDragHintWindows": "Arrástralo a Slack, GitHub o el Explorador de archivos",
     "gifUnavailable": "GIF no disponible",
     "heavyBannerTitle": "{size} es pesado para enviar.",
     "heavyBannerBody": "Compartir crea una copia más liviana: unos {estimate}, que entra en GitHub o Jira. El original queda como está.",
@@ -674,6 +678,7 @@
     "strokeAria": "Trazo {n}",
     "deleteAria": "Eliminar",
     "deleteTitle": "Eliminar (⌫)",
+    "deleteTitleWindows": "Eliminar (Supr)",
     "toolSelect": "Seleccionar",
     "toolPen": "Pluma",
     "toolBox": "Caja",
@@ -895,6 +900,7 @@
     "openExported": "Abrir",
     "openExportedLabel": "Abrir el archivo {name} existente",
     "exportShowInFinder": "Mostrar en Finder",
+    "exportShowInFinderWindows": "Mostrar en el Explorador de archivos",
     "presetBalancedSay": "Texto nítido en un archivo liviano. Sirve para casi todo.",
     "presetYoutubeSay": "El tamaño panorámico estándar que espera YouTube.",
     "presetVerticalSay": "Convierte tu grabación horizontal en un video vertical.",
@@ -977,6 +983,7 @@
     "hint": "PRESIONA ↵ PARA CONTINUAR  ·  ← → PARA NAVEGAR",
     "welcomeTitle": "Bienvenido a Kaipu",
     "welcomeSubtitle": "El grabador simple que hace lo que macOS no — captura tu pantalla con tu voz, el audio del sistema y tus reuniones.",
+    "welcomeSubtitleWindows": "El grabador simple que hace lo que Windows no — captura tu pantalla con tu voz, el audio del sistema y tus reuniones.",
     "language": "Idioma",
     "featScreen": "PANTALLA",
     "featVoice": "VOZ",
@@ -1001,7 +1008,8 @@
     "accessibilityGrant": "Permitir",
     "doneTitle": "¡Todo listo!",
     "donePressPre": "Presiona",
-    "donePressPost": "en cualquier lugar — incluso desde la barra de menú — para grabar."
+    "donePressPost": "en cualquier lugar — incluso desde la barra de menú — para grabar.",
+    "donePressPostWindows": "en cualquier lugar — incluso desde la bandeja del sistema — para grabar."
   },
   "shortcuts": {
     "title": "Atajos",
@@ -1456,13 +1464,25 @@
       "betaNote": "Una beta puede fallar. Tus capturas son archivos normales en tu disco, así que desinstalar nunca se las lleva."
     },
     "items": {
+      "screenshotModes": {
+        "title": "Modos de captura: Marco y Pantalla",
+        "description": "Arrastra un marco o reutiliza el último, o captura un monitor completo. Elige el modo sobre la misma selección y luego Captura, o Copia al portapapeles sin abrir el editor; una pequeña tarjeta te ofrece Anotar o Abrir en la Biblioteca."
+      },
+      "editorHome": {
+        "title": "Un editor que empieza donde lo dejaste",
+        "description": "El editor lista lo último que trabajaste, con filtros y el estado de exportación de cada video, y abre una imagen pegada directo en el editor de imágenes."
+      },
+      "liveRecordingControls": {
+        "title": "Cambia las entradas mientras grabas",
+        "description": "Silencia el micrófono, activa o apaga el audio del sistema y muestra u oculta la cámara a mitad de la toma, desde el panel de captura o con un atajo global, sin detener la grabación."
+      },
       "screenAndCamera": {
         "title": "Grabación de pantalla y cámara",
         "description": "Graba tu pantalla y tu cámara en alta calidad, con una burbuja de cámara flotante y presets que equilibran tamaño y nitidez."
       },
       "shortcuts": {
         "title": "Atajos de teclado globales",
-        "description": "Inicia, pausa y detén una captura desde donde estés, sin tener que buscar la ventana primero.",
+        "description": "Inicia y detén una grabación, haz una captura en el modo que quieras y trae la app al frente, desde donde estés. Puedes cambiar cualquier atajo.",
         "note": "Windows tiene sus propios atajos por defecto (Ctrl+Alt), porque la combinación de Mac cae ahí en la tecla de Windows."
       },
       "screenshotAnnotations": {
@@ -1541,10 +1561,6 @@
         "title": "Panel en la barra de menús y la bandeja",
         "description": "Un panel de captura que vive en la barra de menús en macOS y en la bandeja del sistema en Windows."
       },
-      "frameCapture": {
-        "title": "Captura con marco",
-        "description": "Dibuja una caja en la pantalla y captura exactamente eso. El marco recuerda dónde estaba, así que las capturas repetidas coinciden."
-      },
       "windowCapture": {
         "title": "Captura de ventana",
         "description": "Haz clic en una ventana para capturar solo esa ventana.",
@@ -1588,7 +1604,7 @@
         "line": "Capturas con flechas, recuadros y notas.",
         "title": "A veces una captura lo dice todo.",
         "serif": "Señálalo. Literalmente.",
-        "intro": "Selecciona un área, marca lo importante, difumina lo que no debe verse y envíala antes de que pase el momento."
+        "intro": "Encuadra lo que necesitas, marca lo importante, difumina lo que no debe verse y envíala antes de que pase el momento."
       },
       "edit": {
         "name": "Editar",
@@ -1621,6 +1637,13 @@
         "k3": "Captura",
         "k4": "Mostrar app"
       },
+      "liveControls": {
+        "title": "Cambia de idea a mitad de la toma",
+        "body": "Silencia el micrófono, apaga el audio del sistema u oculta la cámara mientras grabas, desde el panel de captura o con un atajo. La toma sigue.",
+        "k1": "Micrófono",
+        "k2": "Audio del sistema",
+        "k3": "Cámara"
+      },
       "micPicker": {
         "title": "Selector de micrófono",
         "body": "Elige cualquier entrada. Conecta unos audífonos y la lista se actualiza sola."
@@ -1644,8 +1667,15 @@
         "d3": "Siete colores y tres grosores por marca"
       },
       "captureModes": {
-        "title": "Selecciona un área",
-        "body": "Arrastra sobre la parte de la pantalla que necesitas, con un atajo o desde la barra de menú."
+        "title": "Marco o Pantalla",
+        "body": "Arrastra un marco sobre lo que necesitas o quédate con el de la última vez. Pantalla toma un monitor completo. Cambia de modo sobre la misma selección; Kaipu recuerda el último.",
+        "k1": "Modo actual",
+        "k2": "Marco",
+        "k3": "Pantalla"
+      },
+      "quietCapture": {
+        "title": "Copia y sigue",
+        "body": "Pulsa ⌘C sobre la selección y la captura va directo al portapapeles, sin que el editor se interponga. Con el guardado automático activo, Capturar la guarda en tu biblioteca igual de discreto. Luego, una pequeña tarjeta te ofrece Anotar, Abrir en la Biblioteca o Guardar en la Biblioteca."
       },
       "blurFrame": {
         "title": "Difumina y enmarca",
@@ -1708,6 +1738,10 @@
       "background": {
         "title": "Los exports corren en segundo plano",
         "body": "Sigue trabajando mientras se codifica. Al terminar aparece una tarjeta “Listo para compartir”: arrastra el archivo directo a Slack, GitHub o Finder, con un nombre legible."
+      },
+      "editorHome": {
+        "title": "Retoma donde lo dejaste",
+        "body": "El editor se abre con lo último que trabajaste, con el estado de exportación de cada video, y empieza una imagen nueva directo desde el portapapeles."
       },
       "library": {
         "title": "Una biblioteca para todo",
