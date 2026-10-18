@@ -220,7 +220,7 @@ export function FrameBox({
 
   return (
     <div
-      className={`${styles.sheet} ${styles.drawable}`}
+      className={`${styles.sheet} ${styles.clear} ${styles.drawable}`}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={endDrag}

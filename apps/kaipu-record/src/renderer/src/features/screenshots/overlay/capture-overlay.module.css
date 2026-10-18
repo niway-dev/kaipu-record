@@ -22,6 +22,15 @@
   touch-action: none;
 }
 
+/*
+ * With a box to cut out (Frame, a highlighted window) the sheet is nearly clear and the box's
+ * own shadow carries the whole dim, so the inside of the selection is never tinted. The
+ * 0.01 keeps the sheet non-zero so a transparent window on Windows still receives clicks.
+ */
+.clear {
+  background: rgba(0, 0, 0, 0.01);
+}
+
 /* Frame: pressing outside the box draws a new one. */
 .drawable {
   cursor: crosshair;
@@ -101,12 +110,12 @@
 
 /* ── The Frame box ─────────────────────────────────────────────── */
 
-/* 1.5 px pink border; the huge spread shadow dims everything outside the frame once more. */
+/* 1.5 px pink border; the huge spread shadow is the overlay's whole dim outside the frame. */
 .frameBox {
   position: absolute;
   box-sizing: border-box;
   border: 1.5px solid var(--overlay-accent);
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.35);
   cursor: move;
 }
 
@@ -325,9 +334,9 @@
 .windowHighlight {
   position: absolute;
   box-sizing: border-box;
-  background: rgba(246, 5, 92, 0.14);
   border: 2px solid var(--overlay-accent);
   border-radius: 6px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.35);
   pointer-events: none;
 }
 

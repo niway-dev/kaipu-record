@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { DEFAULT_SETTINGS, type AppSettings } from "@shared/types";
@@ -383,6 +384,29 @@ describe("FrameBox", () => {
     render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
     await screen.findByTestId("capture-frame");
     expect(within(screen.getByTestId("selection-toolbar")).getByText("Frame")).toBeInTheDocument();
+  });
+});
+
+describe("the dim", () => {
+  const css = readFileSync(
+    "src/renderer/src/features/screenshots/overlay/capture-overlay.module.css",
+    "utf8",
+  );
+  const rule = (selector: string): string =>
+    css.match(new RegExp(`^${selector.replace(".", "\\.")} \\{[^}]*\\}`, "m"))?.[0] ?? "";
+
+  it("clears the Frame sheet and lets the frame box carry the whole dim", async () => {
+    const { api } = fakeApi({ "42": { x: 100, y: 120, width: 400, height: 300 } });
+    const { container } = render(
+      <CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />,
+    );
+    const box = await screen.findByTestId("capture-frame");
+    expect((container.firstElementChild as HTMLElement).className).toContain("clear");
+    expect(box.className).toContain("frameBox");
+    // Inside the box is clear; outside is dimmed once, by the box's shadow.
+    expect(rule(".clear")).toContain("rgba(0, 0, 0, 0.01)");
+    expect(rule(".frameBox")).toContain("0 0 0 9999px rgba(0, 0, 0, 0.35)");
+    expect(rule(".sheet")).toContain("rgba(0, 0, 0, 0.25)");
   });
 });
 

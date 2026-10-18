@@ -173,7 +173,7 @@ export function WindowPicker({
 
   return (
     <div
-      className={`${styles.sheet} ${styles.windowSheet}`}
+      className={`${styles.sheet} ${hovered ? styles.clear : ""} ${styles.windowSheet}`}
       data-testid="window-picker"
       onPointerMove={track}
       onPointerEnter={track}

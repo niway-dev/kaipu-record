@@ -281,6 +281,10 @@ does nothing but `revealAfterCapture()` to its previous state. Editor: unchanged
   live in the card's bottom row, with the card's own button row (Capture · n, Copy) and a
   "Record this display · soon" line. Enter and ⌘C work without the toolbar being hovered; the
   toolbar never covers the selection when there is room outside it.
+- Inside the selection is never tinted: with a Frame box or a highlighted window the sheet is
+  nearly clear (`rgba(0, 0, 0, 0.01)`, non-zero so transparent windows on Windows still receive
+  clicks) and the box's own shadow carries the whole dim (`0.35`) outside it. Screen and the
+  states with no box keep the uniform `0.25` sheet.
 - Hint pill at the bottom: "Enter to capture" (Frame) or "Click or Enter to capture" · "⌘C to copy" ·
   "1–3 switch mode" · "Esc to cancel".
 - Single display and initial mode Screen: capture at once, as 0.12.0 does. Switching to Screen
