@@ -7,6 +7,7 @@ import {
   RoadmapHero,
   RoadmapLegend,
   RoadmapList,
+  RoadmapTheme,
   WindowsComingSoon,
 } from "@/components/roadmap/roadmap-page";
 import { pageHead } from "@/lib/seo";
@@ -28,13 +29,15 @@ function RoadmapPage() {
   return (
     // No chapter rail: this page has no chapters for it to scroll-spy on.
     <HomeShell page="roadmap" chapterNav={false}>
-      <RoadmapHero />
-      {/* Not lazy: the filters are the first thing a visitor touches. */}
-      <RoadmapList />
-      <RoadmapLegend />
-      <LazyHydrate>
-        <WindowsComingSoon />
-      </LazyHydrate>
+      <RoadmapTheme>
+        <RoadmapHero />
+        {/* Not lazy: the filters are the first thing a visitor touches. */}
+        <RoadmapList />
+        <RoadmapLegend />
+        <LazyHydrate>
+          <WindowsComingSoon />
+        </LazyHydrate>
+      </RoadmapTheme>
       <LazyHydrate>
         <Closing />
       </LazyHydrate>

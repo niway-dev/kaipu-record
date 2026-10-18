@@ -23,13 +23,14 @@ the repo instead.
 
 ## Where it lives
 
-| Piece           | Path                                                         |
-| --------------- | ------------------------------------------------------------ |
-| Route           | `apps/web-hono/src/routes/roadmap.tsx`                       |
-| Page sections   | `apps/web-hono/src/components/roadmap/roadmap-page.tsx`      |
-| Source of truth | `apps/web-hono/src/components/roadmap/roadmap-config.ts`     |
-| Copy (en + es)  | `roadmap` namespace in `packages/i18n/messages/{en,es}.json` |
-| Entry points    | `TopNav`, `Footer`, `apps/web-hono/public/sitemap.xml`       |
+| Piece           | Path                                                                 |
+| --------------- | -------------------------------------------------------------------- |
+| Route           | `apps/web-hono/src/routes/roadmap.tsx`                               |
+| Page sections   | `apps/web-hono/src/components/roadmap/roadmap-page.tsx`              |
+| Styles (StyleX) | `stylex.create` in `roadmap-page.tsx`; tokens in `roadmap.stylex.ts` |
+| Source of truth | `apps/web-hono/src/components/roadmap/roadmap-config.ts`             |
+| Copy (en + es)  | `roadmap` namespace in `packages/i18n/messages/{en,es}.json`         |
+| Entry points    | `TopNav`, `Footer`, `apps/web-hono/public/sitemap.xml`               |
 
 The page renders inside `HomeShell` with the chapter rail off (`chapterNav={false}`), so it
 shares the home's top bar, `--kl-*` tokens, theme cookie and locale switcher. Its route

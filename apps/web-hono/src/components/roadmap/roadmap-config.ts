@@ -55,20 +55,10 @@ export type RoadmapPlatform = (typeof ROADMAP_PLATFORMS)[number];
 /** The filter's platform choice: one platform, or both side by side. */
 export type PlatformFilter = RoadmapPlatform | "all";
 
-/**
- * The first four reuse the home's chapter tints, so a row's icon reads as the
- * same moment it is on the home and /features. Cloud takes "Your files" blue.
- */
-export const ROADMAP_AREAS = {
-  record: "var(--kl-c1)",
-  capture: "var(--kl-c2)",
-  edit: "var(--kl-c3)",
-  find: "var(--kl-c4)",
-  cloud: "var(--kl-c5)",
-  app: "var(--kl-faint)",
-} as const;
+/** Each area's tint lives with the page's styles (`areaTint` in roadmap-page.tsx). */
+export const ROADMAP_AREAS = ["record", "capture", "edit", "find", "cloud", "app"] as const;
 
-export type RoadmapArea = keyof typeof ROADMAP_AREAS;
+export type RoadmapArea = (typeof ROADMAP_AREAS)[number];
 
 interface RoadmapRow {
   id: string;
