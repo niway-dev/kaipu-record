@@ -19,10 +19,13 @@ export interface AutoActions {
  * the user brought in from the clipboard. Only a capture is new to Kaipu.
  */
 export type OpenKind = "capture" | "local" | "paste";
+// A quiet capture (bytes kept by main for Annotate) counts as `local`: main already
+// saved and/or copied it, so the editor must not do either again.
 
 export function openKindOf(source: ImageSource): OpenKind {
   if (source.kind === "local") return "local";
   if (source.kind === "blob" && source.origin === "paste") return "paste";
+  if (source.kind === "blob" && source.origin === "quiet") return "local";
   return "capture";
 }
 

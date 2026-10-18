@@ -55,6 +55,9 @@ describe("useScreenshotCapture", () => {
   it("opens the editor and reveals the app on captured, defaulting to frame", async () => {
     const api = stubApi({
       kind: "captured",
+      after: "editor",
+      saved: null,
+      copied: false,
       png: new ArrayBuffer(4),
       width: 10,
       height: 5,
@@ -67,6 +70,25 @@ describe("useScreenshotCapture", () => {
       expect.objectContaining({ kind: "blob", width: 10, height: 5 }),
     );
     expect(api.revealAfterCapture).toHaveBeenCalled();
+  });
+
+  it("never opens the editor nor force-shows the window on a quiet capture", async () => {
+    const api = stubApi({
+      kind: "captured",
+      after: "quiet",
+      saved: { id: "screenshot-1" },
+      copied: true,
+      png: new ArrayBuffer(0),
+      width: 10,
+      height: 5,
+      mode: "frame",
+    });
+    const { result } = renderHook(() => useScreenshotCapture());
+    await act(() => result.current.capture());
+    expect(openCapture).not.toHaveBeenCalled();
+    // Main restored the window to its pre-capture state; a reveal would undo that.
+    expect(api.revealAfterCapture).not.toHaveBeenCalled();
+    expect(showToast).not.toHaveBeenCalled();
   });
 
   it("does nothing on cancelled", async () => {
