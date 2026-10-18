@@ -17,8 +17,25 @@ export interface CaptureRequestPayload {
   mode: CaptureMode;
 }
 
+/** What main did with a capture: opened the editor path, or finished it without one. */
+export type AfterCaptureKind = "editor" | "quiet";
+
+/**
+ * `after: "editor"` carries the bytes the editor will open. `after: "quiet"` means main
+ * already saved and/or copied: `png` is empty (the bytes never cross IPC when no editor
+ * opens), `saved` is the vault item written, `copied` says whether the clipboard got it.
+ */
 export type CaptureResult =
-  | { kind: "captured"; png: ArrayBuffer; width: number; height: number; mode: CaptureMode }
+  | {
+      kind: "captured";
+      after: AfterCaptureKind;
+      png: ArrayBuffer;
+      width: number;
+      height: number;
+      mode: CaptureMode;
+      saved: { id: string } | null;
+      copied: boolean;
+    }
   | { kind: "cancelled" }
   | { kind: "unsupported"; mode: CaptureMode; platform: NodeJS.Platform };
 

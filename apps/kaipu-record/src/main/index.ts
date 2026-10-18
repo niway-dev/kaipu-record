@@ -344,10 +344,11 @@ const captureWindowHooks = {
     // region-select and land in the screenshot too.
     hub?.hideCameraBubbleForCapture();
   },
-  afterCapture: (captured: boolean): void => {
-    // On success the renderer reveals the window once it shows the editor; here we
-    // only need to undo the hide when the user cancelled with the app previously up.
-    if (!captured && captureWasVisible) showMainWindow();
+  afterCapture: (editorTakesOver: boolean): void => {
+    // When the editor opens, the renderer reveals the window once it shows it; here we
+    // only undo the hide when nothing opens (cancel, or a quiet capture) with the app
+    // previously up. A window that was hidden stays hidden.
+    if (!editorTakesOver && captureWasVisible) showMainWindow();
     hub?.restoreCameraBubbleAfterCapture();
   },
   reveal: (): void => bringAppToFront(),
