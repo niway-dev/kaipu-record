@@ -414,6 +414,8 @@ several displays), so these are manual checks.
 
 All lines below are not yet executed; they need `bun run dev` on a real macOS desktop.
 
+Window mode is disabled (see "Window mode — disabled" below): skip its lines in this list, and expect two modes (Frame, Screen) on the pill, keys 1 and 2, two chips, and no Capture window row on the Shortcuts page.
+
 - [ ] Window mode: hovering a window highlights it; click or Enter captures that window (not the screen around it), including a window partly covered by another.
 - [ ] Window mode on a window that spans two displays: the shot has the whole window, not a stitch.
 - [ ] The mode pill (Frame, Window, Screen) sits attached to the selection; keys 1, 2 and 3 switch mode on any overlay, and a switch mid-drag ends the drag first (no half box survives).
@@ -455,6 +457,16 @@ Modes v2" mock (states Page, Recording, Tray); run them with `bun run dev`.
 - [ ] Shortcuts page: the generic shortcut reads "Capture screenshot — Capture with your current mode".
 - [ ] Frame overlay: pink border with marching ants, pink-bordered handles, size pill above the corner, toolbar centered under the frame; outside the frame is darker than inside.
 - [ ] Screen chooser on two displays: each shows the numbered pill with its size; the hovered one turns pink; "DISPLAY N" sits bottom-left on every overlay.
+
+### Window mode — disabled
+
+Window mode ships behind `WINDOW_MODE_ENABLED = false` in `apps/kaipu-record/src/shared/types/screenshot-capture.ts`. The owner tried it on 2026-10-18 and found it "buggy, not liked". The code, the `window` types and the Window tests stay; flipping the flag to `true` re-enables every surface. Before doing that, look at:
+
+- Window list latency: how long "Finding windows…" shows, especially on Windows where the PowerShell lister is slow to start.
+- Highlight accuracy: the highlighted rectangle matches the window under the pointer, including overlapping windows.
+- Keyboard follow across displays: Esc, Enter and the number keys go to the overlay under the pointer when it crosses displays.
+- Occluded capture: a window partly covered by another is captured whole, not with the cover in it.
+- Kaipu's own windows (overlay, toast, hidden main window) are filtered out of the list.
 
 ## Capture modes — Windows QA
 

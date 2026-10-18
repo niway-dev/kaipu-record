@@ -156,7 +156,19 @@ The global shortcut actions that feed `screenshot:hotkey` are `captureScreenshot
 `captureScreen`, `captureFrame` and `captureWindow`, and main resolves the mode before broadcasting
 (`main/screenshots/shortcut-capture.ts`). `captureScreenshot` captures with the current mode,
 `AppSettings.screenshotMode`, or with `"frame"` when the platform cannot serve the stored one.
-`captureScreen`, `captureFrame` and `captureWindow` open the overlay in their own mode (Window is
+`captureScreen`, `captureFrame` and `captureWindow` open the overlay in their own mode.
+
+**Window mode is disabled** by one flag, `WINDOW_MODE_ENABLED = false` in
+`shared/types/screenshot-capture.ts` (owner decision 2026-10-18: buggy, stays off until fixed;
+flip it to `true` to re-enable). The contract is unchanged: `CAPTURE_MODES` still lists
+`frame`, `window`, `screen` and the `window` answer and `ListedWindow` types stay. What the
+user can reach derives from `ENABLED_CAPTURE_MODES` (Frame and Screen): the overlay pill and
+keys 1 and 2, the page and tray chips, `supports("window")` (false on every provider, so a
+`window` request answers `unsupported`), the settings merge (a stored `"window"` reads as
+`"frame"`), and main ignores a `screenshot:overlay-mode` with `"window"` and never starts the
+window lister. The `captureWindow` action stays in the constants so a stored binding survives,
+but it is not registered as a global shortcut and the Shortcuts page does not list it. While
+enabled, Window is
 served on both platforms: macOS captures by window id through `screencapture -l`, Windows through
 the `desktopCapturer` window source, and both fall back to a crop of the display when the window
 cannot be grabbed by id). No
@@ -165,7 +177,7 @@ shortcut writes `screenshotMode` by itself: the `screenshot:capture` handler wri
 result, the mode the user ended in on the overlay. A cancelled, unsupported or failed capture
 leaves it untouched, so a mode switched on the overlay and then cancelled with Esc is not
 remembered. The Screenshots page and the tray panel never write it either: their Capture button
-sends the current mode and each mode chip (Frame, Window, Screen) sends its own, through
+sends the current mode and each mode chip (Frame, Screen; Window while enabled) sends its own, through
 `screenshot:capture` (page) or `screenshot:request-capture` (tray), and main remembers whichever mode
 the capture ends in. Analytics: the handler of
 `screenshot:capture` emits one `screenshot_captured` event per answered request with
