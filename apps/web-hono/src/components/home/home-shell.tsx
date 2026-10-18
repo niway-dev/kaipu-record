@@ -25,18 +25,21 @@ import "@/styles/landing.css";
 export function HomeShell({
   children,
   page = "home",
+  chapterNav = true,
 }: {
   children: ReactNode;
   /** Which marketing page this is — the top bar marks it as current. */
   page?: MarketingPage;
+  /** The chapter rail and mobile strip; off for a page without the four chapters. */
+  chapterNav?: boolean;
 }) {
   const { landingTheme } = useRouteContext({ from: "__root__" });
 
   return (
     <div data-kl data-kl-theme={landingTheme}>
       <TopNav page={page} />
-      <ChapterStrip />
-      <Rail />
+      {chapterNav && <ChapterStrip />}
+      {chapterNav && <Rail />}
       <main>{children}</main>
       <StickyCta />
     </div>

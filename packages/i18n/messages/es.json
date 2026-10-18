@@ -1344,7 +1344,7 @@
     "pages": {
       "roadmap": {
         "title": "Roadmap | Kaipu Record",
-        "description": "Qué ya está en Kaipu Record y qué viene después: el roadmap público, agrupado por estado."
+        "description": "Qué ya hace Kaipu Record en macOS y Windows, y qué viene después: el roadmap público, agrupado por estado."
       },
       "terms-and-conditions": {
         "title": "Términos y condiciones | Kaipu Record",
@@ -1370,60 +1370,140 @@
   },
   "roadmap": {
     "navLabel": "Roadmap",
-    "eyebrow": "Roadmap público",
-    "heading": "Qué hace Kaipu Record hoy y qué viene después",
-    "intro": "Todo lo de abajo está agrupado por estado, no por fecha. Lo lanzado es lo que ya tienes al descargar Kaipu Record; lo planeado es lo que estamos construyendo ahora.",
-    "disclaimer": "El orden es una prioridad, no una promesa. Los planes se mueven a medida que aprendemos qué necesita la gente de verdad.",
-    "count": "{count, plural, one {# elemento} other {# elementos}}",
+    "page": {
+      "eyebrow": "Roadmap público",
+      "heading": "Qué funciona hoy y en qué plataforma.",
+      "serif": "Y qué viene después.",
+      "intro": "Kaipu Record funciona hoy en macOS, y Windows viene en camino. Cada función de abajo muestra dónde ya funciona, dónde se está construyendo y qué está planeado.",
+      "disclaimer": "El orden es una prioridad, no una promesa. Los planes se mueven a medida que aprendemos qué necesita la gente de verdad.",
+      "count": "{count, plural, one {# elemento} other {# elementos}}",
+      "showing": "{shown} de {total} funciones",
+      "columns": {
+        "feature": "Función",
+        "mac": "macOS",
+        "win": "Windows"
+      }
+    },
     "status": {
       "shipped": "Lanzado",
       "inProgress": "En progreso",
       "planned": "Planeado"
+    },
+    "groupHint": {
+      "shipped": "Disponible hoy en al menos una plataforma. Las celdas dicen en cuál.",
+      "shippedOne": "Ya está en la app que descargas.",
+      "inProgress": "Se está construyendo o portando ahora mismo.",
+      "planned": "Lo siguiente. El orden es una prioridad, no una promesa."
+    },
+    "areas": {
+      "record": "Grabar",
+      "capture": "Capturar",
+      "edit": "Editar",
+      "find": "Encontrar",
+      "cloud": "Nube",
+      "app": "App"
+    },
+    "platforms": {
+      "mac": {
+        "name": "macOS",
+        "line": "Apple Silicon e Intel",
+        "badge": "Disponible"
+      },
+      "win": {
+        "name": "Windows",
+        "line": "Windows 10 o posterior, 64 bits",
+        "badge": "Muy pronto"
+      }
+    },
+    "filters": {
+      "label": "Filtrar el roadmap",
+      "platform": "Plataforma",
+      "both": "Ambas",
+      "states": "Estados"
+    },
+    "legend": {
+      "title": "Cómo leerlo",
+      "shipped": "en la versión actual",
+      "inProgress": "en construcción o en portación",
+      "planned": "en la lista, sin fecha"
+    },
+    "windows": {
+      "eyebrow": "Windows",
+      "badge": "Muy pronto",
+      "title": "Kaipu para Windows viene en camino.",
+      "serif": "Primero grabar, luego lo demás.",
+      "body": "La versión de Windows ya graba, edita y guarda tu biblioteca. La estamos preparando para lanzarla como una beta marcada como tal. Hasta que el instalador esté en la página de descarga, cada fila de arriba muestra Windows en progreso o planeado, nunca como lanzado.",
+      "download": "Descargar para Mac",
+      "requirements": "Windows 10 o posterior · 64 bits",
+      "smartscreenTitle": "Cuando llegue la beta, verás un aviso de SmartScreen",
+      "smartscreenBody": "La primera beta aún no estará firmada, así que Windows será precavido. Dos clics y pasas.",
+      "steps": {
+        "s1": "Abre el instalador",
+        "s2": "Pulsa “Más información”",
+        "s3": "Elige “Ejecutar de todas formas”"
+      },
+      "mock": {
+        "protected": "Windows protegió su PC",
+        "prevented": "Microsoft Defender SmartScreen impidió el inicio de una aplicación no reconocida.",
+        "moreInfo": "Más información",
+        "app": "Aplicación: kaipu-setup.exe",
+        "publisher": "Editor: Editor desconocido",
+        "runAnyway": "Ejecutar de todas formas",
+        "dontRun": "No ejecutar",
+        "installs": "Kaipu Record se instala",
+        "tray": "Se abre en la bandeja al terminar"
+      },
+      "betaNote": "Una beta puede fallar. Tus capturas son archivos normales en tu disco, así que desinstalar nunca se las lleva."
     },
     "items": {
       "screenAndCamera": {
         "title": "Grabación de pantalla y cámara",
         "description": "Graba tu pantalla y tu cámara en alta calidad, con una burbuja de cámara flotante y presets que equilibran tamaño y nitidez."
       },
-      "videoEditor": {
-        "title": "Editor de video integrado",
-        "description": "Recorta y exporta tus grabaciones sin salir de la app, con miniatura generada para cada video editado."
+      "shortcuts": {
+        "title": "Atajos de teclado globales",
+        "description": "Inicia, pausa y detén una captura desde donde estés, sin tener que buscar la ventana primero.",
+        "note": "Windows tiene sus propios atajos por defecto (Ctrl+Alt), porque la combinación de Mac cae ahí en la tecla de Windows."
       },
       "screenshotAnnotations": {
         "title": "Anotaciones en capturas",
         "description": "Captura y anota con formas y texto: etiquetas de varias líneas, cajas redimensionables con ajuste de línea y doble clic para editar una etiqueta en su sitio."
       },
-      "library": {
-        "title": "Biblioteca de grabaciones",
-        "description": "Cada captura llega a una sola biblioteca con vistas previas, renombrado y recuperación de grabaciones importadas o interrumpidas."
-      },
-      "exportPresets": {
-        "title": "Exporta para donde va a ir",
-        "description": "Elige un destino como GitHub, Slack o YouTube, o deja Equilibrado, y obtén un archivo que cabe. Compartir reutiliza una exportación que ya hiciste, las exportaciones corren en segundo plano con progreso, y Máxima calidad está a un ajuste de distancia."
-      },
-      "captureTags": {
-        "title": "Etiquetas de colores para tus capturas",
-        "description": "Etiqueta grabaciones y capturas, dale un color a cada etiqueta y filtra o busca en la biblioteca por etiqueta para que un historial largo siga siendo fácil de encontrar."
-      },
-      "screenshotPdf": {
-        "title": "Exportar capturas como PDF",
-        "description": "Guarda una captura anotada como un PDF nítido de una página, listo para enviar o imprimir, junto al PNG de siempre."
+      "saveEveryScreenshot": {
+        "title": "Guardar todas las capturas automáticamente",
+        "description": "Un ajuste que guarda cada captura en tu biblioteca en el momento en que la tomas, o solo cuando pulsas Guardar. Automático es el valor por defecto, así que ninguna captura se pierde."
       },
       "captureTitle": {
         "title": "Ponle nombre a una captura al hacerla",
         "description": "Un campo de título en el editor de capturas, ya rellenado y editable antes y después de guardar, para nombrar cada captura donde la haces."
       },
-      "watermark": {
-        "title": "Sin marca de agua, en cualquier plan",
-        "description": "La app gratuita graba, edita y exporta sin marca de agua. Hay una pequeña insignia \"Hecho con Kaipu\" por si quieres dar crédito a la herramienta, y viene apagada por defecto."
+      "screenshotPdf": {
+        "title": "Exportar capturas como PDF",
+        "description": "Guarda una captura anotada como un PDF nítido de una página, listo para enviar o imprimir, junto al PNG de siempre."
       },
-      "shortcuts": {
-        "title": "Atajos de teclado globales",
-        "description": "Inicia, pausa y detén una captura desde donde estés, sin tener que buscar la ventana primero."
+      "videoEditor": {
+        "title": "Editor de video integrado",
+        "description": "Recorta y exporta tus grabaciones sin salir de la app, con miniatura generada para cada video editado."
       },
-      "themeAndLanguages": {
-        "title": "Tema claro y oscuro, español e inglés",
-        "description": "Toda la app sigue una paleta compartida de design tokens en ambos temas, y está traducida por completo al español y al inglés."
+      "videoZoom": {
+        "title": "Zoom automático en videos",
+        "description": "Graba limpio y deja que el editor acerque en cada clic para que el detalle que señalas se lea bien. Cada zoom es un segmento que puedes mover, redimensionar o borrar, junto a zonas de desenfoque y cobertura para lo que deba quedar privado."
+      },
+      "exportPresets": {
+        "title": "Exporta para donde va a ir",
+        "description": "Elige un destino como GitHub, Slack o YouTube, o deja Equilibrado, y obtén un archivo que cabe. Compartir reutiliza una exportación que ya hiciste, las exportaciones corren en segundo plano con progreso, y Máxima calidad está a un ajuste de distancia."
+      },
+      "library": {
+        "title": "Biblioteca de grabaciones",
+        "description": "Cada captura llega a una sola biblioteca con vistas previas, renombrado y recuperación de grabaciones importadas o interrumpidas."
+      },
+      "captureTags": {
+        "title": "Etiquetas de colores para tus capturas",
+        "description": "Etiqueta grabaciones y capturas, dale un color a cada etiqueta y filtra o busca en la biblioteca por etiqueta para que un historial largo siga siendo fácil de encontrar."
+      },
+      "photoZoom": {
+        "title": "Zoom en el visor de imágenes",
+        "description": "Acercar y desplazar dentro del visor de capturas, en vez de forzar la vista sobre una imagen reducida."
       },
       "accounts": {
         "title": "Cuentas y verificación de correo",
@@ -1433,33 +1513,55 @@
         "title": "Bases de Kaipu Cloud",
         "description": "Una sola biblioteca que combina archivos locales con tu catálogo en la nube, caché por cuenta, modos de guardado, límites de capacidad y quitar la copia local conservando la de la nube."
       },
-      "windowsBeta": {
-        "title": "Beta para Windows: primero grabación, luego capturas",
-        "description": "Una beta para Windows, marcada como tal, con grabación de pantalla y cámara, el editor y la biblioteca. Las capturas y su atajo llegan en una beta posterior, y la app lo dice en vez de fallar en silencio."
-      },
       "cloudUpload": {
         "title": "Terminar la subida a la nube de punta a punta",
         "description": "Subir cada captura a Kaipu Cloud automáticamente, con transferencias reanudables, progreso claro y reintentos cuando se cae la red."
       },
-      "videoZoom": {
-        "title": "Zoom automático en videos",
-        "description": "Graba limpio y deja que el editor acerque en cada clic para que el detalle que señalas se lea bien. Cada zoom es un segmento que puedes mover, redimensionar o borrar, junto a zonas de desenfoque y cobertura para lo que deba quedar privado."
+      "themeAndLanguages": {
+        "title": "Tema claro y oscuro, español e inglés",
+        "description": "Toda la app sigue una paleta compartida de design tokens en ambos temas, y está traducida por completo al español y al inglés."
       },
-      "photoZoom": {
-        "title": "Zoom en el visor de imágenes",
-        "description": "Acercar y desplazar dentro del visor de capturas, en vez de forzar la vista sobre una imagen reducida."
+      "watermark": {
+        "title": "Sin marca de agua, en cualquier plan",
+        "description": "La app gratuita graba, edita y exporta sin marca de agua. Hay una pequeña insignia \"Hecho con Kaipu\" por si quieres dar crédito a la herramienta, y viene apagada por defecto."
       },
       "watermarkUpgrade": {
         "title": "Tu propia marca de agua en las exportaciones",
         "description": "Sella tus exportaciones con tu propio logo, con control de posición, tamaño y opacidad. La insignia de Kaipu sigue siendo opcional y apagada; esto va de llevar tu marca, no la nuestra."
       },
-      "saveEveryScreenshot": {
-        "title": "Guardar todas las capturas automáticamente",
-        "description": "Un ajuste que guarda cada captura en tu biblioteca en el momento en que la tomas, o solo cuando pulsas Guardar. Automático es el valor por defecto, así que ninguna captura se pierde."
-      },
       "brandIdentity": {
         "title": "Logo e identidad renovados",
         "description": "Un logo más definido y una identidad visual consistente entre la app, el sitio y los instaladores."
+      },
+      "systemAudio": {
+        "title": "Audio del sistema",
+        "description": "Graba lo que suena en tu computadora, con su propio interruptor junto al micrófono."
+      },
+      "trayPanel": {
+        "title": "Panel en la barra de menús y la bandeja",
+        "description": "Un panel de captura que vive en la barra de menús en macOS y en la bandeja del sistema en Windows."
+      },
+      "frameCapture": {
+        "title": "Captura con marco",
+        "description": "Dibuja una caja en la pantalla y captura exactamente eso. El marco recuerda dónde estaba, así que las capturas repetidas coinciden."
+      },
+      "windowCapture": {
+        "title": "Captura de ventana",
+        "description": "Haz clic en una ventana para capturar solo esa ventana.",
+        "note": "Ya está construida, y apagada por ahora mientras pulimos los últimos detalles."
+      },
+      "blurAndBackground": {
+        "title": "Desenfoque y fondo limpio",
+        "description": "Desenfoca un correo o un token en una captura, y luego enmárcala sobre un fondo limpio."
+      },
+      "videoMute": {
+        "title": "Silenciar un tramo del video",
+        "description": "Silencia una tos o una notificación en el editor, o la grabación entera, sin tocar el archivo original."
+      },
+      "signedInstaller": {
+        "title": "Instalador firmado",
+        "description": "Una versión en la que tu sistema confía desde el inicio, sin avisos de seguridad al abrirla por primera vez.",
+        "note": "Las versiones de macOS ya están firmadas y notarizadas por Apple. La primera beta de Windows sale sin firmar; abajo están los pasos para su aviso."
       }
     }
   },
