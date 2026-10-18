@@ -257,8 +257,8 @@
     "homeChapter2Sub": "Screenshots that explain",
     "homeChapter2Title": "Sometimes a screenshot says it all.",
     "homeChapter2Serif": "Point at it. Literally.",
-    "homeChapter2Body": "Select an area, then add boxes, arrows and handwritten notes. Blur what shouldn’t be seen and frame it on a clean background.",
-    "homeChapter2Pill1": "Area · window · full screen",
+    "homeChapter2Body": "Draw a frame or pick a screen, then add boxes, arrows and handwritten notes. Blur what shouldn’t be seen and set it on a clean background.",
+    "homeChapter2Pill1": "Frame · Screen",
     "homeChapter2Pill2": "Boxes & arrows",
     "homeChapter2Pill3": "Blur",
     "homeChapter2Pill4": "Copy in one click",
@@ -1381,6 +1381,14 @@
       "planned": "Planned"
     },
     "items": {
+      "screenshotModes": {
+        "title": "Screenshot modes: Frame and Screen",
+        "description": "Drag a frame or reuse the last one, or capture a whole display. Pick the mode on the selection itself, then Capture, or Copy to the clipboard without opening the editor; a small card offers Annotate or Open in Library."
+      },
+      "editorHome": {
+        "title": "An Editor that starts where you left off",
+        "description": "The Editor lists what you worked on last, with filters and each video's export state, and opens a pasted image straight in the image editor."
+      },
       "screenAndCamera": {
         "title": "Screen and camera recording",
         "description": "Record your screen and your camera in high quality, with a floating camera bubble and quality presets that trade size for sharpness."
@@ -1413,13 +1421,17 @@
         "title": "Name a screenshot as you make it",
         "description": "A title field in the screenshot editor, filled in for you and editable before and after saving, so captures are named where you make them."
       },
+      "liveRecordingControls": {
+        "title": "Change inputs while you record",
+        "description": "Mute the microphone, turn system audio on or off and show or hide the camera mid-take, from the capture panel or a global shortcut, without stopping the recording."
+      },
       "watermark": {
         "title": "No watermark, on any plan",
         "description": "The free app records, edits and exports without a watermark. A small \"Made with Kaipu\" badge is there if you want to credit the tool, and it is off by default."
       },
       "shortcuts": {
         "title": "Global keyboard shortcuts",
-        "description": "Start, pause and stop a capture from anywhere, without hunting for the window first."
+        "description": "Start and stop a recording, take a screenshot in the mode you want and bring the app to front, from anywhere. Every shortcut can be rebound."
       },
       "themeAndLanguages": {
         "title": "Light and dark theme, English and Spanish",
@@ -1486,7 +1498,7 @@
         "line": "Screenshots with arrows, boxes and notes.",
         "title": "Sometimes a screenshot says it all.",
         "serif": "Point at it. Literally.",
-        "intro": "Select an area, mark what matters, blur what shouldn’t be seen, and send it before the moment passes."
+        "intro": "Frame what you need, mark what matters, blur what shouldn’t be seen, and send it before the moment passes."
       },
       "edit": {
         "name": "Edit",
@@ -1519,6 +1531,13 @@
         "k3": "Screenshot",
         "k4": "Show app"
       },
+      "liveControls": {
+        "title": "Change your mind mid-take",
+        "body": "Mute the mic, turn system audio off or hide the camera while you record, from the capture panel or a shortcut. The take keeps going.",
+        "k1": "Mic",
+        "k2": "System audio",
+        "k3": "Camera"
+      },
       "micPicker": {
         "title": "Microphone picker",
         "body": "Choose any input. Plug in a headset and the list updates on its own."
@@ -1542,8 +1561,15 @@
         "d3": "Seven colors and three stroke widths per mark"
       },
       "captureModes": {
-        "title": "Select an area",
-        "body": "Drag over the part of the screen you need, from a shortcut or the menu bar."
+        "title": "Frame or Screen",
+        "body": "Drag a frame over what you need, or keep last time’s. Screen takes a whole display. Switch modes on the selection itself; Kaipu remembers the last one.",
+        "k1": "Current mode",
+        "k2": "Frame",
+        "k3": "Screen"
+      },
+      "quietCapture": {
+        "title": "Copy and keep going",
+        "body": "Press ⌘C on the selection and the shot lands on the clipboard, no editor in the way. With saving on, Capture files it in your library just as quietly. A small card then offers Annotate, Open in Library or Save to Library."
       },
       "blurFrame": {
         "title": "Blur and frame",
@@ -1606,6 +1632,10 @@
       "background": {
         "title": "Exports run in the background",
         "body": "Keep working while it encodes. A “Ready to share” card appears when it’s done: drag the file straight into Slack, GitHub or Finder, under a friendly name."
+      },
+      "editorHome": {
+        "title": "Pick up where you left off",
+        "body": "The Editor opens on what you worked on last, with each video’s export state, and starts a new image straight from the clipboard."
       },
       "library": {
         "title": "One library for everything",
