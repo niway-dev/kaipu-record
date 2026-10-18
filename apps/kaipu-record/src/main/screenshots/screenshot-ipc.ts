@@ -41,7 +41,6 @@ const overlay: OverlayPort = {
   },
   hideAll: async () => overlayWindows?.hideAll(),
   destroyAll: () => overlayWindows?.destroyAll(),
-  setWindows: (list) => overlayWindows?.setWindows(list),
 };
 
 /** What the rest of main needs from the screenshot backend once it is registered. */

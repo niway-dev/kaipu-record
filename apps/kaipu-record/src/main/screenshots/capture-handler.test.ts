@@ -10,7 +10,6 @@ const overlay: OverlayPort = {
   pick: async () => ({ kind: "cancelled" }),
   hideAll: async () => {},
   destroyAll: () => {},
-  setWindows: () => {},
 };
 
 // The default preferences keep the editor path: saving manual means Capture opens it.

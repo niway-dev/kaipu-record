@@ -1,5 +1,5 @@
 import type { Display } from "electron";
-import type { CaptureMode, ListedWindow, OverlayAnswer } from "@shared/types/screenshot-capture";
+import type { CaptureMode, OverlayAnswer } from "@shared/types/screenshot-capture";
 import type { WindowLister } from "./window-lister";
 
 /** What the user picked on an overlay; shared with the overlay renderer. */
@@ -17,18 +17,14 @@ export interface OverlayPort {
   hideAll(): Promise<void>;
   /** Destroy every overlay and end the pick session. Safe to call more than once. */
   destroyAll(): void;
-  /**
-   * Push the on-screen window list into the state every overlay renders (Window mode).
-   * Ignored when no pick is open.
-   */
-  setWindows(list: ListedWindow[]): void;
 }
 
 /**
  * Where Window mode's list of on-screen windows comes from: the port is defined once, in
- * `window-lister.ts`. The overlay asks once per pick, the first time Window is shown, and
- * renders "Finding windows…" until it answers. A lister that rejects is treated as an empty
- * list, never as a stuck overlay.
+ * `window-lister.ts`. The overlay asks once per pick (the first time Window is shown on macOS,
+ * as soon as the pick opens on Windows, where PowerShell is slow to start) and renders
+ * "Finding windows…" until it answers. A lister that rejects is treated as an empty list,
+ * never as a stuck overlay.
  *
  * Injection seam: `CaptureOverlayWindows` takes it as `deps.windowLister`. Production passes
  * `createWindowLister(process.platform)` (`screenshot-ipc.ts`); the default, used by tests,

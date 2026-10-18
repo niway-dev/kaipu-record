@@ -363,7 +363,8 @@ export class CaptureOverlayWindows implements OverlayPort {
     return done;
   }
 
-  setWindows(list: ListedWindow[]): void {
+  /** Push the list into the state every overlay renders. Ignored when no pick is open. */
+  private setWindows(list: ListedWindow[]): void {
     if (!this.session) return;
     this.windows = list;
     this.broadcastState();

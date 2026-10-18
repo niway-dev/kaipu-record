@@ -724,16 +724,6 @@ describe("CaptureOverlayWindows: switching mode inside the overlay", () => {
     expect(first.webContents.send.mock.calls).toHaveLength(sentBefore);
   });
 
-  it("setWindows pushes a list into every overlay's state", () => {
-    const { port, first, second } = pickWith("window", { list: () => new Promise(() => {}) });
-
-    port.setWindows([editor]);
-
-    for (const window of [first, second]) {
-      expect(states(window).at(-1)).toMatchObject({ windows: [editor] });
-    }
-  });
-
   it("Window: the pointer entering another display moves the keyboard to that overlay", async () => {
     const { first, second } = pickWith("window", { list: async () => [editor] });
     await flush();
