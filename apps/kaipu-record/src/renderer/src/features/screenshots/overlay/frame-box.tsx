@@ -7,7 +7,7 @@ import { handleCursor, type HandleId, type Pt, type Size } from "../annotations/
 import type { CropRect } from "../annotations/scene";
 import { isCaptureKey, isCopyKey } from "./overlay-keys";
 import { workAreaInWindow, type OverlayQuery } from "./overlay-query";
-import { ActionBar, ModePill, type OverlayChrome } from "./selection-chrome";
+import { SelectionToolbar, type OverlayChrome } from "./selection-chrome";
 import styles from "./capture-overlay.module.css";
 
 /** How close (DIP) the pointer must be to a handle to grab it. */
@@ -268,9 +268,8 @@ export function FrameBox({
       >
         {frame.width} × {frame.height}
       </div>
-      <ModePill chrome={chrome} selection={frame} area={area} />
-      <ActionBar
-        platform={platform}
+      <SelectionToolbar
+        chrome={chrome}
         selection={frame}
         area={area}
         onAction={(action) => onConfirm(frame, action)}

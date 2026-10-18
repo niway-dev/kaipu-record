@@ -592,6 +592,7 @@
       "soon": "Soon",
       "recordDisplaySoon": "Record this display · soon",
       "cancel": "Cancel",
+      "cancelTitle": "Cancel · Esc",
       "modes": "Capture mode",
       "modeKey": "{mode} ({key})",
       "frame": "Capture frame",
