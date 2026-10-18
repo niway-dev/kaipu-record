@@ -39,16 +39,19 @@ app `Header` and legal footer on top — see [Public page shell](./public-page-s
 
 ## What "shipped" means
 
-**Shipped means "in the build you can download today".** There is no downloadable Windows
-build yet (no Windows job in `release-desktop.yml`, no Windows URL in `lib/download.ts`), so
-no Windows cell says shipped: what the Windows build already does is `inProgress`, and the
-Windows section says "coming soon" with the Mac download as its button. A test in
-`roadmap-config.test.ts` pins this.
+**Shipped means "in the build you can download today", and checked on that platform.** The
+first Windows installer shipped with desktop 0.13.0 on 2026-10-18, unsigned
+(`downloadUrls.windowsX64` in `lib/download.ts`). The Windows section (`WindowsBeta`) now
+offers "Download for Windows (beta)" with the SmartScreen steps, and the Windows summary
+card's badge reads "Beta".
 
-When the first Windows installer is on the download feed, the same PR flips the Windows
-cells that QA confirmed, puts the "Download for Windows (beta)" button back in
-`WindowsComingSoon`, and updates that test — as the
-[Windows release design](/specs/2026-10-15-windows-release-design/) (decision 9) asks.
+No Windows cell says shipped yet, on purpose: every Windows row in
+[Platform parity](/desktop/platform-parity/) is still `unverified`, and the
+[Windows release design](/specs/2026-10-15-windows-release-design/) (decision 10) requires
+the owner's QA on Windows hardware before a cell flips. Cells flip **one feature at a time**
+as that QA confirms them (owner task 10); Platform parity is the tracker. The test in
+`roadmap-config.test.ts` that pins zero shipped Windows cells is relaxed in the PR that
+flips the first one.
 
 With **Both** selected, a row is grouped under its most advanced platform, so the Shipped
 group reads "available somewhere today" and the two cells say where.
@@ -168,6 +171,15 @@ Implemented the `Kaipu Roadmap.dc.html` layout and moved the page from `PublicSh
   with their copy unchanged. `screenshotModes` replaces this branch's `frameCapture` row,
   which described the same Frame mode. #305 landed the Windows CI jobs but no download URL,
   so the Windows cells stay `inProgress`.
+
+### 2026-10-18 — Windows beta downloadable
+
+Desktop 0.13.0 shipped the first Windows installer (unsigned). The Windows section's button
+now downloads `download/latest/kaipu-setup.exe`, its badge and copy say "Beta" rather than
+"Coming soon", and the SmartScreen steps read in the present tense. The section is renamed
+`WindowsComingSoon` → `WindowsBeta`. **No Windows cell flipped:** each one waits for owner
+QA on Windows hardware (Windows release design, decision 10), tracked in
+[Platform parity](/desktop/platform-parity/).
 
 ## What to validate in production
 

@@ -5,10 +5,11 @@ description: Design for shipping the Windows desktop build as a labelled beta �
 
 # Windows release — design
 
-**Status: 🟡 In progress · 2026-10-16.** Implemented on `feat/windows-release`, PR pending;
-first dispatch and owner tasks outstanding. Code tasks 1–6 are on the branch (CI jobs,
-signing hook, shortcuts, close-to-tray, tray icon); task 7 and owner tasks 8–10 are not done,
-and nothing has been validated on Windows hardware. Decision 8 (the screenshot buttons'
+**Status: 🟡 In progress · 2026-10-18.** Code tasks 1–7 are done (CI jobs, signing hook,
+shortcuts, close-to-tray, tray icon, the landing's "Download for Windows (beta)" button and
+SmartScreen note). Desktop 0.13.0 shipped the first Windows installer, unsigned, on
+2026-10-18. Owner tasks 8–10 are outstanding, and nothing has been validated on Windows
+hardware yet; the roadmap's Windows cells flip per feature as part of task 10. Decision 8 (the screenshot buttons'
 Coming-to-Windows state) lands with the screenshot capture modes stream. Designed 2026-10-15. Executes the owner's decision in
 [Windows beta — recording first, screenshots later](/backlog/windows-beta/) (2026-09-27) and
 records what that page left open. Linear: parent ticket "Windows release" in the Kaipu
@@ -207,7 +208,11 @@ Code (agent-executable):
 6. **Windows tray icon** — `.ico` asset derived from the brand source (see
    [app icon derivation plan](/plans/2026-10-07-app-icon-derivation/)), selection on win32.
 7. **Landing and roadmap** — "Download for Windows (beta)" button, SmartScreen walkthrough
-   section, roadmap flip. Blocked by the first tag that produces a downloadable exe.
+   section, roadmap flip. **Done 2026-10-18** for the button (landing closing screen and the
+   /roadmap Windows section) and the SmartScreen note. The roadmap's `windowsBeta` row no
+   longer exists (retired by the per-platform redesign, #316); its per-feature Windows cells
+   flip after owner QA, as part of task 10, tracked in
+   [Platform parity](/desktop/platform-parity/).
 
 Owner (manual, `owner` label):
 
@@ -218,7 +223,8 @@ Owner (manual, `owner` label):
    environment, not per OS; verify `MAIN_VITE_SERVER_URL` and the R2 secrets resolve) and run
    the first manual dispatch.
 10. **Manual QA on Windows hardware** per decision 10, including the beta → beta+1 update and
-    the AltGr check from open question 2. Record results on the Windows beta backlog page.
+    the AltGr check from open question 2. Record results on the Windows beta backlog page,
+    and flip each roadmap Windows cell (`win` in `roadmap-config.ts`) the QA confirms.
 
 Order: 1 → 2 → 9 → (3, 4, 5, 6 in parallel) → first tag → 7 and 10; 8 whenever the owner
 decides, it changes nothing in code.

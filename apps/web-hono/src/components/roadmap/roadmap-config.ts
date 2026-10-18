@@ -39,10 +39,11 @@ import {
  * `roadmap.items` namespace of `@kaipu/i18n` (en + es), whose parity test keeps
  * both locales complete.
  *
- * "shipped" means "in the build you can download". There is no downloadable
- * Windows build yet, so no Windows cell says shipped: what already runs there is
- * `inProgress` until the beta installer is on the download feed, and flipping
- * those cells belongs in the same PR as that first build.
+ * "shipped" means "in the build you can download", checked on that platform.
+ * The Windows beta installer is on the download feed (desktop 0.13.0), but no
+ * Windows cell says shipped yet: each one flips only after the owner's QA on
+ * Windows hardware confirms it (Windows release design, decision 10), tracked
+ * in the docs site's desktop/platform-parity page.
  */
 
 /** Rendered top to bottom: what already ships, what is being built, what comes next. */

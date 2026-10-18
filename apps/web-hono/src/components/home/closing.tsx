@@ -1,4 +1,4 @@
-import { Apple } from "lucide-react";
+import { Apple, Monitor } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { KaipuLogo } from "@kaipu/brand";
 import { useTranslations } from "@kaipu/i18n";
@@ -35,10 +35,15 @@ export function Closing() {
               <Apple size={19} aria-hidden />
               {t("downloadMacIntel")}
             </a>
-            <span className={styles.soon}>{t("downloadWindows")}</span>
+            {/* lucide has no Windows mark; a monitor says "PC" without borrowing a logo. */}
+            <a href={downloadUrls.windowsX64} className={styles.secondary}>
+              <Monitor size={19} aria-hidden />
+              {t("downloadWindowsBeta")}
+            </a>
           </div>
 
           <p className={styles.footnote}>{t("homeCtaFootnote")}</p>
+          <p className={styles.smartscreen}>{t("downloadWindowsSmartScreen")}</p>
         </div>
       </section>
 

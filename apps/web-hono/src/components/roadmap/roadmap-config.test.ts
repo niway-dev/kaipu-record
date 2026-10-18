@@ -8,9 +8,9 @@ describe("roadmap config", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  // "Shipped" means "in the build you can download", and no Windows build is on
-  // the download feed yet. Flip this in the same PR as the first Windows installer.
-  it("claims nothing shipped on Windows before the Windows build is downloadable", () => {
+  // The Windows beta is downloadable (0.13.0), but a cell flips only after owner
+  // QA on Windows hardware (decision 10). Relax this in the PR that flips the first.
+  it("claims nothing shipped on Windows before hardware QA confirms a feature", () => {
     expect(platformCounts("win").shipped).toBe(0);
   });
 

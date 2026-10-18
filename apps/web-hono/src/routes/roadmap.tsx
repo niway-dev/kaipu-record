@@ -8,7 +8,7 @@ import {
   RoadmapLegend,
   RoadmapList,
   RoadmapTheme,
-  WindowsComingSoon,
+  WindowsBeta,
 } from "@/components/roadmap/roadmap-page";
 import { pageHead } from "@/lib/seo";
 
@@ -35,7 +35,7 @@ function RoadmapPage() {
         <RoadmapList />
         <RoadmapLegend />
         <LazyHydrate>
-          <WindowsComingSoon />
+          <WindowsBeta />
         </LazyHydrate>
       </RoadmapTheme>
       <LazyHydrate>
