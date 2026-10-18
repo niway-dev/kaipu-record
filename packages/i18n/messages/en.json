@@ -179,6 +179,7 @@
     "brandBadgeDescription": "A small mark in the corner of new recordings. Off by default.",
     "screenshotCopy": "Copy screenshots to the clipboard automatically",
     "screenshotCopyDescription": "Every capture is ready to paste the moment you take it.",
+    "screenshotQuietNote": "When either is on, captures skip the editor and show a small notification instead.",
     "developer": "Developer",
     "openFolder": "Open folder",
     "accountMoved": "Your account moved to Cloud",

@@ -4,6 +4,7 @@ import { getRecorderSnapshot } from "@renderer/features/recording/recorder-store
 import { useOpenInEditor } from "@renderer/features/editor/open-in-editor";
 import { showToast } from "@renderer/ui/toast-store";
 import type { CaptureMode } from "@shared/types/screenshot-capture";
+import { screenshotTitle } from "@shared/screenshot-title";
 import type { ImageSource } from "./image-source";
 
 export function useScreenshotCapture(): { capture: (mode?: CaptureMode) => Promise<void> } {
@@ -31,15 +32,17 @@ export function useScreenshotCapture(): { capture: (mode?: CaptureMode) => Promi
         window.electronAPI.revealAfterCapture();
         return;
       }
+      // Quiet capture: main already saved and/or copied it and put the main window back
+      // where it was (hidden stays hidden, the page stays the page). No editor, and no
+      // reveal: that would force the window on screen.
+      if (shot.after === "quiet") return;
       // A fresh capture is an in-memory blob source; the editor resolves it generically.
-      // Title is stamped at capture time (mirrors recordings' "Recording — <date>") so
-      // saved shots are told apart by when they were taken, not a generic "Captura".
       const source: ImageSource = {
         kind: "blob",
         bytes: shot.png,
         width: shot.width,
         height: shot.height,
-        title: `Screenshot — ${new Date().toLocaleString()}`,
+        title: screenshotTitle(),
       };
       // Navigate first (synchronous in the router), THEN ask main to bring the app
       // back — so it reappears already on the editor, not the previous page.

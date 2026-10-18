@@ -179,6 +179,7 @@
     "brandBadgeDescription": "Una marca pequeña en la esquina de las nuevas grabaciones. Apagada por defecto.",
     "screenshotCopy": "Copiar capturas al portapapeles automáticamente",
     "screenshotCopyDescription": "Cada captura queda lista para pegar apenas la tomas.",
+    "screenshotQuietNote": "Si cualquiera está activado, las capturas se saltan el editor y muestran una notificación pequeña.",
     "developer": "Developer",
     "openFolder": "Abrir carpeta",
     "accountMoved": "Tu cuenta se movió a Cloud",
