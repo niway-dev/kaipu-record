@@ -1,11 +1,24 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useTranslations } from "@kaipu/i18n";
 
-import { PublicShell } from "@/components/landing/public-shell";
-import { RoadmapTimeline } from "@/components/roadmap/roadmap-timeline";
+import { LazyHydrate } from "@/components/lazy-hydrate";
+import { HomeShell } from "@/components/home/home-shell";
+import { Closing } from "@/components/home/closing";
+import {
+  RoadmapHero,
+  RoadmapLegend,
+  RoadmapList,
+  RoadmapTheme,
+  WindowsComingSoon,
+} from "@/components/roadmap/roadmap-page";
 import { pageHead } from "@/lib/seo";
 
+/**
+ * What works today on each platform, and what comes next. Design: Claude Design
+ * project 71546ef1, file `Kaipu Roadmap.dc.html`. Content lives in
+ * roadmap-config.ts.
+ */
 export const Route = createFileRoute("/roadmap")({
+  // Same top bar as the home and /features, so the root document stands down.
   staticData: { shell: "marketing" },
   head: ({ match }) =>
     pageHead({ locale: match.context.locale, page: "roadmap", path: "/roadmap" }),
@@ -13,21 +26,21 @@ export const Route = createFileRoute("/roadmap")({
 });
 
 function RoadmapPage() {
-  const t = useTranslations("roadmap");
   return (
-    <PublicShell>
-      {/* A plain div, not <main>: the root document already wraps the Outlet in one. */}
-      <div className="mx-auto max-w-3xl px-6 py-14">
-        <header className="mb-14">
-          <p className="text-sm font-semibold uppercase tracking-wider text-[var(--kaipu-accent-primary)]">
-            {t("eyebrow")}
-          </p>
-          <h1 className="mt-3 text-4xl font-bold tracking-tight">{t("heading")}</h1>
-          <p className="mt-4 text-[var(--kaipu-text-secondary)]">{t("intro")}</p>
-          <p className="mt-3 text-sm text-[var(--kaipu-text-muted)]">{t("disclaimer")}</p>
-        </header>
-        <RoadmapTimeline />
-      </div>
-    </PublicShell>
+    // No chapter rail: this page has no chapters for it to scroll-spy on.
+    <HomeShell page="roadmap" chapterNav={false}>
+      <RoadmapTheme>
+        <RoadmapHero />
+        {/* Not lazy: the filters are the first thing a visitor touches. */}
+        <RoadmapList />
+        <RoadmapLegend />
+        <LazyHydrate>
+          <WindowsComingSoon />
+        </LazyHydrate>
+      </RoadmapTheme>
+      <LazyHydrate>
+        <Closing />
+      </LazyHydrate>
+    </HomeShell>
   );
 }

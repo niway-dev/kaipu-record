@@ -1352,7 +1352,7 @@
     "pages": {
       "roadmap": {
         "title": "Roadmap | Kaipu Record",
-        "description": "What Kaipu Record already does and what comes next: the public roadmap, grouped by state."
+        "description": "What Kaipu Record already does on macOS and Windows, and what comes next: the public roadmap, grouped by state."
       },
       "terms-and-conditions": {
         "title": "Terms and conditions | Kaipu Record",
@@ -1378,15 +1378,90 @@
   },
   "roadmap": {
     "navLabel": "Roadmap",
-    "eyebrow": "Public roadmap",
-    "heading": "What Kaipu Record does today, and what comes next",
-    "intro": "Everything below is grouped by state, not by date. The shipped list is what you already get when you download Kaipu Record; the planned list is what we are building next.",
-    "disclaimer": "Order is a priority, not a promise. Plans move as we learn what people actually need.",
-    "count": "{count, plural, one {# item} other {# items}}",
+    "page": {
+      "eyebrow": "Public roadmap",
+      "heading": "What works today, on which platform.",
+      "serif": "And what comes next.",
+      "intro": "Kaipu Record runs on macOS today, and Windows is on its way. Every feature below shows where it already works, where it is being built, and what is planned.",
+      "disclaimer": "Order is a priority, not a promise. Plans move as we learn what people actually need.",
+      "count": "{count, plural, one {# item} other {# items}}",
+      "showing": "{shown} of {total} features",
+      "columns": {
+        "feature": "Feature",
+        "mac": "macOS",
+        "win": "Windows"
+      }
+    },
     "status": {
       "shipped": "Shipped",
       "inProgress": "In progress",
       "planned": "Planned"
+    },
+    "groupHint": {
+      "shipped": "Available today on at least one platform. The cells say where.",
+      "shippedOne": "Already in the app you download.",
+      "inProgress": "Being built or ported right now.",
+      "planned": "Next up. Order is a priority, not a promise."
+    },
+    "areas": {
+      "record": "Record",
+      "capture": "Capture",
+      "edit": "Edit",
+      "find": "Find",
+      "cloud": "Cloud",
+      "app": "App"
+    },
+    "platforms": {
+      "mac": {
+        "name": "macOS",
+        "line": "Apple Silicon and Intel",
+        "badge": "Available"
+      },
+      "win": {
+        "name": "Windows",
+        "line": "Windows 10 or later, 64-bit",
+        "badge": "Coming soon"
+      }
+    },
+    "filters": {
+      "label": "Filter the roadmap",
+      "platform": "Platform",
+      "both": "Both",
+      "states": "States"
+    },
+    "legend": {
+      "title": "How to read it",
+      "shipped": "in the current release",
+      "inProgress": "being built or ported",
+      "planned": "on the list, no date"
+    },
+    "windows": {
+      "eyebrow": "Windows",
+      "badge": "Coming soon",
+      "title": "Kaipu for Windows is on its way.",
+      "serif": "Recording first, then the rest.",
+      "body": "The Windows build already records, edits and keeps your library. We are getting it ready to ship as a labelled beta. Until the installer is on the download page, every row above shows Windows as in progress or planned, never as shipped.",
+      "download": "Download for Mac",
+      "requirements": "Windows 10 or later · 64-bit",
+      "smartscreenTitle": "When the beta lands, expect a SmartScreen warning",
+      "smartscreenBody": "The first beta will not be signed yet, so Windows will be cautious. Two clicks get you through.",
+      "steps": {
+        "s1": "Run the installer",
+        "s2": "Click “More info”",
+        "s3": "Choose “Run anyway”"
+      },
+      "mock": {
+        "protected": "Windows protected your PC",
+        "prevented": "Microsoft Defender SmartScreen prevented an unrecognized app from starting.",
+        "moreInfo": "More info",
+        "app": "App: kaipu-setup.exe",
+        "publisher": "Publisher: Unknown publisher",
+        "runAnyway": "Run anyway",
+        "dontRun": "Don’t run",
+        "installs": "Kaipu Record installs",
+        "tray": "Opens in the tray when done"
+      },
+      "betaNote": "A beta can break. Your captures are ordinary files on your disk, so uninstalling never takes them with it."
     },
     "items": {
       "screenshotModes": {
@@ -1397,53 +1472,58 @@
         "title": "An Editor that starts where you left off",
         "description": "The Editor lists what you worked on last, with filters and each video's export state, and opens a pasted image straight in the image editor."
       },
+      "liveRecordingControls": {
+        "title": "Change inputs while you record",
+        "description": "Mute the microphone, turn system audio on or off and show or hide the camera mid-take, from the capture panel or a global shortcut, without stopping the recording."
+      },
       "screenAndCamera": {
         "title": "Screen and camera recording",
         "description": "Record your screen and your camera in high quality, with a floating camera bubble and quality presets that trade size for sharpness."
       },
-      "videoEditor": {
-        "title": "Built-in video editor",
-        "description": "Trim and export your recordings without leaving the app, with a poster thumbnail generated for every edited video."
+      "shortcuts": {
+        "title": "Global keyboard shortcuts",
+        "description": "Start and stop a recording, take a screenshot in the mode you want and bring the app to front, from anywhere. Every shortcut can be rebound.",
+        "note": "Windows gets its own defaults (Ctrl+Alt), because the Mac combination lands on the Windows key there."
       },
       "screenshotAnnotations": {
         "title": "Screenshot annotations",
         "description": "Capture and annotate screenshots with shapes and text: multi-line labels, resizable boxes with word wrap, and double-click to edit a label in place."
       },
-      "library": {
-        "title": "Library of recordings",
-        "description": "Every capture lands in one library with previews, renaming, and recovery for imported or interrupted recordings."
-      },
-      "exportPresets": {
-        "title": "Export for where it is going",
-        "description": "Pick a destination such as GitHub, Slack or YouTube, or keep Balanced, and get a file that fits. Share reuses an export you already made, exports run in the background with progress, and Maximum quality is one setting away."
-      },
-      "captureTags": {
-        "title": "Colored tags for your captures",
-        "description": "Tag recordings and screenshots, give each tag a color, then filter and search the library by tag so a long history stays findable."
-      },
-      "screenshotPdf": {
-        "title": "Export screenshots as PDF",
-        "description": "Save an annotated screenshot as a sharp one-page PDF, ready to send or print, next to the usual PNG."
+      "saveEveryScreenshot": {
+        "title": "Save every screenshot automatically",
+        "description": "A setting that keeps every screenshot in your library the moment you take it, or only once you click Save. Automatic is the default, so a capture is never lost."
       },
       "captureTitle": {
         "title": "Name a screenshot as you make it",
         "description": "A title field in the screenshot editor, filled in for you and editable before and after saving, so captures are named where you make them."
       },
-      "liveRecordingControls": {
-        "title": "Change inputs while you record",
-        "description": "Mute the microphone, turn system audio on or off and show or hide the camera mid-take, from the capture panel or a global shortcut, without stopping the recording."
+      "screenshotPdf": {
+        "title": "Export screenshots as PDF",
+        "description": "Save an annotated screenshot as a sharp one-page PDF, ready to send or print, next to the usual PNG."
       },
-      "watermark": {
-        "title": "No watermark, on any plan",
-        "description": "The free app records, edits and exports without a watermark. A small \"Made with Kaipu\" badge is there if you want to credit the tool, and it is off by default."
+      "videoEditor": {
+        "title": "Built-in video editor",
+        "description": "Trim and export your recordings without leaving the app, with a poster thumbnail generated for every edited video."
       },
-      "shortcuts": {
-        "title": "Global keyboard shortcuts",
-        "description": "Start and stop a recording, take a screenshot in the mode you want and bring the app to front, from anywhere. Every shortcut can be rebound."
+      "videoZoom": {
+        "title": "Automatic zoom in videos",
+        "description": "Record clean, then let the editor zoom in on every click so the detail you point at is readable. Each zoom is a segment you can move, resize or delete, next to blur and cover regions for anything that should stay private."
       },
-      "themeAndLanguages": {
-        "title": "Light and dark theme, English and Spanish",
-        "description": "The whole app follows a shared design-token palette in both themes, and is fully translated into English and Spanish."
+      "exportPresets": {
+        "title": "Export for where it is going",
+        "description": "Pick a destination such as GitHub, Slack or YouTube, or keep Balanced, and get a file that fits. Share reuses an export you already made, exports run in the background with progress, and Maximum quality is one setting away."
+      },
+      "library": {
+        "title": "Library of recordings",
+        "description": "Every capture lands in one library with previews, renaming, and recovery for imported or interrupted recordings."
+      },
+      "captureTags": {
+        "title": "Colored tags for your captures",
+        "description": "Tag recordings and screenshots, give each tag a color, then filter and search the library by tag so a long history stays findable."
+      },
+      "photoZoom": {
+        "title": "Zoom in the image viewer",
+        "description": "Zoom and pan inside the screenshot viewer instead of squinting at a scaled-down capture."
       },
       "accounts": {
         "title": "Accounts and email verification",
@@ -1453,33 +1533,51 @@
         "title": "Kaipu Cloud foundations",
         "description": "One library that merges local files with your cloud catalogue, per-account caching, save modes, capacity limits, and removing a local copy while keeping the cloud one."
       },
-      "windowsBeta": {
-        "title": "Windows beta: recording first, screenshots next",
-        "description": "A labelled Windows beta with screen and camera recording, the editor and the library. Screenshots and the screenshot shortcut come in a later beta, and the app says so instead of failing quietly."
-      },
       "cloudUpload": {
         "title": "Finish cloud upload end to end",
         "description": "Upload every capture to Kaipu Cloud automatically, with resumable transfers, clear progress, and retries when the network drops."
       },
-      "videoZoom": {
-        "title": "Automatic zoom in videos",
-        "description": "Record clean, then let the editor zoom in on every click so the detail you point at is readable. Each zoom is a segment you can move, resize or delete, next to blur and cover regions for anything that should stay private."
+      "themeAndLanguages": {
+        "title": "Light and dark theme, English and Spanish",
+        "description": "The whole app follows a shared design-token palette in both themes, and is fully translated into English and Spanish."
       },
-      "photoZoom": {
-        "title": "Zoom in the image viewer",
-        "description": "Zoom and pan inside the screenshot viewer instead of squinting at a scaled-down capture."
+      "watermark": {
+        "title": "No watermark, on any plan",
+        "description": "The free app records, edits and exports without a watermark. A small \"Made with Kaipu\" badge is there if you want to credit the tool, and it is off by default."
       },
       "watermarkUpgrade": {
         "title": "Your own watermark on exports",
         "description": "Stamp exports with your own logo, with control over position, size and opacity. Kaipu's own badge stays optional and off; this is about carrying your brand, not ours."
       },
-      "saveEveryScreenshot": {
-        "title": "Save every screenshot automatically",
-        "description": "A setting that keeps every screenshot in your library the moment you take it, or only once you click Save. Automatic is the default, so a capture is never lost."
-      },
       "brandIdentity": {
         "title": "Refreshed logo and identity",
         "description": "A sharper logo and a consistent visual identity across the app, the site and the installers."
+      },
+      "systemAudio": {
+        "title": "System audio",
+        "description": "Capture what your computer is playing, on its own switch next to the microphone."
+      },
+      "trayPanel": {
+        "title": "Menu bar and tray panel",
+        "description": "A capture panel that lives in the menu bar on macOS and in the system tray on Windows."
+      },
+      "windowCapture": {
+        "title": "Window capture",
+        "description": "Click a window to capture just that window.",
+        "note": "Built, and switched off for now while we fix the last rough edges."
+      },
+      "blurAndBackground": {
+        "title": "Blur and a clean background",
+        "description": "Blur an email or a token in a screenshot, then frame the shot on a clean background."
+      },
+      "videoMute": {
+        "title": "Mute a stretch of a video",
+        "description": "Silence a cough or a notification in the editor, or the whole recording, without touching the original file."
+      },
+      "signedInstaller": {
+        "title": "Signed installer",
+        "description": "A build your system trusts out of the box, with no security warning on the first launch.",
+        "note": "macOS builds are already signed and notarized by Apple. The first Windows beta ships unsigned; the steps for its warning are below."
       }
     }
   },
