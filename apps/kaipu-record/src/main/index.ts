@@ -40,11 +40,13 @@ import { registerScreenshotHandlers, type ScreenshotHandlers } from "./screensho
 import { resolveShortcutCapture, type CaptureShortcut } from "./screenshots/shortcut-capture";
 import {
   createCaptureToastWindow,
+  saveFromToast,
   type CaptureToastWindow,
 } from "./screenshots/capture-toast-window";
 import { createCaptureWindowHooks } from "./screenshots/capture-window-hooks";
 import {
-  keepLastQuietCapture,
+  peekLastQuietCapture,
+  releaseLastQuietCapture,
   takeLastQuietCapture,
   type QuietCapture,
 } from "./screenshots/last-quiet-capture";
@@ -524,11 +526,10 @@ app.whenReady().then(() => {
   // The capture toast after a quiet capture (lazy window; shown on the shot's display).
   const toast = createCaptureToastWindow({
     takeQuietCapture: takeLastQuietCapture,
-    keepQuietCapture: keepLastQuietCapture,
-    saveToVault: async (png, title) => {
-      const saved = await saveScreenshotToVault(png, { title, manual: true });
-      return { id: saved.id };
-    },
+    peekQuietCapture: peekLastQuietCapture,
+    releaseQuietCapture: releaseLastQuietCapture,
+    // manual: false — the editor never opened this shot, so it stays off the Continue list.
+    saveToVault: saveFromToast(saveScreenshotToVault),
     title: () => screenshotTitle(),
     openSaved: openSavedScreenshot,
     openQuietCapture,
