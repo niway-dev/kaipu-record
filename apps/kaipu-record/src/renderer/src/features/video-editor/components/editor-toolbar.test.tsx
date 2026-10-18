@@ -157,7 +157,7 @@ describe("EditorToolbar — v2 tooltip shortcuts (PR 10 polish)", () => {
     expect(screen.getByRole("button", { name: "Blur" })).toHaveAttribute("title", "Blur (B)");
     expect(screen.getByRole("button", { name: "Cover" })).toHaveAttribute("title", "Cover (C)");
     expect(screen.getByRole("button", { name: "Undo" })).toHaveAttribute("title", "Undo (⌘Z)");
-    expect(screen.getByRole("button", { name: "Redo" })).toHaveAttribute("title", "Redo (⌘⇧Z)");
+    expect(screen.getByRole("button", { name: "Redo" })).toHaveAttribute("title", "Redo (⇧⌘Z)");
     expect(screen.getByRole("button", { name: "Split here" })).toHaveAttribute(
       "title",
       "Split here (S)",
@@ -166,6 +166,29 @@ describe("EditorToolbar — v2 tooltip shortcuts (PR 10 polish)", () => {
       "title",
       "Delete segment (⌫)",
     );
+  });
+
+  it("prints Windows key names, never macOS glyphs, when the bridge reports win32", () => {
+    const api = window.electronAPI as { platform: string };
+    const original = api.platform;
+    api.platform = "win32";
+    try {
+      renderToolbar();
+      expect(screen.getByRole("button", { name: "Undo" })).toHaveAttribute(
+        "title",
+        "Undo (Ctrl+Z)",
+      );
+      expect(screen.getByRole("button", { name: "Redo" })).toHaveAttribute(
+        "title",
+        "Redo (Ctrl+Shift+Z)",
+      );
+      expect(screen.getByRole("button", { name: "Delete segment" })).toHaveAttribute(
+        "title",
+        "Delete segment (Del)",
+      );
+    } finally {
+      api.platform = original;
+    }
   });
 });
 

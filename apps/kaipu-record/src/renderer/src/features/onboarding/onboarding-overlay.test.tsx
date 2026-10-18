@@ -107,6 +107,27 @@ describe("OnboardingOverlay", () => {
     fireEvent.click(screen.getByRole("button", { name: /start recording/i }));
     expect(onClose).toHaveBeenCalledOnce();
   });
+
+  it("speaks Windows on Windows: no macOS wording, glyphs or menu bar from welcome to done", async () => {
+    mockElectronAPI({
+      platform: "win32",
+      checkPermissions: vi
+        .fn()
+        .mockResolvedValue({ screen: true, microphone: true, camera: false }),
+      getSettings: vi.fn().mockResolvedValue({ shortcuts: defaultShortcutsFor("win32") }),
+    } as Partial<KaipuElectronAPI>);
+    render(<OnboardingOverlay onClose={vi.fn()} />);
+    expect(screen.getByText(/does what Windows doesn't/)).toBeInTheDocument();
+    expect(screen.queryByText(/macOS/)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /get started/i }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /continue/i })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+
+    expect(await screen.findByText("Ctrl+Alt+C")).toBeInTheDocument();
+    expect(screen.getByText(/even from the system tray/)).toBeInTheDocument();
+    expect(screen.queryByText(/⌘|⌃|menu bar/)).toBeNull();
+  });
 });
 
 describe("OnboardingOverlay — Accessibility row (plans/video-editor-v2/03 § UI)", () => {

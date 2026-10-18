@@ -1,5 +1,6 @@
 import { Monitor, Mic, Volume2, Video, type LucideIcon } from "lucide-react";
 import { useLocale, useSetLocale, useTranslations, type Locale } from "@kaipu/i18n";
+import { isWindowsHost } from "@renderer/features/shortcuts/host-platform";
 import { KaipuLogo } from "@kaipu/brand";
 import styles from "./welcome-step.module.css";
 
@@ -58,7 +59,9 @@ export function WelcomeStep(): React.JSX.Element {
         <KaipuLogo use="app" size={96} />
       </div>
       <h1 className={styles.title}>{t("welcomeTitle")}</h1>
-      <p className={styles.subtitle}>{t("welcomeSubtitle")}</p>
+      <p className={styles.subtitle}>
+        {t(isWindowsHost() ? "welcomeSubtitleWindows" : "welcomeSubtitle")}
+      </p>
       <div className={styles.features}>
         {FEATURES.map(({ icon: Icon, labelKey }) => (
           <div key={labelKey} className={styles.feature}>

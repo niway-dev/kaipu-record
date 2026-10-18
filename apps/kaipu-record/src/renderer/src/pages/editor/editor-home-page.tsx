@@ -19,7 +19,10 @@ import { buildLineage, editBadge, type Lineage } from "@renderer/features/librar
 import { formatDuration } from "@renderer/features/library/format";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import { canOpenInEditor, useOpenInEditor } from "@renderer/features/editor/open-in-editor";
-import { PASTE_SHORTCUT, usePasteToEditor } from "@renderer/features/editor/use-paste-to-editor";
+import {
+  pasteShortcutLabel,
+  usePasteToEditor,
+} from "@renderer/features/editor/use-paste-to-editor";
 import { useShortcutLabels } from "@renderer/features/shortcuts/use-shortcut-labels";
 import {
   CONTINUE_ROWS,
@@ -121,7 +124,7 @@ function StartImage({ onPaste }: { onPaste: () => void }): React.JSX.Element {
       </span>
       <div className={styles.startText}>
         <h2 className={styles.startTitle}>{t("startTitle")}</h2>
-        <p className={styles.startBody}>{t("startBody", { shortcut: PASTE_SHORTCUT })}</p>
+        <p className={styles.startBody}>{t("startBody", { shortcut: pasteShortcutLabel() })}</p>
         {clip && (
           <div className={styles.clipPeek}>
             <span className={styles.clipThumb} aria-hidden>
@@ -134,7 +137,7 @@ function StartImage({ onPaste }: { onPaste: () => void }): React.JSX.Element {
               </span>
             </span>
             <button type="button" className={styles.clipPaste} onClick={onPaste}>
-              {t("pasteNow", { shortcut: PASTE_SHORTCUT })}
+              {t("pasteNow", { shortcut: pasteShortcutLabel() })}
             </button>
           </div>
         )}
