@@ -1,14 +1,14 @@
 import { useForm } from "@tanstack/react-form";
-import { useNavigate, useRouter } from "@tanstack/react-router";
+import { useRouter } from "@tanstack/react-router";
 import { toast } from "sonner";
 import z from "zod";
 import { Button, Input, Label } from "@kaipu/web-ui";
 import { useTranslations } from "@kaipu/i18n";
 import CloudPromotion from "@/components/cloud-promotion";
 import { authClient } from "@/lib/auth/auth-client";
+import { resolvePostSignInPath } from "@/lib/post-sign-in";
 
 export default function SignInForm({ redirectTo }: { redirectTo?: string }) {
-  const navigate = useNavigate();
   const router = useRouter();
   const t = useTranslations("auth");
 
@@ -26,9 +26,8 @@ export default function SignInForm({ redirectTo }: { redirectTo?: string }) {
         {
           onSuccess: async () => {
             await router.invalidate();
-            // `redirectTo` was validated as a same-origin path by the login route.
-            if (redirectTo) router.history.push(redirectTo);
-            else navigate({ to: "/recordings" });
+            // The helper validates `redirectTo` again, so a bad value cannot leave the site.
+            router.history.push(resolvePostSignInPath({ redirect: redirectTo }));
             toast.success(t("signInSuccess"));
           },
           onError: (error) => {
