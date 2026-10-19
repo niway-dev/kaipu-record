@@ -1,12 +1,12 @@
 import { createAuthClient } from "better-auth/client";
 import { electronClient } from "@better-auth/electron/client";
-import { DEEP_LINK_SCHEME } from "./deep-link";
+import {
+  DESKTOP_AUTH_CLIENT_ID,
+  DESKTOP_AUTH_COOKIE_PREFIX,
+  DESKTOP_AUTH_SCHEME,
+} from "@kaipu/domain/constants";
 import type { AuthError, BrowserSignInIntent } from "@shared/types/auth";
 import type { SignInResult } from "./auth-client";
-
-/** The `client_id` this app announces to the server's electron plugin. Must match the
- *  `clientID` option of the server plugin (apps/server-hono/src/lib/auth.ts). */
-export const DESKTOP_CLIENT_ID = "kaipu-desktop";
 
 export interface BrowserSignInConfig {
   /** The API origin (`MAIN_VITE_SERVER_URL`); better-auth lives under `/api/auth`. */
@@ -98,8 +98,11 @@ export function createBrowserSignInClient(config: BrowserSignInConfig): BrowserS
       plugins: [
         electronClient({
           signInURL,
-          protocol: { scheme: DEEP_LINK_SCHEME },
-          clientID: DESKTOP_CLIENT_ID,
+          protocol: { scheme: DESKTOP_AUTH_SCHEME },
+          clientID: DESKTOP_AUTH_CLIENT_ID,
+          // The web done page hands back the readable `<cookiePrefix>.<clientID>` cookie, which
+          // is what `authenticate({ token })` parses; both halves must match the server plugin.
+          cookiePrefix: DESKTOP_AUTH_COOKIE_PREFIX,
           storage,
         }),
       ],

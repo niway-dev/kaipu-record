@@ -56,6 +56,7 @@ describe("createBrowserSignInClient", () => {
     expect(String(options.signInURL)).toBe("http://localhost:3001/auth/desktop");
     expect(options.protocol).toEqual({ scheme: "kaipu" });
     expect(options.clientID).toBe("kaipu-desktop");
+    expect(options.cookiePrefix).toBe("better-auth");
   });
 
   it("marks the sign-up variant in the URL it opens", async () => {

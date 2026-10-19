@@ -5,7 +5,9 @@
  * `open-url`, Windows/Linux argv, cold start) can be unit-tested with plain strings.
  */
 
-export const DEEP_LINK_SCHEME = "kaipu";
+import { DESKTOP_AUTH_CALLBACK_PATH, DESKTOP_AUTH_SCHEME } from "@kaipu/domain/constants";
+
+export const DEEP_LINK_SCHEME = DESKTOP_AUTH_SCHEME;
 
 export type DeepLink =
   /** The browser finished signing in and hands back a single-use code (`#token=<base64url>`). */
@@ -34,7 +36,7 @@ export function parseDeepLink(raw: string): DeepLink | null {
   // something the app silently depends on.
   const path = `/${url.hostname}${url.pathname}`.replace(/\/{2,}/g, "/").replace(/\/$/, "");
 
-  if (path === "/auth/callback") {
+  if (path === DESKTOP_AUTH_CALLBACK_PATH) {
     const match = /^#token=(.+)$/.exec(url.hash);
     if (!match?.[1]) return { kind: "unhandled", path };
     try {
