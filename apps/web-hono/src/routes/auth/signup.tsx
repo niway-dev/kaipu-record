@@ -1,8 +1,6 @@
-import { NOINDEX } from "@/lib/seo";
-import { createFileRoute, Link, redirect } from "@tanstack/react-router";
-import { useTranslations } from "@kaipu/i18n";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
-import SignUpForm from "@/components/sign-up-form";
+import { AuthPanel } from "@/components/auth/auth-panel";
 import {
   desktopAuthSearch,
   parseDesktopAuthQuery,
@@ -10,15 +8,20 @@ import {
 } from "@/lib/desktop-auth";
 import { resolvePostSignInPath } from "@/lib/post-sign-in";
 import { safeRedirectPath } from "@/lib/safe-redirect";
+import { NOINDEX } from "@/lib/seo";
 
 type SignUpSearch = { redirect?: string } & Partial<DesktopAuthQuery>;
 
+/**
+ * The "Create account" tab. It still accepts the desktop query (NIW2-471): an older link from the
+ * desktop sign-in page pointed here, and it keeps working, with its tabs leading back to
+ * `/auth/desktop`.
+ */
 export const Route = createFileRoute("/auth/signup")({
   head: () => NOINDEX,
   component: SignUpPage,
   validateSearch: (search: Record<string, unknown>): SignUpSearch => {
     const target = safeRedirectPath(search.redirect);
-    // Sign-up opened from the desktop sign-in page (NIW2-471) keeps the app's query.
     const desktop = parseDesktopAuthQuery(search);
     return { ...(target ? { redirect: target } : {}), ...desktop };
   },
@@ -36,24 +39,7 @@ export const Route = createFileRoute("/auth/signup")({
 });
 
 function SignUpPage() {
-  const t = useTranslations("auth");
   const search = Route.useSearch();
   const desktop = parseDesktopAuthQuery(search) ?? undefined;
-  return (
-    <div className="mx-auto w-full mt-10 max-w-md p-6">
-      <SignUpForm redirectTo={search.redirect} desktop={desktop} />
-      <div className="mt-4 text-center text-sm text-muted-foreground">
-        {t("haveAccount")}{" "}
-        {desktop ? (
-          <Link to="/auth/desktop" search={desktop} className="text-primary hover:underline">
-            {t("signIn")}
-          </Link>
-        ) : (
-          <Link to="/auth/login" className="text-primary hover:underline">
-            {t("signIn")}
-          </Link>
-        )}
-      </div>
-    </div>
-  );
+  return <AuthPanel mode="sign-up" redirectTo={search.redirect} desktop={desktop} />;
 }

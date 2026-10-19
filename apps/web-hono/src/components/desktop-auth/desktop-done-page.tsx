@@ -1,14 +1,28 @@
 import { useEffect, useState } from "react";
+import * as stylex from "@stylexjs/stylex";
 import { useTranslations } from "@kaipu/i18n";
-import { Button } from "@kaipu/web-ui";
+import { KaipuLogo } from "@kaipu/brand";
 
+// Relative on purpose: the StyleX compiler resolves `.stylex` imports itself and knows no `@/`.
+import { kl } from "../auth/auth.stylex";
+import {
+  AccountChip,
+  GhostButton,
+  HeroBody,
+  HeroHeader,
+  InfoPanel,
+  PrimaryButton,
+  SmallPrint,
+  Strong,
+} from "@/components/auth/auth-ui";
 import { desktopAuthClient } from "@/lib/auth/desktop-auth-client";
+import type { AuthSession } from "@/lib/auth/types";
 import { desktopCallbackUrl } from "@/lib/desktop-auth";
 
 /** How often and how long to look for the code cookie (the plugin's own defaults). */
 export const CODE_POLL_INTERVAL_MS = 100;
 export const CODE_WAIT_MS = 10_000;
-/** How long "Returning to Kaipu…" stays before the fallback offers to retry or copy the code. */
+/** How long before the paste-the-code fallback appears under "Open Kaipu Record". */
 export const FALLBACK_AFTER_MS = 4_000;
 
 type Phase =
@@ -18,17 +32,28 @@ type Phase =
   | { kind: "no-code" };
 
 /**
- * `/auth/desktop/done` (NIW2-471). The sign-in left a readable `better-auth.kaipu-desktop` cookie;
- * this page opens `kaipu://auth/callback#token=<cookie value>` through `ensureElectronRedirect`.
+ * `/auth/desktop/done` (NIW2-471), the design's "You're signed in". The sign-in left a readable
+ * `better-auth.kaipu-desktop` cookie; this page opens `kaipu://auth/callback#token=<cookie value>`
+ * through `ensureElectronRedirect`.
  *
  * `ensureElectronRedirect` deletes the cookie as it redirects, so the page reads the value first
- * and keeps it: when the deep link cannot open the app (blocked prompt, unpackaged dev build), the
- * fallback offers the same link again and the value to paste. That value — base64url JSON of
- * `{ identifier, state }` — is what the desktop's `authenticate({ token })` decodes. The raw
- * 32-character code alone would not work.
+ * and keeps it: "Open Kaipu Record" opens the same link again, and when the deep link cannot open
+ * the app (blocked prompt, unpackaged dev build) the fallback below it offers the value to paste.
+ * That value — base64url JSON of `{ identifier, state }` — is what the desktop's
+ * `authenticate({ token })` decodes. The raw 32-character code alone would not work.
+ *
+ * `checkEmail` is set after an email sign-up: the page then also says a verification link is on its
+ * way. It never holds the return to the app back — verifying only unlocks Kaipu Cloud.
  */
-export function DesktopDonePage() {
+export function DesktopDonePage({
+  session,
+  checkEmail,
+}: {
+  session?: AuthSession | null;
+  checkEmail?: boolean;
+}) {
   const t = useTranslations("desktopAuth");
+  const tAuth = useTranslations("auth");
   const [phase, setPhase] = useState<Phase>({ kind: "waiting" });
 
   useEffect(() => {
@@ -57,29 +82,54 @@ export function DesktopDonePage() {
 
   if (phase.kind === "no-code") {
     return (
-      <Card>
-        <h1 className="mb-4 text-center text-2xl font-bold">{t("noCodeTitle")}</h1>
-        <p className="text-center text-sm text-muted-foreground">{t("noCodeBody")}</p>
-      </Card>
+      <HeroHeader use="product" title={t("noCodeTitle")}>
+        <HeroBody>{t("noCodeBody")}</HeroBody>
+      </HeroHeader>
     );
   }
 
-  if (phase.kind === "fallback") return <Fallback code={phase.code} />;
+  if (phase.kind === "waiting") {
+    return (
+      <div aria-live="polite">
+        <HeroHeader use="done" size={92} title={t("returningTitle")}>
+          <HeroBody>{t("returningBody")}</HeroBody>
+        </HeroHeader>
+      </div>
+    );
+  }
 
+  const email = session?.user.email;
   return (
-    <Card>
-      <h1 className="mb-4 text-center text-2xl font-bold" aria-live="polite">
-        {t("returningTitle")}
-      </h1>
-      <p className="text-center text-sm text-muted-foreground">{t("returningBody")}</p>
-    </Card>
+    <div>
+      <HeroHeader use="done" size={92} float title={t("doneTitle")}>
+        {email ? <AccountChip name={session?.user.name} email={email} /> : null}
+        {checkEmail ? (
+          <InfoPanel>
+            <Strong>{tAuth("checkEmailTitle")}</Strong>{" "}
+            {email
+              ? tAuth.rich("checkEmailBody", { email, b: (chunks) => <Strong>{chunks}</Strong> })
+              : tAuth("checkEmailLater")}
+          </InfoPanel>
+        ) : null}
+        <HeroBody>{t("doneBody")}</HeroBody>
+        <PrimaryButton
+          large
+          arrow={false}
+          icon={<KaipuLogo use="product" size={22} />}
+          onClick={() => {
+            window.location.href = desktopCallbackUrl(phase.code);
+          }}
+        >
+          {t("openKaipuRecord")}
+        </PrimaryButton>
+        <SmallPrint>{t("doneCloseTab")}</SmallPrint>
+      </HeroHeader>
+      {phase.kind === "fallback" ? <Fallback code={phase.code} /> : null}
+    </div>
   );
 }
 
-function Card({ children }: { children: React.ReactNode }) {
-  return <div className="mx-auto w-full mt-10 max-w-md p-6">{children}</div>;
-}
-
+/** The paste-the-code fallback, as it works since #333: copy the value, or select it by hand. */
 function Fallback({ code }: { code: string }) {
   const t = useTranslations("desktopAuth");
   const [copy, setCopy] = useState<"idle" | "copied" | "failed">("idle");
@@ -94,23 +144,13 @@ function Fallback({ code }: { code: string }) {
   }
 
   return (
-    <Card>
-      <h1 className="mb-4 text-center text-2xl font-bold">{t("fallbackTitle")}</h1>
-      <p className="mb-6 text-center text-sm text-muted-foreground">{t("fallbackBody")}</p>
-      <div className="space-y-3">
-        <Button
-          className="w-full"
-          onClick={() => {
-            window.location.href = desktopCallbackUrl(code);
-          }}
-        >
-          {t("openAgain")}
-        </Button>
-        <Button variant="outline" className="w-full" onClick={() => void copyCode()}>
-          {t("copyCode")}
-        </Button>
-      </div>
-      <label className="mt-6 block text-sm font-medium" htmlFor="desktop-sign-in-code">
+    <section aria-labelledby="desktop-fallback-title" {...stylex.props(s.fallback)}>
+      <h2 id="desktop-fallback-title" {...stylex.props(s.fallbackTitle)}>
+        {t("fallbackTitle")}
+      </h2>
+      <p {...stylex.props(s.text)}>{t("fallbackBodyCode")}</p>
+      <GhostButton onClick={() => void copyCode()}>{t("copyCode")}</GhostButton>
+      <label htmlFor="desktop-sign-in-code" {...stylex.props(s.label)}>
         {t("codeLabel")}
       </label>
       <textarea
@@ -119,13 +159,48 @@ function Fallback({ code }: { code: string }) {
         rows={3}
         value={code}
         onFocus={(e) => e.currentTarget.select()}
-        className="mt-2 w-full resize-none rounded-md border bg-muted p-2 font-mono text-xs break-all"
+        {...stylex.props(s.code)}
       />
-      <p className="mt-2 text-xs text-muted-foreground">{t("codeNote")}</p>
-      <p aria-live="polite" className="mt-4 text-center text-sm">
+      <p {...stylex.props(s.text)}>{t("codeNote")}</p>
+      <p aria-live="polite" {...stylex.props(s.status)}>
         {copy === "copied" ? t("copied") : copy === "failed" ? t("copyFailed") : ""}
       </p>
-      <p className="mt-6 text-center text-xs text-muted-foreground">{t("closeTab")}</p>
-    </Card>
+    </section>
   );
 }
+
+const s = stylex.create({
+  fallback: {
+    marginTop: "28px",
+    paddingTop: "20px",
+    borderTopWidth: "1px",
+    borderTopStyle: "solid",
+    borderTopColor: kl.bd,
+  },
+  fallbackTitle: { margin: 0, fontSize: "14px", fontWeight: 600, color: kl.tx },
+  text: { margin: "6px 0 12px", fontSize: "12.5px", lineHeight: 1.5, color: kl.faint },
+  label: {
+    display: "block",
+    marginTop: "14px",
+    fontSize: "12.5px",
+    fontWeight: 600,
+    color: kl.dim,
+  },
+  code: {
+    boxSizing: "border-box",
+    width: "100%",
+    marginTop: "6px",
+    padding: "8px",
+    resize: "none",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: kl.bd2,
+    borderRadius: "8px",
+    backgroundColor: kl.card,
+    color: kl.dim,
+    fontFamily: kl.fontMono,
+    fontSize: "11px",
+    wordBreak: "break-all",
+  },
+  status: { margin: 0, minHeight: "1.2em", fontSize: "12.5px", color: kl.dim },
+});

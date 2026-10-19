@@ -1,4 +1,8 @@
-import { cloudAssetSummarySchema, createUploadIntentSchema } from "@kaipu/domain/schemas";
+import {
+  assetCursorSchema,
+  cloudAssetSummarySchema,
+  createUploadIntentSchema,
+} from "@kaipu/domain/schemas";
 import { oc } from "@orpc/contract";
 import { z } from "zod";
 import { apiResponseSchema } from "./shared.contract";
@@ -40,7 +44,7 @@ export const cloudContract = {
     .route({ method: "GET", path: "/assets" })
     .input(
       z.object({
-        cursor: z.string().optional(),
+        cursor: assetCursorSchema.optional(),
         limit: z.coerce.number().int().min(1).max(100).default(50),
       }),
     )

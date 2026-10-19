@@ -1,16 +1,18 @@
 import { useState } from "react";
-import { Button } from "@kaipu/web-ui";
+import * as stylex from "@stylexjs/stylex";
 import { useTranslations } from "@kaipu/i18n";
-import { SignupLegalNotice } from "@/components/legal/signup-legal-notice";
+
 import { authClient } from "@/lib/auth/auth-client";
 import { desktopAuthSearch, desktopDonePath, type DesktopAuthQuery } from "@/lib/desktop-auth";
 import { googleStartErrorKey } from "@/lib/google-auth";
 import { resolvePostSignInPath } from "@/lib/post-sign-in";
+import { bp, kl } from "./auth.stylex";
+import { FieldError } from "./auth-ui";
 
 /** Google's multicolour "G", per its sign-in branding guidelines (not recoloured, not cropped). */
 export function GoogleMark() {
   return (
-    <svg aria-hidden="true" width="18" height="18" viewBox="0 0 48 48" focusable="false">
+    <svg aria-hidden="true" width="19" height="19" viewBox="0 0 48 48" focusable="false">
       <path
         fill="#EA4335"
         d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
@@ -44,9 +46,9 @@ export interface GoogleButtonProps {
 }
 
 /**
- * "Continue with Google" plus the "or" divider, above the email form on /auth/login and
- * /auth/signup and /auth/desktop. Always shown; a server without Google answers with an error that
- * is shown as a friendly message.
+ * The big "Continue with Google" button that opens every sign-in and sign-up form. Always shown;
+ * a server without Google answers with an error that is shown as a friendly message. While the
+ * browser leaves for Google it reads "Waiting for Google…" and cannot be pressed twice.
  */
 export function GoogleButton({ mode, redirectTo, desktop }: GoogleButtonProps) {
   const t = useTranslations("auth");
@@ -75,29 +77,81 @@ export function GoogleButton({ mode, redirectTo, desktop }: GoogleButtonProps) {
     }
   }
 
+  const label = redirecting
+    ? t("googleRedirecting")
+    : mode === "sign-up"
+      ? t("signUpWithGoogle")
+      : t("continueWithGoogle");
+
   return (
-    <div className="mb-6 space-y-4">
-      <Button
+    <>
+      <button
         type="button"
-        variant="outline"
-        className="w-full gap-2"
         disabled={redirecting}
+        aria-busy={redirecting || undefined}
         onClick={() => void start()}
+        {...stylex.props(s.button)}
       >
-        <GoogleMark />
-        {redirecting ? t("googleRedirecting") : t("continueWithGoogle")}
-      </Button>
-      {errorKey && (
-        <p role="alert" className="text-destructive text-sm">
-          {t(errorKey)}
-        </p>
-      )}
-      {mode === "sign-up" && <SignupLegalNotice messageKey="googleSignupNotice" />}
-      <div className="flex items-center gap-3 text-xs text-muted-foreground uppercase">
-        <span className="h-px flex-1 bg-border" />
-        {t("orDivider")}
-        <span className="h-px flex-1 bg-border" />
-      </div>
-    </div>
+        {redirecting ? <span aria-hidden {...stylex.props(s.spinner)} /> : <GoogleMark />}
+        {label}
+        {redirecting ? null : (
+          <span aria-hidden {...stylex.props(s.tag)}>
+            {t("recommended")}
+          </span>
+        )}
+      </button>
+      <div aria-live="polite">{errorKey ? <FieldError>{t(errorKey)}</FieldError> : null}</div>
+    </>
   );
 }
+
+const spin = stylex.keyframes({ to: { transform: "rotate(360deg)" } });
+
+const s = stylex.create({
+  button: {
+    position: "relative",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "11px",
+    width: "100%",
+    height: "54px",
+    borderStyle: "none",
+    borderRadius: "12px",
+    // The design inverts the page: light button on dark, dark button on light.
+    backgroundColor: kl.tx,
+    color: kl.bg,
+    fontFamily: "inherit",
+    fontSize: "16px",
+    fontWeight: 600,
+    cursor: { default: "pointer", ":disabled": "progress" },
+    boxShadow: "0 14px 30px -16px rgba(0, 0, 0, 0.7)",
+    outline: { default: "none", ":focus-visible": "2px solid #f6055c" },
+    outlineOffset: "2px",
+    opacity: { default: 1, ":hover": 0.94 },
+  },
+  tag: {
+    position: "absolute",
+    right: "14px",
+    display: { default: "inline", [bp.mobile]: "none" },
+    fontFamily: kl.fontMono,
+    fontSize: "9.5px",
+    letterSpacing: "0.1em",
+    textTransform: "uppercase",
+    opacity: 0.55,
+  },
+  spinner: {
+    width: "18px",
+    height: "18px",
+    boxSizing: "border-box",
+    borderWidth: "2px",
+    borderStyle: "solid",
+    borderColor: "currentColor",
+    borderTopColor: "transparent",
+    borderRadius: "50%",
+    animationName: spin,
+    animationDuration: "0.7s",
+    animationTimingFunction: "linear",
+    animationIterationCount: "infinite",
+  },
+});

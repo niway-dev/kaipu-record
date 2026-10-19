@@ -47,9 +47,41 @@ export function desktopAuthSearch(query: DesktopAuthQuery): string {
   return `?${params.toString()}`;
 }
 
-/** Where every successful desktop sign-in lands: the page that hands the code to the app. */
-export function desktopDonePath(query: DesktopAuthQuery): string {
-  return `/auth/desktop/done${desktopAuthSearch(query)}`;
+/**
+ * Where every successful desktop sign-in lands: the page that hands the code to the app.
+ * `checkEmail` is set after an email sign-up, so that page also says a verification link is on its
+ * way — without holding back the return to the app, which the sign-up has already earned.
+ */
+export function desktopDonePath(
+  query: DesktopAuthQuery,
+  options: { checkEmail?: boolean } = {},
+): string {
+  const tail = options.checkEmail ? `&${CHECK_EMAIL_PARAM}=1` : "";
+  return `/auth/desktop/done${desktopAuthSearch(query)}${tail}`;
+}
+
+/** The done page's "a verification link was sent" flag. */
+export const CHECK_EMAIL_PARAM = "check_email";
+
+export function parseCheckEmail(value: unknown): boolean {
+  return value === 1 || value === "1" || value === true;
+}
+
+/**
+ * The two tabs of the sign-in page, as links that keep every query parameter the visitor came
+ * with: `redirect` on the web pages, the app's `client_id`, `state` and `code_challenge` on the
+ * desktop page (whose sign-up tab is the same route with `intent=sign-up`).
+ */
+export function authTabHrefs(options: { redirect?: string; desktop?: DesktopAuthQuery | null }): {
+  signIn: string;
+  signUp: string;
+} {
+  if (options.desktop) {
+    const base = `/auth/desktop${desktopAuthSearch(options.desktop)}`;
+    return { signIn: base, signUp: `${base}&intent=sign-up` };
+  }
+  const tail = options.redirect ? `?${new URLSearchParams({ redirect: options.redirect })}` : "";
+  return { signIn: `/auth/login${tail}`, signUp: `/auth/signup${tail}` };
 }
 
 /**
