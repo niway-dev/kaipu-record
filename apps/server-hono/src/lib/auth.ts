@@ -4,6 +4,7 @@ import { betterAuth } from "better-auth";
 import { customSession } from "better-auth/plugins";
 import { env } from "../env";
 import { buildResetUrl, buildVerifyUrl, tryGetEmail, webUrl } from "./email";
+import { getSocialProviders } from "./social-providers";
 
 /** Best-effort locale from Accept-Language; English is the documented fallback. */
 function emailLocale(request?: Request): EmailLocale {
@@ -23,6 +24,11 @@ function emailLocale(request?: Request): EmailLocale {
 // React Native's fetch doesn't send Sec-Fetch-* headers.
 export const auth = betterAuth({
   ...baseConfig,
+  // Explicit on purpose: without it Better Auth falls back to the request origin, which
+  // behind the web proxy is the API, not the origin the browser (and the OAuth state
+  // cookie) lives on. See .env.example.
+  baseURL: env.BETTER_AUTH_URL,
+  socialProviders: getSocialProviders(env),
   trustedOrigins: [...env.CORS_ORIGIN, "kaipu-record://app"],
   emailAndPassword: {
     ...baseConfig.emailAndPassword,

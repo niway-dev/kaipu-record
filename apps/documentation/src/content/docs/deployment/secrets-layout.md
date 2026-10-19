@@ -67,6 +67,8 @@ libraries used _by_ the apps that are.
 | -------------------------- | ------------- | ------------------------------------ |
 | `CORS_ORIGIN`              | `/public`     | `server-hono`                        |
 | `PUBLIC_WEB_URL`           | `/public`     | `server-hono`                        |
+| `BETTER_AUTH_URL`          | `/public`     | `server-hono`                        |
+| `GOOGLE_CLIENT_ID`         | `/public`     | `server-hono`                        |
 | `R2_BUCKET`                | `/public`     | `server-hono`                        |
 | `R2_ACCOUNT_ID`            | `/public`     | `server-hono`                        |
 | `VITE_SERVER_URL`          | `/public`     | `web-hono`                           |
@@ -86,6 +88,7 @@ libraries used _by_ the apps that are.
 | `R2_ACCESS_KEY_ID`         | `/cloudflare` | `server-hono`                        |
 | `R2_SECRET_ACCESS_KEY`     | `/cloudflare` | `server-hono`                        |
 | `BETTER_AUTH_SECRET`       | `/auth`       | `server-hono`                        |
+| `GOOGLE_CLIENT_SECRET`     | `/auth`       | `server-hono`                        |
 | `RESEND_API_KEY`           | `/email`      | `server-hono`                        |
 
 ## Complete map — `prod`
@@ -109,6 +112,13 @@ GitHub, from GitHub, so routing it through an external service adds a bootstrap
 dependency and no protection.
 
 ## Decisions worth knowing
+
+**Google OAuth values (NIW2-215).** `GOOGLE_CLIENT_ID` is public by design (it appears
+in every authorize URL), so it sits in `/public`; `GOOGLE_CLIENT_SECRET` can act as the
+OAuth client and lives in `/auth`. `BETTER_AUTH_URL` is the web origin, not a secret.
+In `prod` they are still GitHub `production` Environment values (`GOOGLE_CLIENT_SECRET`
+as a secret, the other two as variables). Setup steps:
+[Google OAuth runbook](/deployment/google-oauth/).
 
 **`R2_BUCKET` and `R2_ACCOUNT_ID` live in `/public`.** Neither is a credential —
 a bucket name and an account identifier, both already committed in plaintext in
