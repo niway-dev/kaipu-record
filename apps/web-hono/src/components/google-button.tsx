@@ -4,7 +4,7 @@ import { useTranslations } from "@kaipu/i18n";
 import { SignupLegalNotice } from "@/components/legal/signup-legal-notice";
 import { authClient } from "@/lib/auth/auth-client";
 import { desktopAuthSearch, desktopDonePath, type DesktopAuthQuery } from "@/lib/desktop-auth";
-import { isGoogleAuthEnabled } from "@/lib/google-auth";
+import { googleStartErrorKey } from "@/lib/google-auth";
 import { resolvePostSignInPath } from "@/lib/post-sign-in";
 
 /** Google's multicolour "G", per its sign-in branding guidelines (not recoloured, not cropped). */
@@ -35,8 +35,6 @@ export interface GoogleButtonProps {
   mode: "sign-in" | "sign-up";
   /** The same `redirect` the email form honours; validated again by resolvePostSignInPath. */
   redirectTo?: string;
-  /** Defaults to the VITE_GOOGLE_AUTH_ENABLED flag; tests pass it explicitly. */
-  enabled?: boolean;
   /**
    * Desktop sign-in (NIW2-471): the app's query goes with the request, so the electron plugin keeps
    * it across the Google round trip and mints the code on the callback, and both outcomes return
@@ -47,20 +45,17 @@ export interface GoogleButtonProps {
 
 /**
  * "Continue with Google" plus the "or" divider, above the email form on /auth/login and
- * /auth/signup. Renders nothing while Google is not configured (Q8).
+ * /auth/signup and /auth/desktop. Always shown; a server without Google answers with an error that
+ * is shown as a friendly message.
  */
-export function GoogleButton({
-  mode,
-  redirectTo,
-  enabled = isGoogleAuthEnabled(),
-  desktop,
-}: GoogleButtonProps) {
+export function GoogleButton({ mode, redirectTo, desktop }: GoogleButtonProps) {
   const t = useTranslations("auth");
   const [redirecting, setRedirecting] = useState(false);
-  if (!enabled) return null;
+  const [errorKey, setErrorKey] = useState<ReturnType<typeof googleStartErrorKey> | null>(null);
 
   async function start() {
     setRedirecting(true);
+    setErrorKey(null);
     const destination = desktop
       ? desktopDonePath(desktop)
       : resolvePostSignInPath({ redirect: redirectTo });
@@ -74,7 +69,10 @@ export function GoogleButton({
       fetchOptions: desktop ? { query: { ...desktop } } : undefined,
     });
     // On success the browser is already navigating to Google; only a failure comes back here.
-    if (result?.error) setRedirecting(false);
+    if (result?.error) {
+      setRedirecting(false);
+      setErrorKey(googleStartErrorKey(result.error));
+    }
   }
 
   return (
@@ -89,6 +87,11 @@ export function GoogleButton({
         <GoogleMark />
         {redirecting ? t("googleRedirecting") : t("continueWithGoogle")}
       </Button>
+      {errorKey && (
+        <p role="alert" className="text-destructive text-sm">
+          {t(errorKey)}
+        </p>
+      )}
       {mode === "sign-up" && <SignupLegalNotice messageKey="googleSignupNotice" />}
       <div className="flex items-center gap-3 text-xs text-muted-foreground uppercase">
         <span className="h-px flex-1 bg-border" />

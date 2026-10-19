@@ -26,9 +26,9 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-function renderSection(enabled = true, locale: "en" | "es" = "en") {
+function renderSection(locale: "en" | "es" = "en") {
   return renderWithProviders(
-    <SignInMethodsSection googleControls={<GoogleSignInControls enabled={enabled} />} />,
+    <SignInMethodsSection googleControls={<GoogleSignInControls />} />,
     locale,
   );
 }
@@ -49,10 +49,18 @@ describe("GoogleSignInControls — connect", () => {
     expect(await screen.findByRole("button", { name: "Redirecting to Google…" })).toBeTruthy();
   });
 
-  it("offers no Connect button while Google is not configured", async () => {
-    renderSection(false);
-    await screen.findByText("Email and password");
-    expect(screen.queryByRole("button", { name: "Connect Google" })).toBeNull();
+  it("says Google is unavailable when the server has no Google provider", async () => {
+    auth.linkSocial.mockResolvedValue({
+      data: null,
+      error: { code: "PROVIDER_NOT_FOUND", status: 404, message: "Provider not found" },
+    });
+    renderSection();
+    fireEvent.click(await screen.findByRole("button", { name: "Connect Google" }));
+    expect(
+      await screen.findByText(
+        "Google sign-in isn't available right now. Use your email and password.",
+      ),
+    ).toBeTruthy();
   });
 
   it("says so when the link cannot start", async () => {
@@ -173,7 +181,7 @@ describe("GoogleSignInControls — set a password", () => {
   });
 
   it("speaks Spanish in the es locale", async () => {
-    renderSection(true, "es");
+    renderSection("es");
     expect(await screen.findByRole("heading", { name: "Crear una contraseña" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Desconectar Google" })).toBeTruthy();
   });

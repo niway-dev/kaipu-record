@@ -5,7 +5,7 @@ import { Button, Input, Label } from "@kaipu/web-ui";
 import { GoogleMark } from "@/components/google-button";
 import { hasPassword, linkedAccountsKey, useLinkedAccounts } from "@/hooks/use-linked-accounts";
 import { authClient } from "@/lib/auth/auth-client";
-import { isGoogleAuthEnabled } from "@/lib/google-auth";
+import { googleStartErrorKey } from "@/lib/google-auth";
 import { client } from "@/lib/orpc-client";
 
 const PASSWORD_MIN = 8;
@@ -84,12 +84,7 @@ function SetPasswordForm({ onSaved }: { onSaved: () => Promise<void> }) {
  * method; the API refuses it too) and "Set a password" for Google-only accounts. Rendered in
  * SignInMethodsSection's `googleControls` slot; shares its accounts query.
  */
-export function GoogleSignInControls({
-  enabled = isGoogleAuthEnabled(),
-}: {
-  /** Defaults to the VITE_GOOGLE_AUTH_ENABLED flag; tests pass it explicitly. */
-  enabled?: boolean;
-}) {
+export function GoogleSignInControls() {
   const t = useTranslations("account");
   const tAuth = useTranslations("auth");
   const queryClient = useQueryClient();
@@ -115,7 +110,14 @@ export function GoogleSignInControls({
     // On success the browser is on its way to Google.
     if (result?.error) {
       setBusy(null);
-      setMessage({ tone: "alert", text: tAuth("oauthErrorUnableToLink") });
+      setMessage({
+        tone: "alert",
+        text: tAuth(
+          result.error.code === "PROVIDER_NOT_FOUND"
+            ? googleStartErrorKey(result.error)
+            : "oauthErrorUnableToLink",
+        ),
+      });
     }
   }
 
@@ -144,37 +146,35 @@ export function GoogleSignInControls({
 
   return (
     <div className="space-y-6">
-      {(hasGoogle || enabled) && (
-        <div className="space-y-2">
-          {hasGoogle ? (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                // FR9: never the last method. The server refuses it as well.
-                disabled={!withPassword || busy !== null}
-                onClick={() => void disconnect()}
-              >
-                {busy === "disconnect" ? t("googleDisconnecting") : t("googleDisconnect")}
-              </Button>
-              {!withPassword && (
-                <p className="text-muted-foreground text-sm">{t("googleLastMethod")}</p>
-              )}
-            </>
-          ) : (
+      <div className="space-y-2">
+        {hasGoogle ? (
+          <>
             <Button
               type="button"
               variant="outline"
-              className="gap-2"
-              disabled={busy !== null}
-              onClick={() => void connect()}
+              // FR9: never the last method. The server refuses it as well.
+              disabled={!withPassword || busy !== null}
+              onClick={() => void disconnect()}
             >
-              <GoogleMark />
-              {busy === "connect" ? t("googleConnecting") : t("googleConnect")}
+              {busy === "disconnect" ? t("googleDisconnecting") : t("googleDisconnect")}
             </Button>
-          )}
-        </div>
-      )}
+            {!withPassword && (
+              <p className="text-muted-foreground text-sm">{t("googleLastMethod")}</p>
+            )}
+          </>
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-2"
+            disabled={busy !== null}
+            onClick={() => void connect()}
+          >
+            <GoogleMark />
+            {busy === "connect" ? t("googleConnecting") : t("googleConnect")}
+          </Button>
+        )}
+      </div>
       {message && (
         <p
           role={message.tone}

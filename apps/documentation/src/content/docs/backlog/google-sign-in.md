@@ -14,9 +14,11 @@ description: "Web Google sign-in (NIW2-219): the button, the linking rules, the 
 - `/auth/login` and `/auth/signup` show **Continue with Google** above the email form. Sign-in
   lands on `resolvePostSignInPath` (the dashboard unless a safe `redirect` is present). Sign-up
   shows the legal notice under the button.
-- The button only appears with `VITE_GOOGLE_AUTH_ENABLED=true`. Set it only where the API has
-  `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (see the [Google OAuth runbook](/deployment/google-oauth/)).
-  Production reads it from the GitHub `production` Environment variable of the same name.
+- The button is always shown (there is no feature flag). Where the API has no `GOOGLE_CLIENT_ID` /
+  `GOOGLE_CLIENT_SECRET` (see the [Google OAuth runbook](/deployment/google-oauth/)), Better Auth
+  answers `PROVIDER_NOT_FOUND` and the page shows "Google sign-in isn't available right now"
+  instead of a raw error. Clicking it for real needs the account to be a Google test user while the
+  OAuth app is in testing.
 - A failed or cancelled Google round trip comes back to `/auth/login?error=<code>` (or
   `/dashboard/profile?error=<code>` for Connect), and the code is shown as copy, never raw.
 - **Sign-in methods** on `/dashboard/profile`: Connect Google (`linkSocial`), Disconnect Google

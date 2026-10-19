@@ -5,8 +5,6 @@ interface ImportMetaEnv {
   readonly VITE_ACCOUNT_DELETION_ENABLED?: string;
   /** "true" swaps the account page's deletion client for the in-memory mock (local dev). */
   readonly VITE_ACCOUNT_USE_MOCKS?: string;
-  /** "true" shows "Continue with Google" (the API must have GOOGLE_CLIENT_ID/SECRET). NIW2-219. */
-  readonly VITE_GOOGLE_AUTH_ENABLED?: string;
 }
 interface ImportMeta {
   readonly env: ImportMetaEnv;
