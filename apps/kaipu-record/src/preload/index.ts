@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 import { electronAPI } from "@electron-toolkit/preload";
 import { IPC_CHANNELS } from "@shared/types";
 import type { AppSettings } from "@shared/types";
-import type { AuthStatus } from "@shared/types/auth";
+import type { AuthError, AuthStatus } from "@shared/types/auth";
 import type {
   CaptureRequestPayload,
   CaptureToastPayload,
@@ -40,8 +40,14 @@ const kaipuApi: KaipuElectronAPI = {
     return () => ipcRenderer.removeListener(IPC_CHANNELS.settingsChanged, listener);
   },
   getAuthStatus: () => ipcRenderer.invoke(IPC_CHANNELS.authGetStatus),
-  signIn: (credentials) => ipcRenderer.invoke(IPC_CHANNELS.authSignIn, credentials),
-  signUp: (input) => ipcRenderer.invoke(IPC_CHANNELS.authSignUp, input),
+  beginBrowserSignIn: (intent) => ipcRenderer.invoke(IPC_CHANNELS.authBeginBrowserSignIn, intent),
+  cancelBrowserSignIn: () => ipcRenderer.invoke(IPC_CHANNELS.authCancelBrowserSignIn),
+  submitSignInCode: (code) => ipcRenderer.invoke(IPC_CHANNELS.authSubmitCode, code),
+  onBrowserSignInFailed: (callback) => {
+    const listener = (_e: IpcRendererEvent, error: AuthError): void => callback(error);
+    ipcRenderer.on(IPC_CHANNELS.authBrowserSignInFailed, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.authBrowserSignInFailed, listener);
+  },
   signOut: () => ipcRenderer.invoke(IPC_CHANNELS.authSignOut),
   resendVerificationEmail: () => ipcRenderer.invoke(IPC_CHANNELS.authResendVerification),
   onAuthStatusChanged: (callback) => {

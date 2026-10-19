@@ -495,8 +495,12 @@ export const IPC_CHANNELS = {
   videoEditLoadSession: "videoEdit:load-session",
   // Authentication (main → renderer bridge; implemented in src/preload)
   authGetStatus: "auth:get-status",
-  authSignIn: "auth:sign-in",
-  authSignUp: "auth:sign-up",
+  // Browser sign-in: begin (opens the system browser), cancel, paste-code fallback, and the
+  // main → renderer failure event for a deep link that did not complete.
+  authBeginBrowserSignIn: "auth:begin-browser-sign-in",
+  authCancelBrowserSignIn: "auth:cancel-browser-sign-in",
+  authSubmitCode: "auth:submit-code",
+  authBrowserSignInFailed: "auth:browser-sign-in-failed",
   authSignOut: "auth:sign-out",
   authStatusChanged: "auth:status-changed",
   authResendVerification: "auth:resend-verification",

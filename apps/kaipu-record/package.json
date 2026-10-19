@@ -26,6 +26,7 @@
     "build:linux": "bash ../../scripts/rebuild-native.sh && electron-vite build && electron-builder --linux"
   },
   "dependencies": {
+    "@better-auth/electron": "catalog:",
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
     "@kaipu/brand": "workspace:*",
@@ -35,6 +36,7 @@
     "@kaipu/ui": "workspace:*",
     "@radix-ui/react-select": "^2.3.0",
     "@stylexjs/stylex": "^0.19.1",
+    "better-auth": "catalog:",
     "electron-updater": "^6.3.9",
     "gifenc": "1.0.3",
     "lucide-react": "^1.18.0",

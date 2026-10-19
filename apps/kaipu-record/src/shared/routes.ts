@@ -31,7 +31,6 @@ export const ROUTES = {
   cloud: "/cloud",
   settings: "/settings",
   signIn: "/sign-in",
-  signUp: "/sign-up",
 } as const;
 
 export type RouteName = keyof typeof ROUTES;

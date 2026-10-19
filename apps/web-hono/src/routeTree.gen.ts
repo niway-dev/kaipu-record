@@ -27,7 +27,9 @@ import { Route as AuthLoginRouteImport } from './routes/auth/login'
 import { Route as AuthForgotPasswordRouteImport } from './routes/auth/forgot-password'
 import { Route as AuthEmailVerifiedRouteImport } from './routes/auth/email-verified'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthDesktopIndexRouteImport } from './routes/auth/desktop/index'
 import { Route as AuthenticatedDashboardIndexRouteImport } from './routes/_authenticated/dashboard/index'
+import { Route as AuthDesktopDoneRouteImport } from './routes/auth/desktop/done'
 import { Route as ApiV1SplatRouteImport } from './routes/api/v1/$'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as AuthenticatedDashboardSettingsRouteImport } from './routes/_authenticated/dashboard/settings'
@@ -123,12 +125,22 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthDesktopIndexRoute = AuthDesktopIndexRouteImport.update({
+  id: '/desktop/',
+  path: '/desktop/',
+  getParentRoute: () => AuthRoute,
+} as any)
 const AuthenticatedDashboardIndexRoute =
   AuthenticatedDashboardIndexRouteImport.update({
     id: '/',
     path: '/',
     getParentRoute: () => AuthenticatedDashboardRoute,
   } as any)
+const AuthDesktopDoneRoute = AuthDesktopDoneRouteImport.update({
+  id: '/desktop/done',
+  path: '/desktop/done',
+  getParentRoute: () => AuthRoute,
+} as any)
 const ApiV1SplatRoute = ApiV1SplatRouteImport.update({
   id: '/api/v1/$',
   path: '/api/v1/$',
@@ -181,7 +193,9 @@ export interface FileRoutesByFullPath {
   '/dashboard/settings': typeof AuthenticatedDashboardSettingsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/v1/$': typeof ApiV1SplatRoute
+  '/auth/desktop/done': typeof AuthDesktopDoneRoute
   '/dashboard/': typeof AuthenticatedDashboardIndexRoute
+  '/auth/desktop/': typeof AuthDesktopIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -205,7 +219,9 @@ export interface FileRoutesByTo {
   '/dashboard/settings': typeof AuthenticatedDashboardSettingsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/v1/$': typeof ApiV1SplatRoute
+  '/auth/desktop/done': typeof AuthDesktopDoneRoute
   '/dashboard': typeof AuthenticatedDashboardIndexRoute
+  '/auth/desktop': typeof AuthDesktopIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -232,7 +248,9 @@ export interface FileRoutesById {
   '/_authenticated/dashboard/settings': typeof AuthenticatedDashboardSettingsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/v1/$': typeof ApiV1SplatRoute
+  '/auth/desktop/done': typeof AuthDesktopDoneRoute
   '/_authenticated/dashboard/': typeof AuthenticatedDashboardIndexRoute
+  '/auth/desktop/': typeof AuthDesktopIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -259,7 +277,9 @@ export interface FileRouteTypes {
     | '/dashboard/settings'
     | '/api/auth/$'
     | '/api/v1/$'
+    | '/auth/desktop/done'
     | '/dashboard/'
+    | '/auth/desktop/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -283,7 +303,9 @@ export interface FileRouteTypes {
     | '/dashboard/settings'
     | '/api/auth/$'
     | '/api/v1/$'
+    | '/auth/desktop/done'
     | '/dashboard'
+    | '/auth/desktop'
   id:
     | '__root__'
     | '/'
@@ -309,7 +331,9 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard/settings'
     | '/api/auth/$'
     | '/api/v1/$'
+    | '/auth/desktop/done'
     | '/_authenticated/dashboard/'
+    | '/auth/desktop/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -457,12 +481,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/auth/desktop/': {
+      id: '/auth/desktop/'
+      path: '/desktop'
+      fullPath: '/auth/desktop/'
+      preLoaderRoute: typeof AuthDesktopIndexRouteImport
+      parentRoute: typeof AuthRoute
+    }
     '/_authenticated/dashboard/': {
       id: '/_authenticated/dashboard/'
       path: '/'
       fullPath: '/dashboard/'
       preLoaderRoute: typeof AuthenticatedDashboardIndexRouteImport
       parentRoute: typeof AuthenticatedDashboardRoute
+    }
+    '/auth/desktop/done': {
+      id: '/auth/desktop/done'
+      path: '/desktop/done'
+      fullPath: '/auth/desktop/done'
+      preLoaderRoute: typeof AuthDesktopDoneRouteImport
+      parentRoute: typeof AuthRoute
     }
     '/api/v1/$': {
       id: '/api/v1/$'
@@ -541,6 +579,8 @@ interface AuthRouteChildren {
   AuthLoginRoute: typeof AuthLoginRoute
   AuthResetPasswordRoute: typeof AuthResetPasswordRoute
   AuthSignupRoute: typeof AuthSignupRoute
+  AuthDesktopDoneRoute: typeof AuthDesktopDoneRoute
+  AuthDesktopIndexRoute: typeof AuthDesktopIndexRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
@@ -549,6 +589,8 @@ const AuthRouteChildren: AuthRouteChildren = {
   AuthLoginRoute: AuthLoginRoute,
   AuthResetPasswordRoute: AuthResetPasswordRoute,
   AuthSignupRoute: AuthSignupRoute,
+  AuthDesktopDoneRoute: AuthDesktopDoneRoute,
+  AuthDesktopIndexRoute: AuthDesktopIndexRoute,
 }
 
 const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)

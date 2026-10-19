@@ -9,6 +9,14 @@ files:
   - "!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}"
   - "!{.env,.env.*,.npmrc,pnpm-lock.yaml}"
   - "!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}"
+# The kaipu:// scheme the browser sign-in returns through. electron-builder writes it into the
+# macOS Info.plist (CFBundleURLTypes), the NSIS installer's registry entries and the Linux
+# desktop file. Dev builds do not get it (macOS only routes custom schemes to packaged apps);
+# they use the paste-code fallback.
+protocols:
+  - name: Kaipu
+    schemes:
+      - kaipu
 asarUnpack:
   - resources/**
   - "**/node_modules/uiohook-napi/**"

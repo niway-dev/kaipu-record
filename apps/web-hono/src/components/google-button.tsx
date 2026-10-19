@@ -3,6 +3,7 @@ import { Button } from "@kaipu/web-ui";
 import { useTranslations } from "@kaipu/i18n";
 import { SignupLegalNotice } from "@/components/legal/signup-legal-notice";
 import { authClient } from "@/lib/auth/auth-client";
+import { desktopAuthSearch, desktopDonePath, type DesktopAuthQuery } from "@/lib/desktop-auth";
 import { isGoogleAuthEnabled } from "@/lib/google-auth";
 import { resolvePostSignInPath } from "@/lib/post-sign-in";
 
@@ -36,6 +37,12 @@ export interface GoogleButtonProps {
   redirectTo?: string;
   /** Defaults to the VITE_GOOGLE_AUTH_ENABLED flag; tests pass it explicitly. */
   enabled?: boolean;
+  /**
+   * Desktop sign-in (NIW2-471): the app's query goes with the request, so the electron plugin keeps
+   * it across the Google round trip and mints the code on the callback, and both outcomes return
+   * to the desktop pages instead of the dashboard or /auth/login.
+   */
+  desktop?: DesktopAuthQuery;
 }
 
 /**
@@ -46,6 +53,7 @@ export function GoogleButton({
   mode,
   redirectTo,
   enabled = isGoogleAuthEnabled(),
+  desktop,
 }: GoogleButtonProps) {
   const t = useTranslations("auth");
   const [redirecting, setRedirecting] = useState(false);
@@ -53,13 +61,17 @@ export function GoogleButton({
 
   async function start() {
     setRedirecting(true);
-    const destination = resolvePostSignInPath({ redirect: redirectTo });
+    const destination = desktop
+      ? desktopDonePath(desktop)
+      : resolvePostSignInPath({ redirect: redirectTo });
     const result = await authClient.signIn.social({
       provider: "google",
       callbackURL: destination,
       newUserCallbackURL: destination,
-      // Better Auth appends `?error=<code>`; /auth/login maps it to copy.
-      errorCallbackURL: "/auth/login",
+      // Better Auth appends `?error=<code>` (`&error=` after the desktop query); both pages map it
+      // to copy.
+      errorCallbackURL: desktop ? `/auth/desktop${desktopAuthSearch(desktop)}` : "/auth/login",
+      fetchOptions: desktop ? { query: { ...desktop } } : undefined,
     });
     // On success the browser is already navigating to Google; only a failure comes back here.
     if (result?.error) setRedirecting(false);
