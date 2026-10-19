@@ -28,37 +28,46 @@ The legacy upload routes are removed outright (the read and delete routes stay b
 web `/recordings` page uses them). The cursor is validated by a zod schema at the contract and
 defensively in the repository.
 
-| #   | Decision                                                                                                                                                                                                                                             | Why                                                                                                                                                                                                                                                                                         | ADR  |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
-| 1   | `cancelUpload` and `deleteCloudCopy` defer the release/physical delete while the ticket window is open (`ticketExpiresAt + RESERVATION_GRACE_SECONDS`). The existing sweep and retry jobs settle them once it closes.                                | A presigned URL cannot be revoked; the only way to make a late write harmless is to keep the reservation (and the object, which makes `if-none-match: *` refuse the write) until the URL can no longer start a request. Applies an invariant already accepted in the cloud data model spec. | none |
-| 2   | One shared predicate, `ticketWindowClosed`, is the single definition of "the ticket can no longer write", used by cancel, delete, the retry job and (indirectly) the sweep.                                                                          | Two independent definitions of the window would drift; the sweep's `before = now - grace` and the predicate must agree or a revision could be released by one and still writable by the other's definition.                                                                                 | none |
-| 3   | A new `sweepOrphanObjects` use case reconciles storage against revisions per account; NIW2-328 schedules it. It is defence in depth, not the fix.                                                                                                    | Decision 1 closes the known path; a reconciliation pass is what catches any path not yet known (a crash between claim and delete, a future bug) and bounds the cost of a stray object to one sweep interval.                                                                                | none |
-| 4   | Remove the legacy upload routes (`createUpload`, `confirm`) and their use cases, schemas and tests. Keep `list`, `downloadUrl`, `delete` for the web page until cloud-01 Task 12 migrates it.                                                        | No client creates rows through the legacy flow; routing it through the v2 ticket path would mean maintaining two contracts for one capability. Task 12 already plans the remaining deletion, so the read/delete routes are not re-decided here.                                             | none |
-| 5   | Validate the cursor at the contract with `assetCursorSchema` (400 on anything but the shape the repository encodes) and keep the repository's `decodeCursor` defensive. Move encode/decode into the domain so there is one definition of the format. | Contract validation turns a malformed cursor into a client error instead of a 500 or a silent restart from page one; the repository check protects any future caller that bypasses the contract. One definition stops the schema and the encoder drifting.                                  | none |
-| 6   | Deferred cancels/deletes are observable through two new structured events, `cloud.cancel.deferred` and `cloud.delete.deferred`; the API response shape does not change.                                                                              | Operators need to see that a deferral happened and when it settles; no shipped client consumes `cancelUpload` yet, so widening the response buys nothing today.                                                                                                                             | none |
+| #   | Decision                                                                                                                                                                                                                                             | Why                                                                                                                                                                                                                                                                                                                                   | ADR  |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| 1   | `cancelUpload` and `deleteCloudCopy` defer the release/physical delete while the ticket window is open (`ticketExpiresAt + RESERVATION_GRACE_SECONDS`). The existing sweep and retry jobs settle them once it closes.                                | A presigned URL cannot be revoked; the only way to make a late write harmless is to keep the reservation (and the object, which makes `if-none-match: *` refuse the write) until the URL can no longer start a request. Applies an invariant already accepted in the cloud data model spec.                                           | none |
+| 2   | One shared predicate, `ticketWindowClosed`, is the single definition of "the ticket can no longer write", used by cancel, delete, the retry job and (indirectly) the sweep.                                                                          | Two independent definitions of the window would drift; the sweep's `before = now - grace` and the predicate must agree or a revision could be released by one and still writable by the other's definition.                                                                                                                           | none |
+| 3   | A new `sweepOrphanObjects` use case reconciles storage against revisions per account; NIW2-328 schedules it. It is defence in depth, not the fix.                                                                                                    | Decision 1 closes the known path; a reconciliation pass is what catches any path not yet known (a crash between claim and delete, a future bug) and bounds the cost of a stray object to one sweep interval.                                                                                                                          | none |
+| 4   | Remove the legacy upload routes (`createUpload`, `confirm`) and their use cases, schemas and tests. Keep `list`, `downloadUrl`, `delete` for the web page until cloud-01 Task 12 migrates it.                                                        | No client creates rows through the legacy flow; routing it through the v2 ticket path would mean maintaining two contracts for one capability. Task 12 already plans the remaining deletion, so the read/delete routes are not re-decided here.                                                                                       | none |
+| 5   | Validate the cursor at the contract with `assetCursorSchema` (400 on anything but the shape the repository encodes) and keep the repository's `decodeCursor` defensive. Move encode/decode into the domain so there is one definition of the format. | Contract validation turns a malformed cursor into a client error instead of a 500 or a silent restart from page one; the repository check protects any future caller that bypasses the contract. One definition stops the schema and the encoder drifting.                                                                            | none |
+| 6   | Deferred cancels/deletes are observable through two new structured events, `cloud.cancel.deferred` and `cloud.delete.deferred`; the API response shape does not change.                                                                              | Operators need to see that a deferral happened and when it settles; no shipped client consumes `cancelUpload` yet, so widening the response buys nothing today.                                                                                                                                                                       | none |
+| 7   | The window is re-checked inside the state transition: `release` takes `ticketExpiredBy` (`ticket_expires_at <= now - grace` in the same UPDATE) and `listDeleting` filters by it in the query.                                                       | Found in review of the WIP: cancel and the sweep read the revision, then release it in a second statement, and a resumed intent could extend the ticket in between, leaving a freshly signed ticket with nothing reserved. Filtering `listDeleting` in SQL stops open-window rows from filling every page and starving the retry job. | none |
 
 No ADR is created: each decision applies an invariant or a plan the docs already hold (cloud
 data model spec, cloud-01 plan Task 12), and none is cross-cutting or hard to reverse.
 
-**Open questions**
+**Open questions — decided by default, owner to confirm**
+
+The owner had not answered these when the branch was finished (2026-10-19). Each was settled with
+the spec's own recommendation, or the conservative option where it had none; the PR lists them
+under "Decisions taken by default".
 
 1. **Pending-slot lockout during the window.** A deferred cancel keeps the revision `reserved`,
    so it still counts toward `MAX_PENDING_UPLOADS_PER_ACCOUNT` (3) for up to 3 h 05 min
    (ticket TTL + grace). Three cancels in a row block a fourth upload until the sweep runs.
-   Accept this for the first release, or add a `cancelled` revision status that holds bytes but
-   not a pending slot (see F-1 alternatives)? `RESERVATION_GRACE_SECONDS` is still marked
-   "PROPOSAL — not approved" in `cloud-limits.ts:30`; approving a shorter grace changes the
-   size of this problem.
+   **Default: accepted for the first release.** Alternative: a `cancelled` revision status that
+   holds bytes but not a pending slot (see F-1 alternatives), as a follow-up ticket.
+   `RESERVATION_GRACE_SECONDS` is still marked "PROPOSAL — not approved" in `cloud-limits.ts`;
+   approving a shorter grace shrinks this problem.
 2. **Ship order with NIW2-328.** Until the scheduled handler exists, a deferred cancel never
-   releases and a deferred delete keeps counting as used. This branch is safe to merge first
-   (the rows simply wait), but it should not reach a production release without the cron.
-   Confirm the order: merge 323, merge 328, release once.
-3. **Orphan sweep ownership and legacy keys.** The ticket says the orphan-key sweep use case
-   belongs here and NIW2-328 schedules it. Confirm, and confirm that keys of the legacy
-   `recording` table (`videos/<userId>/<id>.<ext>`, same prefix as v2 keys) are treated as
-   backed, not orphaned, until Task 12 drops that table.
-4. **Legacy read/delete routes.** Remove them now (breaking the web `/recordings` page) or at
-   Task 12 as planned? This spec assumes Task 12.
+   releases and a deferred delete keeps counting as used. **Default: merge 323, merge 328, then
+   one API release.** As of 2026-10-19 `main` has no `scheduled` export and no `triggers.crons`,
+   and no NIW2-328 branch is pushed. Merging this branch first is safe: deferred rows wait, nothing
+   is released early and no quota leaks; the cost is held bytes and slots (question 1), which only
+   affects a client that cancels or deletes within minutes of an upload. No shipped client does
+   that today: the desktop app only lists assets (`catalog-client.ts`).
+3. **Orphan sweep ownership and legacy keys.** **Default: `sweepOrphanObjects` lives here and
+   NIW2-328 schedules it; legacy `recording` keys (`videos/<userId>/<id>.<ext>`) are skipped by
+   shape until Task 12 drops that table.**
+4. **Legacy read/delete routes.** **Default: keep them until Task 12.** The web dashboard
+   (`routes/_authenticated/dashboard/recordings.tsx` via `hooks/use-recordings.ts`) still calls
+   `recording.list`, `recording.downloadUrl` and `recording.delete`; the old `/recordings` path now
+   redirects there.
 
 **Out of scope**
 
@@ -171,11 +180,20 @@ is returned. The revision stays `deleting` and keeps counting as used. A ready r
 has an open window if it was confirmed within 5 minutes of its last ticket, so this branch is
 rare in practice.
 
-**retryPendingDeletes** (`retry-pending-deletes.ts:21`): skips `deleting` revisions whose
-window is still open; a later run finishes them. **sweepExpiredReservations** is unchanged:
-its listing boundary already is the window.
+**retryPendingDeletes** lists only `deleting` revisions whose window has closed
+(`listDeleting(limit, now - grace)`, filtered in SQL so open-window rows cannot fill every page)
+and re-checks the predicate per row. **sweepExpiredReservations** keeps its listing; its claim now
+passes the same cutoff to `release` so a ticket extended after the listing is not stranded.
 
-**Observability (remaining).** Add `cloud.cancel.deferred { userId, revisionId, settlesAt }`
+**Claim guard (added in review).** Cancel and the sweep read the revision and release it in a
+second statement. Between the two, a resumed intent (same `intentKey`) can extend the ticket and
+sign a fresh URL. Without a guard the release would then succeed and the fresh ticket would point
+at an empty key with nothing reserved: F-1 again, through a race the caller controls. `release`
+therefore accepts `ticketExpiredBy` and adds `ticket_expires_at <= ticketExpiredBy` to its UPDATE;
+`cancelUpload` reports a lost race on a still-`reserved` row as a deferral. The only unguarded
+release left is `createUploadIntent` handing back a reservation whose ticket was never signed.
+
+**Observability (done).** Add `cloud.cancel.deferred { userId, revisionId, settlesAt }`
 and `cloud.delete.deferred { userId, assetId, settlesAt }` to `CloudEvent`
 (`apps/server-hono/src/lib/events.ts:8-31`) and emit them from the router when the use case
 reports a deferral. The use-case return types stay as they are; the router can detect the
@@ -205,7 +223,7 @@ up to 3 h 05 min, and until NIW2-328 ships, for ever. The spec accepts the first
 rare, visible in `/me/storage`) and names the second as a release dependency, not a code
 dependency.
 
-### F-1, defence in depth: `sweepOrphanObjects` (remaining)
+### F-1, defence in depth: `sweepOrphanObjects` (done; scheduled by NIW2-328)
 
 New use case in `packages/application/src/cloud/sweep-orphan-objects.ts`:
 
@@ -254,7 +272,7 @@ shipped client yet, so for a while no client can upload at all. Accepted: an unu
 path with no quota is worse than no path, and the v2 path is tested at the application and
 repository layers.
 
-**Remaining:** mark `createUploadUrl` and `objectExists` as having no production caller (the
+**Done:** mark `createUploadUrl` and `objectExists` as having no production caller (the
 R2 implementation stays until Task 12, since the port still declares them), and update
 `backlog/cloud-recordings-upload.md` to state that the upload routes were removed on
 2026-10-12 and the page lists historical rows only.
@@ -267,7 +285,7 @@ value that yields a valid `Date`), used by the contract
 (`apps/server-hono/src/contract/cloud.contract.ts:47`); `decodeCursor` in the repository also
 rejects an invalid `Date` and a non-uuid id (`cloud-asset.repository.ts:99-108`).
 
-**Remaining:** move `encodeAssetCursor`/`decodeAssetCursor` next to the schema in the domain and
+**Done:** move `encodeAssetCursor`/`decodeAssetCursor` next to the schema in the domain and
 have the repository and the schema's refine use them, so the domain test stops re-implementing
 the encoding with `btoa` and a change to the format cannot pass the schema test while breaking
 the repository (or the reverse).
@@ -368,48 +386,44 @@ objects directly (`cloudContract.list` input schema, absence of `recordingContra
 
 ## Implementation status
 
-Branch `feature/niw2-323-close-api-upload-abuse-paths` = `origin/main` (`400c80e`) +
-`f34df72` "chore(api): save unverified partial work for NIW2-323". That commit's message says
-`bun run verify` was not run; it was run on 2026-10-12 in a clean worktree at `f34df72` and
-exited 0 (build, types, lint, format, all unit suites). The code is therefore verified as
-green; "unverified" in the commit message is stale.
+Branch `feature/niw2-323-close-api-upload-abuse-paths`, refreshed on 2026-10-19 by merging
+`origin/main` (`b501231`, after Better Auth 1.7, Google sign-in and desktop browser sign-in). The
+merge had no conflicts. `CI=true bun run verify` exits 0 on the finished branch.
 
-**Done in `f34df72`**
+**Done**
 
-- F-1: `ticket-window.ts` (new); deferral in `cancel-upload.ts:36-38`, `delete-cloud-copy.ts:29-31`,
-  `retry-pending-deletes.ts:21`; `now?: Date` added to those three use cases; three unit tests
-  (`cloud.test.ts:657-754`).
-- F-2: `createUpload`/`confirm` removed from `recording.contract.ts` and `recording.router.ts`;
-  `create-recording-upload.ts`, `confirm-recording.ts` deleted; `recordings/index.ts` barrel,
-  `recordings.test.ts` (now seeds ready rows directly), `schemas/recording.ts` (upload schema,
-  cap, two errors removed) and `schemas/index.ts` updated; `recording.test.ts` trimmed.
-- F-9: `assetCursorSchema` + test in the domain; contract uses it; `decodeCursor` hardened.
+- F-1 deferral (WIP `f34df72`, reviewed): `ticket-window.ts`, deferral in `cancelUpload`,
+  `deleteCloudCopy`, `retryPendingDeletes`.
+- F-1 review fixes: `release(…, { ticketExpiredBy })` closes the extend-between-read-and-release
+  race in cancel and the sweep (decision 7); `listDeleting(limit, ticketExpiredBy)` filters in SQL
+  so deferred deletes cannot starve the retry job; `ticketWindowCutoff`/`ticketWindowClosesAt`
+  make every caller derive its boundary from one place.
+- Task 1: pre-existing tests pass an explicit post-window `now`; boundary test (closed exactly at
+  expiry + grace, the sweep one tick later); "deferred then resumed and confirmed"; "sweep before
+  the window closes"; both race cases; retry starvation.
+- Task 2: `CancelUploadResult` (`reason: "not-reserved" | "deferred"`, `settlesAt`) and
+  `DeleteCloudCopyResult.deferredUntil`, internal to the application layer;
+  `cloud.cancel.deferred` and `cloud.delete.deferred` emitted from `cloud.router.ts`; the contract
+  still answers `{ released }` / `{ deleted }`.
+- Task 3: `encodeAssetCursor`/`decodeAssetCursor` in the domain next to `assetCursorSchema`; the
+  schema accepts exactly what the decoder accepts; the repository uses both; round-trip test and a
+  test that the encoder matches the old `Buffer` base64url output (cursors already issued stay valid).
+- Task 4: `findRevisionsByStorageKeys` on the port, in Drizzle and in the fake; integration test
+  written (needs `TEST_DATABASE_URL`, run by a person — not run by the agent).
+- Task 5: `sweepOrphanObjects` with fake-storage `afterList` hook, unit tests (no revision, live
+  statuses, expired inside/after window, legacy keys, listing-then-lookup ordering, idempotence and
+  `accountLimit`), exported from `@kaipu/application`; `cloud.sweep.orphans` event type.
+- Task 6: `backlog/cloud-recordings-upload.md` and `backlog/cloud-data-lifecycle.md` updated.
+- Task 7: `apps/server-hono/src/contract/upload-abuse.contract.test.ts` mounts the real contracts
+  behind stub handlers in an `OpenAPIHandler`: `POST /recordings` and `POST /recordings/{id}/confirm`
+  are 404, a bad cursor is 400 before any handler runs, a well-formed one is 200.
+- Task 8: open questions settled by default (above); the owner confirms in the PR.
 
-**Remaining, in order (each a resumable task with its own commit)**
+**Not done here**
 
-1. Pass an explicit post-window `now` in the pre-existing cancel test (`cloud.test.ts:579-612`);
-   add the boundary test for `ticketWindowClosed` and the "deferred then confirmed" and
-   "sweep before window" cases. Pin the boundary: the sweep lists `ticketExpiresAt < now - grace`
-   (strict) while the predicate is `ticketExpiresAt + grace <= now`, so at the exact instant
-   the predicate says closed and the sweep does not list yet; one millisecond later both agree.
-   That is safe (neither side releases before the window), and the test should document it
-   rather than change it.
-2. Internal deferral reason in the use cases; `cloud.cancel.deferred` / `cloud.delete.deferred`
-   events emitted from `cloud.router.ts`; router passes no `now` (default `new Date()` stays).
-3. Move cursor encode/decode into the domain next to `assetCursorSchema`; repository and schema
-   use the shared functions; round-trip test.
-4. `findRevisionsByStorageKeys` on `ICloudAssetRepository` + Drizzle implementation + integration
-   test (run by a person).
-5. `sweepOrphanObjects` use case, fakes support for "object inserted after listing", unit tests,
-   export from `@kaipu/application`, `cloud.sweep.orphans` event type. Coordinate the call site
-   with NIW2-328.
-6. Docs: update `backlog/cloud-recordings-upload.md` (upload routes removed, page is read-only
-   over historical rows); add a line to `backlog/cloud-data-lifecycle.md` pointing at this spec
-   for the deferral rule.
-7. Contract-level test for the 400 cursor and the 404 legacy routes (choice of stubbing in the
-   test plan).
-8. Resolve open questions 1 to 4 with the owner; if question 1 chooses the `cancelled` status,
-   it becomes a follow-up ticket, not part of this one.
+- Scheduling `sweepExpiredReservations`, `retryPendingDeletes` and `sweepOrphanObjects`: NIW2-328.
+  Until it ships, deferred cancels and deletes do not settle (see question 2).
+- Running the new repository integration tests against a database.
 
 ## References
 
