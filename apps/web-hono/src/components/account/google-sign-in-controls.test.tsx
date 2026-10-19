@@ -72,7 +72,7 @@ describe("GoogleSignInControls — disconnect", () => {
     renderSection();
     fireEvent.click(await screen.findByRole("button", { name: "Disconnect Google" }));
     expect(await screen.findByText("Google disconnected")).toBeTruthy();
-    expect(auth.unlinkAccount).toHaveBeenCalledWith({ providerId: "google" });
+    expect(auth.unlinkAccount).toHaveBeenCalledWith({ accountId: ACCOUNT_GOOGLE.id });
     await waitFor(() => expect(auth.listAccounts).toHaveBeenCalledTimes(2));
   });
 
@@ -92,7 +92,7 @@ describe("GoogleSignInControls — disconnect", () => {
     auth.listAccounts.mockResolvedValue(accounts(ACCOUNT_PASSWORD, ACCOUNT_GOOGLE));
     auth.unlinkAccount.mockResolvedValue({
       data: null,
-      error: { code: "YOU_CANT_UNLINK_YOUR_LAST_ACCOUNT", status: 400 },
+      error: { code: "FAILED_TO_UNLINK_LAST_ACCOUNT", status: 400 },
     });
     renderSection();
     fireEvent.click(await screen.findByRole("button", { name: "Disconnect Google" }));
@@ -104,7 +104,10 @@ describe("GoogleSignInControls — disconnect", () => {
 
   it("asks to sign in again when the session is not fresh", async () => {
     auth.listAccounts.mockResolvedValue(accounts(ACCOUNT_PASSWORD, ACCOUNT_GOOGLE));
-    auth.unlinkAccount.mockResolvedValue({ data: null, error: { status: 403 } });
+    auth.unlinkAccount.mockResolvedValue({
+      data: null,
+      error: { code: "SESSION_NOT_FRESH", status: 403 },
+    });
     renderSection();
     fireEvent.click(await screen.findByRole("button", { name: "Disconnect Google" }));
     expect(

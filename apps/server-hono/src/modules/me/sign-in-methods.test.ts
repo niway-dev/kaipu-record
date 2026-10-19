@@ -15,9 +15,12 @@ describe("setPasswordForSession", () => {
   });
 
   it("answers 409 when the account already has a password", async () => {
-    const setPassword = vi
-      .fn()
-      .mockRejectedValue(new APIError("BAD_REQUEST", { message: "user already has a password" }));
+    const setPassword = vi.fn().mockRejectedValue(
+      new APIError("BAD_REQUEST", {
+        message: "User already has a password set",
+        code: "PASSWORD_ALREADY_SET",
+      }),
+    );
     const err = await setPasswordForSession({ setPassword }, headers, "x".repeat(8)).catch(
       (e: unknown) => e,
     );
@@ -54,27 +57,19 @@ describe("setPasswordForSession", () => {
 
 describe("takeNoticesFor", () => {
   it("reports and clears a pending credential-dropped notice", async () => {
-    const store = {
-      findVerificationValue: vi.fn().mockResolvedValue({ id: "ver-1" }),
-      deleteVerificationValue: vi.fn().mockResolvedValue(undefined),
-    };
+    const store = { consumeVerificationValue: vi.fn().mockResolvedValue({ id: "ver-1" }) };
     await expect(takeNoticesFor(store, "user-1")).resolves.toEqual({
       data: { credentialDropped: true },
       error: null,
     });
-    expect(store.findVerificationValue).toHaveBeenCalledWith("notice:credential-dropped:user-1");
-    expect(store.deleteVerificationValue).toHaveBeenCalledWith("ver-1");
+    expect(store.consumeVerificationValue).toHaveBeenCalledWith("notice:credential-dropped:user-1");
   });
 
   it("reports nothing when there is no notice", async () => {
-    const store = {
-      findVerificationValue: vi.fn().mockResolvedValue(undefined),
-      deleteVerificationValue: vi.fn(),
-    };
+    const store = { consumeVerificationValue: vi.fn().mockResolvedValue(null) };
     await expect(takeNoticesFor(store, "user-1")).resolves.toEqual({
       data: { credentialDropped: false },
       error: null,
     });
-    expect(store.deleteVerificationValue).not.toHaveBeenCalled();
   });
 });

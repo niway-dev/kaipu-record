@@ -16,7 +16,9 @@ describe("isGoogleAuthEnabled", () => {
 describe("oauthErrorKey", () => {
   it.each([
     ["account_not_linked", "oauthErrorNotLinked"],
+    ["email_does_not_match", "oauthErrorEmailMismatch"],
     ["email_doesn't_match", "oauthErrorEmailMismatch"],
+    ["state_security_mismatch", "oauthErrorExpired"],
     ["account_already_linked_to_different_user", "oauthErrorAlreadyLinked"],
     ["unable_to_link_account", "oauthErrorUnableToLink"],
     ["access_denied", "oauthErrorCancelled"],

@@ -1,5 +1,5 @@
 /**
- * End-to-end linking flows through a REAL Better Auth 1.4.18 instance, in process: the in-memory
+ * End-to-end linking flows through a REAL Better Auth 1.7.11 instance, in process: the in-memory
  * adapter instead of Postgres, and a fake Google token endpoint instead of Google. Nothing here
  * reaches a database, Google, Infisical or a deployed API.
  *
@@ -134,6 +134,9 @@ async function passwordSignInStatus(auth: Auth, email: string, password = PASSWO
 const userByEmail = (db: Db, email: string) => db.user.find((u) => u.email === email)!;
 const accountsOf = (db: Db, userId: string) =>
   db.account.filter((a) => a.userId === userId).map((a) => a.providerId);
+/** Better Auth's own account id (what `unlinkAccount` takes since 1.7), not the provider's. */
+const googleAccountIdOf = (db: Db, userId: string) =>
+  db.account.find((a) => a.userId === userId && a.providerId === "google")!.id;
 const sessionsOf = (db: Db, userId: string) => db.session.filter((s) => s.userId === userId);
 
 let logs: string[];
@@ -318,7 +321,8 @@ describe("Continue with Google — implicit sign-in", () => {
     const res = await call(auth, cookieJar(), "/sign-in/social", {
       body: { provider: "google", idToken: { token: fakeIdToken({ sub: "x" }) } },
     });
-    expect(res.status).toBe(401);
+    // 1.7 answers 404 (no id-token sign-in for this provider); 1.4 answered 401. Closed either way.
+    expect(res.status).toBe(404);
   });
 });
 
@@ -395,19 +399,20 @@ describe("Sign-in methods — manual link, unlink, set password", () => {
       path: "/sign-in/social",
       body: { callbackURL: "/dashboard" },
     });
+    const onlyUser = userByEmail(db, "only@example.com");
     const refused = await call(auth, googleJar, "/unlink-account", {
-      body: { providerId: "google" },
+      body: { accountId: googleAccountIdOf(db, onlyUser.id) },
     });
     expect(refused.status).toBe(400);
-    expect(((await refused.json()) as { code: string }).code).toBe(
-      "YOU_CANT_UNLINK_YOUR_LAST_ACCOUNT",
-    );
+    expect(((await refused.json()) as { code: string }).code).toBe("FAILED_TO_UNLINK_LAST_ACCOUNT");
 
     const email = "both@example.com";
     const jar = await signedIn(auth, db, email, true);
     nextGoogle = { sub: "g-both", email, email_verified: true, name: "Both" };
     await googleRoundTrip(auth, jar, { path: "/link-social", body: { callbackURL: "/x" } });
-    const ok = await call(auth, jar, "/unlink-account", { body: { providerId: "google" } });
+    const ok = await call(auth, jar, "/unlink-account", {
+      body: { accountId: googleAccountIdOf(db, userByEmail(db, email).id) },
+    });
     expect(ok.status).toBe(200);
     expect(accountsOf(db, userByEmail(db, email).id)).toEqual(["credential"]);
   });
@@ -431,6 +436,6 @@ describe("Sign-in methods — manual link, unlink, set password", () => {
     expect(await passwordSignInStatus(auth, email, "fresh-password-1")).toBe(200);
     await expect(
       auth.api.setPassword({ body: { newPassword: "another-password-1" }, headers }),
-    ).rejects.toMatchObject({ body: { message: "user already has a password" } });
+    ).rejects.toMatchObject({ body: { code: "PASSWORD_ALREADY_SET" } });
   });
 });
