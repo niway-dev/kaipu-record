@@ -3,7 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 import { Cloud, Info, Lock, Pause, RefreshCw, TriangleAlert } from "lucide-react";
 import { useFormatter, useLocale, useTranslations, type Translator } from "@kaipu/i18n";
 import { barSegments, isAlmostFull, isOverQuota, type CapacityView } from "@kaipu/domain/capacity";
-import { MAX_VIDEO_BYTES } from "@kaipu/domain/constants";
+import { MAX_VIDEO_BYTES, PLANS } from "@kaipu/domain/constants";
 import type { Entitlements } from "@kaipu/domain/schemas";
 import { useAccountStorage } from "@/hooks/use-account-storage";
 import { formatBytesForLocale } from "@/lib/format-bytes";
@@ -134,7 +134,7 @@ export function PlanLine({
   const t = useTranslations("account");
   const ts = useTranslations("storageCloud");
   const format = useFormatter();
-  const planName = plan.plan === "pro" ? ts("planPro") : ts("planFree");
+  const planName = ts(PLANS[plan.plan].nameKey);
   const until = plan.currentPeriodEnd
     ? ` · ${t("planUntil", {
         date: format.dateTime(new Date(plan.currentPeriodEnd), { dateStyle: "medium" }),

@@ -3,6 +3,8 @@ import { MAX_SCREENSHOT_BYTES, MAX_VIDEO_BYTES } from "../constants/cloud-limits
 import {
   accountPrefixes,
   assetCursorSchema,
+  decodeAssetCursor,
+  encodeAssetCursor,
   buildRevisionStorageKey,
   buildThumbnailStorageKey,
   computeMissingBytes,
@@ -152,21 +154,37 @@ describe("pure rules", () => {
   });
 });
 
-describe("assetCursorSchema", () => {
+describe("asset cursor", () => {
+  // Raw base64url of arbitrary text: what a client could craft by hand.
   const encode = (raw: string) =>
     btoa(raw).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   const id = "0b6f8d3e-5c1a-4d7e-9a2b-3c4d5e6f7a8b";
+  const createdAt = new Date("2026-10-12T08:00:00.123Z");
 
-  it("accepts a cursor shaped like the repository encodes it", () => {
-    expect(assetCursorSchema.safeParse(encode(`1760000000000:${id}`)).success).toBe(true);
+  it("round-trips through the shared encoder, and the schema accepts what the encoder produces", () => {
+    const cursor = encodeAssetCursor(createdAt, id);
+    expect(decodeAssetCursor(cursor)).toEqual({ createdAt, assetId: id });
+    expect(assetCursorSchema.safeParse(cursor).success).toBe(true);
   });
 
-  it("rejects malformed, out-of-range and non-uuid cursors", () => {
-    expect(assetCursorSchema.safeParse("not a cursor!").success).toBe(false);
-    expect(assetCursorSchema.safeParse(encode("garbage")).success).toBe(false);
-    expect(assetCursorSchema.safeParse(encode(`abc:${id}`)).success).toBe(false);
-    expect(assetCursorSchema.safeParse(encode(`99999999999999999999:${id}`)).success).toBe(false);
-    expect(assetCursorSchema.safeParse(encode("1760000000000:not-a-uuid")).success).toBe(false);
-    expect(assetCursorSchema.safeParse("A".repeat(300)).success).toBe(false);
+  it("produces the same string the repository issued before the move (Buffer base64url)", () => {
+    // Cursors handed out by an older deploy must still decode after this one.
+    const legacy = Buffer.from(`${createdAt.getTime()}:${id}`).toString("base64url");
+    expect(encodeAssetCursor(createdAt, id)).toBe(legacy);
+  });
+
+  it("rejects malformed, out-of-range and non-uuid cursors in both the schema and the decoder", () => {
+    for (const bad of [
+      "not a cursor!",
+      encode("garbage"),
+      encode(`abc:${id}`),
+      encode(`99999999999999999999:${id}`),
+      encode("1760000000000:not-a-uuid"),
+      encode(`1760000000000:${id}' or 1=1 --`),
+      "A".repeat(300),
+    ]) {
+      expect(assetCursorSchema.safeParse(bad).success, bad).toBe(false);
+      expect(decodeAssetCursor(bad), bad).toBeNull();
+    }
   });
 });

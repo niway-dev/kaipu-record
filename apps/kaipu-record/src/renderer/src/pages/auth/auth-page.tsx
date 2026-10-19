@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import * as stylex from "@stylexjs/stylex";
+import { planCopyValues } from "@kaipu/domain/constants";
 import { useTranslations } from "@kaipu/i18n";
 import { KaipuLogo } from "@kaipu/brand";
 import { Button, Input } from "@kaipu/ui";
@@ -113,7 +114,7 @@ export function AuthPage(): React.JSX.Element {
           <h1 className={styles.title}>{t(waiting ? "waitingTitle" : "browserTitle")}</h1>
           <p className={styles.subtitle}>{t(waiting ? "waitingSubtitle" : "browserSubtitle")}</p>
           <p className={styles.cloudTerms}>
-            <strong>{t("cloudPromotion")}</strong> {t("cloudPromotionNote")}{" "}
+            <strong>{t("cloudPromotion", planCopyValues())}</strong> {t("cloudPromotionNote")}{" "}
             <a
               href={`${LEGAL_WEB_URL}/legal/cloud-terms`}
               target="_blank"

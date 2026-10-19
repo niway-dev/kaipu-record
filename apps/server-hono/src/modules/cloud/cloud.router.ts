@@ -102,15 +102,25 @@ export const cloudRouter = impl.router({
   }),
 
   cancelUpload: impl.cancelUpload.use(authMiddleware).handler(async ({ input, context }) => {
-    const data = await cancelUpload({
+    const userId = context.user.id;
+    const result = await cancelUpload({
       assets,
       storage: getStorage(),
-      userId: context.user.id,
+      userId,
       assetId: input.assetId,
       revisionId: input.revisionId,
     });
-    if (!data) return notFound();
-    return { data, error: null };
+    if (!result) return notFound();
+    if (!result.released && result.reason === "deferred") {
+      logEvent({
+        name: "cloud.cancel.deferred",
+        userId,
+        revisionId: input.revisionId,
+        settlesAt: result.settlesAt.toISOString(),
+      });
+    }
+    // The contract answers `released` only; a deferral reads as `released: false` (spec decision 6).
+    return { data: { released: result.released }, error: null };
   }),
 
   list: impl.list.use(authMiddleware).handler(async ({ input, context }) => {
@@ -150,6 +160,14 @@ export const cloudRouter = impl.router({
         assetId: input.assetId,
       });
       if (!data) return notFound();
+      if (data.deferredUntil) {
+        logEvent({
+          name: "cloud.delete.deferred",
+          userId,
+          assetId: input.assetId,
+          settlesAt: data.deferredUntil.toISOString(),
+        });
+      }
       logEvent({ name: "cloud.delete.ok", userId, assetId: input.assetId });
       return { data: { deleted: data.deleted }, error: null };
     } catch (err) {

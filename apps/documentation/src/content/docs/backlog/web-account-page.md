@@ -62,6 +62,7 @@ Mocks only; nothing here touches a database, R2 bucket, secret store or deployed
 
 - Wire the HTTP deletion client to PR #268 once merged; check the POST/GET response shapes and that
   Restore works from the post-request session (the request revokes every session).
-- NIW2-232 (plan table in `@kaipu/domain`) is not on `main`: the page shows the server's capacity and
-  plan name and hard-codes no sizes.
+- Since NIW2-232 the page takes the plan's display name from the plan table in `@kaipu/domain`
+  (`PLANS[plan].nameKey`) and the capacity from the server; it hard-codes no sizes. See
+  [Plans](/features/plans/).
 - Google connect/disconnect and "set a password" (NIW2-219) plug into `SignInMethodsSection`'s slot.

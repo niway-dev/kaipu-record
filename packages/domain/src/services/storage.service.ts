@@ -40,13 +40,19 @@ export interface ObjectMetadata {
 }
 
 export interface IStorageService {
-  /** @deprecated removed in Task 12 — use `createUploadTicket`. */
+  /**
+   * @deprecated No production caller since NIW2-323 removed the legacy upload routes; the port
+   * and the R2 implementation are deleted in cloud-01 Task 12. Use `createUploadTicket`.
+   */
   createUploadUrl(key: string, options?: CreateUploadUrlOptions): Promise<string>;
   /** Presigned PUT bound to key + length + type + sha256 + no-overwrite. */
   createUploadTicket(key: string, request: UploadTicketRequest): Promise<UploadTicket>;
   /** A presigned GET URL to download the object. */
   createDownloadUrl(key: string, options?: CreateDownloadUrlOptions): Promise<string>;
-  /** @deprecated removed in Task 12 — use `headObject`. */
+  /**
+   * @deprecated No production caller since NIW2-323 removed the legacy confirm route; deleted in
+   * cloud-01 Task 12. Use `headObject`.
+   */
   objectExists(key: string): Promise<boolean>;
   /** Metadata of the stored object, or null when it does not exist. */
   headObject(key: string): Promise<ObjectMetadata | null>;

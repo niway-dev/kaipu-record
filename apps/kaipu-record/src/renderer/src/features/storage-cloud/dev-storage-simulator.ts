@@ -79,11 +79,12 @@ export function useStorageSimulator(): StorageSimulator {
   );
 }
 
-const GB = 1_000_000_000;
 const MB = 1_000_000;
 
 function usage(overrides: Partial<StorageUsage> = {}): StorageUsage {
-  const base = { capacityBytes: GB, usedBytes: 610 * MB, reservedBytes: 130 * MB };
+  // A Free account: the plan's capacity, not a made-up number.
+  const capacityBytes = FREE_ENTITLEMENTS.features.cloudStorageBytes;
+  const base = { capacityBytes, usedBytes: 150 * MB, reservedBytes: 30 * MB };
   const merged = { ...base, ...overrides };
   return {
     pendingUploads: 1,
@@ -127,7 +128,7 @@ export function simulatedStorageResult(
     case "near-full":
       return {
         kind: "ok",
-        usage: usage({ usedBytes: 860 * MB, reservedBytes: 60 * MB }),
+        usage: usage({ usedBytes: 215 * MB, reservedBytes: 15 * MB }),
         fetchedAt: now,
       };
     case "stale":

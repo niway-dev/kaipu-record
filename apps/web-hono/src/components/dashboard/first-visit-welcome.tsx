@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { PLANS } from "@kaipu/domain/constants";
 import { useLocale, useTranslations } from "@kaipu/i18n";
 import * as stylex from "@stylexjs/stylex";
 import { KaipuLogo } from "@kaipu/brand";
@@ -47,7 +48,7 @@ export function FirstVisitWelcome({
   const planLine =
     storage.view.kind === "usage" && storage.plan
       ? t("firstVisitPlan", {
-          plan: storage.plan.plan === "pro" ? ts("planPro") : ts("planFree"),
+          plan: ts(PLANS[storage.plan.plan].nameKey),
           capacity: formatBytesForLocale(storage.view.usage.capacityBytes, locale),
         })
       : null;

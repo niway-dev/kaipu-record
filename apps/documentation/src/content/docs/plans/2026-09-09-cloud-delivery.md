@@ -3,6 +3,8 @@ title: Plan — optional cloud and share links
 description: Phased implementation with quota, security, editing, and design gates.
 ---
 
+> **Historical plan numbers.** Capacities in this document are as of its date. Current values: [Plans — Free and Pro](/features/plans/).
+
 # Implementation plan
 
 Date: 2026-09-09. Status: proposed plan, without application changes or deployment. Contracts: [product](/specs/2026-09-09-cloud-product/), [data](/specs/2026-09-09-cloud-data-model/), [design](/specs/2026-09-09-cloud-design-handoff/).

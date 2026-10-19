@@ -20,6 +20,8 @@ description: Status tracker for the plan/entitlements vertical (free/pro, waterm
 
 ## Where the detail lives
 
+What each plan includes (capacity, limits): **[Plans — Free and Pro](/features/plans)**.
+
 This page tracks status only. The design and the operational detail were split out into
 their permanent homes, following the project's own convention of keeping an ADR separate
 from the operational document once a decision is made:

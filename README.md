@@ -169,7 +169,7 @@ The full reference — every command, per-app scripts, and how to make an accoun
 
 ### Plans (premium)
 
-- `bun run plan show|grant|revoke <email>` -- Inspect, grant or revoke account entitlements; local watermark behavior is no longer plan-gated on this branch
+- `bun run plan show|grant|revoke <email>` -- Inspect, grant or revoke account entitlements; what each plan includes is documented on the docs site's Plans page (`features/plans`)
 
 ### Code Quality
 
