@@ -30,6 +30,11 @@ export type CloudEvent =
     }
   | { name: "cloud.sweep.failed"; error: string };
 
-export function logEvent(event: CloudEvent): void {
+/** Sign-in method linking (NIW2-219). */
+export type AuthEvent =
+  | { name: "auth.link.unverified_credential_dropped"; userId: string }
+  | { name: "auth.link.email_verified_by_google"; userId: string };
+
+export function logEvent(event: CloudEvent | AuthEvent): void {
   console.log(JSON.stringify({ ts: new Date().toISOString(), ...event }));
 }

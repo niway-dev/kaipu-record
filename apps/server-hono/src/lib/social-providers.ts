@@ -8,7 +8,12 @@ export interface SocialProviderEnv {
 }
 
 export type SocialProviders = {
-  google?: { clientId: string; clientSecret: string; prompt: "select_account" };
+  google?: {
+    clientId: string;
+    clientSecret: string;
+    prompt: "select_account";
+    disableIdTokenSignIn: true;
+  };
 };
 
 /** Pure: returns `{}` unless both Google values are non-empty. */
@@ -20,6 +25,10 @@ export function buildSocialProviders(env: SocialProviderEnv): SocialProviders {
       clientSecret: env.GOOGLE_CLIENT_SECRET,
       // People with work and personal Google accounts should pick one consciously.
       prompt: "select_account",
+      // Kaipu only uses the redirect flow. Turning off the id-token paths (POST /sign-in/social
+      // and /link-social with `idToken`) removes two more ways into implicit linking that the
+      // web app never uses. See account-linking.ts.
+      disableIdTokenSignIn: true,
     },
   };
 }
