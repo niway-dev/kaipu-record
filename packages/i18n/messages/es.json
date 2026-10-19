@@ -424,7 +424,8 @@
     "oauthErrorUnableToLink": "No pudimos conectar tu cuenta de Google. Inténtalo de nuevo.",
     "oauthErrorCancelled": "Cancelaste el inicio de sesión con Google. Puedes intentarlo de nuevo o usar tu correo y contraseña.",
     "oauthErrorExpired": "El inicio de sesión con Google se interrumpió o tardó demasiado. Inténtalo de nuevo.",
-    "oauthErrorGeneric": "El inicio de sesión con Google no funcionó. Inténtalo de nuevo o usa tu correo y contraseña."
+    "oauthErrorGeneric": "El inicio de sesión con Google no funcionó. Inténtalo de nuevo o usa tu correo y contraseña.",
+    "googleUnavailable": "El inicio de sesión con Google no está disponible ahora. Usa tu correo y contraseña."
   },
   "recordings": {
     "title": "Grabaciones",

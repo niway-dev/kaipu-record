@@ -66,7 +66,7 @@ to the done page instead of the `redirect` param or the dashboard.
 The electron proxy client (`lib/auth/desktop-auth-client.ts`) is imported only by the desktop pages,
 so it ships in its own chunk; the public pages and the regular auth client never load it.
 
-**Google:** the NIW2-219 button (behind `VITE_GOOGLE_AUTH_ENABLED`) is reused. On the desktop pages
+**Google:** the NIW2-219 button (always shown) is reused. On the desktop pages
 it sends `fetchOptions: { query }`, `callbackURL: /auth/desktop/done?<query>` and
 `errorCallbackURL: /auth/desktop?<query>`. The plugin keeps the query across the OAuth round trip in
 a signed `transfer_token` cookie and mints the code on `/callback/google`, and the callback is still

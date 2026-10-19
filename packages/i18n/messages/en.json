@@ -424,7 +424,8 @@
     "oauthErrorUnableToLink": "We couldn't connect your Google account. Try again.",
     "oauthErrorCancelled": "Google sign-in was cancelled. You can try again or use your email and password.",
     "oauthErrorExpired": "The Google sign-in was interrupted or took too long. Try again.",
-    "oauthErrorGeneric": "Google sign-in didn't work. Try again, or use your email and password."
+    "oauthErrorGeneric": "Google sign-in didn't work. Try again, or use your email and password.",
+    "googleUnavailable": "Google sign-in isn't available right now. Use your email and password."
   },
   "recordings": {
     "title": "Recordings",
