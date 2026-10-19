@@ -2,18 +2,17 @@ import { app, BrowserWindow, ipcMain, safeStorage } from "electron";
 import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { FREE_ENTITLEMENTS, type Entitlements } from "@shared/entitlements";
-import type { AuthCredentials, AuthError, AuthStatus, SignUpInput } from "@shared/types/auth";
+import type { AuthError, AuthStatus, BrowserSignInIntent } from "@shared/types/auth";
 import type { AuthAttemptResult } from "@shared/types/electron-api";
 import { IPC_CHANNELS } from "@shared/types/ipc";
 import {
   getEntitlements,
   getSession,
   resendVerificationEmail,
-  signInWithPassword,
   signOutRemote,
-  signUpWithPassword,
   type AuthClientConfig,
 } from "../services/auth-client";
+import type { BrowserSignInClient } from "../services/browser-sign-in";
 
 function tokenFilePath(): string {
   return join(app.getPath("userData"), "auth.enc");
@@ -45,6 +44,18 @@ export interface AuthHandle {
   getCurrentAccount(): { userId: string; token: string } | null;
   /** Fires with the new userId on sign-in and null on sign-out / confirmed-invalid token. */
   onAccountChanged(listener: (userId: string | null) => void): () => void;
+  /** Finish a browser sign-in with the code from a `kaipu://auth/callback` link. Failures are
+   *  also reported to the renderer, since nobody is awaiting this call's result on screen. */
+  completeBrowserSignIn(code: string): Promise<AuthAttemptResult>;
+}
+
+export interface AuthStoreDeps {
+  /** The browser hand-off. Absent when the web address is not configured: starting a sign-in
+   *  then reports `not-configured` instead of the app refusing to start. */
+  browser?: BrowserSignInClient;
+  /** Deliver a main to renderer message, queued until the renderer is listening. Defaults to a
+   *  plain broadcast to every window. */
+  sendToRenderer?: (channel: string, payload?: unknown) => void;
 }
 
 function readStoredSession(): StoredSession | null {
@@ -104,6 +115,7 @@ function toAuthError(err: unknown): AuthError {
 export function registerAuth(
   config: AuthClientConfig,
   getMainWindow: () => BrowserWindow | null,
+  deps: AuthStoreDeps = {},
 ): AuthHandle {
   const stored = readStoredSession();
   let token: string | null = stored?.token ?? null;
@@ -190,7 +202,7 @@ export function registerAuth(
     }
   });
 
-  // Shared by sign-in and sign-up: persist FIRST, only update in-memory state if that succeeds.
+  // Used by the browser sign-in: persist FIRST, only update in-memory state if that succeeds.
   // Setting `token`/`cachedIdentity` before a possible `writeStoredSession` failure would leave this
   // running process's in-memory state "signed in" even though nothing was saved and the call
   // rejected to the renderer — an inconsistent state a later authGetStatus in the same session
@@ -228,34 +240,73 @@ export function registerAuth(
     return status;
   }
 
-  // Both handlers RETURN their failure instead of throwing it: Electron serializes anything
-  // thrown out of `ipcMain.handle` down to its `.message`, which would strip the structured
-  // `kind` the renderer needs to pick the right error copy. `requireMainWindow` deliberately
-  // still throws — that is a programming/security error, not a user-facing auth outcome.
+  // The browser hand-off. `awaiting` is true between "Sign in with your browser" and either a
+  // completed exchange or Cancel: a link or code arriving outside that window is refused, so
+  // pressing Cancel really cancels. The PKCE verifier itself lives in the plugin (main process
+  // memory only) and is consumed by the first exchange attempt.
+  let awaiting = false;
+  let exchanging = false;
+
+  // Handlers RETURN their failure instead of throwing it: Electron serializes anything thrown
+  // out of `ipcMain.handle` down to its `.message`, which would strip the structured `kind` the
+  // renderer needs to pick the right error copy. `requireMainWindow` deliberately still throws:
+  // that is a programming/security error, not a user-facing auth outcome.
+  async function finishBrowserSignIn(code: string): Promise<AuthAttemptResult> {
+    if (!deps.browser) return { ok: false, error: { kind: "not-configured" } };
+    if (exchanging || !awaiting) return { ok: false, error: { kind: "state-mismatch" } };
+    exchanging = true;
+    try {
+      const previousToken = token;
+      const status = await commitSignIn(await deps.browser.exchange(code.trim()));
+      awaiting = false;
+      // One session per device: the account this one replaces is released on the server too.
+      if (previousToken && previousToken !== token)
+        void signOutRemote(config, previousToken).catch(() => {});
+      return { ok: true, status };
+    } catch (err) {
+      return { ok: false, error: toAuthError(err) };
+    } finally {
+      exchanging = false;
+    }
+  }
+
+  function sendToRenderer(channel: string, payload?: unknown): void {
+    if (deps.sendToRenderer) deps.sendToRenderer(channel, payload);
+    else
+      for (const win of BrowserWindow.getAllWindows())
+        if (!win.isDestroyed()) win.webContents.send(channel, payload);
+  }
+
   ipcMain.handle(
-    IPC_CHANNELS.authSignIn,
-    async (event, credentials: AuthCredentials): Promise<AuthAttemptResult> => {
+    IPC_CHANNELS.authBeginBrowserSignIn,
+    async (
+      event,
+      intent: BrowserSignInIntent,
+    ): Promise<{ ok: true } | { ok: false; error: AuthError }> => {
       requireMainWindow(event);
+      if (!deps.browser) return { ok: false, error: { kind: "not-configured" } };
       try {
-        return {
-          ok: true,
-          status: await commitSignIn(await signInWithPassword(config, credentials)),
-        };
+        await deps.browser.begin(intent === "sign-up" ? "sign-up" : "sign-in");
+        awaiting = true;
+        return { ok: true };
       } catch (err) {
         return { ok: false, error: toAuthError(err) };
       }
     },
   );
 
+  ipcMain.handle(IPC_CHANNELS.authCancelBrowserSignIn, async (event): Promise<void> => {
+    requireMainWindow(event);
+    awaiting = false;
+  });
+
   ipcMain.handle(
-    IPC_CHANNELS.authSignUp,
-    async (event, input: SignUpInput): Promise<AuthAttemptResult> => {
+    IPC_CHANNELS.authSubmitCode,
+    async (event, code: unknown): Promise<AuthAttemptResult> => {
       requireMainWindow(event);
-      try {
-        return { ok: true, status: await commitSignIn(await signUpWithPassword(config, input)) };
-      } catch (err) {
-        return { ok: false, error: toAuthError(err) };
-      }
+      if (typeof code !== "string" || !code.trim())
+        return { ok: false, error: { kind: "invalid-code" } };
+      return finishBrowserSignIn(code);
     },
   );
 
@@ -307,6 +358,17 @@ export function registerAuth(
   return {
     getCurrentAccount: () =>
       token && cachedIdentity ? { userId: cachedIdentity.userId, token } : null,
+    completeBrowserSignIn: async (code) => {
+      // A second link while the first is still exchanging, or a stale link while already signed
+      // in with nothing pending, must not paint an error over a sign-in that worked.
+      if (exchanging || (!awaiting && token)) {
+        console.warn("ignoring a sign-in link: no browser sign-in is pending");
+        return { ok: false, error: { kind: "state-mismatch" } };
+      }
+      const result = await finishBrowserSignIn(code);
+      if (!result.ok) sendToRenderer(IPC_CHANNELS.authBrowserSignInFailed, result.error);
+      return result;
+    },
     onAccountChanged: (listener) => {
       accountListeners.add(listener);
       return () => accountListeners.delete(listener);

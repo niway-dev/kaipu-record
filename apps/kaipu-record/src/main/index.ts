@@ -28,6 +28,9 @@ import {
   updateAppSettings,
 } from "./infrastructure/settings-store";
 import { registerAuth } from "./infrastructure/auth-store";
+import { createBrowserSignInClient } from "./services/browser-sign-in";
+import { createDeepLinkRouter } from "./deep-link-router";
+import { DEEP_LINK_SCHEME } from "./services/deep-link";
 import {
   registerGlobalShortcuts,
   applyGlobalShortcuts,
@@ -123,10 +126,41 @@ function sendToRenderer(channel: string, payload?: unknown): void {
 // told through `second-instance` and brings its window back. The lock is keyed on the
 // userData directory, so E2E launches with their own `--user-data-dir` do not collide.
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
+
+// `kaipu://` links (browser sign-in hand-back, later billing) reach the app three ways, and all
+// of them go through this one router: macOS `open-url`, the argv of a cold start (Windows and
+// Linux), and the argv of a second launch (`second-instance`, below). The lock above is the
+// only one in the process: @better-auth/electron's `setupMain` is deliberately NOT used because
+// it calls `requestSingleInstanceLock` and registers its own `second-instance` handler, which
+// would focus the window even while a recording hides it (see `secondInstanceAction`).
+// `completeSignIn` is bound once the auth store exists, inside `app.whenReady`.
+let completeBrowserSignIn: (code: string) => Promise<unknown> = async () => {};
+const deepLinks = createDeepLinkRouter({
+  completeSignIn: (code) => completeBrowserSignIn(code),
+  focus: () => {
+    if (!hub?.isActive()) showMainWindow();
+  },
+});
+
 if (!hasSingleInstanceLock) {
   app.quit();
 } else {
-  app.on("second-instance", () => {
+  // Only a packaged build owns the scheme. A dev run is Electron's own bundle: registering it
+  // would, on Windows, replace the installed app as the handler of every kaipu:// link, and
+  // macOS does not route custom schemes to unpackaged apps anyway. Dev uses the paste-code
+  // fallback instead. (Packaged builds also get the scheme from electron-builder `protocols`.)
+  if (app.isPackaged) app.setAsDefaultProtocolClient(DEEP_LINK_SCHEME);
+
+  // macOS, including a cold start by link, which fires this before `ready`.
+  app.on("open-url", (event, url) => {
+    event.preventDefault();
+    deepLinks.receive(url);
+  });
+  // Windows/Linux cold start: the link is in our own argv.
+  deepLinks.receiveArgv(process.argv);
+
+  app.on("second-instance", (_event, argv) => {
+    deepLinks.receiveArgv(argv);
     const action = secondInstanceAction({ ready: app.isReady(), recording: !!hub?.isActive() });
     if (action === "show") showMainWindow();
     else if (action === "notify") showAlreadyRecordingNotice();
@@ -545,7 +579,25 @@ app.whenReady().then(() => {
   // error the user cannot act on. Fail loudly at startup, naming the variable.
   const authServerUrl = import.meta.env.MAIN_VITE_SERVER_URL;
   if (!authServerUrl) throw new Error("MAIN_VITE_SERVER_URL is not set — check .env");
-  const auth = registerAuth({ serverUrl: authServerUrl }, () => mainWindow);
+  // The website origin that hosts the browser sign-in page. Not fatal when missing: the app
+  // still runs, and starting a sign-in reports "not configured" instead of failing silently.
+  const webUrl = import.meta.env.MAIN_VITE_WEB_URL;
+  let browserSignIn: ReturnType<typeof createBrowserSignInClient> | undefined;
+  try {
+    if (!webUrl) throw new Error("MAIN_VITE_WEB_URL is not set — check .env");
+    browserSignIn = createBrowserSignInClient({
+      serverUrl: authServerUrl.replace(/\/$/, ""),
+      webUrl: new URL(webUrl).origin,
+    });
+  } catch (error) {
+    console.error("browser sign-in is disabled", error);
+  }
+  const auth = registerAuth({ serverUrl: authServerUrl }, () => mainWindow, {
+    browser: browserSignIn,
+    sendToRenderer,
+  });
+  completeBrowserSignIn = auth.completeBrowserSignIn;
+  deepLinks.start();
   initMainAnalytics(getDeviceId(), getAppSettings().diagnosticsEnabled);
   onSettingsChanged((settings) => setMainAnalyticsEnabled(settings.diagnosticsEnabled));
   registerAnalyticsIpc();
