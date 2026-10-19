@@ -147,6 +147,14 @@ export function AuthForm({
       {error && (
         <p className={styles.error} role="alert">
           {t(errorCopyKey(error))}
+          {/* NIW2-219 FR11: a Google-only account has no password yet. Shown on every wrong
+              email/password answer, so it reveals nothing about whether the account exists. */}
+          {error.kind === "invalid-credentials" && mode === "sign-in" && (
+            <>
+              <br />
+              {t("errorInvalidCredentialsGoogleHint")}
+            </>
+          )}
         </p>
       )}
       {mode === "sign-up" && (

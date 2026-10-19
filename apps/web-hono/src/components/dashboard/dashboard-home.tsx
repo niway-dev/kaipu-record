@@ -1,4 +1,5 @@
 import type { AccountUser } from "@/components/account/profile-section";
+import { CredentialDroppedNotice } from "./credential-dropped-notice";
 import { FirstVisitWelcome } from "./first-visit-welcome";
 import { GetStarted } from "./get-started";
 import { StorageSummary } from "./storage-summary";
@@ -14,6 +15,7 @@ export function DashboardHome({
 }) {
   return (
     <div className="container mx-auto max-w-3xl space-y-6 px-4 py-8">
+      <CredentialDroppedNotice />
       <FirstVisitWelcome userId={user.id} />
       <WelcomeSection user={user} onSessionChanged={onSessionChanged} />
       <StorageSummary />
