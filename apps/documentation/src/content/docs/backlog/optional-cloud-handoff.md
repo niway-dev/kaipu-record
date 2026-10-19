@@ -135,24 +135,24 @@ To resume in a new Claude session, a good opening message is:
 
 ## 3. Plan 01 progress (server)
 
-| Task | What                                                                                     | State                                                                          |
-| ---- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| 0    | Founder decisions recorded                                                               | ✅ `137cee9` (five values still open — section 5)                              |
-| 1    | Real-R2 spike: length, hash, overwrite, HEAD, Range                                      | ✅ `ef41478`                                                                   |
-| 1b   | Real-R2 spike: URL expiry during a transfer                                              | ✅ `3b62cc8`                                                                   |
-| 2    | Decimal-byte limits (`packages/domain/src/constants/cloud-limits.ts`)                    | ✅ `7ac1865`                                                                   |
-| 3    | Asset, revision, intent schemas, quota rules, domain errors                              | ✅ `6bfd13c`                                                                   |
-| 4    | Entitlements: `cloudUploads` = verified email, capacity 1 GB / 25 GB                     | ✅ `56bd84a`                                                                   |
-| 5    | Ports: `ICloudAssetRepository`, `ICloudPurgeRepository`, storage ticket/HEAD/list        | ✅ `6cb568d`                                                                   |
-| 6    | R2: signed-header tickets, HEAD metadata, prefix listing                                 | ✅ `98053a1`                                                                   |
-| 7    | Five cloud tables + migrations `0000` (guarded baseline) / `0001`                        | ✅ `9b66b41`, fix `e1a1e4f`                                                    |
-| 8    | Postgres repositories; single-statement atomic writes; locked `reconcile`; real-DB tests | ✅ `54aeff8`, fixes `4434426`, `443d990`, `b8ec3fc`                            |
-| 9    | Application use cases over in-memory fakes                                               | ✅ `af03654`, fix `a3a3e27` (**last fix round not independently re-reviewed**) |
-| —    | `me.router` composes cloud access so the server type-checks                              | ✅ `82dc682` (small piece of Task 10's wiring)                                 |
-| 10   | Server contract, `/assets*` and `/me/storage` routes, error mapping, structured events   | ⬜ Not started                                                                 |
-| 11   | Cron sweep, account purge on delete, `cloud:uploads status\|on\|off` admin command       | ⬜ Not started                                                                 |
-| 12   | Remove the legacy recording vertical; migrate the web consumer                           | ⬜ Not started                                                                 |
-| 13   | `backend/cloud-storage.md`, WAF runbook, backlog statuses, CI integration step           | ⬜ Not started                                                                 |
+| Task | What                                                                                                  | State                                                                          |
+| ---- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| 0    | Founder decisions recorded                                                                            | ✅ `137cee9` (five values still open — section 5)                              |
+| 1    | Real-R2 spike: length, hash, overwrite, HEAD, Range                                                   | ✅ `ef41478`                                                                   |
+| 1b   | Real-R2 spike: URL expiry during a transfer                                                           | ✅ `3b62cc8`                                                                   |
+| 2    | Decimal-byte limits (`packages/domain/src/constants/cloud-limits.ts`)                                 | ✅ `7ac1865`                                                                   |
+| 3    | Asset, revision, intent schemas, quota rules, domain errors                                           | ✅ `6bfd13c`                                                                   |
+| 4    | Entitlements: `cloudUploads` = verified email, capacity 1 GB / 25 GB (now: [Plans](/features/plans/)) | ✅ `56bd84a`                                                                   |
+| 5    | Ports: `ICloudAssetRepository`, `ICloudPurgeRepository`, storage ticket/HEAD/list                     | ✅ `6cb568d`                                                                   |
+| 6    | R2: signed-header tickets, HEAD metadata, prefix listing                                              | ✅ `98053a1`                                                                   |
+| 7    | Five cloud tables + migrations `0000` (guarded baseline) / `0001`                                     | ✅ `9b66b41`, fix `e1a1e4f`                                                    |
+| 8    | Postgres repositories; single-statement atomic writes; locked `reconcile`; real-DB tests              | ✅ `54aeff8`, fixes `4434426`, `443d990`, `b8ec3fc`                            |
+| 9    | Application use cases over in-memory fakes                                                            | ✅ `af03654`, fix `a3a3e27` (**last fix round not independently re-reviewed**) |
+| —    | `me.router` composes cloud access so the server type-checks                                           | ✅ `82dc682` (small piece of Task 10's wiring)                                 |
+| 10   | Server contract, `/assets*` and `/me/storage` routes, error mapping, structured events                | ⬜ Not started                                                                 |
+| 11   | Cron sweep, account purge on delete, `cloud:uploads status\|on\|off` admin command                    | ⬜ Not started                                                                 |
+| 12   | Remove the legacy recording vertical; migrate the web consumer                                        | ⬜ Not started                                                                 |
+| 13   | `backend/cloud-storage.md`, WAF runbook, backlog statuses, CI integration step                        | ⬜ Not started                                                                 |
 
 ## 4. Carried rulings and findings (from the execution ledger)
 
@@ -207,14 +207,14 @@ These were decided during execution and are **not** all visible in the plan text
 
 Never describe these as decided. In code they carry `// PROPOSAL (Task 0) — not approved`.
 
-| Value                            | Shipped proposal                                                         |
-| -------------------------------- | ------------------------------------------------------------------------ |
-| Reservation grace                | 3 h after ticket expiry (covers 1 GB at ~1 Mbps)                         |
-| Cron schedule                    | every 15 minutes                                                         |
-| Sweep batch sizes                | 50 reservations + 50 deletes + 1 account purge per run                   |
-| When deleted bytes stop counting | at physical R2 removal (alternative: at the delete intent)               |
-| Rate-limit thresholds            | none; check the Cloudflare plan's rate-limiting allowance first          |
-| Free capacity long term          | 1 GB approved; any future reduction needs a policy for accounts above it |
+| Value                            | Shipped proposal                                                  |
+| -------------------------------- | ----------------------------------------------------------------- |
+| Reservation grace                | 3 h after ticket expiry (covers 1 GB at ~1 Mbps)                  |
+| Cron schedule                    | every 15 minutes                                                  |
+| Sweep batch sizes                | 50 reservations + 50 deletes + 1 account purge per run            |
+| When deleted bytes stop counting | at physical R2 removal (alternative: at the delete intent)        |
+| Rate-limit thresholds            | none; check the Cloudflare plan's rate-limiting allowance first   |
+| Free capacity long term          | Superseded: 250 MB since NIW2-232 — see [Plans](/features/plans/) |
 
 ## 6. Dependencies outside plan 01
 

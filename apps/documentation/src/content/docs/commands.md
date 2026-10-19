@@ -37,7 +37,8 @@ environment from Infisical.
 
 ## Plans — make an account premium (pro)
 
-`pro` removes the watermark. With no payment provider yet, an operator grants it by hand:
+`pro` raises the account's cloud capacity (what each plan includes: [Plans](/features/plans)).
+With no payment provider yet, an operator grants it by hand:
 
 ```bash
 bun run plan show <email>     # current plan

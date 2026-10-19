@@ -128,9 +128,11 @@ The shared es/en messages now describe the 250 MB trial and manually approved
 expansion. Account settings, signup and the Cloud promotion consume these keys.
 The Cloud offer paragraph uses the same quantities and conditions.
 
-Release this copy together with the real verification, trial quota and request/
-approval flow. The backend currently still derives 1 GB for Free verified
-accounts; this documentation/copy change alone is **not ready for deployment**.
+**2026-10-10 (NIW2-232):** the backend now derives 250 MB for Free verified
+accounts and Pro is 15 GB, both from the plan table in `@kaipu/domain`; the copy
+interpolates those numbers. The current values live on the canonical
+[Plans](/features/plans/) page. The request/approval flow (the 1 GB expansion)
+is still not built.
 
 Future request-state copy, to wire when those states exist:
 
@@ -154,6 +156,15 @@ Reapplication after rejection is defined above (30-day cooldown via
 accounts' capacity until a transition is defined; do not silently reduce them to
 the trial quota.
 The trial has no newly agreed expiration period in this session.
+
+> **Amendment (owner decision, 2026-10-19, NIW2-232):** this decision supersedes
+> the "preserve existing accounts' capacity" line above. Existing accounts follow
+> the plan table with no grandfathering and no special rule: an account's
+> capacity is whatever `PLANS` in `packages/domain/src/constants/plans.ts` says,
+> so changing a constant changes it for every account, existing ones included.
+> Verified Free accounts created under the old 1 GB rule get 250 MB, and Pro
+> grants get 15 GB instead of 25 GB. Accounts left over the new limit keep their
+> files and cannot upload; see [Plans](/features/plans/#existing-accounts).
 
 ## Decision status
 
@@ -222,8 +233,8 @@ the queue and redaction boundary.
 ## Decision 4 — Pro capacity
 
 The paid/future Pro entitlement is **15 GB total** (15,000,000,000 decimal
-bytes). The current 25 GB implementation is historical and must be updated when
-this plan is implemented. Add an explicit **`unlimited` plan** for the owner's
+bytes). The 25 GB implementation is historical; since NIW2-232 the code uses
+15 GB from the plan table (see [Plans](/features/plans/)). Add an explicit **`unlimited` plan** for the owner's
 operator account; do not make the admin role bypass storage checks.
 
 Keep the capacity in one configurable entitlement setting/variable rather than

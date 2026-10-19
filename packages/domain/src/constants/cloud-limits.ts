@@ -6,9 +6,7 @@
 export const BYTES_PER_MB = 1_000_000;
 export const BYTES_PER_GB = 1_000_000_000;
 
-/** Total occupied space allowed per account (media + persisted thumbnails). */
-export const FREE_CLOUD_CAPACITY_BYTES = 1 * BYTES_PER_GB;
-export const PRO_CLOUD_CAPACITY_BYTES = 25 * BYTES_PER_GB;
+/* Per-plan account capacity lives in ./plans.ts (the plan table), not here. */
 
 /** Per-file caps, independent of the account capacity. */
 export const MAX_VIDEO_BYTES = 1 * BYTES_PER_GB;
