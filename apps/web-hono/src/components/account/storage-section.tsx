@@ -19,7 +19,7 @@ function ageLabel(t: Translator<"storageCloud">, since: number, now: number): st
   return t("ageDays", { count: Math.floor(hours / 24) });
 }
 
-const SIGN_IN_AGAIN = "/auth/login?redirect=%2Faccount";
+const SIGN_IN_AGAIN = "/auth/login?redirect=%2Fdashboard%2Fsettings";
 
 export interface StorageViewProps {
   view: CapacityView;
@@ -27,6 +27,8 @@ export interface StorageViewProps {
   refreshing: boolean;
   onRefresh(): void;
   now?: number;
+  /** Where "sign in again" returns to; defaults to the settings page, where this view lives. */
+  signInAgainHref?: string;
 }
 
 /**
@@ -39,6 +41,7 @@ export function StorageView({
   refreshing,
   onRefresh,
   now = Date.now(),
+  signInAgainHref = SIGN_IN_AGAIN,
 }: StorageViewProps) {
   const t = useTranslations("account");
   const ts = useTranslations("storageCloud");
@@ -75,7 +78,7 @@ export function StorageView({
           title={ts("expiredTitle")}
           detail={ts("expiredDetail")}
           action={
-            <Button size="sm" render={<a href={SIGN_IN_AGAIN} />}>
+            <Button size="sm" render={<a href={signInAgainHref} />}>
               {ts("signInAgain")}
             </Button>
           }

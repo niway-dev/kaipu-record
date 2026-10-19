@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslations } from "@kaipu/i18n";
 import {
   Badge,
@@ -11,13 +11,7 @@ import {
   Label,
 } from "@kaipu/web-ui";
 import { authClient } from "@/lib/auth/auth-client";
-import {
-  readResendSentAt,
-  withinResendCooldown,
-  writeResendSentAt,
-  cooldownRemainingMs,
-} from "@/lib/resend-cooldown";
-import { Notice } from "./notice";
+import { VerificationNotice } from "./verification-notice";
 
 export interface AccountUser {
   id: string;
@@ -29,7 +23,6 @@ export interface AccountUser {
 const NAME_MAX = 80;
 
 type NameStatus = "idle" | "saving" | "saved" | "failed" | "invalid";
-type ResendStatus = "idle" | "pending" | "failed";
 
 export function ProfileSection({
   user,
@@ -42,26 +35,6 @@ export function ProfileSection({
   const t = useTranslations("account");
   const [name, setName] = useState(user.name);
   const [nameStatus, setNameStatus] = useState<NameStatus>("idle");
-
-  // Read after mount: the server render has no localStorage, and reading it during render would
-  // make the first client render disagree with the markup.
-  const [sentAt, setSentAt] = useState<number | null>(null);
-  const [now, setNow] = useState(() => Date.now());
-  const [resend, setResend] = useState<ResendStatus>("idle");
-  const [refreshFailed, setRefreshFailed] = useState(false);
-
-  useEffect(() => {
-    setSentAt(readResendSentAt(user.id));
-    setNow(Date.now());
-  }, [user.id]);
-
-  // Re-enable the resend button when the cooldown ends, without polling every second.
-  useEffect(() => {
-    const remaining = cooldownRemainingMs(sentAt, now);
-    if (remaining <= 0) return;
-    const timer = setTimeout(() => setNow(Date.now()), remaining + 50);
-    return () => clearTimeout(timer);
-  }, [sentAt, now]);
 
   async function saveName(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -80,39 +53,6 @@ export function ProfileSection({
     setNameStatus("saved");
     await onSessionChanged();
   }
-
-  async function resendVerification() {
-    setResend("pending");
-    const result = await authClient.sendVerificationEmail({
-      email: user.email,
-      callbackURL: "/auth/email-verified",
-    });
-    if (result.error) {
-      // A failure leaves the button usable: it must not look like a send that never happened.
-      setResend("failed");
-      return;
-    }
-    const sent = Date.now();
-    writeResendSentAt(user.id, sent);
-    setSentAt(sent);
-    setNow(sent);
-    setResend("idle");
-  }
-
-  async function refresh() {
-    setRefreshFailed(false);
-    try {
-      // The session cookie is cached for ten minutes; without this the badge would keep saying
-      // "not verified" after the user clicked the link in another tab.
-      await authClient.getSession({ query: { disableCookieCache: true } });
-      await onSessionChanged();
-    } catch {
-      setRefreshFailed(true);
-    }
-  }
-
-  const coolingDown = withinResendCooldown(sentAt, now);
-  const justSent = sentAt !== null && resend !== "failed";
 
   return (
     <Card>
@@ -165,36 +105,7 @@ export function ProfileSection({
         </div>
 
         {!user.emailVerified && (
-          <div className="space-y-3">
-            <Notice
-              title={t("unverifiedNotice")}
-              detail={
-                resend === "failed" ? t("resendFailed") : justSent ? t("resendSent") : undefined
-              }
-              tone={resend === "failed" ? "destructive" : "default"}
-            />
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                onClick={() => void resendVerification()}
-                disabled={resend === "pending" || coolingDown}
-              >
-                {t("resendVerification")}
-              </Button>
-              {/* Refreshing only makes sense once a mail is out: before that there is nothing
-                  for the server to have recorded. */}
-              {sentAt !== null && (
-                <Button variant="outline" onClick={() => void refresh()}>
-                  {t("refresh")}
-                </Button>
-              )}
-            </div>
-            {refreshFailed && (
-              <p role="alert" className="text-destructive text-sm">
-                {t("refreshFailed")}
-              </p>
-            )}
-          </div>
+          <VerificationNotice user={user} onSessionChanged={onSessionChanged} />
         )}
       </CardContent>
     </Card>

@@ -8,4 +8,6 @@ const BASE = import.meta.env.VITE_PUBLIC_DOWNLOAD_URL ?? "https://updates.kaipu.
 export const downloadUrls = {
   macArm64: `${BASE}/download/latest/kaipu-arm64.dmg`,
   macX64: `${BASE}/download/latest/kaipu-x64.dmg`,
+  /** The Windows beta's NSIS installer. Unsigned for now, so SmartScreen asks once. */
+  windowsX64: `${BASE}/download/latest/kaipu-setup.exe`,
 } as const;

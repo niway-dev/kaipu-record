@@ -24,8 +24,9 @@ export default function Header({ isAuthenticated, userName, userEmail }: HeaderP
           </Link>
           {isAuthenticated && (
             <Link
-              to="/recordings"
+              to="/dashboard"
               className="text-muted-foreground hover:text-foreground transition-colors"
+              activeProps={{ className: "text-foreground font-medium" }}
             >
               {t("dashboard")}
             </Link>
