@@ -1969,7 +1969,7 @@
     "openAgain": "Abrir Kaipu de nuevo",
     "copyCode": "Copiar código",
     "codeLabel": "Código de inicio de sesión",
-    "codeNote": "Funciona una sola vez y caduca 5 minutos después de iniciar sesión.",
+    "codeNote": "Funciona una sola vez y caduca 5 minutos después de iniciar sesión. Si al pegarlo falla, empieza otra vez desde la app de Kaipu.",
     "copied": "Código copiado. Pégalo en la app de Kaipu.",
     "copyFailed": "No se pudo copiar. Selecciona el código y cópialo tú.",
     "noCodeTitle": "No hay código de inicio de sesión",

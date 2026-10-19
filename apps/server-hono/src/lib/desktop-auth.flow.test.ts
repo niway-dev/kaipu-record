@@ -18,6 +18,7 @@ import { bearer } from "better-auth/plugins";
 import { createHash, randomBytes } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { desktopAuthPlugin, DESKTOP_TRUSTED_ORIGINS } from "./desktop-auth";
+import { buildSocialProviders } from "./social-providers";
 
 const WEB_ORIGIN = "http://localhost:3001";
 const PASSWORD = "desktop-password-1";
@@ -39,6 +40,10 @@ function setup(trustedOrigins: string[] = [WEB_ORIGIN, ...DESKTOP_TRUSTED_ORIGIN
     baseURL: WEB_ORIGIN,
     database: memoryAdapter(db as unknown as Record<string, Row[]>),
     emailAndPassword: { enabled: true },
+    socialProviders: buildSocialProviders({
+      GOOGLE_CLIENT_ID: "test-client-id",
+      GOOGLE_CLIENT_SECRET: "test-client-secret",
+    }),
     trustedOrigins,
     // Better Auth skips the origin check when NODE_ENV is "test"; production never does.
     advanced: { disableOriginCheck: false },
@@ -159,6 +164,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
@@ -218,6 +224,57 @@ describe("desktop sign-in through the browser", () => {
 
     const exchanged = await exchange(auth, {
       token: code,
+      state: p.state,
+      code_verifier: p.verifier,
+    });
+    expect(exchanged.status).toBe(200);
+    expect(exchanged.headers.get("set-auth-token")).toBeTruthy();
+  });
+
+  it("keeps the query across a Google round trip and still redirects to the done page", async () => {
+    const { auth } = setup();
+    const fakeIdToken = (claims: object) => {
+      const b64 = (value: object) => Buffer.from(JSON.stringify(value)).toString("base64url");
+      return `${b64({ alg: "RS256", kid: "test" })}.${b64(claims)}.not-a-signature`;
+    };
+    // The only network call: Google's token endpoint. getUserInfo decodes the id_token.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input instanceof Request ? input.url : input);
+        if (!url.startsWith("https://oauth2.googleapis.com/token")) {
+          throw new Error(`unexpected network call in a test: ${url}`);
+        }
+        const claims = { sub: "g-ada", email: EMAIL, email_verified: true, name: "Ada" };
+        return Response.json({
+          access_token: "fake-access-token",
+          token_type: "Bearer",
+          expires_in: 3600,
+          scope: "openid email profile",
+          id_token: fakeIdToken(claims),
+        });
+      }),
+    );
+
+    const p = pkce();
+    const done = `/auth/desktop/done?${electronQuery(p)}`;
+    const jar = cookieJar();
+    const begin = await call(auth, `/sign-in/social?${electronQuery(p)}`, {
+      jar,
+      body: { provider: "google", callbackURL: done, newUserCallbackURL: done },
+    });
+    expect(begin.status).toBe(200);
+    const state = new URL(((await begin.json()) as { url: string }).url).searchParams.get("state");
+
+    const callback = await call(auth, `/callback/google?code=fake-code&state=${state}`, { jar });
+    // Still a redirect to the done page — the plugin's after-hook must not turn it into JSON.
+    expect(callback.status).toBe(302);
+    expect(callback.headers.get("location")).toBe(done);
+
+    const { identifier, state: cookieState } = decodeRedirectCookie(jar.get(REDIRECT_COOKIE)!);
+    expect(cookieState).toBe(p.state);
+    const exchanged = await exchange(auth, {
+      token: identifier,
       state: p.state,
       code_verifier: p.verifier,
     });

@@ -51,11 +51,11 @@ keep the signed token (safeStorage)
 
 ## Pages (apps/web-hono)
 
-| Path                   | What it does                                                                                                                                                                                                                                                                                             |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/auth/desktop`        | Validates `client_id` (must be `kaipu-desktop`), `state` and an S256-shaped `code_challenge`. Missing or malformed → "Open sign-in from the Kaipu app". Signed in → confirm the account (**Continue** / **Switch account**). Signed out → the sign-in form plus a sign-up link, both carrying the query. |
-| `/auth/signup?<query>` | The regular sign-up page. With the desktop query it sends it with the request, lands on the done page, and its "sign in" link returns to `/auth/desktop`. A signed-in visitor is sent to `/auth/desktop`, not the dashboard.                                                                             |
-| `/auth/desktop/done`   | Reads the code cookie, calls `ensureElectronRedirect()` and shows "Returning to Kaipu…". After 4 s it offers **Open Kaipu again** and **Copy code**. With no cookie after 10 s it says the code expired or was used.                                                                                     |
+| Path                   | What it does                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/auth/desktop`        | Validates `client_id` (must be `kaipu-desktop`), `state` and an S256-shaped `code_challenge`. Missing or malformed → "Open sign-in from the Kaipu app". Signed in → confirm the account (**Continue** / **Switch account**). Signed out → the sign-in form, or the sign-up form with `intent=sign-up` (the app's "Create account"), both carrying the query. A failed Google round trip comes back with `error=<code>`, shown as copy. |
+| `/auth/signup?<query>` | The regular sign-up page. With the desktop query it sends it with the request, lands on the done page, and its "sign in" link returns to `/auth/desktop`. A signed-in visitor is sent to `/auth/desktop`, not the dashboard.                                                                                                                                                                                                           |
+| `/auth/desktop/done`   | Reads the code cookie, calls `ensureElectronRedirect()` and shows "Returning to Kaipu…". After 4 s it offers **Open Kaipu again** and **Copy code**. With no cookie after 10 s it says the code expired or was used.                                                                                                                                                                                                                   |
 
 All three are `NOINDEX`. The copy lives in the `desktopAuth` message namespace (en + es), which only
 `/auth/desktop/*` loads (`route-messages.ts`).
@@ -66,10 +66,11 @@ to the done page instead of the `redirect` param or the dashboard.
 The electron proxy client (`lib/auth/desktop-auth-client.ts`) is imported only by the desktop pages,
 so it ships in its own chunk; the public pages and the regular auth client never load it.
 
-**Google:** the Google button is not on this branch yet (it arrives through PR 1 from NIW2-219). It
-must be added to `/auth/desktop` with `fetchOptions: { query }` and
-`callbackURL: /auth/desktop/done?<query>`; the plugin keeps the query across the OAuth round trip in
-a signed `transfer_token` cookie and mints the code on `/callback/google`.
+**Google:** the NIW2-219 button (behind `VITE_GOOGLE_AUTH_ENABLED`) is reused. On the desktop pages
+it sends `fetchOptions: { query }`, `callbackURL: /auth/desktop/done?<query>` and
+`errorCallbackURL: /auth/desktop?<query>`. The plugin keeps the query across the OAuth round trip in
+a signed `transfer_token` cookie and mints the code on `/callback/google`, and the callback is still
+a 302 to the done page (pinned in the server flow test with a fake Google token endpoint).
 
 ## API (apps/server-hono)
 
@@ -95,9 +96,10 @@ so the server, the web and the desktop cannot drift apart.
 - **`client_id`** is a public identifier, not a secret; a request with another id mints nothing.
 - **Trusted origin `kaipu:/`.** The Electron client sends `Origin: kaipu:/`. Better Auth 1.7
   matches a host-bearing pattern against the host exactly, so the bare-scheme pattern is required; a
-  pattern such as `kaipu://app` would not match. `kaipu-record://app` stays for the current in-app
-  form and can be removed once every supported desktop build signs in through the browser (after
-  PR 3 ships and old builds are past the [version gate](./version-gate)).
+  pattern such as `kaipu://app` would not match. `kaipu-record://app` stays: the current in-app
+  form uses it, and after PR 3 the desktop still sends it on its resend-verification-email call. It
+  can go only once no supported desktop build sends it (old builds past the
+  [version gate](./version-gate)).
 - **Bearer token.** `requireSignature: true` is unchanged: the desktop keeps the signed value from
   `set-auth-token`, never the raw session token from the JSON body.
 
@@ -115,6 +117,9 @@ code and a **Copy code** button; the person pastes it in the app.
 verifier by that state; the bare code would fail to decode. The done page reads the cookie before
 `ensureElectronRedirect()` deletes it, so the value is still there for the fallback.
 
+A code works once. The desktop also drops its PKCE verifier on the first exchange attempt, even a
+failed one, so after a failed paste the person starts again from the app; the page says so.
+
 Device-code flow (RFC 8628) is not in v1.
 
 ## Reserved, not implemented
@@ -127,4 +132,5 @@ Device-code flow (RFC 8628) is not in v1.
 - A real browser on a deployed domain: the cookie passing through the web proxy (domain stripped)
   and being readable by the done page.
 - The deep link opening the packaged app (needs PR 3).
-- Google sign-in through this flow (button not on the branch yet; no QA against the owner's account).
+- Google sign-in through this flow against real Google (only the in-process round trip is tested; no
+  QA against the owner's account).

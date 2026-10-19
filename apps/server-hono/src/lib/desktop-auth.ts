@@ -26,8 +26,8 @@ export function desktopAuthPlugin() {
  *   `/electron/token`. Better Auth 1.7 matches a host-bearing pattern against the host exactly, so
  *   a pattern like `kaipu://app` would not match it.
  * - `kaipu-record://app` is the literal the current in-app email/password form sets as its Origin
- *   (apps/kaipu-record/src/main/services/auth-client.ts). It can be dropped once the desktop no
- *   longer calls `/sign-in/email` and `/sign-up/email` itself and every supported desktop build
- *   signs in through the browser.
+ *   (apps/kaipu-record/src/main/services/auth-client.ts). The browser sign-in desktop build still
+ *   sends it on its resend-verification-email call, so it can be dropped only once no supported
+ *   desktop build sends it any more.
  */
 export const DESKTOP_TRUSTED_ORIGINS = [DESKTOP_AUTH_ORIGIN, "kaipu-record://app"] as const;

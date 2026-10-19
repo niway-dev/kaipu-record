@@ -1969,7 +1969,7 @@
     "openAgain": "Open Kaipu again",
     "copyCode": "Copy code",
     "codeLabel": "Sign-in code",
-    "codeNote": "It works once and expires 5 minutes after you signed in.",
+    "codeNote": "It works once and expires 5 minutes after you signed in. If pasting it fails, start again from the Kaipu app.",
     "copied": "Code copied. Paste it in the Kaipu app.",
     "copyFailed": "Couldn't copy. Select the code and copy it yourself.",
     "noCodeTitle": "No sign-in code here",

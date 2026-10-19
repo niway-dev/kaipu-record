@@ -30,6 +30,13 @@ export function parseDesktopAuthQuery(search: Record<string, unknown>): DesktopA
   return { client_id, state, code_challenge };
 }
 
+/** Which form `/auth/desktop` opens with: the app's "Create account" sends `intent=sign-up`. */
+export type DesktopAuthIntent = "sign-up";
+
+export function parseDesktopAuthIntent(value: unknown): DesktopAuthIntent | undefined {
+  return value === "sign-up" ? value : undefined;
+}
+
 /** `?client_id=…&state=…&code_challenge=…`, for links and callback URLs. */
 export function desktopAuthSearch(query: DesktopAuthQuery): string {
   const params = new URLSearchParams({

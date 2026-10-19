@@ -3,11 +3,13 @@ import { Link, useRouter } from "@tanstack/react-router";
 import { useTranslations } from "@kaipu/i18n";
 import { Button } from "@kaipu/web-ui";
 
+import { OAuthErrorAlert } from "@/components/oauth-error-alert";
 import SignInForm from "@/components/sign-in-form";
+import SignUpForm from "@/components/sign-up-form";
 import { authClient } from "@/lib/auth/auth-client";
 import { desktopAuthClient } from "@/lib/auth/desktop-auth-client";
 import type { AuthSession } from "@/lib/auth/types";
-import { desktopDonePath, type DesktopAuthQuery } from "@/lib/desktop-auth";
+import { desktopDonePath, type DesktopAuthIntent, type DesktopAuthQuery } from "@/lib/desktop-auth";
 
 /**
  * `/auth/desktop` (NIW2-471). The desktop app opens it in the system browser with its
@@ -15,16 +17,22 @@ import { desktopDonePath, type DesktopAuthQuery } from "@/lib/desktop-auth";
  *
  * - without them it explains that sign-in starts in the app;
  * - a signed-in visitor confirms the account ("Continue") or switches to another one;
- * - anyone else gets the regular sign-in form, which carries the query to the API.
+ * - anyone else gets the regular sign-in form — or the sign-up form when the app's "Create
+ *   account" opened the page with `intent=sign-up` — which carries the query to the API;
+ * - a failed Google round trip comes back here with `error=<code>`, shown as copy.
  *
  * Every path ends on `/auth/desktop/done`, which hands the code to the app.
  */
 export function DesktopSignInPage({
   query,
   session,
+  intent,
+  oauthError,
 }: {
   query: DesktopAuthQuery | null;
   session: AuthSession | null;
+  intent?: DesktopAuthIntent;
+  oauthError?: string;
 }) {
   const t = useTranslations("desktopAuth");
 
@@ -38,7 +46,7 @@ export function DesktopSignInPage({
   }
 
   if (session) return <ConfirmAccount query={query} session={session} />;
-  return <SignInForDesktop query={query} />;
+  return <SignInForDesktop query={query} intent={intent} oauthError={oauthError} />;
 }
 
 function Card({ children }: { children: React.ReactNode }) {
@@ -106,25 +114,52 @@ function ConfirmAccount({ query, session }: { query: DesktopAuthQuery; session: 
   );
 }
 
-function SignInForDesktop({ query }: { query: DesktopAuthQuery }) {
+function SignInForDesktop({
+  query,
+  intent,
+  oauthError,
+}: {
+  query: DesktopAuthQuery;
+  intent?: DesktopAuthIntent;
+  oauthError?: string;
+}) {
   const t = useTranslations("desktopAuth");
   const tAuth = useTranslations("auth");
   return (
     <Card>
       <p className="mb-2 text-center text-sm font-medium">{t("signInTitle")}</p>
       <p className="mb-4 text-center text-sm text-muted-foreground">{t("signInBody")}</p>
-      <SignInForm desktop={query} />
-      <div className="mt-4 text-center text-sm text-muted-foreground">
-        {tAuth("needAccount")}{" "}
-        <Link to="/auth/signup" search={{ ...query }} className="text-primary hover:underline">
-          {tAuth("signUp")}
-        </Link>
-      </div>
-      <div className="mt-2 text-center text-sm text-muted-foreground">
-        <Link to="/auth/forgot-password" className="text-primary hover:underline">
-          {tAuth("forgotPassword")}
-        </Link>
-      </div>
+      <OAuthErrorAlert code={oauthError} />
+      {intent === "sign-up" ? (
+        <>
+          <SignUpForm desktop={query} />
+          <div className="mt-4 text-center text-sm text-muted-foreground">
+            {tAuth("haveAccount")}{" "}
+            <Link to="/auth/desktop" search={{ ...query }} className="text-primary hover:underline">
+              {tAuth("signIn")}
+            </Link>
+          </div>
+        </>
+      ) : (
+        <>
+          <SignInForm desktop={query} />
+          <div className="mt-4 text-center text-sm text-muted-foreground">
+            {tAuth("needAccount")}{" "}
+            <Link
+              to="/auth/desktop"
+              search={{ ...query, intent: "sign-up" }}
+              className="text-primary hover:underline"
+            >
+              {tAuth("signUp")}
+            </Link>
+          </div>
+          <div className="mt-2 text-center text-sm text-muted-foreground">
+            <Link to="/auth/forgot-password" className="text-primary hover:underline">
+              {tAuth("forgotPassword")}
+            </Link>
+          </div>
+        </>
+      )}
     </Card>
   );
 }

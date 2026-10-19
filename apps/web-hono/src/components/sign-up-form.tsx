@@ -67,7 +67,7 @@ export default function SignUpForm({
 
       <CloudPromotion />
 
-      <GoogleButton mode="sign-up" redirectTo={redirectTo} />
+      <GoogleButton mode="sign-up" redirectTo={redirectTo} desktop={desktop} />
 
       <form
         onSubmit={(e) => {

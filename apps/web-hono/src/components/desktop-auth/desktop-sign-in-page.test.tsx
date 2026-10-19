@@ -30,6 +30,12 @@ vi.mock("@/components/sign-in-form", () => ({
     return <div>sign-in form</div>;
   },
 }));
+vi.mock("@/components/sign-up-form", () => ({
+  default: (props: object) => {
+    mocks.formProps(props);
+    return <div>sign-up form</div>;
+  },
+}));
 
 import { DesktopSignInPage } from "./desktop-sign-in-page";
 
@@ -65,8 +71,25 @@ describe("DesktopSignInPage", () => {
     expect(screen.getByText("sign-in form")).toBeTruthy();
     expect(mocks.formProps).toHaveBeenCalledWith(expect.objectContaining({ desktop: query }));
     expect(screen.getByRole("link", { name: "Create account" }).getAttribute("href")).toBe(
-      `/auth/signup?${search}`,
+      `/auth/desktop?${search}&intent=sign-up`,
     );
+  });
+
+  it("opens on the sign-up form when the app asked for it, still carrying the query", () => {
+    renderWithProviders(<DesktopSignInPage query={query} session={null} intent="sign-up" />);
+    expect(screen.getByText("sign-up form")).toBeTruthy();
+    expect(screen.queryByText("sign-in form")).toBeNull();
+    expect(mocks.formProps).toHaveBeenCalledWith(expect.objectContaining({ desktop: query }));
+    expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe(
+      `/auth/desktop?${search}`,
+    );
+  });
+
+  it("shows a failed Google round trip as copy, not the raw code", () => {
+    renderWithProviders(
+      <DesktopSignInPage query={query} session={null} oauthError="access_denied" />,
+    );
+    expect(screen.getByRole("alert").textContent).not.toContain("access_denied");
   });
 
   it("asks a signed-in visitor to confirm the account", () => {

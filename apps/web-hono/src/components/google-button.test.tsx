@@ -53,6 +53,26 @@ describe("GoogleButton", () => {
     expect(social).toHaveBeenLastCalledWith(expect.objectContaining({ callbackURL: "/dashboard" }));
   });
 
+  it("on the desktop pages, carries the app's query and returns to them (NIW2-471)", () => {
+    const desktop = {
+      client_id: "kaipu-desktop",
+      state: "Ab12Cd34Ef56Gh78",
+      code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+    };
+    const search = `client_id=kaipu-desktop&state=Ab12Cd34Ef56Gh78&code_challenge=${desktop.code_challenge}`;
+    renderWithProviders(
+      <GoogleButton mode="sign-in" enabled desktop={desktop} redirectTo="/dashboard/profile" />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Continue with Google" }));
+    expect(social).toHaveBeenCalledWith({
+      provider: "google",
+      callbackURL: `/auth/desktop/done?${search}`,
+      newUserCallbackURL: `/auth/desktop/done?${search}`,
+      errorCallbackURL: `/auth/desktop?${search}`,
+      fetchOptions: { query: desktop },
+    });
+  });
+
   it("re-enables the button when the request fails before leaving the page", async () => {
     social.mockResolvedValue({ data: null, error: { message: "nope" } });
     renderWithProviders(<GoogleButton mode="sign-in" enabled />);
