@@ -16,7 +16,7 @@ import { Download, Trash2 } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { useDeleteRecording, useOpenRecording, useRecordings } from "@/hooks/use-recordings";
 
-export const Route = createFileRoute("/_authenticated/recordings/")({
+export const Route = createFileRoute("/_authenticated/dashboard/recordings")({
   // Imported on demand: the hooks module pulls in the oRPC client, the API
   // contract and zod, and a static import here would put all of it in the entry
   // chunk, which every public page downloads.

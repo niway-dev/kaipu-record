@@ -81,11 +81,11 @@ describe("StorageSection", () => {
     noZeroUsage();
   });
 
-  it("asks to sign in again on a 401, returning to /account", async () => {
+  it("asks to sign in again on a 401, returning to the dashboard", async () => {
     mocks.storage.mockRejectedValue(orpcError(401));
     renderWithProviders(<StorageSection />);
     const link = await screen.findByRole("link", { name: "Sign in again" });
-    expect(link.getAttribute("href")).toBe("/auth/login?redirect=%2Faccount");
+    expect(link.getAttribute("href")).toBe("/auth/login?redirect=%2Fdashboard");
     noZeroUsage();
   });
 

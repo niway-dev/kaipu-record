@@ -23,10 +23,15 @@ import { Route as AuthResetPasswordRouteImport } from './routes/auth/reset-passw
 import { Route as AuthLoginRouteImport } from './routes/auth/login'
 import { Route as AuthForgotPasswordRouteImport } from './routes/auth/forgot-password'
 import { Route as AuthEmailVerifiedRouteImport } from './routes/auth/email-verified'
+import { Route as AuthenticatedDashboardRouteRouteImport } from './routes/_authenticated/dashboard/route'
 import { Route as AuthenticatedRecordingsIndexRouteImport } from './routes/_authenticated/recordings/index'
+import { Route as AuthenticatedDashboardIndexRouteImport } from './routes/_authenticated/dashboard/index'
 import { Route as AuthenticatedAccountIndexRouteImport } from './routes/_authenticated/account/index'
 import { Route as ApiV1SplatRouteImport } from './routes/api/v1/$'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as AuthenticatedDashboardSettingsRouteImport } from './routes/_authenticated/dashboard/settings'
+import { Route as AuthenticatedDashboardRecordingsRouteImport } from './routes/_authenticated/dashboard/recordings'
+import { Route as AuthenticatedDashboardProfileRouteImport } from './routes/_authenticated/dashboard/profile'
 
 const RoadmapRoute = RoadmapRouteImport.update({
   id: '/roadmap',
@@ -97,11 +102,23 @@ const AuthEmailVerifiedRoute = AuthEmailVerifiedRouteImport.update({
   path: '/email-verified',
   getParentRoute: () => AuthRoute,
 } as any)
+const AuthenticatedDashboardRouteRoute =
+  AuthenticatedDashboardRouteRouteImport.update({
+    id: '/dashboard',
+    path: '/dashboard',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedRecordingsIndexRoute =
   AuthenticatedRecordingsIndexRouteImport.update({
     id: '/recordings/',
     path: '/recordings/',
     getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedDashboardIndexRoute =
+  AuthenticatedDashboardIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedDashboardRouteRoute,
   } as any)
 const AuthenticatedAccountIndexRoute =
   AuthenticatedAccountIndexRouteImport.update({
@@ -119,11 +136,30 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedDashboardSettingsRoute =
+  AuthenticatedDashboardSettingsRouteImport.update({
+    id: '/settings',
+    path: '/settings',
+    getParentRoute: () => AuthenticatedDashboardRouteRoute,
+  } as any)
+const AuthenticatedDashboardRecordingsRoute =
+  AuthenticatedDashboardRecordingsRouteImport.update({
+    id: '/recordings',
+    path: '/recordings',
+    getParentRoute: () => AuthenticatedDashboardRouteRoute,
+  } as any)
+const AuthenticatedDashboardProfileRoute =
+  AuthenticatedDashboardProfileRouteImport.update({
+    id: '/profile',
+    path: '/profile',
+    getParentRoute: () => AuthenticatedDashboardRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRouteWithChildren
   '/roadmap': typeof RoadmapRoute
+  '/dashboard': typeof AuthenticatedDashboardRouteRouteWithChildren
   '/auth/email-verified': typeof AuthEmailVerifiedRoute
   '/auth/forgot-password': typeof AuthForgotPasswordRoute
   '/auth/login': typeof AuthLoginRoute
@@ -134,9 +170,13 @@ export interface FileRoutesByFullPath {
   '/legal/cookies': typeof LegalCookiesRoute
   '/legal/privacy-policy': typeof LegalPrivacyPolicyRoute
   '/legal/terms-and-conditions': typeof LegalTermsAndConditionsRoute
+  '/dashboard/profile': typeof AuthenticatedDashboardProfileRoute
+  '/dashboard/recordings': typeof AuthenticatedDashboardRecordingsRoute
+  '/dashboard/settings': typeof AuthenticatedDashboardSettingsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/v1/$': typeof ApiV1SplatRoute
   '/account/': typeof AuthenticatedAccountIndexRoute
+  '/dashboard/': typeof AuthenticatedDashboardIndexRoute
   '/recordings/': typeof AuthenticatedRecordingsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -153,9 +193,13 @@ export interface FileRoutesByTo {
   '/legal/cookies': typeof LegalCookiesRoute
   '/legal/privacy-policy': typeof LegalPrivacyPolicyRoute
   '/legal/terms-and-conditions': typeof LegalTermsAndConditionsRoute
+  '/dashboard/profile': typeof AuthenticatedDashboardProfileRoute
+  '/dashboard/recordings': typeof AuthenticatedDashboardRecordingsRoute
+  '/dashboard/settings': typeof AuthenticatedDashboardSettingsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/v1/$': typeof ApiV1SplatRoute
   '/account': typeof AuthenticatedAccountIndexRoute
+  '/dashboard': typeof AuthenticatedDashboardIndexRoute
   '/recordings': typeof AuthenticatedRecordingsIndexRoute
 }
 export interface FileRoutesById {
@@ -164,6 +208,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/auth': typeof AuthRouteWithChildren
   '/roadmap': typeof RoadmapRoute
+  '/_authenticated/dashboard': typeof AuthenticatedDashboardRouteRouteWithChildren
   '/auth/email-verified': typeof AuthEmailVerifiedRoute
   '/auth/forgot-password': typeof AuthForgotPasswordRoute
   '/auth/login': typeof AuthLoginRoute
@@ -174,9 +219,13 @@ export interface FileRoutesById {
   '/legal/cookies': typeof LegalCookiesRoute
   '/legal/privacy-policy': typeof LegalPrivacyPolicyRoute
   '/legal/terms-and-conditions': typeof LegalTermsAndConditionsRoute
+  '/_authenticated/dashboard/profile': typeof AuthenticatedDashboardProfileRoute
+  '/_authenticated/dashboard/recordings': typeof AuthenticatedDashboardRecordingsRoute
+  '/_authenticated/dashboard/settings': typeof AuthenticatedDashboardSettingsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/v1/$': typeof ApiV1SplatRoute
   '/_authenticated/account/': typeof AuthenticatedAccountIndexRoute
+  '/_authenticated/dashboard/': typeof AuthenticatedDashboardIndexRoute
   '/_authenticated/recordings/': typeof AuthenticatedRecordingsIndexRoute
 }
 export interface FileRouteTypes {
@@ -185,6 +234,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/roadmap'
+    | '/dashboard'
     | '/auth/email-verified'
     | '/auth/forgot-password'
     | '/auth/login'
@@ -195,9 +245,13 @@ export interface FileRouteTypes {
     | '/legal/cookies'
     | '/legal/privacy-policy'
     | '/legal/terms-and-conditions'
+    | '/dashboard/profile'
+    | '/dashboard/recordings'
+    | '/dashboard/settings'
     | '/api/auth/$'
     | '/api/v1/$'
     | '/account/'
+    | '/dashboard/'
     | '/recordings/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -214,9 +268,13 @@ export interface FileRouteTypes {
     | '/legal/cookies'
     | '/legal/privacy-policy'
     | '/legal/terms-and-conditions'
+    | '/dashboard/profile'
+    | '/dashboard/recordings'
+    | '/dashboard/settings'
     | '/api/auth/$'
     | '/api/v1/$'
     | '/account'
+    | '/dashboard'
     | '/recordings'
   id:
     | '__root__'
@@ -224,6 +282,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/roadmap'
+    | '/_authenticated/dashboard'
     | '/auth/email-verified'
     | '/auth/forgot-password'
     | '/auth/login'
@@ -234,9 +293,13 @@ export interface FileRouteTypes {
     | '/legal/cookies'
     | '/legal/privacy-policy'
     | '/legal/terms-and-conditions'
+    | '/_authenticated/dashboard/profile'
+    | '/_authenticated/dashboard/recordings'
+    | '/_authenticated/dashboard/settings'
     | '/api/auth/$'
     | '/api/v1/$'
     | '/_authenticated/account/'
+    | '/_authenticated/dashboard/'
     | '/_authenticated/recordings/'
   fileRoutesById: FileRoutesById
 }
@@ -354,12 +417,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthEmailVerifiedRouteImport
       parentRoute: typeof AuthRoute
     }
+    '/_authenticated/dashboard': {
+      id: '/_authenticated/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof AuthenticatedDashboardRouteRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/recordings/': {
       id: '/_authenticated/recordings/'
       path: '/recordings'
       fullPath: '/recordings/'
       preLoaderRoute: typeof AuthenticatedRecordingsIndexRouteImport
       parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/dashboard/': {
+      id: '/_authenticated/dashboard/'
+      path: '/'
+      fullPath: '/dashboard/'
+      preLoaderRoute: typeof AuthenticatedDashboardIndexRouteImport
+      parentRoute: typeof AuthenticatedDashboardRouteRoute
     }
     '/_authenticated/account/': {
       id: '/_authenticated/account/'
@@ -382,15 +459,60 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/dashboard/settings': {
+      id: '/_authenticated/dashboard/settings'
+      path: '/settings'
+      fullPath: '/dashboard/settings'
+      preLoaderRoute: typeof AuthenticatedDashboardSettingsRouteImport
+      parentRoute: typeof AuthenticatedDashboardRouteRoute
+    }
+    '/_authenticated/dashboard/recordings': {
+      id: '/_authenticated/dashboard/recordings'
+      path: '/recordings'
+      fullPath: '/dashboard/recordings'
+      preLoaderRoute: typeof AuthenticatedDashboardRecordingsRouteImport
+      parentRoute: typeof AuthenticatedDashboardRouteRoute
+    }
+    '/_authenticated/dashboard/profile': {
+      id: '/_authenticated/dashboard/profile'
+      path: '/profile'
+      fullPath: '/dashboard/profile'
+      preLoaderRoute: typeof AuthenticatedDashboardProfileRouteImport
+      parentRoute: typeof AuthenticatedDashboardRouteRoute
+    }
   }
 }
 
+interface AuthenticatedDashboardRouteRouteChildren {
+  AuthenticatedDashboardProfileRoute: typeof AuthenticatedDashboardProfileRoute
+  AuthenticatedDashboardRecordingsRoute: typeof AuthenticatedDashboardRecordingsRoute
+  AuthenticatedDashboardSettingsRoute: typeof AuthenticatedDashboardSettingsRoute
+  AuthenticatedDashboardIndexRoute: typeof AuthenticatedDashboardIndexRoute
+}
+
+const AuthenticatedDashboardRouteRouteChildren: AuthenticatedDashboardRouteRouteChildren =
+  {
+    AuthenticatedDashboardProfileRoute: AuthenticatedDashboardProfileRoute,
+    AuthenticatedDashboardRecordingsRoute:
+      AuthenticatedDashboardRecordingsRoute,
+    AuthenticatedDashboardSettingsRoute: AuthenticatedDashboardSettingsRoute,
+    AuthenticatedDashboardIndexRoute: AuthenticatedDashboardIndexRoute,
+  }
+
+const AuthenticatedDashboardRouteRouteWithChildren =
+  AuthenticatedDashboardRouteRoute._addFileChildren(
+    AuthenticatedDashboardRouteRouteChildren,
+  )
+
 interface AuthenticatedRouteChildren {
+  AuthenticatedDashboardRouteRoute: typeof AuthenticatedDashboardRouteRouteWithChildren
   AuthenticatedAccountIndexRoute: typeof AuthenticatedAccountIndexRoute
   AuthenticatedRecordingsIndexRoute: typeof AuthenticatedRecordingsIndexRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
+  AuthenticatedDashboardRouteRoute:
+    AuthenticatedDashboardRouteRouteWithChildren,
   AuthenticatedAccountIndexRoute: AuthenticatedAccountIndexRoute,
   AuthenticatedRecordingsIndexRoute: AuthenticatedRecordingsIndexRoute,
 }

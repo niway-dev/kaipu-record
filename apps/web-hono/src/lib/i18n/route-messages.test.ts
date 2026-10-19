@@ -24,19 +24,26 @@ describe("slicesForPath", () => {
     expect(slicesForPath("/roadmap-extra")).toEqual([]);
   });
 
-  it("loads the recordings namespace only for the recordings page", () => {
-    expect(slicesForPath("/recordings")).toContain("recordings");
+  it("keeps the recordings copy off the sign-in pages", () => {
     expect(slicesForPath("/auth/login")).not.toContain("recordings");
     expect(slicesForPath("/auth/login")).toContain("auth");
   });
 
-  it("gives the account page the account copy and the shared capacity copy", () => {
-    const slices = slicesForPath("/account");
-    expect(slices).toContain("account");
-    expect(slices).toContain("storageCloud");
-    expect(slices).toContain("auth");
-    expect(slicesForPath("/account/")).toEqual(slices);
-    expect(slicesForPath("/recordings")).not.toContain("storageCloud");
+  it("gives every dashboard page the dashboard, account, capacity and recordings copy", () => {
+    const slices = slicesForPath("/dashboard");
+    for (const slice of ["dashboard", "account", "storageCloud", "recordings", "auth", "header"]) {
+      expect(slices).toContain(slice);
+    }
+    expect(slicesForPath("/dashboard/")).toEqual(slices);
+    expect(slicesForPath("/dashboard/profile")).toEqual(slices);
+    expect(slicesForPath("/dashboard/settings")).toEqual(slices);
+    expect(slicesForPath("/dashboard/recordings")).toEqual(slices);
+  });
+
+  it("does not send the dashboard copy to the redirect-only legacy paths or lookalikes", () => {
+    expect(slicesForPath("/account")).toEqual([]);
+    expect(slicesForPath("/recordings")).toEqual([]);
+    expect(slicesForPath("/dashboards")).toEqual([]);
   });
 
   it("sends nothing for a route with no rule", () => {
@@ -50,8 +57,8 @@ describe("slicesForPath", () => {
       "/roadmap",
       "/legal/cookies",
       "/auth/login",
-      "/recordings",
-      "/account",
+      "/dashboard",
+      "/dashboard/settings",
     ]) {
       for (const slice of slicesForPath(path)) {
         expect(known.has(slice.split(".")[0] ?? "")).toBe(true);

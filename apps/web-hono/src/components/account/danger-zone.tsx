@@ -25,7 +25,7 @@ import { Notice } from "./notice";
 
 type Scheduled = Extract<DeletionStatus, { status: "scheduled" }>;
 
-const SIGN_IN_AGAIN = "/auth/login?redirect=%2Faccount";
+const SIGN_IN_AGAIN = "/auth/login?redirect=%2Fdashboard%2Fsettings";
 
 export interface DangerZoneProps {
   email: string;

@@ -19,7 +19,7 @@ function ageLabel(t: Translator<"storageCloud">, since: number, now: number): st
   return t("ageDays", { count: Math.floor(hours / 24) });
 }
 
-const SIGN_IN_AGAIN = "/auth/login?redirect=%2Faccount";
+const SIGN_IN_AGAIN = "/auth/login?redirect=%2Fdashboard";
 
 export interface StorageViewProps {
   view: CapacityView;
@@ -27,6 +27,11 @@ export interface StorageViewProps {
   refreshing: boolean;
   onRefresh(): void;
   now?: number;
+  /**
+   * The dashboard home's one-glance version: plan, bar and warnings, without the breakdown. Every
+   * other state renders exactly as on the settings page.
+   */
+  compact?: boolean;
 }
 
 /**
@@ -39,6 +44,7 @@ export function StorageView({
   refreshing,
   onRefresh,
   now = Date.now(),
+  compact = false,
 }: StorageViewProps) {
   const t = useTranslations("account");
   const ts = useTranslations("storageCloud");
@@ -133,21 +139,28 @@ export function StorageView({
               data-segment="reserved"
             />
           </div>
-          <dl className="grid grid-cols-3 gap-4 text-sm">
-            <div>
-              <dt className="text-muted-foreground">{ts("used")}</dt>
-              <dd className="font-medium">{used}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">{t("reservedInProgress")}</dt>
-              <dd className="font-medium">{reserved}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">{ts("available")}</dt>
-              <dd className="font-medium">{bytes(usage.availableBytes)}</dd>
-            </div>
-          </dl>
-          {usage.pendingUploads > 0 && (
+          {compact && (
+            <p className="text-muted-foreground text-sm">
+              {ts("barLabel", { used, reserved, capacity })}
+            </p>
+          )}
+          {!compact && (
+            <dl className="grid grid-cols-3 gap-4 text-sm">
+              <div>
+                <dt className="text-muted-foreground">{ts("used")}</dt>
+                <dd className="font-medium">{used}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">{t("reservedInProgress")}</dt>
+                <dd className="font-medium">{reserved}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">{ts("available")}</dt>
+                <dd className="font-medium">{bytes(usage.availableBytes)}</dd>
+              </div>
+            </dl>
+          )}
+          {!compact && usage.pendingUploads > 0 && (
             <p className="text-muted-foreground text-sm">
               {t("pendingUploads", { count: usage.pendingUploads })}
             </p>
@@ -159,9 +172,11 @@ export function StorageView({
           {isAlmostFull(usage) && (
             <Notice title={t("almostFullTitle")} detail={t("almostFullDetail")} />
           )}
-          <p className="text-muted-foreground text-xs">
-            {ts("limits", { perVideo: bytes(MAX_VIDEO_BYTES) })}
-          </p>
+          {!compact && (
+            <p className="text-muted-foreground text-xs">
+              {ts("limits", { perVideo: bytes(MAX_VIDEO_BYTES) })}
+            </p>
+          )}
         </div>
       );
     }
