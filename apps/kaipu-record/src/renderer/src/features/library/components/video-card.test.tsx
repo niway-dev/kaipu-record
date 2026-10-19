@@ -11,7 +11,7 @@ const video: LibraryVideo = {
   title: "My Recording",
   createdAt: Date.now() - 3_600_000,
   durationSeconds: 95,
-  fileSizeBytes: 32 * 1024 * 1024,
+  fileSizeBytes: 32_000_000,
   cloudSizeBytes: null,
   thumbnailUrl: null,
   availability: "local",
@@ -96,5 +96,40 @@ describe("VideoCard", () => {
       <VideoCard video={video} badge="never-exported" onNavigate={vi.fn()} onDelete={vi.fn()} />,
     );
     expect(screen.getByText(/edited · not exported/i)).toBeInTheDocument();
+  });
+});
+
+describe("VideoCard tags", () => {
+  it("always shows the first tags, the rest as +N", () => {
+    render(
+      <VideoCard
+        video={video}
+        tags={["a", "b", "c", "d", "e"].map((name) => ({
+          id: name,
+          name,
+          slug: name,
+          color: "rose" as const,
+          count: 1,
+        }))}
+        onNavigate={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    const list = screen.getByRole("list", { name: "Tags" });
+    expect([...list.querySelectorAll("li")].map((li) => li.textContent)).toEqual([
+      "a",
+      "b",
+      "c",
+      "+2",
+    ]);
+  });
+
+  it("opens the tag panel from its own button without navigating", async () => {
+    const onNavigate = vi.fn();
+    const onTags = vi.fn();
+    render(<VideoCard video={video} onNavigate={onNavigate} onDelete={vi.fn()} onTags={onTags} />);
+    await userEvent.click(screen.getByTitle("Tags"));
+    expect(onTags).toHaveBeenCalledOnce();
+    expect(onNavigate).not.toHaveBeenCalled();
   });
 });

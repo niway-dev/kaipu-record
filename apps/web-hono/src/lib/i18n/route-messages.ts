@@ -29,10 +29,22 @@ const ROUTE_SLICES: ReadonlyArray<{
   slices: readonly MessageSlice[];
 }> = [
   { path: "/", exact: true, slices: [...MARKETING_CHROME, "record", "nav"] },
+  { path: "/features", slices: [...MARKETING_CHROME, "features"] },
   { path: "/roadmap", slices: MARKETING_CHROME },
   { path: "/legal", slices: [...MARKETING_CHROME, "legal"] },
+  // Desktop sign-in through the browser (NIW2-471): the sign-in form plus its own copy.
+  { path: "/auth/desktop", slices: [...APP_CHROME, "desktopAuth"] },
   { path: "/auth", slices: APP_CHROME },
-  { path: "/recordings", slices: [...APP_CHROME, "recordings"] },
+  // `/account` and `/recordings` only redirect into `/dashboard/*`, so they need no copy.
+  {
+    path: "/dashboard",
+    exact: true,
+    slices: [...APP_CHROME, "dashboard", "account", "storageCloud"],
+  },
+  { path: "/dashboard/profile", slices: [...APP_CHROME, "dashboard", "account"] },
+  { path: "/dashboard/settings", slices: [...APP_CHROME, "dashboard", "account", "storageCloud"] },
+  { path: "/dashboard/recordings", slices: [...APP_CHROME, "dashboard", "recordings"] },
+  { path: "/dashboard", slices: [...APP_CHROME, "dashboard"] },
 ];
 
 function normalizePath(pathname: string): string {

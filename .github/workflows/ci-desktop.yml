@@ -121,6 +121,7 @@ jobs:
         # server runs here, and the auth specs self-skip on their own health check.
         env:
           MAIN_VITE_SERVER_URL: http://localhost:3000
+          MAIN_VITE_WEB_URL: http://localhost:3001
         run: xvfb-run --auto-servernum bun run test:e2e
 
       - name: Upload Playwright artifacts on failure

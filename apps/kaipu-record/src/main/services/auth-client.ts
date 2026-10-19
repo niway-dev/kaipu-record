@@ -1,84 +1,15 @@
 import { FREE_ENTITLEMENTS, type Entitlements } from "@shared/entitlements";
-import type { AuthCredentials, AuthError, SignUpInput } from "@shared/types/auth";
 
 export interface AuthClientConfig {
   serverUrl: string;
 }
 
+/** What a completed browser sign-in yields: the session token plus who it belongs to. */
 export interface SignInResult {
   token: string;
   userId: string;
   email: string;
   name: string;
-}
-
-/** The per-endpoint default reported for a rejected credential submission, used whenever the
- *  response body carries no more specific code. */
-type DefaultFailureKind = "invalid-credentials" | "email-taken";
-
-function networkError(): AuthError {
-  return { kind: "network" };
-}
-
-async function callCredentialEndpoint(
-  config: AuthClientConfig,
-  path: string,
-  body: AuthCredentials | SignUpInput,
-  invalidStatusKind: DefaultFailureKind,
-): Promise<SignInResult> {
-  let res: Response;
-  try {
-    res = await fetch(`${config.serverUrl}/api/auth/${path}`, {
-      method: "POST",
-      // This Origin is load-bearing, not decorative: Electron's main-process fetch()
-      // (Chromium's network stack) attaches Sec-Fetch-* headers even outside a page
-      // context, which trips better-auth's Sec-Fetch-gated CSRF check on sign-in/email
-      // and sign-up/email specifically — without a trusted Origin, both 403 with
-      // MISSING_OR_NULL_ORIGIN. Must stay byte-identical to the trustedOrigins entry in
-      // apps/server-hono/src/lib/auth.ts, which explains the mechanism in full.
-      headers: { "Content-Type": "application/json", Origin: "kaipu-record://app" },
-      body: JSON.stringify(body),
-    });
-  } catch {
-    throw networkError();
-  }
-
-  if (!res.ok) {
-    // better-auth answers an error with a `{code, message}` JSON body. Only PASSWORD_TOO_SHORT
-    // is special-cased: baseConfig sets no `minPasswordLength`, so better-auth's default of 8
-    // applies, and a shorter sign-up password would otherwise be reported to the user as "that
-    // email is already registered" — actively misleading. Every other code keeps the
-    // per-endpoint default, which is already the common case for its endpoint
-    // (INVALID_EMAIL_OR_PASSWORD on sign-in, USER_ALREADY_EXISTS on sign-up).
-    const body = (await res.json().catch(() => null)) as { code?: string } | null;
-    if (body?.code === "PASSWORD_TOO_SHORT")
-      throw { kind: "password-too-short" } satisfies AuthError;
-    throw { kind: invalidStatusKind } satisfies AuthError;
-  }
-
-  const token = res.headers.get("set-auth-token");
-  if (!token)
-    throw {
-      kind: "unknown",
-      message: "sign-in succeeded but no session token was issued",
-    } satisfies AuthError;
-
-  const data = (await res.json()) as { user: { id: string; email: string; name: string } };
-  return { token, userId: data.user.id, email: data.user.email, name: data.user.name };
-}
-
-export function signInWithPassword(
-  config: AuthClientConfig,
-  credentials: AuthCredentials,
-): Promise<SignInResult> {
-  return callCredentialEndpoint(config, "sign-in/email", credentials, "invalid-credentials");
-}
-
-export function signUpWithPassword(
-  config: AuthClientConfig,
-  input: SignUpInput,
-): Promise<SignInResult> {
-  return callCredentialEndpoint(config, "sign-up/email", input, "email-taken");
 }
 
 /**

@@ -14,6 +14,7 @@ module.exports = {
         "../../packages/ui/src/**/*.{ts,tsx}",
         "../../packages/tokens/stylex/*.stylex.ts",
         "src/routes/dev/**/*.{ts,tsx}",
+        "src/components/roadmap/**/*.{ts,tsx}",
       ],
     },
   },

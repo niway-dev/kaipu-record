@@ -15,6 +15,10 @@ export interface ExportDialogProps {
   /** 0..1 — ignored while `status === "error"`. */
   fraction: number;
   error: string | null;
+  /** Progress title; defaults to "Exporting video…" (the GIF export passes its own). */
+  title?: string;
+  /** Error title; defaults to "Couldn't export the video". */
+  errorTitle?: string;
   onCancel(): void;
   onRetry(): void;
 }
@@ -30,6 +34,8 @@ export function ExportDialog({
   status,
   fraction,
   error,
+  title,
+  errorTitle,
   onCancel,
   onRetry,
 }: ExportDialogProps): React.JSX.Element {
@@ -42,7 +48,7 @@ export function ExportDialog({
         <ModalIcon tone="danger">
           <TriangleAlert size={20} strokeWidth={1.8} />
         </ModalIcon>
-        <ModalTitle id="export-dialog-title">{t("exportError")}</ModalTitle>
+        <ModalTitle id="export-dialog-title">{errorTitle ?? t("exportError")}</ModalTitle>
         <ModalText>{error}</ModalText>
         <ModalActions>
           <ModalButton variant="ghost" onClick={onCancel}>
@@ -58,7 +64,7 @@ export function ExportDialog({
 
   return (
     <ModalOverlay onCancel={onCancel} labelledBy="export-dialog-title">
-      <ModalTitle id="export-dialog-title">{t("exporting")}</ModalTitle>
+      <ModalTitle id="export-dialog-title">{title ?? t("exporting")}</ModalTitle>
       <div
         className={styles.progressTrack}
         role="progressbar"

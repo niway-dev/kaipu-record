@@ -11,8 +11,9 @@ import {
 const BIG = { width: 3840, height: 2160 };
 
 describe("presetForPath", () => {
-  it("gives every sidebar screen the SAME preset", () => {
-    // This is the point: navigating between them must not resize the window.
+  it("gives every sidebar page except the Editor the main preset", () => {
+    // Navigating between these must not resize the window; the Editor entry is the
+    // one sidebar link that takes the window over (next test).
     const sidebar = [
       ROUTES.record,
       ROUTES.library,
@@ -22,14 +23,30 @@ describe("presetForPath", () => {
       ROUTES.cloud,
       ROUTES.settings,
       "/settings/general",
-      // The screenshot editor shares the window too: only video takes it over.
-      ROUTES.screenshotEditor,
     ];
     for (const path of sidebar) expect(presetForPath(path), path).toBe("main");
   });
 
-  it("gives only the video editor its own", () => {
-    expect(presetForPath(ROUTES.videoEditor)).toBe("videoEditor");
+  it("gives the whole Editor workspace the editor preset", () => {
+    // Home, New image, an open video and an open image all share one window, so
+    // moving between them never resizes it mid-session.
+    const editor = [
+      ROUTES.editor,
+      ROUTES.editorNew,
+      ROUTES.editorCapture,
+      "/editor/video/asset-1",
+      "/editor/image/asset-1",
+    ];
+    for (const path of editor) expect(presetForPath(path), path).toBe("editor");
+  });
+
+  it("matches /editor as a path segment, not as a string prefix", () => {
+    expect(presetForPath("/editorial")).toBe("main");
+  });
+
+  it("leaves the legacy redirects on main (they redirect at once)", () => {
+    expect(presetForPath(ROUTES.videoEditor)).toBe("main");
+    expect(presetForPath(ROUTES.screenshotEditor)).toBe("main");
   });
 
   it("falls back to main for an unrecognised path", () => {
@@ -39,7 +56,7 @@ describe("presetForPath", () => {
 
 describe("isEditorPreset", () => {
   it("is true only for the screens that take the window over", () => {
-    expect(isEditorPreset("videoEditor")).toBe(true);
+    expect(isEditorPreset("editor")).toBe(true);
     expect(isEditorPreset("main")).toBe(false);
     expect(isEditorPreset("onboarding")).toBe(false);
   });
@@ -64,19 +81,17 @@ describe("WINDOW_PRESETS", () => {
   it("keeps the shared minimum at what the UI needs, not at the largest screen's", () => {
     // Taking the editor's floor for every screen would make the whole app
     // needlessly large; the main window stays at the smallest usable size.
-    expect(WINDOW_PRESETS.main.minWidth).toBeLessThan(WINDOW_PRESETS.videoEditor.minWidth);
+    expect(WINDOW_PRESETS.main.minWidth).toBeLessThan(WINDOW_PRESETS.editor.minWidth);
   });
 });
 
 describe("fitPresetToDisplay", () => {
   it("leaves a preset alone on a display that fits it", () => {
-    expect(fitPresetToDisplay(WINDOW_PRESETS.videoEditor, BIG)).toMatchObject(
-      WINDOW_PRESETS.videoEditor,
-    );
+    expect(fitPresetToDisplay(WINDOW_PRESETS.editor, BIG)).toMatchObject(WINDOW_PRESETS.editor);
   });
 
   it("shrinks the size AND the minimum to the display", () => {
-    const fitted = fitPresetToDisplay(WINDOW_PRESETS.videoEditor, { width: 1024, height: 640 });
+    const fitted = fitPresetToDisplay(WINDOW_PRESETS.editor, { width: 1024, height: 640 });
     expect(fitted.width).toBe(1024);
     expect(fitted.minWidth).toBeLessThanOrEqual(1024);
     expect(fitted.minHeight).toBeLessThanOrEqual(640);

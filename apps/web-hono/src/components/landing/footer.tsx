@@ -14,7 +14,10 @@ export function Footer() {
       </span>
       <p className="mt-2 font-medium text-[var(--kaipu-text-secondary)]">{t("footerSignature")}</p>
       <p className="mt-1">{t("footerTagline")}</p>
-      <div className="mt-5">
+      <div className="mt-5 flex justify-center gap-4">
+        <Link to="/features" className="underline-offset-4 hover:underline focus-visible:underline">
+          {t("homeNavFeatures")}
+        </Link>
         <Link to="/roadmap" className="underline-offset-4 hover:underline focus-visible:underline">
           {tRoadmap("navLabel")}
         </Link>

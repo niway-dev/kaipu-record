@@ -1,7 +1,7 @@
+import { toEnabledCaptureMode, type CaptureRect } from "@shared/types/screenshot-capture";
 import {
   type AppSettings,
   DEFAULT_SETTINGS,
-  DEFAULT_SHORTCUTS,
   SCREENSHOT_COPY_MODES,
   SCREENSHOT_SAVE_MODES,
   SHORTCUT_ACTIONS,
@@ -12,7 +12,9 @@ import {
   type Theme,
   UPLOAD_MODES,
   type UploadMode,
+  sanitizeExportQuality,
 } from "@shared/types";
+import { defaultShortcutsFor } from "@shared/shortcut-defaults";
 import { sanitizeQuality } from "@shared/recording-quality";
 import { DEFAULT_LOCALE, isLocale } from "@kaipu/i18n";
 
@@ -47,15 +49,40 @@ export function isValidScreenshotCopyMode(value: unknown): value is ScreenshotCo
  * if it's a non-empty string; anything else falls back to that action's default.
  * (The accelerator's syntactic validity is enforced where it's registered.)
  */
-export function mergeShortcuts(stored: unknown): ShortcutSettings {
+export function mergeShortcuts(
+  stored: unknown,
+  platform: string = process.platform,
+): ShortcutSettings {
+  const defaults = defaultShortcutsFor(platform);
   const safe = (stored && typeof stored === "object" ? stored : {}) as Partial<
     Record<ShortcutAction, unknown>
   >;
   const result = {} as ShortcutSettings;
   for (const action of SHORTCUT_ACTIONS) {
     const value = safe[action];
-    result[action] =
-      typeof value === "string" && value.length > 0 ? value : DEFAULT_SHORTCUTS[action];
+    result[action] = typeof value === "string" && value.length > 0 ? value : defaults[action];
+  }
+  return result;
+}
+
+function isFrameRect(value: unknown): value is CaptureRect {
+  if (!value || typeof value !== "object") return false;
+  const { x, y, width, height } = value as Record<string, unknown>;
+  const finite = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
+  return finite(x) && finite(y) && finite(width) && finite(height) && width > 0 && height > 0;
+}
+
+/**
+ * Keep only well-formed remembered frames (finite, positive size), keyed by display id.
+ * Whether a frame still fits its display is decided when the overlay opens, not here.
+ */
+export function mergeScreenshotFrames(stored: unknown): Record<string, CaptureRect> {
+  if (!stored || typeof stored !== "object" || Array.isArray(stored)) return {};
+  const result: Record<string, CaptureRect> = {};
+  for (const [displayId, value] of Object.entries(stored)) {
+    if (!isFrameRect(value)) continue;
+    const { x, y, width, height } = value;
+    result[displayId] = { x, y, width, height };
   }
   return result;
 }
@@ -64,7 +91,10 @@ export function mergeShortcuts(stored: unknown): ShortcutSettings {
  * Merge persisted (possibly partial or untrusted) settings on top of the
  * defaults, dropping any invalid fields.
  */
-export function mergeSettings(stored: Partial<AppSettings> | null | undefined): AppSettings {
+export function mergeSettings(
+  stored: Partial<AppSettings> | null | undefined,
+  platform: string = process.platform,
+): AppSettings {
   const safe = stored ?? {};
   return {
     theme: isValidTheme(safe.theme) ? safe.theme : DEFAULT_SETTINGS.theme,
@@ -88,8 +118,24 @@ export function mergeSettings(stored: Partial<AppSettings> | null | undefined): 
     screenshotCopy: isValidScreenshotCopyMode(safe.screenshotCopy)
       ? safe.screenshotCopy
       : DEFAULT_SETTINGS.screenshotCopy,
-    shortcuts: mergeShortcuts(safe.shortcuts),
+    shortcuts: mergeShortcuts(safe.shortcuts, platform),
     deviceId: typeof safe.deviceId === "string" ? safe.deviceId : "",
     uploadMode: isValidUploadMode(safe.uploadMode) ? safe.uploadMode : DEFAULT_SETTINGS.uploadMode,
+    // Files written before NIW2-218's Export quality still carry `lastExportPreset` /
+    // `lastExportFraming`; rebuilding the object here drops them.
+    exportQuality: sanitizeExportQuality(safe.exportQuality),
+    showRecordingSavedCard:
+      typeof safe.showRecordingSavedCard === "boolean"
+        ? safe.showRecordingSavedCard
+        : DEFAULT_SETTINGS.showRecordingSavedCard,
+    screenshotFrame: mergeScreenshotFrames(safe.screenshotFrame),
+    // A stored "window" reads as Frame while Window mode is off (the file keeps it).
+    screenshotMode: toEnabledCaptureMode(safe.screenshotMode),
+    trayHintShown:
+      typeof safe.trayHintShown === "boolean" ? safe.trayHintShown : DEFAULT_SETTINGS.trayHintShown,
+    diagnosticsEnabled:
+      typeof safe.diagnosticsEnabled === "boolean"
+        ? safe.diagnosticsEnabled
+        : DEFAULT_SETTINGS.diagnosticsEnabled,
   };
 }

@@ -1,17 +1,24 @@
-import { app, Menu, nativeImage, Tray } from "electron";
+import { app, Menu, nativeImage, type NativeImage, Tray } from "electron";
 import trayRecordingPath from "../../resources/tray-recording.png?asset";
 import trayScreenshotPath from "../../resources/tray-screenshot.png?asset";
+import trayWindowsRecordingPath from "../../resources/tray-windows-recording.ico?asset";
+import trayWindowsScreenshotPath from "../../resources/tray-windows-screenshot.ico?asset";
 import { createMainTranslator } from "@kaipu/i18n/main";
 import type { Locale } from "@kaipu/i18n";
 import type { CapturePanelWindow } from "./capture-panel-window";
+import { trayIconFor, type TrayIconFile, type TrayState } from "./tray-icon";
+
+export type { TrayState } from "./tray-icon";
 
 /**
  * Creates the menu-bar tray icon.
  *  - Left click  → toggle the Capture Panel anchored to the tray.
  *  - Right click → context menu (open main window / quit), translated.
  *
- * Each icon is a monochrome black+alpha template image; `setTemplateImage(true)`
- * lets macOS recolor it for light/dark menu bars automatically.
+ * On macOS each icon is a monochrome black+alpha template image;
+ * `setTemplateImage(true)` lets macOS recolor it for light/dark menu bars
+ * automatically. Windows does not recolor tray icons, so it gets light-glyph
+ * .ico files instead (see `tray-icon.ts`).
  *
  * The icon follows the mode the capture panel has selected: the fox with its
  * record dot for Record, the framed fox for Screenshot. There is no third
@@ -27,13 +34,20 @@ let showMain: (() => void) | null = null;
 let contextMenu: Menu | null = null;
 let trayRef: Tray | null = null;
 
-/** The capture mode the menu-bar icon is showing. */
-export type TrayState = "record" | "screenshot";
-
-const TRAY_ICONS: Record<TrayState, string> = {
-  record: trayRecordingPath,
-  screenshot: trayScreenshotPath,
+const TRAY_ICON_PATHS: Record<TrayIconFile, string> = {
+  "tray-recording.png": trayRecordingPath,
+  "tray-screenshot.png": trayScreenshotPath,
+  "tray-windows-recording.ico": trayWindowsRecordingPath,
+  "tray-windows-screenshot.ico": trayWindowsScreenshotPath,
 };
+
+/** The tray image for a mode on this platform, marked as a template where macOS wants one. */
+function loadTrayIcon(state: TrayState): NativeImage {
+  const { file, template } = trayIconFor(state, process.platform);
+  const icon = nativeImage.createFromPath(TRAY_ICON_PATHS[file]);
+  if (template) icon.setTemplateImage(true);
+  return icon;
+}
 
 let trayState: TrayState = "record";
 
@@ -47,9 +61,7 @@ export function setTrayState(state: TrayState): void {
   if (state === trayState) return;
   trayState = state;
   if (!trayRef || trayRef.isDestroyed()) return;
-  const icon = nativeImage.createFromPath(TRAY_ICONS[state]);
-  icon.setTemplateImage(true);
-  trayRef.setImage(icon);
+  trayRef.setImage(loadTrayIcon(state));
 }
 
 function buildContextMenu(locale: Locale): Menu {
@@ -66,10 +78,7 @@ export function createTray(
   showMainWindow: () => void,
   initialLocale: Locale,
 ): Tray {
-  const icon = nativeImage.createFromPath(TRAY_ICONS[trayState]);
-  icon.setTemplateImage(true);
-
-  const tray = new Tray(icon);
+  const tray = new Tray(loadTrayIcon(trayState));
   trayRef = tray;
   showMain = showMainWindow;
   tray.setToolTip("Kaipu Record");

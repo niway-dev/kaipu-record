@@ -25,6 +25,8 @@ import {
   VIDEO_TOOLS,
   type VideoTool,
 } from "../annotations/video-tools";
+import { formatAccelerator } from "@renderer/features/shortcuts/keyboard-accelerator";
+import { isWindowsHost } from "@renderer/features/shortcuts/host-platform";
 import styles from "./editor-toolbar.module.css";
 
 /** Accepted image types for the "Add image" tool — matches SlideAssetStore's decode path. */
@@ -72,9 +74,19 @@ const TOOL_SHORTCUT: Record<VideoTool, string> = { select: "V", box: "R", arrow:
 const PRIVACY_SHORTCUT: Record<PrivacyTool, string> = { blur: "B", cover: "C" };
 const ZOOM_SHORTCUT = "Z";
 const SPLIT_SHORTCUT = "S";
-const DELETE_SHORTCUT = "⌫";
-const UNDO_SHORTCUT = "⌘Z";
-const REDO_SHORTCUT = "⌘⇧Z";
+
+/**
+ * Undo/redo/delete as the host prints them: "⌘Z" / "⌘⇧Z" / "⌫" on macOS, and
+ * "Ctrl+Z" / "Ctrl+Shift+Z" / "Del" on Windows. These match the page's key handler
+ * (Cmd-or-Ctrl+Z, plus Shift for redo; Delete or Backspace), which binds no Ctrl+Y.
+ */
+function editShortcuts(): { undo: string; redo: string; remove: string } {
+  return {
+    undo: formatAccelerator("CommandOrControl+Z"),
+    redo: formatAccelerator("CommandOrControl+Shift+Z"),
+    remove: isWindowsHost() ? "Del" : "⌫",
+  };
+}
 
 export interface EditorToolbarProps {
   canUndo: boolean;
@@ -236,6 +248,7 @@ export function EditorToolbar({
 }: EditorToolbarProps): React.JSX.Element {
   const t = useTranslations("videoEditor");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const shortcuts = editShortcuts();
 
   return (
     <div className={styles.toolbar}>
@@ -244,7 +257,7 @@ export function EditorToolbar({
         <button
           type="button"
           className={styles.iconBtn}
-          title={`${t("undo")} (${UNDO_SHORTCUT})`}
+          title={`${t("undo")} (${shortcuts.undo})`}
           aria-label={t("undo")}
           disabled={!canUndo}
           onClick={onUndo}
@@ -254,7 +267,7 @@ export function EditorToolbar({
         <button
           type="button"
           className={styles.iconBtn}
-          title={`${t("redo")} (${REDO_SHORTCUT})`}
+          title={`${t("redo")} (${shortcuts.redo})`}
           aria-label={t("redo")}
           disabled={!canRedo}
           onClick={onRedo}
@@ -297,7 +310,7 @@ export function EditorToolbar({
         <button
           type="button"
           className={styles.iconBtn}
-          title={`${t("deleteSegment")} (${DELETE_SHORTCUT})`}
+          title={`${t("deleteSegment")} (${shortcuts.remove})`}
           aria-label={t("deleteSegment")}
           disabled={deleteDisabled}
           onClick={onDeleteSelected}

@@ -13,6 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@better-auth/electron": "catalog:",
     "@kaipu/application": "workspace:*",
     "@kaipu/domain": "workspace:*",
     "@kaipu/infra-auth": "workspace:*",
@@ -24,7 +25,7 @@
     "@orpc/openapi": "catalog:",
     "@orpc/server": "catalog:",
     "better-auth": "catalog:",
-    "drizzle-orm": "^0.45.1",
+    "drizzle-orm": "^0.45.2",
     "hono": "catalog:",
     "zod": "catalog:"
   },

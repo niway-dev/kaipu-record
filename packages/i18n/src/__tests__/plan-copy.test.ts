@@ -13,7 +13,6 @@ const values = planCopyValues();
 
 const uiKeys = [
   ["settings", "accountDescription"],
-  ["auth", "signUpSubtitle"],
   ["auth", "cloudPromotion"],
   ["auth", "cloudActivation"],
 ] as const;

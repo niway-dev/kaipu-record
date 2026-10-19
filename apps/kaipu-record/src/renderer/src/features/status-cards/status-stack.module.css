@@ -1,0 +1,16 @@
+/* Top-right, under the title bar, above the page and below modals (z-index 50). */
+.stack {
+  position: fixed;
+  top: calc(var(--titlebar-height) + 10px);
+  right: 16px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.slot {
+  display: contents;
+}

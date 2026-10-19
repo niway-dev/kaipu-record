@@ -7,8 +7,8 @@ import type { AuthStatus } from "@shared/types/auth";
 import { entitlementsFromStatus } from "@shared/entitlements";
 import { Button } from "@kaipu/ui";
 import { Badge } from "@kaipu/ui";
-import { barSegments, type CapacityView } from "./capacity-view";
-import { formatBytesDecimal, MAX_VIDEO_BYTES } from "./format-bytes";
+import { barSegments, type CapacityView } from "@kaipu/domain/capacity";
+import { formatBytesDecimal, MAX_VIDEO_BYTES } from "@kaipu/domain/constants";
 import styles from "./storage-cloud-settings.module.css";
 
 type Translate = Translator<"storageCloud">;

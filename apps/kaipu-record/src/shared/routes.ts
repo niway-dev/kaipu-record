@@ -15,13 +15,22 @@ export const ROUTES = {
   library: "/library",
   libraryDetail: "/library/:assetId",
   screenshots: "/screenshots",
+  /** The Editor workspace: recent items when nothing is open. */
+  editor: "/editor",
+  editorVideo: "/editor/video/:assetId",
+  editorImage: "/editor/image/:assetId",
+  /** An empty editor waiting for an image pasted from the clipboard. */
+  editorNew: "/editor/new",
+  /** A fresh capture that is not in the vault yet; its image travels in router state. */
+  editorCapture: "/editor/capture",
+  /** Legacy, redirects to `editorImage`/`editorCapture`. */
   screenshotEditor: "/screenshot-editor",
+  /** Legacy, redirects to `editorVideo`. */
   videoEditor: "/video-editor",
   shortcuts: "/shortcuts",
   cloud: "/cloud",
   settings: "/settings",
   signIn: "/sign-in",
-  signUp: "/sign-up",
 } as const;
 
 export type RouteName = keyof typeof ROUTES;

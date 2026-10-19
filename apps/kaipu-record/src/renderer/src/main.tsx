@@ -6,15 +6,20 @@ import App from "./app/app";
 import { CapturePanel } from "./features/capture-panel/capture-panel";
 import { ControlBarWindowRoot } from "./features/control-bar/control-bar-window";
 import { CameraBubble } from "./features/camera-bubble/camera-bubble";
+import { CaptureOverlay } from "./features/screenshots/overlay/capture-overlay";
+import { parseOverlayQuery } from "./features/screenshots/overlay/overlay-query";
+import { CaptureToast } from "./features/screenshots/toast/capture-toast";
 import { installCrashForwarder } from "./features/analytics/crash-forwarder";
 import { I18nRoot } from "./app/i18n-root";
 import { StylexProbe } from "./dev/stylex-probe";
 
-// Same HTML entry, four render targets selected by query param:
-//   ?mode=capture         → the menu-bar tray's compact panel
-//   ?window=control-bar   → the floating recording control bar
-//   ?window=camera-bubble → the floating webcam bubble
-//   (default)             → the full app
+// Same HTML entry, six render targets selected by query param:
+//   ?mode=capture           → the menu-bar tray's compact panel
+//   ?window=control-bar     → the floating recording control bar
+//   ?window=camera-bubble   → the floating webcam bubble
+//   ?window=capture-overlay → one screenshot capture overlay per display
+//   ?window=capture-toast   → the toast after a quiet capture
+//   (default)               → the full app
 const root = createRoot(document.getElementById("root")!);
 
 /** Pick the render target, then wrap it in the i18n provider (resolved from the
@@ -27,7 +32,27 @@ async function bootstrap(): Promise<void> {
   const isCameraBubble = windowKind === "camera-bubble";
 
   let node: React.JSX.Element;
-  if (isControlBar) {
+  if (windowKind === "capture-overlay") {
+    // Transparent, display-sized window: the overlay paints its own dim sheet, which is
+    // also what makes Windows deliver the clicks to it. No router, no app shell.
+    document.body.style.background = "transparent";
+    document.body.dataset.window = "capture-overlay";
+    installCrashForwarder("capture-overlay");
+    const overlayQuery = parseOverlayQuery(window.location.search);
+    if (overlayQuery) {
+      node = <CaptureOverlay query={overlayQuery} />;
+    } else {
+      // Nothing to draw: cancel at once rather than leave a screen-covering window.
+      window.electronAPI.captureOverlay.answer({ kind: "cancelled" });
+      node = <></>;
+    }
+  } else if (windowKind === "capture-toast") {
+    // Transparent, fixed-size window: only the card paints (see main.css).
+    document.body.style.background = "transparent";
+    document.body.dataset.window = "capture-toast";
+    installCrashForwarder("capture-toast");
+    node = <CaptureToast />;
+  } else if (isControlBar) {
     // Transparent, fixed-size widget — only the bar pill paints, and it never
     // scrolls (see the `[data-window="control-bar"]` rule in main.css).
     document.body.style.background = "transparent";
