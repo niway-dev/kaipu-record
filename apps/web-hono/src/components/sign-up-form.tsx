@@ -1,17 +1,17 @@
 import { useForm } from "@tanstack/react-form";
-import { useNavigate, useRouter } from "@tanstack/react-router";
+import { useRouter } from "@tanstack/react-router";
 import { toast } from "sonner";
 import z from "zod";
 
 import { SignupLegalNotice } from "@/components/legal/signup-legal-notice";
 import CloudPromotion from "@/components/cloud-promotion";
 import { authClient } from "@/lib/auth/auth-client";
+import { resolvePostSignInPath } from "@/lib/post-sign-in";
 
 import { Button, Input, Label } from "@kaipu/web-ui";
 import { useTranslations } from "@kaipu/i18n";
 
-export default function SignUpForm() {
-  const navigate = useNavigate();
+export default function SignUpForm({ redirectTo }: { redirectTo?: string }) {
   const router = useRouter();
   const t = useTranslations("auth");
 
@@ -31,7 +31,7 @@ export default function SignUpForm() {
         {
           onSuccess: async () => {
             await router.invalidate();
-            navigate({ to: "/recordings" });
+            router.history.push(resolvePostSignInPath({ redirect: redirectTo }));
             toast.success(t("signUpSuccess"));
           },
           onError: (error) => {

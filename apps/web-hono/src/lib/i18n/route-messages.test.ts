@@ -25,18 +25,39 @@ describe("slicesForPath", () => {
   });
 
   it("loads the recordings namespace only for the recordings page", () => {
-    expect(slicesForPath("/recordings")).toContain("recordings");
+    expect(slicesForPath("/dashboard/recordings")).toContain("recordings");
+    expect(slicesForPath("/dashboard")).not.toContain("recordings");
     expect(slicesForPath("/auth/login")).not.toContain("recordings");
     expect(slicesForPath("/auth/login")).toContain("auth");
   });
 
-  it("gives the account page the account copy and the shared capacity copy", () => {
-    const slices = slicesForPath("/account");
-    expect(slices).toContain("account");
-    expect(slices).toContain("storageCloud");
-    expect(slices).toContain("auth");
-    expect(slicesForPath("/account/")).toEqual(slices);
-    expect(slicesForPath("/recordings")).not.toContain("storageCloud");
+  it("gives every dashboard page its navigation copy and the app chrome", () => {
+    for (const path of [
+      "/dashboard",
+      "/dashboard/profile",
+      "/dashboard/settings",
+      "/dashboard/recordings",
+    ]) {
+      const slices = slicesForPath(path);
+      expect(slices).toContain("dashboard");
+      expect(slices).toContain("header");
+      expect(slices).toContain("auth");
+    }
+    expect(slicesForPath("/dashboard/")).toEqual(slicesForPath("/dashboard"));
+  });
+
+  it("gives the home and the settings page the shared capacity copy, and not the profile", () => {
+    for (const path of ["/dashboard", "/dashboard/settings"]) {
+      expect(slicesForPath(path)).toContain("account");
+      expect(slicesForPath(path)).toContain("storageCloud");
+    }
+    expect(slicesForPath("/dashboard/profile")).toContain("account");
+    expect(slicesForPath("/dashboard/profile")).not.toContain("storageCloud");
+  });
+
+  it("sends no copy for the redirect-only legacy paths", () => {
+    expect(slicesForPath("/account")).toEqual([]);
+    expect(slicesForPath("/recordings")).toEqual([]);
   });
 
   it("ships the features catalogue only to the features page", () => {
@@ -58,8 +79,10 @@ describe("slicesForPath", () => {
       "/roadmap",
       "/legal/cookies",
       "/auth/login",
-      "/recordings",
-      "/account",
+      "/dashboard",
+      "/dashboard/profile",
+      "/dashboard/settings",
+      "/dashboard/recordings",
     ]) {
       for (const slice of slicesForPath(path)) {
         expect(known.has(slice.split(".")[0] ?? "")).toBe(true);

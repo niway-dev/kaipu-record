@@ -5,6 +5,10 @@ description: "The authenticated /account page on the web (NIW2-220): what is bui
 
 # Web account page
 
+> **Moved by NIW2-470:** the page now lives in the [web dashboard](./web-dashboard). `/account`
+> redirects to `/dashboard/profile` (profile and sign-in methods) and its plan, language and danger
+> zone sections are on `/dashboard/settings`. The rest of this page describes the sections.
+
 > **Status: 🟢 Ready to validate (2026-10-11), not yet reviewed on a deploy.**
 > Spec (the contract): [NIW2-220 approved spec](../specs/2026-10-11-niw2-220-web-account-page).
 > Linear: NIW2-220. Epic: NIW2-213. Server-side deletion: NIW2-214 / PR #268.

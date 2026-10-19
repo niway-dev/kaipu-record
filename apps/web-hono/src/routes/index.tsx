@@ -1,5 +1,5 @@
 import { Crop, Scissors, Search, Video } from "lucide-react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 import { LazyHydrate } from "@/components/lazy-hydrate";
 import { HomeShell } from "@/components/home/home-shell";
@@ -14,11 +14,21 @@ import { MockFind } from "@/components/home/mock-find";
 import { Files } from "@/components/home/files";
 import { Closing } from "@/components/home/closing";
 import { pageHead, softwareJsonLd } from "@/lib/seo";
+import { getHomeRedirect } from "@/server-functions/get-home-redirect";
 
 export const Route = createFileRoute("/")({
   // The redesigned home brings its own chrome (top bar + rail), so the root
   // document must stand down exactly as it does for the marketing shell.
   staticData: { shell: "marketing" },
+  // Server-side only, so it costs the public page nothing: a document request that carries a
+  // Better Auth session cookie is checked once and bounced to the dashboard when the session is
+  // valid; a request without the cookie (crawlers, new visitors) renders the landing with no API
+  // call. In-app navigation to `/` (the header logo, sign-out) is never redirected.
+  beforeLoad: async () => {
+    if (typeof window !== "undefined") return;
+    const to = await getHomeRedirect();
+    if (to) throw redirect({ href: to });
+  },
   head: ({ match }) => {
     const { locale } = match.context;
     return {

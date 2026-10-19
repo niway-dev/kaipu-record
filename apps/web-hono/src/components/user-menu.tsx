@@ -40,7 +40,9 @@ export default function UserMenu({ userName, userEmail, isAuthenticated }: UserM
           <DropdownMenuLabel>{t("myAccount")}</DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem>{userEmail}</DropdownMenuItem>
-          <DropdownMenuItem render={<Link to="/account" />}>{t("account")}</DropdownMenuItem>
+          <DropdownMenuItem render={<Link to="/dashboard/profile" />}>
+            {t("account")}
+          </DropdownMenuItem>
           <DropdownMenuItem variant="destructive" onClick={() => signOut.mutate()}>
             {t("signOut")}
           </DropdownMenuItem>

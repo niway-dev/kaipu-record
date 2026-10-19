@@ -3,6 +3,7 @@ import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useTranslations } from "@kaipu/i18n";
 
 import SignInForm from "@/components/sign-in-form";
+import { resolvePostSignInPath } from "@/lib/post-sign-in";
 import { safeRedirectPath } from "@/lib/safe-redirect";
 
 function LoginPage() {
@@ -36,7 +37,7 @@ export const Route = createFileRoute("/auth/login")({
   beforeLoad: async (ctx) => {
     const { isAuthenticated } = ctx.context;
     if (isAuthenticated) {
-      throw redirect({ href: ctx.search.redirect ?? "/recordings" });
+      throw redirect({ href: resolvePostSignInPath(ctx.search) });
     }
   },
 });

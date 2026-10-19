@@ -1892,5 +1892,33 @@
     "restored": "Your account was restored",
     "restoreFailed": "We couldn't restore your account. Sign in again and retry.",
     "cancel": "Cancel"
+  },
+  "dashboard": {
+    "navLabel": "Dashboard sections",
+    "navHome": "Home",
+    "navProfile": "Profile",
+    "navSettings": "Settings",
+    "navRecordings": "Recordings",
+    "welcomeTitle": "Hi, {name}",
+    "welcomeSignedInAs": "Signed in as {email}",
+    "firstVisitTitle": "Your account is ready",
+    "firstVisitPlan": "You're on the {plan} plan with {capacity} of cloud space.",
+    "firstVisitDismiss": "Got it",
+    "storageManage": "Manage",
+    "storageSummary": "{used} used of {capacity}",
+    "getStartedTitle": "Get started",
+    "getStartedBody": "Kaipu records on your computer. Install the desktop app and sign in with this account to upload recordings to your cloud space.",
+    "downloadMac": "Download for Mac (Apple Silicon)",
+    "downloadMacIntel": "Mac (Intel)",
+    "downloadWindows": "Download for Windows (beta)",
+    "downloadWindowsShort": "Windows (beta)",
+    "downloadMacShort": "Mac (Apple Silicon)",
+    "otherDownloads": "Other downloads",
+    "profileTitle": "Profile",
+    "profileDescription": "Your name, your email and how you sign in.",
+    "settingsTitle": "Settings",
+    "settingsDescription": "Your plan and storage, your language and your account.",
+    "languageTitle": "Language",
+    "languageDescription": "The language Kaipu uses on the web."
   }
 }

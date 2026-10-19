@@ -162,7 +162,7 @@ describe("DangerZone", () => {
     fireEvent.click(confirmButton());
 
     const link = await screen.findByRole("link", { name: "Sign in again" });
-    expect(link.getAttribute("href")).toBe("/auth/login?redirect=%2Faccount");
+    expect(link.getAttribute("href")).toBe("/auth/login?redirect=%2Fdashboard%2Fsettings");
   });
 
   it("asks only for the email on an account without a password, and sends no password", async () => {
