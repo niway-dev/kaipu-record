@@ -108,6 +108,7 @@ export default defineConfig({
             { slug: "backlog/desktop-cloud-sync-gap" },
             { slug: "backlog/cloud-error-states" },
             { slug: "backlog/web-account-page" },
+            { slug: "backlog/web-dashboard" },
             { slug: "backlog/legal-documents" },
             { slug: "backlog/public-roadmap-page" },
             { slug: "backlog/public-page-shell" },
