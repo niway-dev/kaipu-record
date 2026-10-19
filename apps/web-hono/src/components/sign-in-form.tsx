@@ -6,9 +6,21 @@ import { Button, Input, Label } from "@kaipu/web-ui";
 import { useTranslations } from "@kaipu/i18n";
 import CloudPromotion from "@/components/cloud-promotion";
 import { authClient } from "@/lib/auth/auth-client";
+import { desktopDonePath, type DesktopAuthQuery } from "@/lib/desktop-auth";
 import { resolvePostSignInPath } from "@/lib/post-sign-in";
 
-export default function SignInForm({ redirectTo }: { redirectTo?: string }) {
+/**
+ * `desktop` is set on the desktop sign-in page (NIW2-471): the request then carries the app's
+ * query so the API mints an authorization code with the new session, and the visitor lands on the
+ * page that hands that code to the app instead of the dashboard.
+ */
+export default function SignInForm({
+  redirectTo,
+  desktop,
+}: {
+  redirectTo?: string;
+  desktop?: DesktopAuthQuery;
+}) {
   const router = useRouter();
   const t = useTranslations("auth");
 
@@ -24,10 +36,13 @@ export default function SignInForm({ redirectTo }: { redirectTo?: string }) {
           password: value.password,
         },
         {
+          query: desktop ? { ...desktop } : undefined,
           onSuccess: async () => {
             await router.invalidate();
             // The helper validates `redirectTo` again, so a bad value cannot leave the site.
-            router.history.push(resolvePostSignInPath({ redirect: redirectTo }));
+            router.history.push(
+              desktop ? desktopDonePath(desktop) : resolvePostSignInPath({ redirect: redirectTo }),
+            );
             toast.success(t("signInSuccess"));
           },
           onError: (error) => {

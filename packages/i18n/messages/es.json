@@ -1920,5 +1920,30 @@
     "settingsDescription": "Tu plan y almacenamiento, tu idioma y tu cuenta.",
     "languageTitle": "Idioma",
     "languageDescription": "El idioma que usa Kaipu en la web."
+  },
+  "desktopAuth": {
+    "invalidTitle": "Abre el inicio de sesión desde la app de Kaipu",
+    "invalidBody": "Esta página solo funciona cuando la abre la app de Kaipu. Vuelve a la app y elige Iniciar sesión.",
+    "signInTitle": "Inicia sesión en la app de Kaipu",
+    "signInBody": "Inicia sesión aquí y te llevaremos de vuelta a Kaipu en esta computadora.",
+    "confirmTitle": "¿Iniciar sesión en Kaipu en esta computadora?",
+    "confirmBody": "Tienes la sesión iniciada como {account}.",
+    "continue": "Continuar",
+    "continuing": "Conectando…",
+    "switchAccount": "Cambiar de cuenta",
+    "transferFailed": "No se pudo conectar la app. Inténtalo de nuevo o empieza otra vez desde la app de Kaipu.",
+    "returningTitle": "Volviendo a Kaipu…",
+    "returningBody": "Es posible que tu navegador pregunte si quieres abrir Kaipu. Permítelo para terminar de iniciar sesión.",
+    "fallbackTitle": "¿No se abrió Kaipu?",
+    "fallbackBody": "Ábrelo de nuevo, o copia el código y pégalo en la app.",
+    "openAgain": "Abrir Kaipu de nuevo",
+    "copyCode": "Copiar código",
+    "codeLabel": "Código de inicio de sesión",
+    "codeNote": "Funciona una sola vez y caduca 5 minutos después de iniciar sesión.",
+    "copied": "Código copiado. Pégalo en la app de Kaipu.",
+    "copyFailed": "No se pudo copiar. Selecciona el código y cópialo tú.",
+    "noCodeTitle": "No hay código de inicio de sesión",
+    "noCodeBody": "Puede que el código haya caducado o ya se haya usado. Empieza otra vez desde la app de Kaipu.",
+    "closeTab": "Cuando Kaipu haya iniciado sesión, puedes cerrar esta pestaña."
   }
 }
