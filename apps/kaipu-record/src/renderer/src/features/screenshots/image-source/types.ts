@@ -16,12 +16,24 @@ export interface ImageSourceBase {
 
 /**
  * Where the editor's image comes from — the `kind` discriminator:
- * - `blob`  — a freshly captured PNG held in memory (what capture produces today).
+ * - `blob`  — a PNG held in memory: a fresh capture, or an image pasted from the
+ *             clipboard (`origin: "paste"`).
  * - `local` — a screenshot already saved in the vault (offline / local re-open).
  * - `cloud` — a screenshot uploaded to cloud storage (remote URL).
  */
 export type ImageSource =
-  | (ImageSourceBase & { kind: "blob"; bytes: ArrayBuffer })
+  | (ImageSourceBase & {
+      kind: "blob";
+      bytes: ArrayBuffer;
+      /**
+       * Where the bytes came from. A capture (the default) is a fresh screenshot;
+       * a paste is an image the user already had, so the editor opens it without
+       * the capture conveniences (frame, auto-save, auto-copy). A quiet capture was
+       * already saved and/or copied by main (Annotate on the capture toast), so the
+       * editor runs no auto action for it.
+       */
+      origin?: "capture" | "paste" | "quiet";
+    })
   | (ImageSourceBase & { kind: "local"; id: string; version?: number })
   | (ImageSourceBase & { kind: "cloud"; url: string });
 

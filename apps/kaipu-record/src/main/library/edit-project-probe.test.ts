@@ -116,15 +116,25 @@ describe("probeEditing", () => {
   });
 
   it("keeps the export stamp across later saves, so it reads as edited-since-export", async () => {
-    await writeFile(join(dir, "r.mp4"), "v");
-    await saveSession("r", { sessionJson: "{}", assets: [], exported: true });
-    const stamp = (await probeEditSession(dir, "r")).exportedSavedAt;
+    // `savedAt` is Date.now(): two saves inside one millisecond (a fast CI runner)
+    // would stamp the same value, so the clock is pinned to two distinct instants.
+    const clock = vi.spyOn(Date, "now");
+    try {
+      await writeFile(join(dir, "r.mp4"), "v");
+      clock.mockReturnValue(1_000);
+      await saveSession("r", { sessionJson: "{}", assets: [], exported: true });
+      const stamp = (await probeEditSession(dir, "r")).exportedSavedAt;
+      expect(stamp).toBe(1_000);
 
-    // A plain edit must neither clear the stamp (that would claim it was never
-    // exported) nor advance it (that would claim the new edit is already in a file).
-    await saveSession("r", { sessionJson: '{"v":2}', assets: [] });
-    const after = await probeEditSession(dir, "r");
-    expect(after.exportedSavedAt).toBe(stamp);
-    expect(after.savedAt).not.toBe(after.exportedSavedAt);
+      // A plain edit must neither clear the stamp (that would claim it was never
+      // exported) nor advance it (that would claim the new edit is already in a file).
+      clock.mockReturnValue(2_000);
+      await saveSession("r", { sessionJson: '{"v":2}', assets: [] });
+      const after = await probeEditSession(dir, "r");
+      expect(after.exportedSavedAt).toBe(stamp);
+      expect(after.savedAt).toBe(2_000);
+    } finally {
+      clock.mockRestore();
+    }
   });
 });

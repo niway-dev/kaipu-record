@@ -38,7 +38,9 @@
   },
   "tray": {
     "open": "Open Kaipu Record",
-    "quit": "Quit"
+    "quit": "Quit",
+    "closedToTrayTitle": "Kaipu is still running",
+    "closedToTrayBody": "Find it in the system tray. Right-click the icon to quit."
   },
   "dialogs": {
     "cancel": "Cancel",
@@ -54,7 +56,14 @@
     "folderUnusableDetail": "Kaipu can't write there. Pick another folder.",
     "changeFolder": "Change folder",
     "changeFolderTitle": "Change the recordings folder",
-    "changeFolderDetail": "Your current recordings stay in the old folder; from now on Kaipu saves and shows the new folder's contents. You can switch back anytime."
+    "changeFolderDetail": "Your current recordings stay in the old folder; from now on Kaipu saves and shows the new folder's contents. You can switch back anytime.",
+    "exportPdfTitle": "Export as PDF",
+    "pdfFileType": "PDF document",
+    "exportInProgress": "An export is still running",
+    "closeCancelsExportDetail": "Closing the window cancels it. The original recording isn't touched.",
+    "quitCancelsExportDetail": "Quitting cancels it. The original recording isn't touched.",
+    "cancelExportAndClose": "Cancel export and close",
+    "cancelExportAndQuit": "Cancel export and quit"
   },
   "nav": {
     "record": "Record",
@@ -63,7 +72,49 @@
     "shortcuts": "Shortcuts",
     "settings": "Settings",
     "account": "Account",
-    "cloud": "Cloud"
+    "cloud": "Cloud",
+    "editor": "Editor"
+  },
+  "editor": {
+    "title": "Editor",
+    "subtitleImages": "Start a new image, or open one you worked on.",
+    "subtitleVideos": "Resume an edit, or pick a recording from your Library.",
+    "tabsLabel": "What to edit",
+    "tabImages": "Images",
+    "tabVideos": "Videos",
+    "startTitle": "Start from an image you copied",
+    "startBody": "Copy a screenshot or a photo anywhere, then press {shortcut} here to edit it.",
+    "chooseFromLibrary": "Choose from Library",
+    "clipboardImage": "Image on your clipboard",
+    "clipboardSize": "{width} × {height}",
+    "pasteNow": "Paste {shortcut}",
+    "continueTitle": "Continue",
+    "continueImages": "Images you opened or saved here",
+    "continueVideos": "Videos you edited or opened here",
+    "lastWorkedOn": "Last worked on",
+    "activityEdited": "Edited {when}",
+    "activitySaved": "Saved {when}",
+    "activityOpened": "Opened {when}",
+    "open": "Open",
+    "resume": "Resume",
+    "openItem": "Open {title}",
+    "resumeItem": "Resume {title}",
+    "showOlder": "Show older · {count}",
+    "showLess": "Show less",
+    "emptyTitle": "Nothing to continue yet",
+    "emptyImages": "Images you open or save in the editor show up here. Screenshots you only captured stay in your Library.",
+    "emptyVideos": "Recordings you open in the editor show up here. Pick one from your Library to start.",
+    "emptyCaptureHint": "Capture a screenshot from any app and it opens in the editor.",
+    "new": "New image",
+    "newTitle": "Start from an image on your clipboard",
+    "newHeading": "New image",
+    "newSubtitle": "Edit any image you have copied: a photo, a picture from the web, a screenshot from another app.",
+    "pasteTitle": "Paste an image",
+    "pasteHint": "Copy an image anywhere, then press {shortcut} here.",
+    "pasteButton": "Paste from clipboard",
+    "pasteEmpty": "There is no image on the clipboard. Copy one, then try again.",
+    "pasteError": "Couldn't open that image. Try copying it again.",
+    "pastedTitle": "Pasted image — {date}"
   },
   "settings": {
     "title": "Settings",
@@ -112,7 +163,14 @@
     "general": "General",
     "generalDescription": "Language and appearance of Kaipu Record.",
     "permissionsDescription": "What Kaipu Record may access on this device.",
-    "recordingQualityDescription": "Resolution, frame rate and bitrate for new recordings.",
+    "recordingQualityDescription": "Resolution, frame rate and bitrate for new recordings, and the default for exports.",
+    "exportQuality": "Export quality",
+    "exportQualityGroup": "Export quality",
+    "exportQualityBalanced": "Balanced",
+    "exportQualityBalancedCaption": "Recommended. Crisp screen text at about 7 MB a minute: up to 1080p, 24 fps.",
+    "exportQualityMaximum": "Maximum quality",
+    "exportQualityMaximumCaption": "Native size and the highest bitrate. Larger files.",
+    "exportQualityNote": "Preselected in the export window. You can pick another option for a single export.",
     "recordingDescription": "How recordings are captured.",
     "filesDescription": "Where recordings and screenshots are saved on this device.",
     "appDescription": "How the app behaves on this device.",
@@ -121,15 +179,21 @@
     "screenshotSaveDescription": "Every capture goes to your Library the moment you take it.",
     "brandBadge": "Show a \"Made with Kaipu\" badge",
     "brandBadgeDescription": "A small mark in the corner of new recordings. Off by default.",
+    "privacy": "Privacy",
+    "diagnostics": "Send diagnostics",
+    "diagnosticsDescription": "Sends error reports and technical events so we can find and fix problems. Never your video or audio. Turned off, nothing is sent, and we cannot look into errors you run into.",
     "screenshotCopy": "Copy screenshots to the clipboard automatically",
     "screenshotCopyDescription": "Every capture is ready to paste the moment you take it.",
+    "screenshotQuietNote": "When either is on, captures skip the editor and show a small notification instead.",
     "developer": "Developer",
     "openFolder": "Open folder",
     "accountMoved": "Your account moved to Cloud",
     "accountMovedDetail": "Session, capacity and uploads live in the Cloud section of the sidebar.",
     "goToCloud": "Go to Cloud",
     "navCloudNote": "Your account and cloud capacity now live in the Cloud section.",
-    "screenshotsDescription": "How captures are saved on this device."
+    "screenshotsDescription": "How captures are saved on this device.",
+    "recordingSavedCard": "Offer a light copy after recording",
+    "recordingSavedCardDescription": "When a recording is over 10 MB, its page shows a card to make a copy small enough for GitHub. It hides after 8 seconds."
   },
   "record": {
     "readyToRecord": "Ready to record",
@@ -181,7 +245,8 @@
     "heroSubtitle": "Kaipu Record captures your screen and camera in high quality, right on your Mac. Private, fast, and account-free.",
     "downloadMacArm": "Download for Mac (Apple Silicon)",
     "downloadMacIntel": "Mac (Intel)",
-    "downloadWindows": "Windows (coming soon)",
+    "downloadWindowsBeta": "Windows (beta)",
+    "downloadWindowsSmartScreen": "The Windows beta is not code-signed yet. If SmartScreen stops it, choose “More info”, then “Run anyway”.",
     "footerTagline": "Record. Share. No fuss.",
     "homeEyebrow": "Kaipu, in four moments",
     "homeHeroSerif": "Get back to work.",
@@ -198,8 +263,8 @@
     "homeChapter2Sub": "Screenshots that explain",
     "homeChapter2Title": "Sometimes a screenshot says it all.",
     "homeChapter2Serif": "Point at it. Literally.",
-    "homeChapter2Body": "Select an area, then add boxes, arrows and handwritten notes. Blur what shouldn’t be seen and frame it on a clean background.",
-    "homeChapter2Pill1": "Area · window · full screen",
+    "homeChapter2Body": "Draw a frame or pick a screen, then add boxes, arrows and handwritten notes. Blur what shouldn’t be seen and set it on a clean background.",
+    "homeChapter2Pill1": "Frame · Screen",
     "homeChapter2Pill2": "Boxes & arrows",
     "homeChapter2Pill3": "Blur",
     "homeChapter2Pill4": "Copy in one click",
@@ -230,11 +295,11 @@
     "homeFilesLabel": "Your files",
     "homeCtaLead": "Next time,",
     "homeCtaSerif": "show it with Kaipu.",
-    "homeCtaFootnote": "macOS 13 or later · We’ll let you know when Windows is ready.",
+    "homeCtaFootnote": "macOS 13 or later · Windows 10 or later, 64-bit (beta)",
     "homeMadeIn": "Made in Peru",
     "homeRailTotal": "04",
     "homeNavProduct": "Product",
-    "homeNavYourFiles": "Your files",
+    "homeNavFeatures": "Features",
     "homeHeroEyebrow": "Screen recording & screenshots for Mac",
     "homeHeroBadgeMac": "Mac app",
     "homeHeroBadgeRest": "Local · no account",
@@ -246,7 +311,7 @@
     "homeHeroPill4": "A folder, not a cloud",
     "homeHeroCtaPrimary": "Download Kaipu for Mac",
     "homeHeroCtaSecondary": "See how it works",
-    "homeHeroFootnote": "Apple Silicon · Intel · Windows coming soon",
+    "homeHeroFootnote": "Apple Silicon · Intel · Windows beta",
     "homeAppTitle": "Kaipu Record",
     "homeAppDisplay": "Built-in Retina Display",
     "homeAppDisplayMeta": "PRIMARY · 2560×1600",
@@ -315,15 +380,22 @@
     "signInSuccess": "Sign in successful",
     "signUpSuccess": "Sign up successful",
     "back": "Back",
-    "signInSubtitle": "Sign in to save and share with Kaipu Cloud.",
-    "signUpSubtitle": "Sign up and verify your email to try Kaipu Cloud with 250 MB free.",
-    "errorInvalidCredentials": "Wrong email or password.",
-    "errorEmailTaken": "That email is already registered.",
-    "errorPasswordTooShort": "Password must be at least 8 characters.",
     "errorNetwork": "Couldn't reach the server — check your connection.",
+    "browserTitle": "Sign in to Kaipu",
+    "browserSubtitle": "We open Kaipu in your browser to sign in. You never type a password in this app.",
+    "signInWithBrowser": "Sign in with your browser",
+    "waitingTitle": "Finish signing in in your browser",
+    "waitingSubtitle": "Sign in on the Kaipu page that just opened. This app continues on its own when you are done.",
+    "openBrowserAgain": "Open browser again",
+    "cancel": "Cancel",
+    "pasteCodeHint": "If this app doesn't open on its own, copy the code from the Kaipu page and paste it here.",
+    "codeLabel": "Code",
+    "submitCode": "Continue",
+    "submittingCode": "Checking code…",
+    "errorStateMismatch": "This sign-in was not started from this app, or it was cancelled. Press Sign in with your browser to start again.",
+    "errorInvalidCode": "That code is invalid, expired or already used. Codes last a few minutes. Open the browser again to get a new one.",
+    "errorNotConfigured": "This build does not know where to sign in. Update the app or contact support.",
     "errorUnknown": "Something went wrong. Try again.",
-    "signingIn": "Signing in…",
-    "creatingAccount": "Creating account…",
     "cloudPromotion": "250 MB free to try Kaipu Cloud",
     "cloudPromotionNote": "Promotional, per verified account. Capacity may change under the Cloud terms.",
     "cloudActivation": "Activate your 250 MB by verifying your email. Use it for recordings and screenshots, and request an increase to 1 GB total, subject to manual approval during the beta.",
@@ -341,7 +413,19 @@
     "verifiedBody": "Your email is verified. You can close this window and return to the Kaipu app, or sign in here.",
     "verifiedError": "This verification link is invalid or has expired.",
     "verifiedResend": "Send a new verification email",
-    "verifiedResendSent": "A new verification email is on its way."
+    "verifiedResendSent": "A new verification email is on its way.",
+    "account": "Account",
+    "continueWithGoogle": "Continue with Google",
+    "googleRedirecting": "Redirecting to Google…",
+    "orDivider": "or",
+    "oauthErrorNotLinked": "This email already has a Kaipu account, and Google has not verified it. Verify your email with Google, or sign in with your password.",
+    "oauthErrorEmailMismatch": "That Google account uses a different email.",
+    "oauthErrorAlreadyLinked": "That Google account is already connected to another Kaipu account.",
+    "oauthErrorUnableToLink": "We couldn't connect your Google account. Try again.",
+    "oauthErrorCancelled": "Google sign-in was cancelled. You can try again or use your email and password.",
+    "oauthErrorExpired": "The Google sign-in was interrupted or took too long. Try again.",
+    "oauthErrorGeneric": "Google sign-in didn't work. Try again, or use your email and password.",
+    "googleUnavailable": "Google sign-in isn't available right now. Use your email and password."
   },
   "recordings": {
     "title": "Recordings",
@@ -374,6 +458,60 @@
     "storageAll": "All",
     "storageLocal": "Local",
     "storageCloud": "Cloud",
+    "tagFilterLabel": "Filter by tag",
+    "tagChip": "{tag} ({count})",
+    "tagsMore": "+{count}",
+    "tagsLess": "Fewer",
+    "tagsLabel": "Tags",
+    "tagsPlaceholder": "Add a tag…",
+    "tagsRemove": "Remove tag {tag}",
+    "tagsEdit": "Tags",
+    "tagPanelTitle": "Tags",
+    "tagPanelClose": "Close tags",
+    "tagPanelEmpty": "No tags yet. Type one and press Enter.",
+    "tagPanelQuick": "Used in your library",
+    "tagPanelOpenDetails": "Open details",
+    "tagsManage": "Manage tags",
+    "tagPanelTabItem": "This item",
+    "tagPanelTabAll": "All tags ({count})",
+    "tagPanelThisItem": "Tags on this item",
+    "tagPanelNoTags": "No tags yet. Open an item's tags to add the first one.",
+    "tagFilterBy": "Show items tagged {tag}",
+    "tagRename": "Rename {tag}",
+    "tagRenameLabel": "New name for {tag}",
+    "tagDelete": "Delete {tag}",
+    "tagDeleteConfirm": "{count, plural, one {Remove from # item?} other {Remove from # items?}}",
+    "tagCreateTitle": "New tag",
+    "tagCreateName": "New tag name",
+    "tagCreatePlaceholder": "Name it… (e.g. Client X)",
+    "tagCreate": "Create",
+    "tagNameTaken": "A tag with this name already exists.",
+    "tagColorLabel": "Tag color",
+    "tagRecolor": "Color of {tag}",
+    "tagColor_rose": "Rose",
+    "tagColor_coral": "Coral",
+    "tagColor_amber": "Amber",
+    "tagColor_lime": "Lime",
+    "tagColor_mint": "Mint",
+    "tagColor_lagoon": "Lagoon",
+    "tagColor_sky": "Sky",
+    "tagColor_iris": "Iris",
+    "tagColor_orchid": "Orchid",
+    "tagColor_slate": "Slate",
+    "tagsLimit": "An item can carry at most {max} tags.",
+    "errorTags": "We couldn't save the tags.",
+    "filterKind": "Type",
+    "filterKindHint": "Video recordings or screenshots",
+    "filterStorage": "Location",
+    "filterStorageHint": "On this Mac, in the cloud, or both",
+    "filterStorageHintWindows": "On this PC, in the cloud, or both",
+    "filterTags": "Tags",
+    "filterTagsHint": "Shows what carries every tag you pick",
+    "filterTagsEmpty": "No tags yet",
+    "filterNameRecordings": "Recordings",
+    "filterNameScreenshots": "Screenshots",
+    "fileCountOf": "{shown} OF {total, plural, one {# FILE} other {# FILES}}",
+    "filteredBy": "filtered by: {filters}",
     "fileCount": "{count, plural, one {# FILE} other {# FILES}}",
     "clearFilters": "Clear filters",
     "errorTitle": "Cannot read your recordings folder",
@@ -393,6 +531,10 @@
     "copied": "Copied",
     "copyError": "Couldn't copy the screenshot to the clipboard.",
     "editVideo": "Edit video",
+    "share": "Share",
+    "shareHint": "Make a lighter copy to send or post",
+    "shareTitle": "Share a copy",
+    "shareReadError": "Couldn't read this recording to prepare a file.",
     "durationUnreadable": "Couldn't read this video's duration",
     "reveal": "Reveal",
     "delete": "Delete",
@@ -439,20 +581,79 @@
     "removeLocalCopy": "Remove local download",
     "removeLocalCopyBlockedEdit": "This file is used by a local editing project. Keep its files to continue editing.",
     "removeLocalCopyBlockedBytes": "The cloud copy is not identical to this file.",
-    "removeLocalCopyBlockedNoCloud": "There is no cloud copy of this file."
+    "removeLocalCopyBlockedNoCloud": "There is no cloud copy of this file.",
+    "kindGif": "GIF",
+    "gifSpecs": "{width}×{height} · {fps} fps",
+    "gifDragHint": "Drag into Slack, GitHub or Finder",
+    "gifDragHintWindows": "Drag into Slack, GitHub or File Explorer",
+    "gifUnavailable": "GIF unavailable",
+    "heavyBannerTitle": "{size} is heavy to send.",
+    "heavyBannerBody": "Share makes a lighter copy — about {estimate}, small enough for GitHub or Jira. The original stays as it is.",
+    "heavyBannerBodyNoEstimate": "Share makes a lighter copy with text that stays readable. The original stays as it is.",
+    "heavyBannerAction": "Make a light copy →",
+    "heavyBannerBodyNoGithub": "Share makes a lighter copy — about {estimate}, with text that stays readable. The original stays as it is."
   },
   "screenshots": {
+    "toast": {
+      "label": "Capture notification",
+      "copiedTitle": "Copied to clipboard",
+      "savedTitle": "Saved to Library",
+      "meta": "{width} × {height} · {mode}",
+      "pasteWith": "paste with {key}",
+      "annotate": "Annotate",
+      "openInLibrary": "Open in Library",
+      "saveToLibrary": "Save to Library",
+      "dismiss": "Dismiss",
+      "footerAlsoSaved": "Auto-hides in {seconds} s · Also saved to your Library",
+      "footerNotSaved": "Auto-hides in {seconds} s · Not saved yet",
+      "footer": "Auto-hides in {seconds} s"
+    },
+    "overlay": {
+      "captureDisplay": "Capture this display · {index}",
+      "captureNumber": "Capture · {index}",
+      "moveFrameHere": "Click to move the frame here",
+      "capture": "Capture",
+      "copy": "Copy",
+      "record": "Record",
+      "recordSoon": "Record · soon",
+      "soon": "Soon",
+      "recordDisplaySoon": "Record this display · soon",
+      "cancel": "Cancel",
+      "cancelTitle": "Cancel · Esc",
+      "modes": "Capture mode",
+      "modeKey": "{mode} ({key})",
+      "frame": "Capture frame",
+      "displayLabel": "Display {index}",
+      "builtIn": "Built-in",
+      "external": "External",
+      "findingWindows": "Finding windows…",
+      "noWindows": "No windows on this display",
+      "hintFrame": "Enter to capture · {copyKey} to copy · {keys} switch mode · Esc to cancel",
+      "hintPick": "Click or Enter to capture · {copyKey} to copy · {keys} switch mode · Esc to cancel"
+    },
     "overline": "SCREENSHOTS",
     "pageTitle": "Capture and document",
     "pageSubtitle": "Take a screenshot, mark what matters with boxes, arrows and text, and share it. All local, no accounts.",
-    "captureButton": "Capture screen",
-    "captureHint": "Select a screen area to start.",
-    "globalShortcut": "Global shortcut {shortcut}",
+    "captureButton": "Capture",
+    "lastUsed": "Last used",
+    "heroHint": "Opens the selector in your last mode. Switch modes there, or pick one below to jump straight in.",
+    "pickerHintRecording": "Capture is off while you record.",
+    "trayLastUsed": "Last used: {mode}. Switch inside the selector.",
+    "recordingBannerLead": "Recording in progress · {elapsed}.",
+    "recordingBannerBody": "Screenshots are paused until you stop.",
+    "stopRecording": "Stop recording",
+    "trayRecordingLead": "Recording · {elapsed}",
+    "trayRecordingBody": "— screenshots paused",
+    "modeScreen": "Screen",
+    "modeFrame": "Frame",
+    "modeWindow": "Window",
+    "notAvailable": "Not available on this platform",
     "recent": "Recent",
     "today": "Today",
     "yesterday": "Yesterday",
     "undo": "Undo",
     "redo": "Redo",
+    "editorToolbar": "Editor toolbar",
     "copy": "Copy",
     "copied": "Copied",
     "copyTitle": "Copy to clipboard",
@@ -470,6 +671,14 @@
     "copySuffix": "copy",
     "copyError": "Couldn't copy the screenshot to the clipboard.",
     "saveError": "Couldn't save the screenshot.",
+    "exportPdf": "PDF",
+    "exportPdfTitle": "Export as a PDF you can share and zoom",
+    "exportedPdf": "Exported",
+    "exportedPdfTitle": "Exported to “{name}”",
+    "exportPdfError": "Couldn't export the screenshot as PDF.",
+    "renameError": "Couldn't rename the screenshot.",
+    "titleLabel": "Title",
+    "titleHint": "Name this capture. Enter or click away applies it; Esc reverts.",
     "discardTitle": "Discard unsaved changes",
     "discardBodyNeverSaved": "This screenshot isn't saved to your library. If you leave now, it's lost.",
     "discardBody": "You have unsaved edits. If you leave now, they're lost.",
@@ -492,6 +701,7 @@
     "strokeAria": "Stroke {n}",
     "deleteAria": "Delete",
     "deleteTitle": "Delete (⌫)",
+    "deleteTitleWindows": "Delete (Del)",
     "toolSelect": "Select",
     "toolPen": "Pen",
     "toolBox": "Box",
@@ -507,6 +717,8 @@
     "beautifyTip": "Tip: annotations are drawn by hand. The frame stays clean and crisp.",
     "typePlaceholder": "Type…",
     "captureWhileRecording": "Finish the recording before taking a screenshot.",
+    "captureUnsupportedWindows": "Screenshots are coming to Windows",
+    "captureUnsupported": "Screenshots are not available on this platform.",
     "imageAlt": "Screenshot",
     "colorPink": "Pink",
     "colorBlack": "Black",
@@ -655,7 +867,123 @@
     "muteRemove": "Delete this muted section",
     "muteNoRoom": "Not enough room left to mute.",
     "muteOnSlide": "A slide has no audio to mute.",
-    "muteInspectorNote": "Silent in the export. The original recording keeps its audio."
+    "muteInspectorNote": "Silent in the export. The original recording keeps its audio.",
+    "exportGenericError": "Couldn't export the video.",
+    "exportEmptyTimeline": "There's nothing to export",
+    "exportSheetTitle": "Export",
+    "exportFormatLabel": "Format",
+    "formatVideo": "Video (MP4)",
+    "formatGif": "GIF",
+    "gifRangeLabel": "Range",
+    "gifRangeStart": "Start (s)",
+    "gifRangeEnd": "End (s)",
+    "gifRangeSummary": "{start} – {end} · {duration}",
+    "gifWidthLabel": "Width",
+    "gifWidthOption": "{width} px",
+    "gifWidthTooWide": "Wider than the recording",
+    "gifFpsLabel": "Frame rate",
+    "gifFpsOption": "{fps} fps",
+    "gifLoopNote": "Loops forever. No audio.",
+    "gifEstimateLabel": "Estimated size",
+    "gifEstimate": "≈ {size}",
+    "gifEstimating": "Estimating…",
+    "gifEstimateFailed": "Couldn't estimate the size",
+    "gifTooLong": "A GIF can be at most {max} s long. Shorten the range.",
+    "gifTooShort": "Select at least 0.5 s",
+    "gifSizeWarning": "Over 10 MB: GitHub won't accept it as an attachment. Try a lower width or frame rate.",
+    "exportGifAction": "Export GIF",
+    "exportingGif": "Exporting GIF…",
+    "gifTitle": "{title} (GIF)",
+    "gifSaved": "GIF saved · {size}",
+    "gifOpen": "Open",
+    "gifExportError": "Couldn't export the GIF.",
+    "gifTooLargeError": "The GIF is over 64 MB. Try a shorter range, a lower width or a lower frame rate.",
+    "presetLabel": "Destination",
+    "presetBalanced": "Balanced",
+    "presetBalancedHint": "Good for almost anything",
+    "presetRecommended": "Recommended",
+    "presetYoutube": "YouTube",
+    "presetYoutubeHint": "16:9 · widescreen",
+    "presetVertical": "Reels · TikTok · Shorts",
+    "presetVerticalHint": "9:16 · vertical",
+    "presetSquare": "Feeds",
+    "presetSquareHint": "1:1 · square",
+    "presetMaximum": "Maximum quality",
+    "presetMaximumHint": "Same as the recording",
+    "presetDimensions": "{width}×{height}",
+    "framingLabel": "Framing",
+    "framingFit": "Fit · show all",
+    "framingFill": "Fill · crop the sides",
+    "framingFitHint": "Shows the whole recording, with blurred bands above and below.",
+    "framingFillHint": "Fills the screen. The edges of your recording are cut off — follows the zooms you made.",
+    "presetTitleYoutube": "{title} (YouTube)",
+    "presetTitleVertical": "{title} (vertical)",
+    "presetTitleSquare": "{title} (square)",
+    "presetTitleShare": "{title} (for sharing)",
+    "openExported": "Open",
+    "openExportedLabel": "Open the existing {name} file",
+    "exportShowInFinder": "Show in Finder",
+    "exportShowInFinderWindows": "Show in File Explorer",
+    "presetBalancedSay": "Crisp text that stays light. Good for almost anything.",
+    "presetYoutubeSay": "The standard widescreen size YouTube expects.",
+    "presetVerticalSay": "Turns your wide recording into a vertical video.",
+    "presetSquareSay": "A square video for LinkedIn or Instagram feeds.",
+    "presetMaximumSay": "Keeps every pixel. Best for archiving, not for sending.",
+    "presetGroupRecommended": "Recommended",
+    "presetGroupShare": "Share in a tool",
+    "presetGroupPost": "Post",
+    "presetGroupKeep": "Keep",
+    "factTextReadable": "Text stays readable",
+    "factPlaysEverywhere": "Plays everywhere",
+    "factBlackBars": "Black bars if the screen isn't 16:9",
+    "factNothingLost": "Nothing is lost",
+    "factHeavy": "Heavy to share",
+    "sizeAbout": "~{size}",
+    "sizeUpTo": "up to ~{size}",
+    "sizeFull": "Full size",
+    "meterOriginal": "Original {size}",
+    "meterUpTo": "Up to ~{size}",
+    "meterFull": "Full size",
+    "meterLighter": "{percent}% lighter",
+    "exportSheetSubtitle": "{title} · {duration} · {width}×{height}",
+    "exportSheetNote": "Saved as a new item in your Library. The original isn't touched.",
+    "exportSizeAction": "Export {size}",
+    "exportFullAction": "Export",
+    "alreadyExportedOpen": "Already exported · Open",
+    "closeSheet": "Close",
+    "exportProgressTitle": "Making a lighter copy…",
+    "exportProgressTitleFull": "Exporting at full quality…",
+    "exportProgressPercent": "{percent}%",
+    "exportProgressEta": "{percent}% · about {eta} left",
+    "etaSeconds": "{seconds} s",
+    "etaMinutes": "{minutes} min",
+    "exportProgressSizes": "{from} → {to}",
+    "exportBusy": "Already exporting “{title}”. Wait for it to finish, or cancel it in the top-right corner.",
+    "readyTitle": "Ready to share · {size}",
+    "readyLighter": "{percent}% lighter than the original.",
+    "readyDragHintTool": "Drag it into a GitHub or Jira comment",
+    "readyDragHint": "Drag it anywhere",
+    "readyDragLabel": "Drag {name} out of Kaipu",
+    "readyViewFile": "View file",
+    "readyDone": "Done",
+    "recordingSavedTitle": "Recording saved",
+    "recordingSavedMeter": "~{size} · fits GitHub",
+    "recordingSavedBody": "Want to send it? We can make a copy that's {percent}% lighter. Text stays readable.",
+    "recordingSavedBodyNoEstimate": "Want to send it? We can make a lighter copy. Text stays readable.",
+    "recordingSavedShare": "Share a light copy",
+    "recordingSavedFooter": "Auto-hides in 8 s · Turn off in Settings → Export quality",
+    "dismissCard": "Dismiss",
+    "presetLight": "Light",
+    "presetLightHint": "GitHub · Jira · Linear · Slack",
+    "presetLightSay": "Readable text, smallest file.",
+    "presetTitleLight": "{title} (light)",
+    "factSmallest": "Smallest file",
+    "factGithubTooBig": "Too big for GitHub — export a shorter part",
+    "recordingSavedMeterNoGithub": "~{size} light copy",
+    "githubFitLabel": "Fits GitHub",
+    "githubFree": "GitHub Free · {limit}",
+    "githubFreeOver": "GitHub Free · over {limit}",
+    "githubPaid": "GitHub Pro / Team / Enterprise · {limit}"
   },
   "panel": {
     "saving": "Saving…",
@@ -666,8 +994,7 @@
     "open": "Open ↗",
     "tabRecord": "Record",
     "tabCapture": "Capture",
-    "panelMode": "Panel mode",
-    "captureScreen": "Capture Screen"
+    "panelMode": "Panel mode"
   },
   "onboarding": {
     "ctaGetStarted": "Get started",
@@ -679,6 +1006,7 @@
     "hint": "PRESS ↵ TO CONTINUE  ·  ← → TO NAVIGATE",
     "welcomeTitle": "Welcome to Kaipu",
     "welcomeSubtitle": "The simple recorder that does what macOS doesn't — capture your screen with your voice, system audio and meetings.",
+    "welcomeSubtitleWindows": "The simple recorder that does what Windows doesn't — capture your screen with your voice, system audio and meetings.",
     "language": "Language",
     "featScreen": "SCREEN",
     "featVoice": "VOICE",
@@ -703,7 +1031,8 @@
     "accessibilityGrant": "Allow",
     "doneTitle": "You're all set",
     "donePressPre": "Press",
-    "donePressPost": "anywhere — even from the menu bar — to start recording."
+    "donePressPost": "anywhere — even from the menu bar — to start recording.",
+    "donePressPostWindows": "anywhere — even from the system tray — to start recording."
   },
   "shortcuts": {
     "title": "Shortcuts",
@@ -721,7 +1050,13 @@
     "bringToFrontLabel": "Bring Kaipu to front",
     "bringToFrontDesc": "Show the app window if it slips behind or out of reach",
     "captureScreenshotLabel": "Capture screenshot",
-    "captureScreenshotDesc": "Open the area selection to take a screenshot",
+    "captureScreenshotDesc": "Capture with your current mode",
+    "captureScreenLabel": "Capture screen",
+    "captureScreenDesc": "Capture one whole display",
+    "captureFrameLabel": "Capture frame",
+    "captureFrameDesc": "Capture what is inside a remembered frame",
+    "captureWindowLabel": "Capture window",
+    "captureWindowDesc": "Capture one window, not the screen around it",
     "toggleMicrophoneLabel": "Mute / unmute microphone",
     "toggleMicrophoneDesc": "Turn your voice on or off, also mid-recording",
     "toggleSystemAudioLabel": "System audio on / off",
@@ -823,13 +1158,13 @@
     "eyebrow": "KAIPU / LEGAL",
     "title": "Clear ground rules.",
     "intro": "How the service works, what to expect from Cloud and how we handle your data.",
-    "updated": "Updated September 14, 2026 · Version 2026-09-14",
+    "updated": "Updated October 19, 2026 · Version 2026-10-19",
     "contents": "On this page",
     "navigation": "Legal documents",
     "contact": "Contact",
     "operator": "Niway S.A.C. · Lima, Peru",
     "contactBody": "For support, privacy, account deletion or abuse reports, email us. Include your account email and the reason; do not send passwords or sensitive recordings.",
-    "signupNotice": "By creating your account, you accept the <terms>Terms and conditions</terms> and <cloud>Cloud terms</cloud>. Learn how we handle your data in the <privacy>Privacy policy</privacy>.",
+    "signupNotice": "By creating your account, you confirm that you are at least 18 years old and accept the <terms>Terms and conditions</terms> and <cloud>Cloud terms</cloud>. Learn how we handle your data in the <privacy>Privacy policy</privacy>.",
     "readTerms": "Read the full Cloud terms",
     "print": "Print or save as PDF",
     "home": "Back to Kaipu",
@@ -843,7 +1178,7 @@
         },
         "account": {
           "title": "Your account",
-          "body": "You must be at least 18 years old, or the age of majority where you live, and able to enter into a contract; if acting for an organization, you confirm you are authorized to bind it. Provide accurate information, keep your credentials secure and tell us promptly about unauthorized access. You are responsible for activity under your account. We may require email verification and fraud or identity checks, and may refuse or close an account created with false information or to bypass limits."
+          "body": "You must be at least 18 years old, or the age of majority where you live, and able to enter into a contract; if acting for an organization, you confirm you are authorized to bind it. You can create an account with email and password or sign in with Google. Provide accurate information, keep your credentials secure and tell us promptly about unauthorized access. If you use Google, you are also responsible for the security of your Google account, which Google, not Niway, controls. In the desktop app, sign-in may happen in your web browser and return to the app. You are responsible for activity under your account. We may require email verification and fraud or identity checks, and may refuse or close an account created with false information or to bypass limits."
         },
         "local": {
           "title": "Your device and recordings",
@@ -866,8 +1201,8 @@
           "body": "Free features, trials, promotions and quotas are offered at Niway's discretion and may be modified or withdrawn, with notice where the Cloud terms require it. They create no right to continued or future capacity or features, have no cash value and cannot be transferred. Using a promotion never results in automatic charges."
         },
         "payment": {
-          "title": "Future paid plans",
-          "body": "If we offer paid plans, we will show price, taxes, limits, billing period, renewal and cancellation terms before purchase. A free account will never become paid without your express acceptance. We may change prices for future periods with notice before the affected renewal; you may cancel before it takes effect. Except where these terms, the purchase conditions or the law provide otherwise, payments are non-refundable."
+          "title": "Paid plans",
+          "body": "Niway may offer paid plans, such as premium Cloud storage or features, as one-time purchases or subscriptions. Before purchase we will show price, taxes, limits, billing period, renewal and cancellation terms. Subscriptions renew automatically for the same period until you cancel; cancellation takes effect at the end of the current period. Payments may be processed by a payment processor or a reseller acting as merchant of record, whose purchase terms also apply. A free account will never become paid without your express acceptance. We may change prices, plans, limits and included features for future periods with notice before the affected renewal; you may cancel before it takes effect. If a paid plan ends, your account returns to the free limits and the Cloud terms on exceeding a limit apply. Except where these terms, the purchase conditions or the law provide otherwise, payments are non-refundable."
         },
         "availability": {
           "title": "Availability and support",
@@ -901,7 +1236,7 @@
     },
     "privacy": {
       "title": "Privacy policy",
-      "intro": "Recording locally and uploading to Cloud are separate actions. This policy explains what data is processed, why and by whom.",
+      "intro": "Recording locally and uploading to Cloud are separate actions. This policy explains what data is processed, why and by whom, including for accounts, Cloud storage and paid plans.",
       "sections": {
         "controller": {
           "title": "Controller and contact",
@@ -913,15 +1248,31 @@
         },
         "account": {
           "title": "Account and service data",
-          "body": "We process name, email, verification status, account and session identifiers, dates and credentials protected with hashing. Sessions may include IP address and browser or device information. Cloud processes uploaded files, names, type, size, duration where applicable, dates, revisions, status, quota usage and sharing settings. We also process information you send when requesting support."
+          "body": "We process name, email, verification status, account and session identifiers, dates and credentials protected with hashing. If you sign in with Google we also receive the data described in the section on Google sign-in. When you create an account we record your confirmation that you are of legal age and your acceptance of the legal documents, with their version and date. Sessions are described in their own section. We also process your plan, quota usage, preferences, product communications and the information you send when requesting support."
+        },
+        "google": {
+          "title": "Google sign-in and Google user data",
+          "body": "If you choose Sign in with Google, Kaipu asks Google only for the scopes openid, email and profile. From your Google account we receive: your Google account ID, your email address, whether Google has verified that email, your name and the URL of your profile picture. We use them to create or identify your Kaipu account, sign you in, and show your name and picture in the app and on the website. Kaipu does not call any other Google API, does not access your Gmail, Google Drive, contacts or calendar, and does not use Google data for advertising or to train AI models. We store this data in our database (Neon) and, as with any sign-in, the tokens Google issues to Kaipu (access, refresh and ID tokens) are kept server-side in the same database, with access limited to what operating the service requires. We do not sell Google user data and do not share or transfer it to anyone except the infrastructure providers listed in this policy as needed to operate the service, or when the law requires it. Kaipu's use and transfer of information received from Google APIs will adhere to the Google API Services User Data Policy (https://developers.google.com/terms/api-services-user-data-policy), including the Limited Use requirements. We keep Google data while your account exists. To delete it, delete your account from the account page in the web app or email contacto@niway.dev; you can also revoke Kaipu's access at any time in your Google Account settings under third-party access, which stops further sign-ins with Google until you authorize it again."
+        },
+        "sessions": {
+          "title": "Sessions and devices",
+          "body": "Each time you sign in, on the website or on a device, Kaipu creates a separate session. Each session records a session token, its creation and expiry dates, your IP address and your browser or device user agent, so we can keep your account secure and tell sessions apart. On the website the session is kept in cookies; on the desktop app it is kept as a session token stored locally on your device. Signing out ends the session, and a password reset ends all sessions. We use this data to authenticate you, detect abuse and support account security, not for advertising."
+        },
+        "content": {
+          "title": "Recordings and images you upload",
+          "body": "When you upload to Cloud, we store your videos, screenshots, images, audio and related files, together with their name, type, size, duration where applicable, dates, revisions, status and sharing settings. Files are stored in Cloudflare R2 and their metadata in our database. To provide the service we may create derived files, such as thumbnails, previews, compressed or converted versions and, if you use those features, transcripts. Your content may show your face, voice, screen or information about other people; we process it only to provide the features you use and do not use it to identify people by their biometric features."
+        },
+        "payments": {
+          "title": "Paid plans and payments",
+          "body": "If you buy a paid plan, such as premium Cloud storage or features, payments are handled by a payment processor or a reseller that acts as merchant of record. They collect your card or payment details under their own privacy policy, and Niway does not store full card numbers. We receive and keep what is needed to manage your plan: plan and subscription status, billing period, amounts, currency, taxes, country, billing name and address or tax ID if provided, transaction and invoice identifiers, and limited payment-method details such as brand, last four digits and expiry. We use them to charge, renew and cancel plans, apply entitlements and limits, issue receipts, handle refunds and disputes, prevent fraud and meet tax and accounting obligations."
         },
         "purposes": {
           "title": "How we use data",
-          "body": "We use data to create and secure accounts, authenticate you, host and deliver files, manage limits, provide support, analyze and improve the service, detect abuse and fraud, send service and legal notices, and comply with legal obligations. Processing relies on the contract, legitimate interests, legal obligations or your consent where required. Marketing communications require consent and include a way to opt out. We do not sell personal data or use your recordings for advertising, and we do not use recordings to train general-purpose AI models without your permission. Features you choose to use, such as transcription or AI assistance, process the content needed for them, which may include specialized providers."
+          "body": "We use data to create and secure accounts, authenticate you, host and deliver files, manage plans, payments, limits and entitlements, provide support, analyze and improve the service, develop new features, detect abuse and fraud, send service, billing and legal notices, and comply with legal obligations. Processing relies on the contract, legitimate interests, legal obligations or your consent where required. Marketing communications require consent and include a way to opt out. We do not sell personal data or use your recordings for advertising, and we do not use recordings to train general-purpose AI models without your permission. Features you choose to use, such as transcription or AI assistance, process the content needed for them, which may include specialized providers. If a new feature needs data or a purpose this policy does not cover, we will update the policy and ask for consent where required before using it."
         },
         "providers": {
           "title": "Where data is stored and who processes it",
-          "body": "We use infrastructure and service providers to run Kaipu, currently including Cloudflare (web, API and R2 file storage), Neon (PostgreSQL database for accounts, sessions and Cloud metadata) and PostHog (diagnostics in versions where it is enabled), and may add or replace providers such as email, payment or AI providers as the service evolves. Data may be transferred to and processed in other countries, including the United States and the European Union, under the safeguards required by Peruvian data protection law. We update this policy when material providers change."
+          "body": "We use infrastructure and service providers to run Kaipu, currently including Cloudflare (website, API and R2 file storage; cloudflare.com/privacypolicy), Neon (PostgreSQL database for accounts, sessions, plans and Cloud metadata; neon.com/privacy-policy) and PostHog (diagnostics in versions where it is enabled; posthog.com/privacy). As the service evolves we may add or replace providers, such as for payments, email delivery, support, analytics or AI. Payment processors and merchants of record may act as independent controllers under their own privacy policies. Data may be transferred to and processed in other countries, including the United States and the European Union, under the safeguards required by Peruvian data protection law. We update this policy when material providers change. For sign-in, Google (policies.google.com/privacy) acts as an identity provider when you choose Sign in with Google."
         },
         "diagnostics": {
           "title": "App diagnostics",
@@ -931,9 +1282,13 @@
           "title": "Sharing and access",
           "body": "When you enable or use a sharing feature, people with access to the link may view or download content according to that feature. Links can be forwarded and cannot recall copies already downloaded. Authorized personnel and providers may access data as needed for operation, support, security or legal obligations; access is limited to its purpose. We do not describe Cloud as end-to-end encrypted storage. We may disclose information for valid legal requests or to address incidents and protect rights, within legal limits."
         },
+        "age": {
+          "title": "Age requirement",
+          "body": "Kaipu accounts, Cloud and paid plans are only for people who are at least 18 years old, or the age of majority where they live. When you sign up you confirm that you meet this requirement. We do not knowingly collect personal data from minors. If we learn that an account belongs to a minor, we may close it and delete its data, except what we must keep by law. If you believe a minor has given us data, contact us."
+        },
         "retention": {
           "title": "Retention and deletion",
-          "body": "We retain data while the account is active and afterwards as long as needed for the purposes described, to resolve disputes, prevent abuse, and meet legal, tax or accounting obligations. You may delete files in the app and request account closure by email. Deletion may not be immediate for every copy: backups and logs are overwritten on their normal cycle. Cloud files may also be deleted under the Cloud terms, including over-limit and inactive-account rules. Aggregated or anonymized data may be kept without limit."
+          "body": "We retain data while the account is active and afterwards as long as needed for the purposes described, to resolve disputes, prevent abuse, and meet legal, tax or accounting obligations. Billing and payment records are kept for the period required by tax and accounting law, even after the account is closed. You may delete files in the app and request account closure by email. Deletion may not be immediate for every copy: backups and logs are overwritten on their normal cycle. Cloud files may also be deleted under the Cloud terms, including over-limit and inactive-account rules, or when a paid plan ends and stored content exceeds the limits of your new plan. Aggregated or anonymized data may be kept without limit. Google user data is kept while your account exists and is deleted when the account is deleted, subject to the same backup and log cycle."
         },
         "rights": {
           "title": "Your rights",
@@ -1012,7 +1367,8 @@
           "body": "You may clear or block cookies and storage in your browser and manage capture permissions in your operating system. Clearing cookies may sign you out or reset preferences, but does not delete your account or Cloud files. Email the contact address for privacy or deletion requests."
         }
       }
-    }
+    },
+    "googleSignupNotice": "By continuing with Google, you confirm that you are at least 18 years old and accept the <terms>Terms and conditions</terms> and <cloud>Cloud terms</cloud>. Learn how we handle your data in the <privacy>Privacy policy</privacy>."
   },
   "emails": {
     "footer": "Kaipu — a Niway product",
@@ -1040,7 +1396,7 @@
     "pages": {
       "roadmap": {
         "title": "Roadmap | Kaipu Record",
-        "description": "What Kaipu Record already does and what comes next: the public roadmap, grouped by state."
+        "description": "What Kaipu Record already does on macOS and Windows, and what comes next: the public roadmap, grouped by state."
       },
       "terms-and-conditions": {
         "title": "Terms and conditions | Kaipu Record",
@@ -1057,49 +1413,161 @@
       "cookies": {
         "title": "Cookies and local storage | Kaipu Record",
         "description": "The session and preference cookies Kaipu Record uses, and how to manage them."
+      },
+      "features": {
+        "title": "Features | Kaipu Record",
+        "description": "Everything Kaipu Record does: screen and camera recording, annotated screenshots, an editor with automatic zoom, light exports and a searchable library."
       }
     }
   },
   "roadmap": {
     "navLabel": "Roadmap",
-    "eyebrow": "Public roadmap",
-    "heading": "What Kaipu Record does today, and what comes next",
-    "intro": "Everything below is grouped by state, not by date. The shipped list is what you already get when you download Kaipu Record; the planned list is what we are building next.",
-    "disclaimer": "Order is a priority, not a promise. Plans move as we learn what people actually need.",
-    "count": "{count, plural, one {# item} other {# items}}",
+    "page": {
+      "eyebrow": "Public roadmap",
+      "heading": "What works today, on which platform.",
+      "serif": "And what comes next.",
+      "intro": "Kaipu Record runs on macOS, and Windows is in beta. Every feature below shows where it already works, where it is being built, and what is planned.",
+      "disclaimer": "Order is a priority, not a promise. Plans move as we learn what people actually need.",
+      "count": "{count, plural, one {# item} other {# items}}",
+      "showing": "{shown} of {total} features",
+      "columns": {
+        "feature": "Feature",
+        "mac": "macOS",
+        "win": "Windows"
+      }
+    },
     "status": {
       "shipped": "Shipped",
       "inProgress": "In progress",
       "planned": "Planned"
     },
+    "groupHint": {
+      "shipped": "Available today on at least one platform. The cells say where.",
+      "shippedOne": "Already in the app you download.",
+      "inProgress": "Being built or ported right now.",
+      "planned": "Next up. Order is a priority, not a promise."
+    },
+    "areas": {
+      "record": "Record",
+      "capture": "Capture",
+      "edit": "Edit",
+      "find": "Find",
+      "cloud": "Cloud",
+      "app": "App"
+    },
+    "platforms": {
+      "mac": {
+        "name": "macOS",
+        "line": "Apple Silicon and Intel",
+        "badge": "Available"
+      },
+      "win": {
+        "name": "Windows",
+        "line": "Windows 10 or later, 64-bit",
+        "badge": "Beta"
+      }
+    },
+    "filters": {
+      "label": "Filter the roadmap",
+      "platform": "Platform",
+      "both": "Both",
+      "states": "States"
+    },
+    "legend": {
+      "title": "How to read it",
+      "shipped": "in the current release",
+      "inProgress": "being built or ported",
+      "planned": "on the list, no date"
+    },
+    "windows": {
+      "eyebrow": "Windows",
+      "badge": "Beta",
+      "title": "Kaipu for Windows is in beta.",
+      "serif": "Recording and screenshots, ready to try.",
+      "body": "The Windows beta records your screen, takes screenshots, edits and keeps your library. It is not code-signed yet; signing is in progress. The rows above turn to shipped on Windows one at a time, as each feature is checked on real Windows machines.",
+      "download": "Download for Windows (beta)",
+      "requirements": "Windows 10 or later · 64-bit",
+      "smartscreenTitle": "Expect a SmartScreen warning",
+      "smartscreenBody": "The beta is not signed yet, so Windows is cautious the first time you run it. Two clicks get you through.",
+      "steps": {
+        "s1": "Run the installer",
+        "s2": "Click “More info”",
+        "s3": "Choose “Run anyway”"
+      },
+      "mock": {
+        "protected": "Windows protected your PC",
+        "prevented": "Microsoft Defender SmartScreen prevented an unrecognized app from starting.",
+        "moreInfo": "More info",
+        "app": "App: kaipu-setup.exe",
+        "publisher": "Publisher: Unknown publisher",
+        "runAnyway": "Run anyway",
+        "dontRun": "Don’t run",
+        "installs": "Kaipu Record installs",
+        "tray": "Opens in the tray when done"
+      },
+      "betaNote": "A beta can break. Your captures are ordinary files on your disk, so uninstalling never takes them with it."
+    },
     "items": {
+      "screenshotModes": {
+        "title": "Screenshot modes: Frame and Screen",
+        "description": "Drag a frame or reuse the last one, or capture a whole display. Pick the mode on the selection itself, then Capture, or Copy to the clipboard without opening the editor; a small card offers Annotate or Open in Library."
+      },
+      "editorHome": {
+        "title": "An Editor that starts where you left off",
+        "description": "The Editor lists what you worked on last, with filters and each video's export state, and opens a pasted image straight in the image editor."
+      },
+      "liveRecordingControls": {
+        "title": "Change inputs while you record",
+        "description": "Mute the microphone, turn system audio on or off and show or hide the camera mid-take, from the capture panel or a global shortcut, without stopping the recording."
+      },
       "screenAndCamera": {
         "title": "Screen and camera recording",
         "description": "Record your screen and your camera in high quality, with a floating camera bubble and quality presets that trade size for sharpness."
       },
-      "videoEditor": {
-        "title": "Built-in video editor",
-        "description": "Trim and export your recordings without leaving the app, with a poster thumbnail generated for every edited video."
+      "shortcuts": {
+        "title": "Global keyboard shortcuts",
+        "description": "Start and stop a recording, take a screenshot in the mode you want and bring the app to front, from anywhere. Every shortcut can be rebound.",
+        "note": "Windows gets its own defaults (Ctrl+Alt), because the Mac combination lands on the Windows key there."
       },
       "screenshotAnnotations": {
         "title": "Screenshot annotations",
         "description": "Capture and annotate screenshots with shapes and text: multi-line labels, resizable boxes with word wrap, and double-click to edit a label in place."
       },
+      "saveEveryScreenshot": {
+        "title": "Save every screenshot automatically",
+        "description": "A setting that keeps every screenshot in your library the moment you take it, or only once you click Save. Automatic is the default, so a capture is never lost."
+      },
+      "captureTitle": {
+        "title": "Name a screenshot as you make it",
+        "description": "A title field in the screenshot editor, filled in for you and editable before and after saving, so captures are named where you make them."
+      },
+      "screenshotPdf": {
+        "title": "Export screenshots as PDF",
+        "description": "Save an annotated screenshot as a sharp one-page PDF, ready to send or print, next to the usual PNG."
+      },
+      "videoEditor": {
+        "title": "Built-in video editor",
+        "description": "Trim and export your recordings without leaving the app, with a poster thumbnail generated for every edited video."
+      },
+      "videoZoom": {
+        "title": "Automatic zoom in videos",
+        "description": "Record clean, then let the editor zoom in on every click so the detail you point at is readable. Each zoom is a segment you can move, resize or delete, next to blur and cover regions for anything that should stay private."
+      },
+      "exportPresets": {
+        "title": "Export for where it is going",
+        "description": "Pick a destination such as GitHub, Slack or YouTube, or keep Balanced, and get a file that fits. Share reuses an export you already made, exports run in the background with progress, and Maximum quality is one setting away."
+      },
       "library": {
         "title": "Library of recordings",
         "description": "Every capture lands in one library with previews, renaming, and recovery for imported or interrupted recordings."
       },
-      "watermark": {
-        "title": "Watermark on exports",
-        "description": "Stamp your exports with a watermark so shared clips carry your mark."
+      "captureTags": {
+        "title": "Colored tags for your captures",
+        "description": "Tag recordings and screenshots, give each tag a color, then filter and search the library by tag so a long history stays findable."
       },
-      "shortcuts": {
-        "title": "Global keyboard shortcuts",
-        "description": "Start, pause and stop a capture from anywhere, without hunting for the window first."
-      },
-      "themeAndLanguages": {
-        "title": "Light and dark theme, English and Spanish",
-        "description": "The whole app follows a shared design-token palette in both themes, and is fully translated into English and Spanish."
+      "photoZoom": {
+        "title": "Zoom in the image viewer",
+        "description": "Zoom and pan inside the screenshot viewer instead of squinting at a scaled-down capture."
       },
       "accounts": {
         "title": "Accounts and email verification",
@@ -1113,34 +1581,414 @@
         "title": "Finish cloud upload end to end",
         "description": "Upload every capture to Kaipu Cloud automatically, with resumable transfers, clear progress, and retries when the network drops."
       },
-      "videoZoom": {
-        "title": "Zoom in videos",
-        "description": "Zoom into a region of a recording so the detail you are pointing at is actually readable for whoever watches it."
+      "themeAndLanguages": {
+        "title": "Light and dark theme, English and Spanish",
+        "description": "The whole app follows a shared design-token palette in both themes, and is fully translated into English and Spanish."
       },
-      "photoZoom": {
-        "title": "Zoom in the image viewer",
-        "description": "Zoom and pan inside the screenshot viewer instead of squinting at a scaled-down capture."
+      "watermark": {
+        "title": "No watermark, on any plan",
+        "description": "The free app records, edits and exports without a watermark. A small \"Made with Kaipu\" badge is there if you want to credit the tool, and it is off by default."
       },
       "watermarkUpgrade": {
-        "title": "A better watermark",
-        "description": "More control over the watermark: position, size, opacity, and your own logo instead of a fixed stamp."
-      },
-      "imageTags": {
-        "title": "Tags on images",
-        "description": "Tag screenshots and group them by tag, so a long library stays findable."
-      },
-      "renameOnSave": {
-        "title": "Rename an image after saving",
-        "description": "Change the name of a capture once it is already saved, without going out to Finder."
-      },
-      "saveEveryScreenshot": {
-        "title": "Option to save every screenshot",
-        "description": "An opt-in setting that keeps every screenshot you take in the library automatically, instead of only the ones you save by hand."
+        "title": "Your own watermark on exports",
+        "description": "Stamp exports with your own logo, with control over position, size and opacity. Kaipu's own badge stays optional and off; this is about carrying your brand, not ours."
       },
       "brandIdentity": {
         "title": "Refreshed logo and identity",
         "description": "A sharper logo and a consistent visual identity across the app, the site and the installers."
+      },
+      "systemAudio": {
+        "title": "System audio",
+        "description": "Capture what your computer is playing, on its own switch next to the microphone."
+      },
+      "trayPanel": {
+        "title": "Menu bar and tray panel",
+        "description": "A capture panel that lives in the menu bar on macOS and in the system tray on Windows."
+      },
+      "windowCapture": {
+        "title": "Window capture",
+        "description": "Click a window to capture just that window.",
+        "note": "Built, and switched off for now while we fix the last rough edges."
+      },
+      "blurAndBackground": {
+        "title": "Blur and a clean background",
+        "description": "Blur an email or a token in a screenshot, then frame the shot on a clean background."
+      },
+      "videoMute": {
+        "title": "Mute a stretch of a video",
+        "description": "Silence a cough or a notification in the editor, or the whole recording, without touching the original file."
+      },
+      "signedInstaller": {
+        "title": "Signed installer",
+        "description": "A build your system trusts out of the box, with no security warning on the first launch.",
+        "note": "macOS builds are already signed and notarized by Apple. The first Windows beta ships unsigned; the steps for its warning are below."
       }
     }
+  },
+  "features": {
+    "eyebrow": "Features · {count} features · 4 chapters",
+    "title": "Everything Kaipu does.",
+    "serif": "Capture it. Make it clear. Find it again.",
+    "lead": "The home page is the 30-second version. This is the whole list: every feature in Kaipu today, grouped by the moment you’d reach for it.",
+    "indexLabel": "Chapters",
+    "count": "{count, plural, one {# feature} other {# features}}",
+    "linkFiles": "Your files",
+    "linkPrivate": "Private by design",
+    "linkNext": "Coming next",
+    "chapters": {
+      "record": {
+        "name": "Record",
+        "line": "Screen, voice, system audio and a camera bubble.",
+        "title": "Show what happened.",
+        "serif": "One take. No setup.",
+        "intro": "Start from the menu bar or a shortcut, talk while you show it, stop. It’s already in your library."
+      },
+      "capture": {
+        "name": "Capture",
+        "line": "Screenshots with arrows, boxes and notes.",
+        "title": "Sometimes a screenshot says it all.",
+        "serif": "Point at it. Literally.",
+        "intro": "Frame what you need, mark what matters, blur what shouldn’t be seen, and send it before the moment passes."
+      },
+      "edit": {
+        "name": "Edit",
+        "line": "Zoom, trim, mute, hide, then export.",
+        "title": "A small tweak. A clearer idea.",
+        "serif": "Cut what’s extra. Zoom into what matters.",
+        "intro": "Just enough editing to make it clear. Every change can be undone, and your original is never touched."
+      },
+      "find": {
+        "name": "Find",
+        "line": "One library, tags and search.",
+        "title": "Useful now. Easy to find later.",
+        "serif": "Explain it once. It stays explained.",
+        "intro": "Next week, you won’t have to record it again. Everything you made is one search away."
+      }
+    },
+    "items": {
+      "screenCamera": {
+        "title": "Screen and camera recording",
+        "body": "Your screen, your voice, system audio and a floating camera bubble you can drag anywhere, in high quality.",
+        "d1": "Mic, system audio and camera on separate switches",
+        "d2": "The camera bubble stays on top while you work",
+        "d3": "Pause and resume without starting over"
+      },
+      "startAnywhere": {
+        "title": "Start from anywhere",
+        "body": "A capture panel in the menu bar, and global shortcuts that work from any app. Rebind any of them.",
+        "k1": "Start",
+        "k2": "Stop",
+        "k3": "Screenshot",
+        "k4": "Show app"
+      },
+      "liveControls": {
+        "title": "Change your mind mid-take",
+        "body": "Mute the mic, turn system audio off or hide the camera while you record, from the capture panel or a shortcut. The take keeps going.",
+        "k1": "Mic",
+        "k2": "System audio",
+        "k3": "Camera"
+      },
+      "micPicker": {
+        "title": "Microphone picker",
+        "body": "Choose any input. Plug in a headset and the list updates on its own."
+      },
+      "recordingQuality": {
+        "title": "Recording quality presets",
+        "body": "Trade file size for sharpness before you start, or set resolution and frame rate yourself.",
+        "c1": "Light",
+        "c2": "Balanced",
+        "c3": "Maximum quality"
+      },
+      "alreadySaved": {
+        "title": "Already saved",
+        "body": "When you stop, it’s in your library. A file missing its thumbnail or duration is repaired on its own."
+      },
+      "annotations": {
+        "title": "Annotations",
+        "body": "Arrows, boxes, a freehand pen and handwritten-style notes on top of any screenshot.",
+        "d1": "Multi-line labels that wrap on their own",
+        "d2": "Double-click a label to edit it in place",
+        "d3": "Seven colors and three stroke widths per mark"
+      },
+      "captureModes": {
+        "title": "Frame or Screen",
+        "body": "Drag a frame over what you need, or keep last time’s. Screen takes a whole display. Switch modes on the selection itself; Kaipu remembers the last one.",
+        "k1": "Current mode",
+        "k2": "Frame",
+        "k3": "Screen"
+      },
+      "quietCapture": {
+        "title": "Copy and keep going",
+        "body": "Press ⌘C on the selection and the shot lands on the clipboard, no editor in the way. With saving on, Capture files it in your library just as quietly. A small card then offers Annotate, Open in Library or Save to Library."
+      },
+      "blurFrame": {
+        "title": "Blur and frame",
+        "body": "Blur a detail, then set the shot on a background with padding, a shadow and rounded corners so it looks finished."
+      },
+      "nameIt": {
+        "title": "Name it as you make it",
+        "body": "A pre-filled title you can edit before saving, and rename later."
+      },
+      "copyPngPdf": {
+        "title": "Copy, PNG or PDF",
+        "body": "Copied to the clipboard as the editor opens, saved as a PNG, or exported as a sharp one-page PDF.",
+        "c1": "Copy",
+        "c2": ".png",
+        "c3": ".pdf"
+      },
+      "saveEvery": {
+        "title": "Save every screenshot, or only some",
+        "body": "By default every capture is kept. Prefer to choose? Switch to saving only when you click Save."
+      },
+      "autoZoom": {
+        "title": "Automatic zoom",
+        "body": "The editor suggests a zoom wherever you clicked or paused, so the detail you point at is readable.",
+        "d1": "Each zoom follows the cursor, or locks on one spot",
+        "d2": "Add your own, or remove any suggestion",
+        "d3": "Every zoom shows why it’s there: a click, a pause or you"
+      },
+      "trim": {
+        "title": "Trim and cut",
+        "body": "Remove the start, the end, and anything in between.",
+        "d1": "Split at the playhead and delete a piece",
+        "d2": "Undo and redo every step",
+        "d3": "A history slider to go back further"
+      },
+      "mute": {
+        "title": "Mute a cough",
+        "body": "Silence a stretch of audio, or the whole recording. The picture keeps playing."
+      },
+      "cover": {
+        "title": "Blur and cover",
+        "body": "Hide an API key or a customer name for exactly as long as it’s on screen. Cover leaves no trace."
+      },
+      "original": {
+        "title": "Your original stays untouched",
+        "body": "An edit is saved as a new item in your library. The recording you made is never changed."
+      },
+      "export": {
+        "title": "Export for where it’s going",
+        "body": "Pick where the video is going and get a file that fits, or keep Balanced. Maximum quality is one setting away.",
+        "c1": "GitHub · Jira · Linear",
+        "c2": "Slack · Discord",
+        "c3": "YouTube",
+        "c4": "Reels · TikTok · Shorts",
+        "c5": "Feeds"
+      },
+      "share": {
+        "title": "Share in one click",
+        "body": "Share straight from the library. If that version is already exported, Kaipu reuses it instead of encoding again."
+      },
+      "background": {
+        "title": "Exports run in the background",
+        "body": "Keep working while it encodes. A “Ready to share” card appears when it’s done: drag the file straight into Slack, GitHub or Finder, under a friendly name."
+      },
+      "editorHome": {
+        "title": "Pick up where you left off",
+        "body": "The Editor opens on what you worked on last, with each video’s export state, and starts a new image straight from the clipboard."
+      },
+      "library": {
+        "title": "One library for everything",
+        "body": "Recordings and screenshots side by side, with previews, badges, filters and search.",
+        "d1": "Filter by type, by tag, or by this Mac and the cloud",
+        "d2": "Search by title or tag name",
+        "d3": "Sort by newest, oldest or largest"
+      },
+      "tags": {
+        "title": "Colored tags",
+        "body": "Create tags, give each a color, and filter the library by tag.",
+        "c1": "bug",
+        "c2": "onboarding",
+        "c3": "release",
+        "c4": "design"
+      },
+      "rename": {
+        "title": "Rename anything",
+        "body": "Give anything a better name. An edited video is its own item, linked back to the recording it came from."
+      }
+    },
+    "private": {
+      "eyebrow": "Private by design",
+      "title": "Yours, without an account.",
+      "serif": "No watermark. No screen in the analytics.",
+      "items": {
+        "noAccount": {
+          "title": "Works without an account",
+          "body": "Record, capture, edit and export with no sign-up. Accounts exist only for the optional cloud."
+        },
+        "noWatermark": {
+          "title": "No watermark, on any plan",
+          "body": "An optional “Made with Kaipu” badge exists, and it’s off by default."
+        },
+        "analytics": {
+          "title": "Analytics never see your screen",
+          "body": "Usage analytics never record your screen or your clicks in the app."
+        },
+        "languages": {
+          "title": "Light, dark, English, Spanish",
+          "body": "Both themes are first-class, and the whole app is in English and Spanish."
+        }
+      }
+    },
+    "next": {
+      "badge": "Planned",
+      "title": "Coming next",
+      "note": "Not shipped yet. No dates: we’ll say when.",
+      "roadmapLink": "See the roadmap",
+      "items": {
+        "windows": "Windows beta",
+        "cloudUpload": "Cloud upload with resumable transfers",
+        "imageZoom": "Zoom and pan in the image viewer",
+        "ownWatermark": "Your own logo as a watermark"
+      }
+    }
+  },
+  "account": {
+    "title": "Account",
+    "description": "Your profile, how you sign in, your plan and your cloud storage.",
+    "loadingSession": "Loading your account…",
+    "profileTitle": "Profile",
+    "nameLabel": "Name",
+    "nameSave": "Save name",
+    "nameSaving": "Saving…",
+    "nameSaved": "Name updated",
+    "nameSaveFailed": "We couldn't update your name. Try again.",
+    "nameInvalid": "Use between 1 and 80 characters.",
+    "emailLabel": "Email",
+    "emailVerified": "Verified",
+    "emailNotVerified": "Not verified",
+    "unverifiedNotice": "Cloud is locked until you verify your email. Recording keeps working on this device.",
+    "resendVerification": "Resend verification email",
+    "resendSent": "Verification email sent. You can ask for another one in about 2 minutes.",
+    "resendFailed": "The verification email could not be sent. Check your connection and try again.",
+    "refresh": "Refresh",
+    "refreshFailed": "We couldn't refresh your account. Try again.",
+    "signInTitle": "Sign-in methods",
+    "methodsLoading": "Loading your sign-in methods…",
+    "methodsFailed": "We couldn't load your sign-in methods.",
+    "methodPassword": "Email and password",
+    "methodGoogle": "Google",
+    "methodOther": "{provider}",
+    "linkedOn": "Linked {date}",
+    "changePassword": "Change password",
+    "currentPassword": "Current password",
+    "newPassword": "New password",
+    "confirmPassword": "Confirm new password",
+    "passwordMismatch": "The passwords do not match.",
+    "passwordTooShort": "Use at least 8 characters.",
+    "passwordRequired": "Enter your current password.",
+    "changePasswordSubmit": "Update password",
+    "changePasswordSaving": "Updating…",
+    "passwordChanged": "Password updated",
+    "wrongCurrentPassword": "That is not your current password.",
+    "changePasswordFailed": "We couldn't update your password. Try again.",
+    "otherSessionsNote": "Changing your password signs you out on your other devices.",
+    "planTitle": "Plan and storage",
+    "planUntil": "until {date}",
+    "reservedInProgress": "In progress (reserved by uploads)",
+    "pendingUploads": "{count, plural, one {# upload in progress} other {# uploads in progress}}",
+    "overQuotaTitle": "You're using more than your plan includes",
+    "overQuotaDetail": "New uploads are blocked. Your files stay available to view, download and delete.",
+    "almostFullTitle": "Almost full",
+    "almostFullDetail": "You've used most of your cloud space. Delete files you no longer need to make room.",
+    "dangerTitle": "Danger zone",
+    "dangerDescription": "Delete your account and the cloud files that belong to it. You have 7 days to change your mind.",
+    "deleteAccount": "Delete account",
+    "deleteComingSoon": "Coming soon",
+    "deleteDialogTitle": "Delete your account?",
+    "deleteDialogIntro": "This will delete:",
+    "deletesProfile": "your profile",
+    "deletesCloud": "all your cloud recordings and screenshots, and their shared links",
+    "deletesSignIn": "your sign-in methods",
+    "deleteLocalKept": "Files saved on your devices are not deleted.",
+    "deleteGrace": "Deletion happens after 7 days. Sign in during that time and press Restore to cancel it.",
+    "deleteImpact": "{cloudFiles, plural, one {# cloud file} other {# cloud files}} and {pendingUploads, plural, one {# upload in progress} other {# uploads in progress}} will be removed.",
+    "deleteTypeEmail": "Type {email} to confirm",
+    "deleteEmailLabel": "Your email",
+    "deletePasswordLabel": "Your password",
+    "deleteConfirm": "Delete my account",
+    "deleteWorking": "Deleting…",
+    "deleteWrongPassword": "Wrong password.",
+    "deleteNotFresh": "For your security, sign in again to confirm.",
+    "deleteSignInAgain": "Sign in again",
+    "deleteFailed": "We couldn't schedule the deletion. Try again.",
+    "deleteScheduled": "Deletion scheduled for {date}",
+    "deleteScheduledDetail": "Your account and cloud files will be deleted then. Restore it before that date to keep everything.",
+    "restore": "Restore",
+    "restoring": "Restoring…",
+    "restored": "Your account was restored",
+    "restoreFailed": "We couldn't restore your account. Sign in again and retry.",
+    "cancel": "Cancel",
+    "googleConnect": "Connect Google",
+    "googleConnecting": "Redirecting to Google…",
+    "googleDisconnect": "Disconnect Google",
+    "googleDisconnecting": "Disconnecting…",
+    "googleDisconnected": "Google disconnected",
+    "googleDisconnectFailed": "We couldn't disconnect Google. Try again.",
+    "googleLastMethod": "Google is your only way to sign in. Set a password before disconnecting it.",
+    "googleNotFresh": "For your security, sign in again to disconnect Google.",
+    "setPasswordTitle": "Set a password",
+    "setPasswordIntro": "Add a password to sign in to the Kaipu desktop app with your email.",
+    "setPasswordSubmit": "Save password",
+    "setPasswordSaving": "Saving…",
+    "setPasswordDone": "Password saved. You can now sign in on the desktop app with your email and this password.",
+    "setPasswordExists": "This account already has a password.",
+    "setPasswordFailed": "We couldn't save your password. Try again."
+  },
+  "dashboard": {
+    "navLabel": "Dashboard sections",
+    "navHome": "Home",
+    "navProfile": "Profile",
+    "navSettings": "Settings",
+    "navRecordings": "Recordings",
+    "welcomeTitle": "Hi, {name}",
+    "welcomeSignedInAs": "Signed in as {email}",
+    "firstVisitTitle": "Your account is ready",
+    "firstVisitPlan": "You're on the {plan} plan with {capacity} of cloud space.",
+    "firstVisitDismiss": "Got it",
+    "storageManage": "Manage",
+    "storageSummary": "{used} used of {capacity}",
+    "getStartedTitle": "Get started",
+    "getStartedBody": "Kaipu records on your computer. Install the desktop app and sign in with this account to upload recordings to your cloud space.",
+    "downloadMac": "Download for Mac (Apple Silicon)",
+    "downloadMacIntel": "Mac (Intel)",
+    "downloadWindows": "Download for Windows (beta)",
+    "downloadWindowsShort": "Windows (beta)",
+    "downloadMacShort": "Mac (Apple Silicon)",
+    "otherDownloads": "Other downloads",
+    "profileTitle": "Profile",
+    "profileDescription": "Your name, your email and how you sign in.",
+    "settingsTitle": "Settings",
+    "settingsDescription": "Your plan and storage, your language and your account.",
+    "languageTitle": "Language",
+    "languageDescription": "The language Kaipu uses on the web.",
+    "credentialDroppedTitle": "We removed an old password from your account",
+    "credentialDroppedDetail": "For your security, we removed the password set before your email was verified. Set a new one in Profile to use the desktop app.",
+    "credentialDroppedAction": "Set a password"
+  },
+  "desktopAuth": {
+    "invalidTitle": "Open sign-in from the Kaipu app",
+    "invalidBody": "This page only works when the Kaipu app opens it. Go back to the app and choose Sign in.",
+    "signInTitle": "Sign in to the Kaipu app",
+    "signInBody": "Sign in here and we'll take you back to Kaipu on this computer.",
+    "confirmTitle": "Sign in to Kaipu on this computer?",
+    "confirmBody": "You're signed in as {account}.",
+    "continue": "Continue",
+    "continuing": "Connecting…",
+    "switchAccount": "Switch account",
+    "transferFailed": "Couldn't connect the app. Try again, or start over from the Kaipu app.",
+    "returningTitle": "Returning to Kaipu…",
+    "returningBody": "Your browser may ask whether to open Kaipu. Allow it to finish signing in.",
+    "fallbackTitle": "Kaipu didn't open?",
+    "fallbackBody": "Open it again, or copy the code and paste it in the app.",
+    "openAgain": "Open Kaipu again",
+    "copyCode": "Copy code",
+    "codeLabel": "Sign-in code",
+    "codeNote": "It works once and expires 5 minutes after you signed in. If pasting it fails, start again from the Kaipu app.",
+    "copied": "Code copied. Paste it in the Kaipu app.",
+    "copyFailed": "Couldn't copy. Select the code and copy it yourself.",
+    "noCodeTitle": "No sign-in code here",
+    "noCodeBody": "The code may have expired or been used already. Start again from the Kaipu app.",
+    "closeTab": "Once Kaipu is signed in, you can close this tab."
   }
 }

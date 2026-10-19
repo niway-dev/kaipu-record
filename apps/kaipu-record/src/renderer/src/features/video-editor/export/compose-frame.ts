@@ -207,3 +207,41 @@ export function applyRedactions(
     ctx.imageSmoothingEnabled = smoothing;
   }
 }
+
+/** Where a framed frame lands: source window → destination rect. */
+export interface FramingRect {
+  sx: number;
+  sy: number;
+  sw: number;
+  sh: number;
+  dx: number;
+  dy: number;
+  dw: number;
+  dh: number;
+}
+
+/**
+ * Pure placement of a `srcW × srcH` frame on a `dstW × dstH` canvas.
+ * - fit: the whole frame, scaled to fit, centred (the caller pads the rest).
+ * - fill: the frame scaled to cover, centred, overflow cropped from the source.
+ * The frame handed in is the composed VIEW (zoom crop already applied), so "centred"
+ * is the centre of the zoomed view: Fill follows the zoom camera.
+ */
+export function framingRect(
+  srcW: number,
+  srcH: number,
+  dstW: number,
+  dstH: number,
+  mode: "fit" | "fill",
+): FramingRect {
+  if (mode === "fit") {
+    const scale = Math.min(dstW / srcW, dstH / srcH);
+    const dw = srcW * scale;
+    const dh = srcH * scale;
+    return { sx: 0, sy: 0, sw: srcW, sh: srcH, dx: (dstW - dw) / 2, dy: (dstH - dh) / 2, dw, dh };
+  }
+  const scale = Math.max(dstW / srcW, dstH / srcH);
+  const sw = dstW / scale;
+  const sh = dstH / scale;
+  return { sx: (srcW - sw) / 2, sy: (srcH - sh) / 2, sw, sh, dx: 0, dy: 0, dw: dstW, dh: dstH };
+}

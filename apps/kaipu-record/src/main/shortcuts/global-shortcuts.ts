@@ -1,5 +1,11 @@
 import { globalShortcut } from "electron";
-import { SHORTCUT_ACTIONS, type ShortcutAction, type ShortcutSettings } from "@shared/types";
+import {
+  isShortcutActionEnabled,
+  SHORTCUT_ACTIONS,
+  type ShortcutAction,
+  type ShortcutSettings,
+} from "@shared/types";
+import type { CaptureMode } from "@shared/types/screenshot-capture";
 
 /**
  * Global (system-wide) keyboard shortcuts. They work even when the app isn't
@@ -16,6 +22,8 @@ type ShortcutHandlers = Record<ShortcutAction, () => void>;
 interface GlobalShortcutDeps {
   getShortcuts: () => ShortcutSettings;
   handlers: ShortcutHandlers;
+  /** Modes the user can reach; defaults to `ENABLED_CAPTURE_MODES`. */
+  enabledModes?: readonly CaptureMode[];
 }
 
 let deps: GlobalShortcutDeps | null = null;
@@ -24,6 +32,9 @@ const status: Record<ShortcutAction, boolean> = {
   stopRecording: false,
   bringToFront: false,
   captureScreenshot: false,
+  captureScreen: false,
+  captureFrame: false,
+  captureWindow: false,
   toggleMicrophone: false,
   toggleSystemAudio: false,
   toggleCamera: false,
@@ -44,6 +55,11 @@ export function applyGlobalShortcuts(): void {
   globalShortcut.unregisterAll();
   const shortcuts = deps.getShortcuts();
   for (const action of SHORTCUT_ACTIONS) {
+    // A switched-off action (Window mode) is never registered, so its combo stays free.
+    if (!isShortcutActionEnabled(action, deps.enabledModes)) {
+      status[action] = false;
+      continue;
+    }
     status[action] = tryRegister(shortcuts[action], deps.handlers[action]);
   }
 }

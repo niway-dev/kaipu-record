@@ -9,16 +9,32 @@ files:
   - "!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}"
   - "!{.env,.env.*,.npmrc,pnpm-lock.yaml}"
   - "!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}"
+# The kaipu:// scheme the browser sign-in returns through. electron-builder writes it into the
+# macOS Info.plist (CFBundleURLTypes), the NSIS installer's registry entries and the Linux
+# desktop file. Dev builds do not get it (macOS only routes custom schemes to packaged apps);
+# they use the paste-code fallback.
+protocols:
+  - name: Kaipu
+    schemes:
+      - kaipu
 asarUnpack:
   - resources/**
   - "**/node_modules/uiohook-napi/**"
 win:
   executableName: kaipu-record
+  # Custom signing hook (read at build time, not packaged). No-ops with a CI
+  # warning without WIN_SIGN_VENDOR; throws for an unknown or unfinished vendor.
+  signtoolOptions:
+    sign: ./scripts/sign-windows.cjs
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
+  # Shown as the installer's first page: SignPath's signing terms require software that
+  # sends data off the device to show its privacy notice during installation. Kept as
+  # UTF-8 with BOM, or electron-builder rewrites it in place on every build.
+  license: build/installer-privacy-notice.txt
 mac:
   category: public.app-category.video # cosmetic (LSApplicationCategoryType)
   hardenedRuntime: true # REQUIRED to notarize

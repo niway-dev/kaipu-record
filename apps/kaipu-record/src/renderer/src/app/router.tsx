@@ -21,6 +21,13 @@ import { ShortcutsPage } from "@renderer/pages/shortcuts/shortcuts-page";
 import { ScreenshotsPage } from "@renderer/pages/screenshots/screenshots-page";
 import { ScreenshotEditorPage } from "@renderer/pages/screenshot-editor/screenshot-editor-page";
 import { VideoEditorPage } from "@renderer/pages/video-editor/video-editor-page";
+import { EditorHomePage } from "@renderer/pages/editor/editor-home-page";
+import { EditorNewPage } from "@renderer/pages/editor/editor-new-page";
+import {
+  EditorImagePage,
+  EditorVideoPage,
+  LegacyScreenshotEditorRedirect,
+} from "@renderer/pages/editor/editor-routes";
 import { AuthPage } from "@renderer/pages/auth/auth-page";
 import { ROUTES } from "@shared/routes";
 
@@ -43,8 +50,8 @@ import { ROUTES } from "@shared/routes";
  *     version gate, so they survive on every route.
  *   - <AppShell /> (sidebar + status bar) hosts the regular pages. Add new sidebar
  *     pages as its children so they share the layout.
- *   - /sign-in and /sign-up are full-window pages: siblings of the shell, not
- *     children, so they render without the sidebar.
+ *   - /sign-in is a full-window page: a sibling of the shell, not a child, so it
+ *     renders without the sidebar.
  */
 const router = createHashRouter([
   {
@@ -58,7 +65,16 @@ const router = createHashRouter([
           { path: ROUTES.library, element: <LibraryPage /> },
           { path: ROUTES.libraryDetail, element: <LibraryDetailPage /> },
           { path: ROUTES.screenshots, element: <ScreenshotsPage /> },
-          { path: ROUTES.screenshotEditor, element: <ScreenshotEditorPage /> },
+          // Editor workspace: every Edit lands here, addressed by URL.
+          { path: ROUTES.editor, element: <EditorHomePage /> },
+          // New: an empty editor that opens the image editor on a pasted image.
+          { path: ROUTES.editorNew, element: <EditorNewPage /> },
+          { path: ROUTES.editorVideo, element: <EditorVideoPage /> },
+          { path: ROUTES.editorImage, element: <EditorImagePage /> },
+          // A fresh capture is not in the vault yet: its image travels in router state.
+          { path: ROUTES.editorCapture, element: <ScreenshotEditorPage /> },
+          // Legacy paths, kept so old navigations land on the new routes.
+          { path: ROUTES.screenshotEditor, element: <LegacyScreenshotEditorRedirect /> },
           { path: ROUTES.videoEditor, element: <VideoEditorPage /> },
           { path: ROUTES.shortcuts, element: <ShortcutsPage /> },
           { path: ROUTES.cloud, element: <CloudPage /> },
@@ -82,8 +98,7 @@ const router = createHashRouter([
           { path: "*", element: <NotFound /> },
         ],
       },
-      { path: ROUTES.signIn, element: <AuthPage mode="sign-in" /> },
-      { path: ROUTES.signUp, element: <AuthPage mode="sign-up" /> },
+      { path: ROUTES.signIn, element: <AuthPage /> },
     ],
   },
 ]);

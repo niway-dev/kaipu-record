@@ -4,7 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { FREE_ENTITLEMENTS } from "@shared/entitlements";
 import type { StorageUsage } from "@shared/types/cloud-storage";
 import { CapacityCard, type CapacityCardProps } from "./capacity-card";
-import type { CapacityView } from "./capacity-view";
+import type { CapacityView } from "@kaipu/domain/capacity";
 
 const USAGE: StorageUsage = {
   capacityBytes: 1_000_000_000,

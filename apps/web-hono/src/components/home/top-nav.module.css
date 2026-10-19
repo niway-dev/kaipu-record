@@ -5,6 +5,25 @@
   z-index: 50;
   width: 100%;
   padding: 16px 0;
+  /* Transparent border kept at the top so the bar does not shift by 1px when it appears. */
+  border-bottom: 1px solid transparent;
+  transition:
+    background 0.25s ease,
+    border-color 0.25s ease;
+}
+
+/*
+ * Over the hero the bar is see-through on purpose; once the page scrolls, the
+ * content runs underneath it and the labels collide with whatever passes by.
+ * The glass is the same one the rail and the roadmap's filter bar use. The
+ * height stays put: the mobile chapter strip and the roadmap's filter bar are
+ * pinned right under it.
+ */
+.nav[data-scrolled="true"] {
+  border-bottom-color: var(--kl-bd);
+  background: var(--kl-glass);
+  backdrop-filter: blur(var(--kl-glass-blur));
+  -webkit-backdrop-filter: blur(var(--kl-glass-blur));
 }
 
 /*
