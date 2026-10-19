@@ -1,14 +1,27 @@
 import { basename, join } from "node:path";
-import { access, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdir,
+  open,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import type { LocalRecording } from "@shared/types/library-storage";
+import { normalizeExportPresetId, type StoredExportPresetId } from "@shared/types/export-preset";
 import { sha256FileBase64 } from "./content-hash";
 
 const META_DIR = ".kaipu";
 /** Known video containers, in preference order — `.mp4` is what we now write. */
 const VIDEO_EXTS = [".mp4", ".webm"] as const;
 const IMAGE_EXTS = [".png"] as const;
-const ALL_EXTS = [...VIDEO_EXTS, ...IMAGE_EXTS] as const;
+/** Animated GIF exports (NIW2-217). Local-only; thumbnail in `.kaipu/<id>.jpg` like videos. */
+const GIF_EXTS = [".gif"] as const;
+const ALL_EXTS = [...VIDEO_EXTS, ...IMAGE_EXTS, ...GIF_EXTS] as const;
 
 /** Version 2 adds identity + provenance + hash cache. Every field stays optional so a v1 file reads fine. */
 export interface Sidecar {
@@ -24,6 +37,26 @@ export interface Sidecar {
   hashedMtimeMs?: number;
   /** Set by `removeLocalCopy`; cleared when a file reappears under this id. */
   localRemovedAt?: number;
+  /** Phase 1 plain-string tags (never released); imported once into the registry. */
+  tags?: string[];
+  /** Ids of the tags in `.kaipu/tags.json` this item carries (ADR 0020). */
+  tagIds?: string[];
+  /** Cached names of `tagIds`, for people and other tools; the ids are the truth. */
+  tagNames?: string[];
+  /** Epoch ms of the last tag write on this item. */
+  tagsUpdatedAt?: number;
+  /** Editor exports (NIW2-218): the destination preset; absent on older items. */
+  exportPreset?: StoredExportPresetId;
+  /** What the export encoded ("whole" or "edit:<hash>"); see RecordingFinalizeMeta. */
+  exportFingerprint?: string;
+  /** GIF exports only (NIW2-217). */
+  gifWidth?: number;
+  gifHeight?: number;
+  gifFps?: number;
+  /** Epoch ms the item was last opened in an editor (the Editor home's "Opened"). */
+  editorOpenedAt?: number;
+  /** Screenshots: epoch ms of the last manual Save from the image editor ("Saved"). */
+  editorSavedAt?: number;
 }
 
 // Keyed by the sidecar's absolute path (not per-instance), so a re-minted id on a
@@ -50,7 +83,7 @@ export class LibraryVault {
   /** Guards `ensureIdentity` so two parallel `describe(id)` calls never mint two ids for the same id. */
   private readonly identityInFlight = new Map<string, Promise<Sidecar & { assetId: string }>>();
 
-  constructor(private readonly directory: string) {}
+  constructor(readonly directory: string) {}
 
   /** Resolve an id to its real file; if none exists yet, default to `.mp4`. */
   async filePath(id: string): Promise<string> {
@@ -103,6 +136,7 @@ export class LibraryVault {
       return null;
     }
     const isImage = IMAGE_EXTS.some((ext) => filePath.endsWith(ext));
+    const isGif = GIF_EXTS.some((ext) => filePath.endsWith(ext));
     const meta = await this.ensureIdentity(id);
     const hashIsFresh =
       meta.contentSha256 !== undefined &&
@@ -111,7 +145,7 @@ export class LibraryVault {
     return {
       id,
       assetId: meta.assetId,
-      kind: isImage ? "screenshot" : "recording",
+      kind: isImage ? "screenshot" : isGif ? "gif" : "recording",
       title: meta.title ?? humanizeId(id),
       filePath,
       createdAt: meta.createdAt ?? info.birthtimeMs,
@@ -119,6 +153,16 @@ export class LibraryVault {
       durationSeconds: meta.durationSeconds ?? 0,
       derivedFromAssetId: meta.derivedFromAssetId ?? null,
       contentSha256: hashIsFresh ? (meta.contentSha256 ?? null) : null,
+      tagIds: Array.isArray(meta.tagIds)
+        ? meta.tagIds.filter((t): t is string => typeof t === "string")
+        : [],
+      gif:
+        isGif && meta.gifWidth && meta.gifHeight
+          ? { width: meta.gifWidth, height: meta.gifHeight, fps: meta.gifFps ?? 0 }
+          : null,
+      export: describeExport(meta),
+      editorOpenedAt: typeof meta.editorOpenedAt === "number" ? meta.editorOpenedAt : null,
+      editorSavedAt: typeof meta.editorSavedAt === "number" ? meta.editorSavedAt : null,
       thumbnailUrl: isImage
         ? // `?v=<mtime>` busts the renderer image cache when a screenshot is
           // overwritten in place (same id/URL) — only the changed item, so the
@@ -180,14 +224,29 @@ export class LibraryVault {
     }
   }
 
-  /** Merge fields into the sidecar (used by rename and by finalize). */
+  /**
+   * Merge fields into the sidecar (used by rename, finalize and tags). Atomic
+   * (temp + rename): a crash mid-write never leaves a truncated sidecar, which
+   * would read back as `{}` and lose the item's title, identity and tags.
+   */
   async writeMeta(id: string, meta: Sidecar): Promise<void> {
     const current = await this.sidecar(id);
     await mkdir(this.metaDirectory(), { recursive: true });
+    const target = this.sidecarPath(id);
     await writeFile(
-      this.sidecarPath(id),
+      `${target}.tmp`,
       JSON.stringify({ ...current, ...meta, sidecarVersion: 2 }, null, 2),
     );
+    await rename(`${target}.tmp`, target);
+  }
+
+  /** Whether `id` names a media file in the vault right now (not deleted, not unknown). */
+  async hasMedia(id: string): Promise<boolean> {
+    if (!isPlainItemId(id)) return false;
+    for (const ext of ALL_EXTS) {
+      if (await exists(join(this.directory, `${id}${ext}`))) return true;
+    }
+    return false;
   }
 
   /**
@@ -276,6 +335,31 @@ export class LibraryVault {
     return this.describe(id);
   }
 
+  /**
+   * Writes a GIF export as `<id>.gif`, atomically: `<id>.gif.part` → fsync → rename. A
+   * failure removes the `.part`, so no partial file is ever listed (`.part` is not a known
+   * extension) or left behind.
+   */
+  async writeGif(id: string, bytes: Uint8Array): Promise<string> {
+    await mkdir(this.directory, { recursive: true });
+    const target = join(this.directory, `${id}${GIF_EXTS[0]}`);
+    const part = `${target}.part`;
+    try {
+      const handle = await open(part, "w");
+      try {
+        await handle.writeFile(bytes);
+        await handle.sync();
+      } finally {
+        await handle.close();
+      }
+      await rename(part, target);
+    } catch (error) {
+      await rm(part, { force: true }).catch(() => {});
+      throw error;
+    }
+    return target;
+  }
+
   /** Writes a screenshot PNG as `<id>.png` in the vault root. */
   async writeImage(id: string, png: Buffer): Promise<void> {
     await mkdir(this.directory, { recursive: true });
@@ -285,6 +369,11 @@ export class LibraryVault {
   /** Updates the user-facing title without touching the video file. */
   async rename(id: string, title: string): Promise<void> {
     await this.writeMeta(id, { title });
+  }
+
+  /** Stamp "opened in an editor now" — what the Editor home's Continue list orders by. */
+  async markOpenedInEditor(id: string, at = Date.now()): Promise<void> {
+    await this.writeMeta(id, { editorOpenedAt: at });
   }
 
   /**
@@ -318,7 +407,25 @@ export class LibraryVault {
   }
 }
 
+/** An MP4 export's preset + fingerprint (NIW2-218), or null for anything that isn't one. */
+function describeExport(meta: Sidecar): LocalRecording["export"] {
+  const preset = normalizeExportPresetId(meta.exportPreset);
+  if (!preset) return null;
+  return {
+    preset,
+    fingerprint: typeof meta.exportFingerprint === "string" ? meta.exportFingerprint : null,
+  };
+}
+
 function humanizeId(id: string): string {
   const cleaned = id.replace(/[-_]+/g, " ").trim();
   return cleaned ? cleaned.replace(/\b\w/g, (c) => c.toUpperCase()) : "Recording";
+}
+
+/**
+ * An item id is a bare file stem: no path separators, no leading dot. Anything
+ * else could address a file outside the vault when joined into a path.
+ */
+export function isPlainItemId(id: string): boolean {
+  return id.length > 0 && !id.startsWith(".") && !/[\\/]/.test(id) && basename(id) === id;
 }

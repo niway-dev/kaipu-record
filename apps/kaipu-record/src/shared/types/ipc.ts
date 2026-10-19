@@ -1,3 +1,4 @@
+import type { TagColor } from "@kaipu/domain/constants";
 /**
  * Shared IPC contract between the main and renderer processes.
  *
@@ -9,6 +10,8 @@
 
 import { DEFAULT_QUALITY, type RecordingQuality } from "../recording-quality";
 import type { Locale } from "@kaipu/i18n";
+import type { ExportPresetId, ExportQuality } from "./export-preset";
+import { ENABLED_CAPTURE_MODES, type CaptureMode, type CaptureRect } from "./screenshot-capture";
 
 /**
  * "system" (follow the OS appearance) is a deliberate non-goal for now — the
@@ -23,6 +26,9 @@ export const SHORTCUT_ACTIONS = [
   "stopRecording",
   "bringToFront",
   "captureScreenshot",
+  "captureScreen",
+  "captureFrame",
+  "captureWindow",
   "toggleMicrophone",
   "toggleSystemAudio",
   "toggleCamera",
@@ -43,8 +49,8 @@ export type ShortcutGroup = "recording" | "app";
  */
 export interface ShortcutDefinition {
   action: ShortcutAction;
-  /** Electron accelerator used when the user hasn't rebound the action. */
-  defaultAccelerator: string;
+  /** Electron accelerators used when the user hasn't rebound the action, per platform. */
+  defaultAccelerator: { mac: string; win: string };
   group: ShortcutGroup;
   /** Title shown on the Shortcuts page (e.g. "Start recording"). */
   label: string;
@@ -56,8 +62,10 @@ export interface ShortcutDefinition {
 
 /**
  * The accelerators are LITERALS here, and deliberately, even though
- * `DEFAULT_ACCELERATORS.mac` in `@kaipu/domain/constants` holds the same pair
- * and the marketing site reads it.
+ * `DEFAULT_ACCELERATORS.mac` and `.windows` in `@kaipu/domain/constants` hold
+ * the same pairs and the marketing site reads them. macOS uses
+ * `Command+Control`; Windows uses `Control+Alt` (`CommandOrControl` would
+ * collapse to plain Ctrl there and bind Ctrl+C, copy, globally).
  *
  * This file is reachable from the PRELOAD bundle, which externalizes workspace
  * packages and then cannot load their TypeScript at runtime — importing one
@@ -71,7 +79,7 @@ export interface ShortcutDefinition {
 export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
   {
     action: "startRecording",
-    defaultAccelerator: "Command+Control+C",
+    defaultAccelerator: { mac: "Command+Control+C", win: "Control+Alt+C" },
     group: "recording",
     label: "Start recording",
     description: "Begin a screen recording from anywhere",
@@ -79,7 +87,7 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
   },
   {
     action: "stopRecording",
-    defaultAccelerator: "Command+Control+S",
+    defaultAccelerator: { mac: "Command+Control+S", win: "Control+Alt+S" },
     group: "recording",
     label: "Stop recording",
     description: "End the current recording from anywhere",
@@ -87,7 +95,7 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
   },
   {
     action: "bringToFront",
-    defaultAccelerator: "Command+Control+O",
+    defaultAccelerator: { mac: "Command+Control+O", win: "Control+Alt+O" },
     group: "app",
     label: "Bring Kaipu to front",
     description: "Show the app window if it slips behind or out of reach",
@@ -95,17 +103,41 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
   },
   {
     action: "captureScreenshot",
-    defaultAccelerator: "Command+Control+X",
+    defaultAccelerator: { mac: "Command+Control+X", win: "Control+Alt+X" },
     group: "app",
     label: "Capture screenshot",
-    description: "Open the area selection to take a screenshot",
+    description: "Capture with your current mode",
     statusWord: "capture",
+  },
+  {
+    action: "captureScreen",
+    defaultAccelerator: { mac: "Command+Control+Shift+X", win: "Control+Alt+Shift+X" },
+    group: "app",
+    label: "Capture screen",
+    description: "Capture one whole display",
+    statusWord: "screen",
+  },
+  {
+    action: "captureFrame",
+    defaultAccelerator: { mac: "Command+Control+Shift+F", win: "Control+Alt+Shift+F" },
+    group: "app",
+    label: "Capture frame",
+    description: "Capture what is inside a remembered frame",
+    statusWord: "frame",
+  },
+  {
+    action: "captureWindow",
+    defaultAccelerator: { mac: "Command+Control+W", win: "Control+Alt+W" },
+    group: "app",
+    label: "Capture window",
+    description: "Capture one window, not the screen around it",
+    statusWord: "window",
   },
   // Live input toggles: they flip the recording setting with or without a take
   // (outside a take they change the pre-recording toggle, as clicking it does).
   {
     action: "toggleMicrophone",
-    defaultAccelerator: "Command+Control+M",
+    defaultAccelerator: { mac: "Command+Control+M", win: "Control+Alt+M" },
     group: "recording",
     label: "Mute / unmute microphone",
     description: "Turn your voice on or off, also mid-recording",
@@ -113,7 +145,7 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
   },
   {
     action: "toggleSystemAudio",
-    defaultAccelerator: "Command+Control+A",
+    defaultAccelerator: { mac: "Command+Control+A", win: "Control+Alt+A" },
     group: "recording",
     label: "System audio on / off",
     description: "Turn what the computer plays on or off, also mid-recording",
@@ -121,7 +153,7 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
   },
   {
     action: "toggleCamera",
-    defaultAccelerator: "Command+Control+K",
+    defaultAccelerator: { mac: "Command+Control+K", win: "Control+Alt+K" },
     group: "recording",
     label: "Show / hide camera",
     description: "Show or hide the camera bubble, also mid-recording",
@@ -129,10 +161,24 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
   },
 ];
 
-/** Default accelerators, derived so they can never drift from the definitions. */
-export const DEFAULT_SHORTCUTS: ShortcutSettings = Object.fromEntries(
-  SHORTCUT_DEFINITIONS.map((d) => [d.action, d.defaultAccelerator]),
-) as ShortcutSettings;
+/**
+ * Whether `action` is reachable right now. `captureWindow` follows Window mode's flag: the
+ * action stays in the constants (a stored user binding survives), it is just neither
+ * registered nor listed while Window mode is off.
+ */
+export function isShortcutActionEnabled(
+  action: ShortcutAction,
+  enabledModes: readonly CaptureMode[] = ENABLED_CAPTURE_MODES,
+): boolean {
+  return action !== "captureWindow" || enabledModes.includes("window");
+}
+
+/** `SHORTCUT_DEFINITIONS` minus the actions that are switched off: what the UI lists. */
+export function activeShortcutDefinitions(
+  enabledModes: readonly CaptureMode[] = ENABLED_CAPTURE_MODES,
+): readonly ShortcutDefinition[] {
+  return SHORTCUT_DEFINITIONS.filter((def) => isShortcutActionEnabled(def.action, enabledModes));
+}
 
 /**
  * How this device treats the cloud. Mutually exclusive, per device, never per account:
@@ -201,9 +247,51 @@ export interface AppSettings {
   deviceId: string;
   /** Upload preference for this device. See {@link UploadMode}. */
   uploadMode: UploadMode;
+  /**
+   * NIW2-218: the row the export sheet preselects (Settings → Export quality). Picking
+   * another row in the sheet applies to that export only; nothing is remembered.
+   */
+  exportQuality: ExportQuality;
+  /**
+   * NIW2-218 export redesign: right after a recording heavier than GitHub's 10 MB limit,
+   * its page shows a "Recording saved" card offering a light copy (auto-hides in 8 s).
+   * Settings → Export turns it off.
+   */
+  showRecordingSavedCard: boolean;
+  /**
+   * Frame capture mode: the last frame the user confirmed, per display id (`String(id)`),
+   * in display-relative DIP. Re-clamped to the display's work area when the overlay
+   * opens, so a frame remembered before a resolution change is moved, not dropped.
+   */
+  screenshotFrame: Record<string, CaptureRect>;
+  /**
+   * The one current screenshot mode, app-wide. The Screenshots page, the tray panel and the
+   * generic `captureScreenshot` shortcut all capture with it; picking a mode on the page or
+   * the tray, or pressing a mode-specific shortcut (`captureScreen`, `captureFrame`, `captureWindow`), makes
+   * that mode current. A mode the platform cannot serve stays stored but captures as Frame.
+   * A stored legacy `"area"` is migrated to `"frame"` by the settings merge.
+   */
+  screenshotMode: CaptureMode;
+  /**
+   * Windows: closing the main window hides it to the tray. The first time it does,
+   * the app says so once with a native notification ("Kaipu is still running"); this
+   * records that the notification was shown, so it shows once per install.
+   */
+  trayHintShown: boolean;
+  /**
+   * Send error reports and technical events to PostHog (Settings → App → Privacy).
+   * On by default; off means nothing leaves the device from either process, at the
+   * cost of the team not seeing the errors this install hits. The privacy policy
+   * describes it, and SignPath's signing terms require the opt-out.
+   */
+  diagnosticsEnabled: boolean;
 }
 
-export const DEFAULT_SETTINGS: AppSettings = {
+/**
+ * Defaults for everything except shortcuts, whose defaults depend on the
+ * platform: see `defaultShortcutsFor` in `shared/shortcut-defaults.ts`.
+ */
+export const DEFAULT_SETTINGS: Omit<AppSettings, "shortcuts"> = {
   theme: "dark",
   // Must match DEFAULT_LOCALE in @kaipu/i18n. Kept as a literal on purpose: this
   // module is shared with preload, and importing the i18n package here would pull
@@ -217,9 +305,15 @@ export const DEFAULT_SETTINGS: AppSettings = {
   screenshotSave: "auto",
   showBrandBadge: false,
   screenshotCopy: "auto",
-  shortcuts: DEFAULT_SHORTCUTS,
   deviceId: "",
   uploadMode: "local-only",
+  // Literal on purpose (preload bundle); equals DEFAULT_EXPORT_QUALITY in ./export-preset.
+  exportQuality: "balanced",
+  showRecordingSavedCard: true,
+  screenshotFrame: {},
+  screenshotMode: "frame",
+  trayHintShown: false,
+  diagnosticsEnabled: true,
 };
 
 /**
@@ -258,9 +352,26 @@ export const IPC_CHANNELS = {
   accessibilityRequest: "permissions:accessibility-request",
   listLocalRecordings: "library:list-local",
   renameLocalRecording: "library:rename-local",
+  // Editor home: stamp an item as opened in an editor (sidecar `editorOpenedAt`).
+  markOpenedInEditor: "library:mark-opened-in-editor",
+  /** Tags as entities (ADR 0020): the registry, and which tags an item carries. */
+  listTags: "tags:list",
+  createTag: "tags:create",
+  renameTag: "tags:rename",
+  recolorTag: "tags:recolor",
+  deleteTag: "tags:delete",
+  setItemTags: "tags:setItemTags",
   backfillLocalRecordingMeta: "library:backfill-meta",
   deleteLocalRecording: "library:delete-local",
   revealLocalRecording: "library:reveal-local",
+  /** NIW2-217: save an exported animated GIF into the vault (atomic, validated). */
+  gifSave: "library:gif-save",
+  /** NIW2-217: native drag-out of a vault file (e.g. a GIF into Slack or GitHub). */
+  startFileDrag: "library:start-file-drag",
+  /** NIW2-218: renderer → main, whether a background export is running (close/quit guard). */
+  exportActive: "export:active",
+  /** NIW2-218: main → renderer, "cancel" the running export (the user confirmed quitting). */
+  exportCommand: "export:command",
   getVaultDirectory: "library:get-vault-dir",
   chooseVaultDirectory: "library:choose-vault-dir",
   resetVaultDirectory: "library:reset-vault-dir",
@@ -279,6 +390,8 @@ export const IPC_CHANNELS = {
   loadCursorTrack: "library:load-cursor-track",
   // Screenshots (renderer ↔ main)
   screenshotCapture: "screenshot:capture",
+  // Which `CaptureMode`s this platform's provider can serve (invoke, answers `CaptureMode[]`).
+  screenshotSupportedModes: "screenshot:supported-modes",
   screenshotCopy: "screenshot:copy",
   // Copy a saved screenshot to the clipboard by id (main reads the file — fetch on
   // the kaipu-media:// scheme doesn't return bytes in the renderer).
@@ -286,15 +399,51 @@ export const IPC_CHANNELS = {
   // Read a saved screenshot's PNG bytes by id (for re-opening it in the editor).
   screenshotReadBytes: "screenshot:read-bytes",
   screenshotSave: "screenshot:save",
+  // Read the image on the system clipboard as PNG (the Editor's New → Paste).
+  clipboardReadImage: "clipboard:read-image",
+  // The clipboard image's size without sending its bytes (the Editor home peek).
+  clipboardPeekImage: "clipboard:peek-image",
+  // Write an exported capture (PDF today) to a path the user picks in a save dialog.
+  screenshotExportFile: "screenshot:export-file",
   // Renderer → main: capture done + navigated to the editor, bring the app back.
   screenshotReveal: "screenshot:reveal",
   // Main → renderer: global hotkey fired, run the region capture flow.
   screenshotHotkey: "screenshot:hotkey",
+  // Capture overlay: one window per display (main/screenshots/capture-overlay-windows.ts).
+  // Overlay → main: the user's pick (`OverlayAnswer`); the first valid one wins.
+  screenshotOverlayAnswer: "screenshot:overlay-answer",
+  // Overlay → main: the pointer is over this display (`{ displayId: number | null }`).
+  screenshotOverlayHover: "screenshot:overlay-hover",
+  // Main → every overlay: `OverlayState` (`{ mode, hoverDisplayId, frameDisplayId, windows }`).
+  screenshotOverlayState: "screenshot:overlay-state",
+  // Overlay → main: switch every overlay to this mode (`{ mode: CaptureMode }`); main
+  // validates, rebroadcasts the state, and lists the windows the first time Window is entered.
+  screenshotOverlayMode: "screenshot:overlay-mode",
+  // Overlay → main (Frame): "move the frame to this display" (`{ displayId: number }`).
+  screenshotOverlayFrameDisplay: "screenshot:overlay-frame-display",
+  // Main → overlay (no payload): "reply after your next animation frame"; overlay → main
+  // on the same channel (no payload). Capture waits for every reply or a 250 ms cap.
+  screenshotOverlayHiddenAck: "screenshot:overlay-hidden-ack",
+  // Capture toast (main/screenshots/capture-toast-window.ts), shown after a quiet capture.
+  // Main → toast: `CaptureToastPayload` to render; sent again with `saved` after Save.
+  screenshotToastShow: "screenshot:toast-show",
+  // Toast → main: `{ action: "annotate" | "open-library" | "save" | "dismiss" }`.
+  screenshotToastAction: "screenshot:toast-action",
+  // Toast → main: `{ paused: boolean }`, the pointer entered (true) or left (false) the card.
+  screenshotToastHover: "screenshot:toast-hover",
+  // Toast → main (no payload): the toast's listener is up; main sends the current payload.
+  screenshotToastReady: "screenshot:toast-ready",
+  // Main → main window: `OpenSavedScreenshotRequest`, open a saved shot in the editor or Library.
+  screenshotOpenSaved: "screenshot:open-saved",
+  // Main → main window: `QuietCaptureHandOff`, a copy-only capture's bytes for the editor.
+  screenshotOpenQuietCapture: "screenshot:open-quiet-capture",
   // Recording engine (renderer ↔ main)
   recordingCreate: "recording:create",
   recordingWrite: "recording:write",
   recordingFinalize: "recording:finalize",
   recordingAbort: "recording:abort",
+  /** NIW2-218: byte size of an open writer session's temp file (Small-file size check). */
+  recordingStat: "recording:stat",
   recordingReportTick: "recording:report-tick",
   recordingStart: "recording:start",
   recordingStop: "recording:stop",
@@ -391,6 +540,15 @@ export interface RecordingTick {
 
 export type ControlCommand = "pause" | "resume" | "stop";
 
+/** A live tag and how many items carry it (ADR 0020). */
+export interface TagSummary {
+  id: string;
+  name: string;
+  slug: string;
+  color: TagColor;
+  count: number;
+}
+
 /** Global recording activity shared across windows. `status`/`elapsedSeconds` matter when active. */
 export interface RecordingActivity {
   active: boolean;
@@ -398,6 +556,18 @@ export interface RecordingActivity {
   elapsedSeconds: number;
   /** See {@link RecordingTick.systemAudioAvailable}. Only meaningful while active. */
   systemAudioAvailable?: boolean;
+}
+
+/** What the GIF export sends with the file bytes (`gifSave`). No path: main picks it. */
+export interface GifSaveMeta {
+  title: string;
+  durationSeconds: number;
+  width: number;
+  height: number;
+  fps: number;
+  /** JPEG of the first frame, or null when the worker could not encode one. */
+  thumbnail: ArrayBuffer | null;
+  derivedFromAssetId: string | null;
 }
 
 export interface RecordingFinalizeMeta {
@@ -412,6 +582,14 @@ export interface RecordingFinalizeMeta {
   thumbnail?: ArrayBuffer | null;
   /** Set by the video editor's export: the asset the render was produced from. */
   derivedFromAssetId?: string | null;
+  /** NIW2-218: the export preset that produced this file (sidecar `exportPreset`). */
+  exportPreset?: ExportPresetId;
+  /**
+   * NIW2-218: what was encoded, so the same export can be reused instead of encoded again
+   * (sidecar `exportFingerprint`): `"whole"` = the source file as it is on disk (Share),
+   * `"edit:<hash>"` = the editor's scene at export time.
+   */
+  exportFingerprint?: string;
 }
 
 /**

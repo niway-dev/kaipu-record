@@ -1,14 +1,18 @@
 import { useEffect } from "react";
-import { initAnalytics } from "./analytics-client";
+import { setAnalyticsEnabled } from "./analytics-client";
 
 /**
- * Initialize PostHog once for the main window. Reads the persisted deviceId (which
- * the settings-store mints) and identifies with it. No-op without a key.
+ * Run PostHog in the main window while diagnostics are enabled. Reads the persisted
+ * deviceId (which the settings-store mints) and identifies with it, then follows the
+ * Send diagnostics toggle without a restart. No-op without a key.
  */
 export function useInitAnalytics(): void {
   useEffect(() => {
     void window.electronAPI.getSettings().then((settings) => {
-      initAnalytics(settings.deviceId);
+      setAnalyticsEnabled(settings.diagnosticsEnabled, settings.deviceId);
+    });
+    return window.electronAPI.onSettingsChanged((settings) => {
+      setAnalyticsEnabled(settings.diagnosticsEnabled, settings.deviceId);
     });
   }, []);
 }

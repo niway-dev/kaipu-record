@@ -1,0 +1,488 @@
+/*
+ * The capture overlay: one full-window sheet per display. The sheet is never fully
+ * transparent, so on Windows it receives the clicks instead of the app underneath.
+ * Styled after the Claude Design "Kaipu Screenshot Modes" overlay: a pink Frame box with
+ * marching ants, dark pills for labels, and the Kaipu accent for actions. The overlay
+ * always sits over arbitrary screen content, so it does not follow the app theme.
+ */
+
+.sheet {
+  --overlay-accent: var(--accent-primary, #f6055c);
+  --overlay-pill-bg: rgba(19, 19, 22, 0.95);
+  --overlay-pill-line: rgba(255, 255, 255, 0.16);
+  --overlay-pill-shadow: 0 24px 50px -20px rgba(0, 0, 0, 0.8);
+  --overlay-muted: #8a8a92;
+
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.25);
+  user-select: none;
+  font-family: var(--font-family);
+  touch-action: none;
+}
+
+/*
+ * With a box to cut out (Frame, a highlighted window) the sheet is nearly clear and the box's
+ * own shadow carries the whole dim, so the inside of the selection is never tinted. The
+ * 0.01 keeps the sheet non-zero so a transparent window on Windows still receives clicks.
+ */
+.clear {
+  background: rgba(0, 0, 0, 0.01);
+}
+
+/* Frame: pressing outside the box draws a new one. */
+.drawable {
+  cursor: crosshair;
+}
+
+/* ── Screen chooser and "move the frame here" ─────────────────── */
+
+.chooser {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+
+.chooser:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 3px var(--overlay-accent);
+}
+
+/* The hovered display lightens and its card takes the pink highlight. */
+.chooser[data-highlighted="true"] {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.chooserNumber {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: var(--font-weight-semibold);
+  color: #fff;
+  background: var(--overlay-accent);
+  border-radius: 8px;
+}
+
+.chooserText {
+  display: flex;
+  flex-direction: column;
+}
+
+.chooserTitle {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: #f3f3f5;
+}
+
+.chooserSize {
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--overlay-muted);
+}
+
+/* The other displays in Frame mode: one centered pill, the same chrome as the chooser. */
+.movePill {
+  padding: 12px 18px;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: #f3f3f5;
+  background: var(--overlay-pill-bg);
+  border: 1px solid var(--overlay-pill-line);
+  border-radius: 12px;
+  box-shadow: var(--overlay-pill-shadow);
+  transition: border-color var(--transition);
+}
+
+.chooser:hover .movePill,
+.chooser:focus-visible .movePill {
+  border-color: var(--overlay-accent);
+}
+
+/* ── The Frame box ─────────────────────────────────────────────── */
+
+/* 1.5 px pink border; the huge spread shadow is the overlay's whole dim outside the frame. */
+.frameBox {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1.5px solid var(--overlay-accent);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+  cursor: move;
+}
+
+.ants {
+  position: absolute;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.ants rect {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 1;
+  stroke-dasharray: 6 6;
+  animation: ants 0.7s linear infinite;
+}
+
+@keyframes ants {
+  to {
+    stroke-dashoffset: -12; /* one full 6 + 6 dash period, so the loop is seamless */
+  }
+}
+
+.handle {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  margin: -4.5px 0 0 -4.5px;
+  box-sizing: border-box;
+  background: #fff;
+  border: 1.5px solid var(--overlay-accent);
+  border-radius: 2px;
+}
+
+.sizePill {
+  position: absolute;
+  padding: 4px 8px;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  white-space: nowrap;
+  background: var(--overlay-pill-bg);
+  border: 1px solid var(--overlay-pill-line);
+  border-radius: 6px;
+  pointer-events: none;
+}
+
+.captureButton {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 13px;
+  font-family: inherit;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: #fff;
+  background: var(--overlay-accent);
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.captureButton:hover {
+  background: #ff3d82;
+}
+
+.copyButton {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 12px;
+  font-family: inherit;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: #f3f3f5;
+  background: transparent;
+  border: 1px solid var(--overlay-pill-line);
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.copyButton:hover {
+  border-color: rgba(255, 255, 255, 0.32);
+}
+
+.kbd {
+  padding: 1px 5px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+  opacity: 0.85;
+}
+
+/* ── Chrome attached to the selection (Frame box, highlighted window) ── */
+
+/* The one toolbar, 10 DIP below (or above) the selection, centred on it. */
+.toolbar {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  white-space: nowrap;
+  background: var(--overlay-pill-bg);
+  border: 1px solid var(--overlay-pill-line);
+  border-radius: 10px;
+  box-shadow: 0 20px 44px -16px rgba(0, 0, 0, 0.8);
+  cursor: default;
+}
+
+/* The segmented mode group: one button per enabled mode, the active one filled. */
+.toolbarModes {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.toolbarMode {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 8px;
+  font-family: inherit;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: #d4d4da;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.toolbarMode:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.toolbarMode[aria-pressed="true"] {
+  color: #fff;
+  background: var(--overlay-accent);
+}
+
+.modeBadge {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  line-height: 1;
+  color: var(--overlay-muted);
+}
+
+.toolbarMode[aria-pressed="true"] .modeBadge {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.cancelButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  color: #d4d4da;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.cancelButton:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.barDivider {
+  width: 1px;
+  height: 20px;
+  margin: 0 2px;
+  background: var(--overlay-pill-line);
+}
+
+.recordButton {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  font-family: inherit;
+  font-size: var(--font-size-base);
+  color: var(--overlay-muted);
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.soonTag {
+  padding: 1px 5px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid var(--overlay-pill-line);
+  border-radius: 4px;
+}
+
+/* ── Window mode ───────────────────────────────────────────────── */
+
+.windowSheet {
+  cursor: pointer;
+}
+
+.windowHighlight {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid var(--overlay-accent);
+  border-radius: 6px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+
+.windowLabel {
+  position: absolute;
+  padding: 4px 9px;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: #fff;
+  white-space: nowrap;
+  background: var(--overlay-accent);
+  border-radius: 6px;
+  pointer-events: none;
+}
+
+.statusLayer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+/* ── Screen card ───────────────────────────────────────────────── */
+
+.screenCard {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 300px;
+  padding: 16px;
+  background: var(--overlay-pill-bg);
+  border: 1px solid var(--overlay-pill-line);
+  border-radius: 14px;
+  box-shadow: var(--overlay-pill-shadow);
+  transition:
+    border-color var(--transition),
+    box-shadow var(--transition);
+}
+
+.chooser[data-highlighted="true"] .screenCard {
+  border-color: var(--overlay-accent);
+  box-shadow:
+    0 0 0 3px rgba(246, 5, 92, 0.25),
+    var(--overlay-pill-shadow);
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cardButtons {
+  display: flex;
+  gap: 8px;
+}
+
+.cardCapture {
+  flex: 2;
+  justify-content: center;
+}
+
+.cardCopy {
+  flex: 1;
+  justify-content: center;
+}
+
+.modeRow {
+  display: flex;
+  padding: 3px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+}
+
+.modeSegment {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 26px;
+  font-family: inherit;
+  font-size: var(--font-size-xs);
+  color: #d4d4da;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.modeSegment[aria-pressed="true"] {
+  color: #fff;
+  background: var(--overlay-accent);
+}
+
+.cardRecord {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-align: center;
+  text-transform: uppercase;
+  color: var(--overlay-muted);
+  opacity: 0.7;
+  cursor: default;
+}
+
+/* ── Every overlay ─────────────────────────────────────────────── */
+
+.hintPill {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  padding: 7px 14px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: #d4d4da;
+  white-space: nowrap;
+  background: var(--overlay-pill-bg);
+  border: 1px solid var(--overlay-pill-line);
+  border-radius: 999px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.displayLabel {
+  position: fixed;
+  left: 10px;
+  bottom: 8px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ants rect {
+    animation: none;
+  }
+
+  .chooser,
+  .screenCard,
+  .movePill {
+    transition: none;
+  }
+}

@@ -4,6 +4,8 @@ import {
   DEFAULT_SURFACE,
   FLAG_DEFAULTS,
   FLAG_NAMES,
+  SCREENSHOT_CAPTURED_EVENT,
+  buildScreenshotCapturedProperties,
   serializeError,
 } from "./analytics";
 
@@ -33,5 +35,46 @@ describe("serializeError", () => {
   it("survives non-Error throws", () => {
     expect(serializeError("nope")).toEqual({ name: "Error", message: "nope", stack: null });
     expect(serializeError(undefined).message).toBe("Unknown error");
+  });
+});
+
+describe("screenshot_captured", () => {
+  it("keeps a stable event name", () => {
+    expect(SCREENSHOT_CAPTURED_EVENT).toBe("screenshot_captured");
+  });
+
+  it("carries exactly mode, platform, displays and outcome, nothing else", () => {
+    const leaky = {
+      mode: "frame",
+      platform: "darwin",
+      displays: 2,
+      outcome: "captured",
+      rect: { x: 1, y: 2, width: 3, height: 4 },
+      png: new ArrayBuffer(8),
+    } as Parameters<typeof buildScreenshotCapturedProperties>[0];
+    expect(buildScreenshotCapturedProperties(leaky)).toEqual({
+      mode: "frame",
+      platform: "darwin",
+      displays: 2,
+      outcome: "captured",
+    });
+  });
+
+  it("carries after when set and drops anything beyond the allowed fields", () => {
+    const input = {
+      mode: "window",
+      platform: "darwin",
+      displays: 1,
+      outcome: "captured",
+      after: "quiet",
+      title: "secret",
+    } as Parameters<typeof buildScreenshotCapturedProperties>[0];
+    expect(buildScreenshotCapturedProperties(input)).toEqual({
+      mode: "window",
+      platform: "darwin",
+      displays: 1,
+      outcome: "captured",
+      after: "quiet",
+    });
   });
 });

@@ -39,6 +39,13 @@ describe("slicesForPath", () => {
     expect(slicesForPath("/recordings")).not.toContain("storageCloud");
   });
 
+  it("ships the features catalogue only to the features page", () => {
+    expect(slicesForPath("/features")).toContain("features");
+    expect(slicesForPath("/features")).toContain("landing");
+    expect(slicesForPath("/")).not.toContain("features");
+    expect(slicesForPath("/roadmap")).not.toContain("features");
+  });
+
   it("sends nothing for a route with no rule", () => {
     expect(slicesForPath("/does-not-exist")).toEqual([]);
   });
@@ -47,6 +54,7 @@ describe("slicesForPath", () => {
     const known = new Set(Object.keys(en));
     for (const path of [
       "/",
+      "/features",
       "/roadmap",
       "/legal/cookies",
       "/auth/login",

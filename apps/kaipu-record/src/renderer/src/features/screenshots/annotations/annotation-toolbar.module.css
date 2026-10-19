@@ -5,6 +5,7 @@
 
 .toolGroup {
   display: flex;
+  flex-shrink: 0;
   gap: 3px;
   padding: 3px;
   background: var(--bg-modal);

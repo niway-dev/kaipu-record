@@ -131,3 +131,27 @@
   background: rgba(239, 68, 68, 0.12);
   color: var(--accent-red);
 }
+
+.row[data-selected="true"] {
+  background: rgba(246, 5, 92, 0.06);
+}
+
+.tags {
+  display: flex;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.tag {
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}

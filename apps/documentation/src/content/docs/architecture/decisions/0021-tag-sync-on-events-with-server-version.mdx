@@ -1,0 +1,66 @@
+---
+title: "ADR 0021: Tag sync is opt-in, event-driven, and ordered by a server version"
+description: Signed-in users can switch on "Sync tags" (tags only; videos get their own switch). Local writes go to an outbox and are pushed at once; changes are pulled on start, focus, Library open, sign-in and the Sync button using a server-side version cursor. No polling. Hand-rolled; PowerSync and Electric stay evaluated alternatives.
+---
+
+# ADR 0021: Tag sync is opt-in, event-driven, and ordered by a server version
+
+## Status
+
+| Field         | Value                                                                                             |
+| ------------- | ------------------------------------------------------------------------------------------------- |
+| Status        | Proposed — [tags as entities design](/specs/2026-10-13-tags-as-entities-design/); not implemented |
+| Date          | 2026-10-13                                                                                        |
+| Supersedes    | ADR 0012's cloud replica and "last writer wins per recording" (PR #241)                           |
+| Superseded by | —                                                                                                 |
+
+## Context
+
+Kaipu is local-first: a user without an account must keep every feature offline, forever.
+Signed-in users want their tags on every machine. The owner wants syncing to be a choice,
+scoped to tags alone, and explicitly no background call every few minutes for something
+that rarely changes on another device. The cloud catalog already refreshes on events
+(Library open, sign-in, the Sync button), not on a timer.
+
+## Decision
+
+1. **Opt-in, per domain.** A Settings switch, "Sync tags with Kaipu Cloud", off until the user
+   turns it on. Videos get a separate switch. With the switch off, tags make no network call.
+2. **Local first, outbox.** Every write lands in the vault first, then appends an entry with a
+   client mutation id to `userData/cloud/<userId>/tag-outbox.json`, pushed immediately and
+   retried on the next event.
+3. **Pull on events.** App start, window focus (debounced), Library open, sign-in, the Sync
+   button and after a successful push. Never on a timer.
+4. **Server order.** A per-user global version is incremented in the same transaction as each
+   push; rows carry the version that last touched them; the client pulls `since=<cursor>`.
+   Tag fields merge last-writer-wins by that order; deletes are tombstones; item↔tag
+   membership is rows merged add-wins. Retries are idempotent by client mutation id.
+5. **Upgrade is the first sync.** Turning the switch on pushes the whole local registry. Tags
+   with the same slug already in the account merge (older id kept) and the client remaps ids.
+6. **Hand-rolled.** No sync service or library for now.
+
+## Alternatives rejected
+
+- **Polling every N minutes.** Stale between polls and wasteful for data that rarely changes.
+- **Always-on sync for every account.** Breaks "nothing leaves the machine unasked".
+- **Client timestamps as order.** A device with a wrong clock wins forever.
+- **CRDT documents (Automerge, Yjs).** Built for concurrently edited documents, not records.
+- **PowerSync / Electric (TanStack DB) / TinyBase.** Mature, but each adds a service or a
+  client database that competes with the vault as source of truth, for tens of records. Kept
+  as evaluated alternatives; a learning spike is tracked separately.
+
+## Consequences
+
+- Kaipu owns a small sync engine: idempotent push, cursor pull, tombstones, id remap.
+- Realtime can be added later as a wake-up signal on top of the same cursor.
+- Users who never sign in, or never turn the switch on, run exactly the local path.
+
+## Non-goals
+
+Syncing videos, sharing tags between users, realtime push in this phase, change history.
+
+## Reopen when
+
+- A second domain (videos, edit sessions) needs the same sync and hand-rolled code starts to
+  repeat — then evaluate PowerSync or Electric for all of them.
+- Users report stale tags across devices that the event triggers do not catch.

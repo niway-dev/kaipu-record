@@ -16,6 +16,16 @@ const PANEL_INITIAL_HEIGHT = 380;
  * It is created ahead of the first click (`prewarm`) and only revealed once it
  * has painted. Created on the click instead, the first open showed an empty
  * transparent window while the renderer loaded and React mounted.
+ *
+ * It must open over a full-screen app on the Space the user is on. As a plain
+ * window, macOS cannot place it over a full-screen Space, moves it to a black
+ * Space of its own, and — because the window is reused — every later open lands
+ * there too until the app restarts. On macOS it is therefore a `panel`, which
+ * can float over full-screen apps, and it joins every Space — full-screen ones
+ * included — only while it is open (`setSpaceBehavior`). Kept on while hidden,
+ * that membership left the app's own menu bar black and empty over a
+ * full-screen Kaipu window. `skipTransformProcessType` keeps Electron from
+ * hiding the Dock icon (and with it the app's menu) to get there.
  */
 export class CapturePanelWindow {
   private window: BrowserWindow | null = null;
@@ -52,6 +62,7 @@ export class CapturePanelWindow {
       return;
     }
     this.position(trayBounds);
+    this.setSpaceBehavior(true);
     this.window?.show();
     this.window?.focus();
   }
@@ -60,7 +71,17 @@ export class CapturePanelWindow {
     this.pendingTrayBounds = null;
     if (this.window && !this.window.isDestroyed()) {
       this.window.hide();
+      this.setSpaceBehavior(false);
     }
+  }
+
+  /** Join every Space, full-screen ones included, while open; leave them when hidden. */
+  private setSpaceBehavior(open: boolean): void {
+    if (process.platform !== "darwin" || !this.window || this.window.isDestroyed()) return;
+    this.window.setVisibleOnAllWorkspaces(open, {
+      visibleOnFullScreen: open,
+      skipTransformProcessType: true,
+    });
   }
 
   /** Anchor the panel below (or above) the tray icon, clamped to the work area. */
@@ -84,10 +105,14 @@ export class CapturePanelWindow {
     this.window = new BrowserWindow({
       width: PANEL_WIDTH,
       height: PANEL_INITIAL_HEIGHT,
+      ...(process.platform === "darwin" ? { type: "panel" } : {}),
       show: false,
       frame: false,
       resizable: false,
       movable: false,
+      minimizable: false,
+      maximizable: false,
+      fullscreenable: false,
       alwaysOnTop: true,
       skipTaskbar: true,
       transparent: true,
@@ -97,6 +122,7 @@ export class CapturePanelWindow {
         sandbox: false,
       },
     });
+    this.window.setAlwaysOnTop(true, "screen-saver");
 
     if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
       void this.window.loadURL(`${process.env["ELECTRON_RENDERER_URL"]}/?mode=capture`);

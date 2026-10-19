@@ -4,8 +4,20 @@ import type { WindowPresetName } from "../window-size";
  * `src/preload`, typed for the renderer via `src/preload/index.d.ts`). Pure types.
  */
 
+import type {
+  CaptureMode,
+  CaptureRequestPayload,
+  CaptureResult,
+  CaptureToastAction,
+  CaptureToastPayload,
+  OpenSavedScreenshotRequest,
+  OverlayAnswer,
+  OverlayState,
+  QuietCaptureHandOff,
+} from "./screenshot-capture";
 import type { SerializedError } from "../analytics";
-import type { AppSettings, ShortcutAction, UpdateStatus } from "./ipc";
+import type { AppSettings, ShortcutAction, TagSummary, UpdateStatus } from "./ipc";
+import type { TagColor } from "@kaipu/domain/constants";
 import type { LocalRecording, VaultDirectory } from "./library-storage";
 import type { StorageUsageResult } from "./cloud-storage";
 import type {
@@ -16,6 +28,7 @@ import type {
 import type {
   ControlCommand,
   RecordingActivity,
+  GifSaveMeta,
   RecordingBackfillMeta,
   RecordingFinalizeMeta,
   RecordingSettings,
@@ -30,6 +43,42 @@ export interface ScreenSource {
   name: string;
   thumbnail: string;
   type: "screen" | "window";
+}
+
+/**
+ * The capture overlay window's bridge (`?window=capture-overlay`, one per display). The
+ * overlay only answers what the user picked; main captures the pixels.
+ */
+export interface CaptureOverlayBridge {
+  /** Send the user's pick. Main keeps the first valid answer and ignores the rest. */
+  answer(answer: OverlayAnswer): void;
+  /** The pointer entered this display (its id) or left it (`null`). */
+  hover(displayId: number | null): void;
+  /** Frame mode: ask main to move the one frame to this display. */
+  chooseFrameDisplay(displayId: number): void;
+  /** The mode pill or keys 1–3: ask main to switch every overlay to `mode`. */
+  setMode(mode: CaptureMode): void;
+  /** Main's state broadcast (mode, hover, frame display, window list). Returns an unsubscribe fn. */
+  onState(callback: (state: OverlayState) => void): () => void;
+  /** Main hid the overlays and asks for an ack after the next frame. Returns an unsubscribe fn. */
+  onHiddenAckRequest(callback: () => void): () => void;
+  /** Answer `onHiddenAckRequest`: this overlay has painted its last frame. */
+  hiddenAck(): void;
+}
+
+/**
+ * The capture toast window's bridge (`?window=capture-toast`). The toast only renders what
+ * main sends and reports what the user pressed; main runs every action.
+ */
+export interface CaptureToastBridge {
+  /** Main's payload for the card (a new capture, or the same one after Save). Returns an unsubscribe fn. */
+  onShow(callback: (payload: CaptureToastPayload) => void): () => void;
+  /** Tell main the listener is up, so it sends the current payload. */
+  ready(): void;
+  /** A button or the ×. */
+  action(action: CaptureToastAction): void;
+  /** The pointer entered (`true`, pause the auto-hide) or left (`false`, restart it) the card. */
+  hover(paused: boolean): void;
 }
 
 /** macOS media permissions the recorder cares about. */
@@ -52,6 +101,8 @@ export type AccessibilityStatus = "granted" | "denied" | "not-required";
 export type AuthAttemptResult = { ok: true; status: AuthStatus } | { ok: false; error: AuthError };
 
 export interface KaipuElectronAPI {
+  /** Host OS (`process.platform`), exposed because the renderer must not read `process` itself. */
+  readonly platform: string;
   /** The running app version (`app.getVersion()`), used by the version gate. */
   getAppVersion(): Promise<string>;
   /** Tell main the app shell has mounted and its IPC listeners are registered,
@@ -131,6 +182,18 @@ export interface KaipuElectronAPI {
   listLocalRecordings(): Promise<LocalRecording[]>;
   /** Rename a local recording (updates sidecar metadata; the file is untouched). */
   renameLocalRecording(id: string, title: string): Promise<void>;
+  /** Stamp a vault item as opened in an editor now (orders the Editor home). */
+  markOpenedInEditor(id: string): Promise<void>;
+  /** Every live tag with its item count, most used first. */
+  listTags(): Promise<TagSummary[]>;
+  /** Create a tag; rejects when the name (case-insensitively) is taken. */
+  createTag(name: string, color?: TagColor): Promise<TagSummary>;
+  renameTag(id: string, name: string): Promise<TagSummary>;
+  recolorTag(id: string, color: TagColor): Promise<TagSummary>;
+  /** Delete a tag and take it off every item. */
+  deleteTag(id: string): Promise<void>;
+  /** Replace a local item's tags; resolves to the ids actually stored. */
+  setItemTags(itemId: string, tagIds: readonly string[]): Promise<string[]>;
   /**
    * Persist duration + poster the renderer decoded for a recording that had no
    * sidecar (hand-imported, or an interrupted finalize). Returns the re-described
@@ -144,6 +207,21 @@ export interface KaipuElectronAPI {
   deleteLocalRecording(id: string): Promise<void>;
   /** Reveal a local recording in the OS file manager. */
   revealLocalRecording(id: string): Promise<void>;
+  /**
+   * NIW2-217: write an exported GIF into the vault as `<id>.gif` (+ sidecar and
+   * thumbnail). Main validates the bytes (GIF89a, ≤ 64 MB) and picks the path.
+   */
+  gifSave(bytes: ArrayBuffer, meta: GifSaveMeta): Promise<LocalRecording>;
+  /**
+   * NIW2-217: start a native drag of a vault item's file (call from `dragstart`).
+   * NIW2-218: `name` drags it under a friendly file name ("Demo (10 MB).mp4") instead of the
+   * vault id — main sanitizes it and drags a temporary link to the vault file.
+   */
+  startFileDrag(id: string, name?: string): void;
+  /** NIW2-218: tell main whether a background export is running (close/quit confirmation). */
+  setExportActive(active: boolean): void;
+  /** NIW2-218: main asks to cancel the running export (the user confirmed close/quit). */
+  onExportCommand(callback: (command: "cancel") => void): () => void;
 
   /** Current recordings-folder location (custom or platform default). */
   getVaultDirectory(): Promise<VaultDirectory>;
@@ -173,6 +251,8 @@ export interface KaipuElectronAPI {
   recordingFinalize(sessionId: string, meta: RecordingFinalizeMeta): Promise<LocalRecording>;
   /** Discard a failed session (delete temp). */
   recordingAbort(sessionId: string): Promise<void>;
+  /** Byte size of an open session's temp file, after every queued write landed (NIW2-218). */
+  recordingStat(sessionId: string): Promise<number>;
   /** Push a live tick (elapsed/levels/status) to the hub for the bar. */
   recordingReportTick(tick: RecordingTick): void;
   /** Tell the hub recording started: hide main window, show the bar. */
@@ -220,7 +300,7 @@ export interface KaipuElectronAPI {
   /** Record page subscribes so a panel "Change" opens its source picker. */
   onRequestChooseSource(callback: () => void): () => void;
   /** Capture Panel → main: run the interactive screenshot capture (same as ⌘⌃X). */
-  requestCaptureScreenshot(): void;
+  requestCaptureScreenshot(mode: CaptureMode): void;
 
   // ── Global shortcuts ──────────────────────────────────────────────────
   /** Per-action registration state of the global shortcuts (false = unavailable). */
@@ -231,13 +311,15 @@ export interface KaipuElectronAPI {
   resumeShortcuts(): void;
 
   // ── Screenshots ───────────────────────────────────────────────────────
-  /** Run the interactive region capture; resolves null if the user cancelled. */
-  captureScreenshot(): Promise<{ png: ArrayBuffer; width: number; height: number } | null>;
+  /** Run a capture in `mode`; always answers captured, cancelled or unsupported. */
+  captureScreenshot(mode: CaptureMode): Promise<CaptureResult>;
+  /** Modes this platform can capture; an absent mode renders its entry point disabled. */
+  screenshotSupportedModes(): Promise<CaptureMode[]>;
   /**
-   * Subscribe to the global `⌘⌃X` hotkey broadcast from main. Returns an
+   * Subscribe to the global capture hotkey broadcast (`{ mode }`) from main. Returns an
    * unsubscribe fn. The renderer owns navigation so it runs the capture flow.
    */
-  onCaptureScreenshotHotkey(callback: () => void): () => void;
+  onCaptureScreenshotHotkey(callback: (request: CaptureRequestPayload) => void): () => void;
   /**
    * Bring the app back to the front after a successful capture. The renderer
    * calls this *after* it has navigated to the editor, so the window reappears
@@ -245,6 +327,20 @@ export interface KaipuElectronAPI {
    * window for the duration of the capture so the app isn't in the shot.
    */
   revealAfterCapture(): void;
+  /** Only used by the capture overlay windows; see `CaptureOverlayBridge`. */
+  captureOverlay: CaptureOverlayBridge;
+  /** Only used by the capture toast window; see `CaptureToastBridge`. */
+  captureToast: CaptureToastBridge;
+  /**
+   * The capture toast asked to show a saved screenshot (Annotate, Open in Library). The
+   * renderer navigates, then calls `revealAfterCapture()`. Returns an unsubscribe fn.
+   */
+  onOpenSavedScreenshot(callback: (request: OpenSavedScreenshotRequest) => void): () => void;
+  /**
+   * The capture toast's Annotate on a copy-only capture: open these bytes in the editor
+   * (`origin: "quiet"`), then call `revealAfterCapture()`. Returns an unsubscribe fn.
+   */
+  onOpenQuietCapture(callback: (capture: QuietCaptureHandOff) => void): () => void;
   /**
    * Toggle "editor mode" window sizing: when active, main raises the minimum
    * size and grows the window so the screenshot editor has room; inactive
@@ -272,6 +368,10 @@ export interface KaipuElectronAPI {
   copyScreenshotById(id: string): Promise<void>;
   /** Read a saved screenshot's PNG bytes by id (re-opening it in the editor). */
   readScreenshotBytes(id: string): Promise<ArrayBuffer>;
+  /** The image on the system clipboard as PNG, or null when it holds no image. */
+  readClipboardImage(): Promise<{ png: ArrayBuffer; width: number; height: number } | null>;
+  /** The clipboard image's size, or null when it holds no image. No bytes cross IPC. */
+  peekClipboardImage(): Promise<{ width: number; height: number } | null>;
   /**
    * Write a PNG into the vault and return the stored item. With `overwriteId` it
    * replaces that existing screenshot (keeping its createdAt); without, it creates
@@ -279,8 +379,19 @@ export interface KaipuElectronAPI {
    */
   saveScreenshot(
     png: ArrayBuffer,
-    meta: { title: string; overwriteId?: string },
+    /** `manual`: the user pressed Save (stamps the Editor home's "Saved"), not the auto-save. */
+    meta: { title: string; overwriteId?: string; manual?: boolean },
   ): Promise<LocalRecording>;
+  /**
+   * Ask where to put an exported capture (a native save dialog seeded with
+   * `suggestedName`.`extension`) and write `bytes` there. Resolves the written
+   * path, or null when the user cancelled. Exports live outside the vault: they
+   * are files to hand to someone, not library items.
+   */
+  exportScreenshotFile(
+    bytes: ArrayBuffer,
+    meta: { suggestedName: string; extension: string },
+  ): Promise<{ path: string } | null>;
 
   // ── Analytics ─────────────────────────────────────────────────────────
   /** Forward a serialized exception (+ origin/context) to the main-process sink. */

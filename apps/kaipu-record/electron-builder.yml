@@ -14,11 +14,19 @@ asarUnpack:
   - "**/node_modules/uiohook-napi/**"
 win:
   executableName: kaipu-record
+  # Custom signing hook (read at build time, not packaged). No-ops with a CI
+  # warning without WIN_SIGN_VENDOR; throws for an unknown or unfinished vendor.
+  signtoolOptions:
+    sign: ./scripts/sign-windows.cjs
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
+  # Shown as the installer's first page: SignPath's signing terms require software that
+  # sends data off the device to show its privacy notice during installation. Kept as
+  # UTF-8 with BOM, or electron-builder rewrites it in place on every build.
+  license: build/installer-privacy-notice.txt
 mac:
   category: public.app-category.video # cosmetic (LSApplicationCategoryType)
   hardenedRuntime: true # REQUIRED to notarize

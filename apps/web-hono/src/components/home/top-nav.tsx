@@ -5,6 +5,7 @@ import { SUPPORTED_LOCALES, useLocale, useSetLocale, useTranslations } from "@ka
 
 import { downloadUrls } from "@/lib/download";
 import { setLandingTheme } from "@/server-functions/set-landing-theme";
+import { useScrolled } from "./use-scrolled";
 import styles from "./top-nav.module.css";
 
 /**
@@ -15,14 +16,32 @@ import styles from "./top-nav.module.css";
  * server re-renders with the new answer instead of the client patching it. That
  * is why neither one flashes and why a reload keeps the choice.
  */
-export function TopNav() {
+/** The marketing pages that share this bar. */
+export type MarketingPage = "home" | "features" | "roadmap";
+
+const PAGE_PATHS: Record<MarketingPage, string> = {
+  home: "/",
+  features: "/features",
+  roadmap: "/roadmap",
+};
+
+export function TopNav({ page = "home" }: { page?: MarketingPage }) {
   const t = useTranslations("landing");
   const tRoadmap = useTranslations("roadmap");
+  const onHome = page === "home";
+  // The current page's tab scrolls back to the top instead of reloading it.
+  const tab = (target: MarketingPage) => ({
+    href: page === target ? "#top" : PAGE_PATHS[target],
+    className: `${styles.tab} ${page === target ? styles.tabActive : ""}`,
+    "aria-current": page === target ? ("page" as const) : undefined,
+  });
   const locale = useLocale();
   const setLocale = useSetLocale();
   const router = useRouter();
   const { landingTheme } = useRouteContext({ from: "__root__" });
   const nextTheme = landingTheme === "dark" ? "light" : "dark";
+  // Transparent over the hero; glass once content scrolls underneath it.
+  const scrolled = useScrolled();
 
   const toggleTheme = async () => {
     await setLandingTheme({ data: nextTheme });
@@ -30,7 +49,7 @@ export function TopNav() {
   };
 
   return (
-    <header className={styles.nav}>
+    <header className={styles.nav} data-scrolled={scrolled}>
       {/*
         The bar is full-bleed (it spans the viewport and carries the blur), but
         its CONTENTS sit in the same container as the page below, so the mark on
@@ -38,21 +57,15 @@ export function TopNav() {
         left and right edges instead of on the viewport's.
       */}
       <div className={styles.inner}>
-        <a href="#top" className={styles.brand}>
+        <a href={onHome ? "#top" : "/"} className={styles.brand}>
           <KaipuLogo use="product" size={30} />
           {t("navBrand")}
         </a>
 
         <nav className={styles.center}>
-          <a href="#top" className={`${styles.tab} ${styles.tabActive}`}>
-            {t("homeNavProduct")}
-          </a>
-          <a href="#files" className={styles.tab}>
-            {t("homeNavYourFiles")}
-          </a>
-          <a href="/roadmap" className={styles.tab}>
-            {tRoadmap("navLabel")}
-          </a>
+          <a {...tab("home")}>{t("homeNavProduct")}</a>
+          <a {...tab("features")}>{t("homeNavFeatures")}</a>
+          <a {...tab("roadmap")}>{tRoadmap("navLabel")}</a>
         </nav>
 
         <button type="button" className={styles.menuBtn} aria-label={t("homeMenuOpen")}>
