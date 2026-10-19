@@ -13,7 +13,7 @@ import "@/styles/landing-tokens.css";
 
 /**
  * The page every `/auth/*` route renders into (design: "Kaipu Web Auth.dc.html"): the brand
- * panel on the left, the 520px form column on the right, one column on a phone.
+ * panel on the left, the form column (a little wider than the panel, 5 : 4) on the right, one column on a phone.
  *
  * It is not the app shell: no app header, no legal footer. The legal links live in each form.
  * The colours are the landing's (`[data-kl]` + `data-kl-theme`, read from the same cookie the
@@ -142,7 +142,8 @@ const s = stylex.create({
     position: "relative",
     display: { default: "flex", [bp.mobile]: "none" },
     flexDirection: "column",
-    flex: "1 1 0",
+    // 4 : 5 with the form column, so the brand panel is ~44% and the form ~56%.
+    flex: "4 1 0",
     minWidth: 0,
     overflow: "hidden",
     padding: "34px 44px",
@@ -182,6 +183,8 @@ const s = stylex.create({
     flexDirection: "column",
     justifyContent: "center",
     flex: 1,
+    width: "100%",
+    maxWidth: "560px",
     paddingBlock: "32px",
   },
   brandFox: {
@@ -241,7 +244,7 @@ const s = stylex.create({
     position: "relative",
     display: "flex",
     flexDirection: "column",
-    flex: { default: "0 0 520px", [bp.mobile]: "1 1 auto" },
+    flex: { default: "5 1 0", [bp.mobile]: "1 1 auto" },
     minWidth: 0,
     backgroundColor: kl.bg,
   },
