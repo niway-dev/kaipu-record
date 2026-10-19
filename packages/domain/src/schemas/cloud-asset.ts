@@ -267,3 +267,28 @@ export class UploadIntentExpiredError extends Error {
     this.name = "UploadIntentExpiredError";
   }
 }
+
+/**
+ * Pagination cursor for the asset list: base64url of "<createdAtMillis>:<assetId uuid>", as the
+ * repository encodes it. Anything else (wrong shape, out-of-range timestamp, non-uuid id) is
+ * rejected at the API boundary instead of reaching the database.
+ */
+export const assetCursorSchema = z
+  .string()
+  .max(256)
+  .regex(/^[A-Za-z0-9_-]+$/)
+  .refine((cursor) => {
+    try {
+      const raw = atob(cursor.replace(/-/g, "+").replace(/_/g, "/"));
+      const match = /^(\d{1,15}):([0-9a-f-]{36})$/i.exec(raw);
+      if (!match) return false;
+      const ms = Number(match[1]);
+      return (
+        Number.isFinite(ms) &&
+        !Number.isNaN(new Date(ms).getTime()) &&
+        z.string().uuid().safeParse(match[2]).success
+      );
+    } catch {
+      return false;
+    }
+  }, "Invalid cursor");

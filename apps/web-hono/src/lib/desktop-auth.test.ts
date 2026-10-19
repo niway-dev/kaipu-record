@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  authTabHrefs,
   desktopAuthSearch,
   desktopCallbackUrl,
   desktopDonePath,
+  parseCheckEmail,
   parseDesktopAuthQuery,
 } from "./desktop-auth";
 
@@ -43,6 +45,33 @@ describe("desktop paths", () => {
     expect(desktopDonePath(valid)).toBe(
       `/auth/desktop/done?client_id=kaipu-desktop&state=Ab12Cd34Ef56Gh78&code_challenge=${CHALLENGE}`,
     );
+  });
+
+  it("marks an email sign-up on the done page, and reads the flag back", () => {
+    const path = desktopDonePath(valid, { checkEmail: true });
+    expect(path).toBe(`${desktopDonePath(valid)}&check_email=1`);
+    const params = Object.fromEntries(new URLSearchParams(path.split("?")[1]));
+    expect(parseCheckEmail(params.check_email)).toBe(true);
+    expect(parseDesktopAuthQuery(params)).toEqual(valid);
+    expect(parseCheckEmail(undefined)).toBe(false);
+    expect(parseCheckEmail("yes")).toBe(false);
+  });
+
+  it("keeps the redirect on the web tabs", () => {
+    expect(authTabHrefs({ redirect: "/dashboard/settings" })).toEqual({
+      signIn: "/auth/login?redirect=%2Fdashboard%2Fsettings",
+      signUp: "/auth/signup?redirect=%2Fdashboard%2Fsettings",
+    });
+    expect(authTabHrefs({})).toEqual({ signIn: "/auth/login", signUp: "/auth/signup" });
+  });
+
+  it("keeps the app's query on the desktop tabs, which are one route", () => {
+    const { signIn, signUp } = authTabHrefs({ desktop: valid, redirect: "/ignored" });
+    expect(signIn).toBe(`/auth/desktop${desktopAuthSearch(valid)}`);
+    expect(signUp).toBe(`/auth/desktop${desktopAuthSearch(valid)}&intent=sign-up`);
+    const params = Object.fromEntries(new URLSearchParams(signUp.split("?")[1]));
+    expect(parseDesktopAuthQuery(params)).toEqual(valid);
+    expect(params.intent).toBe("sign-up");
   });
 
   it("builds the deep link the way ensureElectronRedirect does", () => {

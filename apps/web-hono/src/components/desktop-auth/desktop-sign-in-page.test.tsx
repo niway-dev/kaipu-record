@@ -24,16 +24,10 @@ vi.mock("@/lib/auth/auth-client", () => ({ authClient: { signOut: mocks.signOut 
 vi.mock("@/lib/auth/desktop-auth-client", () => ({
   desktopAuthClient: { electron: { transferUser: mocks.transferUser } },
 }));
-vi.mock("@/components/sign-in-form", () => ({
-  default: (props: object) => {
+vi.mock("@/components/auth/auth-panel", () => ({
+  AuthPanel: (props: { mode: string }) => {
     mocks.formProps(props);
-    return <div>sign-in form</div>;
-  },
-}));
-vi.mock("@/components/sign-up-form", () => ({
-  default: (props: object) => {
-    mocks.formProps(props);
-    return <div>sign-up form</div>;
+    return <div>{props.mode} panel</div>;
   },
 }));
 
@@ -66,44 +60,44 @@ describe("DesktopSignInPage", () => {
     expect(screen.queryByRole("button")).toBeNull();
   });
 
-  it("shows the sign-in form with the query, and a sign-up link that keeps it", () => {
+  it("shows the shared sign-in page with the query", () => {
     renderWithProviders(<DesktopSignInPage query={query} session={null} />);
-    expect(screen.getByText("sign-in form")).toBeTruthy();
-    expect(mocks.formProps).toHaveBeenCalledWith(expect.objectContaining({ desktop: query }));
-    expect(screen.getByRole("link", { name: "Create account" }).getAttribute("href")).toBe(
-      `/auth/desktop?${search}&intent=sign-up`,
+    expect(screen.getByText("sign-in panel")).toBeTruthy();
+    expect(mocks.formProps).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: "sign-in", desktop: query }),
     );
   });
 
-  it("opens on the sign-up form when the app asked for it, still carrying the query", () => {
+  it("opens on the sign-up tab when the app asked for it, still carrying the query", () => {
     renderWithProviders(<DesktopSignInPage query={query} session={null} intent="sign-up" />);
-    expect(screen.getByText("sign-up form")).toBeTruthy();
-    expect(screen.queryByText("sign-in form")).toBeNull();
-    expect(mocks.formProps).toHaveBeenCalledWith(expect.objectContaining({ desktop: query }));
-    expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe(
-      `/auth/desktop?${search}`,
+    expect(screen.getByText("sign-up panel")).toBeTruthy();
+    expect(mocks.formProps).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: "sign-up", desktop: query }),
     );
   });
 
-  it("shows a failed Google round trip as copy, not the raw code", () => {
+  it("hands a failed Google round trip to the page, which maps it to copy", () => {
     renderWithProviders(
       <DesktopSignInPage query={query} session={null} oauthError="access_denied" />,
     );
-    expect(screen.getByRole("alert").textContent).not.toContain("access_denied");
+    expect(mocks.formProps).toHaveBeenCalledWith(
+      expect.objectContaining({ oauthError: "access_denied" }),
+    );
   });
 
-  it("asks a signed-in visitor to confirm the account", () => {
+  it("asks a signed-in visitor to confirm the account, under the waiting banner", () => {
     renderWithProviders(<DesktopSignInPage query={query} session={session} />);
     expect(
       screen.getByRole("heading", { name: "Sign in to Kaipu on this computer?" }),
     ).toBeTruthy();
-    expect(screen.getByText("You're signed in as Ada Lovelace (ada@example.com).")).toBeTruthy();
-    expect(screen.queryByText("sign-in form")).toBeNull();
+    expect(screen.getByText("ada@example.com")).toBeTruthy();
+    expect(screen.getByText(/^Kaipu Record( for \w+)? is waiting$/)).toBeTruthy();
+    expect(screen.queryByText("sign-in panel")).toBeNull();
   });
 
-  it("Continue transfers the user with the query and goes to the done page", async () => {
+  it("Continue as transfers the user with the query and goes to the done page", async () => {
     renderWithProviders(<DesktopSignInPage query={query} session={session} />);
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue as Ada Lovelace" }));
     await waitFor(() => expect(mocks.push).toHaveBeenCalledWith(`/auth/desktop/done?${search}`));
     expect(mocks.transferUser).toHaveBeenCalledWith({ fetchOptions: { query } });
   });
@@ -111,7 +105,7 @@ describe("DesktopSignInPage", () => {
   it("stays on the page with an error when the transfer fails", async () => {
     mocks.transferUser.mockResolvedValue({ data: null, error: { status: 400 } });
     renderWithProviders(<DesktopSignInPage query={query} session={session} />);
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue as Ada Lovelace" }));
     expect(await screen.findByRole("alert")).toBeTruthy();
     expect(mocks.push).not.toHaveBeenCalled();
   });
