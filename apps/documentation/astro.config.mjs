@@ -117,6 +117,7 @@ export default defineConfig({
             { slug: "backlog/web-dashboard" },
             { slug: "backlog/google-sign-in" },
             { slug: "backlog/desktop-browser-sign-in" },
+            { slug: "backlog/web-auth-redesign" },
             { slug: "backlog/legal-documents" },
             { slug: "backlog/desktop-diagnostics-opt-out" },
             { slug: "backlog/public-roadmap-page" },
