@@ -399,10 +399,17 @@ VITE_SERVER_URL=https://your-backend.workers.dev
 ```bash
 CORS_ORIGIN=http://localhost:3001
 BETTER_AUTH_SECRET=your-secret-key
-BETTER_AUTH_URL=http://localhost:3000
+BETTER_AUTH_URL=http://localhost:3001
 DATABASE_URL=postgresql://...
 DATABASE_URL_DIRECT=postgresql://...
 ```
+
+`BETTER_AUTH_URL` is the **web** origin (`http://localhost:3001` in dev, `https://kaipu.app`
+in prod), not the API origin (`:3000`). The browser only talks to the web Worker, which
+proxies `/api/auth/*` to the API. Better Auth builds OAuth redirect URIs from this value,
+and the OAuth `state` cookie is set on the web origin, so pointing it at the API makes the
+callback arrive without the cookie and fail with a state mismatch. See the
+[Google OAuth runbook](/deployment/google-oauth/).
 
 ---
 
