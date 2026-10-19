@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { AssetConflictError } from "@kaipu/domain/schemas";
+import { AssetConflictError, encodeAssetCursor } from "@kaipu/domain/schemas";
 import { and, eq } from "drizzle-orm";
 import type { DatabaseClient } from "../client";
 import { CloudAssetRepository } from "../repositories/cloud-asset.repository";
@@ -251,5 +251,75 @@ describe("CloudAssetRepository (real database)", () => {
       newer.revision.revisionId,
     );
     expect(await repo.usage(USER)).toEqual({ usedBytes: 200, reservedBytes: 0, pendingUploads: 0 });
+  });
+
+  // --- NIW2-323 ---
+
+  it("a guarded release is a no-op once extendTicket has moved the expiry past the cutoff", async () => {
+    const expired = new Date(Date.now() - 4 * 3600_000);
+    const r = await repo.reserve(reserveData({ ticketExpiresAt: expired }));
+    if (r.kind !== "reserved") throw new Error(r.kind);
+    const cutoff = new Date(expired.getTime() + 1000);
+    expect(
+      await repo.extendTicket(USER, r.revision.revisionId, new Date(Date.now() + 300_000)),
+    ).toBe(true);
+    expect(await repo.release(USER, r.revision.revisionId, { ticketExpiredBy: cutoff })).toBeNull();
+    expect(await repo.usage(USER)).toEqual({ usedBytes: 0, reservedBytes: 600, pendingUploads: 1 });
+    // Without the extension the same guard lets it through.
+    const other = await repo.reserve(
+      reserveData({ ticketExpiresAt: expired, sizeBytes: 100, reservedBytes: 100 }),
+    );
+    if (other.kind !== "reserved") throw new Error(other.kind);
+    expect(
+      await repo.release(USER, other.revision.revisionId, { ticketExpiredBy: cutoff }),
+    ).not.toBeNull();
+  });
+
+  it("listDeleting returns only revisions whose ticket expired by the cutoff", async () => {
+    const old = new Date(Date.now() - 4 * 3600_000);
+    const closed = await repo.reserve(
+      reserveData({ ticketExpiresAt: old, sizeBytes: 100, reservedBytes: 100 }),
+    );
+    const open = await repo.reserve(reserveData({ sizeBytes: 100, reservedBytes: 100 }));
+    if (closed.kind !== "reserved" || open.kind !== "reserved") throw new Error("reserve");
+    for (const r of [closed, open]) {
+      await repo.markReady(USER, r.revision.revisionId, new Date());
+      await repo.beginDelete(USER, r.revision.revisionId);
+    }
+    const listed = (await repo.listDeleting(100, new Date(Date.now() - 3 * 3600_000)))
+      .filter((r) => r.userId === USER)
+      .map((r) => r.revisionId);
+    expect(listed).toEqual([closed.revision.revisionId]);
+  });
+
+  it("findRevisionsByStorageKeys matches by storage key or thumbnail key, owner-scoped", async () => {
+    const revisionId = crypto.randomUUID();
+    const thumb = `videos/${USER}/x/${revisionId}.thumb.jpg`;
+    const r = await repo.reserve(
+      reserveData({
+        revisionId,
+        storageKey: `videos/${USER}/x/${revisionId}.mp4`,
+        thumbnailKey: thumb,
+        thumbnailBytes: 10,
+        sizeBytes: 100,
+        reservedBytes: 110,
+      }),
+    );
+    if (r.kind !== "reserved") throw new Error(r.kind);
+    const byMain = await repo.findRevisionsByStorageKeys(USER, [r.revision.storageKey]);
+    const byThumb = await repo.findRevisionsByStorageKeys(USER, [thumb, "videos/nobody/x/y.mp4"]);
+    expect(byMain.map((x) => x.revisionId)).toEqual([revisionId]);
+    expect(byThumb.map((x) => x.revisionId)).toEqual([revisionId]);
+    expect(await repo.findRevisionsByStorageKeys("someone-else", [thumb])).toEqual([]);
+    expect(await repo.findRevisionsByStorageKeys(USER, [])).toEqual([]);
+  });
+
+  it("a well-formed cursor naming another user's asset still lists only the caller's assets", async () => {
+    const r = await repo.reserve(reserveData({ sizeBytes: 100, reservedBytes: 100 }));
+    if (r.kind !== "reserved") throw new Error(r.kind);
+    await repo.markReady(USER, r.revision.revisionId, new Date());
+    const foreign = encodeAssetCursor(new Date(Date.now() + 3600_000), crypto.randomUUID());
+    const page = await repo.listAssets(USER, { cursor: foreign, limit: 10 });
+    expect(page.items.map((i) => i.asset.userId)).toEqual([USER]);
   });
 });

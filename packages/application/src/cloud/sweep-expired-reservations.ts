@@ -1,6 +1,6 @@
-import { RESERVATION_GRACE_SECONDS } from "@kaipu/domain/constants";
 import type { ICloudAssetRepository } from "@kaipu/domain/repositories";
 import type { IStorageService } from "@kaipu/domain/services";
+import { ticketWindowCutoff } from "./ticket-window";
 
 /**
  * Reservations whose ticket expired more than the grace period ago can no longer
@@ -12,6 +12,12 @@ import type { IStorageService } from "@kaipu/domain/services";
  * `ready` between the listing above and this loop) fails the claim here and is left completely
  * untouched, object included. A storage delete failure does not stop the sweep from counting the
  * revision released: the bytes are already reclaimed, and a stray object can be cleaned up later.
+ *
+ * The listing is strict (`ticketExpiresAt < cutoff`) while `ticketWindowClosed` is inclusive, so at
+ * the exact closing instant the predicate already says closed and the sweep lists the revision one
+ * tick later. Neither side releases before the window closes, which is the property that matters.
+ * The claim repeats the window check in SQL (`ticketExpiredBy`), so a resumed intent that extends
+ * the ticket after the listing makes the claim a no-op instead of stranding a fresh ticket.
  */
 export async function sweepExpiredReservations(params: {
   assets: ICloudAssetRepository;
@@ -19,13 +25,15 @@ export async function sweepExpiredReservations(params: {
   now: Date;
   limit: number;
 }): Promise<{ released: number; deletedObjects: number }> {
-  const before = new Date(params.now.getTime() - RESERVATION_GRACE_SECONDS * 1000);
+  const before = ticketWindowCutoff(params.now);
   const expired = await params.assets.listReservedExpiredBefore(before, params.limit);
   let released = 0;
   let deletedObjects = 0;
   for (const revision of expired) {
-    const claimed = await params.assets.release(revision.userId, revision.revisionId);
-    if (!claimed) continue; // lost the race (e.g. confirmed since listing) — leave it alone
+    const claimed = await params.assets.release(revision.userId, revision.revisionId, {
+      ticketExpiredBy: before,
+    });
+    if (!claimed) continue; // lost the race (confirmed or resumed since listing) — leave it alone
     released += 1;
     for (const key of [revision.storageKey, revision.thumbnailKey]) {
       if (!key) continue;

@@ -6,8 +6,8 @@ import type {
   ReserveRevisionData,
 } from "@kaipu/domain/repositories";
 import type { CloudAsset, CloudRevision } from "@kaipu/domain/schemas";
-import { AssetConflictError } from "@kaipu/domain/schemas";
-import { and, desc, eq, gt, lt, or, type SQL, sql } from "drizzle-orm";
+import { AssetConflictError, decodeAssetCursor, encodeAssetCursor } from "@kaipu/domain/schemas";
+import { and, desc, eq, gt, inArray, lt, lte, or, type SQL, sql } from "drizzle-orm";
 import type { DatabaseClient } from "../client";
 import { mapCloudAssetToDomain, mapCloudRevisionToDomain } from "../mappers/cloud.mapper";
 import { cloudAssetTable, cloudRevisionTable, cloudStorageAccountTable } from "../schema/cloud";
@@ -90,21 +90,6 @@ function isIntentKeyViolation(err: unknown): boolean {
       return true;
   }
   return false;
-}
-
-/** Keyset cursor: "<createdAtMillis>:<assetId>", opaque to clients. */
-function encodeCursor(createdAt: Date, assetId: string): string {
-  return Buffer.from(`${createdAt.getTime()}:${assetId}`).toString("base64url");
-}
-function decodeCursor(cursor: string): { createdAt: Date; assetId: string } | null {
-  const raw = Buffer.from(cursor, "base64url").toString();
-  const sep = raw.indexOf(":");
-  if (sep <= 0) return null;
-  const ms = Number(raw.slice(0, sep));
-  if (!Number.isFinite(ms) || Number.isNaN(new Date(ms).getTime())) return null;
-  const assetId = raw.slice(sep + 1);
-  if (!/^[0-9a-f-]{36}$/i.test(assetId)) return null;
-  return { createdAt: new Date(ms), assetId };
 }
 
 export class CloudAssetRepository implements ICloudAssetRepository {
@@ -342,12 +327,22 @@ export class CloudAssetRepository implements ICloudAssetRepository {
     return row && row.status === "ready" ? mapCloudRevisionToDomain(row) : null;
   }
 
-  async release(userId: string, revisionId: string): Promise<CloudRevision | null> {
+  async release(
+    userId: string,
+    revisionId: string,
+    opts?: { ticketExpiredBy?: Date },
+  ): Promise<CloudRevision | null> {
+    // The window guard lives in the same statement as the status guard: a concurrent
+    // `extendTicket` moves `ticket_expires_at` forward and this update then matches nothing.
+    const windowGuard = opts?.ticketExpiredBy
+      ? sql`and ticket_expires_at <= ${toTimestamp(opts.ticketExpiredBy)}::timestamp`
+      : sql``;
     return this.runTransition(sql`
       with f as (
         update ${cloudRevisionTable}
         set status = 'expired', updated_at = now()
         where user_id = ${userId} and revision_id = ${revisionId} and status = 'reserved'
+          ${windowGuard}
         returning *
       ),
       acct as (
@@ -421,7 +416,7 @@ export class CloudAssetRepository implements ICloudAssetRepository {
     userId: string,
     params: { cursor: string | null; limit: number },
   ): Promise<AssetPage> {
-    const after = params.cursor ? decodeCursor(params.cursor) : null;
+    const after = params.cursor ? decodeAssetCursor(params.cursor) : null;
     const rows = await this.db
       .select({ asset: cloudAssetTable, revision: cloudRevisionTable })
       .from(cloudAssetTable)
@@ -454,7 +449,7 @@ export class CloudAssetRepository implements ICloudAssetRepository {
       })),
       nextCursor:
         rows.length > params.limit && last
-          ? encodeCursor(last.asset.createdAt, last.asset.assetId)
+          ? encodeAssetCursor(last.asset.createdAt, last.asset.assetId)
           : null,
     };
   }
@@ -531,13 +526,35 @@ export class CloudAssetRepository implements ICloudAssetRepository {
     return rows.map(mapCloudRevisionToDomain);
   }
 
-  async listDeleting(limit: number): Promise<CloudRevision[]> {
+  async listDeleting(limit: number, ticketExpiredBy: Date): Promise<CloudRevision[]> {
     const rows = await this.db
       .select()
       .from(cloudRevisionTable)
-      .where(eq(cloudRevisionTable.status, "deleting"))
+      .where(
+        and(
+          eq(cloudRevisionTable.status, "deleting"),
+          lte(cloudRevisionTable.ticketExpiresAt, ticketExpiredBy),
+        ),
+      )
       .orderBy(cloudRevisionTable.updatedAt)
       .limit(limit);
+    return rows.map(mapCloudRevisionToDomain);
+  }
+
+  async findRevisionsByStorageKeys(userId: string, keys: string[]): Promise<CloudRevision[]> {
+    if (keys.length === 0) return [];
+    const rows = await this.db
+      .select()
+      .from(cloudRevisionTable)
+      .where(
+        and(
+          eq(cloudRevisionTable.userId, userId),
+          or(
+            inArray(cloudRevisionTable.storageKey, keys),
+            inArray(cloudRevisionTable.thumbnailKey, keys),
+          ),
+        ),
+      );
     return rows.map(mapCloudRevisionToDomain);
   }
 

@@ -59,6 +59,8 @@ export {
   TooManyPendingUploadsError,
   UploadsDisabledError,
   assetCursorSchema,
+  decodeAssetCursor,
+  encodeAssetCursor,
   CloudAccessDeniedError,
   UploadVerificationError,
   AssetConflictError,
