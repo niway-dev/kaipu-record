@@ -1220,5 +1220,33 @@
     "restored": "Your account was restored",
     "restoreFailed": "We couldn't restore your account. Sign in again and retry.",
     "cancel": "Cancel"
+  },
+  "dashboard": {
+    "navLabel": "Dashboard sections",
+    "navHome": "Home",
+    "navProfile": "Profile",
+    "navSettings": "Settings",
+    "navRecordings": "Recordings",
+    "greeting": "Hi, {name}",
+    "signedInAs": "Signed in as {email}",
+    "firstVisitTitle": "Your account is ready",
+    "firstVisitPlan": "You're on the {plan} plan. Record with the desktop app: your files stay on your device until you choose to upload them.",
+    "firstVisitNoPlan": "Record with the desktop app: your files stay on your device until you choose to upload them.",
+    "summaryTitle": "Plan and storage",
+    "manage": "Manage",
+    "getStartedTitle": "Get started",
+    "getStartedDetail": "Kaipu records on your computer. Install the desktop app, then upload the recordings you want to keep in the cloud.",
+    "downloadMac": "Download for macOS",
+    "downloadWindows": "Download for Windows (beta)",
+    "otherDownloads": "Other downloads",
+    "macAppleSilicon": "macOS (Apple silicon)",
+    "macIntel": "macOS (Intel)",
+    "windowsBeta": "Windows (beta)",
+    "uploadHint": "In the desktop app, open Storage and cloud and choose manual or automatic upload.",
+    "profileTitle": "Profile",
+    "profileDescription": "Your name, your email and how you sign in.",
+    "settingsTitle": "Settings",
+    "settingsDescription": "Your plan and storage, your language and your account.",
+    "languageTitle": "Language"
   }
 }
