@@ -9,6 +9,10 @@ description: "The authenticated /account page on the web (NIW2-220): what is bui
 > Spec (the contract): [NIW2-220 approved spec](../specs/2026-10-11-niw2-220-web-account-page).
 > Linear: NIW2-220. Epic: NIW2-213. Server-side deletion: NIW2-214 / PR #268.
 
+> **Update (NIW2-470):** the page now lives inside the [web dashboard](./web-dashboard): `/account`
+> redirects to `/dashboard/profile`, and Plan and storage plus the Danger zone moved to
+> `/dashboard/settings`. The behaviour described below is unchanged.
+
 ## What is on the page
 
 `/account`, under the `_authenticated` layout, linked from the user menu. A signed-out visitor goes to
