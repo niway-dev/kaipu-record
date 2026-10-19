@@ -5,6 +5,7 @@ import z from "zod";
 import { Button, Input, Label } from "@kaipu/web-ui";
 import { useTranslations } from "@kaipu/i18n";
 import CloudPromotion from "@/components/cloud-promotion";
+import { GoogleButton } from "@/components/google-button";
 import { authClient } from "@/lib/auth/auth-client";
 import { resolvePostSignInPath } from "@/lib/post-sign-in";
 
@@ -49,6 +50,8 @@ export default function SignInForm({ redirectTo }: { redirectTo?: string }) {
       <h1 className="mb-6 text-center text-3xl font-bold">{t("welcomeBack")}</h1>
 
       <CloudPromotion />
+
+      <GoogleButton mode="sign-in" redirectTo={redirectTo} />
 
       <form
         onSubmit={(e) => {

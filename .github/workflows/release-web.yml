@@ -95,6 +95,9 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           # Public R2 base for the landing's download buttons.
           VITE_PUBLIC_DOWNLOAD_URL: https://updates.kaipu.app
+          # "true" once the API has the Google OAuth secrets (NIW2-215/219); unset hides the
+          # button. Not set on preview builds: Google rejects their redirect URIs (ADR 0007).
+          VITE_GOOGLE_AUTH_ENABLED: ${{ vars.VITE_GOOGLE_AUTH_ENABLED }}
         run: bun run build
 
       # Secrets ship INSIDE the deployed version, in one `wrangler deploy`. The action's
