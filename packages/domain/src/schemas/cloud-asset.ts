@@ -269,26 +269,44 @@ export class UploadIntentExpiredError extends Error {
 }
 
 /**
- * Pagination cursor for the asset list: base64url of "<createdAtMillis>:<assetId uuid>", as the
- * repository encodes it. Anything else (wrong shape, out-of-range timestamp, non-uuid id) is
- * rejected at the API boundary instead of reaching the database.
+ * Asset-list keyset cursor: base64url (no padding) of "<createdAtMillis>:<assetId uuid>". The one
+ * definition of the format — the repository encodes and decodes with these, and the contract
+ * validates with `assetCursorSchema`, which accepts exactly what `decodeAssetCursor` accepts.
+ * Uses `btoa`/`atob` (not `Buffer`) so the domain stays runtime-neutral.
+ */
+export function encodeAssetCursor(createdAt: Date, assetId: string): string {
+  return btoa(`${createdAt.getTime()}:${assetId}`)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+const ASSET_CURSOR_MAX_LENGTH = 256;
+
+/** The decoded position, or null for anything `encodeAssetCursor` could not have produced. */
+export function decodeAssetCursor(cursor: string): { createdAt: Date; assetId: string } | null {
+  if (cursor.length > ASSET_CURSOR_MAX_LENGTH || !/^[A-Za-z0-9_-]+$/.test(cursor)) return null;
+  let raw: string;
+  try {
+    raw = atob(cursor.replace(/-/g, "+").replace(/_/g, "/"));
+  } catch {
+    return null;
+  }
+  const match = /^(\d{1,15}):(.+)$/.exec(raw);
+  if (!match) return null;
+  const createdAt = new Date(Number(match[1]));
+  if (Number.isNaN(createdAt.getTime())) return null;
+  const assetId = match[2] ?? "";
+  if (!uuid.safeParse(assetId).success) return null;
+  return { createdAt, assetId };
+}
+
+/**
+ * Pagination cursor for the asset list, validated at the API boundary: anything the repository
+ * would not have encoded (wrong shape, out-of-range timestamp, non-uuid id) is a 400 instead of
+ * reaching the database or silently restarting from the first page.
  */
 export const assetCursorSchema = z
   .string()
-  .max(256)
-  .regex(/^[A-Za-z0-9_-]+$/)
-  .refine((cursor) => {
-    try {
-      const raw = atob(cursor.replace(/-/g, "+").replace(/_/g, "/"));
-      const match = /^(\d{1,15}):([0-9a-f-]{36})$/i.exec(raw);
-      if (!match) return false;
-      const ms = Number(match[1]);
-      return (
-        Number.isFinite(ms) &&
-        !Number.isNaN(new Date(ms).getTime()) &&
-        z.string().uuid().safeParse(match[2]).success
-      );
-    } catch {
-      return false;
-    }
-  }, "Invalid cursor");
+  .max(ASSET_CURSOR_MAX_LENGTH)
+  .refine((cursor) => decodeAssetCursor(cursor) !== null, "Invalid cursor");

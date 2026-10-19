@@ -165,7 +165,11 @@ export function makeFakeAssets(): ICloudAssetRepository & {
         });
       return ready;
     },
-    async release(userId, revisionId) {
+    async release(userId, revisionId, opts) {
+      const current = revisions.get(revisionId);
+      if (opts?.ticketExpiredBy && current && current.ticketExpiresAt > opts.ticketExpiredBy) {
+        return null;
+      }
       const flipped = flip(userId, revisionId, "reserved", "expired");
       if (!flipped) return null;
       const a = account(userId);
@@ -239,11 +243,21 @@ export function makeFakeAssets(): ICloudAssetRepository & {
         .filter((r) => r.status === "reserved" && r.ticketExpiresAt < before)
         .slice(0, limit);
     },
-    async listDeleting(limit) {
-      return [...revisions.values()].filter((r) => r.status === "deleting").slice(0, limit);
+    async listDeleting(limit, ticketExpiredBy) {
+      return [...revisions.values()]
+        .filter((r) => r.status === "deleting" && r.ticketExpiresAt <= ticketExpiredBy)
+        .slice(0, limit);
     },
-    async listAccountsTouchedSince() {
-      return [...accounts.keys()];
+    async findRevisionsByStorageKeys(userId, keys) {
+      const wanted = new Set(keys);
+      return [...revisions.values()].filter(
+        (r) =>
+          r.userId === userId &&
+          (wanted.has(r.storageKey) || (r.thumbnailKey !== null && wanted.has(r.thumbnailKey))),
+      );
+    },
+    async listAccountsTouchedSince(_since, limit) {
+      return [...accounts.keys()].slice(0, limit);
     },
   };
 }
@@ -298,6 +312,8 @@ export function makeFakeStorage(): IStorageService & {
   downloads: string[];
   deletes: string[];
   failDeletes: boolean;
+  /** Runs right after `listObjectKeys` builds its page — lets a test land an object mid-sweep. */
+  afterList: (() => void) | null;
   land(key: string, meta: Partial<ObjectMetadata> & { sizeBytes: number }): void;
 } {
   const state = {
@@ -306,6 +322,7 @@ export function makeFakeStorage(): IStorageService & {
     downloads: [] as string[],
     deletes: [] as string[],
     failDeletes: false,
+    afterList: null as (() => void) | null,
   };
   return Object.assign(state, {
     land(key: string, meta: Partial<ObjectMetadata> & { sizeBytes: number }) {
@@ -344,10 +361,9 @@ export function makeFakeStorage(): IStorageService & {
       state.objects.delete(key);
     },
     async listObjectKeys(prefix: string) {
-      return {
-        keys: [...state.objects.keys()].filter((k) => k.startsWith(prefix)),
-        nextCursor: null,
-      };
+      const keys = [...state.objects.keys()].filter((k) => k.startsWith(prefix));
+      state.afterList?.();
+      return { keys, nextCursor: null };
     },
   });
 }
