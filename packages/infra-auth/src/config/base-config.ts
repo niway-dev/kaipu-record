@@ -1,5 +1,5 @@
 import { db } from "@kaipu/infra-db/client";
-import { userTable, accountTable, sessionTable } from "@kaipu/infra-db/schemas";
+import { userTable, accountTable, sessionTable, verificationTable } from "@kaipu/infra-db/schemas";
 import type { BetterAuthOptions } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { bearer } from "better-auth/plugins";
@@ -9,7 +9,15 @@ export const baseConfig: BetterAuthOptions = {
   appName: "Kaipu Record",
   database: drizzleAdapter(db, {
     provider: "pg",
-    schema: { user: userTable, account: accountTable, session: sessionTable },
+    // `verification` holds OAuth state (storeStateStrategy defaults to "database" when a database
+    // is configured), password-reset tokens and one-time notices. Without it in this map the
+    // drizzle adapter throws 'model "verification" was not found' on those paths.
+    schema: {
+      user: userTable,
+      account: accountTable,
+      session: sessionTable,
+      verification: verificationTable,
+    },
   }),
   session: {
     cookieCache: {

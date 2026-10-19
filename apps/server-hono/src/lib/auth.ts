@@ -3,6 +3,7 @@ import { describeEmailFailure, EMAIL_TEMPLATE_VALUES, type EmailLocale } from "@
 import { betterAuth } from "better-auth";
 import { customSession } from "better-auth/plugins";
 import { env } from "../env";
+import { desktopAuthPlugin, DESKTOP_TRUSTED_ORIGINS } from "./desktop-auth";
 import { buildResetUrl, buildVerifyUrl, tryGetEmail, webUrl } from "./email";
 import { getSocialProviders } from "./social-providers";
 
@@ -12,6 +13,9 @@ function emailLocale(request?: Request): EmailLocale {
   return header.toLowerCase().startsWith("es") ? "es" : "en";
 }
 
+// Desktop origins live in ./desktop-auth.ts: "kaipu:/" for the browser sign-in exchange
+// (NIW2-471) and "kaipu-record://app" for the legacy in-app form, described below.
+//
 // "kaipu-record://app" is the desktop app's own request identity for Better Auth's CSRF
 // origin check — not a real URL scheme Electron navigates to. Electron's main process
 // (Chromium's network stack) attaches Sec-Fetch-* metadata to outgoing fetch() calls even
@@ -29,7 +33,7 @@ export const auth = betterAuth({
   // cookie) lives on. See .env.example.
   baseURL: env.BETTER_AUTH_URL,
   socialProviders: getSocialProviders(env),
-  trustedOrigins: [...env.CORS_ORIGIN, "kaipu-record://app"],
+  trustedOrigins: [...env.CORS_ORIGIN, ...DESKTOP_TRUSTED_ORIGINS],
   emailAndPassword: {
     ...baseConfig.emailAndPassword,
     enabled: true,
@@ -101,5 +105,10 @@ export const auth = betterAuth({
       }
     },
   },
-  plugins: [...(baseConfig.plugins ?? []), customSession(getCustomSession, baseConfig)],
+  plugins: [
+    ...(baseConfig.plugins ?? []),
+    customSession(getCustomSession, baseConfig),
+    // Desktop sign-in through the browser (NIW2-471). Needs `verification` in the adapter map.
+    desktopAuthPlugin(),
+  ],
 });
