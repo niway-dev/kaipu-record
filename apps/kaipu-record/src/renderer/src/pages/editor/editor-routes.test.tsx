@@ -116,14 +116,20 @@ describe("Editor workspace routes", () => {
     setLibrary([localItem("s1", "screenshot", 1)]);
     renderAt("/editor/image/s1");
     await screen.findByText("image-editor:local:local-s1");
-    expect(window.electronAPI.markOpenedInEditor).toHaveBeenCalledExactlyOnceWith("local-s1");
+    // The stamp runs in a passive effect, which can land after the editor text is
+    // already on screen; wait for it instead of asserting in the same tick.
+    await waitFor(() =>
+      expect(window.electronAPI.markOpenedInEditor).toHaveBeenCalledExactlyOnceWith("local-s1"),
+    );
   });
 
   it("stamps a recording opened in the video editor", async () => {
     setLibrary([localItem("a1", "recording", 1)]);
     renderAt("/editor/video/a1");
     await screen.findByText("video-editor:a1:local-a1");
-    expect(window.electronAPI.markOpenedInEditor).toHaveBeenCalledExactlyOnceWith("local-a1");
+    await waitFor(() =>
+      expect(window.electronAPI.markOpenedInEditor).toHaveBeenCalledExactlyOnceWith("local-a1"),
+    );
   });
 
   it("falls back to the Editor home for an unknown or cloud-only item", async () => {
