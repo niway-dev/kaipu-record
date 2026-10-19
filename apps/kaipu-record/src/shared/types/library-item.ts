@@ -68,7 +68,8 @@ export interface CloudCatalogEntry {
 
 export interface LibraryItem {
   assetId: string;
-  kind: "recording" | "screenshot";
+  /** "gif" items are local-only (NIW2-217); the cloud catalog never holds one. */
+  kind: "recording" | "screenshot" | "gif";
   title: string;
   createdAt: number;
   durationSeconds: number;
@@ -96,6 +97,15 @@ export interface LibraryItem {
   editing: EditingState;
   /** Plan 04 fills this; here it is always `"private"`. */
   sharing: SharingState;
+}
+
+/**
+ * Whether an item of this kind may ever be uploaded to the cloud. GIF exports are
+ * local-only in v1 (NIW2-217); the cloud upload flow (NIW2-214) must check this both in
+ * the UI and in the main-process handler.
+ */
+export function isCloudUploadEligible(item: Pick<LibraryItem, "kind">): boolean {
+  return item.kind !== "gif";
 }
 
 export function hasLocalCopy(item: Pick<LibraryItem, "availability">): boolean {

@@ -38,7 +38,9 @@
   },
   "tray": {
     "open": "Abrir Kaipu Record",
-    "quit": "Salir"
+    "quit": "Salir",
+    "closedToTrayTitle": "Kaipu sigue abierto",
+    "closedToTrayBody": "Lo encuentras en la bandeja del sistema. Haz clic derecho en el icono para salir."
   },
   "dialogs": {
     "cancel": "Cancelar",
@@ -54,7 +56,14 @@
     "folderUnusableDetail": "Kaipu no puede escribir ahí. Elige otra carpeta.",
     "changeFolder": "Cambiar carpeta",
     "changeFolderTitle": "Cambiar la carpeta de grabaciones",
-    "changeFolderDetail": "Tus grabaciones actuales se quedan en la carpeta anterior; desde ahora Kaipu guarda y muestra las de la carpeta nueva. Puedes volver a la anterior cuando quieras."
+    "changeFolderDetail": "Tus grabaciones actuales se quedan en la carpeta anterior; desde ahora Kaipu guarda y muestra las de la carpeta nueva. Puedes volver a la anterior cuando quieras.",
+    "exportPdfTitle": "Exportar como PDF",
+    "pdfFileType": "Documento PDF",
+    "exportInProgress": "Hay una exportación en curso",
+    "closeCancelsExportDetail": "Si cierras la ventana, se cancela. La grabación original no se toca.",
+    "quitCancelsExportDetail": "Si sales, se cancela. La grabación original no se toca.",
+    "cancelExportAndClose": "Cancelar exportación y cerrar",
+    "cancelExportAndQuit": "Cancelar exportación y salir"
   },
   "nav": {
     "record": "Grabar",
@@ -63,7 +72,49 @@
     "shortcuts": "Atajos",
     "settings": "Ajustes",
     "account": "Cuenta",
-    "cloud": "Cloud"
+    "cloud": "Cloud",
+    "editor": "Editor"
+  },
+  "editor": {
+    "title": "Editor",
+    "subtitleImages": "Empieza una imagen nueva o abre una en la que trabajaste.",
+    "subtitleVideos": "Retoma una edición o elige una grabación de tu Biblioteca.",
+    "tabsLabel": "Qué editar",
+    "tabImages": "Imágenes",
+    "tabVideos": "Videos",
+    "startTitle": "Empieza desde una imagen que copiaste",
+    "startBody": "Copia una captura o una foto donde sea y pulsa {shortcut} aquí para editarla.",
+    "chooseFromLibrary": "Elegir de la Biblioteca",
+    "clipboardImage": "Imagen en tu portapapeles",
+    "clipboardSize": "{width} × {height}",
+    "pasteNow": "Pegar {shortcut}",
+    "continueTitle": "Continuar",
+    "continueImages": "Imágenes que abriste o guardaste aquí",
+    "continueVideos": "Videos que editaste o abriste aquí",
+    "lastWorkedOn": "Lo último que trabajaste",
+    "activityEdited": "Editado {when}",
+    "activitySaved": "Guardado {when}",
+    "activityOpened": "Abierto {when}",
+    "open": "Abrir",
+    "resume": "Retomar",
+    "openItem": "Abrir {title}",
+    "resumeItem": "Retomar {title}",
+    "showOlder": "Ver anteriores · {count}",
+    "showLess": "Ver menos",
+    "emptyTitle": "Aún no hay nada que continuar",
+    "emptyImages": "Las imágenes que abras o guardes en el editor aparecen aquí. Las capturas que solo tomaste se quedan en tu Biblioteca.",
+    "emptyVideos": "Las grabaciones que abras en el editor aparecen aquí. Elige una de tu Biblioteca para empezar.",
+    "emptyCaptureHint": "Haz una captura desde cualquier app y se abre en el editor.",
+    "new": "Nueva imagen",
+    "newTitle": "Empezar desde una imagen del portapapeles",
+    "newHeading": "Nueva imagen",
+    "newSubtitle": "Edita cualquier imagen que hayas copiado: una foto, una imagen de la web, una captura de otra app.",
+    "pasteTitle": "Pega una imagen",
+    "pasteHint": "Copia una imagen donde sea y luego pulsa {shortcut} aquí.",
+    "pasteButton": "Pegar desde el portapapeles",
+    "pasteEmpty": "No hay ninguna imagen en el portapapeles. Copia una e inténtalo de nuevo.",
+    "pasteError": "No se pudo abrir esa imagen. Intenta copiarla de nuevo.",
+    "pastedTitle": "Imagen pegada — {date}"
   },
   "settings": {
     "title": "Ajustes",
@@ -112,7 +163,14 @@
     "general": "General",
     "generalDescription": "Idioma y apariencia de Kaipu Record.",
     "permissionsDescription": "A qué puede acceder Kaipu Record en este dispositivo.",
-    "recordingQualityDescription": "Resolución, fluidez y peso de las nuevas grabaciones.",
+    "recordingQualityDescription": "Resolución, fluidez y peso de las nuevas grabaciones, y la calidad por defecto al exportar.",
+    "exportQuality": "Calidad de exportación",
+    "exportQualityGroup": "Calidad de exportación",
+    "exportQualityBalanced": "Equilibrado",
+    "exportQualityBalancedCaption": "Recomendado. Texto de pantalla nítido a unos 7 MB por minuto: hasta 1080p, 24 fps.",
+    "exportQualityMaximum": "Calidad máxima",
+    "exportQualityMaximumCaption": "Tamaño nativo y el mayor bitrate. Archivos más pesados.",
+    "exportQualityNote": "Se preselecciona en la ventana de exportación. Puedes elegir otra opción para una sola exportación.",
     "recordingDescription": "Cómo se capturan las grabaciones.",
     "filesDescription": "Dónde se guardan las grabaciones y capturas en este dispositivo.",
     "appDescription": "Cómo se comporta la app en este dispositivo.",
@@ -121,15 +179,21 @@
     "screenshotSaveDescription": "Cada captura va a tu Biblioteca apenas la tomas.",
     "brandBadge": "Mostrar la marca \"Hecho con Kaipu\"",
     "brandBadgeDescription": "Una marca pequeña en la esquina de las nuevas grabaciones. Apagada por defecto.",
+    "privacy": "Privacidad",
+    "diagnostics": "Enviar diagnósticos",
+    "diagnosticsDescription": "Envía reportes de error y eventos técnicos para que podamos encontrar y corregir problemas. Nunca tu video ni tu audio. Si lo apagas, no se envía nada y no podremos revisar los errores que te ocurran.",
     "screenshotCopy": "Copiar capturas al portapapeles automáticamente",
     "screenshotCopyDescription": "Cada captura queda lista para pegar apenas la tomas.",
+    "screenshotQuietNote": "Si cualquiera está activado, las capturas se saltan el editor y muestran una notificación pequeña.",
     "developer": "Developer",
     "openFolder": "Abrir carpeta",
     "accountMoved": "Tu cuenta se movió a Cloud",
     "accountMovedDetail": "La sesión, la capacidad y las subidas viven en la sección Cloud del menú lateral.",
     "goToCloud": "Ir a Cloud",
     "navCloudNote": "La cuenta y la capacidad en cloud viven ahora en la sección Cloud.",
-    "screenshotsDescription": "Cómo se guardan las capturas en este dispositivo."
+    "screenshotsDescription": "Cómo se guardan las capturas en este dispositivo.",
+    "recordingSavedCard": "Ofrecer una copia liviana al terminar de grabar",
+    "recordingSavedCardDescription": "Cuando una grabación pesa más de 10 MB, su página muestra una tarjeta para crear una copia que entre en GitHub. Se oculta a los 8 segundos."
   },
   "record": {
     "readyToRecord": "Todo listo para grabar",
@@ -181,7 +245,8 @@
     "heroSubtitle": "Kaipu Record captura tu pantalla y cámara en alta calidad, directo en tu Mac. Privado, rápido y sin cuenta.",
     "downloadMacArm": "Descargar para Mac (Apple Silicon)",
     "downloadMacIntel": "Mac (Intel)",
-    "downloadWindows": "Windows (próximamente)",
+    "downloadWindowsBeta": "Windows (beta)",
+    "downloadWindowsSmartScreen": "La beta de Windows aún no tiene firma de código. Si SmartScreen la detiene, elige “Más información” y luego “Ejecutar de todas formas”.",
     "footerTagline": "Graba. Comparte. Sin vueltas.",
     "homeEyebrow": "Kaipu, en cuatro momentos",
     "homeHeroSerif": "Sigue con lo tuyo.",
@@ -198,8 +263,8 @@
     "homeChapter2Sub": "Capturas que explican",
     "homeChapter2Title": "A veces una captura lo dice todo.",
     "homeChapter2Serif": "Señálalo. Literalmente.",
-    "homeChapter2Body": "Selecciona un área y agrega cajas, flechas y notas a mano. Difumina lo que no se debe ver y enmárcalo sobre un fondo limpio.",
-    "homeChapter2Pill1": "Área · ventana · pantalla completa",
+    "homeChapter2Body": "Dibuja un marco o elige una pantalla y agrega cajas, flechas y notas a mano. Difumina lo que no se debe ver y ponlo sobre un fondo limpio.",
+    "homeChapter2Pill1": "Marco · Pantalla",
     "homeChapter2Pill2": "Cajas y flechas",
     "homeChapter2Pill3": "Difuminado",
     "homeChapter2Pill4": "Copiar en un clic",
@@ -230,11 +295,11 @@
     "homeFilesLabel": "Tus archivos",
     "homeCtaLead": "La próxima vez,",
     "homeCtaSerif": "muéstralo con Kaipu.",
-    "homeCtaFootnote": "macOS 13 o posterior · Te avisamos cuando Windows esté listo.",
+    "homeCtaFootnote": "macOS 13 o posterior · Windows 10 o posterior, 64 bits (beta)",
     "homeMadeIn": "Hecho en Perú",
     "homeRailTotal": "04",
     "homeNavProduct": "Producto",
-    "homeNavYourFiles": "Tus archivos",
+    "homeNavFeatures": "Funciones",
     "homeHeroEyebrow": "Grabación de pantalla y capturas para Mac",
     "homeHeroBadgeMac": "App para Mac",
     "homeHeroBadgeRest": "Local · sin cuenta",
@@ -246,7 +311,7 @@
     "homeHeroPill4": "Una carpeta, no una nube",
     "homeHeroCtaPrimary": "Descargar Kaipu para Mac",
     "homeHeroCtaSecondary": "Ver cómo funciona",
-    "homeHeroFootnote": "Apple Silicon · Intel · Windows próximamente",
+    "homeHeroFootnote": "Apple Silicon · Intel · Windows beta",
     "homeAppTitle": "Kaipu Record",
     "homeAppDisplay": "Pantalla Retina integrada",
     "homeAppDisplayMeta": "PRINCIPAL · 2560×1600",
@@ -375,6 +440,60 @@
     "storageAll": "Todo",
     "storageLocal": "Local",
     "storageCloud": "Nube",
+    "tagFilterLabel": "Filtrar por etiqueta",
+    "tagChip": "{tag} ({count})",
+    "tagsMore": "+{count}",
+    "tagsLess": "Menos",
+    "tagsLabel": "Etiquetas",
+    "tagsPlaceholder": "Añadir una etiqueta…",
+    "tagsRemove": "Quitar la etiqueta {tag}",
+    "tagsEdit": "Etiquetas",
+    "tagPanelTitle": "Etiquetas",
+    "tagPanelClose": "Cerrar etiquetas",
+    "tagPanelEmpty": "Sin etiquetas. Escribe una y pulsa Enter.",
+    "tagPanelQuick": "Usadas en tu biblioteca",
+    "tagPanelOpenDetails": "Abrir detalle",
+    "tagsManage": "Gestionar etiquetas",
+    "tagPanelTabItem": "Este elemento",
+    "tagPanelTabAll": "Todas ({count})",
+    "tagPanelThisItem": "Etiquetas de este elemento",
+    "tagPanelNoTags": "Aún no hay etiquetas. Abre las etiquetas de un elemento para crear la primera.",
+    "tagFilterBy": "Ver los elementos con {tag}",
+    "tagRename": "Renombrar {tag}",
+    "tagRenameLabel": "Nuevo nombre para {tag}",
+    "tagDelete": "Eliminar {tag}",
+    "tagDeleteConfirm": "{count, plural, one {¿Quitar de # elemento?} other {¿Quitar de # elementos?}}",
+    "tagCreateTitle": "Nueva etiqueta",
+    "tagCreateName": "Nombre de la nueva etiqueta",
+    "tagCreatePlaceholder": "Ponle nombre… (ej. Cliente X)",
+    "tagCreate": "Crear",
+    "tagNameTaken": "Ya existe una etiqueta con ese nombre.",
+    "tagColorLabel": "Color de la etiqueta",
+    "tagRecolor": "Color de {tag}",
+    "tagColor_rose": "Rosa",
+    "tagColor_coral": "Coral",
+    "tagColor_amber": "Ámbar",
+    "tagColor_lime": "Lima",
+    "tagColor_mint": "Menta",
+    "tagColor_lagoon": "Laguna",
+    "tagColor_sky": "Cielo",
+    "tagColor_iris": "Iris",
+    "tagColor_orchid": "Orquídea",
+    "tagColor_slate": "Pizarra",
+    "tagsLimit": "Un elemento puede tener como máximo {max} etiquetas.",
+    "errorTags": "No pudimos guardar las etiquetas.",
+    "filterKind": "Tipo",
+    "filterKindHint": "Grabaciones de video o capturas de pantalla",
+    "filterStorage": "Ubicación",
+    "filterStorageHint": "En esta Mac, en la nube o en ambas",
+    "filterStorageHintWindows": "En esta PC, en la nube o en ambas",
+    "filterTags": "Etiquetas",
+    "filterTagsHint": "Muestra lo que tiene todas las etiquetas que elijas",
+    "filterTagsEmpty": "Aún no hay etiquetas",
+    "filterNameRecordings": "Grabaciones",
+    "filterNameScreenshots": "Capturas",
+    "fileCountOf": "{shown} DE {total, plural, one {# ARCHIVO} other {# ARCHIVOS}}",
+    "filteredBy": "filtrado por: {filters}",
     "fileCount": "{count, plural, one {# ARCHIVO} other {# ARCHIVOS}}",
     "clearFilters": "Limpiar filtros",
     "errorTitle": "No se puede leer tu carpeta de grabaciones",
@@ -394,6 +513,10 @@
     "copied": "Copiado",
     "copyError": "No pudimos copiar la captura al portapapeles.",
     "editVideo": "Editar video",
+    "share": "Compartir",
+    "shareHint": "Crea una copia más liviana para enviar o publicar",
+    "shareTitle": "Compartir una copia",
+    "shareReadError": "No pudimos leer esta grabación para preparar el archivo.",
     "durationUnreadable": "No se pudo leer la duración de este video",
     "reveal": "Mostrar en carpeta",
     "delete": "Eliminar",
@@ -440,20 +563,79 @@
     "removeLocalCopy": "Quitar descarga local",
     "removeLocalCopyBlockedEdit": "Este archivo se usa en un proyecto de edición local. Conserva sus archivos para poder continuar editando.",
     "removeLocalCopyBlockedBytes": "La copia en cloud no es idéntica a este archivo.",
-    "removeLocalCopyBlockedNoCloud": "No hay copia en cloud de este archivo."
+    "removeLocalCopyBlockedNoCloud": "No hay copia en cloud de este archivo.",
+    "kindGif": "GIF",
+    "gifSpecs": "{width}×{height} · {fps} fps",
+    "gifDragHint": "Arrástralo a Slack, GitHub o Finder",
+    "gifDragHintWindows": "Arrástralo a Slack, GitHub o el Explorador de archivos",
+    "gifUnavailable": "GIF no disponible",
+    "heavyBannerTitle": "{size} es pesado para enviar.",
+    "heavyBannerBody": "Compartir crea una copia más liviana: unos {estimate}, que entra en GitHub o Jira. El original queda como está.",
+    "heavyBannerBodyNoEstimate": "Compartir crea una copia más liviana con texto que se sigue leyendo. El original queda como está.",
+    "heavyBannerAction": "Crear una copia liviana →",
+    "heavyBannerBodyNoGithub": "Compartir crea una copia más liviana: unos {estimate}, con texto que se sigue leyendo. El original queda como está."
   },
   "screenshots": {
+    "toast": {
+      "label": "Aviso de captura",
+      "copiedTitle": "Copiado al portapapeles",
+      "savedTitle": "Guardado en la Biblioteca",
+      "meta": "{width} × {height} · {mode}",
+      "pasteWith": "pega con {key}",
+      "annotate": "Anotar",
+      "openInLibrary": "Abrir en la Biblioteca",
+      "saveToLibrary": "Guardar en la Biblioteca",
+      "dismiss": "Cerrar",
+      "footerAlsoSaved": "Se oculta en {seconds} s · También está en tu Biblioteca",
+      "footerNotSaved": "Se oculta en {seconds} s · Aún no está guardada",
+      "footer": "Se oculta en {seconds} s"
+    },
+    "overlay": {
+      "captureDisplay": "Capturar esta pantalla · {index}",
+      "captureNumber": "Capturar · {index}",
+      "moveFrameHere": "Clic para mover el marco aquí",
+      "capture": "Capturar",
+      "copy": "Copiar",
+      "record": "Grabar",
+      "recordSoon": "Grabar · pronto",
+      "soon": "Pronto",
+      "recordDisplaySoon": "Grabar esta pantalla · pronto",
+      "cancel": "Cancelar",
+      "cancelTitle": "Cancelar · Esc",
+      "modes": "Modo de captura",
+      "modeKey": "{mode} ({key})",
+      "frame": "Marco de captura",
+      "displayLabel": "Pantalla {index}",
+      "builtIn": "Integrada",
+      "external": "Externa",
+      "findingWindows": "Buscando ventanas…",
+      "noWindows": "No hay ventanas en esta pantalla",
+      "hintFrame": "Enter para capturar · {copyKey} para copiar · {keys} cambia de modo · Esc para cancelar",
+      "hintPick": "Clic o Enter para capturar · {copyKey} para copiar · {keys} cambia de modo · Esc para cancelar"
+    },
     "overline": "CAPTURAS",
     "pageTitle": "Captura y documenta",
     "pageSubtitle": "Toma una captura, marca lo importante con cajas, flechas y texto, y compártela. Todo local, sin cuentas.",
-    "captureButton": "Capturar pantalla",
-    "captureHint": "Selecciona un área de la pantalla para empezar.",
-    "globalShortcut": "Atajo global {shortcut}",
+    "captureButton": "Capturar",
+    "lastUsed": "Último usado",
+    "heroHint": "Abre el selector en tu último modo. Cambia de modo ahí, o elige uno abajo para entrar directo.",
+    "pickerHintRecording": "La captura está apagada mientras grabas.",
+    "trayLastUsed": "Último usado: {mode}. Cámbialo dentro del selector.",
+    "recordingBannerLead": "Grabación en curso · {elapsed}.",
+    "recordingBannerBody": "Las capturas están en pausa hasta que detengas.",
+    "stopRecording": "Detener grabación",
+    "trayRecordingLead": "Grabando · {elapsed}",
+    "trayRecordingBody": "— capturas en pausa",
+    "modeScreen": "Pantalla",
+    "modeFrame": "Marco",
+    "modeWindow": "Ventana",
+    "notAvailable": "No disponible en esta plataforma",
     "recent": "Recientes",
     "today": "Hoy",
     "yesterday": "Ayer",
     "undo": "Deshacer",
     "redo": "Rehacer",
+    "editorToolbar": "Barra de herramientas del editor",
     "copy": "Copiar",
     "copied": "Copiado",
     "copyTitle": "Copiar al portapapeles",
@@ -471,6 +653,14 @@
     "copySuffix": "copia",
     "copyError": "No pudimos copiar la captura al portapapeles.",
     "saveError": "No pudimos guardar la captura.",
+    "exportPdf": "PDF",
+    "exportPdfTitle": "Exportar como PDF para compartir y hacer zoom",
+    "exportedPdf": "Exportado",
+    "exportedPdfTitle": "Exportado a “{name}”",
+    "exportPdfError": "No pudimos exportar la captura como PDF.",
+    "renameError": "No pudimos renombrar la captura.",
+    "titleLabel": "Título",
+    "titleHint": "Ponle nombre a esta captura. Enter o hacer clic fuera lo aplica; Esc lo revierte.",
     "discardTitle": "Descartar cambios sin guardar",
     "discardBodyNeverSaved": "Esta captura no está guardada en tu biblioteca. Si sales ahora, se pierde.",
     "discardBody": "Tienes ediciones sin guardar. Si sales ahora, se pierden.",
@@ -493,6 +683,7 @@
     "strokeAria": "Trazo {n}",
     "deleteAria": "Eliminar",
     "deleteTitle": "Eliminar (⌫)",
+    "deleteTitleWindows": "Eliminar (Supr)",
     "toolSelect": "Seleccionar",
     "toolPen": "Pluma",
     "toolBox": "Caja",
@@ -508,6 +699,8 @@
     "beautifyTip": "Tip: las anotaciones se dibujan a mano. El marco queda limpio y nítido.",
     "typePlaceholder": "Escribe…",
     "captureWhileRecording": "Termina la grabación antes de tomar una captura.",
+    "captureUnsupportedWindows": "Las capturas llegan pronto a Windows",
+    "captureUnsupported": "Las capturas no están disponibles en esta plataforma.",
     "imageAlt": "Captura",
     "colorPink": "Rosa",
     "colorBlack": "Negro",
@@ -656,7 +849,123 @@
     "muteRemove": "Eliminar este tramo silenciado",
     "muteNoRoom": "No queda espacio para silenciar.",
     "muteOnSlide": "Una diapositiva no tiene audio que silenciar.",
-    "muteInspectorNote": "Silencio en el export. La grabación original conserva su audio."
+    "muteInspectorNote": "Silencio en el export. La grabación original conserva su audio.",
+    "exportGenericError": "No pudimos exportar el video.",
+    "exportEmptyTimeline": "No hay nada que exportar",
+    "exportSheetTitle": "Exportar",
+    "exportFormatLabel": "Formato",
+    "formatVideo": "Video (MP4)",
+    "formatGif": "GIF",
+    "gifRangeLabel": "Rango",
+    "gifRangeStart": "Inicio (s)",
+    "gifRangeEnd": "Fin (s)",
+    "gifRangeSummary": "{start} – {end} · {duration}",
+    "gifWidthLabel": "Ancho",
+    "gifWidthOption": "{width} px",
+    "gifWidthTooWide": "Más ancho que la grabación",
+    "gifFpsLabel": "Fotogramas por segundo",
+    "gifFpsOption": "{fps} fps",
+    "gifLoopNote": "Se repite en bucle. Sin audio.",
+    "gifEstimateLabel": "Tamaño estimado",
+    "gifEstimate": "≈ {size}",
+    "gifEstimating": "Calculando…",
+    "gifEstimateFailed": "No pudimos estimar el tamaño",
+    "gifTooLong": "Un GIF puede durar como máximo {max} s. Acorta el rango.",
+    "gifTooShort": "Selecciona al menos 0,5 s",
+    "gifSizeWarning": "Pesa más de 10 MB: GitHub no lo acepta como adjunto. Prueba con menos ancho o menos fotogramas por segundo.",
+    "exportGifAction": "Exportar GIF",
+    "exportingGif": "Exportando GIF…",
+    "gifTitle": "{title} (GIF)",
+    "gifSaved": "GIF guardado · {size}",
+    "gifOpen": "Abrir",
+    "gifExportError": "No pudimos exportar el GIF.",
+    "gifTooLargeError": "El GIF pesa más de 64 MB. Prueba con un rango más corto, menos ancho o menos fotogramas por segundo.",
+    "presetLabel": "Destino",
+    "presetBalanced": "Equilibrado",
+    "presetBalancedHint": "Sirve para casi todo",
+    "presetRecommended": "Recomendado",
+    "presetYoutube": "YouTube",
+    "presetYoutubeHint": "16:9 · panorámico",
+    "presetVertical": "Reels · TikTok · Shorts",
+    "presetVerticalHint": "9:16 · vertical",
+    "presetSquare": "Feeds",
+    "presetSquareHint": "1:1 · cuadrado",
+    "presetMaximum": "Calidad máxima",
+    "presetMaximumHint": "Igual que la grabación",
+    "presetDimensions": "{width}×{height}",
+    "framingLabel": "Encuadre",
+    "framingFit": "Ajustar · mostrar todo",
+    "framingFill": "Rellenar · recortar los lados",
+    "framingFitHint": "Muestra toda la grabación, con bandas desenfocadas arriba y abajo.",
+    "framingFillHint": "Llena la pantalla. Los bordes de tu grabación se recortan; sigue los zooms que hiciste.",
+    "presetTitleYoutube": "{title} (YouTube)",
+    "presetTitleVertical": "{title} (vertical)",
+    "presetTitleSquare": "{title} (cuadrado)",
+    "presetTitleShare": "{title} (para compartir)",
+    "openExported": "Abrir",
+    "openExportedLabel": "Abrir el archivo {name} existente",
+    "exportShowInFinder": "Mostrar en Finder",
+    "exportShowInFinderWindows": "Mostrar en el Explorador de archivos",
+    "presetBalancedSay": "Texto nítido en un archivo liviano. Sirve para casi todo.",
+    "presetYoutubeSay": "El tamaño panorámico estándar que espera YouTube.",
+    "presetVerticalSay": "Convierte tu grabación horizontal en un video vertical.",
+    "presetSquareSay": "Un video cuadrado para los feeds de LinkedIn o Instagram.",
+    "presetMaximumSay": "Conserva cada píxel. Ideal para archivar, no para enviar.",
+    "presetGroupRecommended": "Recomendado",
+    "presetGroupShare": "Compartir en una herramienta",
+    "presetGroupPost": "Publicar",
+    "presetGroupKeep": "Conservar",
+    "factTextReadable": "El texto se sigue leyendo",
+    "factPlaysEverywhere": "Se reproduce en todas partes",
+    "factBlackBars": "Barras negras si la pantalla no es 16:9",
+    "factNothingLost": "No se pierde nada",
+    "factHeavy": "Pesado para compartir",
+    "sizeAbout": "~{size}",
+    "sizeUpTo": "hasta ~{size}",
+    "sizeFull": "Tamaño completo",
+    "meterOriginal": "Original {size}",
+    "meterUpTo": "Hasta ~{size}",
+    "meterFull": "Tamaño completo",
+    "meterLighter": "{percent}% más liviano",
+    "exportSheetSubtitle": "{title} · {duration} · {width}×{height}",
+    "exportSheetNote": "Se guarda como un elemento nuevo en tu Biblioteca. El original no se toca.",
+    "exportSizeAction": "Exportar {size}",
+    "exportFullAction": "Exportar",
+    "alreadyExportedOpen": "Ya exportado · Abrir",
+    "closeSheet": "Cerrar",
+    "exportProgressTitle": "Creando una copia más liviana…",
+    "exportProgressTitleFull": "Exportando en calidad máxima…",
+    "exportProgressPercent": "{percent}%",
+    "exportProgressEta": "{percent}% · faltan unos {eta}",
+    "etaSeconds": "{seconds} s",
+    "etaMinutes": "{minutes} min",
+    "exportProgressSizes": "{from} → {to}",
+    "exportBusy": "Ya se está exportando “{title}”. Espera a que termine o cancélala arriba a la derecha.",
+    "readyTitle": "Lista para compartir · {size}",
+    "readyLighter": "{percent}% más liviana que el original.",
+    "readyDragHintTool": "Arrástrala a un comentario de GitHub o Jira",
+    "readyDragHint": "Arrástrala a donde quieras",
+    "readyDragLabel": "Arrastrar {name} fuera de Kaipu",
+    "readyViewFile": "Ver archivo",
+    "readyDone": "Listo",
+    "recordingSavedTitle": "Grabación guardada",
+    "recordingSavedMeter": "~{size} · entra en GitHub",
+    "recordingSavedBody": "¿Quieres enviarla? Podemos crear una copia {percent}% más liviana. El texto se sigue leyendo.",
+    "recordingSavedBodyNoEstimate": "¿Quieres enviarla? Podemos crear una copia más liviana. El texto se sigue leyendo.",
+    "recordingSavedShare": "Compartir una copia liviana",
+    "recordingSavedFooter": "Se oculta en 8 s · Desactívalo en Ajustes → Calidad de exportación",
+    "dismissCard": "Descartar",
+    "presetLight": "Liviano",
+    "presetLightHint": "GitHub · Jira · Linear · Slack",
+    "presetLightSay": "Texto legible, el archivo más pequeño.",
+    "presetTitleLight": "{title} (liviano)",
+    "factSmallest": "El archivo más pequeño",
+    "factGithubTooBig": "Demasiado grande para GitHub: exporta una parte más corta",
+    "recordingSavedMeterNoGithub": "~{size} copia liviana",
+    "githubFitLabel": "Entra en GitHub",
+    "githubFree": "GitHub Free · {limit}",
+    "githubFreeOver": "GitHub Free · supera {limit}",
+    "githubPaid": "GitHub Pro / Team / Enterprise · {limit}"
   },
   "panel": {
     "saving": "Guardando…",
@@ -667,8 +976,7 @@
     "open": "Abrir ↗",
     "tabRecord": "Grabar",
     "tabCapture": "Captura",
-    "panelMode": "Modo del panel",
-    "captureScreen": "Capturar pantalla"
+    "panelMode": "Modo del panel"
   },
   "onboarding": {
     "ctaGetStarted": "Empezar",
@@ -680,6 +988,7 @@
     "hint": "PRESIONA ↵ PARA CONTINUAR  ·  ← → PARA NAVEGAR",
     "welcomeTitle": "Bienvenido a Kaipu",
     "welcomeSubtitle": "El grabador simple que hace lo que macOS no — captura tu pantalla con tu voz, el audio del sistema y tus reuniones.",
+    "welcomeSubtitleWindows": "El grabador simple que hace lo que Windows no — captura tu pantalla con tu voz, el audio del sistema y tus reuniones.",
     "language": "Idioma",
     "featScreen": "PANTALLA",
     "featVoice": "VOZ",
@@ -704,7 +1013,8 @@
     "accessibilityGrant": "Permitir",
     "doneTitle": "¡Todo listo!",
     "donePressPre": "Presiona",
-    "donePressPost": "en cualquier lugar — incluso desde la barra de menú — para grabar."
+    "donePressPost": "en cualquier lugar — incluso desde la barra de menú — para grabar.",
+    "donePressPostWindows": "en cualquier lugar — incluso desde la bandeja del sistema — para grabar."
   },
   "shortcuts": {
     "title": "Atajos",
@@ -721,8 +1031,14 @@
     "stopRecordingDesc": "Termina la grabación actual desde cualquier lugar",
     "bringToFrontLabel": "Traer Kaipu al frente",
     "bringToFrontDesc": "Muestra la ventana si queda detrás o fuera de alcance",
-    "captureScreenshotLabel": "Capturar pantalla",
-    "captureScreenshotDesc": "Abre la selección de área para tomar una captura",
+    "captureScreenshotLabel": "Tomar captura",
+    "captureScreenshotDesc": "Captura con tu modo actual",
+    "captureScreenLabel": "Capturar pantalla",
+    "captureScreenDesc": "Captura una pantalla completa",
+    "captureFrameLabel": "Capturar marco",
+    "captureFrameDesc": "Captura lo que hay dentro de un marco recordado",
+    "captureWindowLabel": "Capturar ventana",
+    "captureWindowDesc": "Captura una sola ventana, sin la pantalla que la rodea",
     "toggleMicrophoneLabel": "Silenciar / activar micrófono",
     "toggleMicrophoneDesc": "Activa o silencia tu voz, también durante la grabación",
     "toggleSystemAudioLabel": "Audio del sistema sí / no",
@@ -824,13 +1140,13 @@
     "eyebrow": "KAIPU / LEGAL",
     "title": "Las reglas, claras.",
     "intro": "Cómo funciona el servicio, qué puedes esperar de Cloud y cómo tratamos tus datos.",
-    "updated": "Actualizado el 14 de septiembre de 2026 · Versión 2026-09-14",
+    "updated": "Actualizado el 18 de octubre de 2026 · Versión 2026-10-18",
     "contents": "En esta página",
     "navigation": "Documentos legales",
     "contact": "Contacto",
     "operator": "Niway S.A.C. · Lima, Perú",
     "contactBody": "Para soporte, privacidad, eliminación de cuenta o reportes de abuso, escríbenos. Indica el correo de tu cuenta y el motivo; no envíes contraseñas ni grabaciones sensibles.",
-    "signupNotice": "Al crear tu cuenta aceptas los <terms>Términos y condiciones</terms> y las <cloud>Condiciones de Cloud</cloud>. Consulta cómo tratamos tus datos en la <privacy>Política de privacidad</privacy>.",
+    "signupNotice": "Al crear tu cuenta confirmas que tienes al menos 18 años y aceptas los <terms>Términos y condiciones</terms> y las <cloud>Condiciones de Cloud</cloud>. Consulta cómo tratamos tus datos en la <privacy>Política de privacidad</privacy>.",
     "readTerms": "Leer todas las condiciones de Cloud",
     "print": "Imprimir o guardar como PDF",
     "home": "Volver a Kaipu",
@@ -867,8 +1183,8 @@
           "body": "Las funciones gratuitas, pruebas, promociones y cuotas se ofrecen a criterio de Niway y pueden modificarse o retirarse, con aviso cuando las condiciones de Cloud lo exijan. No generan derecho a capacidad o funciones continuas o futuras, no tienen valor en dinero y no son transferibles. Usar una promoción nunca genera cargos automáticos."
         },
         "payment": {
-          "title": "Planes de pago futuros",
-          "body": "Si ofrecemos planes de pago, mostraremos precio, impuestos, límites, periodo de facturación, renovación y cancelación antes de la compra. Una cuenta gratuita nunca pasará a ser de pago sin tu aceptación expresa. Podemos cambiar precios para periodos futuros avisando antes de la renovación afectada; puedes cancelar antes de que se aplique. Salvo que estos términos, las condiciones de compra o la ley dispongan otra cosa, los pagos no son reembolsables."
+          "title": "Planes de pago",
+          "body": "Niway puede ofrecer planes de pago, como almacenamiento o funciones premium de Cloud, en pagos únicos o suscripciones. Antes de la compra mostraremos precio, impuestos, límites, periodo de facturación, renovación y cancelación. Las suscripciones se renuevan automáticamente por el mismo periodo hasta que las canceles; la cancelación surte efecto al final del periodo en curso. Los pagos pueden procesarse mediante un procesador de pagos o un revendedor que actúe como comerciante registrado, cuyas condiciones de compra también se aplican. Una cuenta gratuita nunca pasará a ser de pago sin tu aceptación expresa. Podemos cambiar precios, planes, límites y funciones incluidas para periodos futuros avisando antes de la renovación afectada; puedes cancelar antes de que se aplique. Si un plan de pago termina, tu cuenta vuelve a los límites gratuitos y se aplican las condiciones de Cloud sobre exceso de límite. Salvo que estos términos, las condiciones de compra o la ley dispongan otra cosa, los pagos no son reembolsables."
         },
         "availability": {
           "title": "Disponibilidad y soporte",
@@ -902,7 +1218,7 @@
     },
     "privacy": {
       "title": "Política de privacidad",
-      "intro": "Grabar localmente y subir a Cloud son acciones distintas. Aquí explicamos qué datos se procesan, con qué finalidad y quién participa.",
+      "intro": "Grabar localmente y subir a Cloud son acciones distintas. Aquí explicamos qué datos se procesan, con qué finalidad y quién participa, incluidas la cuenta, el almacenamiento en Cloud y los planes de pago.",
       "sections": {
         "controller": {
           "title": "Responsable y contacto",
@@ -914,15 +1230,23 @@
         },
         "account": {
           "title": "Datos de cuenta y servicio",
-          "body": "Tratamos nombre, correo, estado de verificación, identificadores de cuenta y sesión, fechas y credenciales protegidas mediante hash. Las sesiones pueden incluir dirección IP y datos de navegador o dispositivo. Cloud procesa los archivos que subes, nombres, tipo, tamaño, duración cuando corresponda, fechas, revisiones, estado, uso de cuota y ajustes de compartición. También tratamos la información que envías al pedir soporte."
+          "body": "Tratamos nombre, correo, estado de verificación, identificadores de cuenta y sesión, fechas y credenciales protegidas mediante hash. Si ofrecemos inicio de sesión con un proveedor externo y lo usas, recibimos los datos de perfil que ese proveedor comparte, como nombre, correo e identificador. Al crear la cuenta registramos tu confirmación de que eres mayor de edad y tu aceptación de los documentos legales, con su versión y fecha. Las sesiones pueden incluir dirección IP y datos de navegador o dispositivo. También tratamos tu plan, uso de cuota, preferencias, comunicaciones del producto y la información que envías al pedir soporte."
+        },
+        "content": {
+          "title": "Grabaciones e imágenes que subes",
+          "body": "Cuando subes contenido a Cloud, guardamos tus videos, capturas, imágenes, audio y archivos relacionados, junto con su nombre, tipo, tamaño, duración cuando corresponda, fechas, revisiones, estado y ajustes de compartición. Los archivos se almacenan en Cloudflare R2 y sus metadatos en nuestra base de datos. Para prestar el servicio podemos generar archivos derivados, como miniaturas, vistas previas, versiones comprimidas o convertidas y, si usas esas funciones, transcripciones. Tu contenido puede mostrar tu rostro, tu voz, tu pantalla o información de otras personas; lo tratamos solo para prestar las funciones que usas y no lo usamos para identificar personas por sus rasgos biométricos."
+        },
+        "payments": {
+          "title": "Planes de pago y pagos",
+          "body": "Si compras un plan de pago, como almacenamiento o funciones premium de Cloud, los pagos los gestiona un procesador de pagos o un revendedor que actúa como comerciante registrado (merchant of record). Ellos recogen los datos de tu tarjeta o medio de pago bajo su propia política de privacidad, y Niway no guarda números de tarjeta completos. Recibimos y conservamos lo necesario para gestionar tu plan: plan y estado de suscripción, periodo de facturación, importes, moneda, impuestos, país, nombre y dirección de facturación o identificación tributaria si los proporcionas, identificadores de transacción y de comprobante, y datos limitados del medio de pago como marca, últimos cuatro dígitos y vencimiento. Los usamos para cobrar, renovar y cancelar planes, aplicar beneficios y límites, emitir comprobantes, gestionar reembolsos y disputas, prevenir fraude y cumplir obligaciones tributarias y contables."
         },
         "purposes": {
           "title": "Para qué los usamos",
-          "body": "Usamos datos para crear y proteger cuentas, autenticarte, alojar y entregar archivos, gestionar límites, dar soporte, analizar y mejorar el servicio, detectar abuso y fraude, enviar avisos del servicio y legales, y cumplir obligaciones legales. El tratamiento se basa en el contrato, intereses legítimos, obligaciones legales o tu consentimiento cuando se requiera. Las comunicaciones de marketing requieren consentimiento e incluyen una forma de darse de baja. No vendemos datos personales ni usamos tus grabaciones para publicidad, y no las usamos para entrenar modelos de IA de propósito general sin tu permiso. Las funciones que elijas usar, como transcripción o asistencia con IA, procesan el contenido necesario para ellas, lo que puede incluir proveedores especializados."
+          "body": "Usamos datos para crear y proteger cuentas, autenticarte, alojar y entregar archivos, gestionar planes, pagos, límites y beneficios, dar soporte, analizar y mejorar el servicio, desarrollar nuevas funciones, detectar abuso y fraude, enviar avisos del servicio, de facturación y legales, y cumplir obligaciones legales. El tratamiento se basa en el contrato, intereses legítimos, obligaciones legales o tu consentimiento cuando se requiera. Las comunicaciones de marketing requieren consentimiento e incluyen una forma de darse de baja. No vendemos datos personales ni usamos tus grabaciones para publicidad, y no las usamos para entrenar modelos de IA de propósito general sin tu permiso. Las funciones que elijas usar, como transcripción o asistencia con IA, procesan el contenido necesario para ellas, lo que puede incluir proveedores especializados. Si una nueva función necesita datos o una finalidad que esta política no cubre, actualizaremos la política y pediremos tu consentimiento cuando se requiera antes de usarlos."
         },
         "providers": {
           "title": "Dónde se guarda y quién lo procesa",
-          "body": "Usamos proveedores de infraestructura y servicios para operar Kaipu, actualmente entre ellos Cloudflare (web, API y almacenamiento de archivos R2), Neon (base de datos PostgreSQL de cuentas, sesiones y metadatos de Cloud) y PostHog (diagnóstico en las versiones donde está activado), y podemos agregar o reemplazar proveedores, como de correo, pagos o IA, a medida que el servicio evoluciona. Los datos pueden transferirse y tratarse en otros países, incluidos Estados Unidos y la Unión Europea, con las garantías que exige la normativa peruana de protección de datos. Actualizamos esta política cuando cambian proveedores relevantes."
+          "body": "Usamos proveedores de infraestructura y servicios para operar Kaipu, actualmente entre ellos Cloudflare (sitio web, API y almacenamiento de archivos R2; cloudflare.com/privacypolicy), Neon (base de datos PostgreSQL de cuentas, sesiones, planes y metadatos de Cloud; neon.com/privacy-policy) y PostHog (diagnóstico en las versiones donde está activado; posthog.com/privacy). A medida que el servicio evoluciona podemos agregar o reemplazar proveedores, como de pagos, envío de correo, soporte, analítica o IA. Los procesadores de pago y comerciantes registrados pueden actuar como responsables independientes bajo sus propias políticas de privacidad. Los datos pueden transferirse y tratarse en otros países, incluidos Estados Unidos y la Unión Europea, con las garantías que exige la normativa peruana de protección de datos. Actualizamos esta política cuando cambian proveedores relevantes."
         },
         "diagnostics": {
           "title": "Diagnósticos de la aplicación",
@@ -932,9 +1256,13 @@
           "title": "Compartición y accesos",
           "body": "Cuando habilitas o usas una función de compartición, las personas con acceso al enlace pueden ver o descargar el contenido según esa función. Un enlace puede reenviarse y no permite recuperar copias ya descargadas. El personal autorizado y los proveedores pueden acceder a datos cuando sea necesario para operación, soporte, seguridad o una obligación legal; limitamos ese acceso a su finalidad. No presentamos Cloud como almacenamiento cifrado de extremo a extremo. Podemos revelar información ante requerimientos legales válidos o para atender incidentes y proteger derechos, dentro de los límites legales."
         },
+        "age": {
+          "title": "Requisito de edad",
+          "body": "Las cuentas de Kaipu, Cloud y los planes de pago son solo para personas de al menos 18 años o la mayoría de edad de su lugar de residencia. Al registrarte confirmas que cumples este requisito. No recopilamos a sabiendas datos personales de menores de edad. Si sabemos que una cuenta pertenece a un menor, podemos cerrarla y eliminar sus datos, salvo lo que debamos conservar por ley. Si crees que un menor nos ha dado datos, escríbenos."
+        },
         "retention": {
           "title": "Conservación y eliminación",
-          "body": "Conservamos los datos mientras la cuenta esté activa y, después, el tiempo necesario para los fines descritos, resolver controversias, prevenir abusos y cumplir obligaciones legales, tributarias o contables. Puedes borrar archivos en la app y pedir el cierre de tu cuenta por correo. La eliminación puede no ser inmediata para todas las copias: las copias de respaldo y los registros se sobrescriben en su ciclo normal. Los archivos de Cloud también pueden eliminarse según las condiciones de Cloud, incluidas las reglas de exceso de límite y cuentas inactivas. Los datos agregados o anonimizados pueden conservarse sin límite."
+          "body": "Conservamos los datos mientras la cuenta esté activa y, después, el tiempo necesario para los fines descritos, resolver controversias, prevenir abusos y cumplir obligaciones legales, tributarias o contables. Los registros de facturación y pago se conservan durante el plazo que exige la normativa tributaria y contable, incluso después de cerrar la cuenta. Puedes borrar archivos en la app y pedir el cierre de tu cuenta por correo. La eliminación puede no ser inmediata para todas las copias: las copias de respaldo y los registros se sobrescriben en su ciclo normal. Los archivos de Cloud también pueden eliminarse según las condiciones de Cloud, incluidas las reglas de exceso de límite y cuentas inactivas, o cuando termina un plan de pago y el contenido guardado supera los límites de tu nuevo plan. Los datos agregados o anonimizados pueden conservarse sin límite."
         },
         "rights": {
           "title": "Tus derechos",
@@ -1041,7 +1369,7 @@
     "pages": {
       "roadmap": {
         "title": "Roadmap | Kaipu Record",
-        "description": "Qué ya está en Kaipu Record y qué viene después: el roadmap público, agrupado por estado."
+        "description": "Qué ya hace Kaipu Record en macOS y Windows, y qué viene después: el roadmap público, agrupado por estado."
       },
       "terms-and-conditions": {
         "title": "Términos y condiciones | Kaipu Record",
@@ -1058,49 +1386,161 @@
       "cookies": {
         "title": "Cookies y almacenamiento local | Kaipu Record",
         "description": "Cookies de sesión y preferencias que usa Kaipu Record, y cómo gestionarlas."
+      },
+      "features": {
+        "title": "Funciones | Kaipu Record",
+        "description": "Todo lo que hace Kaipu Record: grabación de pantalla y cámara, capturas anotadas, un editor con zoom automático, exports livianos y una biblioteca con búsqueda."
       }
     }
   },
   "roadmap": {
     "navLabel": "Roadmap",
-    "eyebrow": "Roadmap público",
-    "heading": "Qué hace Kaipu Record hoy y qué viene después",
-    "intro": "Todo lo de abajo está agrupado por estado, no por fecha. Lo lanzado es lo que ya tienes al descargar Kaipu Record; lo planeado es lo que estamos construyendo ahora.",
-    "disclaimer": "El orden es una prioridad, no una promesa. Los planes se mueven a medida que aprendemos qué necesita la gente de verdad.",
-    "count": "{count, plural, one {# elemento} other {# elementos}}",
+    "page": {
+      "eyebrow": "Roadmap público",
+      "heading": "Qué funciona hoy y en qué plataforma.",
+      "serif": "Y qué viene después.",
+      "intro": "Kaipu Record funciona en macOS, y Windows está en beta. Cada función de abajo muestra dónde ya funciona, dónde se está construyendo y qué está planeado.",
+      "disclaimer": "El orden es una prioridad, no una promesa. Los planes se mueven a medida que aprendemos qué necesita la gente de verdad.",
+      "count": "{count, plural, one {# elemento} other {# elementos}}",
+      "showing": "{shown} de {total} funciones",
+      "columns": {
+        "feature": "Función",
+        "mac": "macOS",
+        "win": "Windows"
+      }
+    },
     "status": {
       "shipped": "Lanzado",
       "inProgress": "En progreso",
       "planned": "Planeado"
     },
+    "groupHint": {
+      "shipped": "Disponible hoy en al menos una plataforma. Las celdas dicen en cuál.",
+      "shippedOne": "Ya está en la app que descargas.",
+      "inProgress": "Se está construyendo o portando ahora mismo.",
+      "planned": "Lo siguiente. El orden es una prioridad, no una promesa."
+    },
+    "areas": {
+      "record": "Grabar",
+      "capture": "Capturar",
+      "edit": "Editar",
+      "find": "Encontrar",
+      "cloud": "Nube",
+      "app": "App"
+    },
+    "platforms": {
+      "mac": {
+        "name": "macOS",
+        "line": "Apple Silicon e Intel",
+        "badge": "Disponible"
+      },
+      "win": {
+        "name": "Windows",
+        "line": "Windows 10 o posterior, 64 bits",
+        "badge": "Beta"
+      }
+    },
+    "filters": {
+      "label": "Filtrar el roadmap",
+      "platform": "Plataforma",
+      "both": "Ambas",
+      "states": "Estados"
+    },
+    "legend": {
+      "title": "Cómo leerlo",
+      "shipped": "en la versión actual",
+      "inProgress": "en construcción o en portación",
+      "planned": "en la lista, sin fecha"
+    },
+    "windows": {
+      "eyebrow": "Windows",
+      "badge": "Beta",
+      "title": "Kaipu para Windows está en beta.",
+      "serif": "Grabación y capturas, listas para probar.",
+      "body": "La beta de Windows graba tu pantalla, toma capturas, edita y guarda tu biblioteca. Aún no tiene firma de código; la firma está en trámite. Las filas de arriba pasan a lanzado en Windows una por una, a medida que comprobamos cada función en equipos Windows reales.",
+      "download": "Descargar para Windows (beta)",
+      "requirements": "Windows 10 o posterior · 64 bits",
+      "smartscreenTitle": "Verás un aviso de SmartScreen",
+      "smartscreenBody": "La beta aún no está firmada, así que Windows es precavido la primera vez que la abres. Dos clics y pasas.",
+      "steps": {
+        "s1": "Abre el instalador",
+        "s2": "Pulsa “Más información”",
+        "s3": "Elige “Ejecutar de todas formas”"
+      },
+      "mock": {
+        "protected": "Windows protegió su PC",
+        "prevented": "Microsoft Defender SmartScreen impidió el inicio de una aplicación no reconocida.",
+        "moreInfo": "Más información",
+        "app": "Aplicación: kaipu-setup.exe",
+        "publisher": "Editor: Editor desconocido",
+        "runAnyway": "Ejecutar de todas formas",
+        "dontRun": "No ejecutar",
+        "installs": "Kaipu Record se instala",
+        "tray": "Se abre en la bandeja al terminar"
+      },
+      "betaNote": "Una beta puede fallar. Tus capturas son archivos normales en tu disco, así que desinstalar nunca se las lleva."
+    },
     "items": {
+      "screenshotModes": {
+        "title": "Modos de captura: Marco y Pantalla",
+        "description": "Arrastra un marco o reutiliza el último, o captura un monitor completo. Elige el modo sobre la misma selección y luego Captura, o Copia al portapapeles sin abrir el editor; una pequeña tarjeta te ofrece Anotar o Abrir en la Biblioteca."
+      },
+      "editorHome": {
+        "title": "Un editor que empieza donde lo dejaste",
+        "description": "El editor lista lo último que trabajaste, con filtros y el estado de exportación de cada video, y abre una imagen pegada directo en el editor de imágenes."
+      },
+      "liveRecordingControls": {
+        "title": "Cambia las entradas mientras grabas",
+        "description": "Silencia el micrófono, activa o apaga el audio del sistema y muestra u oculta la cámara a mitad de la toma, desde el panel de captura o con un atajo global, sin detener la grabación."
+      },
       "screenAndCamera": {
         "title": "Grabación de pantalla y cámara",
         "description": "Graba tu pantalla y tu cámara en alta calidad, con una burbuja de cámara flotante y presets que equilibran tamaño y nitidez."
       },
-      "videoEditor": {
-        "title": "Editor de video integrado",
-        "description": "Recorta y exporta tus grabaciones sin salir de la app, con miniatura generada para cada video editado."
+      "shortcuts": {
+        "title": "Atajos de teclado globales",
+        "description": "Inicia y detén una grabación, haz una captura en el modo que quieras y trae la app al frente, desde donde estés. Puedes cambiar cualquier atajo.",
+        "note": "Windows tiene sus propios atajos por defecto (Ctrl+Alt), porque la combinación de Mac cae ahí en la tecla de Windows."
       },
       "screenshotAnnotations": {
         "title": "Anotaciones en capturas",
         "description": "Captura y anota con formas y texto: etiquetas de varias líneas, cajas redimensionables con ajuste de línea y doble clic para editar una etiqueta en su sitio."
       },
+      "saveEveryScreenshot": {
+        "title": "Guardar todas las capturas automáticamente",
+        "description": "Un ajuste que guarda cada captura en tu biblioteca en el momento en que la tomas, o solo cuando pulsas Guardar. Automático es el valor por defecto, así que ninguna captura se pierde."
+      },
+      "captureTitle": {
+        "title": "Ponle nombre a una captura al hacerla",
+        "description": "Un campo de título en el editor de capturas, ya rellenado y editable antes y después de guardar, para nombrar cada captura donde la haces."
+      },
+      "screenshotPdf": {
+        "title": "Exportar capturas como PDF",
+        "description": "Guarda una captura anotada como un PDF nítido de una página, listo para enviar o imprimir, junto al PNG de siempre."
+      },
+      "videoEditor": {
+        "title": "Editor de video integrado",
+        "description": "Recorta y exporta tus grabaciones sin salir de la app, con miniatura generada para cada video editado."
+      },
+      "videoZoom": {
+        "title": "Zoom automático en videos",
+        "description": "Graba limpio y deja que el editor acerque en cada clic para que el detalle que señalas se lea bien. Cada zoom es un segmento que puedes mover, redimensionar o borrar, junto a zonas de desenfoque y cobertura para lo que deba quedar privado."
+      },
+      "exportPresets": {
+        "title": "Exporta para donde va a ir",
+        "description": "Elige un destino como GitHub, Slack o YouTube, o deja Equilibrado, y obtén un archivo que cabe. Compartir reutiliza una exportación que ya hiciste, las exportaciones corren en segundo plano con progreso, y Máxima calidad está a un ajuste de distancia."
+      },
       "library": {
         "title": "Biblioteca de grabaciones",
         "description": "Cada captura llega a una sola biblioteca con vistas previas, renombrado y recuperación de grabaciones importadas o interrumpidas."
       },
-      "watermark": {
-        "title": "Marca de agua en las exportaciones",
-        "description": "Sella tus exportaciones con una marca de agua para que los clips que compartes lleven tu marca."
+      "captureTags": {
+        "title": "Etiquetas de colores para tus capturas",
+        "description": "Etiqueta grabaciones y capturas, dale un color a cada etiqueta y filtra o busca en la biblioteca por etiqueta para que un historial largo siga siendo fácil de encontrar."
       },
-      "shortcuts": {
-        "title": "Atajos de teclado globales",
-        "description": "Inicia, pausa y detén una captura desde donde estés, sin tener que buscar la ventana primero."
-      },
-      "themeAndLanguages": {
-        "title": "Tema claro y oscuro, español e inglés",
-        "description": "Toda la app sigue una paleta compartida de design tokens en ambos temas, y está traducida por completo al español y al inglés."
+      "photoZoom": {
+        "title": "Zoom en el visor de imágenes",
+        "description": "Acercar y desplazar dentro del visor de capturas, en vez de forzar la vista sobre una imagen reducida."
       },
       "accounts": {
         "title": "Cuentas y verificación de correo",
@@ -1114,33 +1554,265 @@
         "title": "Terminar la subida a la nube de punta a punta",
         "description": "Subir cada captura a Kaipu Cloud automáticamente, con transferencias reanudables, progreso claro y reintentos cuando se cae la red."
       },
-      "videoZoom": {
-        "title": "Zoom en videos",
-        "description": "Acercar una zona de la grabación para que el detalle que señalas se lea de verdad para quien lo ve."
+      "themeAndLanguages": {
+        "title": "Tema claro y oscuro, español e inglés",
+        "description": "Toda la app sigue una paleta compartida de design tokens en ambos temas, y está traducida por completo al español y al inglés."
       },
-      "photoZoom": {
-        "title": "Zoom en el visor de imágenes",
-        "description": "Acercar y desplazar dentro del visor de capturas, en vez de forzar la vista sobre una imagen reducida."
+      "watermark": {
+        "title": "Sin marca de agua, en cualquier plan",
+        "description": "La app gratuita graba, edita y exporta sin marca de agua. Hay una pequeña insignia \"Hecho con Kaipu\" por si quieres dar crédito a la herramienta, y viene apagada por defecto."
       },
       "watermarkUpgrade": {
-        "title": "Una marca de agua mejor",
-        "description": "Más control sobre la marca de agua: posición, tamaño, opacidad y tu propio logo en lugar de un sello fijo."
-      },
-      "imageTags": {
-        "title": "Etiquetas en imágenes",
-        "description": "Etiquetar capturas y agruparlas por etiqueta, para que una biblioteca larga siga siendo navegable."
-      },
-      "renameOnSave": {
-        "title": "Renombrar una imagen después de guardarla",
-        "description": "Cambiar el nombre de una captura cuando ya está guardada, sin salir a Finder."
-      },
-      "saveEveryScreenshot": {
-        "title": "Opción de guardar todas las capturas",
-        "description": "Un ajuste opcional que guarda en la biblioteca cada captura que tomas, en vez de solo las que guardas a mano."
+        "title": "Tu propia marca de agua en las exportaciones",
+        "description": "Sella tus exportaciones con tu propio logo, con control de posición, tamaño y opacidad. La insignia de Kaipu sigue siendo opcional y apagada; esto va de llevar tu marca, no la nuestra."
       },
       "brandIdentity": {
         "title": "Logo e identidad renovados",
         "description": "Un logo más definido y una identidad visual consistente entre la app, el sitio y los instaladores."
+      },
+      "systemAudio": {
+        "title": "Audio del sistema",
+        "description": "Graba lo que suena en tu computadora, con su propio interruptor junto al micrófono."
+      },
+      "trayPanel": {
+        "title": "Panel en la barra de menús y la bandeja",
+        "description": "Un panel de captura que vive en la barra de menús en macOS y en la bandeja del sistema en Windows."
+      },
+      "windowCapture": {
+        "title": "Captura de ventana",
+        "description": "Haz clic en una ventana para capturar solo esa ventana.",
+        "note": "Ya está construida, y apagada por ahora mientras pulimos los últimos detalles."
+      },
+      "blurAndBackground": {
+        "title": "Desenfoque y fondo limpio",
+        "description": "Desenfoca un correo o un token en una captura, y luego enmárcala sobre un fondo limpio."
+      },
+      "videoMute": {
+        "title": "Silenciar un tramo del video",
+        "description": "Silencia una tos o una notificación en el editor, o la grabación entera, sin tocar el archivo original."
+      },
+      "signedInstaller": {
+        "title": "Instalador firmado",
+        "description": "Una versión en la que tu sistema confía desde el inicio, sin avisos de seguridad al abrirla por primera vez.",
+        "note": "Las versiones de macOS ya están firmadas y notarizadas por Apple. La primera beta de Windows sale sin firmar; abajo están los pasos para su aviso."
+      }
+    }
+  },
+  "features": {
+    "eyebrow": "Funciones · {count} funciones · 4 capítulos",
+    "title": "Todo lo que hace Kaipu.",
+    "serif": "Captúralo. Explícalo. Vuelve a encontrarlo.",
+    "lead": "La página de inicio es la versión de 30 segundos. Esta es la lista completa: cada función de Kaipu hoy, agrupada según el momento en que la usarías.",
+    "indexLabel": "Capítulos",
+    "count": "{count, plural, one {# función} other {# funciones}}",
+    "linkFiles": "Tus archivos",
+    "linkPrivate": "Privado por diseño",
+    "linkNext": "Lo que viene",
+    "chapters": {
+      "record": {
+        "name": "Grabar",
+        "line": "Pantalla, voz, audio del sistema y una burbuja de cámara.",
+        "title": "Muestra lo que pasó.",
+        "serif": "Una toma. Sin preparar nada.",
+        "intro": "Empieza desde la barra de menú o con un atajo, habla mientras lo muestras y detente. Ya está en tu biblioteca."
+      },
+      "capture": {
+        "name": "Capturar",
+        "line": "Capturas con flechas, recuadros y notas.",
+        "title": "A veces una captura lo dice todo.",
+        "serif": "Señálalo. Literalmente.",
+        "intro": "Encuadra lo que necesitas, marca lo importante, difumina lo que no debe verse y envíala antes de que pase el momento."
+      },
+      "edit": {
+        "name": "Editar",
+        "line": "Zoom, cortes, silencio, ocultar y exportar.",
+        "title": "Un pequeño ajuste. Una idea más clara.",
+        "serif": "Quita lo que sobra. Acércate a lo importante.",
+        "intro": "La edición justa para que se entienda. Cada cambio se puede deshacer y tu original nunca se toca."
+      },
+      "find": {
+        "name": "Encontrar",
+        "line": "Una biblioteca, etiquetas y búsqueda.",
+        "title": "Útil ahora. Fácil de encontrar después.",
+        "serif": "Explícalo una vez. Queda explicado.",
+        "intro": "La próxima semana no tendrás que grabarlo de nuevo. Todo lo que hiciste está a una búsqueda de distancia."
+      }
+    },
+    "items": {
+      "screenCamera": {
+        "title": "Grabación de pantalla y cámara",
+        "body": "Tu pantalla, tu voz, el audio del sistema y una burbuja de cámara flotante que puedes mover a donde quieras, en alta calidad.",
+        "d1": "Micrófono, audio del sistema y cámara con interruptores separados",
+        "d2": "La burbuja de cámara queda encima mientras trabajas",
+        "d3": "Pausa y reanuda sin empezar de nuevo"
+      },
+      "startAnywhere": {
+        "title": "Empieza desde cualquier lugar",
+        "body": "Un panel de captura en la barra de menú y atajos globales que funcionan desde cualquier app. Puedes cambiar cualquiera.",
+        "k1": "Empezar",
+        "k2": "Detener",
+        "k3": "Captura",
+        "k4": "Mostrar app"
+      },
+      "liveControls": {
+        "title": "Cambia de idea a mitad de la toma",
+        "body": "Silencia el micrófono, apaga el audio del sistema u oculta la cámara mientras grabas, desde el panel de captura o con un atajo. La toma sigue.",
+        "k1": "Micrófono",
+        "k2": "Audio del sistema",
+        "k3": "Cámara"
+      },
+      "micPicker": {
+        "title": "Selector de micrófono",
+        "body": "Elige cualquier entrada. Conecta unos audífonos y la lista se actualiza sola."
+      },
+      "recordingQuality": {
+        "title": "Calidades de grabación",
+        "body": "Elige entre tamaño de archivo y nitidez antes de empezar, o ajusta tú la resolución y los cuadros por segundo.",
+        "c1": "Ligera",
+        "c2": "Equilibrada",
+        "c3": "Calidad máxima"
+      },
+      "alreadySaved": {
+        "title": "Ya está guardado",
+        "body": "Cuando te detienes, ya está en tu biblioteca. Si a un archivo le falta la miniatura o la duración, se repara solo."
+      },
+      "annotations": {
+        "title": "Anotaciones",
+        "body": "Flechas, recuadros, lápiz libre y notas con letra manuscrita sobre cualquier captura.",
+        "d1": "Etiquetas de varias líneas que se ajustan solas",
+        "d2": "Doble clic en una etiqueta para editarla ahí mismo",
+        "d3": "Siete colores y tres grosores por marca"
+      },
+      "captureModes": {
+        "title": "Marco o Pantalla",
+        "body": "Arrastra un marco sobre lo que necesitas o quédate con el de la última vez. Pantalla toma un monitor completo. Cambia de modo sobre la misma selección; Kaipu recuerda el último.",
+        "k1": "Modo actual",
+        "k2": "Marco",
+        "k3": "Pantalla"
+      },
+      "quietCapture": {
+        "title": "Copia y sigue",
+        "body": "Pulsa ⌘C sobre la selección y la captura va directo al portapapeles, sin que el editor se interponga. Con el guardado automático activo, Capturar la guarda en tu biblioteca igual de discreto. Luego, una pequeña tarjeta te ofrece Anotar, Abrir en la Biblioteca o Guardar en la Biblioteca."
+      },
+      "blurFrame": {
+        "title": "Difumina y enmarca",
+        "body": "Difumina un detalle y pon la captura sobre un fondo con margen, sombra y esquinas redondeadas para que se vea terminada."
+      },
+      "nameIt": {
+        "title": "Ponle nombre al hacerla",
+        "body": "Un título ya escrito que puedes editar antes de guardar, y renombrar después."
+      },
+      "copyPngPdf": {
+        "title": "Copiar, PNG o PDF",
+        "body": "Se copia al portapapeles al abrir el editor, se guarda como PNG o se exporta como un PDF nítido de una página.",
+        "c1": "Copiar",
+        "c2": ".png",
+        "c3": ".pdf"
+      },
+      "saveEvery": {
+        "title": "Guarda todas las capturas, o solo algunas",
+        "body": "Por defecto se guarda cada captura. ¿Prefieres elegir? Cambia a guardar solo cuando pulsas Guardar."
+      },
+      "autoZoom": {
+        "title": "Zoom automático",
+        "body": "El editor sugiere un zoom donde hiciste clic o te detuviste, para que se lea el detalle que señalas.",
+        "d1": "Cada zoom sigue al cursor o se fija en un punto",
+        "d2": "Agrega los tuyos o quita cualquier sugerencia",
+        "d3": "Cada zoom muestra por qué está: un clic, una pausa o tú"
+      },
+      "trim": {
+        "title": "Recortar y cortar",
+        "body": "Quita el inicio, el final y cualquier parte en medio.",
+        "d1": "Divide en el cabezal y borra un trozo",
+        "d2": "Deshaz y rehaz cada paso",
+        "d3": "Un historial para volver más atrás"
+      },
+      "mute": {
+        "title": "Silencia una tos",
+        "body": "Silencia un tramo del audio o la grabación completa. La imagen sigue."
+      },
+      "cover": {
+        "title": "Difuminar y tapar",
+        "body": "Oculta una clave de API o el nombre de un cliente justo mientras está en pantalla. Tapar no deja rastro."
+      },
+      "original": {
+        "title": "Tu original no se toca",
+        "body": "Una edición se guarda como un elemento nuevo en tu biblioteca. La grabación que hiciste nunca cambia."
+      },
+      "export": {
+        "title": "Exporta para donde va a ir",
+        "body": "Elige a dónde va el video y obtén un archivo que cabe, o deja Equilibrada. La calidad máxima está a un ajuste de distancia.",
+        "c1": "GitHub · Jira · Linear",
+        "c2": "Slack · Discord",
+        "c3": "YouTube",
+        "c4": "Reels · TikTok · Shorts",
+        "c5": "Feeds"
+      },
+      "share": {
+        "title": "Comparte con un clic",
+        "body": "Comparte directo desde la biblioteca. Si esa versión ya está exportada, Kaipu la reutiliza en vez de codificarla de nuevo."
+      },
+      "background": {
+        "title": "Los exports corren en segundo plano",
+        "body": "Sigue trabajando mientras se codifica. Al terminar aparece una tarjeta “Listo para compartir”: arrastra el archivo directo a Slack, GitHub o Finder, con un nombre legible."
+      },
+      "editorHome": {
+        "title": "Retoma donde lo dejaste",
+        "body": "El editor se abre con lo último que trabajaste, con el estado de exportación de cada video, y empieza una imagen nueva directo desde el portapapeles."
+      },
+      "library": {
+        "title": "Una biblioteca para todo",
+        "body": "Grabaciones y capturas juntas, con vistas previas, insignias, filtros y búsqueda.",
+        "d1": "Filtra por tipo, por etiqueta, o por esta Mac y la nube",
+        "d2": "Busca por título o por nombre de etiqueta",
+        "d3": "Ordena por más nuevo, más antiguo o más pesado"
+      },
+      "tags": {
+        "title": "Etiquetas de colores",
+        "body": "Crea etiquetas, dale un color a cada una y filtra la biblioteca por etiqueta.",
+        "c1": "bug",
+        "c2": "onboarding",
+        "c3": "release",
+        "c4": "diseño"
+      },
+      "rename": {
+        "title": "Renombra lo que sea",
+        "body": "Dale a cualquier cosa un mejor nombre. Un video editado es su propio elemento, enlazado a la grabación de la que salió."
+      }
+    },
+    "private": {
+      "eyebrow": "Privado por diseño",
+      "title": "Tuyo, sin una cuenta.",
+      "serif": "Sin marca de agua. Sin tu pantalla en las analíticas.",
+      "items": {
+        "noAccount": {
+          "title": "Funciona sin cuenta",
+          "body": "Graba, captura, edita y exporta sin registrarte. Las cuentas existen solo para la nube opcional."
+        },
+        "noWatermark": {
+          "title": "Sin marca de agua, en cualquier plan",
+          "body": "Existe un sello opcional “Hecho con Kaipu”, y viene apagado."
+        },
+        "analytics": {
+          "title": "Las analíticas nunca ven tu pantalla",
+          "body": "Las analíticas de uso nunca graban tu pantalla ni tus clics en la app."
+        },
+        "languages": {
+          "title": "Claro, oscuro, inglés, español",
+          "body": "Los dos temas están cuidados por igual, y toda la app está en inglés y en español."
+        }
+      }
+    },
+    "next": {
+      "badge": "Planeado",
+      "title": "Lo que viene",
+      "note": "Todavía no está disponible. Sin fechas: avisaremos cuando esté.",
+      "roadmapLink": "Ver el roadmap",
+      "items": {
+        "windows": "Beta para Windows",
+        "cloudUpload": "Subida a la nube con transferencias que se reanudan",
+        "imageZoom": "Zoom y desplazamiento en el visor de imágenes",
+        "ownWatermark": "Tu propio logo como marca de agua"
       }
     }
   },

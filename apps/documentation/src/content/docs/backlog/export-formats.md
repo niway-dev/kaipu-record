@@ -5,7 +5,34 @@ description: Export-format roadmap for the screenshot editor — ships PNG, with
 
 # Screenshot export formats (PNG now, PDF next)
 
-> **Status: 🔵 Proposed.**
+> **Status: 🟢 Ready to validate.** PNG and PDF ship; JPG/WebP/SVG stay proposed.
+
+## What shipped (PDF, 2026-10-07)
+
+The exporter-per-format seam below exists at
+`apps/kaipu-record/src/renderer/src/features/screenshots/export/`: `EXPORTERS` is a registry keyed
+by `ExportFormat` (`"png" | "pdf"`), and the editor calls `exportScene(format, input)` without
+knowing how either is encoded. Copy and Save go through the PNG exporter unchanged (still 1:1
+with the shot); the new **PDF** button in the editor toolbar goes through the PDF exporter.
+
+- **PDF = `pdf-lib` + a high-DPI raster.** The compositor gained a `rasterScale` option
+  (`compositeSceneAt`): the export SVG is drawn onto a canvas 3× the frame size, so the beautify
+  frame and every annotation stroke are rendered crisp at that resolution (the shot itself is
+  upsampled). The PNG is embedded in a one-page PDF whose page is the frame's 1× size in points,
+  and drawn to fill it — zooming to 300% in a viewer is still 1:1 with the bitmap. Alpha survives,
+  so a "None" background stays transparent.
+- **Large captures step down.** `clampRasterScale` picks the largest scale that keeps both canvas
+  sides under 8192 px (Chromium's area limit would otherwise make `toBlob` return null): a
+  2880-wide Retina shot exports at 2×, smaller shots at 3×.
+- **Exports live outside the vault.** A PDF is a file to hand to someone, not a library item, so
+  the button opens a native save dialog (seeded with the capture title, in Downloads) and writes
+  there via the `screenshot:export-file` IPC. The library, `kaipu-media://` and the viewer never
+  learn about PDFs. Exporting neither binds the editor to a saved item nor clears the
+  unsaved-changes guard.
+- **Not yet:** vector annotations in the PDF (the "true vector" route below), JPG/WebP, SVG.
+
+Validate in prod: export a capture with annotations as PDF, open it in Preview — one page,
+zoom to 300% and the strokes should stay sharp.
 
 The screenshot editor (see [design spec](../specs/2026-06-29-screenshot-editor-design)) captures a
 PNG, beautifies it (background / padding / corners / shadow), annotates it, and **exports**. Export

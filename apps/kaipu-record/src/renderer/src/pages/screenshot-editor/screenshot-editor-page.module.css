@@ -14,10 +14,17 @@
 
 /* ── Toolbar ─────────────────────────────────────── */
 
+/*
+ * One row: the tool group leading, the actions trailing. Neither group shrinks,
+ * so the row's groups never squeeze into each other; when they would not fit,
+ * useCompactRow (screenshot-editor-page.tsx) sets data-compact and the action
+ * labels give way instead — see the compact rules below.
+ */
 .toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--space-md);
   padding: var(--space-sm) var(--space-md);
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -28,7 +35,23 @@
 .actions {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
   gap: var(--space-sm);
+}
+
+/* The text beside an action's icon; the only thing the compact row drops. */
+.label {
+  white-space: nowrap;
+}
+
+.toolbar[data-compact="true"] .label {
+  display: none;
+}
+
+/* Icon-only: square-ish buttons, matching the undo/redo pair beside them. */
+.toolbar[data-compact="true"] .secondary,
+.toolbar[data-compact="true"] .save {
+  padding: 0 var(--space-sm);
 }
 
 .iconBtn {

@@ -99,3 +99,14 @@ describe("editBadge", () => {
     expect(editBadge(exp, lineage)).toBeNull();
   });
 });
+
+describe("GIF exports in the lineage (NIW2-217)", () => {
+  it("lists a GIF export under its source like an MP4 export", () => {
+    const source = video({ assetId: "src", editSavedAt: 5, editExportedSavedAt: 5 });
+    const gif = video({ assetId: "g", kind: "gif", derivedFromAssetId: "src" });
+    const lineage = buildLineage([source, gif]);
+    expect(lineage.exportsOf.get("src")?.map((v) => v.assetId)).toEqual(["g"]);
+    expect(editBadge(source, lineage)).toBe("edited");
+    expect(editBadge(gif, lineage)).toBeNull();
+  });
+});

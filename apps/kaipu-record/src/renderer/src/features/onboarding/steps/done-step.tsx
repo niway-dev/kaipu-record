@@ -1,4 +1,5 @@
 import { useTranslations } from "@kaipu/i18n";
+import { isWindowsHost } from "@renderer/features/shortcuts/host-platform";
 import { KaipuLogo } from "@kaipu/brand";
 import { useShortcutLabels } from "@renderer/features/shortcuts/use-shortcut-labels";
 import styles from "./done-step.module.css";
@@ -17,7 +18,7 @@ export function DoneStep(): React.JSX.Element {
       <h1 className={styles.title}>{t("doneTitle")}</h1>
       <p className={styles.subtitle}>
         {t("donePressPre")} <kbd className={styles.kbd}>{shortcuts?.startRecording ?? "…"}</kbd>{" "}
-        {t("donePressPost")}
+        {t(isWindowsHost() ? "donePressPostWindows" : "donePressPost")}
       </p>
     </div>
   );

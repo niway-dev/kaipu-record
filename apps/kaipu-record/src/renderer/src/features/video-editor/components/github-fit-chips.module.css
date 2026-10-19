@@ -1,0 +1,33 @@
+/* GitHub Free / paid fit chips (NIW2-218 quality tiers). */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  font-size: 11.5px;
+  color: var(--text-primary);
+}
+
+.chip[data-fits="true"] svg {
+  color: var(--tone-saving);
+}
+
+/* Over the free limit: not a problem on a paid plan, so muted rather than amber. */
+.chip[data-fits="false"] {
+  color: var(--text-muted);
+}
+
+.chip[data-warn="true"] {
+  color: var(--tone-heavy);
+}

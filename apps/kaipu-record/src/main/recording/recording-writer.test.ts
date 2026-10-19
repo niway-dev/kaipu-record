@@ -84,11 +84,54 @@ describe("RecordingWriter", () => {
     expect(sidecar.assetId).toMatch(/^[0-9a-f-]{36}$/);
   });
 
+  it("stat() reports the temp file size after queued writes land", async () => {
+    const { writer } = await setup();
+    await writer.create("s1");
+    void writer.write("s1", new TextEncoder().encode("AAAA").buffer, 0);
+    void writer.write("s1", new TextEncoder().encode("BB").buffer, 10);
+    expect(await writer.stat("s1")).toBe(12);
+    await expect(writer.stat("ghost")).rejects.toThrow(/session/i);
+    await writer.abort("s1");
+  });
+
+  it("persists the export preset in the sidecar (NIW2-218)", async () => {
+    const { writer, vaultDir } = await setup();
+    await writer.create("s1");
+    await writer.write("s1", new TextEncoder().encode("AAAA").buffer, 0);
+    await writer.finalize("s1", {
+      title: "Export (vertical)",
+      durationSeconds: 1,
+      durationMs: 1000,
+      derivedFromAssetId: "22222222-2222-4222-8222-222222222222",
+      exportPreset: "vertical",
+      exportFingerprint: "edit:abc123",
+    });
+    const sidecar = JSON.parse(await readFile(join(vaultDir, ".kaipu", "rec-fixed.json"), "utf-8"));
+    expect(sidecar.exportPreset).toBe("vertical");
+    expect(sidecar.exportFingerprint).toBe("edit:abc123");
+  });
+
   it("a plain recording has no provenance", async () => {
     const { writer } = await setup();
     await writer.create("s1");
     await writer.write("s1", new TextEncoder().encode("A").buffer, 0);
     const rec = await writer.finalize("s1", { title: "Rec", durationSeconds: 1, durationMs: 1000 });
     expect(rec.derivedFromAssetId).toBeNull();
+    expect(rec.export).toBeNull();
+  });
+
+  it("drops a fingerprint that isn't a short token", async () => {
+    const { writer, vaultDir } = await setup();
+    await writer.create("s1");
+    await writer.write("s1", new TextEncoder().encode("A").buffer, 0);
+    await writer.finalize("s1", {
+      title: "Rec",
+      durationSeconds: 1,
+      durationMs: 1000,
+      exportPreset: "balanced",
+      exportFingerprint: "x".repeat(65),
+    });
+    const sidecar = JSON.parse(await readFile(join(vaultDir, ".kaipu", "rec-fixed.json"), "utf-8"));
+    expect(sidecar).not.toHaveProperty("exportFingerprint");
   });
 });

@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as RoadmapRouteImport } from './routes/roadmap'
 import { Route as RecordingsRouteImport } from './routes/recordings'
+import { Route as FeaturesRouteImport } from './routes/features'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AccountRouteImport } from './routes/account'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
@@ -41,6 +42,11 @@ const RoadmapRoute = RoadmapRouteImport.update({
 const RecordingsRoute = RecordingsRouteImport.update({
   id: '/recordings',
   path: '/recordings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FeaturesRoute = FeaturesRouteImport.update({
+  id: '/features',
+  path: '/features',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthRoute = AuthRouteImport.update({
@@ -156,6 +162,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
   '/auth': typeof AuthRouteWithChildren
+  '/features': typeof FeaturesRoute
   '/recordings': typeof RecordingsRoute
   '/roadmap': typeof RoadmapRoute
   '/dashboard': typeof AuthenticatedDashboardRouteWithChildren
@@ -180,6 +187,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
   '/auth': typeof AuthRouteWithChildren
+  '/features': typeof FeaturesRoute
   '/recordings': typeof RecordingsRoute
   '/roadmap': typeof RoadmapRoute
   '/auth/email-verified': typeof AuthEmailVerifiedRoute
@@ -205,6 +213,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/account': typeof AccountRoute
   '/auth': typeof AuthRouteWithChildren
+  '/features': typeof FeaturesRoute
   '/recordings': typeof RecordingsRoute
   '/roadmap': typeof RoadmapRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRouteWithChildren
@@ -231,6 +240,7 @@ export interface FileRouteTypes {
     | '/'
     | '/account'
     | '/auth'
+    | '/features'
     | '/recordings'
     | '/roadmap'
     | '/dashboard'
@@ -255,6 +265,7 @@ export interface FileRouteTypes {
     | '/'
     | '/account'
     | '/auth'
+    | '/features'
     | '/recordings'
     | '/roadmap'
     | '/auth/email-verified'
@@ -279,6 +290,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/account'
     | '/auth'
+    | '/features'
     | '/recordings'
     | '/roadmap'
     | '/_authenticated/dashboard'
@@ -305,6 +317,7 @@ export interface RootRouteChildren {
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   AccountRoute: typeof AccountRoute
   AuthRoute: typeof AuthRouteWithChildren
+  FeaturesRoute: typeof FeaturesRoute
   RecordingsRoute: typeof RecordingsRoute
   RoadmapRoute: typeof RoadmapRoute
   DevStylexRoute: typeof DevStylexRoute
@@ -330,6 +343,13 @@ declare module '@tanstack/react-router' {
       path: '/recordings'
       fullPath: '/recordings'
       preLoaderRoute: typeof RecordingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/features': {
+      id: '/features'
+      path: '/features'
+      fullPath: '/features'
+      preLoaderRoute: typeof FeaturesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth': {
@@ -538,6 +558,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   AccountRoute: AccountRoute,
   AuthRoute: AuthRouteWithChildren,
+  FeaturesRoute: FeaturesRoute,
   RecordingsRoute: RecordingsRoute,
   RoadmapRoute: RoadmapRoute,
   DevStylexRoute: DevStylexRoute,

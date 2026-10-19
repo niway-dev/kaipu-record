@@ -1,0 +1,571 @@
+/*
+ * The /features catalogue. It speaks the home's visual language — same tokens,
+ * tints, glows and type scale from landing-tokens.css — so the two pages read as
+ * one site. A chapter hands its tint down as --kl-tint, exactly as on the home.
+ */
+
+.container {
+  position: relative;
+  z-index: 1;
+  max-width: var(--kl-max-w);
+  margin: 0 auto;
+}
+
+.mono {
+  font-family: var(--kl-font-mono);
+  font-size: 12px;
+  color: var(--kl-faint);
+}
+
+.eyebrow {
+  font-family: var(--kl-font-mono);
+  font-size: 12.5px;
+  letter-spacing: var(--kl-tracking-label);
+  text-transform: uppercase;
+  color: var(--kl-faint);
+}
+
+/* ---------- hero ---------- */
+
+.hero {
+  position: relative;
+  padding: 140px var(--kl-gutter) 96px;
+  overflow: hidden;
+}
+
+.heroPixels {
+  position: absolute;
+  top: 110px;
+  right: 3%;
+}
+
+.h1 {
+  max-width: 900px;
+  margin: 18px 0 0;
+  font-size: var(--kl-fs-h1);
+  font-weight: 700;
+  line-height: 0.92;
+  letter-spacing: var(--kl-tracking-h1);
+  text-wrap: balance;
+}
+
+.h1Serif {
+  margin: 10px 0 0;
+  font-family: var(--kl-font-serif);
+  font-size: var(--kl-fs-h1-serif);
+  font-style: italic;
+  line-height: 1.05;
+  color: var(--kl-pink-tx);
+}
+
+.lead {
+  max-width: 600px;
+  margin: 24px 0 0;
+  font-size: var(--kl-fs-body);
+  line-height: var(--kl-leading-body);
+  color: var(--kl-dim);
+  text-wrap: pretty;
+}
+
+.index {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 40px;
+}
+
+.indexCard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 18px 18px 20px;
+  overflow: hidden;
+  border: 1px solid var(--kl-bd);
+  border-radius: 18px;
+  background:
+    radial-gradient(
+      80% 80% at 100% 0%,
+      color-mix(in srgb, var(--kl-tint) 16%, transparent),
+      transparent 70%
+    ),
+    var(--kl-card);
+  color: var(--kl-tx);
+  text-decoration: none;
+  transition:
+    border-color 0.2s,
+    transform 0.2s;
+}
+
+.indexCard:hover {
+  border-color: var(--kl-bd-2);
+  transform: translateY(-2px);
+}
+
+.indexTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.indexIcon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 12px;
+  color: #fff;
+}
+
+.indexName {
+  margin-top: 18px;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.indexLine {
+  margin-top: 5px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--kl-dim);
+}
+
+.indexCount {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.extraLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.extraLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--kl-bd-2);
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--kl-tx);
+  text-decoration: none;
+}
+
+.extraLink svg {
+  color: var(--kl-faint);
+}
+
+/* ---------- chapters ---------- */
+
+.chapter {
+  position: relative;
+  padding: 120px var(--kl-gutter) 110px;
+  overflow: hidden;
+  border-top: 1px solid var(--kl-bd);
+}
+
+.chapterHead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 40px;
+  margin-bottom: 44px;
+}
+
+.chapterHeadMain {
+  min-width: 0;
+  max-width: 760px;
+}
+
+.chapterMeta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.chapterIcon {
+  display: grid;
+  flex-shrink: 0;
+  width: 58px;
+  height: 58px;
+  place-items: center;
+  border-radius: 16px;
+  color: #fff;
+}
+
+.chapterMetaText {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.chapterPill {
+  width: fit-content;
+  padding: 4px 12px;
+  border: 1px solid var(--kl-bd-2);
+  border-radius: 999px;
+  font-size: 13px;
+  color: var(--kl-dim);
+}
+
+.chapterPill strong {
+  font-weight: 500;
+  color: var(--kl-tx);
+}
+
+.h2 {
+  margin: 0;
+  font-size: var(--kl-fs-h2);
+  font-weight: 700;
+  line-height: 0.98;
+  letter-spacing: var(--kl-tracking-h2);
+  text-wrap: balance;
+}
+
+.h2Serif {
+  margin: 10px 0 0;
+  font-family: var(--kl-font-serif);
+  font-size: var(--kl-fs-h2-serif);
+  font-style: italic;
+  line-height: 1.1;
+  color: var(--kl-pink-tx);
+}
+
+.chapterIntro {
+  max-width: 380px;
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--kl-dim);
+  text-wrap: pretty;
+}
+
+.cards {
+  display: grid;
+  grid-auto-flow: row dense;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 24px;
+  border: 1px solid var(--kl-bd);
+  border-radius: 18px;
+  background: var(--kl-card);
+}
+
+.card[data-span="2"] {
+  grid-column: span 2;
+}
+
+.card[data-span="3"] {
+  grid-column: span 3;
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.cardIcon {
+  display: grid;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--kl-tint) 14%, transparent);
+  color: var(--kl-tint);
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+.card[data-span="2"] .cardTitle,
+.card[data-span="3"] .cardTitle {
+  font-size: 20px;
+}
+
+.cardBody {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.58;
+  color: var(--kl-dim);
+  text-wrap: pretty;
+}
+
+.details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 2px 0 0;
+  list-style: none;
+}
+
+.detail {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--kl-tx);
+}
+
+.detailTick {
+  margin-top: 2px;
+  color: var(--kl-tint);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px;
+  border: 1px solid var(--kl-bd-2);
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--kl-dim);
+  white-space: nowrap;
+}
+
+.chip[data-kind="kbd"] {
+  border-radius: 7px;
+  background: var(--kl-bg-2);
+  color: var(--kl-tx);
+}
+
+.chip[data-kind="tag"] {
+  border-color: var(--kl-bd);
+  background: var(--kl-bg-2);
+  color: var(--kl-tx);
+}
+
+.kbd {
+  font-family: var(--kl-font-mono);
+  font-size: 12px;
+}
+
+.tagDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+/* ---------- private by design ---------- */
+
+.private {
+  position: relative;
+  padding: 120px var(--kl-gutter) 110px;
+  overflow: hidden;
+}
+
+.privateGlow {
+  background: radial-gradient(
+    45% 50% at 12% 30%,
+    color-mix(in srgb, var(--kl-pink) 12%, transparent),
+    transparent 70%
+  );
+}
+
+.private .h2 {
+  margin-top: 16px;
+}
+
+.privateGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 44px;
+}
+
+.privateCard {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px;
+  border: 1px solid var(--kl-bd);
+  border-radius: 18px;
+  background: var(--kl-card);
+}
+
+.privateIcon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--kl-pink) 13%, transparent);
+  color: var(--kl-pink-tx);
+}
+
+.privateTitle {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+.privateBody {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--kl-dim);
+  text-wrap: pretty;
+}
+
+/* ---------- coming next ---------- */
+
+.next {
+  padding: 56px var(--kl-gutter) 60px;
+  border-top: 1px dashed var(--kl-bd-2);
+}
+
+.nextHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.plannedBadge {
+  padding: 4px 10px;
+  border: 1px dashed var(--kl-bd-2);
+  border-radius: 999px;
+  font-family: var(--kl-font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--kl-faint);
+}
+
+.nextTitle {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--kl-dim);
+}
+
+.nextNote {
+  margin: 0;
+  font-size: 14px;
+  color: var(--kl-faint);
+}
+
+.nextLink {
+  color: var(--kl-pink-tx);
+  text-decoration: none;
+}
+
+.nextGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 20px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nextItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 15px;
+  border: 1px dashed var(--kl-bd-2);
+  border-radius: 14px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--kl-dim);
+}
+
+.nextItem svg {
+  flex-shrink: 0;
+  color: var(--kl-faint);
+}
+
+/* ---------- responsive ---------- */
+
+@media (width < 1100px) {
+  .index,
+  .privateGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (width < 980px) {
+  .hero {
+    padding: 120px 20px 52px;
+  }
+
+  .heroPixels {
+    display: none;
+  }
+
+  .chapter,
+  .private {
+    padding: 64px 20px 60px;
+  }
+
+  .chapterHead {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 18px;
+    margin-bottom: 28px;
+  }
+
+  .chapterIntro {
+    max-width: none;
+  }
+
+  .cards,
+  .privateGrid,
+  .nextGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .card[data-span="2"],
+  .card[data-span="3"] {
+    grid-column: auto;
+  }
+
+  .card,
+  .privateCard {
+    padding: 18px;
+  }
+
+  .next {
+    padding: 40px 20px 44px;
+  }
+}

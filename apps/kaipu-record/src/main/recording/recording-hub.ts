@@ -225,6 +225,11 @@ export function registerRecordingHub(
       return recording;
     },
   );
+  // NIW2-218: Small-file size check before finalize. Takes a session id only, like write.
+  ipcMain.handle(IPC_CHANNELS.recordingStat, (_e, sessionId: string): Promise<number> => {
+    if (typeof sessionId !== "string") throw new Error("recordingStat: invalid session id");
+    return writer.stat(sessionId);
+  });
   ipcMain.handle(IPC_CHANNELS.recordingAbort, (_e, sessionId: string) => {
     cursorTracks.discard(sessionId);
     clickSessions.delete(sessionId);

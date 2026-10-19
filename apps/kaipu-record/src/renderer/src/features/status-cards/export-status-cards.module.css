@@ -1,0 +1,108 @@
+/* Export progress and "Ready to share" cards (NIW2-218 export redesign). */
+.note {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+.spacer {
+  flex: 1;
+}
+
+@keyframes stripe {
+  to {
+    background-position: 28px 0;
+  }
+}
+
+.progressTrack {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--border);
+}
+
+.progressFill {
+  height: 100%;
+  border-radius: 4px;
+  background: repeating-linear-gradient(
+    135deg,
+    var(--accent-primary) 0 7px,
+    color-mix(in srgb, var(--accent-primary) 75%, #fff) 7px 14px
+  );
+  background-size: 28px 100%;
+  animation: stripe 800ms linear infinite;
+  transition: width 300ms ease;
+}
+
+.progressLine {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: -4px;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
+/* The file to drag out: dashed, like something you can pick up. */
+.fileChip {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px dashed var(--border-light);
+  background: var(--bg-input);
+  cursor: grab;
+}
+
+.fileChip:active {
+  cursor: grabbing;
+}
+
+.grip {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.fileBadge {
+  width: 34px;
+  height: 26px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: #5b6ee1;
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.fileText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.fileName {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fileHint {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
