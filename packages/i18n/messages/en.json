@@ -407,7 +407,18 @@
     "verifiedError": "This verification link is invalid or has expired.",
     "verifiedResend": "Send a new verification email",
     "verifiedResendSent": "A new verification email is on its way.",
-    "account": "Account"
+    "account": "Account",
+    "continueWithGoogle": "Continue with Google",
+    "googleRedirecting": "Redirecting to Google…",
+    "orDivider": "or",
+    "oauthErrorNotLinked": "This email already has a Kaipu account, and Google has not verified it. Verify your email with Google, or sign in with your password.",
+    "oauthErrorEmailMismatch": "That Google account uses a different email.",
+    "oauthErrorAlreadyLinked": "That Google account is already connected to another Kaipu account.",
+    "oauthErrorUnableToLink": "We couldn't connect your Google account. Try again.",
+    "oauthErrorCancelled": "Google sign-in was cancelled. You can try again or use your email and password.",
+    "oauthErrorExpired": "The Google sign-in was interrupted or took too long. Try again.",
+    "oauthErrorGeneric": "Google sign-in didn't work. Try again, or use your email and password.",
+    "errorInvalidCredentialsGoogleHint": "Signed up with Google? Set a password at kaipu.app, in Dashboard → Profile."
   },
   "recordings": {
     "title": "Recordings",
@@ -1349,7 +1360,8 @@
           "body": "You may clear or block cookies and storage in your browser and manage capture permissions in your operating system. Clearing cookies may sign you out or reset preferences, but does not delete your account or Cloud files. Email the contact address for privacy or deletion requests."
         }
       }
-    }
+    },
+    "googleSignupNotice": "By continuing with Google, you confirm that you are at least 18 years old and accept the <terms>Terms and conditions</terms> and <cloud>Cloud terms</cloud>. Learn how we handle your data in the <privacy>Privacy policy</privacy>."
   },
   "emails": {
     "footer": "Kaipu — a Niway product",
@@ -1899,7 +1911,22 @@
     "restoring": "Restoring…",
     "restored": "Your account was restored",
     "restoreFailed": "We couldn't restore your account. Sign in again and retry.",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "googleConnect": "Connect Google",
+    "googleConnecting": "Redirecting to Google…",
+    "googleDisconnect": "Disconnect Google",
+    "googleDisconnecting": "Disconnecting…",
+    "googleDisconnected": "Google disconnected",
+    "googleDisconnectFailed": "We couldn't disconnect Google. Try again.",
+    "googleLastMethod": "Google is your only way to sign in. Set a password before disconnecting it.",
+    "googleNotFresh": "For your security, sign in again to disconnect Google.",
+    "setPasswordTitle": "Set a password",
+    "setPasswordIntro": "Add a password to sign in to the Kaipu desktop app with your email.",
+    "setPasswordSubmit": "Save password",
+    "setPasswordSaving": "Saving…",
+    "setPasswordDone": "Password saved. You can now sign in on the desktop app with your email and this password.",
+    "setPasswordExists": "This account already has a password.",
+    "setPasswordFailed": "We couldn't save your password. Try again."
   },
   "dashboard": {
     "navLabel": "Dashboard sections",
@@ -1927,6 +1954,9 @@
     "settingsTitle": "Settings",
     "settingsDescription": "Your plan and storage, your language and your account.",
     "languageTitle": "Language",
-    "languageDescription": "The language Kaipu uses on the web."
+    "languageDescription": "The language Kaipu uses on the web.",
+    "credentialDroppedTitle": "We removed an old password from your account",
+    "credentialDroppedDetail": "For your security, we removed the password set before your email was verified. Set a new one in Profile to use the desktop app.",
+    "credentialDroppedAction": "Set a password"
   }
 }

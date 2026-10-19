@@ -68,6 +68,18 @@ describe("AuthForm", () => {
     expect(screen.queryByText(/something went wrong/i)).not.toBeInTheDocument();
   });
 
+  it("adds the Google hint to a wrong email or password on sign-in (NIW2-219)", () => {
+    renderForm({ error: { kind: "invalid-credentials" } });
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Signed up with Google? Set a password at kaipu.app, in Dashboard → Profile.",
+    );
+  });
+
+  it("does not add the Google hint to other errors", () => {
+    renderForm({ error: { kind: "network" } });
+    expect(screen.getByRole("alert")).not.toHaveTextContent(/signed up with google/i);
+  });
+
   it("disables submit while pending and says what is happening", () => {
     renderForm({ pending: true });
     expect(screen.getByRole("button", { name: /signing in/i })).toBeDisabled();

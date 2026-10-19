@@ -1,0 +1,41 @@
+import { useEffect, useState } from "react";
+import { Link } from "@tanstack/react-router";
+import { useTranslations } from "@kaipu/i18n";
+import { Notice } from "@/components/account/notice";
+import { client } from "@/lib/orpc-client";
+
+/**
+ * Q3: the one-time banner after the pre-hijack guard removed a password that was set before the
+ * email was verified. The API clears the notice as it answers, so a later answer is always
+ * "nothing": the banner only ever turns on, never off, and a failed ask just shows nothing.
+ */
+export function CredentialDroppedNotice() {
+  const t = useTranslations("dashboard");
+  const [show, setShow] = useState(false);
+
+  useEffect(() => {
+    // No "ignore after unmount" guard on purpose: under StrictMode the effect runs twice, the
+    // first call consumes the notice, and dropping its answer would lose the banner for good.
+    client.me
+      .takeNotices()
+      .then((response) => {
+        if (response.data?.credentialDropped) setShow(true);
+      })
+      .catch(() => {
+        // Best effort: a missed banner is not worth an error on the dashboard.
+      });
+  }, []);
+
+  if (!show) return null;
+  return (
+    <Notice
+      title={t("credentialDroppedTitle")}
+      detail={t("credentialDroppedDetail")}
+      action={
+        <Link to="/dashboard/profile" className="text-sm font-medium underline underline-offset-2">
+          {t("credentialDroppedAction")}
+        </Link>
+      }
+    />
+  );
+}

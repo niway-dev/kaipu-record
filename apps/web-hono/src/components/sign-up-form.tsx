@@ -5,6 +5,7 @@ import z from "zod";
 
 import { SignupLegalNotice } from "@/components/legal/signup-legal-notice";
 import CloudPromotion from "@/components/cloud-promotion";
+import { GoogleButton } from "@/components/google-button";
 import { authClient } from "@/lib/auth/auth-client";
 import { resolvePostSignInPath } from "@/lib/post-sign-in";
 
@@ -54,6 +55,8 @@ export default function SignUpForm({ redirectTo }: { redirectTo?: string }) {
       <h1 className="mb-6 text-center text-3xl font-bold">{t("createAccount")}</h1>
 
       <CloudPromotion />
+
+      <GoogleButton mode="sign-up" redirectTo={redirectTo} />
 
       <form
         onSubmit={(e) => {
