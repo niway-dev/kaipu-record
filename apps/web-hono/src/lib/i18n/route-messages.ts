@@ -32,8 +32,16 @@ const ROUTE_SLICES: ReadonlyArray<{
   { path: "/roadmap", slices: MARKETING_CHROME },
   { path: "/legal", slices: [...MARKETING_CHROME, "legal"] },
   { path: "/auth", slices: APP_CHROME },
-  { path: "/recordings", slices: [...APP_CHROME, "recordings"] },
-  { path: "/account", slices: [...APP_CHROME, "account", "storageCloud"] },
+  // `/account` and `/recordings` only redirect into `/dashboard/*`, so they need no copy.
+  {
+    path: "/dashboard",
+    exact: true,
+    slices: [...APP_CHROME, "dashboard", "account", "storageCloud"],
+  },
+  { path: "/dashboard/profile", slices: [...APP_CHROME, "dashboard", "account"] },
+  { path: "/dashboard/settings", slices: [...APP_CHROME, "dashboard", "account", "storageCloud"] },
+  { path: "/dashboard/recordings", slices: [...APP_CHROME, "dashboard", "recordings"] },
+  { path: "/dashboard", slices: [...APP_CHROME, "dashboard"] },
 ];
 
 function normalizePath(pathname: string): string {

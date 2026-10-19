@@ -1220,5 +1220,33 @@
     "restored": "Tu cuenta fue restaurada",
     "restoreFailed": "No pudimos restaurar tu cuenta. Inicia sesión de nuevo e inténtalo otra vez.",
     "cancel": "Cancelar"
+  },
+  "dashboard": {
+    "navLabel": "Secciones del panel",
+    "navHome": "Inicio",
+    "navProfile": "Perfil",
+    "navSettings": "Ajustes",
+    "navRecordings": "Grabaciones",
+    "welcomeTitle": "Hola, {name}",
+    "welcomeSignedInAs": "Sesión iniciada como {email}",
+    "firstVisitTitle": "Tu cuenta está lista",
+    "firstVisitPlan": "Tienes el plan {plan} con {capacity} de espacio en la nube.",
+    "firstVisitDismiss": "Entendido",
+    "storageManage": "Administrar",
+    "storageSummary": "{used} usados de {capacity}",
+    "getStartedTitle": "Empieza aquí",
+    "getStartedBody": "Kaipu graba en tu computadora. Instala la app de escritorio e inicia sesión con esta cuenta para subir grabaciones a tu espacio en la nube.",
+    "downloadMac": "Descargar para Mac (Apple Silicon)",
+    "downloadMacIntel": "Mac (Intel)",
+    "downloadWindows": "Descargar para Windows (beta)",
+    "downloadWindowsShort": "Windows (beta)",
+    "downloadMacShort": "Mac (Apple Silicon)",
+    "otherDownloads": "Otras descargas",
+    "profileTitle": "Perfil",
+    "profileDescription": "Tu nombre, tu correo y cómo inicias sesión.",
+    "settingsTitle": "Ajustes",
+    "settingsDescription": "Tu plan y almacenamiento, tu idioma y tu cuenta.",
+    "languageTitle": "Idioma",
+    "languageDescription": "El idioma que usa Kaipu en la web."
   }
 }
