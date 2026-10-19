@@ -31,6 +31,14 @@ describe("slicesForPath", () => {
     expect(slicesForPath("/auth/login")).toContain("auth");
   });
 
+  it("gives the sign-in pages their own copy and the legal notice, without the app header", () => {
+    for (const path of ["/auth/login", "/auth/signup", "/auth/forgot-password", "/auth/desktop"]) {
+      expect(slicesForPath(path)).toContain("auth");
+      expect(slicesForPath(path)).toContain("legal");
+      expect(slicesForPath(path)).not.toContain("header");
+    }
+  });
+
   it("gives the desktop sign-in pages their copy and the sign-in form, and no one else", () => {
     for (const path of ["/auth/desktop", "/auth/desktop/done"]) {
       expect(slicesForPath(path)).toContain("desktopAuth");

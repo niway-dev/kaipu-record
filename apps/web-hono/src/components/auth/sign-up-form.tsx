@@ -1,164 +1,137 @@
-import { useForm } from "@tanstack/react-form";
+import { useState } from "react";
 import { useRouter } from "@tanstack/react-router";
-import { toast } from "sonner";
-import z from "zod";
-
-import { SignupLegalNotice } from "@/components/legal/signup-legal-notice";
-import CloudPromotion from "@/components/cloud-promotion";
-import { GoogleButton } from "@/components/google-button";
-import { authClient } from "@/lib/auth/auth-client";
-import { desktopDonePath, type DesktopAuthQuery } from "@/lib/desktop-auth";
-import { resolvePostSignInPath } from "@/lib/post-sign-in";
-
-import { Button, Input, Label } from "@kaipu/web-ui";
 import { useTranslations } from "@kaipu/i18n";
 
-/** `desktop`: see SignInForm. A new account lands in the app the same way a sign-in does. */
-export default function SignUpForm({
-  redirectTo,
-  desktop,
-}: {
-  redirectTo?: string;
-  desktop?: DesktopAuthQuery;
-}) {
-  const router = useRouter();
-  const t = useTranslations("auth");
+import { authClient } from "@/lib/auth/auth-client";
+import { desktopDonePath, type DesktopAuthQuery } from "@/lib/desktop-auth";
+import {
+  ErrorBanner,
+  FieldHint,
+  PasswordField,
+  PrimaryButton,
+  QuietButton,
+  TextField,
+} from "./auth-ui";
+import { isEmail, MIN_NAME, MIN_PASSWORD } from "./validation";
 
-  const form = useForm({
-    defaultValues: {
-      email: "",
-      password: "",
-      name: "",
-    },
-    onSubmit: async ({ value }) => {
-      await authClient.signUp.email(
-        {
-          email: value.email,
-          password: value.password,
-          name: value.name,
-        },
-        {
-          query: desktop ? { ...desktop } : undefined,
-          onSuccess: async () => {
-            await router.invalidate();
-            router.history.push(
-              desktop ? desktopDonePath(desktop) : resolvePostSignInPath({ redirect: redirectTo }),
-            );
-            toast.success(t("signUpSuccess"));
-          },
-          onError: (error) => {
-            toast.error(error.error.message || error.error.statusText);
-          },
-        },
+export interface SignUpValues {
+  name: string;
+  email: string;
+}
+
+/**
+ * The email half of the "Create account" tab.
+ *
+ * Signing up signs the visitor in straight away, unverified; the verification link only unlocks
+ * Kaipu Cloud and can be opened later in any browser (`emailVerification.sendOnSignUp` on the
+ * API). So nothing waits for the link:
+ *
+ * - on the web, `onSignedUp` swaps the form for "Check your email" with a way into the library;
+ * - from the desktop (`desktop` set, NIW2-471), the request carries the app's query, the electron
+ *   plugin mints the code with the new session, and the visitor goes straight to the page that
+ *   hands it to the app — told there that a link is on its way.
+ */
+export default function SignUpForm({
+  desktop,
+  defaultValues,
+  onBack,
+  onSignedUp,
+}: {
+  desktop?: DesktopAuthQuery;
+  defaultValues?: Partial<SignUpValues>;
+  onBack: () => void;
+  onSignedUp: (email: string) => void;
+}) {
+  const t = useTranslations("auth");
+  const router = useRouter();
+  const [name, setName] = useState(defaultValues?.name ?? "");
+  const [email, setEmail] = useState(defaultValues?.email ?? "");
+  const [password, setPassword] = useState("");
+  const [errors, setErrors] = useState<{ name?: string; email?: string; password?: string }>({});
+  const [failure, setFailure] = useState<"network" | "other" | null>(null);
+  const [pending, setPending] = useState(false);
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const next = {
+      name: name.trim().length >= MIN_NAME ? undefined : t("nameMin"),
+      email: isEmail(email) ? undefined : t("invalidEmail"),
+      password: password.length >= MIN_PASSWORD ? undefined : t("passwordMin"),
+    };
+    setErrors(next);
+    if (next.name || next.email || next.password) return;
+
+    setPending(true);
+    setFailure(null);
+    const address = email.trim();
+    try {
+      const { error } = await authClient.signUp.email(
+        { name: name.trim(), email: address, password },
+        { query: desktop ? { ...desktop } : undefined },
       );
-    },
-    validators: {
-      onSubmit: z.object({
-        name: z.string().min(2, t("nameMin")),
-        email: z.email(t("invalidEmail")),
-        password: z.string().min(8, t("passwordMin")),
-      }),
-    },
-  });
+      if (error) {
+        setPending(false);
+        setFailure("other");
+        return;
+      }
+    } catch {
+      setPending(false);
+      setFailure("network");
+      return;
+    }
+    if (desktop) {
+      router.history.push(desktopDonePath(desktop, { checkEmail: true }));
+      return;
+    }
+    // No router.invalidate() here: /auth/signup sends a signed-in visitor away, and this one has to
+    // stay for "Check your email". Its way forward is a full page load, which reads the session.
+    onSignedUp(address);
+  }
 
   return (
-    <>
-      <h1 className="mb-6 text-center text-3xl font-bold">{t("createAccount")}</h1>
-
-      <CloudPromotion />
-
-      <GoogleButton mode="sign-up" redirectTo={redirectTo} desktop={desktop} />
-
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          form.handleSubmit();
-        }}
-        className="space-y-4"
-      >
-        <div>
-          <form.Field name="name">
-            {(field) => (
-              <div className="space-y-2">
-                <Label htmlFor={field.name}>{t("name")}</Label>
-                <Input
-                  id={field.name}
-                  name={field.name}
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                />
-                {field.state.meta.errors.map((error) => (
-                  <p key={error?.message} className="text-red-500">
-                    {error?.message}
-                  </p>
-                ))}
-              </div>
-            )}
-          </form.Field>
-        </div>
-
-        <div>
-          <form.Field name="email">
-            {(field) => (
-              <div className="space-y-2">
-                <Label htmlFor={field.name}>{t("email")}</Label>
-                <Input
-                  id={field.name}
-                  name={field.name}
-                  type="email"
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                />
-                {field.state.meta.errors.map((error) => (
-                  <p key={error?.message} className="text-red-500">
-                    {error?.message}
-                  </p>
-                ))}
-              </div>
-            )}
-          </form.Field>
-        </div>
-
-        <div>
-          <form.Field name="password">
-            {(field) => (
-              <div className="space-y-2">
-                <Label htmlFor={field.name}>{t("password")}</Label>
-                <Input
-                  id={field.name}
-                  name={field.name}
-                  type="password"
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                />
-                {field.state.meta.errors.map((error) => (
-                  <p key={error?.message} className="text-red-500">
-                    {error?.message}
-                  </p>
-                ))}
-              </div>
-            )}
-          </form.Field>
-        </div>
-
-        <SignupLegalNotice />
-
-        <form.Subscribe>
-          {(state) => (
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={!state.canSubmit || state.isSubmitting}
-            >
-              {state.isSubmitting ? t("submitting") : t("signUp")}
-            </Button>
-          )}
-        </form.Subscribe>
-      </form>
-    </>
+    <form noValidate onSubmit={(e) => void submit(e)}>
+      <TextField
+        first
+        label={t("name")}
+        name="name"
+        autoComplete="name"
+        placeholder={t("namePlaceholder")}
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        error={errors.name}
+        autoFocus={!defaultValues?.email}
+      />
+      <TextField
+        label={t("email")}
+        type="email"
+        name="email"
+        autoComplete="email"
+        inputMode="email"
+        placeholder={t("emailPlaceholder")}
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        error={errors.email}
+      />
+      <PasswordField
+        label={t("password")}
+        name="password"
+        autoComplete="new-password"
+        placeholder={t("passwordPlaceholderSignUp")}
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        error={errors.password}
+        aside={<FieldHint>{t("passwordHint")}</FieldHint>}
+        autoFocus={!!defaultValues?.email}
+      />
+      {failure ? (
+        <ErrorBanner>{failure === "network" ? t("errorNetwork") : t("signUpFailed")}</ErrorBanner>
+      ) : null}
+      <PrimaryButton type="submit" disabled={pending}>
+        {pending ? t("submitting") : t("signUp")}
+      </PrimaryButton>
+      <QuietButton back block onClick={onBack}>
+        {t("backToGoogle")}
+      </QuietButton>
+    </form>
   );
 }

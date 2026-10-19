@@ -39,6 +39,15 @@ export function oauthErrorKey(code: string): OAuthErrorKey {
   return Object.hasOwn(CODES, code) ? CODES[code]! : "oauthErrorGeneric";
 }
 
+/**
+ * The same mapping for the sign-in page, whose design words a closed consent screen its own way:
+ * "Google sign-in was closed. Nothing happened — try again, or use your email." The account
+ * page's linking flow keeps `oauthErrorCancelled`, which talks about a password.
+ */
+export function signInOAuthErrorKey(code: string): OAuthErrorKey | "oauthErrorClosed" {
+  return code === "access_denied" ? "oauthErrorClosed" : oauthErrorKey(code);
+}
+
 /** Keeps a short, printable `?error=` value; anything else is dropped from the URL state. */
 export function parseOAuthErrorParam(value: unknown): string | undefined {
   return typeof value === "string" && /^[\w'.-]{1,64}$/.test(value) ? value : undefined;

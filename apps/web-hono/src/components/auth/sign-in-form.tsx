@@ -1,139 +1,144 @@
-import { useForm } from "@tanstack/react-form";
-import { useRouter } from "@tanstack/react-router";
-import { toast } from "sonner";
-import z from "zod";
-import { Button, Input, Label } from "@kaipu/web-ui";
+import { useState } from "react";
+import { Link, useRouter } from "@tanstack/react-router";
 import { useTranslations } from "@kaipu/i18n";
-import CloudPromotion from "@/components/cloud-promotion";
-import { GoogleButton } from "@/components/google-button";
+
 import { authClient } from "@/lib/auth/auth-client";
 import { desktopDonePath, type DesktopAuthQuery } from "@/lib/desktop-auth";
 import { resolvePostSignInPath } from "@/lib/post-sign-in";
+import {
+  AccentButton,
+  ErrorBanner,
+  linkStyles,
+  PasswordField,
+  PrimaryButton,
+  QuietButton,
+  TextField,
+} from "./auth-ui";
+import { isEmail, MIN_PASSWORD } from "./validation";
+
+type Failure = "credentials" | "network" | "other";
 
 /**
+ * The email half of the sign-in tab, revealed by "Continue with email".
+ *
  * `desktop` is set on the desktop sign-in page (NIW2-471): the request then carries the app's
  * query so the API mints an authorization code with the new session, and the visitor lands on the
  * page that hands that code to the app instead of the dashboard.
+ *
+ * A wrong password and an unknown email get the same answer (owner decision: no account
+ * enumeration). The follow-up link reads the same either way: it offers to create an account with
+ * the typed email, and says nothing about whether one exists.
  */
 export default function SignInForm({
   redirectTo,
   desktop,
+  defaultEmail = "",
+  onBack,
+  onCreateAccount,
 }: {
   redirectTo?: string;
   desktop?: DesktopAuthQuery;
+  defaultEmail?: string;
+  onBack: () => void;
+  onCreateAccount: (email: string) => void;
 }) {
-  const router = useRouter();
   const t = useTranslations("auth");
+  const router = useRouter();
+  const [email, setEmail] = useState(defaultEmail);
+  const [password, setPassword] = useState("");
+  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [failure, setFailure] = useState<Failure | null>(null);
+  const [pending, setPending] = useState(false);
 
-  const form = useForm({
-    defaultValues: {
-      email: "",
-      password: "",
-    },
-    onSubmit: async ({ value }) => {
-      await authClient.signIn.email(
-        {
-          email: value.email,
-          password: value.password,
-        },
-        {
-          query: desktop ? { ...desktop } : undefined,
-          onSuccess: async () => {
-            await router.invalidate();
-            // The helper validates `redirectTo` again, so a bad value cannot leave the site.
-            router.history.push(
-              desktop ? desktopDonePath(desktop) : resolvePostSignInPath({ redirect: redirectTo }),
-            );
-            toast.success(t("signInSuccess"));
-          },
-          onError: (error) => {
-            toast.error(error.error.message || error.error.statusText);
-          },
-        },
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const next = {
+      email: isEmail(email) ? undefined : t("invalidEmail"),
+      password: password.length >= MIN_PASSWORD ? undefined : t("passwordMin"),
+    };
+    setErrors(next);
+    if (next.email || next.password) return;
+
+    setPending(true);
+    setFailure(null);
+    try {
+      const { error } = await authClient.signIn.email(
+        { email: email.trim(), password },
+        { query: desktop ? { ...desktop } : undefined },
       );
-    },
-    validators: {
-      onSubmit: z.object({
-        email: z.email(t("invalidEmail")),
-        password: z.string().min(8, t("passwordMin")),
-      }),
-    },
-  });
+      if (error) {
+        setPending(false);
+        // 401 INVALID_EMAIL_OR_PASSWORD covers both a wrong password and an unknown email.
+        setFailure(error.status === 401 || error.status === 400 ? "credentials" : "other");
+        return;
+      }
+    } catch {
+      setPending(false);
+      setFailure("network");
+      return;
+    }
+    if (desktop) {
+      // Straight on: re-running the route first would flash the desktop page's "Continue as"
+      // screen. The navigation reloads the session for the done page anyway.
+      router.history.push(desktopDonePath(desktop));
+      return;
+    }
+    await router.invalidate();
+    // The helper validates `redirectTo` again, so a bad value cannot leave the site.
+    router.history.push(resolvePostSignInPath({ redirect: redirectTo }));
+  }
 
   return (
-    <>
-      <h1 className="mb-6 text-center text-3xl font-bold">{t("welcomeBack")}</h1>
-
-      <CloudPromotion />
-
-      <GoogleButton mode="sign-in" redirectTo={redirectTo} desktop={desktop} />
-
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          form.handleSubmit();
-        }}
-        className="space-y-4"
-      >
-        <div>
-          <form.Field name="email">
-            {(field) => (
-              <div className="space-y-2">
-                <Label htmlFor={field.name}>{t("email")}</Label>
-                <Input
-                  id={field.name}
-                  name={field.name}
-                  type="email"
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                />
-                {field.state.meta.errors.map((error) => (
-                  <p key={error?.message} className="text-red-500">
-                    {error?.message}
-                  </p>
-                ))}
-              </div>
-            )}
-          </form.Field>
-        </div>
-
-        <div>
-          <form.Field name="password">
-            {(field) => (
-              <div className="space-y-2">
-                <Label htmlFor={field.name}>{t("password")}</Label>
-                <Input
-                  id={field.name}
-                  name={field.name}
-                  type="password"
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                />
-                {field.state.meta.errors.map((error) => (
-                  <p key={error?.message} className="text-red-500">
-                    {error?.message}
-                  </p>
-                ))}
-              </div>
-            )}
-          </form.Field>
-        </div>
-
-        <form.Subscribe>
-          {(state) => (
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={!state.canSubmit || state.isSubmitting}
-            >
-              {state.isSubmitting ? t("submitting") : t("signIn")}
-            </Button>
+    <form noValidate onSubmit={(e) => void submit(e)}>
+      <TextField
+        first
+        label={t("email")}
+        type="email"
+        name="email"
+        autoComplete="email"
+        inputMode="email"
+        placeholder={t("emailPlaceholder")}
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        error={errors.email}
+        autoFocus
+      />
+      <PasswordField
+        label={t("password")}
+        name="password"
+        autoComplete="current-password"
+        placeholder={t("passwordPlaceholderSignIn")}
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        error={errors.password}
+        aside={
+          <Link to="/auth/forgot-password" {...linkStyles.accent()}>
+            {t("forgotPasswordShort")}
+          </Link>
+        }
+      />
+      {failure ? (
+        <ErrorBanner>
+          {failure === "credentials" ? (
+            <>
+              {t("wrongCredentials")}{" "}
+              <AccentButton onClick={() => onCreateAccount(email.trim())}>
+                {t("createWithThisEmail")}
+              </AccentButton>
+            </>
+          ) : failure === "network" ? (
+            t("errorNetwork")
+          ) : (
+            t("signInFailed")
           )}
-        </form.Subscribe>
-      </form>
-    </>
+        </ErrorBanner>
+      ) : null}
+      <PrimaryButton type="submit" disabled={pending}>
+        {pending ? t("submitting") : t("signIn")}
+      </PrimaryButton>
+      <QuietButton back block onClick={onBack}>
+        {t("backToGoogle")}
+      </QuietButton>
+    </form>
   );
 }

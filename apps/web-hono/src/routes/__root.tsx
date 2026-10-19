@@ -123,8 +123,13 @@ function RootDocument() {
     select: (s) => s.matches.some((m) => m.staticData.shell === "marketing"),
   });
 
+  // The sign-in pages draw with the landing's palette too (AuthShell), so they share its theme.
+  const isAuthShell = useRouterState({
+    select: (s) => s.matches.some((m) => m.staticData.shell === "auth"),
+  });
+
   // Both the <html> class and the pre-stylesheet background hang off this.
-  const isLandingLight = isMarketing && context.landingTheme === "light";
+  const isLandingLight = (isMarketing || isAuthShell) && context.landingTheme === "light";
 
   // Persist to the cookie, drop the cache (it holds the old language), then
   // re-run beforeLoad so the tree re-renders with the new messages (resolved
