@@ -30,6 +30,15 @@ describe("slicesForPath", () => {
     expect(slicesForPath("/auth/login")).toContain("auth");
   });
 
+  it("gives the account page the account copy and the shared capacity copy", () => {
+    const slices = slicesForPath("/account");
+    expect(slices).toContain("account");
+    expect(slices).toContain("storageCloud");
+    expect(slices).toContain("auth");
+    expect(slicesForPath("/account/")).toEqual(slices);
+    expect(slicesForPath("/recordings")).not.toContain("storageCloud");
+  });
+
   it("ships the features catalogue only to the features page", () => {
     expect(slicesForPath("/features")).toContain("features");
     expect(slicesForPath("/features")).toContain("landing");
@@ -50,6 +59,7 @@ describe("slicesForPath", () => {
       "/legal/cookies",
       "/auth/login",
       "/recordings",
+      "/account",
     ]) {
       for (const slice of slicesForPath(path)) {
         expect(known.has(slice.split(".")[0] ?? "")).toBe(true);

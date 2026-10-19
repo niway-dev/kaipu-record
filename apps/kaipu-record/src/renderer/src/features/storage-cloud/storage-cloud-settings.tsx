@@ -5,7 +5,7 @@ import { Card } from "@kaipu/ui";
 import { AccountPanel } from "@renderer/features/auth/account-panel";
 import { useAuthStatus } from "@renderer/features/auth/use-auth-status";
 import { CapacityCard } from "./capacity-card";
-import { toCapacityView } from "./capacity-view";
+import { toCapacityView } from "@kaipu/domain/capacity";
 import {
   simulatedAuthStatus,
   simulatedStorageResult,

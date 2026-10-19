@@ -1,4 +1,18 @@
-import type { StorageUsage, StorageUsageResult } from "@shared/types/cloud-storage";
+import type { StorageUsage } from "../schemas/cloud-asset";
+
+/**
+ * What a client's capacity query produced. Never a zeroed `StorageUsage` for a failure:
+ * a failed query must not render as "0 GB used".
+ *   • stale — the query failed, but an earlier answer for the same account exists.
+ */
+export type StorageUsageResult =
+  | { kind: "signed-out" }
+  | { kind: "ok"; usage: StorageUsage; fetchedAt: number }
+  | { kind: "stale"; usage: StorageUsage; fetchedAt: number }
+  | { kind: "error" }
+  /** The server has no capacity endpoint (404): cloud storage is not offered there yet. */
+  | { kind: "not-available" }
+  | { kind: "session-expired" };
 
 /**
  * What the capacity card renders, derived from the raw query result. Beta access and the
@@ -42,4 +56,22 @@ export function barSegments(usage: StorageUsage): { used: number; reserved: numb
   const used = Math.min(100, pct(usage.usedBytes));
   const reserved = Math.min(100 - used, pct(usage.reservedBytes));
   return { used, reserved };
+}
+
+/** Share of the capacity already committed (used + reserved), as a percentage. Not clamped. */
+export function committedPercent(usage: StorageUsage): number {
+  if (usage.capacityBytes <= 0) return 0;
+  return ((usage.usedBytes + usage.reservedBytes) / usage.capacityBytes) * 100;
+}
+
+/** More committed than the plan includes, e.g. after a capacity reduction. */
+export function isOverQuota(usage: StorageUsage): boolean {
+  return usage.usedBytes + usage.reservedBytes > usage.capacityBytes;
+}
+
+/** At this share of committed capacity the UI shows a passive "almost full" notice. */
+export const ALMOST_FULL_PERCENT = 90;
+
+export function isAlmostFull(usage: StorageUsage): boolean {
+  return !isOverQuota(usage) && committedPercent(usage) >= ALMOST_FULL_PERCENT;
 }

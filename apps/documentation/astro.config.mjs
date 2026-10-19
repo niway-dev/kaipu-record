@@ -113,6 +113,7 @@ export default defineConfig({
             { slug: "backlog/optional-cloud-handoff" },
             { slug: "backlog/desktop-cloud-sync-gap" },
             { slug: "backlog/cloud-error-states" },
+            { slug: "backlog/web-account-page" },
             { slug: "backlog/legal-documents" },
             { slug: "backlog/desktop-diagnostics-opt-out" },
             { slug: "backlog/public-roadmap-page" },

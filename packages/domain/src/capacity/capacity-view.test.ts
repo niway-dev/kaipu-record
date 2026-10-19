@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
-import type { StorageUsage } from "@shared/types/cloud-storage";
-import { barSegments, toCapacityView } from "./capacity-view";
-import { formatBytesDecimal } from "./format-bytes";
+import type { StorageUsage } from "../schemas/cloud-asset";
+import { formatBytesDecimal } from "../constants/cloud-limits";
+import {
+  barSegments,
+  committedPercent,
+  isAlmostFull,
+  isOverQuota,
+  toCapacityView,
+} from "./capacity-view";
 
 const USAGE: StorageUsage = {
   capacityBytes: 1_000_000_000,
@@ -69,5 +75,39 @@ describe("formatBytesDecimal", () => {
     expect(formatBytesDecimal(610_000_000)).toBe("610 MB");
     expect(formatBytesDecimal(1_500_000)).toBe("1.5 MB");
     expect(formatBytesDecimal(999)).toBe("999 B");
+  });
+});
+
+describe("over quota and the almost-full notice", () => {
+  it("is over quota only when committed bytes exceed the capacity", () => {
+    expect(isOverQuota(USAGE)).toBe(false);
+    expect(isOverQuota({ ...USAGE, usedBytes: 1_000_000_000, reservedBytes: 0 })).toBe(false);
+    expect(isOverQuota({ ...USAGE, usedBytes: 1_200_000_000, reservedBytes: 0 })).toBe(true);
+    expect(isOverQuota({ ...USAGE, usedBytes: 900_000_000, reservedBytes: 200_000_000 })).toBe(
+      true,
+    );
+  });
+
+  it("counts reserved bytes toward the committed share", () => {
+    expect(committedPercent(USAGE)).toBeCloseTo(74);
+    expect(committedPercent({ ...USAGE, capacityBytes: 0 })).toBe(0);
+  });
+
+  it("warns passively from 90% committed, but not when already over quota", () => {
+    const at = (used: number, reserved = 0): StorageUsage => ({
+      ...USAGE,
+      usedBytes: used,
+      reservedBytes: reserved,
+    });
+    expect(isAlmostFull(at(899_999_999))).toBe(false);
+    expect(isAlmostFull(at(900_000_000))).toBe(true);
+    expect(isAlmostFull(at(800_000_000, 100_000_000))).toBe(true);
+    expect(isAlmostFull(at(1_000_000_000))).toBe(true);
+    expect(isAlmostFull(at(1_000_000_001))).toBe(false);
+  });
+
+  it("clamps the bar at 100% when over quota", () => {
+    const s = barSegments({ ...USAGE, usedBytes: 1_400_000_000, reservedBytes: 100_000_000 });
+    expect(s).toEqual({ used: 100, reserved: 0 });
   });
 });
