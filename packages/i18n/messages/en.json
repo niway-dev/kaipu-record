@@ -242,6 +242,8 @@
   "landing": {
     "navBrand": "Kaipu",
     "navDownload": "Download",
+    "navSignIn": "Sign in",
+    "navDashboard": "Dashboard",
     "heroSubtitle": "Kaipu Record captures your screen and camera in high quality, right on your Mac. Private, fast, and account-free.",
     "downloadMacArm": "Download for Mac (Apple Silicon)",
     "downloadMacIntel": "Mac (Intel)",
