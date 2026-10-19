@@ -50,8 +50,8 @@ import { ROUTES } from "@shared/routes";
  *     version gate, so they survive on every route.
  *   - <AppShell /> (sidebar + status bar) hosts the regular pages. Add new sidebar
  *     pages as its children so they share the layout.
- *   - /sign-in and /sign-up are full-window pages: siblings of the shell, not
- *     children, so they render without the sidebar.
+ *   - /sign-in is a full-window page: a sibling of the shell, not a child, so it
+ *     renders without the sidebar.
  */
 const router = createHashRouter([
   {
@@ -98,8 +98,7 @@ const router = createHashRouter([
           { path: "*", element: <NotFound /> },
         ],
       },
-      { path: ROUTES.signIn, element: <AuthPage mode="sign-in" /> },
-      { path: ROUTES.signUp, element: <AuthPage mode="sign-up" /> },
+      { path: ROUTES.signIn, element: <AuthPage /> },
     ],
   },
 ]);

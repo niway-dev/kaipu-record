@@ -35,7 +35,7 @@ import type {
   RecordingStartInfo,
   RecordingTick,
 } from "./ipc";
-import type { AuthCredentials, AuthError, AuthStatus, SignUpInput } from "./auth";
+import type { AuthError, AuthStatus, BrowserSignInIntent } from "./auth";
 
 /** A capture source returned by the screen picker — includes a base64 thumbnail. */
 export interface ScreenSource {
@@ -91,12 +91,10 @@ export type PermissionStatus = Record<PermissionKind, boolean>;
 export type AccessibilityStatus = "granted" | "denied" | "not-required";
 
 /**
- * Discriminated result for the two credential-submitting IPC calls. A structured
- * AuthError does not survive a *thrown* IPC error — Electron serializes anything thrown
- * out of `ipcMain.handle` down to its `.message` alone, so a `{ kind }` payload arrives at
- * the renderer as an opaque Error and every failure collapses into the generic copy.
- * Returning the error instead round-trips cleanly, since normal resolved IPC values ARE
- * structurally cloned in full.
+ * Discriminated result for the browser sign-in IPC calls. A structured AuthError does not
+ * survive a *thrown* IPC error — Electron serializes anything thrown out of `ipcMain.handle`
+ * down to its `.message` alone, so a `{ kind }` payload would arrive as an opaque Error and
+ * every failure would collapse into the generic copy. Returning the error round-trips cleanly.
  */
 export type AuthAttemptResult = { ok: true; status: AuthStatus } | { ok: false; error: AuthError };
 
@@ -130,12 +128,19 @@ export interface KaipuElectronAPI {
   // ── Authentication ────────────────────────────────────────────────────
   /** Get the current authentication status. */
   getAuthStatus(): Promise<AuthStatus>;
-  /** Sign in with email and password. Never rejects on a credential failure — see
-   *  {@link AuthAttemptResult}. */
-  signIn(credentials: AuthCredentials): Promise<AuthAttemptResult>;
-  /** Sign up with email, password, and name. Never rejects on a credential failure — see
-   *  {@link AuthAttemptResult}. */
-  signUp(input: SignUpInput): Promise<AuthAttemptResult>;
+  /** Open the system browser on the Kaipu sign-in (or sign-up) page. Resolves once the browser
+   *  was asked to open; the sign-in itself completes later, through the `kaipu://` link or
+   *  {@link submitSignInCode}, and arrives as an auth status change. Never rejects. */
+  beginBrowserSignIn(
+    intent: BrowserSignInIntent,
+  ): Promise<{ ok: true } | { ok: false; error: AuthError }>;
+  /** Stop waiting for the browser: a link or code that arrives afterwards is ignored. */
+  cancelBrowserSignIn(): Promise<void>;
+  /** Paste-code fallback for when the link cannot reach the app (unpackaged builds, blocked
+   *  deep links). Never rejects on a bad code — see {@link AuthAttemptResult}. */
+  submitSignInCode(code: string): Promise<AuthAttemptResult>;
+  /** Subscribe to a browser sign-in that came back through the link but did not complete. */
+  onBrowserSignInFailed(callback: (error: AuthError) => void): () => void;
   /** Sign out and clear the stored session. */
   signOut(): Promise<void>;
   /** Resend the verification email to the signed-in account. `ok: false` when signed out or

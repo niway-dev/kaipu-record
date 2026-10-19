@@ -14,7 +14,8 @@ set -euo pipefail
 # The env vars the renderer inlines (MAIN_VITE_* / VITE_*) are NOT fetched here.
 # Supply them yourself for the target you are building, e.g.
 #
-#   MAIN_VITE_SERVER_URL=https://kaipu-api.example.workers.dev bun run build:mac
+#   MAIN_VITE_SERVER_URL=https://kaipu-api.example.workers.dev \
+#   MAIN_VITE_WEB_URL=https://kaipu.app bun run build:mac
 #
 # They are not in Infisical `prod` yet; the release workflow passes them from
 # GitHub Variables. Until that is migrated, an unset value means the build fails
