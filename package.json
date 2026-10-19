@@ -21,6 +21,7 @@
       "@orpc/openapi-client": "1.13.5",
       "@orpc/tanstack-query": "1.13.5",
       "better-auth": "1.7.11",
+      "@better-auth/electron": "1.7.11",
       "@tailwindcss/vite": "4.1.8",
       "tailwindcss": "4.1.18",
       "@vitejs/plugin-react": "5.1.2",
