@@ -42,14 +42,27 @@ async function openDialog() {
 const confirmButton = () => screen.getByRole("button", { name: "Delete my account" });
 
 describe("DangerZone", () => {
-  it("renders a disabled 'Coming soon' button while the flag is off, and never asks the client", () => {
+  it("renders a disabled Delete account button tagged Coming soon while the flag is off, and never asks the client", () => {
     const client = createMockAccountDeletionClient();
     const spy = vi.spyOn(client, "getDeletionStatus");
     setup({ client, enabled: false });
-    const button = screen.getByRole("button", { name: "Coming soon" }) as HTMLButtonElement;
+    const button = screen.getByRole("button", { name: "Delete account" }) as HTMLButtonElement;
     expect(button.disabled).toBe(true);
-    expect(screen.queryByRole("button", { name: "Delete account" })).toBeNull();
+    expect(screen.getByText("Coming soon")).toBeTruthy();
+    fireEvent.click(button);
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("closes the dialog on Escape without scheduling anything", async () => {
+    const client = createMockAccountDeletionClient({ now: () => NOW });
+    const request = vi.spyOn(client, "requestDeletion");
+    setup({ client });
+    const dialog = await openDialog();
+    expect(dialog.getAttribute("aria-modal")).toBe("true");
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(request).not.toHaveBeenCalled();
   });
 
   it("lists what is deleted, that local files stay, and the mock's counts", async () => {

@@ -154,6 +154,13 @@ function RootDocument() {
   // Both the <html> class and the pre-stylesheet background hang off this.
   const isLandingLight = (isMarketing || isAuthShell) && context.landingTheme === "light";
 
+  // The signed-in dashboard draws with the landing's palette and theme cookie too. It keeps the
+  // app's `dark` class, but its first paint must follow the cookie.
+  const isDashboard = useRouterState({
+    select: (s) => s.matches.some((m) => m.routeId === "/_authenticated/dashboard"),
+  });
+  const lightFirstPaint = isLandingLight || (isDashboard && context.landingTheme === "light");
+
   // Persist to the cookie, drop the cache (it holds the old language), then
   // re-run beforeLoad so the tree re-renders with the new messages (resolved
   // server-side). Until they land the provider keeps showing the old text.
@@ -172,7 +179,7 @@ function RootDocument() {
       suppressHydrationWarning
     >
       <head>
-        <style dangerouslySetInnerHTML={{ __html: criticalStyles(isLandingLight) }} />
+        <style dangerouslySetInnerHTML={{ __html: criticalStyles(lightFirstPaint) }} />
         <HeadContent />
       </head>
       <body suppressHydrationWarning>

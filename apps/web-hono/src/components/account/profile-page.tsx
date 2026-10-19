@@ -1,5 +1,7 @@
+import { TriangleAlert } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
-import { OAuthErrorAlert } from "@/components/oauth-error-alert";
+import { oauthErrorKey } from "@/lib/google-auth";
+import { Notice, PageHeading, PageStack } from "@/components/dashboard/ui";
 import { GoogleSignInControls } from "./google-sign-in-controls";
 import { ProfileSection, type AccountUser } from "./profile-section";
 import { SignInMethodsSection } from "./sign-in-methods-section";
@@ -14,15 +16,20 @@ export interface ProfilePageProps {
 /** `/dashboard/profile`: who you are and how you sign in. Each section owns its own data. */
 export function ProfilePage({ user, onSessionChanged, oauthError }: ProfilePageProps) {
   const t = useTranslations("dashboard");
+  const tAuth = useTranslations("auth");
   return (
-    <div className="container mx-auto max-w-3xl space-y-6 px-4 py-8">
-      <div>
-        <h1 className="text-3xl font-bold">{t("profileTitle")}</h1>
-        <p className="text-muted-foreground mt-1">{t("profileDescription")}</p>
-      </div>
-      <OAuthErrorAlert code={oauthError} />
+    <PageStack>
+      <PageHeading title={t("profileTitle")} description={t("profileDescription")} />
+      {oauthError ? (
+        <Notice
+          tone="danger"
+          role="alert"
+          icon={<TriangleAlert size={18} />}
+          title={tAuth(oauthErrorKey(oauthError))}
+        />
+      ) : null}
       <ProfileSection user={user} onSessionChanged={onSessionChanged} />
       <SignInMethodsSection googleControls={<GoogleSignInControls />} />
-    </div>
+    </PageStack>
   );
 }
