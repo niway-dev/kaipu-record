@@ -1,7 +1,6 @@
 import { NOINDEX } from "@/lib/seo";
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 
-import { AppShell } from "@/components/app-shell";
 import { getAuthSession } from "@/lib/auth/get-auth-session";
 
 export const Route = createFileRoute("/_authenticated")({
@@ -15,10 +14,7 @@ export const Route = createFileRoute("/_authenticated")({
     }
     return { session, isAuthenticated: true };
   },
-  component: AuthenticatedLayout,
+  // The only signed-in section is `/dashboard`, whose layout draws its own frame
+  // (`DashboardShell`), so this layout adds nothing around it.
+  component: Outlet,
 });
-
-function AuthenticatedLayout() {
-  const { session } = Route.useRouteContext();
-  return <AppShell session={session} />;
-}

@@ -1,27 +1,15 @@
 import { useEffect, useState } from "react";
 import { useFormatter, useTranslations } from "@kaipu/i18n";
-import {
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  Input,
-  Label,
-} from "@kaipu/web-ui";
+import * as stylex from "@stylexjs/stylex";
+import { Check, Trash2 } from "lucide-react";
 import type {
   AccountDeletionClient,
   DeletionFailure,
   DeletionImpact,
   DeletionStatus,
 } from "@/lib/account-deletion";
-import { Notice } from "./notice";
+import { kl, tone } from "../dashboard/dashboard.stylex";
+import { Button, Card, Dialog, Field, Notice, Tag } from "@/components/dashboard/ui";
 
 type Scheduled = Extract<DeletionStatus, { status: "scheduled" }>;
 
@@ -105,133 +93,183 @@ export function DangerZone({ email, hasPassword, enabled, client }: DangerZonePr
     }
   }
 
+  const close = () => {
+    setOpen(false);
+    reset();
+  };
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-destructive">{t("dangerTitle")}</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <p className="text-muted-foreground text-sm">{t("dangerDescription")}</p>
+    <Card title={t("dangerTitle")} danger>
+      {restore === "done" && (
+        <div {...stylex.props(s.gap)}>
+          <Notice icon={<Check size={18} />} title={t("restored")} />
+        </div>
+      )}
 
-        {restore === "done" && <Notice title={t("restored")} />}
-
-        {scheduled ? (
-          <div className="space-y-3">
-            <Notice
-              tone="destructive"
-              title={t("deleteScheduled", { date: date(scheduled.scheduledAt) })}
-              detail={t("deleteScheduledDetail")}
-              action={
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => void restoreAccount()}
-                  disabled={restore === "pending"}
-                >
-                  {restore === "pending" ? t("restoring") : t("restore")}
-                </Button>
-              }
-            />
-            {restore === "failed" && (
-              <p role="alert" className="text-destructive text-sm">
-                {t("restoreFailed")}
-              </p>
-            )}
-          </div>
-        ) : !enabled ? (
-          <Button variant="destructive" disabled>
-            {t("deleteComingSoon")}
-          </Button>
-        ) : (
-          <Button variant="destructive" onClick={() => setOpen(true)}>
-            {t("deleteAccount")}
-          </Button>
-        )}
-      </CardContent>
-
-      <Dialog
-        open={open}
-        onOpenChange={(next) => {
-          setOpen(next);
-          if (!next) reset();
-        }}
-      >
-        <DialogContent>
-          <form onSubmit={(e) => void confirm(e)} className="grid gap-4" noValidate>
-            <DialogHeader>
-              <DialogTitle>{t("deleteDialogTitle")}</DialogTitle>
-              <DialogDescription>{t("deleteDialogIntro")}</DialogDescription>
-            </DialogHeader>
-            <ul className="list-disc space-y-1 pl-5 text-sm">
-              <li>{t("deletesProfile")}</li>
-              <li>{t("deletesCloud")}</li>
-              <li>{t("deletesSignIn")}</li>
-            </ul>
-            {impact && (
-              <p className="text-sm font-medium">
-                {t("deleteImpact", {
-                  cloudFiles: impact.cloudFiles,
-                  pendingUploads: impact.pendingUploads,
-                })}
-              </p>
-            )}
-            <p className="text-muted-foreground text-sm">{t("deleteLocalKept")}</p>
-            <p className="text-muted-foreground text-sm">{t("deleteGrace")}</p>
-
-            <div className="space-y-2">
-              <Label htmlFor="delete-email">{t("deleteTypeEmail", { email })}</Label>
-              <Input
-                id="delete-email"
-                value={typedEmail}
-                onChange={(e) => setTypedEmail(e.target.value)}
-                autoComplete="off"
-                placeholder={t("deleteEmailLabel")}
-              />
+      {scheduled ? (
+        <>
+          <Notice
+            tone="danger"
+            icon={<Trash2 size={18} />}
+            title={t("deleteScheduled", { date: date(scheduled.scheduledAt) })}
+            detail={t("deleteScheduledDetail")}
+            actions={
+              <Button
+                size="sm"
+                variant="pink"
+                onClick={() => void restoreAccount()}
+                disabled={restore === "pending"}
+              >
+                {restore === "pending" ? t("restoring") : t("restore")}
+              </Button>
+            }
+          />
+          {restore === "failed" && (
+            <p role="alert" {...stylex.props(s.error, s.errorBelow)}>
+              {t("restoreFailed")}
+            </p>
+          )}
+        </>
+      ) : (
+        <div {...stylex.props(s.row)}>
+          <p {...stylex.props(s.description)}>{t("dangerDescription")}</p>
+          {enabled ? (
+            <Button variant="dangerOutline" onClick={() => setOpen(true)}>
+              {t("deleteAccount")}
+            </Button>
+          ) : (
+            // The server side is NIW2-214 / #268: until then the button is shown, disabled.
+            <div {...stylex.props(s.soon)}>
+              <Button variant="dangerOutline" disabled>
+                {t("deleteAccount")}
+              </Button>
+              <Tag>{t("deleteComingSoon")}</Tag>
             </div>
-            {hasPassword && (
-              <div className="space-y-2">
-                <Label htmlFor="delete-password">{t("deletePasswordLabel")}</Label>
-                <Input
-                  id="delete-password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="current-password"
-                  aria-invalid={failure === "wrong-password" || undefined}
-                />
-              </div>
-            )}
+          )}
+        </div>
+      )}
 
-            {failure === "wrong-password" && (
-              <p role="alert" className="text-destructive text-sm">
-                {t("deleteWrongPassword")}
-              </p>
-            )}
-            {failure === "session-not-fresh" && (
-              <p role="alert" className="text-destructive text-sm">
-                {t("deleteNotFresh")}{" "}
-                <a className="underline" href={SIGN_IN_AGAIN}>
-                  {t("deleteSignInAgain")}
-                </a>
-              </p>
-            )}
-            {failure === "failed" && (
-              <p role="alert" className="text-destructive text-sm">
-                {t("deleteFailed")}
-              </p>
-            )}
+      <Dialog open={open} title={t("deleteDialogTitle")} onClose={close}>
+        <form onSubmit={(e) => void confirm(e)} noValidate>
+          <p {...stylex.props(s.intro)}>{t("deleteDialogIntro")}</p>
+          <ul {...stylex.props(s.list)}>
+            <li>{t("deletesProfile")}</li>
+            <li>{t("deletesCloud")}</li>
+            <li>{t("deletesSignIn")}</li>
+          </ul>
+          {impact && (
+            <p {...stylex.props(s.impact)}>
+              {t("deleteImpact", {
+                cloudFiles: impact.cloudFiles,
+                pendingUploads: impact.pendingUploads,
+              })}
+            </p>
+          )}
+          <p {...stylex.props(s.kept)}>
+            <Check size={15} strokeWidth={2.4} aria-hidden {...stylex.props(s.keptIcon)} />
+            {t("deleteLocalKept")}
+          </p>
+          <p {...stylex.props(s.grace)}>{t("deleteGrace")}</p>
 
-            <DialogFooter showCloseButton={false}>
-              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-                {t("cancel")}
-              </Button>
-              <Button type="submit" variant="destructive" disabled={!canConfirm}>
-                {pending ? t("deleteWorking") : t("deleteConfirm")}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
+          <Field
+            id="delete-email"
+            label={t("deleteTypeEmail", { email })}
+            value={typedEmail}
+            onChange={(e) => setTypedEmail(e.target.value)}
+            autoComplete="off"
+            placeholder={t("deleteEmailLabel")}
+          />
+          {hasPassword && (
+            <Field
+              id="delete-password"
+              label={t("deletePasswordLabel")}
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              error={failure === "wrong-password" ? t("deleteWrongPassword") : null}
+            />
+          )}
+
+          {failure === "session-not-fresh" && (
+            <p role="alert" {...stylex.props(s.error)}>
+              {t("deleteNotFresh")}{" "}
+              <a href={SIGN_IN_AGAIN} {...stylex.props(s.errorLink)}>
+                {t("deleteSignInAgain")}
+              </a>
+            </p>
+          )}
+          {failure === "failed" && (
+            <p role="alert" {...stylex.props(s.error)}>
+              {t("deleteFailed")}
+            </p>
+          )}
+
+          <div {...stylex.props(s.actions)}>
+            <Button onClick={close}>{t("cancel")}</Button>
+            <Button type="submit" variant="danger" disabled={!canConfirm}>
+              {pending ? t("deleteWorking") : t("deleteConfirm")}
+            </Button>
+          </div>
+        </form>
       </Dialog>
     </Card>
   );
 }
+
+const s = stylex.create({
+  gap: { marginBottom: "12px" },
+  row: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: "16px" },
+  description: {
+    flex: "1",
+    minWidth: "220px",
+    margin: 0,
+    fontSize: "14px",
+    lineHeight: 1.5,
+    color: kl.dim,
+  },
+  soon: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px" },
+  intro: { margin: 0, marginTop: "12px", fontSize: "14px", color: kl.dim },
+  list: { margin: 0, marginTop: "6px", paddingLeft: "20px", fontSize: "14px", lineHeight: 1.6 },
+  impact: {
+    margin: 0,
+    marginTop: "14px",
+    paddingBlock: "11px",
+    paddingInline: "13px",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: "rgba(239, 68, 68, 0.3)",
+    borderRadius: "10px",
+    backgroundColor: tone.redSoft,
+    fontSize: "13.5px",
+    color: kl.tx,
+  },
+  kept: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    margin: 0,
+    marginTop: "10px",
+    fontSize: "13.5px",
+    color: kl.dim,
+  },
+  keptIcon: { flexShrink: 0, color: tone.green },
+  grace: {
+    margin: 0,
+    marginTop: "8px",
+    marginBottom: "16px",
+    fontSize: "13px",
+    lineHeight: 1.5,
+    color: kl.faint,
+  },
+  error: { margin: 0, marginBottom: "12px", fontSize: "13px", lineHeight: 1.45, color: tone.red },
+  errorBelow: { marginTop: "10px", marginBottom: 0 },
+  errorLink: { color: tone.red, textDecoration: "underline" },
+  actions: {
+    display: "flex",
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+    gap: "8px",
+    marginTop: "20px",
+  },
+});

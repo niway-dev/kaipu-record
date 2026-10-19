@@ -34,6 +34,7 @@ describe("WelcomeSection", () => {
     );
     expect(screen.getByRole("heading", { name: "Hi, Ada Lovelace" })).toBeTruthy();
     expect(screen.getByText("Signed in as ada@example.com")).toBeTruthy();
+    expect(screen.getByText("Good to see you.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Resend verification email" })).toBeNull();
   });
 

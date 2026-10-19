@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "@kaipu/i18n";
-import { Button } from "@kaipu/web-ui";
+import * as stylex from "@stylexjs/stylex";
+import { Lock, Mail, RefreshCw } from "lucide-react";
 import { authClient } from "@/lib/auth/auth-client";
 import {
   cooldownRemainingMs,
@@ -8,7 +9,8 @@ import {
   withinResendCooldown,
   writeResendSentAt,
 } from "@/lib/resend-cooldown";
-import { Notice } from "./notice";
+import { tone } from "../dashboard/dashboard.stylex";
+import { Button, Notice } from "@/components/dashboard/ui";
 
 type ResendStatus = "idle" | "pending" | "failed";
 
@@ -80,34 +82,53 @@ export function VerificationNotice({
   const coolingDown = withinResendCooldown(sentAt, now);
   const justSent = sentAt !== null && resend !== "failed";
 
+  // Refreshing only makes sense once a mail is out: before that there is nothing for the server
+  // to have recorded.
+  const refreshButton =
+    sentAt !== null ? (
+      <Button size="sm" icon={<RefreshCw size={15} aria-hidden />} onClick={() => void refresh()}>
+        {t("refresh")}
+      </Button>
+    ) : null;
+
   return (
-    <div className="space-y-3">
+    <div {...stylex.props(s.stack)}>
       <Notice
-        title={t("unverifiedNotice")}
-        detail={resend === "failed" ? t("resendFailed") : justSent ? t("resendSent") : undefined}
-        tone={resend === "failed" ? "destructive" : "default"}
+        tone={resend === "failed" ? "danger" : "pink"}
+        icon={justSent ? <Mail size={18} /> : <Lock size={18} />}
+        title={justSent ? t("resendSentTitle") : t("unverifiedTitle")}
+        detail={
+          resend === "failed"
+            ? t("resendFailed")
+            : justSent
+              ? t("resendSentDetail")
+              : t("unverifiedDetail")
+        }
+        actions={
+          <>
+            <Button
+              variant={justSent ? "outline" : "pink"}
+              size="sm"
+              wrap
+              onClick={() => void resendVerification()}
+              disabled={resend === "pending" || coolingDown}
+            >
+              {t("resendVerification")}
+            </Button>
+            {refreshButton}
+          </>
+        }
       />
-      <div className="flex flex-wrap gap-2">
-        <Button
-          variant="outline"
-          onClick={() => void resendVerification()}
-          disabled={resend === "pending" || coolingDown}
-        >
-          {t("resendVerification")}
-        </Button>
-        {/* Refreshing only makes sense once a mail is out: before that there is nothing
-            for the server to have recorded. */}
-        {sentAt !== null && (
-          <Button variant="outline" onClick={() => void refresh()}>
-            {t("refresh")}
-          </Button>
-        )}
-      </div>
       {refreshFailed && (
-        <p role="alert" className="text-destructive text-sm">
+        <p role="alert" {...stylex.props(s.error)}>
           {t("refreshFailed")}
         </p>
       )}
     </div>
   );
 }
+
+const s = stylex.create({
+  stack: { display: "flex", flexDirection: "column", gap: "8px" },
+  error: { margin: 0, fontSize: "13px", color: tone.red },
+});

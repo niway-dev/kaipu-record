@@ -45,7 +45,8 @@ describe("StorageSection", () => {
     expect(screen.getByText("130 MB")).toBeTruthy();
     expect(screen.getByText("260 MB")).toBeTruthy();
     expect(screen.getByText("Plan Free · 1 GB")).toBeTruthy();
-    expect(screen.getByText("In progress (reserved by uploads)")).toBeTruthy();
+    expect(screen.getByText("In progress")).toBeTruthy();
+    expect(screen.getByText("Reserved by uploads")).toBeTruthy();
     expect(screen.getByText("1 upload in progress")).toBeTruthy();
     expect(screen.getByText("Up to 1 GB per video.")).toBeTruthy();
     expect(bar().getAttribute("aria-label")).toBe("610 MB used and 130 MB reserved of 1 GB");

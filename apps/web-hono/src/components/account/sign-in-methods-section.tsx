@@ -1,9 +1,20 @@
 import { useState, type ReactNode } from "react";
+import * as stylex from "@stylexjs/stylex";
+import { KeyRound, Mail, TriangleAlert } from "lucide-react";
 import { useFormatter, useTranslations } from "@kaipu/i18n";
-import { Button, Card, CardContent, CardHeader, CardTitle, Input, Label } from "@kaipu/web-ui";
 import { authClient } from "@/lib/auth/auth-client";
 import { hasPassword, useLinkedAccounts } from "@/hooks/use-linked-accounts";
-import { Notice } from "./notice";
+import { kl } from "../dashboard/dashboard.stylex";
+import {
+  Button,
+  Card,
+  Field,
+  FieldPair,
+  FormMessage,
+  FormPanel,
+  GoogleMark,
+  Notice,
+} from "@/components/dashboard/ui";
 
 const PASSWORD_MIN = 8;
 
@@ -57,53 +68,45 @@ function ChangePasswordForm() {
   }
 
   const field = (id: keyof typeof values, label: string, autoComplete: string): ReactNode => (
-    <div className="space-y-2">
-      <Label htmlFor={`account-${id}`}>{label}</Label>
-      <Input
-        id={`account-${id}`}
-        type="password"
-        value={values[id]}
-        onChange={set(id)}
-        autoComplete={autoComplete}
-        aria-invalid={errors[id] ? true : undefined}
-        aria-describedby={errors[id] ? `account-${id}-error` : undefined}
-      />
-      {errors[id] && (
-        <p id={`account-${id}-error`} role="alert" className="text-destructive text-sm">
-          {errors[id]}
-        </p>
-      )}
-    </div>
+    <Field
+      id={`account-${id}`}
+      label={label}
+      type="password"
+      value={values[id]}
+      onChange={set(id)}
+      autoComplete={autoComplete}
+      error={errors[id]}
+    />
   );
 
   return (
-    <form onSubmit={(e) => void submit(e)} className="space-y-4" noValidate>
-      <h3 className="font-medium">{t("changePassword")}</h3>
-      {field("currentPassword", t("currentPassword"), "current-password")}
-      {field("newPassword", t("newPassword"), "new-password")}
-      {field("confirmPassword", t("confirmPassword"), "new-password")}
-      <p className="text-muted-foreground text-sm">{t("otherSessionsNote")}</p>
-      {errors.form && (
-        <p role="alert" className="text-destructive text-sm">
-          {errors.form}
-        </p>
-      )}
-      {done && (
-        <p role="status" className="text-sm">
-          {t("passwordChanged")}
-        </p>
-      )}
-      <Button type="submit" disabled={pending}>
-        {pending ? t("changePasswordSaving") : t("changePasswordSubmit")}
-      </Button>
-    </form>
+    <FormPanel title={t("changePassword")} intro={t("otherSessionsNote")}>
+      <form onSubmit={(e) => void submit(e)} noValidate>
+        {field("currentPassword", t("currentPassword"), "current-password")}
+        <FieldPair>
+          {field("newPassword", t("newPassword"), "new-password")}
+          {field("confirmPassword", t("confirmPassword"), "new-password")}
+        </FieldPair>
+        {errors.form && <FormMessage tone="error">{errors.form}</FormMessage>}
+        {done && <FormMessage tone="ok">{t("passwordChanged")}</FormMessage>}
+        <Button type="submit" variant="pink" size="sm" disabled={pending}>
+          {pending ? t("changePasswordSaving") : t("changePasswordSubmit")}
+        </Button>
+      </form>
+    </FormPanel>
   );
+}
+
+function MethodIcon({ providerId }: { providerId: string }) {
+  if (providerId === "google") return <GoogleMark />;
+  if (providerId === "credential") return <Mail size={16} aria-hidden />;
+  return <KeyRound size={16} aria-hidden />;
 }
 
 export function SignInMethodsSection({
   googleControls,
 }: {
-  /** Connect / disconnect Google and "set a password": owned by NIW2-219, hidden until it ships. */
+  /** Connect / disconnect Google and "set a password" (NIW2-219). */
   googleControls?: ReactNode;
 }) {
   const t = useTranslations("account");
@@ -117,32 +120,75 @@ export function SignInMethodsSection({
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t("signInTitle")}</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {accounts.isPending && (
-          <p className="text-muted-foreground text-sm">{t("methodsLoading")}</p>
-        )}
-        {accounts.isError && <Notice tone="destructive" title={t("methodsFailed")} />}
-        {accounts.data && (
-          <ul className="space-y-2">
-            {accounts.data.map((account) => (
-              <li key={account.id} className="flex flex-wrap items-baseline justify-between gap-2">
-                <span className="font-medium">{label(account.providerId)}</span>
-                <span className="text-muted-foreground text-sm">
+    <Card title={t("signInTitle")}>
+      {accounts.isPending && <p {...stylex.props(s.muted)}>{t("methodsLoading")}</p>}
+      {accounts.isError && (
+        <Notice
+          tone="danger"
+          role="alert"
+          icon={<TriangleAlert size={18} />}
+          title={t("methodsFailed")}
+        />
+      )}
+      {accounts.data && (
+        <ul {...stylex.props(s.list)}>
+          {accounts.data.map((account) => (
+            <li key={account.id} {...stylex.props(s.method)}>
+              <span aria-hidden {...stylex.props(s.methodIcon)}>
+                <MethodIcon providerId={account.providerId} />
+              </span>
+              <div {...stylex.props(s.methodText)}>
+                <p {...stylex.props(s.methodTitle)}>{label(account.providerId)}</p>
+                <p {...stylex.props(s.methodSub)}>
                   {t("linkedOn", {
                     date: format.dateTime(new Date(account.createdAt), { dateStyle: "medium" }),
                   })}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-        {accounts.data && hasPassword(accounts.data) && <ChangePasswordForm />}
-        {googleControls}
-      </CardContent>
+                </p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {accounts.data && hasPassword(accounts.data) && <ChangePasswordForm />}
+      {googleControls}
     </Card>
   );
 }
+
+const s = stylex.create({
+  muted: { margin: 0, fontSize: "14px", color: kl.dim },
+  list: { margin: 0, padding: 0, listStyle: "none" },
+  method: {
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: "12px",
+    paddingBlock: "13px",
+    borderTopWidth: "1px",
+    borderTopStyle: "solid",
+    borderTopColor: kl.bd,
+  },
+  methodIcon: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+    width: "36px",
+    height: "36px",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: kl.bd,
+    borderRadius: "10px",
+    backgroundColor: kl.bg2,
+    color: kl.dim,
+  },
+  methodText: { flex: "1", minWidth: 0 },
+  methodTitle: { margin: 0, fontSize: "14.5px", fontWeight: 600, color: kl.tx },
+  methodSub: {
+    margin: 0,
+    marginTop: "3px",
+    fontFamily: kl.fontMono,
+    fontSize: "11.5px",
+    color: kl.faint,
+  },
+});

@@ -12,6 +12,8 @@ module.exports = {
       // like routeTree.gen.ts — and scanning the world is wasted work anyway.
       include: [
         "../../packages/ui/src/**/*.{ts,tsx}",
+        "src/components/dashboard/**/*.{ts,tsx}",
+        "src/components/account/**/*.{ts,tsx}",
         "../../packages/tokens/stylex/*.stylex.ts",
         "src/routes/dev/**/*.{ts,tsx}",
         "src/components/roadmap/**/*.{ts,tsx}",
