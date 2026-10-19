@@ -1,5 +1,5 @@
 import { db } from "@kaipu/infra-db/client";
-import { userTable, accountTable, sessionTable } from "@kaipu/infra-db/schemas";
+import { userTable, accountTable, sessionTable, verificationTable } from "@kaipu/infra-db/schemas";
 import type { BetterAuthOptions } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { bearer } from "better-auth/plugins";
@@ -9,7 +9,16 @@ export const baseConfig: BetterAuthOptions = {
   appName: "Kaipu Record",
   database: drizzleAdapter(db, {
     provider: "pg",
-    schema: { user: userTable, account: accountTable, session: sessionTable },
+    // Every model Better Auth writes must be listed. Since 1.7 the adapter checks this map
+    // against the tables it expects before every endpoint call, and a missing one fails all
+    // requests (SCHEMA_MISMATCH), not just the flows that use it. `verification` holds
+    // OAuth state and password-reset tokens.
+    schema: {
+      user: userTable,
+      account: accountTable,
+      session: sessionTable,
+      verification: verificationTable,
+    },
   }),
   session: {
     cookieCache: {
