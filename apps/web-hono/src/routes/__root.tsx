@@ -21,6 +21,7 @@ import type { MessageTree } from "@/lib/i18n/pick-messages";
 import { slicesForPath, type MessageSlice } from "@/lib/i18n/route-messages";
 import { getLocale } from "@/server-functions/get-locale";
 import { setLocale as setLocaleFn } from "@/server-functions/set-locale";
+import { getHasSessionCookie } from "@/server-functions/get-has-session-cookie";
 import { getLandingTheme } from "@/server-functions/get-landing-theme";
 import { readLandingThemeCookie, type LandingTheme } from "@/lib/landing-theme";
 
@@ -33,6 +34,22 @@ export interface RouterAppContext {
   messageSlices: MessageSlice[];
   /** The landing's own dark/light choice; unrelated to the app shell's theme. */
   landingTheme: LandingTheme;
+  /**
+   * A Better Auth session cookie is present (not that it is valid). Read only on the marketing
+   * pages, which show "Dashboard" or "Sign in" from it; `false` elsewhere.
+   */
+  hasSessionCookie: boolean;
+}
+
+/** The routes that render the public nav (HomeShell / PublicShell). */
+function isMarketingPath(pathname: string): boolean {
+  return (
+    pathname === "/" ||
+    pathname === "/features" ||
+    pathname === "/roadmap" ||
+    pathname === "/legal" ||
+    pathname.startsWith("/legal/")
+  );
 }
 
 export const Route = createRootRouteWithContext<RouterAppContext>()({
@@ -70,18 +87,24 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
   beforeLoad: async ({ location }: { location: { pathname: string } }) => {
     const slices = slicesForPath(location.pathname);
     // On the client a slice already in hand is not worth a round trip.
-    const [i18n, landingTheme] = await Promise.all([
+    const [i18n, landingTheme, hasSessionCookie] = await Promise.all([
       readCovering(slices) ?? getLocale({ data: { slices } }),
       // The cookie is not httpOnly, so the browser can read it without a call.
       typeof window === "undefined"
         ? getLandingTheme().then((r) => r.theme)
         : readLandingThemeCookie(),
+      // Presence of the httpOnly session cookie, no API call. Only the marketing nav uses it, so
+      // client-side navigation to other routes skips the round trip.
+      typeof window === "undefined" || isMarketingPath(location.pathname)
+        ? getHasSessionCookie()
+        : false,
     ]);
     return {
       locale: i18n.locale,
       messages: remember(i18n.locale, slices, i18n.messages),
       messageSlices: slices,
       landingTheme,
+      hasSessionCookie,
     };
   },
 });

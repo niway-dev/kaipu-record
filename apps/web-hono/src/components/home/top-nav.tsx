@@ -38,7 +38,11 @@ export function TopNav({ page = "home" }: { page?: MarketingPage }) {
   const locale = useLocale();
   const setLocale = useSetLocale();
   const router = useRouter();
-  const { landingTheme } = useRouteContext({ from: "__root__" });
+  const { landingTheme, hasSessionCookie } = useRouteContext({ from: "__root__" });
+  // Signed in (a session cookie is present): the way back into the app. Otherwise: the way in.
+  const account = hasSessionCookie
+    ? { href: "/dashboard", label: t("navDashboard"), className: styles.dashboard }
+    : { href: "/auth/login", label: t("navSignIn"), className: styles.signIn };
   const nextTheme = landingTheme === "dark" ? "light" : "dark";
   // Transparent over the hero; glass once content scrolls underneath it.
   const scrolled = useScrolled();
@@ -68,9 +72,14 @@ export function TopNav({ page = "home" }: { page?: MarketingPage }) {
           <a {...tab("roadmap")}>{tRoadmap("navLabel")}</a>
         </nav>
 
-        <button type="button" className={styles.menuBtn} aria-label={t("homeMenuOpen")}>
-          <Menu size={19} aria-hidden />
-        </button>
+        <div className={styles.mobileEnd}>
+          <a href={account.href} className={`${account.className} ${styles.accountMobile}`}>
+            {account.label}
+          </a>
+          <button type="button" className={styles.menuBtn} aria-label={t("homeMenuOpen")}>
+            <Menu size={19} aria-hidden />
+          </button>
+        </div>
 
         <div className={styles.right}>
           {/* The icon shows the theme you would GET, not the one you are in. */}
@@ -95,6 +104,9 @@ export function TopNav({ page = "home" }: { page?: MarketingPage }) {
               </button>
             ))}
           </div>
+          <a href={account.href} className={account.className}>
+            {account.label}
+          </a>
           <a href={downloadUrls.macArm64} className={styles.download}>
             <Apple size={16} aria-hidden />
             {t("navDownload")}

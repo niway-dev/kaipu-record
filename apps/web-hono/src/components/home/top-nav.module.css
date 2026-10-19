@@ -158,7 +158,53 @@
   filter: brightness(1.08);
 }
 
+.signIn {
+  padding: 10px 14px;
+  border-radius: 999px;
+  color: var(--kl-dim);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.signIn:hover {
+  color: var(--kl-tx);
+}
+
+/* Primary, like Download: it is the way back into the product for someone already signed in. */
+.dashboard {
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 22px;
+  border-radius: 999px;
+  background: var(--kl-pink);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: var(--kl-glow-btn);
+  transition: filter 0.2s ease;
+}
+
+.dashboard:hover {
+  filter: brightness(1.08);
+}
+
+/* Phone width: shown beside the menu button; hidden on desktop where .right carries it. */
+.mobileEnd {
+  display: none;
+  align-items: center;
+  gap: 8px;
+}
+
+.accountMobile {
+  padding: 8px 14px;
+}
+
 .round:focus-visible,
+.signIn:focus-visible,
+.dashboard:focus-visible,
 .localeOption:focus-visible,
 .download:focus-visible,
 .tab:focus-visible,
@@ -194,6 +240,10 @@
   .center,
   .right {
     display: none;
+  }
+
+  .mobileEnd {
+    display: flex;
   }
 
   .menuBtn {
