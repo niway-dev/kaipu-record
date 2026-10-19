@@ -414,7 +414,17 @@
     "verifiedError": "Este enlace de verificación no es válido o expiró.",
     "verifiedResend": "Enviar un nuevo correo de verificación",
     "verifiedResendSent": "Un nuevo correo de verificación va en camino.",
-    "account": "Cuenta"
+    "account": "Cuenta",
+    "continueWithGoogle": "Continuar con Google",
+    "googleRedirecting": "Redirigiendo a Google…",
+    "orDivider": "o",
+    "oauthErrorNotLinked": "Este correo ya tiene una cuenta de Kaipu y Google no lo ha verificado. Verifica tu correo con Google o inicia sesión con tu contraseña.",
+    "oauthErrorEmailMismatch": "Esa cuenta de Google usa otro correo.",
+    "oauthErrorAlreadyLinked": "Esa cuenta de Google ya está conectada a otra cuenta de Kaipu.",
+    "oauthErrorUnableToLink": "No pudimos conectar tu cuenta de Google. Inténtalo de nuevo.",
+    "oauthErrorCancelled": "Cancelaste el inicio de sesión con Google. Puedes intentarlo de nuevo o usar tu correo y contraseña.",
+    "oauthErrorExpired": "El inicio de sesión con Google se interrumpió o tardó demasiado. Inténtalo de nuevo.",
+    "oauthErrorGeneric": "El inicio de sesión con Google no funcionó. Inténtalo de nuevo o usa tu correo y contraseña."
   },
   "recordings": {
     "title": "Grabaciones",
@@ -1348,7 +1358,8 @@
           "body": "Puedes borrar o bloquear cookies y almacenamiento desde tu navegador y gestionar permisos de captura desde el sistema operativo. Borrar cookies puede cerrar tu sesión o restablecer preferencias, pero no elimina tu cuenta ni los archivos de Cloud. Para solicitudes de privacidad o eliminación, escribe al correo de contacto."
         }
       }
-    }
+    },
+    "googleSignupNotice": "Al continuar con Google, confirmas que tienes al menos 18 años y aceptas los <terms>Términos y condiciones</terms> y los <cloud>Términos de Cloud</cloud>. Conoce cómo tratamos tus datos en la <privacy>Política de privacidad</privacy>."
   },
   "emails": {
     "footer": "Kaipu — un producto de Niway",
@@ -1898,7 +1909,22 @@
     "restoring": "Restaurando…",
     "restored": "Tu cuenta fue restaurada",
     "restoreFailed": "No pudimos restaurar tu cuenta. Inicia sesión de nuevo e inténtalo otra vez.",
-    "cancel": "Cancelar"
+    "cancel": "Cancelar",
+    "googleConnect": "Conectar Google",
+    "googleConnecting": "Redirigiendo a Google…",
+    "googleDisconnect": "Desconectar Google",
+    "googleDisconnecting": "Desconectando…",
+    "googleDisconnected": "Google desconectado",
+    "googleDisconnectFailed": "No pudimos desconectar Google. Inténtalo de nuevo.",
+    "googleLastMethod": "Google es tu única forma de iniciar sesión. Crea una contraseña antes de desconectarlo.",
+    "googleNotFresh": "Por tu seguridad, vuelve a iniciar sesión para desconectar Google.",
+    "setPasswordTitle": "Crear una contraseña",
+    "setPasswordIntro": "Agrega una contraseña para iniciar sesión en la app de escritorio de Kaipu con tu correo.",
+    "setPasswordSubmit": "Guardar contraseña",
+    "setPasswordSaving": "Guardando…",
+    "setPasswordDone": "Contraseña guardada. Ya puedes iniciar sesión en la app de escritorio con tu correo y esta contraseña.",
+    "setPasswordExists": "Esta cuenta ya tiene una contraseña.",
+    "setPasswordFailed": "No pudimos guardar tu contraseña. Inténtalo de nuevo."
   },
   "dashboard": {
     "navLabel": "Secciones del panel",
@@ -1926,6 +1952,9 @@
     "settingsTitle": "Ajustes",
     "settingsDescription": "Tu plan y almacenamiento, tu idioma y tu cuenta.",
     "languageTitle": "Idioma",
-    "languageDescription": "El idioma que usa Kaipu en la web."
+    "languageDescription": "El idioma que usa Kaipu en la web.",
+    "credentialDroppedTitle": "Quitamos una contraseña antigua de tu cuenta",
+    "credentialDroppedDetail": "Por tu seguridad, quitamos la contraseña creada antes de que verificaras tu correo. Crea una nueva en Perfil para usar la app de escritorio.",
+    "credentialDroppedAction": "Crear una contraseña"
   }
 }

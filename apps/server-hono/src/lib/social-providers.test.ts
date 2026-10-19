@@ -32,7 +32,12 @@ describe("buildSocialProviders", () => {
 
   it("returns the google block with select_account when both are set", () => {
     expect(buildSocialProviders({ GOOGLE_CLIENT_ID: ID, GOOGLE_CLIENT_SECRET: SECRET })).toEqual({
-      google: { clientId: ID, clientSecret: SECRET, prompt: "select_account" },
+      google: {
+        clientId: ID,
+        clientSecret: SECRET,
+        prompt: "select_account",
+        disableIdTokenSignIn: true,
+      },
     });
   });
 });
