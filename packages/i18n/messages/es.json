@@ -1857,9 +1857,7 @@
     "emailLabel": "Correo",
     "emailVerified": "Verificado",
     "emailNotVerified": "Sin verificar",
-    "unverifiedNotice": "La nube está bloqueada hasta que verifiques tu correo. Grabar sigue funcionando en este dispositivo.",
     "resendVerification": "Reenviar correo de verificación",
-    "resendSent": "Correo de verificación enviado. Podrás pedir otro en unos 2 minutos.",
     "resendFailed": "No se pudo enviar el correo de verificación. Revisa tu conexión e inténtalo de nuevo.",
     "refresh": "Actualizar",
     "refreshFailed": "No pudimos actualizar tu cuenta. Inténtalo de nuevo.",
@@ -1933,7 +1931,15 @@
     "setPasswordSaving": "Guardando…",
     "setPasswordDone": "Contraseña guardada. Ya puedes iniciar sesión en la app de escritorio con tu correo y esta contraseña.",
     "setPasswordExists": "Esta cuenta ya tiene una contraseña.",
-    "setPasswordFailed": "No pudimos guardar tu contraseña. Inténtalo de nuevo."
+    "setPasswordFailed": "No pudimos guardar tu contraseña. Inténtalo de nuevo.",
+    "unverifiedTitle": "La nube está bloqueada hasta que verifiques tu correo",
+    "unverifiedDetail": "Grabar sigue funcionando en este dispositivo.",
+    "resendSentTitle": "Correo de verificación enviado",
+    "resendSentDetail": "Podrás pedir otro en unos 2 minutos.",
+    "inProgress": "En curso",
+    "pausedBadge": "Subidas en pausa",
+    "staleTitle": "Revisado {age}",
+    "staleBody": "Es la última cifra conocida, no una confirmada."
   },
   "dashboard": {
     "navLabel": "Secciones del panel",
@@ -1964,7 +1970,20 @@
     "languageDescription": "El idioma que usa Kaipu en la web.",
     "credentialDroppedTitle": "Quitamos una contraseña antigua de tu cuenta",
     "credentialDroppedDetail": "Por tu seguridad, quitamos la contraseña creada antes de que verificaras tu correo. Crea una nueva en Perfil para usar la app de escritorio.",
-    "credentialDroppedAction": "Crear una contraseña"
+    "credentialDroppedAction": "Crear una contraseña",
+    "navDevices": "Dispositivos",
+    "navBilling": "Facturación",
+    "navSoon": "Pronto",
+    "comingSoon": "Próximamente",
+    "signOut": "Cerrar sesión",
+    "themeToLight": "Cambiar a tema claro",
+    "themeToDark": "Cambiar a tema oscuro",
+    "welcomeSerif": "Qué bueno verte.",
+    "recentTitle": "Lo último en tu biblioteca",
+    "recentBody": "Tus últimos archivos en la nube aparecerán aquí cuando la biblioteca en la nube esté lista.",
+    "recordingsDescription": "Archivos que subiste desde la app de escritorio.",
+    "credentialDroppedDismiss": "Ocultar",
+    "retry": "Reintentar"
   },
   "desktopAuth": {
     "invalidTitle": "Abre el inicio de sesión desde la app de Kaipu",

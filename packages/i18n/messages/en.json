@@ -1857,9 +1857,7 @@
     "emailLabel": "Email",
     "emailVerified": "Verified",
     "emailNotVerified": "Not verified",
-    "unverifiedNotice": "Cloud is locked until you verify your email. Recording keeps working on this device.",
     "resendVerification": "Resend verification email",
-    "resendSent": "Verification email sent. You can ask for another one in about 2 minutes.",
     "resendFailed": "The verification email could not be sent. Check your connection and try again.",
     "refresh": "Refresh",
     "refreshFailed": "We couldn't refresh your account. Try again.",
@@ -1933,7 +1931,15 @@
     "setPasswordSaving": "Saving…",
     "setPasswordDone": "Password saved. You can now sign in on the desktop app with your email and this password.",
     "setPasswordExists": "This account already has a password.",
-    "setPasswordFailed": "We couldn't save your password. Try again."
+    "setPasswordFailed": "We couldn't save your password. Try again.",
+    "unverifiedTitle": "Cloud is locked until you verify your email",
+    "unverifiedDetail": "Recording keeps working on this device.",
+    "resendSentTitle": "Verification email sent",
+    "resendSentDetail": "You can ask for another one in about 2 minutes.",
+    "inProgress": "In progress",
+    "pausedBadge": "Uploads paused",
+    "staleTitle": "Last checked {age}",
+    "staleBody": "This is the last known figure, not a confirmed one."
   },
   "dashboard": {
     "navLabel": "Dashboard sections",
@@ -1964,7 +1970,20 @@
     "languageDescription": "The language Kaipu uses on the web.",
     "credentialDroppedTitle": "We removed an old password from your account",
     "credentialDroppedDetail": "For your security, we removed the password set before your email was verified. Set a new one in Profile to use the desktop app.",
-    "credentialDroppedAction": "Set a password"
+    "credentialDroppedAction": "Set a password",
+    "navDevices": "Devices",
+    "navBilling": "Billing",
+    "navSoon": "Soon",
+    "comingSoon": "Coming soon",
+    "signOut": "Sign out",
+    "themeToLight": "Switch to light theme",
+    "themeToDark": "Switch to dark theme",
+    "welcomeSerif": "Good to see you.",
+    "recentTitle": "Recent in your library",
+    "recentBody": "Your latest cloud files will show up here once the cloud library is ready.",
+    "recordingsDescription": "Files you uploaded from the desktop app.",
+    "credentialDroppedDismiss": "Dismiss",
+    "retry": "Retry"
   },
   "desktopAuth": {
     "invalidTitle": "Open sign-in from the Kaipu app",
