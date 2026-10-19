@@ -41,30 +41,28 @@ defensively in the repository.
 No ADR is created: each decision applies an invariant or a plan the docs already hold (cloud
 data model spec, cloud-01 plan Task 12), and none is cross-cutting or hard to reverse.
 
-**Open questions — decided by default, owner to confirm**
+**Open questions — resolved**
 
-The owner had not answered these when the branch was finished (2026-10-19). Each was settled with
-the spec's own recommendation, or the conservative option where it had none; the PR lists them
-under "Decisions taken by default".
+The owner approved the recommendations below on 2026-10-12 (recorded in Linear NIW2-323, "Owner
+decisions"). The bold text in each item is the decision.
 
 1. **Pending-slot lockout during the window.** A deferred cancel keeps the revision `reserved`,
    so it still counts toward `MAX_PENDING_UPLOADS_PER_ACCOUNT` (3) for up to 3 h 05 min
    (ticket TTL + grace). Three cancels in a row block a fourth upload until the sweep runs.
-   **Default: accepted for the first release.** Alternative: a `cancelled` revision status that
+   **Accepted for the first release.** Alternative: a `cancelled` revision status that
    holds bytes but not a pending slot (see F-1 alternatives), as a follow-up ticket.
    `RESERVATION_GRACE_SECONDS` is still marked "PROPOSAL — not approved" in `cloud-limits.ts`;
    approving a shorter grace shrinks this problem.
 2. **Ship order with NIW2-328.** Until the scheduled handler exists, a deferred cancel never
-   releases and a deferred delete keeps counting as used. **Default: merge 323, merge 328, then
-   one API release.** As of 2026-10-19 `main` has no `scheduled` export and no `triggers.crons`,
+   releases and a deferred delete keeps counting as used. **No production release before NIW2-328's cron: merge 323, merge 328, then one API release.** As of 2026-10-19 `main` has no `scheduled` export and no `triggers.crons`,
    and no NIW2-328 branch is pushed. Merging this branch first is safe: deferred rows wait, nothing
    is released early and no quota leaks; the cost is held bytes and slots (question 1), which only
    affects a client that cancels or deletes within minutes of an upload. No shipped client does
    that today: the desktop app only lists assets (`catalog-client.ts`).
-3. **Orphan sweep ownership and legacy keys.** **Default: `sweepOrphanObjects` lives here and
+3. **Orphan sweep ownership and legacy keys.** **`sweepOrphanObjects` lives here and
    NIW2-328 schedules it; legacy `recording` keys (`videos/<userId>/<id>.<ext>`) are skipped by
    shape until Task 12 drops that table.**
-4. **Legacy read/delete routes.** **Default: keep them until Task 12.** The web dashboard
+4. **Legacy read/delete routes.** **Removed at cloud-01 Task 12, not here.** The web dashboard
    (`routes/_authenticated/dashboard/recordings.tsx` via `hooks/use-recordings.ts`) still calls
    `recording.list`, `recording.downloadUrl` and `recording.delete`; the old `/recordings` path now
    redirects there.
@@ -417,7 +415,7 @@ merge had no conflicts. `CI=true bun run verify` exits 0 on the finished branch.
 - Task 7: `apps/server-hono/src/contract/upload-abuse.contract.test.ts` mounts the real contracts
   behind stub handlers in an `OpenAPIHandler`: `POST /recordings` and `POST /recordings/{id}/confirm`
   are 404, a bad cursor is 400 before any handler runs, a well-formed one is 200.
-- Task 8: open questions settled by default (above); the owner confirms in the PR.
+- Task 8: open questions resolved by the owner on 2026-10-12 (above).
 
 **Not done here**
 
