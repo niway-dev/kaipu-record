@@ -7,12 +7,20 @@ import { SignupLegalNotice } from "@/components/legal/signup-legal-notice";
 import CloudPromotion from "@/components/cloud-promotion";
 import { GoogleButton } from "@/components/google-button";
 import { authClient } from "@/lib/auth/auth-client";
+import { desktopDonePath, type DesktopAuthQuery } from "@/lib/desktop-auth";
 import { resolvePostSignInPath } from "@/lib/post-sign-in";
 
 import { Button, Input, Label } from "@kaipu/web-ui";
 import { useTranslations } from "@kaipu/i18n";
 
-export default function SignUpForm({ redirectTo }: { redirectTo?: string }) {
+/** `desktop`: see SignInForm. A new account lands in the app the same way a sign-in does. */
+export default function SignUpForm({
+  redirectTo,
+  desktop,
+}: {
+  redirectTo?: string;
+  desktop?: DesktopAuthQuery;
+}) {
   const router = useRouter();
   const t = useTranslations("auth");
 
@@ -30,9 +38,12 @@ export default function SignUpForm({ redirectTo }: { redirectTo?: string }) {
           name: value.name,
         },
         {
+          query: desktop ? { ...desktop } : undefined,
           onSuccess: async () => {
             await router.invalidate();
-            router.history.push(resolvePostSignInPath({ redirect: redirectTo }));
+            router.history.push(
+              desktop ? desktopDonePath(desktop) : resolvePostSignInPath({ redirect: redirectTo }),
+            );
             toast.success(t("signUpSuccess"));
           },
           onError: (error) => {
@@ -56,7 +67,7 @@ export default function SignUpForm({ redirectTo }: { redirectTo?: string }) {
 
       <CloudPromotion />
 
-      <GoogleButton mode="sign-up" redirectTo={redirectTo} />
+      <GoogleButton mode="sign-up" redirectTo={redirectTo} desktop={desktop} />
 
       <form
         onSubmit={(e) => {

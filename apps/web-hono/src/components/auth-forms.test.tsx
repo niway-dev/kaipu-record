@@ -90,3 +90,36 @@ describe("SignUpForm", () => {
     expect(mocks.push).toHaveBeenCalledWith("/dashboard");
   });
 });
+
+describe("desktop sign-in (NIW2-471)", () => {
+  const desktop = {
+    client_id: "kaipu-desktop",
+    state: "Ab12Cd34Ef56Gh78",
+    code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+  };
+  const done = `/auth/desktop/done?client_id=kaipu-desktop&state=Ab12Cd34Ef56Gh78&code_challenge=${desktop.code_challenge}`;
+
+  it("sends the app's query with the sign-in and lands on the done page, not the redirect", async () => {
+    renderWithProviders(<SignInForm desktop={desktop} redirectTo="/dashboard/settings" />);
+    fill("Email", "ada@example.com");
+    fill("Password", "correct horse battery");
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith(done));
+    expect(mocks.signInEmail.mock.calls[0]![1]).toMatchObject({ query: desktop });
+  });
+
+  it("sends the app's query with the sign-up and lands on the done page", async () => {
+    renderWithProviders(<SignUpForm desktop={desktop} />);
+    fill("Name", "Ada Lovelace");
+    fill("Email", "ada@example.com");
+    fill("Password", "correct horse battery");
+    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith(done));
+    expect(mocks.signUpEmail.mock.calls[0]![1]).toMatchObject({ query: desktop });
+  });
+
+  it("sends no query on a regular sign-in", async () => {
+    await signIn();
+    expect(mocks.signInEmail.mock.calls[0]![1].query).toBeUndefined();
+  });
+});

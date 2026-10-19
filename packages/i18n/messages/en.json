@@ -1956,5 +1956,30 @@
     "credentialDroppedTitle": "We removed an old password from your account",
     "credentialDroppedDetail": "For your security, we removed the password set before your email was verified. Set a new one in Profile to use the desktop app.",
     "credentialDroppedAction": "Set a password"
+  },
+  "desktopAuth": {
+    "invalidTitle": "Open sign-in from the Kaipu app",
+    "invalidBody": "This page only works when the Kaipu app opens it. Go back to the app and choose Sign in.",
+    "signInTitle": "Sign in to the Kaipu app",
+    "signInBody": "Sign in here and we'll take you back to Kaipu on this computer.",
+    "confirmTitle": "Sign in to Kaipu on this computer?",
+    "confirmBody": "You're signed in as {account}.",
+    "continue": "Continue",
+    "continuing": "Connecting…",
+    "switchAccount": "Switch account",
+    "transferFailed": "Couldn't connect the app. Try again, or start over from the Kaipu app.",
+    "returningTitle": "Returning to Kaipu…",
+    "returningBody": "Your browser may ask whether to open Kaipu. Allow it to finish signing in.",
+    "fallbackTitle": "Kaipu didn't open?",
+    "fallbackBody": "Open it again, or copy the code and paste it in the app.",
+    "openAgain": "Open Kaipu again",
+    "copyCode": "Copy code",
+    "codeLabel": "Sign-in code",
+    "codeNote": "It works once and expires 5 minutes after you signed in. If pasting it fails, start again from the Kaipu app.",
+    "copied": "Code copied. Paste it in the Kaipu app.",
+    "copyFailed": "Couldn't copy. Select the code and copy it yourself.",
+    "noCodeTitle": "No sign-in code here",
+    "noCodeBody": "The code may have expired or been used already. Start again from the Kaipu app.",
+    "closeTab": "Once Kaipu is signed in, you can close this tab."
   }
 }

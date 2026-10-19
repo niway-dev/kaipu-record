@@ -13,6 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@better-auth/electron": "catalog:",
     "@kaipu/application": "workspace:*",
     "@kaipu/domain": "workspace:*",
     "@kaipu/infra-auth": "workspace:*",

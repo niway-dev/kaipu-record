@@ -31,6 +31,15 @@ describe("slicesForPath", () => {
     expect(slicesForPath("/auth/login")).toContain("auth");
   });
 
+  it("gives the desktop sign-in pages their copy and the sign-in form, and no one else", () => {
+    for (const path of ["/auth/desktop", "/auth/desktop/done"]) {
+      expect(slicesForPath(path)).toContain("desktopAuth");
+      expect(slicesForPath(path)).toContain("auth");
+    }
+    expect(slicesForPath("/auth/login")).not.toContain("desktopAuth");
+    expect(slicesForPath("/auth/desktopish")).not.toContain("desktopAuth");
+  });
+
   it("gives every dashboard page its navigation copy and the app chrome", () => {
     for (const path of [
       "/dashboard",

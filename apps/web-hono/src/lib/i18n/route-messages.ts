@@ -32,6 +32,8 @@ const ROUTE_SLICES: ReadonlyArray<{
   { path: "/features", slices: [...MARKETING_CHROME, "features"] },
   { path: "/roadmap", slices: MARKETING_CHROME },
   { path: "/legal", slices: [...MARKETING_CHROME, "legal"] },
+  // Desktop sign-in through the browser (NIW2-471): the sign-in form plus its own copy.
+  { path: "/auth/desktop", slices: [...APP_CHROME, "desktopAuth"] },
   { path: "/auth", slices: APP_CHROME },
   // `/account` and `/recordings` only redirect into `/dashboard/*`, so they need no copy.
   {
