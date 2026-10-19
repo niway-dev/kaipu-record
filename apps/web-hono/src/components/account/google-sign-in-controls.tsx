@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "@kaipu/i18n";
 import { Button, Input, Label } from "@kaipu/web-ui";
-import { GoogleMark } from "@/components/google-button";
+import { GoogleMark } from "@/components/auth/google-button";
 import { hasPassword, linkedAccountsKey, useLinkedAccounts } from "@/hooks/use-linked-accounts";
 import { authClient } from "@/lib/auth/auth-client";
 import { googleStartErrorKey } from "@/lib/google-auth";

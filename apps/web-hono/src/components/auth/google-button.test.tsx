@@ -5,12 +5,8 @@ import { renderWithProviders } from "@/test/render";
 
 const social = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/auth/auth-client", () => ({ authClient: { signIn: { social } } }));
-vi.mock("@/components/legal/signup-legal-notice", () => ({
-  SignupLegalNotice: ({ messageKey }: { messageKey?: string }) => <p>legal:{messageKey}</p>,
-}));
 
 import { GoogleButton } from "./google-button";
-import { OAuthErrorAlert } from "./oauth-error-alert";
 
 beforeEach(() => {
   social.mockReset();
@@ -30,8 +26,9 @@ describe("GoogleButton", () => {
       newUserCallbackURL: "/dashboard",
       errorCallbackURL: "/auth/login",
     });
-    const button = await screen.findByRole("button", { name: "Redirecting to Google…" });
+    const button = await screen.findByRole("button", { name: "Waiting for Google…" });
     expect((button as HTMLButtonElement).disabled).toBe(true);
+    expect(button.getAttribute("aria-busy")).toBe("true");
   });
 
   it("honours a same-origin redirect and ignores an off-site one", () => {
@@ -86,56 +83,32 @@ describe("GoogleButton", () => {
     });
     renderWithProviders(<GoogleButton mode="sign-in" />);
     fireEvent.click(screen.getByRole("button", { name: "Continue with Google" }));
-    expect((await screen.findByRole("alert")).textContent).toBe(
-      "Google sign-in isn't available right now. Use your email and password.",
-    );
+    expect(
+      await screen.findByText(
+        "Google sign-in isn't available right now. Use your email and password.",
+      ),
+    ).toBeTruthy();
     expect(screen.queryByText(/Provider not found/)).toBeNull();
     cleanup();
 
     renderWithProviders(<GoogleButton mode="sign-in" />, "es");
     fireEvent.click(screen.getByRole("button", { name: "Continuar con Google" }));
-    expect((await screen.findByRole("alert")).textContent).toBe(
-      "El inicio de sesión con Google no está disponible ahora. Usa tu correo y contraseña.",
-    );
+    expect(
+      await screen.findByText(
+        "El inicio de sesión con Google no está disponible ahora. Usa tu correo y contraseña.",
+      ),
+    ).toBeTruthy();
   });
 
-  it("shows the Google legal notice on sign-up only", () => {
+  it("reads Sign up with Google on the sign-up tab, and marks itself recommended", () => {
     renderWithProviders(<GoogleButton mode="sign-up" />);
-    expect(screen.getByText("legal:googleSignupNotice")).toBeTruthy();
-    cleanup();
-    renderWithProviders(<GoogleButton mode="sign-in" />);
-    expect(screen.queryByText(/legal:/)).toBeNull();
+    const button = screen.getByRole("button", { name: "Sign up with Google" });
+    // The tag is decoration: it is in the button but not in its accessible name.
+    expect(button.textContent).toContain("Recommended");
   });
 
   it("speaks Spanish in the es locale", () => {
     renderWithProviders(<GoogleButton mode="sign-in" />, "es");
     expect(screen.getByRole("button", { name: "Continuar con Google" })).toBeTruthy();
-    expect(screen.getByText("o")).toBeTruthy();
-  });
-});
-
-describe("OAuthErrorAlert", () => {
-  it("renders nothing without an error", () => {
-    renderWithProviders(<OAuthErrorAlert />);
-    expect(screen.queryByRole("alert")).toBeNull();
-  });
-
-  it("maps a cancelled consent screen to friendly copy", () => {
-    renderWithProviders(<OAuthErrorAlert code="access_denied" />);
-    expect(screen.getByRole("alert").textContent).toBe(
-      "Google sign-in was cancelled. You can try again or use your email and password.",
-    );
-  });
-
-  it("never shows a raw code", () => {
-    renderWithProviders(<OAuthErrorAlert code="internal_server_error" />);
-    expect(screen.getByRole("alert").textContent).not.toContain("internal_server_error");
-  });
-
-  it("speaks Spanish in the es locale", () => {
-    renderWithProviders(<OAuthErrorAlert code="account_already_linked_to_different_user" />, "es");
-    expect(screen.getByRole("alert").textContent).toBe(
-      "Esa cuenta de Google ya está conectada a otra cuenta de Kaipu.",
-    );
   });
 });

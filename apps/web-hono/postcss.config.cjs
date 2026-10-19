@@ -15,6 +15,8 @@ module.exports = {
         "../../packages/tokens/stylex/*.stylex.ts",
         "src/routes/dev/**/*.{ts,tsx}",
         "src/components/roadmap/**/*.{ts,tsx}",
+        "src/components/auth/**/*.{ts,tsx}",
+        "src/components/desktop-auth/**/*.{ts,tsx}",
       ],
     },
   },
