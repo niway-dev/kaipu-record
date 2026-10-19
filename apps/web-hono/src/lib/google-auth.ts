@@ -21,12 +21,14 @@ export type OAuthErrorKey =
   | "oauthErrorGeneric";
 
 /**
- * Better Auth 1.4.18 redirects to the error URL with `?error=<code>` (api/routes/callback.mjs,
- * oauth2/state.mjs). Known codes get specific copy; anything else gets the generic message, so
+ * Better Auth 1.7.11 redirects to the error URL with `?error=<code>` (api/routes/callback.mjs,
+ * oauth2/errors.mjs, oauth2/state.mjs). Known codes get specific copy; anything else gets the generic message, so
  * a raw code is never shown. Keys live in the `auth` namespace.
  */
 const CODES: Record<string, OAuthErrorKey> = {
   account_not_linked: "oauthErrorNotLinked",
+  email_does_not_match: "oauthErrorEmailMismatch",
+  // The 1.4 spelling, kept so an old link or bookmark still gets the right copy.
   "email_doesn't_match": "oauthErrorEmailMismatch",
   account_already_linked_to_different_user: "oauthErrorAlreadyLinked",
   unable_to_link_account: "oauthErrorUnableToLink",
@@ -35,6 +37,8 @@ const CODES: Record<string, OAuthErrorKey> = {
   no_code: "oauthErrorExpired",
   state_mismatch: "oauthErrorExpired",
   state_not_found: "oauthErrorExpired",
+  state_invalid: "oauthErrorExpired",
+  state_security_mismatch: "oauthErrorExpired",
   please_restart_the_process: "oauthErrorExpired",
 };
 

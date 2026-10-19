@@ -98,7 +98,8 @@ export function GoogleSignInControls({
   const [message, setMessage] = useState<{ tone: "status" | "alert"; text: string } | null>(null);
 
   if (!accounts.data) return null;
-  const hasGoogle = accounts.data.some((a) => a.providerId === "google");
+  const googleAccount = accounts.data.find((a) => a.providerId === "google");
+  const hasGoogle = googleAccount !== undefined;
   const withPassword = hasPassword(accounts.data);
   const refresh = () => queryClient.invalidateQueries({ queryKey: linkedAccountsKey() });
 
@@ -119,13 +120,17 @@ export function GoogleSignInControls({
   }
 
   async function disconnect() {
+    if (!googleAccount) return;
     setBusy("disconnect");
     setMessage(null);
-    const result = await authClient.unlinkAccount({ providerId: "google" });
+    // Better Auth 1.7 selects the row by its own account id (from listAccounts), not provider.
+    const result = await authClient.unlinkAccount({ accountId: googleAccount.id });
     setBusy(null);
     if (result.error) {
+      // FAILED_TO_UNLINK_LAST_ACCOUNT: the server's FR9 refusal. 403 is SESSION_NOT_FRESH:
+      // unlinking needs a session younger than `freshAge` (one day, from sign-in).
       const text =
-        result.error.code === "YOU_CANT_UNLINK_YOUR_LAST_ACCOUNT"
+        result.error.code === "FAILED_TO_UNLINK_LAST_ACCOUNT"
           ? t("googleLastMethod")
           : result.error.status === 403
             ? t("googleNotFresh")

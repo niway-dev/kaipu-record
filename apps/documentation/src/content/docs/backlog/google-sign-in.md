@@ -45,17 +45,25 @@ before you verified it loses that access when you sign in with Google.
   function; the Better Auth `databaseHooks.account.create` hooks only load data and apply its
   answer. The destructive part runs in `create.before`, so a failure aborts the link instead of
   leaving a linked account with the old password intact (there are no DB transactions here).
+- Better Auth 1.7 refuses an implicit link to an unverified local account by default. Kaipu
+  sets `accountLinking.requireLocalEmailVerified: false` so the approved behaviour (link, drop
+  the unverified password and old sessions) still applies; the `create.before` guard is what
+  makes that safe. The guard aborts with a plain `Error`, which Better Auth answers with
+  `?error=unable_to_link_account` (an `APIError` would surface as a bare 403).
 - The hook tells a manual link from a sign-in by the OAuth state Better Auth keeps for the request
   (`getOAuthState().link`), not by path alone.
 - Google's id-token sign-in paths are disabled (`disableIdTokenSignIn`); only the redirect flow exists.
 - `authMiddleware` reads sessions without the 10-minute cookie cache, so a revoked session stops
   working on `/api/v1` at once.
 - Google's access and refresh tokens are stored encrypted (`encryptOAuthTokens`).
+- Disconnecting Google sends Better Auth's own account id (`unlinkAccount({ accountId })`). It
+  needs a fresh session (signed in within a day); otherwise the page asks the user to sign in
+  again.
 - `account` has a unique index on `(provider_id, account_id)`; apply it with `bun run db:push`.
 
 ## Testing
 
-`account-linking.flow.test.ts` drives a real Better Auth 1.4.18 instance on the in-memory adapter
+`account-linking.flow.test.ts` drives a real Better Auth 1.7.11 instance on the in-memory adapter
 with a fake Google token endpoint, so it pins Better Auth's internal ordering. A Better Auth
 upgrade that changes it fails there.
 

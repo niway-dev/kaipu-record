@@ -1,30 +1,47 @@
 /**
  * Account linking rules for "Continue with Google" (NIW2-219).
  *
- * Better Auth 1.4.18 links a Google sign-in to an existing user with the same email whenever
- * Google says the email is verified. That is right for a verified email+password account, and
- * wrong for an UNVERIFIED one: whoever registered the address first (possibly an attacker who
- * never owned the inbox) would keep their password and sessions after the real owner signs in
- * with Google. This module closes that "pre-hijack" hole.
+ * The approved behaviour (FR6): an implicit Google sign-in on an existing user with the same,
+ * Google-verified email links to that user even when the local email+password account is
+ * UNVERIFIED, and in that case drops the password and every earlier session. Whoever registered
+ * the address first (possibly an attacker who never owned the inbox) must not keep a password or
+ * sessions after the real owner signs in with Google. This module is that "pre-hijack" guard.
  *
- * Verified against node_modules/better-auth/dist (1.4.18):
- * - oauth2/link-account.mjs: the implicit link runs `linkAccount` (account create hooks), THEN
- *   `updateUser({ emailVerified: true })`, THEN `createSession`. So inside the account create
- *   hooks the user is still unverified and the new session does not exist yet.
- * - db/with-hooks.mjs: `create.before` runs before the row is written; a throw aborts the
- *   write. `link-account.mjs` wraps `linkAccount` in try/catch and answers
- *   `error=unable_to_link_account`, so the sign-in fails closed.
+ * Verified against node_modules/better-auth/dist (1.7.11):
+ * - oauth2/link-account.mjs (`handleOAuthUserInfo`): the implicit link runs `linkAccount`
+ *   (account create hooks), THEN `updateUser({ emailVerified: true })`, THEN `createSession`. So
+ *   inside the account create hooks the user is still unverified and the new session does not
+ *   exist yet. Since 1.7 Better Auth refuses that link itself unless
+ *   `accountLinking.requireLocalEmailVerified` is false (see `accountOptions`).
+ * - db/with-hooks.mjs: `create.before` runs before the row is written; a throw aborts the write.
+ *   `handleOAuthUserInfo` catches a plain Error and answers `error=unable_to_link_account`, so
+ *   the sign-in fails closed. It RETHROWS an `APIError`, which the callback then turns into
+ *   `?error=<body.code>` or, without a code, a bare 403 — so the hook throws plain Errors.
+ * - `create.after` is queued with `queueAfterTransactionHook`: outside a transaction (both link
+ *   paths) it runs right after the row is written, as before 1.5.
  * - The drizzle adapter runs with `transaction: false` (adapter default; neon-http has no
  *   transactions anyway), so nothing here can rely on a rollback. That is why the destructive
  *   work happens in `before`: if anything fails, the Google row is never written and the user
  *   is never left "linked + unverified + attacker password intact".
- * - api/routes/callback.mjs + oauth2/state.mjs: the callback stores the parsed OAuth state with
- *   `setOAuthState`; `getOAuthState()` returns it, and its `link` field is present only when a
+ * - api/routes/callback.mjs + oauth2/state.mjs: the callback stores the parsed OAuth state;
+ *   `getOAuthState()` (better-auth/api) returns it, and its `link` field is present only when a
  *   signed-in user started `linkSocial`. That is how the hook tells a manual link apart.
  */
-import { APIError, getOAuthState } from "better-auth/api";
+import { getOAuthState } from "better-auth/api";
 import type { BetterAuthOptions } from "better-auth";
 import { logEvent } from "./events";
+
+/**
+ * Thrown from the account create hooks to abort a link. A plain Error on purpose: Better Auth
+ * 1.7 answers it with `?error=unable_to_link_account`, while an `APIError` would escape the
+ * OAuth callback as a bare 403 instead of the redirect the web pages expect.
+ */
+export class LinkRefusedError extends Error {
+  constructor() {
+    super("unable to link account");
+    this.name = "LinkRefusedError";
+  }
+}
 
 export type LinkFlow = "implicit" | "manual-link";
 
@@ -41,7 +58,7 @@ export interface LinkDecisionInput {
 
 export type LinkDecision =
   | { kind: "none" }
-  /** Abort the link: the hook throws and Better Auth answers `unable_to_link_account`. */
+  /** Abort the link: the hook throws LinkRefusedError; Better Auth answers `unable_to_link_account`. */
   | { kind: "refuse"; reason: "google-email-not-verified" | "google-email-mismatch" }
   /** FR6: delete the unverified password, revoke every earlier session, then let the link go on. */
   | { kind: "drop-unverified-credential"; credentialAccountIds: string[] }
@@ -155,7 +172,7 @@ async function decide(
 ): Promise<{ decision: LinkDecision; userId: string }> {
   const adapter = ctx.context.internalAdapter;
   const user = await adapter.findUserById(account.userId);
-  if (!user) throw new APIError("BAD_REQUEST", { message: "unable to link account" });
+  if (!user) throw new LinkRefusedError();
   const accounts = await adapter.findAccounts(account.userId);
   const decision = decideLinkSideEffects({
     providerId: account.providerId,
@@ -178,12 +195,12 @@ export const accountLinkingHooks = {
       before: async (account: AccountRow, ctx: HookContext) => {
         if (account.providerId !== "google") return;
         // Every Google account is created inside an auth endpoint; without one we cannot check.
-        if (!ctx) throw new APIError("BAD_REQUEST", { message: "unable to link account" });
+        if (!ctx) throw new LinkRefusedError();
 
         const { decision, userId } = await decide(ctx, account);
         if (decision.kind === "refuse") {
           console.warn("google link refused", { userId, reason: decision.reason });
-          throw new APIError("FORBIDDEN", { message: "unable to link account" });
+          throw new LinkRefusedError();
         }
         if (decision.kind !== "drop-unverified-credential") return;
 
@@ -191,7 +208,8 @@ export const accountLinkingHooks = {
         for (const id of decision.credentialAccountIds) await adapter.deleteAccount(id);
         // Every session of this user is from before this sign-in: the new one is created only
         // after linkAccount returns (link-account.mjs). Desktop bearer sessions are DB rows too.
-        await adapter.deleteSessions(userId);
+        // `deleteUserSessions(userId)` since 1.7; `deleteSessions` now takes session tokens.
+        await adapter.deleteUserSessions(userId);
         await adapter.createVerificationValue({
           identifier: credentialDroppedNoticeId(userId),
           value: "1",
@@ -226,6 +244,12 @@ export const accountOptions = {
     // Only reachable through linkSocial (a signed-in user); implicit linking always matches
     // by email. Google stays OUT of trustedProviders (Q1): its email_verified claim is required.
     allowDifferentEmails: true,
+    // FR6 (approved): an implicit Google sign-in may join an UNVERIFIED email+password user.
+    // Better Auth 1.7 refuses that by default (`account_not_linked`, oauth2/link-account.mjs).
+    // We turn the refusal off because `accountLinkingHooks.account.create.before` makes the link
+    // safe: it requires Google's verified, matching email and then deletes the unverified
+    // password and every earlier session before the Google row is written.
+    requireLocalEmailVerified: false,
   },
   // Kaipu never calls Google APIs; encrypt the stored access/refresh tokens at rest anyway.
   encryptOAuthTokens: true,

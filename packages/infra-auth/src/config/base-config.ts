@@ -9,9 +9,11 @@ export const baseConfig: BetterAuthOptions = {
   appName: "Kaipu Record",
   database: drizzleAdapter(db, {
     provider: "pg",
-    // `verification` holds OAuth state (storeStateStrategy defaults to "database" when a database
-    // is configured), password-reset tokens and one-time notices. Without it in this map the
-    // drizzle adapter throws 'model "verification" was not found' on those paths.
+    // Every model Better Auth writes must be listed. Since 1.7 the adapter checks this map
+    // against the tables it expects before every endpoint call, and a missing one fails all
+    // requests (SCHEMA_MISMATCH), not just the flows that use it. `verification` holds OAuth
+    // state (storeStateStrategy defaults to "database" when a database is configured),
+    // password-reset tokens and one-time notices.
     schema: {
       user: userTable,
       account: accountTable,
