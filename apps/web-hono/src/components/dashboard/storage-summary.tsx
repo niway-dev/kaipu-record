@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useLocale, useTranslations } from "@kaipu/i18n";
 import { barSegments, isAlmostFull, isOverQuota, type CapacityView } from "@kaipu/domain/capacity";
+import { PLANS } from "@kaipu/domain/constants";
 import type { Entitlements } from "@kaipu/domain/schemas";
 import { Button, Card, CardAction, CardContent, CardHeader, CardTitle } from "@kaipu/web-ui";
 import { StorageView } from "@/components/account/storage-section";
@@ -50,7 +51,7 @@ export function StorageSummaryView({ view, plan, refreshing, onRefresh }: Storag
   const used = bytes(usage.usedBytes);
   const reserved = bytes(usage.reservedBytes);
   const segments = barSegments(usage);
-  const planName = plan?.plan === "pro" ? ts("planPro") : ts("planFree");
+  const planName = ts(PLANS[plan?.plan ?? "free"].nameKey);
 
   return (
     <div className="space-y-3">

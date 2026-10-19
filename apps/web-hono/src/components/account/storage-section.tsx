@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { useFormatter, useLocale, useTranslations, type Translator } from "@kaipu/i18n";
 import { barSegments, isAlmostFull, isOverQuota, type CapacityView } from "@kaipu/domain/capacity";
-import { MAX_VIDEO_BYTES } from "@kaipu/domain/constants";
+import { MAX_VIDEO_BYTES, PLANS } from "@kaipu/domain/constants";
 import type { Entitlements } from "@kaipu/domain/schemas";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@kaipu/web-ui";
 import { useAccountStorage } from "@/hooks/use-account-storage";
@@ -95,7 +95,7 @@ export function StorageView({
       const capacity = bytes(usage.capacityBytes);
       const used = bytes(usage.usedBytes);
       const reserved = bytes(usage.reservedBytes);
-      const planName = plan?.plan === "pro" ? ts("planPro") : ts("planFree");
+      const planName = ts(PLANS[plan?.plan ?? "free"].nameKey);
       return (
         <div className="space-y-4" data-stale={view.staleSince !== null || undefined}>
           {plan && (

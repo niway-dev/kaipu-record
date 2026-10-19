@@ -39,6 +39,16 @@ product shows and the server enforces.
 - A lapsed, canceled or `past_due` Pro subscription falls back to Free capacity; the plan
   name is still reported so the UI can explain it.
 
+## Existing accounts
+
+The plan table applies to every account the moment the server deploys it. There is no
+grandfathering: a verified Free account created when the server granted 1 GB drops to
+250 MB, and a manual Pro grant drops from 25 GB to 15 GB. The
+[cloud trial and approval spec](/specs/2026-09-15-cloud-trial-and-approval/) asked to keep
+existing accounts' capacity until a transition is defined; that conflict is open until the
+owner confirms the reduction or asks for a grandfather rule. Accounts that end up over the new
+limit follow the next section.
+
 ## When an account is over its capacity
 
 An account can hold more than its plan allows — for example a Free account that uploaded
@@ -60,6 +70,7 @@ under the old 1 GB rule, or a Pro grant that lapsed. Then:
 | Plan → entitlements rule (`deriveEntitlements`)                           | `packages/domain/src/schemas/subscription.ts`                                                 |
 | API (`GET /me/entitlements`, `GET /me/storage`)                           | `apps/server-hono/src/modules/me/me.router.ts`                                                |
 | Copy values (`{freeCapacity}`, `{proCapacity}`, `{expansionCapacity}`, …) | `planCopyValues()` in `plans.ts`, passed to `t(...)` by the desktop and web                   |
+| Plan display name (`PLANS[plan].nameKey`)                                 | Desktop Cloud card; web dashboard storage summary, first-visit welcome and account storage    |
 | Desktop offline fallback (`FREE_ENTITLEMENTS`, a literal for the preload) | `apps/kaipu-record/src/shared/entitlements.ts`, pinned to `PLANS.free` by its test            |
 | Legal text (Cloud terms, rendered verbatim)                               | `packages/i18n/messages/*.json` → `legal.cloud`, pinned to the plan table by `plan-copy.test` |
 
