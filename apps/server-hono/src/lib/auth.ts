@@ -5,6 +5,7 @@ import { customSession } from "better-auth/plugins";
 import { env } from "../env";
 import { desktopAuthPlugin, DESKTOP_TRUSTED_ORIGINS } from "./desktop-auth";
 import { buildResetUrl, buildVerifyUrl, tryGetEmail, webUrl } from "./email";
+import { accountLinkingHooks, accountOptions } from "./account-linking";
 import { getSocialProviders } from "./social-providers";
 
 /** Best-effort locale from Accept-Language; English is the documented fallback. */
@@ -33,6 +34,9 @@ export const auth = betterAuth({
   // cookie) lives on. See .env.example.
   baseURL: env.BETTER_AUTH_URL,
   socialProviders: getSocialProviders(env),
+  // Linking rules for Google sign-in (NIW2-219): who gets linked, and the pre-hijack guard.
+  account: accountOptions,
+  databaseHooks: accountLinkingHooks,
   trustedOrigins: [...env.CORS_ORIGIN, ...DESKTOP_TRUSTED_ORIGINS],
   emailAndPassword: {
     ...baseConfig.emailAndPassword,

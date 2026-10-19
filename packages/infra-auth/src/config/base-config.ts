@@ -11,8 +11,9 @@ export const baseConfig: BetterAuthOptions = {
     provider: "pg",
     // Every model Better Auth writes must be listed. Since 1.7 the adapter checks this map
     // against the tables it expects before every endpoint call, and a missing one fails all
-    // requests (SCHEMA_MISMATCH), not just the flows that use it. `verification` holds
-    // OAuth state and password-reset tokens.
+    // requests (SCHEMA_MISMATCH), not just the flows that use it. `verification` holds OAuth
+    // state (storeStateStrategy defaults to "database" when a database is configured),
+    // password-reset tokens and one-time notices.
     schema: {
       user: userTable,
       account: accountTable,
