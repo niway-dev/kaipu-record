@@ -99,6 +99,12 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           CORS_ORIGIN: ${{ vars.CORS_ORIGIN }}
           BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
+          # Google sign-in (optional). BETTER_AUTH_URL is the WEB origin (https://kaipu.app),
+          # not the API: the web Worker proxies /api/auth/* and the OAuth state cookie lives
+          # there. Empty values are dropped below, so merging before they exist is safe.
+          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          BETTER_AUTH_URL: ${{ vars.BETTER_AUTH_URL }}
           # Cloud recordings storage: the private bucket (kaipu-private-bucket), never the
           # public releases bucket. The API reports "not configured" if any of these is empty.
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
@@ -113,6 +119,9 @@ jobs:
             --arg DATABASE_URL "$DATABASE_URL" \
             --arg CORS_ORIGIN "$CORS_ORIGIN" \
             --arg BETTER_AUTH_SECRET "$BETTER_AUTH_SECRET" \
+            --arg GOOGLE_CLIENT_ID "$GOOGLE_CLIENT_ID" \
+            --arg GOOGLE_CLIENT_SECRET "$GOOGLE_CLIENT_SECRET" \
+            --arg BETTER_AUTH_URL "$BETTER_AUTH_URL" \
             --arg R2_ACCOUNT_ID "$R2_ACCOUNT_ID" \
             --arg R2_ACCESS_KEY_ID "$R2_ACCESS_KEY_ID" \
             --arg R2_SECRET_ACCESS_KEY "$R2_SECRET_ACCESS_KEY" \
