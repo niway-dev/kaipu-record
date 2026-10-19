@@ -155,14 +155,16 @@ Reapplication after rejection is defined above (30-day cooldown via
 `canReapplyAt`). Existing-account migration remains open: preserve existing
 accounts' capacity until a transition is defined; do not silently reduce them to
 the trial quota.
+The trial has no newly agreed expiration period in this session.
 
-> **Open conflict (NIW2-232, 2026-10-19):** NIW2-232 makes every verified Free
-> account 250 MB, including accounts created under the old 1 GB rule, and every
-> Pro grant 15 GB instead of 25 GB. No grandfathering exists in code. That
-> contradicts the paragraph above. The owner has to confirm the reduction (or
-> ask for a grandfather rule) before NIW2-232 ships; see
-> [Plans](/features/plans/#existing-accounts).
-> The trial has no newly agreed expiration period in this session.
+> **Amendment (owner decision, 2026-10-19, NIW2-232):** this decision supersedes
+> the "preserve existing accounts' capacity" line above. Existing accounts follow
+> the plan table with no grandfathering and no special rule: an account's
+> capacity is whatever `PLANS` in `packages/domain/src/constants/plans.ts` says,
+> so changing a constant changes it for every account, existing ones included.
+> Verified Free accounts created under the old 1 GB rule get 250 MB, and Pro
+> grants get 15 GB instead of 25 GB. Accounts left over the new limit keep their
+> files and cannot upload; see [Plans](/features/plans/#existing-accounts).
 
 ## Decision status
 

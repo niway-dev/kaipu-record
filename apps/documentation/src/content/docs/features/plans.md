@@ -41,13 +41,17 @@ product shows and the server enforces.
 
 ## Existing accounts
 
-The plan table applies to every account the moment the server deploys it. There is no
-grandfathering: a verified Free account created when the server granted 1 GB drops to
-250 MB, and a manual Pro grant drops from 25 GB to 15 GB. The
-[cloud trial and approval spec](/specs/2026-09-15-cloud-trial-and-approval/) asked to keep
-existing accounts' capacity until a transition is defined; that conflict is open until the
-owner confirms the reduction or asks for a grandfather rule. Accounts that end up over the new
-limit follow the next section.
+**Rule (owner decision, 2026-10-19):** existing accounts follow the plan table, with no
+grandfathering and no special rule. An account's capacity is whatever `PLANS` in
+`packages/domain/src/constants/plans.ts` says, so changing a constant changes it for every
+account, existing ones included, as soon as the server deploys it. Do not add logic that
+preserves an older capacity.
+
+With today's table, a verified Free account created when the server granted 1 GB has 250 MB,
+and a manual Pro grant has 15 GB instead of 25 GB. This supersedes the "preserve existing
+accounts' capacity" line in the
+[cloud trial and approval spec](/specs/2026-09-15-cloud-trial-and-approval/). Accounts that
+end up over the new limit follow the next section.
 
 ## When an account is over its capacity
 

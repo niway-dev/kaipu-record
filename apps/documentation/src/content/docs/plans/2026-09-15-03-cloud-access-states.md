@@ -5,6 +5,13 @@ description: "Implementation plan for requestStatus/cloudAccessStatus persistenc
 
 # Cloud Access States Implementation Plan
 
+> **Superseded in part (owner decision, 2026-10-19, NIW2-232):** the grandfather backfill in
+> this plan — keeping every already-verified account at 1 GB (`approved`) so nobody's capacity
+> drops — is superseded. Existing accounts follow the plan table with no grandfathering and no
+> special rule; see [Plans](/features/plans/#existing-accounts). Do not implement the
+> `backfill-cloud-access` script or the `grandfathered-2026-09` reason. The rest of the plan
+> (request lifecycle, access states, approval email) is not affected by this note.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Persist the request lifecycle (`none → pending → approved | rejected`, 30-day reapply cooldown) and the effective access state (`trial | approved | revoked | banned`), gate the API with them, send the approval email, and let the desktop request the 1 GB expansion.
