@@ -1140,7 +1140,7 @@
     "eyebrow": "KAIPU / LEGAL",
     "title": "Las reglas, claras.",
     "intro": "Cómo funciona el servicio, qué puedes esperar de Cloud y cómo tratamos tus datos.",
-    "updated": "Actualizado el 18 de octubre de 2026 · Versión 2026-10-18",
+    "updated": "Actualizado el 19 de octubre de 2026 · Versión 2026-10-19",
     "contents": "En esta página",
     "navigation": "Documentos legales",
     "contact": "Contacto",
@@ -1160,7 +1160,7 @@
         },
         "account": {
           "title": "Tu cuenta",
-          "body": "Debes tener al menos 18 años, o la mayoría de edad de tu lugar de residencia, y capacidad para contratar; si actúas por una organización, confirmas que estás autorizado para obligarla. Proporciona información veraz, protege tus credenciales y avísanos pronto de cualquier acceso no autorizado. Eres responsable de la actividad de tu cuenta. Podemos exigir verificación de correo y controles de fraude o identidad, y rechazar o cerrar cuentas creadas con información falsa o para eludir límites."
+          "body": "Debes tener al menos 18 años, o la mayoría de edad de tu lugar de residencia, y capacidad para contratar; si actúas por una organización, confirmas que estás autorizado para obligarla. Puedes crear una cuenta con correo y contraseña o iniciar sesión con Google. Proporciona información veraz, protege tus credenciales y avísanos pronto de cualquier acceso no autorizado. Si usas Google, también eres responsable de la seguridad de tu cuenta de Google, que controla Google y no Niway. En la app de escritorio, el inicio de sesión puede realizarse en tu navegador web y volver a la app. Eres responsable de la actividad de tu cuenta. Podemos exigir verificación de correo y controles de fraude o identidad, y rechazar o cerrar cuentas creadas con información falsa o para eludir límites."
         },
         "local": {
           "title": "Tu dispositivo y tus grabaciones",
@@ -1230,7 +1230,15 @@
         },
         "account": {
           "title": "Datos de cuenta y servicio",
-          "body": "Tratamos nombre, correo, estado de verificación, identificadores de cuenta y sesión, fechas y credenciales protegidas mediante hash. Si ofrecemos inicio de sesión con un proveedor externo y lo usas, recibimos los datos de perfil que ese proveedor comparte, como nombre, correo e identificador. Al crear la cuenta registramos tu confirmación de que eres mayor de edad y tu aceptación de los documentos legales, con su versión y fecha. Las sesiones pueden incluir dirección IP y datos de navegador o dispositivo. También tratamos tu plan, uso de cuota, preferencias, comunicaciones del producto y la información que envías al pedir soporte."
+          "body": "Tratamos nombre, correo, estado de verificación, identificadores de cuenta y sesión, fechas y credenciales protegidas mediante hash. Si inicias sesión con Google, también recibimos los datos descritos en la sección sobre el inicio de sesión con Google. Al crear la cuenta registramos tu confirmación de que eres mayor de edad y tu aceptación de los documentos legales, con su versión y fecha. Las sesiones se describen en su propia sección. También tratamos tu plan, uso de cuota, preferencias, comunicaciones del producto y la información que envías al pedir soporte."
+        },
+        "google": {
+          "title": "Inicio de sesión con Google y datos de usuario de Google",
+          "body": "Si eliges iniciar sesión con Google, Kaipu solicita a Google únicamente los permisos (scopes) openid, email y profile. De tu cuenta de Google recibimos: el identificador de tu cuenta de Google, tu correo electrónico, si Google ha verificado ese correo, tu nombre y la URL de tu foto de perfil. Los usamos para crear o identificar tu cuenta de Kaipu, iniciar tu sesión y mostrar tu nombre y tu foto en la app y en el sitio web. Kaipu no llama a ninguna otra API de Google, no accede a tu Gmail, Google Drive, contactos ni calendario, y no usa los datos de Google para publicidad ni para entrenar modelos de IA. Guardamos estos datos en nuestra base de datos (Neon) y, como en cualquier inicio de sesión, los tokens que Google emite a Kaipu (de acceso, de actualización y de identidad) se conservan en el servidor, en la misma base de datos, con acceso limitado a lo que exige la operación del servicio. No vendemos los datos de usuario de Google ni los compartimos o transferimos a nadie, salvo a los proveedores de infraestructura indicados en esta política cuando sea necesario para operar el servicio, o cuando la ley lo exija. El uso y la transferencia por parte de Kaipu de la información recibida de las API de Google se ajustarán a la Política de datos de usuario de los servicios de API de Google (Google API Services User Data Policy, https://developers.google.com/terms/api-services-user-data-policy), incluidos los requisitos de uso limitado (Limited Use). Conservamos los datos de Google mientras exista tu cuenta. Para eliminarlos, elimina tu cuenta desde la página de cuenta de la app web o escribe a contacto@niway.dev; también puedes revocar en cualquier momento el acceso de Kaipu en la configuración de tu cuenta de Google, en el acceso de terceros, lo que impide nuevos inicios de sesión con Google hasta que lo autorices otra vez."
+        },
+        "sessions": {
+          "title": "Sesiones y dispositivos",
+          "body": "Cada vez que inicias sesión, en el sitio web o en un dispositivo, Kaipu crea una sesión independiente. Cada sesión registra un token de sesión, sus fechas de creación y vencimiento, tu dirección IP y el agente de usuario de tu navegador o dispositivo, para mantener segura tu cuenta y distinguir unas sesiones de otras. En el sitio web la sesión se guarda en cookies; en la app de escritorio se guarda como un token de sesión almacenado localmente en tu dispositivo. Cerrar sesión termina la sesión, y restablecer la contraseña termina todas las sesiones. Usamos estos datos para autenticarte, detectar abusos y apoyar la seguridad de la cuenta, no para publicidad."
         },
         "content": {
           "title": "Grabaciones e imágenes que subes",
@@ -1246,7 +1254,7 @@
         },
         "providers": {
           "title": "Dónde se guarda y quién lo procesa",
-          "body": "Usamos proveedores de infraestructura y servicios para operar Kaipu, actualmente entre ellos Cloudflare (sitio web, API y almacenamiento de archivos R2; cloudflare.com/privacypolicy), Neon (base de datos PostgreSQL de cuentas, sesiones, planes y metadatos de Cloud; neon.com/privacy-policy) y PostHog (diagnóstico en las versiones donde está activado; posthog.com/privacy). A medida que el servicio evoluciona podemos agregar o reemplazar proveedores, como de pagos, envío de correo, soporte, analítica o IA. Los procesadores de pago y comerciantes registrados pueden actuar como responsables independientes bajo sus propias políticas de privacidad. Los datos pueden transferirse y tratarse en otros países, incluidos Estados Unidos y la Unión Europea, con las garantías que exige la normativa peruana de protección de datos. Actualizamos esta política cuando cambian proveedores relevantes."
+          "body": "Usamos proveedores de infraestructura y servicios para operar Kaipu, actualmente entre ellos Cloudflare (sitio web, API y almacenamiento de archivos R2; cloudflare.com/privacypolicy), Neon (base de datos PostgreSQL de cuentas, sesiones, planes y metadatos de Cloud; neon.com/privacy-policy) y PostHog (diagnóstico en las versiones donde está activado; posthog.com/privacy). A medida que el servicio evoluciona podemos agregar o reemplazar proveedores, como de pagos, envío de correo, soporte, analítica o IA. Los procesadores de pago y comerciantes registrados pueden actuar como responsables independientes bajo sus propias políticas de privacidad. Los datos pueden transferirse y tratarse en otros países, incluidos Estados Unidos y la Unión Europea, con las garantías que exige la normativa peruana de protección de datos. Actualizamos esta política cuando cambian proveedores relevantes. Para el inicio de sesión, Google (policies.google.com/privacy) actúa como proveedor de identidad cuando eliges iniciar sesión con Google."
         },
         "diagnostics": {
           "title": "Diagnósticos de la aplicación",
@@ -1262,7 +1270,7 @@
         },
         "retention": {
           "title": "Conservación y eliminación",
-          "body": "Conservamos los datos mientras la cuenta esté activa y, después, el tiempo necesario para los fines descritos, resolver controversias, prevenir abusos y cumplir obligaciones legales, tributarias o contables. Los registros de facturación y pago se conservan durante el plazo que exige la normativa tributaria y contable, incluso después de cerrar la cuenta. Puedes borrar archivos en la app y pedir el cierre de tu cuenta por correo. La eliminación puede no ser inmediata para todas las copias: las copias de respaldo y los registros se sobrescriben en su ciclo normal. Los archivos de Cloud también pueden eliminarse según las condiciones de Cloud, incluidas las reglas de exceso de límite y cuentas inactivas, o cuando termina un plan de pago y el contenido guardado supera los límites de tu nuevo plan. Los datos agregados o anonimizados pueden conservarse sin límite."
+          "body": "Conservamos los datos mientras la cuenta esté activa y, después, el tiempo necesario para los fines descritos, resolver controversias, prevenir abusos y cumplir obligaciones legales, tributarias o contables. Los registros de facturación y pago se conservan durante el plazo que exige la normativa tributaria y contable, incluso después de cerrar la cuenta. Puedes borrar archivos en la app y pedir el cierre de tu cuenta por correo. La eliminación puede no ser inmediata para todas las copias: las copias de respaldo y los registros se sobrescriben en su ciclo normal. Los archivos de Cloud también pueden eliminarse según las condiciones de Cloud, incluidas las reglas de exceso de límite y cuentas inactivas, o cuando termina un plan de pago y el contenido guardado supera los límites de tu nuevo plan. Los datos agregados o anonimizados pueden conservarse sin límite. Los datos de usuario de Google se conservan mientras exista tu cuenta y se eliminan cuando esta se elimina, con el mismo ciclo de copias de respaldo y registros."
         },
         "rights": {
           "title": "Tus derechos",

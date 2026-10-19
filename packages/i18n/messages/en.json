@@ -1140,7 +1140,7 @@
     "eyebrow": "KAIPU / LEGAL",
     "title": "Clear ground rules.",
     "intro": "How the service works, what to expect from Cloud and how we handle your data.",
-    "updated": "Updated October 18, 2026 · Version 2026-10-18",
+    "updated": "Updated October 19, 2026 · Version 2026-10-19",
     "contents": "On this page",
     "navigation": "Legal documents",
     "contact": "Contact",
@@ -1160,7 +1160,7 @@
         },
         "account": {
           "title": "Your account",
-          "body": "You must be at least 18 years old, or the age of majority where you live, and able to enter into a contract; if acting for an organization, you confirm you are authorized to bind it. Provide accurate information, keep your credentials secure and tell us promptly about unauthorized access. You are responsible for activity under your account. We may require email verification and fraud or identity checks, and may refuse or close an account created with false information or to bypass limits."
+          "body": "You must be at least 18 years old, or the age of majority where you live, and able to enter into a contract; if acting for an organization, you confirm you are authorized to bind it. You can create an account with email and password or sign in with Google. Provide accurate information, keep your credentials secure and tell us promptly about unauthorized access. If you use Google, you are also responsible for the security of your Google account, which Google, not Niway, controls. In the desktop app, sign-in may happen in your web browser and return to the app. You are responsible for activity under your account. We may require email verification and fraud or identity checks, and may refuse or close an account created with false information or to bypass limits."
         },
         "local": {
           "title": "Your device and recordings",
@@ -1230,7 +1230,15 @@
         },
         "account": {
           "title": "Account and service data",
-          "body": "We process name, email, verification status, account and session identifiers, dates and credentials protected with hashing. If we offer sign-in through a third-party provider and you use it, we receive the profile data that provider shares, such as name, email and an identifier. When you create an account we record your confirmation that you are of legal age and your acceptance of the legal documents, with their version and date. Sessions may include IP address and browser or device information. We also process your plan, quota usage, preferences, product communications and the information you send when requesting support."
+          "body": "We process name, email, verification status, account and session identifiers, dates and credentials protected with hashing. If you sign in with Google we also receive the data described in the section on Google sign-in. When you create an account we record your confirmation that you are of legal age and your acceptance of the legal documents, with their version and date. Sessions are described in their own section. We also process your plan, quota usage, preferences, product communications and the information you send when requesting support."
+        },
+        "google": {
+          "title": "Google sign-in and Google user data",
+          "body": "If you choose Sign in with Google, Kaipu asks Google only for the scopes openid, email and profile. From your Google account we receive: your Google account ID, your email address, whether Google has verified that email, your name and the URL of your profile picture. We use them to create or identify your Kaipu account, sign you in, and show your name and picture in the app and on the website. Kaipu does not call any other Google API, does not access your Gmail, Google Drive, contacts or calendar, and does not use Google data for advertising or to train AI models. We store this data in our database (Neon) and, as with any sign-in, the tokens Google issues to Kaipu (access, refresh and ID tokens) are kept server-side in the same database, with access limited to what operating the service requires. We do not sell Google user data and do not share or transfer it to anyone except the infrastructure providers listed in this policy as needed to operate the service, or when the law requires it. Kaipu's use and transfer of information received from Google APIs will adhere to the Google API Services User Data Policy (https://developers.google.com/terms/api-services-user-data-policy), including the Limited Use requirements. We keep Google data while your account exists. To delete it, delete your account from the account page in the web app or email contacto@niway.dev; you can also revoke Kaipu's access at any time in your Google Account settings under third-party access, which stops further sign-ins with Google until you authorize it again."
+        },
+        "sessions": {
+          "title": "Sessions and devices",
+          "body": "Each time you sign in, on the website or on a device, Kaipu creates a separate session. Each session records a session token, its creation and expiry dates, your IP address and your browser or device user agent, so we can keep your account secure and tell sessions apart. On the website the session is kept in cookies; on the desktop app it is kept as a session token stored locally on your device. Signing out ends the session, and a password reset ends all sessions. We use this data to authenticate you, detect abuse and support account security, not for advertising."
         },
         "content": {
           "title": "Recordings and images you upload",
@@ -1246,7 +1254,7 @@
         },
         "providers": {
           "title": "Where data is stored and who processes it",
-          "body": "We use infrastructure and service providers to run Kaipu, currently including Cloudflare (website, API and R2 file storage; cloudflare.com/privacypolicy), Neon (PostgreSQL database for accounts, sessions, plans and Cloud metadata; neon.com/privacy-policy) and PostHog (diagnostics in versions where it is enabled; posthog.com/privacy). As the service evolves we may add or replace providers, such as for payments, email delivery, support, analytics or AI. Payment processors and merchants of record may act as independent controllers under their own privacy policies. Data may be transferred to and processed in other countries, including the United States and the European Union, under the safeguards required by Peruvian data protection law. We update this policy when material providers change."
+          "body": "We use infrastructure and service providers to run Kaipu, currently including Cloudflare (website, API and R2 file storage; cloudflare.com/privacypolicy), Neon (PostgreSQL database for accounts, sessions, plans and Cloud metadata; neon.com/privacy-policy) and PostHog (diagnostics in versions where it is enabled; posthog.com/privacy). As the service evolves we may add or replace providers, such as for payments, email delivery, support, analytics or AI. Payment processors and merchants of record may act as independent controllers under their own privacy policies. Data may be transferred to and processed in other countries, including the United States and the European Union, under the safeguards required by Peruvian data protection law. We update this policy when material providers change. For sign-in, Google (policies.google.com/privacy) acts as an identity provider when you choose Sign in with Google."
         },
         "diagnostics": {
           "title": "App diagnostics",
@@ -1262,7 +1270,7 @@
         },
         "retention": {
           "title": "Retention and deletion",
-          "body": "We retain data while the account is active and afterwards as long as needed for the purposes described, to resolve disputes, prevent abuse, and meet legal, tax or accounting obligations. Billing and payment records are kept for the period required by tax and accounting law, even after the account is closed. You may delete files in the app and request account closure by email. Deletion may not be immediate for every copy: backups and logs are overwritten on their normal cycle. Cloud files may also be deleted under the Cloud terms, including over-limit and inactive-account rules, or when a paid plan ends and stored content exceeds the limits of your new plan. Aggregated or anonymized data may be kept without limit."
+          "body": "We retain data while the account is active and afterwards as long as needed for the purposes described, to resolve disputes, prevent abuse, and meet legal, tax or accounting obligations. Billing and payment records are kept for the period required by tax and accounting law, even after the account is closed. You may delete files in the app and request account closure by email. Deletion may not be immediate for every copy: backups and logs are overwritten on their normal cycle. Cloud files may also be deleted under the Cloud terms, including over-limit and inactive-account rules, or when a paid plan ends and stored content exceeds the limits of your new plan. Aggregated or anonymized data may be kept without limit. Google user data is kept while your account exists and is deleted when the account is deleted, subject to the same backup and log cycle."
         },
         "rights": {
           "title": "Your rights",
