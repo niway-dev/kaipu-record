@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  adrDir,
   annotateDiff,
   resolveScope,
   type PrFile,
@@ -358,5 +359,21 @@ describe("openBotThreads", () => {
       },
     ]);
     expect(thread.replies).toEqual([{ author: "csdev19", body: "Will fix" }]);
+  });
+});
+
+describe("adrDir", () => {
+  test("defaults to docs/adr and takes the repository's directory from the environment", () => {
+    const saved = process.env.CLAUDE_REVIEW_ADR_DIR;
+    try {
+      delete process.env.CLAUDE_REVIEW_ADR_DIR;
+      expect(adrDir()).toBe("docs/adr");
+      process.env.CLAUDE_REVIEW_ADR_DIR =
+        "apps/documentation/src/content/docs/architecture/decisions/";
+      expect(adrDir()).toBe("apps/documentation/src/content/docs/architecture/decisions");
+    } finally {
+      if (saved === undefined) delete process.env.CLAUDE_REVIEW_ADR_DIR;
+      else process.env.CLAUDE_REVIEW_ADR_DIR = saved;
+    }
   });
 });

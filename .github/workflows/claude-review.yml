@@ -56,6 +56,8 @@ env:
   CLAUDE_REVIEW_MAX_LINES: 3000
   CLAUDE_REVIEW_MAX_FILES: 60
   CLAUDE_REVIEW_BUDGET_USD: 1
+  # Named in the prompt so Claude checks changes against the accepted decisions.
+  CLAUDE_REVIEW_ADR_DIR: apps/documentation/src/content/docs/architecture/decisions
 
 jobs:
   review:

@@ -24,7 +24,8 @@
  * refuses to post text containing the API key. That is best-effort, not a sandbox: it relies on
  * the consumer repository's trust assumption (only the owner pushes), stated in its workflow.
  *
- * Needs GH_TOKEN, ANTHROPIC_API_KEY, GITHUB_REPOSITORY and `claude` on the PATH.
+ * Needs GH_TOKEN, ANTHROPIC_API_KEY, GITHUB_REPOSITORY and `claude` on the PATH. The ADR directory
+ * named in the prompt is `docs/adr` unless CLAUDE_REVIEW_ADR_DIR says otherwise.
  * Design: niway-dev/pr-review-engine, docs/specs/2026-10-20-claude-p-review-kit-v1-design.md.
  */
 import { spawnSync } from "node:child_process";
@@ -336,6 +337,11 @@ function repoFocus() {
     : "";
 }
 
+/** Where the repository keeps its decision records; `CLAUDE_REVIEW_ADR_DIR` overrides the default. */
+export function adrDir() {
+  return (process.env.CLAUDE_REVIEW_ADR_DIR || "docs/adr").replace(/\/+$/, "");
+}
+
 function env(name: string, fallback?: string) {
   const value = process.env[name] ?? fallback;
   if (value === undefined || value === "") throw new Error(`${name} is not set`);
@@ -572,7 +578,7 @@ function review(repo: string, pr: number, words: string[]) {
 
   const list = kept.map((f) => `- ${f.filename} +${f.additions} −${f.deletions}`).join("\n");
   const prompt = `You are reviewing pull request #${pr} in ${repo}, checked out at its head commit ${headSha}.
-Read CLAUDE.md first: it holds this repository's rules, and the ADRs in docs/adr/ hold its decisions.
+Read CLAUDE.md first: it holds this repository's rules, and the ADRs in ${adrDir()}/ hold its decisions.
 
 The pull request's title, body and author are in ${dir}/pr.json. The diff to review is in
 ${dir}/review.diff and covers ${since ? `only the changes since commit ${since}, the last reviewed one` : "the whole pull request"}.
