@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.11.0](https://github.com/niway-dev/kaipu-record/compare/web-v0.10.0...web-v0.11.0) (2026-10-20)
+
+
+### Features
+
+* **i18n:** copy for the Kaipu Dashboard design in en and es ([af3b0b0](https://github.com/niway-dev/kaipu-record/commit/af3b0b070d6483b28654765401dfe867dadb53a3))
+* **i18n:** copy for the Kaipu Web Auth sign-in pages in en and es ([74ba553](https://github.com/niway-dev/kaipu-record/commit/74ba553cbc5826183e27fbefde7c98b65f7c40da))
+* NIW2-471 land desktop sign-in through the browser on main ([#333](https://github.com/niway-dev/kaipu-record/issues/333) + [#332](https://github.com/niway-dev/kaipu-record/issues/332)) ([9ae765b](https://github.com/niway-dev/kaipu-record/commit/9ae765b4de06e451ee94dd1f51f8a8d0ea67c486))
+* **web-hono:** dashboard from the Kaipu Dashboard design ([bdf03cc](https://github.com/niway-dev/kaipu-record/commit/bdf03cc67f450dd2fb6c08ceb763d69a0e832dd1))
+* **web-hono:** dashboard from the Kaipu Dashboard design (NIW2-475) ([41fbbba](https://github.com/niway-dev/kaipu-record/commit/41fbbba50c740f3dd39a817ff881631ac0d50555))
+* **web-hono:** Google sign-in button always on ([dde268b](https://github.com/niway-dev/kaipu-record/commit/dde268b1f7767ee5529bce63719977f5c517b0ec))
+* **web-hono:** Google sign-in button always on (remove VITE_GOOGLE_AUTH_ENABLED) ([b501231](https://github.com/niway-dev/kaipu-record/commit/b501231e0ed12138253f19d4a4623075625b678a))
+* **web-hono:** sign-in and sign-up from the Kaipu Web Auth design ([9e8f8da](https://github.com/niway-dev/kaipu-record/commit/9e8f8da458572aac416dfca366ffaeb4e2a7dddc))
+* **web-hono:** sign-in and sign-up from the Kaipu Web Auth design, email verification by link ([5e4422e](https://github.com/niway-dev/kaipu-record/commit/5e4422ee004953fe7b1dcdfc464646b73dd988c5))
+* **web:** add Sign in / Dashboard link to the landing nav ([8de68c0](https://github.com/niway-dev/kaipu-record/commit/8de68c00e0a5f2cd9b10d0756c589b525b4335ba))
+* **web:** add Sign in / Dashboard link to the landing nav ([4f56dcf](https://github.com/niway-dev/kaipu-record/commit/4f56dcfe8221393c15df8654f723cc3763cc19c3))
+* **web:** cookieless PostHog analytics for auth pages and download clicks, Windows on the home (NIW2-477) ([f8e5099](https://github.com/niway-dev/kaipu-record/commit/f8e50990b0509212a9c8eba65e3af554fab1a815))
+* **web:** cookieless PostHog analytics for auth pages and download clicks, Windows on the home (NIW2-477) ([38ca777](https://github.com/niway-dev/kaipu-record/commit/38ca777519aefb98f6a5810a30e9336e098efcbe))
+
+
+### Bug Fixes
+
+* **kaipu:** NIW2-232 unify plan information (Free 250 MB) ([5eddfd0](https://github.com/niway-dev/kaipu-record/commit/5eddfd0d917e7c50723ecdde557336a392aaf8ca))
+* **web-hono:** plan names on the dashboard and account page come from the plan table ([dbf1da9](https://github.com/niway-dev/kaipu-record/commit/dbf1da9c493c0022e127570655b506de4b027574))
+* **web:** give the auth form column more room ([e246bb2](https://github.com/niway-dev/kaipu-record/commit/e246bb283e5745ffc60e0bb6ad495c04c23cfa55))
+* **web:** rebalance the auth split so the form gets more room ([5f0bab5](https://github.com/niway-dev/kaipu-record/commit/5f0bab527b69daf036fcac9581a3c66b3d49512a))
+
 ## [0.10.0](https://github.com/niway-dev/kaipu-record/compare/web-v0.9.0...web-v0.10.0) (2026-10-19)
 
 
