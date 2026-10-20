@@ -301,6 +301,16 @@ jobs:
         working-directory: apps/server-hono
         run: bun run build
 
+      # The exact deploy command of release-api.yml / release-web.yml, with --dry-run:
+      # same script, same pinned wrangler, same --secrets-file. api-v0.5.0 failed on the
+      # tag with "Unknown arguments: secrets-file" because nothing ran it before.
+      - name: Dry-run the Worker deploys
+        run: |
+          echo '{}' > apps/server-hono/worker-secrets.json
+          echo '{}' > apps/web-hono/worker-secrets.json
+          bash scripts/deploy-worker.sh apps/server-hono --dry-run
+          bash scripts/deploy-worker.sh apps/web-hono --dry-run
+
   # The docs site (`apps/documentation`, Astro Starlight) was built nowhere in CI: a broken
   # frontmatter or a page that fails to compile reached `main` unnoticed, and two of every
   # three pull requests change documentation. `astro build` needs no secret and no workspace
