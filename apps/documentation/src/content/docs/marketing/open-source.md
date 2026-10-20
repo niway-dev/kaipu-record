@@ -84,9 +84,9 @@ to catch them. Kaipu is also a one-person project. The rules exist so that stays
 - **Issue before pull request**, for collaborators too: a pull request links the issue it
   resolves.
 - **Small, single-purpose PRs.** One behavior per PR; refactors travel separately.
-- **The existing gates apply to everyone.** CI green on every pull request — `verify`, the app
-  builds and the macOS end-to-end suite
-  ([ADR 0010](/architecture/decisions/0010-checks-run-in-actions-on-every-pr/)).
+- **The existing gates apply to everyone.** The pre-push hook (lint, format, builds, types)
+  on every change, and on the release pull request `verify`, the app builds and the macOS
+  end-to-end suite ([ADR 0027](/architecture/decisions/0027-verify-release-candidates-only/)).
 - **Disclose generated code.** A PR must say whether it was produced with an AI tool and
   confirm the author ran it. Undisclosed generated PRs are closed.
 - **No drive-by dependency changes.** Adding or upgrading a dependency needs its own issue,

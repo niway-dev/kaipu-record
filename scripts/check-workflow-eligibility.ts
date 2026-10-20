@@ -306,7 +306,7 @@ interface Expectation {
 type JobResult = "success" | "failure" | "cancelled" | "skipped";
 
 /**
- * Mirrors the `e2e` rule in the classify step: a release-please branch or a manual
+ * Mirrors the `release` rule in the classify step: a release-please branch or a manual
  * dispatch. Derived from the scenario's event, never from its expectation, so the check
  * cannot agree with itself.
  */
@@ -323,10 +323,11 @@ function needsContext(
   override: Partial<Record<string, JobResult>> = {},
   docsOnly = false,
   releaseCandidate = false,
+  changesEligible = false,
 ) {
-  // `changes` shares the parts' eligibility, so it ran whenever anything verifying did.
-  const changes: JobResult =
-    override.changes ?? (expect.verify || expect.e2e || docsOnly ? "success" : "skipped");
+  // `changes` runs on every non-draft revision; everything else waits on its verdict.
+  // Whether it ran comes from evaluating its own condition, not from the expectation.
+  const changes: JobResult = override.changes ?? (changesEligible ? "success" : "skipped");
   const verify: JobResult = override.verify ?? (expect.verify ? "success" : "skipped");
   const e2e: JobResult = override.e2e_desktop ?? (expect.e2e ? "success" : "skipped");
   const gate: JobResult = override.gate ?? (expect.gate ? "success" : "skipped");
@@ -341,8 +342,12 @@ function needsContext(
       // A job output is the empty string unless the job succeeded and set it.
       outputs:
         changes === "success"
-          ? { docs_only: String(docsOnly), e2e: String(!docsOnly && releaseCandidate) }
-          : { docs_only: "", e2e: "" },
+          ? {
+              docs_only: String(docsOnly),
+              release: String(releaseCandidate),
+              e2e: String(!docsOnly && releaseCandidate),
+            }
+          : { docs_only: "", release: "", e2e: "" },
     },
     lint: part("lint"),
     types: part("types"),
@@ -370,9 +375,9 @@ const scenarios: Array<{
     title: "Ordinary PR targeting main",
     ctx: pullRequestEvent({ action: "opened" }),
     eventType: "opened",
-    // ADR 0010: every pull request is verified in Actions. Since its 2026-10-19 amendment
-    // the macOS E2E is for release candidates only, and the gate still reports.
-    expect: { verify: true, e2e: false, gate: true, legacy: true, cancel: false },
+    // ADR 0027: only release candidates are verified in Actions. An ordinary pull request
+    // starts no verification runner, and the gate reports an immediate pass.
+    expect: { verify: false, e2e: false, gate: true, legacy: true, cancel: false },
   },
   {
     n: 3,
@@ -481,22 +486,22 @@ const scenarios: Array<{
   },
   {
     n: 21,
-    title: "Ordinary PR superseded while its tests ran",
-    ctx: pullRequestEvent({ action: "synchronize" }),
+    title: "Ready candidate superseded while its tests ran",
+    ctx: pullRequestEvent({ action: "synchronize", headRef: RELEASE_BRANCH }),
     eventType: "synchronize",
     // A part cancelled by a newer revision: `verify` must not run, so it cannot turn the
     // cancellation into a failure that lands on a commit this run knows nothing about.
     results: { tests: "cancelled" },
-    expect: { verify: false, e2e: false, gate: false, legacy: false, cancel: false },
+    expect: { verify: false, e2e: true, gate: false, legacy: false, cancel: false },
   },
   {
     n: 22,
-    title: "Ordinary PR whose lint failed",
-    ctx: pullRequestEvent({ action: "synchronize" }),
+    title: "Ready candidate whose lint failed",
+    ctx: pullRequestEvent({ action: "synchronize", headRef: RELEASE_BRANCH }),
     eventType: "synchronize",
     // A real verdict: `verify` runs (always()), fails, and the gate reports it.
     results: { lint: "failure", verify: "failure" },
-    expect: { verify: true, e2e: false, gate: true, legacy: true, cancel: false },
+    expect: { verify: true, e2e: true, gate: true, legacy: true, cancel: false },
   },
   {
     n: 29,
@@ -504,8 +509,8 @@ const scenarios: Array<{
     ctx: pullRequestEvent({ action: "opened", headRef: "design/stacked-upper" }),
     eventType: "opened",
     // GitHub judges every PR in a stack against main's required check, so it must
-    // report; like any ordinary PR, without the macOS E2E.
-    expect: { verify: true, e2e: false, gate: true, legacy: true, cancel: false },
+    // report; like any ordinary PR, with an immediate pass.
+    expect: { verify: false, e2e: false, gate: true, legacy: true, cancel: false },
   },
   {
     n: 30,
@@ -521,14 +526,13 @@ const scenarios: Array<{
     ctx: pullRequestEvent({ action: "synchronize" }),
     eventType: "synchronize",
     docsOnly: true,
-    // ADR 0010 amendment: no macOS run, and the gate still reports — a skipped E2E with a
-    // docs-only classification from this same run is a decision, not silence.
-    expect: { verify: true, e2e: false, gate: true, legacy: true, cancel: false },
+    // Not a release candidate: an immediate pass, like any ordinary pull request.
+    expect: { verify: false, e2e: false, gate: true, legacy: true, cancel: false },
   },
   {
     n: 24,
-    title: "Docs-only PR whose lint failed",
-    ctx: pullRequestEvent({ action: "synchronize" }),
+    title: "Docs-only release PR whose lint failed",
+    ctx: pullRequestEvent({ action: "synchronize", headRef: RELEASE_BRANCH }),
     eventType: "synchronize",
     docsOnly: true,
     results: { lint: "failure", verify: "failure" },
@@ -540,9 +544,9 @@ const scenarios: Array<{
     ctx: pullRequestEvent({ action: "synchronize" }),
     eventType: "synchronize",
     results: { changes: "failure" },
-    // No E2E without a classification, and the gate reports the failure instead of
-    // leaving the required check on "Expected".
-    expect: { verify: true, e2e: false, gate: true, legacy: true, cancel: false },
+    // Nothing can run without a classification, and the gate reports the failure instead
+    // of leaving the required check on "Expected".
+    expect: { verify: false, e2e: false, gate: true, legacy: true, cancel: false },
   },
   {
     n: 26,
@@ -554,8 +558,8 @@ const scenarios: Array<{
   },
   {
     n: 27,
-    title: "Docs-only PR superseded while its tests ran",
-    ctx: pullRequestEvent({ action: "synchronize" }),
+    title: "Docs-only release PR superseded while its tests ran",
+    ctx: pullRequestEvent({ action: "synchronize", headRef: RELEASE_BRANCH }),
     eventType: "synchronize",
     docsOnly: true,
     results: { tests: "cancelled" },
@@ -567,8 +571,8 @@ const scenarios: Array<{
     ctx: pullRequestEvent({ action: "synchronize" }),
     eventType: "synchronize",
     results: { changes: "cancelled" },
-    // Not a docs-only skip and not a failure: this run decided nothing about the E2E.
-    expect: { verify: true, e2e: false, gate: false, legacy: false, cancel: false },
+    // Not a classification and not a failure: this run decided nothing.
+    expect: { verify: false, e2e: false, gate: false, legacy: false, cancel: false },
   },
   {
     n: 12,
@@ -607,16 +611,24 @@ console.log(
   "  -  ----------------------------------------------  ------  ----  ----  ------  ------",
 );
 
+/** The `needs` context a scenario's run would produce, `changes` included. */
+const scenarioNeeds = (s: (typeof scenarios)[number]) =>
+  needsContext(
+    s.expect,
+    s.results,
+    s.docsOnly,
+    isReleaseCandidate(s.ctx),
+    evaluate(exprs.changes, s.ctx),
+  );
+
 for (const s of scenarios) {
-  const ctx = {
-    ...s.ctx,
-    needs: needsContext(s.expect, s.results, s.docsOnly, isReleaseCandidate(s.ctx)),
-  };
-  // `changes` must be eligible exactly when the verifying parts are, or the E2E and the
-  // gate would read a classification that never ran.
+  const ctx = { ...s.ctx, needs: scenarioNeeds(s) };
+  // The verifying parts run exactly when `changes` succeeded and classified a release
+  // candidate (ADR 0027), so an ordinary pull request starts none of them.
   ok(
-    evaluate(exprs.changes, ctx) === evaluate(exprs.lint, ctx),
-    `scenario ${s.n} (${s.title}): 'changes' must share the verifying parts' eligibility`,
+    evaluate(exprs.lint, ctx) ===
+      (ctx.needs.changes.result === "success" && ctx.needs.changes.outputs.release === "true"),
+    `scenario ${s.n} (${s.title}): the verifying parts must run only on a classified release candidate`,
   );
   const got = {
     verify: evaluate(exprs.verify, ctx),
@@ -702,19 +714,21 @@ ok(
 console.log("\nThe one report per commit invariant");
 for (const s of scenarios) {
   if (s.eventType === "workflow_dispatch") continue;
-  const needs = needsContext(s.expect, s.results, s.docsOnly, isReleaseCandidate(s.ctx));
+  const needs = scenarioNeeds(s);
   const ctx = { ...s.ctx, needs };
   const verified = ["success", "failure"].includes(needs.verify.result);
-  // ADR 0010: report iff both checks reached a verdict. For the E2E, a skip this run
-  // classified as not required (docs-only, or not a release candidate) is a verdict, and so
-  // is a failed classification.
+  // A run decides in three ways (ADR 0027): it classified the PR as not a release candidate;
+  // its classification failed; or it verified a candidate, with the E2E either reaching a
+  // verdict or classified as not required (docs-only).
   const e2eDecided =
     ["success", "failure"].includes(needs.e2e_desktop.result) ||
     (needs.e2e_desktop.result === "skipped" &&
       needs.changes.result === "success" &&
-      needs.changes.outputs.e2e === "false") ||
-    needs.changes.result === "failure";
-  const mustReport = verified && e2eDecided;
+      needs.changes.outputs.e2e === "false");
+  const mustReport =
+    (needs.changes.result === "success" && needs.changes.outputs.release === "false") ||
+    needs.changes.result === "failure" ||
+    (verified && e2eDecided);
   const reports = evaluate(exprs.gate, ctx);
   console.log(
     `  ${String(s.n).padStart(2)} ${s.title.slice(0, 52).padEnd(54)}` +
@@ -758,25 +772,87 @@ ok(
 // Scenario 11 + the gate's own decision table, by running the real shell script.
 console.log("\nScenario 11 — the real merge-requirements script, by exit code");
 const decide = stepScript("gate", "Check whether verification permits merging");
-// [isDraft, verify, e2e, changes, docsOnly, e2eRequired, expected exit, label]
-const decideCases: Array<[string, string, string, string, string, string, number, string]> = [
+// [isDraft, verify, e2e, changes, docsOnly, release, e2eRequired, expected exit, label]
+type DecideCase = [string, string, string, string, string, string, string, number, string];
+const decideCases: DecideCase[] = [
   // The row that would have caught the 0.8.1 green button.
-  ["true", "skipped", "skipped", "skipped", "", "", 1, "draft: nothing verified"],
-  ["false", "success", "success", "success", "false", "true", 0, "candidate: verify + E2E green"],
+  ["true", "skipped", "skipped", "skipped", "", "", "", 1, "draft: nothing verified"],
+  ["false", "success", "success", "success", "false", "true", "true", 0, "candidate: all green"],
   // This row is the one that would have stopped desktop 0.8.0 before the tag existed.
-  ["false", "success", "failure", "success", "false", "true", 1, "candidate: E2E failed"],
-  ["false", "success", "cancelled", "success", "false", "true", 1, "candidate: E2E superseded"],
-  ["false", "success", "skipped", "success", "false", "true", 1, "candidate: E2E never ran"],
-  ["false", "failure", "success", "success", "false", "true", 1, "candidate: verify failed"],
-  ["false", "failure", "skipped", "success", "false", "true", 1, "verify failed, E2E never ran"],
-  ["false", "success", "skipped", "success", "false", "false", 0, "ordinary PR, E2E not required"],
-  ["false", "failure", "skipped", "success", "false", "false", 1, "ordinary PR, verify failed"],
-  ["false", "success", "skipped", "success", "true", "false", 0, "docs-only, E2E skipped"],
-  ["false", "failure", "skipped", "success", "true", "false", 1, "docs-only, verify failed"],
-  ["false", "success", "failure", "success", "true", "false", 1, "docs-only, E2E ran and failed"],
-  ["false", "success", "skipped", "failure", "", "", 1, "change detection failed"],
+  ["false", "success", "failure", "success", "false", "true", "true", 1, "candidate: E2E failed"],
+  [
+    "false",
+    "success",
+    "cancelled",
+    "success",
+    "false",
+    "true",
+    "true",
+    1,
+    "candidate: E2E superseded",
+  ],
+  [
+    "false",
+    "success",
+    "skipped",
+    "success",
+    "false",
+    "true",
+    "true",
+    1,
+    "candidate: E2E never ran",
+  ],
+  [
+    "false",
+    "failure",
+    "success",
+    "success",
+    "false",
+    "true",
+    "true",
+    1,
+    "candidate: verify failed",
+  ],
+  ["false", "skipped", "skipped", "success", "false", "true", "true", 1, "candidate: nothing ran"],
+  // ADR 0027: an ordinary pull request is not verified here, and passes at once.
+  ["false", "skipped", "skipped", "success", "false", "false", "false", 0, "ordinary PR"],
+  ["false", "skipped", "skipped", "success", "true", "false", "false", 0, "ordinary docs-only PR"],
+  ["false", "success", "skipped", "success", "true", "true", "false", 0, "docs-only candidate"],
+  [
+    "false",
+    "failure",
+    "skipped",
+    "success",
+    "true",
+    "true",
+    "false",
+    1,
+    "docs-only candidate, verify failed",
+  ],
+  [
+    "false",
+    "success",
+    "failure",
+    "success",
+    "true",
+    "true",
+    "false",
+    1,
+    "docs-only candidate, E2E failed",
+  ],
+  ["false", "skipped", "skipped", "failure", "", "", "", 1, "change detection failed"],
 ];
-for (const [isDraft, verify, e2e, changes, docsOnly, e2eRequired, wantCode, label] of decideCases) {
+for (const [
+  isDraft,
+  verify,
+  e2e,
+  changes,
+  docsOnly,
+  release,
+  e2eRequired,
+  wantCode,
+  label,
+] of decideCases) {
   let code = 0;
   let out = "";
   try {
@@ -789,6 +865,7 @@ for (const [isDraft, verify, e2e, changes, docsOnly, e2eRequired, wantCode, labe
         CHANGES: changes,
         DOCS_ONLY: docsOnly,
         E2E_REQUIRED: e2eRequired,
+        RELEASE: release,
         SHA: "1bd8b2a",
       },
       encoding: "utf8",
