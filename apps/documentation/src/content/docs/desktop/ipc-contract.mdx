@@ -107,15 +107,24 @@ same path as `settings:update`; no UI control writes it directly.
 Providers capture by the overlay's answer (`answer.mode`), not by the mode that was requested:
 the user may have switched mode on the overlay.
 
-After a capture main applies the after-capture policy (`decideAfterCapture(action, screenshotSave,
-screenshotCopy)`): `capture` with saving manual opens the editor (`after: "editor"`, the PNG bytes
-in `png`, `saved: null`, `copied: false`); otherwise the capture finishes quietly (`after: "quiet"`):
-main writes the vault (when saving is automatic, or Copy with saving automatic) and/or the clipboard,
-`png` is an empty `ArrayBuffer` (the bytes never cross IPC), `saved` is the new vault item and
-`copied` says whether the clipboard got it. The renderer then opens no editor and does not reveal the
-window: main already restored the pre-capture visibility. A copy-only capture's bytes stay in main
-(`takeLastQuietCapture()`) until the next capture starts or a consumer takes them. If a quiet capture
-manages neither to save nor to copy, main answers `after: "editor"` instead of losing the shot.
+After a capture main **always writes the vault first**, then applies the after-capture policy
+(`decideAfterCapture(action, screenshotCopy)`). `saved` is the new vault item (`{ id, assetId }`),
+`copied` says whether the clipboard got it, and `png` is an empty `ArrayBuffer` (the bytes never
+cross IPC):
+
+- **Capture** (`after: "editor"`): main also copies when `screenshotCopy` is `auto`. The renderer
+  opens `/editor/image/:assetId` on the saved item, then reveals the window.
+- **Copy** (`after: "quiet"`): main always copies and shows the capture toast. The renderer opens no
+  editor and does not reveal the window: main already restored the pre-capture visibility.
+
+There is no "save automatically" preference any more: every capture is in the Library, so the image
+editor saves edits over that item on its own and never asks before leaving (only a pasted image, or
+a capture whose vault write failed, still asks). A failed vault write is the only time the bytes cross
+IPC: Capture answers `after: "editor"` with `saved: null` and the bytes, and the in-memory editor
+retries the save; Copy still copies and keeps the bytes in main (`takeLastQuietCapture()`) for the
+toast's Edit until the next capture starts. If a Copy manages neither to save nor to copy, main
+answers `after: "editor"` with the bytes instead of losing the shot. Every screenshot vault write
+broadcasts `library:changed`, so an editor already open on another item can resolve the new one.
 
 After a quiet capture main shows the **capture toast** (`main/screenshots/capture-toast-window.ts`,
 `?window=capture-toast`, `t` in the tables): one frameless, non-focusable, always-on-top window,
@@ -126,7 +135,7 @@ never brings it forward; a main window that was visible comes back with `showIna
 app the user was in keeps the focus. `beforeCapture` also dismisses the previous toast, and the
 toast window is content-protected, so it is never in the next shot. A new capture re-targets the
 same window and restarts its 6 s auto-hide, counted from when the toast renderer is ready; the
-pointer over the card pauses it. Annotate and Open in Library ask the main window through
+pointer over the card pauses it. Edit and Open in Library ask the main window through
 `screenshot:open-saved` or `screenshot:open-quiet-capture`; the renderer navigates, then calls
 `revealAfterCapture()`, as on the editor path.
 
