@@ -17,7 +17,8 @@
   "scripts": {
     "build": "tsdown",
     "check-types": "tsc -b",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "test": "vitest run"
   },
   "dependencies": {
     "zod": "catalog:"
@@ -25,6 +26,7 @@
   "devDependencies": {
     "@kaipu/config": "workspace:*",
     "tsdown": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "^4.1.9"
   }
 }
