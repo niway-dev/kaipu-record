@@ -72,6 +72,8 @@ export interface OpenInEditor {
    * that only exists to pick the image, like the Editor's New.
    */
   openCapture(source: ImageSource, options?: { replace?: boolean }): void;
+  /** Open a screenshot main just saved to the vault (a capture, the toast's Edit). */
+  openScreenshot(assetId: string): void;
 }
 
 export function useOpenInEditor(): OpenInEditor {
@@ -87,5 +89,9 @@ export function useOpenInEditor(): OpenInEditor {
       navigate(ROUTES.editorCapture, { state: source, replace: options?.replace ?? false }),
     [navigate],
   );
-  return { openItem, openCapture };
+  const openScreenshot = useCallback(
+    (assetId: string) => navigate(editorPathFor({ assetId, kind: "screenshot" })),
+    [navigate],
+  );
+  return { openItem, openCapture, openScreenshot };
 }

@@ -3,10 +3,8 @@ import {
   type AppSettings,
   DEFAULT_SETTINGS,
   SCREENSHOT_COPY_MODES,
-  SCREENSHOT_SAVE_MODES,
   SHORTCUT_ACTIONS,
   type ScreenshotCopyMode,
-  type ScreenshotSaveMode,
   type ShortcutAction,
   type ShortcutSettings,
   type Theme,
@@ -34,10 +32,6 @@ export function isValidUploadMode(value: unknown): value is UploadMode {
 
 export function isValidTheme(value: unknown): value is Theme {
   return typeof value === "string" && (VALID_THEMES as readonly string[]).includes(value);
-}
-
-export function isValidScreenshotSaveMode(value: unknown): value is ScreenshotSaveMode {
-  return typeof value === "string" && (SCREENSHOT_SAVE_MODES as readonly string[]).includes(value);
 }
 
 export function isValidScreenshotCopyMode(value: unknown): value is ScreenshotCopyMode {
@@ -108,9 +102,6 @@ export function mergeSettings(
       typeof safe.showBarInRecording === "boolean"
         ? safe.showBarInRecording
         : DEFAULT_SETTINGS.showBarInRecording,
-    screenshotSave: isValidScreenshotSaveMode(safe.screenshotSave)
-      ? safe.screenshotSave
-      : DEFAULT_SETTINGS.screenshotSave,
     showBrandBadge:
       typeof safe.showBrandBadge === "boolean"
         ? safe.showBrandBadge

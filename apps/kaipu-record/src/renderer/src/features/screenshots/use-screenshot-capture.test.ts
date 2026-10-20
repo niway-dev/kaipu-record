@@ -3,10 +3,11 @@ import { act, renderHook } from "@testing-library/react";
 import type { CaptureResult } from "@shared/types/screenshot-capture";
 
 const openCapture = vi.fn();
+const openScreenshot = vi.fn();
 const showToast = vi.fn();
 
 vi.mock("@renderer/features/editor/open-in-editor", () => ({
-  useOpenInEditor: () => ({ openCapture }),
+  useOpenInEditor: () => ({ openCapture, openScreenshot }),
 }));
 vi.mock("@renderer/ui/toast-store", () => ({ showToast: (spec: unknown) => showToast(spec) }));
 let recorderStatus = "idle";
@@ -52,7 +53,26 @@ describe("useScreenshotCapture", () => {
     }
   });
 
-  it("opens the editor and reveals the app on captured, defaulting to frame", async () => {
+  it("opens the saved shot in the editor and reveals the app, defaulting to frame", async () => {
+    const api = stubApi({
+      kind: "captured",
+      after: "editor",
+      saved: { id: "screenshot-1", assetId: "asset-1" },
+      copied: false,
+      png: new ArrayBuffer(0),
+      width: 10,
+      height: 5,
+      mode: "frame",
+    });
+    const { result } = renderHook(() => useScreenshotCapture());
+    await act(() => result.current.capture());
+    expect(api.captureScreenshot).toHaveBeenCalledWith("frame");
+    expect(openScreenshot).toHaveBeenCalledExactlyOnceWith("asset-1");
+    expect(openCapture).not.toHaveBeenCalled();
+    expect(api.revealAfterCapture).toHaveBeenCalled();
+  });
+
+  it("opens the bytes in memory when main could not save the shot", async () => {
     const api = stubApi({
       kind: "captured",
       after: "editor",
@@ -65,18 +85,18 @@ describe("useScreenshotCapture", () => {
     });
     const { result } = renderHook(() => useScreenshotCapture());
     await act(() => result.current.capture());
-    expect(api.captureScreenshot).toHaveBeenCalledWith("frame");
     expect(openCapture).toHaveBeenCalledWith(
       expect.objectContaining({ kind: "blob", width: 10, height: 5 }),
     );
+    expect(openScreenshot).not.toHaveBeenCalled();
     expect(api.revealAfterCapture).toHaveBeenCalled();
   });
 
-  it("never opens the editor nor force-shows the window on a quiet capture", async () => {
+  it("never opens the editor nor force-shows the window on a Copy", async () => {
     const api = stubApi({
       kind: "captured",
       after: "quiet",
-      saved: { id: "screenshot-1" },
+      saved: { id: "screenshot-1", assetId: "asset-1" },
       copied: true,
       png: new ArrayBuffer(0),
       width: 10,
@@ -86,6 +106,7 @@ describe("useScreenshotCapture", () => {
     const { result } = renderHook(() => useScreenshotCapture());
     await act(() => result.current.capture());
     expect(openCapture).not.toHaveBeenCalled();
+    expect(openScreenshot).not.toHaveBeenCalled();
     // Main restored the window to its pre-capture state; a reveal would undo that.
     expect(api.revealAfterCapture).not.toHaveBeenCalled();
     expect(showToast).not.toHaveBeenCalled();

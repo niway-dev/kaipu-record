@@ -1,5 +1,5 @@
 import type { LocalRecording } from "@shared/types/library-storage";
-import { currentVault } from "../library";
+import { broadcastLibraryChanged, currentVault } from "../library";
 
 /** Stable, sortable id; mirrors the recording writer's timestamp scheme. */
 function screenshotId(): string {
@@ -33,5 +33,8 @@ export async function saveScreenshotToVault(
   });
   const saved = await vault.describe(id);
   if (!saved) throw new Error(`screenshot save: could not describe ${id} after writing`);
+  // An editor already open on another item keeps its library list: without this it
+  // never sees the new shot, and opening it there falls back to the Editor home.
+  broadcastLibraryChanged();
   return saved;
 }

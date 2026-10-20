@@ -32,7 +32,6 @@ import { UpdateSettings } from "./update-settings";
 import { RecordingQualitySettings } from "./recording-quality-settings";
 import { ExportQualitySettings } from "./export-quality-settings";
 import { ScreenshotCopySettings } from "./screenshot-copy-settings";
-import { ScreenshotSaveSettings } from "./screenshot-save-settings";
 import { BrandBadgeSettings } from "./brand-badge-settings";
 import { DiagnosticsSettings } from "./diagnostics-settings";
 import { Section, SettingsPanel } from "./settings-panel";
@@ -297,7 +296,6 @@ export function ScreenshotsSettingsPage(): React.JSX.Element {
   return (
     <SettingsPanel title={t("screenshots")} subtitle={t("screenshotsDescription")}>
       <Section title={t("screenshots")}>
-        <ScreenshotSaveSettings />
         <ScreenshotCopySettings />
       </Section>
       <p className={styles.sectionNote}>{t("screenshotQuietNote")}</p>

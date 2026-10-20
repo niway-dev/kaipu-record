@@ -112,6 +112,29 @@ describe("Editor workspace routes", () => {
     expect(await screen.findByText("image-editor:local:local-s1")).toBeInTheDocument();
   });
 
+  it("opens a shot saved after the editor read its list, instead of falling back home", async () => {
+    // The editor is open on one capture; a second capture is saved and its Edit
+    // navigates to it. The page stays mounted, so its list predates the new shot.
+    setLibrary([localItem("s1", "screenshot", 1)]);
+    const router = renderAt("/editor/image/s1");
+    await screen.findByText("image-editor:local:local-s1");
+    setLibrary([localItem("s1", "screenshot", 1), localItem("s2", "screenshot", 2)]);
+    await router.navigate("/editor/image/s2");
+    expect(await screen.findByText("image-editor:local:local-s2")).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/editor/image/s2");
+  });
+
+  it("re-lists an unknown image once, then falls back to the Editor home", async () => {
+    setLibrary([]);
+    const router = renderAt("/editor/image/gone");
+    await waitFor(() => expect(router.state.location.pathname).toBe("/editor"));
+    // The image page's read, one re-list for the unknown id, then the Editor home's
+    // own read: never a loop.
+    await waitFor(() => expect(window.electronAPI.listLibraryItems).toHaveBeenCalledTimes(3));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(window.electronAPI.listLibraryItems).toHaveBeenCalledTimes(3);
+  });
+
   it("stamps the opened item, once, so the Editor home can list it", async () => {
     setLibrary([localItem("s1", "screenshot", 1)]);
     renderAt("/editor/image/s1");

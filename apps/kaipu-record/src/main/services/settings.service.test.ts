@@ -67,7 +67,6 @@ describe("mergeSettings", () => {
         showInDock: false,
         recordingQuality: QUALITY_PRESETS.max,
         showBarInRecording: true,
-        screenshotSave: "manual",
         showBrandBadge: true,
         screenshotCopy: "manual",
         shortcuts,
@@ -87,7 +86,6 @@ describe("mergeSettings", () => {
       showInDock: false,
       recordingQuality: QUALITY_PRESETS.max,
       showBarInRecording: true,
-      screenshotSave: "manual",
       showBrandBadge: true,
       screenshotCopy: "manual",
       shortcuts,
@@ -321,16 +319,11 @@ describe("uploadMode", () => {
   });
 });
 
-describe("screenshotSave", () => {
-  it("defaults to auto", () => {
-    expect(DEFAULT_SETTINGS.screenshotSave).toBe("auto");
-    expect(mergeSettings(null).screenshotSave).toBe("auto");
-  });
-
-  it("keeps a valid stored mode and coerces anything else to the default", () => {
-    expect(mergeSettings({ screenshotSave: "manual" }).screenshotSave).toBe("manual");
-    expect(mergeSettings({ screenshotSave: "always" as never }).screenshotSave).toBe("auto");
-    expect(mergeSettings({ screenshotSave: 3 as never }).screenshotSave).toBe("auto");
+describe("screenshotSave (removed)", () => {
+  it("drops the retired preference from a stored file", () => {
+    expect(mergeSettings({ screenshotSave: "manual" } as never)).not.toHaveProperty(
+      "screenshotSave",
+    );
   });
 });
 
@@ -356,16 +349,5 @@ describe("screenshotCopy", () => {
     expect(mergeSettings({ screenshotCopy: "manual" }).screenshotCopy).toBe("manual");
     expect(mergeSettings({ screenshotCopy: "always" as never }).screenshotCopy).toBe("auto");
     expect(mergeSettings({ screenshotCopy: 3 as never }).screenshotCopy).toBe("auto");
-  });
-
-  it("is independent of screenshotSave — every combination survives a merge", () => {
-    expect(mergeSettings({ screenshotSave: "manual", screenshotCopy: "auto" })).toMatchObject({
-      screenshotSave: "manual",
-      screenshotCopy: "auto",
-    });
-    expect(mergeSettings({ screenshotSave: "auto", screenshotCopy: "manual" })).toMatchObject({
-      screenshotSave: "auto",
-      screenshotCopy: "manual",
-    });
   });
 });

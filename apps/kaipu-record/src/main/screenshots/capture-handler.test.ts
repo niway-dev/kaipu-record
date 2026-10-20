@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ScreenshotCopyMode, ScreenshotSaveMode } from "@shared/types";
+import type { ScreenshotCopyMode } from "@shared/types";
 import type { CaptureAction } from "@shared/types/screenshot-capture";
 import { createCaptureHandler } from "./capture-handler";
 import { clearLastQuietCapture, takeLastQuietCapture } from "./last-quiet-capture";
@@ -16,13 +16,10 @@ const overlay: OverlayPort = {
   destroyAll: () => {},
 };
 
-// The default preferences keep the editor path: saving manual means Capture opens it.
-let prefs: { save: ScreenshotSaveMode; copy: ScreenshotCopyMode } = {
-  save: "manual",
-  copy: "manual",
-};
+// Copying manual by default, so a Capture touches the clipboard only when a test asks.
+let prefs: { copy: ScreenshotCopyMode } = { copy: "manual" };
 beforeEach(() => {
-  prefs = { save: "manual", copy: "manual" };
+  prefs = { copy: "manual" };
   clearLastQuietCapture();
 });
 
@@ -34,7 +31,10 @@ function setup(
   const windows = { beforeCapture: vi.fn(), afterCapture: vi.fn(), reveal: vi.fn() };
   const track = vi.fn();
   const rememberMode = vi.fn();
-  const saveToVault = vi.fn(async (_png: Buffer, _title: string) => ({ id: "screenshot-1" }));
+  const saveToVault = vi.fn(async (_png: Buffer, _title: string) => ({
+    id: "screenshot-1",
+    assetId: "asset-1",
+  }));
   const copyToClipboard = vi.fn();
   const onQuietCapture = vi.fn();
   const handler = createCaptureHandler({
@@ -113,7 +113,7 @@ describe("createCaptureHandler", () => {
     expect(await handler({ mode: "frame" })).toMatchObject({ kind: "captured", mode: "frame" });
   });
 
-  it("answers captured with an ArrayBuffer copy, size and mode", async () => {
+  it("answers captured with the saved item, size and mode", async () => {
     const { handler, windows } = setup(async ({ mode }) => ({
       kind: "captured",
       png: Buffer.from([1, 2, 3]),
@@ -124,14 +124,12 @@ describe("createCaptureHandler", () => {
     expect(out).toMatchObject({
       kind: "captured",
       after: "editor",
-      saved: null,
+      saved: { id: "screenshot-1", assetId: "asset-1" },
       copied: false,
       width: 3,
       height: 2,
       mode: "frame",
     });
-    if (out.kind !== "captured") throw new Error("unreachable");
-    expect(new Uint8Array(out.png)).toEqual(new Uint8Array([1, 2, 3]));
     expect(windows.afterCapture).toHaveBeenCalledWith("editor");
   });
 
@@ -281,7 +279,7 @@ describe("createCaptureHandler", () => {
     });
   });
 
-  describe("quiet capture", () => {
+  describe("after capture", () => {
     const shot = (action: CaptureAction) =>
       vi.fn(async ({ mode }: { mode: "frame" | "window" | "screen" }) => ({
         kind: "captured" as const,
@@ -290,9 +288,10 @@ describe("createCaptureHandler", () => {
         action,
       }));
 
-    it("saves exactly one vault item, answers its id and ships no bytes", async () => {
-      prefs = { save: "auto", copy: "manual" };
-      const { handler, saveToVault, copyToClipboard, windows } = setup(shot("capture"));
+    it("Capture saves one vault item and opens the editor on it, without shipping bytes", async () => {
+      const { handler, saveToVault, copyToClipboard, windows, onQuietCapture } = setup(
+        shot("capture"),
+      );
       const out = await handler({ mode: "frame" });
       expect(saveToVault).toHaveBeenCalledOnce();
       expect(saveToVault.mock.calls[0]![0]).toEqual(Buffer.from([9, 8, 7]));
@@ -300,8 +299,8 @@ describe("createCaptureHandler", () => {
       expect(copyToClipboard).not.toHaveBeenCalled();
       expect(out).toMatchObject({
         kind: "captured",
-        after: "quiet",
-        saved: { id: "screenshot-1" },
+        after: "editor",
+        saved: { id: "screenshot-1", assetId: "asset-1" },
         copied: false,
         width: 3,
         height: 2,
@@ -309,29 +308,76 @@ describe("createCaptureHandler", () => {
       });
       if (out.kind !== "captured") throw new Error("unreachable");
       expect(out.png.byteLength).toBe(0);
-      // The editor will not open: the main window goes back where it was.
-      expect(windows.afterCapture).toHaveBeenCalledWith("quiet");
-      // A saved shot is annotated from the vault, so nothing is kept in memory.
+      // The renderer reveals the window once the editor shows; no toast for an editor capture.
+      expect(windows.afterCapture).toHaveBeenCalledWith("editor");
+      expect(onQuietCapture).not.toHaveBeenCalled();
       expect(takeLastQuietCapture()).toBeNull();
     });
 
-    it("copies when both preferences are automatic", async () => {
-      prefs = { save: "auto", copy: "auto" };
-      const { handler, saveToVault, copyToClipboard } = setup(shot("capture"));
+    it("Capture also copies when copying is automatic", async () => {
+      prefs = { copy: "auto" };
+      const { handler, copyToClipboard } = setup(shot("capture"));
       const out = await handler({ mode: "screen" });
-      expect(saveToVault).toHaveBeenCalledOnce();
       expect(copyToClipboard).toHaveBeenCalledWith(Buffer.from([9, 8, 7]));
-      expect(out).toMatchObject({ after: "quiet", saved: { id: "screenshot-1" }, copied: true });
+      expect(out).toMatchObject({ after: "editor", copied: true });
     });
 
-    it("Copy with saving manual only copies, never writes the vault, and keeps the bytes once", async () => {
+    it("Capture whose save fails opens the bytes in memory and copies nothing", async () => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      prefs = { copy: "auto" };
+      const { handler, saveToVault, copyToClipboard, windows, onQuietCapture } = setup(
+        shot("capture"),
+      );
+      saveToVault.mockRejectedValueOnce(new Error("disk full"));
+      const out = await handler({ mode: "frame" });
+      if (out.kind !== "captured") throw new Error("unreachable");
+      expect(out).toMatchObject({ after: "editor", saved: null, copied: false });
+      expect(new Uint8Array(out.png)).toEqual(new Uint8Array([9, 8, 7]));
+      // The in-memory editor runs its own auto copy; main must not copy twice.
+      expect(copyToClipboard).not.toHaveBeenCalled();
+      expect(windows.afterCapture).toHaveBeenCalledWith("editor");
+      expect(onQuietCapture).not.toHaveBeenCalled();
+    });
+
+    it("Copy saves, copies and finishes quietly, whatever the copy preference", async () => {
       const { handler, saveToVault, copyToClipboard, windows } = setup(shot("copy"));
       const out = await handler({ mode: "window" });
-      expect(saveToVault).not.toHaveBeenCalled();
+      expect(saveToVault).toHaveBeenCalledOnce();
       expect(copyToClipboard).toHaveBeenCalledOnce();
-      // Quiet, not cancelled: the window comes back without taking the focus from the app.
+      // Quiet: the window comes back without taking the focus from the app.
       expect(windows.afterCapture).toHaveBeenCalledExactlyOnceWith("quiet");
-      expect(out).toMatchObject({ after: "quiet", saved: null, copied: true, mode: "window" });
+      expect(out).toMatchObject({
+        after: "quiet",
+        saved: { id: "screenshot-1", assetId: "asset-1" },
+        copied: true,
+        mode: "window",
+      });
+      if (out.kind !== "captured") throw new Error("unreachable");
+      expect(out.png.byteLength).toBe(0);
+      // A saved shot is edited from the vault, so nothing is kept in memory.
+      expect(takeLastQuietCapture()).toBeNull();
+    });
+
+    it("hands the toast hook one payload per Copy", async () => {
+      const { handler, onQuietCapture } = setup(shot("copy"));
+      await handler({ mode: "frame" });
+      expect(onQuietCapture).toHaveBeenCalledExactlyOnceWith({
+        thumbnail: "data:image/png;base64,thumb",
+        width: 3,
+        height: 2,
+        mode: "frame",
+        saved: { id: "screenshot-1", assetId: "asset-1" },
+        copied: true,
+      });
+    });
+
+    it("Copy whose save fails still copies and keeps the bytes once for Edit", async () => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      const { handler, saveToVault, onQuietCapture } = setup(shot("copy"));
+      saveToVault.mockRejectedValueOnce(new Error("disk full"));
+      const out = await handler({ mode: "window" });
+      expect(out).toMatchObject({ after: "quiet", saved: null, copied: true });
+      expect(onQuietCapture).toHaveBeenCalledWith(expect.objectContaining({ saved: null }));
       expect(takeLastQuietCapture()).toEqual({
         png: Buffer.from([9, 8, 7]),
         width: 3,
@@ -341,82 +387,41 @@ describe("createCaptureHandler", () => {
       expect(takeLastQuietCapture()).toBeNull();
     });
 
-    it("Copy with saving automatic writes the vault once and keeps nothing", async () => {
-      prefs = { save: "auto", copy: "manual" };
-      const { handler, saveToVault } = setup(shot("copy"));
+    it("Copy that lands nowhere falls back to the editor with the bytes", async () => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      const { handler, saveToVault, copyToClipboard, onQuietCapture } = setup(shot("copy"));
+      saveToVault.mockRejectedValueOnce(new Error("disk full"));
+      copyToClipboard.mockImplementationOnce(() => {
+        throw new Error("clipboard busy");
+      });
       const out = await handler({ mode: "frame" });
-      expect(saveToVault).toHaveBeenCalledOnce();
-      expect(out).toMatchObject({ saved: { id: "screenshot-1" }, copied: true });
-      expect(takeLastQuietCapture()).toBeNull();
+      if (out.kind !== "captured") throw new Error("unreachable");
+      expect(out.after).toBe("editor");
+      expect(new Uint8Array(out.png)).toEqual(new Uint8Array([9, 8, 7]));
+      expect(onQuietCapture).not.toHaveBeenCalled();
     });
 
-    it("a new capture replaces the kept bytes, and starting one frees them", async () => {
+    it("starting a capture frees the bytes kept by the previous one", async () => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
       const first = setup(shot("copy"));
-      await first.handler({ mode: "frame" });
-      const second = setup(
-        vi.fn(async ({ mode }) => ({
-          kind: "captured" as const,
-          png: Buffer.from([4]),
-          mode,
-          action: "copy" as const,
-        })),
-      );
-      await second.handler({ mode: "frame" });
-      expect(takeLastQuietCapture()?.png).toEqual(Buffer.from([4]));
-
+      first.saveToVault.mockRejectedValueOnce(new Error("disk full"));
       await first.handler({ mode: "frame" });
       const cancelled = setup(async () => ({ kind: "cancelled" }));
       await cancelled.handler({ mode: "frame" });
       expect(takeLastQuietCapture()).toBeNull();
     });
 
-    it("hands the toast hook one payload per quiet capture", async () => {
-      prefs = { save: "auto", copy: "auto" };
-      const { handler, onQuietCapture } = setup(shot("capture"));
-      await handler({ mode: "frame" });
-      expect(onQuietCapture).toHaveBeenCalledOnce();
-      expect(onQuietCapture).toHaveBeenCalledWith({
-        thumbnail: "data:image/png;base64,thumb",
-        width: 3,
-        height: 2,
-        mode: "frame",
-        saved: { id: "screenshot-1" },
-        copied: true,
-      });
-    });
-
-    it("does not call the toast hook for an editor capture", async () => {
-      const { handler, onQuietCapture } = setup(shot("capture"));
-      await handler({ mode: "frame" });
-      expect(onQuietCapture).not.toHaveBeenCalled();
-    });
-
-    it("reports after: quiet, with the mode the user ended in", async () => {
-      prefs = { save: "auto", copy: "manual" };
-      const { handler, track } = setup(shot("capture"));
-      await handler({ mode: "frame" });
+    it("reports after: quiet for Copy, with the mode the user ended in", async () => {
+      const { handler, track } = setup(shot("copy"));
+      await handler({ mode: "screen" });
       expect(track).toHaveBeenCalledWith(
-        expect.objectContaining({ outcome: "captured", after: "quiet" }),
+        expect.objectContaining({ mode: "screen", outcome: "captured", after: "quiet" }),
       );
     });
 
-    it("falls back to the editor with the bytes when the vault write fails and nothing else succeeded", async () => {
+    it("remembers the mode on a Copy and on a Capture whose save failed", async () => {
       vi.spyOn(console, "error").mockImplementation(() => {});
-      prefs = { save: "auto", copy: "manual" };
-      const { handler, saveToVault, windows, onQuietCapture } = setup(shot("capture"));
-      saveToVault.mockRejectedValueOnce(new Error("disk full"));
-      const out = await handler({ mode: "frame" });
-      if (out.kind !== "captured") throw new Error("unreachable");
-      expect(out.after).toBe("editor");
-      expect(new Uint8Array(out.png)).toEqual(new Uint8Array([9, 8, 7]));
-      expect(windows.afterCapture).toHaveBeenCalledWith("editor");
-      expect(onQuietCapture).not.toHaveBeenCalled();
-    });
-
-    it("remembers the mode on a quiet capture and on a failed vault write that falls back to the editor", async () => {
-      vi.spyOn(console, "error").mockImplementation(() => {});
-      prefs = { save: "auto", copy: "manual" };
-      const quiet = setup(shot("capture"));
+      const quiet = setup(shot("copy"));
       await quiet.handler({ mode: "screen" });
       expect(quiet.rememberMode).toHaveBeenCalledExactlyOnceWith("screen");
 

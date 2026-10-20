@@ -8,7 +8,7 @@ import { screenshotTitle } from "@shared/screenshot-title";
 import type { ImageSource } from "./image-source";
 
 export function useScreenshotCapture(): { capture: (mode?: CaptureMode) => Promise<void> } {
-  const { openCapture } = useOpenInEditor();
+  const { openCapture, openScreenshot } = useOpenInEditor();
   const t = useTranslations("screenshots");
   const capture = useCallback(
     async (mode: CaptureMode = "frame") => {
@@ -32,24 +32,28 @@ export function useScreenshotCapture(): { capture: (mode?: CaptureMode) => Promi
         window.electronAPI.revealAfterCapture();
         return;
       }
-      // Quiet capture: main already saved and/or copied it and put the main window back
-      // where it was (hidden stays hidden, the page stays the page). No editor, and no
-      // reveal: that would force the window on screen.
+      // Copy: main already saved and copied it and put the main window back where it was
+      // (hidden stays hidden, the page stays the page). No editor, and no reveal: that
+      // would force the window on screen.
       if (shot.after === "quiet") return;
-      // A fresh capture is an in-memory blob source; the editor resolves it generically.
-      const source: ImageSource = {
-        kind: "blob",
-        bytes: shot.png,
-        width: shot.width,
-        height: shot.height,
-        title: screenshotTitle(),
-      };
       // Navigate first (synchronous in the router), THEN ask main to bring the app
       // back — so it reappears already on the editor, not the previous page.
-      openCapture(source);
+      if (shot.saved) {
+        openScreenshot(shot.saved.assetId);
+      } else {
+        // The vault write failed: the editor opens the bytes in memory, where Save retries.
+        const source: ImageSource = {
+          kind: "blob",
+          bytes: shot.png,
+          width: shot.width,
+          height: shot.height,
+          title: screenshotTitle(),
+        };
+        openCapture(source);
+      }
       window.electronAPI.revealAfterCapture();
     },
-    [openCapture, t],
+    [openCapture, openScreenshot, t],
   );
   return { capture };
 }

@@ -88,7 +88,7 @@ export function CaptureToast({
       <div className={styles.actions}>
         <button type="button" className={styles.primary} onClick={() => api.action("annotate")}>
           <PenLine size={14} aria-hidden />
-          {t("toast.annotate")}
+          {t("toast.edit")}
         </button>
         {payload.saved ? (
           <button

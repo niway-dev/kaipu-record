@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { generatePath, Navigate, useLocation, useParams } from "react-router-dom";
 import { useTranslations } from "@kaipu/i18n";
 import { ROUTES } from "@shared/routes";
@@ -17,11 +17,23 @@ import styles from "./editor-page.module.css";
  * the way the library detail page does, instead of reading router state.
  */
 
-/** Resolve the `:assetId` param against the local library. */
+/**
+ * Resolve the `:assetId` param against the local library. Moving from one item to
+ * another keeps this page mounted, and with it a list read before the new item existed
+ * (a capture saved a moment ago): an id the list does not have is re-listed once before
+ * the page gives up on it, and reports loading until that answer arrives.
+ */
 function useItemFromParams(): { item: LibraryVideo | undefined; isLoading: boolean } {
   const { assetId } = useParams<{ assetId: string }>();
-  const { videos, isLoading } = useLocalLibrary();
-  return { item: videos.find((v) => v.assetId === assetId), isLoading };
+  const { videos, isLoading, refresh } = useLocalLibrary();
+  const item = videos.find((v) => v.assetId === assetId);
+  const [relisted, setRelisted] = useState<string | undefined>(undefined);
+  const needsRelist = !item && !isLoading && assetId !== undefined && relisted !== assetId;
+  useEffect(() => {
+    if (!needsRelist) return;
+    void refresh().finally(() => setRelisted(assetId));
+  }, [needsRelist, assetId, refresh]);
+  return { item, isLoading: isLoading || needsRelist };
 }
 
 /**

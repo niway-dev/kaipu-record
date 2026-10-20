@@ -63,7 +63,6 @@ const STUB_SETTINGS = {
   showInDock: true,
   recordingQuality: DEFAULT_QUALITY,
   showBarInRecording: false,
-  screenshotSave: "auto",
   showBrandBadge: false,
   screenshotCopy: "auto",
   shortcuts: defaultShortcutsFor("darwin"),
