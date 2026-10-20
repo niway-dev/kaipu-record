@@ -42,8 +42,13 @@ name: PR checks
 
 on:
   pull_request:
-    branches:
-      - main
+    # No `branches:` filter, since 2026-10-19: a stacked pull request targets the branch of
+    # the one below it, yet GitHub judges every pull request in a stack against the stack's
+    # base (`main`) and its required check. With `branches: [main]` the upper pull requests
+    # never ran, so "Release candidate verified" stayed "Expected" forever and "Merge stack"
+    # was impossible (PR #347). The check now runs on every pull request and stays attached
+    # to the head commit, so a pull request later retargeted onto `main` keeps its result.
+    #
     # Why each of these, since the default set is not enough and every extra type is a
     # potential wasted run:
     #   ready_for_review  — THE trigger. "This candidate is the one I am publishing."
@@ -59,7 +64,8 @@ on:
     # as passing, so while the real run was still working the PR read "All checks have
     # passed" and could be merged unverified (seen on desktop 0.10.0, PR #195). Without
     # `edited`, the required check stays "Expected" until the run that verifies reports it.
-    # The retargeted stacked PR now needs one push, or close and reopen, to start its run.
+    # A retargeted stacked PR needs no new run: it was verified when it was opened against
+    # the branch below it (see the note on `branches` above).
     types:
       - opened
       - reopened
