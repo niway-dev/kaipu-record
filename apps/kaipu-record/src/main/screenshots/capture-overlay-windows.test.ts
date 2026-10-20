@@ -10,6 +10,8 @@ const ipcListeners = new Map<
 >();
 const screenListeners = new Map<string, (event: unknown, display: Display) => void>();
 let nextWebContentsId = 100;
+/** The window holding keyboard focus, as the OS sees it: Electron's `show()` takes it, `showInactive()` does not. */
+let keyWindowId: number | null = null;
 
 class FakeWindow {
   private renderGone: (() => void) | null = null;
@@ -24,9 +26,14 @@ class FakeWindow {
   };
   setAlwaysOnTop = vi.fn();
   setVisibleOnAllWorkspaces = vi.fn();
-  show = vi.fn();
+  show = vi.fn(() => {
+    keyWindowId = this.webContents.id;
+  });
+  showInactive = vi.fn();
   hide = vi.fn();
-  focus = vi.fn();
+  focus = vi.fn(() => {
+    keyWindowId = this.webContents.id;
+  });
   loadURL = vi.fn(async () => {});
   loadFile = vi.fn(async (_path: string, _options?: { search: string }) => {});
   private destroyed = false;
@@ -100,6 +107,7 @@ function overlays(platform: NodeJS.Platform = "darwin") {
 
 beforeEach(() => {
   created.length = 0;
+  keyWindowId = null;
   ipcListeners.clear();
   screenListeners.clear();
 });
@@ -188,14 +196,36 @@ describe("CaptureOverlayWindows: creating the overlays", () => {
     void overlays("win32").pick("screen", [left, right]);
     const [first, second] = created.map(({ window }) => window);
     expect(first.show).not.toHaveBeenCalled();
+    expect(first.showInactive).not.toHaveBeenCalled();
 
     first.paint();
     second.paint();
 
-    expect(first.show).toHaveBeenCalled();
+    expect(first.showInactive).toHaveBeenCalled();
     expect(second.show).toHaveBeenCalled();
     expect(first.focus).not.toHaveBeenCalled();
     expect(second.focus).toHaveBeenCalled(); // the pointer (2000, 100) is on the right display
+  });
+
+  // Three displays paint in whatever order their renderers load. `show()` makes a window
+  // key, so a display that paints after the focused one used to take the keyboard, and
+  // Enter / ⌘C on the frame went nowhere.
+  it("keeps keyboard focus on the focused overlay whatever order the others paint in", () => {
+    const third = display(3, 2880);
+    for (const order of [
+      [1, 0, 2],
+      [0, 1, 2],
+      [2, 1, 0],
+    ]) {
+      created.length = 0;
+      keyWindowId = null;
+      void overlays("darwin").pick("frame", [left, right, third]);
+      const windows = created.map(({ window }) => window);
+      for (const index of order) windows[index].paint();
+
+      // The pointer (2000, 100) is on the right display, so the frame and the keyboard are there.
+      expect(keyWindowId).toBe(windows[1].webContents.id);
+    }
   });
 
   it("answers cancelled without creating anything when there is no display", async () => {

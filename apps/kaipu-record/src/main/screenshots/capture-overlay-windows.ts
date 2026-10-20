@@ -59,6 +59,7 @@ export interface OverlayWindow {
     options?: { visibleOnFullScreen?: boolean; skipTransformProcessType?: boolean },
   ): void;
   show(): void;
+  showInactive(): void;
   hide(): void;
   focus(): void;
   destroy(): void;
@@ -465,8 +466,15 @@ export class CaptureOverlayWindows implements OverlayPort {
       // Answered or destroyed before it painted: never show a stale overlay.
       if (window.isDestroyed() || !this.session?.settle) return;
       this.setSpaceBehavior(window, true);
-      window.show();
-      if (display.id === this.focusDisplayId) window.focus();
+      // `show()` also makes the window key, so with several displays whichever overlay
+      // painted LAST took the keyboard and Enter / ⌘C on the frame went nowhere. Only the
+      // focus target is shown active; the others never take focus on their own.
+      if (display.id === this.focusDisplayId) {
+        window.show();
+        window.focus();
+      } else {
+        window.showInactive();
+      }
       // A renderer that loaded after the last broadcast still learns where the frame is.
       this.sendState(window);
       const session = this.session;
