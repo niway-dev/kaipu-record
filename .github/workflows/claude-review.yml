@@ -1,0 +1,192 @@
+name: Claude PR review
+
+# A code review by Claude Sonnet 5.5, paid from the Anthropic Console API credits through
+# the `ANTHROPIC_API_KEY` secret. It is a GitHub review: each finding is a comment on its
+# line, labelled "Should fix" or "Note", that the owner can answer in its thread. It is
+# advisory: never a required check, never an approval or a change request, never a merge
+# gate. What to look for beyond the defaults is in `.github/claude-review.md`.
+#
+# Copied from the review kit in niway-dev/pr-review-engine; this repository's decision is
+# ADR 0028 (apps/documentation/src/content/docs/architecture/decisions/). It runs narrowly:
+#   - `review`: once, when a pull request opens ready for review or leaves draft.
+#     A later push does not re-run it.
+#   - `on-demand`: when the repository owner comments on a pull request:
+#     `@claude review` re-reviews what changed since the last reviewed commit and
+#     answers the owner's replies in the open threads; `@claude review <path>…` reviews
+#     only those paths; any other `@claude …` comment is a question, answered as a comment.
+#
+# Before Claude is called, `scripts/claude-review.ts` drops lockfiles, build output and
+# generated files, then stops at the size gate below: a larger pull request gets a review
+# body saying how to scope it, and nothing is spent. Below the gate, a file Claude does
+# not account for marks the review "partial" on its first line.
+#
+# Comments come from `github-actions[bot]` through the workflow token, so the Claude
+# GitHub App does not need to be installed.
+#
+# Both jobs run `scripts/claude-review.ts`: Claude only reads (files, the PR, its diff),
+# and the script posts the review, capped at $1 a run. That is enough
+# here because only collaborators open pull requests (CONTRIBUTING.md), and the owner is
+# the only collaborator, so everything Claude reads is trusted. This repository is public,
+# so three things keep strangers out: fork pull requests are skipped (they get no secrets
+# anyway), only the owner's `@claude` comment starts a run, and only replies from people
+# with access reach Claude. Claude Code still loads the PR head's `.claude/` hooks, which
+# run with the key: the trust assumption, not a sandbox, is what makes that acceptable.
+
+on:
+  pull_request:
+    types: [opened, ready_for_review]
+  issue_comment:
+    types: [created]
+
+# Claude Code runs directly rather than through anthropics/claude-code-action: on
+# 2026-10-20 the action's run failed its first API call with `billing_error` ("Credit
+# balance is too low") while `claude -p`, same key, same version (2.1.304), same
+# runner, succeeded. Request IDs req_011CgE5r6BmHE8igysA8ZR7i and
+# req_011CgE6KfqposaccWs8zThCr.
+#
+# Concurrency is per job, never per workflow: every comment on a pull request starts a
+# run, and a workflow-level group would let a skipped `on-demand` cancel a review.
+
+env:
+  # Pinned: the version is part of what was verified to work (see above). Bump it by
+  # hand, and re-run a review to check.
+  CLAUDE_CODE_VERSION: 2.1.304
+  # The linux-x64 binary's SHA-256, from the release's manifest.json:
+  #   https://downloads.claude.ai/claude-code-releases/<version>/manifest.json
+  # The binary is downloaded directly and checked against this value, rather than running
+  # install.sh from claude.ai, whose content is fetched live in a job that holds the key.
+  # Bump it with the version.
+  CLAUDE_CODE_SHA256: ea0f135784631619a7a409d07322ecec964f9cc4fd377508ed1ba3f141f27912
+  # The size gate, after filtering, and the most one review may spend. A pull request
+  # edits these for its own `review` run, which the trust assumption above accepts.
+  CLAUDE_REVIEW_MAX_LINES: 3000
+  CLAUDE_REVIEW_MAX_FILES: 60
+  CLAUDE_REVIEW_BUDGET_USD: 1
+  # Named in the prompt so Claude checks changes against the accepted decisions.
+  CLAUDE_REVIEW_ADR_DIR: apps/documentation/src/content/docs/architecture/decisions
+
+jobs:
+  review:
+    name: Claude review
+    # Fork and Dependabot pull requests get no secrets, so the job could only fail there.
+    # Release-please pull requests are a changelog and a version bump, verified by
+    # pr-checks.yml (ADR 0027); reviewing them would only spend.
+    if: |
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]' &&
+      !startsWith(github.head_ref, 'release-please--')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: claude-review-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      # Unlike `on-demand`, this job runs the head's own script. Checking out the default
+      # branch's script here would not protect the key: a `pull_request` run uses the
+      # workflow file from the head, so a branch that can edit the script can edit this
+      # file too. The trust assumption in the header is what covers it.
+      # The head, not the default merge commit, so the files match the diff's lines.
+      - name: Checkout the pull request head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.4
+
+      - name: Install Claude Code
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL "https://downloads.claude.ai/claude-code-releases/$CLAUDE_CODE_VERSION/linux-x64/claude" \
+            -o "$HOME/.local/bin/claude"
+          echo "$CLAUDE_CODE_SHA256  $HOME/.local/bin/claude" | sha256sum -c -
+          chmod +x "$HOME/.local/bin/claude"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Review the pull request
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: bun scripts/claude-review.ts review "$PR"
+
+  on-demand:
+    name: Claude on demand
+    if: |
+      github.event_name == 'issue_comment' &&
+      github.event.issue.pull_request &&
+      github.event.comment.author_association == 'OWNER' &&
+      contains(github.event.comment.body, '@claude')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Queued, not cancelled: a quick follow-up `@claude` comment must not kill a review
+    # that has already spent its budget. GitHub keeps one pending run per group, so a
+    # burst of comments runs the first and the last.
+    concurrency:
+      group: claude-on-demand-${{ github.event.issue.number }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      # `issue_comment` carries no head repository, so check it before anything reads the
+      # head: on a fork's pull request the job stops instead of running its code with the key.
+      - name: Refuse a fork pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.issue.number }}
+        run: |
+          head=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq .head.repo.full_name)
+          if [ "$head" != "$GITHUB_REPOSITORY" ]; then
+            echo "Pull request #$PR comes from $head, not $GITHUB_REPOSITORY; not running." >&2
+            exit 1
+          fi
+
+      # Claude reads the pull request head; the script that holds the key comes from
+      # the default branch. That is not a sandbox: Claude Code still loads the head's
+      # `.claude/` settings and hooks, which run with the key. It relies on the trust
+      # assumption in the header, like everything else in this file.
+      - name: Checkout the pull request head
+        uses: actions/checkout@v4
+        with:
+          ref: refs/pull/${{ github.event.issue.number }}/head
+          fetch-depth: 1
+
+      - name: Checkout the default branch's script
+        uses: actions/checkout@v4
+        with:
+          path: .ci-main
+          sparse-checkout: scripts
+          fetch-depth: 1
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.4
+
+      - name: Install Claude Code
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL "https://downloads.claude.ai/claude-code-releases/$CLAUDE_CODE_VERSION/linux-x64/claude" \
+            -o "$HOME/.local/bin/claude"
+          echo "$CLAUDE_CODE_SHA256  $HOME/.local/bin/claude" | sha256sum -c -
+          chmod +x "$HOME/.local/bin/claude"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      # The comment reaches the script through the environment, never interpolated
+      # into the shell, so its text cannot run as a command.
+      - name: Review or answer
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.issue.number }}
+          REQUEST: ${{ github.event.comment.body }}
+        run: bun .ci-main/scripts/claude-review.ts comment "$PR"
