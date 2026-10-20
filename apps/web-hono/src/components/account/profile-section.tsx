@@ -1,16 +1,10 @@
 import { useState } from "react";
+import * as stylex from "@stylexjs/stylex";
+import { Check } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
-import {
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  Input,
-  Label,
-} from "@kaipu/web-ui";
 import { authClient } from "@/lib/auth/auth-client";
+import { kl, tone } from "../dashboard/dashboard.stylex";
+import { Button, Card, Field, Tag } from "@/components/dashboard/ui";
 import { VerificationNotice } from "./verification-notice";
 
 export interface AccountUser {
@@ -55,59 +49,80 @@ export function ProfileSection({
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t("profileTitle")}</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <form onSubmit={(e) => void saveName(e)} className="space-y-2" noValidate>
-          <Label htmlFor="account-name">{t("nameLabel")}</Label>
-          <div className="flex gap-2">
-            <Input
-              id="account-name"
-              value={name}
-              onChange={(e) => {
-                setName(e.target.value);
-                setNameStatus("idle");
-              }}
-              autoComplete="name"
-              aria-invalid={nameStatus === "invalid" || undefined}
-            />
-            <Button type="submit" disabled={nameStatus === "saving" || name.trim() === user.name}>
-              {nameStatus === "saving" ? t("nameSaving") : t("nameSave")}
-            </Button>
-          </div>
-          {nameStatus === "invalid" && (
-            <p role="alert" className="text-destructive text-sm">
-              {t("nameInvalid")}
-            </p>
-          )}
-          {nameStatus === "failed" && (
-            <p role="alert" className="text-destructive text-sm">
-              {t("nameSaveFailed")}
-            </p>
-          )}
+    <Card title={t("profileTitle")}>
+      <form onSubmit={(e) => void saveName(e)} noValidate>
+        <Field
+          id="account-name"
+          label={t("nameLabel")}
+          value={name}
+          onChange={(e) => {
+            setName(e.target.value);
+            setNameStatus("idle");
+          }}
+          autoComplete="name"
+          error={nameStatus === "invalid" ? t("nameInvalid") : null}
+        />
+        <div {...stylex.props(s.row)}>
+          <Button
+            type="submit"
+            variant="pink"
+            size="sm"
+            disabled={nameStatus === "saving" || name.trim() === user.name}
+          >
+            {nameStatus === "saving" ? t("nameSaving") : t("nameSave")}
+          </Button>
           {nameStatus === "saved" && (
-            <p role="status" className="text-muted-foreground text-sm">
+            <p role="status" {...stylex.props(s.saved)}>
+              <Check size={14} strokeWidth={2.4} aria-hidden />
               {t("nameSaved")}
             </p>
           )}
-        </form>
-
-        <div className="space-y-2">
-          <Label>{t("emailLabel")}</Label>
-          <div className="flex flex-wrap items-center gap-2">
-            <span>{user.email}</span>
-            <Badge variant={user.emailVerified ? "secondary" : "outline"}>
-              {user.emailVerified ? t("emailVerified") : t("emailNotVerified")}
-            </Badge>
-          </div>
+          {nameStatus === "failed" && (
+            <p role="alert" {...stylex.props(s.failed)}>
+              {t("nameSaveFailed")}
+            </p>
+          )}
         </div>
+      </form>
 
-        {!user.emailVerified && (
+      <div aria-hidden {...stylex.props(s.divider)} />
+
+      <p {...stylex.props(s.label)}>{t("emailLabel")}</p>
+      <div {...stylex.props(s.row)}>
+        <span {...stylex.props(s.email)}>{user.email}</span>
+        <Tag tone={user.emailVerified ? "ok" : "warn"}>
+          {user.emailVerified ? t("emailVerified") : t("emailNotVerified")}
+        </Tag>
+      </div>
+
+      {!user.emailVerified && (
+        <div {...stylex.props(s.notice)}>
           <VerificationNotice user={user} onSessionChanged={onSessionChanged} />
-        )}
-      </CardContent>
+        </div>
+      )}
     </Card>
   );
 }
+
+const s = stylex.create({
+  row: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: "12px" },
+  saved: {
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    margin: 0,
+    fontSize: "13px",
+    color: tone.green,
+  },
+  failed: { margin: 0, fontSize: "13px", color: tone.red },
+  divider: { height: "1px", marginTop: "20px", marginBottom: "16px", backgroundColor: kl.bd },
+  label: { margin: 0, marginBottom: "8px", fontSize: "13px", fontWeight: 600, color: kl.tx },
+  email: {
+    minWidth: 0,
+    fontFamily: kl.fontMono,
+    fontSize: "13.5px",
+    color: kl.tx,
+    overflowWrap: "anywhere",
+  },
+  notice: { marginTop: "16px" },
+});

@@ -29,30 +29,36 @@ the current state of that work.
 ## Layout in Infisical
 
 - Environment slug: `dev` (the Infisical UI shows it as "Development").
-- Secrets live in four folders, grouped by blast radius rather than by which app reads them:
-  `/cloudflare`, `/database`, `/server-hono`, `/kaipu-record`.
+- Secrets live in six folders, grouped by blast radius rather than by which app reads them:
+  `/public`, `/database`, `/cloudflare`, `/auth`, `/email`, `/signing`. Tags name the consumer.
 - Non-secret config lives at the Infisical root.
 
 ## How commands get their environment
 
-Two different mechanisms exist because Cloudflare Workers need env differently from everything
-else:
+Infisical is only contacted by one command, `bun env:pull` (`scripts/env-pull.sh`). It
+generates a gitignored `.env` per consumer, filtered by tag, and everything else reads those
+files — so an Infisical outage blocks a refresh, never a dev session.
 
-| Mechanism                                | Used by                                                           | How                                                                                                                                                                                                                                             |
-| ---------------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `scripts/with-env.sh`                    | Most commands — `bun run dev`, `db:*`, `test:integration`, `plan` | Wraps the command with `infisical run`, injecting values into the process environment. Requires an explicit `--tags` or `--path` filter — there is no "fetch everything" mode.                                                                  |
-| `scripts/pull-env.sh` (generated `.env`) | Cloudflare Workers (`apps/server-hono`, `apps/web-hono`)          | `wrangler` reads Worker bindings from a file, not from the parent process, so `infisical run` never reaches the Worker. This script writes a gitignored `.env` file with exactly one consumer's secrets, filtered by tag, for wrangler to read. |
+| File                     | Tag            | Read by                                                        |
+| ------------------------ | -------------- | -------------------------------------------------------------- |
+| `apps/server-hono/.env`  | `server-hono`  | `wrangler dev`                                                 |
+| `apps/web-hono/.env`     | `web-hono`     | `vite dev`, `wrangler dev`                                     |
+| `apps/console/.env`      | `console`      | `vite dev`                                                     |
+| `apps/kaipu-record/.env` | `kaipu-record` | `electron-vite dev`, `test:e2e`                                |
+| `packages/infra-db/.env` | `db-scripts`   | root `db:*`, `plan`, `test:integration` (via `bun --env-file`) |
 
-Both scripts pass straight through when `CI` is set (CI builds with placeholder values on
-purpose and must not need a secrets CLI) and both fail loudly if the Infisical CLI is missing
-locally, rather than silently building with undefined values.
+- **All or nothing.** Every file is fetched to a temp directory first; the real files are
+  replaced only when every fetch succeeded. A failure leaves every existing `.env` as it was.
+- **Owner-only.** Files are written with mode `600`. The script prints counts, never values.
+- **Fail fast.** `scripts/require-env.sh` stops `dev` and the database scripts when their file
+  is missing, and the Zod schemas validate through `parseEnv` from `@kaipu/infra-env`. Both
+  point to `bun env:pull`. `require-env.sh` passes straight through when `CI` is set: workflows
+  inject their own values and never need a secrets CLI.
+- **Inline overrides win.** For the database scripts a variable set in the shell beats the file:
+  `DATABASE_URL='<production url>' bun run plan grant <email>`.
 
-`scripts/with-env.sh` also honours `SKIP_INFISICAL=1` as an escape hatch for an operator who
-wants to supply values directly — for example
-`DATABASE_URL='<production url>' SKIP_INFISICAL=1 bun run plan grant <email>` when running a
-command against a database other than the default `dev` one. Without `SKIP_INFISICAL`,
-Infisical overrides variables already set in the shell, so a plain inline override would
-silently be ignored.
+`scripts/with-env.sh` (live `infisical run`) remains only for the signed production build in
+`apps/kaipu-record/scripts/build-mac-local.sh`.
 
 ## First-time setup
 
@@ -61,17 +67,18 @@ Once per machine:
 ```bash
 bun run setup      # reports which global tools are missing, and how to install them
 infisical login
+bun env:pull       # from the repo root
 ```
 
-`scripts/setup-dev.sh` only checks — it never installs. After that, every command that needs
-secrets fetches them itself; there is nothing to configure per app.
+`scripts/setup-dev.sh` only checks — it never installs. Run `bun env:pull` again whenever a
+value changes in Infisical, a variable is added, or an app reports a missing variable.
 
 ## Rules
 
-- Never hand-write or hand-edit a `.env` file. Where one exists it was generated by
-  `pull-env.sh` (or equivalent) and is gitignored.
+- Never hand-write or hand-edit a generated `.env` file; the next pull overwrites it.
 - Adding a new Infisical folder means adding it to the `FOLDERS` list in
-  `scripts/pull-env.sh` too, or its secrets go missing from generated files without any error.
+  `scripts/env-pull.sh` too, or its secrets go missing from generated files without any error.
+  A new consumer means a new entry in `TARGETS`.
 - Never print secret values in logs, commits, or documentation.
 
 See the root `CLAUDE.md` ("Secrets: Infisical") for the source-of-truth summary this page

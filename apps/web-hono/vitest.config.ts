@@ -2,6 +2,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { defineConfig } from "vitest/config";
 import tsconfigPaths from "vite-tsconfig-paths";
+import react from "@vitejs/plugin-react";
 
 const require = createRequire(import.meta.url);
 const packageDir = (name: string): string => path.dirname(require.resolve(`${name}/package.json`));
@@ -21,11 +22,24 @@ const shimAliases = [
   { find: /^use-sync-external-store\/shim(\/with-selector)?$/, replacement: shim },
 ];
 
+// `stylex.create` is a compile-time call: without the plugin a component that styles itself with
+// StyleX throws on import. Same options as vite.config.ts and babel.config.cjs (`dev: false`), so a
+// test sees the class names a build produces (invariant 3, backlog/stylex-migration).
+const stylexBabel: [string, Record<string, unknown>] = [
+  "@stylexjs/babel-plugin",
+  {
+    dev: false,
+    runtimeInjection: false,
+    treeshakeCompensation: true,
+    unstable_moduleResolution: { type: "commonJS" },
+  },
+];
+
 export default defineConfig({
   // Resolves `@/` from each package's own tsconfig (this app's and @kaipu/web-ui's), so tests
   // import modules the way the app does. The cast is only because the plugin is typed against
   // vite 7.3.0 and Vitest runs 7.3.1: the same plugin, two declaration copies.
-  plugins: [tsconfigPaths() as never],
+  plugins: [tsconfigPaths() as never, react({ babel: { plugins: [stylexBabel] } }) as never],
   resolve: {
     alias: [...reactAliases, ...shimAliases],
     dedupe: ["react", "react-dom"],
@@ -36,5 +50,4 @@ export default defineConfig({
     environment: "jsdom",
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
   },
-  esbuild: { jsx: "automatic" },
 });

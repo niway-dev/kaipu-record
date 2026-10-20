@@ -1,12 +1,21 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "@kaipu/i18n";
-import { Button, Input, Label } from "@kaipu/web-ui";
-import { GoogleMark } from "@/components/google-button";
+import * as stylex from "@stylexjs/stylex";
+import { Info } from "lucide-react";
 import { hasPassword, linkedAccountsKey, useLinkedAccounts } from "@/hooks/use-linked-accounts";
 import { authClient } from "@/lib/auth/auth-client";
-import { isGoogleAuthEnabled } from "@/lib/google-auth";
+import { googleStartErrorKey } from "@/lib/google-auth";
 import { client } from "@/lib/orpc-client";
+import { kl } from "../dashboard/dashboard.stylex";
+import {
+  Button,
+  Field,
+  FieldPair,
+  FormMessage,
+  FormPanel,
+  GoogleMark,
+} from "@/components/dashboard/ui";
 
 const PASSWORD_MIN = 8;
 const PROFILE_PATH = "/dashboard/profile";
@@ -42,40 +51,30 @@ function SetPasswordForm({ onSaved }: { onSaved: () => Promise<void> }) {
   }
 
   const field = (id: "newPassword" | "confirmPassword", label: string) => (
-    <div className="space-y-2">
-      <Label htmlFor={`set-${id}`}>{label}</Label>
-      <Input
-        id={`set-${id}`}
-        type="password"
-        autoComplete="new-password"
-        value={values[id]}
-        onChange={(e) => setValues((v) => ({ ...v, [id]: e.target.value }))}
-        aria-invalid={errors[id] ? true : undefined}
-        aria-describedby={errors[id] ? `set-${id}-error` : undefined}
-      />
-      {errors[id] && (
-        <p id={`set-${id}-error`} role="alert" className="text-destructive text-sm">
-          {errors[id]}
-        </p>
-      )}
-    </div>
+    <Field
+      id={`set-${id}`}
+      label={label}
+      type="password"
+      autoComplete="new-password"
+      value={values[id]}
+      onChange={(e) => setValues((v) => ({ ...v, [id]: e.target.value }))}
+      error={errors[id]}
+    />
   );
 
   return (
-    <form onSubmit={(e) => void submit(e)} className="space-y-4" noValidate>
-      <h3 className="font-medium">{t("setPasswordTitle")}</h3>
-      <p className="text-muted-foreground text-sm">{t("setPasswordIntro")}</p>
-      {field("newPassword", t("newPassword"))}
-      {field("confirmPassword", t("confirmPassword"))}
-      {errors.form && (
-        <p role="alert" className="text-destructive text-sm">
-          {errors.form}
-        </p>
-      )}
-      <Button type="submit" disabled={pending}>
-        {pending ? t("setPasswordSaving") : t("setPasswordSubmit")}
-      </Button>
-    </form>
+    <FormPanel title={t("setPasswordTitle")} intro={t("setPasswordIntro")}>
+      <form onSubmit={(e) => void submit(e)} noValidate>
+        <FieldPair>
+          {field("newPassword", t("newPassword"))}
+          {field("confirmPassword", t("confirmPassword"))}
+        </FieldPair>
+        {errors.form && <FormMessage tone="error">{errors.form}</FormMessage>}
+        <Button type="submit" variant="pink" size="sm" disabled={pending}>
+          {pending ? t("setPasswordSaving") : t("setPasswordSubmit")}
+        </Button>
+      </form>
+    </FormPanel>
   );
 }
 
@@ -84,12 +83,7 @@ function SetPasswordForm({ onSaved }: { onSaved: () => Promise<void> }) {
  * method; the API refuses it too) and "Set a password" for Google-only accounts. Rendered in
  * SignInMethodsSection's `googleControls` slot; shares its accounts query.
  */
-export function GoogleSignInControls({
-  enabled = isGoogleAuthEnabled(),
-}: {
-  /** Defaults to the VITE_GOOGLE_AUTH_ENABLED flag; tests pass it explicitly. */
-  enabled?: boolean;
-}) {
+export function GoogleSignInControls() {
   const t = useTranslations("account");
   const tAuth = useTranslations("auth");
   const queryClient = useQueryClient();
@@ -115,7 +109,14 @@ export function GoogleSignInControls({
     // On success the browser is on its way to Google.
     if (result?.error) {
       setBusy(null);
-      setMessage({ tone: "alert", text: tAuth("oauthErrorUnableToLink") });
+      setMessage({
+        tone: "alert",
+        text: tAuth(
+          result.error.code === "PROVIDER_NOT_FOUND"
+            ? googleStartErrorKey(result.error)
+            : "oauthErrorUnableToLink",
+        ),
+      });
     }
   }
 
@@ -143,46 +144,7 @@ export function GoogleSignInControls({
   }
 
   return (
-    <div className="space-y-6">
-      {(hasGoogle || enabled) && (
-        <div className="space-y-2">
-          {hasGoogle ? (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                // FR9: never the last method. The server refuses it as well.
-                disabled={!withPassword || busy !== null}
-                onClick={() => void disconnect()}
-              >
-                {busy === "disconnect" ? t("googleDisconnecting") : t("googleDisconnect")}
-              </Button>
-              {!withPassword && (
-                <p className="text-muted-foreground text-sm">{t("googleLastMethod")}</p>
-              )}
-            </>
-          ) : (
-            <Button
-              type="button"
-              variant="outline"
-              className="gap-2"
-              disabled={busy !== null}
-              onClick={() => void connect()}
-            >
-              <GoogleMark />
-              {busy === "connect" ? t("googleConnecting") : t("googleConnect")}
-            </Button>
-          )}
-        </div>
-      )}
-      {message && (
-        <p
-          role={message.tone}
-          className={message.tone === "alert" ? "text-destructive text-sm" : "text-sm"}
-        >
-          {message.text}
-        </p>
-      )}
+    <>
       {!withPassword && (
         <SetPasswordForm
           onSaved={async () => {
@@ -192,6 +154,56 @@ export function GoogleSignInControls({
           }}
         />
       )}
-    </div>
+      <div {...stylex.props(s.google)}>
+        {hasGoogle ? (
+          <>
+            <Button
+              size="sm"
+              icon={<GoogleMark />}
+              // FR9: never the last method. The server refuses it as well.
+              disabled={!withPassword || busy !== null}
+              onClick={() => void disconnect()}
+            >
+              {busy === "disconnect" ? t("googleDisconnecting") : t("googleDisconnect")}
+            </Button>
+            {!withPassword && (
+              <p {...stylex.props(s.hint)}>
+                <Info size={13} aria-hidden {...stylex.props(s.hintIcon)} />
+                {t("googleLastMethod")}
+              </p>
+            )}
+          </>
+        ) : (
+          <Button
+            variant="google"
+            icon={<GoogleMark />}
+            disabled={busy !== null}
+            onClick={() => void connect()}
+          >
+            {busy === "connect" ? t("googleConnecting") : t("googleConnect")}
+          </Button>
+        )}
+      </div>
+      {message && (
+        <div {...stylex.props(s.message)}>
+          <FormMessage tone={message.tone === "alert" ? "error" : "ok"}>{message.text}</FormMessage>
+        </div>
+      )}
+    </>
   );
 }
+
+const s = stylex.create({
+  google: { marginTop: "16px" },
+  hint: {
+    display: "flex",
+    gap: "7px",
+    margin: 0,
+    marginTop: "8px",
+    fontSize: "12.5px",
+    lineHeight: 1.45,
+    color: kl.faint,
+  },
+  hintIcon: { flexShrink: 0, marginTop: "2px" },
+  message: { marginTop: "12px" },
+});

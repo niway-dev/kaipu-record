@@ -1,24 +1,32 @@
 import { useState } from "react";
-import { Link, useRouter } from "@tanstack/react-router";
+import { useRouter } from "@tanstack/react-router";
 import { useTranslations } from "@kaipu/i18n";
-import { Button } from "@kaipu/web-ui";
 
-import { OAuthErrorAlert } from "@/components/oauth-error-alert";
-import SignInForm from "@/components/sign-in-form";
-import SignUpForm from "@/components/sign-up-form";
+import { AuthPanel } from "@/components/auth/auth-panel";
+import {
+  AccountChip,
+  DesktopWaitingBanner,
+  ErrorBanner,
+  GhostButton,
+  HeroBody,
+  HeroHeader,
+  PrimaryButton,
+  Spaced,
+} from "@/components/auth/auth-ui";
 import { authClient } from "@/lib/auth/auth-client";
 import { desktopAuthClient } from "@/lib/auth/desktop-auth-client";
 import type { AuthSession } from "@/lib/auth/types";
 import { desktopDonePath, type DesktopAuthIntent, type DesktopAuthQuery } from "@/lib/desktop-auth";
+import { useDesktopPlatform } from "@/components/auth/use-desktop-platform";
 
 /**
  * `/auth/desktop` (NIW2-471). The desktop app opens it in the system browser with its
  * `client_id`, `state` and `code_challenge`:
  *
  * - without them it explains that sign-in starts in the app;
- * - a signed-in visitor confirms the account ("Continue") or switches to another one;
- * - anyone else gets the regular sign-in form — or the sign-up form when the app's "Create
- *   account" opened the page with `intent=sign-up` — which carries the query to the API;
+ * - a signed-in visitor confirms the account ("Continue as …") or switches to another one;
+ * - anyone else gets the shared sign-in page — on its "Create account" tab when the app's
+ *   "Create account" opened it with `intent=sign-up` — which carries the query to the API;
  * - a failed Google round trip comes back here with `error=<code>`, shown as copy.
  *
  * Every path ends on `/auth/desktop/done`, which hands the code to the app.
@@ -38,19 +46,16 @@ export function DesktopSignInPage({
 
   if (!query) {
     return (
-      <Card>
-        <h1 className="mb-4 text-center text-2xl font-bold">{t("invalidTitle")}</h1>
-        <p className="text-center text-sm text-muted-foreground">{t("invalidBody")}</p>
-      </Card>
+      <HeroHeader use="product" title={t("invalidTitle")}>
+        <HeroBody>{t("invalidBody")}</HeroBody>
+      </HeroHeader>
     );
   }
 
   if (session) return <ConfirmAccount query={query} session={session} />;
-  return <SignInForDesktop query={query} intent={intent} oauthError={oauthError} />;
-}
-
-function Card({ children }: { children: React.ReactNode }) {
-  return <div className="mx-auto w-full mt-10 max-w-md p-6">{children}</div>;
+  const mode = intent === "sign-up" ? "sign-up" : "sign-in";
+  // Keyed by tab: both tabs are this one route, and each should start from its own Google button.
+  return <AuthPanel key={mode} mode={mode} desktop={query} oauthError={oauthError} />;
 }
 
 function ConfirmAccount({ query, session }: { query: DesktopAuthQuery; session: AuthSession }) {
@@ -58,10 +63,9 @@ function ConfirmAccount({ query, session }: { query: DesktopAuthQuery; session: 
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
-  const account = session.user.name
-    ? `${session.user.name} (${session.user.email})`
-    : session.user.email;
+  const name = session.user.name?.trim() || session.user.email;
 
+  const platform = useDesktopPlatform();
   async function continueAsCurrentUser() {
     setPending(true);
     setFailed(false);
@@ -87,79 +91,20 @@ function ConfirmAccount({ query, session }: { query: DesktopAuthQuery; session: 
   }
 
   return (
-    <Card>
-      <h1 className="mb-4 text-center text-2xl font-bold">{t("confirmTitle")}</h1>
-      <p className="mb-6 text-center text-sm text-muted-foreground">
-        {t("confirmBody", { account })}
-      </p>
-      <div className="space-y-3">
-        <Button className="w-full" disabled={pending} onClick={() => void continueAsCurrentUser()}>
-          {pending ? t("continuing") : t("continue")}
-        </Button>
-        <Button
-          variant="outline"
-          className="w-full"
-          disabled={pending}
-          onClick={() => void switchAccount()}
-        >
-          {t("switchAccount")}
-        </Button>
-      </div>
-      {failed ? (
-        <p role="alert" className="mt-4 text-center text-sm text-red-500">
-          {t("transferFailed")}
-        </p>
-      ) : null}
-    </Card>
-  );
-}
-
-function SignInForDesktop({
-  query,
-  intent,
-  oauthError,
-}: {
-  query: DesktopAuthQuery;
-  intent?: DesktopAuthIntent;
-  oauthError?: string;
-}) {
-  const t = useTranslations("desktopAuth");
-  const tAuth = useTranslations("auth");
-  return (
-    <Card>
-      <p className="mb-2 text-center text-sm font-medium">{t("signInTitle")}</p>
-      <p className="mb-4 text-center text-sm text-muted-foreground">{t("signInBody")}</p>
-      <OAuthErrorAlert code={oauthError} />
-      {intent === "sign-up" ? (
-        <>
-          <SignUpForm desktop={query} />
-          <div className="mt-4 text-center text-sm text-muted-foreground">
-            {tAuth("haveAccount")}{" "}
-            <Link to="/auth/desktop" search={{ ...query }} className="text-primary hover:underline">
-              {tAuth("signIn")}
-            </Link>
-          </div>
-        </>
-      ) : (
-        <>
-          <SignInForm desktop={query} />
-          <div className="mt-4 text-center text-sm text-muted-foreground">
-            {tAuth("needAccount")}{" "}
-            <Link
-              to="/auth/desktop"
-              search={{ ...query, intent: "sign-up" }}
-              className="text-primary hover:underline"
-            >
-              {tAuth("signUp")}
-            </Link>
-          </div>
-          <div className="mt-2 text-center text-sm text-muted-foreground">
-            <Link to="/auth/forgot-password" className="text-primary hover:underline">
-              {tAuth("forgotPassword")}
-            </Link>
-          </div>
-        </>
-      )}
-    </Card>
+    <div>
+      <DesktopWaitingBanner platform={platform} />
+      <HeroHeader use="product" title={t("confirmTitle")}>
+        <AccountChip name={session.user.name} email={session.user.email} />
+        <PrimaryButton large disabled={pending} onClick={() => void continueAsCurrentUser()}>
+          {pending ? t("continuing") : t("continueAs", { name })}
+        </PrimaryButton>
+        <Spaced>
+          <GhostButton disabled={pending} onClick={() => void switchAccount()}>
+            {t("switchAccount")}
+          </GhostButton>
+        </Spaced>
+      </HeroHeader>
+      {failed ? <ErrorBanner>{t("transferFailed")}</ErrorBanner> : null}
+    </div>
   );
 }

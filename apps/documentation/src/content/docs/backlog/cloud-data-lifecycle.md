@@ -35,6 +35,17 @@ sweep, another for account-deletion cleanup retries. Confirm the batch size and 
 limits fit a single invocation, or split the sweep into resumable pages if the private bucket
 grows large.
 
+## Deferral rule (NIW2-323)
+
+A cancel or a cloud-copy delete never releases quota or deletes an object while the revision's
+presigned PUT ticket can still write (ticket expiry + `RESERVATION_GRACE_SECONDS`). It records the
+intent and leaves the settlement to the expired-reservation sweep and the pending-delete retry job.
+Those jobs therefore have to run for deferred cancels and deletes to settle: until the scheduled
+handler (NIW2-328) ships, deferred rows wait, holding their bytes and, for a cancel, a pending slot.
+An orphan-object sweep (`sweepOrphanObjects`) reconciles storage against revisions as defence in
+depth. Design and rationale:
+[Close API upload abuse paths](/specs/2026-10-12-api-upload-abuse/).
+
 ## Acceptance criteria
 
 - An interrupted upload becomes recoverable or is removed without manual database access.

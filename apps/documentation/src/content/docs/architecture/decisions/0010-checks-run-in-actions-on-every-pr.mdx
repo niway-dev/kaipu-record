@@ -7,13 +7,13 @@ description: With the repository going public, verification moves back from the 
 
 ## Status
 
-| Field         | Value                                                                                                                                                                                                                                                         |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status        | Accepted — implemented in `pr-checks.yml` and `lefthook.yml`. Amended 2026-10-05: docs-only pull requests skip the desktop E2E ([amendment](#amendment-docs-only-pull-requests-skip-the-e2e)); the amendment has not run on a real docs-only pull request yet |
-| Date          | 2026-10-05                                                                                                                                                                                                                                                    |
-| Supersedes    | [ADR 0004](./0004-local-first-release-verification) — the local-first pre-push gate                                                                                                                                                                           |
-| Amends        | [ADR 0006](./0006-desktop-e2e-in-the-candidate-tier) — the desktop E2E is no longer gated to desktop candidates · [ADR 0005](./0005-draft-ready-release-candidate-readiness) — draft/ready now applies to every PR                                            |
-| Superseded by | —                                                                                                                                                                                                                                                             |
+| Field         | Value                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Accepted — implemented in `pr-checks.yml` and `lefthook.yml`. Amended 2026-10-05: docs-only pull requests skip the desktop E2E ([amendment](#amendment-docs-only-pull-requests-skip-the-e2e)); the amendment has not run on a real docs-only pull request yet. Amended 2026-10-19: the macOS E2E runs only on release candidates, and stacked pull requests are verified ([amendment](#amendment-the-macos-e2e-is-for-release-candidates-stacked-pull-requests-are-verified)) |
+| Date          | 2026-10-05                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Supersedes    | [ADR 0004](./0004-local-first-release-verification) — the local-first pre-push gate                                                                                                                                                                                                                                                                                                                                                                                           |
+| Amends        | [ADR 0006](./0006-desktop-e2e-in-the-candidate-tier) — the desktop E2E is no longer gated to desktop candidates · [ADR 0005](./0005-draft-ready-release-candidate-readiness) — draft/ready now applies to every PR                                                                                                                                                                                                                                                            |
+| Superseded by | —                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
 ## Context
 
@@ -104,6 +104,41 @@ changing what `bun run verify` contains.
   add the path filter, with the gate reading its output.
 - Flaky runners make the required check unreliable often enough that merges routinely
   need a re-run.
+
+## Amendment: the macOS E2E is for release candidates; stacked pull requests are verified
+
+**2026-10-19.** Two problems, met on the same day:
+
+- The second reopen condition above was met. A run measured on PR #345 took 234 s, and the
+  macOS E2E alone took 210 s; every other job ran in parallel and finished within about 100 s.
+  Waiting on macOS was the routine reason a pull request sat unmerged.
+- `pr-checks.yml` listened only to pull requests targeting `main`. A pull request in a GitHub
+  stack targets the branch below it, so it never ran, while GitHub judges every pull request in
+  a stack against the stack's base and its required check. "Release candidate verified" stayed
+  "Expected" on PR #347 and "Merge stack" could not be used.
+
+**Decision.**
+
+1. **The macOS E2E runs only on release candidates** — pull requests from release-please
+   branches (`release-please--branches--*`) that change more than documentation — and on a
+   manual dispatch. `Classify the change` outputs `e2e`, the E2E job runs on it, and the gate
+   accepts a skip that this run classified as not required. This narrows decision 1 back
+   toward ADR 0006 for the E2E only: lint, format, types, unit tests, bundles and the docs
+   build still run on every pull request.
+2. **The `branches: [main]` filter is removed**: every pull request runs `PR checks`, so each
+   pull request in a stack carries the required check. The result is attached to the head
+   commit, so a stacked pull request retargeted onto `main` keeps it, and decision 7's "one
+   push, or close and reopen" is no longer needed.
+
+**Cost.** A regression only the E2E catches (export path, library actions, settings
+persistence against a real build) is found on the release pull request rather than on the pull
+request that caused it. Unit tests still run everywhere, so this covers only what they cannot
+reach. A stack must have the updated workflow at its bottom branch to benefit: `pull_request`
+runs read the workflow from the merge of the head into its base.
+
+**Reopen when** a release pull request fails the E2E on a change that an ordinary pull
+request introduced and the culprit takes more than one bisect to find — then run the E2E on
+pull requests that touch `apps/kaipu-record/` again.
 
 ## Amendment: docs-only pull requests skip the E2E
 

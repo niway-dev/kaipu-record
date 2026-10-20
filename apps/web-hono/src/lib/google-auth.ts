@@ -1,15 +1,7 @@
 /**
- * Web side of "Continue with Google" (NIW2-219): the feature flag and the mapping from Better
- * Auth's OAuth `?error=` codes to copy.
+ * Web side of "Continue with Google" (NIW2-219): the mapping from Better Auth's OAuth errors to copy.
+ * The button is always shown; a server without Google configured answers with an error, mapped here.
  */
-
-/**
- * Q8: the Google button shows only when `VITE_GOOGLE_AUTH_ENABLED=true`. The web app cannot see
- * the API's GOOGLE_* secrets, so this flag says "the API has Google configured" for it.
- */
-export function isGoogleAuthEnabled(env: ImportMetaEnv = import.meta.env): boolean {
-  return env.VITE_GOOGLE_AUTH_ENABLED === "true";
-}
 
 export type OAuthErrorKey =
   | "oauthErrorNotLinked"
@@ -18,7 +10,8 @@ export type OAuthErrorKey =
   | "oauthErrorUnableToLink"
   | "oauthErrorCancelled"
   | "oauthErrorExpired"
-  | "oauthErrorGeneric";
+  | "oauthErrorGeneric"
+  | "googleUnavailable";
 
 /**
  * Better Auth 1.7.11 redirects to the error URL with `?error=<code>` (api/routes/callback.mjs,
@@ -46,7 +39,28 @@ export function oauthErrorKey(code: string): OAuthErrorKey {
   return Object.hasOwn(CODES, code) ? CODES[code]! : "oauthErrorGeneric";
 }
 
+/**
+ * The same mapping for the sign-in page, whose design words a closed consent screen its own way:
+ * "Google sign-in was closed. Nothing happened — try again, or use your email." The account
+ * page's linking flow keeps `oauthErrorCancelled`, which talks about a password.
+ */
+export function signInOAuthErrorKey(code: string): OAuthErrorKey | "oauthErrorClosed" {
+  return code === "access_denied" ? "oauthErrorClosed" : oauthErrorKey(code);
+}
+
 /** Keeps a short, printable `?error=` value; anything else is dropped from the URL state. */
 export function parseOAuthErrorParam(value: unknown): string | undefined {
   return typeof value === "string" && /^[\w'.-]{1,64}$/.test(value) ? value : undefined;
+}
+
+/**
+ * The error a start request (`signIn.social`, `linkSocial`) comes back with, as copy. The button is
+ * always shown, so a server with no Google provider configured answers `PROVIDER_NOT_FOUND` (404,
+ * "Provider not found"); that gets its own message instead of the raw error.
+ */
+export function googleStartErrorKey(error: unknown): OAuthErrorKey {
+  const { code, status } = (error ?? {}) as { code?: unknown; status?: unknown };
+  if (code === "PROVIDER_NOT_FOUND" || (status === 404 && code === undefined))
+    return "googleUnavailable";
+  return "oauthErrorGeneric";
 }

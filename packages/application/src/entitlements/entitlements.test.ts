@@ -78,6 +78,8 @@ describe("getEntitlements", () => {
       userId: "u1",
     });
     expect(e.features.cloudUploads).toBe(true);
-    expect(e.features.cloudStorageBytes).toBe(1_000_000_000);
+    // A verified Free account: what GET /me/entitlements and /me/storage report (NIW2-232).
+    expect(e.plan).toBe("free");
+    expect(e.features.cloudStorageBytes).toBe(250_000_000);
   });
 });

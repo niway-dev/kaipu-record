@@ -1,4 +1,4 @@
-import { cleanup, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/render";
@@ -28,6 +28,13 @@ describe("CredentialDroppedNotice", () => {
       "/dashboard/profile",
     );
     expect(api.takeNotices).toHaveBeenCalledTimes(1);
+  });
+
+  it("can be dismissed", async () => {
+    api.takeNotices.mockResolvedValue({ data: { credentialDropped: true }, error: null });
+    renderWithProviders(<CredentialDroppedNotice />);
+    fireEvent.click(await screen.findByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByText("We removed an old password from your account")).toBeNull();
   });
 
   it("shows nothing when there is no notice", async () => {

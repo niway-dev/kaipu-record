@@ -64,8 +64,21 @@ export interface ICloudAssetRepository {
    * points the asset at this revision. No-op (returns the row) when already `ready`.
    */
   markReady(userId: string, revisionId: string, verifiedAt: Date): Promise<CloudRevision | null>;
-  /** `reserved` → `expired`: releases the reservation. No-op when not `reserved`. */
-  release(userId: string, revisionId: string): Promise<CloudRevision | null>;
+  /**
+   * `reserved` → `expired`: releases the reservation. No-op when not `reserved`.
+   *
+   * With `ticketExpiredBy`, the transition also requires `ticket_expires_at <= ticketExpiredBy`
+   * in the same statement, so a concurrent `extendTicket` (a resumed intent that just signed a
+   * fresh ticket) makes the release a no-op instead of leaving a valid ticket with nothing
+   * reserved behind it. Callers that release because the ticket window closed pass
+   * `now - RESERVATION_GRACE_SECONDS`; only a release of a reservation whose ticket was never
+   * handed out (signing failed) may omit it.
+   */
+  release(
+    userId: string,
+    revisionId: string,
+    opts?: { ticketExpiredBy?: Date },
+  ): Promise<CloudRevision | null>;
   /** `ready` → `deleting`: clears the asset's current pointer if it was this revision. */
   beginDelete(userId: string, revisionId: string): Promise<CloudRevision | null>;
   /** `deleting` → `deleted`: subtracts `reservedBytes` from used. No-op when not `deleting`. */
@@ -82,7 +95,17 @@ export interface ICloudAssetRepository {
   reconcile(userId: string): Promise<AccountUsage>;
   // --- sweep queries (cross-account, no owner scope) ---
   listReservedExpiredBefore(before: Date, limit: number): Promise<CloudRevision[]>;
-  listDeleting(limit: number): Promise<CloudRevision[]>;
+  /**
+   * `deleting` revisions whose ticket expired at or before `ticketExpiredBy` (pass
+   * `now - RESERVATION_GRACE_SECONDS`). Filtering in the query, not the caller, keeps revisions
+   * whose window is still open from filling every page and starving the retry job.
+   */
+  listDeleting(limit: number, ticketExpiredBy: Date): Promise<CloudRevision[]>;
+  /**
+   * The caller's revisions (any status) whose `storage_key` or `thumbnail_key` is one of
+   * `keys`. Used by the orphan sweep to decide which listed objects a revision still backs.
+   */
+  findRevisionsByStorageKeys(userId: string, keys: string[]): Promise<CloudRevision[]>;
   /** Users whose accounting row was touched since `since` — candidates for `reconcile`. */
   listAccountsTouchedSince(since: Date, limit: number): Promise<string[]>;
 }

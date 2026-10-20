@@ -5,6 +5,16 @@ description: Backend for signing in and uploading local recordings to the user's
 
 # Cloud recordings — accounts + R2 upload (backend)
 
+> **Upload routes removed (NIW2-323, 2026-10).** `POST /api/v1/recordings` and
+> `POST /api/v1/recordings/{id}/confirm` no longer exist: they had none of the v2 controls (quota,
+> entitlement, verified email, kill switch, content-type allowlist, size-bound tickets) and no client
+> called them. What remains is read-only over historical rows — `GET /recordings`,
+> `GET /recordings/{id}/download-url`, `DELETE /recordings/{id}` — for the web dashboard's
+> recordings page, until cloud-01 Task 12 migrates that page and drops the table. New uploads go
+> through the v2 assets API (`/api/v1/assets/upload-intents`). See
+> [Close API upload abuse paths](/specs/2026-10-12-api-upload-abuse/). The rest of this page
+> describes the flow as it was validated in 2026-09.
+
 > **Status: 🟢 Validated end-to-end locally (2026-09-02).** Full backend vertical implemented and
 > tested (domain + application + infra + API), unit tests + `check-types` green across the
 > monorepo. Realizes the **presigned-URL path** from

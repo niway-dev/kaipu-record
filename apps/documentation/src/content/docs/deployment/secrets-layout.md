@@ -151,21 +151,17 @@ The default becomes safe rather than convenient.
 
 ## How scripts consume it
 
-Filter by **tag**, not by path — an app's secrets deliberately span folders:
-
-```bash
-infisical run --env=dev --recursive --tags kaipu-record -- electron-vite dev
-```
-
-`scripts/with-env.sh` wraps this. It requires an explicit filter: there is no
-"fetch everything" mode, because a desktop build has no business holding a
-database credential.
+Filter by **tag**, not by path — an app's secrets deliberately span folders.
+Locally, `bun env:pull` (`scripts/env-pull.sh`) writes one `.env` per tag, and
+`dev` and the database scripts read those files without contacting Infisical.
+There is no "fetch everything" mode, because a desktop build has no business
+holding a database credential.
 
 **One asymmetry to remember:** `infisical run` supports `--recursive`, so a tag
 filter reaches every folder. **`infisical export` does not** — it reads one
-`--path` at a time. Anything that needs a generated file (a Cloudflare Worker,
-because `wrangler` populates bindings from a file rather than the parent
-process) must list its paths explicitly and concatenate.
+`--path` at a time, so `env-pull.sh` lists the folders explicitly and
+concatenates. `scripts/with-env.sh` (live `infisical run --recursive`) remains
+only for the signed production desktop build.
 
 ## Operational notes
 

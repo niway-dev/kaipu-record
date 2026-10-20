@@ -8,9 +8,8 @@
     "check-types": "tsc --noEmit",
     "test": "vitest run",
     "serve": "vite preview",
-    "env:pull": "bash ../../scripts/pull-env.sh web-hono .env",
-    "dev": "bun run env:pull && vite dev",
-    "wrangler:dev": "bun run env:pull && wrangler dev --port 3001 --inspector-port 9230",
+    "dev": "bash ../../scripts/require-env.sh .env && vite dev",
+    "wrangler:dev": "bash ../../scripts/require-env.sh .env && wrangler dev --port 3001 --inspector-port 9230",
     "wrangler:types": "wrangler types"
   },
   "dependencies": {
