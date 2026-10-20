@@ -1,0 +1,81 @@
+---
+title: "ADR 0028: An advisory Claude review on pull requests, as inline review comments"
+description: Claude Sonnet 5.5 reviews each pull request once when it is ready, and again on the owner's `@claude review`, through `claude -p` and the review kit from niway-dev/pr-review-engine. Findings are inline review comments the owner can answer; nothing blocks a merge, and a pull request too large for one pass costs nothing.
+---
+
+# ADR 0028: An advisory Claude review on pull requests, as inline review comments
+
+## Status
+
+| Field         | Value                                                                                                        |
+| ------------- | ------------------------------------------------------------------------------------------------------------ |
+| Status        | Accepted — implemented in `claude-review.yml` and `scripts/claude-review.ts`; not yet run in this repository |
+| Date          | 2026-10-20                                                                                                   |
+| Supersedes    | —                                                                                                            |
+| Amends        | —                                                                                                            |
+| Superseded by | —                                                                                                            |
+
+## Context
+
+The owner wanted Claude code reviews on Kaipu's pull requests, after the same reviewer worked in
+csdev19/invisible-assistant (its ADRs 0065 and 0067). The reusable part, a script and a workflow,
+lives as a kit in niway-dev/pr-review-engine; what the first setup taught is in that repository's
+`docs/findings/2026-10-20-first-setup-in-yui.md`.
+
+This repository is public, unlike the first one. `CONTRIBUTING.md` limits pull requests to
+collaborators, and the owner is the only one. Nobody else reviews pull requests, and ADR 0027
+keeps ordinary pull requests fast: they get an immediate pass, not a verification.
+
+## Decision
+
+1. **Claude Sonnet 5.5 reviews a pull request** when it opens ready for review or leaves draft,
+   and when the owner comments `@claude review` (only what changed since the last reviewed
+   commit) or `@claude review <path>…` (only those paths). Any other `@claude …` comment is a
+   question, answered as a comment.
+2. **Through `claude -p`**, not `anthropics/claude-code-action`, which failed with a billing error
+   in the first repository while `claude -p` with the same key worked. Claude Code is pinned.
+3. **Findings are inline review comments**, labelled "Should fix" (correctness, security) or
+   "Note", that the owner answers in their threads. Claude never resolves one; on a re-review it
+   answers the owner's replies.
+4. **Advisory.** No required check, no approval, no change request, no ruleset rule. It does not
+   touch ADR 0027's `Merge requirements` check.
+5. **Decide before spending.** Lockfiles, build output (`dist/`, including `@kaipu/web-ui`'s
+   committed one) and generated files are dropped; above 3,000 changed lines or 60 files after
+   that, the pull request gets a message on how to scope it and Claude is not called. Each run is
+   capped at $1. A file Claude does not account for marks the review partial.
+6. **Kept out:** fork pull requests (they get no secrets), Dependabot and release-please pull
+   requests, comments by anyone but the owner, and replies in review threads by people without
+   access, which never reach Claude.
+7. **Claude only reads**: no shell, no GitHub token, `/proc` denied; the script posts, and
+   refuses text containing the key. This repository's review focus is
+   `.github/claude-review.md`.
+
+## Alternatives rejected
+
+- **`claude-code-action`.** See decision 2.
+- **A merge gate** (open threads blocking through the ruleset). The owner wants review, not a gate.
+- **Pullfrog or CodeRabbit.** The owner wants control of the prompt, the cost rules and the
+  output; they stay the comparison (niway-dev/pr-review-engine ADR 0001).
+- **Reviewing on every push.** It spends on every push; `@claude review` covers a second pass.
+
+## Consequences
+
+- An `ANTHROPIC_API_KEY` **repository** secret is needed (not a `production` or `preview`
+  environment secret). Until it exists, every review run fails at its first step.
+- Review comments are public, as everything on this repository is. The Actions log shows only
+  the run's cost and size, never Claude's tool output.
+- A review cost $0.05 to $0.16 in the first repository; a pull request above the gate costs $0.
+- The script is a copy of the kit's: a fix there has to be copied here, and `bun test ./scripts/`
+  (in `check-workflows`) runs its tests.
+
+## Non-goals
+
+- Reviewing outside contributors' pull requests. That needs a different trust model: their code
+  and their `.claude/` hooks would run next to the key.
+- Replacing review by a person, or ADR 0027's verification of release candidates.
+
+## What would reopen this
+
+- `CONTRIBUTING.md` opens pull requests to outside contributors, or a second collaborator joins.
+- The kit moves past its first option (niway-dev/pr-review-engine's v1 design ladder).
+- `claude-code-action` works with this key.
