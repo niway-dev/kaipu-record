@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.14.0](https://github.com/niway-dev/kaipu-record/compare/desktop-v0.13.0...desktop-v0.14.0) (2026-10-20)
+
+
+### Features
+
+* **desktop:** let users turn off diagnostics ([aab3100](https://github.com/niway-dev/kaipu-record/commit/aab3100205480bda97cf0341b1edc9733e99b2c0))
+* **desktop:** let users turn off diagnostics ([6def54c](https://github.com/niway-dev/kaipu-record/commit/6def54c21af68332c46209e3fad5dd8cf8e2fe2c))
+* **desktop:** NIW2-471 sign in through the browser ([6131126](https://github.com/niway-dev/kaipu-record/commit/6131126bcb8d40a44e322f2ac708e8d5507de0af))
+* **desktop:** NIW2-471 sign in through the browser ([ad20b60](https://github.com/niway-dev/kaipu-record/commit/ad20b60c22e19a00d4443af200732f0800d4dda5))
+* NIW2-219 Continue with Google and safe account linking ([12c6426](https://github.com/niway-dev/kaipu-record/commit/12c6426d3dd4ae95d60e91b779176444c6cc5def))
+* NIW2-219 Google in Sign-in methods and the desktop hint ([911c1f2](https://github.com/niway-dev/kaipu-record/commit/911c1f2d24a5d7021e318f1a5810784af919e11b))
+* NIW2-471 land desktop sign-in through the browser on main ([#333](https://github.com/niway-dev/kaipu-record/issues/333) + [#332](https://github.com/niway-dev/kaipu-record/issues/332)) ([9ae765b](https://github.com/niway-dev/kaipu-record/commit/9ae765b4de06e451ee94dd1f51f8a8d0ea67c486))
+* **web-hono:** authenticated /account page (profile, sign-in methods, plan and storage) ([408d55b](https://github.com/niway-dev/kaipu-record/commit/408d55b765e49eb8ff8d745344a6aa74fadf2981))
+
+
+### Bug Fixes
+
+* **kaipu:** NIW2-232 unify plan information (Free 250 MB) ([5eddfd0](https://github.com/niway-dev/kaipu-record/commit/5eddfd0d917e7c50723ecdde557336a392aaf8ca))
+
 ## [0.13.0](https://github.com/niway-dev/kaipu-record/compare/desktop-v0.12.0...desktop-v0.13.0) (2026-10-18)
 
 
