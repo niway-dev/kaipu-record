@@ -86,6 +86,10 @@ jobs:
       contents: read
       pull-requests: write
     steps:
+      # Unlike `on-demand`, this job runs the head's own script. Checking out the default
+      # branch's script here would not protect the key: a `pull_request` run uses the
+      # workflow file from the head, so a branch that can edit the script can edit this
+      # file too. The trust assumption in the header is what covers it.
       # The head, not the default merge commit, so the files match the diff's lines.
       - name: Checkout the pull request head
         uses: actions/checkout@v4
