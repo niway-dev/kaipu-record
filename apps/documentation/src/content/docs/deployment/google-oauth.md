@@ -67,8 +67,7 @@ Kaipu's Google assets.
   `http://localhost:3000`, change it)
 
 Check without printing values:
-`bash scripts/pull-env.sh server-hono /tmp/x.env && grep -c GOOGLE_ /tmp/x.env` should
-print `2`; then delete `/tmp/x.env`.
+`bun env:pull && grep -c GOOGLE_ apps/server-hono/.env` should print `2`.
 
 **Prod:** GitHub, repo Settings, Environments, `production` (what `release-api.yml` reads):
 
