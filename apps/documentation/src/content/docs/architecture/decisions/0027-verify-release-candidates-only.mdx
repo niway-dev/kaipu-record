@@ -1,0 +1,90 @@
+---
+title: "ADR 0027: Only release candidates are verified in Actions"
+description: Ordinary pull requests, stacked ones included, get an immediate pass from the required check; the full verification (verify, bundles, docs build, and the macOS E2E for code) runs only on release-please pull requests and manual dispatches. Supersedes ADR 0010's "every pull request is verified in Actions"; keeps its light pre-push hook.
+---
+
+# ADR 0027: Only release candidates are verified in Actions
+
+## Status
+
+| Field         | Value                                                                                                                                      |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Status        | Accepted — implemented in `pr-checks.yml` and `scripts/check-workflow-eligibility.ts`                                                      |
+| Date          | 2026-10-19                                                                                                                                 |
+| Supersedes    | [ADR 0010](./0010-checks-run-in-actions-on-every-pr) — every pull request verified in Actions. Its light pre-push hook (decision 5) stays. |
+| Amends        | —                                                                                                                                          |
+| Superseded by | —                                                                                                                                          |
+
+## Context
+
+Before ADR 0010 (2026-10-05), only the release-please pull request was verified in Actions;
+an ordinary pull request got one short job that reported the required check. ADR 0010 moved
+every pull request onto full verification because the repository was going public: runners
+became free, and outside contributors do not run local hooks.
+
+Two weeks of that cost the owner speed:
+
+- **Waiting.** A run measured on PR #345 took 234 s, 210 s of them the macOS E2E. Narrowing the
+  E2E to release candidates (ADR 0010's amendment of 2026-10-19) still left about 1.5–2 minutes
+  of Linux checks on every pull request, including a docs-only one such as PR #338.
+- **Stacks.** GitHub judges every pull request in a stack against `main`'s required check, so
+  each layer of a stack waited for its own full run before **Merge stack** could be used.
+
+The argument about outside contributors does not hold today: `CONTRIBUTING.md` limits pull
+requests to collaborators. The owner wants fast merges and is willing to find regressions on
+the release pull request instead.
+
+## Decision
+
+1. **`Classify the change` decides whether a pull request is a release candidate**: a
+   `release-please--branches--*` head branch, or a manual dispatch. It runs first on every
+   non-draft revision and outputs `release`, `docs_only` and `e2e`.
+2. **The verifying jobs run only on release candidates**: lint and format, build and
+   type-check, the unit test shards, the Workers bundles, the docs build, and `All checks
+passed`. The macOS E2E runs on candidates that change more than documentation.
+3. **An ordinary pull request gets an immediate pass.** `Merge requirements` reports success
+   as soon as `Classify the change` says it is not a candidate; `Release candidate verified`
+   mirrors it. Stacked pull requests are ordinary pull requests, so Merge stack works.
+4. **The required check still reports exactly once per commit, from a run that decided.** A
+   classification is a decision; a draft, a cancelled classification or a superseded run stays
+   silent. `scripts/check-workflow-eligibility.ts` enforces this against the real conditions
+   and scripts.
+5. **The pre-push hook stays light** (`bun run verify:local`: lint, format, cached builds,
+   types; about 7 s). It is now the only check an ordinary pull request gets. No tests and no
+   E2E on push.
+
+## Alternatives rejected
+
+- **Keep ADR 0010 with the E2E narrowed (the 2026-10-19 amendment).** Saves the macOS wait,
+  but every pull request, docs and stack layers included, still waits 1.5–2 minutes.
+- **Skip only docs-only pull requests.** Helps documentation, not code; the owner's code pull
+  requests are the ones that need to merge fast.
+- **Unit tests in the pre-push hook.** A local safety net without cloud cost, but it slows
+  every push, which is the cost being removed. Rejected for now; it is the first lever if the
+  reopen condition is met.
+- **Remove the required check.** Merge stack and the release flow would lose their guard
+  with no way to say "this candidate was verified".
+
+## Consequences
+
+- Ordinary pull requests merge as soon as the classification job finishes (seconds).
+- A regression in tests, bundles or the E2E is found on the release pull request, possibly
+  several merges after the pull request that caused it, and must be bisected there.
+- `main` can be red between releases. The release pull request is the gate that keeps a broken
+  `main` from being tagged.
+- Outside contributors' pull requests are not verified in Actions. Acceptable while pull
+  requests are limited to collaborators.
+
+## Non-goals
+
+- Changing the release workflows' own gates (ADR 0006's E2E before signing).
+- Renaming the required check from `Release candidate verified` to `Merge requirements` in
+  the ruleset; the transitional alias stays.
+
+## What would reopen this
+
+- A release pull request fails on a regression from an ordinary pull request, and finding the
+  culprit takes more than one bisect — then add unit tests to the pre-push hook first, and
+  per-PR Linux checks second.
+- Pull requests from people outside the collaborators are accepted.
+- A second person merges to `main` regularly.
