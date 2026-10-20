@@ -51,6 +51,12 @@ env:
   # Pinned: the version is part of what was verified to work (see above). Bump it by
   # hand, and re-run a review to check.
   CLAUDE_CODE_VERSION: 2.1.304
+  # The linux-x64 binary's SHA-256, from the release's manifest.json:
+  #   https://downloads.claude.ai/claude-code-releases/<version>/manifest.json
+  # The binary is downloaded directly and checked against this value, rather than running
+  # install.sh from claude.ai, whose content is fetched live in a job that holds the key.
+  # Bump it with the version.
+  CLAUDE_CODE_SHA256: ea0f135784631619a7a409d07322ecec964f9cc4fd377508ed1ba3f141f27912
   # The size gate, after filtering, and the most one review may spend. A pull request
   # edits these for its own `review` run, which the trust assumption above accepts.
   CLAUDE_REVIEW_MAX_LINES: 3000
@@ -94,7 +100,11 @@ jobs:
 
       - name: Install Claude Code
         run: |
-          curl -fsSL https://claude.ai/install.sh | bash -s "$CLAUDE_CODE_VERSION"
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL "https://downloads.claude.ai/claude-code-releases/$CLAUDE_CODE_VERSION/linux-x64/claude" \
+            -o "$HOME/.local/bin/claude"
+          echo "$CLAUDE_CODE_SHA256  $HOME/.local/bin/claude" | sha256sum -c -
+          chmod +x "$HOME/.local/bin/claude"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Review the pull request
@@ -157,7 +167,11 @@ jobs:
 
       - name: Install Claude Code
         run: |
-          curl -fsSL https://claude.ai/install.sh | bash -s "$CLAUDE_CODE_VERSION"
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL "https://downloads.claude.ai/claude-code-releases/$CLAUDE_CODE_VERSION/linux-x64/claude" \
+            -o "$HOME/.local/bin/claude"
+          echo "$CLAUDE_CODE_SHA256  $HOME/.local/bin/claude" | sha256sum -c -
+          chmod +x "$HOME/.local/bin/claude"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       # The comment reaches the script through the environment, never interpolated
