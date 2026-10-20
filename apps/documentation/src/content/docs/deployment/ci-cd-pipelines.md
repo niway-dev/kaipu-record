@@ -59,7 +59,7 @@ consume the R2 feed.
 ### Web — `deploy-web.yml`
 
 1. Installs deps, builds the `@kaipu/*` packages, then builds the web app (`apps/web-hono`).
-2. Deploys the Worker via `cloudflare/wrangler-action`. The Worker is attached to `kaipu.app` +
+2. Deploys the Worker with `scripts/deploy-worker.sh apps/web-hono`. The Worker is attached to `kaipu.app` +
    `www.kaipu.app` (custom domains in `apps/web-hono/wrangler.jsonc`), so DNS + SSL are provisioned
    automatically on deploy.
 
@@ -69,7 +69,7 @@ buttons point at the R2 installers.
 ### API — `deploy-api.yml`
 
 1. Installs deps, builds the `@kaipu/*` packages.
-2. Deploys the Worker (`apps/server-hono`) via `cloudflare/wrangler-action`.
+2. Deploys the Worker with `scripts/deploy-worker.sh apps/server-hono`.
 
 ### Worker secrets travel with the deploy
 
@@ -84,8 +84,23 @@ state `preview-web.yml` leaves behind. That is how `web-v0.9.0` failed on 2026-1
 the jobs drop empty values so a missing GitHub secret cannot blank one. Removing a secret
 from a Worker is a deliberate `wrangler secret delete`, never a side effect of a release.
 
-The three Worker workflows pin `wrangler@4.148.0`. The workspace still has 4.63.0 for local
-development, which lacks `--secrets-file`; bump both together when the workspace upgrades.
+### One deploy script, dry-run on the release candidate
+
+Both release jobs deploy through `scripts/deploy-worker.sh`. It pins wrangler
+(`WRANGLER_VERSION`, 4.148.0), installs it globally with bun if needed, and calls it by
+absolute path. The workspace still has 4.63.0 for local development, which lacks
+`--secrets-file`; bump both together when the workspace upgrades, and keep the
+`preview-web.yml` pin equal.
+
+The jobs do not use `cloudflare/wrangler-action` for the deploy. The action resolves
+wrangler with `npx` inside the app directory, so `apps/server-hono`'s own 4.63.0
+devDependency shadowed the pinned version and `api-v0.5.0` failed on 2026-10-20 with
+`Unknown arguments: secrets-file`. `release-web` kept working only because
+`apps/web-hono` has no local wrangler.
+
+The release-candidate PR check (`Web and API - Workers bundle`) runs the same script with
+`--dry-run` for both apps after building them, with an empty secrets file. A deploy
+command that cannot run now fails on the release pull request instead of on the tag.
 
 ## First-deploy order (one-time)
 

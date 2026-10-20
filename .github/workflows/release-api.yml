@@ -78,11 +78,6 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      # Pinned for the same reasons as release-web.yml: a tag must deploy with the same
-      # tools every time it runs, and `deploy --secrets-file` needs this version.
-      - name: Install Wrangler
-        run: bun add -g wrangler@4.148.0
-
       - name: Build packages only
         run: bun run build --filter='@kaipu/*'
 
@@ -129,13 +124,15 @@ jobs:
             --arg RESEND_API_KEY "$RESEND_API_KEY" \
             '$ARGS.named | with_entries(select(.value != ""))' > worker-secrets.json
 
+      # scripts/deploy-worker.sh pins wrangler and calls it by absolute path. Not
+      # wrangler-action: it resolves wrangler with npx inside apps/server-hono, where the
+      # workspace's 4.63.0 shadows the pinned one and rejects --secrets-file (api-v0.5.0).
+      # The release-candidate PR check runs the same script with --dry-run.
       - name: Deploy Backend to Cloudflare Workers
-        uses: cloudflare/wrangler-action@v3.14.1
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: apps/server-hono
-          command: deploy --secrets-file worker-secrets.json
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/deploy-worker.sh apps/server-hono
 
       - name: Remove Worker secrets file
         if: always()
