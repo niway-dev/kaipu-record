@@ -5,18 +5,18 @@ description: Every command used in the project — development, database, operat
 
 # Commands
 
-Run root commands from the repository root. Commands that touch the database fetch their
-environment from Infisical via `scripts/with-env.sh` (see [Environment
-Variables](/backend/environment-variables/)). Infisical **overrides a variable already set** in
-your shell, so to point a command at a different `DATABASE_URL` — production, for example —
-prefix it inline and set `SKIP_INFISICAL=1`, rather than `export`ing it beforehand:
-`DATABASE_URL='<url>' SKIP_INFISICAL=1 bun run plan grant <email>`.
+Run root commands from the repository root. Generate the local `.env` files once with
+`bun env:pull` (see [Environment Variables](/backend/environment-variables/)); commands that
+touch the database then read `packages/infra-db/.env`. A variable set inline **wins over the
+file**, so to point a command at a different `DATABASE_URL` — production, for example — prefix
+it: `DATABASE_URL='<url>' bun run plan grant <email>`.
 
 ## Development
 
 | Command                                | What it does                                             |
 | -------------------------------------- | -------------------------------------------------------- |
 | `bun install`                          | Install dependencies (also installs the lefthook hooks). |
+| `bun env:pull`                         | Generate every local `.env` file from Infisical (dev).   |
 | `bun run dev`                          | Start every app in development mode.                     |
 | `bun run dev:server-hono`              | Start only the API (Wrangler, port 3000).                |
 | `bun run dev:web-hono`                 | Start only the web app.                                  |
