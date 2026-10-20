@@ -115,6 +115,7 @@ export default defineConfig({
             { slug: "backlog/cloud-error-states" },
             { slug: "backlog/web-account-page" },
             { slug: "backlog/web-dashboard" },
+            { slug: "backlog/user-dashboard-design" },
             { slug: "backlog/google-sign-in" },
             { slug: "backlog/desktop-browser-sign-in" },
             { slug: "backlog/web-auth-redesign" },
