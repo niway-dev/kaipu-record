@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.5.0](https://github.com/niway-dev/kaipu-record/compare/api-v0.4.0...api-v0.5.0) (2026-10-20)
+
+
+### Features
+
+* **desktop:** NIW2-471 sign in through the browser ([6131126](https://github.com/niway-dev/kaipu-record/commit/6131126bcb8d40a44e322f2ac708e8d5507de0af))
+* NIW2-219 Continue with Google and safe account linking ([12c6426](https://github.com/niway-dev/kaipu-record/commit/12c6426d3dd4ae95d60e91b779176444c6cc5def))
+* NIW2-471 land desktop sign-in through the browser on main ([#333](https://github.com/niway-dev/kaipu-record/issues/333) + [#332](https://github.com/niway-dev/kaipu-record/issues/332)) ([9ae765b](https://github.com/niway-dev/kaipu-record/commit/9ae765b4de06e451ee94dd1f51f8a8d0ea67c486))
+* **server-hono:** add the electron plugin for desktop sign-in through the browser ([53e49ac](https://github.com/niway-dev/kaipu-record/commit/53e49ac22f3adaf61f95a1372c7d022698604469))
+* **server-hono:** NIW2-215 optional Google OAuth provider and explicit BETTER_AUTH_URL ([e1299a6](https://github.com/niway-dev/kaipu-record/commit/e1299a61e67cb7d186fde64fe38a2ed4fca0006f))
+* **server-hono:** NIW2-215 optional Google provider and explicit BETTER_AUTH_URL ([da5572e](https://github.com/niway-dev/kaipu-record/commit/da5572e8fd11847e2d597ca64708ff83c8f3b1b4))
+* **server-hono:** NIW2-219 safe Google account linking ([693b122](https://github.com/niway-dev/kaipu-record/commit/693b122621c9b8ee80e892eb1a600b5c889815cb))
+* **web-hono:** Google and intent=sign-up on the desktop sign-in page ([f34fa01](https://github.com/niway-dev/kaipu-record/commit/f34fa01a985740bc7f8fe460d4f1df33cce528e3))
+
+
+### Bug Fixes
+
+* **api:** close ticket-window races and finish upload abuse remediation ([8ded5c2](https://github.com/niway-dev/kaipu-record/commit/8ded5c29c0e1206ccbdcbd152ecee4629fdeb255))
+* **api:** close ticket-window races left by the NIW2-323 WIP [NIW2-323] ([4b86367](https://github.com/niway-dev/kaipu-record/commit/4b863672077777dad6c5323fc4e0b39a000e8394))
+* **api:** close upload abuse paths [NIW2-323] ([3aa720c](https://github.com/niway-dev/kaipu-record/commit/3aa720c412139af538b3b78c97db3e52dc670aef))
+* **auth:** adapt NIW2-219 Google linking to better-auth 1.7 ([d4ae12d](https://github.com/niway-dev/kaipu-record/commit/d4ae12d9788a42b858f847d61ca781e6b90702f4))
+* **domain:** single plan table — Free verified 250 MB, Pro 15 GB ([3c5a8cd](https://github.com/niway-dev/kaipu-record/commit/3c5a8cd65a9d0401b12918e9194ce2194eadbae7))
+* **kaipu:** NIW2-232 unify plan information (Free 250 MB) ([5eddfd0](https://github.com/niway-dev/kaipu-record/commit/5eddfd0d917e7c50723ecdde557336a392aaf8ca))
+
 ## [0.4.0](https://github.com/csdev19/kaipu-record-monorepo/compare/api-v0.3.0...api-v0.4.0) (2026-09-19)
 
 
