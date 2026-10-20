@@ -3,6 +3,7 @@ import { KaipuLogo } from "@kaipu/brand";
 import { useTranslations } from "@kaipu/i18n";
 import { DEFAULT_ACCELERATORS, formatAccelerator } from "@kaipu/domain/constants";
 
+import { DownloadLink } from "@/components/download-link";
 import { downloadUrls } from "@/lib/download";
 import { AppWindow } from "./app-window";
 import styles from "./hero.module.css";
@@ -68,11 +69,24 @@ export function Hero() {
               machine that can run it. Both are rendered server-side and one is
               hidden, which avoids the flash a client-side width check gives.
             */}
-            <a href={downloadUrls.macArm64} className={`${styles.ctaPrimary} ${styles.deskOnly}`}>
+            <DownloadLink
+              placement="hero"
+              href={downloadUrls.macArm64}
+              className={`${styles.ctaPrimary} ${styles.deskOnly}`}
+            >
               <Apple size={18} aria-hidden />
               {t("homeHeroCtaPrimary")}
               <ArrowUpRight size={17} aria-hidden />
-            </a>
+            </DownloadLink>
+            {/* lucide has no Windows mark; a monitor says "PC" without borrowing a logo. */}
+            <DownloadLink
+              placement="hero"
+              href={downloadUrls.windowsX64}
+              className={`${styles.ctaSecondary} ${styles.deskOnly}`}
+            >
+              <Monitor size={17} aria-hidden />
+              {t("downloadWindowsBeta")}
+            </DownloadLink>
             <a href="#download" className={`${styles.ctaPrimary} ${styles.mobileOnly}`}>
               <Mail size={17} aria-hidden />
               {t("homeHeroCtaMobile")}

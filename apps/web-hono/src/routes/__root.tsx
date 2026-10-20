@@ -11,8 +11,11 @@ import {
 } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 
+import { useEffect } from "react";
+
 import { I18nProvider, type Locale } from "@kaipu/i18n";
 
+import { initAnalytics, trackPageview } from "@/lib/analytics";
 import { siteHeadMeta } from "@/lib/seo";
 import appCss from "../index.css?url";
 import stylexCss from "../stylex.css?url";
@@ -130,7 +133,21 @@ function criticalStyles(light: boolean): string {
 `;
 }
 
+/**
+ * Starts the cookieless analytics in the browser and sends a `$pageview` for the first load and for
+ * every client-side navigation. Effects never run during SSR, so nothing starts on the server.
+ */
+function usePageviews() {
+  const router = useRouter();
+  useEffect(() => {
+    initAnalytics();
+    trackPageview();
+    return router.subscribe("onResolved", () => trackPageview());
+  }, [router]);
+}
+
 function RootDocument() {
+  usePageviews();
   const context = Route.useRouteContext();
   const router = useRouter();
   const { locale } = context;

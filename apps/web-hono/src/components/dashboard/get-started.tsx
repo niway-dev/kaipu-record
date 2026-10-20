@@ -4,6 +4,7 @@ import { Monitor } from "lucide-react";
 import { KaipuLogo } from "@kaipu/brand";
 import { useTranslations } from "@kaipu/i18n";
 import { detectDesktopOs, type DesktopOs } from "@/lib/desktop-os";
+import { DownloadLink } from "@/components/download-link";
 import { downloadUrls } from "@/lib/download";
 import { bp, kl, tone } from "./dashboard.stylex";
 import { AppleMark, GlowBox, WindowsMark, buttonProps, textLinkProps } from "./ui";
@@ -71,18 +72,30 @@ export function GetStarted({
           )}
           {os === "other" && (
             <div {...stylex.props(s.equal)}>
-              <a href={downloadUrls.macArm64} {...buttonProps({ size: "lg", wrap: true })}>
+              <DownloadLink
+                placement="dashboard"
+                href={downloadUrls.macArm64}
+                {...buttonProps({ size: "lg", wrap: true })}
+              >
                 <AppleMark />
                 {t("downloadMacShort")}
-              </a>
-              <a href={downloadUrls.macX64} {...buttonProps({ size: "lg", wrap: true })}>
+              </DownloadLink>
+              <DownloadLink
+                placement="dashboard"
+                href={downloadUrls.macX64}
+                {...buttonProps({ size: "lg", wrap: true })}
+              >
                 <AppleMark />
                 {t("downloadMacIntel")}
-              </a>
-              <a href={downloadUrls.windowsX64} {...buttonProps({ size: "lg", wrap: true })}>
+              </DownloadLink>
+              <DownloadLink
+                placement="dashboard"
+                href={downloadUrls.windowsX64}
+                {...buttonProps({ size: "lg", wrap: true })}
+              >
                 <WindowsMark />
                 {t("downloadWindowsShort")}
-              </a>
+              </DownloadLink>
             </div>
           )}
         </div>
@@ -91,7 +104,7 @@ export function GetStarted({
   );
 }
 
-interface DownloadLink {
+interface DownloadOption {
   href: string;
   label: string;
   mark?: React.ReactNode;
@@ -102,24 +115,28 @@ function Downloads({
   others,
   othersLabel,
 }: {
-  primary: DownloadLink;
-  others: DownloadLink[];
+  primary: DownloadOption;
+  others: DownloadOption[];
   othersLabel: string;
 }) {
   return (
     <div {...stylex.props(s.downloads)}>
-      <a href={primary.href} {...buttonProps({ variant: "pink", size: "lg", wrap: true })}>
+      <DownloadLink
+        placement="dashboard"
+        href={primary.href}
+        {...buttonProps({ variant: "pink", size: "lg", wrap: true })}
+      >
         {primary.mark}
         {primary.label}
-      </a>
+      </DownloadLink>
       <p {...stylex.props(s.others)}>
         {othersLabel}:{" "}
         {others.map((link, i) => (
           <span key={link.href}>
             {i > 0 && " · "}
-            <a href={link.href} {...textLinkProps()}>
+            <DownloadLink placement="dashboard" href={link.href} {...textLinkProps()}>
               {link.label}
-            </a>
+            </DownloadLink>
           </span>
         ))}
       </p>

@@ -1410,7 +1410,7 @@
         },
         "diagnostics": {
           "title": "Tecnologías de diagnóstico",
-          "body": "Las versiones de escritorio con PostHog habilitado pueden conservar identificadores y estado de diagnóstico localmente y enviar eventos técnicos. No debe confundirse esto con una cookie necesaria para iniciar sesión. La política de privacidad explica qué datos se envían. Si una nueva tecnología o finalidad exige consentimiento, deberá solicitarse antes de activarla; estos términos no sustituyen ese permiso."
+          "body": "Las versiones de escritorio con PostHog habilitado pueden conservar identificadores y estado de diagnóstico localmente y enviar eventos técnicos. No debe confundirse esto con una cookie necesaria para iniciar sesión. La política de privacidad explica qué datos se envían. Si una nueva tecnología o finalidad exige consentimiento, deberá solicitarse antes de activarla; estos términos no sustituyen ese permiso. La web usa PostHog en modo sin cookies para contar visitas a páginas y clics de descarga. No guarda ninguna cookie ni identificador en el almacenamiento local de tu dispositivo, por lo que no se muestra un aviso de consentimiento: no se almacena nada en el dispositivo con fines de analítica."
         },
         "control": {
           "title": "Cómo gestionarlos",

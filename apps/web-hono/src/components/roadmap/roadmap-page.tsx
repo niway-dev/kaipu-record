@@ -6,6 +6,7 @@ import { KaipuLogo } from "@kaipu/brand";
 import { useTranslations } from "@kaipu/i18n";
 
 import { PixelGrid } from "@/components/home/pixel-grid";
+import { DownloadLink } from "@/components/download-link";
 import { downloadUrls } from "@/lib/download";
 import {
   ROADMAP_ITEMS,
@@ -351,10 +352,14 @@ export function WindowsBeta() {
           <h2 {...stylex.props(s.h2)}>{t("windows.title")}</h2>
           <p {...stylex.props(s.h2Serif)}>{t("windows.serif")}</p>
           <p {...stylex.props(s.windowsBody)}>{t("windows.body")}</p>
-          <a href={downloadUrls.windowsX64} {...stylex.props(s.download)}>
+          <DownloadLink
+            placement="roadmap"
+            href={downloadUrls.windowsX64}
+            {...stylex.props(s.download)}
+          >
             <PlatformIcon platform="win" size={16} />
             {t("windows.download")}
-          </a>
+          </DownloadLink>
           <p {...stylex.props(s.requirements)}>{t("windows.requirements")}</p>
         </div>
 

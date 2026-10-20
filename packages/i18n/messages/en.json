@@ -1410,7 +1410,7 @@
         },
         "diagnostics": {
           "title": "Diagnostic technologies",
-          "body": "Desktop versions with PostHog enabled may store identifiers and diagnostic state locally and send technical events. This is separate from a cookie needed to sign in. The privacy policy explains what is sent. If a new technology or purpose requires consent, it must be requested before activation; these terms do not replace that permission."
+          "body": "Desktop versions with PostHog enabled may store identifiers and diagnostic state locally and send technical events. This is separate from a cookie needed to sign in. The privacy policy explains what is sent. If a new technology or purpose requires consent, it must be requested before activation; these terms do not replace that permission. The website uses PostHog in cookieless mode to count page views and download clicks. It stores no cookie or local storage identifier on your device, so no consent banner is shown: nothing is stored on the device for analytics."
         },
         "control": {
           "title": "How to manage them",
