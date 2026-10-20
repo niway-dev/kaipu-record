@@ -15,10 +15,12 @@ name: PR checks
 #    Job names carry no prefix when they cover the whole workspace, and `<scope> - <what>`
 #    when they cover one part of it (`Desktop - unit tests (1/3)`).
 # 3. `Desktop - E2E tests (macOS)` — Playwright driving the real Electron build on the platform
-#    that ships. It runs on every pull request that changes anything besides documentation:
-#    this suite is the only thing that exercises the export path, the library actions and
-#    settings persistence against a real build (ADR 0006). A docs-only pull request skips
-#    it — `Classify the change` decides, and the gate reads that decision (ADR 0010).
+#    that ships. It runs only on release candidates (release-please branches) that change
+#    more than documentation, and on a manual dispatch: this suite is the only thing that
+#    exercises the export path, the library actions and settings persistence against a real
+#    build (ADR 0006), and at about 3.5 minutes it was most of every pull request's wait.
+#    `Classify the change` decides, and the gate reads that decision (ADR 0010, amended
+#    2026-10-19).
 #
 # READINESS POLICY — draft means "still accumulating", ready means "verify this". It now
 # applies to every pull request, not just release candidates: open a PR as a draft to push
@@ -427,6 +429,7 @@ jobs:
       pull-requests: read
     outputs:
       docs_only: ${{ steps.classify.outputs.docs_only }}
+      e2e: ${{ steps.classify.outputs.e2e }}
     steps:
       - name: List changed files
         if: ${{ github.event_name == 'pull_request' }}
@@ -443,6 +446,8 @@ jobs:
         id: classify
         env:
           FILES: ${{ runner.temp }}/changed-files.txt
+          EVENT: ${{ github.event_name }}
+          HEAD_REF: ${{ github.head_ref }}
         run: |
           set -euo pipefail
           docs_only=false
@@ -452,11 +457,24 @@ jobs:
               docs_only=true
             fi
           fi
-          echo "docs_only=$docs_only" >> "$GITHUB_OUTPUT"
-          echo "docs_only=$docs_only"
 
-  # The desktop end-to-end suite, on every pull request that is not docs-only (ADR 0006,
-  # widened by ADR 0010).
+          # The macOS E2E runs only on release candidates (release-please branches) and on
+          # a manual dispatch, never on a docs-only change. Every other pull request gets
+          # the Linux checks alone (ADR 0010, amendment of 2026-10-19).
+          e2e=false
+          if [ "$docs_only" = "false" ]; then
+            case "$EVENT:$HEAD_REF" in
+              workflow_dispatch:* | pull_request:release-please--branches--*) e2e=true ;;
+            esac
+          fi
+
+          {
+            echo "docs_only=$docs_only"
+            echo "e2e=$e2e"
+          } | tee -a "$GITHUB_OUTPUT"
+
+  # The desktop end-to-end suite, on release candidates that are not docs-only (ADR 0006;
+  # ADR 0010 widened it to every pull request, its 2026-10-19 amendment narrowed it back).
   #
   # A faithful copy of the E2E step in release-desktop.yml, native rebuild included, because
   # a candidate that does not exercise what ships is not a candidate. This is the only place
@@ -489,7 +507,7 @@ jobs:
           )
         ) &&
         needs.changes.result == 'success' &&
-        needs.changes.outputs.docs_only != 'true'
+        needs.changes.outputs.e2e == 'true'
       }}
     concurrency:
       group: e2e-desktop-pr-${{ github.event.pull_request.number || github.ref }}
@@ -616,7 +634,7 @@ jobs:
         (needs.verify.result == 'success' || needs.verify.result == 'failure') &&
         (
           needs.e2e_desktop.result == 'success' || needs.e2e_desktop.result == 'failure' ||
-          (needs.e2e_desktop.result == 'skipped' && needs.changes.result == 'success' && needs.changes.outputs.docs_only == 'true') ||
+          (needs.e2e_desktop.result == 'skipped' && needs.changes.result == 'success' && needs.changes.outputs.e2e == 'false') ||
           needs.changes.result == 'failure'
         )
       }}
@@ -628,6 +646,7 @@ jobs:
           E2E: ${{ needs.e2e_desktop.result }}
           CHANGES: ${{ needs.changes.result }}
           DOCS_ONLY: ${{ needs.changes.outputs.docs_only }}
+          E2E_REQUIRED: ${{ needs.changes.outputs.e2e }}
           SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
@@ -665,10 +684,12 @@ jobs:
           case "$E2E" in
             success) ;;
             skipped)
-              if [ "$DOCS_ONLY" = "true" ]; then
+              if [ "$E2E_REQUIRED" = "false" ] && [ "$DOCS_ONLY" = "true" ]; then
                 echo "Docs-only change: the desktop end-to-end suite is not required."
+              elif [ "$E2E_REQUIRED" = "false" ]; then
+                echo "Not a release candidate: the desktop end-to-end suite runs on the release-please pull request."
               else
-                echo "::error title=Desktop E2E did not run::Every pull request that changes more than documentation must pass the macOS end-to-end suite. Return the pull request to draft and mark it ready for review again."
+                echo "::error title=Desktop E2E did not run::A release candidate that changes more than documentation must pass the macOS end-to-end suite. Return the pull request to draft and mark it ready for review again."
                 exit 1
               fi
               ;;

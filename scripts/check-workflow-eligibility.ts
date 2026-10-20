@@ -305,10 +305,24 @@ interface Expectation {
  */
 type JobResult = "success" | "failure" | "cancelled" | "skipped";
 
+/**
+ * Mirrors the `e2e` rule in the classify step: a release-please branch or a manual
+ * dispatch. Derived from the scenario's event, never from its expectation, so the check
+ * cannot agree with itself.
+ */
+function isReleaseCandidate(ctx: Record<string, unknown>): boolean {
+  const github = ctx.github as { event_name: string; head_ref: string };
+  return (
+    github.event_name === "workflow_dispatch" ||
+    github.head_ref.startsWith("release-please--branches--")
+  );
+}
+
 function needsContext(
   expect: Expectation,
   override: Partial<Record<string, JobResult>> = {},
   docsOnly = false,
+  releaseCandidate = false,
 ) {
   // `changes` shares the parts' eligibility, so it ran whenever anything verifying did.
   const changes: JobResult =
@@ -325,7 +339,10 @@ function needsContext(
     changes: {
       result: changes,
       // A job output is the empty string unless the job succeeded and set it.
-      outputs: { docs_only: changes === "success" ? String(docsOnly) : "" },
+      outputs:
+        changes === "success"
+          ? { docs_only: String(docsOnly), e2e: String(!docsOnly && releaseCandidate) }
+          : { docs_only: "", e2e: "" },
     },
     lint: part("lint"),
     types: part("types"),
@@ -353,8 +370,9 @@ const scenarios: Array<{
     title: "Ordinary PR targeting main",
     ctx: pullRequestEvent({ action: "opened" }),
     eventType: "opened",
-    // ADR 0010: every pull request is verified in Actions, not only release candidates.
-    expect: { verify: true, e2e: true, gate: true, legacy: true, cancel: false },
+    // ADR 0010: every pull request is verified in Actions. Since its 2026-10-19 amendment
+    // the macOS E2E is for release candidates only, and the gate still reports.
+    expect: { verify: true, e2e: false, gate: true, legacy: true, cancel: false },
   },
   {
     n: 3,
@@ -454,8 +472,8 @@ const scenarios: Array<{
   },
   {
     n: 20,
-    title: "Ordinary PR, desktop E2E failed",
-    ctx: pullRequestEvent({ action: "synchronize" }),
+    title: "Ready desktop candidate, desktop E2E failed",
+    ctx: pullRequestEvent({ action: "synchronize", headRef: RELEASE_BRANCH }),
     eventType: "synchronize",
     results: { e2e_desktop: "failure" },
     // A real verdict: it must be reported, so the red E2E blocks the merge.
@@ -469,7 +487,7 @@ const scenarios: Array<{
     // A part cancelled by a newer revision: `verify` must not run, so it cannot turn the
     // cancellation into a failure that lands on a commit this run knows nothing about.
     results: { tests: "cancelled" },
-    expect: { verify: false, e2e: true, gate: false, legacy: false, cancel: false },
+    expect: { verify: false, e2e: false, gate: false, legacy: false, cancel: false },
   },
   {
     n: 22,
@@ -478,7 +496,24 @@ const scenarios: Array<{
     eventType: "synchronize",
     // A real verdict: `verify` runs (always()), fails, and the gate reports it.
     results: { lint: "failure", verify: "failure" },
-    expect: { verify: true, e2e: true, gate: true, legacy: true, cancel: false },
+    expect: { verify: true, e2e: false, gate: true, legacy: true, cancel: false },
+  },
+  {
+    n: 29,
+    title: "Upper PR of a stack (base is another branch)",
+    ctx: pullRequestEvent({ action: "opened", headRef: "design/stacked-upper" }),
+    eventType: "opened",
+    // GitHub judges every PR in a stack against main's required check, so it must
+    // report; like any ordinary PR, without the macOS E2E.
+    expect: { verify: true, e2e: false, gate: true, legacy: true, cancel: false },
+  },
+  {
+    n: 30,
+    title: "Docs-only release PR",
+    ctx: pullRequestEvent({ action: "ready_for_review", headRef: RELEASE_BRANCH }),
+    eventType: "ready_for_review",
+    docsOnly: true,
+    expect: { verify: true, e2e: false, gate: true, legacy: true, cancel: false },
   },
   {
     n: 23,
@@ -573,7 +608,10 @@ console.log(
 );
 
 for (const s of scenarios) {
-  const ctx = { ...s.ctx, needs: needsContext(s.expect, s.results, s.docsOnly) };
+  const ctx = {
+    ...s.ctx,
+    needs: needsContext(s.expect, s.results, s.docsOnly, isReleaseCandidate(s.ctx)),
+  };
   // `changes` must be eligible exactly when the verifying parts are, or the E2E and the
   // gate would read a classification that never ran.
   ok(
@@ -664,16 +702,17 @@ ok(
 console.log("\nThe one report per commit invariant");
 for (const s of scenarios) {
   if (s.eventType === "workflow_dispatch") continue;
-  const needs = needsContext(s.expect, s.results, s.docsOnly);
+  const needs = needsContext(s.expect, s.results, s.docsOnly, isReleaseCandidate(s.ctx));
   const ctx = { ...s.ctx, needs };
   const verified = ["success", "failure"].includes(needs.verify.result);
-  // ADR 0010: report iff both checks reached a verdict. For the E2E, a docs-only skip
-  // classified by this run is a verdict, and so is a failed classification.
+  // ADR 0010: report iff both checks reached a verdict. For the E2E, a skip this run
+  // classified as not required (docs-only, or not a release candidate) is a verdict, and so
+  // is a failed classification.
   const e2eDecided =
     ["success", "failure"].includes(needs.e2e_desktop.result) ||
     (needs.e2e_desktop.result === "skipped" &&
       needs.changes.result === "success" &&
-      needs.changes.outputs.docs_only === "true") ||
+      needs.changes.outputs.e2e === "false") ||
     needs.changes.result === "failure";
   const mustReport = verified && e2eDecided;
   const reports = evaluate(exprs.gate, ctx);
@@ -719,23 +758,25 @@ ok(
 // Scenario 11 + the gate's own decision table, by running the real shell script.
 console.log("\nScenario 11 — the real merge-requirements script, by exit code");
 const decide = stepScript("gate", "Check whether verification permits merging");
-// [isDraft, verify, e2e, changes, docsOnly, expected exit, label]
-const decideCases: Array<[string, string, string, string, string, number, string]> = [
+// [isDraft, verify, e2e, changes, docsOnly, e2eRequired, expected exit, label]
+const decideCases: Array<[string, string, string, string, string, string, number, string]> = [
   // The row that would have caught the 0.8.1 green button.
-  ["true", "skipped", "skipped", "skipped", "", 1, "draft: nothing verified"],
-  ["false", "success", "success", "success", "false", 0, "verify + E2E green"],
+  ["true", "skipped", "skipped", "skipped", "", "", 1, "draft: nothing verified"],
+  ["false", "success", "success", "success", "false", "true", 0, "candidate: verify + E2E green"],
   // This row is the one that would have stopped desktop 0.8.0 before the tag existed.
-  ["false", "success", "failure", "success", "false", 1, "E2E failed"],
-  ["false", "success", "cancelled", "success", "false", 1, "E2E superseded"],
-  ["false", "success", "skipped", "success", "false", 1, "code change, E2E never ran"],
-  ["false", "failure", "success", "success", "false", 1, "verify failed"],
-  ["false", "failure", "skipped", "success", "false", 1, "verify failed, E2E never ran"],
-  ["false", "success", "skipped", "success", "true", 0, "docs-only, E2E skipped"],
-  ["false", "failure", "skipped", "success", "true", 1, "docs-only, verify failed"],
-  ["false", "success", "failure", "success", "true", 1, "docs-only, E2E ran and failed"],
-  ["false", "success", "skipped", "failure", "", 1, "change detection failed"],
+  ["false", "success", "failure", "success", "false", "true", 1, "candidate: E2E failed"],
+  ["false", "success", "cancelled", "success", "false", "true", 1, "candidate: E2E superseded"],
+  ["false", "success", "skipped", "success", "false", "true", 1, "candidate: E2E never ran"],
+  ["false", "failure", "success", "success", "false", "true", 1, "candidate: verify failed"],
+  ["false", "failure", "skipped", "success", "false", "true", 1, "verify failed, E2E never ran"],
+  ["false", "success", "skipped", "success", "false", "false", 0, "ordinary PR, E2E not required"],
+  ["false", "failure", "skipped", "success", "false", "false", 1, "ordinary PR, verify failed"],
+  ["false", "success", "skipped", "success", "true", "false", 0, "docs-only, E2E skipped"],
+  ["false", "failure", "skipped", "success", "true", "false", 1, "docs-only, verify failed"],
+  ["false", "success", "failure", "success", "true", "false", 1, "docs-only, E2E ran and failed"],
+  ["false", "success", "skipped", "failure", "", "", 1, "change detection failed"],
 ];
-for (const [isDraft, verify, e2e, changes, docsOnly, wantCode, label] of decideCases) {
+for (const [isDraft, verify, e2e, changes, docsOnly, e2eRequired, wantCode, label] of decideCases) {
   let code = 0;
   let out = "";
   try {
@@ -747,6 +788,7 @@ for (const [isDraft, verify, e2e, changes, docsOnly, wantCode, label] of decideC
         E2E: e2e,
         CHANGES: changes,
         DOCS_ONLY: docsOnly,
+        E2E_REQUIRED: e2eRequired,
         SHA: "1bd8b2a",
       },
       encoding: "utf8",
@@ -811,12 +853,70 @@ for (const [files, want, label] of classifyCases) {
       ...process.env,
       FILES: files === null ? join(scratch, "missing.txt") : listPath,
       GITHUB_OUTPUT: outPath,
+      EVENT: "pull_request",
+      HEAD_REF: "feat/ordinary",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
   const got = /docs_only=true/.test(readFileSync(outPath, "utf8"));
   console.log(`  docs_only=${String(got).padEnd(5)} ${label}`);
   ok(got === want, `classifier on '${label}' expected docs_only=${want}, got ${got}`);
+}
+
+// The E2E rule, by running the same real step: release candidates and manual dispatches
+// only, never docs-only. A wrong answer here either skips the release E2E or puts macOS
+// back on every pull request.
+console.log("\nE2E rule — the real step, by its output");
+const e2eCases: Array<[string, string, string[] | null, boolean, string]> = [
+  [
+    "pull_request",
+    "release-please--branches--main--components--desktop",
+    ["apps/kaipu-record/src/a.ts"],
+    true,
+    "desktop release, code",
+  ],
+  [
+    "pull_request",
+    "release-please--branches--main--components--web",
+    ["apps/web-hono/src/a.ts"],
+    true,
+    "web release, code",
+  ],
+  [
+    "pull_request",
+    "release-please--branches--main--components--desktop",
+    ["CHANGELOG.md"],
+    false,
+    "release, docs only",
+  ],
+  ["pull_request", "feat/ordinary", ["apps/kaipu-record/src/a.ts"], false, "ordinary PR, code"],
+  [
+    "pull_request",
+    "feat/release-please--branches--main",
+    ["apps/kaipu-record/src/a.ts"],
+    false,
+    "lookalike branch",
+  ],
+  ["workflow_dispatch", "", null, true, "manual dispatch"],
+];
+for (const [event, headRef, files, want, label] of e2eCases) {
+  const listPath = join(scratch, "changed-files.txt");
+  const outPath = join(scratch, "output.txt");
+  writeFileSync(outPath, "");
+  writeFileSync(listPath, files ? `${files.join("\n")}\n` : "");
+  execFileSync("bash", ["-c", classify], {
+    env: {
+      ...process.env,
+      FILES: files === null ? join(scratch, "missing.txt") : listPath,
+      GITHUB_OUTPUT: outPath,
+      EVENT: event,
+      HEAD_REF: headRef,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const got = /^e2e=true$/m.test(readFileSync(outPath, "utf8"));
+  console.log(`  e2e=${String(got).padEnd(5)} ${label}`);
+  ok(got === want, `E2E rule on '${label}' expected e2e=${want}, got ${got}`);
 }
 ok(
   /previous_filename/.test(jobBlock("changes")),
