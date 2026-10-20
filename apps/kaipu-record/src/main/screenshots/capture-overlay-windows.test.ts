@@ -85,7 +85,7 @@ vi.mock("electron", () => ({
 }));
 vi.mock("@electron-toolkit/utils", () => ({ is: { dev: false } }));
 
-const { CaptureOverlayWindows, HIDDEN_ACK_CAP_MS, OVERLAY_READY_TIMEOUT_MS } =
+const { CaptureOverlayWindows, HIDDEN_ACK_CAP_MS, OVERLAY_READY_TIMEOUT_MS, PREWARM_DELAY_MS } =
   await import("./capture-overlay-windows");
 
 function display(id: number, x: number, scaleFactor = 2): Display {
@@ -1144,5 +1144,158 @@ describe("CaptureOverlayWindows: Window mode disabled (the flag as shipped)", ()
     const { first, list } = pickDefault("darwin", "window");
     expect(modes(first).at(-1)).toBe("frame");
     expect(list).not.toHaveBeenCalled();
+  });
+});
+
+describe("CaptureOverlayWindows: preloaded overlays", () => {
+  /** Overlays with preloading on, over a display list the test can change. */
+  function preloading(displays: Display[] = [left, right]) {
+    vi.useFakeTimers();
+    const current = { displays };
+    const port = new CaptureOverlayWindows({
+      platform: "darwin",
+      enabledModes: CAPTURE_MODES,
+      allDisplays: () => current.displays,
+    });
+    port.enablePrewarm(0);
+    vi.advanceTimersByTime(0);
+    const preloaded = created.map(({ window }) => window);
+    return { port, current, preloaded };
+  }
+  const lastState = (window: FakeWindow) =>
+    window.webContents.send.mock.calls
+      .filter(([channel]) => channel === IPC_CHANNELS.screenshotOverlayState)
+      .at(-1)?.[1];
+
+  it("builds nothing until preloading is enabled", () => {
+    vi.useFakeTimers();
+    void new CaptureOverlayWindows({ platform: "darwin", allDisplays: () => [left, right] });
+    vi.advanceTimersByTime(60_000);
+    expect(created).toHaveLength(0);
+  });
+
+  it("loads one hidden overlay per display, with no frame named yet", () => {
+    const { preloaded } = preloading();
+    expect(preloaded).toHaveLength(2);
+    for (const window of preloaded) window.paint();
+
+    for (const window of preloaded) {
+      expect(window.show).not.toHaveBeenCalled();
+      expect(window.showInactive).not.toHaveBeenCalled();
+    }
+    expect(preloaded[0].loadFile.mock.calls[0][1]).toEqual({
+      search:
+        "?window=capture-overlay&display=1&ui=frame&index=1&count=2" +
+        "&bounds=0,0,1440,900&work=0,25,1440,875&ids=1,2",
+    });
+  });
+
+  it("shows the preloaded overlays at once on a pick, with the pick's state and focus", () => {
+    const { port, preloaded } = preloading();
+    const [first, second] = preloaded;
+    first.paint();
+    second.paint();
+
+    void port.pick("screen", [left, right]);
+
+    expect(created).toHaveLength(2); // nothing new was loaded
+    expect(second.show).toHaveBeenCalled(); // the pointer (2000, 100) is on the right display
+    expect(keyWindowId).toBe(second.webContents.id);
+    expect(first.showInactive).toHaveBeenCalled();
+    expect(lastState(first)).toMatchObject({ mode: "screen", frameDisplayId: null });
+    expect(lastState(second)).toMatchObject({ mode: "screen", frameDisplayId: null });
+  });
+
+  it("names the frame display in the state a preloaded Frame overlay receives", () => {
+    const { port, preloaded } = preloading();
+    for (const window of preloaded) window.paint();
+
+    void port.pick("frame", [left, right]);
+
+    expect(lastState(preloaded[0])).toMatchObject({ mode: "frame", frameDisplayId: 2 });
+    expect(lastState(preloaded[1])).toMatchObject({ mode: "frame", frameDisplayId: 2 });
+  });
+
+  it("shows a preloaded overlay that had not painted yet as soon as it paints", () => {
+    const { port, preloaded } = preloading();
+    void port.pick("frame", [left, right]);
+    expect(preloaded[1].show).not.toHaveBeenCalled();
+
+    preloaded[1].paint();
+
+    expect(preloaded[1].show).toHaveBeenCalled();
+  });
+
+  it("lets Esc on a preloaded overlay cancel the pick", async () => {
+    const { port, preloaded } = preloading();
+    for (const window of preloaded) window.paint();
+    const pick = port.pick("frame", [left, right]);
+
+    preloaded[0].emitContents(
+      "before-input-event",
+      { preventDefault: vi.fn() },
+      { type: "keyDown", key: "Escape" },
+    );
+
+    expect(await pick).toEqual({ kind: "cancelled" });
+  });
+
+  it("drops the preloaded set and loads fresh overlays when the displays changed", () => {
+    const { port, preloaded } = preloading();
+    for (const window of preloaded) window.paint();
+
+    void port.pick("frame", [left]);
+
+    for (const window of preloaded) expect(window.destroy).toHaveBeenCalled();
+    expect(created).toHaveLength(3);
+    expect(created[2].options).toMatchObject(left.bounds);
+  });
+
+  it("serves each set once, and preloads the next one after the pick ends", () => {
+    const { port, preloaded } = preloading();
+    for (const window of preloaded) window.paint();
+    void port.pick("frame", [left, right]);
+
+    port.destroyAll();
+    for (const window of preloaded) expect(window.destroy).toHaveBeenCalled();
+    expect(created).toHaveLength(2);
+
+    vi.advanceTimersByTime(PREWARM_DELAY_MS);
+
+    expect(created).toHaveLength(4);
+    for (const { window } of created.slice(2)) expect(window.show).not.toHaveBeenCalled();
+  });
+
+  it("rebuilds the set when a preloaded renderer crashes before any pick", () => {
+    const { preloaded } = preloading();
+
+    preloaded[0].crashRenderer();
+
+    for (const window of preloaded) expect(window.destroy).toHaveBeenCalled();
+    vi.advanceTimersByTime(PREWARM_DELAY_MS);
+    expect(created).toHaveLength(4);
+  });
+
+  it("rebuilds the set for the new layout when a display is added", () => {
+    const { current, preloaded } = preloading([left]);
+    current.displays = [left, right];
+
+    screenListeners.get("display-added")?.({}, right);
+    vi.advanceTimersByTime(PREWARM_DELAY_MS);
+
+    expect(preloaded[0].destroy).toHaveBeenCalled();
+    expect(created).toHaveLength(3);
+    expect(created.slice(1).map(({ options }) => options.x)).toEqual([0, 1440]);
+  });
+
+  it("never preloads while a pick is open", () => {
+    const { port, current } = preloading([left]);
+    void port.pick("frame", [left]);
+    current.displays = [left, right];
+
+    screenListeners.get("display-metrics-changed")?.({}, left);
+    vi.advanceTimersByTime(PREWARM_DELAY_MS);
+
+    expect(created).toHaveLength(1);
   });
 });

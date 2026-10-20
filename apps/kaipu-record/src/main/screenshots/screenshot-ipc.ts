@@ -24,18 +24,26 @@ let overlayWindows: CaptureOverlayWindows | null = null;
 let observePick: (answer: OverlayAnswer) => void = () => {};
 
 /**
- * The overlay windows, created on first use: `BrowserWindow` and `screen` need a ready
- * app, and most sessions never open an overlay. Before `ready` a pick answers `cancelled`.
+ * How long after the handlers register the first overlays are preloaded: late enough not
+ * to compete with the app's own startup, early enough to be ready for the first shortcut.
  */
+const OVERLAY_PREWARM_STARTUP_MS = 3_000;
+
+/** The overlay windows; `BrowserWindow` and `screen` need a ready app. */
+function overlayWindowsInstance(): CaptureOverlayWindows {
+  // macOS lists through osascript JXA, Windows through PowerShell; other platforms find
+  // nothing. Our own windows are dropped by pid (plus HWND on Windows).
+  overlayWindows ??= new CaptureOverlayWindows({
+    windowLister: createWindowLister(process.platform),
+  });
+  return overlayWindows;
+}
+
+/** Before `ready` a pick answers `cancelled`. */
 const overlay: OverlayPort = {
   pick: async (ui, displays) => {
     if (!app.isReady()) return { kind: "cancelled" };
-    // macOS lists through osascript JXA, Windows through PowerShell; other platforms find
-    // nothing. Our own windows are dropped by pid (plus HWND on Windows).
-    overlayWindows ??= new CaptureOverlayWindows({
-      windowLister: createWindowLister(process.platform),
-    });
-    const answer = await overlayWindows.pick(ui, displays);
+    const answer = await overlayWindowsInstance().pick(ui, displays);
     observePick(answer);
     return answer;
   },
@@ -61,6 +69,12 @@ export function registerScreenshotHandlers(
   showToast?: (request: CaptureToastShowRequest) => void,
 ): ScreenshotHandlers {
   const provider = createScreenshotProvider(process.platform);
+  // The capture shortcut shows already-loaded overlays instead of starting a renderer per
+  // display (see `CaptureOverlayWindows`). Not on Linux: there is no capture to serve, and
+  // the app quits when its last window closes, which hidden overlays would prevent.
+  if (process.platform === "darwin" || process.platform === "win32") {
+    overlayWindowsInstance().enablePrewarm(OVERLAY_PREWARM_STARTUP_MS);
+  }
   const toastSeam = deferToastUntilAfterCapture(
     appWindows,
     (request) => showToast?.(request),
