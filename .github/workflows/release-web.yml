@@ -95,6 +95,9 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           # Public R2 base for the landing's download buttons.
           VITE_PUBLIC_DOWNLOAD_URL: https://updates.kaipu.app
+          # Cookieless website analytics (NIW2-477). Empty = analytics off.
+          VITE_POSTHOG_KEY: ${{ vars.VITE_POSTHOG_KEY }}
+          VITE_POSTHOG_HOST: ${{ vars.VITE_POSTHOG_HOST }}
         run: bun run build
 
       # Secrets ship INSIDE the deployed version, in one `wrangler deploy`. The action's

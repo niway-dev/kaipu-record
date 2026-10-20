@@ -3,6 +3,7 @@ import { useRouteContext, useRouter } from "@tanstack/react-router";
 import { KaipuLogo } from "@kaipu/brand";
 import { SUPPORTED_LOCALES, useLocale, useSetLocale, useTranslations } from "@kaipu/i18n";
 
+import { DownloadLink } from "@/components/download-link";
 import { downloadUrls } from "@/lib/download";
 import { setLandingTheme } from "@/server-functions/set-landing-theme";
 import { useScrolled } from "./use-scrolled";
@@ -107,10 +108,10 @@ export function TopNav({ page = "home" }: { page?: MarketingPage }) {
           <a href={account.href} className={account.className}>
             {account.label}
           </a>
-          <a href={downloadUrls.macArm64} className={styles.download}>
+          <DownloadLink placement="nav" href={downloadUrls.macArm64} className={styles.download}>
             <Apple size={16} aria-hidden />
             {t("navDownload")}
-          </a>
+          </DownloadLink>
         </div>
       </div>
     </header>

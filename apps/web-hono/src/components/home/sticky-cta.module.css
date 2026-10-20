@@ -1,10 +1,26 @@
-.cta {
+.bar {
   position: fixed;
   bottom: 20px;
   left: 50%;
   z-index: 46;
   display: none;
   translate: -50% 0;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  /* Never wider than the viewport minus a gutter; on a very narrow screen the chip wraps under the main pill. */
+  max-width: calc(100vw - 24px);
+  flex-wrap: wrap;
+}
+
+@media (width < 980px) {
+  .bar {
+    display: flex;
+  }
+}
+
+.cta {
+  display: inline-flex;
   align-items: center;
   gap: 12px;
   padding: 9px 9px 9px 12px;
@@ -16,10 +32,17 @@
   white-space: nowrap;
 }
 
-@media (width < 980px) {
-  .cta {
-    display: inline-flex;
-  }
+.windows {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 999px;
+  color: var(--kl-tx);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
 }
 
 .arrow {
@@ -32,7 +55,8 @@
   color: #fff;
 }
 
-.cta:focus-visible {
+.cta:focus-visible,
+.windows:focus-visible {
   outline: 2px solid var(--kl-pink);
   outline-offset: 3px;
 }

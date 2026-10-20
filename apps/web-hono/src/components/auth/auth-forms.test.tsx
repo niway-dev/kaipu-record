@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   invalidate: vi.fn(async () => undefined),
   signInEmail: vi.fn(),
   signUpEmail: vi.fn(),
+  track: vi.fn(),
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -17,6 +18,10 @@ vi.mock("@tanstack/react-router", () => ({
       {children}
     </a>
   ),
+}));
+vi.mock("@/lib/analytics", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/analytics")>()),
+  track: mocks.track,
 }));
 vi.mock("@/lib/auth/auth-client", () => ({
   authClient: { signIn: { email: mocks.signInEmail }, signUp: { email: mocks.signUpEmail } },
@@ -38,6 +43,7 @@ beforeEach(() => {
   mocks.invalidate.mockClear();
   mocks.signInEmail.mockReset().mockImplementation(ok);
   mocks.signUpEmail.mockReset().mockImplementation(ok);
+  mocks.track.mockReset();
 });
 afterEach(cleanup);
 
@@ -170,6 +176,19 @@ describe("SignUpForm", () => {
     expect(onSignedUp).not.toHaveBeenCalled();
   });
 
+  it("reports sign_up_completed once, without any personal data (NIW2-477)", async () => {
+    const { onSignedUp } = renderSignUp();
+    await waitFor(() => expect(onSignedUp).toHaveBeenCalled());
+    expect(mocks.track).toHaveBeenCalledTimes(1);
+    expect(mocks.track).toHaveBeenCalledWith("sign_up_completed", { desktop: false });
+  });
+
+  it("flags a sign-up that started from the desktop app", async () => {
+    renderSignUp({ desktop });
+    await waitFor(() => expect(mocks.push).toHaveBeenCalled());
+    expect(mocks.track).toHaveBeenCalledWith("sign_up_completed", { desktop: true });
+  });
+
   it("shows a failure without leaving", async () => {
     mocks.signUpEmail.mockResolvedValue({ data: null, error: { status: 422 } });
     const { onSignedUp } = renderSignUp();
@@ -177,6 +196,7 @@ describe("SignUpForm", () => {
       "We couldn't create your account.",
     );
     expect(onSignedUp).not.toHaveBeenCalled();
+    expect(mocks.track).not.toHaveBeenCalled();
   });
 
   it("keeps the details it is given, and says how long the password must be", () => {

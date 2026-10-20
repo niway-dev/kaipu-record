@@ -20,6 +20,7 @@ import { Route as LegalTermsAndConditionsRouteImport } from './routes/legal/term
 import { Route as LegalPrivacyPolicyRouteImport } from './routes/legal/privacy-policy'
 import { Route as LegalCookiesRouteImport } from './routes/legal/cookies'
 import { Route as LegalCloudTermsRouteImport } from './routes/legal/cloud-terms'
+import { Route as IngestSplatRouteImport } from './routes/ingest/$'
 import { Route as DevStylexRouteImport } from './routes/dev/stylex'
 import { Route as AuthSignupRouteImport } from './routes/auth/signup'
 import { Route as AuthResetPasswordRouteImport } from './routes/auth/reset-password'
@@ -88,6 +89,11 @@ const LegalCookiesRoute = LegalCookiesRouteImport.update({
 const LegalCloudTermsRoute = LegalCloudTermsRouteImport.update({
   id: '/legal/cloud-terms',
   path: '/legal/cloud-terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const IngestSplatRoute = IngestSplatRouteImport.update({
+  id: '/ingest/$',
+  path: '/ingest/$',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DevStylexRoute = DevStylexRouteImport.update({
@@ -184,6 +190,7 @@ export interface FileRoutesByFullPath {
   '/auth/reset-password': typeof AuthResetPasswordRoute
   '/auth/signup': typeof AuthSignupRoute
   '/dev/stylex': typeof DevStylexRoute
+  '/ingest/$': typeof IngestSplatRoute
   '/legal/cloud-terms': typeof LegalCloudTermsRoute
   '/legal/cookies': typeof LegalCookiesRoute
   '/legal/privacy-policy': typeof LegalPrivacyPolicyRoute
@@ -210,6 +217,7 @@ export interface FileRoutesByTo {
   '/auth/reset-password': typeof AuthResetPasswordRoute
   '/auth/signup': typeof AuthSignupRoute
   '/dev/stylex': typeof DevStylexRoute
+  '/ingest/$': typeof IngestSplatRoute
   '/legal/cloud-terms': typeof LegalCloudTermsRoute
   '/legal/cookies': typeof LegalCookiesRoute
   '/legal/privacy-policy': typeof LegalPrivacyPolicyRoute
@@ -239,6 +247,7 @@ export interface FileRoutesById {
   '/auth/reset-password': typeof AuthResetPasswordRoute
   '/auth/signup': typeof AuthSignupRoute
   '/dev/stylex': typeof DevStylexRoute
+  '/ingest/$': typeof IngestSplatRoute
   '/legal/cloud-terms': typeof LegalCloudTermsRoute
   '/legal/cookies': typeof LegalCookiesRoute
   '/legal/privacy-policy': typeof LegalPrivacyPolicyRoute
@@ -268,6 +277,7 @@ export interface FileRouteTypes {
     | '/auth/reset-password'
     | '/auth/signup'
     | '/dev/stylex'
+    | '/ingest/$'
     | '/legal/cloud-terms'
     | '/legal/cookies'
     | '/legal/privacy-policy'
@@ -294,6 +304,7 @@ export interface FileRouteTypes {
     | '/auth/reset-password'
     | '/auth/signup'
     | '/dev/stylex'
+    | '/ingest/$'
     | '/legal/cloud-terms'
     | '/legal/cookies'
     | '/legal/privacy-policy'
@@ -322,6 +333,7 @@ export interface FileRouteTypes {
     | '/auth/reset-password'
     | '/auth/signup'
     | '/dev/stylex'
+    | '/ingest/$'
     | '/legal/cloud-terms'
     | '/legal/cookies'
     | '/legal/privacy-policy'
@@ -345,6 +357,7 @@ export interface RootRouteChildren {
   RecordingsRoute: typeof RecordingsRoute
   RoadmapRoute: typeof RoadmapRoute
   DevStylexRoute: typeof DevStylexRoute
+  IngestSplatRoute: typeof IngestSplatRoute
   LegalCloudTermsRoute: typeof LegalCloudTermsRoute
   LegalCookiesRoute: typeof LegalCookiesRoute
   LegalPrivacyPolicyRoute: typeof LegalPrivacyPolicyRoute
@@ -430,6 +443,13 @@ declare module '@tanstack/react-router' {
       path: '/legal/cloud-terms'
       fullPath: '/legal/cloud-terms'
       preLoaderRoute: typeof LegalCloudTermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ingest/$': {
+      id: '/ingest/$'
+      path: '/ingest/$'
+      fullPath: '/ingest/$'
+      preLoaderRoute: typeof IngestSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dev/stylex': {
@@ -604,6 +624,7 @@ const rootRouteChildren: RootRouteChildren = {
   RecordingsRoute: RecordingsRoute,
   RoadmapRoute: RoadmapRoute,
   DevStylexRoute: DevStylexRoute,
+  IngestSplatRoute: IngestSplatRoute,
   LegalCloudTermsRoute: LegalCloudTermsRoute,
   LegalCookiesRoute: LegalCookiesRoute,
   LegalPrivacyPolicyRoute: LegalPrivacyPolicyRoute,

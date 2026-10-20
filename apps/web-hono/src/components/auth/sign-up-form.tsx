@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useRouter } from "@tanstack/react-router";
 import { useTranslations } from "@kaipu/i18n";
 
+import { ANALYTICS_EVENTS, track } from "@/lib/analytics";
 import { authClient } from "@/lib/auth/auth-client";
 import { desktopDonePath, type DesktopAuthQuery } from "@/lib/desktop-auth";
 import {
@@ -79,6 +80,7 @@ export default function SignUpForm({
       setFailure("network");
       return;
     }
+    track(ANALYTICS_EVENTS.signUpCompleted, { desktop: !!desktop });
     if (desktop) {
       router.history.push(desktopDonePath(desktop, { checkEmail: true }));
       return;
