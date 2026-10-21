@@ -40,6 +40,7 @@ import {
   AnnotationToolbar,
   useAnnotationTools,
   useEditorScene,
+  type Scene,
 } from "@renderer/features/screenshots/annotations";
 import { exportScene, type ExportFormat } from "@renderer/features/screenshots/export";
 import { useTransientValue } from "@renderer/ui/use-transient-value";
@@ -53,9 +54,6 @@ const ZOOM_STEP = 0.25;
 const FEEDBACK_MS = 2600;
 /** How long after the last edit a shot in the vault saves it. */
 const AUTOSAVE_DEBOUNCE_MS = 800;
-/** How long the edit autosave waits for a running save or copy to release the lock. */
-const AUTOSAVE_WAIT_MS = 5000;
-const AUTOSAVE_POLL_MS = 50;
 
 /** The editor's transient success indicator. */
 type Feedback =
@@ -106,12 +104,31 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
   // Export needs the displayed <img> size to scale beautify/annotations to the
   // shot's native (Retina) pixels — gate Copy/Save until the image has laid out.
   const [imageReady, setImageReady] = useState(false);
-  // Guards against a double-click firing two exports/saves (the second Save of a
-  // fresh shot would create a duplicate library entry).
-  const busy = useRef(false);
+  // Exports and saves run one at a time, in click order. A click during another
+  // export WAITS instead of being dropped; the queue also keeps a double-click on a
+  // fresh shot from creating two library entries (see `bindToSaved`).
+  const queueTail = useRef<Promise<unknown>>(Promise.resolve());
+  const enqueue = <T,>(job: () => Promise<T>): Promise<T> => {
+    const run = queueTail.current.then(job);
+    queueTail.current = run.catch(() => undefined);
+    return run;
+  };
+  // False after unmount: jobs that start later and toast Retry buttons become no-ops
+  // (a stale Retry would re-save a discarded capture with the wrong export scale).
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true; // StrictMode re-runs effects
+    return () => {
+      alive.current = false;
+    };
+  }, []);
   // The vault id this editor is bound to: set when re-opening a saved shot, and
   // after the first save. While set, Save asks overwrite-or-copy.
   const [savedId, setSavedId] = useState<string | null>(source.kind === "local" ? source.id : null);
+  // Queued jobs read these when they RUN, not from the render that queued them.
+  const savedIdRef = useRef(savedId);
+  // The item the auto-save on open created: the ONLY thing Discard may delete.
+  const autoSavedId = useRef<string | null>(null);
   // The auto copy mode is read ONCE when the editor opens; a Settings change while
   // this capture is open neither un-copies nor re-copies it.
   const { settings } = useAppSettings();
@@ -155,11 +172,22 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
   // when the scene changes. Skip the initial run so a clean re-opened shot isn't
   // marked dirty just by mounting.
   const sceneSettled = useRef(false);
+  // Bumped per scene edit. A save clears `dirty` only if no edit landed while it ran.
+  const sceneRevision = useRef(0);
+  const currentScene = (): Scene => ({
+    beautify: scene.beautify.state,
+    annotations: scene.annotations,
+    crop: scene.crop,
+  });
+  // The scene and title field as of the latest render, for queued jobs to read.
+  const latest = useRef({ scene: currentScene(), draft: captureTitle.draft });
+  latest.current = { scene: currentScene(), draft: captureTitle.draft };
   useEffect(() => {
     if (!sceneSettled.current) {
       sceneSettled.current = true;
       return;
     }
+    sceneRevision.current += 1;
     setDirty(true);
   }, [scene.beautify.state, scene.annotations, scene.crop]);
 
@@ -201,35 +229,36 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
   // what Copy and Save use, PDF what Export writes. Only ever invoked once
   // `imageReady` is true (see the guards below), which itself can only happen once
   // `image` has resolved, so the non-null assert is safe.
-  const exportAs = async (format: ExportFormat): Promise<ArrayBuffer> =>
+  const exportAs = async (format: ExportFormat, snap: Scene): Promise<ArrayBuffer> =>
     exportScene(format, {
-      scene: { beautify: scene.beautify.state, annotations: scene.annotations, crop: scene.crop },
+      scene: snap,
       bytes: await image!.getBytes(),
       displayedW: imgRef.current?.clientWidth ?? 0,
     });
-  const exportPng = (): Promise<ArrayBuffer> => exportAs("png");
 
   /**
    * Export the scene and put it on the clipboard. Reports its own failures; the
    * caller owns the "Copied" indicator, because the auto path shows a combined one.
    */
-  const copyToClipboard = async (): Promise<boolean> => {
-    if (busy.current || !imageReady) return false;
-    busy.current = true;
-    try {
-      await window.electronAPI.copyImageToClipboard(await exportPng());
-      return true;
-    } catch (error) {
-      // Without this the button just never flips to "Copied" and the rejection is
-      // unhandled — the user has no idea the copy failed.
-      reportError(t("copyError"), error, {
-        context: { phase: "copy" },
-        retry: () => void onCopy(),
-      });
-      return false;
-    } finally {
-      busy.current = false;
-    }
+  const copyToClipboard = (): Promise<boolean> => {
+    if (!imageReady) return Promise.resolve(false);
+    return enqueue(async () => {
+      if (!alive.current) return false;
+      try {
+        await window.electronAPI.copyImageToClipboard(await exportAs("png", latest.current.scene));
+        return true;
+      } catch (error) {
+        // Without this the button just never flips to "Copied" and the rejection is
+        // unhandled — the user has no idea the copy failed.
+        reportError(t("copyError"), error, {
+          context: { phase: "copy" },
+          retry: () => {
+            if (alive.current) void onCopy();
+          },
+        });
+        return false;
+      }
+    });
   };
 
   const onCopy = async (): Promise<void> => {
@@ -237,7 +266,7 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
   };
 
   /** Returns the saved title, or null when the save failed (already reported). */
-  const persist = async (opts: {
+  const persist = (opts: {
     overwriteId?: string;
     title?: string;
     /** The auto path shows one combined indicator instead of this one. */
@@ -247,100 +276,125 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
      * Defaults to `!silent`; the edit autosave is silent but still the user's work.
      */
     manual?: boolean;
-  }): Promise<string | null> => {
-    if (busy.current) return null;
-    busy.current = true;
-    try {
-      const saved = await window.electronAPI.saveScreenshot(await exportPng(), {
-        // The live field, not only its committed value: Save must write what the
-        // user sees even if the field has not blurred yet (e.g. a shortcut).
-        title: opts.title ?? resolveCaptureTitle(captureTitle.draft, captureTitle.autoTitle),
-        overwriteId: opts.overwriteId,
-        // The auto-save on open is not the user's work; every other save is.
-        manual: opts.manual ?? !opts.silent,
-      });
-      setSavedId(saved.id);
-      captureTitle.adopt(saved.title);
-      setDirty(false); // now safely in the vault — leaving no longer loses work
-      if (!opts.silent) showFeedback({ kind: "saved", name: saved.title });
-      return saved.title;
-    } catch (error) {
-      // A swallowed save (vault on a disconnected drive, disk full, composite
-      // failure) let the user close the editor believing the shot was saved.
-      // Surface it with a retry so the work isn't silently lost.
-      reportError(t("saveError"), error, {
-        context: { phase: "save", overwrite: opts.overwriteId !== undefined },
-        retry: () => void persist(opts),
-      });
-      return null;
-    } finally {
-      busy.current = false;
-    }
-  };
+    /** The auto-save on open: the item it creates is the one Discard may delete. */
+    autoOnOpen?: boolean;
+    /** First Save of an unsaved shot: if an earlier queued save already created the item, overwrite it. */
+    bindToSaved?: boolean;
+  }): Promise<string | null> =>
+    enqueue(async () => {
+      if (!alive.current) return null;
+      const revision = sceneRevision.current;
+      const snap = latest.current.scene;
+      const draftAtStart = latest.current.draft;
+      const overwriteId =
+        opts.overwriteId ?? (opts.bindToSaved ? (savedIdRef.current ?? undefined) : undefined);
+      try {
+        const saved = await window.electronAPI.saveScreenshot(await exportAs("png", snap), {
+          // The live field, not only its committed value: Save must write what the
+          // user sees even if the field has not blurred yet (e.g. a shortcut).
+          title: opts.title ?? resolveCaptureTitle(draftAtStart, captureTitle.autoTitle),
+          overwriteId,
+          // The auto-save on open is not the user's work; every other save is.
+          manual: opts.manual ?? !opts.silent,
+        });
+        savedIdRef.current = saved.id;
+        setSavedId(saved.id);
+        // Don't clobber a title typed while the save was running.
+        if (latest.current.draft === draftAtStart) captureTitle.adopt(saved.title);
+        // Clean only if no edit landed during the save; otherwise the edit is still
+        // unsaved and the autosave / leave guard must see it.
+        if (sceneRevision.current === revision) setDirty(false);
+        if (opts.autoOnOpen) {
+          autoSavedId.current = saved.id;
+          setAutoSaved(true);
+        } else if (!opts.silent) {
+          // The user's own save is the keeper: Discard must not delete it, or the
+          // auto-saved item it would now point at.
+          autoSavedId.current = null;
+          setAutoSaved(false);
+          showFeedback({ kind: "saved", name: saved.title });
+        }
+        return saved.title;
+      } catch (error) {
+        // A swallowed save (vault on a disconnected drive, disk full, composite
+        // failure) let the user close the editor believing the shot was saved.
+        // Surface it with a retry so the work isn't silently lost.
+        reportError(t("saveError"), error, {
+          context: { phase: "save", overwrite: overwriteId !== undefined },
+          retry: () => {
+            if (alive.current) void persist(opts);
+          },
+        });
+        return null;
+      }
+    });
 
   /**
    * Export a PDF to a path the user picks. Independent of the vault: it neither
    * binds the editor to a saved item nor clears `dirty` — a shared file is not a
    * library copy. A cancelled dialog is not an error and shows nothing.
    */
-  const onExportPdf = async (): Promise<void> => {
-    if (busy.current || !imageReady) return;
-    busy.current = true;
-    try {
-      const written = await window.electronAPI.exportScreenshotFile(await exportAs("pdf"), {
-        suggestedName: resolveCaptureTitle(captureTitle.draft, captureTitle.autoTitle),
-        extension: "pdf",
-      });
-      if (written) showFeedback({ kind: "exported", name: fileName(written.path) });
-    } catch (error) {
-      reportError(t("exportPdfError"), error, {
-        context: { phase: "export", format: "pdf" },
-        retry: () => void onExportPdf(),
-      });
-    } finally {
-      busy.current = false;
-    }
+  const onExportPdf = (): Promise<void> => {
+    if (!imageReady) return Promise.resolve();
+    return enqueue(async () => {
+      if (!alive.current) return;
+      try {
+        const written = await window.electronAPI.exportScreenshotFile(
+          await exportAs("pdf", latest.current.scene),
+          {
+            suggestedName: resolveCaptureTitle(latest.current.draft, captureTitle.autoTitle),
+            extension: "pdf",
+          },
+        );
+        if (written) showFeedback({ kind: "exported", name: fileName(written.path) });
+      } catch (error) {
+        reportError(t("exportPdfError"), error, {
+          context: { phase: "export", format: "pdf" },
+          retry: () => {
+            if (alive.current) void onExportPdf();
+          },
+        });
+      }
+    });
   };
 
   /**
    * Whatever the two preferences asked for, once, on open. Sequential on purpose:
-   * both paths take the `busy` lock and composite the same scene, so running them
-   * together would silently drop one. Copy goes first — it is the one the user is
+   * both paths composite the same scene through the queue, and the combined
+   * indicator needs both outcomes. Copy goes first — it is the one the user is
    * waiting on to paste; the save round-trips to disk.
    */
   const runAutoActions = async (actions: AutoActions): Promise<void> => {
     const copied = actions.copy ? await copyToClipboard() : false;
-    const savedTitle = actions.save ? await persist({ silent: true }) : null;
-    if (savedTitle) setAutoSaved(true);
+    const savedTitle = actions.save ? await persist({ silent: true, autoOnOpen: true }) : null;
     if (savedTitle && copied) showFeedback({ kind: "savedAndCopied", name: savedTitle });
     else if (savedTitle) showFeedback({ kind: "saved", name: savedTitle });
     else if (copied) showFeedback({ kind: "copied" });
   };
 
-  // Auto modes act the moment the image can be exported, before any edit. A failed
-  // save leaves the editor in manual behaviour (dirty, guarded) — `persist` already
+  // Auto modes act the moment the image can be exported AND the settings are known,
+  // before any edit: whichever of the two lands last triggers them. A failed save
+  // leaves the editor in manual behaviour (dirty, guarded) — `persist` already
   // reports with a retry.
   const autoActionsFired = useRef(false);
+  const actionsReady = autoActionsRef.current !== null; // flips on the render settings resolve
   useEffect(() => {
     const actions = autoActionsRef.current;
-    if (!imageReady || autoActionsFired.current || !actions || savedId) return;
+    if (!imageReady || !actionsReady || autoActionsFired.current || !actions || savedId) return;
     if (!actions.save && !actions.copy) return;
     autoActionsFired.current = true;
     void runAutoActions(actions);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- fire once when the image is ready
-  }, [imageReady]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fire once when image AND settings are ready
+  }, [imageReady, actionsReady]);
 
   /**
    * Write the current edits over the vault item, quietly. Every capture is in the vault,
    * so an edit is never the only copy of anything: it is saved the way a document is,
    * not guarded behind a dialog. False when there was nothing to write or it failed.
+   * A save or copy already running just delays it: the queue runs it afterwards.
    */
   const autosaveEdits = async (): Promise<boolean> => {
     if (!savedId || !imageReady) return false;
-    // A save or copy already running holds the lock; wait for it rather than drop the edit.
-    for (let waited = 0; busy.current && waited < AUTOSAVE_WAIT_MS; waited += AUTOSAVE_POLL_MS) {
-      await new Promise((resolve) => setTimeout(resolve, AUTOSAVE_POLL_MS));
-    }
     return (await persist({ overwriteId: savedId, silent: true, manual: true })) !== null;
   };
 
@@ -360,25 +414,25 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per blocked navigation
   }, [blocker.state]);
 
-  const onDiscardSaved = async (): Promise<void> => {
-    if (!savedId || busy.current) return;
-    busy.current = true;
-    try {
-      await window.electronAPI.deleteLocalRecording(savedId);
-      setDiscarding(true);
-    } catch (error) {
-      reportError(t("saveError"), error, { context: { phase: "discard", id: savedId } });
-    } finally {
-      busy.current = false;
-    }
-  };
+  // Deletes only the item the auto-save on open created, never a save the user made.
+  const onDiscardSaved = (): Promise<void> =>
+    enqueue(async () => {
+      const id = autoSavedId.current;
+      if (!id) return;
+      try {
+        await window.electronAPI.deleteLocalRecording(id);
+        setDiscarding(true);
+      } catch (error) {
+        reportError(t("saveError"), error, { context: { phase: "discard", id } });
+      }
+    });
 
   // First save just writes; a subsequent save (or a re-opened shot) asks whether to
   // overwrite the existing item or branch off a copy.
   const onSave = (): void => {
-    if (!imageReady || busy.current) return;
+    if (!imageReady) return;
     if (savedId) setAskSave(true);
-    else void persist({});
+    else void persist({ bindToSaved: true });
   };
   const onOverwrite = (): void => {
     setAskSave(false);
@@ -482,7 +536,7 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
             {exportedName ? <Check size={16} /> : <FileText size={16} />}
             <span className={styles.label}>{exportedName ? t("exportedPdf") : t("exportPdf")}</span>
           </button>
-          {autoSaved && savedId && (
+          {autoSaved && (
             <button
               type="button"
               className={styles.secondary}
