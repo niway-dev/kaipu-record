@@ -1,12 +1,19 @@
 import type { ICloudAssetRepository, ICloudPurgeRepository } from "@kaipu/domain/repositories";
 import type { IStorageService } from "@kaipu/domain/services";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PURGE_BATCH, runScheduledJobs, SWEEP_BATCH } from "./run-scheduled-jobs";
+import {
+  ORPHAN_ACCOUNT_BATCH,
+  ORPHAN_LOOKBACK_MS,
+  PURGE_BATCH,
+  runScheduledJobs,
+  SWEEP_BATCH,
+} from "./run-scheduled-jobs";
 
 function makeDeps(overrides: { assets?: Partial<ICloudAssetRepository> } = {}) {
   const assets = {
     listReservedExpiredBefore: vi.fn(async () => []),
     listDeleting: vi.fn(async () => []),
+    listAccountsTouchedSince: vi.fn(async () => []),
     ...overrides.assets,
   } as unknown as ICloudAssetRepository;
   const purge = {
@@ -21,7 +28,7 @@ const events = (spy: { mock: { calls: unknown[][] } }): Record<string, unknown>[
 afterEach(() => vi.restoreAllMocks());
 
 describe("runScheduledJobs", () => {
-  it("runs the three jobs with bounded batches and logs one summary", async () => {
+  it("runs the four jobs with bounded batches and logs one summary", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     const deps = makeDeps();
     await runScheduledJobs(deps);
@@ -33,7 +40,25 @@ describe("runScheduledJobs", () => {
     expect(deps.purge.nextPending).toHaveBeenCalledWith(PURGE_BATCH);
     const sweep = events(log).filter((e) => e.name === "cloud.sweep");
     expect(sweep).toHaveLength(1);
-    expect(sweep[0]).toMatchObject({ released: 0, finishedDeletes: 0, purged: 0 });
+    expect(sweep[0]).toMatchObject({
+      released: 0,
+      finishedDeletes: 0,
+      purged: 0,
+      purgeExhausted: false,
+    });
+  });
+
+  it("sweeps orphan objects of the accounts touched within the lookback window", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const deps = makeDeps();
+    await runScheduledJobs(deps);
+    expect(deps.assets.listAccountsTouchedSince).toHaveBeenCalledWith(
+      new Date(deps.now.getTime() - ORPHAN_LOOKBACK_MS),
+      ORPHAN_ACCOUNT_BATCH,
+    );
+    expect(events(log).filter((e) => e.name === "cloud.sweep.orphans")).toEqual([
+      expect.objectContaining({ accounts: 0, deleted: 0, skipped: 0 }),
+    ]);
   });
 
   it("isolates a failing job: the others still run and the failure is named", async () => {
@@ -59,6 +84,7 @@ describe("runScheduledJobs", () => {
     const deps = { ...makeDeps(), storage: null };
     await runScheduledJobs(deps);
     expect(deps.assets.listReservedExpiredBefore).not.toHaveBeenCalled();
-    expect(events(log).filter((e) => e.name === "cloud.sweep.failed")).toHaveLength(3);
+    expect(deps.assets.listAccountsTouchedSince).not.toHaveBeenCalled();
+    expect(events(log).filter((e) => e.name === "cloud.sweep.failed")).toHaveLength(4);
   });
 });

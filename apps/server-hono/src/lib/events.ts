@@ -30,6 +30,8 @@ export type CloudEvent =
       failedDeletes: number;
       purged: number;
       purgeFailed: number;
+      /** The purge hit its per-run object budget; the next run continues it. */
+      purgeExhausted: boolean;
       reconciled: number;
     }
   | { name: "cloud.sweep.failed"; job: string; error: string }

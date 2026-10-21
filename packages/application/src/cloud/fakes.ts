@@ -282,15 +282,24 @@ export function makeFakePurge(): ICloudPurgeRepository & {
   jobs: PurgeJob[];
   done: string[];
   errors: string[];
+  /** Users whose row still exists; `nextPending` skips their jobs, like the SQL `NOT EXISTS`. */
+  liveUsers: Set<string>;
 } {
-  const state = { jobs: [] as PurgeJob[], done: [] as string[], errors: [] as string[] };
+  const state = {
+    jobs: [] as PurgeJob[],
+    done: [] as string[],
+    errors: [] as string[],
+    liveUsers: new Set<string>(),
+  };
   return Object.assign(state, {
     async enqueue(userId: string) {
       if (state.jobs.some((j) => j.userId === userId && !state.done.includes(j.id))) return;
       state.jobs.push({ id: crypto.randomUUID(), userId, attempts: 0, createdAt: new Date() });
     },
     async nextPending(limit: number) {
-      return state.jobs.filter((j) => !state.done.includes(j.id)).slice(0, limit);
+      return state.jobs
+        .filter((j) => !state.done.includes(j.id) && !state.liveUsers.has(j.userId))
+        .slice(0, limit);
     },
     async markAttempt(id: string, error: string | null) {
       const job = state.jobs.find((j) => j.id === id);

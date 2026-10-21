@@ -8,15 +8,15 @@ import { runScheduledJobs } from "./run-scheduled-jobs";
 export async function scheduled(
   _controller: ScheduledController,
   _env: unknown,
-  ctx: ExecutionContext,
+  _ctx: ExecutionContext,
 ): Promise<void> {
   const db = createDatabaseClient(env.DATABASE_URL);
-  ctx.waitUntil(
-    runScheduledJobs({
-      assets: new CloudAssetRepository(db),
-      purge: new CloudPurgeRepository(db),
-      storage: tryGetStorage(),
-      now: new Date(),
-    }),
-  );
+  // Awaited, not handed to waitUntil: one task needs no waitUntil, and awaiting ties the
+  // invocation's recorded outcome in Cron "Past Events" to the run.
+  await runScheduledJobs({
+    assets: new CloudAssetRepository(db),
+    purge: new CloudPurgeRepository(db),
+    storage: tryGetStorage(),
+    now: new Date(),
+  });
 }
