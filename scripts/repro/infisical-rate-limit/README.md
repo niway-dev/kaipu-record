@@ -61,8 +61,9 @@ their first export.
 
 Sample request IDs: `req-us-XQ8caKRmCKtR7z` (21:15:14),
 `req-us-PSwOguBX97KpC5`, `req-us-5A4uxvV3O5FEoc` (`infisical run`),
-`req-us-UX4jEJFNTmVGbG`, `req-us-YjV6wNwXCuCwkK` (21:16:00–01). Each one
-returned `Rate limit exceeded. Please try again in 29–30 seconds`.
+`req-us-UX4jEJFNTmVGbG`, `req-us-YjV6wNwXCuCwkK` (21:16:00–01). The first
+said `Rate limit exceeded. Please try again in 15 seconds`; the 21:16 ones said
+29–30 seconds.
 
 **The same flow with two checkouts did not fail.** It sent 190 calls, at most
 about 114 of them in one wall-clock minute.
