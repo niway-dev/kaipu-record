@@ -832,6 +832,7 @@ app.whenReady().then(() => {
   void recoverStrandedRecordings({
     vaultDir: vaultDirectory().path,
     fallbackTempDir: app.getPath("temp"),
+    title: createMainTranslator(getAppSettings().locale)("library.recoveredRecordingTitle"),
   })
     .then((r) => {
       if (r.recovered.length) console.info(`recovered ${r.recovered.length} stranded recording(s)`);

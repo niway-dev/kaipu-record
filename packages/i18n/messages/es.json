@@ -497,6 +497,7 @@
   },
   "library": {
     "title": "Biblioteca",
+    "recoveredRecordingTitle": "Grabación recuperada",
     "subtitle": "Gestiona tus grabaciones y realiza acciones.",
     "rescan": "Reescanear la carpeta local",
     "sync": "Sincronizar",

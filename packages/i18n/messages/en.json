@@ -497,6 +497,7 @@
   },
   "library": {
     "title": "Library",
+    "recoveredRecordingTitle": "Recovered recording",
     "subtitle": "Manage your recordings and perform actions.",
     "rescan": "Rescan local vault",
     "sync": "Sync",

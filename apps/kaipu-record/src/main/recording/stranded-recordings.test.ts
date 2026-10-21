@@ -30,7 +30,12 @@ describe("recoverStrandedRecordings", () => {
 
   it("recovers an old staged part into the vault as a recovered recording", async () => {
     await part(join(vaultDir, STAGING_DIR), "kaipu-rec-session-1.mp4.part", "bytes");
-    const result = await recoverStrandedRecordings({ vaultDir, fallbackTempDir, now: () => now });
+    const result = await recoverStrandedRecordings({
+      vaultDir,
+      fallbackTempDir,
+      title: "Recovered recording",
+      now: () => now,
+    });
     expect(result.recovered).toHaveLength(1);
     const id = result.recovered[0];
     expect((await readFile(join(vaultDir, `${id}.mp4`))).toString()).toBe("bytes");
@@ -41,7 +46,12 @@ describe("recoverStrandedRecordings", () => {
 
   it("also sweeps the fallback temp dir", async () => {
     await part(fallbackTempDir, "kaipu-rec-session-2.mp4.part", "b");
-    const result = await recoverStrandedRecordings({ vaultDir, fallbackTempDir, now: () => now });
+    const result = await recoverStrandedRecordings({
+      vaultDir,
+      fallbackTempDir,
+      title: "Recovered recording",
+      now: () => now,
+    });
     expect(result.recovered).toHaveLength(1);
   });
 
@@ -52,7 +62,12 @@ describe("recoverStrandedRecordings", () => {
       "b",
       new Date(now - 30_000),
     );
-    const result = await recoverStrandedRecordings({ vaultDir, fallbackTempDir, now: () => now });
+    const result = await recoverStrandedRecordings({
+      vaultDir,
+      fallbackTempDir,
+      title: "Recovered recording",
+      now: () => now,
+    });
     expect(result.recovered).toHaveLength(0);
     expect((await readFile(path)).toString()).toBe("b");
   });
@@ -60,7 +75,12 @@ describe("recoverStrandedRecordings", () => {
   it("deletes an empty part and ignores other names", async () => {
     await part(fallbackTempDir, "kaipu-rec-session-4.mp4.part", "");
     await part(fallbackTempDir, "unrelated.txt", "x");
-    const result = await recoverStrandedRecordings({ vaultDir, fallbackTempDir, now: () => now });
+    const result = await recoverStrandedRecordings({
+      vaultDir,
+      fallbackTempDir,
+      title: "Recovered recording",
+      now: () => now,
+    });
     expect(result.discarded).toBe(1);
     expect(await readdir(fallbackTempDir)).toEqual(["unrelated.txt"]);
   });
@@ -68,13 +88,23 @@ describe("recoverStrandedRecordings", () => {
   it("gives two parts with the same mtime second distinct ids", async () => {
     await part(fallbackTempDir, "kaipu-rec-a.mp4.part", "a");
     await part(fallbackTempDir, "kaipu-rec-b.mp4.part", "b");
-    const result = await recoverStrandedRecordings({ vaultDir, fallbackTempDir, now: () => now });
+    const result = await recoverStrandedRecordings({
+      vaultDir,
+      fallbackTempDir,
+      title: "Recovered recording",
+      now: () => now,
+    });
     expect(new Set(result.recovered).size).toBe(2);
   });
 
   it("returns an empty result when the staging folder is missing", async () => {
     await rm(join(vaultDir, STAGING_DIR), { recursive: true, force: true });
-    const result = await recoverStrandedRecordings({ vaultDir, fallbackTempDir, now: () => now });
+    const result = await recoverStrandedRecordings({
+      vaultDir,
+      fallbackTempDir,
+      title: "Recovered recording",
+      now: () => now,
+    });
     expect(result).toEqual({ recovered: [], discarded: 0, failed: [] });
   });
 });
