@@ -5,7 +5,14 @@ description: Update and validate direct runtime dependencies with known security
 
 # Dependency security upgrades
 
-> **Status: 🔵 Proposed.** Blocking production rollout of cloud recordings.
+> **Status: 🟡 In progress.** Blocking production rollout of cloud recordings.
+>
+> 2026-10-21 (NIW2-324, PR #278): `@orpc/*` 1.15.7, `better-auth` 1.7.12, `seroval` 1.6.11
+> (root `overrides`), `hono` 4.12.34 and `drizzle-orm` 0.45.4 are on that branch; `bun audit` shows
+> no advisory left on them. Still open after it, by severity: `@tanstack/react-start` and
+> `@tanstack/start-server-core` 1.159.0 (critical reflected XSS, fixed in 1.168.60 / 1.169.39),
+> `astro` 5.18 (RCE in AVIF image optimisation, docs app only, fixed in 7.2.8), `electron`
+> 39.8.10 (four high, fixed in 41.10.x). Those belong to a follow-up, not to the auth PR.
 
 ## Why
 

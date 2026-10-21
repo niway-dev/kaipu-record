@@ -6,9 +6,9 @@ description: Upgrade Better Auth and oRPC past their advisories, turn on durable
 # Authentication hardening — design spec
 
 **Ticket:** NIW2-324 · **Branch:** `feature/niw2-324-harden-authentication-and-upgrade-vulnerable-dependencies` ·
-**Status:** design — the branch holds one unverified WIP commit (`b0837f3`) plus this spec; nothing
-here is marked done unless the [Implementation status](#implementation-status) section says the
-branch contains it and it has been verified.
+**Status:** implemented on the branch and verified locally (2026-10-21), except decision 5
+(verified email required), which is deferred to the owner — see
+[Implementation status](#implementation-status). Not yet released.
 
 **Source:** the 2026-10-12 security audit (private, not in the repository): API report findings
 F-3, F-4, F-5, F-7, F-10, F-11, F-13; web report finding #2; dependency scan. The audit ran on
@@ -42,47 +42,45 @@ transport and is unaffected by the cookie and CSRF changes; it gains one new err
 
 ### Decisions
 
-| #   | Decision                                                                                                                                                                                                                                          | Why                                                                                                                                                                                                                                                                                                                                           | ADR                                                                        |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| 1   | `better-auth` goes to **1.7.7** (not the 1.6.22 floor the audit named), `@orpc/*` to **1.15.6**, `seroval`/`seroval-plugins` pinned to **1.6.9** through a root `overrides` block.                                                                | 1.7.7 is the first release that both closes the advisories and fixes concurrent Postgres requests exceeding database-backed rate limits — the store decision 3 relies on. oRPC packages must move together. `seroval` is transitive (TanStack Router) and only an override pins it.                                                           | none                                                                       |
-| 2   | Rate limiting is **explicitly enabled** (`rateLimit.enabled`), independent of `NODE_ENV`, and disabled only under the test runner.                                                                                                                | The Worker never sets `NODE_ENV`; a limiter that depends on it is a limiter that is off. Explicit beats environmental.                                                                                                                                                                                                                        | none                                                                       |
-| 3   | Rate-limit counters live in **Postgres** (`kaipu_rate_limit`, Better Auth `storage: "database"`), per client IP and path, with a **Cloudflare zone rate-limiting rule** on the sign-in path as the outer layer.                                   | Memory is per isolate; KV is eventually consistent with a one-write-per-second-per-key cap; the Workers Rate Limiting binding is per-location and documented as permissive; Durable Objects are exact but add a binding, a class and a migration for a few requests per minute. The DB is already there and 1.7.7 made its increments atomic. | [ADR 0029](/architecture/decisions/0029-auth-rate-limits-in-the-database/) |
-| 4   | Client address comes **only from `cf-connecting-ip`**; the web proxy drops inbound `x-forwarded-for` and `x-real-ip`.                                                                                                                             | Cloudflare sets `cf-connecting-ip` at the edge; `x-forwarded-for` is client-controlled and Better Auth's default source.                                                                                                                                                                                                                      | none (context in ADR 0029)                                                 |
-| 5   | **Verified email required** to sign in (`requireEmailVerification: true`); the verification mail is sent on sign-up (already so) and re-sent on a sign-in attempt by an unverified user (`sendOnSignIn`).                                         | Closes address squatting and makes sign-up answer identically for new and existing addresses (decision 8). Resend on sign-in gives the user a way out of a lost email without a new UI.                                                                                                                                                       | none                                                                       |
-| 6   | **CSRF**: non-safe `/api/v1` requests that carry a cookie must present an allowed `Origin`, or `Sec-Fetch-Site: same-origin`/`none` when `Origin` is absent. Cookie-less (bearer) requests pass. The check lives in `server-hono`, not the proxy. | Better Auth already protects `/api/auth/*`; oRPC routes had nothing. Putting it in the API protects every entry path (proxy, workers.dev, previews), not only the web proxy.                                                                                                                                                                  | none                                                                       |
-| 7   | Web session cookie moves to **`SameSite=Lax`**.                                                                                                                                                                                                   | The browser only ever talks to the web Worker (same origin); the desktop uses a bearer header. `None` buys nothing and makes the cookie ride on cross-site requests.                                                                                                                                                                          | none                                                                       |
-| 8   | Password: keep the stored `salt:hash` scrypt format, switch to **async `scrypt` + `timingSafeEqual`**.                                                                                                                                            | Changing the format would invalidate every stored hash; Better Auth's default hasher uses different scrypt parameters. Async stops blocking the isolate during a login.                                                                                                                                                                       | none                                                                       |
-| 9   | `BETTER_AUTH_SECRET` must be **≥ 32 characters** (env schema).                                                                                                                                                                                    | Better Auth only warns below 32; the secret signs session cookies and bearer tokens.                                                                                                                                                                                                                                                          | none                                                                       |
-| 10  | Sign-up **does not reveal** whether an address is registered.                                                                                                                                                                                     | Falls out of decision 5: Better Auth ≥ 1.6 answers sign-up with the same 200 for new and existing addresses when verification is required.                                                                                                                                                                                                    | none                                                                       |
-| 11  | `account.encryptOAuthTokens: true`.                                                                                                                                                                                                               | No social provider exists today; this stops the first one from writing plaintext tokens. Zero migration cost now.                                                                                                                                                                                                                             | none                                                                       |
+| #   | Decision                                                                                                                                                                                                                                                                | Why                                                                                                                                                                                                                                                                                                                                           | ADR                                                                        |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| 1   | `better-auth` goes to **1.7.12** (`main` had already moved to 1.7.11 for ADR 0025), `@orpc/*` to **1.15.7**, `seroval`/`seroval-plugins` pinned to **1.6.11** through a root `overrides` block; `hono` to the first release past its JSX advisory.                      | 1.7.x closes the advisories and makes the database-backed limiter increments atomic, which decision 3 relies on. oRPC packages must move together. `seroval` is transitive (TanStack Router) and only an override pins it.                                                                                                                    | none                                                                       |
+| 2   | Rate limiting is **explicitly enabled** (`rateLimit.enabled`), independent of `NODE_ENV`, and disabled only under the test runner.                                                                                                                                      | The Worker never sets `NODE_ENV`; a limiter that depends on it is a limiter that is off. Explicit beats environmental.                                                                                                                                                                                                                        | none                                                                       |
+| 3   | Rate-limit counters live in **Postgres** (`kaipu_rate_limit`, Better Auth `storage: "database"`), per client IP and path, with a **Cloudflare zone rate-limiting rule** on the sign-in path as the outer layer.                                                         | Memory is per isolate; KV is eventually consistent with a one-write-per-second-per-key cap; the Workers Rate Limiting binding is per-location and documented as permissive; Durable Objects are exact but add a binding, a class and a migration for a few requests per minute. The DB is already there and 1.7.7 made its increments atomic. | [ADR 0029](/architecture/decisions/0029-auth-rate-limits-in-the-database/) |
+| 4   | Client address comes **only from `cf-connecting-ip`**; the web proxy drops inbound `x-forwarded-for` and `x-real-ip`.                                                                                                                                                   | Cloudflare sets `cf-connecting-ip` at the edge; `x-forwarded-for` is client-controlled and Better Auth's default source.                                                                                                                                                                                                                      | none (context in ADR 0029)                                                 |
+| 5   | **Deferred to the owner.** `requireEmailVerification` stays off. The concrete takeover path the audit's F-5 enabled (a squatter's Google link surviving the owner's claim) is closed instead; see [item 3](#3-verified-email-required-f-5-f-13--deferred-to-the-owner). | Turning it on reverses the 2026-09-15 decision ("sign-in stays allowed for unverified accounts; Cloud is gated on `emailVerified`") and breaks the desktop sign-up flow of ADR 0025, whose done page waits for a session that would never come. That is the owner's call, not this PR's.                                                      | none                                                                       |
+| 6   | **CSRF**: non-safe `/api/v1` requests that carry a cookie must present an allowed `Origin`, or `Sec-Fetch-Site: same-origin`/`none` when `Origin` is absent. Cookie-less (bearer) requests pass. The check lives in `server-hono`, not the proxy.                       | Better Auth already protects `/api/auth/*`; oRPC routes had nothing. Putting it in the API protects every entry path (proxy, workers.dev, previews), not only the web proxy.                                                                                                                                                                  | none                                                                       |
+| 7   | Web session cookie moves to **`SameSite=Lax`**.                                                                                                                                                                                                                         | The browser only ever talks to the web Worker (same origin); the desktop uses a bearer header. `None` buys nothing and makes the cookie ride on cross-site requests.                                                                                                                                                                          | none                                                                       |
+| 8   | Password: keep the stored `salt:hash` scrypt format, switch to **async `scrypt` + `timingSafeEqual`**.                                                                                                                                                                  | Changing the format would invalidate every stored hash; Better Auth's default hasher uses different scrypt parameters. Async stops blocking the isolate during a login.                                                                                                                                                                       | none                                                                       |
+| 9   | `BETTER_AUTH_SECRET` must be **≥ 32 characters** (env schema).                                                                                                                                                                                                          | Better Auth only warns below 32; the secret signs session cookies and bearer tokens.                                                                                                                                                                                                                                                          | none                                                                       |
+| 10  | Sign-up **does not reveal** whether an address is registered.                                                                                                                                                                                                           | Falls out of decision 5: Better Auth ≥ 1.6 answers sign-up with the same 200 for new and existing addresses when verification is required.                                                                                                                                                                                                    | none                                                                       |
+| 11  | `account.encryptOAuthTokens: true`.                                                                                                                                                                                                                                     | No social provider exists today; this stops the first one from writing plaintext tokens. Zero migration cost now.                                                                                                                                                                                                                             | none                                                                       |
 
 ### Open questions
 
-1. **Rate-limit numbers.** The WIP sets 5 sign-ins/minute, 10 sign-ups/hour, 5 reset requests/hour,
-   5 verification sends/hour and 10 resets/15 min, per IP. Better Auth 1.6+ defaults are stricter
-   per 10 seconds (3) and looser per hour. Owner to confirm or adjust; office/NAT users share an IP.
-2. **Resend-on-sign-in email volume.** `sendOnSignIn: true` sends a verification email on every
-   sign-in attempt by an unverified user, bounded only by the sign-in limit. Alternative: leave it
-   off and rely on the existing resend form at `/auth/email-verified?error=…`. Recommendation in
-   [item 3](#3-verified-email-required-f-5-f-13).
-3. **Production secret length.** If the deployed `BETTER_AUTH_SECRET` is shorter than 32 characters
-   the API will refuse to boot after this change. Rotating it signs every web and desktop session
-   out. Better Auth 1.6+ accepts a `secrets` array for rotation; the env schema does not model it.
-   Owner to check the length before merging (see [Owner actions](#owner-actions)).
-4. **Creating `kaipu_rate_limit`.** `bun run db:push` now, or a committed migration if NIW2-328
-   lands first. The spec assumes whichever of the two tickets merges second carries the table the
-   way the first one established.
-5. **`www.kaipu.app`.** The CSRF allow-list is `CORS_ORIGIN` + `PUBLIC_WEB_URL`. If users can
-   reach the app on `www.kaipu.app` without a redirect to the apex, that origin must be in
-   `CORS_ORIGIN` or every write from it is rejected.
-6. **Did verification and reset work on `main`?** `main` passes only `user`, `account` and
-   `session` to the Drizzle adapter (`packages/infra-auth/src/config/base-config.ts:12`); the
-   `verification` table exists in the schema but is not mapped. The WIP adds the mapping. Owner to
-   confirm whether password reset / email verification was working in production, which decides
-   whether this is a fix or a no-op.
-7. **`NODE_ENV=production` on the Worker.** Not needed for the limiter after decision 2, but Better
-   Auth still uses it for other production-only behaviour (secret required, warnings). Set it as a
-   non-secret `vars` entry, or leave it unset and keep everything explicit?
+Resolved on 2026-10-21 by reading Better Auth 1.7.12 and the deployed configuration, unless
+marked **owner**.
+
+1. **Rate-limit numbers.** Kept: 5 sign-ins/minute, 10 sign-ups/hour, 5 reset requests/hour,
+   5 verification sends/hour, 10 resets/15 min, per address; the desktop code exchange
+   (`/electron/token`, `/electron/transfer-user`) 10/minute. `/get-session` is exempt (see
+   [item 2](#2-rate-limiting-f-3-f-4)). **Owner** may still loosen the sign-in rule: it is per
+   address, so an office behind one NAT shares it.
+2. **Resend-on-sign-in.** Moot while decision 5 is deferred; `sendOnSignIn` is not set.
+3. **Production secret length.** Still **owner**: the GitHub `production` secret cannot be read
+   from the repository. The local Infisical value is 43 characters. The API refuses to boot on a
+   shorter secret, so check before the release (owner action 1).
+4. **Creating `kaipu_record_rate_limit`.** `bun run db:push` before the API release (owner action
+   4). `main` still has no committed migrations, so there is nothing else to carry.
+5. **`www.kaipu.app`.** Answered: production `CORS_ORIGIN` and `BETTER_AUTH_URL` are
+   `https://kaipu.app`, and `www.kaipu.app` is a 301 to the apex at the Cloudflare edge (path and
+   query preserved, checked live). Both Better Auth's origin check and the new CSRF check depend
+   on that redirect; it is recorded in [Google OAuth](/deployment/google-oauth/).
+6. **Verification table mapping.** `main` mapped `verification` on its own (NIW2-471 needed it),
+   so this is no longer a change of this PR.
+7. **`NODE_ENV` on the Worker.** Not needed: wrangler inlines `process.env.NODE_ENV` as
+   `"production"` at deploy, so Better Auth's production-only behaviour is already on, and the
+   limiter is enabled explicitly regardless.
 
 ### Out of scope
 
@@ -195,33 +193,37 @@ client address on requests arriving through the web proxy's Service Binding. If 
 were absent on that hop, Better Auth logs a warning and does not limit — the feature would be
 silently off for the web while on for the desktop.
 
-### 3. Verified email required (F-5, F-13)
+### 3. Verified email required (F-5, F-13) — deferred to the owner
 
-`apps/server-hono/src/lib/auth.ts` / `base-config.ts`:
+**Not applied.** `requireEmailVerification` and `sendOnSignIn` are not set. What was verified
+(Better Auth 1.7.12 source, `main` at the merge):
 
-```ts
-emailAndPassword: { enabled: true, requireEmailVerification: true, … },
-emailVerification: { sendOnSignUp: true, sendOnSignIn: true, autoSignInAfterVerification: false, expiresIn: 60 * 60 * 24, … },
-```
+- With the flag on, `/sign-up/email` creates the user and returns `200 { token: null }` with no
+  session, and `/sign-in/email` answers `403 EMAIL_NOT_VERIFIED` after the password check (so it
+  is not an enumeration channel). Sign-up answers the same `200` for a taken address (F-13 closed).
+- The desktop signs up through the browser (ADR 0025): the web form pushes to
+  `/auth/desktop/done`, which polls for the session cookie and after 10 s shows "No sign-in code
+  here". With no session, every desktop email sign-up would end there. The web "Check your email"
+  screen's "Go to library" link would bounce to login. The 2026-09-15 transactional-email plan
+  says explicitly not to set the flag, and the web auth redesign is built on "never blocks".
+- Cloud uploads are already gated on `emailVerified` (`createUploadIntent`); no API route sends
+  email; `/change-email` and `/delete-user` are disabled. Unauthenticated
+  `/send-verification-email` and `/request-password-reset` are limited to 5/hour per address.
 
-Resulting server behaviour (Better Auth 1.7.7):
+**What this PR does instead.** The one concrete takeover path found: whoever registered an
+address without owning the inbox could link their own Google account (FR8 allows a different
+email); when the real owner later claimed the address through Google, FR6 dropped only the
+password and sessions and left that Google row as a back door into the now-verified account.
+`decideLinkSideEffects` now drops every account row attached while the email was unverified;
+only the Google row that proved the inbox survives (`apps/server-hono/src/lib/account-linking.ts`,
+flow test "a Google account the squatter linked while unverified is dropped with the password").
 
-| Call                                 | Result                                                                                                                                                                                                                                                           |
-| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /sign-up/email`, new address   | `200`, user created, **no session, no `set-auth-token`**, verification email sent.                                                                                                                                                                               |
-| `POST /sign-up/email`, taken address | Same `200` shape (synthetic user, no session, no email to the caller). Better Auth 1.6 added this specifically to prevent enumeration when verification is required. The existing owner can be notified through `onExistingUserSignUp` (optional, not in scope). |
-| `POST /sign-in/email`, unverified    | `403` with body code `EMAIL_NOT_VERIFIED`; a fresh verification email is sent (`sendOnSignIn`).                                                                                                                                                                  |
-| `GET /verify-email?token`            | Marks the user verified and redirects to the `callbackURL` built in `lib/email-links.ts` (`/auth/email-verified`); no auto sign-in.                                                                                                                              |
-
-**Recommendation on open question 2:** keep `sendOnSignIn: true`. The cost is bounded by the
-sign-in rule (decision 2) and the email goes only to the address's owner; the benefit is that a
-user whose first email went to spam gets a second one by doing the natural thing (trying to sign
-in) on both web and desktop, without the desktop needing a resend screen. Revisit if Resend volume
-or reputation becomes a problem; the fallback is `sendOnSignIn: false` plus the existing web
-resend form.
-
-Existing users with `email_verified = false` will be locked out until they verify. Count them
-before deploying (owner action) and decide whether to pre-notify.
+**Owner decision.** Enabling the flag needs: a desktop done page that says "check your email"
+instead of "no code", a sign-in message for `EMAIL_NOT_VERIFIED` with a resend link, a count of
+existing unverified users, and the reversal of the 2026-09-15 note. A narrower option that keeps
+sign-in open is `autoSignIn: false` for F-13 alone, which has the same sign-up UX cost.
+Residual risk accepted until then: a squatter who claims an address by password reset (the mail
+goes to the real inbox, so only the owner can finish it) does not get the same cleanup.
 
 ### 4. CSRF on `/api/v1` and `SameSite=Lax` (F-7, web #2)
 
@@ -384,15 +386,15 @@ already have (owner to confirm).
 Before merge:
 
 1. **Check the production `BETTER_AUTH_SECRET` length** (≥ 32 characters). If shorter, generate a
-   new one (`openssl rand -base64 32`), update Infisical (`/server-hono`) and the GitHub
-   `production` environment secret, and accept that every session is signed out on deploy.
-2. **Count users with `email_verified = false`** and decide whether to email them before the
-   change locks them out of sign-in.
-3. Confirm `CORS_ORIGIN` (GitHub `vars`, Infisical) contains every browser origin that will send
-   cookie writes: `https://kaipu.app`, and `https://www.kaipu.app` unless it redirects to the apex.
-   `PUBLIC_WEB_URL` is also added to the CSRF allow-list.
-4. Decide open question 4 (`db:push` vs migration) and run it yourself: `bun run db:push` creates
-   `kaipu_rate_limit`.
+   new one (`openssl rand -base64 32`), update Infisical (`/auth`) and the GitHub `production`
+   environment secret, and accept that every session is signed out on deploy. The local value
+   is 43 characters; the production one cannot be read from the repository.
+2. Decide on [item 3](#3-verified-email-required-f-5-f-13--deferred-to-the-owner) (verified
+   email required). Nothing in this PR depends on the answer.
+3. Keep the `www.kaipu.app` → apex redirect in the Cloudflare dashboard. `CORS_ORIGIN` is the apex
+   only; without the redirect, sign-in and every write from `www` would answer 403.
+4. Run `bun run db:push` against production so `kaipu_record_rate_limit` exists **before** the
+   API release: with `storage: "database"`, a missing table fails every auth request.
 
 At deploy:
 
@@ -408,9 +410,10 @@ At deploy:
 
 After deploy:
 
-7. Watch Workers logs for Better Auth's "no IP address" warning on auth routes (would mean the
-   limiter is not keying on the client); confirm `kaipu_rate_limit` receives rows with real
-   addresses.
+7. Watch Workers logs for Better Auth's "Rate limiting could not determine a client IP" warning
+   (it would mean `cf-connecting-ip` did not survive the service binding and every user shares
+   one bucket per path); confirm `kaipu_record_rate_limit` keys start with real addresses, never
+   `no-trusted-ip`, and that `session.ip_address` is populated for a web sign-in.
 8. Re-run `bun audit` and record remaining findings in
    [Dependency security upgrades](/backlog/dependency-security-upgrades/).
 
@@ -488,81 +491,51 @@ Audit: `bun audit` shows no critical/high in `better-auth`, `@orpc/*`, `seroval`
 ## Rollout and backout
 
 **Rollout.** One PR, one API release (`release-api.yml`), one web release; the desktop change
-ships with the next desktop release, and until then an older desktop sees the new server
-behaviour: sign-up without a token already maps to `unknown` with a readable message in the shipped
-client, and `403` on sign-in maps to `invalid-credentials` — degraded copy, not a broken app.
-Order: (1) owner actions 1–4; (2) merge; (3) release API, then web; (4) owner action 6; (5)
-post-deploy checks 7–8.
+(a `throttled` error state for the code exchange) ships with the next desktop release, and until
+then an older desktop shows a 429 on the exchange as "invalid code" — degraded copy, not a broken
+app. Order: (1) owner actions 1, 3, 4; (2) merge; (3) release API, then web; (4) owner action 6;
+(5) post-deploy checks 7–8.
 
 **Backout.** The change is a set of independent config flags plus one additive table, so partial
 backout is possible without a dependency downgrade:
 
 - Limiter: `rateLimit.enabled: false` (keeps the table; nothing else depends on it).
-- Verification gate: `requireEmailVerification: false` and `sendOnSignIn: false` — users verified
-  in the meantime stay verified.
 - CSRF: remove the middleware call in `index.ts`; cookie back to `none` only if a concrete flow
   broke.
 - Secret length: relax the schema if the deploy fails on boot (then rotate properly).
 - The dependency upgrade itself is reverted only by reverting the PR and regenerating `bun.lock`;
-  Better Auth 1.7.7 wrote nothing to the database that 1.4.18 cannot read (no schema change beyond
-  the new table), so a downgrade does not need a data rollback.
+  `main` was already on Better Auth 1.7.11, so the dependency part of this PR is a patch bump plus
+  oRPC, seroval and hono; nothing wrote to the database that the previous versions cannot read.
 
 ---
 
 ## Implementation status
 
-### What the WIP commit does (`b0837f3`, unverified — `bun run verify` has not run on it)
+### On the branch, verified 2026-10-21
 
-| Area                        | Change                                                                                                                                                                                                                                                                                                                                                                                                             |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Dependencies                | Catalog: `better-auth 1.7.7`, `@orpc/* 1.15.6`; root `overrides` for `seroval`/`seroval-plugins 1.6.9`; `bun.lock` regenerated (resolves `kysely 0.29.6`, `@better-auth/* 1.7.7`). `drizzle-orm` **not** bumped (still `0.45.1`, below the adapter's peer range).                                                                                                                                                  |
-| `packages/infra-auth`       | `base-config.ts`: adapter schema now maps `verification` and `rateLimit`; `requireEmailVerification: true`; async `scrypt` + `timingSafeEqual` (same stored format); `account.encryptOAuthTokens: true`; explicit `rateLimit` block with `storage: "database"` and the rules in item 2; `advanced.ipAddress.ipAddressHeaders: ["cf-connecting-ip"]`; cookies `sameSite: "lax"`; dead commented-out hasher removed. |
-| `packages/infra-db`         | `schema/auth.ts`: `rateLimitTable` (`kaipu_rate_limit`).                                                                                                                                                                                                                                                                                                                                                           |
-| `packages/infra-env`        | `BETTER_AUTH_SECRET` min length 32.                                                                                                                                                                                                                                                                                                                                                                                |
-| `packages/infra-cloudflare` | Proxy deletes inbound `x-forwarded-for` and `x-real-ip`.                                                                                                                                                                                                                                                                                                                                                           |
-| `apps/server-hono`          | `middleware/csrf.ts` + test; `index.ts` applies it to `/api/v1/*` with `CORS_ORIGIN ∪ PUBLIC_WEB_URL`; `lib/auth.ts` adds `sendOnSignIn: true`; `lib/env-schema.test.ts`.                                                                                                                                                                                                                                          |
-| `apps/web-hono`             | Sign-up form navigates to `/auth/login` with a "check your email" toast; sign-in form handles `EMAIL_NOT_VERIFIED`.                                                                                                                                                                                                                                                                                                |
-| `apps/kaipu-record`         | `AuthError` gains `email-not-verified`; `auth-client.ts` maps `403 EMAIL_NOT_VERIFIED` and token-less sign-up to it; `auth-form.tsx` maps it to `errorEmailNotVerified`; tests for both mappings.                                                                                                                                                                                                                  |
-| `packages/i18n`             | `en`/`es`: `signUpCheckEmail`, `emailNotVerified`, `errorEmailNotVerified`.                                                                                                                                                                                                                                                                                                                                        |
+The branch was merged with `main` (359 commits, including Better Auth 1.7.11, the desktop
+browser sign-in and the new web auth forms) on 2026-10-21. Five read-only reviewers (Claude
+Sonnet) then checked each finding against Better Auth 1.7.12's source and the merged tree; what
+they could not prove is listed under "Not verifiable here".
 
-Not in the WIP: this spec and the ADR (added by the follow-up docs commit), the `drizzle-orm`
-bump, the infra-auth and infra-cloudflare tests, the desktop `429`/success-state UX, docs updates,
-and every verification step.
+| Finding            | State                                                                                                                                                                                                                                                                                                                                                |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Dependencies       | Done. `better-auth` 1.7.12, `@orpc/*` 1.15.7, `seroval` 1.6.11 (override), `kysely` 0.29.7, `hono` past GHSA-qp7p-654g-cw7p. `bun audit` shows no advisory left on these; the unrelated ones still open are in [Dependency security upgrades](/backlog/dependency-security-upgrades/).                                                               |
+| F-3/F-4 rate limit | Done. Explicit, `storage: "database"` (`kaipu_record_rate_limit`), keyed on `cf-connecting-ip`; rules on the credential endpoints and the desktop code exchange; `/get-session` exempt; the proxy strips `x-forwarded-for`/`x-real-ip`; the web SSR session check forwards the client address. Tests: `rate-limit.test.ts`, `proxy-handler.test.ts`. |
+| F-5 / F-13         | **Deferred to the owner** ([item 3](#3-verified-email-required-f-5-f-13--deferred-to-the-owner)). The Google-link takeover residue is closed and flow-tested.                                                                                                                                                                                        |
+| F-7 / web #2       | Done. `isRequestAllowed` on `/api/v1/*`; cookies `SameSite=Lax`. Every cookie-bearing write in the repo is a same-origin browser fetch through the proxy; nothing server-side writes with a cookie.                                                                                                                                                  |
+| F-10               | Done. Async scrypt + `timingSafeEqual` in `packages/infra-auth/src/config/password.ts`, legacy-hash tests.                                                                                                                                                                                                                                           |
+| F-11               | Done. `min(32)` in the env schema; fixtures, docs and README updated.                                                                                                                                                                                                                                                                                |
+| OAuth tokens       | Already on `main` (`account-linking.ts`, NIW2-219). Nothing in the repo reads the tokens back.                                                                                                                                                                                                                                                       |
+| 429 handling       | Done. Web sign-in, sign-up and reset show "too many attempts"; the desktop maps 429 on the code exchange to `throttled`, never `invalid-code`.                                                                                                                                                                                                       |
 
-### What remains — resumable, in order
+### Not verifiable here
 
-Each task is independent enough to be a commit; tasks 1–3 gate everything after them.
-
-1. **Install and run the suite.** `bun install` (lock already regenerated; expect the
-   `drizzle-orm` peer warning), then `bun run verify`. Fix type errors from the 1.7.7 types first
-   (`customSession`, `bearer`, `BetterAuthOptions` shape for `rateLimit`/`ipAddress`), then the
-   test failures.
-2. **Bump `drizzle-orm` to `^0.45.2`** in `packages/infra-db/package.json` and
-   `apps/server-hono/package.json`; `bun install`; re-run verify.
-3. **Boot check in `wrangler dev`** with a dev database: no schema-validation complaint; confirm
-   the rate-limit rule paths against the 1.7.7 route table and drop `/forget-password` if it no
-   longer exists; confirm `cf-connecting-ip` is populated locally (miniflare) or temporarily log the
-   address Better Auth resolves.
-4. **Create `kaipu_rate_limit`** (owner runs `db:push`, or generate a migration if NIW2-328 is in).
-5. **Password tests** in `packages/infra-auth` (legacy-hash fixture, wrong password, malformed and
-   truncated stored values) — `packages/infra-auth` has no test script today; add `vitest` the way
-   `apps/server-hono` does.
-6. **Proxy test** in `packages/infra-cloudflare` for the header strip.
-7. **Desktop UX:** render `email-not-verified` after sign-up as an informational state and return
-   to the sign-in page; map `429` to a dedicated kind (or a clear `unknown` message) with the retry
-   seconds; copy in `en`/`es`.
-8. **Web:** on `/auth/login`, when the server answers `EMAIL_NOT_VERIFIED`, offer the link to the
-   existing resend form; surface `429` with the retry seconds instead of the raw message.
-9. **Local end-to-end** per the test plan, including the desktop cycle and the post-verification
-   redirect origin (decides the `baseURL` / `trustedProxyHeaders` question).
-10. **Docs:** ADR index row (added with this spec), backlog rows for dependency upgrades and API
-    abuse controls, and the three `authentication/*.mdx` pages that currently state
-    `SameSite=Lax` as if it were already so — after this change it is.
-11. **Rebase on `main`** once NIW2-327 / NIW2-328 land; regenerate `bun.lock` with `bun install`,
-    never by hand; re-run verify.
-12. **Owner actions 1–4**, mark the PR ready for review, release, owner actions 5–8.
-
----
+- That `cf-connecting-ip`, `Origin` and `Sec-Fetch-Site` survive the Cloudflare service binding
+  between the web and API Workers (they are copied by `new Request(url, request)`; the binding
+  is believed to pass headers unchanged). Owner action 7 is the check.
+- The length of the production `BETTER_AUTH_SECRET` (owner action 1).
+- Whether `kaipu_record_rate_limit` exists in production (owner action 4).
 
 ## References
 
