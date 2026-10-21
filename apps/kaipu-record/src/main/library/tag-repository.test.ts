@@ -1,10 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TagLimitError, TagNameTakenError, TAGS_PER_ITEM_MAX } from "@kaipu/domain/constants";
 import { LibraryVault } from "./library-vault";
-import { loadDeviceId, uuidv7, VaultTagRepository } from "./tag-repository";
+import { loadDeviceId, TagRegistryError, uuidv7, VaultTagRepository } from "./tag-repository";
 
 describe("VaultTagRepository", () => {
   let directory: string;
@@ -31,6 +31,7 @@ describe("VaultTagRepository", () => {
     writeFile(join(directory, `${id}.webm`), Buffer.alloc(16));
   const sidecar = async (id: string): Promise<Record<string, unknown>> =>
     JSON.parse(await readFile(join(directory, ".kaipu", `${id}.json`), "utf8"));
+  const kaipu = (): string => join(directory, ".kaipu");
   const registry = async (): Promise<{ tags: Array<Record<string, unknown>> }> =>
     JSON.parse(await readFile(join(directory, ".kaipu", "tags.json"), "utf8"));
 
@@ -157,6 +158,77 @@ describe("VaultTagRepository", () => {
     expect(one.tags).toBeUndefined();
     expect(one.tagIds).toEqual(list.map((t) => t.id));
     expect((await sidecar("two")).tagIds).toEqual([list[0]!.id]);
+  });
+
+  it("persists an empty registry on first list so the import never re-runs", async () => {
+    await writeItem("clip");
+    expect(await repo.list()).toEqual([]);
+    expect((await registry()).tags).toEqual([]);
+    await writeFile(join(kaipu(), "clip.json"), JSON.stringify({ tags: ["late"] }));
+    expect(await repo.list()).toEqual([]);
+    expect((await sidecar("clip")).tags).toEqual(["late"]);
+  });
+
+  it("does not scan the vault for counts when there are no live tags", async () => {
+    await writeItem("clip");
+    const spy = vi.spyOn(vault, "list");
+    await repo.list(); // the one-time import scans
+    spy.mockClear();
+    await repo.list();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("writes the registry before stripping legacy tags", async () => {
+    await writeItem("one");
+    await mkdir(kaipu(), { recursive: true });
+    await writeFile(join(kaipu(), "one.json"), JSON.stringify({ tags: ["cricut", "demo"] }));
+    // Not "Once": vault.list() backfills item identity through writeMeta and swallows its errors.
+    vi.spyOn(vault, "writeMeta").mockRejectedValue(new Error("crash"));
+    await expect(repo.list()).rejects.toThrow("crash");
+    expect((await registry()).tags).toHaveLength(2);
+  });
+
+  it("does not persist an empty registry while the vault folder is missing", async () => {
+    const gone = join(directory, "unplugged");
+    vault = new LibraryVault(gone);
+    expect(await repo.list()).toEqual([]);
+    // Nothing was created at the vault path, so a real registry there is not shadowed.
+    await expect(readdir(gone)).rejects.toMatchObject({ code: "ENOENT" });
+
+    // The drive comes back with a legacy tag: the import still runs.
+    await mkdir(join(gone, ".kaipu"), { recursive: true });
+    await writeFile(join(gone, "one.webm"), Buffer.alloc(16));
+    await writeFile(join(gone, ".kaipu", "one.json"), JSON.stringify({ tags: ["legacy"] }));
+    expect((await repo.list()).map((t) => t.name)).toEqual(["legacy"]);
+  });
+
+  it("refuses writes and keeps the file when tags.json is corrupt", async () => {
+    await mkdir(kaipu(), { recursive: true });
+    await writeFile(join(kaipu(), "tags.json"), "{ not json");
+    await expect(repo.create("X")).rejects.toBeInstanceOf(TagRegistryError);
+    await expect(repo.list()).rejects.toMatchObject({ code: "corrupt" });
+    await expect(repo.list()).rejects.toMatchObject({ code: "corrupt" });
+    expect(await readFile(join(kaipu(), "tags.json"), "utf8")).toBe("{ not json");
+    const copies = (await readdir(kaipu())).filter((n) => n.startsWith("tags.json.corrupt-"));
+    expect(copies).toHaveLength(1);
+    expect(await readFile(join(kaipu(), copies[0]!), "utf8")).toBe("{ not json");
+  });
+
+  it("treats a newer registry version as untrusted", async () => {
+    await mkdir(kaipu(), { recursive: true });
+    const newer = JSON.stringify({ version: 2, tags: [] });
+    await writeFile(join(kaipu(), "tags.json"), newer);
+    await expect(repo.create("X")).rejects.toBeInstanceOf(TagRegistryError);
+    expect(await readFile(join(kaipu(), "tags.json"), "utf8")).toBe(newer);
+  });
+
+  it("does not treat an unreadable registry as missing", async () => {
+    await writeItem("one");
+    await mkdir(join(kaipu(), "tags.json"), { recursive: true }); // EISDIR on read
+    await writeFile(join(kaipu(), "one.json"), JSON.stringify({ tags: ["legacy"] }));
+    await expect(repo.list()).rejects.toMatchObject({ code: "unreadable" });
+    expect((await readdir(kaipu())).filter((n) => n.includes(".corrupt-"))).toEqual([]);
+    expect((await sidecar("one")).tags).toEqual(["legacy"]);
   });
 
   it("writes the registry atomically, leaving no temp file", async () => {
