@@ -33,10 +33,10 @@ app.get("/api/v1/health", (c) =>
 const openAPIHandler = new OpenAPIHandler(appRouter);
 
 // Cookie-authenticated writes must come from our own origins (CSRF, audit F-7). Bearer-token
-// clients (desktop) send no cookie and pass through. The list mirrors what Better Auth trusts
-// on /api/auth/*: CORS_ORIGIN plus the public web origin, so a host that can sign in can
-// also write. Every custom domain the web Worker serves (www included) must be in CORS_ORIGIN
-// or redirect to one that is.
+// clients (desktop) send no cookie and pass through. CORS_ORIGIN is what Better Auth trusts on
+// /api/auth/* (production: the apex only; www.kaipu.app is a 301 at the Cloudflare edge), so a
+// host that can sign in can also write; PUBLIC_WEB_URL and BETTER_AUTH_URL are added for the
+// environments where they differ from it.
 const allowedOrigins = [
   ...env.CORS_ORIGIN,
   ...(env.PUBLIC_WEB_URL ? [env.PUBLIC_WEB_URL] : []),

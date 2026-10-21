@@ -35,6 +35,35 @@ describe("isRequestAllowed", () => {
     }
   });
 
+  it("normalizes the Origin header before comparing it", () => {
+    for (const origin of ["https://kaipu.app:443", "https://KAIPU.app", "https://kaipu.app/"]) {
+      expect(isRequestAllowed(req("POST", { cookie: "s=1", origin }), options), origin).toBe(true);
+    }
+    // Userinfo tricks resolve to the real host and are rejected.
+    expect(
+      isRequestAllowed(
+        req("POST", { cookie: "s=1", origin: "https://kaipu.app@evil.example" }),
+        options,
+      ),
+    ).toBe(false);
+  });
+
+  it("checks lowercase methods the Fetch spec does not normalize", () => {
+    expect(
+      isRequestAllowed(req("patch", { cookie: "s=1", origin: "https://evil.example" }), options),
+    ).toBe(false);
+  });
+
+  it("treats a custom-scheme or wildcard allow-list entry as never matching", () => {
+    const custom = { allowedOrigins: ["kaipu-record://app", "https://*.kaipu.app"] };
+    expect(
+      isRequestAllowed(req("POST", { cookie: "s=1", origin: "kaipu-record://app" }), custom),
+    ).toBe(false);
+    expect(
+      isRequestAllowed(req("POST", { cookie: "s=1", origin: "https://www.kaipu.app" }), custom),
+    ).toBe(false);
+  });
+
   it("falls back to Sec-Fetch-Site when Origin is absent", () => {
     const c = { cookie: "s=1" };
     expect(isRequestAllowed(req("POST", { ...c, "sec-fetch-site": "same-origin" }), options)).toBe(
