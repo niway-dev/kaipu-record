@@ -50,8 +50,8 @@ All maintained project documentation lives in the Astro Starlight site at
 ### Prerequisites
 
 - [Bun](https://bun.sh) v1.3.4 or higher
-- The [Infisical CLI](https://infisical.com/docs/cli/overview) — every dev and
-  database script fetches its environment from it
+- The [Infisical CLI](https://infisical.com/docs/cli/overview) — it generates the
+  local `.env` files every dev and database script reads
 - Access to the `kaipu-recorder` Infisical project
 
 `bun run setup` checks both and prints how to install anything missing. It never
@@ -73,17 +73,8 @@ bun install
 bun run setup
 ```
 
-3. Sign in to Infisical:
-
-```bash
-infisical login
-```
-
-**There are no `.env` files to create.** Every value comes from Infisical and is
-fetched at start-up. Where a `.env` exists it is generated and gitignored —
-editing it does nothing, because the next start overwrites it.
-
-Change a value in Infisical, restart, done.
+3. Set up environment variables — see
+   [Set up environment variables](#set-up-environment-variables) below.
 
 4. For the desktop app, follow any native-rebuild instruction from `bun run setup`,
    then run `bun run dev` in `apps/kaipu-record`. Native rebuilding is explicit:
@@ -108,6 +99,39 @@ The application will be available at:
 
 - **Web App**: http://localhost:3001
 - **API Server**: http://localhost:3000
+
+### Set up environment variables
+
+Infisical is the source of truth, but nothing talks to it at start-up. One
+command generates every local `.env` file, and `bun run dev` and the `db:*`
+scripts only read those files — so an Infisical outage blocks a refresh, never
+your work.
+
+1. Install the Infisical CLI (`bun run setup` prints the command for your OS).
+2. Sign in once per machine:
+
+   ```bash
+   infisical login
+   ```
+
+3. Generate the files, from the repository root:
+
+   ```bash
+   bun env:pull
+   ```
+
+   It writes `apps/server-hono/.env`, `apps/web-hono/.env`, `apps/console/.env`,
+   `apps/kaipu-record/.env` and `packages/infra-db/.env` (the `db:*` scripts),
+   each with only its own values and readable only by you. It is all or nothing:
+   if Infisical fails part-way, every existing `.env` is left as it was.
+
+Run `bun env:pull` again when a value changes in Infisical, when a new variable
+is added, or when an app reports a missing variable at start-up — a missing file
+or variable says so and points back to this command. Do not hand-edit the files:
+the next pull overwrites them.
+
+To point one command somewhere else, set the variable inline; it wins over the
+file: `DATABASE_URL='<url>' bun run plan show <email>`.
 
 ### Environment variables
 
@@ -169,7 +193,7 @@ The full reference — every command, per-app scripts, and how to make an accoun
 
 ### Plans (premium)
 
-- `bun run plan show|grant|revoke <email>` -- Inspect, grant or revoke account entitlements; local watermark behavior is no longer plan-gated on this branch
+- `bun run plan show|grant|revoke <email>` -- Inspect, grant or revoke account entitlements; what each plan includes is documented on the docs site's Plans page (`features/plans`)
 
 ### Code Quality
 

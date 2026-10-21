@@ -1,3 +1,3 @@
-import { webServerEnvSchema } from "@kaipu/infra-env";
+import { parseEnv, webServerEnvSchema } from "@kaipu/infra-env";
 
-export const env = webServerEnvSchema.parse(process.env);
+export const env = parseEnv(webServerEnvSchema, process.env);

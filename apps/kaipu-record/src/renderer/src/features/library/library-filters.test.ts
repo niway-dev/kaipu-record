@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LibraryVideo } from "./types";
-import { countByKind, countByStorage, selectVisibleVideos } from "./library-filters";
+import { countByKind, countByStorage, facetCounts, selectVisibleVideos } from "./library-filters";
 
 function video(overrides: Partial<LibraryVideo> = {}): LibraryVideo {
   return {
@@ -34,6 +34,7 @@ const base = {
   storageFilter: "all" as const,
   sortKey: "newest" as const,
   searchTerm: "",
+  tags: [] as string[],
 };
 
 describe("selectVisibleVideos", () => {
@@ -118,6 +119,7 @@ describe("selectVisibleVideos", () => {
       storageFilter: "local",
       sortKey: "oldest",
       searchTerm: "report",
+      tags: [],
     });
     expect(result.map((v) => v.id)).toEqual(["x", "y"]);
   });
@@ -126,6 +128,54 @@ describe("selectVisibleVideos", () => {
     const input = [oldest, newest, middle];
     selectVisibleVideos(input, base);
     expect(input.map((v) => v.id)).toEqual(["c", "a", "b"]);
+  });
+});
+
+describe("selectVisibleVideos with tags", () => {
+  // Tags are referenced by id; names and slugs come from the registry.
+  const tagText = new Map([
+    ["t-cricut", "cricut cricut"],
+    ["t-video", "video video"],
+    ["t-kaipu", "kaipu kaipu"],
+    ["t-issue", "issue #1232 issue_#1232"],
+  ]);
+  const both = video({
+    id: "both",
+    title: "Cutting mat",
+    tagIds: ["t-cricut", "t-video", "t-kaipu"],
+  });
+  const cricutOnly = video({ id: "cricut", title: "Vinyl", tagIds: ["t-cricut"] });
+  const issue = video({ id: "issue", title: "Bug repro", tagIds: ["t-issue", "t-video"] });
+  // An item without a sidecar has no tags at all.
+  const noSidecar = video({ id: "bare", title: "Hand imported" });
+  const all = [both, cricutOnly, issue, noSidecar];
+  const withTags = { ...base, tagText };
+
+  it("narrows with AND: every selected tag must be on the item", () => {
+    const result = selectVisibleVideos(all, { ...withTags, tags: ["t-cricut", "t-video"] });
+    expect(result.map((v) => v.id)).toEqual(["both"]);
+  });
+
+  it("keeps items with no tags (and no sidecar) while no tag is selected", () => {
+    const result = selectVisibleVideos(all, withTags);
+    expect(result.map((v) => v.id)).toContain("bare");
+    expect(result).toHaveLength(4);
+  });
+
+  it("matches the search term against tag names and slugs as well as the title", () => {
+    expect(selectVisibleVideos(all, { ...withTags, searchTerm: "1232" }).map((v) => v.id)).toEqual([
+      "issue",
+    ]);
+    expect(
+      selectVisibleVideos(all, { ...withTags, searchTerm: "#Cricut" })
+        .map((v) => v.id)
+        .sort(),
+    ).toEqual(["both", "cricut"]);
+  });
+
+  it("combines tags with the other filters", () => {
+    const result = selectVisibleVideos(all, { ...withTags, tags: ["t-video"], searchTerm: "bug" });
+    expect(result.map((v) => v.id)).toEqual(["issue"]);
   });
 });
 
@@ -151,5 +201,63 @@ describe("countByKind", () => {
 
   it("returns zeros for an empty library", () => {
     expect(countByKind([])).toEqual({ all: 0, recording: 0, screenshot: 0 });
+  });
+});
+
+describe("facetCounts (disjunctive faceting)", () => {
+  // 3 recordings, 2 screenshots; `example` is on 2 local screenshots, `demo` on one
+  // of them and on a cloud recording.
+  const items = [
+    video({ id: "r1", kind: "recording" }),
+    video({ id: "r2", kind: "recording" }),
+    video({ id: null, kind: "recording", availability: "cloud", tagIds: ["t-demo"] }),
+    video({ id: "s1", kind: "screenshot", tagIds: ["t-example", "t-demo"] }),
+    video({ id: "s2", kind: "screenshot", tagIds: ["t-example"] }),
+  ];
+
+  it("without filters, counts the whole library", () => {
+    const facets = facetCounts(items, base);
+    expect(facets.kind).toEqual({ all: 5, recording: 3, screenshot: 2 });
+    expect(facets.storage).toEqual({ local: 4, cloud: 1 });
+    expect(Object.fromEntries(facets.tags)).toEqual({ "t-example": 2, "t-demo": 2 });
+  });
+
+  it("follows the other groups: a tag filter narrows the kind and storage counts", () => {
+    const facets = facetCounts(items, { ...base, tags: ["t-example"] });
+    expect(facets.kind).toEqual({ all: 2, recording: 0, screenshot: 2 });
+    expect(facets.storage).toEqual({ local: 2, cloud: 0 });
+    // Tags combine with AND: demo counts only items that also carry example.
+    expect(Object.fromEntries(facets.tags)).toEqual({ "t-example": 2, "t-demo": 1 });
+  });
+
+  it("ignores its own group: picking Screenshots never zeroes Recordings", () => {
+    const facets = facetCounts(items, { ...base, kindFilter: "screenshot" });
+    expect(facets.kind).toEqual({ all: 5, recording: 3, screenshot: 2 });
+    expect(facets.storage).toEqual({ local: 2, cloud: 0 });
+  });
+
+  it("ignores its own group for storage too, and follows the search box", () => {
+    const facets = facetCounts(
+      [...items, video({ id: "r3", title: "Demo night", kind: "recording" })],
+      { ...base, storageFilter: "cloud", searchTerm: "demo" },
+    );
+    // Search "demo" finds only the titled recording (no tag text supplied here).
+    expect(facets.storage).toEqual({ local: 1, cloud: 0 });
+    expect(facets.kind).toEqual({ all: 0, recording: 0, screenshot: 0 });
+  });
+});
+
+describe("GIF exports (NIW2-217)", () => {
+  const gif = video({ id: "g", title: "Gif", createdAt: 150, kind: "gif" });
+
+  it("group under Recordings in the kind filter and the counts", () => {
+    const all = [newest, shot, gif];
+    expect(selectVisibleVideos(all, { ...base, kindFilter: "recording" }).map((v) => v.id)).toEqual(
+      ["a", "g"],
+    );
+    expect(
+      selectVisibleVideos(all, { ...base, kindFilter: "screenshot" }).map((v) => v.id),
+    ).toEqual(["s"]);
+    expect(countByKind(all)).toEqual({ all: 3, recording: 2, screenshot: 1 });
   });
 });

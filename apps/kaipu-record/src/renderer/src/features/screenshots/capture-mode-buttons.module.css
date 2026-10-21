@@ -1,0 +1,319 @@
+/*
+ * The screenshot mode picker (Claude Design "Kaipu Screenshot Modes"): the Screenshots
+ * page hero and the tray panel: the Capture button and the mode chips. Colours come from the theme tokens; the
+ * accent tints and the shadow are the mock's own values, the same in both themes. The
+ * amber reason pill reuses `--tone-heavy` from base.css.
+ */
+
+.hero,
+.panel {
+  --picker-accent-hover: #ff3d82;
+  --picker-accent-tint: rgba(246, 5, 92, 0.08);
+  --picker-accent-line: rgba(246, 5, 92, 0.6);
+  --picker-accent-glow: 0 0 0 3px rgba(246, 5, 92, 0.12);
+  --picker-amber-bg: rgba(245, 158, 11, 0.12);
+  --picker-amber-line: rgba(245, 158, 11, 0.35);
+  --picker-off-bg: var(--border);
+  --picker-off-text: var(--text-muted);
+
+  font-family: var(--font-family);
+  color: var(--text-primary);
+}
+
+/* ── Primary button (both variants) ─────────────────────────── */
+
+.primary {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-family: inherit;
+  font-weight: var(--font-weight-semibold);
+  color: #fff;
+  background: var(--accent-primary);
+  border: 0;
+  box-shadow: 0 14px 30px -12px rgba(246, 5, 92, 0.95);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    box-shadow var(--transition);
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--picker-accent-hover);
+}
+
+.primary:focus-visible,
+.chip:focus-visible,
+.bannerLink:focus-visible {
+  outline: 2px solid var(--accent-primary-ring);
+  outline-offset: 2px;
+}
+
+.primary:disabled {
+  cursor: default;
+  color: var(--picker-off-text);
+  background: var(--picker-off-bg);
+  box-shadow: none;
+}
+
+.primaryShortcut {
+  margin-left: 4px;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-normal);
+  color: rgba(255, 255, 255, 0.8);
+  background: none;
+  border: 0;
+  padding: 0;
+}
+
+.primary:disabled .primaryShortcut {
+  color: var(--picker-off-text);
+}
+
+.recIcon {
+  flex-shrink: 0;
+  color: var(--accent-primary);
+}
+
+/* ── Page hero ──────────────────────────────────────────────── */
+
+.hero {
+  width: 100%;
+  padding: 22px;
+  background: var(--bg-modal);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  text-align: left;
+}
+
+.hero .primary {
+  height: 50px;
+  padding: 0 26px;
+  border-radius: 11px;
+  font-size: 15.5px;
+}
+
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-bottom: var(--space-lg);
+  padding: 11px 14px;
+  background: var(--picker-accent-tint);
+  border: 1px solid rgba(246, 5, 92, 0.3);
+  border-radius: 10px;
+}
+
+.bannerText {
+  flex: 1;
+  margin: 0;
+  font-size: var(--font-size-base);
+  color: var(--text-primary);
+}
+
+.bannerText b,
+.trayBanner b {
+  font-weight: var(--font-weight-semibold);
+}
+
+.bannerLink {
+  appearance: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+  color: var(--accent-primary);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.bannerLink:hover {
+  color: var(--picker-accent-hover);
+}
+
+.heroTop {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.heroHint {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--font-size-base);
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.lastUsed {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.lastUsedLabel {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 12px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+  color: var(--text-secondary);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    border-color var(--transition);
+}
+
+.chip:hover:not(:disabled):not([data-current]) {
+  background: var(--bg-card-hover);
+  border-color: rgba(246, 5, 92, 0.5);
+}
+
+.chip[data-current] {
+  color: var(--text-primary);
+  background: var(--picker-accent-tint);
+  border-color: var(--picker-accent-line);
+}
+
+.chip:disabled {
+  cursor: default;
+}
+
+.chip[data-unavailable] {
+  opacity: 0.55;
+}
+
+/* A recording pauses every entry point: dimmed, and no pointer interaction at all
+   (no hover tint), so only the banner reads as live. */
+.hero[data-busy] .chip,
+.panel[data-busy] .chip {
+  opacity: 0.55;
+  cursor: default;
+  pointer-events: none;
+}
+
+.currentDot {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+}
+
+.kbd {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: var(--font-weight-normal);
+  color: var(--text-secondary);
+  background: none;
+  border: 1px solid var(--border-light);
+  border-radius: 5px;
+  padding: 1px 6px;
+}
+
+.chip:disabled .kbd {
+  color: var(--picker-off-text);
+  border-color: var(--border);
+}
+
+.reason {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--tone-heavy);
+}
+
+/* ── Tray panel ─────────────────────────────────────────────── */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.trayBanner {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 10px;
+  padding: 10px 11px;
+  font-size: 12.5px;
+  color: var(--text-primary);
+  background: var(--picker-accent-tint);
+  border: 1px solid rgba(246, 5, 92, 0.3);
+  border-radius: 9px;
+}
+
+.panel .primary {
+  height: 44px;
+  margin-bottom: 10px;
+  border-radius: 9px;
+  font-size: var(--font-size-md);
+  gap: 9px;
+}
+
+.panel .chips {
+  gap: 6px;
+}
+
+.panel .chip {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12.5px;
+}
+
+.trayHint {
+  margin: 10px 0 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+/* A narrow main window: the button over its hint. */
+@media (max-width: 720px) {
+  .heroTop,
+  .lastUsed {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .primary,
+  .chip {
+    transition: none;
+  }
+}

@@ -1,31 +1,45 @@
+import { createFileRoute, redirect } from "@tanstack/react-router";
+
+import { AuthPanel } from "@/components/auth/auth-panel";
+import {
+  desktopAuthSearch,
+  parseDesktopAuthQuery,
+  type DesktopAuthQuery,
+} from "@/lib/desktop-auth";
+import { resolvePostSignInPath } from "@/lib/post-sign-in";
+import { safeRedirectPath } from "@/lib/safe-redirect";
 import { NOINDEX } from "@/lib/seo";
-import { createFileRoute, Link, redirect } from "@tanstack/react-router";
-import { useTranslations } from "@kaipu/i18n";
 
-import SignUpForm from "@/components/sign-up-form";
+type SignUpSearch = { redirect?: string } & Partial<DesktopAuthQuery>;
 
+/**
+ * The "Create account" tab. It still accepts the desktop query (NIW2-471): an older link from the
+ * desktop sign-in page pointed here, and it keeps working, with its tabs leading back to
+ * `/auth/desktop`.
+ */
 export const Route = createFileRoute("/auth/signup")({
   head: () => NOINDEX,
   component: SignUpPage,
+  validateSearch: (search: Record<string, unknown>): SignUpSearch => {
+    const target = safeRedirectPath(search.redirect);
+    const desktop = parseDesktopAuthQuery(search);
+    return { ...(target ? { redirect: target } : {}), ...desktop };
+  },
   beforeLoad: async (ctx) => {
     const { isAuthenticated } = ctx.context;
     if (isAuthenticated) {
-      throw redirect({ to: "/recordings" });
+      const desktop = parseDesktopAuthQuery(ctx.search);
+      throw redirect({
+        href: desktop
+          ? `/auth/desktop${desktopAuthSearch(desktop)}`
+          : resolvePostSignInPath(ctx.search),
+      });
     }
   },
 });
 
 function SignUpPage() {
-  const t = useTranslations("auth");
-  return (
-    <div className="mx-auto w-full mt-10 max-w-md p-6">
-      <SignUpForm />
-      <div className="mt-4 text-center text-sm text-muted-foreground">
-        {t("haveAccount")}{" "}
-        <Link to="/auth/login" className="text-primary hover:underline">
-          {t("signIn")}
-        </Link>
-      </div>
-    </div>
-  );
+  const search = Route.useSearch();
+  const desktop = parseDesktopAuthQuery(search) ?? undefined;
+  return <AuthPanel mode="sign-up" redirectTo={search.redirect} desktop={desktop} />;
 }

@@ -1,5 +1,17 @@
-import { app, BrowserWindow, desktopCapturer, ipcMain, screen, systemPreferences } from "electron";
+import {
+  app,
+  BrowserWindow,
+  desktopCapturer,
+  dialog,
+  ipcMain,
+  screen,
+  systemPreferences,
+} from "electron";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { createMainTranslator } from "@kaipu/i18n/main";
 import { IPC_CHANNELS } from "@shared/types";
+import { FINALIZE_ELSEWHERE_MARKER, FINALIZE_KEPT_MARKER } from "@shared/types/ipc";
 import type {
   ControlCommand,
   RecordingActivity,
@@ -15,7 +27,7 @@ import { ClickHook, type HookLike } from "./click-hook";
 import { CursorTrackRegistry } from "./cursor-tracker";
 import { ControlBarWindow } from "./control-bar-window";
 import { CameraBubbleWindow } from "./camera-bubble-window";
-import { RecordingWriter, timestampId } from "./recording-writer";
+import { FinalizeMoveError, RecordingWriter, timestampId } from "./recording-writer";
 import { IDLE_ACTIVITY, applyTick, startedActivity, stoppedActivity } from "./recording-activity";
 import { vaultDirectory } from "../library/vault-location";
 import {
@@ -168,6 +180,33 @@ export function registerRecordingHub(
   });
 
   // ── Disk writer ──────────────────────────────────────────────────────
+  function videosDir(): string {
+    try {
+      return app.getPath("videos");
+    } catch {
+      return homedir();
+    }
+  }
+
+  /** The vault is unreachable: let the user pick where the finished take goes. Resolves the chosen path, or null. */
+  async function offerSaveElsewhere(sessionId: string): Promise<string | null> {
+    const t = createMainTranslator(getAppSettings().locale);
+    // Deliberately parentless: the main window is hidden while the control bar is up.
+    const result = await dialog.showSaveDialog({
+      title: t("dialogs.saveRecordingElsewhere"),
+      defaultPath: join(videosDir(), `${timestampId(Date.now())}.mp4`),
+      filters: [{ name: "MP4", extensions: ["mp4"] }],
+    });
+    if (result.canceled || !result.filePath) return null;
+    try {
+      await writer.salvage(sessionId, result.filePath);
+      return result.filePath;
+    } catch (error) {
+      console.error("salvage failed", error);
+      return null;
+    }
+  }
+
   // Whether we've already told the renderer to stop for a failed write, so the
   // "stop" is sent once per recording (writes are fire-and-forget and keep
   // arriving after the first failure). Reset on each new session.
@@ -203,6 +242,12 @@ export function registerRecordingHub(
         cursorTracks.discard(sessionId);
         clickSessions.delete(sessionId);
         stopHookIfIdle();
+        if (error instanceof FinalizeMoveError) {
+          const saved = await offerSaveElsewhere(sessionId);
+          throw new Error(
+            `${saved ? FINALIZE_ELSEWHERE_MARKER : FINALIZE_KEPT_MARKER} ${error.message}`,
+          );
+        }
         throw error;
       }
       // Best effort: a recording is never failed by its cursor track. The tracker
@@ -225,6 +270,11 @@ export function registerRecordingHub(
       return recording;
     },
   );
+  // NIW2-218: Small-file size check before finalize. Takes a session id only, like write.
+  ipcMain.handle(IPC_CHANNELS.recordingStat, (_e, sessionId: string): Promise<number> => {
+    if (typeof sessionId !== "string") throw new Error("recordingStat: invalid session id");
+    return writer.stat(sessionId);
+  });
   ipcMain.handle(IPC_CHANNELS.recordingAbort, (_e, sessionId: string) => {
     cursorTracks.discard(sessionId);
     clickSessions.delete(sessionId);

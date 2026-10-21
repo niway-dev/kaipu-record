@@ -3,17 +3,11 @@ export {
   recordingKindSchema,
   recordingStatusSchema,
   recordingBaseSchema,
-  createRecordingUploadSchema,
-  MAX_UPLOAD_BYTES,
-  isWithinUploadLimit,
   extensionForContentType,
   buildStorageKey,
-  UploadLimitExceededError,
-  RecordingNotUploadedError,
   type RecordingKind,
   type RecordingStatus,
   type RecordingBase,
-  type CreateRecordingUpload,
 } from "./recording";
 
 // Subscription + entitlements (billing, kept apart from auth)
@@ -64,6 +58,9 @@ export {
   UnsupportedContentTypeError,
   TooManyPendingUploadsError,
   UploadsDisabledError,
+  assetCursorSchema,
+  decodeAssetCursor,
+  encodeAssetCursor,
   CloudAccessDeniedError,
   UploadVerificationError,
   AssetConflictError,

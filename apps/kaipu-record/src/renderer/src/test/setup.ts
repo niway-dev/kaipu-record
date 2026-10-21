@@ -44,7 +44,7 @@ vi.mock("@kaipu/i18n", async (importOriginal) => {
   };
 });
 import { DEFAULT_QUALITY } from "@shared/recording-quality";
-import { DEFAULT_SHORTCUTS } from "@shared/types";
+import { defaultShortcutsFor } from "@shared/shortcut-defaults";
 
 // jsdom has no ResizeObserver; components that observe their size (the annotation
 // layer) need a no-op so they can render under test.
@@ -63,12 +63,17 @@ const STUB_SETTINGS = {
   showInDock: true,
   recordingQuality: DEFAULT_QUALITY,
   showBarInRecording: false,
-  screenshotSave: "auto",
   showBrandBadge: false,
   screenshotCopy: "auto",
-  shortcuts: DEFAULT_SHORTCUTS,
+  shortcuts: defaultShortcutsFor("darwin"),
   deviceId: "",
   uploadMode: "local-only",
+  exportQuality: "balanced",
+  showRecordingSavedCard: true,
+  screenshotFrame: {},
+  screenshotMode: "frame",
+  trayHintShown: false,
+  diagnosticsEnabled: true,
 } as const;
 
 // Vitest does not expose `afterEach` as a global (globals: false), so
@@ -81,6 +86,7 @@ afterEach(() => {
 // Minimal `window.electronAPI` stub so renderer code that talks to the preload
 // bridge (e.g. usePermissions) works under jsdom. Individual tests can override.
 window.electronAPI = {
+  platform: "darwin",
   getAppVersion: async () => "1.0.0",
   notifyReady: () => {},
   getUpdateStatus: async () => ({ state: "idle" }),
@@ -100,9 +106,28 @@ window.electronAPI = {
   openSystemSettings: async () => {},
   listLocalRecordings: async () => [],
   renameLocalRecording: async () => {},
+  markOpenedInEditor: async () => {},
+  listTags: async () => [],
+  createTag: async (name) => ({
+    id: `tag-${name}`,
+    name,
+    slug: name.toLowerCase(),
+    color: "rose",
+    count: 0,
+  }),
+  renameTag: async (id, name) => ({ id, name, slug: name.toLowerCase(), color: "rose", count: 0 }),
+  recolorTag: async (id, color) => ({ id, name: id, slug: id, color, count: 0 }),
+  deleteTag: async () => undefined,
+  setItemTags: async (_itemId, tagIds) => [...tagIds],
   backfillLocalRecordingMeta: async () => null,
   deleteLocalRecording: async () => {},
   revealLocalRecording: async () => {},
+  gifSave: async () => {
+    throw new Error("gifSave not stubbed in this test");
+  },
+  startFileDrag: () => {},
+  setExportActive: () => {},
+  onExportCommand: () => () => {},
   getVaultDirectory: async () => ({ path: "/tmp/vault", isCustom: false }),
   chooseVaultDirectory: async () => null,
   resetVaultDirectory: async () => ({ path: "/tmp/vault", isCustom: false }),
@@ -118,6 +143,7 @@ window.electronAPI = {
     throw new Error("not implemented in test stub");
   },
   recordingAbort: async () => {},
+  recordingStat: async () => 0,
   recordingReportTick: () => {},
   recordingStart: () => {},
   recordingStop: () => {},
@@ -150,6 +176,9 @@ window.electronAPI = {
     stopRecording: true,
     bringToFront: true,
     captureScreenshot: true,
+    captureScreen: true,
+    captureFrame: true,
+    captureWindow: true,
     toggleMicrophone: true,
     toggleSystemAudio: true,
     toggleCamera: true,
@@ -157,24 +186,47 @@ window.electronAPI = {
   suspendShortcuts: () => {},
   resumeShortcuts: () => {},
   reportException: () => {},
-  captureScreenshot: async () => null,
+  captureScreenshot: async () => ({ kind: "cancelled" }),
+  screenshotSupportedModes: async () => ["frame", "window", "screen"],
   revealAfterCapture: () => {},
+  captureOverlay: {
+    answer: () => {},
+    hover: () => {},
+    chooseFrameDisplay: () => {},
+    setMode: () => {},
+    onState: () => () => {},
+    onHiddenAckRequest: () => () => {},
+    hiddenAck: () => {},
+  },
+  captureToast: {
+    onShow: () => () => {},
+    ready: () => {},
+    action: () => {},
+    hover: () => {},
+  },
+  onOpenSavedScreenshot: () => () => {},
+  onOpenQuietCapture: () => () => {},
   applyWindowPreset: () => {},
   setTrayMode: () => {},
   setOnboardingWindowMode: () => {},
   copyImageToClipboard: async () => {},
   copyScreenshotById: async () => {},
   readScreenshotBytes: async () => new ArrayBuffer(0),
+  readClipboardImage: async () => null,
+  peekClipboardImage: async () => null,
   saveScreenshot: async () => {
     throw new Error("not implemented in test stub");
   },
+  exportScreenshotFile: async () => null,
   onCaptureScreenshotHotkey: () => () => {},
   saveVideoEditSession: async () => {},
   loadVideoEditSession: async () => null,
   loadCursorTrack: async () => null,
   getAuthStatus: async () => ({ kind: "signed-out" }),
-  signIn: async () => ({ ok: true, status: { kind: "signed-out" } }),
-  signUp: async () => ({ ok: true, status: { kind: "signed-out" } }),
+  beginBrowserSignIn: async () => ({ ok: true }),
+  cancelBrowserSignIn: async () => {},
+  submitSignInCode: async () => ({ ok: true, status: { kind: "signed-out" } }),
+  onBrowserSignInFailed: () => () => {},
   signOut: async () => {},
   resendVerificationEmail: async () => ({ ok: true, sentAt: Date.now() }),
   onAuthStatusChanged: () => () => {},

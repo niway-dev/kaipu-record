@@ -2,6 +2,7 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { Cloud, Folder, Mic, Monitor, MousePointerClick, Video } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
+import { isWindowsHost } from "@renderer/features/shortcuts/host-platform";
 import { Row } from "@kaipu/ui";
 import { Button } from "@kaipu/ui";
 import { Toggle } from "@kaipu/ui";
@@ -23,15 +24,16 @@ import {
   writeDevUpdateScenario,
 } from "@renderer/features/updater/dev-update-simulator";
 import { DEFAULT_QUALITY } from "@shared/recording-quality";
-import type { PermissionKind } from "@shared/types";
+import { DEFAULT_EXPORT_QUALITY, type PermissionKind } from "@shared/types";
 import { useAppSettings } from "./use-app-settings";
 import { LanguageSettings } from "./language-settings";
 import { ThemeSettings } from "./theme-settings";
 import { UpdateSettings } from "./update-settings";
 import { RecordingQualitySettings } from "./recording-quality-settings";
+import { ExportQualitySettings } from "./export-quality-settings";
 import { ScreenshotCopySettings } from "./screenshot-copy-settings";
-import { ScreenshotSaveSettings } from "./screenshot-save-settings";
 import { BrandBadgeSettings } from "./brand-badge-settings";
+import { DiagnosticsSettings } from "./diagnostics-settings";
 import { Section, SettingsPanel } from "./settings-panel";
 import styles from "./settings-page.module.css";
 
@@ -40,9 +42,10 @@ import styles from "./settings-page.module.css";
  *   • General           → AppSettings.locale / theme (+ a pointer to /cloud for the account)
  *   • Permissions       → window.electronAPI permission bridge (+ macOS Accessibility)
  *   • Recording quality → AppSettings.recordingQuality → encoder
+ *                         + AppSettings.exportQuality → export sheet's preselected row
  *   • Recording         → AppSettings.showBarInRecording / showBrandBadge
  *   • Files             → the real on-disk recordings vault
- *   • App               → Dock policy, replay the first-run flow
+ *   • App               → Dock policy, replay the first-run flow, diagnostics opt-out
  *   • Developer         → dev-only overrides (stripped from production)
  * Device pickers are still absent (no backend wiring) — see backlog/settings-roadmap.mdx.
  * Re-add a control only once its IPC + persistence is implemented.
@@ -159,6 +162,23 @@ export function RecordingQualitySettingsPage(): React.JSX.Element {
           onChange={(recordingQuality) => void update({ recordingQuality })}
         />
       </Section>
+      <Section title={t("exportQuality")}>
+        <ExportQualitySettings
+          quality={settings?.exportQuality ?? DEFAULT_EXPORT_QUALITY}
+          onChange={(exportQuality) => void update({ exportQuality })}
+        />
+        <Row
+          label={t("recordingSavedCard")}
+          description={t("recordingSavedCardDescription")}
+          action={
+            <Toggle
+              aria-label={t("recordingSavedCard")}
+              checked={settings?.showRecordingSavedCard ?? true}
+              onChange={(checked) => void update({ showRecordingSavedCard: checked })}
+            />
+          }
+        />
+      </Section>
     </SettingsPanel>
   );
 }
@@ -236,16 +256,20 @@ export function AppSettingsPage(): React.JSX.Element {
   return (
     <SettingsPanel title={t("app")} subtitle={t("appDescription")}>
       <Section title={t("app")}>
-        <Row
-          label={t("showInDock")}
-          description={t("showInDockDescription")}
-          action={
-            <Toggle
-              checked={settings?.showInDock ?? true}
-              onChange={(checked) => void update({ showInDock: checked })}
-            />
-          }
-        />
+        {/* The Dock and its activation policy exist only on macOS; on Windows the
+            toggle would change nothing, so it is not shown at all. */}
+        {!isWindowsHost() && (
+          <Row
+            label={t("showInDock")}
+            description={t("showInDockDescription")}
+            action={
+              <Toggle
+                checked={settings?.showInDock ?? true}
+                onChange={(checked) => void update({ showInDock: checked })}
+              />
+            }
+          />
+        )}
         <Row
           label={t("onboarding")}
           description={t("onboardingDescription")}
@@ -255,6 +279,9 @@ export function AppSettingsPage(): React.JSX.Element {
             </Button>
           }
         />
+      </Section>
+      <Section title={t("privacy")}>
+        <DiagnosticsSettings />
       </Section>
       <Section title={tUpdates("updates")}>
         <UpdateSettings />
@@ -269,9 +296,9 @@ export function ScreenshotsSettingsPage(): React.JSX.Element {
   return (
     <SettingsPanel title={t("screenshots")} subtitle={t("screenshotsDescription")}>
       <Section title={t("screenshots")}>
-        <ScreenshotSaveSettings />
         <ScreenshotCopySettings />
       </Section>
+      <p className={styles.sectionNote}>{t("screenshotQuietNote")}</p>
     </SettingsPanel>
   );
 }

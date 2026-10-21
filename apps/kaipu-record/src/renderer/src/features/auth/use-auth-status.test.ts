@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import type { AuthStatus } from "@shared/types/auth";
+import type { AuthError, AuthStatus } from "@shared/types/auth";
 import { FREE_ENTITLEMENTS } from "@shared/entitlements";
-import type { AuthAttemptResult } from "@shared/types/electron-api";
 import { useAuthStatus } from "./use-auth-status";
 
 afterEach(() => {
@@ -63,85 +62,155 @@ describe("useAuthStatus", () => {
     );
   });
 
-  it("signIn sets pending during the call and surfaces an AuthError on failure", async () => {
-    let resolveSignIn: (result: AuthAttemptResult) => void = () => {};
-    vi.spyOn(window.electronAPI, "signIn").mockReturnValue(
-      new Promise((resolve) => {
-        resolveSignIn = resolve;
-      }),
-    );
+  const SIGNED_IN: AuthStatus = {
+    kind: "signed-in",
+    userId: "user-1",
+    email: "a@b.com",
+    name: "A",
+    entitlements: FREE_ENTITLEMENTS,
+  };
 
-    const { result } = renderHook(() => useAuthStatus());
-    await waitFor(() => expect(result.current.status).toEqual({ kind: "signed-out" }));
-
-    const promise = result.current.signIn({ email: "a@b.com", password: "wrong" });
-    await waitFor(() => expect(result.current.pending).toBe(true));
-    await act(async () => {
-      resolveSignIn({ ok: false, error: { kind: "invalid-credentials" } });
-      await promise;
+  it("walks idle -> waiting -> signed in when the link completes the sign-in", async () => {
+    let broadcast: ((status: AuthStatus) => void) | undefined;
+    vi.spyOn(window.electronAPI, "onAuthStatusChanged").mockImplementation((cb) => {
+      broadcast = cb;
+      return () => {};
     });
+    const begin = vi
+      .spyOn(window.electronAPI, "beginBrowserSignIn")
+      .mockResolvedValue({ ok: true });
+    const { result } = renderHook(() => useAuthStatus());
+    await waitFor(() => expect(result.current.resolved).toBe(true));
+    expect(result.current.phase).toBe("idle");
 
-    expect(result.current.pending).toBe(false);
-    expect(result.current.error).toEqual({ kind: "invalid-credentials" });
+    await act(async () => {
+      await result.current.startBrowserSignIn("sign-in");
+    });
+    expect(begin).toHaveBeenCalledWith("sign-in");
+    expect(result.current.phase).toBe("waiting");
+
+    act(() => broadcast?.(SIGNED_IN));
+    expect(result.current.phase).toBe("idle");
+    expect(result.current.status).toEqual(SIGNED_IN);
   });
 
-  // Regression test: signIn/signUp report a CREDENTIAL failure as a resolved
-  // `{ ok: false, error }`, never a rejection — but the IPC call itself can still reject for a
-  // reason unrelated to credentials (e.g. auth-store.ts's requireMainWindow guard). Without a
-  // catch around `attempt()`, that rejection propagates uncaught: `pending` never resets and the
-  // form is stuck disabled forever with no error shown.
-  it("recovers from the IPC call itself rejecting (not a credential failure)", async () => {
-    vi.spyOn(window.electronAPI, "signIn").mockRejectedValue(
-      new Error("auth IPC calls are only accepted from the main window"),
-    );
-
+  it("starts the sign-up variant through the same call", async () => {
+    const begin = vi
+      .spyOn(window.electronAPI, "beginBrowserSignIn")
+      .mockResolvedValue({ ok: true });
     const { result } = renderHook(() => useAuthStatus());
-    await waitFor(() => expect(result.current.status).toEqual({ kind: "signed-out" }));
-
     await act(async () => {
-      await result.current.signIn({ email: "a@b.com", password: "x" });
+      await result.current.startBrowserSignIn("sign-up");
+    });
+    expect(begin).toHaveBeenCalledWith("sign-up");
+  });
+
+  it("stays idle and surfaces the error when the browser could not be opened", async () => {
+    vi.spyOn(window.electronAPI, "beginBrowserSignIn").mockResolvedValue({
+      ok: false,
+      error: { kind: "not-configured" },
+    });
+    const { result } = renderHook(() => useAuthStatus());
+    await act(async () => {
+      await result.current.startBrowserSignIn("sign-in");
+    });
+    expect(result.current.phase).toBe("idle");
+    expect(result.current.error).toEqual({ kind: "not-configured" });
+  });
+
+  it("cancel returns to idle, clears the error and tells main", async () => {
+    vi.spyOn(window.electronAPI, "beginBrowserSignIn").mockResolvedValue({ ok: true });
+    const cancel = vi.spyOn(window.electronAPI, "cancelBrowserSignIn").mockResolvedValue();
+    const { result } = renderHook(() => useAuthStatus());
+    await act(async () => {
+      await result.current.startBrowserSignIn("sign-in");
     });
 
-    expect(result.current.pending).toBe(false);
+    await act(async () => {
+      await result.current.cancelBrowserSignIn();
+    });
+
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(result.current.phase).toBe("idle");
+    expect(result.current.error).toBeNull();
+  });
+
+  it("a pasted code signs in, and a bad one keeps waiting with its error", async () => {
+    vi.spyOn(window.electronAPI, "beginBrowserSignIn").mockResolvedValue({ ok: true });
+    const submit = vi
+      .spyOn(window.electronAPI, "submitSignInCode")
+      .mockResolvedValueOnce({ ok: false, error: { kind: "invalid-code" } })
+      .mockResolvedValueOnce({ ok: true, status: SIGNED_IN });
+    const { result } = renderHook(() => useAuthStatus());
+    await act(async () => {
+      await result.current.startBrowserSignIn("sign-in");
+    });
+
+    await act(async () => {
+      await result.current.submitCode("bad");
+    });
+    expect(result.current.error).toEqual({ kind: "invalid-code" });
+    expect(result.current.phase).toBe("waiting");
+    expect(result.current.submittingCode).toBe(false);
+
+    await act(async () => {
+      await result.current.submitCode("good");
+    });
+    expect(submit).toHaveBeenLastCalledWith("good");
+    expect(result.current.error).toBeNull();
+    expect(result.current.status).toEqual(SIGNED_IN);
+    expect(result.current.phase).toBe("idle");
+  });
+
+  it("a link that came back but failed ends the wait and shows why", async () => {
+    let failed: ((error: AuthError) => void) | undefined;
+    vi.spyOn(window.electronAPI, "onBrowserSignInFailed").mockImplementation((cb) => {
+      failed = cb;
+      return () => {};
+    });
+    vi.spyOn(window.electronAPI, "beginBrowserSignIn").mockResolvedValue({ ok: true });
+    const { result } = renderHook(() => useAuthStatus());
+    await act(async () => {
+      await result.current.startBrowserSignIn("sign-in");
+    });
+
+    act(() => failed?.({ kind: "state-mismatch" }));
+
+    expect(result.current.phase).toBe("idle");
+    expect(result.current.error).toEqual({ kind: "state-mismatch" });
+  });
+
+  // The IPC call itself can reject (e.g. a call from an unexpected sender), which is not a
+  // sign-in failure; the hook must turn it into an error instead of getting stuck.
+  it("recovers from the IPC call itself rejecting", async () => {
+    vi.spyOn(window.electronAPI, "submitSignInCode").mockRejectedValue(
+      new Error("auth IPC calls are only accepted from the main window"),
+    );
+    const { result } = renderHook(() => useAuthStatus());
+
+    await act(async () => {
+      await result.current.submitCode("x");
+    });
+
+    expect(result.current.submittingCode).toBe(false);
     expect(result.current.error).toEqual({
       kind: "unknown",
       message: "auth IPC calls are only accepted from the main window",
     });
   });
 
-  it("a new attempt clears the previous error", async () => {
-    vi.spyOn(window.electronAPI, "signIn")
-      .mockResolvedValueOnce({ ok: false, error: { kind: "invalid-credentials" } })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: {
-          kind: "signed-in",
-          userId: "user-1",
-          email: "a@b.com",
-          name: "A",
-          entitlements: FREE_ENTITLEMENTS,
-        },
-      });
-
+  it("sign-out clears the status", async () => {
+    vi.spyOn(window.electronAPI, "getAuthStatus").mockResolvedValue(SIGNED_IN);
+    const signOut = vi.spyOn(window.electronAPI, "signOut").mockResolvedValue();
     const { result } = renderHook(() => useAuthStatus());
-    await waitFor(() => expect(result.current.status).toEqual({ kind: "signed-out" }));
+    await waitFor(() => expect(result.current.status.kind).toBe("signed-in"));
 
     await act(async () => {
-      await result.current.signIn({ email: "a@b.com", password: "wrong" });
+      await result.current.signOut();
     });
-    expect(result.current.error).toEqual({ kind: "invalid-credentials" });
 
-    await act(async () => {
-      await result.current.signIn({ email: "a@b.com", password: "right" });
-    });
-    expect(result.current.error).toBeNull();
-    expect(result.current.status).toEqual({
-      kind: "signed-in",
-      userId: "user-1",
-      email: "a@b.com",
-      name: "A",
-      entitlements: FREE_ENTITLEMENTS,
-    });
+    expect(signOut).toHaveBeenCalledOnce();
+    expect(result.current.status).toEqual({ kind: "signed-out" });
   });
 
   it("refreshes an unknown status on explicit retry", async () => {

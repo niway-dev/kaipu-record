@@ -1,28 +1,30 @@
 name: PR checks
 
-# Tier: pull-request gate (ADR 0010, /architecture/decisions/0010-checks-run-in-actions-on-every-pr/,
-# which supersedes ADR 0004's local-first verification).
+# Tier: pull-request gate (ADR 0027, /architecture/decisions/0027-verify-release-candidates-only/,
+# which supersedes ADR 0010's "every pull request is verified in Actions").
 #
-# Every pull request is verified here, not on the author's machine. The repository is
-# public, so Actions minutes cost nothing — the reason ADR 0004 moved verification to the
-# pre-push hook is gone, and a public project needs server-enforced checks anyway: outside
-# contributors do not run our hooks. The pre-push hook keeps only the fast, local checks.
+# Only release candidates are verified here: the pull requests release-please opens
+# (`release-please--branches--*`) and a manual dispatch. `main` is validated as it will be
+# tagged, before the tag exists. Every other pull request, stacked ones included, gets an
+# immediate pass from the gate; the author's pre-push hook (lint, format, cached builds,
+# types) is its check. Merges stay fast; a regression surfaces on the release pull request.
 #
-# 1. `Merge requirements` — the REQUIRED check. It reports exactly once per commit, from
-#    the run that verified that commit. The rule and the evidence are on the job itself.
-# 2. `All checks passed` — `bun run verify` split into parallel parts (lint, build and
-#    type-check, unit tests, the web and API Workers bundle, the docs site build), on Linux.
-#    Job names carry no prefix when they cover the whole workspace, and `<scope> - <what>`
-#    when they cover one part of it (`Desktop - unit tests (1/3)`).
-# 3. `Desktop - E2E tests (macOS)` — Playwright driving the real Electron build on the platform
-#    that ships. It runs on every pull request that changes anything besides documentation:
-#    this suite is the only thing that exercises the export path, the library actions and
-#    settings persistence against a real build (ADR 0006). A docs-only pull request skips
-#    it — `Classify the change` decides, and the gate reads that decision (ADR 0010).
+# 1. `Classify the change` — runs first on every non-draft revision. It outputs `release`
+#    (is this a candidate?), `docs_only` and `e2e`. Everything below waits on it.
+# 2. `Merge requirements` — the REQUIRED check. It reports exactly once per commit: an
+#    immediate pass for an ordinary pull request, or the verdict of the run that verified a
+#    candidate. The rule and the evidence are on the job itself.
+# 3. `All checks passed` — candidates only. `bun run verify` split into parallel parts (lint,
+#    build and type-check, unit tests, the web and API Workers bundle, the docs site build),
+#    on Linux. Job names carry no prefix when they cover the whole workspace, and
+#    `<scope> - <what>` when they cover one part of it (`Desktop - unit tests (1/3)`).
+# 4. `Desktop - E2E tests (macOS)` — candidates that change more than documentation, and a
+#    manual dispatch. Playwright drives the real Electron build on the platform that ships;
+#    it is the only thing that exercises the export path, the library actions and settings
+#    persistence against a real build (ADR 0006).
 #
-# READINESS POLICY — draft means "still accumulating", ready means "verify this". It now
-# applies to every pull request, not just release candidates: open a PR as a draft to push
-# freely without starting runners, and mark it ready when it should be checked.
+# READINESS POLICY — draft means "still accumulating", ready means "verify this". A draft
+# starts no runner at all, and the required check waits until the pull request is ready.
 #
 # release-please opens its release PRs as drafts (`draft-pull-request` in
 # release-please-config.json) and rewrites them on every releasable merge to `main`. While
@@ -42,8 +44,13 @@ name: PR checks
 
 on:
   pull_request:
-    branches:
-      - main
+    # No `branches:` filter, since 2026-10-19: a stacked pull request targets the branch of
+    # the one below it, yet GitHub judges every pull request in a stack against the stack's
+    # base (`main`) and its required check. With `branches: [main]` the upper pull requests
+    # never ran, so "Release candidate verified" stayed "Expected" forever and "Merge stack"
+    # was impossible (PR #347). The check now runs on every pull request and stays attached
+    # to the head commit, so a pull request later retargeted onto `main` keeps its result.
+    #
     # Why each of these, since the default set is not enough and every extra type is a
     # potential wasted run:
     #   ready_for_review  — THE trigger. "This candidate is the one I am publishing."
@@ -59,7 +66,8 @@ on:
     # as passing, so while the real run was still working the PR read "All checks have
     # passed" and could be merged unverified (seen on desktop 0.10.0, PR #195). Without
     # `edited`, the required check stays "Expected" until the run that verifies reports it.
-    # The retargeted stacked PR now needs one push, or close and reopen, to start its run.
+    # A retargeted stacked PR needs no new run: it was verified when it was opened against
+    # the branch below it (see the note on `branches` above).
     types:
       - opened
       - reopened
@@ -86,14 +94,10 @@ jobs:
   lint:
     name: Lint, format and workflow rules
     runs-on: ubuntu-latest
+    needs: [changes]
+    # Release candidates only (ADR 0027): an ordinary pull request starts no runner here.
     if: >-
-      ${{
-        github.event_name == 'workflow_dispatch' ||
-        (
-          github.event.pull_request.state == 'open' &&
-          github.event.pull_request.draft == false
-        )
-      }}
+      ${{ needs.changes.result == 'success' && needs.changes.outputs.release == 'true' }}
     concurrency:
       group: lint-pr-${{ github.event.pull_request.number || github.ref }}
       cancel-in-progress: true
@@ -134,14 +138,10 @@ jobs:
   types:
     name: Build and type-check
     runs-on: ubuntu-latest
+    needs: [changes]
+    # Release candidates only (ADR 0027): an ordinary pull request starts no runner here.
     if: >-
-      ${{
-        github.event_name == 'workflow_dispatch' ||
-        (
-          github.event.pull_request.state == 'open' &&
-          github.event.pull_request.draft == false
-        )
-      }}
+      ${{ needs.changes.result == 'success' && needs.changes.outputs.release == 'true' }}
     concurrency:
       group: types-pr-${{ github.event.pull_request.number || github.ref }}
       cancel-in-progress: true
@@ -188,14 +188,10 @@ jobs:
   tests:
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest
+    needs: [changes]
+    # Release candidates only (ADR 0027): an ordinary pull request starts no runner here.
     if: >-
-      ${{
-        github.event_name == 'workflow_dispatch' ||
-        (
-          github.event.pull_request.state == 'open' &&
-          github.event.pull_request.draft == false
-        )
-      }}
+      ${{ needs.changes.result == 'success' && needs.changes.outputs.release == 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -257,14 +253,10 @@ jobs:
   bundles:
     name: Web and API - Workers bundle
     runs-on: ubuntu-latest
+    needs: [changes]
+    # Release candidates only (ADR 0027): an ordinary pull request starts no runner here.
     if: >-
-      ${{
-        github.event_name == 'workflow_dispatch' ||
-        (
-          github.event.pull_request.state == 'open' &&
-          github.event.pull_request.draft == false
-        )
-      }}
+      ${{ needs.changes.result == 'success' && needs.changes.outputs.release == 'true' }}
     concurrency:
       group: bundles-pr-${{ github.event.pull_request.number || github.ref }}
       cancel-in-progress: true
@@ -314,6 +306,16 @@ jobs:
         working-directory: apps/server-hono
         run: bun run build
 
+      # The exact deploy command of release-api.yml / release-web.yml, with --dry-run:
+      # same script, same pinned wrangler, same --secrets-file. api-v0.5.0 failed on the
+      # tag with "Unknown arguments: secrets-file" because nothing ran it before.
+      - name: Dry-run the Worker deploys
+        run: |
+          echo '{}' > apps/server-hono/worker-secrets.json
+          echo '{}' > apps/web-hono/worker-secrets.json
+          bash scripts/deploy-worker.sh apps/server-hono --dry-run
+          bash scripts/deploy-worker.sh apps/web-hono --dry-run
+
   # The docs site (`apps/documentation`, Astro Starlight) was built nowhere in CI: a broken
   # frontmatter or a page that fails to compile reached `main` unnoticed, and two of every
   # three pull requests change documentation. `astro build` needs no secret and no workspace
@@ -321,14 +323,10 @@ jobs:
   docs:
     name: Documentation - build
     runs-on: ubuntu-latest
+    needs: [changes]
+    # Release candidates only (ADR 0027): an ordinary pull request starts no runner here.
     if: >-
-      ${{
-        github.event_name == 'workflow_dispatch' ||
-        (
-          github.event.pull_request.state == 'open' &&
-          github.event.pull_request.draft == false
-        )
-      }}
+      ${{ needs.changes.result == 'success' && needs.changes.outputs.release == 'true' }}
     concurrency:
       group: docs-pr-${{ github.event.pull_request.number || github.ref }}
       cancel-in-progress: true
@@ -362,17 +360,12 @@ jobs:
   verify:
     name: All checks passed
     runs-on: ubuntu-latest
-    needs: [lint, types, tests, bundles, docs]
+    needs: [changes, lint, types, tests, bundles, docs]
     if: >-
       ${{
         always() &&
-        (
-          github.event_name == 'workflow_dispatch' ||
-          (
-            github.event.pull_request.state == 'open' &&
-            github.event.pull_request.draft == false
-          )
-        ) &&
+        needs.changes.result == 'success' &&
+        needs.changes.outputs.release == 'true' &&
         needs.lint.result != 'cancelled' &&
         needs.types.result != 'cancelled' &&
         needs.tests.result != 'cancelled' &&
@@ -426,6 +419,8 @@ jobs:
       pull-requests: read
     outputs:
       docs_only: ${{ steps.classify.outputs.docs_only }}
+      e2e: ${{ steps.classify.outputs.e2e }}
+      release: ${{ steps.classify.outputs.release }}
     steps:
       - name: List changed files
         if: ${{ github.event_name == 'pull_request' }}
@@ -442,6 +437,8 @@ jobs:
         id: classify
         env:
           FILES: ${{ runner.temp }}/changed-files.txt
+          EVENT: ${{ github.event_name }}
+          HEAD_REF: ${{ github.head_ref }}
         run: |
           set -euo pipefail
           docs_only=false
@@ -451,11 +448,27 @@ jobs:
               docs_only=true
             fi
           fi
-          echo "docs_only=$docs_only" >> "$GITHUB_OUTPUT"
-          echo "docs_only=$docs_only"
 
-  # The desktop end-to-end suite, on every pull request that is not docs-only (ADR 0006,
-  # widened by ADR 0010).
+          # Verification runs only on release candidates (release-please branches) and on a
+          # manual dispatch (ADR 0027). Every other pull request gets an immediate verdict
+          # from the gate. The macOS E2E additionally skips a docs-only candidate.
+          release=false
+          case "$EVENT:$HEAD_REF" in
+            workflow_dispatch:* | pull_request:release-please--branches--*) release=true ;;
+          esac
+          e2e=false
+          if [ "$release" = "true" ] && [ "$docs_only" = "false" ]; then
+            e2e=true
+          fi
+
+          {
+            echo "docs_only=$docs_only"
+            echo "release=$release"
+            echo "e2e=$e2e"
+          } | tee -a "$GITHUB_OUTPUT"
+
+  # The desktop end-to-end suite, on release candidates that are not docs-only (ADR 0006;
+  # ADR 0010 widened it to every pull request; ADR 0027 narrowed it back).
   #
   # A faithful copy of the E2E step in release-desktop.yml, native rebuild included, because
   # a candidate that does not exercise what ships is not a candidate. This is the only place
@@ -488,7 +501,7 @@ jobs:
           )
         ) &&
         needs.changes.result == 'success' &&
-        needs.changes.outputs.docs_only != 'true'
+        needs.changes.outputs.e2e == 'true'
       }}
     concurrency:
       group: e2e-desktop-pr-${{ github.event.pull_request.number || github.ref }}
@@ -516,6 +529,7 @@ jobs:
         working-directory: apps/kaipu-record
         env:
           MAIN_VITE_SERVER_URL: ${{ vars.MAIN_VITE_SERVER_URL }}
+          MAIN_VITE_WEB_URL: ${{ vars.MAIN_VITE_WEB_URL }}
         run: |
           test -n "$MAIN_VITE_SERVER_URL" || {
             echo "::error::MAIN_VITE_SERVER_URL is not set — add it to the testing Environment"
@@ -611,11 +625,16 @@ jobs:
     if: >-
       ${{
         always() && github.event_name == 'pull_request' &&
-        (needs.verify.result == 'success' || needs.verify.result == 'failure') &&
         (
-          needs.e2e_desktop.result == 'success' || needs.e2e_desktop.result == 'failure' ||
-          (needs.e2e_desktop.result == 'skipped' && needs.changes.result == 'success' && needs.changes.outputs.docs_only == 'true') ||
-          needs.changes.result == 'failure'
+          (needs.changes.result == 'success' && needs.changes.outputs.release == 'false') ||
+          needs.changes.result == 'failure' ||
+          (
+            (needs.verify.result == 'success' || needs.verify.result == 'failure') &&
+            (
+              needs.e2e_desktop.result == 'success' || needs.e2e_desktop.result == 'failure' ||
+              (needs.e2e_desktop.result == 'skipped' && needs.changes.result == 'success' && needs.changes.outputs.e2e == 'false')
+            )
+          )
         )
       }}
     steps:
@@ -626,6 +645,8 @@ jobs:
           E2E: ${{ needs.e2e_desktop.result }}
           CHANGES: ${{ needs.changes.result }}
           DOCS_ONLY: ${{ needs.changes.outputs.docs_only }}
+          E2E_REQUIRED: ${{ needs.changes.outputs.e2e }}
+          RELEASE: ${{ needs.changes.outputs.release }}
           SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
@@ -637,6 +658,18 @@ jobs:
           if [ "$IS_DRAFT" = "true" ]; then
             echo "::error title=Pull request is still a draft::Mark it ready for review to verify it. Nothing has been verified while it is a draft."
             exit 1
+          fi
+
+          if [ "$CHANGES" != "success" ]; then
+            echo "::error title=Change detection failed::Could not classify $SHA (changes job: $CHANGES). Re-run the failed jobs."
+            exit 1
+          fi
+
+          # ADR 0027: only release candidates are verified here. The author's pre-push hook
+          # (lint, format, builds, types) is the check for everything else.
+          if [ "$RELEASE" = "false" ]; then
+            echo "Not a release candidate: verification runs on the release-please pull request."
+            exit 0
           fi
 
           case "$VERIFY" in
@@ -655,18 +688,16 @@ jobs:
               ;;
           esac
 
-          if [ "$CHANGES" != "success" ]; then
-            echo "::error title=Change detection failed::Could not tell whether $SHA changes documentation only (changes job: $CHANGES). Re-run the failed jobs."
-            exit 1
-          fi
 
           case "$E2E" in
             success) ;;
             skipped)
-              if [ "$DOCS_ONLY" = "true" ]; then
+              if [ "$E2E_REQUIRED" = "false" ] && [ "$DOCS_ONLY" = "true" ]; then
                 echo "Docs-only change: the desktop end-to-end suite is not required."
+              elif [ "$E2E_REQUIRED" = "false" ]; then
+                echo "Not a release candidate: the desktop end-to-end suite runs on the release-please pull request."
               else
-                echo "::error title=Desktop E2E did not run::Every pull request that changes more than documentation must pass the macOS end-to-end suite. Return the pull request to draft and mark it ready for review again."
+                echo "::error title=Desktop E2E did not run::A release candidate that changes more than documentation must pass the macOS end-to-end suite. Return the pull request to draft and mark it ready for review again."
                 exit 1
               fi
               ;;
@@ -679,7 +710,7 @@ jobs:
               exit 1
               ;;
             *)
-              echo "::error title=Desktop E2E did not run::Every pull request that changes more than documentation must pass the macOS end-to-end suite (e2e_desktop job: $E2E). Return the pull request to draft and mark it ready for review again."
+              echo "::error title=Desktop E2E did not run::A release candidate that changes more than documentation must pass the macOS end-to-end suite (e2e_desktop job: $E2E). Return the pull request to draft and mark it ready for review again."
               exit 1
               ;;
           esac

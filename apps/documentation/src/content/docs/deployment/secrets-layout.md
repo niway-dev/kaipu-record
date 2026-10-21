@@ -5,10 +5,16 @@ description: "How secrets are organised in Infisical: folders by blast radius, t
 
 # Secrets layout — folders and tags
 
-**Status: 🟢 Applied for `dev`.** The six folders exist, root is empty, tags are
-assigned, and the scripts filter by tag. Verified end to end: `server-hono`
-resolves its nine values and `GET /api/auth/get-session` returns 200, while
-`web-hono` and `kaipu-record` receive zero credentials.
+**Status: 🟢 Applied for `dev`.** The six folders exist, tags are assigned, and
+`bun env:pull` filters by tag. Verified end to end: `server-hono` resolves its
+values and `GET /api/auth/get-session` returns 200. `kaipu-record` receives zero
+credentials. `web-hono` currently receives `DATABASE_URL`; see
+[Open items](#open-items).
+
+**Last reconciled: 2026-10-20**, against the key names in the files `bun env:pull`
+generated (one file per tag) and the Zod schemas in `@kaipu/infra-env`. The folder
+column was not re-read from Infisical in that pass; see
+[How to reconcile](#how-to-reconcile).
 
 `prod` is untouched — the release workflows still read GitHub Secrets.
 
@@ -63,30 +69,45 @@ libraries used _by_ the apps that are.
 
 ## Complete map — `dev`
 
-| Secret                     | Folder        | Tags                                 |
-| -------------------------- | ------------- | ------------------------------------ |
-| `CORS_ORIGIN`              | `/public`     | `server-hono`                        |
-| `PUBLIC_WEB_URL`           | `/public`     | `server-hono`                        |
-| `R2_BUCKET`                | `/public`     | `server-hono`                        |
-| `R2_ACCOUNT_ID`            | `/public`     | `server-hono`                        |
-| `VITE_SERVER_URL`          | `/public`     | `web-hono`                           |
-| `VITE_PUBLIC_DOWNLOAD_URL` | `/public`     | `web-hono`                           |
-| `MAIN_VITE_SERVER_URL`     | `/public`     | `kaipu-record`                       |
-| `MAIN_VITE_POSTHOG_HOST`   | `/public`     | `kaipu-record`                       |
-| `MAIN_VITE_POSTHOG_KEY`    | `/public`     | `kaipu-record`                       |
-| `VITE_POSTHOG_HOST`        | `/public`     | `kaipu-record`                       |
-| `VITE_POSTHOG_KEY`         | `/public`     | `kaipu-record`                       |
-| `VITE_POSTHOG_PRODUCT`     | `/public`     | `kaipu-record`                       |
-| `VITE_POSTHOG_SURFACE`     | `/public`     | `kaipu-record`                       |
-| `VITE_VERSION_GATE_URL`    | `/public`     | `kaipu-record`                       |
-| `CONSOLE_API_URL`          | `/public`     | `console`                            |
-| `CONSOLE_ENVIRONMENT`      | `/public`     | `console`                            |
-| `CONSOLE_ADMIN_USER_IDS`   | `/public`     | `console`                            |
-| `DATABASE_URL`             | `/database`   | `server-hono` `console` `db-scripts` |
-| `R2_ACCESS_KEY_ID`         | `/cloudflare` | `server-hono`                        |
-| `R2_SECRET_ACCESS_KEY`     | `/cloudflare` | `server-hono`                        |
-| `BETTER_AUTH_SECRET`       | `/auth`       | `server-hono`                        |
-| `RESEND_API_KEY`           | `/email`      | `server-hono`                        |
+| Secret                     | Folder        | Tags                                            |
+| -------------------------- | ------------- | ----------------------------------------------- |
+| `CORS_ORIGIN`              | `/public`     | `server-hono`                                   |
+| `PUBLIC_WEB_URL`           | `/public`     | `server-hono`                                   |
+| `BETTER_AUTH_URL`          | `/public`     | `server-hono`                                   |
+| `GOOGLE_CLIENT_ID`         | `/public`     | `server-hono`                                   |
+| `R2_BUCKET`                | `/public`     | `server-hono`                                   |
+| `R2_ACCOUNT_ID`            | `/public`     | `server-hono`                                   |
+| `VITE_SERVER_URL`          | `/public`     | `web-hono`                                      |
+| `VITE_PUBLIC_DOWNLOAD_URL` | `/public`     | `web-hono`                                      |
+| `MAIN_VITE_SERVER_URL`     | `/public`     | `kaipu-record`                                  |
+| `MAIN_VITE_WEB_URL`        | `/public`     | `kaipu-record`                                  |
+| `MAIN_VITE_POSTHOG_HOST`   | `/public`     | `kaipu-record`                                  |
+| `MAIN_VITE_POSTHOG_KEY`    | `/public`     | `kaipu-record`                                  |
+| `VITE_POSTHOG_HOST`        | `/public`     | `kaipu-record`                                  |
+| `VITE_POSTHOG_KEY`         | `/public`     | `kaipu-record`                                  |
+| `VITE_POSTHOG_PRODUCT`     | `/public`     | `kaipu-record`                                  |
+| `VITE_POSTHOG_SURFACE`     | `/public`     | `kaipu-record`                                  |
+| `VITE_VERSION_GATE_URL`    | `/public`     | `kaipu-record`                                  |
+| `CONSOLE_API_URL`          | `/public`     | `console`                                       |
+| `CONSOLE_ENVIRONMENT`      | `/public`     | `console`                                       |
+| `CONSOLE_ADMIN_USER_IDS`   | `/public`     | `console`                                       |
+| `DATABASE_URL`             | `/database`   | `server-hono` `console` `db-scripts` `web-hono` |
+| `R2_ACCESS_KEY_ID`         | `/cloudflare` | `server-hono`                                   |
+| `R2_SECRET_ACCESS_KEY`     | `/cloudflare` | `server-hono`                                   |
+| `BETTER_AUTH_SECRET`       | `/auth`       | `server-hono`                                   |
+| `GOOGLE_CLIENT_SECRET`     | `/auth`       | `server-hono`                                   |
+| `RESEND_API_KEY`           | `/email`      | `server-hono`                                   |
+
+`MAIN_VITE_WEB_URL` is listed under `/public` because it is an origin, not a
+credential; its folder has not been confirmed in Infisical.
+
+### Read by code, deliberately not in Infisical
+
+| Variable                       | Read by                       | Why it stays out                                                |
+| ------------------------------ | ----------------------------- | --------------------------------------------------------------- |
+| `AUTH_EMAIL_FROM`              | `server-hono` (`email.ts`)    | Optional; defaults to the Niway sender                          |
+| `KAIPU_DISABLE_SCREEN_CAPTURE` | `kaipu-record` (main process) | Test-only switch, set by the E2E launcher                       |
+| `VITE_PUBLIC_WEB_URL`          | `kaipu-record` (`auth-page`)  | Optional; defaults to `https://kaipu.app`. Undecided, see below |
 
 ## Complete map — `prod`
 
@@ -109,6 +130,13 @@ GitHub, from GitHub, so routing it through an external service adds a bootstrap
 dependency and no protection.
 
 ## Decisions worth knowing
+
+**Google OAuth values (NIW2-215).** `GOOGLE_CLIENT_ID` is public by design (it appears
+in every authorize URL), so it sits in `/public`; `GOOGLE_CLIENT_SECRET` can act as the
+OAuth client and lives in `/auth`. `BETTER_AUTH_URL` is the web origin, not a secret.
+In `prod` they are still GitHub `production` Environment values (`GOOGLE_CLIENT_SECRET`
+as a secret, the other two as variables). Setup steps:
+[Google OAuth runbook](/deployment/google-oauth/).
 
 **`R2_BUCKET` and `R2_ACCOUNT_ID` live in `/public`.** Neither is a credential —
 a bucket name and an account identifier, both already committed in plaintext in
@@ -141,21 +169,50 @@ The default becomes safe rather than convenient.
 
 ## How scripts consume it
 
-Filter by **tag**, not by path — an app's secrets deliberately span folders:
-
-```bash
-infisical run --env=dev --recursive --tags kaipu-record -- electron-vite dev
-```
-
-`scripts/with-env.sh` wraps this. It requires an explicit filter: there is no
-"fetch everything" mode, because a desktop build has no business holding a
-database credential.
+Filter by **tag**, not by path — an app's secrets deliberately span folders.
+Locally, `bun env:pull` (`scripts/env-pull.sh`) writes one `.env` per tag, and
+`dev` and the database scripts read those files without contacting Infisical.
+There is no "fetch everything" mode, because a desktop build has no business
+holding a database credential.
 
 **One asymmetry to remember:** `infisical run` supports `--recursive`, so a tag
 filter reaches every folder. **`infisical export` does not** — it reads one
-`--path` at a time. Anything that needs a generated file (a Cloudflare Worker,
-because `wrangler` populates bindings from a file rather than the parent
-process) must list its paths explicitly and concatenate.
+`--path` at a time, so `env-pull.sh` lists the folders explicitly and
+concatenates. `scripts/with-env.sh` (live `infisical run --recursive`) remains
+only for the signed production desktop build.
+
+## Open items
+
+Found in the 2026-10-20 reconciliation; none blocks `bun run dev`.
+
+1. **`web-hono` holds a database credential it does not read.** `webServerEnvSchema`
+   still requires `DATABASE_URL`, and the schema's own comment says no server function
+   reads it any more. Removing the `web-hono` tag alone would make the schema reject
+   start-up, so the fix is to drop the key from the schema and from the web Worker's
+   declared vars, then remove the tag.
+2. **`VITE_PUBLIC_WEB_URL` has no home.** The desktop sign-in page reads it for its
+   legal links, so in `dev` those links point to production. Either add it to
+   `/public` tagged `kaipu-record`, or drop it and keep the default.
+3. **Root may not be empty.** One listing of `/` returned the nine `kaipu-record`
+   key names during a run with intermittent Infisical errors, so it is not
+   conclusive. `env-pull.sh` never reads root, so copies there are dead; check in
+   the Infisical UI and delete any.
+4. **`kaipu-record` is unchecked.** It has no Zod schema, so the inventory test
+   planned in [ADR 0026](/architecture/decisions/0026-zod-is-the-env-schema-no-varlock/)
+   cannot catch a desktop variable missing from this page, which is how
+   `MAIN_VITE_WEB_URL` went undocumented.
+
+## How to reconcile
+
+Never print values: an agent transcript or CI log is a leak. Key names are enough.
+
+1. `bun env:pull`, then list the names per consumer:
+   `cut -d= -f1 apps/server-hono/.env` (and the other four files). Each file is
+   exactly one tag's view, so this verifies the **Tags** column.
+2. Compare against the Zod schemas in `packages/infra-env/src/` and against
+   `import.meta.env` / `process.env` reads in apps without a schema.
+3. Verify the **Folder** column in the Infisical UI. `infisical secrets` prints
+   values and the repository's secret guard blocks it.
 
 ## Operational notes
 

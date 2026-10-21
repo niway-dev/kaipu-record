@@ -1,8 +1,8 @@
-import { join } from "node:path";
+import { extname, join } from "node:path";
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell } from "electron";
 import { IPC_CHANNELS } from "@shared/types";
-import type { RecordingBackfillMeta, VaultDirectory } from "@shared/types";
+import type { GifSaveMeta, RecordingBackfillMeta, TagSummary, VaultDirectory } from "@shared/types";
 import { createMainTranslator } from "@kaipu/i18n/main";
 import type { AuthHandle } from "../infrastructure/auth-store";
 import { getAppSettings } from "../infrastructure/settings-store";
@@ -10,11 +10,17 @@ import { CatalogCache } from "../cloud/catalog-cache";
 import { fetchCloudCatalog } from "../cloud/catalog-client";
 import { LibraryService } from "./library-service";
 import { LibraryVault } from "./library-vault";
+import { loadDeviceId, VaultTagRepository, type TagRepository } from "./tag-repository";
+import { isTagColor } from "@kaipu/domain/constants";
+import { saveGif } from "./gif-save";
+import { createDragCopy } from "./drag-copies";
+import { friendlyDragName } from "./drag-name";
+import { timestampId } from "../recording/recording-writer";
 import { resetVaultDirectory, setVaultDirectory, vaultDirectory } from "./vault-location";
 import { deleteVideoEditSession, registerVideoEditSessionHandlers } from "./video-edit-session";
 
-/** Tell every window the vault folder changed so open pages re-list. */
-function broadcastLibraryChanged(): void {
+/** Tell every window the library changed (a new item, a new vault folder) so open pages re-list. */
+export function broadcastLibraryChanged(): void {
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) window.webContents.send(IPC_CHANNELS.libraryChanged);
   }
@@ -86,6 +92,42 @@ export function registerLibraryVaultHandlers(deps: { auth: AuthHandle; serverUrl
   ipcMain.handle(IPC_CHANNELS.renameLocalRecording, (_event, id: string, title: string) =>
     currentVault().rename(id, title),
   );
+  // No broadcast: the stamp only reorders the Editor home, which re-lists on mount.
+  ipcMain.handle(IPC_CHANNELS.markOpenedInEditor, (_event, id: string) =>
+    currentVault().markOpenedInEditor(id),
+  );
+  // Tags (ADR 0020). Every change re-lists the Library in every window, so cards,
+  // filters and the drawer never disagree about a tag's name or color.
+  let deviceId = "unknown";
+  void loadDeviceId(app.getPath("userData")).then((id) => (deviceId = id));
+  const tags: TagRepository = new VaultTagRepository(currentVault, () => deviceId);
+  const summary = async (id: string): Promise<TagSummary> =>
+    (await tags.list()).find((t) => t.id === id)!;
+  const changed = async <T>(work: Promise<T>): Promise<T> => {
+    const result = await work;
+    broadcastLibraryChanged();
+    return result;
+  };
+  ipcMain.handle(IPC_CHANNELS.listTags, () => tags.list());
+  ipcMain.handle(IPC_CHANNELS.createTag, async (_event, name: unknown, color: unknown) =>
+    summary((await changed(tags.create(String(name), isTagColor(color) ? color : undefined))).id),
+  );
+  ipcMain.handle(IPC_CHANNELS.renameTag, async (_event, id: unknown, name: unknown) =>
+    summary((await changed(tags.rename(String(id), String(name)))).id),
+  );
+  ipcMain.handle(IPC_CHANNELS.recolorTag, async (_event, id: unknown, color: unknown) => {
+    if (!isTagColor(color)) throw new Error("tags: not a palette color");
+    return summary((await changed(tags.recolor(String(id), color))).id);
+  });
+  ipcMain.handle(IPC_CHANNELS.deleteTag, (_event, id: unknown) => changed(tags.remove(String(id))));
+  ipcMain.handle(IPC_CHANNELS.setItemTags, (_event, itemId: unknown, tagIds: unknown) =>
+    changed(
+      tags.assign(
+        String(itemId),
+        Array.isArray(tagIds) ? tagIds.filter((t): t is string => typeof t === "string") : [],
+      ),
+    ),
+  );
   ipcMain.handle(
     IPC_CHANNELS.backfillLocalRecordingMeta,
     (_event, id: string, meta: RecordingBackfillMeta) => currentVault().backfill(id, meta),
@@ -98,6 +140,36 @@ export function registerLibraryVaultHandlers(deps: { auth: AuthHandle; serverUrl
   ipcMain.handle(IPC_CHANNELS.revealLocalRecording, async (_event, id: string) =>
     shell.showItemInFolder(await currentVault().filePath(id)),
   );
+  // NIW2-217: GIF export. Bytes are validated (GIF89a, ≤ 64 MB) and the path is chosen here.
+  ipcMain.handle(IPC_CHANNELS.gifSave, async (_event, bytes: ArrayBuffer, meta: GifSaveMeta) => {
+    const recording = await saveGif(
+      { vaultDir: () => vaultDirectory().path, newId: () => timestampId(Date.now()) },
+      bytes,
+      meta,
+    );
+    broadcastLibraryChanged();
+    return recording;
+  });
+  // NIW2-217: drag a vault file out (e.g. a GIF into Slack or a GitHub comment). The id is
+  // resolved inside the vault — the renderer never names a path.
+  // NIW2-218: when the renderer sends the item's title, the dragged file carries it instead of
+  // the vault id. The vault keeps its id name; the friendly file is a hard link (no extra
+  // space) in a temp folder, cleaned on the next drag and on quit.
+  ipcMain.on(IPC_CHANNELS.startFileDrag, (event, id: string, name?: unknown) => {
+    void (async () => {
+      if (typeof id !== "string" || /[\\/]|\.\./.test(id)) return;
+      const vault = currentVault();
+      const file = await vault.filePath(id);
+      // macOS refuses a drag without an icon; the poster is there for videos and GIFs.
+      const icon = nativeImage.createFromPath(vault.thumbnailPath(id));
+      if (icon.isEmpty()) return;
+      const dragFile =
+        typeof name === "string" && name.length > 0
+          ? await createDragCopy(file, friendlyDragName(name, extname(file)))
+          : file;
+      event.sender.startDrag({ file: dragFile, icon: icon.resize({ width: 96 }) });
+    })().catch((error) => console.error("file drag failed", error));
+  });
 
   ipcMain.handle(IPC_CHANNELS.getVaultDirectory, (): VaultDirectory => vaultDirectory());
   // shell.openPath resolves with an error string ("" on success) rather than rejecting.

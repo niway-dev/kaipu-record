@@ -17,6 +17,10 @@ export type CloudEvent =
   | { name: "cloud.confirm.ok"; userId: string; revisionId: string; sizeBytes: number }
   | { name: "cloud.confirm.failed"; userId: string; revisionId: string; reason: string }
   | { name: "cloud.delete.ok"; userId: string; assetId: string }
+  /** NIW2-323: cancel recorded but not released, because the upload ticket can still write. */
+  | { name: "cloud.cancel.deferred"; userId: string; revisionId: string; settlesAt: string }
+  /** NIW2-323: asset hidden, object delete postponed until the upload ticket can no longer write. */
+  | { name: "cloud.delete.deferred"; userId: string; assetId: string; settlesAt: string }
   | { name: "cloud.delete.failed"; userId: string; assetId: string; error: string }
   | {
       name: "cloud.sweep";
@@ -28,8 +32,15 @@ export type CloudEvent =
       purgeFailed: number;
       reconciled: number;
     }
-  | { name: "cloud.sweep.failed"; job: string; error: string };
+  | { name: "cloud.sweep.failed"; job: string; error: string }
+  /** NIW2-323: `sweepOrphanObjects` run summary; emitted by the scheduled handler (NIW2-328). */
+  | { name: "cloud.sweep.orphans"; accounts: number; deleted: number; skipped: number };
 
-export function logEvent(event: CloudEvent): void {
+/** Sign-in method linking (NIW2-219). */
+export type AuthEvent =
+  | { name: "auth.link.unverified_credential_dropped"; userId: string }
+  | { name: "auth.link.email_verified_by_google"; userId: string };
+
+export function logEvent(event: CloudEvent | AuthEvent): void {
   console.log(JSON.stringify({ ts: new Date().toISOString(), ...event }));
 }

@@ -1,0 +1,94 @@
+import {
+  DESKTOP_AUTH_CALLBACK_PATH,
+  DESKTOP_AUTH_CLIENT_ID,
+  DESKTOP_AUTH_SCHEME,
+} from "@kaipu/domain/constants";
+
+/**
+ * The three values the desktop app puts on `/auth/desktop` (NIW2-471). They travel unchanged
+ * through every page of the flow and reach the API as query parameters, where the electron plugin
+ * binds the authorization code to them.
+ */
+export interface DesktopAuthQuery {
+  client_id: string;
+  state: string;
+  code_challenge: string;
+}
+
+// S256 challenges are always 43 base64url characters; the desktop's state is 16 alphanumerics.
+// The bound is loose for state and strict for the challenge: a malformed challenge can never be
+// satisfied, so refusing it here gives the visitor a clearer message than the app could.
+const STATE_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+const CHALLENGE_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+
+/** The desktop query from a route's search params, or null when any value is missing or malformed. */
+export function parseDesktopAuthQuery(search: Record<string, unknown>): DesktopAuthQuery | null {
+  const { client_id, state, code_challenge } = search;
+  if (client_id !== DESKTOP_AUTH_CLIENT_ID) return null;
+  if (typeof state !== "string" || !STATE_PATTERN.test(state)) return null;
+  if (typeof code_challenge !== "string" || !CHALLENGE_PATTERN.test(code_challenge)) return null;
+  return { client_id, state, code_challenge };
+}
+
+/** Which form `/auth/desktop` opens with: the app's "Create account" sends `intent=sign-up`. */
+export type DesktopAuthIntent = "sign-up";
+
+export function parseDesktopAuthIntent(value: unknown): DesktopAuthIntent | undefined {
+  return value === "sign-up" ? value : undefined;
+}
+
+/** `?client_id=…&state=…&code_challenge=…`, for links and callback URLs. */
+export function desktopAuthSearch(query: DesktopAuthQuery): string {
+  const params = new URLSearchParams({
+    client_id: query.client_id,
+    state: query.state,
+    code_challenge: query.code_challenge,
+  });
+  return `?${params.toString()}`;
+}
+
+/**
+ * Where every successful desktop sign-in lands: the page that hands the code to the app.
+ * `checkEmail` is set after an email sign-up, so that page also says a verification link is on its
+ * way — without holding back the return to the app, which the sign-up has already earned.
+ */
+export function desktopDonePath(
+  query: DesktopAuthQuery,
+  options: { checkEmail?: boolean } = {},
+): string {
+  const tail = options.checkEmail ? `&${CHECK_EMAIL_PARAM}=1` : "";
+  return `/auth/desktop/done${desktopAuthSearch(query)}${tail}`;
+}
+
+/** The done page's "a verification link was sent" flag. */
+export const CHECK_EMAIL_PARAM = "check_email";
+
+export function parseCheckEmail(value: unknown): boolean {
+  return value === 1 || value === "1" || value === true;
+}
+
+/**
+ * The two tabs of the sign-in page, as links that keep every query parameter the visitor came
+ * with: `redirect` on the web pages, the app's `client_id`, `state` and `code_challenge` on the
+ * desktop page (whose sign-up tab is the same route with `intent=sign-up`).
+ */
+export function authTabHrefs(options: { redirect?: string; desktop?: DesktopAuthQuery | null }): {
+  signIn: string;
+  signUp: string;
+} {
+  if (options.desktop) {
+    const base = `/auth/desktop${desktopAuthSearch(options.desktop)}`;
+    return { signIn: base, signUp: `${base}&intent=sign-up` };
+  }
+  const tail = options.redirect ? `?${new URLSearchParams({ redirect: options.redirect })}` : "";
+  return { signIn: `/auth/login${tail}`, signUp: `/auth/signup${tail}` };
+}
+
+/**
+ * The deep link that opens the app, in the exact form `ensureElectronRedirect` builds
+ * (`<scheme>:/<callbackPath>#token=<value>`), so "Open Kaipu again" behaves like the first try.
+ * `code` is the value of the `better-auth.<client id>` cookie, not the raw 32-character code.
+ */
+export function desktopCallbackUrl(code: string): string {
+  return `${DESKTOP_AUTH_SCHEME}:/${DESKTOP_AUTH_CALLBACK_PATH}#token=${code}`;
+}

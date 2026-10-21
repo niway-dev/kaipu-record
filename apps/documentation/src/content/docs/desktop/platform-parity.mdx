@@ -1,0 +1,60 @@
+---
+title: Platform parity (macOS and Windows)
+description: One row per desktop capability — what macOS and Windows each run, whether the code is shared or branched, and what has actually been verified on each platform.
+---
+
+**Every PR that adds or changes a `process.platform` branch (or a renderer
+`isWindowsHost()` / `formatAccelerator` platform split) updates this table in the same PR.**
+
+The table says what the code does on each platform and how far that has been checked. It is
+not a roadmap: work that is planned but not started is `pending`, and nothing moves to a
+better status without the verification named in the last column.
+
+## Status legend
+
+| Status       | Meaning                                                                                                  |
+| ------------ | -------------------------------------------------------------------------------------------------------- |
+| `1:1`        | Same code on both platforms. No `process.platform` branch; what macOS verifies covers Windows too.       |
+| `own path`   | A platform branch exists **and** the Windows path has been run on Windows hardware.                      |
+| `unverified` | A platform branch exists, but the Windows path has never been run on Windows hardware (only unit tests). |
+| `pending`    | Not done on Windows yet.                                                                                 |
+
+"Verified by" names the evidence. **QA-10** is decision 10 of the
+[Windows release design](/specs/2026-10-15-windows-release-design/) — the manual QA pass on
+real Windows hardware, recorded on the [Windows beta](/backlog/windows-beta/) page. Until that
+pass happens, no row is `own path`.
+
+## Capabilities (checked 2026-10-18, `feat/windows-release`)
+
+| Capability                                 | macOS                                                                                      | Windows                                                                                                                            | Status       | Verified by                                                                                             |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------- |
+| Recording (screen + loopback system audio) | Desktop `getUserMedia` with system audio in the same call; video-only fallback (dev build) | Same call (`recorder-engine.ts`); loopback audio records                                                                           | `1:1`        | macOS: E2E + packaged app (owner, 2026-10-06). Windows: owner `build:win` run; QA-10 mic + system audio |
+| Camera bubble                              | Floating window, `screen-saver` level                                                      | Same window code                                                                                                                   | `1:1`        | QA-10 camera bubble                                                                                     |
+| Control bar + content protection           | `setContentProtection(!showBarInRecording)`, `screen-saver` level                          | Same code; Electron's Windows exclusion relies on `WDA_EXCLUDEFROMCAPTURE` (Windows 10 2004+, per Electron docs, not checked here) | `1:1`        | QA-10 (not listed there yet: confirm the bar is absent from a recording)                                |
+| Click hook (auto-zoom on clicks)           | `uiohook-napi`; needs Accessibility permission                                             | `uiohook-napi`; no permission (`click-hook.ts` treats win32 as available)                                                          | `unverified` | QA-10 auto-zoom on clicks; `rebuild:native` on the `build-win` runner                                   |
+| Video editor and export                    | Renderer editor, WebCodecs export (platform encoder underneath)                            | Same renderer code                                                                                                                 | `1:1`        | macOS: E2E `export`, `mute-export`, `playback`. Windows: QA-10 export                                   |
+| Library and vault                          | Vault folder on disk, `kaipu-media://` protocol                                            | Same code                                                                                                                          | `1:1`        | macOS: E2E `library`, `library-actions`, `heal-orphan`. Windows: QA-10 library                          |
+| Tags                                       | Renderer + vault sidecars                                                                  | Same code                                                                                                                          | `1:1`        | macOS: E2E `library-actions`                                                                            |
+| Image editor and PDF                       | Renderer editor; PDF export with `pdf-lib`                                                 | Same code                                                                                                                          | `1:1`        | macOS: E2E `screenshot-editor`                                                                          |
+| Screenshot: Screen and Frame               | `MacProvider`: `screencapture -R` / `-l`                                                   | `WindowsProvider`: `desktopCapturer` with DPI-scaled crops                                                                         | `unverified` | Unit tests only. Windows beta checklist: "QA all three modes"                                           |
+| Screenshot: Window mode                    | Disabled (`WINDOW_MODE_ENABLED = false`); JXA window lister behind it                      | Disabled by the same flag; PowerShell window lister behind it                                                                      | `pending`    | Flag off on both. Lister unit tests only                                                                |
+| Capture overlay                            | `type: "panel"`, `screen-saver` level, joins all Spaces                                    | Plain transparent window, `screen-saver` level (above the taskbar); 0.01-alpha sheet so it still receives clicks                   | `unverified` | Unit tests (`capture-overlay-windows.test.ts`, overlay CSS test)                                        |
+| Capture toast                              | `type: "panel"`, `setContentProtection(true)`                                              | Plain window, `setContentProtection(true)` (Windows 10 2004+ for the exclusion, see control bar)                                   | `unverified` | Unit tests (`capture-toast-window.test.ts`)                                                             |
+| Quiet capture + clipboard                  | Copy to clipboard, last-quiet-capture hand-off                                             | Same code                                                                                                                          | `1:1`        | Unit tests; QA-10 does not list it yet                                                                  |
+| Shortcut defaults and labels               | `Command+Control+<key>`, glyph labels (`⌃⌘C`)                                              | `Control+Alt+<key>`, text labels (`Ctrl+Alt+C`); AltGr caveat on some layouts                                                      | `unverified` | Unit tests; E2E `shortcuts` (macOS). Windows beta checklist: per-platform shortcut defaults             |
+| Platform copy and key glyphs               | `⌘`/`⇧`/`⌫` glyphs, "menu bar", "Finder", "Dock"                                           | `Ctrl+…`, `Del`, "system tray", "File Explorer"; the Dock toggle is hidden (`host-platform.ts`)                                    | `unverified` | Unit tests (editor toolbar, onboarding, settings, overlay keys)                                         |
+| Tray icon                                  | Template PNGs                                                                              | Light-glyph `.ico` (`tray-icon.ts`)                                                                                                | `unverified` | Windows beta checklist: dark and light taskbar                                                          |
+| Close-to-tray, `Ctrl+Q`, single instance   | Close closes the window; the app keeps running in the menu bar; `Cmd+Q` quits              | Close hides to the tray with a one-time notification; `Ctrl+Q` with focus; second launch focuses the running copy                  | `unverified` | Unit tests (`window-close-policy`); Windows beta checklist                                              |
+| Permission deep links                      | `x-apple.systempreferences:` panes (screen, mic, camera, Accessibility)                    | `ms-settings:privacy-microphone` / `privacy-webcam`; screen needs no permission                                                    | `unverified` | Unit tests (`permissions`)                                                                              |
+| Launch at login                            | `app.setLoginItemSettings`                                                                 | Same call (`settings-store.ts` allows darwin and win32)                                                                            | `1:1`        | macOS: manual. Windows: not in QA-10 yet                                                                |
+| Dock policy ("Show in Dock")               | `app.setActivationPolicy` regular / accessory                                              | No Dock: the setter returns early and the Settings toggle is hidden                                                                | `unverified` | Unit test (settings layout)                                                                             |
+| Auto-update feed                           | `latest-mac.yml` on the shared `updates/` prefix                                           | `latest.yml` + NSIS `-setup.exe` + blockmap on the same prefix                                                                     | `unverified` | QA-10 update beta → beta+1                                                                              |
+| Signing and notarization                   | Developer ID signing, hardened runtime, notarized                                          | Unsigned; `scripts/sign-windows.cjs` hook is a no-op until a vendor and secrets exist                                              | `pending`    | Owner decision (design task 8)                                                                          |
+| E2E lane                                   | Playwright on `macos-latest` (`pr-checks.yml` `e2e_desktop`), release gate                 | None (decision 2 of the design: no Windows lane until there is a reason to pay for one)                                            | `pending`    | —                                                                                                       |
+
+## When a row changes
+
+- A new `process.platform` branch: add or edit the row, status `unverified`.
+- Windows hardware QA passes for a branched row: move it to `own path` and name the QA run
+  (date, build) in "Verified by".
+- A branch is removed and the code becomes shared: `1:1`.

@@ -8,10 +8,13 @@ import { createMainTranslator } from "@kaipu/i18n/main";
 import { createTray, rebuildTrayMenu, setTrayState, type TrayState } from "./tray";
 import { registerRecordingSourceHandlers } from "./recording-sources";
 import { registerPermissionHandlers } from "./permissions";
-import { registerLibraryVaultHandlers } from "./library";
+import { currentVault, registerLibraryVaultHandlers } from "./library";
+import { cleanupDragCopies } from "./library/drag-copies";
 import { registerCloudStorageHandlers } from "./cloud";
 import { registerMediaProtocol, registerMediaScheme } from "./media-protocol";
 import { registerRecordingHub, type RecordingHubHandle } from "./recording/recording-hub";
+import { recoverStrandedRecordings } from "./recording/stranded-recordings";
+import { vaultDirectory } from "./library/vault-location";
 import {
   initAutoUpdater,
   getUpdateStatus,
@@ -24,17 +27,41 @@ import {
   getAppSettings,
   applyDockPolicy,
   onSettingsChanged,
+  updateAppSettings,
 } from "./infrastructure/settings-store";
 import { registerAuth } from "./infrastructure/auth-store";
+import { createBrowserSignInClient } from "./services/browser-sign-in";
+import { createDeepLinkRouter } from "./deep-link-router";
+import { DEEP_LINK_SCHEME } from "./services/deep-link";
 import {
   registerGlobalShortcuts,
   applyGlobalShortcuts,
   getShortcutStatus,
   unregisterGlobalShortcuts,
 } from "./shortcuts/global-shortcuts";
-import { initMainAnalytics, shutdownMainAnalytics } from "./services/analytics.service";
+import {
+  initMainAnalytics,
+  setMainAnalyticsEnabled,
+  shutdownMainAnalytics,
+} from "./services/analytics.service";
 import { registerAnalyticsIpc } from "./services/analytics-ipc";
-import { registerScreenshotHandlers } from "./screenshots/screenshot-ipc";
+import { isCaptureMode, type CaptureRequestPayload } from "@shared/types/screenshot-capture";
+import { registerScreenshotHandlers, type ScreenshotHandlers } from "./screenshots/screenshot-ipc";
+import { resolveShortcutCapture, type CaptureShortcut } from "./screenshots/shortcut-capture";
+import {
+  createCaptureToastWindow,
+  saveFromToast,
+  type CaptureToastWindow,
+} from "./screenshots/capture-toast-window";
+import { createCaptureWindowHooks } from "./screenshots/capture-window-hooks";
+import {
+  peekLastQuietCapture,
+  releaseLastQuietCapture,
+  takeLastQuietCapture,
+  type QuietCapture,
+} from "./screenshots/last-quiet-capture";
+import { saveScreenshotToVault } from "./screenshots/screenshot-save";
+import { screenshotTitle } from "@shared/screenshot-title";
 import {
   boundsAroundCenter,
   fitPresetToDisplay,
@@ -42,6 +69,13 @@ import {
   WINDOW_PRESETS,
   type WindowPresetName,
 } from "@shared/window-size";
+import {
+  handleMainWindowClose,
+  isQuitShortcut,
+  secondInstanceAction,
+  shouldQuitOnAllWindowsClosed,
+  shouldShowTrayHint,
+} from "./window-close-policy";
 
 let mainWindow: BrowserWindow | null = null;
 let capturePanel: CapturePanelWindow | null = null;
@@ -57,12 +91,21 @@ let closingWithRecording = false;
  *  guard — lets the second `before-quit` (after the recording finalizes) pass
  *  straight through instead of prompting again. */
 let quittingWithRecording = false;
+/** Mirrors the renderer's `exportActive` message: true while a video export is writing. */
+let exportActive = false;
+/** True once the user confirmed "Cancel export and close" — lets the second `close` pass. */
+let closingWithExport = false;
+/** Same, for "Cancel export and quit" on `before-quit`. */
+let quittingWithExport = false;
+/** True once `before-quit` passed every guard: the app is really quitting, so the
+ *  main window's `close` must close it rather than hide it to the tray (Windows). */
+let isQuitting = false;
 /** Set true when the renderer sends `appReady` (its IPC listeners are up), reset
  *  to false whenever a new main window is created. */
 let rendererReady = false;
 /** Window-triggered actions (start/capture/source-picker) that arrived before the
  *  renderer was ready, flushed on `appReady` so they aren't dropped. */
-let pendingRendererSends: string[] = [];
+let pendingRendererSends: Array<{ channel: string; payload?: unknown }> = [];
 
 /**
  * Send a main → renderer channel, or queue it until the renderer signals ready.
@@ -70,11 +113,60 @@ let pendingRendererSends: string[] = [];
  * the app shell's React effects register the matching IPC listeners, so the
  * message was silently dropped (the shortcut "did nothing" the first time).
  */
-function sendToRenderer(channel: string): void {
+function sendToRenderer(channel: string, payload?: unknown): void {
   const contents = mainWindow?.webContents;
   if (!contents) return;
-  if (rendererReady) contents.send(channel);
-  else pendingRendererSends.push(channel);
+  if (rendererReady) contents.send(channel, payload);
+  else pendingRendererSends.push({ channel, payload });
+}
+
+// One running copy per user. Mandatory on Windows: closing the window hides the app
+// to the tray instead of quitting, so double-clicking the desktop shortcut afterwards
+// would otherwise start a second process — a second tray icon, global shortcuts that
+// fail to register because the first copy holds them, and two writers on the same
+// settings file. The second copy quits before creating any window; the first one is
+// told through `second-instance` and brings its window back. The lock is keyed on the
+// userData directory, so E2E launches with their own `--user-data-dir` do not collide.
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+
+// `kaipu://` links (browser sign-in hand-back, later billing) reach the app three ways, and all
+// of them go through this one router: macOS `open-url`, the argv of a cold start (Windows and
+// Linux), and the argv of a second launch (`second-instance`, below). The lock above is the
+// only one in the process: @better-auth/electron's `setupMain` is deliberately NOT used because
+// it calls `requestSingleInstanceLock` and registers its own `second-instance` handler, which
+// would focus the window even while a recording hides it (see `secondInstanceAction`).
+// `completeSignIn` is bound once the auth store exists, inside `app.whenReady`.
+let completeBrowserSignIn: (code: string) => Promise<unknown> = async () => {};
+const deepLinks = createDeepLinkRouter({
+  completeSignIn: (code) => completeBrowserSignIn(code),
+  focus: () => {
+    if (!hub?.isActive()) showMainWindow();
+  },
+});
+
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  // Only a packaged build owns the scheme. A dev run is Electron's own bundle: registering it
+  // would, on Windows, replace the installed app as the handler of every kaipu:// link, and
+  // macOS does not route custom schemes to unpackaged apps anyway. Dev uses the paste-code
+  // fallback instead. (Packaged builds also get the scheme from electron-builder `protocols`.)
+  if (app.isPackaged) app.setAsDefaultProtocolClient(DEEP_LINK_SCHEME);
+
+  // macOS, including a cold start by link, which fires this before `ready`.
+  app.on("open-url", (event, url) => {
+    event.preventDefault();
+    deepLinks.receive(url);
+  });
+  // Windows/Linux cold start: the link is in our own argv.
+  deepLinks.receiveArgv(process.argv);
+
+  app.on("second-instance", (_event, argv) => {
+    deepLinks.receiveArgv(argv);
+    const action = secondInstanceAction({ ready: app.isReady(), recording: !!hub?.isActive() });
+    if (action === "show") showMainWindow();
+    else if (action === "notify") showAlreadyRecordingNotice();
+  });
 }
 
 // Must run before `app.whenReady` — privileged scheme registration.
@@ -94,6 +186,27 @@ const BASE_MIN_HEIGHT = 560;
 const ONBOARDING_MIN_WIDTH = BASE_MIN_WIDTH;
 const ONBOARDING_MIN_HEIGHT = 700;
 
+/** Ask the renderer to cancel its export, then run `done` once it reports the export stopped
+ *  (`exportActive: false`) or after 2 s, whichever comes first. */
+function cancelExportThen(done: () => void): void {
+  let finished = false;
+  const finish = (): void => {
+    if (finished) return;
+    finished = true;
+    // Whatever won, the confirmed cancel is final: don't let the guards prompt a second time.
+    exportActive = false;
+    clearTimeout(timeout);
+    ipcMain.removeListener(IPC_CHANNELS.exportActive, onActive);
+    done();
+  };
+  const onActive = (_event: unknown, active: unknown): void => {
+    if (active !== true) finish();
+  };
+  const timeout = setTimeout(finish, 2000);
+  ipcMain.on(IPC_CHANNELS.exportActive, onActive);
+  mainWindow?.webContents.send(IPC_CHANNELS.exportCommand, "cancel");
+}
+
 /**
  * Create the main window. `showOnReady` defaults to true; pass false when
  * recreating it solely to run the capture flow (the renderer reveals it after a
@@ -103,6 +216,7 @@ function createWindow(showOnReady = true): void {
   // A fresh window's renderer hasn't registered its IPC listeners yet; block
   // sends until it signals `appReady`.
   rendererReady = false;
+  exportActive = false;
   // Create the browser window.
   mainWindow = new BrowserWindow({
     title: "Kaipu Record",
@@ -128,6 +242,8 @@ function createWindow(showOnReady = true): void {
   mainWindow.on("closed", () => {
     mainWindow = null;
     closingWithRecording = false;
+    closingWithExport = false;
+    exportActive = false;
   });
 
   // Closing the window mid-recording (the red button, or Cmd+W where the app
@@ -137,8 +253,11 @@ function createWindow(showOnReady = true): void {
   // recorder's normal stop path (finalizing what's on disk so far) before
   // actually closing — with a timeout so the window is never stuck if the
   // renderer is unresponsive.
-  mainWindow.on("close", (event) => {
-    if (closingWithRecording || !hub?.isActive()) return;
+  //
+  // Each guard returns whether it took this close over (prevented it), so the
+  // close-to-tray step below never hides over a guard's confirmation.
+  const recordingCloseGuard = (event: Electron.Event): boolean => {
+    if (closingWithRecording || !hub?.isActive()) return false;
     event.preventDefault();
     const t = createMainTranslator(getAppSettings().locale);
     const choice = dialog.showMessageBoxSync(mainWindow!, {
@@ -149,7 +268,12 @@ function createWindow(showOnReady = true): void {
       message: t("dialogs.recordingInProgress"),
       detail: t("dialogs.closeStopsDetail"),
     });
-    if (choice !== 1) return;
+    if (choice !== 1) {
+      // Cancelling here aborts a quit already past `before-quit`, if one was in
+      // flight: the app keeps running, so the next close must hide again.
+      isQuitting = false;
+      return true;
+    }
     closingWithRecording = true;
     mainWindow?.webContents.send(IPC_CHANNELS.recordingCommand, "stop");
     const finishClose = (): void => mainWindow?.close();
@@ -158,6 +282,59 @@ function createWindow(showOnReady = true): void {
       clearTimeout(timeout);
       finishClose();
     });
+    return true;
+  };
+
+  // The export runs in this window's renderer, so closing the window destroys it mid-write and
+  // leaves a `.part` file behind. Confirm, then ask the renderer to cancel (it deletes the
+  // `.part`) and close once it reports the export stopped — with a timeout so the window is
+  // never stuck. The recording guard above has priority and returns first.
+  const exportCloseGuard = (event: Electron.Event): boolean => {
+    if (closingWithExport || !exportActive || hub?.isActive()) return false;
+    event.preventDefault();
+    const t = createMainTranslator(getAppSettings().locale);
+    const choice = dialog.showMessageBoxSync(mainWindow!, {
+      type: "warning",
+      buttons: [t("dialogs.cancel"), t("dialogs.cancelExportAndClose")],
+      defaultId: 0,
+      cancelId: 0,
+      message: t("dialogs.exportInProgress"),
+      detail: t("dialogs.closeCancelsExportDetail"),
+    });
+    if (choice !== 1) {
+      // Cancelling here aborts a quit already past `before-quit`, if one was in
+      // flight: the app keeps running, so the next close must hide again.
+      isQuitting = false;
+      return true;
+    }
+    closingWithExport = true;
+    cancelExportThen(() => mainWindow?.close());
+    return true;
+  };
+
+  // Windows keeps the app in the tray: a close the guards let through hides the
+  // window instead, unless the app is quitting. A confirmed "Stop and close" /
+  // "Cancel export and close" re-closes with its flag set, passes the guards, and
+  // lands here — so on Windows it hides too. macOS and Linux close as before.
+  mainWindow.on("close", (event) => {
+    const guardTookOver = recordingCloseGuard(event) || exportCloseGuard(event);
+    handleMainWindowClose(
+      event,
+      { platform: process.platform, isQuitting, guardTookOver },
+      hideMainWindowToTray,
+    );
+  });
+
+  // Windows: Ctrl+Q quits, as the tray menu's Quit does (the hidden menu bar binds nothing).
+  mainWindow.webContents.on("before-input-event", (event, input) => {
+    if (!isQuitShortcut(input, process.platform)) return;
+    event.preventDefault();
+    app.quit();
+  });
+
+  // Windows log-off / shutdown ends the app without `before-quit`; let the close through.
+  mainWindow.on("session-end", () => {
+    isQuitting = true;
   });
 
   // If the renderer crashes/OOMs mid-recording there is no `recordingStop` IPC
@@ -166,6 +343,8 @@ function createWindow(showOnReady = true): void {
   mainWindow.webContents.on("render-process-gone", (_event, details) => {
     console.error("main renderer process gone", details.reason);
     hub?.forceReset();
+    // The renderer that owned the export is gone; nothing is left to cancel.
+    exportActive = false;
   });
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -180,6 +359,36 @@ function createWindow(showOnReady = true): void {
   } else {
     mainWindow.loadFile(join(__dirname, "../renderer/index.html"));
   }
+}
+
+/**
+ * Hide the main window in place of closing it (Windows close-to-tray). Clears the
+ * guards' one-shot "closing" flags the way `closed` would, so the next close while
+ * recording or exporting asks again. The first time, tell the user the app is still
+ * running with a native notification — shown now, as the window disappears, because
+ * that is the moment they might think the app quit. The flag is persisted only once
+ * the notification was actually shown.
+ */
+function hideMainWindowToTray(): void {
+  closingWithRecording = false;
+  closingWithExport = false;
+  mainWindow?.hide();
+  const settings = getAppSettings();
+  if (
+    !shouldShowTrayHint({
+      platform: process.platform,
+      trayHintShown: settings.trayHintShown,
+      notificationSupported: Notification.isSupported(),
+    })
+  ) {
+    return;
+  }
+  const t = createMainTranslator(settings.locale);
+  new Notification({
+    title: t("tray.closedToTrayTitle"),
+    body: t("tray.closedToTrayBody"),
+  }).show();
+  updateAppSettings({ trayHintShown: true });
 }
 
 /** Show & focus the main window, recreating it if it was closed. */
@@ -199,19 +408,22 @@ function showMainWindow(): void {
  * Start button and the global "Start recording" shortcut. The Record page's
  * `startRecording` guards on a selected source / not-already-recording.
  */
+function showAlreadyRecordingNotice(): void {
+  if (!Notification.isSupported()) return;
+  const t = createMainTranslator(getAppSettings().locale);
+  new Notification({
+    title: t("dialogs.alreadyRecordingTitle"),
+    body: t("dialogs.alreadyRecordingBody"),
+  }).show();
+}
+
 function triggerStartRecording(): void {
   if (hub?.isActive()) {
     // Don't un-hide the (deliberately hidden) main window into an active
     // recording — it would get burned into the video with no explanation.
     // Let the user know the shortcut landed instead of silently no-oping.
     capturePanel?.hide();
-    if (Notification.isSupported()) {
-      const t = createMainTranslator(getAppSettings().locale);
-      new Notification({
-        title: t("dialogs.alreadyRecordingTitle"),
-        body: t("dialogs.alreadyRecordingBody"),
-      }).show();
-    }
+    showAlreadyRecordingNotice();
     return;
   }
   capturePanel?.hide();
@@ -244,51 +456,109 @@ function bringAppToFront(): void {
  * everything, and `screenshotCapture` then hides the app so it isn't in the shot
  * (see `captureWindowHooks`). The window comes back via `revealAfterCapture`.
  */
-function triggerCaptureScreenshot(): void {
+function triggerCaptureScreenshot(request: CaptureRequestPayload): void {
   // The capture flow runs in the renderer, so the window must exist. If it was
   // closed (macOS keeps the app alive in the tray), recreate it HIDDEN — never
   // show a hidden one: the capture handler hides the window anyway, and bringing
   // it forward here would put the app back in the shot. The renderer reveals it
   // after a successful capture.
   if (!mainWindow || mainWindow.isDestroyed()) createWindow(false);
-  sendToRenderer(IPC_CHANNELS.screenshotHotkey);
+  sendToRenderer(IPC_CHANNELS.screenshotHotkey, request);
 }
 
-/** Remembers whether the app was visible before a capture, to restore on cancel. */
-let captureWasVisible = false;
+/** Set once the screenshot IPC is registered; until then a shortcut trusts the stored mode. */
+let screenshotHandlers: ScreenshotHandlers | null = null;
+
+/**
+ * A capture shortcut: the generic one opens the overlay in the current mode, a
+ * mode-specific one in its own. The mode becomes current only when a capture in it
+ * succeeds (the capture handler remembers it). See `resolveShortcutCapture`.
+ */
+function triggerShortcutCapture(action: CaptureShortcut): void {
+  const { mode } = resolveShortcutCapture(
+    action,
+    getAppSettings().screenshotMode,
+    screenshotHandlers?.supportedModes() ?? null,
+  );
+  triggerCaptureScreenshot({ mode });
+}
+
+/** The toast after a quiet capture; created once the app is ready. */
+let captureToast: CaptureToastWindow | null = null;
 
 /** Window orchestration handed to the screenshot IPC (hide for the shot, reveal after). */
-const captureWindowHooks = {
-  beforeCapture: (): void => {
-    captureWasVisible = mainWindow?.isVisible() ?? false;
-    capturePanel?.hide();
-    mainWindow?.hide();
-    // The bubble is always-on-top and not content-protected (it's meant to be
-    // captured by a *recording*), so it would otherwise sit inside the native
-    // region-select and land in the screenshot too.
-    hub?.hideCameraBubbleForCapture();
-  },
-  afterCapture: (captured: boolean): void => {
-    // On success the renderer reveals the window once it shows the editor; here we
-    // only need to undo the hide when the user cancelled with the app previously up.
-    if (!captured && captureWasVisible) showMainWindow();
-    hub?.restoreCameraBubbleAfterCapture();
-  },
-  reveal: (): void => bringAppToFront(),
-};
+const captureWindowHooks = createCaptureWindowHooks({
+  mainWindow: () => mainWindow,
+  hideCapturePanel: () => capturePanel?.hide(),
+  dismissToast: () => captureToast?.dismiss(),
+  hideCameraBubble: () => hub?.hideCameraBubbleForCapture(),
+  restoreCameraBubble: () => hub?.restoreCameraBubbleAfterCapture(),
+  showMainWindow,
+  bringAppToFront,
+});
+
+/**
+ * The capture toast asked the main window for a saved screenshot (Annotate, Open in
+ * Library). Routes are keyed by asset id, the toast knows the vault id: resolve it, then
+ * let the renderer navigate and reveal the window itself (`revealAfterCapture`), so it
+ * comes back already on the item — the same hand-off as the capture hotkey.
+ */
+function openSavedScreenshot(target: "editor" | "library", id: string): void {
+  void currentVault()
+    .describe(id)
+    .then((item) => {
+      if (!item) {
+        console.warn(`[screenshot] toast: ${id} is no longer in the vault`);
+        return;
+      }
+      if (!mainWindow || mainWindow.isDestroyed()) createWindow(false);
+      sendToRenderer(IPC_CHANNELS.screenshotOpenSaved, { target, assetId: item.assetId });
+    })
+    .catch((error: unknown) => console.error("[screenshot] toast: open saved failed", error));
+}
+
+/** Annotate on a copy-only toast: hand the kept bytes to the editor (it reveals the window). */
+function openQuietCapture(capture: QuietCapture): void {
+  if (!mainWindow || mainWindow.isDestroyed()) createWindow(false);
+  const { png, width, height, mode } = capture;
+  sendToRenderer(IPC_CHANNELS.screenshotOpenQuietCapture, {
+    png: png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength),
+    width,
+    height,
+    mode,
+  });
+}
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
+  // A second copy is already quitting (see the single-instance lock above).
+  if (!hasSingleInstanceLock) return;
+
   // Set app user model id for windows
   electronApp.setAppUserModelId("com.niway.kaipu-record");
+
+  // A dev run is Electron's own bundle, so the Dock and ⌘-Tab would show
+  // Electron's icon. Give it the brand icon (derived by scripts/generate-app-icons.sh).
+  // Packaged builds keep the bundle's .icns: overriding it there would hide a
+  // stale bundle icon instead of surfacing it.
+  if (process.platform === "darwin" && !app.isPackaged) app.dock?.setIcon(icon);
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.
   // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
   app.on("browser-window-created", (_, window) => {
     optimizer.watchWindowShortcuts(window);
+  });
+
+  // Drag copies left by a previous run (crash, force quit) are stale; best-effort.
+  cleanupDragCopies().catch(() => {});
+
+  // The renderer reports when a video export starts and stops (NIW2-218); the close and quit
+  // guards read it. Registered once, not per window.
+  ipcMain.on(IPC_CHANNELS.exportActive, (_event, active: unknown) => {
+    exportActive = active === true;
   });
 
   // IPC test
@@ -301,7 +571,7 @@ app.whenReady().then(() => {
     rendererReady = true;
     const queued = pendingRendererSends;
     pendingRendererSends = [];
-    for (const channel of queued) mainWindow?.webContents.send(channel);
+    for (const { channel, payload } of queued) mainWindow?.webContents.send(channel, payload);
   });
 
   // Persisted app settings (+ apply the Dock/switcher policy and launch-at-login).
@@ -311,8 +581,27 @@ app.whenReady().then(() => {
   // error the user cannot act on. Fail loudly at startup, naming the variable.
   const authServerUrl = import.meta.env.MAIN_VITE_SERVER_URL;
   if (!authServerUrl) throw new Error("MAIN_VITE_SERVER_URL is not set — check .env");
-  const auth = registerAuth({ serverUrl: authServerUrl }, () => mainWindow);
-  initMainAnalytics(getDeviceId());
+  // The website origin that hosts the browser sign-in page. Not fatal when missing: the app
+  // still runs, and starting a sign-in reports "not configured" instead of failing silently.
+  const webUrl = import.meta.env.MAIN_VITE_WEB_URL;
+  let browserSignIn: ReturnType<typeof createBrowserSignInClient> | undefined;
+  try {
+    if (!webUrl) throw new Error("MAIN_VITE_WEB_URL is not set — check .env");
+    browserSignIn = createBrowserSignInClient({
+      serverUrl: authServerUrl.replace(/\/$/, ""),
+      webUrl: new URL(webUrl).origin,
+    });
+  } catch (error) {
+    console.error("browser sign-in is disabled", error);
+  }
+  const auth = registerAuth({ serverUrl: authServerUrl }, () => mainWindow, {
+    browser: browserSignIn,
+    sendToRenderer,
+  });
+  completeBrowserSignIn = auth.completeBrowserSignIn;
+  deepLinks.start();
+  initMainAnalytics(getDeviceId(), getAppSettings().diagnosticsEnabled);
+  onSettingsChanged((settings) => setMainAnalyticsEnabled(settings.diagnosticsEnabled));
   registerAnalyticsIpc();
 
   // Capture Panel → show the main window (the panel's "Open ↗" button).
@@ -329,9 +618,9 @@ app.whenReady().then(() => {
 
   // Capture Panel "Capture Screen" → dismiss the panel and run the same interactive
   // region capture as the ⌘⌃X hotkey.
-  ipcMain.on(IPC_CHANNELS.screenshotRequestCapture, () => {
+  ipcMain.on(IPC_CHANNELS.screenshotRequestCapture, (_event, request?: { mode?: unknown }) => {
     capturePanel?.hide();
-    triggerCaptureScreenshot();
+    triggerCaptureScreenshot({ mode: isCaptureMode(request?.mode) ? request.mode : "frame" });
   });
 
   // App version for the renderer-side version gate.
@@ -377,7 +666,10 @@ app.whenReady().then(() => {
       startRecording: triggerStartRecording,
       stopRecording: () => mainWindow?.webContents.send(IPC_CHANNELS.recordingCommand, "stop"),
       bringToFront: bringAppToFront,
-      captureScreenshot: triggerCaptureScreenshot,
+      captureScreenshot: () => triggerShortcutCapture("captureScreenshot"),
+      captureScreen: () => triggerShortcutCapture("captureScreen"),
+      captureFrame: () => triggerShortcutCapture("captureFrame"),
+      captureWindow: () => triggerShortcutCapture("captureWindow"),
       // Live input toggles write the shared RecordingSettings, never the engine:
       // mid-take the recorder forwards the change, outside a take it is just the
       // pre-recording toggle.
@@ -395,7 +687,21 @@ app.whenReady().then(() => {
   registerCloudStorageHandlers({ auth, serverUrl: authServerUrl });
 
   // Screenshots: capture/copy/save IPC handlers.
-  registerScreenshotHandlers(captureWindowHooks);
+  // The capture toast after a quiet capture (lazy window; shown on the shot's display).
+  const toast = createCaptureToastWindow({
+    takeQuietCapture: takeLastQuietCapture,
+    peekQuietCapture: peekLastQuietCapture,
+    releaseQuietCapture: releaseLastQuietCapture,
+    // manual: false — the editor never opened this shot, so it stays off the Continue list.
+    saveToVault: saveFromToast(saveScreenshotToVault),
+    title: () => screenshotTitle(),
+    openSaved: openSavedScreenshot,
+    openQuietCapture,
+  });
+  captureToast = toast;
+  screenshotHandlers = registerScreenshotHandlers(captureWindowHooks, (request) =>
+    toast.show(request),
+  );
 
   /**
    * Raise the window's minimum size for a screen that cannot reflow, growing the
@@ -522,6 +828,18 @@ app.whenReady().then(() => {
   // Stream local vault files to the renderer for playback (kaipu-media://).
   registerMediaProtocol();
 
+  // Recover takes a failed finalize or a crash left behind, so the first Library list sees them.
+  void recoverStrandedRecordings({
+    vaultDir: vaultDirectory().path,
+    fallbackTempDir: app.getPath("temp"),
+    title: createMainTranslator(getAppSettings().locale)("library.recoveredRecordingTitle"),
+  })
+    .then((r) => {
+      if (r.recovered.length) console.info(`recovered ${r.recovered.length} stranded recording(s)`);
+      if (r.failed.length) console.warn("stranded recordings left in place", r.failed);
+    })
+    .catch((error) => console.error("stranded recording sweep failed", error));
+
   createWindow();
 
   // Menu-bar tray + its Capture Panel.
@@ -548,6 +866,9 @@ app.whenReady().then(() => {
 // to the vault before the app actually quits. A timeout still quits if the
 // renderer is unresponsive, so the app is never wedged open.
 app.on("before-quit", (event) => {
+  // A second copy quitting at start-up owns nothing: it must not clean up the drag
+  // copies, shortcuts or analytics of the copy that is running.
+  if (!hasSingleInstanceLock) return;
   if (!quittingWithRecording && hub?.isActive()) {
     event.preventDefault();
     const t = createMainTranslator(getAppSettings().locale);
@@ -571,20 +892,43 @@ app.on("before-quit", (event) => {
     return;
   }
 
+  // Same hazard as the window close guard, on Cmd+Q / tray Quit: quitting mid-export would
+  // leave a `.part` behind. Confirm, cancel the export cleanly, then quit (2 s timeout). With
+  // no main window there is no renderer running an export, so just quit.
+  if (!quittingWithExport && exportActive && mainWindow) {
+    event.preventDefault();
+    const t = createMainTranslator(getAppSettings().locale);
+    const choice = dialog.showMessageBoxSync({
+      type: "warning",
+      buttons: [t("dialogs.cancel"), t("dialogs.cancelExportAndQuit")],
+      defaultId: 0,
+      cancelId: 0,
+      message: t("dialogs.exportInProgress"),
+      detail: t("dialogs.quitCancelsExportDetail"),
+    });
+    if (choice !== 1) return;
+    quittingWithExport = true;
+    cancelExportThen(() => app.quit());
+    return;
+  }
+
+  // Every guard passed: this quit is real, so the main window's close must not hide it.
+  isQuitting = true;
+
   // The app lives in the menu bar — keep the tray reference alive and release it
   // only on quit so the icon isn't garbage-collected. Flush analytics best-effort
   // (fire-and-forget: client already flushes on every capture so nothing is lost).
   unregisterGlobalShortcuts();
   tray?.destroy();
   tray = null;
+  cleanupDragCopies().catch(() => {});
   void shutdownMainAnalytics();
 });
 
-// Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
+// Quit when all windows are closed on Linux only. macOS keeps the app in the menu
+// bar until Cmd+Q; Windows keeps it in the tray until its Quit item.
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
+  if (shouldQuitOnAllWindowsClosed(process.platform)) {
     app.quit();
   }
 });

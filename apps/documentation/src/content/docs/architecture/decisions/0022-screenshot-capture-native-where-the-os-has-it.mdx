@@ -1,0 +1,87 @@
+---
+title: "ADR 0022: Screenshot capture is a mode request served by a per-platform backend; the overlay is shared UI that never captures"
+description: The renderer asks for a capture mode and gets captured, cancelled or unsupported — never null. macOS captures through the system screencapture binary, Windows through desktopCapturer; one overlay window per display draws the frame and the display chooser on both and only ever answers with a rectangle.
+---
+
+# ADR 0022: Screenshot capture is a mode request served by a per-platform backend; the overlay is shared UI that never captures
+
+## Status
+
+| Field         | Value                                                                                                                                                                                                                                                                         |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Accepted — shipped in desktop 0.12.0 (PR #306, 2026-10-17); Windows QA outstanding — [design](/specs/2026-10-15-screenshot-capture-modes-design/). Amended by [0024](/architecture/decisions/0024-window-mode-and-quiet-capture/): Area removed, Window added, quiet capture. |
+| Date          | 2026-10-15                                                                                                                                                                                                                                                                    |
+| Supersedes    | The "Path A, mac-only, behind a seam" decision in [screenshots brief §3](/backlog/screenshots/). Its reopen condition ("when Windows is concrete") is met: the Windows beta is scheduled.                                                                                     |
+| Superseded by | — (decision 1 and the "window capture" non-goal are amended by 0024; decisions 2–4 stand)                                                                                                                                                                                     |
+
+## Context
+
+The screenshot feature has one mode (drag an area) implemented by shelling out to macOS
+`screencapture -i`, and the IPC handler returns `null` on any other platform. The owner wants
+two more modes — one whole display with a chooser, and a resizable frame that captures what is
+inside — and wants them on Windows, where the beta is being prepared. The brief anticipated a
+cross-platform "Path B" overlay that would draw its own picker and crop `desktopCapturer`
+output, as the one engine for every OS. Building that engine for macOS too would throw away the
+pixel-perfect, Retina-correct, permission-prompt-free capture the OS already gives us, and the
+owner asked explicitly for each platform's native way.
+
+## Decision
+
+1. The renderer asks for a **mode** (`area`, `screen`, `frame`) and receives a typed result:
+   `captured`, `cancelled` or `unsupported`. The handler's platform switch is exhaustive.
+   `null` is not a result.
+2. **Pixels come from the platform's native path.** On macOS every mode ends in the system
+   `screencapture` binary (`-i` for the area picker, `-R x,y,w,h` for a rectangle, `-x` silent).
+   On Windows every mode ends in `desktopCapturer.getSources` at the display's physical size
+   (`display.size × scaleFactor`), cropped by a pure function that derives the scale from the
+   image it received. No native module is added for capture.
+3. **The overlay is shared UI and never captures.** One frameless, transparent, always-on-top
+   `BrowserWindow` per display (`?window=capture-overlay`) draws the frame, the display chooser
+   and, on Windows, the area drag. It answers main with a display id and a DIP rectangle, or
+   `cancelled`. Main hides every overlay and waits one frame before capturing, so the overlay is
+   never in the shot. On macOS it is a `type: "panel"` window with the open-only Space toggle
+   from the hub's floating-windows page.
+4. A frame is clamped to one display and remembered per display id.
+
+## Alternatives rejected
+
+- **One overlay engine for every OS (the brief's Path B everywhere).** Gives up Apple's
+  picker, Retina handling and color management on the platform with every current user, to
+  save one 60-line backend.
+- **Native modules (ScreenCaptureKit / Windows.Graphics.Capture bindings).** A second native
+  dependency with its own ABI rebuild, for pixels Chromium already captures through the same
+  OS APIs.
+- **Invoking the Windows Snipping Tool (`ms-screenclip:`).** It writes to the clipboard and
+  never signals completion or cancel; the app would have to poll the clipboard and guess.
+- **A frozen backdrop in the overlay.** Costs a full-resolution capture of every display at
+  open; the native pickers on both OSes are live. It stays an option inside this decision,
+  not a different one.
+- **Keep returning `null` on Windows until every mode works.** The backlog already called this
+  a silent no-op; a typed `unsupported` lets the beta ship with an honest "coming soon".
+
+## Consequences
+
+- Two backends to keep green, each small and tested with injected deps; one overlay.
+- macOS Screen mode uses `-R` with the display bounds rather than `-D n`, because `-D`'s
+  1-based index has no documented mapping to Electron display ids.
+- The IPC surface changes: `captureScreenshot(mode)`, hotkey payloads carry a mode, two new
+  shortcut actions. `desktop/ipc-contract.mdx` must be updated with the feature.
+- Windows crops depend on DPI arithmetic that is easy to regress; the pure geometry module
+  and its mixed-DPI fixtures are the guard, and every Windows capture bug starts there.
+- Linux inherits the `unsupported` answer for free and nothing else.
+
+## Non-goals
+
+- Window capture as a mode, scrolling capture, OCR, timers, a magnifier, freeze.
+- Branding the macOS area picker (Apple's chrome stays).
+- Any change to the editor, the vault, auto-save/auto-copy or the Library.
+
+## Reopen when
+
+- A macOS release removes or restricts `screencapture` for third-party apps, or a user reports
+  color or scale drift between Area (`-i`) and Frame (`-R`) shots of the same region.
+- Overlay creation on a packaged build measures above 300 ms on the Mac mini (then prewarm,
+  inside this decision) or the overlay cannot be made clickable on a Windows display above
+  150% scaling (then revisit the live-overlay choice).
+- Analytics show Frame or Screen used by fewer than one in twenty captures three months after
+  shipping: the modes stay, but window capture and freeze do not get built on their account.

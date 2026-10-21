@@ -1,4 +1,4 @@
 import { env as cfEnv } from "cloudflare:workers";
-import { serverEnvSchema } from "@kaipu/infra-env";
+import { parseEnv, serverEnvSchema } from "@kaipu/infra-env";
 
-export const env = serverEnvSchema.parse(cfEnv);
+export const env = parseEnv(serverEnvSchema, cfEnv);

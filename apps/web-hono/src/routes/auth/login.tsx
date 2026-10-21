@@ -1,36 +1,30 @@
+import { createFileRoute, redirect } from "@tanstack/react-router";
+
+import { AuthPanel } from "@/components/auth/auth-panel";
+import { parseOAuthErrorParam } from "@/lib/google-auth";
+import { resolvePostSignInPath } from "@/lib/post-sign-in";
+import { safeRedirectPath } from "@/lib/safe-redirect";
 import { NOINDEX } from "@/lib/seo";
-import { createFileRoute, Link, redirect } from "@tanstack/react-router";
-import { useTranslations } from "@kaipu/i18n";
 
-import SignInForm from "@/components/sign-in-form";
-
-function LoginPage() {
-  const t = useTranslations("auth");
-  return (
-    <div className="mx-auto w-full mt-10 max-w-md p-6">
-      <SignInForm />
-      <div className="mt-4 text-center text-sm text-muted-foreground">
-        {t("needAccount")}{" "}
-        <Link to="/auth/signup" className="text-primary hover:underline">
-          {t("signUp")}
-        </Link>
-      </div>
-      <div className="mt-2 text-center text-sm text-muted-foreground">
-        <Link to="/auth/forgot-password" className="text-primary hover:underline">
-          {t("forgotPassword")}
-        </Link>
-      </div>
-    </div>
-  );
-}
-
+/** The "Sign in" tab. A visitor who is already signed in goes where they were heading. */
 export const Route = createFileRoute("/auth/login")({
   head: () => NOINDEX,
   component: LoginPage,
+  validateSearch: (search: Record<string, unknown>): { redirect?: string; error?: string } => {
+    const target = safeRedirectPath(search.redirect);
+    // `error` is where Better Auth sends a failed Google sign-in (errorCallbackURL).
+    const error = parseOAuthErrorParam(search.error);
+    return { ...(target ? { redirect: target } : {}), ...(error ? { error } : {}) };
+  },
   beforeLoad: async (ctx) => {
     const { isAuthenticated } = ctx.context;
     if (isAuthenticated) {
-      throw redirect({ to: "/recordings" });
+      throw redirect({ href: resolvePostSignInPath(ctx.search) });
     }
   },
 });
+
+function LoginPage() {
+  const { redirect: redirectTo, error } = Route.useSearch();
+  return <AuthPanel mode="sign-in" redirectTo={redirectTo} oauthError={error} />;
+}

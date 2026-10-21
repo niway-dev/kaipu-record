@@ -3,6 +3,8 @@ title: "Plan 02 — Entitlements v2 (quotas, unlimited, grants, overrides, DB co
 description: "Implementation plan for the capacity-resolution model: 250 MB / 1 GB / 15 GB / unlimited, dated grants, per-user overrides and runtime capacity configuration."
 ---
 
+> **Historical plan numbers.** Capacities in this document are as of its date. Current values: [Plans — Free and Pro](/features/plans/).
+
 # Entitlements v2 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

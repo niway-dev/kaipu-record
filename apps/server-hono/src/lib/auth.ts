@@ -6,7 +6,10 @@ import { createDatabaseClient } from "@kaipu/infra-db/client";
 import { CloudPurgeRepository } from "@kaipu/infra-db/repositories";
 import { env } from "../env";
 import { enqueuePurgeBeforeUserDelete } from "./account-deletion";
+import { desktopAuthPlugin, DESKTOP_TRUSTED_ORIGINS } from "./desktop-auth";
 import { buildResetUrl, buildVerifyUrl, tryGetEmail, webUrl } from "./email";
+import { accountLinkingHooks, accountOptions } from "./account-linking";
+import { getSocialProviders } from "./social-providers";
 
 /** Best-effort locale from Accept-Language; English is the documented fallback. */
 function emailLocale(request?: Request): EmailLocale {
@@ -14,6 +17,9 @@ function emailLocale(request?: Request): EmailLocale {
   return header.toLowerCase().startsWith("es") ? "es" : "en";
 }
 
+// Desktop origins live in ./desktop-auth.ts: "kaipu:/" for the browser sign-in exchange
+// (NIW2-471) and "kaipu-record://app" for the legacy in-app form, described below.
+//
 // "kaipu-record://app" is the desktop app's own request identity for Better Auth's CSRF
 // origin check — not a real URL scheme Electron navigates to. Electron's main process
 // (Chromium's network stack) attaches Sec-Fetch-* metadata to outgoing fetch() calls even
@@ -26,9 +32,17 @@ function emailLocale(request?: Request): EmailLocale {
 // React Native's fetch doesn't send Sec-Fetch-* headers.
 export const auth = betterAuth({
   ...baseConfig,
-  trustedOrigins: [...env.CORS_ORIGIN, "kaipu-record://app"],
-  // Queue the R2 purge while the user row still exists; the scheduled handler drains it.
+  // Explicit on purpose: without it Better Auth falls back to the request origin, which
+  // behind the web proxy is the API, not the origin the browser (and the OAuth state
+  // cookie) lives on. See .env.example.
+  baseURL: env.BETTER_AUTH_URL,
+  socialProviders: getSocialProviders(env),
+  // Linking rules for Google sign-in (NIW2-219): who gets linked, and the pre-hijack guard.
+  account: accountOptions,
   databaseHooks: {
+    ...accountLinkingHooks,
+    // NIW2-328: queue the R2 purge while the user row still exists; the scheduled handler
+    // drains it once the row is gone.
     user: {
       delete: {
         before: enqueuePurgeBeforeUserDelete(
@@ -37,6 +51,7 @@ export const auth = betterAuth({
       },
     },
   },
+  trustedOrigins: [...env.CORS_ORIGIN, ...DESKTOP_TRUSTED_ORIGINS],
   emailAndPassword: {
     ...baseConfig.emailAndPassword,
     enabled: true,
@@ -108,5 +123,10 @@ export const auth = betterAuth({
       }
     },
   },
-  plugins: [...(baseConfig.plugins ?? []), customSession(getCustomSession, baseConfig)],
+  plugins: [
+    ...(baseConfig.plugins ?? []),
+    customSession(getCustomSession, baseConfig),
+    // Desktop sign-in through the browser (NIW2-471). Needs `verification` in the adapter map.
+    desktopAuthPlugin(),
+  ],
 });

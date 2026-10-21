@@ -1,5 +1,70 @@
 # Changelog
 
+## [0.11.0](https://github.com/niway-dev/kaipu-record/compare/web-v0.10.0...web-v0.11.0) (2026-10-20)
+
+
+### Features
+
+* **i18n:** copy for the Kaipu Dashboard design in en and es ([af3b0b0](https://github.com/niway-dev/kaipu-record/commit/af3b0b070d6483b28654765401dfe867dadb53a3))
+* **i18n:** copy for the Kaipu Web Auth sign-in pages in en and es ([74ba553](https://github.com/niway-dev/kaipu-record/commit/74ba553cbc5826183e27fbefde7c98b65f7c40da))
+* NIW2-471 land desktop sign-in through the browser on main ([#333](https://github.com/niway-dev/kaipu-record/issues/333) + [#332](https://github.com/niway-dev/kaipu-record/issues/332)) ([9ae765b](https://github.com/niway-dev/kaipu-record/commit/9ae765b4de06e451ee94dd1f51f8a8d0ea67c486))
+* **web-hono:** dashboard from the Kaipu Dashboard design ([bdf03cc](https://github.com/niway-dev/kaipu-record/commit/bdf03cc67f450dd2fb6c08ceb763d69a0e832dd1))
+* **web-hono:** dashboard from the Kaipu Dashboard design (NIW2-475) ([41fbbba](https://github.com/niway-dev/kaipu-record/commit/41fbbba50c740f3dd39a817ff881631ac0d50555))
+* **web-hono:** Google sign-in button always on ([dde268b](https://github.com/niway-dev/kaipu-record/commit/dde268b1f7767ee5529bce63719977f5c517b0ec))
+* **web-hono:** Google sign-in button always on (remove VITE_GOOGLE_AUTH_ENABLED) ([b501231](https://github.com/niway-dev/kaipu-record/commit/b501231e0ed12138253f19d4a4623075625b678a))
+* **web-hono:** sign-in and sign-up from the Kaipu Web Auth design ([9e8f8da](https://github.com/niway-dev/kaipu-record/commit/9e8f8da458572aac416dfca366ffaeb4e2a7dddc))
+* **web-hono:** sign-in and sign-up from the Kaipu Web Auth design, email verification by link ([5e4422e](https://github.com/niway-dev/kaipu-record/commit/5e4422ee004953fe7b1dcdfc464646b73dd988c5))
+* **web:** add Sign in / Dashboard link to the landing nav ([8de68c0](https://github.com/niway-dev/kaipu-record/commit/8de68c00e0a5f2cd9b10d0756c589b525b4335ba))
+* **web:** add Sign in / Dashboard link to the landing nav ([4f56dcf](https://github.com/niway-dev/kaipu-record/commit/4f56dcfe8221393c15df8654f723cc3763cc19c3))
+* **web:** cookieless PostHog analytics for auth pages and download clicks, Windows on the home (NIW2-477) ([f8e5099](https://github.com/niway-dev/kaipu-record/commit/f8e50990b0509212a9c8eba65e3af554fab1a815))
+* **web:** cookieless PostHog analytics for auth pages and download clicks, Windows on the home (NIW2-477) ([38ca777](https://github.com/niway-dev/kaipu-record/commit/38ca777519aefb98f6a5810a30e9336e098efcbe))
+
+
+### Bug Fixes
+
+* **kaipu:** NIW2-232 unify plan information (Free 250 MB) ([5eddfd0](https://github.com/niway-dev/kaipu-record/commit/5eddfd0d917e7c50723ecdde557336a392aaf8ca))
+* **web-hono:** plan names on the dashboard and account page come from the plan table ([dbf1da9](https://github.com/niway-dev/kaipu-record/commit/dbf1da9c493c0022e127570655b506de4b027574))
+* **web:** give the auth form column more room ([e246bb2](https://github.com/niway-dev/kaipu-record/commit/e246bb283e5745ffc60e0bb6ad495c04c23cfa55))
+* **web:** rebalance the auth split so the form gets more room ([5f0bab5](https://github.com/niway-dev/kaipu-record/commit/5f0bab527b69daf036fcac9581a3c66b3d49512a))
+
+## [0.10.0](https://github.com/niway-dev/kaipu-record/compare/web-v0.9.0...web-v0.10.0) (2026-10-19)
+
+
+### Features
+
+* **i18n:** dashboard copy in en and es, and the /dashboard route slices ([a3e7349](https://github.com/niway-dev/kaipu-record/commit/a3e7349f09039d0c7e8c94b6066552cacf4a3f33))
+* NIW2-219 Continue with Google and safe account linking ([12c6426](https://github.com/niway-dev/kaipu-record/commit/12c6426d3dd4ae95d60e91b779176444c6cc5def))
+* NIW2-219 Google in Sign-in methods and the desktop hint ([911c1f2](https://github.com/niway-dev/kaipu-record/commit/911c1f2d24a5d7021e318f1a5810784af919e11b))
+* **roadmap:** refresh the public roadmap (2026-10-14) ([1dcb64f](https://github.com/niway-dev/kaipu-record/commit/1dcb64f45028184fd89ec8f1685f0aef873c05d3))
+* **roadmap:** refresh the public roadmap against what shipped ([58459b6](https://github.com/niway-dev/kaipu-record/commit/58459b66d89b78940c3c4e975b9371d0bea6e084))
+* **roadmap:** refresh the public roadmap against what shipped ([7e4fbd3](https://github.com/niway-dev/kaipu-record/commit/7e4fbd3add6c6fea98908b79239ab8d5e4eb5661))
+* **web-hono:** /dashboard hub with home, profile, settings and recordings ([1b2fdd8](https://github.com/niway-dev/kaipu-record/commit/1b2fdd895f75a846017999060a6399a9a0cacf27))
+* **web-hono:** authenticated /account page ([77c675b](https://github.com/niway-dev/kaipu-record/commit/77c675b9367379858e4109745fb3845afc7d5078))
+* **web-hono:** authenticated /account page (profile, sign-in methods, plan and storage) ([408d55b](https://github.com/niway-dev/kaipu-record/commit/408d55b765e49eb8ff8d745344a6aa74fadf2981))
+* **web-hono:** header logo opens the dashboard when signed in ([cc18c8a](https://github.com/niway-dev/kaipu-record/commit/cc18c8a99d205f65ab88931b7ae988b57c2a5883))
+* **web-hono:** NIW2-219 Continue with Google on login and signup ([a109c77](https://github.com/niway-dev/kaipu-record/commit/a109c7715ffbc90c85370aedfcde9782c5b5f8f5))
+* **web-hono:** NIW2-470 /dashboard hub with profile, settings and recordings ([94adcc3](https://github.com/niway-dev/kaipu-record/commit/94adcc307bab371ee96e4289e7313b43f6660584))
+* **web-hono:** resolve every post-sign-in destination in one helper ([f93ed8d](https://github.com/niway-dev/kaipu-record/commit/f93ed8d6db983d3c248f391e7b447a708a5c5fec))
+* **web-hono:** return to the requested page after sign-in ([8e0c6f7](https://github.com/niway-dev/kaipu-record/commit/8e0c6f7e33f8f0e53dc98791c8118e93f760df08))
+* **web-hono:** send / to the dashboard for a valid session ([9440323](https://github.com/niway-dev/kaipu-record/commit/9440323b94f5ccf8d80b0db964e343a6d942deb2))
+* **web:** /features page, the full catalogue of what Kaipu ships ([7e2e0fa](https://github.com/niway-dev/kaipu-record/commit/7e2e0faaca620d79ea161744ce6569f671a1db53))
+* **web:** /features page, the full catalogue of what Kaipu ships ([1857556](https://github.com/niway-dev/kaipu-record/commit/18575563073956ec6a00bb31db81300fa61aa122))
+* **web:** catalogue the screenshot modes, quiet capture and the 0.11–0.13 desktop features ([06bd9c6](https://github.com/niway-dev/kaipu-record/commit/06bd9c6e05a4ad9e0b7a1dfb215dbb3729044bd5))
+* **web:** catalogue the screenshot modes, quiet capture and the 0.11–0.13 desktop features ([06581ab](https://github.com/niway-dev/kaipu-record/commit/06581ab8fd7c90032aae436a6af6fdc1f9e3b423))
+* **web:** Download for Windows (beta) with the SmartScreen note ([2cf43ba](https://github.com/niway-dev/kaipu-record/commit/2cf43ba475725952e47e4027a2172a7f2a7d835d))
+* **web:** Download for Windows (beta) with the SmartScreen note ([938088c](https://github.com/niway-dev/kaipu-record/commit/938088ce70dffae3c2fd53215a345e8965011db5))
+* **web:** roadmap with a state per platform ([385c66a](https://github.com/niway-dev/kaipu-record/commit/385c66a70409f812eaffdd6e741307f68c9b367c))
+* **web:** roadmap with a state per platform ([6c5434f](https://github.com/niway-dev/kaipu-record/commit/6c5434f3bbe62039ae6c4429271f9b3610599b4a))
+
+
+### Bug Fixes
+
+* **auth:** adapt NIW2-219 Google linking to better-auth 1.7 ([d4ae12d](https://github.com/niway-dev/kaipu-record/commit/d4ae12d9788a42b858f847d61ca781e6b90702f4))
+* **web-hono:** check redirect control characters without a regex ([a5610ea](https://github.com/niway-dev/kaipu-record/commit/a5610eaa3f1dafad1bd4c85b6c0231a918c7d14e))
+* **web:** fit the roadmap on a laptop screen ([f0622f8](https://github.com/niway-dev/kaipu-record/commit/f0622f8bb2c6f3a5f7d15951c77cded10ccc2e46))
+* **web:** glass top bar once the page scrolls ([913140b](https://github.com/niway-dev/kaipu-record/commit/913140b4a0a38d0f22b4367494ab493a9f78bd18))
+* **web:** top bar shows the same three tabs on every marketing page ([f52e365](https://github.com/niway-dev/kaipu-record/commit/f52e3658978cc928c3c744b0010cea124fb4dcc5))
+
 ## [0.9.0](https://github.com/niway-dev/kaipu-record/compare/web-v0.8.0...web-v0.9.0) (2026-10-05)
 
 

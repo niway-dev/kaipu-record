@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm";
-import { text, timestamp, boolean, index } from "drizzle-orm/pg-core";
+import { text, timestamp, boolean, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { createTable } from "../utils/table-creator";
 import { recordingTable } from "./recording";
 import { subscriptionTable } from "./subscription";
@@ -59,7 +59,12 @@ export const accountTable = createTable(
       .$onUpdate(() => /* @__PURE__ */ new Date())
       .notNull(),
   },
-  (table) => [index("account_userId_idx").on(table.userId)],
+  (table) => [
+    index("account_userId_idx").on(table.userId),
+    // One Kaipu user per external identity (NIW2-219, Q10). Better Auth checks this in code
+    // (findAccount) but two parallel OAuth callbacks could both pass that check.
+    uniqueIndex("account_provider_account_uidx").on(table.providerId, table.accountId),
+  ],
 );
 
 export const verificationTable = createTable(
