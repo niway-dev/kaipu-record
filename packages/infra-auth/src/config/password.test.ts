@@ -48,10 +48,10 @@ describe("verifyPassword", () => {
 
   it("returns false on a truncated or over-long stored key", async () => {
     const stored = legacyHash("pw", SALT);
-    const [salt, key] = stored.split(":");
+    const key = stored.split(":")[1] ?? "";
     await expect(
-      verifyPassword({ hash: `${salt}:${key.slice(0, 64)}`, password: "pw" }),
+      verifyPassword({ hash: `${SALT}:${key.slice(0, 64)}`, password: "pw" }),
     ).resolves.toBe(false);
-    await expect(verifyPassword({ hash: `${salt}:${key}00`, password: "pw" })).resolves.toBe(false);
+    await expect(verifyPassword({ hash: `${SALT}:${key}00`, password: "pw" })).resolves.toBe(false);
   });
 });
