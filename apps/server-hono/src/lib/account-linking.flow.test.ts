@@ -297,8 +297,7 @@ describe("Continue with Google — implicit sign-in", () => {
     });
     expect(res.headers.get("location")).toBe("/dashboard");
 
-    const rows = db.account as Array<{ userId: string; providerId: string; accountId: string }>;
-    expect(rows.filter((row) => row.userId === user.id).map((row) => row.accountId)).toEqual([
+    expect(db.account.filter((row) => row.userId === user.id).map((row) => row.accountId)).toEqual([
       "g-owner",
     ]);
     // The squatter's Google account now lands in a fresh user, not in the owner's.
