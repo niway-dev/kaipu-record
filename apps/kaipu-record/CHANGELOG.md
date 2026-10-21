@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.15.0](https://github.com/niway-dev/kaipu-record/compare/desktop-v0.14.1...desktop-v0.15.0) (2026-10-21)
+
+
+### Features
+
+* **desktop:** offer to save a stranded recording elsewhere and say what happened ([7ee1730](https://github.com/niway-dev/kaipu-record/commit/7ee173041540ed66629487433b32e105631f4121))
+* **desktop:** recover stranded recording parts into the vault at launch ([4dad233](https://github.com/niway-dev/kaipu-record/commit/4dad2339a3cc04aa0fba23f65da917cba7c418c9))
+
+
+### Bug Fixes
+
+* **desktop:** let salvage overwrite a destination the user confirmed ([240be75](https://github.com/niway-dev/kaipu-record/commit/240be755a7b6f8ce16201bcae1562845f29d2cc1))
+* **desktop:** localize the recovered recording title ([4802823](https://github.com/niway-dev/kaipu-record/commit/4802823301aef0fbefe1cda93f64449ade014442))
+* **desktop:** never lose a finished recording when the vault is unreachable (audit REC-B6, REC-A8) ([a181d1a](https://github.com/niway-dev/kaipu-record/commit/a181d1a30f2b5bff3286c0e634b62c0cb85c3fb8))
+* **desktop:** screenshot editor save races (audit SHOT-B1/B4/B8/B9) ([fa87962](https://github.com/niway-dev/kaipu-record/commit/fa87962a2294cacc98d5f6d5ace0451c7bbe5652))
+* **desktop:** screenshot editor saves never drop edits, clicks or the wrong item ([e5b25e6](https://github.com/niway-dev/kaipu-record/commit/e5b25e6390b1e094a3bd4d2e103ad43c3442d1b6))
+* **desktop:** skip the tag import while the vault folder is missing ([981630a](https://github.com/niway-dev/kaipu-record/commit/981630aaf6f9b17eeb4cabaa8350d466da44e3ef))
+* **desktop:** stage recordings in the vault and keep a take recoverable when finalize cannot reach it ([18a764e](https://github.com/niway-dev/kaipu-record/commit/18a764ef2e80a53372c15a366bcbd92a44ff0598))
+* **desktop:** tag registry imports once and is never overwritten when untrusted ([f522276](https://github.com/niway-dev/kaipu-record/commit/f522276e0600917a0685873135fff37952e789d3))
+* **desktop:** tag registry imports once and is never overwritten when untrusted (audit LIB-A4, LIB-B6, LIB-B7) ([8621fd7](https://github.com/niway-dev/kaipu-record/commit/8621fd796144ddd99b829814379c86dccc4ffa7f))
+
 ## [0.14.1](https://github.com/niway-dev/kaipu-record/compare/desktop-v0.14.0...desktop-v0.14.1) (2026-10-20)
 
 
