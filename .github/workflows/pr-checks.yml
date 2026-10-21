@@ -131,8 +131,9 @@ jobs:
         run: bunx oxfmt --check .
 
       # No database involved: `drizzle-kit generate` only diffs the schema files against the
-      # committed snapshot. See ADR 0011.
+      # committed snapshot. See ADR 0029.
       - name: Check committed migrations match the schema
+        timeout-minutes: 5
         run: bun run db:check
 
   types:
