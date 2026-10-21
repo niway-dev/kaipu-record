@@ -20,6 +20,12 @@ export const baseConfig: BetterAuthOptions = {
   appName: "Kaipu Record",
   database: drizzleAdapter(db, {
     provider: "pg",
+    // Every model Better Auth writes must be listed. Since 1.7 the adapter checks this map
+    // against the tables it expects before every endpoint call, and a missing one fails all
+    // requests (SCHEMA_MISMATCH), not just the flows that use it. `verification` holds OAuth
+    // state (storeStateStrategy defaults to "database" when a database is configured),
+    // password-reset tokens and one-time notices. `rateLimit` holds the limiter's counters
+    // (`rateLimit.storage: "database"` below).
     schema: {
       user: userTable,
       account: accountTable,
@@ -36,10 +42,6 @@ export const baseConfig: BetterAuthOptions = {
   },
   emailAndPassword: {
     enabled: true,
-    // Sign-in is refused until the address is verified. This also makes sign-up answer
-    // identically for new and already-registered addresses (no account enumeration),
-    // and stops anyone squatting an address they do not own.
-    requireEmailVerification: true,
     password: {
       /**
        * Hash password using scrypt from node:crypto (async: does not block the isolate).
@@ -52,7 +54,7 @@ export const baseConfig: BetterAuthOptions = {
       },
 
       /**
-       * Verify password against hash in constant time.
+       * Verify password against hash in constant time (audit F-10).
        */
       verify: async ({ hash, password }: { hash: string; password: string }): Promise<boolean> => {
         const [salt, key] = hash.split(":");
@@ -65,17 +67,12 @@ export const baseConfig: BetterAuthOptions = {
       },
     },
   },
-  account: {
-    // Provider tokens are encrypted at rest with BETTER_AUTH_SECRET. No social provider is
-    // configured today; this keeps one from storing plaintext tokens if it is added.
-    encryptOAuthTokens: true,
-  },
   rateLimit: {
     // Explicit: Better Auth only enables the limiter when NODE_ENV === "production", and the
     // Worker does not set it. Disabled only under the test runner.
     enabled: process.env.NODE_ENV !== "test",
     // Per-isolate memory is useless on Workers (each isolate has its own counters), so the
-    // counters live in the database, where Better Auth updates them atomically.
+    // counters live in the database, where Better Auth updates them atomically (ADR 0029).
     storage: "database",
     window: 10,
     max: 100,
@@ -102,7 +99,6 @@ export const baseConfig: BetterAuthOptions = {
       httpOnly: true,
     },
   },
-  // plugins: [customSession(getCustomSession)],
   // `requireSignature` rejects a bare, unsigned session id in the Authorization header. Without
   // it the plugin re-signs whatever it was handed and then verifies its own signature — a
   // tautology that accepts a raw session id. Desktop always sends the full signed cookie value
@@ -110,7 +106,3 @@ export const baseConfig: BetterAuthOptions = {
   // the signature costs nothing and closes that acceptance path.
   plugins: [bearer({ requireSignature: true })],
 };
-
-// export const options = {
-//   plugins: [customSession(getCustomSession)],
-// } satisfies BetterAuthOptions;

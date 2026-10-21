@@ -8,6 +8,9 @@ import {
 } from "@renderer/features/version-gate";
 import { useUpdateStatus, UpdateBanner } from "@renderer/features/updater";
 import { useScreenshotCapture } from "@renderer/features/screenshots/use-screenshot-capture";
+import { useCaptureToastHandOffs } from "@renderer/features/screenshots/toast/use-capture-toast-hand-offs";
+import { StatusStackProvider } from "@renderer/features/status-cards/status-stack";
+import { cancelVideoExport } from "@renderer/features/video-editor/export/export-runner";
 import styles from "./app-root.module.css";
 
 /**
@@ -21,6 +24,8 @@ export function AppRoot(): React.JSX.Element {
   const gate = useVersionGate();
   const update = useUpdateStatus();
   const { capture } = useScreenshotCapture();
+  // The capture toast's Annotate / Open in Library land on the editor or the Library.
+  useCaptureToastHandOffs();
 
   // A global "start recording" (the hotkey or the Capture Panel) can arrive on any
   // route — the recorder lives on the Record page, so bring the user there and
@@ -45,7 +50,10 @@ export function AppRoot(): React.JSX.Element {
 
   // Global ⌘⌃X hotkey: main brings the window to front and broadcasts this event;
   // we run the region-capture flow here so navigation (useNavigate) is available.
-  useEffect(() => window.electronAPI.onCaptureScreenshotHotkey(capture), [capture]);
+  useEffect(
+    () => window.electronAPI.onCaptureScreenshotHotkey(({ mode }) => void capture(mode)),
+    [capture],
+  );
 
   // A recording finishing is reported by the module-singleton recorder store
   // (see recorder-store.ts), not by whichever page happens to be mounted — the
@@ -63,6 +71,10 @@ export function AppRoot(): React.JSX.Element {
     [navigate],
   );
 
+  // Closing the window or quitting mid-export: main confirmed with the user and asks the
+  // export to stop cleanly (its writer session aborted, no temp file left behind).
+  useEffect(() => window.electronAPI.onExportCommand(() => cancelVideoExport()), []);
+
   // Signal main that our IPC listeners (above) are registered — LAST effect, so
   // it runs after them. Main defers window-triggered actions (start/capture/
   // source-picker sent to a freshly-created window) until this fires, so they're
@@ -75,7 +87,11 @@ export function AppRoot(): React.JSX.Element {
         <VersionGateBanner message={gate.message} downloadUrl={gate.downloadUrl} />
       )}
       {update.state === "ready" && <UpdateBanner version={update.version} />}
-      <Outlet />
+      {/* The top-right status cards (a background export's progress, "Ready to share",
+          a page's "Recording saved") live here, so they survive navigation. */}
+      <StatusStackProvider>
+        <Outlet />
+      </StatusStackProvider>
       {gate.kind === "hard" && (
         <VersionGateOverlay message={gate.message} downloadUrl={gate.downloadUrl} />
       )}

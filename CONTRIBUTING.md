@@ -36,9 +36,10 @@ Never in a public issue. See [SECURITY.md](SECURITY.md).
 
 - **Issue first.** A pull request links the issue it resolves.
 - **One behaviour per pull request.** Refactors travel separately.
-- **The checks apply to everyone.** Every pull request runs `bun run verify`, the app
-  builds and the macOS end-to-end suite in Actions, and `Merge requirements` must be green
-  ([ADR 0010](apps/documentation/src/content/docs/architecture/decisions/0010-checks-run-in-actions-on-every-pr.mdx)).
+- **The checks apply to everyone.** The pre-push hook runs lint, format, builds and type
+  checks; `bun run verify` runs everything on demand. In Actions, the release pull request
+  runs `verify`, the app builds and the macOS end-to-end suite before anything is tagged
+  ([ADR 0027](apps/documentation/src/content/docs/architecture/decisions/0027-verify-release-candidates-only.mdx)).
 - **Disclose generated code.** Say whether a tool wrote it, and confirm you ran it.
 - **No drive-by dependency changes.** A new or upgraded dependency needs its own issue: there
   is no `postinstall`, and native rebuilds are explicit by design.

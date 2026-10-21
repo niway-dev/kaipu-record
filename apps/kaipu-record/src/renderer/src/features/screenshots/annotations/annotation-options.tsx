@@ -1,6 +1,7 @@
 import React from "react";
 import { Trash2 } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
+import { isWindowsHost } from "@renderer/features/shortcuts/host-platform";
 import { ANNOTATION_COLORS, STROKE_WIDTHS, TEXT_SIZES } from "./tools";
 import type { Annotation } from "./scene";
 import type { EditorScene } from "./use-editor-scene";
@@ -197,7 +198,7 @@ export function AnnotationOptions({
         <button
           type="button"
           aria-label={t("deleteAria")}
-          title={t("deleteTitle")}
+          title={t(isWindowsHost() ? "deleteTitleWindows" : "deleteTitle")}
           className={styles.delete}
           onClick={() => scene.removeSelected()}
         >

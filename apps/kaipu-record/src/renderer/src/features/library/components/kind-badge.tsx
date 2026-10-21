@@ -1,14 +1,15 @@
-import { Camera, Video } from "lucide-react";
+import { Camera, ImagePlay, Video } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import type { LibraryKind } from "@renderer/features/library/types";
 import styles from "./kind-badge.module.css";
 
 const KIND_META: Record<
   LibraryKind,
-  { labelKey: "kindRecording" | "kindScreenshot"; Icon: typeof Video }
+  { labelKey: "kindRecording" | "kindScreenshot" | "kindGif"; Icon: typeof Video }
 > = {
   recording: { labelKey: "kindRecording", Icon: Video },
   screenshot: { labelKey: "kindScreenshot", Icon: Camera },
+  gif: { labelKey: "kindGif", Icon: ImagePlay },
 };
 
 /**

@@ -16,6 +16,11 @@ export type MessageSlice = Namespace | "legal.links";
 
 const MARKETING_CHROME: readonly MessageSlice[] = ["landing", "roadmap", "settings", "legal.links"];
 const APP_CHROME: readonly MessageSlice[] = ["header", "settings", "auth", "legal"];
+/**
+ * The sign-in pages (`AuthShell`): no app header, so no `header` or `settings`. `legal` stays for
+ * the sign-up legal notice, whose text lives in that namespace.
+ */
+const AUTH_CHROME: readonly MessageSlice[] = ["auth", "legal"];
 
 /**
  * First match wins. `exact` rules match the whole pathname, the others match the
@@ -29,10 +34,22 @@ const ROUTE_SLICES: ReadonlyArray<{
   slices: readonly MessageSlice[];
 }> = [
   { path: "/", exact: true, slices: [...MARKETING_CHROME, "record", "nav"] },
+  { path: "/features", slices: [...MARKETING_CHROME, "features"] },
   { path: "/roadmap", slices: MARKETING_CHROME },
   { path: "/legal", slices: [...MARKETING_CHROME, "legal"] },
-  { path: "/auth", slices: APP_CHROME },
-  { path: "/recordings", slices: [...APP_CHROME, "recordings"] },
+  // Desktop sign-in through the browser (NIW2-471): the sign-in form plus its own copy.
+  { path: "/auth/desktop", slices: [...AUTH_CHROME, "desktopAuth"] },
+  { path: "/auth", slices: AUTH_CHROME },
+  // `/account` and `/recordings` only redirect into `/dashboard/*`, so they need no copy.
+  {
+    path: "/dashboard",
+    exact: true,
+    slices: [...APP_CHROME, "dashboard", "account", "storageCloud"],
+  },
+  { path: "/dashboard/profile", slices: [...APP_CHROME, "dashboard", "account"] },
+  { path: "/dashboard/settings", slices: [...APP_CHROME, "dashboard", "account", "storageCloud"] },
+  { path: "/dashboard/recordings", slices: [...APP_CHROME, "dashboard", "recordings"] },
+  { path: "/dashboard", slices: [...APP_CHROME, "dashboard"] },
 ];
 
 function normalizePath(pathname: string): string {

@@ -22,13 +22,15 @@ describe("formatDuration", () => {
 describe("formatSize", () => {
   it("picks the unit by magnitude", () => {
     expect(formatSize(512)).toBe("512 B");
-    expect(formatSize(2048)).toBe("2.0 KB");
-    expect(formatSize(5 * 1024 * 1024)).toBe("5.0 MB");
-    expect(formatSize(3 * 1024 * 1024 * 1024)).toBe("3.0 GB");
+    expect(formatSize(2000)).toBe("2.0 KB");
+    expect(formatSize(5_000_000)).toBe("5.0 MB");
+    expect(formatSize(3_000_000_000)).toBe("3.0 GB");
+    // Decimal, like Finder and GitHub's limits: not 113 MB.
+    expect(formatSize(119_000_000)).toBe("119 MB");
   });
 
   it("drops decimals once the value reaches 10", () => {
-    expect(formatSize(25 * 1024 * 1024)).toBe("25 MB");
+    expect(formatSize(25_000_000)).toBe("25 MB");
   });
 });
 

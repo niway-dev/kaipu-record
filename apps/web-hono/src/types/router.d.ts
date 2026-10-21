@@ -11,7 +11,10 @@ declare module "@tanstack/react-router" {
      *
      * Routes that omit this get the app shell, which is the right default for
      * anything behind sign-in.
+     *
+     * `"auth"` is the sign-in pages: they bring their own full-page shell (`AuthShell`) drawn with
+     * the landing's palette, so they follow the landing's theme cookie like the marketing pages.
      */
-    shell?: "marketing";
+    shell?: "marketing" | "auth";
   }
 }

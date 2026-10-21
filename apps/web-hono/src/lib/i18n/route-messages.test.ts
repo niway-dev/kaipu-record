@@ -25,9 +25,63 @@ describe("slicesForPath", () => {
   });
 
   it("loads the recordings namespace only for the recordings page", () => {
-    expect(slicesForPath("/recordings")).toContain("recordings");
+    expect(slicesForPath("/dashboard/recordings")).toContain("recordings");
+    expect(slicesForPath("/dashboard")).not.toContain("recordings");
     expect(slicesForPath("/auth/login")).not.toContain("recordings");
     expect(slicesForPath("/auth/login")).toContain("auth");
+  });
+
+  it("gives the sign-in pages their own copy and the legal notice, without the app header", () => {
+    for (const path of ["/auth/login", "/auth/signup", "/auth/forgot-password", "/auth/desktop"]) {
+      expect(slicesForPath(path)).toContain("auth");
+      expect(slicesForPath(path)).toContain("legal");
+      expect(slicesForPath(path)).not.toContain("header");
+    }
+  });
+
+  it("gives the desktop sign-in pages their copy and the sign-in form, and no one else", () => {
+    for (const path of ["/auth/desktop", "/auth/desktop/done"]) {
+      expect(slicesForPath(path)).toContain("desktopAuth");
+      expect(slicesForPath(path)).toContain("auth");
+    }
+    expect(slicesForPath("/auth/login")).not.toContain("desktopAuth");
+    expect(slicesForPath("/auth/desktopish")).not.toContain("desktopAuth");
+  });
+
+  it("gives every dashboard page its navigation copy and the app chrome", () => {
+    for (const path of [
+      "/dashboard",
+      "/dashboard/profile",
+      "/dashboard/settings",
+      "/dashboard/recordings",
+    ]) {
+      const slices = slicesForPath(path);
+      expect(slices).toContain("dashboard");
+      expect(slices).toContain("header");
+      expect(slices).toContain("auth");
+    }
+    expect(slicesForPath("/dashboard/")).toEqual(slicesForPath("/dashboard"));
+  });
+
+  it("gives the home and the settings page the shared capacity copy, and not the profile", () => {
+    for (const path of ["/dashboard", "/dashboard/settings"]) {
+      expect(slicesForPath(path)).toContain("account");
+      expect(slicesForPath(path)).toContain("storageCloud");
+    }
+    expect(slicesForPath("/dashboard/profile")).toContain("account");
+    expect(slicesForPath("/dashboard/profile")).not.toContain("storageCloud");
+  });
+
+  it("sends no copy for the redirect-only legacy paths", () => {
+    expect(slicesForPath("/account")).toEqual([]);
+    expect(slicesForPath("/recordings")).toEqual([]);
+  });
+
+  it("ships the features catalogue only to the features page", () => {
+    expect(slicesForPath("/features")).toContain("features");
+    expect(slicesForPath("/features")).toContain("landing");
+    expect(slicesForPath("/")).not.toContain("features");
+    expect(slicesForPath("/roadmap")).not.toContain("features");
   });
 
   it("sends nothing for a route with no rule", () => {
@@ -36,7 +90,17 @@ describe("slicesForPath", () => {
 
   it("only names namespaces that exist in the catalog", () => {
     const known = new Set(Object.keys(en));
-    for (const path of ["/", "/roadmap", "/legal/cookies", "/auth/login", "/recordings"]) {
+    for (const path of [
+      "/",
+      "/features",
+      "/roadmap",
+      "/legal/cookies",
+      "/auth/login",
+      "/dashboard",
+      "/dashboard/profile",
+      "/dashboard/settings",
+      "/dashboard/recordings",
+    ]) {
       for (const slice of slicesForPath(path)) {
         expect(known.has(slice.split(".")[0] ?? "")).toBe(true);
       }

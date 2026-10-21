@@ -1,16 +1,25 @@
 name: Release Desktop
 
-# Builds the macOS desktop app (arm64 + x64), signs with Developer ID and
-# notarizes it, then attaches the DMGs to a GitHub Release.
+# Builds the desktop app for macOS (arm64 + x64, signed with Developer ID and
+# notarized) and Windows (x64 NSIS installer), then publishes both to R2 and to one
+# GitHub Release. ADR 0023 (/architecture/decisions/0023-one-release-workflow-per-os-build-jobs-one-publisher):
+#
+#   verify -> build-mac || build-win -> publish
+#
+# The build jobs only build and upload their `dist/` as a workflow artifact
+# (`desktop-mac`, `desktop-win`). `publish` is the only job that touches R2 or the
+# GitHub Release, so two parallel jobs can never create two draft releases for one tag.
 #
 # Trigger: push a `desktop-v*` tag (e.g. `desktop-v0.1.0`), or run manually from
-# the Actions tab while tuning the pipeline.
+# the Actions tab while tuning the pipeline. A manual run builds both platforms and
+# keeps the artifacts for 3 days; `publish` is skipped because there is no tag.
 #
 # Release gate (ADR 0004, /architecture/decisions/0004-local-first-release-verification):
 # a Linux `verify` job (lint, types, unit tests) must pass on this exact SHA, then the
-# macOS job builds, runs the Playwright E2E against that build, and only then signs,
-# notarizes and writes the update feed to R2. PR-time cloud checks were retired; this
-# is where the cloud validates the code that ships.
+# macOS job builds and runs the Playwright E2E against that build, and only then signs
+# and notarizes. Windows has no E2E (ADR 0023, ADR 0006): it is verified by the build
+# plus a manual QA checklist. PR-time cloud checks were retired; this is where the
+# cloud validates the code that ships.
 #
 # Secrets live in the `production` GitHub Environment (hence `environment:` below):
 #   CSC_LINK          base64 of the Developer ID .p12 (electron-builder accepts base64)
@@ -18,6 +27,9 @@ name: Release Desktop
 #   APPLE_API_KEY     base64 of the App Store Connect .p8 (decoded to a temp file below)
 #   APPLE_API_KEY_ID  the key id (10 chars) — e.g. QWXC4HC43K
 #   APPLE_API_ISSUER  the Issuer ID (UUID)
+#   WIN_SIGN_VENDOR, AZURE_*, WIN_SIGN_*  optional Windows signing inputs. Absent today:
+#                     the first Windows beta ships unsigned (the hook that reads them
+#                     lands with scripts/sign-windows.cjs).
 #
 # NOTE: CSC_LINK and APPLE_API_KEY must hold the *base64 of the files*, NOT the
 # local file paths from .env.signing — those paths don't exist on the runner.
@@ -34,7 +46,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write # create the GitHub Release and upload assets
+  contents: read # least privilege; only `publish` gets write
 
 jobs:
   # Release gate (ADR 0004): the same `bun run verify` the Lefthook pre-push runs, on the
@@ -82,7 +94,7 @@ jobs:
       - name: Verify
         run: bun run verify
 
-  release-mac:
+  build-mac:
     name: Build, sign & notarize (macOS)
     needs: verify
     runs-on: macos-latest
@@ -131,12 +143,20 @@ jobs:
           # deliberately its own variable rather than the web's VITE_SERVER_URL, which
           # can be re-pointed by a redeploy that installed desktop apps cannot follow.
           MAIN_VITE_SERVER_URL: ${{ vars.MAIN_VITE_SERVER_URL }}
+          # The website the browser sign-in opens (https://kaipu.app/auth/desktop). Frozen into
+          # the binary like the server URL.
+          MAIN_VITE_WEB_URL: ${{ vars.MAIN_VITE_WEB_URL }}
         run: |
           # Fail here rather than ship: an unset value inlines as `undefined`, and the
           # main process throws on startup (src/main/index.ts), so the app would open
           # no window at all on every user's machine.
           test -n "$MAIN_VITE_SERVER_URL" || {
             echo "::error::MAIN_VITE_SERVER_URL is not set — add it to the production Environment"
+            exit 1
+          }
+          # Without it the shipped app cannot start a sign-in at all.
+          test -n "$MAIN_VITE_WEB_URL" || {
+            echo "::error::MAIN_VITE_WEB_URL is not set — add it to the production Environment"
             exit 1
           }
           bun run build
@@ -179,9 +199,173 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         run: bunx electron-builder --mac --arm64 --x64 --publish never
 
-      - name: Publish update feed + installers to R2
-        if: startsWith(github.ref, 'refs/tags/')
+      # Always uploaded, tag or not: `publish` downloads it. Short retention because the
+      # tag's copy lives on in R2 and the GitHub Release; this one only has to survive
+      # until `publish` runs (or, on a manual dispatch, until someone inspects it).
+      - name: Upload build as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-mac
+          path: |
+            apps/kaipu-record/dist/*.dmg
+            apps/kaipu-record/dist/*-mac.zip
+            apps/kaipu-record/dist/*-mac.zip.blockmap
+            apps/kaipu-record/dist/latest-mac.yml
+          if-no-files-found: error
+          retention-days: 3
+
+  build-win:
+    name: Build (Windows)
+    needs: verify
+    runs-on: windows-latest
+    timeout-minutes: 60
+    environment: production # MAIN_VITE_SERVER_URL (and later the signing secrets) live here
+    defaults:
+      run:
+        shell: bash # Git Bash is on the runner; the scripts below are bash
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.4
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # Same reason as on macOS: `npmRebuild: false`, so this is the only place
+      # uiohook-napi is built against Electron's ABI. The MSVC toolchain is on the runner.
+      - name: Rebuild native dependencies for Electron
+        run: bash scripts/rebuild-native.sh
+
+      # Failure 8 of the Windows release design: if the rebuild above is ever dropped or
+      # silently skipped, the installer still builds and click-hook.ts degrades to "no
+      # clicks" on every user's machine. The stamp is what scripts/rebuild-native.sh writes
+      # and scripts/setup-dev.sh reads; a mismatch with the installed Electron fails here.
+      - name: Check native dependencies were rebuilt for this Electron
         working-directory: apps/kaipu-record
+        run: |
+          ELECTRON_VERSION="$(node -p "require('./node_modules/electron/package.json').version")"
+          BUILT_FOR="$(cat node_modules/.native-deps-electron-version 2>/dev/null || echo "")"
+          if [ "$BUILT_FOR" != "$ELECTRON_VERSION" ]; then
+            echo "::error::native dependencies were built for '${BUILT_FOR}', installed Electron is '${ELECTRON_VERSION}' — the rebuild step did not run or did not finish"
+            exit 1
+          fi
+          echo "uiohook-napi built for Electron ${ELECTRON_VERSION}"
+
+      - name: Build
+        working-directory: apps/kaipu-record
+        env:
+          # Same variable and same guard as build-mac: inlined into the main bundle at
+          # build time, and an unset value makes the app open no window at all.
+          MAIN_VITE_SERVER_URL: ${{ vars.MAIN_VITE_SERVER_URL }}
+          # The website the browser sign-in opens (https://kaipu.app/auth/desktop). Frozen into
+          # the binary like the server URL.
+          MAIN_VITE_WEB_URL: ${{ vars.MAIN_VITE_WEB_URL }}
+        run: |
+          test -n "$MAIN_VITE_SERVER_URL" || {
+            echo "::error::MAIN_VITE_SERVER_URL is not set — add it to the production Environment"
+            exit 1
+          }
+          # Without it the shipped app cannot start a sign-in at all.
+          test -n "$MAIN_VITE_WEB_URL" || {
+            echo "::error::MAIN_VITE_WEB_URL is not set — add it to the production Environment"
+            exit 1
+          }
+          bun run build
+
+      # No E2E here (ADR 0023, ADR 0006): the macOS job is the gate. Windows is verified
+      # by this build plus the manual QA checklist in the Windows release design.
+      - name: Package (NSIS installer)
+        working-directory: apps/kaipu-record
+        env:
+          # Read by the signing hook (scripts/sign-windows.cjs). Secrets that do not
+          # exist resolve to empty strings, and the hook then ships the build unsigned
+          # with a visible warning. Adding a certificate later is a secrets change.
+          WIN_SIGN_VENDOR: ${{ secrets.WIN_SIGN_VENDOR }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          WIN_SIGN_PUBLISHER_NAME: ${{ secrets.WIN_SIGN_PUBLISHER_NAME }}
+          WIN_SIGN_ENDPOINT: ${{ secrets.WIN_SIGN_ENDPOINT }}
+          WIN_SIGN_CERTIFICATE_PROFILE: ${{ secrets.WIN_SIGN_CERTIFICATE_PROFILE }}
+          WIN_SIGN_ACCOUNT_NAME: ${{ secrets.WIN_SIGN_ACCOUNT_NAME }}
+        run: bunx electron-builder --win --publish never
+
+      - name: Upload build as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-win
+          path: |
+            apps/kaipu-record/dist/*-setup.exe
+            apps/kaipu-record/dist/*-setup.exe.blockmap
+            apps/kaipu-record/dist/latest.yml
+          if-no-files-found: error
+          retention-days: 3
+
+  publish:
+    name: Publish (R2 + GitHub Release)
+    needs: [build-mac, build-win]
+    # Only tag pushes release. A manual dispatch stops after the builds and leaves the
+    # two workflow artifacts behind.
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write # create the GitHub Release and upload assets
+    environment: production # the R2 secrets live in this Environment
+    steps:
+      # Needed for apps/kaipu-record/package.json (the version that names the files).
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download macOS build
+        uses: actions/download-artifact@v4
+        with:
+          name: desktop-mac
+          path: artifacts/mac
+
+      - name: Download Windows build
+        uses: actions/download-artifact@v4
+        with:
+          name: desktop-win
+          path: artifacts/win
+
+      # Failure 2 of the Windows release design: a tag must never publish with a platform
+      # (or part of one) missing. upload-artifact already errors on no files; this is the
+      # second lock, on the download side. It names every file the R2 copy and the release
+      # depend on, because a directory holding only latest-mac.yml is non-empty yet would
+      # pass `aws s3 cp --include` (no match exits 0) and leave R2 half-written. Nothing
+      # below may write to R2 until all of these exist.
+      - name: Fail if any expected build file is missing
+        run: |
+          VERSION="$(node -p "require('./apps/kaipu-record/package.json').version")"
+          MISSING=0
+          need() {
+            test -f "$1" || {
+              echo "::error::missing ${1} — a platform build is incomplete, refusing to publish"
+              MISSING=1
+            }
+          }
+          need_glob() {
+            compgen -G "$1" > /dev/null || {
+              echo "::error::no file matches ${1} — a platform build is incomplete, refusing to publish"
+              MISSING=1
+            }
+          }
+          need "artifacts/mac/kaipu-record-${VERSION}-arm64.dmg"
+          need "artifacts/mac/kaipu-record-${VERSION}-x64.dmg"
+          need "artifacts/mac/latest-mac.yml"
+          need_glob "artifacts/mac/*-mac.zip"
+          need_glob "artifacts/mac/*-mac.zip.blockmap"
+          need "artifacts/win/kaipu-record-${VERSION}-setup.exe"
+          need "artifacts/win/kaipu-record-${VERSION}-setup.exe.blockmap"
+          need "artifacts/win/latest.yml"
+          exit "$MISSING"
+
+      - name: Publish update feed + installers to R2
         env:
           # R2's S3 API needs its own Access Key + Secret (created in R2 → Manage
           # R2 API Tokens) — the Cloudflare API token does NOT work here. The
@@ -194,27 +378,33 @@ jobs:
           R2_BUCKET: kaipu-bucket
         run: |
           ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
-          # Derive from package.json (same source electron-builder names the dmg from),
+          # Derive from package.json (same source electron-builder names the files from),
           # so a tag/package version drift can never point at a nonexistent file.
-          VERSION="$(node -p "require('./package.json').version")"
-          # Update feed (zip + blockmap + latest-mac.yml) -> updates/
-          aws s3 cp dist/ "s3://${R2_BUCKET}/updates/" --recursive \
+          VERSION="$(node -p "require('./apps/kaipu-record/package.json').version")"
+          # Update feed -> updates/. One explicit --include list per platform (never a
+          # blanket --recursive copy): latest.yml and latest-mac.yml share this prefix and
+          # must each come from their own artifact, never overwrite one another.
+          aws s3 cp artifacts/mac/ "s3://${R2_BUCKET}/updates/" --recursive \
             --exclude "*" --include "*-mac.zip" --include "*-mac.zip.blockmap" --include "latest-mac.yml" \
+            --endpoint-url "$ENDPOINT"
+          aws s3 cp artifacts/win/ "s3://${R2_BUCKET}/updates/" --recursive \
+            --exclude "*" --include "*-setup.exe" --include "*-setup.exe.blockmap" --include "latest.yml" \
             --endpoint-url "$ENDPOINT"
           # Installers -> download/<version>/ and download/latest/
           for arch in arm64 x64; do
-            SRC="dist/kaipu-record-${VERSION}-${arch}.dmg"
+            SRC="artifacts/mac/kaipu-record-${VERSION}-${arch}.dmg"
             aws s3 cp "$SRC" "s3://${R2_BUCKET}/download/${VERSION}/kaipu-${arch}.dmg" --endpoint-url "$ENDPOINT"
             aws s3 cp "$SRC" "s3://${R2_BUCKET}/download/latest/kaipu-${arch}.dmg" --endpoint-url "$ENDPOINT"
           done
+          WIN_SRC="artifacts/win/kaipu-record-${VERSION}-setup.exe"
+          aws s3 cp "$WIN_SRC" "s3://${R2_BUCKET}/download/${VERSION}/kaipu-setup.exe" --endpoint-url "$ENDPOINT"
+          aws s3 cp "$WIN_SRC" "s3://${R2_BUCKET}/download/latest/kaipu-setup.exe" --endpoint-url "$ENDPOINT"
 
       - name: Prune old release artifacts (keep last N versions)
         # download/<version>/ and updates/ accumulate one entry per release forever
         # otherwise (only download/latest/ self-overwrites). Auto-update only ever
         # needs the newest version's feed entry; older ones just enable manual
         # rollback, so we only need to keep a handful of them around.
-        if: startsWith(github.ref, 'refs/tags/')
-        working-directory: apps/kaipu-record
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -238,8 +428,9 @@ jobs:
               [ -z "$v" ] && continue
               echo "Pruning release artifacts for v${v} (keeping last ${KEEP_VERSIONS} versions)"
               aws s3 rm "s3://${R2_BUCKET}/download/${v}/" --recursive --endpoint-url "$ENDPOINT"
-              # Version-scoped update-feed files only (zip + blockmap for both archs).
-              # latest-mac.yml has no version segment in its name, so it's never matched here.
+              # Version-scoped update-feed files only (mac zip + blockmaps, Windows exe + blockmap).
+              # latest-mac.yml and latest.yml have no version segment in their names, so they are
+              # never matched here. The Windows installer and blockmap do (`*-<v>-setup.exe`).
               aws s3 rm "s3://${R2_BUCKET}/updates/" --recursive --endpoint-url "$ENDPOINT" \
                 --exclude "*" --include "*-${v}-*"
             done
@@ -247,25 +438,10 @@ jobs:
             echo "${TOTAL} version(s) published, nothing to prune (keeping last ${KEEP_VERSIONS})."
           fi
 
-      - name: Upload build as workflow artifact
-        # Only for manual-dispatch runs (no tag): a tag release already ships the
-        # DMG/zip to R2 and to the GitHub Release, so the workflow artifact would
-        # be a redundant ~500 MB copy that counts against the Actions storage
-        # quota. Manual runs have neither, so keep a short-lived artifact for them.
-        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: kaipu-record-macos
-          path: |
-            apps/kaipu-record/dist/*.dmg
-            apps/kaipu-record/dist/*.zip
-          if-no-files-found: error
-          retention-days: 3
-
       - name: Upload artifacts to GitHub Release
-        # Only on tag pushes — a manual dispatch has no tag to release against,
-        # so it just exercises the build/sign/notarize path.
-        if: startsWith(github.ref, 'refs/tags/')
+        # The ONLY gh-release step in this workflow (scripts/check-release-workflow.ts
+        # enforces it): two jobs with `draft: true` can create two drafts for one tag,
+        # because a draft carries no tag to match on.
         uses: softprops/action-gh-release@v2
         with:
           # Draft so a human reviews/writes notes before it reaches testers.
@@ -274,7 +450,10 @@ jobs:
           prerelease: true
           fail_on_unmatched_files: true
           files: |
-            apps/kaipu-record/dist/*.dmg
-            apps/kaipu-record/dist/*.zip
-            apps/kaipu-record/dist/*.blockmap
-            apps/kaipu-record/dist/latest-mac*.yml
+            artifacts/mac/*.dmg
+            artifacts/mac/*.zip
+            artifacts/mac/*.blockmap
+            artifacts/mac/latest-mac*.yml
+            artifacts/win/*.exe
+            artifacts/win/*.blockmap
+            artifacts/win/latest.yml

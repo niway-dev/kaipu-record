@@ -162,29 +162,37 @@ sudo xcode-select --switch /Library/Developer/CommandLineTools
 Do not install the CLI with `bun add` — bun blocks the `preinstall` that
 extracts the binary, so you get the package without a working command.
 
-Then every command works as before — the scripts pull secrets themselves:
+Then generate the local files, from the repo root:
 
-- `bun run dev` — each app fetches its own env at start-up
-- `bun run db:push` and the other `db:*` scripts wrap `infisical run`
+```bash
+bun env:pull       # scripts/env-pull.sh: every app's .env, plus packages/infra-db/.env
+```
 
-Changing a value means changing it in Infisical and restarting. Never add it to
-a local file.
+That is the only command that talks to Infisical in local development:
+
+- `bun run dev` reads each app's `.env` and never calls Infisical, so an
+  Infisical outage cannot block it.
+- `bun run db:*`, `plan` and `test:integration` load `packages/infra-db/.env`
+  with `bun --env-file`. A variable set inline in the shell wins over the file.
+- A missing file fails fast through `scripts/require-env.sh`, and the Zod
+  schemas validate through `parseEnv` (`@kaipu/infra-env`); both point to
+  `bun env:pull`.
+- The pull is all or nothing: a failed fetch leaves every existing `.env` as it
+  was.
+
+Changing a value means changing it in Infisical, then `bun env:pull` and a
+restart. Never hand-edit a generated `.env`.
 
 Layout: environment slug `dev` (the UI shows it as "Development"). Secrets live
-in four folders — `/cloudflare`, `/database`, `/server-hono`, `/kaipu-record` —
-plus non-secret config at the root. Scripts use `--recursive` (or the four
-explicit `--path` flags where `export` is needed, since `export` has no
-`--recursive`).
+in six folders — `/public`, `/database`, `/cloudflare`, `/auth`, `/email`,
+`/signing` — and tags name the consumer. `infisical export` has no
+`--recursive`, so `env-pull.sh` lists the folders explicitly; a new folder must
+be added there.
 
-Workers are the exception: `wrangler` needs values as bindings rather than
-process env, so `env:pull` writes a generated `.env` that wrangler reads.
-
-Scripts go through `scripts/with-env.sh` rather than calling `infisical run`
-directly. It fetches from Infisical locally, and **passes straight through when
-`CI` is set** — CI builds with placeholder values on purpose and must not need a
-secrets CLI. Locally a missing CLI fails loudly instead of building with
-undefined values, which would produce a subtly broken artifact rather than an
-error.
+`scripts/with-env.sh` (live `infisical run`) remains only for the signed
+production build in `apps/kaipu-record/scripts/build-mac-local.sh`. CI never
+needs a secrets CLI: workflows inject their own values, and `require-env.sh`
+passes straight through when `CI` is set.
 
 ## Native dependencies: no install scripts
 

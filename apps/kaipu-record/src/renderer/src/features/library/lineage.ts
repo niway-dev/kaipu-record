@@ -8,7 +8,7 @@ import type { LibraryVideo } from "./types";
 
 export interface Lineage {
   byAssetId: Map<string, LibraryVideo>;
-  /** Exports of a recording, newest first. Screenshots are never keys or values. */
+  /** Exports of a recording (videos and GIFs), newest first. Screenshots are never keys or values. */
   exportsOf: Map<string, LibraryVideo[]>;
 }
 
@@ -17,7 +17,8 @@ export function buildLineage(videos: readonly LibraryVideo[]): Lineage {
   const exportsOf = new Map<string, LibraryVideo[]>();
   for (const v of videos) byAssetId.set(v.assetId, v);
   for (const v of videos) {
-    if (v.kind !== "recording" || !v.derivedFromAssetId) continue;
+    // A GIF export (NIW2-217) is an export like an MP4 one: it carries the edits too.
+    if (v.kind === "screenshot" || !v.derivedFromAssetId) continue;
     const list = exportsOf.get(v.derivedFromAssetId) ?? [];
     list.push(v);
     exportsOf.set(v.derivedFromAssetId, list);

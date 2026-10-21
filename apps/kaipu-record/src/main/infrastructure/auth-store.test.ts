@@ -41,7 +41,25 @@ vi.mock("electron", () => ({
 }));
 
 import * as authClient from "../services/auth-client";
-import { registerAuth } from "./auth-store";
+import { registerAuth as registerRealAuth, type AuthStoreDeps } from "./auth-store";
+import type { AuthClientConfig } from "../services/auth-client";
+
+/** Stand-in for the plugin-backed browser hand-off (see services/browser-sign-in.ts). */
+const browser = vi.hoisted(() => ({ begin: vi.fn(), exchange: vi.fn() }));
+
+function registerAuth(
+  config: AuthClientConfig,
+  getWindow: () => never | null,
+  deps: AuthStoreDeps = {},
+): ReturnType<typeof registerRealAuth> {
+  return registerRealAuth(config, getWindow as never, { browser, ...deps });
+}
+
+/** What the renderer does: press "Sign in with your browser", then the code comes back. */
+async function signInVia(event: { sender: unknown }): Promise<unknown> {
+  await mockState.handlers.get(IPC_CHANNELS.authBeginBrowserSignIn)!(event, "sign-in");
+  return mockState.handlers.get(IPC_CHANNELS.authSubmitCode)!(event, "code-from-browser");
+}
 
 const OTHER_SENDER = { id: "other" };
 /** Sentinel used as the main window's `webContents`, so a fake main-window object can be built
@@ -69,6 +87,8 @@ describe("auth-store", () => {
     mockState.handlers.clear();
     mockState.windows = [fakeWindow()];
     vi.restoreAllMocks();
+    browser.begin.mockReset().mockResolvedValue(undefined);
+    browser.exchange.mockReset();
     vi.spyOn(authClient, "getEntitlements").mockRejectedValue(new Error("offline"));
   });
 
@@ -84,8 +104,8 @@ describe("auth-store", () => {
     expect(status).toEqual({ kind: "signed-out" });
   });
 
-  it("authSignIn persists the token, caches identity, and broadcasts signed-in", async () => {
-    vi.spyOn(authClient, "signInWithPassword").mockResolvedValue({
+  it("a browser sign-in persists the token, caches identity, and broadcasts signed-in", async () => {
+    browser.exchange.mockResolvedValue({
       token: "tok_1",
       userId: "user-1",
       email: "a@b.com",
@@ -94,10 +114,7 @@ describe("auth-store", () => {
     const mainWindow = mockState.windows[0]!;
     registerAuth(config, () => mainWindow as never);
 
-    const status = await mockState.handlers.get(IPC_CHANNELS.authSignIn)!(
-      { sender: mainWindow.webContents },
-      { email: "a@b.com", password: "pw" },
-    );
+    const status = await signInVia({ sender: mainWindow.webContents });
 
     expect(status).toEqual({
       ok: true,
@@ -123,7 +140,7 @@ describe("auth-store", () => {
     destroyed.isDestroyed = () => true;
     const liveWindow = fakeWindow();
     mockState.windows = [destroyed, liveWindow];
-    vi.spyOn(authClient, "signInWithPassword").mockResolvedValue({
+    browser.exchange.mockResolvedValue({
       token: "tok_1",
       userId: "user-1",
       email: "a@b.com",
@@ -131,41 +148,31 @@ describe("auth-store", () => {
     });
     registerAuth(config, () => liveWindow as never);
 
-    await mockState.handlers.get(IPC_CHANNELS.authSignIn)!(
-      { sender: liveWindow.webContents },
-      { email: "a@b.com", password: "pw" },
-    );
+    await signInVia({ sender: liveWindow.webContents });
 
     expect(destroyed.webContents.send).not.toHaveBeenCalled();
     expect(liveWindow.webContents.send).toHaveBeenCalledOnce();
   });
 
-  it("rejects authSignIn from a window that isn't the main window", async () => {
+  it("rejects a browser sign-in from a window that isn't the main window", async () => {
     const mainWindow = mockState.windows[0]!;
     registerAuth(config, () => mainWindow as never);
 
-    await expect(
-      mockState.handlers.get(IPC_CHANNELS.authSignIn)!(
-        { sender: OTHER_SENDER },
-        { email: "a@b.com", password: "pw" },
-      ),
-    ).rejects.toThrow();
+    await expect(signInVia({ sender: OTHER_SENDER })).rejects.toThrow();
   });
 
-  it("returns a credential failure as a structured result instead of throwing it", async () => {
+  it("returns a sign-in failure as a structured result instead of throwing it", async () => {
     // Electron serializes anything thrown out of ipcMain.handle down to its `.message`, so a
     // thrown `{ kind }` would reach the renderer with no discriminant at all. The handler must
     // resolve the error instead, where structured cloning preserves it in full.
-    vi.spyOn(authClient, "signInWithPassword").mockRejectedValue({ kind: "invalid-credentials" });
+    browser.exchange.mockRejectedValue({ kind: "invalid-code" });
     const mainWindow = mockState.windows[0]!;
     registerAuth(config, () => mainWindow as never);
 
-    await expect(
-      mockState.handlers.get(IPC_CHANNELS.authSignIn)!(
-        { sender: mainWindow.webContents },
-        { email: "a@b.com", password: "wrong" },
-      ),
-    ).resolves.toEqual({ ok: false, error: { kind: "invalid-credentials" } });
+    await expect(signInVia({ sender: mainWindow.webContents })).resolves.toEqual({
+      ok: false,
+      error: { kind: "invalid-code" },
+    });
     expect(mainWindow.webContents.send).not.toHaveBeenCalled();
   });
 
@@ -177,7 +184,7 @@ describe("auth-store", () => {
   });
 
   it("a confirmed 401 on restore clears the stored token and returns signed-out", async () => {
-    vi.spyOn(authClient, "signInWithPassword").mockResolvedValue({
+    browser.exchange.mockResolvedValue({
       token: "tok_1",
       userId: "user-1",
       email: "a@b.com",
@@ -185,10 +192,7 @@ describe("auth-store", () => {
     });
     const mainWindow = mockState.windows[0]!;
     registerAuth(config, () => mainWindow as never);
-    await mockState.handlers.get(IPC_CHANNELS.authSignIn)!(
-      { sender: mainWindow.webContents },
-      { email: "a@b.com", password: "pw" },
-    );
+    await signInVia({ sender: mainWindow.webContents });
 
     vi.spyOn(authClient, "getSession").mockResolvedValue(null); // confirmed 401
     const status = await mockState.handlers.get(IPC_CHANNELS.authGetStatus)!({
@@ -205,7 +209,7 @@ describe("auth-store", () => {
   });
 
   it("a network failure on restore keeps the stored token and returns unknown, not signed-out", async () => {
-    vi.spyOn(authClient, "signInWithPassword").mockResolvedValue({
+    browser.exchange.mockResolvedValue({
       token: "tok_1",
       userId: "user-1",
       email: "a@b.com",
@@ -213,10 +217,7 @@ describe("auth-store", () => {
     });
     const mainWindow = mockState.windows[0]!;
     registerAuth(config, () => mainWindow as never);
-    await mockState.handlers.get(IPC_CHANNELS.authSignIn)!(
-      { sender: mainWindow.webContents },
-      { email: "a@b.com", password: "pw" },
-    );
+    await signInVia({ sender: mainWindow.webContents });
 
     vi.spyOn(authClient, "getSession").mockRejectedValue(new Error("offline"));
     const status = await mockState.handlers.get(IPC_CHANNELS.authGetStatus)!({
@@ -273,7 +274,7 @@ describe("auth-store", () => {
   });
 
   it("persists the identity with the token, so a restart restores it without a round-trip", async () => {
-    vi.spyOn(authClient, "signInWithPassword").mockResolvedValue({
+    browser.exchange.mockResolvedValue({
       token: "tok_1",
       userId: "user-1",
       email: "a@b.com",
@@ -281,10 +282,7 @@ describe("auth-store", () => {
     });
     const mainWindow = mockState.windows[0]!;
     registerAuth(config, () => mainWindow as never);
-    await mockState.handlers.get(IPC_CHANNELS.authSignIn)!(
-      { sender: mainWindow.webContents },
-      { email: "a@b.com", password: "pw" },
-    );
+    await signInVia({ sender: mainWindow.webContents });
 
     const { readFile } = await import("node:fs/promises");
     const onDisk = await readFile(join(mockState.userDataDir, "auth.enc"), "utf8");
@@ -321,7 +319,7 @@ describe("auth-store", () => {
   });
 
   it("authSignOut clears local state synchronously even when the remote sign-out fails", async () => {
-    vi.spyOn(authClient, "signInWithPassword").mockResolvedValue({
+    browser.exchange.mockResolvedValue({
       token: "tok_1",
       userId: "user-1",
       email: "a@b.com",
@@ -330,10 +328,7 @@ describe("auth-store", () => {
     vi.spyOn(authClient, "signOutRemote").mockRejectedValue(new Error("offline"));
     const mainWindow = mockState.windows[0]!;
     registerAuth(config, () => mainWindow as never);
-    await mockState.handlers.get(IPC_CHANNELS.authSignIn)!(
-      { sender: mainWindow.webContents },
-      { email: "a@b.com", password: "pw" },
-    );
+    await signInVia({ sender: mainWindow.webContents });
 
     await mockState.handlers.get(IPC_CHANNELS.authSignOut)!({ sender: mainWindow.webContents });
 
@@ -346,7 +341,7 @@ describe("auth-store", () => {
 
   it("isEncryptionAvailable() === false: sign-in fails and nothing is persisted", async () => {
     mockState.encryptionAvailable = false;
-    vi.spyOn(authClient, "signInWithPassword").mockResolvedValue({
+    browser.exchange.mockResolvedValue({
       token: "tok_1",
       userId: "user-1",
       email: "a@b.com",
@@ -357,12 +352,10 @@ describe("auth-store", () => {
 
     // The handler RETURNS the failure rather than throwing it (Electron would strip a thrown
     // error down to its `.message` and lose the structured `kind`).
-    await expect(
-      mockState.handlers.get(IPC_CHANNELS.authSignIn)!(
-        { sender: mainWindow.webContents },
-        { email: "a@b.com", password: "pw" },
-      ),
-    ).resolves.toMatchObject({ ok: false, error: { kind: "unknown" } });
+    await expect(signInVia({ sender: mainWindow.webContents })).resolves.toMatchObject({
+      ok: false,
+      error: { kind: "unknown" },
+    });
 
     // Query the same registration closure: a regression that cached before persistence failed
     // would be hidden by registering a fresh store below.
@@ -400,8 +393,8 @@ describe("auth-store", () => {
     expect(status).toEqual({ kind: "signed-out" });
   });
 
-  it("routes sign-up through the same persist-then-cache transaction", async () => {
-    vi.spyOn(authClient, "signUpWithPassword").mockResolvedValue({
+  it("a sign-up started in the browser goes through the same persist-then-cache transaction", async () => {
+    browser.exchange.mockResolvedValue({
       token: "tok_2",
       userId: "user-2",
       email: "new@b.com",
@@ -410,12 +403,7 @@ describe("auth-store", () => {
     const mainWindow = mockState.windows[0]!;
     registerAuth(config, () => mainWindow as never);
 
-    await expect(
-      mockState.handlers.get(IPC_CHANNELS.authSignUp)!(
-        { sender: mainWindow.webContents },
-        { email: "new@b.com", password: "pw", name: "New" },
-      ),
-    ).resolves.toEqual({
+    await expect(signInVia({ sender: mainWindow.webContents })).resolves.toEqual({
       ok: true,
       status: {
         kind: "signed-in",
@@ -444,17 +432,14 @@ describe("auth-store", () => {
   };
 
   async function signInAs(mainWindow: ReturnType<typeof fakeWindow>): Promise<void> {
-    vi.spyOn(authClient, "signInWithPassword").mockResolvedValue({
+    browser.exchange.mockResolvedValue({
       token: "tok_1",
       userId: "user-1",
       email: "a@b.com",
       name: "A",
     });
     registerAuth(config, () => mainWindow as never);
-    await mockState.handlers.get(IPC_CHANNELS.authSignIn)!(
-      { sender: mainWindow.webContents },
-      { email: "a@b.com", password: "pw" },
-    );
+    await signInVia({ sender: mainWindow.webContents });
   }
 
   it("authGetStatus re-checks entitlements on every successful session check", async () => {
@@ -534,7 +519,7 @@ describe("auth-store", () => {
   it("sign-in fetches entitlements right away so the first signed-in status already carries them", async () => {
     vi.spyOn(authClient, "getEntitlements").mockResolvedValue(PRO);
     const mainWindow = mockState.windows[0]!;
-    vi.spyOn(authClient, "signInWithPassword").mockResolvedValue({
+    browser.exchange.mockResolvedValue({
       token: "tok_1",
       userId: "user-1",
       email: "a@b.com",
@@ -542,10 +527,7 @@ describe("auth-store", () => {
     });
     registerAuth(config, () => mainWindow as never);
 
-    const result = await mockState.handlers.get(IPC_CHANNELS.authSignIn)!(
-      { sender: mainWindow.webContents },
-      { email: "a@b.com", password: "pw" },
-    );
+    const result = await signInVia({ sender: mainWindow.webContents });
 
     expect(result).toEqual({
       ok: true,
@@ -576,7 +558,7 @@ describe("auth-store", () => {
   // ── Account identity (AuthHandle for main modules) ────────────────────
 
   it("exposes the current account (userId + token) to main modules and notifies on change", async () => {
-    vi.spyOn(authClient, "signInWithPassword").mockResolvedValue({
+    browser.exchange.mockResolvedValue({
       token: "t1",
       userId: "user-1",
       email: "a@b.com",
@@ -587,10 +569,7 @@ describe("auth-store", () => {
     handle.onAccountChanged((userId) => seen.push(userId));
 
     expect(handle.getCurrentAccount()).toBeNull();
-    await mockState.handlers.get(IPC_CHANNELS.authSignIn)!(
-      { sender: MAIN_SENDER },
-      { email: "a@b.com", password: "x" },
-    );
+    await signInVia({ sender: MAIN_SENDER });
     expect(handle.getCurrentAccount()).toEqual({ userId: "user-1", token: "t1" });
 
     await mockState.handlers.get(IPC_CHANNELS.authSignOut)!({ sender: MAIN_SENDER });
@@ -602,5 +581,158 @@ describe("auth-store", () => {
     await writeFile(join(mockState.userDataDir, "auth.enc"), storedBlob("t-disk"));
     const handle = registerAuth(config, () => null);
     expect(handle.getCurrentAccount()).toEqual({ userId: "user-1", token: "t-disk" });
+  });
+
+  // ── Browser sign-in ───────────────────────────────────────────────────
+
+  const BROWSER_RESULT = { token: "signed.tok", userId: "user-9", email: "z@b.com", name: "Z" };
+
+  it("commits the signed token from the browser exchange to auth.enc, where every consumer reads it", async () => {
+    browser.exchange.mockResolvedValue(BROWSER_RESULT);
+    const handle = registerAuth(config, () => ({ webContents: MAIN_SENDER }) as never);
+
+    await signInVia({ sender: MAIN_SENDER });
+
+    expect(browser.begin).toHaveBeenCalledWith("sign-in");
+    expect(browser.exchange).toHaveBeenCalledWith("code-from-browser");
+    expect(handle.getCurrentAccount()).toEqual({ userId: "user-9", token: "signed.tok" });
+    // A fresh process reads the same bearer token back from disk.
+    const reopened = registerAuth(config, () => null);
+    expect(reopened.getCurrentAccount()).toEqual({ userId: "user-9", token: "signed.tok" });
+  });
+
+  it("keeps a session written before the browser flow valid: it loads without a re-login", async () => {
+    await writeFile(join(mockState.userDataDir, "auth.enc"), storedBlob("legacy.tok"));
+    const getSession = vi
+      .spyOn(authClient, "getSession")
+      .mockResolvedValue({ userId: "user-1", email: "a@b.com", name: "A" });
+    registerAuth(config, () => null);
+
+    const status = await mockState.handlers.get(IPC_CHANNELS.authGetStatus)!({
+      sender: OTHER_SENDER,
+    });
+
+    expect(getSession).toHaveBeenCalledWith(config, "legacy.tok");
+    expect(status).toMatchObject({ kind: "signed-in", email: "a@b.com" });
+    expect(browser.begin).not.toHaveBeenCalled();
+  });
+
+  it("passes the sign-up intent through to the browser", async () => {
+    registerAuth(config, () => ({ webContents: MAIN_SENDER }) as never);
+    await mockState.handlers.get(IPC_CHANNELS.authBeginBrowserSignIn)!(
+      { sender: MAIN_SENDER },
+      "sign-up",
+    );
+    expect(browser.begin).toHaveBeenCalledWith("sign-up");
+  });
+
+  it("refuses a code when no sign-in was started, and after Cancel", async () => {
+    browser.exchange.mockResolvedValue(BROWSER_RESULT);
+    registerAuth(config, () => ({ webContents: MAIN_SENDER }) as never);
+    const submit = async (): Promise<unknown> =>
+      mockState.handlers.get(IPC_CHANNELS.authSubmitCode)!({ sender: MAIN_SENDER }, "c");
+
+    await expect(submit()).resolves.toEqual({ ok: false, error: { kind: "state-mismatch" } });
+
+    await mockState.handlers.get(IPC_CHANNELS.authBeginBrowserSignIn)!(
+      { sender: MAIN_SENDER },
+      "sign-in",
+    );
+    await mockState.handlers.get(IPC_CHANNELS.authCancelBrowserSignIn)!({ sender: MAIN_SENDER });
+    await expect(submit()).resolves.toEqual({ ok: false, error: { kind: "state-mismatch" } });
+    expect(browser.exchange).not.toHaveBeenCalled();
+  });
+
+  it("reports a failed browser start and a missing web address as results", async () => {
+    browser.begin.mockRejectedValue(new TypeError("fetch failed"));
+    registerAuth(config, () => ({ webContents: MAIN_SENDER }) as never);
+    await expect(
+      mockState.handlers.get(IPC_CHANNELS.authBeginBrowserSignIn)!(
+        { sender: MAIN_SENDER },
+        "sign-in",
+      ),
+    ).resolves.toEqual({ ok: false, error: { kind: "unknown", message: "fetch failed" } });
+
+    mockState.handlers.clear();
+    registerRealAuth(config, (() => ({ webContents: MAIN_SENDER })) as never);
+    await expect(
+      mockState.handlers.get(IPC_CHANNELS.authBeginBrowserSignIn)!(
+        { sender: MAIN_SENDER },
+        "sign-in",
+      ),
+    ).resolves.toEqual({ ok: false, error: { kind: "not-configured" } });
+  });
+
+  it("completes a sign-in from the deep link and tells the renderer when it fails", async () => {
+    const sendToRenderer = vi.fn();
+    browser.exchange.mockRejectedValueOnce({ kind: "invalid-code" });
+    const handle = registerAuth(config, () => ({ webContents: MAIN_SENDER }) as never, {
+      sendToRenderer,
+    });
+    await mockState.handlers.get(IPC_CHANNELS.authBeginBrowserSignIn)!(
+      { sender: MAIN_SENDER },
+      "sign-in",
+    );
+
+    await expect(handle.completeBrowserSignIn("expired")).resolves.toEqual({
+      ok: false,
+      error: { kind: "invalid-code" },
+    });
+    expect(sendToRenderer).toHaveBeenCalledWith(IPC_CHANNELS.authBrowserSignInFailed, {
+      kind: "invalid-code",
+    });
+
+    browser.exchange.mockResolvedValueOnce(BROWSER_RESULT);
+    await expect(handle.completeBrowserSignIn("good")).resolves.toMatchObject({ ok: true });
+    expect(handle.getCurrentAccount()).toEqual({ userId: "user-9", token: "signed.tok" });
+  });
+
+  it("a deep link with nothing pending reports a mismatch (cold start by a stale link)", async () => {
+    const sendToRenderer = vi.fn();
+    const handle = registerAuth(config, () => null, { sendToRenderer });
+
+    await expect(handle.completeBrowserSignIn("stale")).resolves.toEqual({
+      ok: false,
+      error: { kind: "state-mismatch" },
+    });
+    expect(sendToRenderer).toHaveBeenCalledWith(IPC_CHANNELS.authBrowserSignInFailed, {
+      kind: "state-mismatch",
+    });
+    expect(browser.exchange).not.toHaveBeenCalled();
+  });
+
+  it("ignores a stale link while signed in with nothing pending, without showing an error", async () => {
+    await writeFile(join(mockState.userDataDir, "auth.enc"), storedBlob("tok"));
+    const sendToRenderer = vi.fn();
+    const handle = registerAuth(config, () => null, { sendToRenderer });
+
+    await handle.completeBrowserSignIn("stale");
+
+    expect(sendToRenderer).not.toHaveBeenCalled();
+    expect(handle.getCurrentAccount()).toEqual({ userId: "user-1", token: "tok" });
+  });
+
+  it("signing in over an existing session releases the old one on the server", async () => {
+    await writeFile(join(mockState.userDataDir, "auth.enc"), storedBlob("old.tok"));
+    const signOutRemote = vi.spyOn(authClient, "signOutRemote").mockResolvedValue();
+    browser.exchange.mockResolvedValue(BROWSER_RESULT);
+    registerAuth(config, () => ({ webContents: MAIN_SENDER }) as never);
+
+    await signInVia({ sender: MAIN_SENDER });
+
+    expect(signOutRemote).toHaveBeenCalledWith(config, "old.tok");
+  });
+
+  it("sign-out after a browser sign-in clears auth.enc and signs out on the server with the bearer token", async () => {
+    browser.exchange.mockResolvedValue(BROWSER_RESULT);
+    const signOutRemote = vi.spyOn(authClient, "signOutRemote").mockResolvedValue();
+    registerAuth(config, () => ({ webContents: MAIN_SENDER }) as never);
+    await signInVia({ sender: MAIN_SENDER });
+
+    await mockState.handlers.get(IPC_CHANNELS.authSignOut)!({ sender: MAIN_SENDER });
+
+    expect(signOutRemote).toHaveBeenCalledWith(config, "signed.tok");
+    const reopened = registerAuth(config, () => null);
+    expect(reopened.getCurrentAccount()).toBeNull();
   });
 });

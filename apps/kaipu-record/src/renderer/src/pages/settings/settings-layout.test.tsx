@@ -101,6 +101,25 @@ describe("Settings layout", () => {
     expect(open).toHaveBeenCalledOnce();
   });
 
+  it("App shows the Dock toggle on macOS", async () => {
+    renderAt("/settings/app");
+    expect(await screen.findByText("Show in Dock & app switcher")).toBeInTheDocument();
+  });
+
+  it("App hides the Dock toggle entirely on Windows, where there is no Dock", async () => {
+    const api = window.electronAPI as { platform: string };
+    const original = api.platform;
+    api.platform = "win32";
+    try {
+      renderAt("/settings/app");
+      await screen.findByRole("button", { name: /replay/i });
+      expect(screen.queryByText("Show in Dock & app switcher")).toBeNull();
+      expect(screen.queryByText(/⌘|Dock/)).toBeNull();
+    } finally {
+      api.platform = original;
+    }
+  });
+
   it("Permissions hides the Accessibility row when it's not required (non-macOS, or the stub default)", async () => {
     renderAt("/settings/permissions");
     await screen.findByRole("heading", { level: 2, name: "Permissions" });
@@ -137,5 +156,22 @@ describe("Settings layout", () => {
 
     getAccessibilityStatus.mockRestore();
     requestAccessibility.mockRestore();
+  });
+
+  it("turns the Recording saved card off from the Export quality section (NIW2-218)", async () => {
+    const updateSettings = vi
+      .spyOn(window.electronAPI, "updateSettings")
+      .mockImplementation(async (patch) => ({
+        ...(await window.electronAPI.getSettings()),
+        ...patch,
+      }));
+    renderAt("/settings/recording-quality");
+    const toggle = await screen.findByRole("switch", {
+      name: "Offer a light copy after recording",
+    });
+    await waitFor(() => expect(toggle).toHaveAttribute("aria-checked", "true"));
+    fireEvent.click(toggle);
+    expect(updateSettings).toHaveBeenCalledWith({ showRecordingSavedCard: false });
+    updateSettings.mockRestore();
   });
 });

@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm";
-import { text, timestamp, boolean, index, integer, bigint } from "drizzle-orm/pg-core";
+import { text, timestamp, boolean, index, uniqueIndex, integer, bigint } from "drizzle-orm/pg-core";
 import { createTable } from "../utils/table-creator";
 import { recordingTable } from "./recording";
 import { subscriptionTable } from "./subscription";
@@ -57,7 +57,12 @@ export const accountTable = createTable(
       .$onUpdate(() => /* @__PURE__ */ new Date())
       .notNull(),
   },
-  (table) => [index("account_userId_idx").on(table.userId)],
+  (table) => [
+    index("account_userId_idx").on(table.userId),
+    // One Kaipu user per external identity (NIW2-219, Q10). Better Auth checks this in code
+    // (findAccount) but two parallel OAuth callbacks could both pass that check.
+    uniqueIndex("account_provider_account_uidx").on(table.providerId, table.accountId),
+  ],
 );
 
 export const verificationTable = createTable(
@@ -103,7 +108,8 @@ export const accountRelations = relations(accountTable, ({ one }) => ({
  * Workers keep no state between isolates, so in-memory counters would let an
  * attacker spread attempts across isolates. Better Auth's database storage
  * updates this table with conditional increments, which keeps the limit exact
- * under concurrent requests. Requires `bun run db:push` after upgrading.
+ * under concurrent requests. The table must exist before the API that uses it
+ * is deployed (`bun run db:push`): a missing table fails every auth request.
  */
 export const rateLimitTable = createTable("rate_limit", {
   id: text("id").primaryKey(),

@@ -9,6 +9,9 @@ description: "Owner idea: an editor window that does not start from a Kaipu capt
 > editor, so I can edit photos or videos from our editor even without our own material,
 > or to join two videos." Recorded here so it is not lost; **not** designed. It is an
 > architectural change and gets its own brainstorming session before a spec.
+>
+> **First slice taken (2026-10-14):** [New — edit an image from the clipboard](./editor-new-from-clipboard).
+> A pasted image opens in the image editor without going through the Library.
 
 ## What it would mean
 

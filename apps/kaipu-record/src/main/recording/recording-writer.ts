@@ -85,6 +85,17 @@ export class RecordingWriter {
     return this.sessions.get(sessionId)?.failed !== undefined;
   }
 
+  /**
+   * Size in bytes of the session's temp file once every queued positional write has landed
+   * (NIW2-218: the Small-file preset checks it against its cap before finalizing).
+   */
+  async stat(sessionId: string): Promise<number> {
+    const session = this.sessions.get(sessionId);
+    if (!session) throw new Error(`No recording session "${sessionId}"`);
+    await session.queue;
+    return (await session.handle.stat()).size;
+  }
+
   async finalize(sessionId: string, meta: RecordingFinalizeMeta): Promise<LocalRecording> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`No recording session "${sessionId}"`);
@@ -120,6 +131,10 @@ export class RecordingWriter {
       durationSeconds: meta.durationSeconds,
       createdAt: this.now(),
       derivedFromAssetId: meta.derivedFromAssetId ?? null,
+      ...(meta.exportPreset ? { exportPreset: meta.exportPreset } : {}),
+      ...(isFingerprint(meta.exportFingerprint)
+        ? { exportFingerprint: meta.exportFingerprint }
+        : {}),
     });
     if (meta.thumbnail) await vault.writeThumbnail(id, Buffer.from(meta.thumbnail));
 
@@ -136,6 +151,11 @@ export class RecordingWriter {
     await unlink(session.tempPath).catch(() => {});
     this.sessions.delete(sessionId);
   }
+}
+
+/** A renderer-supplied export fingerprint: a short token ("whole" or "edit:<hash>"). */
+function isFingerprint(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= 64;
 }
 
 /** Default id: sortable, filesystem-safe, second-resolution timestamp. */

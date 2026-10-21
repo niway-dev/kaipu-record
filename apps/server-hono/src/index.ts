@@ -32,9 +32,16 @@ app.get("/api/v1/health", (c) =>
 // oRPC OpenAPIHandler — REST-style URLs at /api/v1/*
 const openAPIHandler = new OpenAPIHandler(appRouter);
 
-// Cookie-authenticated writes must come from our own origins (CSRF). Bearer-token clients
-// (desktop) send no cookie and pass through.
-const allowedOrigins = [...env.CORS_ORIGIN, ...(env.PUBLIC_WEB_URL ? [env.PUBLIC_WEB_URL] : [])];
+// Cookie-authenticated writes must come from our own origins (CSRF, audit F-7). Bearer-token
+// clients (desktop) send no cookie and pass through. The list mirrors what Better Auth trusts
+// on /api/auth/*: CORS_ORIGIN plus the public web origin, so a host that can sign in can
+// also write. Every custom domain the web Worker serves (www included) must be in CORS_ORIGIN
+// or redirect to one that is.
+const allowedOrigins = [
+  ...env.CORS_ORIGIN,
+  ...(env.PUBLIC_WEB_URL ? [env.PUBLIC_WEB_URL] : []),
+  ...(env.BETTER_AUTH_URL ? [env.BETTER_AUTH_URL] : []),
+];
 
 app.all("/api/v1/*", async (c) => {
   if (!isRequestAllowed(c.req.raw, { allowedOrigins })) {

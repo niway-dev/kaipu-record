@@ -28,22 +28,17 @@ export type AuthStatus =
       verificationEmailSentAt?: number;
     };
 
-export interface AuthCredentials {
-  email: string;
-  password: string;
-}
+/** Which web screen the browser sign-in lands on. Both end in the same hand-off back to the app. */
+export type BrowserSignInIntent = "sign-in" | "sign-up";
 
-export interface SignUpInput extends AuthCredentials {
-  name: string;
-}
-
-/** What a failed sign-in/sign-up/session-check reports to the renderer. */
+/** What a failed browser sign-in reports to the renderer. */
 export type AuthError =
-  | { kind: "invalid-credentials" }
-  | { kind: "email-taken" }
-  | { kind: "password-too-short" }
-  /** The server requires a verified email before it issues a session. Carries no token: the user
-   *  must follow the emailed link, then sign in. Also what a successful sign-up reports. */
-  | { kind: "email-not-verified" }
+  /** The sign-in link or pasted code does not belong to a sign-in this app started (PKCE state
+   *  mismatch, the app was restarted in between, or the user pressed Cancel). */
+  | { kind: "state-mismatch" }
+  /** The code is malformed, expired (they live about five minutes) or was already used. */
+  | { kind: "invalid-code" }
   | { kind: "network" }
+  /** The web address of Kaipu is not configured in this build, so there is nowhere to send the user. */
+  | { kind: "not-configured" }
   | { kind: "unknown"; message: string };

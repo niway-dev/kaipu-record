@@ -21,6 +21,8 @@ export const getRouter = () => {
         // Placeholder until the root's beforeLoad reads the cookie; it must
         // match DEFAULT_LANDING_THEME or the first paint would be the wrong one.
         landingTheme: DEFAULT_LANDING_THEME,
+        // Placeholder as well; the root's beforeLoad reads the real cookie presence.
+        hasSessionCookie: false,
       },
       defaultPendingComponent: () => <Loader />,
       defaultNotFoundComponent: () => <div>Not Found</div>,

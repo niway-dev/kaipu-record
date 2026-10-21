@@ -1,13 +1,33 @@
 ---
 title: "Bug — the main window is ordered out by macOS whenever the app loses focus"
-description: "Reported as 'the app disappears when I switch the camera on'. Instrumented: the camera is not the cause. The main window emits hide right after every blur, from native code, and comes back on the next activation. Hypotheses ranked and the next experiment written down."
+description: "Reported as 'the app disappears when I switch the camera on'. Instrumented: the camera is not the cause. Every Dock-policy re-assertion ran app.dock.show(), which on macOS orders the app's windows out and back in. Fixed by applying the policy only on an actual transition."
 ---
 
 # The main window disappears when the app loses focus
 
-> **Status: 🔵 Proposed — diagnosed, not fixed** (2026-09-30). Owner report: "cuando
-> activo la camara mi app desaparece cosa que no tiene sentido porque desaparecería?"
-> The camera turned out to be the trigger that made it visible, not the cause.
+> **Status: 🟢 Ready to validate** (fix 2026-10-07, diagnosed 2026-09-30). Owner report:
+> "cuando activo la camara mi app desaparece cosa que no tiene sentido porque
+> desaparecería?" The camera turned out to be the trigger that made it visible, not the
+> cause. To validate: open the main window, switch Camera ON — the window stays.
+
+## Fix
+
+`applyDockPolicy()` and `forceRegularPolicy()` in `main/infrastructure/settings-store.ts`
+now share one setter that remembers the last policy it applied and returns early when
+nothing changed. `app.setActivationPolicy()` and `app.dock.show()` run only on an actual
+`regular ⇄ accessory` transition.
+
+Why that is the whole fix: Electron's `app.dock.show()`, when the app is active, first
+activates the Dock process (our app loses focus — the `blur`), then re-transforms the
+process into a foreground application and re-activates it. AppKit orders every window
+out during that transform and back in afterwards — the `hide` / `show` pair, emitted from
+native code with no JavaScript frame above it, exactly as measured below. The camera-on
+path called `applyDockPolicy()` right after `cameraBubble.show()`, so every camera toggle
+paid for a policy transition that changed nothing.
+
+Regression tests: `settings-store.test.ts` (re-asserting an unchanged policy touches no
+AppKit state; real transitions still happen) and `recording-hub.test.ts` (camera on shows
+the bubble, never hides the main window, and leaves the activation policy alone).
 
 ## Symptom
 
@@ -77,7 +97,7 @@ Three findings, all of them narrowing the search:
 3. **A dev-only artefact of `electron-vite`.** Not yet ruled out; the session was
    `bun run dev`. Worth one run of a packaged build before spending effort on 1.
 
-## Next experiment
+## Next experiment (as written before the fix; hypothesis 1 held)
 
 Log every policy change with its caller, then reproduce for ~30 seconds of ordinary
 window switching:

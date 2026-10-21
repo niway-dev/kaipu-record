@@ -5,6 +5,9 @@ description: "Proposal: a Screenshots section in Settings with one toggle — sa
 
 # Settings → Screenshots
 
+> **Superseded (2026-10-20):** the "save automatically" preference was removed. Every capture
+> is saved to the Library now; see [capture flow fixes](./capture-flow-fixes). Kept for history.
+
 > **Status: 🟢 Ready to validate — implemented in [#155](https://github.com/niway-dev/kaipu-record/pull/155) (2026-09-23)**.
 > Owner request: a Screenshots section in Settings with a control that decides whether a
 > screenshot is saved automatically or requires a click on Save. Parent:

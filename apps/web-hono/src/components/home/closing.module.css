@@ -91,24 +91,23 @@
   border-color: var(--kl-dim);
 }
 
-/* Windows is not a link: it is a promise, and a disabled-looking chip says that
- * better than a button that goes nowhere. */
-.soon {
-  display: inline-flex;
-  align-items: center;
-  padding: 17px 30px;
-  border: 1px dashed var(--kl-bd-2);
-  border-radius: 999px;
-  color: var(--kl-faint);
-  font-size: 16.5px;
-}
-
 .footnote {
   margin-top: 26px;
   font-family: var(--kl-font-mono);
   font-size: 13px;
   letter-spacing: 0.02em;
   color: var(--kl-faint);
+}
+
+/* The unsigned Windows beta's one hurdle, said before anyone meets it. Body font
+ * rather than mono: it is an instruction to follow, not a spec line. */
+.smartscreen {
+  max-width: 520px;
+  margin: 10px auto 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--kl-faint);
+  text-wrap: pretty;
 }
 
 .primary:focus-visible,
@@ -171,8 +170,7 @@
   }
 
   .primary,
-  .secondary,
-  .soon {
+  .secondary {
     justify-content: center;
   }
 

@@ -1,8 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { FREE_ENTITLEMENTS } from "@shared/entitlements";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
-import type { AuthAttemptResult } from "@shared/types/electron-api";
+import type { AuthStatus } from "@shared/types/auth";
 import { AuthPage } from "./auth-page";
 
 const SIGNED_IN = {
@@ -18,12 +18,11 @@ function Landed(): React.JSX.Element {
   return <p>landed {location.pathname}</p>;
 }
 
-function renderAt(path: "/sign-in" | "/sign-up", from?: string): void {
+function renderAt(from?: string): void {
   render(
-    <MemoryRouter initialEntries={[{ pathname: path, state: from ? { from } : undefined }]}>
+    <MemoryRouter initialEntries={[{ pathname: "/sign-in", state: from ? { from } : undefined }]}>
       <Routes>
-        <Route path="/sign-in" element={<AuthPage mode="sign-in" />} />
-        <Route path="/sign-up" element={<AuthPage mode="sign-up" />} />
+        <Route path="/sign-in" element={<AuthPage />} />
         <Route path="/settings" element={<Landed />} />
         <Route path="/library" element={<Landed />} />
       </Routes>
@@ -31,112 +30,158 @@ function renderAt(path: "/sign-in" | "/sign-up", from?: string): void {
   );
 }
 
-/** Fill and submit. Waits for the initial status load first: until it resolves the hook
- *  reports `pending`, the submit button is disabled, and a click would do nothing. */
-const SUBMIT = /^(sign in|create account)$/i;
-
-async function submit(email: string, password: string): Promise<void> {
-  await waitFor(() => expect(screen.getByRole("button", { name: SUBMIT })).toBeEnabled());
-  fireEvent.change(screen.getByLabelText(/email/i), { target: { value: email } });
-  fireEvent.change(screen.getByLabelText(/password/i), { target: { value: password } });
-  fireEvent.click(screen.getByRole("button", { name: SUBMIT }));
+/** Capture the broadcast subscription so a test can play the part of main announcing a sign-in. */
+function captureBroadcast(): { send(status: AuthStatus): void } {
+  let listener: ((status: AuthStatus) => void) | undefined;
+  vi.spyOn(window.electronAPI, "onAuthStatusChanged").mockImplementation((cb) => {
+    listener = cb;
+    return () => {};
+  });
+  return { send: (status) => listener?.(status) };
 }
 
+async function signedOutPage(from?: string): Promise<void> {
+  vi.spyOn(window.electronAPI, "getAuthStatus").mockResolvedValue({ kind: "signed-out" });
+  renderAt(from);
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: /sign in with your browser/i })).toBeEnabled(),
+  );
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe("AuthPage", () => {
-  it("signs in and returns to the route that opened it", async () => {
-    vi.spyOn(window.electronAPI, "getAuthStatus").mockResolvedValue({ kind: "signed-out" });
-    const signIn = vi
-      .spyOn(window.electronAPI, "signIn")
-      .mockResolvedValue({ ok: true, status: SIGNED_IN });
-    renderAt("/sign-in", "/library");
+  it("has no password field: it offers the browser instead", async () => {
+    await signedOutPage();
+    expect(screen.queryByLabelText(/password/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/email/i)).not.toBeInTheDocument();
+    // The cloud promo copy stays.
+    expect(screen.getByText(/250 MB free/i)).toBeInTheDocument();
+  });
 
-    expect(screen.getByRole("heading", { name: /welcome back/i })).toBeInTheDocument();
-    await submit("a@b.com", "pw");
+  it("idle -> waiting -> signed in: opens the browser, waits, then returns to the route that opened it", async () => {
+    const broadcast = captureBroadcast();
+    const begin = vi
+      .spyOn(window.electronAPI, "beginBrowserSignIn")
+      .mockResolvedValue({ ok: true });
+    await signedOutPage("/library");
 
-    await waitFor(() => expect(signIn).toHaveBeenCalledWith({ email: "a@b.com", password: "pw" }));
+    fireEvent.click(screen.getByRole("button", { name: /sign in with your browser/i }));
+
+    expect(begin).toHaveBeenCalledWith("sign-in");
+    expect(
+      await screen.findByRole("heading", { name: /finish signing in in your browser/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /open browser again/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /cancel/i })).toBeInTheDocument();
+
+    broadcast.send(SIGNED_IN);
     await waitFor(() => expect(screen.getByText("landed /library")).toBeInTheDocument());
   });
 
-  it("falls back to Settings when nothing sent the user here", async () => {
-    vi.spyOn(window.electronAPI, "getAuthStatus").mockResolvedValue({ kind: "signed-out" });
-    vi.spyOn(window.electronAPI, "signIn").mockResolvedValue({ ok: true, status: SIGNED_IN });
-    renderAt("/sign-in");
+  it("Create account runs the same flow with the sign-up intent", async () => {
+    const begin = vi
+      .spyOn(window.electronAPI, "beginBrowserSignIn")
+      .mockResolvedValue({ ok: true });
+    await signedOutPage();
 
-    await submit("a@b.com", "pw");
+    fireEvent.click(screen.getByRole("button", { name: /create account/i }));
+
+    await waitFor(() => expect(begin).toHaveBeenCalledWith("sign-up"));
+    await screen.findByRole("heading", { name: /finish signing in/i });
+    // "Open browser again" repeats the intent the user chose.
+    fireEvent.click(screen.getByRole("button", { name: /open browser again/i }));
+    await waitFor(() => expect(begin).toHaveBeenCalledTimes(2));
+    expect(begin).toHaveBeenLastCalledWith("sign-up");
+  });
+
+  it("falls back to Settings when nothing sent the user here", async () => {
+    const broadcast = captureBroadcast();
+    vi.spyOn(window.electronAPI, "beginBrowserSignIn").mockResolvedValue({ ok: true });
+    await signedOutPage();
+    fireEvent.click(screen.getByRole("button", { name: /sign in with your browser/i }));
+    await screen.findByRole("heading", { name: /finish signing in/i });
+
+    broadcast.send(SIGNED_IN);
 
     await waitFor(() => expect(screen.getByText("landed /settings")).toBeInTheDocument());
+  });
+
+  it("pasting the code signs in", async () => {
+    vi.spyOn(window.electronAPI, "beginBrowserSignIn").mockResolvedValue({ ok: true });
+    const submit = vi
+      .spyOn(window.electronAPI, "submitSignInCode")
+      .mockResolvedValue({ ok: true, status: SIGNED_IN });
+    await signedOutPage("/library");
+    fireEvent.click(screen.getByRole("button", { name: /sign in with your browser/i }));
+    await screen.findByRole("heading", { name: /finish signing in/i });
+
+    const continueButton = screen.getByRole("button", { name: /^continue$/i });
+    expect(continueButton).toBeDisabled();
+    fireEvent.change(screen.getByLabelText(/code/i), { target: { value: " abc123 " } });
+    fireEvent.click(continueButton);
+
+    await waitFor(() => expect(submit).toHaveBeenCalledWith(" abc123 "));
+    await waitFor(() => expect(screen.getByText("landed /library")).toBeInTheDocument());
+  });
+
+  it.each([
+    [{ kind: "invalid-code" }, /invalid, expired or already used/i],
+    [{ kind: "state-mismatch" }, /not started from this app/i],
+    [{ kind: "network" }, /couldn't reach the server/i],
+  ] as const)("a failed code (%j) shows its own message and keeps waiting", async (error, copy) => {
+    vi.spyOn(window.electronAPI, "beginBrowserSignIn").mockResolvedValue({ ok: true });
+    vi.spyOn(window.electronAPI, "submitSignInCode").mockResolvedValue({ ok: false, error });
+    await signedOutPage();
+    fireEvent.click(screen.getByRole("button", { name: /sign in with your browser/i }));
+    await screen.findByRole("heading", { name: /finish signing in/i });
+
+    fireEvent.change(screen.getByLabelText(/code/i), { target: { value: "bad" } });
+    fireEvent.click(screen.getByRole("button", { name: /^continue$/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(copy);
+    expect(screen.getByRole("heading", { name: /finish signing in/i })).toBeInTheDocument();
+  });
+
+  it("shows why the browser could not be opened and stays on the first screen", async () => {
+    vi.spyOn(window.electronAPI, "beginBrowserSignIn").mockResolvedValue({
+      ok: false,
+      error: { kind: "not-configured" },
+    });
+    await signedOutPage();
+
+    fireEvent.click(screen.getByRole("button", { name: /sign in with your browser/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/does not know where to sign in/i);
+    expect(screen.queryByRole("heading", { name: /finish signing in/i })).not.toBeInTheDocument();
+  });
+
+  it("Cancel stops waiting and tells main, so a late link is ignored", async () => {
+    vi.spyOn(window.electronAPI, "beginBrowserSignIn").mockResolvedValue({ ok: true });
+    const cancel = vi.spyOn(window.electronAPI, "cancelBrowserSignIn").mockResolvedValue();
+    await signedOutPage();
+    fireEvent.click(screen.getByRole("button", { name: /sign in with your browser/i }));
+    await screen.findByRole("heading", { name: /finish signing in/i });
+
+    fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
+
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(
+      await screen.findByRole("button", { name: /sign in with your browser/i }),
+    ).toBeInTheDocument();
   });
 
   it("leaves immediately when the user is already signed in", async () => {
     vi.spyOn(window.electronAPI, "getAuthStatus").mockResolvedValue(SIGNED_IN);
-    renderAt("/sign-in");
+    renderAt();
     await waitFor(() => expect(screen.getByText("landed /settings")).toBeInTheDocument());
   });
 
   it("goes back without signing in", async () => {
-    vi.spyOn(window.electronAPI, "getAuthStatus").mockResolvedValue({ kind: "signed-out" });
-    renderAt("/sign-in", "/library");
+    await signedOutPage("/library");
     fireEvent.click(screen.getByRole("button", { name: /back/i }));
     expect(screen.getByText("landed /library")).toBeInTheDocument();
-  });
-
-  it("signs up with a name and lands on Settings", async () => {
-    vi.spyOn(window.electronAPI, "getAuthStatus").mockResolvedValue({ kind: "signed-out" });
-    const signUp = vi
-      .spyOn(window.electronAPI, "signUp")
-      .mockResolvedValue({ ok: true, status: SIGNED_IN });
-    renderAt("/sign-up");
-
-    expect(screen.getByRole("heading", { name: /create account/i })).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText(/name/i), { target: { value: "Ada" } });
-    await submit("a@b.com", "longenough");
-
-    await waitFor(() =>
-      expect(signUp).toHaveBeenCalledWith({
-        email: "a@b.com",
-        name: "Ada",
-        password: "longenough",
-      }),
-    );
-    await waitFor(() => expect(screen.getByText("landed /settings")).toBeInTheDocument());
-  });
-
-  // The IPC layer reports a credential failure as a RESOLVED `{ ok: false, error }` value,
-  // never a rejection: Electron strips a thrown error down to its `.message`, which would
-  // lose the `kind` this assertion depends on.
-  it("shows the specific error inline, then drops it when switching to sign-up", async () => {
-    vi.spyOn(window.electronAPI, "getAuthStatus").mockResolvedValue({ kind: "signed-out" });
-    vi.spyOn(window.electronAPI, "signIn").mockResolvedValue({
-      ok: false,
-      error: { kind: "invalid-credentials" },
-    });
-    renderAt("/sign-in");
-
-    await submit("a@b.com", "wrong");
-    await waitFor(() => expect(screen.getByText(/wrong email or password/i)).toBeInTheDocument());
-
-    fireEvent.click(screen.getByRole("link", { name: /create account/i }));
-    expect(screen.getByRole("heading", { name: /create account/i })).toBeInTheDocument();
-    expect(screen.queryByText(/wrong email or password/i)).not.toBeInTheDocument();
-    // The email carries over so the user does not retype it; the password does not.
-    expect(screen.getByLabelText(/email/i)).toHaveValue("a@b.com");
-    expect(screen.getByLabelText(/password/i)).toHaveValue("");
-  });
-
-  it("disables submit while the attempt is in flight", async () => {
-    vi.spyOn(window.electronAPI, "getAuthStatus").mockResolvedValue({ kind: "signed-out" });
-    let resolveSignIn: (v: AuthAttemptResult) => void = () => {};
-    vi.spyOn(window.electronAPI, "signIn").mockReturnValue(
-      new Promise((resolve) => {
-        resolveSignIn = resolve;
-      }),
-    );
-    renderAt("/sign-in");
-
-    await submit("a@b.com", "pw");
-
-    expect(screen.getByRole("button", { name: /signing in/i })).toBeDisabled();
-    resolveSignIn({ ok: true, status: SIGNED_IN });
-    await waitFor(() => expect(screen.getByText("landed /settings")).toBeInTheDocument());
   });
 });

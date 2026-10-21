@@ -20,6 +20,7 @@
         "VITE_POSTHOG_SURFACE",
         "VITE_VERSION_GATE_URL",
         "MAIN_VITE_SERVER_URL",
+        "MAIN_VITE_WEB_URL",
         "MAIN_VITE_POSTHOG_KEY",
         "MAIN_VITE_POSTHOG_HOST"
       ]

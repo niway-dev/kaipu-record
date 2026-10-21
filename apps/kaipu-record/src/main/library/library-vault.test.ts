@@ -70,6 +70,31 @@ describe("LibraryVault", () => {
     expect(await readdir(directory)).toContain("clip.webm");
   });
 
+  it("stamps an item as opened in an editor, keeping its other fields", async () => {
+    await writeRecording("clip");
+    await writeSidecar("clip", { title: "My Demo", createdAt: 1000 });
+    expect((await vault.list())[0]).toMatchObject({ editorOpenedAt: null, editorSavedAt: null });
+
+    await vault.markOpenedInEditor("clip", 5000);
+
+    expect((await vault.list())[0]).toMatchObject({
+      title: "My Demo",
+      createdAt: 1000,
+      editorOpenedAt: 5000,
+      editorSavedAt: null,
+    });
+  });
+
+  it("reads a manual-save stamp and ignores a malformed one", async () => {
+    await writeRecording("good");
+    await writeRecording("bad");
+    await writeSidecar("good", { editorSavedAt: 7000 });
+    await writeSidecar("bad", { editorSavedAt: "yesterday", editorOpenedAt: null });
+    const byId = Object.fromEntries((await vault.list()).map((r) => [r.id, r]));
+    expect(byId.good.editorSavedAt).toBe(7000);
+    expect(byId.bad).toMatchObject({ editorSavedAt: null, editorOpenedAt: null });
+  });
+
   it("writes, reads and removes the cursor track sidecar", async () => {
     await writeRecording("rec");
     expect(await vault.readCursorTrack("rec")).toBeNull();
@@ -180,6 +205,24 @@ describe("LibraryVault", () => {
     });
     await writeRecording("exp", 11); // bytes changed → cached hash is stale
     expect((await vault.describe("exp"))?.contentSha256).toBeNull();
+  });
+
+  it('exposes an MP4 export\'s preset and fingerprint, reading the legacy "original" as maximum (NIW2-218)', async () => {
+    await writeRecording("share");
+    await writeSidecar("share", { exportPreset: "balanced", exportFingerprint: "whole" });
+    await writeRecording("legacy");
+    await writeSidecar("legacy", { exportPreset: "original" });
+    await writeRecording("plain");
+    await writeSidecar("plain", { exportPreset: "tiktok" });
+    expect((await vault.describe("share"))?.export).toEqual({
+      preset: "balanced",
+      fingerprint: "whole",
+    });
+    expect((await vault.describe("legacy"))?.export).toEqual({
+      preset: "maximum",
+      fingerprint: null,
+    });
+    expect((await vault.describe("plain"))?.export).toBeNull();
   });
 
   it("ensureContentHash computes once, caches by size+mtime, and recomputes after a change", async () => {

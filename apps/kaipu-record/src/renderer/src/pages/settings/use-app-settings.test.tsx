@@ -1,6 +1,7 @@
 import { renderHook, waitFor, act } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { type AppSettings, DEFAULT_SHORTCUTS } from "@shared/types";
+import { defaultShortcutsFor } from "@shared/shortcut-defaults";
+import type { AppSettings } from "@shared/types";
 import { DEFAULT_QUALITY } from "@shared/recording-quality";
 import { useAppSettings } from "./use-app-settings";
 
@@ -11,12 +12,17 @@ const SETTINGS: AppSettings = {
   showInDock: true,
   recordingQuality: DEFAULT_QUALITY,
   showBarInRecording: false,
-  screenshotSave: "auto",
   showBrandBadge: false,
   screenshotCopy: "auto",
-  shortcuts: DEFAULT_SHORTCUTS,
+  shortcuts: defaultShortcutsFor("darwin"),
   deviceId: "",
   uploadMode: "local-only",
+  exportQuality: "balanced",
+  showRecordingSavedCard: true,
+  screenshotFrame: {},
+  screenshotMode: "frame",
+  trayHintShown: false,
+  diagnosticsEnabled: true,
 };
 
 describe("useAppSettings", () => {
