@@ -88,6 +88,7 @@ export default defineConfig({
             { slug: "backlog/settings-screenshots" },
             { slug: "backlog/settings-screenshot-clipboard" },
             { slug: "backlog/capture-flow-fixes" },
+            { slug: "backlog/recording-finalize-recovery" },
             { slug: "backlog/video-editor-mute" },
             { slug: "backlog/gif-export" },
             { slug: "backlog/export-presets" },
