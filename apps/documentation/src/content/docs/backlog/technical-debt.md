@@ -84,7 +84,7 @@ ignores make it harmless.
 
 ## Database schema
 
-Left out of the migration work ([ADR 0011](/architecture/decisions/0011-committed-migrations-instead-of-push/))
+Left out of the migration work ([ADR 0029](/architecture/decisions/0029-committed-migrations-instead-of-push/))
 on purpose: each needs a data migration against production, which a baseline-and-integrity
 change should not carry.
 

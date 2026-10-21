@@ -3,7 +3,7 @@
 * @csdev19
 
 # The database schema and its migrations: a migration is applied to production by hand, and a
-# reviewed schema change is the only gate before it (ADR 0011). Listed explicitly so the rule
+# reviewed schema change is the only gate before it (ADR 0029). Listed explicitly so the rule
 # survives a future change to the default owner above.
 /packages/infra-db/src/schema/ @csdev19
 /packages/infra-db/src/migrations/ @csdev19

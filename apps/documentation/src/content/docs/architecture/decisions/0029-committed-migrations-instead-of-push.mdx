@@ -1,9 +1,9 @@
 ---
-title: "ADR 0011: Committed Drizzle migrations replace db:push"
+title: "ADR 0029: Committed Drizzle migrations replace db:push"
 description: Schema changes ship as reviewed, versioned SQL files in the repository instead of a human running `drizzle-kit push` against production. Covers the baseline, the CI drift check, and the one-time procedure to mark the baseline as applied.
 ---
 
-# ADR 0011: Committed Drizzle migrations replace db:push
+# ADR 0029: Committed Drizzle migrations replace db:push
 
 ## Status
 
@@ -38,8 +38,11 @@ data-retention risk.
   tables, a dropped duplicate index, defaults on two auth timestamps).
 - `db:push` stops being the way schema changes ship. `db:generate` and `db:migrate` are the
   commands; `db:check` verifies that no schema change lacks its migration.
-- CI runs `bun run db:check` on every pull request. It runs `drizzle-kit generate` and fails
-  if that writes anything. It reads no database and needs no secret.
+- CI runs `bun run db:check` in the `lint` job of `pr-checks.yml`. It runs `drizzle-kit generate`
+  and fails if that writes anything. It reads no database and needs no secret. Under
+  [ADR 0027](/architecture/decisions/0027-verify-release-candidates-only/) that job runs on
+  release candidates only, so drift is caught before a release, not on every pull request; run
+  `bun run db:check` locally after any schema edit.
 - `.github/CODEOWNERS` names `@csdev19` as owner of the schema, the migrations and the
   drizzle config, so a ruleset that requires code-owner review gates them.
 - **Applying a migration to production stays a manual, owner-run step** (`bun run db:migrate`
