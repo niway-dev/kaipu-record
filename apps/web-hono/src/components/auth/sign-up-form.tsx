@@ -49,7 +49,7 @@ export default function SignUpForm({
   const [email, setEmail] = useState(defaultValues?.email ?? "");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<{ name?: string; email?: string; password?: string }>({});
-  const [failure, setFailure] = useState<"network" | "other" | null>(null);
+  const [failure, setFailure] = useState<"throttled" | "network" | "other" | null>(null);
   const [pending, setPending] = useState(false);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -72,7 +72,7 @@ export default function SignUpForm({
       );
       if (error) {
         setPending(false);
-        setFailure("other");
+        setFailure(error.status === 429 ? "throttled" : "other");
         return;
       }
     } catch {
@@ -126,7 +126,13 @@ export default function SignUpForm({
         autoFocus={!!defaultValues?.email}
       />
       {failure ? (
-        <ErrorBanner>{failure === "network" ? t("errorNetwork") : t("signUpFailed")}</ErrorBanner>
+        <ErrorBanner>
+          {failure === "throttled"
+            ? t("tooManyAttempts")
+            : failure === "network"
+              ? t("errorNetwork")
+              : t("signUpFailed")}
+        </ErrorBanner>
       ) : null}
       <PrimaryButton type="submit" disabled={pending}>
         {pending ? t("submitting") : t("signUp")}

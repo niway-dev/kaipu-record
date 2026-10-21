@@ -42,6 +42,7 @@ function errorCopyKey(
 ):
   | "errorStateMismatch"
   | "errorInvalidCode"
+  | "errorTooManyAttempts"
   | "errorNotConfigured"
   | "errorNetwork"
   | "errorUnknown" {
@@ -50,6 +51,8 @@ function errorCopyKey(
       return "errorStateMismatch";
     case "invalid-code":
       return "errorInvalidCode";
+    case "throttled":
+      return "errorTooManyAttempts";
     case "not-configured":
       return "errorNotConfigured";
     case "network":

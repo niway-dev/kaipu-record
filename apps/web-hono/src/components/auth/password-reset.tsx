@@ -105,6 +105,7 @@ export function ResetPassword({ token }: { token?: string }) {
   const [password, setPassword] = useState("");
   const [fieldError, setFieldError] = useState<string | undefined>();
   const [invalid, setInvalid] = useState(false);
+  const [throttled, setThrottled] = useState(false);
   const [pending, setPending] = useState(false);
 
   if (!token) {
@@ -128,10 +129,13 @@ export function ResetPassword({ token }: { token?: string }) {
     setFieldError(undefined);
     setPending(true);
     setInvalid(false);
+    setThrottled(false);
     const result = await authClient.resetPassword({ newPassword: password, token: token! });
     setPending(false);
     if (result.error) {
-      setInvalid(true);
+      // A rate-limited attempt is not an invalid link: the link is still good, only later.
+      if (result.error.status === 429) setThrottled(true);
+      else setInvalid(true);
       return;
     }
     toast.success(t("resetSuccess"));
@@ -155,7 +159,9 @@ export function ResetPassword({ token }: { token?: string }) {
           error={fieldError}
           autoFocus
         />
-        {invalid ? (
+        {throttled ? (
+          <ErrorBanner>{t("tooManyAttempts")}</ErrorBanner>
+        ) : invalid ? (
           <ErrorBanner>
             {t("resetInvalid")}{" "}
             <Link to="/auth/forgot-password" {...linkStyles.accent()}>
