@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   isTagColor,
@@ -37,6 +37,17 @@ interface RegistryFile {
   tags: Tag[];
 }
 
+/** The registry exists but cannot be trusted. Writes are refused so it is never overwritten. */
+export class TagRegistryError extends Error {
+  constructor(
+    readonly code: "corrupt" | "unreadable",
+    message: string,
+  ) {
+    super(message);
+    this.name = "TagRegistryError";
+  }
+}
+
 /**
  * Phase 1b adapter: the registry `<vault>/.kaipu/tags.json`, and `tagIds` (plus a
  * cached `tagNames` copy for humans) in each item's sidecar. Writes to the
@@ -44,6 +55,7 @@ interface RegistryFile {
  */
 export class VaultTagRepository implements TagRepository {
   private chain: Promise<unknown> = Promise.resolve();
+  private readonly quarantined = new Set<string>();
 
   constructor(
     private readonly vault: () => LibraryVault,
@@ -63,12 +75,35 @@ export class VaultTagRepository implements TagRepository {
   }
 
   private async read(): Promise<Tag[]> {
+    const path = this.registryPath();
+    let raw: string;
     try {
-      const parsed = JSON.parse(await readFile(this.registryPath(), "utf-8")) as RegistryFile;
-      return parsed.version === 1 && Array.isArray(parsed.tags) ? parsed.tags : [];
-    } catch {
-      return this.importLegacy();
+      raw = await readFile(path, "utf-8");
+    } catch (error) {
+      // Only a missing file means "no registry yet". EIO/EACCES on a flaky drive
+      // must not look like an empty registry, or the next write would erase it.
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return this.importLegacy();
+      throw new TagRegistryError("unreadable", `tags: cannot read ${path}: ${String(error)}`);
     }
+    let parsed: Partial<RegistryFile> | null;
+    try {
+      parsed = JSON.parse(raw) as Partial<RegistryFile> | null;
+    } catch {
+      parsed = null;
+    }
+    if (parsed && parsed.version === 1 && Array.isArray(parsed.tags)) return parsed.tags;
+    await this.quarantine(path);
+    throw new TagRegistryError(
+      "corrupt",
+      `tags: ${path} is corrupt or from a newer version; tag changes are disabled. A copy was kept next to it.`,
+    );
+  }
+
+  /** Keep a copy of an untrusted registry, once per path per session. Never touches the original. */
+  private async quarantine(path: string): Promise<void> {
+    if (this.quarantined.has(path)) return;
+    this.quarantined.add(path);
+    await copyFile(path, `${path}.corrupt-${this.now()}`).catch(() => undefined);
   }
 
   private async write(tags: Tag[]): Promise<void> {
@@ -87,6 +122,7 @@ export class VaultTagRepository implements TagRepository {
     const items = await this.vault().list();
     const tags: Tag[] = [];
     const bySlug = new Map<string, Tag>();
+    const assignments: Array<{ id: string; ids: string[] }> = [];
     for (const item of items) {
       const legacy = (await this.vault().sidecar(item.id)).tags;
       if (!Array.isArray(legacy) || legacy.length === 0) continue;
@@ -102,13 +138,20 @@ export class VaultTagRepository implements TagRepository {
         }
         if (!ids.includes(tag.id)) ids.push(tag.id);
       }
-      await this.vault().writeMeta(item.id, {
+      assignments.push({ id: item.id, ids });
+    }
+    // Registry first, even when empty: that is what makes the import run once, and
+    // a crash can then never leave items pointing at tags that were not stored.
+    // (A crash between here and a sidecar rewrite drops that item's Phase 1 tags,
+    // which were never released: accepted.)
+    await this.write(tags);
+    for (const { id, ids } of assignments) {
+      await this.vault().writeMeta(id, {
         tags: undefined,
         tagIds: ids,
-        tagNames: ids.map((id) => tags.find((t) => t.id === id)!.name),
+        tagNames: ids.map((tagId) => tags.find((t) => t.id === tagId)!.name),
       });
     }
-    if (tags.length > 0) await this.write(tags);
     return tags;
   }
 
@@ -147,6 +190,8 @@ export class VaultTagRepository implements TagRepository {
 
   async list(): Promise<TagSummary[]> {
     const tags = (await this.serial(() => this.read())).filter((t) => t.deletedAt === null);
+    // No live tags (the common case): nothing to count, so skip the full vault scan.
+    if (tags.length === 0) return [];
     const counts = new Map<string, number>();
     for (const item of await this.vault().list()) {
       for (const id of item.tagIds ?? []) counts.set(id, (counts.get(id) ?? 0) + 1);
