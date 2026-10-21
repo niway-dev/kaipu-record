@@ -120,10 +120,13 @@ jobs:
 
   on-demand:
     name: Claude on demand
+    # The owner is matched by login, not by `author_association == 'OWNER'`: this repository
+    # belongs to the niway-dev organization, so the owner's comments carry `MEMBER` and an
+    # OWNER check skips every run. Matching the login also keeps other org members out.
     if: |
       github.event_name == 'issue_comment' &&
       github.event.issue.pull_request &&
-      github.event.comment.author_association == 'OWNER' &&
+      github.event.comment.user.login == 'csdev19' &&
       contains(github.event.comment.body, '@claude')
     runs-on: ubuntu-latest
     timeout-minutes: 10
