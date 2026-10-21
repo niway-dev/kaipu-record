@@ -98,7 +98,7 @@ describe("CaptureToast", () => {
 
   it("sends the right action for every button", () => {
     const { api, show } = renderToast(COPIED);
-    fireEvent.click(screen.getByRole("button", { name: "Annotate" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     expect(api.action).toHaveBeenLastCalledWith("annotate");
     fireEvent.click(screen.getByRole("button", { name: "Save to Library" }));
     expect(api.action).toHaveBeenLastCalledWith("save");

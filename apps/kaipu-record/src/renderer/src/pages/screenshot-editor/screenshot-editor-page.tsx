@@ -51,6 +51,11 @@ const ZOOM_MAX = 3;
 const ZOOM_STEP = 0.25;
 /** How long the Copy/Save buttons stay in their "done" state. */
 const FEEDBACK_MS = 2600;
+/** How long after the last edit a shot in the vault saves it. */
+const AUTOSAVE_DEBOUNCE_MS = 800;
+/** How long the edit autosave waits for a running save or copy to release the lock. */
+const AUTOSAVE_WAIT_MS = 5000;
+const AUTOSAVE_POLL_MS = 50;
 
 /** The editor's transient success indicator. */
 type Feedback =
@@ -107,16 +112,12 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
   // The vault id this editor is bound to: set when re-opening a saved shot, and
   // after the first save. While set, Save asks overwrite-or-copy.
   const [savedId, setSavedId] = useState<string | null>(source.kind === "local" ? source.id : null);
-  // The auto save/copy modes are read ONCE when the editor opens; a Settings change
-  // while this capture is open neither retro-saves nor un-saves nor re-copies it.
+  // The auto copy mode is read ONCE when the editor opens; a Settings change while
+  // this capture is open neither un-copies nor re-copies it.
   const { settings } = useAppSettings();
   const autoActionsRef = useRef<AutoActions | null>(null);
   if (autoActionsRef.current === null && settings) {
-    autoActionsRef.current = autoActionsOnOpen(
-      settings.screenshotSave,
-      settings.screenshotCopy,
-      openKind,
-    );
+    autoActionsRef.current = autoActionsOnOpen(settings.screenshotCopy, openKind);
   }
   // True once THIS editor created the item on open — enables Discard.
   const [autoSaved, setAutoSaved] = useState(false);
@@ -162,8 +163,10 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
     setDirty(true);
   }, [scene.beautify.state, scene.annotations, scene.crop]);
 
-  // Block in-app navigation (sidebar clicks, ⌘⌃V start-recording, ⌘⌃X new
-  // capture — all go through the router) while there are unsaved changes.
+  // Hold in-app navigation (sidebar clicks, ⌘⌃V start-recording, ⌘⌃X new
+  // capture — all go through the router) while there are unsaved changes. A shot that
+  // is in the vault saves its edits and then leaves (see `autosaveEdits`); only an
+  // image the vault has never seen asks before it is lost.
   // Discard deletes the auto-saved item and leaves. The blocker reads `dirty` from the
   // render it was called in, so navigating in the same tick as `setDirty(false)` would
   // still be blocked after an edit; instead, flip `discarding`, let the blocker lift on
@@ -239,6 +242,11 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
     title?: string;
     /** The auto path shows one combined indicator instead of this one. */
     silent?: boolean;
+    /**
+     * Whether the save counts as the user's work (the Editor home's Continue list).
+     * Defaults to `!silent`; the edit autosave is silent but still the user's work.
+     */
+    manual?: boolean;
   }): Promise<string | null> => {
     if (busy.current) return null;
     busy.current = true;
@@ -248,8 +256,8 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
         // user sees even if the field has not blurred yet (e.g. a shortcut).
         title: opts.title ?? resolveCaptureTitle(captureTitle.draft, captureTitle.autoTitle),
         overwriteId: opts.overwriteId,
-        // Only the auto-save on open is silent; every other save is the user's.
-        manual: !opts.silent,
+        // The auto-save on open is not the user's work; every other save is.
+        manual: opts.manual ?? !opts.silent,
       });
       setSavedId(saved.id);
       captureTitle.adopt(saved.title);
@@ -321,6 +329,36 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
     void runAutoActions(actions);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fire once when the image is ready
   }, [imageReady]);
+
+  /**
+   * Write the current edits over the vault item, quietly. Every capture is in the vault,
+   * so an edit is never the only copy of anything: it is saved the way a document is,
+   * not guarded behind a dialog. False when there was nothing to write or it failed.
+   */
+  const autosaveEdits = async (): Promise<boolean> => {
+    if (!savedId || !imageReady) return false;
+    // A save or copy already running holds the lock; wait for it rather than drop the edit.
+    for (let waited = 0; busy.current && waited < AUTOSAVE_WAIT_MS; waited += AUTOSAVE_POLL_MS) {
+      await new Promise((resolve) => setTimeout(resolve, AUTOSAVE_POLL_MS));
+    }
+    return (await persist({ overwriteId: savedId, silent: true, manual: true })) !== null;
+  };
+
+  // Save the edits a moment after the last one, so closing the window loses at most that.
+  useEffect(() => {
+    if (!dirty || !savedId || !imageReady || discarding) return;
+    const timer = setTimeout(() => void autosaveEdits(), AUTOSAVE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the scene change re-arms it
+  }, [dirty, savedId, imageReady, discarding, scene.beautify.state, scene.annotations, scene.crop]);
+
+  // Leaving a shot that is in the vault: save what is pending, then go. A failed save
+  // stays here (`persist` reported it with a retry) instead of dropping the edits.
+  useEffect(() => {
+    if (blocker.state !== "blocked" || !savedId) return;
+    void autosaveEdits().then((saved) => (saved ? blocker.proceed() : blocker.reset()));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per blocked navigation
+  }, [blocker.state]);
 
   const onDiscardSaved = async (): Promise<void> => {
     if (!savedId || busy.current) return;
@@ -533,7 +571,7 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
         />
       )}
 
-      {blocker.state === "blocked" && (
+      {blocker.state === "blocked" && !savedId && (
         <DiscardChangesDialog
           neverSaved={savedId === null}
           onDiscard={() => blocker.proceed()}

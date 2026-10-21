@@ -34,9 +34,7 @@ describe("ScreenshotCopySettings", () => {
 
   it("does not touch the save preference when toggled", async () => {
     const update = vi.fn().mockResolvedValue(DEFAULT_SETTINGS);
-    window.electronAPI.getSettings = vi
-      .fn()
-      .mockResolvedValue({ ...DEFAULT_SETTINGS, screenshotSave: "manual" });
+    window.electronAPI.getSettings = vi.fn().mockResolvedValue(DEFAULT_SETTINGS);
     window.electronAPI.updateSettings = update;
     render(<ScreenshotCopySettings />);
 

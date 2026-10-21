@@ -19,8 +19,8 @@ import { timestampId } from "../recording/recording-writer";
 import { resetVaultDirectory, setVaultDirectory, vaultDirectory } from "./vault-location";
 import { deleteVideoEditSession, registerVideoEditSessionHandlers } from "./video-edit-session";
 
-/** Tell every window the vault folder changed so open pages re-list. */
-function broadcastLibraryChanged(): void {
+/** Tell every window the library changed (a new item, a new vault folder) so open pages re-list. */
+export function broadcastLibraryChanged(): void {
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) window.webContents.send(IPC_CHANNELS.libraryChanged);
   }

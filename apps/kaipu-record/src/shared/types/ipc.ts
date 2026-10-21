@@ -190,14 +190,9 @@ export function activeShortcutDefinitions(
 export const UPLOAD_MODES = ["local-only", "manual", "automatic"] as const;
 export type UploadMode = (typeof UPLOAD_MODES)[number];
 
-/** Whether a fresh screenshot is written to the Library when its editor opens, or on Save. */
-export const SCREENSHOT_SAVE_MODES = ["auto", "manual"] as const;
-export type ScreenshotSaveMode = (typeof SCREENSHOT_SAVE_MODES)[number];
-
 /**
- * Whether a fresh screenshot lands on the system clipboard when its editor opens,
- * or only when the user clicks Copy. Independent of {@link SCREENSHOT_SAVE_MODES}:
- * all four combinations are valid, and the editor honours each one.
+ * Whether a Capture also lands on the system clipboard, or only when the user clicks
+ * Copy. (Copy on the overlay always copies; every screenshot is saved to the Library.)
  */
 export const SCREENSHOT_COPY_MODES = ["auto", "manual"] as const;
 export type ScreenshotCopyMode = (typeof SCREENSHOT_COPY_MODES)[number];
@@ -219,12 +214,6 @@ export interface AppSettings {
    * it out via content protection (`NSWindowSharingNone`).
    */
   showBarInRecording: boolean;
-  /**
-   * "auto" (default): a capture is saved to the Library the moment its editor opens,
-   * like recordings; Save then overwrites that item. "manual": kept in memory until
-   * Save (backlog/settings-screenshots).
-   */
-  screenshotSave: ScreenshotSaveMode;
   /**
    * Burn a small "Made with Kaipu" mark into recordings. Off by default: the free
    * app carries no watermark (backlog/free-tier-no-watermark), this is an opt-in
@@ -302,7 +291,6 @@ export const DEFAULT_SETTINGS: Omit<AppSettings, "shortcuts"> = {
   showInDock: true,
   recordingQuality: DEFAULT_QUALITY,
   showBarInRecording: false,
-  screenshotSave: "auto",
   showBrandBadge: false,
   screenshotCopy: "auto",
   deviceId: "",

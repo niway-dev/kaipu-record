@@ -1,21 +1,23 @@
 import type { CaptureAction } from "@shared/types/screenshot-capture";
-import type { ScreenshotCopyMode, ScreenshotSaveMode } from "@shared/types";
-
-/** What main does with a finished capture: open the editor, or finish it quietly. */
-export type AfterCapture = { open: "editor" } | { open: "quiet"; save: boolean; copy: boolean };
+import type { ScreenshotCopyMode } from "@shared/types";
 
 /**
- * The overlay's action decides first, then the preferences. Copy always finishes
- * quietly (the clipboard, plus the vault only when saving is automatic). Capture
- * opens the editor unless saving is automatic, in which case nobody has anything
- * left to decide. Pure: no Electron imports.
+ * What main does with a finished capture. Every capture is saved to the vault first;
+ * the action only decides what comes after it.
  */
-export function decideAfterCapture(
-  action: CaptureAction,
-  save: ScreenshotSaveMode,
-  copy: ScreenshotCopyMode,
-): AfterCapture {
-  if (action === "copy") return { open: "quiet", save: save === "auto", copy: true };
-  if (save === "manual") return { open: "editor" };
-  return { open: "quiet", save: true, copy: copy === "auto" };
+export interface AfterCapture {
+  /** `editor` opens the saved shot in the image editor; `quiet` shows only the toast. */
+  open: "editor" | "quiet";
+  /** Whether main also puts the shot on the clipboard. */
+  copy: boolean;
+}
+
+/**
+ * Copy finishes quietly: the clipboard, the vault and the toast, without bringing the
+ * app forward. Capture opens the editor on the saved shot, and copies it too when the
+ * copy preference is automatic. Pure: no Electron imports.
+ */
+export function decideAfterCapture(action: CaptureAction, copy: ScreenshotCopyMode): AfterCapture {
+  if (action === "copy") return { open: "quiet", copy: true };
+  return { open: "editor", copy: copy === "auto" };
 }

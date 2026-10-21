@@ -82,13 +82,10 @@ export function registerScreenshotHandlers(
     rememberMode: (mode) => {
       if (getAppSettings().screenshotMode !== mode) updateAppSettings({ screenshotMode: mode });
     },
-    settings: () => {
-      const { screenshotSave, screenshotCopy } = getAppSettings();
-      return { save: screenshotSave, copy: screenshotCopy };
-    },
+    settings: () => ({ copy: getAppSettings().screenshotCopy }),
     saveToVault: async (png, title) => {
       const saved = await saveScreenshotToVault(png, { title, manual: false });
-      return { id: saved.id };
+      return { id: saved.id, assetId: saved.assetId };
     },
     copyToClipboard: (png) => clipboard.writeImage(nativeImage.createFromBuffer(png)),
     thumbnail: (png) => {

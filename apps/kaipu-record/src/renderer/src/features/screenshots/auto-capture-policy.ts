@@ -1,10 +1,10 @@
-import type { ScreenshotCopyMode, ScreenshotSaveMode } from "@shared/types";
+import type { ScreenshotCopyMode } from "@shared/types";
 import type { ImageSource } from "./image-source";
 
 /**
- * What a screenshot editor does on its own the moment it opens. The two
- * preferences are independent, so a fresh capture has four outcomes; a shot
- * re-opened from the Library and an image pasted from the clipboard have none.
+ * What a screenshot editor does on its own the moment it opens. Only an in-memory
+ * capture has any; a shot re-opened from the Library and an image pasted from the
+ * clipboard have none.
  */
 export interface AutoActions {
   /** Write the capture to the vault. */
@@ -30,12 +30,13 @@ export function openKindOf(source: ImageSource): OpenKind {
 }
 
 /**
- * Auto mode writes a FRESH capture to the vault as soon as the editor can export it.
- * A screenshot re-opened from the Library already has a row and must never get a
+ * An in-memory capture exists only because main could not write it to the vault: the
+ * editor tries again the moment it can export, since every capture belongs in the
+ * Library. A shot re-opened from the Library already has a row and must never get a
  * second one on open; a pasted image is the user's own, saved only when they ask.
  */
-export function shouldAutoSaveOnOpen(mode: ScreenshotSaveMode, openKind: OpenKind): boolean {
-  return mode === "auto" && openKind === "capture";
+export function shouldAutoSaveOnOpen(openKind: OpenKind): boolean {
+  return openKind === "capture";
 }
 
 /**
@@ -49,14 +50,10 @@ export function shouldAutoCopyOnOpen(mode: ScreenshotCopyMode, openKind: OpenKin
   return mode === "auto" && openKind === "capture";
 }
 
-/** The truth table both preferences form, as one value the editor acts on. */
-export function autoActionsOnOpen(
-  saveMode: ScreenshotSaveMode,
-  copyMode: ScreenshotCopyMode,
-  openKind: OpenKind,
-): AutoActions {
+/** What the editor does on its own when it opens, as one value. */
+export function autoActionsOnOpen(copyMode: ScreenshotCopyMode, openKind: OpenKind): AutoActions {
   return {
-    save: shouldAutoSaveOnOpen(saveMode, openKind),
+    save: shouldAutoSaveOnOpen(openKind),
     copy: shouldAutoCopyOnOpen(copyMode, openKind),
   };
 }

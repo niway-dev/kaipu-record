@@ -3,8 +3,9 @@ import {
   type CaptureMode,
   type CaptureResult,
   type CaptureToastPayload,
+  type SavedScreenshotRef,
 } from "@shared/types/screenshot-capture";
-import type { ScreenshotCopyMode, ScreenshotSaveMode } from "@shared/types";
+import type { ScreenshotCopyMode } from "@shared/types";
 import type { ScreenshotCapturedProperties } from "@shared/analytics";
 import { screenshotTitle } from "@shared/screenshot-title";
 import { decideAfterCapture } from "./after-capture-policy";
@@ -14,7 +15,7 @@ import type { ProviderResult, ScreenshotCaptureProvider } from "./screenshot-cap
 
 /**
  * How a capture ended, for `afterCapture`: `editor` (the renderer is about to show the
- * editor and reveals the window itself), `quiet` (main saved and/or copied; the window
+ * editor and reveals the window itself), `quiet` (main saved and copied; the window
  * comes back where it was, without taking focus), `cancelled` (nothing was captured: Esc,
  * an unsupported answer or a throw; the window comes back where it was).
  */
@@ -51,10 +52,10 @@ interface CaptureHandlerDeps {
    * and then cancelling (Esc) leaves the previous mode untouched (spec failure 10).
    */
   rememberMode(mode: CaptureMode): void;
-  /** The current save/copy preferences, read per capture. */
-  settings(): { save: ScreenshotSaveMode; copy: ScreenshotCopyMode };
-  /** The vault write the `screenshot:save` handler uses (`manual: false`); resolves the new item's id. */
-  saveToVault(png: Buffer, title: string): Promise<{ id: string }>;
+  /** The current copy preference, read per capture. */
+  settings(): { copy: ScreenshotCopyMode };
+  /** The vault write the `screenshot:save` handler uses (`manual: false`); resolves the new item. */
+  saveToVault(png: Buffer, title: string): Promise<SavedScreenshotRef>;
   /** `clipboard.writeImage` of the PNG. */
   copyToClipboard(png: Buffer): void;
   /** Data URL of the PNG at most 160 px wide, for the toast. */
@@ -158,53 +159,67 @@ function remember(deps: CaptureHandlerDeps, mode: CaptureMode): void {
 
 type Captured = Extract<ProviderResult, { kind: "captured" }>;
 
-/** Applies the after-capture policy to a captured shot and builds the renderer's answer. */
+/**
+ * Saves a captured shot, applies the after-capture policy and builds the renderer's
+ * answer. Every capture lands in the vault; only a failed save hands the bytes over.
+ */
 async function finish(deps: CaptureHandlerDeps, shot: Captured): Promise<CaptureResult> {
   const { png } = shot;
   const { width, height } = deps.measure(png);
-  const toEditor = (): CaptureResult => ({
+  const answer = (
+    after: "editor" | "quiet",
+    saved: SavedScreenshotRef | null,
+    copied: boolean,
+  ): CaptureResult => ({
     kind: "captured",
-    after: "editor",
-    // Buffer → ArrayBuffer slice for structured-clone across IPC.
-    png: png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength) as ArrayBuffer,
+    after,
+    // The bytes cross IPC only for the in-memory editor (a failed save); a vault item
+    // is opened by its id. Buffer → ArrayBuffer slice for structured-clone.
+    png:
+      after === "editor" && !saved
+        ? (png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength) as ArrayBuffer)
+        : new ArrayBuffer(0),
     width,
     height,
     mode: shot.mode,
-    saved: null,
-    copied: false,
+    saved,
+    copied,
   });
+  // The in-memory editor runs its own auto actions, so main copies nothing for it.
+  const toEditor = (): CaptureResult => answer("editor", null, false);
 
   let decision;
   try {
-    const { save, copy } = deps.settings();
-    decision = decideAfterCapture(shot.action, save, copy);
+    decision = decideAfterCapture(shot.action, deps.settings().copy);
   } catch (error) {
     console.error("screenshot after-capture settings failed", error);
     return toEditor();
   }
-  if (decision.open === "editor") return toEditor();
 
-  let saved: { id: string } | null = null;
-  let copied = false;
-  if (decision.save) {
-    try {
-      saved = await deps.saveToVault(png, screenshotTitle());
-    } catch (error) {
-      console.error("screenshot quiet save failed", error);
-    }
+  let saved: SavedScreenshotRef | null = null;
+  try {
+    saved = await deps.saveToVault(png, screenshotTitle());
+  } catch (error) {
+    console.error("screenshot save failed", error);
   }
+  // The editor opens the bytes in memory instead, where Save can retry.
+  if (decision.open === "editor" && !saved) return toEditor();
+
+  let copied = false;
   if (decision.copy) {
     try {
       deps.copyToClipboard(png);
       copied = true;
     } catch (error) {
-      console.error("screenshot quiet copy failed", error);
+      console.error("screenshot copy failed", error);
     }
   }
+  if (decision.open === "editor") return answer("editor", saved, copied);
+
   // Nothing landed anywhere: opening the editor is better than losing the shot.
   if (!saved && !copied) return toEditor();
 
-  // Copy-only: Annotate has no vault item to open, so main keeps the bytes for it.
+  // Copy-only (the save failed): Annotate has no vault item to open, so main keeps the bytes.
   if (!saved) keepLastQuietCapture({ png, width, height, mode: shot.mode });
   try {
     deps.onQuietCapture?.({
@@ -219,14 +234,5 @@ async function finish(deps: CaptureHandlerDeps, shot: Captured): Promise<Capture
     // A broken toast must never turn a finished capture into an error.
     console.error("screenshot capture toast failed", error);
   }
-  return {
-    kind: "captured",
-    after: "quiet",
-    png: new ArrayBuffer(0),
-    width,
-    height,
-    mode: shot.mode,
-    saved,
-    copied,
-  };
+  return answer("quiet", saved, copied);
 }

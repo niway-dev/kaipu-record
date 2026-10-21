@@ -48,10 +48,18 @@ export interface CaptureRequestPayload {
 /** What main did with a capture: opened the editor path, or finished it without one. */
 export type AfterCaptureKind = "editor" | "quiet";
 
+/** A screenshot main wrote to the vault: its vault id and the asset id routes use. */
+export interface SavedScreenshotRef {
+  id: string;
+  assetId: string;
+}
+
 /**
- * `after: "editor"` carries the bytes the editor will open. `after: "quiet"` means main
- * already saved and/or copied: `png` is empty (the bytes never cross IPC when no editor
- * opens), `saved` is the vault item written, `copied` says whether the clipboard got it.
+ * Main saves every capture before answering. `saved` is the vault item written and
+ * `copied` says whether the clipboard got it; `png` is then empty (the bytes never cross
+ * IPC), and `after` says whether the renderer opens the editor on `saved` or nothing.
+ * Only a save that failed carries the bytes: `after: "editor"` with `saved: null` opens
+ * them in memory, so the shot is never lost.
  */
 export type CaptureResult =
   | {
@@ -61,7 +69,7 @@ export type CaptureResult =
       width: number;
       height: number;
       mode: CaptureMode;
-      saved: { id: string } | null;
+      saved: SavedScreenshotRef | null;
       copied: boolean;
     }
   | { kind: "cancelled" }
