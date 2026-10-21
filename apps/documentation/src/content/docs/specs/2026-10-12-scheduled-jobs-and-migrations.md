@@ -37,8 +37,8 @@ owner-run procedure to mark the baseline as applied without re-running it.
 | 2   | The purge is enqueued from Better Auth **before** the user row is deleted, through `databaseHooks.user.delete.before`; the enqueue is idempotent per user and a failure aborts the deletion                                                                                                             | After the cascade, the `cloud_purge` row is the only memory that the account owned objects. The adapter-level hook fires for every path that deletes a user through Better Auth, not only the self-service endpoint                             | none                                                                                       |
 | 3   | The purge job only drains jobs whose user row is **gone** (`NOT EXISTS` on `user`)                                                                                                                                                                                                                      | The HTTP driver cannot wrap the enqueue and the delete in one transaction. If the delete fails after the enqueue, a live account must never have its objects purged                                                                             | none                                                                                       |
 | 4   | Schema integrity: FK `cloud_revision(user_id, asset_id) → cloud_asset` (cascade), FK `cloud_asset.current_revision_id → cloud_revision` (set null), drop `subscription_userId_idx`, `DEFAULT now()` on `session.updated_at` and `account.updated_at`. `derived_from_asset_id` stays unconstrained       | Orphan revisions are possible today and the code is the only guard. The dropped index duplicates the unique constraint on the same column. `derived_from_asset_id` cannot get a composite `SET NULL` that Drizzle can express; recorded as debt | none                                                                                       |
-| 5   | Schema changes ship as **committed Drizzle migrations**: `0000_baseline` (production as it is on `main`) plus `0001_integrity`; `db:push` is demoted to throwaway development databases; CI fails when `drizzle-kit generate` would write anything; CODEOWNERS names the owner on schema and migrations | Reviewable SQL in order, repeatable on any database, and a gate before a third party can change the schema. The drift check needs no database and no secret                                                                                     | [0011](/architecture/decisions/0011-committed-migrations-instead-of-push/) (new, Proposed) |
-| 6   | Applying a migration to production stays an **owner-run** step for now; the first run is preceded by a one-time journal insert that marks the baseline as applied; a `migrate` job in `release-api.yml` is designed here but not built                                                                  | Production was built with `push`, so the baseline's tables already exist and must be recorded, not executed. Giving CI a production credential and an automatic schema step is a separate decision the ADR's reopen conditions cover            | 0011                                                                                       |
+| 5   | Schema changes ship as **committed Drizzle migrations**: `0000_baseline` (production as it is on `main`) plus `0001_integrity`; `db:push` is demoted to throwaway development databases; CI fails when `drizzle-kit generate` would write anything; CODEOWNERS names the owner on schema and migrations | Reviewable SQL in order, repeatable on any database, and a gate before a third party can change the schema. The drift check needs no database and no secret                                                                                     | [0029](/architecture/decisions/0029-committed-migrations-instead-of-push/) (new, Proposed) |
+| 6   | Applying a migration to production stays an **owner-run** step for now; the first run is preceded by a one-time journal insert that marks the baseline as applied; a `migrate` job in `release-api.yml` is designed here but not built                                                                  | Production was built with `push`, so the baseline's tables already exist and must be recorded, not executed. Giving CI a production credential and an automatic schema step is a separate decision the ADR's reopen conditions cover            | 0029                                                                                       |
 | 7   | Debt recorded, not fixed: timestamps without time zone, free-text status columns without CHECK, session IP/UA retention, the console reading every user                                                                                                                                                 | Each needs a data migration or a product decision; a baseline-and-integrity change should not carry them                                                                                                                                        | none (ledger entries)                                                                      |
 
 **Open questions** (each changes a number or a step below, none blocks the code):
@@ -57,10 +57,8 @@ owner-run procedure to mark the baseline as applied without re-running it.
 4. **Does production contain any orphan rows** (a revision with no asset, an asset whose
    `current_revision_id` points nowhere)? Both would make `0001_integrity` fail. The owner
    pre-check in the ADR answers it; an agent must not.
-5. **ADR number.** `0011` is free on `main` (which ends at `0010`), but the spec for
-   [NIW2-326](https://linear.app/niway/issue/NIW2-326) proposes an ADR with the same number
-   (not written yet). Both keep `0011` for now; **whichever branch merges second renumbers**
-   its ADR, its index row and the links in its spec. Nothing in the code depends on the number.
+5. **ADR number.** Resolved 2026-10-21: `main` now skips from `0010` to `0020`, and other
+   specs reserve numbers in that gap, so this ADR takes `0029`, the next free number on `main`.
 
 **Out of scope:** the orphan-R2-key sweep (its use case belongs to
 [NIW2-323](https://linear.app/niway/issue/NIW2-323); this spec leaves a named hook point for
@@ -157,11 +155,12 @@ and is listed as a task.
 
 ### Batch sizes
 
-| Job                          | Batch (per run)                                  | Subrequests, worst case on this batch                                                                         |
-| ---------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
-| `sweep-expired-reservations` | `SWEEP_BATCH = 100` revisions                    | 1 list + per revision: 1 `release` + up to 2 HEAD + 2 DELETE → ≤ 501                                          |
-| `retry-pending-deletes`      | `RETRY_DELETES_BATCH = 100` revisions            | 1 list + per revision: up to 2 DELETE + 1 `finishDelete` → ≤ 301                                              |
-| `purge-account-objects`      | `PURGE_BATCH = 5` jobs, `PURGE_MAX_ATTEMPTS = 5` | 1 list + per job: 2 prefixes × (1 LIST per 1,000 keys + 1 DELETE per key) + 1 mark → **unbounded by objects** |
+| Job                          | Batch (per run)                                                              | Subrequests, worst case on this batch                                                         |
+| ---------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `sweep-expired-reservations` | `SWEEP_BATCH = 100` revisions                                                | 1 list + per revision: 1 `release` + up to 2 HEAD + 2 DELETE → ≤ 501                          |
+| `retry-pending-deletes`      | `RETRY_DELETES_BATCH = 100` revisions                                        | 1 list + per revision: up to 2 DELETE + 1 `finishDelete` → ≤ 301                              |
+| `purge-account-objects`      | `PURGE_BATCH = 5` jobs, `PURGE_MAX_ATTEMPTS = 5`, `PURGE_MAX_OBJECTS = 1000` | 1 list + per job: 2 prefixes × (1 LIST per 1,000 keys + 1 DELETE per key) + 1 mark → ≤ ~1,015 |
+| `sweep-orphan-objects`       | `ORPHAN_ACCOUNT_BATCH = 10` accounts touched in the last 24 h                | 1 list + per account: 2 prefixes × (1 LIST per page + 1 revision lookup + DELETEs of orphans) |
 
 Two consequences to act on:
 
@@ -278,7 +277,7 @@ never run against production (its tables exist); it is recorded as applied (see 
 procedure) and it is what a fresh development database runs first.
 
 Baseline integrity is defined as "the schema in the repository", not "whatever production
-holds" (ADR 0011 rejects `drizzle-kit pull` for this reason). The owner pre-check finds any
+holds" (ADR 0029 rejects `drizzle-kit pull` for this reason). The owner pre-check finds any
 difference; a difference is a bug to fix in the schema, not a fact to bless.
 
 ### `0001_integrity.sql` — the delta this ticket adds
@@ -383,8 +382,8 @@ pre-checks and `0001` before production sees them.
    Anything else is drift between production and the repository: stop, fix the schema on a PR,
    regenerate `0001` from the corrected baseline, and start over. (`--strict` is what makes this
    safe: without it `push` applies non-destructive statements immediately.)
-3. **Check for orphan rows** with the two `SELECT`s in ADR 0011. Both must return nothing.
-4. **Record the baseline** in the journal table with the `INSERT` in ADR 0011. The hash is
+3. **Check for orphan rows** with the two `SELECT`s in ADR 0029. Both must return nothing.
+4. **Record the baseline** in the journal table with the `INSERT` in ADR 0029. The hash is
    `shasum -a 256 packages/infra-db/src/migrations/0000_baseline.sql`
    (`a020c8d2c44757eea1ef404a4719e9b2f3d46df3a55d5f014a3586efc259a9fe` for the file on the
    branch) and `created_at` is the `when` of the `0000_baseline` journal entry
@@ -415,7 +414,7 @@ environment, running `bun run db:migrate` with `DATABASE_URL` from the environme
 The job uses the WebSocket path through `drizzle-kit migrate`, so each migration is
 transactional. Preconditions: the baseline is marked on production, one migration has been
 applied by hand successfully, and the owner has decided whether the environment's protection
-rules are the approval step. ADR 0011 names this as a reopen condition.
+rules are the approval step. ADR 0029 names this as a reopen condition.
 
 Optional, separately: a Neon branch per pull request that touches `packages/infra-db/`, with
 `create-branch-action` → `db:migrate` → `test:integration` → `delete-branch-action`. It needs
@@ -458,7 +457,7 @@ the `testing` environment is designed for. Not part of this ticket.
 8. On production, `drizzle.__drizzle_migrations` holds two rows and the four integrity
    statements are in effect; the integration suite passes against a branch of it.
 9. `db:push` is documented as development-only in `commands.md`, `CLAUDE.md` and the README;
-   CODEOWNERS names the owner on the schema and migration paths; ADR 0011 is in the index.
+   CODEOWNERS names the owner on the schema and migration paths; ADR 0029 is in the index.
 10. The technical-debt ledger carries the four deferred schema debts with closing conditions.
 
 ## Rollout and backout
@@ -480,7 +479,7 @@ index. The old Worker never depended on the constraints, so a Worker rollback ne
 change.
 
 **Backout, process.** Reverting to `db:push` is a documentation change; the migration files
-can stay. ADR 0011 would move to Superseded.
+can stay. ADR 0029 would move to Superseded.
 
 ## Owner steps
 
@@ -498,39 +497,39 @@ Everything an agent must not or cannot do:
 6. Decide the deletion path (operator command now, self-service endpoint later or never) and
    test one real deletion end to end.
 7. Later: add the `migrate` job to `release-api.yml` once one manual migration has succeeded,
-   and update ADR 0011's status.
+   and update ADR 0029's status.
 
 ## Implementation status
 
-The WIP commit `01afb9a` on `feature/niw2-328-scheduled-jobs-r2-purge-on-account-deletion-and-committed`
-contains the items marked **done (WIP)**. "Verified" means run in the worktree without a
-database: `bun run db:check`, `tsc -b` in `apps/server-hono`, `tsc --noEmit` in
-`packages/infra-db`, and the three unit test files above. The full `bun run verify` has not been
-run; lint and format are unchecked. Nothing has touched any database.
+Updated 2026-10-21, after `main` was merged into the branch. "Verified" means run in the
+worktree without a database: `bun run db:check`, `check-types`, `build` and `test` for
+`@kaipu/domain`, `@kaipu/application`, `@kaipu/infra-db` and `server-hono`, plus the
+pre-commit lint and format hooks. The integration suite was written but **not run**: it needs a
+throwaway database, and no agent connects to one. Nothing has touched any database.
 
-| #   | Task                                                                                                                                                                                             | Status                                                           |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
-| 1   | `apps/server-hono/src/jobs/run-scheduled-jobs.ts` + test; `jobs/scheduled.ts`; `index.ts` exports `{ fetch, scheduled }`; `wrangler.jsonc` cron; `events.ts` gains `job` on `cloud.sweep.failed` | done (WIP), unit tests and types verified                        |
-| 2   | `packages/application/src/cloud/enqueue-account-purge.ts` + export + test; `fakes.ts` idempotent enqueue                                                                                         | done (WIP), tests verified                                       |
-| 3   | `apps/server-hono/src/lib/account-deletion.ts` + test; `databaseHooks.user.delete.before` wired in `lib/auth.ts`                                                                                 | done (WIP), tests verified; dormant until a deletion path exists |
-| 4   | `CloudPurgeRepository`: idempotent `enqueue`, `nextPending` with `NOT EXISTS` on `user`                                                                                                          | done (WIP), types verified, no integration run                   |
-| 5   | Schema: composite FK, `current_revision_id` FK, index drop, `updated_at` defaults; `drizzle.config.ts` schema path fixed                                                                         | done (WIP)                                                       |
-| 6   | `0000_baseline.sql`, `0001_integrity.sql`, snapshots, journal                                                                                                                                    | done (WIP), `db:check` verified                                  |
-| 7   | `scripts/check-migrations.sh`, root `db:check` script, `pr-checks.yml` step, CODEOWNERS entries                                                                                                  | done (WIP), script verified locally; CI not yet run              |
-| 8   | ADR 0011 draft, ADR index row, `commands.md`, `CLAUDE.md`, ledger entries                                                                                                                        | done (WIP); ADR status kept **Proposed** by this spec            |
-| 9   | `scheduled.ts`: `await runScheduledJobs(...)` instead of `ctx.waitUntil`                                                                                                                         | to do                                                            |
-| 10  | `purgeAccountObjects`: per-run object budget (`maxObjects`, `exhausted`, `attempts` only on error) + unit test; runner reads it into the summary                                                 | to do                                                            |
-| 11  | `makeFakePurge`: model "user exists" so the `nextPending` guard is tested at the application level                                                                                               | to do                                                            |
-| 12  | Integration tests for the new foreign keys and for `CloudPurgeRepository` (owner-run against a branch)                                                                                           | to do                                                            |
-| 13  | `timeout-minutes` on the `db:check` step; `deployment/pr-checks.md` lists it; README's `db:push` line                                                                                            | to do                                                            |
-| 14  | Operator command `account delete <email>` (enqueue, then delete through Better Auth's adapter or the database client) next to `scripts/plan.ts`, with a `bun run account` root script            | to do, after open question 2                                     |
-| 15  | `bun run verify` green on the branch; PR opened by the owner                                                                                                                                     | to do (owner pushes)                                             |
-| 16  | Owner procedure on a Neon branch, then production; ADR 0011 status → Accepted with the date                                                                                                      | owner                                                            |
-| 17  | `migrate` job in `release-api.yml`                                                                                                                                                               | later, per ADR 0011 reopen conditions                            |
+| #   | Task                                                                                                                                                       | Status                                                                    |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| 1   | `jobs/run-scheduled-jobs.ts` + test; `jobs/scheduled.ts`; `index.ts` exports `{ fetch, scheduled }`; `wrangler.jsonc` cron; `job` on `cloud.sweep.failed`  | done, unit tests verified                                                 |
+| 2   | `enqueue-account-purge.ts` + export + test; `fakes.ts` idempotent enqueue                                                                                  | done, tests verified                                                      |
+| 3   | `lib/account-deletion.ts` + test; `databaseHooks.user.delete.before` merged with `main`'s `accountLinkingHooks` in `lib/auth.ts`                           | done, tests verified; dormant until a deletion path exists                |
+| 4   | `CloudPurgeRepository`: idempotent `enqueue`, `nextPending` with `NOT EXISTS` on `user`                                                                    | done, types verified; integration test written, not run                   |
+| 5   | Schema: composite FK, `current_revision_id` FK, index drop, `updated_at` defaults; `drizzle.config.ts` schema path fixed                                   | done                                                                      |
+| 6   | `0000_baseline.sql`, `0001_integrity.sql`; `0002_account_provider_unique.sql` for the NIW2-219 index `main` added after the baseline (`IF NOT EXISTS`)     | done, `db:check` verified                                                 |
+| 7   | `scripts/check-migrations.sh` (pinned `drizzle-kit`, ignores staged files), root `db:check`, `pr-checks.yml` step with a timeout, CODEOWNERS entries       | done, script verified locally; the step runs on release candidates (0027) |
+| 8   | ADR renumbered **0029**, ADR index row, `commands.md`, `CLAUDE.md`, `README.md`, `deployment/pr-checks.md`, ledger entries                                 | done; ADR status kept **Proposed**                                        |
+| 9   | `scheduled.ts`: `await runScheduledJobs(...)` instead of `ctx.waitUntil`                                                                                   | done                                                                      |
+| 10  | `purgeAccountObjects`: per-run object budget (`maxObjects`, `exhausted`, `attempts` only on error); done only after an empty listing; runner summary field | done, unit tests verified (`PURGE_MAX_OBJECTS = 1000`)                    |
+| 11  | `makeFakePurge` models "user exists" (`liveUsers`), so the `nextPending` guard is tested at the application level                                          | done, test verified                                                       |
+| 12  | Integration tests for the new foreign keys and for `CloudPurgeRepository` (`cloud-purge.repository.integration.test.ts`)                                   | written and type-checked; **owner runs** `bun run test:integration`       |
+| 13  | `timeout-minutes` on the `db:check` step; `deployment/pr-checks.md` lists it; README's `db:push` line                                                      | done                                                                      |
+| 14  | Fourth job: `sweepOrphanObjects` (NIW2-323) wired with `ORPHAN_ACCOUNT_BATCH = 10` over a 24 h lookback, one `cloud.sweep.orphans` line per run            | done, unit test verified                                                  |
+| 15  | Operator command `account delete <email>` next to `scripts/plan.ts`, with a `bun run account` root script                                                  | to do, after open question 2                                              |
+| 16  | Owner procedure on a Neon branch, then production; ADR 0029 status → Accepted with the date                                                                | owner                                                                     |
+| 17  | `migrate` job in `release-api.yml`                                                                                                                         | later, per ADR 0029 reopen conditions                                     |
 
 ## References
 
-- [ADR 0011: Committed Drizzle migrations replace `db:push`](/architecture/decisions/0011-committed-migrations-instead-of-push/) (Proposed)
+- [ADR 0029: Committed Drizzle migrations replace `db:push`](/architecture/decisions/0029-committed-migrations-instead-of-push/) (Proposed)
 - [ADR 0002: Plan entitlements kept separate from auth](/architecture/decisions/0002-plan-entitlements-separate-from-auth/) — the per-feature table pattern the integrity changes keep
 - [ADR 0010: Checks run in Actions on every pull request](/architecture/decisions/0010-checks-run-in-actions-on-every-pr/) — where the `db:check` step lives
 - [Cloud recording lifecycle and account deletion (backlog)](/backlog/cloud-data-lifecycle/) — the acceptance criteria this spec implements
