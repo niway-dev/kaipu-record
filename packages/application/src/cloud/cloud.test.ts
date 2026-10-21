@@ -14,6 +14,7 @@ import { cancelUpload } from "./cancel-upload";
 import { confirmUpload } from "./confirm-upload";
 import { createUploadIntent } from "./create-upload-intent";
 import { deleteCloudCopy } from "./delete-cloud-copy";
+import { enqueueAccountPurge } from "./enqueue-account-purge";
 import { makeFakeAccess, makeFakeAssets, makeFakePurge, makeFakeStorage } from "./fakes";
 import { getAssetDownloadUrl } from "./get-asset-download-url";
 import { getStorageUsage } from "./get-storage-usage";
@@ -1385,15 +1386,85 @@ describe("sweeps", () => {
     storage.land("videos/other/a/r.mp4", { sizeBytes: 1 });
     await purge.enqueue("gone");
     storage.failDeletes = true;
-    expect(await purgeAccountObjects({ purge, storage, limit: 5, maxAttempts: 3 })).toEqual({
+    expect(
+      await purgeAccountObjects({ purge, storage, limit: 5, maxAttempts: 3, maxObjects: 100 }),
+    ).toEqual({
       done: 0,
       failed: 1,
+      exhausted: false,
     });
     storage.failDeletes = false;
-    expect(await purgeAccountObjects({ purge, storage, limit: 5, maxAttempts: 3 })).toEqual({
+    expect(
+      await purgeAccountObjects({ purge, storage, limit: 5, maxAttempts: 3, maxObjects: 100 }),
+    ).toEqual({
       done: 1,
       failed: 0,
+      exhausted: false,
     });
     expect([...storage.objects.keys()]).toEqual(["videos/other/a/r.mp4"]);
+  });
+
+  it("stops at the per-run object budget without counting an attempt, and resumes next run", async () => {
+    const storage = makeFakeStorage();
+    const purge = makeFakePurge();
+    for (const n of [1, 2, 3]) storage.land(`videos/gone/a/r${n}.mp4`, { sizeBytes: 1 });
+    storage.land("img/gone/a/t.png", { sizeBytes: 1 });
+    await purge.enqueue("gone");
+    const run = () =>
+      purgeAccountObjects({ purge, storage, limit: 5, maxAttempts: 3, maxObjects: 3 });
+    expect(await run()).toEqual({ done: 0, failed: 0, exhausted: true });
+    expect(storage.objects.size).toBe(1);
+    expect(purge.jobs[0]?.attempts).toBe(0);
+    expect(await run()).toEqual({ done: 1, failed: 0, exhausted: false });
+    expect(storage.objects.size).toBe(0);
+  });
+
+  it("marks a job done only once a listing of every prefix comes back empty", async () => {
+    const storage = makeFakeStorage();
+    const purge = makeFakePurge();
+    storage.land("videos/gone/a/r.mp4", { sizeBytes: 1 });
+    await purge.enqueue("gone");
+    // A late PUT lands right after the first listing: the purge must catch it before markDone.
+    let landed = false;
+    storage.afterList = () => {
+      if (landed) return;
+      landed = true;
+      storage.land("videos/gone/b/late.mp4", { sizeBytes: 1 });
+    };
+    expect(
+      await purgeAccountObjects({ purge, storage, limit: 5, maxAttempts: 3, maxObjects: 100 }),
+    ).toEqual({ done: 1, failed: 0, exhausted: false });
+    expect(storage.objects.size).toBe(0);
+  });
+
+  it("never purges an account whose user row still exists", async () => {
+    const storage = makeFakeStorage();
+    const purge = makeFakePurge();
+    storage.land("videos/alive/a/r.mp4", { sizeBytes: 1 });
+    await purge.enqueue("alive");
+    purge.liveUsers.add("alive"); // the user delete failed after the enqueue
+    expect(
+      await purgeAccountObjects({ purge, storage, limit: 5, maxAttempts: 3, maxObjects: 100 }),
+    ).toEqual({ done: 0, failed: 0, exhausted: false });
+    expect(storage.objects.has("videos/alive/a/r.mp4")).toBe(true);
+  });
+
+  it("enqueues one purge job per deleted account, and the purge then removes its objects", async () => {
+    const storage = makeFakeStorage();
+    const purge = makeFakePurge();
+    storage.land("videos/u1/a/r.mp4", { sizeBytes: 1 });
+    storage.land("img/u1/a/t.jpg", { sizeBytes: 1 });
+    storage.land("videos/u2/a/r.mp4", { sizeBytes: 1 });
+    await enqueueAccountPurge({ purge, userId: "u1" });
+    await enqueueAccountPurge({ purge, userId: "u1" }); // retried delete: no duplicate job
+    expect(purge.jobs.map((j) => j.userId)).toEqual(["u1"]);
+    expect(
+      await purgeAccountObjects({ purge, storage, limit: 5, maxAttempts: 3, maxObjects: 100 }),
+    ).toEqual({
+      done: 1,
+      failed: 0,
+      exhausted: false,
+    });
+    expect([...storage.objects.keys()]).toEqual(["videos/u2/a/r.mp4"]);
   });
 });

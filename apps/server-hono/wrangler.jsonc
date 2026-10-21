@@ -5,6 +5,10 @@
   "compatibility_date": "2025-10-31",
   "compatibility_flags": ["nodejs_compat", "nodejs_compat_populate_process_env"],
   "preview_urls": true,
+  // Every 15 minutes: expired upload reservations, pending R2 deletes, deleted-account purge.
+  "triggers": {
+    "crons": ["*/15 * * * *"],
+  },
   "observability": {
     "enabled": true,
   },

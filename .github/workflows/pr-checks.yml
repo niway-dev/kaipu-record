@@ -130,6 +130,12 @@ jobs:
       - name: Check formatting
         run: bunx oxfmt --check .
 
+      # No database involved: `drizzle-kit generate` only diffs the schema files against the
+      # committed snapshot. See ADR 0029.
+      - name: Check committed migrations match the schema
+        timeout-minutes: 5
+        run: bun run db:check
+
   types:
     name: Build and type-check
     runs-on: ubuntu-latest

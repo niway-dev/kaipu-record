@@ -83,10 +83,11 @@ bun run setup
 bun run rebuild:native
 ```
 
-For backend development, push the database schema:
+For backend development, apply the committed migrations to a fresh development database (one built
+earlier with `db:push` needs the baseline marked as applied first; see ADR 0029):
 
 ```bash
-bun run db:push
+bun run db:migrate
 ```
 
 5. Start the development servers:
@@ -188,7 +189,10 @@ The full reference — every command, per-app scripts, and how to make an accoun
 
 ### Database
 
-- `bun run db:push` -- Apply the schema to the database (how schema changes ship)
+- `bun run db:generate` -- Generate a migration from schema changes (commit it with the change)
+- `bun run db:migrate` -- Apply committed migrations to the database (how schema changes ship)
+- `bun run db:check` -- Fail if the schema has changes without a committed migration (no database)
+- `bun run db:push` -- Sync the schema to a throwaway development database only
 - `bun run db:studio` -- Open Drizzle Studio (database GUI)
 
 ### Plans (premium)

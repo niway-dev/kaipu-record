@@ -10,3 +10,4 @@ export { sweepExpiredReservations } from "./sweep-expired-reservations";
 export { retryPendingDeletes } from "./retry-pending-deletes";
 export { purgeAccountObjects } from "./purge-account-objects";
 export { sweepOrphanObjects } from "./sweep-orphan-objects";
+export { enqueueAccountPurge } from "./enqueue-account-purge";

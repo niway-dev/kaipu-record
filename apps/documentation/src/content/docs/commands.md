@@ -25,12 +25,20 @@ it: `DATABASE_URL='<url>' bun run plan grant <email>`.
 
 ## Database
 
-| Command               | What it does                                                                                                       |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `bun run db:push`     | Apply the Drizzle schema to the database. This is how schema changes ship.                                         |
-| `bun run db:studio`   | Open Drizzle Studio to inspect data.                                                                               |
-| `bun run db:generate` | Generate versioned migration files. Not used today; the project stays on `db:push` until an ADR adopts migrations. |
-| `bun run db:migrate`  | Apply versioned migrations. Not used today, same reason.                                                           |
+| Command               | What it does                                                                                                                                                         |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bun run db:generate` | Generate a versioned migration from schema changes into `packages/infra-db/src/migrations/`. Commit the result.                                                      |
+| `bun run db:migrate`  | Apply committed migrations to the database `DATABASE_URL` points at. This is how schema changes ship.                                                                |
+| `bun run db:check`    | Fail if the schema has changes without a committed migration. Needs no database; CI runs it on release candidates (ADR 0027).                                        |
+| `bun run db:studio`   | Open Drizzle Studio to inspect data.                                                                                                                                 |
+| `bun run db:push`     | Sync the schema straight to a throwaway **development** database. Never production ([ADR 0029](/architecture/decisions/0029-committed-migrations-instead-of-push/)). |
+
+Schema changes ship as committed migrations: edit `packages/infra-db/src/schema/`, run
+`bun run db:generate`, read the SQL, and commit it with the schema change. `@csdev19` is the
+required reviewer for those paths. Migrations are not applied by the release workflows yet:
+the owner runs `bun run db:migrate` against production after merging. The first time, mark
+the baseline as applied first; the procedure is in
+[ADR 0029](/architecture/decisions/0029-committed-migrations-instead-of-push/#owner-procedure-mark-the-baseline-as-applied-on-production).
 
 Never run `db:*` from `packages/infra-db/` directly: the root scripts are what fetch the
 environment from Infisical.

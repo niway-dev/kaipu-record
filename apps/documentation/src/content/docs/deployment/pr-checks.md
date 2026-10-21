@@ -22,7 +22,8 @@ harness behind the second one.
 ### PR Validation (the broad, cheap gate)
 
 Runs on `ubuntu-latest`: `bun install`, then **lint** (`oxlint`), **format check**
-(`oxfmt --check .`), **build** of the `@kaipu/*` packages + web + api, **typecheck**, and the
+(`oxfmt --check .`), the **migration drift check** (`bun run db:check`, no database; ADR 0029),
+**build** of the `@kaipu/*` packages + web + api, **typecheck**, and the
 **desktop unit suite** (`vitest`, ~600 tests). It validates the whole monorepo and does not
 deploy. This is the check to keep fast and always-on.
 

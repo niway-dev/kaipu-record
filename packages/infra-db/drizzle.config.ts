@@ -2,7 +2,7 @@ import { defineConfig } from "drizzle-kit";
 import { TABLE_PREFIX } from "./src/config";
 
 export default defineConfig({
-  schema: ["./src/schema", "./src/schema/enums"],
+  schema: "./src/schema",
   out: "./src/migrations",
   dialect: "postgresql",
   dbCredentials: {

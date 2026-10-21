@@ -52,6 +52,7 @@
     "db:push": "bash scripts/require-env.sh packages/infra-db/.env && bun --env-file=packages/infra-db/.env run turbo run db:push -F @kaipu/infra-db",
     "db:studio": "bash scripts/require-env.sh packages/infra-db/.env && bun --env-file=packages/infra-db/.env run turbo run db:studio -F @kaipu/infra-db",
     "db:generate": "bash scripts/require-env.sh packages/infra-db/.env && bun --env-file=packages/infra-db/.env run turbo run db:generate -F @kaipu/infra-db",
+    "db:check": "bash scripts/check-migrations.sh",
     "db:migrate": "bash scripts/require-env.sh packages/infra-db/.env && bun --env-file=packages/infra-db/.env run turbo run db:migrate -F @kaipu/infra-db",
     "plan": "bash scripts/require-env.sh packages/infra-db/.env && bun --env-file=packages/infra-db/.env run apps/server-hono/scripts/plan.ts",
     "test": "turbo run test",

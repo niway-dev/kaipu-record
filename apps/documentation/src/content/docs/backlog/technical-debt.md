@@ -81,3 +81,51 @@ _Cost today:_ none, now that the tooling ignores it.
 
 _Closes when:_ that branch ships and the worktree is removed, or never — the
 ignores make it harmless.
+
+## Database schema
+
+Left out of the migration work ([ADR 0029](/architecture/decisions/0029-committed-migrations-instead-of-push/))
+on purpose: each needs a data migration against production, which a baseline-and-integrity
+change should not carry.
+
+### Timestamps are `timestamp without time zone`
+
+Every `timestamp(...)` column omits `withTimezone`. Values are written from Workers in UTC, so
+nothing is wrong today.
+
+_Cost today:_ none until a second writer in another time zone, or a query comparing against
+`now()` in a session with a non-UTC zone, exists. Then the error is silent.
+
+_Closes when:_ a migration converts the columns to `timestamptz` (`USING col AT TIME ZONE 'UTC'`)
+with the schema and the mappers updated together.
+
+### Status columns are free text with no CHECK constraint
+
+`cloud_revision.status`, `subscription.plan`, `subscription.status` and `subscription.provider`
+are `text`; only the domain enums constrain them. A bad value written by a script or a future
+code path is accepted by Postgres.
+
+_Cost today:_ a hand-run SQL statement can store a status the code does not handle.
+
+_Closes when:_ production is checked for out-of-enum values, then CHECK constraints (or Postgres
+enums) are added in a migration.
+
+### `derived_from_asset_id` has no foreign key
+
+The asset primary key is `(user_id, asset_id)`, so a reference must be composite. A composite
+`ON DELETE SET NULL` would also null the `NOT NULL` `user_id`, and Drizzle cannot emit the
+column-list form (`SET NULL (derived_from_asset_id)`, Postgres 15+).
+
+_Cost today:_ a derived asset can point at an asset that never existed. Nothing reads it for
+access control.
+
+_Closes when:_ Drizzle supports the column-list `SET NULL`, or the reference moves to a
+dedicated single-column surrogate key.
+
+### `cloud_asset.current_revision_id` does not check the revision's owner
+
+The foreign key targets `cloud_revision.revision_id` alone, so it does not prove the revision
+belongs to the same user and asset. The application sets it only from the user's own confirm.
+
+_Closes when:_ `cloud_revision` gains a unique `(user_id, asset_id, revision_id)` and the
+reference becomes composite.

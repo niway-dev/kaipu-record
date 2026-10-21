@@ -2,7 +2,10 @@ import { baseConfig, getCustomSession } from "@kaipu/infra-auth";
 import { describeEmailFailure, EMAIL_TEMPLATE_VALUES, type EmailLocale } from "@kaipu/infra-email";
 import { betterAuth } from "better-auth";
 import { customSession } from "better-auth/plugins";
+import { createDatabaseClient } from "@kaipu/infra-db/client";
+import { CloudPurgeRepository } from "@kaipu/infra-db/repositories";
 import { env } from "../env";
+import { enqueuePurgeBeforeUserDelete } from "./account-deletion";
 import { desktopAuthPlugin, DESKTOP_TRUSTED_ORIGINS } from "./desktop-auth";
 import { buildResetUrl, buildVerifyUrl, tryGetEmail, webUrl } from "./email";
 import { accountLinkingHooks, accountOptions } from "./account-linking";
@@ -36,7 +39,18 @@ export const auth = betterAuth({
   socialProviders: getSocialProviders(env),
   // Linking rules for Google sign-in (NIW2-219): who gets linked, and the pre-hijack guard.
   account: accountOptions,
-  databaseHooks: accountLinkingHooks,
+  databaseHooks: {
+    ...accountLinkingHooks,
+    // NIW2-328: queue the R2 purge while the user row still exists; the scheduled handler
+    // drains it once the row is gone.
+    user: {
+      delete: {
+        before: enqueuePurgeBeforeUserDelete(
+          new CloudPurgeRepository(createDatabaseClient(env.DATABASE_URL)),
+        ),
+      },
+    },
+  },
   trustedOrigins: [...env.CORS_ORIGIN, ...DESKTOP_TRUSTED_ORIGINS],
   emailAndPassword: {
     ...baseConfig.emailAndPassword,
