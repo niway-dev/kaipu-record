@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { isAudible, type AudioEdits } from "./audio-edits";
 import {
   entryAt,
   type LayoutEntry,
@@ -51,12 +52,36 @@ interface ActiveSlide {
   anchorAt: number | null;
 }
 
-export function usePreviewPlayback(layout: LayoutEntry[]): PreviewPlayback {
+/**
+ * `audio` is the scene's muting — the whole-video flag and the muted ranges. The
+ * preview reads it per frame so what you hear while scrubbing is what the export
+ * will write; without this the editor would show a muted range and play sound
+ * straight through it, which is what happened before this existed.
+ */
+export function usePreviewPlayback(layout: LayoutEntry[], audio?: AudioEdits): PreviewPlayback {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  // Kept in a ref so the rAF loop reads the latest edits without re-subscribing
+  // on every drag of a range handle.
+  const audioRef = useRef<AudioEdits | undefined>(audio);
+  audioRef.current = audio;
   const internalSeekRef = useRef(false);
   const listenersRef = useRef(new Set<(t: number) => void>());
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
+  const mutedRef = useRef(false);
+  mutedRef.current = muted;
+
+  /**
+   * The element is muted when EITHER the user muted the preview OR the scene
+   * mutes this instant. `video.currentTime` is source time (the element plays
+   * the original file), which is what the ranges are anchored to.
+   */
+  const applyMute = useCallback((video: HTMLVideoElement, userMuted: boolean) => {
+    const edits = audioRef.current;
+    const silenced = edits ? !isAudible(video.currentTime, edits) : false;
+    video.muted = userMuted || silenced;
+  }, []);
+
   const [timelineTime, setTimelineTime] = useState(0);
   const [activeSlideId, setActiveSlideId] = useState<string | null>(null);
   const duration = useMemo(() => layoutDuration(layout), [layout]);
@@ -161,6 +186,7 @@ export function usePreviewPlayback(layout: LayoutEntry[]): PreviewPlayback {
         }
       } else {
         const video = videoRef.current;
+        if (video) applyMute(video, mutedRef.current);
         const mapped = video ? sourceToTimeline(layoutRef.current, video.currentTime) : null;
         if (mapped !== null) lastValidTimeRef.current = mapped;
         emitTime(lastValidTimeRef.current);
@@ -169,7 +195,7 @@ export function usePreviewPlayback(layout: LayoutEntry[]): PreviewPlayback {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [playing, emitTime, advanceFrom]);
+  }, [playing, emitTime, advanceFrom, applyMute]);
 
   // The video's `timeupdate` drives `timelineTime` state on clips; slides get no such
   // event, so update the state on a low-frequency interval while one is active (the rAF
@@ -281,17 +307,20 @@ export function usePreviewPlayback(layout: LayoutEntry[]): PreviewPlayback {
   // Apply muted state imperatively: React's JSX `muted` attribute is only read during
   // initial mount and is not reflected back to the DOM property on updates. Setting
   // `video.muted` directly via the ref ensures the audio state stays consistent with
-  // the UI toggle across re-renders and source changes.
+  // the UI toggle across re-renders and source changes. Re-run when the edits
+  // change too, so toggling "mute all" or dragging a range over the paused
+  // playhead is heard immediately rather than at the next tick.
   useEffect(() => {
     const video = videoRef.current;
-    if (video) video.muted = muted;
-  }, [muted]);
+    if (video) applyMute(video, muted);
+  }, [muted, audio, applyMute]);
 
   const onVideoTimeUpdate = useCallback(() => {
     // While a slide owns the clock the video is paused; ignore any trailing timeupdate.
     if (slideRef.current !== null) return;
     const video = videoRef.current;
     if (!video) return;
+    applyMute(video, mutedRef.current);
     if (internalSeekRef.current) {
       internalSeekRef.current = false;
       return;
@@ -323,7 +352,7 @@ export function usePreviewPlayback(layout: LayoutEntry[]): PreviewPlayback {
       return;
     }
     setTimelineTime(t);
-  }, [pause, seekVideoToSource, advanceFrom]);
+  }, [pause, seekVideoToSource, advanceFrom, applyMute]);
 
   const onVideoEnded = useCallback(() => {
     playingRef.current = false;

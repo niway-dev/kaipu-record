@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, type ReactElement } from "react";
 import { ImagePlus } from "lucide-react";
+import { useTranslations } from "@kaipu/i18n";
 import type { PreviewPlayback } from "../use-preview-playback";
 import type { LayoutEntry } from "../timeline";
 import { layoutDuration } from "../timeline";
@@ -16,6 +17,18 @@ import styles from "./timeline-strip.module.css";
 
 const THUMBS_PER_BLOCK_PX = 72; // one thumbnail tile roughly every 72px of block width
 
+/** A lane stacked under the main track (Activity, Zooms, Privacy — video-editor v2). */
+export interface ExtraLane {
+  key: string;
+  /** Short uppercase label for the label column. */
+  label: string;
+  /** A SINGLE element, not a ReactNode: .timelineBody is a two-column grid and
+   *  auto-places one child per cell, so a lane rendering a fragment with two roots
+   *  would push every following label and lane one cell along. LaneRow also wraps it
+   *  in its own cell div, so neither mistake can reach the grid. */
+  node: ReactElement;
+}
+
 export function TimelineStrip({
   layout,
   playback,
@@ -29,6 +42,7 @@ export function TimelineStrip({
   selectedOverlayId,
   onSelectOverlay,
   onWindowChange,
+  extraLanes = [],
 }: {
   layout: LayoutEntry[];
   playback: PreviewPlayback;
@@ -53,7 +67,10 @@ export function TimelineStrip({
   selectedOverlayId: string | null;
   onSelectOverlay: (id: string | null) => void;
   onWindowChange?: (id: string, start: number, end: number, phase: WindowChangePhase) => void;
+  /** Lanes rendered below the main track, each with its label, in order. */
+  extraLanes?: ExtraLane[];
 }): React.JSX.Element {
+  const t = useTranslations("videoEditor");
   const trackRef = useRef<HTMLDivElement | null>(null);
   const playheadRef = useRef<HTMLDivElement | null>(null);
   const duration = layoutDuration(layout);
@@ -136,9 +153,12 @@ export function TimelineStrip({
 
   return (
     <div className={styles.strip}>
-      {/* timelineBody gives ruler + overlay lane + track a shared stacking context so
-          the playhead can span all three rows as a single continuous scrub indicator. */}
+      {/* timelineBody is a two-column grid: labels (--lane-label-w) + lanes. Every lane
+          sits in column 2, so all lanes share one horizontal extent and the fraction →
+          time mapping is identical on each. The playhead lives in its own layer
+          spanning column 2 across every row (see .playheadLayer). */}
       <div className={styles.timelineBody}>
+        <span className={styles.laneLabel} />
         <div
           data-testid="ruler"
           className={styles.ruler}
@@ -155,6 +175,7 @@ export function TimelineStrip({
             </span>
           ))}
         </div>
+        <span className={styles.laneLabel}>{t("laneAnnotations")}</span>
         <OverlayLane
           overlays={overlays}
           duration={duration}
@@ -162,6 +183,7 @@ export function TimelineStrip({
           onSelectOverlay={onSelectOverlay}
           onWindowChange={(id, start, end, phase) => onWindowChange?.(id, start, end, phase)}
         />
+        <span className={styles.laneLabel}>{t("laneClips")}</span>
         <div
           ref={trackRef}
           className={styles.track}
@@ -183,12 +205,35 @@ export function TimelineStrip({
             />
           ))}
         </div>
-        {/* Playhead lives in timelineBody — not inside .track — so it visually spans
-            ruler → overlay lane → track as one continuous line. Positioned via direct
-            DOM mutation in the subscribeTime callback (avoid React re-renders at 60fps). */}
-        <div ref={playheadRef} className={styles.playhead} />
+        {extraLanes.map((lane) => (
+          <LaneRow key={lane.key} label={lane.label}>
+            {lane.node}
+          </LaneRow>
+        ))}
+        {/* Positioned via direct DOM mutation in the subscribeTime callback (avoid React
+            re-renders at 60fps). The layer spans every row of the lanes column. */}
+        <div className={styles.playheadLayer}>
+          <div ref={playheadRef} className={styles.playhead} />
+        </div>
       </div>
     </div>
+  );
+}
+
+function LaneRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactElement;
+}): React.JSX.Element {
+  return (
+    <>
+      <span className={styles.laneLabel}>{label}</span>
+      {/* Exactly one grid cell, whatever the lane renders — the label/lane pairing of
+          every row below this one depends on it. */}
+      <div className={styles.laneCell}>{children}</div>
+    </>
   );
 }
 

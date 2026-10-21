@@ -3,8 +3,6 @@ import react from "@vitejs/plugin-react";
 import dts from "vite-plugin-dts";
 import { resolve } from "node:path";
 import tsconfigPaths from "vite-tsconfig-paths";
-import { libInjectCss } from "vite-plugin-lib-inject-css";
-import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
   plugins: [
@@ -15,8 +13,9 @@ export default defineConfig({
       outDir: "dist",
       insertTypesEntry: true,
     }),
-    libInjectCss(),
-    tailwindcss(),
+    // libInjectCss + tailwindcss used to run here, injecting a full Tailwind
+    // build into dist. Removed on purpose: one Tailwind build per app, owned
+    // by the app (see the comment in src/index.ts).
   ],
   resolve: {
     alias: {

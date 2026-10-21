@@ -30,8 +30,9 @@ professional NLE) that covers the explainer-video jobs:
   video) is a follow-up — the overlay data model already has room for an `image` kind.
 - **Annotations are time-ranged**, anchored to timeline time, clamped when cuts shorten
   the timeline.
-- **Export duplicates** (original untouched, session re-editable). Final behavior will
-  offer "reemplazar" vs "generar duplicado" — deferred.
+- **Export duplicates** (original untouched, session re-editable). The once-deferred
+  "reemplazar" vs "generar duplicado" choice is closed: an export never replaces the
+  original — see [ADR 0003](/architecture/decisions/0003-export-never-replaces-the-original/).
 - **One editor page, one pure timeline module.** All timeline↔source time math lives in
   a single tested module; the design-principles section of the spec locks in the rest
   (canvas-per-frame export, foregrounded export, no clip reordering).

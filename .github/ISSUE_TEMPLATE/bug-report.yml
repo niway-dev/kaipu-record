@@ -1,0 +1,38 @@
+name: Bug report
+description: Something in Kaipu Record does not work as it should.
+labels: ["bug"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Kaipu version
+      description: Settings → About.
+      placeholder: "0.10.0"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: macOS version
+      placeholder: "macOS 26.1, Apple silicon"
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open the menu-bar panel
+        2. …
+  - type: textarea
+    id: media
+    attributes:
+      label: Recording or screenshot
+      description: A short clip or image of the problem, when it is visual. Drag it here.

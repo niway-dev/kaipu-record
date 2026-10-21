@@ -13,7 +13,14 @@ description: Status tracker for the plan/entitlements vertical (free/pro, waterm
 > Pending: a real user flipping themselves to `pro` and confirming the watermark drops in an
 > actual exported recording. Effort: Medium.
 
+> **2026-09-27.** The watermark is no longer the feature this vertical gates: the free app
+> ships without one ([decision](./free-tier-no-watermark)). The vertical stays as built; its
+> next consumers are the cloud features. The "real user flips to pro and the watermark drops"
+> validation below is therefore moot and replaced by the cloud-feature validation.
+
 ## Where the detail lives
+
+What each plan includes (capacity, limits): **[Plans — Free and Pro](/features/plans)**.
 
 This page tracks status only. The design and the operational detail were split out into
 their permanent homes, following the project's own convention of keeping an ADR separate

@@ -1,13 +1,34 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { PublicShell } from "@/components/landing/public-shell";
-import { Hero } from "@/components/landing/hero";
-import { Showcase } from "@/components/landing/showcase";
-import { WhyKaipu } from "@/components/landing/why-kaipu";
-import { DownloadSection } from "@/components/landing/download-section";
+import { Crop, Scissors, Search, Video } from "lucide-react";
+import { createFileRoute, redirect } from "@tanstack/react-router";
+
+import { LazyHydrate } from "@/components/lazy-hydrate";
+import { HomeShell } from "@/components/home/home-shell";
+import { Hero } from "@/components/home/hero";
+import { Moments } from "@/components/home/moments";
+import { Kai } from "@/components/home/kai";
+import { Chapter } from "@/components/home/chapter";
+import { MockRecord } from "@/components/home/mock-record";
+import { MockCapture } from "@/components/home/mock-capture";
+import { MockEdit } from "@/components/home/mock-edit";
+import { MockFind } from "@/components/home/mock-find";
+import { Files } from "@/components/home/files";
+import { Closing } from "@/components/home/closing";
 import { pageHead, softwareJsonLd } from "@/lib/seo";
+import { getHomeRedirect } from "@/server-functions/get-home-redirect";
 
 export const Route = createFileRoute("/")({
+  // The redesigned home brings its own chrome (top bar + rail), so the root
+  // document must stand down exactly as it does for the marketing shell.
   staticData: { shell: "marketing" },
+  // Server-side only, so it costs the public page nothing: a document request that carries a
+  // Better Auth session cookie is checked once and bounced to the dashboard when the session is
+  // valid; a request without the cookie (crawlers, new visitors) renders the landing with no API
+  // call. In-app navigation to `/` (the header logo, sign-out) is never redirected.
+  beforeLoad: async () => {
+    if (typeof window !== "undefined") return;
+    const to = await getHomeRedirect();
+    if (to) throw redirect({ href: to });
+  },
   head: ({ match }) => {
     const { locale } = match.context;
     return {
@@ -15,16 +36,48 @@ export const Route = createFileRoute("/")({
       scripts: [{ type: "application/ld+json", children: softwareJsonLd(locale) }],
     };
   },
-  component: LandingPage,
+  component: HomePage,
 });
 
-function LandingPage() {
+function HomePage() {
   return (
-    <PublicShell>
+    <HomeShell>
       <Hero />
-      <Showcase />
-      <WhyKaipu />
-      <DownloadSection />
-    </PublicShell>
+      {/* Everything below the hero hydrates lazily: its HTML is server-rendered
+          and stays in the document, but its client work waits until the section
+          is near the viewport. See LazyHydrate. */}
+      <LazyHydrate>
+        <Moments />
+      </LazyHydrate>
+      <LazyHydrate>
+        <Kai />
+      </LazyHydrate>
+      <LazyHydrate>
+        <Chapter id="record" tint="c1" number="01" icon={Video} keyPrefix="homeChapter1">
+          <MockRecord />
+        </Chapter>
+      </LazyHydrate>
+      <LazyHydrate>
+        <Chapter id="capture" tint="c2" number="02" icon={Crop} keyPrefix="homeChapter2">
+          <MockCapture />
+        </Chapter>
+      </LazyHydrate>
+      <LazyHydrate>
+        <Chapter id="edit" tint="c3" number="03" icon={Scissors} keyPrefix="homeChapter3">
+          <MockEdit />
+        </Chapter>
+      </LazyHydrate>
+      <LazyHydrate>
+        <Chapter id="find" tint="c4" number="04" icon={Search} keyPrefix="homeChapter4">
+          <MockFind />
+        </Chapter>
+      </LazyHydrate>
+      <LazyHydrate>
+        <Files />
+      </LazyHydrate>
+      <LazyHydrate>
+        <Closing />
+      </LazyHydrate>
+    </HomeShell>
   );
 }

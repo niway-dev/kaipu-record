@@ -15,9 +15,16 @@ export function useSourceSelection(setup: RecordingSetup): ScreenSourcesState {
   const { refresh, sources } = screenSources;
   const { selectedSource, selectSource, isSourcePickerOpen } = setup;
 
-  // Load on mount and whenever the picker (re)opens, so the list is ready.
+  // On mount, only what the default selection needs: the screens, no thumbnails.
+  // The full list — every window, a screenshot of each — is what made the Capture
+  // Panel wait before it could say "Screen 1", and nothing on screen shows it until
+  // the picker opens. So the picker pays for it, each time it opens.
   useEffect(() => {
-    void refresh();
+    void refresh({ withThumbnails: false });
+  }, [refresh]);
+
+  useEffect(() => {
+    if (isSourcePickerOpen) void refresh();
   }, [refresh, isSourcePickerOpen]);
 
   // Default to the primary screen once sources load, so recording is ready to

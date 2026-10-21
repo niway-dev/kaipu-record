@@ -1,0 +1,76 @@
+{
+  "status": "third-measurement",
+  "taken": "2026-10-03T00:42:41Z",
+  "description": "Lighthouse 13.5.0 against the Cloudflare Version URL serving main at 0b6f4c4 (after the web-ui CSS dedup, PR #214). See /frontend/web-vitals-baseline/ for the reading and its caveat.",
+  "target_url": "https://9503d39c-kaipu-web.cristiansotomayor-dev.workers.dev/",
+  "commit": "0b6f4c4",
+  "lighthouse_version": "13.5.0",
+  "chromium_binary": "Brave Browser (headless) \u2014 same binary family as the second measurement",
+  "caveat": "Measured on a DIFFERENT machine than rows 1-2 (benchmarkIndex 4330/4079). throttlingMethod is 'simulate', so host CPU speed moves the timings. Byte counts are machine-independent; the score deltas are not.",
+  "runs": {
+    "desktop": {
+      "json": "lighthouse-desktop.json",
+      "html": "lighthouse-desktop.html",
+      "json_sha256": "58e0dc0a90b5e1a340b45bd47fed351f7cba62d04c676f603a6e39f16e1f5065",
+      "html_sha256": "14695cce1277ec488aeb8066907af6a65f4b77e2316a2eb657979cfa27bef805",
+      "form_factor": "desktop",
+      "throttling_method": "simulate",
+      "throttling": {
+        "rttMs": 40,
+        "throughputKbps": 10240,
+        "requestLatencyMs": 0,
+        "downloadThroughputKbps": 0,
+        "uploadThroughputKbps": 0,
+        "cpuSlowdownMultiplier": 1
+      },
+      "benchmark_index": 4079.5,
+      "scores": {
+        "performance": 96,
+        "accessibility": 96,
+        "best-practices": 100,
+        "seo": 66,
+        "agentic-browsing": 100
+      },
+      "metrics": {
+        "fcp_ms": 874,
+        "lcp_ms": 894,
+        "tbt_ms": 0,
+        "cls": 0.0002591340074249765,
+        "speed_index_ms": 1690
+      },
+      "render_blocking_insight_score": 0.5
+    },
+    "mobile": {
+      "json": "lighthouse-mobile.json",
+      "html": "lighthouse-mobile.html",
+      "json_sha256": "ee8e683ac2c4b12d6db29d553497bf354c21f3edddbfa0ab70a561e827625487",
+      "html_sha256": "431b4bcec43467e83d1e52da8f33fe0fa00d436cee9d7422aea27a45256466c8",
+      "form_factor": "mobile",
+      "throttling_method": "simulate",
+      "throttling": {
+        "rttMs": 150,
+        "throughputKbps": 1638.4,
+        "requestLatencyMs": 562.5,
+        "downloadThroughputKbps": 1474.5600000000002,
+        "uploadThroughputKbps": 675,
+        "cpuSlowdownMultiplier": 4
+      },
+      "benchmark_index": 4330,
+      "scores": {
+        "performance": 100,
+        "accessibility": 96,
+        "best-practices": 100,
+        "seo": 66,
+        "agentic-browsing": 100
+      },
+      "metrics": {
+        "fcp_ms": 1415,
+        "lcp_ms": 1415,
+        "tbt_ms": 14,
+        "cls": 0.0002879385442135096,
+        "speed_index_ms": 2370
+      },
+      "render_blocking_insight_score": 0
+    }
+  }
+}

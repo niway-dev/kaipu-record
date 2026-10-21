@@ -49,5 +49,27 @@ describe("recording-activity", () => {
       expect(result).toEqual({ activity: running, changed: false });
       expect(result.activity).toBe(running); // same reference, untouched
     });
+
+    it("re-broadcasts once when loopback availability becomes known, then stays quiet", () => {
+      const first = applyTick(running, { ...tick("recording", 5), systemAudioAvailable: false });
+      expect(first.changed).toBe(true);
+      expect(first.activity.systemAudioAvailable).toBe(false);
+
+      const again = applyTick(first.activity, {
+        ...tick("recording", 5),
+        systemAudioAvailable: false,
+      });
+      expect(again.changed).toBe(false);
+    });
+
+    it("keeps the known availability when a tick omits it", () => {
+      const known = { ...running, systemAudioAvailable: true };
+      const result = applyTick(known, tick("recording", 6));
+      expect(result.activity.systemAudioAvailable).toBe(true);
+    });
+
+    it("a new take starts with availability unknown", () => {
+      expect(startedActivity().systemAudioAvailable).toBeUndefined();
+    });
   });
 });

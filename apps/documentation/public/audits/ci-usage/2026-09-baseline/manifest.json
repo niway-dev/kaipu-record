@@ -1,0 +1,26 @@
+{
+  "status": "baseline-month-to-date",
+  "period": "2026-09",
+  "description": "Original GitHub billing exports supplied by the repository owner. See /specs/2026-09-ci-usage-baseline/ for interpretation and provenance.",
+  "currency": "USD",
+  "complete_month": false,
+  "detailed_report": {
+    "file": "github-detailed-usage.csv",
+    "original_filename": "report_monthly-usageReport_1_e435d02814f14edcaf34dc37b38eb952.csv",
+    "sha256": "00f2746ad669147e76793e94f5088b1df5b3e12910fab44ad7d8a1c5e90127af",
+    "rows": 190,
+    "first_date": "2026-09-01",
+    "last_date": "2026-09-24",
+    "last_runner_date": "2026-09-23",
+    "gross_amount": "19.495535192",
+    "discount_amount": "19.495535192",
+    "net_amount": "0"
+  },
+  "chart_export": {
+    "file": "github-repository-chart.csv",
+    "original_filename": "Billing Usage Repositories.csv",
+    "sha256": "cb4c57f8adfe34f718bc9ddbc9aff19df81a6835b24cd437cd0fdefe1159897e",
+    "rows": 24,
+    "values": "Cumulative gross USD, rounded by repository/group; do not sum rows."
+  }
+}

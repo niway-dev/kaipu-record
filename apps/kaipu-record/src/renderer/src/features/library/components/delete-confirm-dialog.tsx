@@ -8,7 +8,7 @@ import {
   ModalOverlay,
   ModalText,
   ModalTitle,
-} from "@renderer/ui/modal";
+} from "@kaipu/ui";
 
 interface DeleteConfirmDialogProps {
   title: string;

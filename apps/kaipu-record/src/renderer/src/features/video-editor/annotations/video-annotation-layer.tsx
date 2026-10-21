@@ -7,14 +7,19 @@
  * (no pen/blur/crop).
  *
  * Coordinate space: this component is rendered as a sibling of the <video> element
- * inside PreviewStage's position:relative wrapper (see preview-stage.tsx), and
- * measures THAT wrapper via ResizeObserver — same pattern as the screenshot layer.
- * Unlike a typical object-fit:contain box, this wrapper has no explicit width/height
- * of its own (preview-stage.module.css: only max-width/max-height:100%), so as a
- * flex item it shrinks to exactly wrap the <video>'s own rendered (intrinsic-aspect)
- * box — there is no separate letterbox to account for; the wrapper's clientWidth/
- * clientHeight from the ResizeObserver ARE the video's displayed box. Overlay
- * geometry is normalized 0-1 of that box (see scene.ts).
+ * inside PreviewStage's content layer (see preview-stage.tsx) and fills it
+ * (inset: 0), measuring itself via ResizeObserver — same pattern as the screenshot
+ * layer. That layer is sized from the decoded frame's aspect ratio, so it IS the
+ * video's displayed box with no letterbox to account for, and overlay geometry is
+ * normalized 0-1 of it (see scene.ts).
+ *
+ * Since video-editor v2 the content layer also carries the camera transform. Nothing
+ * here changes: `toNorm` normalizes against this element's own
+ * getBoundingClientRect(), which is the TRANSFORMED rect, so a point under the
+ * pointer still maps to the right place in the original frame while zoomed. `size`
+ * comes from clientWidth/clientHeight (untransformed), and is used only for handle
+ * geometry and hit tolerance — those stay constant in normalized units and simply
+ * read bigger on screen as the camera zooms in.
  *
  * Deviation from the screenshot layer (see plan brief): a draw gesture's live draft
  * is kept in local component state only (never routed through onDraft/onInteractStart)
@@ -33,7 +38,9 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "@kaipu/i18n";
 import {
   HAND_FONT,
-  TEXT_PX,
+  TEXT_LINE_HEIGHT,
+  textBoxPx,
+  resolveFontPx,
   handlesFor,
   hitHandle,
   resizeAnnotation,
@@ -119,13 +126,25 @@ export function VideoAnnotationLayer({
   const ref = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<Size>({ w: 0, h: 0 });
   const [draft, setDraft] = useState<VideoOverlay | null>(null);
-  const [editingText, setEditingText] = useState<{ x: number; y: number } | null>(null);
+  // `id` present means we are re-editing an existing label rather than placing a new
+  // one; `initialText` prefills the box. A label used to be write-once, so fixing a
+  // typo meant deleting the overlay and losing its timeline window.
+  const [editingText, setEditingText] = useState<{
+    x: number;
+    y: number;
+    id?: string;
+    initialText?: string;
+    /** The label's own size, so the editor matches what it covers rather than the
+     *  tool default — reopening a corner-sized label used to type at the wrong size. */
+    size?: number;
+    fontPx?: number;
+  } | null>(null);
   const drag = useRef<Drag | null>(null);
   // Armed on a select-tool pointerdown that hit neither a handle nor a shape; cleared
   // the moment the pointer moves past CLICK_MOVE_TOL_PX so a drag from empty space
   // (which does nothing here, but still isn't a "click") never fires onBackgroundClick.
   const clickCandidate = useRef<Pt | null>(null);
-  const textInputRef = useRef<HTMLInputElement>(null);
+  const textInputRef = useRef<HTMLTextAreaElement>(null);
   // Same arming trick as the screenshot layer: blur-to-commit only fires once the
   // input has settled, so the click that opened it can't immediately cancel it.
   const textArmed = useRef(false);
@@ -148,16 +167,45 @@ export function VideoAnnotationLayer({
       textArmed.current = false;
       return;
     }
-    textInputRef.current?.focus();
+    const el = textInputRef.current;
+    el?.focus();
+    if (el) {
+      // Size it to its content NOW. The textarea is born `rows={1}` and its auto-grow
+      // lives in `onInput`, which never fires for a prefilled value — so reopening a
+      // multi-line label showed one line and you arrowed down through the rest.
+      el.style.height = "auto";
+      el.style.height = `${el.scrollHeight}px`;
+      // Caret at the end, so reopening continues the label instead of overwriting it.
+      el.setSelectionRange(el.value.length, el.value.length);
+    }
     const raf = requestAnimationFrame(() => {
       textArmed.current = true;
     });
     return () => cancelAnimationFrame(raf);
   }, [editingText]);
 
-  const toNorm = (e: React.PointerEvent): Pt => {
+  const toNorm = (e: { clientX: number; clientY: number }): Pt => {
     const r = ref.current!.getBoundingClientRect();
     return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
+  };
+
+  // Double-clicking a label reopens it in place, the same gesture the screenshot
+  // editor uses. Select tool only, so it never collides with a drawing tool's click.
+  const onDoubleClick = (e: React.MouseEvent): void => {
+    if (tool !== "select") return;
+    const candidates = overlays.filter((o) => visibleIds.has(o.id) || o.id === selectedId);
+    const hit = hitTest(candidates, toNorm(e), size);
+    if (hit?.kind !== "text") return;
+    onSelect(hit.id);
+    editDone.current = false;
+    setEditingText({
+      x: hit.x,
+      y: hit.y,
+      id: hit.id,
+      initialText: hit.text,
+      size: hit.size,
+      fontPx: hit.fontPx,
+    });
   };
 
   const onPointerDown = (e: React.PointerEvent): void => {
@@ -187,7 +235,16 @@ export function VideoAnnotationLayer({
       if (hit) {
         onInteractStart();
         drag.current = { mode: "move", id: hit.id, start: p, orig: hit };
-        (e.target as Element).setPointerCapture?.(e.pointerId);
+        // Capture on the LAYER, never on the node under the cursor — the resize
+        // branch above has always done this and it is why resizing kept working.
+        //
+        // `e.target` for a label is a <tspan>, which React re-renders when the
+        // selection changes and removes outright when the inline editor opens.
+        // A dblclick only fires when both clicks share a target, so pinning capture
+        // to that node silently killed double-click-to-edit. It became reachable when
+        // the multi-line change turned the label's content from a text node (target:
+        // the <text> element) into <tspan> elements.
+        ref.current?.setPointerCapture?.(e.pointerId);
       } else {
         // Empty space, select tool: arm a background-click candidate — confirmed on
         // pointerup unless the pointer drifts past CLICK_MOVE_TOL_PX first.
@@ -210,7 +267,9 @@ export function VideoAnnotationLayer({
       seed: Math.floor(Math.random() * 100000),
       window: overlayWindow(playheadTime, timelineDuration),
     };
-    (e.target as Element).setPointerCapture?.(e.pointerId);
+    // Same reason as the move branch: the layer is the only node guaranteed to
+    // outlive the gesture.
+    ref.current?.setPointerCapture?.(e.pointerId);
   };
 
   const onPointerMove = (e: React.PointerEvent): void => {
@@ -306,22 +365,32 @@ export function VideoAnnotationLayer({
   const commitText = (value: string): void => {
     if (editDone.current) return; // a trailing unmount-blur after Enter/Escape
     editDone.current = true;
+    // Only the ends are trimmed: the user's own newlines are content.
     const text = value.trim();
     if (editingText && text) {
-      const { start, end } = overlayWindow(playheadTime, timelineDuration);
-      const overlay: VideoOverlay = {
-        id: newId(),
-        kind: "text",
-        x: editingText.x,
-        y: editingText.y,
-        text,
-        color: toolState.color,
-        size: toolState.textSize,
-        start,
-        end,
-      };
-      onCommit([...overlays, overlay]);
-      onSelect(overlay.id);
+      if (editingText.id) {
+        // Re-edit: replace the text and keep everything else, above all the timeline
+        // window — retyping a label must not move when it appears.
+        onCommit(
+          overlays.map((o) => (o.id === editingText.id && o.kind === "text" ? { ...o, text } : o)),
+        );
+        onSelect(editingText.id);
+      } else {
+        const { start, end } = overlayWindow(playheadTime, timelineDuration);
+        const overlay: VideoOverlay = {
+          id: newId(),
+          kind: "text",
+          x: editingText.x,
+          y: editingText.y,
+          text,
+          color: toolState.color,
+          size: toolState.textSize,
+          start,
+          end,
+        };
+        onCommit([...overlays, overlay]);
+        onSelect(overlay.id);
+      }
     }
     setEditingText(null);
   };
@@ -336,6 +405,7 @@ export function VideoAnnotationLayer({
       className={styles.layer}
       style={{ cursor: tool === "select" ? "default" : "crosshair" }}
       onPointerDown={onPointerDown}
+      onDoubleClick={onDoubleClick}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerAbort}
@@ -348,6 +418,12 @@ export function VideoAnnotationLayer({
           // Not visible and not selected: not rendered at all. The selected overlay
           // stays visible (dimmed) outside its window so it can still be adjusted.
           if (!visible && !isSelected) return null;
+          // Hide the label being re-edited: the inline editor sits exactly on top of
+          // it, so drawing both renders the same words twice, a hair apart, while the
+          // user types. Its selection outline and handles go with it — the textarea is
+          // the thing being manipulated, and a dashed box around text you are already
+          // editing is noise.
+          if (o.id === editingText?.id) return null;
           return (
             <OverlayShape
               key={o.id}
@@ -362,22 +438,40 @@ export function VideoAnnotationLayer({
         {selectedOverlay && <OverlayHandles o={selectedOverlay} size={size} />}
       </svg>
       {editingText && (
-        <input
+        <textarea
           ref={textInputRef}
           className={styles.textInput}
           placeholder={t("typePlaceholder")}
+          rows={1}
+          // Prefilled when reopening an existing label; empty for a fresh one.
+          defaultValue={editingText.initialText}
+          // `off` so the only breaks are the ones the user typed — the label itself
+          // does not wrap, so soft-wrapping here would not match what it renders.
+          wrap="off"
           style={{
             left: editingText.x * size.w,
             top: editingText.y * size.h,
             color: toolState.color,
             fontFamily: HAND_FONT,
-            fontSize: TEXT_PX[toolState.textSize],
+            fontSize: resolveFontPx(editingText.size ?? toolState.textSize, editingText.fontPx),
+            lineHeight: TEXT_LINE_HEIGHT,
+            whiteSpace: "pre",
+            resize: "none",
+            overflow: "hidden",
           }}
           onPointerDown={(e) => e.stopPropagation()}
+          onInput={(e) => {
+            // Grow with the content so every line stays visible while typing.
+            const el = e.currentTarget;
+            el.style.height = "auto";
+            el.style.height = `${el.scrollHeight}px`;
+          }}
           onKeyDown={(e) => {
-            if (e.key === "Enter") {
+            // Plain Enter commits; Shift/Alt+Enter fall through to the textarea's own
+            // newline, the way a spreadsheet cell behaves.
+            if (e.key === "Enter" && !e.altKey && !e.shiftKey) {
               e.preventDefault();
-              commitText((e.target as HTMLInputElement).value);
+              commitText(e.currentTarget.value);
             } else if (e.key === "Escape") {
               e.preventDefault();
               editDone.current = true; // cancel — the unmount blur must not commit
@@ -425,13 +519,21 @@ function hitTest(overlays: VideoOverlay[], p: Pt, size: Size): VideoOverlay | nu
       }
     } else if (o.kind === "text") {
       // The text renders in px (TEXT_PX[size]) but lives in normalized space, so the
-      // hit box must derive from the font size AND the layer's pixel size (matches the
-      // rendered bounds in overlay-shapes.tsx) plus an 8px click margin.
-      const fs = TEXT_PX[o.size];
+      // hit box derives from the font size AND the layer's pixel size, plus an 8px
+      // click margin.
+      //
+      // `textBoxPx` is the same measurement the renderer and the selection outline
+      // use — one source of truth, which this deliberately is not allowed to restate.
+      // It used to: `text.length * fs * 0.55` counted newlines as characters, so a
+      // three-line label claimed a box three times too wide and one line tall. Every
+      // line after the first fell outside it, so clicking the body of a tall label
+      // missed the annotation and fell through to the video, which started playing.
+      const fs = resolveFontPx(o.size, o.fontPx);
       const padX = 8 / (size.w || 1);
       const padY = 8 / (size.h || 1);
-      const w = (o.text.length * fs * 0.55) / (size.w || 1);
-      const h = (fs * 1.3) / (size.h || 1);
+      const px = textBoxPx(o.text, fs, o.width ? o.width * (size.w || 1) : undefined);
+      const w = px.w / (size.w || 1);
+      const h = px.h / (size.h || 1);
       if (
         p.x >= o.x - padX &&
         p.x <= o.x + w + padX &&

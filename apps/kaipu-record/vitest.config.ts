@@ -5,6 +5,24 @@ import { defineConfig } from "vitest/config";
 const sharedAlias = { "@shared": resolve("src/shared") };
 
 /**
+ * The renderer renders @kaipu/ui components, whose styles are a compile-time
+ * call: without this transform the module throws
+ * "Unexpected 'stylex.defineVars' call at runtime" on import. Options match
+ * electron.vite.config.ts and babel.config.cjs exactly — invariant 3 in
+ * backlog/stylex-migration: every transform in the pipeline agrees, or they
+ * produce different class names.
+ */
+const stylexBabel = [
+  "@stylexjs/babel-plugin",
+  {
+    dev: false,
+    runtimeInjection: false,
+    treeshakeCompensation: true,
+    unstable_moduleResolution: { type: "commonJS" },
+  },
+];
+
+/**
  * One Vitest project per Electron process we test:
  *   - main:     pure logic (node environment)
  *   - renderer: helpers + components (jsdom environment)
@@ -46,7 +64,7 @@ export default defineConfig({
         },
       },
       {
-        plugins: [react()],
+        plugins: [react({ babel: { plugins: [stylexBabel] } })],
         resolve: {
           alias: {
             "@renderer": resolve("src/renderer/src"),
@@ -56,6 +74,12 @@ export default defineConfig({
         test: {
           name: "renderer",
           environment: "jsdom",
+          // Above Testing Library's asyncUtilTimeout (3 s, in test/setup.ts) so a
+          // waiting query reports the element it could not find rather than
+          // tripping vitest's generic "Test timed out" first. Component tests
+          // here render a full editor under a parallel turbo run; 5 s was the
+          // whole budget, which the StyleX transform pushed past.
+          testTimeout: 20_000,
           include: ["src/renderer/**/*.{test,spec}.{ts,tsx}"],
           setupFiles: ["src/renderer/src/test/setup.ts"],
         },

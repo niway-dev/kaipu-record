@@ -12,26 +12,6 @@ import path from "node:path";
 const APP_ROOT = path.resolve(__dirname, "..");
 const MAIN_ENTRY = path.join(APP_ROOT, "out", "main", "index.js");
 
-// MAIN_VITE_SERVER_URL is inlined at build time (src/main/index.ts) as
-// http://localhost:3000 — these tests talk to a REAL local server-hono dev instance
-// (`bun run dev` in apps/server-hono), not a mock.
-const SERVER_HEALTH_URL = "http://localhost:3000/api/v1/health";
-
-/**
- * Task 12 (desktop-authentication plan) manual verification, kept as a permanent
- * regression spec. Self-skips (rather than failing) when the local server isn't
- * reachable, so it stays out of CI without a CI-only env var — ci-desktop.yml has no
- * server-hono step, and there is no clean way to stand up Cloudflare Workers + D1 there.
- */
-async function isServerUp(): Promise<boolean> {
-  try {
-    const res = await fetch(SERVER_HEALTH_URL, { signal: AbortSignal.timeout(2000) });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
 /** A throwaway profile: preferences.json pointing at a throwaway vault (so the app never
  * touches the real ~/Videos/Kaipu Record) and a pinned English locale for deterministic
  * copy. Returns both directories so the caller can remove them once done — a relaunch
@@ -80,77 +60,24 @@ async function openSettings(page: Page): Promise<void> {
   await page.evaluate(() => (location.hash = "#/cloud"));
 }
 
-function uniqueEmail(): string {
-  return `e2e-auth-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`;
-}
-
-test.describe("Desktop authentication (Task 12 manual verification)", () => {
-  test.beforeAll(async () => {
-    if (!(await isServerUp())) {
-      test.skip(
-        true,
-        `server-hono is not reachable at ${SERVER_HEALTH_URL} — run "bun run dev" in apps/server-hono first`,
-      );
-    }
-  });
-
-  test("sign up, sign out, sign in again, and the session survives a restart", async () => {
-    const email = uniqueEmail();
-    const password = "correct horse battery staple 1";
-    const name = "E2E Auth";
-
+test.describe("Desktop authentication", () => {
+  // The browser round trip itself (system browser -> kaipu.app -> deep link) cannot be driven
+  // from Playwright; the main-process and renderer units cover the states, and the manual steps
+  // are in the PR that introduced it (NIW2-471). What E2E can pin is what the user sees.
+  test("the sign-in page hands off to the browser and has no password field", async () => {
     const { userDataDir, vaultDir } = await seedUserData();
-    // One outer try/finally covering BOTH launches: an assertion failure anywhere in the
-    // first launch's block must still reach the cleanup below, not just a failure after
-    // the restart section starts.
     try {
-      {
-        const { app, page } = await launch(userDataDir);
-        try {
-          await openSettings(page);
+      const { app, page } = await launch(userDataDir);
+      try {
+        await openSettings(page);
+        await page.getByRole("button", { name: "Sign in" }).click();
 
-          // Sign up: Settings only offers "Sign in"; the sign-in page links to sign-up.
-          await page.getByRole("button", { name: "Sign in" }).click();
-          await page.getByRole("link", { name: "Create account" }).click();
-          await page.getByLabel("Email").fill(email);
-          await page.getByLabel("Name").fill(name);
-          await page.getByLabel("Password").fill(password);
-          await page.getByRole("button", { name: "Create account" }).click();
-          await expect(page.getByText(email)).toBeVisible();
-          await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
-
-          // Sign out
-          await page.getByRole("button", { name: "Sign out" }).click();
-          await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
-          await expect(page.getByText(email)).toHaveCount(0);
-
-          // Sign in with the same credentials
-          await page.getByRole("button", { name: "Sign in" }).click();
-          await page.getByLabel("Email").fill(email);
-          await page.getByLabel("Password").fill(password);
-          await page.getByRole("button", { name: "Sign in" }).click();
-          await expect(page.getByText(email)).toBeVisible();
-          await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
-        } finally {
-          await app.close();
-        }
-      }
-
-      // Restart, reusing the SAME userData dir: the token persisted to auth.enc must
-      // restore the session on the fresh process without re-entering credentials.
-      {
-        const { app, page } = await launch(userDataDir);
-        try {
-          await openSettings(page);
-          await expect(page.getByText(email)).toBeVisible();
-          await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
-
-          // Cleanup: sign out so the test doesn't leave a signed-in account behind.
-          await page.getByRole("button", { name: "Sign out" }).click();
-          await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
-        } finally {
-          await app.close();
-        }
+        await expect(page.getByRole("button", { name: "Sign in with your browser" })).toBeVisible();
+        await expect(page.getByRole("button", { name: "Create account" })).toBeVisible();
+        await expect(page.getByLabel("Password")).toHaveCount(0);
+        await expect(page.getByLabel("Email")).toHaveCount(0);
+      } finally {
+        await app.close();
       }
     } finally {
       await rm(userDataDir, { recursive: true, force: true });
@@ -172,9 +99,9 @@ test.describe("Desktop authentication (Task 12 manual verification)", () => {
       try {
         await openSettings(page);
         await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
-        await expect(
-          page.getByText("You can record, edit, and export without an account."),
-        ).toBeVisible();
+        // Same signed-out marker the account-panel unit test uses: the exact sentence has
+        // changed before, and this suite only runs when a local server answers.
+        await expect(page.getByText(/without an account/i).first()).toBeVisible();
       } finally {
         await app.close();
       }

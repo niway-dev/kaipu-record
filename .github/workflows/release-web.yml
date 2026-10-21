@@ -15,8 +15,54 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Release gate (ADR 0004): the same `bun run verify` the Lefthook pre-push runs, on the
+  # exact SHA being released, in a clean Linux environment. Nothing below starts until it
+  # passes, so a red gate publishes nothing. If it fails after the tag exists, fix forward
+  # and cut a patch release; do not delete tags.
+  verify:
+    name: Verify (lint, types, tests)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.4
+
+      - name: Cache bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      # Turbo's local cache. Without it every run re-does `check-types` and `build` from
+      # scratch: measured on #161's run, type-check alone was 1m05 and the builds 55s —
+      # 71% of the job — while the same tasks replay in seconds locally off a warm cache.
+      # Keyed on the lockfile + turbo config, NOT on the SHA: cache entries are immutable,
+      # so a per-SHA key mints a fresh entry on every push of an open PR (x9 jobs) and
+      # eats the repository's 10 GB budget. Turbo validates each task's own input hash, so
+      # an entry that predates the current code is partially reused, never wrongly reused.
+      - name: Cache turbo outputs
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ hashFiles('bun.lock', 'turbo.json') }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Verify
+        run: bun run verify
+
   release-web:
     name: Build & deploy web
+    needs: verify
     runs-on: ubuntu-latest
     environment: production # Cloudflare + build secrets live here
 
@@ -32,9 +78,6 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Install Wrangler
-        run: bun add -g wrangler
-
       - name: Build packages only
         run: bun run build --filter='@kaipu/*'
 
@@ -45,18 +88,40 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           # Public R2 base for the landing's download buttons.
           VITE_PUBLIC_DOWNLOAD_URL: https://updates.kaipu.app
+          # Cookieless website analytics (NIW2-477). Empty = analytics off.
+          VITE_POSTHOG_KEY: ${{ vars.VITE_POSTHOG_KEY }}
+          VITE_POSTHOG_HOST: ${{ vars.VITE_POSTHOG_HOST }}
         run: bun run build
 
-      - name: Deploy to Cloudflare Workers
-        uses: cloudflare/wrangler-action@v3.14.1
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: apps/web-hono
-          secrets: |
-            VITE_SERVER_URL
-            DATABASE_URL
+      # Secrets ship INSIDE the deployed version, in one `wrangler deploy`. The action's
+      # `secrets:` input runs `wrangler secret bulk` first, which edits the latest
+      # version and deploys it on its own. Once preview-web.yml has uploaded a version
+      # that is not deployed, Cloudflare refuses that edit, and the release fails
+      # before it deploys anything (web-v0.9.0, 2026-10-06). It was also never atomic:
+      # it deployed the OLD code with the new secrets, then the new code.
+      # `--secrets-file` is additive: a secret left out of the file keeps its value.
+      # Empty values are dropped for that reason: a GitHub secret that went missing must
+      # not blank the value the Worker already has.
+      - name: Write Worker secrets file
+        working-directory: apps/web-hono
         env:
-          ENVIRONMENT: production
           VITE_SERVER_URL: ${{ vars.VITE_SERVER_URL }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          umask 077
+          jq -n \
+            --arg VITE_SERVER_URL "$VITE_SERVER_URL" \
+            --arg DATABASE_URL "$DATABASE_URL" \
+            '$ARGS.named | with_entries(select(.value != ""))' > worker-secrets.json
+
+      # Same script as release-api.yml (pinned wrangler, absolute path), and the same
+      # one the release-candidate PR check runs with --dry-run.
+      - name: Deploy to Cloudflare Workers
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/deploy-worker.sh apps/web-hono
+
+      - name: Remove Worker secrets file
+        if: always()
+        run: rm -f apps/web-hono/worker-secrets.json

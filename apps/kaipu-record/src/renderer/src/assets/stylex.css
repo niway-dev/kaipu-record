@@ -1,0 +1,11 @@
+/*
+ * Where @stylexjs/postcss-plugin writes the atomic rules for every StyleX style
+ * in the renderer and in @kaipu/ui. One `@stylex;` per bundle: a second sheet
+ * carrying it would make the plugin emit the same atomics twice.
+ *
+ * This lives in the always-loaded chain (main.css → here) rather than in the
+ * dev probe's own sheet, which is where it started. A shared component rendered
+ * by a real screen needs its classes in the packaged build, not only when the
+ * probe is mounted in development.
+ */
+@stylex;

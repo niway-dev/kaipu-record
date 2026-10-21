@@ -1,20 +1,10 @@
 /*
- * Floating per-tool options panel (Excalidraw-style) shown over the preview stage.
+ * Shared annotation-control styles (color palette, stroke/size pickers), consumed by
+ * the inspector's annotation panels (annotation-inspector.tsx). Originally the
+ * floating popover's stylesheet; the popover is gone, the controls live on.
  * Colors/spacing use base.css tokens; swatch colors are drawing values from the
- * screenshot feature's tools.ts — same convention as
- * screenshots/annotations/annotation-options.module.css.
+ * screenshot feature's tools.ts.
  */
-
-.panel {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-  padding: var(--space-md);
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg, 0 8px 24px -8px rgba(0, 0, 0, 0.55));
-}
 
 .label {
   font-family: var(--font-mono);
@@ -102,23 +92,6 @@
 }
 
 /* ── Delete ─────────────────────────────────── */
-
-.delete {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-xs);
-  height: 30px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--bg-modal);
-  color: var(--text-muted);
-  cursor: pointer;
-  transition:
-    color 0.1s ease,
-    border-color 0.1s ease,
-    background 0.1s ease;
-}
 
 .delete:hover {
   color: #fff;

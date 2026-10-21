@@ -1,0 +1,109 @@
+---
+title: "ADR 0025: The desktop signs in through the browser, with Better Auth's Electron plugin"
+description: The desktop app stops showing a password form. Sign-in and sign-up happen on kaipu.app in the system browser and come back through a kaipu:// link carrying a short-lived, single-use code bound to PKCE and state; the app exchanges it for its own session and keeps using the bearer token it stores today. Better Auth moves from 1.4.18 to 1.7.x to get the official @better-auth/electron plugin.
+---
+
+# ADR 0025: The desktop signs in through the browser, with Better Auth's Electron plugin
+
+## Status
+
+| Field         | Value                                                                                                                                                                                     |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Proposed — implementation in progress in three stacked PRs (upgrade, server + web, desktop); not on `main` — [design](/specs/2026-10-19-desktop-browser-sign-in-design/), Linear NIW2-471 |
+| Date          | 2026-10-19                                                                                                                                                                                |
+| Amends        | The [desktop authentication spec](/specs/2026-09-02-desktop-authentication-design/): its in-app email and password form. Its token storage and transport (bearer, `safeStorage`) stand.   |
+| Superseded by | —                                                                                                                                                                                         |
+
+## Context
+
+The desktop app signs in with an email and password form inside the app. The main process
+posts to `sign-in/email`, reads the signed session token from the `set-auth-token` header and
+keeps it encrypted with `safeStorage`. Two things that form cannot do are now on the roadmap:
+
+- **Google sign-in.** Google refuses OAuth inside embedded web views, and RFC 8252 §8.12 says
+  native apps must not use embedded user agents for sign-in at all.
+- **Payments.** They will live on the web, not in the app, so the desktop needs one way to send
+  the person to kaipu.app and get them back anyway.
+
+The desktop authentication spec (2026-09-02) already named this as its own item: a system
+browser handoff, a registered custom protocol and single-instance deep-link handling. The
+invisible-assistant repository decided the same flow for its desktop (its ADR 0051) but has not
+built it, so there is no shared code to reuse, only the design.
+
+Better Auth ships an official Electron integration, `@better-auth/electron`, that implements
+this flow. It exists from 1.5 and the current release requires `better-auth ^1.7.11`. Kaipu is
+on 1.4.18.
+
+## Decision
+
+1. **The desktop never shows a password field.** "Sign in" and "Create account" open
+   `kaipu.app/auth/desktop` in the person's default browser. They sign in there with any method
+   the web offers (email, Google). If the browser already has a session, the page offers
+   "Continue as …" and "Switch account" instead of asking again.
+2. **The browser returns to the app through `kaipu://auth/callback`, carrying a short-lived,
+   single-use code bound to PKCE and state.** The app creates the PKCE verifier (S256) and the
+   state; the server stores the challenge with the code (300 s, deleted when read) and checks
+   both at the exchange. The exchange creates a **new session for that device**; it never
+   reuses the browser's session.
+3. **Use the official `@better-auth/electron` plugin; upgrade Better Auth to 1.7.x first.** The
+   server gets `electron()`, the web sign-in page the proxy client, the main process the Electron
+   client. The upgrade is its own pull request with no behaviour change, so the existing auth
+   tests (including the Google account-linking flow test of NIW2-219) are the regression net.
+4. **The app keeps one session store: the bearer token in `auth.enc`.** After the exchange the
+   signed session token is committed through the existing auth store, so every API caller keeps
+   sending `Authorization: Bearer` and sessions created before this change stay valid. The
+   plugin's own cookie jar is not a second persistent copy.
+5. **A paste-code fallback.** When the link cannot open the app (a browser or policy blocks the
+   scheme, or a development build that macOS does not route links to), the web page shows a code
+   to copy and the app accepts it. It is the same flow, completed by hand.
+6. **Scheme `kaipu`.** The readable name, not the reverse-domain form RFC 8252 §7.1 suggests;
+   PKCE makes an intercepted code useless, which is the risk the reverse-domain form reduces.
+   The server trusts the bare scheme origin `kaipu:/`.
+7. **`kaipu://billing/refresh` is reserved** for the billing work: a successful checkout on the
+   web will only ask the app to refresh its entitlements, never grant anything through the link.
+
+## Alternatives rejected
+
+- **Keep the in-app form and add Google in a web view.** Google blocks it and RFC 8252 forbids
+  it; it also hides the address bar and defeats password managers and passkeys.
+- **Build the code exchange by hand on 1.4.18** (a custom endpoint, or the `one-time-token`
+  plugin, which 1.4.18 has). No upgrade, but the security-critical part becomes our own code to
+  maintain, and it would be replaced by the plugin at the next upgrade anyway.
+- **Loopback redirect (`http://127.0.0.1:<port>`).** Works without registering a scheme, also in
+  development, but the browser ends on a "you can close this tab" page instead of returning to
+  the app, and the plugin does not implement it.
+- **Device code only (RFC 8628).** No scheme to register and 1.4.18 has the plugin, but typing a
+  code is worse when the browser is on the same computer. It stays a possible later fallback.
+- **Let the plugin keep its own cookie jar as the session.** It would leave two stores of the same
+  session and change how every existing desktop API caller authenticates, for no gain.
+
+## Consequences
+
+- A Better Auth upgrade across server, web, console and desktop lands before any of this; its
+  breaking changes are handled in that pull request (hooks run after commit, `freshAge` from
+  creation, the drizzle adapter package).
+- The desktop registers a protocol (electron-builder `protocols`, Info.plist, Windows registry)
+  and its single-instance handling is shared with the plugin; there is still one lock.
+- The web gains `/auth/desktop` and `/auth/desktop/done`; the server gains three plugin endpoints
+  (`/electron/token`, `/electron/transfer-user`, `/electron/init-oauth-proxy`, the last unused).
+- The desktop needs the web origin at build time (a new main-process environment variable next to
+  `MAIN_VITE_SERVER_URL`).
+- Every desktop sign-in is a separate session row with its user agent and IP address, so a later
+  "your devices" page can list and revoke them with Better Auth's own session endpoints.
+- The password IPC (`authSignIn`, `authSignUp`) and its main-process code are removed.
+
+## Non-goals
+
+- Billing, checkout and the handling of `kaipu://billing/refresh`.
+- A "your devices" page.
+- Device-code sign-in, claimed https links (universal links), Linux.
+- Google sign-in itself, which is NIW2-219.
+
+## Reopen when
+
+- Custom-scheme return fails for a noticeable share of sign-ins (blocked by browsers or managed
+  devices): promote the paste code, or add device code, as the default.
+- `@better-auth/electron` is abandoned or lags a Better Auth release we need: replace it with a
+  hand-built exchange behind the same desktop port.
+- A second desktop client (another product on the same accounts) needs sign-in: revisit the
+  public `client_id` and the scheme.

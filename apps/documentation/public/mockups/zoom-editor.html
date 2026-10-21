@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Editor de zoom — mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ground: #10131a;
+  --panel: #181c26;
+  --panel-hi: #1f2431;
+  --line: #2a3040;
+  --ink: #e4e6eb;
+  --ink-dim: #8b93a5;
+  --ink-faint: #5b6376;
+  --frame: #e0a34a;
+  --frame-dim: #6b4f22;
+  --dwell: #4a6b8a;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  display: flex;
+  justify-content: center;
+  padding: 24px 16px 48px;
+}
+.app { width: 100%; max-width: 880px; }
+.masthead { display: flex; align-items: baseline; gap: 12px; margin-bottom: 20px; }
+.masthead h1 { font-size: 17px; font-weight: 500; letter-spacing: -0.01em; }
+.masthead span { color: var(--ink-faint); font-size: 13px; }
+
+.stage {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  background: #0a0c11;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  user-select: none;
+}
+.desk { position: absolute; inset: 0; background: #141821; }
+.chrome-bar { position: absolute; left: 3%; top: 4%; right: 3%; height: 7%; background: #1c2130; border-radius: 5px; }
+.sidebar { position: absolute; left: 3%; top: 15%; width: 20%; bottom: 5%; background: #1a1f2c; border-radius: 5px; }
+.card-a { position: absolute; left: 26%; top: 15%; right: 3%; height: 22%; background: #1e2434; border-radius: 5px; }
+.card-b { position: absolute; left: 26%; top: 41%; width: 33%; bottom: 5%; background: #1a1f2c; border-radius: 5px; }
+.card-c { position: absolute; left: 62%; top: 41%; right: 3%; bottom: 5%; background: #1a1f2c; border-radius: 5px; }
+.cam {
+  position: absolute;
+  border: 1.5px solid var(--frame);
+  cursor: grab;
+  touch-action: none;
+}
+.cam:active { cursor: grabbing; }
+.cam::after {
+  content: '';
+  position: absolute; inset: 0;
+  box-shadow: 0 0 0 9999px rgba(8, 10, 14, 0.55);
+}
+.cam .tick { position: absolute; width: 9px; height: 9px; border: 1.5px solid var(--frame); }
+.cam .tl { left: -1.5px; top: -1.5px; border-right: 0; border-bottom: 0; }
+.cam .tr { right: -1.5px; top: -1.5px; border-left: 0; border-bottom: 0; }
+.cam .bl { left: -1.5px; bottom: -1.5px; border-right: 0; border-top: 0; }
+.cam .br { right: -1.5px; bottom: -1.5px; border-left: 0; border-top: 0; }
+.cam .scale {
+  position: absolute; top: -22px; left: 0;
+  font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--frame);
+}
+.pointer { position: absolute; width: 14px; height: 20px; pointer-events: none; z-index: 3; }
+
+.compare {
+  position: absolute; right: 10px; bottom: 10px; z-index: 4;
+  background: rgba(16,19,26,.85); color: var(--ink-dim);
+  border: 1px solid var(--line); border-radius: 6px;
+  padding: 6px 12px; font: inherit; font-size: 12px; cursor: pointer;
+}
+.compare:active { color: var(--frame); border-color: var(--frame-dim); }
+.stage.raw .cam::after { box-shadow: none; }
+.stage.raw .cam { border-color: transparent; }
+.stage.raw .cam .tick { border-color: transparent; }
+.stage.raw .cam .scale { opacity: 0; }
+
+.transport { display: flex; align-items: center; gap: 14px; margin: 14px 0 10px; }
+.play { background: none; border: 0; color: var(--ink); cursor: pointer; font-size: 15px; padding: 0; }
+.tc { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--ink-dim); }
+.count { margin-left: auto; font-size: 12px; color: var(--ink-faint); }
+
+.tracks { position: relative; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.activity { position: relative; height: 34px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.activity i { position: absolute; bottom: 0; width: 3px; background: var(--dwell); }
+.activity i.hit { background: var(--frame); }
+.segments { position: relative; height: 46px; background: var(--panel-hi); cursor: pointer; }
+.seg {
+  position: absolute; top: 7px; height: 32px;
+  background: var(--frame-dim); border: 1px solid #8a6a30; border-radius: 5px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #f0c887;
+}
+.seg.on { background: #7a5a26; border-color: var(--frame); color: #fff2dd; }
+.head { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--ink); pointer-events: none; }
+.head::before { content: ''; position: absolute; top: 0; left: -4px; border: 4px solid transparent; border-top-color: var(--ink); }
+
+.rack { display: grid; grid-template-columns: 1fr 260px; gap: 20px; margin-top: 18px; }
+@media (max-width: 640px) { .rack { grid-template-columns: 1fr; } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
+.panel h2 { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
+.tag { display: inline-block; font-size: 11px; color: var(--frame); border: 1px solid var(--frame-dim); border-radius: 4px; padding: 1px 7px; vertical-align: 2px; margin-left: 8px; }
+.hint { color: var(--ink-faint); font-size: 12px; margin-bottom: 16px; }
+
+.row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.row label { color: var(--ink-dim); font-size: 13px; width: 74px; flex: none; }
+.row output { font-family: 'JetBrains Mono', monospace; font-size: 12px; width: 38px; text-align: right; flex: none; }
+input[type=range] { flex: 1; accent-color: var(--frame); min-width: 0; }
+.modes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+.modes button, .kill {
+  background: var(--panel-hi); color: var(--ink-dim);
+  border: 1px solid var(--line); border-radius: 6px;
+  padding: 9px; font: inherit; font-size: 13px; cursor: pointer;
+}
+.modes button.on { border-color: var(--frame); color: var(--frame); }
+.kill { width: 100%; margin-top: 8px; }
+.kill:hover { border-color: #8a3b3b; color: #d98080; }
+.regen { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 16px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="masthead">
+    <h1>Recorte automático</h1>
+    <span>captura_2026-09-09.mp4 · 0:34</span>
+  </div>
+
+  <div class="stage" id="stage">
+    <div class="desk">
+      <div class="chrome-bar"></div>
+      <div class="sidebar"></div>
+      <div class="card-a"></div>
+      <div class="card-b"></div>
+      <div class="card-c"></div>
+    </div>
+    <div class="cam" id="cam">
+      <span class="scale" id="camScale">2.1×</span>
+      <span class="tick tl"></span><span class="tick tr"></span>
+      <span class="tick bl"></span><span class="tick br"></span>
+    </div>
+    <svg class="pointer" id="ptr" viewBox="0 0 14 20"><path d="M1 1 L1 16 L5 12.5 L7.5 18 L10 17 L7.5 11.5 L12.5 11 Z" fill="#fff" stroke="#10131a" stroke-width="1.2"/></svg>
+    <button class="compare" id="compare">Mantener para ver el original</button>
+  </div>
+
+  <div class="transport">
+    <button class="play" id="play">▶</button>
+    <span class="tc" id="tc">0:08 / 0:34</span>
+    <span class="count" id="count">4 zooms detectados</span>
+  </div>
+
+  <div class="tracks">
+    <div class="activity" id="activity"></div>
+    <div class="segments" id="segments"></div>
+    <div class="head" id="head" style="left:24%"></div>
+  </div>
+
+  <div class="rack">
+    <div class="panel">
+      <h2>Zoom 2 <span class="tag" id="origin">click detectado</span></h2>
+      <p class="hint" id="range">0:09.4 → 0:13.1</p>
+
+      <div class="row">
+        <label for="lvl">Nivel</label>
+        <input type="range" id="lvl" min="1" max="4" step="0.1" value="2.1">
+        <output id="lvlOut">2.1×</output>
+      </div>
+      <div class="row">
+        <label for="smo">Suavidad</label>
+        <input type="range" id="smo" min="0" max="100" value="70">
+        <output id="smoOut">70</output>
+      </div>
+
+      <div class="modes">
+        <button class="on" data-mode="follow">Seguir cursor</button>
+        <button data-mode="fixed">Fijar aquí</button>
+      </div>
+      <button class="kill" id="kill">Quitar este zoom</button>
+    </div>
+
+    <div class="panel">
+      <h2>Detección</h2>
+      <p class="hint">Vuelve a analizar la grabación y reemplaza los zooms automáticos.</p>
+      <div class="row">
+        <label for="sens">Sensibilidad</label>
+        <input type="range" id="sens" min="0" max="100" value="55">
+        <output id="sensOut">55</output>
+      </div>
+      <p class="hint" id="sensNote" style="margin:0">4 zooms · 11% del clip</p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const SEED = [
+  { id: 'a', start: 10, w: 16, scale: 1.8, smoothing: 60, mode: 'follow', origin: 'click detectado' },
+  { id: 'b', start: 30, w: 18, scale: 2.1, smoothing: 70, mode: 'follow', origin: 'click detectado' },
+  { id: 'c', start: 54, w: 14, scale: 2.6, smoothing: 45, mode: 'fixed',  origin: 'pausa larga' },
+  { id: 'd', start: 76, w: 15, scale: 1.9, smoothing: 80, mode: 'follow', origin: 'click detectado' }
+];
+const DUR = 34;
+let segs = SEED.map(s => ({ ...s }));
+let selected = 'b';
+
+const $ = id => document.getElementById(id);
+const stage = $('stage'), cam = $('cam'), ptr = $('ptr');
+
+function paintActivity() {
+  const marks = [6, 14, 19, 22, 34, 41, 47, 58, 63, 71, 80, 86, 92];
+  $('activity').innerHTML = marks.map((x, i) => {
+    const hit = i % 3 === 1;
+    const h = hit ? 26 : 8 + (i * 7) % 13;
+    return `<i class="${hit ? 'hit' : ''}" style="left:${x}%;height:${h}px"></i>`;
+  }).join('');
+}
+
+function paintSegments() {
+  $('segments').innerHTML = segs.map(s =>
+    `<div class="seg ${s.id === selected ? 'on' : ''}" data-id="${s.id}"
+      style="left:${s.start}%;width:${s.w}%">${s.scale.toFixed(1)}×</div>`
+  ).join('');
+  $('count').textContent = segs.length + (segs.length === 1 ? ' zoom detectado' : ' zooms detectados');
+  const cover = segs.reduce((a, s) => a + s.w, 0);
+  $('sensNote').textContent = `${segs.length} zooms · ${Math.round(cover)}% del clip`;
+}
+
+function paintInspector() {
+  const s = segs.find(x => x.id === selected);
+  const panel = document.querySelector('.rack .panel');
+  if (!s) { panel.style.opacity = .4; return; }
+  panel.style.opacity = 1;
+  const n = segs.indexOf(s) + 1;
+  panel.querySelector('h2').firstChild.textContent = `Zoom ${n} `;
+  $('origin').textContent = s.origin;
+  const a = (s.start / 100) * DUR, b = ((s.start + s.w) / 100) * DUR;
+  const fmt = t => `0:${String(Math.floor(t)).padStart(2, '0')}.${Math.floor((t % 1) * 10)}`;
+  $('range').textContent = `${fmt(a)} → ${fmt(b)}`;
+  $('lvl').value = s.scale; $('lvlOut').textContent = s.scale.toFixed(1) + '×';
+  $('smo').value = s.smoothing; $('smoOut').textContent = s.smoothing;
+  document.querySelectorAll('.modes button').forEach(b =>
+    b.classList.toggle('on', b.dataset.mode === s.mode));
+  paintCamera();
+}
+
+let camPos = { x: 0.34, y: 0.30 };
+function paintCamera() {
+  const s = segs.find(x => x.id === selected);
+  if (!s) { cam.style.display = 'none'; return; }
+  cam.style.display = 'block';
+  const w = 100 / s.scale, h = 100 / s.scale;
+  const x = Math.min(Math.max(camPos.x, 0), 1 - w / 100);
+  const y = Math.min(Math.max(camPos.y, 0), 1 - h / 100);
+  cam.style.left = (x * 100) + '%'; cam.style.top = (y * 100) + '%';
+  cam.style.width = w + '%'; cam.style.height = h + '%';
+  $('camScale').textContent = s.scale.toFixed(1) + '×';
+  ptr.style.left = `calc(${(x * 100) + w / 2}% - 4px)`;
+  ptr.style.top = `calc(${(y * 100) + h / 2}% - 2px)`;
+}
+
+$('segments').addEventListener('click', e => {
+  const el = e.target.closest('.seg');
+  if (!el) return;
+  selected = el.dataset.id;
+  const s = segs.find(x => x.id === selected);
+  $('head').style.left = (s.start + s.w / 2) + '%';
+  $('tc').textContent = `0:${String(Math.round(((s.start + s.w / 2) / 100) * DUR)).padStart(2, '0')} / 0:34`;
+  paintSegments(); paintInspector();
+});
+
+$('lvl').addEventListener('input', e => {
+  const s = segs.find(x => x.id === selected); if (!s) return;
+  s.scale = +e.target.value;
+  $('lvlOut').textContent = s.scale.toFixed(1) + '×';
+  paintSegments(); paintCamera();
+});
+$('smo').addEventListener('input', e => {
+  const s = segs.find(x => x.id === selected); if (!s) return;
+  s.smoothing = +e.target.value;
+  $('smoOut').textContent = s.smoothing;
+});
+document.querySelectorAll('.modes button').forEach(b => b.addEventListener('click', () => {
+  const s = segs.find(x => x.id === selected); if (!s) return;
+  s.mode = b.dataset.mode;
+  paintInspector();
+}));
+$('kill').addEventListener('click', () => {
+  segs = segs.filter(s => s.id !== selected);
+  selected = segs.length ? segs[0].id : null;
+  paintSegments(); paintInspector();
+});
+
+$('sens').addEventListener('input', e => {
+  const v = +e.target.value;
+  $('sensOut').textContent = v;
+  const keep = Math.max(1, Math.round((v / 100) * 6));
+  segs = SEED.slice(0, Math.min(keep, SEED.length)).map(s => ({ ...s }));
+  if (keep > SEED.length) segs.push({ id: 'e', start: 92, w: 6, scale: 1.6, smoothing: 65, mode: 'follow', origin: 'movimiento sostenido' });
+  if (!segs.find(s => s.id === selected)) selected = segs[0].id;
+  paintSegments(); paintInspector();
+});
+
+let drag = null;
+cam.addEventListener('pointerdown', e => {
+  drag = { px: e.clientX, py: e.clientY, ox: camPos.x, oy: camPos.y };
+  cam.setPointerCapture(e.pointerId);
+});
+cam.addEventListener('pointermove', e => {
+  if (!drag) return;
+  const r = stage.getBoundingClientRect();
+  camPos.x = drag.ox + (e.clientX - drag.px) / r.width;
+  camPos.y = drag.oy + (e.clientY - drag.py) / r.height;
+  paintCamera();
+});
+cam.addEventListener('pointerup', () => drag = null);
+
+const cmp = $('compare');
+['pointerdown', 'pointerleave'].forEach(ev => cmp.addEventListener(ev, e => {
+  stage.classList.toggle('raw', e.type === 'pointerdown');
+}));
+cmp.addEventListener('pointerup', () => stage.classList.remove('raw'));
+
+$('play').addEventListener('click', e => {
+  e.target.textContent = e.target.textContent === '▶' ? '❚❚' : '▶';
+});
+
+paintActivity(); paintSegments(); paintInspector();
+</script>
+</body>
+</html>

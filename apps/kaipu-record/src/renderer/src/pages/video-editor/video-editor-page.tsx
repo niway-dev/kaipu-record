@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Navigate, useBlocker, useLocation, useNavigate } from "react-router-dom";
+import { generatePath, Navigate, useBlocker, useLocation, useNavigate } from "react-router-dom";
+import { ROUTES } from "@shared/routes";
 import {
   Maximize2,
   Minimize2,
   Pause,
   Play,
+  Shield,
   Trash2,
   TriangleAlert,
   Volume2,
   VolumeX,
 } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
+import { parseCursorTrack, type CursorTrack } from "@shared/cursor-track";
 import { captureException } from "@renderer/features/analytics";
 import {
   initialScene,
@@ -26,7 +29,9 @@ import {
   ModalOverlay,
   ModalText,
   ModalTitle,
-} from "@renderer/ui/modal";
+} from "@kaipu/ui";
+import * as stylex from "@stylexjs/stylex";
+import { Badge } from "@kaipu/ui";
 import {
   boundaryIndexAt,
   clampOverlays,
@@ -45,19 +50,91 @@ import {
   type SlideAssetStore,
 } from "@renderer/features/video-editor/slide-assets";
 import { parseSession, serializeSession } from "@renderer/features/video-editor/session";
+import { withInitialZooms } from "@renderer/features/video-editor/initial-zooms";
+import { useEditorSelection } from "@renderer/features/video-editor/editor-selection";
+import {
+  sourceRangeToTimelineBlocks,
+  sourceTimeAtTimeline,
+} from "@renderer/features/video-editor/source-time";
+import { activityMarks } from "@renderer/features/video-editor/zoom/detect-zoom-segments";
+import { useZoomEditing } from "@renderer/features/video-editor/zoom/use-zoom-editing";
+import { seekTargetForSegment } from "@renderer/features/video-editor/zoom/select-seek";
+import { focusInspectorFirstControl } from "@renderer/features/video-editor/focus-inspector";
+import { ActivityLane } from "@renderer/features/video-editor/components/activity-lane";
+import { ZoomLane } from "@renderer/features/video-editor/components/zoom-lane";
+import { EditorInspector } from "@renderer/features/video-editor/components/inspector/editor-inspector";
+import { DetectionPanel } from "@renderer/features/video-editor/components/inspector/detection-panel";
+import { ZoomInspector } from "@renderer/features/video-editor/components/inspector/zoom-inspector";
+import {
+  AnnotationDefaultsPanel,
+  AnnotationInspector,
+} from "@renderer/features/video-editor/components/inspector/annotation-inspector";
+import { boxCenterAt, CameraBox } from "@renderer/features/video-editor/components/camera-box";
+import { HoldOriginalButton } from "@renderer/features/video-editor/components/hold-original-button";
+import { useCameraPath } from "@renderer/features/video-editor/zoom/use-camera-path";
+import { useCameraPreview } from "@renderer/features/video-editor/zoom/use-camera-preview";
+import {
+  isPrivacyTool,
+  type EditorTool,
+} from "@renderer/features/video-editor/annotations/video-tools";
+import type { NormRect } from "@renderer/features/video-editor/privacy/redaction";
+import { useRedactionEditing } from "@renderer/features/video-editor/privacy/use-redaction-editing";
+import { RedactionLayer } from "@renderer/features/video-editor/components/redaction-layer";
+import { RegionDrawer } from "@renderer/features/video-editor/components/region-drawer";
+import { RegionEditor } from "@renderer/features/video-editor/components/region-editor";
+import { PrivacyLane } from "@renderer/features/video-editor/components/privacy-lane";
+import { BlurInspector } from "@renderer/features/video-editor/components/inspector/blur-inspector";
+import { CoverInspector } from "@renderer/features/video-editor/components/inspector/cover-inspector";
+import { formatPrecise } from "@renderer/features/video-editor/components/inspector/format";
+import { useSessionAutosave } from "@renderer/features/video-editor/use-session-autosave";
 import { usePreviewPlayback } from "@renderer/features/video-editor/use-preview-playback";
 import { useSourceThumbnails } from "@renderer/features/video-editor/use-source-thumbnails";
 import { useVideoScene } from "@renderer/features/video-editor/use-video-scene";
 import { useVideoTools } from "@renderer/features/video-editor/annotations/video-tools";
 import { useVideoExport } from "@renderer/features/video-editor/export/use-video-export";
+import {
+  isVideoExportBusy,
+  showExportBusyToast,
+} from "@renderer/features/video-editor/export/export-runner";
+import {
+  useGifExport,
+  type GifJobArgs,
+} from "@renderer/features/video-editor/export/use-gif-export";
+import {
+  ExportSheet,
+  type GifSettings,
+  type VideoExportChoice,
+} from "@renderer/features/video-editor/components/export-sheet";
+import {
+  editFingerprint,
+  findReusableExports,
+} from "@renderer/features/video-editor/export/export-reuse";
+import { useSourceExports } from "@renderer/features/video-editor/export/use-source-exports";
+import { probeSource, type SourceProbe } from "@renderer/features/video-editor/export/probe-source";
+import { useAppSettings } from "@renderer/pages/settings/use-app-settings";
+import { formatSize } from "@renderer/features/library/format";
 import { VideoAnnotationLayer } from "@renderer/features/video-editor/annotations/video-annotation-layer";
-import { EditorToolbar } from "@renderer/features/video-editor/components/editor-toolbar";
+import {
+  EditorToolbar,
+  EditorToolRail,
+} from "@renderer/features/video-editor/components/editor-toolbar";
 import { ExportDialog } from "@renderer/features/video-editor/components/export-dialog";
-import { OverlayOptions } from "@renderer/features/video-editor/components/overlay-options";
 import { PreviewStage } from "@renderer/features/video-editor/components/preview-stage";
 import { TimelineStrip } from "@renderer/features/video-editor/components/timeline-strip";
 import { showToast } from "@renderer/ui/toast-store";
 import styles from "./video-editor-page.module.css";
+
+/** The "original" pill's own shape, moved out of video-editor-page.module.css:
+ *  the shared Badge takes StyleX styles, not a className. */
+const sxEditor = stylex.create({
+  originalPill: {
+    flexShrink: 0,
+    letterSpacing: "0.04em",
+  },
+});
+import { useMuteEditing } from "@renderer/features/video-editor/use-mute-editing";
+import { AudioLane } from "@renderer/features/video-editor/components/audio-lane";
+import { MuteInspector } from "@renderer/features/video-editor/components/inspector/mute-inspector";
 
 export interface VideoEditorSource {
   id: string;
@@ -65,9 +142,13 @@ export interface VideoEditorSource {
   assetId: string;
   title: string;
   durationSeconds: number;
+  /** The recording's file size, for the export sheet's before/after meter. */
+  sizeBytes?: number;
+  /** Its poster frame, for the export sheet's framing preview. */
+  thumbnailUrl?: string | null;
 }
 
-function isVideoEditorSource(value: unknown): value is VideoEditorSource {
+export function isVideoEditorSource(value: unknown): value is VideoEditorSource {
   if (typeof value !== "object" || value === null) return false;
   const v = value as Record<string, unknown>;
   return (
@@ -77,6 +158,46 @@ function isVideoEditorSource(value: unknown): value is VideoEditorSource {
     typeof v.durationSeconds === "number" &&
     v.durationSeconds > 0
   );
+}
+
+/**
+ * Keyboard shortcuts for the tool group (plans/video-editor-v2/08 § PR 10 polish),
+ * mirroring EditorToolbar's own tooltips: V/R/A/T pick an annotation tool, B/C a
+ * privacy drawing mode. Z (add/select a zoom) is handled separately — it is an action,
+ * not a tool (see editor-toolbar.tsx's TOOL_HINT comment).
+ */
+const PRIVACY_SHORTCUT_TOOLS = new Set<EditorTool>(["blur", "cover"]);
+
+// A Map, not an object literal: `"constructor" in {}` is true and
+// `({})["constructor"]` returns a function, so an object lookup keyed by arbitrary
+// `e.key` values resolves inherited members as if they were tools. No real keyboard
+// produces those keys, but the lookup should not be the thing standing between us and
+// that — a Map has no prototype chain to walk.
+const TOOL_SHORTCUT_KEYS = new Map<string, EditorTool>([
+  ["v", "select"],
+  ["r", "box"],
+  ["a", "arrow"],
+  ["t", "text"],
+  ["b", "blur"],
+  ["c", "cover"],
+]);
+
+/**
+ * Which tool a one-letter shortcut selects, or null when this shortcut must not fire.
+ *
+ * The gate exists because the toolbar disables Blur/Cover on a slide
+ * (`privacyDisabled={onSlide}`) and the keyboard has to agree with it: there is no
+ * footage to redact under an image, so arming the tool would leave the user drawing
+ * into a toast. Split and delete already honour their own disabled flags.
+ *
+ * Pure and exported so the policy is testable without driving the playhead onto a
+ * slide through the timeline UI.
+ */
+export function toolForShortcut(key: string, opts: { onSlide: boolean }): EditorTool | null {
+  const tool = TOOL_SHORTCUT_KEYS.get(key);
+  if (!tool) return null;
+  if (PRIVACY_SHORTCUT_TOOLS.has(tool) && opts.onSlide) return null;
+  return tool;
 }
 
 /** Target is a text field — don't hijack Space for play/pause while typing. */
@@ -99,12 +220,16 @@ function upsertOverlay(overlays: VideoOverlay[], next: VideoOverlay): VideoOverl
   return i === -1 ? [...overlays, next] : overlays.map((o, idx) => (idx === i ? next : o));
 }
 
+/**
+ * Legacy `/video-editor` route. The editor is addressed by URL now
+ * (`/editor/video/:assetId`); an old navigation that still carries the recording
+ * in router state lands on the new URL, a stateless one on the Editor home.
+ */
 export function VideoEditorPage(): React.JSX.Element {
   const location = useLocation();
   const source = location.state;
-  if (!isVideoEditorSource(source)) return <Navigate to="/library" replace />;
-  // Remount per navigation so a different recording never inherits editor state.
-  return <VideoEditorLoader key={location.key} source={source} />;
+  if (!isVideoEditorSource(source)) return <Navigate to={ROUTES.editor} replace />;
+  return <Navigate to={generatePath(ROUTES.editorVideo, { assetId: source.assetId })} replace />;
 }
 
 /**
@@ -113,8 +238,11 @@ export function VideoEditorPage(): React.JSX.Element {
  * Without this split, `useVideoScene` would receive the fresh fallback scene before
  * the session IPC returns, and re-initializing a hook with a different value isn't
  * possible in React.
+ *
+ * The Editor workspace route renders this, keyed by asset id so a different
+ * recording never inherits editor state.
  */
-function VideoEditorLoader({ source }: { source: VideoEditorSource }): React.JSX.Element {
+export function VideoEditorLoader({ source }: { source: VideoEditorSource }): React.JSX.Element {
   const t = useTranslations("videoEditor");
   // Asset store lives here so it can be populated by the session loader and passed
   // down to the editor without being torn down between the two renders.
@@ -123,7 +251,25 @@ function VideoEditorLoader({ source }: { source: VideoEditorSource }): React.JSX
     return () => assetStoreRef.current.dispose();
   }, []);
 
-  const [resolvedScene, setResolvedScene] = useState<VideoScene | null>(null);
+  // The room this screen needs; released when it unmounts. See use-window-floor.
+
+  /**
+   * The recording's name lives in the window title, not in a header row. It is
+   * reference, never a control, and a full-width row for one static string is
+   * width the timeline needs more.
+   */
+  useEffect(() => {
+    const previous = document.title;
+    document.title = source.title;
+    return () => {
+      document.title = previous;
+    };
+  }, [source.title]);
+
+  const [resolved, setResolved] = useState<{
+    scene: VideoScene;
+    cursorTrack: CursorTrack | null;
+  } | null>(null);
 
   useEffect(() => {
     // Guards against calling restoreAsset or setting state after unmount —
@@ -131,6 +277,25 @@ function VideoEditorLoader({ source }: { source: VideoEditorSource }): React.JSX
     // then restoreAsset would recreate object URLs that are never revoked.
     let cancelled = false;
     void (async () => {
+      // The cursor track is best-effort and independent of the session: a missing or
+      // malformed track just means no auto zooms (the editor behaves as before v2).
+      let cursorTrack: CursorTrack | null = null;
+      try {
+        const trackJson = await window.electronAPI.loadCursorTrack(source.id);
+        cursorTrack = trackJson ? parseCursorTrack(trackJson) : null;
+      } catch {
+        cursorTrack = null;
+      }
+      if (cancelled) return;
+      // Initial detection happens HERE, before useVideoScene exists, so it is part of the
+      // initial scene — not a commit — and merely opening the editor is not an edit.
+      const open = (scene: VideoScene, hasZoomData: boolean): void => {
+        if (cancelled) return;
+        setResolved({
+          scene: withInitialZooms(scene, hasZoomData, cursorTrack, source.durationSeconds),
+          cursorTrack,
+        });
+      };
       try {
         const saved = await window.electronAPI.loadVideoEditSession(source.id);
         if (cancelled) return;
@@ -156,91 +321,133 @@ function VideoEditorLoader({ source }: { source: VideoEditorSource }): React.JSX
               ),
             };
             showToast({ message: t("restored") });
-            setResolvedScene(filteredScene);
+            open(filteredScene, session.hasZoomData);
           } else {
             // Session file exists but is invalid (schema changed, corruption, etc.).
             showToast({ message: t("restoreError") });
-            if (!cancelled) setResolvedScene(initialScene(source.durationSeconds));
+            open(initialScene(source.durationSeconds), false);
           }
         } else {
           // No saved session — fresh start, no toast.
-          if (!cancelled) setResolvedScene(initialScene(source.durationSeconds));
+          open(initialScene(source.durationSeconds), false);
         }
       } catch {
         // IPC failure is non-fatal; open a fresh editor without surfacing the error.
-        if (!cancelled) setResolvedScene(initialScene(source.durationSeconds));
+        open(initialScene(source.durationSeconds), false);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, []); // [] correct: source is stable per VideoEditorPage's key={location.key}
+  }, []); // [] correct: source is stable per VideoEditorLoader's key (the asset id)
 
-  if (resolvedScene === null) {
+  if (resolved === null) {
     // Brief loading state while the session IPC resolves. The editor grows the window
     // on mount; showing a blank page here avoids a visible size jump.
     return <div className={styles.page} />;
   }
 
   return (
-    <VideoEditor source={source} resolvedScene={resolvedScene} assetStoreRef={assetStoreRef} />
+    <VideoEditor
+      source={source}
+      resolvedScene={resolved.scene}
+      cursorTrack={resolved.cursorTrack}
+      assetStoreRef={assetStoreRef}
+    />
   );
 }
 
 function VideoEditor({
   source,
   resolvedScene,
+  cursorTrack,
   assetStoreRef,
 }: {
   source: VideoEditorSource;
   resolvedScene: VideoScene;
+  /** Parsed `.cursor.json`, or null (no track / window source / pre-v2 recording). */
+  cursorTrack: CursorTrack | null;
   assetStoreRef: React.MutableRefObject<SlideAssetStore>;
 }): React.JSX.Element {
   const t = useTranslations("videoEditor");
   const navigate = useNavigate();
-  useEffect(() => {
-    // Same window growth the screenshot editor uses; restored on unmount.
-    window.electronAPI.setEditorWindowMode(true);
-    return () => window.electronAPI.setEditorWindowMode(false);
-  }, []);
-
   const controller = useVideoScene(resolvedScene);
   const { scene } = controller;
   const layout = useMemo(() => toLayout(scene.items), [scene.items]);
-  // Blocks in-app navigation (e.g. the sidebar) while there's an edit that would be
-  // lost — same useBlocker pattern as the screenshot editor.
+  // Writes the session ~800 ms after every commit/endInteract, and flushes on unmount
+  // and beforeunload. See plans/video-editor-v2/07: before this, closing the window
+  // threw away every cut, zoom and redaction, because useBlocker below only ever sees
+  // in-app navigation.
+  const autosave = useSessionAutosave(source.id, scene, controller.interacting, assetStoreRef);
+  // Blocks in-app navigation (e.g. the sidebar) while an edit has NOT reached the
+  // session file yet — same useBlocker pattern as the screenshot editor, but now about
+  // "not written" rather than "edited": with autosave on, an edit that is already on
+  // disk is not lost by leaving, so warning about it would be a lie. In practice the
+  // dialog therefore appears only inside the debounce window or after a failed write,
+  // and its Discard button drops the pending write (`autosave.cancel()`) so it means
+  // exactly what it says.
   //
-  // The predicate reads refs instead of closing over `controller.dirty`/a plain
-  // boolean: react-router's data router consults the predicate SYNCHRONOUSLY inside
-  // `navigate()`, before React has re-rendered. handleExport's onSaved callback calls
-  // `controller.markClean()` (which schedules setPast([])/setFuture([])) immediately
-  // followed by `navigate(...)` — React 19 batches those state updates, so a boolean
-  // `dirty` value closed over at render time would still read `true` at navigate-time
-  // and the "discard changes" dialog would pop on every successful export. Refs
-  // sidestep the batching entirely: they're updated synchronously and read
-  // synchronously by the predicate.
-  const dirtyRef = useRef(controller.dirty);
-  dirtyRef.current = controller.dirty;
-  // Set to true right before the post-export `navigate()` so that programmatic
-  // navigation always proceeds, regardless of batching timing. Normal in-app
-  // navigation (e.g. the sidebar) never touches this ref, so it still blocks while
-  // dirty.
-  const bypassBlockerRef = useRef(false);
-  const shouldBlock = useCallback(() => dirtyRef.current && !bypassBlockerRef.current, []);
+  // The predicate reads a ref instead of a plain boolean: react-router's data router
+  // consults it SYNCHRONOUSLY inside `navigate()`, before React has re-rendered, and
+  // React 19 batches the state updates that a render-time boolean would depend on.
+  // Refs sidestep the batching entirely.
+  const pendingSaveRef = autosave.pendingRef;
+  const shouldBlock = useCallback(() => pendingSaveRef.current, [pendingSaveRef]);
   const blocker = useBlocker(shouldBlock);
-  const playback = usePreviewPlayback(layout);
+  // The preview hears the scene's muting so scrubbing matches the export. Memoised on
+  // the two fields rather than passed as `scene`: the scene object changes on every
+  // commit, and the hook re-applies the mute whenever this value changes.
+  const audioEdits = useMemo(
+    () => ({ audioMuted: scene.audioMuted, mutedRanges: scene.mutedRanges }),
+    [scene.audioMuted, scene.mutedRanges],
+  );
+  const playback = usePreviewPlayback(layout, audioEdits);
+  const zooms = useZoomEditing({
+    controller,
+    layout,
+    timelineDuration: playback.duration,
+    sourceDuration: source.durationSeconds,
+    cursorTrack,
+  });
+  const mutes = useMuteEditing(controller, layout, source.durationSeconds);
+  const redactionEdits = useRedactionEditing({
+    controller,
+    layout,
+    sourceDuration: source.durationSeconds,
+  });
+  // One camera simulation shared by the preview (useCameraPreview) and the export (doc 05).
+  // Declared before any callback that closes over it (handleExport).
+  const cameraPath = useCameraPath(scene.zoomSegments, cursorTrack, source.durationSeconds);
+  // Evidence for the Activity lane — depends only on the (immutable) track.
+  const activity = useMemo(
+    () => (cursorTrack ? activityMarks(cursorTrack, source.durationSeconds) : []),
+    [cursorTrack, source.durationSeconds],
+  );
   const videoTools = useVideoTools();
   const videoExport = useVideoExport();
+  const gifExport = useGifExport();
   const mediaUrl = `kaipu-media://recording/${source.id}`;
   const thumbnails = useSourceThumbnails(mediaUrl, source.durationSeconds);
-  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const selection = useEditorSelection();
+  // `select` / `clear` are stable (useCallback, no deps); the `selection` object itself
+  // is rebuilt every render, so never put it in a dependency array.
+  const { select: selectKind, clear: clearSelection } = selection;
+  const selectedItemId = selection.itemId;
+  const selectedOverlayId = selection.overlayId;
+  const setSelectedItemId = useCallback(
+    (id: string | null) => selectKind("item", id),
+    [selectKind],
+  );
+  const setSelectedOverlayId = useCallback(
+    (id: string | null) => selectKind("overlay", id),
+    [selectKind],
+  );
   // A delete must clamp the playhead into the new (shorter) timeline, but the preview
   // hook's layoutRef only picks up the new layout on the NEXT render — seeking
   // synchronously here would map the target time through the stale, pre-delete layout.
   // Queue it and let the effect below (keyed on `layout`) fire the actual seek once
   // layoutRef has caught up.
   const pendingSeekRef = useRef<number | null>(null);
-  const [selectedOverlayId, setSelectedOverlayId] = useState<string | null>(null);
   // Fullscreen state — true while document.fullscreenElement is this page's <main> stage.
   const [isFullscreen, setIsFullscreen] = useState(false);
   // Ref for the stage <main> element, used to request fullscreen on it directly.
@@ -262,6 +469,25 @@ function VideoEditor({
       setSelectedOverlayId(null);
     }
   }, [scene.overlays, selectedOverlayId]);
+
+  const selectedZoomId = selection.zoomId;
+  const selectedRedactionId = selection.redactionId;
+  const selectedMuteId = selection.muteId;
+  useEffect(() => {
+    if (selectedZoomId && !scene.zoomSegments.some((z) => z.id === selectedZoomId)) {
+      selectKind("zoom", null);
+    }
+  }, [scene.zoomSegments, selectedZoomId, selectKind]);
+  useEffect(() => {
+    if (selectedRedactionId && !scene.redactions.some((r) => r.id === selectedRedactionId)) {
+      selectKind("redaction", null);
+    }
+  }, [scene.redactions, selectedRedactionId, selectKind]);
+  useEffect(() => {
+    if (selectedMuteId && !scene.mutedRanges.some((r) => r.id === selectedMuteId)) {
+      selectKind("mute", null);
+    }
+  }, [scene.mutedRanges, selectedMuteId, selectKind]);
 
   // Track fullscreen state via the fullscreenchange event so pressing Esc (which the
   // browser handles natively) still syncs isFullscreen back to false.
@@ -368,49 +594,206 @@ function VideoEditor({
   // memoized — the box can resize between renders) and hands off to the export
   // hook, which owns the whole worker/writer pipeline. `markClean` runs before
   // navigating so `useBlocker` doesn't intercept this programmatic navigation.
+  const appSettings = useAppSettings();
+  // NIW2-218: frame rate + audio layout for the preset estimates and bitrates. Probed once
+  // per source; until it resolves the presets assume 30 fps with audio (conservative).
+  const [sourceProbe, setSourceProbe] = useState<SourceProbe | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void probeSource(source.id).then((probe) => {
+      if (alive) setSourceProbe(probe);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [source.id]);
+  // The scene as it is now, for an export that finishes after the user kept editing (or
+  // left): see `onSaved` below.
+  const sceneRef = useRef(scene);
+  sceneRef.current = scene;
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const startVideoExport = useCallback(
+    (choice: VideoExportChoice) => {
+      const video = playback.videoRef.current;
+      if (!video) return;
+      // videoWidth/videoHeight are 0 until the browser has decoded the stream's
+      // metadata (loadedmetadata). Starting the export before that hands the worker
+      // a 0×0 OffscreenCanvas, which produces a corrupt file — refuse early.
+      if (video.videoWidth === 0 || video.videoHeight === 0) {
+        showToast({ message: t("videoStillLoading") });
+        return;
+      }
+      // What this file carries, so the sheet can offer it again while the edit is unchanged,
+      // and the session save below: taken NOW, because the export runs in the background
+      // and the user can keep editing (or leave) while it encodes.
+      const fingerprint = editFingerprint(scene);
+      const sessionJson = serializeSession(scene);
+      const assets = assetStoreRef.current
+        .entries()
+        .map((a) => ({ assetId: a.assetId, bytes: a.bytes }));
+      void videoExport.start({
+        scene,
+        sourceId: source.id,
+        title: source.title,
+        derivedFromAssetId: source.assetId,
+        sourceSizeBytes: source.sizeBytes ?? null,
+        videoWidth: video.videoWidth,
+        videoHeight: video.videoHeight,
+        previewWidth: video.clientWidth,
+        slideAssets: assetStoreRef.current,
+        cameraPath,
+        presetId: choice.presetId,
+        framing: choice.framing,
+        sourceInfo: sourceProbe,
+        fingerprint,
+        // NIW2-218 export redesign: the export runs in the background and the user stays in
+        // the editor; the "Ready to share" card takes it from here. What is left is stamping
+        // the edit session as exported — the stamp clears the library's "not exported"
+        // badge — but only while the session still holds the edit that was exported.
+        onSaved: async () => {
+          if (mountedRef.current) {
+            // Still here: edited since the export started → that newer edit is what the
+            // autosave writes, and it is rightly not exported.
+            if (editFingerprint(sceneRef.current) !== fingerprint) return;
+            // This save supersedes whatever the autosave still had queued.
+            autosave.cancel();
+          } else {
+            // Left the editor: its unmount flush wrote the latest edit (or Discard dropped
+            // it). Stamp only if what is on disk is the edit that was exported.
+            const saved = await window.electronAPI.loadVideoEditSession(source.id);
+            const savedScene = saved ? parseSession(saved.sessionJson)?.scene : null;
+            if (savedScene && editFingerprint(savedScene) !== fingerprint) return;
+          }
+          try {
+            // `true`: this scene is exactly what was just burned into the file, so the write
+            // stamps it as exported.
+            await window.electronAPI.saveVideoEditSession(source.id, sessionJson, assets, true);
+            if (mountedRef.current) controller.markClean();
+          } catch (error) {
+            // Session save failure is non-fatal — the export already succeeded.
+            captureException(error, { context: "video-edit-session-save" });
+          }
+        },
+      });
+    },
+    [
+      t,
+      sourceProbe,
+      playback,
+      videoExport,
+      scene,
+      source,
+      controller,
+      assetStoreRef,
+      autosave,
+      cameraPath,
+    ],
+  );
+
+  // NIW2-217: "Export" opens the export sheet (format choice). The metadata guard runs
+  // here too, so the sheet never offers a GIF of a 0×0 stream.
+  const [exportSheetOpen, setExportSheetOpen] = useState(false);
+  // NIW2-218 "already exported → reuse": this source's exports, re-read when the sheet opens.
+  const sourceExports = useSourceExports(source.assetId, exportSheetOpen);
+  const lastGifSettingsRef = useRef<GifSettings | null>(null);
   const handleExport = useCallback(() => {
     const video = playback.videoRef.current;
     if (!video) return;
-    // videoWidth/videoHeight are 0 until the browser has decoded the stream's
-    // metadata (loadedmetadata). Starting the export before that hands the worker
-    // a 0×0 OffscreenCanvas, which produces a corrupt file — refuse early.
     if (video.videoWidth === 0 || video.videoHeight === 0) {
       showToast({ message: t("videoStillLoading") });
       return;
     }
-    void videoExport.start({
-      scene,
-      sourceId: source.id,
-      title: source.title,
-      derivedFromAssetId: source.assetId,
-      videoWidth: video.videoWidth,
-      videoHeight: video.videoHeight,
-      previewWidth: video.clientWidth,
-      slideAssets: assetStoreRef.current,
-      onSaved: async (recording) => {
-        // Persist the session before navigating away so reopening the editor on the
-        // original recording restores cuts/overlays/slides. Non-fatal if it fails —
-        // the export already succeeded and the user lands on the new recording.
-        try {
-          const sessionJson = serializeSession(scene);
-          const assets = assetStoreRef.current
-            .entries()
-            .map((a) => ({ assetId: a.assetId, bytes: a.bytes }));
-          await window.electronAPI.saveVideoEditSession(source.id, sessionJson, assets);
-        } catch (error) {
-          // Session save failure is non-fatal — the export already succeeded.
-          captureException(error, { context: "video-edit-session-save" });
-        }
-        controller.markClean();
-        // Set BEFORE navigate(): react-router calls the blocker predicate
-        // synchronously inside navigate(), ahead of React re-rendering — the ref
-        // guarantees the predicate observes the bypass regardless of how
-        // markClean()'s state updates get batched.
-        bypassBlockerRef.current = true;
-        navigate(`/library/${recording.assetId}`);
-      },
-    });
-  }, [playback, videoExport, scene, source, controller, navigate, assetStoreRef]);
+    // One export at a time: say which one is running instead of opening a second sheet.
+    if (isVideoExportBusy()) {
+      showExportBusyToast(t);
+      return;
+    }
+    setExportSheetOpen(true);
+  }, [playback, t]);
+
+  const closeExportSheet = useCallback(() => {
+    gifExport.cancelEstimate();
+    setExportSheetOpen(false);
+  }, [gifExport]);
+
+  // Shared job inputs for the GIF estimate and export; null while the video is loading.
+  const gifJobArgs = useCallback(
+    (settings: GifSettings): GifJobArgs | null => {
+      const video = playback.videoRef.current;
+      if (!video || video.videoWidth === 0 || video.videoHeight === 0) return null;
+      return {
+        scene,
+        sourceId: source.id,
+        videoWidth: video.videoWidth,
+        videoHeight: video.videoHeight,
+        previewWidth: video.clientWidth,
+        slideAssets: assetStoreRef.current,
+        cameraPath,
+        range: settings.range,
+        width: settings.width,
+        fps: settings.fps,
+      };
+    },
+    [playback, scene, source.id, assetStoreRef, cameraPath],
+  );
+
+  const handleGifSettingsChange = useCallback(
+    (settings: GifSettings | null) => {
+      const args = settings ? gifJobArgs(settings) : null;
+      if (args) gifExport.requestEstimate(args);
+      else gifExport.cancelEstimate();
+    },
+    [gifJobArgs, gifExport],
+  );
+
+  const startGifExport = useCallback(
+    (settings: GifSettings) => {
+      const args = gifJobArgs(settings);
+      if (!args) {
+        showToast({ message: t("videoStillLoading") });
+        return;
+      }
+      lastGifSettingsRef.current = settings;
+      setExportSheetOpen(false);
+      void gifExport.start({
+        ...args,
+        title: source.title,
+        derivedFromAssetId: source.assetId,
+        onSaved: async (recording) => {
+          // Same session save as the MP4 export (stamped as exported), but the user stays
+          // in the editor: GIF users often export several ranges in a row (FR 11).
+          autosave.cancel();
+          try {
+            const sessionJson = serializeSession(scene);
+            const assets = assetStoreRef.current
+              .entries()
+              .map((a) => ({ assetId: a.assetId, bytes: a.bytes }));
+            await window.electronAPI.saveVideoEditSession(source.id, sessionJson, assets, true);
+            controller.markClean();
+          } catch (error) {
+            captureException(error, { context: "video-edit-session-save" });
+          }
+          showToast({
+            message: t("gifSaved", { size: formatSize(recording.sizeBytes) }),
+            action: {
+              label: t("gifOpen"),
+              // Unsaved edits made after the export still go through the discard guard.
+              onClick: () => navigate(`/library/${recording.assetId}`),
+            },
+            durationMs: 8000,
+          });
+        },
+      });
+    },
+    [gifJobArgs, gifExport, source, autosave, scene, assetStoreRef, controller, navigate, t],
+  );
 
   const handleDeleteOverlay = useCallback(() => {
     // Same rationale as handleDeleteSelected: don't touch scene/selection while a
@@ -508,12 +891,164 @@ function VideoEditor({
     [controller],
   );
 
+  // Selecting a zoom moves the playhead to the middle of its first visible piece (UI
+  // spec § 6.3), so the preview shows what the zoom does — but ONLY when the playhead
+  // isn't already inside the segment: seeking unconditionally threw away a frame the
+  // user had just scrubbed to while positioning the camera box (backlog/video-editor-
+  // camera-box-ux § 2, candidate cause A; seekTargetForSegment carries the full
+  // rationale and is unit-tested on its own in select-seek.test.ts).
+  //
+  // Regardless of whether we seek, focus moves into the inspector on the next frame —
+  // the lane's own <button> would otherwise keep focus after the click, which is what
+  // made the editor look like it "lost focus" (same backlog entry, candidate cause B).
+  // Deferred to requestAnimationFrame so it runs after React commits the ZoomInspector
+  // for the new selection, per focus-inspector.ts's documented contract.
+  const handleSelectZoom = useCallback(
+    (id: string) => {
+      selectKind("zoom", id);
+      const segment = controller.scene.zoomSegments.find((z) => z.id === id);
+      if (segment) {
+        const target = seekTargetForSegment(layout, playback.timelineTime, segment);
+        if (target !== null) playback.seek(target);
+      }
+      requestAnimationFrame(() => focusInspectorFirstControl());
+    },
+    [selectKind, controller, layout, playback],
+  );
+
+  // Zoom tool (an action, not a mode): select the zoom under the playhead if there is
+  // one, otherwise add a manual zoom there.
+  const handleAddZoom = useCallback(() => {
+    const at = sourceTimeAtTimeline(layout, playback.timelineTime);
+    const existing =
+      at === null ? undefined : zooms.visibleZooms.find((z) => at >= z.start && at < z.end);
+    if (existing) {
+      selectKind("zoom", existing.id);
+      return;
+    }
+    const result = zooms.addAtPlayhead(playback.timelineTime);
+    if (result.ok) selectKind("zoom", result.id);
+    else if (result.reason === "on-slide") showToast({ message: t("zoomNotOnSlide") });
+    else if (result.reason === "no-room") showToast({ message: t("zoomNoRoom") });
+  }, [layout, playback.timelineTime, zooms, selectKind, t]);
+
+  const handleAddMute = useCallback(() => {
+    const result = mutes.addAtPlayhead(playback.timelineTime);
+    if (result.ok) selectKind("mute", result.id);
+    else if (result.reason === "on-slide") showToast({ message: t("muteOnSlide") });
+    else if (result.reason === "no-room") showToast({ message: t("muteNoRoom") });
+  }, [mutes, playback.timelineTime, selectKind, t]);
+
+  const handleRemoveZoom = useCallback(
+    (id: string) => {
+      zooms.remove(id);
+      selectKind("zoom", null);
+    },
+    [zooms, selectKind],
+  );
+
+  const selectedZoom = selectedZoomId
+    ? (zooms.visibleZooms.find((z) => z.id === selectedZoomId) ?? null)
+    : null;
+  const selectedOverlay = selectedOverlayId
+    ? (scene.overlays.find((o) => o.id === selectedOverlayId) ?? null)
+    : null;
+
+  // Privacy (doc 10). While a privacy tool is active or a region is selected the preview
+  // shows the unzoomed original frame, so drawing/editing maps 1:1 to frame coordinates.
+  const privacyTool = isPrivacyTool(videoTools.tool) ? videoTools.tool : null;
+  const onSlide = playback.activeSlideId !== null;
+  const [draftRegion, setDraftRegion] = useState<NormRect | null>(null);
+  const selectedMute = selectedMuteId
+    ? (scene.mutedRanges.find((r) => r.id === selectedMuteId) ?? null)
+    : null;
+  const selectedRedaction = selectedRedactionId
+    ? (redactionEdits.visibleRedactions.find((r) => r.id === selectedRedactionId) ?? null)
+    : null;
+  /** Timeline range covered by a source range's visible pieces (inspector + draw badge). */
+  const timelineRangeOf = useCallback(
+    (start: number, end: number): { from: number; to: number } => {
+      const blocks = sourceRangeToTimelineBlocks(layout, start, end);
+      return {
+        from: blocks[0]?.timelineStart ?? 0,
+        to: blocks[blocks.length - 1]?.timelineEnd ?? 0,
+      };
+    },
+    [layout],
+  );
+  const drawWindow = privacyTool ? redactionEdits.windowAt(playback.timelineTime) : null;
+  const drawRange = drawWindow ? timelineRangeOf(drawWindow.start, drawWindow.end) : null;
+
+  const handleToolChange = useCallback(
+    (tool: EditorTool) => {
+      // Drawing a region starts from a clean slate: no zoom/region box competing with it.
+      if (isPrivacyTool(tool)) clearSelection();
+      videoTools.setTool(tool);
+    },
+    [clearSelection, videoTools],
+  );
+
+  const handleCreateRegion = useCallback(
+    (rect: NormRect) => {
+      if (!privacyTool) return;
+      const result = redactionEdits.add(privacyTool, rect, playback.timelineTime);
+      if (result.ok) {
+        // UI spec § 4.4: on release the region is created, selected, and the tool returns to Select.
+        selectKind("redaction", result.id);
+        videoTools.setTool("select");
+      } else if (result.reason === "on-slide") {
+        showToast({ message: t("privacyNotOnSlide") });
+      }
+    },
+    [privacyTool, redactionEdits, playback.timelineTime, selectKind, videoTools, t],
+  );
+
+  const handleSelectRedaction = useCallback(
+    (id: string) => {
+      selectKind("redaction", id);
+      const r = controller.scene.redactions.find((x) => x.id === id);
+      if (!r) return;
+      const [first] = sourceRangeToTimelineBlocks(layout, r.start, r.end);
+      if (first) playback.seek((first.timelineStart + first.timelineEnd) / 2);
+    },
+    [selectKind, controller, layout, playback],
+  );
+
+  const handleRemoveRedaction = useCallback(
+    (id: string) => {
+      redactionEdits.remove(id);
+      selectKind("redaction", null);
+    },
+    [redactionEdits, selectKind],
+  );
+
+  // Preview camera (doc 09). Result view applies the camera; selecting a zoom switches to
+  // the zoom-edit view (full frame + camera box); holding "original" shows the raw frame.
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const [holdingOriginal, setHoldingOriginal] = useState(false);
+  // Decoded source height, as STATE. It feeds the soft-zoom hint, and it cannot be read
+  // off `playback.videoRef.current.videoHeight` during render: that is 0 until metadata
+  // lands and changing it never re-renders, so the hint would appear or not depending on
+  // whether some unrelated render happened to arrive after the metadata did.
+  const [sourceHeight, setSourceHeight] = useState(0);
+  useCameraPreview(
+    playback.videoRef,
+    contentRef,
+    cameraPath,
+    !holdingOriginal &&
+      selectedZoom === null &&
+      selectedRedaction === null &&
+      privacyTool === null &&
+      !onSlide,
+  );
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (isEditingTarget(e.target)) return;
-      // Don't fire editor shortcuts behind the discard-changes modal or the export
-      // dialog — both block the scene from being safely mutated or played while open.
-      if (blocker.state === "blocked" || videoExport.status !== "idle") return;
+      // Don't fire editor shortcuts behind the discard-changes modal, the export sheet or
+      // the GIF export dialog — they block the scene from being safely mutated or played
+      // while open. A video export runs in the background and blocks nothing.
+      if (blocker.state === "blocked" || gifExport.status !== "idle" || exportSheetOpen) return;
       if (e.key === " ") {
         e.preventDefault();
         playback.toggle();
@@ -530,12 +1065,38 @@ function VideoEditor({
         if (!splitDisabled) handleSplit();
         return;
       }
+      // Tool shortcuts (plans/video-editor-v2/08 § PR 10 polish): V/R/A/T pick an
+      // annotation tool, Z adds/selects a zoom at the playhead, B/C pick a privacy
+      // drawing mode. Matches EditorToolbar's own tooltips (V R A T / Z / B C).
+      const key = e.key.toLowerCase();
+      if (!isMod && TOOL_SHORTCUT_KEYS.has(key)) {
+        const next = toolForShortcut(key, { onSlide });
+        // Through handleToolChange, not videoTools.setTool: the toolbar path clears
+        // the selection before arming a privacy tool, and the keyboard must match —
+        // otherwise B with a zoom selected leaves the RegionDrawer stacked over the
+        // camera box (equal z-index, later sibling wins) and the box is unreachable.
+        if (next) handleToolChange(next);
+        return;
+      }
+      if (!isMod && key === "z") {
+        handleAddZoom();
+        return;
+      }
+      // `!document.fullscreenElement`: in fullscreen the browser handles Esc itself to
+      // leave it — clearing the selection at the same time would be a second, invisible
+      // action the user never asked for.
+      if (e.key === "Escape" && !document.fullscreenElement) {
+        clearSelection();
+        return;
+      }
       // Annotation selection takes precedence over segment deletion when both exist —
       // an annotation is almost always the more "local" thing the user just touched.
       // Cmd/Ctrl+Backspace is a common "delete line/word" chord in text contexts —
       // require !isMod so it doesn't also delete an overlay or a segment.
       if (!isMod && (e.key === "Delete" || e.key === "Backspace")) {
-        if (selectedOverlayId) handleDeleteOverlay();
+        if (selectedRedactionId) handleRemoveRedaction(selectedRedactionId);
+        else if (selectedZoomId) handleRemoveZoom(selectedZoomId);
+        else if (selectedOverlayId) handleDeleteOverlay();
         else if (!deleteDisabled) handleDeleteSelected();
       }
     };
@@ -545,20 +1106,27 @@ function VideoEditor({
     playback,
     controller,
     blocker.state,
-    videoExport.status,
+    gifExport.status,
+    exportSheetOpen,
     splitDisabled,
     deleteDisabled,
     handleSplit,
     handleDeleteSelected,
     selectedOverlayId,
     handleDeleteOverlay,
+    clearSelection,
+    selectedZoomId,
+    selectedRedactionId,
+    handleRemoveZoom,
+    handleRemoveRedaction,
+    videoTools,
+    handleToolChange,
+    handleAddZoom,
+    onSlide,
   ]);
 
   return (
     <div className={styles.page}>
-      <header className={styles.header}>
-        <h1 className={styles.title}>{source.title}</h1>
-      </header>
       <EditorToolbar
         canUndo={controller.canUndo}
         canRedo={controller.canRedo}
@@ -570,100 +1138,260 @@ function VideoEditor({
         deleteDisabled={deleteDisabled}
         onAddImage={handleAddImage}
         tool={videoTools.tool}
-        onToolChange={videoTools.setTool}
         onExport={handleExport}
-        exportDisabled={videoExport.status === "exporting" || scene.items.length === 0}
-      />
-      <main className={styles.stage} ref={stageRef}>
-        {/* Floating per-tool options (Excalidraw-style), pinned to the stage so it
-            doesn't shift with the video's own size. */}
-        <div className={styles.optionsFloat}>
-          <OverlayOptions
-            tools={videoTools}
-            overlays={scene.overlays}
-            selectedId={selectedOverlayId}
-            onCommitOverlay={handleCommitOverlay}
-            onDeleteSelected={handleDeleteOverlay}
-          />
-        </div>
-        {/* Video region: 1fr grid row — centers PreviewStage and constrains its height
-            so the transport bar below is never clipped regardless of video aspect ratio.
-            In fullscreen mode the 50 vh cap is lifted via an inline style override. */}
-        <div
-          className={styles.videoRegion}
-          style={isFullscreen ? { maxHeight: "none" } : undefined}
-        >
-          <PreviewStage
-            playback={playback}
-            mediaUrl={mediaUrl}
-            slideUrl={slideUrl}
-            expanded={isFullscreen}
-            overlay={
-              <VideoAnnotationLayer
-                overlays={scene.overlays}
-                visibleIds={visibleIds}
-                selectedId={selectedOverlayId}
-                onSelect={setSelectedOverlayId}
-                tool={videoTools.tool}
-                toolState={{
-                  color: videoTools.color,
-                  stroke: videoTools.stroke,
-                  textSize: videoTools.textSize,
-                }}
-                playheadTime={playback.timelineTime}
-                timelineDuration={playback.duration}
-                onDraft={(draft) =>
-                  controller.updateLive({
-                    ...scene,
-                    overlays: upsertOverlay(scene.overlays, draft),
-                  })
-                }
-                onCommit={(overlays) => {
-                  controller.commit({ ...scene, overlays });
-                  // Every onCommit call is a just-finished draw or text label (moves/
-                  // resizes finalize through onInteractEnd only) — auto-switch back to
-                  // select so the new overlay can be adjusted right away.
-                  videoTools.setTool("select");
-                }}
-                onInteractStart={controller.beginInteract}
-                onInteractEnd={controller.endInteract}
-                onBackgroundClick={playback.toggle}
-              />
-            }
-          />
-        </div>
-        {/* Transport bar lives outside the overflow:hidden video region so it is always
-            visible even when the video fills the full available height. */}
-        <div className={styles.transport}>
+        exportDisabled={gifExport.status === "exporting" || scene.items.length === 0}
+      >
+        {/* Not interactive — a reminder, not a control (plans/video-editor-v2/08 § PR 10
+            polish, W12's "ORIGINAL UNTOUCHED" pill). The original recording on disk and
+            its library thumbnail are untouched by every edit in this page. */}
+        <Badge variant="neutral" style={sxEditor.originalPill}>
+          <Shield size={12} strokeWidth={2} /> {t("originalUntouched")}
+        </Badge>
+        {autosave.state !== "idle" && (
           <button
             type="button"
-            className={styles.muteButton}
-            aria-label={playback.muted ? t("unmute") : t("mute")}
-            onClick={playback.toggleMute}
+            className={styles.saveState}
+            data-state={autosave.state}
+            onClick={autosave.state === "failed" ? () => void autosave.retry() : undefined}
+            disabled={autosave.state !== "failed"}
+            aria-live="polite"
           >
-            {playback.muted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+            {autosave.state === "saving" && t("saveStateSaving")}
+            {autosave.state === "saved" && t("saveStateSaved")}
+            {autosave.state === "failed" && t("saveStateFailed")}
           </button>
-          <button
-            type="button"
-            className={styles.playButton}
-            aria-label={playback.playing ? t("pause") : t("play")}
-            onClick={playback.toggle}
+        )}
+      </EditorToolbar>
+      <div className={styles.workspace}>
+        <EditorToolRail
+          onAddMute={handleAddMute}
+          onToggleMuteAll={mutes.toggleAll}
+          audioMuted={mutes.audioMuted}
+          tool={videoTools.tool}
+          onToolChange={handleToolChange}
+          onAddZoom={handleAddZoom}
+          privacyDisabled={onSlide}
+        />
+        <main className={styles.stage} ref={stageRef}>
+          {/* Video region: 1fr grid row — centers PreviewStage and constrains its height
+              so the transport bar below is never clipped regardless of video aspect ratio.
+              In fullscreen mode the 50 vh cap is lifted via an inline style override. */}
+          <div
+            className={styles.videoRegion}
+            style={isFullscreen ? { maxHeight: "none" } : undefined}
           >
-            {playback.playing ? <Pause size={20} /> : <Play size={20} />}
-          </button>
-          <span className={styles.timeDisplay}>
-            {formatTime(playback.timelineTime)} / {formatTime(playback.duration)}
-          </span>
-          <button
-            type="button"
-            className={styles.fullscreenButton}
-            aria-label={isFullscreen ? t("exitFullscreen") : t("fullscreen")}
-            onClick={handleFullscreen}
-          >
-            {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-          </button>
-        </div>
-      </main>
+            <PreviewStage
+              playback={playback}
+              mediaUrl={mediaUrl}
+              slideUrl={slideUrl}
+              expanded={isFullscreen}
+              contentRef={contentRef}
+              onFrameSize={({ height }) => setSourceHeight(height)}
+              underlay={
+                <RedactionLayer
+                  redactions={redactionEdits.visibleRedactions}
+                  videoRef={playback.videoRef}
+                  hidden={holdingOriginal || onSlide}
+                />
+              }
+              chrome={
+                <>
+                  {selectedZoom && !holdingOriginal && !onSlide && (
+                    <CameraBox
+                      videoRef={playback.videoRef}
+                      path={cameraPath}
+                      segment={selectedZoom}
+                      onBegin={zooms.begin}
+                      onMove={(center) => zooms.liveLock(selectedZoom.id, center)}
+                      onEnd={zooms.end}
+                    />
+                  )}
+                  {selectedRedaction && !holdingOriginal && !onSlide && (
+                    <RegionEditor
+                      rect={selectedRedaction.rect}
+                      onBegin={redactionEdits.begin}
+                      onChange={(rect) => redactionEdits.livePatch(selectedRedaction.id, { rect })}
+                      onEnd={redactionEdits.end}
+                    />
+                  )}
+                  {privacyTool && !holdingOriginal && !onSlide && (
+                    <RegionDrawer
+                      kind={privacyTool}
+                      videoRef={playback.videoRef}
+                      range={
+                        drawRange
+                          ? { from: formatPrecise(drawRange.from), to: formatPrecise(drawRange.to) }
+                          : null
+                      }
+                      onDraft={setDraftRegion}
+                      onCreate={handleCreateRegion}
+                    />
+                  )}
+                  <HoldOriginalButton holding={holdingOriginal} onHoldChange={setHoldingOriginal} />
+                </>
+              }
+              // "Hold to see original" must show the ORIGINAL: the chip says UNEDITED,
+              // so the annotation layer goes with the camera and the privacy regions.
+              // The hold owns the pointer, so no in-progress draw can be interrupted.
+              overlay={
+                !holdingOriginal && (
+                  <VideoAnnotationLayer
+                    overlays={scene.overlays}
+                    visibleIds={visibleIds}
+                    selectedId={selectedOverlayId}
+                    // A click on the canvas background deselects EVERYTHING (spec § 10.5),
+                    // not just the annotation — otherwise a selected zoom would survive it
+                    // and the inspector would keep showing the Zoom panel. The same click
+                    // still toggles play/pause through onBackgroundClick below.
+                    onSelect={(id) => (id === null ? clearSelection() : selectKind("overlay", id))}
+                    tool={isPrivacyTool(videoTools.tool) ? "select" : videoTools.tool}
+                    toolState={{
+                      color: videoTools.color,
+                      stroke: videoTools.stroke,
+                      textSize: videoTools.textSize,
+                    }}
+                    playheadTime={playback.timelineTime}
+                    timelineDuration={playback.duration}
+                    onDraft={(draft) =>
+                      controller.updateLive({
+                        ...scene,
+                        overlays: upsertOverlay(scene.overlays, draft),
+                      })
+                    }
+                    onCommit={(overlays) => {
+                      controller.commit({ ...scene, overlays });
+                      // Every onCommit call is a just-finished draw or text label (moves/
+                      // resizes finalize through onInteractEnd only) — auto-switch back to
+                      // select so the new overlay can be adjusted right away.
+                      videoTools.setTool("select");
+                    }}
+                    onInteractStart={controller.beginInteract}
+                    onInteractEnd={controller.endInteract}
+                    onBackgroundClick={playback.toggle}
+                  />
+                )
+              }
+            />
+          </div>
+          {/* Transport bar lives outside the overflow:hidden video region so it is always
+              visible even when the video fills the full available height. Three columns
+              (see .transport): the play button stays optically centred however wide the
+              side clusters get — v2 puts the zoom count on the right. */}
+          <div className={styles.transport}>
+            <div className={styles.transportSide}>
+              <button
+                type="button"
+                className={styles.muteButton}
+                aria-label={playback.muted ? t("unmute") : t("mute")}
+                onClick={playback.toggleMute}
+              >
+                {playback.muted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+              </button>
+            </div>
+            <button
+              type="button"
+              className={styles.playButton}
+              aria-label={playback.playing ? t("pause") : t("play")}
+              onClick={playback.toggle}
+            >
+              {playback.playing ? <Pause size={20} /> : <Play size={20} />}
+            </button>
+            <div className={`${styles.transportSide} ${styles.transportRight}`}>
+              <span className={styles.timeDisplay}>
+                {formatTime(playback.timelineTime)} / {formatTime(playback.duration)}
+              </span>
+              {/* Shown whenever there is something to count: a pre-v2 recording has no
+                  cursor track but can still carry hand-made zooms. */}
+              {(cursorTrack || zooms.visibleZooms.length > 0) && (
+                <span className={styles.counts}>
+                  {t("zoomCount", { count: zooms.visibleZooms.length })}
+                </span>
+              )}
+              {redactionEdits.visibleRedactions.length > 0 && (
+                <span className={styles.counts}>
+                  {t("privacyCount", { count: redactionEdits.visibleRedactions.length })}
+                </span>
+              )}
+              <button
+                type="button"
+                className={styles.fullscreenButton}
+                aria-label={isFullscreen ? t("exitFullscreen") : t("fullscreen")}
+                onClick={handleFullscreen}
+              >
+                {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+              </button>
+            </div>
+          </div>
+        </main>
+        <EditorInspector>
+          {selectedRedaction?.kind === "blur" ? (
+            <BlurInspector
+              redaction={selectedRedaction}
+              range={timelineRangeOf(selectedRedaction.start, selectedRedaction.end)}
+              edits={redactionEdits}
+              onRemoved={() => selectKind("redaction", null)}
+            />
+          ) : selectedRedaction?.kind === "cover" ? (
+            <CoverInspector
+              redaction={selectedRedaction}
+              range={timelineRangeOf(selectedRedaction.start, selectedRedaction.end)}
+              edits={redactionEdits}
+              onRemoved={() => selectKind("redaction", null)}
+            />
+          ) : selectedMute ? (
+            <MuteInspector
+              range={selectedMute}
+              index={scene.mutedRanges.indexOf(selectedMute) + 1}
+              layout={layout}
+              mutes={mutes}
+              onRemoved={() => selectKind("mute", null)}
+            />
+          ) : selectedZoom ? (
+            <ZoomInspector
+              segment={selectedZoom}
+              index={zooms.visibleZooms.indexOf(selectedZoom) + 1}
+              layout={layout}
+              zooms={zooms}
+              sourceHeight={sourceHeight}
+              anchorNow={() =>
+                boxCenterAt(
+                  selectedZoom,
+                  cameraPath,
+                  sourceTimeAtTimeline(layout, playback.timelineTime) ?? selectedZoom.start,
+                )
+              }
+              onRemoved={() => selectKind("zoom", null)}
+            />
+          ) : selectedOverlay ? (
+            <AnnotationInspector
+              overlay={selectedOverlay}
+              tools={videoTools}
+              // Unlike the redaction/zoom `start`/`end` above (source time, converted via
+              // timelineRangeOf), an overlay's `start`/`end` are ALREADY timeline time
+              // (scene.ts's OverlayBase docs) — so the inspector's range is the overlay's
+              // own window verbatim, no block conversion needed.
+              range={{ start: selectedOverlay.start, end: selectedOverlay.end }}
+              onCommitOverlay={handleCommitOverlay}
+              // handleDeleteOverlay reads `selectedOverlayId` itself rather than taking an
+              // id argument, but the inspector only ever renders (and can only call
+              // onRemove) for that same selected overlay, so the ids always match — one
+              // undoable commit, no wrapper needed.
+              onRemove={handleDeleteOverlay}
+              onRemoved={() => setSelectedOverlayId(null)}
+            />
+          ) : videoTools.tool === "box" ||
+            videoTools.tool === "arrow" ||
+            videoTools.tool === "text" ? (
+            <AnnotationDefaultsPanel tools={videoTools} />
+          ) : (
+            <DetectionPanel
+              zooms={zooms}
+              sensitivity={scene.zoomSensitivity}
+              clicksAvailable={cursorTrack?.clicksAvailable ?? false}
+            />
+          )}
+        </EditorInspector>
+      </div>
       <footer className={styles.timeline}>
         <TimelineStrip
           layout={layout}
@@ -678,6 +1406,63 @@ function VideoEditor({
           selectedOverlayId={selectedOverlayId}
           onSelectOverlay={setSelectedOverlayId}
           onWindowChange={handleWindowChange}
+          extraLanes={[
+            ...(cursorTrack
+              ? [
+                  {
+                    key: "activity",
+                    label: t("laneActivity"),
+                    node: <ActivityLane marks={activity} layout={layout} />,
+                  },
+                ]
+              : []),
+            {
+              key: "zooms",
+              label: t("laneZooms"),
+              node: (
+                <ZoomLane
+                  segments={zooms.visibleZooms}
+                  layout={layout}
+                  selectedId={selectedZoomId}
+                  onSelect={handleSelectZoom}
+                  onEdgeDrag={zooms.edgeDrag}
+                  hasTrack={cursorTrack !== null}
+                />
+              ),
+            },
+            {
+              key: "privacy",
+              label: t("lanePrivacy"),
+              node: (
+                <PrivacyLane
+                  redactions={redactionEdits.visibleRedactions}
+                  layout={layout}
+                  selectedId={selectedRedactionId}
+                  onSelect={handleSelectRedaction}
+                  onEdgeDrag={redactionEdits.edgeDrag}
+                  ghost={
+                    draftRegion && privacyTool && drawWindow
+                      ? { kind: privacyTool, start: drawWindow.start, end: drawWindow.end }
+                      : null
+                  }
+                />
+              ),
+            },
+            {
+              key: "audio",
+              label: t("laneAudio"),
+              node: (
+                <AudioLane
+                  ranges={mutes.mutedRanges}
+                  layout={layout}
+                  audioMuted={mutes.audioMuted}
+                  selectedId={selectedMuteId}
+                  onSelect={(id) => selectKind("mute", id)}
+                  onEdgeDrag={mutes.edgeDrag}
+                />
+              ),
+            },
+          ]}
         />
       </footer>
       {blocker.state === "blocked" && (
@@ -691,20 +1476,68 @@ function VideoEditor({
             <ModalButton variant="ghost" onClick={() => blocker.reset()}>
               {t("keepEditing")}
             </ModalButton>
-            <ModalButton variant="danger" onClick={() => blocker.proceed()}>
+            <ModalButton
+              variant="danger"
+              onClick={() => {
+                // Discard = drop the queued write, so the unmount flush does not save
+                // the very edits the user just chose to throw away.
+                autosave.cancel();
+                blocker.proceed();
+              }}
+            >
               <Trash2 size={15} strokeWidth={1.8} />
               {t("discard")}
             </ModalButton>
           </ModalActions>
         </ModalOverlay>
       )}
-      {videoExport.status !== "idle" && (
+      {exportSheetOpen && (
+        <ExportSheet
+          sourceTitle={source.title}
+          sourceSizeBytes={source.sizeBytes ?? null}
+          thumbnailUrl={source.thumbnailUrl ?? null}
+          timelineDuration={playback.duration}
+          sourceWidth={playback.videoRef.current?.videoWidth ?? 0}
+          estimate={gifExport.estimate}
+          presetSource={{
+            width: playback.videoRef.current?.videoWidth ?? 0,
+            height: playback.videoRef.current?.videoHeight ?? 0,
+            fps: sourceProbe?.fps ?? 30,
+            hasAudio: (sourceProbe?.hasAudio ?? true) && !scene.audioMuted,
+            sampleRate: sourceProbe?.sampleRate,
+          }}
+          // Settings → Export quality; another row applies to this export only and is
+          // never remembered, nor written to the edit session (FR13).
+          defaultPreset={appSettings.settings?.exportQuality}
+          // A row whose file already carries exactly this edit opens it instead of encoding.
+          reusable={findReusableExports(sourceExports, editFingerprint(scene))}
+          onOpenExisting={(existing) => {
+            closeExportSheet();
+            // Edits not yet written still go through the discard guard.
+            navigate(`/library/${existing.assetId}`);
+          }}
+          onGifSettingsChange={handleGifSettingsChange}
+          onExportVideo={(choice) => {
+            closeExportSheet();
+            startVideoExport(choice);
+          }}
+          onExportGif={startGifExport}
+          onCancel={closeExportSheet}
+        />
+      )}
+      {gifExport.status !== "idle" && (
         <ExportDialog
-          status={videoExport.status}
-          fraction={videoExport.fraction}
-          error={videoExport.error}
-          onCancel={videoExport.cancel}
-          onRetry={handleExport}
+          status={gifExport.status}
+          fraction={gifExport.fraction}
+          error={gifExport.error}
+          title={t("exportingGif")}
+          errorTitle={t("gifExportError")}
+          onCancel={gifExport.cancel}
+          onRetry={() => {
+            const settings = lastGifSettingsRef.current;
+            gifExport.cancel();
+            if (settings) startGifExport(settings);
+          }}
         />
       )}
     </div>

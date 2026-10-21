@@ -1,5 +1,13 @@
 # Development Rules
 
+## Brand Identity
+
+Before changing Kaipu's name, story, logo, mascot, onboarding, or marketing copy, read
+`apps/documentation/src/content/docs/marketing/brand-identity.md` — the canonical
+brand decision. Other documents link to it; they do not redefine the origin.
+The execution sequence lives in
+`apps/documentation/src/content/docs/plans/2026-09-27-brand-and-website-rollout.md`.
+
 ## Template Customization
 
 This is a multi-pattern template. Before starting development, customize it:
@@ -118,6 +126,14 @@ The web app (TanStack Start) proxies all API requests through itself to the Elys
 - `application` never imports from `infra-*` (uses domain interfaces)
 - `infra-*` never imports from `application`
 - Mobile app (`apps/mobile/`) only imports from `@kaipu/domain`
+- `apps/kaipu-record/src/shared/**` never takes a **value** import from a workspace
+  package — type-only imports are fine. That directory is reachable from the
+  preload bundle, which externalizes workspace packages and then cannot load
+  their TypeScript at runtime: the preload script fails, `window.electronAPI`
+  comes back `undefined`, and the app opens to a black window with a green build,
+  green types and a green test suite. Keep the value as a literal there (as
+  `locale` and the shortcut accelerators do) and pin it with a test that imports
+  the package — test files are not in that bundle.
 
 ## Secrets: Infisical
 
@@ -146,34 +162,69 @@ sudo xcode-select --switch /Library/Developer/CommandLineTools
 Do not install the CLI with `bun add` — bun blocks the `preinstall` that
 extracts the binary, so you get the package without a working command.
 
-Then every command works as before — the scripts pull secrets themselves:
+Then generate the local files, from the repo root:
 
-- `bun run dev` — each app fetches its own env at start-up
-- `bun run db:push` and the other `db:*` scripts wrap `infisical run`
+```bash
+bun env:pull       # scripts/env-pull.sh: every app's .env, plus packages/infra-db/.env
+```
 
-Changing a value means changing it in Infisical and restarting. Never add it to
-a local file.
+That is the only command that talks to Infisical in local development:
+
+- `bun run dev` reads each app's `.env` and never calls Infisical, so an
+  Infisical outage cannot block it.
+- `bun run db:*`, `plan` and `test:integration` load `packages/infra-db/.env`
+  with `bun --env-file`. A variable set inline in the shell wins over the file.
+- A missing file fails fast through `scripts/require-env.sh`, and the Zod
+  schemas validate through `parseEnv` (`@kaipu/infra-env`); both point to
+  `bun env:pull`.
+- The pull is all or nothing: a failed fetch leaves every existing `.env` as it
+  was.
+
+Changing a value means changing it in Infisical, then `bun env:pull` and a
+restart. Never hand-edit a generated `.env`.
 
 Layout: environment slug `dev` (the UI shows it as "Development"). Secrets live
-in four folders — `/cloudflare`, `/database`, `/server-hono`, `/kaipu-record` —
-plus non-secret config at the root. Scripts use `--recursive` (or the four
-explicit `--path` flags where `export` is needed, since `export` has no
-`--recursive`).
+in six folders — `/public`, `/database`, `/cloudflare`, `/auth`, `/email`,
+`/signing` — and tags name the consumer. `infisical export` has no
+`--recursive`, so `env-pull.sh` lists the folders explicitly; a new folder must
+be added there.
 
-Workers are the exception: `wrangler` needs values as bindings rather than
-process env, so `env:pull` writes a generated `.env` that wrangler reads.
+`scripts/with-env.sh` (live `infisical run`) remains only for the signed
+production build in `apps/kaipu-record/scripts/build-mac-local.sh`. CI never
+needs a secrets CLI: workflows inject their own values, and `require-env.sh`
+passes straight through when `CI` is set.
 
-Scripts go through `scripts/with-env.sh` rather than calling `infisical run`
-directly. It fetches from Infisical locally, and **passes straight through when
-`CI` is set** — CI builds with placeholder values on purpose and must not need a
-secrets CLI. Locally a missing CLI fails loudly instead of building with
-undefined values, which would produce a subtly broken artifact rather than an
-error.
+## Native dependencies: no install scripts
+
+There is **no `postinstall`** in this repo, and none should be added. `bun install`
+is not allowed to compile code, download binaries, or run anything you have not
+read — the same rule as `scripts/setup-dev.sh`, which checks and never installs.
+The reusable form of this, including why it breaks unrelated CI jobs, is the
+[native dependencies pattern](https://github.com/csdev19/general-knowledge/blob/main/desktop/native-dependencies.md).
+
+The desktop app has one native dependency, `uiohook-napi` (the global mouse hook
+behind auto-zoom on clicks). It ships prebuilds for Node, not for Electron, and
+`electron-builder.yml` sets `npmRebuild: false`, so it has to be rebuilt
+explicitly:
+
+```bash
+bun run rebuild:native   # rebuilds against the installed Electron's ABI
+```
+
+`bun run setup` reports when that rebuild is pending and prints this command —
+it compares a stamp in `node_modules` against the installed Electron version, so
+a fresh install or an Electron bump both show up. Every packaging path
+(`build:mac`, `build:unpack`, `build:win`, `build:linux`, `release-desktop.yml`)
+calls it explicitly, because a release must not depend on someone remembering.
+
+If you skip it the app still runs: `click-hook.ts` degrades to "no clicks"
+rather than crashing. That silence is why the check exists.
 
 ## Common Commands
 
 - `bun run db:push` — Push Drizzle schema to DB (run from monorepo root, NOT from packages/infra-db/)
 - `bun run db:studio` — Open Drizzle Studio to inspect DB
+- `bun run rebuild:native` — Rebuild the desktop app's native deps for Electron (see above)
 
 ## Known Issues
 

@@ -19,6 +19,9 @@
   --kaipu-text-muted: #6b7280;
   --kaipu-accent-primary: #f6055c;
   --kaipu-accent-primary-hover: #d4044f;
+  --kaipu-accent-primary-soft: rgba(246, 5, 92, 0.1);
+  --kaipu-accent-primary-tint: rgba(246, 5, 92, 0.12);
+  --kaipu-accent-primary-ring: rgba(246, 5, 92, 0.4);
   --kaipu-glow-accent: 0 10px 26px -8px rgba(246, 5, 92, 0.75);
   --kaipu-accent-green: #22c55e;
   --kaipu-accent-red: #ef4444;
@@ -67,6 +70,9 @@
   --kaipu-text-muted: #62626b;
   --kaipu-accent-primary: #f6055c;
   --kaipu-accent-primary-hover: #d4044f;
+  --kaipu-accent-primary-soft: rgba(246, 5, 92, 0.1);
+  --kaipu-accent-primary-tint: rgba(246, 5, 92, 0.12);
+  --kaipu-accent-primary-ring: rgba(246, 5, 92, 0.4);
   --kaipu-glow-accent: 0 10px 26px -8px rgba(246, 5, 92, 0.35);
   --kaipu-accent-green: #15803d;
   --kaipu-accent-red: #dc2626;

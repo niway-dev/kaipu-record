@@ -16,11 +16,13 @@
   overflow: visible;
 }
 
+/* A straight line, not a dashed one. Excalidraw's selection is a clean rectangle with
+   a dot in each corner; the dashes read as "marching ants / still loading" and fight
+   the corner handles for attention. */
 .selOutline {
   fill: none;
   stroke: var(--accent-primary);
   stroke-width: 1;
-  stroke-dasharray: 4 4;
 }
 
 .handle {

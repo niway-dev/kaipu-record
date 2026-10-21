@@ -1,8 +1,8 @@
 /**
- * Pure watermark model: the config shape, the default look, and the two pieces of
- * pure logic (the gating decision + the corner placement math). No React, no DOM,
- * no electron — so both are unit-testable. The drawing lives in the compositor;
- * the decision lives in `useWatermark`.
+ * Pure watermark model: the config shape, the default look, and the corner
+ * placement math. No React, no DOM, no electron — so it is unit-testable. The
+ * drawing lives in the compositor; whether to draw at all is the user's
+ * `showBrandBadge` setting, read by `useWatermark`.
  */
 
 // `as const` sets — no TS enums (see docs: enums-as-const). Type derives from values.
@@ -35,13 +35,25 @@ export interface WatermarkConfig {
   marginRatio: number;
 }
 
+/**
+ * The badge look. The mark is a signature in a corner, not a claim on the
+ * frame: `middle-right` at 0.9 opacity sat over the content itself, so it moved
+ * to the bottom-right corner and lost a third of its weight. Losing some presence
+ * is the intent — the compositor's drop shadow is what keeps it legible on light
+ * footage at this opacity.
+ *
+ * The margin is deliberately larger than a tight corner inset. At 2.5 % the mark
+ * read as stuck to the bottom edge, where it collided with whatever bottom bar or
+ * dock the recorded content had of its own; 5 % lifts it clear of that band while
+ * keeping it a corner placement.
+ */
 export const DEFAULT_WATERMARK_CONFIG: WatermarkConfig = {
   variant: "wordmark",
-  position: "middle-right",
+  position: "bottom-right",
   tint: "white",
-  opacity: 0.9,
+  opacity: 0.75,
   heightRatio: 0.059, // tuned up ~30% from the original 0.045 for visibility
-  marginRatio: 0.03,
+  marginRatio: 0.05,
 };
 
 export interface Rect {
@@ -85,19 +97,4 @@ export function watermarkRect(
     case "middle-right":
       return { x: rightX, y: middleY, width, height };
   }
-}
-
-export interface WatermarkInputs {
-  /** Feature flag (today always on; tomorrow PostHog). */
-  flagOn: boolean;
-  /** Real entitlement (today stubbed; tomorrow a backend). */
-  isPaid: boolean;
-  /** DEV-only force override; `null` in prod. */
-  devForce: "free" | "paid" | null;
-}
-
-/** The single gating rule: paid (or forced paid) removes it; the flag can kill it. */
-export function resolveWatermarkEnabled({ flagOn, isPaid, devForce }: WatermarkInputs): boolean {
-  const paid = devForce ? devForce === "paid" : isPaid;
-  return flagOn && !paid;
 }

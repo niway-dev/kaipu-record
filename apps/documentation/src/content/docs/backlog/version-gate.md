@@ -32,7 +32,7 @@ no infra failure can lock a user out.
   "minVersion": "1.2.0",
   "latestVersion": "1.4.0",
   "message": "Optional custom copy",
-  "downloadUrl": "https://github.com/csdev19/kaipu-record-monorepo/releases/latest"
+  "downloadUrl": "https://github.com/niway-dev/kaipu-record/releases/latest"
 }
 ```
 

@@ -1,0 +1,58 @@
+.surface {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.draft {
+  position: absolute;
+  pointer-events: none;
+}
+
+.draftCover {
+  background: color-mix(in srgb, #18181b 85%, transparent);
+}
+
+/* Marching ants: UI spec stroke-dasharray 8 8, animated. */
+.ants {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+
+.ants rect {
+  fill: none;
+  stroke: var(--accent-primary);
+  stroke-width: 1.5;
+  stroke-dasharray: 8 8;
+  animation: march 0.6s linear infinite;
+}
+
+@keyframes march {
+  to {
+    stroke-dashoffset: -16;
+  }
+}
+
+.sizeBadge,
+.rangeBadge {
+  position: absolute;
+  left: 0;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: rgba(8, 8, 10, 0.85);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.sizeBadge {
+  top: -20px;
+}
+
+.rangeBadge {
+  bottom: -20px;
+}

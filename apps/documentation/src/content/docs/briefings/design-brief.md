@@ -5,6 +5,8 @@ description: Kaipu Record's palette, type scale, and voice, read from the design
 
 # Kaipu Record — Design Brief
 
+**Brand update (2026-09-27):** [Brand identity](/marketing/brand-identity/) is canonical for the name, signature, and Kai's preferred knot direction. Use the [rollout plan](/plans/2026-09-27-brand-and-website-rollout/) for new logo/notch artwork intake. This addition does not revalidate the historical token snapshot below.
+
 > Paste this into a model doing design or UI work on Kaipu. If anything here
 > disagrees with `packages/tokens/src/` (`base.ts`, `themes/dark.ts`,
 > `themes/light.ts`), **the tokens package wins** — it's the compiled, contrast-tested
@@ -86,8 +88,10 @@ There is no dedicated brand-assets folder yet. What exists today:
 - `apps/web-hono/public/demos/` — the landing page's demo clips (`hero`, `record`,
   `screenshot`, `editor`), each shipped as `.mp4`/`.webm` plus a poster `.jpg`.
 
-There is no vector logo/wordmark file in the repo today; the "Kaipu" wordmark seen
-in the desktop watermark is drawn in the compositor, not sourced from an asset file.
+Vector marks and a wordmark now exist under
+`apps/kaipu-record/src/renderer/src/assets/brand/`; the web also has
+`apps/web-hono/public/favicon.svg` and a `kaipu-mark.tsx` component.
+New creator-supplied logo/notch art has not yet been located or integrated in this branch.
 
 ## Voice
 

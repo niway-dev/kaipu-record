@@ -1,16 +1,22 @@
 import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
-import { usePermissions } from "@renderer/features/permissions";
+import { usePermissions, useAccessibility } from "@renderer/features/permissions";
 import { requiredPermissionsMet } from "./permissions";
 import { WelcomeStep } from "./steps/welcome-step";
 import { PermissionsStep } from "./steps/permissions-step";
 import { DoneStep } from "./steps/done-step";
 import styles from "./onboarding-overlay.module.css";
 
-const STEP_COUNT = 3;
-const PERMISSIONS_STEP = 1;
-const CTA_LABEL_KEYS = ["ctaGetStarted", "ctaContinue", "ctaStartRecording"] as const;
+type StepId = "welcome" | "permissions" | "done";
+
+const STEPS: readonly StepId[] = ["welcome", "permissions", "done"];
+
+const CTA_LABEL_KEY: Record<StepId, "ctaGetStarted" | "ctaContinue" | "ctaStartRecording"> = {
+  welcome: "ctaGetStarted",
+  permissions: "ctaContinue",
+  done: "ctaStartRecording",
+};
 
 interface OnboardingOverlayProps {
   /** Called when the user finishes the flow or skips it. */
@@ -18,18 +24,28 @@ interface OnboardingOverlayProps {
 }
 
 /**
- * Full-window onboarding takeover: Welcome → Grant permissions → All set.
- * Owns the step index, live permission state, and keyboard navigation. The
- * Continue button on the permissions step is gated until the required
- * permissions (screen + microphone) are granted.
+ * Full-window onboarding takeover: Welcome → Grant permissions → All set. Owns the
+ * current step, live permission state, and keyboard navigation. The Continue button on
+ * the permissions step is gated until the required permissions (screen + microphone)
+ * are granted; camera and macOS Accessibility are optional rows on the same step.
  */
 export function OnboardingOverlay({ onClose }: OnboardingOverlayProps): React.JSX.Element {
   const t = useTranslations("onboarding");
   const [step, setStep] = useState(0);
   const { status, denied, request, openSettings } = usePermissions();
+  const accessibility = useAccessibility();
 
-  const canAdvance = step !== PERMISSIONS_STEP || requiredPermissionsMet(status);
-  const isLastStep = step === STEP_COUNT - 1;
+  // The takeover cannot reflow below a point (see ONBOARDING_MIN_HEIGHT in main):
+  // raise the window's minimum while it is up, and release it on unmount so the
+  // rest of the app keeps its normal floor.
+  useEffect(() => {
+    window.electronAPI.setOnboardingWindowMode(true);
+    return () => window.electronAPI.setOnboardingWindowMode(false);
+  }, []);
+
+  const activeStepId = STEPS[step];
+  const canAdvance = activeStepId !== "permissions" || requiredPermissionsMet(status);
+  const isLastStep = step === STEPS.length - 1;
 
   const advance = useCallback(() => {
     if (!canAdvance) return;
@@ -37,7 +53,9 @@ export function OnboardingOverlay({ onClose }: OnboardingOverlayProps): React.JS
     else setStep((s) => s + 1);
   }, [canAdvance, isLastStep, onClose]);
 
-  const back = useCallback(() => setStep((s) => Math.max(0, s - 1)), []);
+  const back = useCallback(() => {
+    setStep((s) => Math.max(0, s - 1));
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -65,16 +83,18 @@ export function OnboardingOverlay({ onClose }: OnboardingOverlayProps): React.JS
     >
       <div className={styles.stage}>
         <div className={styles.content}>
-          {step === 0 && <WelcomeStep />}
-          {step === 1 && (
+          {activeStepId === "welcome" && <WelcomeStep />}
+          {activeStepId === "permissions" && (
             <PermissionsStep
               status={status}
               denied={denied}
               onRequest={(kind) => void request(kind)}
               onOpenSettings={(kind) => void openSettings(kind)}
+              accessibility={accessibility.status}
+              onRequestAccessibility={() => void accessibility.request()}
             />
           )}
-          {step === 2 && <DoneStep />}
+          {activeStepId === "done" && <DoneStep />}
         </div>
 
         <div className={styles.footer}>
@@ -88,14 +108,14 @@ export function OnboardingOverlay({ onClose }: OnboardingOverlayProps): React.JS
           </button>
 
           <div className={styles.dots}>
-            {Array.from({ length: STEP_COUNT }, (_, i) => (
-              <span key={i} className={i === step ? styles.dotActive : styles.dot} />
+            {STEPS.map((id, i) => (
+              <span key={id} className={i === step ? styles.dotActive : styles.dot} />
             ))}
           </div>
 
           <div className={styles.advance}>
             <button type="button" className={styles.cta} onClick={advance} disabled={!canAdvance}>
-              {t(CTA_LABEL_KEYS[step])} <ArrowRight size={18} strokeWidth={2} />
+              {t(CTA_LABEL_KEY[activeStepId])} <ArrowRight size={18} strokeWidth={2} />
             </button>
             {!isLastStep && (
               <button type="button" className={styles.skip} onClick={onClose}>

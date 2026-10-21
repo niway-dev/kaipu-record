@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type AppSettings, DEFAULT_SHORTCUTS } from "@shared/types";
+import { defaultShortcutsFor } from "@shared/shortcut-defaults";
+import type { AppSettings } from "@shared/types";
 import { DEFAULT_QUALITY } from "@shared/recording-quality";
 import { I18nRoot } from "./i18n-root";
 
@@ -10,9 +11,17 @@ const SETTINGS: AppSettings = {
   showInDock: true,
   recordingQuality: DEFAULT_QUALITY,
   showBarInRecording: false,
-  shortcuts: DEFAULT_SHORTCUTS,
+  showBrandBadge: false,
+  screenshotCopy: "auto",
+  shortcuts: defaultShortcutsFor("darwin"),
   deviceId: "",
   uploadMode: "local-only",
+  exportQuality: "balanced",
+  showRecordingSavedCard: true,
+  screenshotFrame: {},
+  screenshotMode: "frame",
+  trayHintShown: false,
+  diagnosticsEnabled: true,
 };
 
 describe("I18nRoot theme application", () => {

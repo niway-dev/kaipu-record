@@ -89,7 +89,8 @@
   gap: var(--space-md);
 }
 
-.lockable[data-locked] {
+/* Only the source card and mic picker lock during a take; the toggles stay live. */
+.locked[data-locked] {
   opacity: 0.5;
   transition: opacity 140ms ease;
 }

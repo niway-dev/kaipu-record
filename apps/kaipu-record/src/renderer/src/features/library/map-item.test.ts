@@ -9,6 +9,8 @@ const item: LibraryItem = {
   createdAt: 5,
   durationSeconds: 9,
   derivedFromAssetId: null,
+  editSavedAt: 123,
+  editExportedSavedAt: null,
   local: {
     id: "f",
     assetId: "A",
@@ -46,6 +48,15 @@ const item: LibraryItem = {
 };
 
 describe("toLibraryVideo", () => {
+  it("carries an MP4 export's preset and fingerprint, null for anything else (NIW2-218)", () => {
+    expect(toLibraryVideo(item).export).toBeNull();
+    const exported = {
+      ...item,
+      local: { ...item.local!, export: { preset: "youtube" as const, fingerprint: "whole" } },
+    };
+    expect(toLibraryVideo(exported).export).toEqual({ preset: "youtube", fingerprint: "whole" });
+  });
+
   it("keeps the local id, the asset id, both sizes and the axes", () => {
     expect(toLibraryVideo(item)).toMatchObject({
       id: "f",
@@ -56,6 +67,8 @@ describe("toLibraryVideo", () => {
       comparison: "local-changes",
       editing: "project-available",
       thumbnailUrl: "kaipu-media://thumb/f",
+      editSavedAt: 123,
+      editExportedSavedAt: null,
     });
   });
 

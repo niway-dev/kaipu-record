@@ -18,5 +18,12 @@ export function toLibraryVideo(item: LibraryItem): LibraryVideo {
     editing: item.editing,
     transfer: item.transfer,
     derivedFromAssetId: item.derivedFromAssetId,
+    editSavedAt: item.editSavedAt,
+    editExportedSavedAt: item.editExportedSavedAt,
+    tagIds: item.local?.tagIds ?? [],
+    gif: item.local?.gif ?? null,
+    export: item.local?.export ?? null,
+    editorOpenedAt: item.local?.editorOpenedAt ?? null,
+    editorSavedAt: item.local?.editorSavedAt ?? null,
   };
 }

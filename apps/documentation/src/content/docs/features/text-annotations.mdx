@@ -1,0 +1,203 @@
+---
+title: "Text annotations"
+description: "How a text label is modelled, measured, edited and exported in both editors — what the two share, what they still duplicate, and the one rule that keeps six bugs from coming back."
+---
+
+# Text annotations
+
+How a text label works in the **screenshot editor** and the **video editor**. They share
+their model and their maths; they do not share their interaction shell, and that gap is
+where every defect in this feature has come from.
+
+## The model
+
+A label is a position, a string, a colour, and two optional sizing fields.
+
+```ts
+{
+  x, y,            // normalized 0–1, the top-left of the box
+  text,            // the raw string; "\n" is content, not formatting
+  color,
+  size,            // index into TEXT_PX — the XS/S/M/L presets
+  width?,          // normalized wrap width, set by dragging a side
+  fontPx?,         // free font size in px, set by dragging a corner
+}
+```
+
+**Both optional fields are optional on purpose.** Every label saved before they existed
+has neither, and without them the behaviour is exactly what it was. There is no migration
+step and no session rewrite.
+
+### The box governs the text
+
+With a `width`, the text wraps by whole words to fit it, and dragging a side reflows the
+label. A single word wider than the box overflows on its own line rather than splitting
+mid-letter. Nothing is ever clipped: the box grows taller instead, because hiding a user's
+words is worse than a tall label.
+
+Without a `width`, lines break only where the user pressed Enter.
+
+### `fontPx` wins over `size`
+
+`size` is an **index** into four presets. `fontPx` is a free value written by a corner
+drag, and it takes precedence — that is what makes a corner drag continuous instead of
+snapping between four levels.
+
+Both editors' size controls reflect this: while `fontPx` is set **no preset is
+highlighted** and a `Custom` chip appears instead, because none of the four is the size on
+screen. Picking a preset **clears `fontPx`**.
+
+That clearing is load-bearing rather than tidy-up. Writing only `size` leaves the label
+untouched, so the control lights up L while the text stays where a corner drag left it.
+It shipped that way twice — once per editor — because the fix was applied to one and not
+the other.
+
+**`size` and `fontPx` travel together.** The two size controls are the only places that
+write them, and both now do.
+
+## The one rule
+
+> **No consumer computes text geometry.**
+
+Everything asks `textLines`, `textBoxPx` and `resolveFontPx`. This is not a style
+preference; it is the conclusion of seven defects, each one a different place that had
+measured the text itself and drifted:
+
+| Symptom                                                  | Where the copy lived                |
+| -------------------------------------------------------- | ----------------------------------- |
+| Line breaks vanished from the exported video             | the export rasterizer               |
+| The label drew twice while being edited                  | the preview renderer                |
+| A tall label was unclickable, so clicks played the video | the hit test                        |
+| Reopening showed one line until you arrowed down         | the textarea's sizing               |
+| Changing the box did nothing to the text                 | the model had no `width` at all     |
+| The corner dots floated far below the label              | `annotationBox`                     |
+| The image editor's outline and handles disagreed         | its own renderer, export and editor |
+
+The fifth is the interesting one. It was not a stale copy; it was a **missing field**, and
+it is why the handles looked broken when they were only writing somewhere nothing read.
+
+The last one is the cautionary one. Earlier notes said "five places", then six. There were
+**seven**, and each was found by a user hitting it rather than by anyone reading the code.
+Counting copies by hand is exactly the method that fails here.
+
+So the rule is now **enforced, not documented**. `one-owner.test.ts` walks every source
+file under `features/` and fails if anything except `tools.ts` indexes `TEXT_PX[...]` —
+because the preset table cannot know about `fontPx`, so anything reading it directly is
+measuring a label the user may not be looking at. That is source inspection, normally a
+junk pattern; it is kept because no behavioural test catches "someone wrote an eighth
+copy" and this failure has now shipped seven times.
+
+## What the two editors actually share
+
+Measured, not assumed:
+
+| Shared                   | Lines | What                                                           |
+| ------------------------ | ----- | -------------------------------------------------------------- |
+| `annotations/tools.ts`   | 137   | colours, presets, `textLines`, `textBoxPx`, `resolveFontPx`    |
+| `annotations/handles.ts` | 226   | `annotationBox`, `handlesFor`, `hitHandle`, `resizeAnnotation` |
+
+Sixteen exports cross from the screenshot editor's annotation package into the video
+editor: the palette, the fonts, the text geometry, the handle maths, the rough-drawing
+helpers and the redaction shapes. **The model and every measurement are one copy.**
+
+### What they do not share
+
+| Not shared                                            | Lines |
+| ----------------------------------------------------- | ----- |
+| `screenshots/annotations/annotation-layer.tsx`        | 688   |
+| `video-editor/annotations/video-annotation-layer.tsx` | 550   |
+
+The two interaction shells. Much of that difference is real: the video layer carries a
+timeline window (`start`/`end`), visibility per frame, and a draft/commit flow tied to the
+player; the screenshot layer carries crop, an undo scene and slides.
+
+But the **inline text editor inside them is nearly identical** — the overlaid `<textarea>`,
+the armed-blur dance that stops the opening click from cancelling the edit, the focus
+effect that sizes it and places the caret, and the commit path. Four of the six defects
+above lived in exactly that duplicated block, usually because one editor's behaviour was
+ported to the other and one half was left behind.
+
+**So: how much more can be reused?** That block, and it is the obvious next extraction — a
+hook owning the textarea's lifecycle and the style that keeps it matching the label. It is
+not done, and this page should not be read as claiming it is.
+
+## Decisions, and where they are recorded
+
+| Decision                                            | Why                                                                                                                         | Recorded in                                                       |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| The box governs the text                            | Every consumer had to measure the string to know where the annotation was, so every consumer needed the same measuring code | [ADR-adjacent spec](../specs/2026-09-27-text-annotation-geometry) |
+| One owner for text geometry                         | Seven copies drifted, each found by a user rather than by reading the code                                                  | this page, enforced by `one-owner.test.ts`                        |
+| A corner writes a free `fontPx` instead of snapping | Snapping to four presets is what made a slow drag jump                                                                      | [spec](../specs/2026-09-27-text-annotation-geometry)              |
+| `width` and `fontPx` are optional                   | Every label already saved has neither, so there is no migration                                                             | this page                                                         |
+| SVG plus an overlaid textarea, not canvas           | Excalidraw overlays a textarea too; the difference was never the rendering technology                                       | [spec](../specs/2026-09-27-text-annotation-geometry)              |
+| Both editors share the model and the maths          | A shared owner only one editor uses drifts again                                                                            | [spec](../specs/2026-09-27-text-annotation-geometry)              |
+
+## State
+
+**Shipped and working in both editors:** the width-bound box, continuous corner scaling,
+the `Custom` state, four corner handles plus both side midpoints, the solid selection
+outline, editable multi-line labels, and wrapping that survives the export.
+
+**Enforced rather than documented:** the one-owner rule, by a test that fails if anything
+outside `tools.ts` indexes the preset table.
+
+**Not done, and named rather than implied:**
+
+- The inline text editor is still duplicated between the two layers — the overlaid
+  textarea, the armed-blur dance, the focus effect, the commit path. Four of the seven
+  defects lived there. Extracting it into a hook is the next step.
+- No Playwright assertion covers the visual match between editor and label. jsdom cannot,
+  and two of the seven defects were of exactly that kind.
+- Clicking the video to play it still competes with clicking an annotation. A hit-test
+  miss is what made those clicks reach the player, so it felt like part of this work; it
+  is a decision about the player.
+
+## Handles
+
+Text gets Excalidraw's shape: a dot in each of the four corners to scale the font, and both
+side midpoints to set the wrap width. Corners change how big the text is; sides change how
+much room it has.
+
+Dragging the west side keeps the right edge put by moving the origin. Corner scaling is
+measured from the edge the user is **not** dragging, so the opposite corner stays put, and
+the result is clamped so text can never become invisible or larger than the frame.
+
+The selection outline is a plain rectangle. It used to be dashed; marching ants read as
+"still loading" and fought the corner dots for attention.
+
+## Editing
+
+Both editors overlay a real DOM `<textarea>` on the label and hide the label while it is
+open, so the two never draw on top of each other.
+
+This is the same approach Excalidraw uses, and worth stating because it comes up: Excalidraw
+does **not** draw an input into its canvas — nothing can type into a canvas. It overlays a
+textarea and commits to the canvas on blur. The difference was never the rendering
+technology; it was that they measure text in one place.
+
+- **Plain Enter** commits. **Shift or Alt + Enter** inserts a newline, like a spreadsheet cell.
+- **Double-click** reopens an existing label, prefilled, with the caret at the end.
+- Reopening **sizes the textarea to its content immediately**, because its auto-grow runs on
+  `input` and that never fires for a prefilled value.
+
+One subtlety worth knowing before touching this code: the pointer is captured on the
+**layer**, never on the node under the cursor. A `dblclick` only fires when both clicks
+share a target, and the node under a label is a `<tspan>` that React re-renders and then
+removes when the editor opens. Capturing there silently kills double-click-to-edit.
+
+## Export
+
+The rasterizer emits one `<tspan>` per wrapped line. SVG `<text>` neither wraps nor honours
+a newline on its own, so a label that looked right in the preview would otherwise ship as a
+single run with the breaks gone — discovered only after the export, which is the worst
+moment to discover anything.
+
+## What is not covered by tests, and why
+
+jsdom has no layout engine. It cannot verify that the textarea visually matches the label,
+nor that a rendered box is where it appears. Two of the six defects were of exactly that
+kind.
+
+The geometry is pure and exhaustively unit-tested; the consumers are tested for
+**delegating** rather than computing. The visual match belongs in the Playwright suite,
+which runs pre-push and in the release candidate. It is not written yet.

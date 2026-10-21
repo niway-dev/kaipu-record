@@ -5,8 +5,239 @@ description: Proposal to evaluate shared typed token references and a gradual mi
 
 # Typed styles with StyleX across desktop and web
 
-> **Status: 🔵 Proposed — pending analysis** (2026-09-12). This records a direction
-> to evaluate later, not an approved implementation plan. No migration has started.
+> **Status: 🟡 In progress — stages 0–1 shipped, stage 2 started** (updated
+> 2026-10-02). ADR 0008 settled the direction and the four stages; stages 0 and 1
+> are on `main` (PR #212). Stage 2 is migrating the desktop's primitives into
+> `@kaipu/ui` under `atoms/`. The original proposal below still describes the end
+> state.
+
+## What the first experiment proved (2026-10-01, `be6eed7`)
+
+One `KaipuButton` written with `stylex.create` in a new source-exported package,
+`packages/ui` (`@kaipu/ui`), compiles in **both** pipelines with official StyleX
+pieces only (0.19.1) — no community Vite plugin:
+
+- `@stylexjs/babel-plugin` passed **inline** to `@vitejs/plugin-react`, in
+  `apps/web-hono/vite.config.ts` and the renderer section of
+  `apps/kaipu-record/electron.vite.config.ts`;
+- `@stylexjs/postcss-plugin` scanning the StyleX sources and writing atomics where a
+  stylesheet says `@stylex;` (`apps/web-hono/src/stylex.css`,
+  `apps/kaipu-record/src/renderer/src/dev/stylex-probe.css`).
+
+Both production builds exit 0. The web build emits a separate ~1 KB `stylex-*.css`;
+the renderer merges the atomics into its `index-*.css`. Every color in the emitted
+CSS is a `var(--kaipu-*)` reference, so the existing theme blocks style the shared
+button with no theming code in the component — the token layer crossed the
+desktop/web boundary exactly as this proposal hoped.
+
+### The working pipeline
+
+How a style written in `@kaipu/ui` reaches a screen, on either surface:
+
+```
+packages/ui/src/*.tsx            stylex.create({...}), colors as var(--kaipu-*)
+        │
+        ├─ JS side:  @stylexjs/babel-plugin, INLINE in @vitejs/plugin-react
+        │            (vite.config.ts / electron.vite.config.ts) — turns
+        │            stylex.props(...) into class names on the element
+        │
+        └─ CSS side: @stylexjs/postcss-plugin scans the same sources
+                     (narrow include globs; parses with babel.config.cjs)
+                     and writes the atomic rules where a sheet says `@stylex;`
+                     (web: src/stylex.css · desktop: dev/stylex-probe.css)
+
+var(--kaipu-*) resolves because BOTH surfaces define the prefixed set:
+web via index.css, desktop via assets/base.css (both @kaipu/tokens imports).
+```
+
+Toolchain invariants learned the hard way, which the migration must keep:
+
+1. The PostCSS plugin's scanner parses its `include` files with its **own** Babel:
+   it needs the `babel.config.cjs` each app now carries (that file exists _only_
+   for the scanner — Vite's React transform takes its plugins inline and never
+   reads it), and its globs must point at StyleX sources only, or it chokes on
+   generated TS such as `routeTree.gen.ts`.
+2. Babel 8 removed `preset-typescript`'s `isTSX`/`allExtensions`; older recipes
+   that pass them fail the build.
+3. **Every StyleX transform in the pipeline must agree on its options.** The
+   inline plugin ran `dev: true` on the dev server while the scanner ran
+   `dev: false`: different class names, a correct sheet nothing referenced, dev
+   unstyled while production worked. `dev` is pinned `false` in both configs; to
+   ever flip it, flip it everywhere at once.
+4. **An undefined `var()` silently unsets the declaration.** The desktop defined
+   only the unprefixed token set, the button said `var(--kaipu-accent-primary)`,
+   and the background computed transparent with the sheet present and the class
+   applied. Both surfaces now import the prefixed set; the permanent fix is typed
+   `defineVars` generated from `@kaipu/tokens`, which makes a missing spelling a
+   compile error instead of an invisible button.
+
+Probes to see it render: web `/dev/stylex` (unlinked route), desktop
+`#stylex-probe` (dev-only, tree-shaken from packaged builds). Both show every
+`Button` variant and size, plus a raw control with literal colors: where the
+raw control renders and the token-driven buttons do not, the surface's token
+variables are missing, not StyleX. Since stage 2 the control is a local button
+inside each probe rather than a `Button` variant, so a debugging aid stays out
+of the product's API. (`KaipuButton`, named above as the first spike, is now
+`Button` in `packages/ui/src/atoms/`.)
+
+Still open before widening: dev-server HMR behaviour of the scanner,
+[facebook/stylex#1918](https://github.com/facebook/stylex/issues/1918) on our Vite,
+and typed `defineVars` generated from `@kaipu/tokens` (the button consumes the
+tokens as `var()` strings). The agreed shape: the web-ui CSS dedup ships first,
+the auth screens (dark today) are rebuilt on shadcn-cssinjs as the pilot, and the
+cloud shell is born in StyleX when it goes live — Tailwind leaves with its last
+shadcn screen. The design spec and ADR will carry those decisions.
+
+## What the second pass proved (2026-10-02)
+
+The three things the first pass declared untested, now measured:
+
+- **Live-edit freshness: yes.** With the web dev server running, a style value
+  edited in `@kaipu/ui` reached both the served sheet and the component's
+  compiled class names within seconds, in lockstep (`.xixl9f9` on both sides).
+- **[facebook/stylex#1918](https://github.com/facebook/stylex/issues/1918)
+  (stale chunk hash): does not reproduce here.** Two production builds differing
+  in one style value produced different sheet filenames, contents and JS chunk
+  hashes.
+- **Typed tokens: shipped as generated `defineVars`.** `@kaipu/tokens` now also
+  generates `stylex/kaipu.stylex.ts` — typed references over the prefixed
+  custom properties, so a token typo is a compile error while the existing
+  `[data-theme]` blocks keep owning the values. The button consumes
+  `tokens.accentPrimary` instead of a `var()` string; both builds emit the
+  defining `:root` block (`--xbxcam6: var(--kaipu-accent-primary)`) and the
+  atomics referencing it. Replacing the references with literal values +
+  `createTheme` (retiring the css imports) stays a spec decision, on purpose.
+
+Invariant 5, learned shipping it: **the import specifier must end in
+`.stylex`** — the compiler refuses `@kaipu/tokens/stylex` and accepts
+`@kaipu/tokens/kaipu.stylex` (the export map key carries the suffix). And a
+corollary of invariant 4 caught in the same hour: the scanner's `include`
+globs are part of the correctness surface — a formatter-collapsed config line
+silently dropped the tokens glob, and the sheet _used_ the hashed vars without
+_defining_ them. The grep that catches it:
+`grep -- '--x[a-z0-9]*:var(--kaipu-' <emitted css>` must match.
+
+## Stage 2a — the shared library, as it stands (2026-10-03)
+
+Eleven of the desktop's thirteen primitives are gone from the app and nine of
+them live in `@kaipu/ui`. Nothing here changes a pixel: every component was
+migrated value for value.
+
+|                        | Components                                                   |
+| ---------------------- | ------------------------------------------------------------ |
+| `atoms/`               | `Badge` `Button` `Card` `Input` `Row` `SearchInput` `Toggle` |
+| `molecules/`           | `Modal` `Popover` `ToastList`                                |
+| Deleted — no consumers | `IconButton` `PageHeader`                                    |
+| Still in the desktop   | `Select`                                                     |
+
+`Select` is the only one left, and not for want of effort — see the limits
+section in the spec. Radix publishes its state through data attributes that
+StyleX has no way to select on, so migrating it means lifting that state into
+React: a behavioural rewrite of the component whose keyboard handling is the
+whole reason Radix is there. Stage 4 settles it, along with which headless
+library both surfaces share.
+
+What the desktop's `ui/` folder still holds is no longer components: the toast
+host (six lines wiring this app's store to the shared stack), the toast store
+itself, and two helpers.
+
+### Dependencies this removed
+
+`@radix-ui/react-switch` is gone. `Toggle` is a `<button role="switch">`, which
+is what the primitive rendered anyway, and the native button already provides
+keyboard activation and focus. It mattered because the web runs on
+`@base-ui/react`: a shared component carrying Radix would pull a second headless
+library into whichever surface lacked it.
+
+### What it cost in bytes: almost nothing
+
+Desktop renderer bundle, built before (`228bf47`) and after the whole migration:
+
+|     | Before    | After     |
+| --- | --------- | --------- |
+| CSS | 172.4 KB  | 170.9 KB  |
+| JS  | 2824.1 KB | 2815.7 KB |
+
+−1.5 KB and −8.4 KB, the JS mostly from dropping Radix's switch. **This migration
+is not a performance change and should not be sold as one.** Its return is
+type-safety and shareability. The landing is untouched so far, so there is
+nothing for a web preview to measure yet; that comes when stage 2b replaces the
+home's hand-drawn mocks with the real components.
+
+### Decisions inside the Button worth knowing
+
+- **Hover is a separate style layer applied only while enabled**, not a `:hover`
+  nested in each variant. The CSS it replaces guarded every hover with
+  `:not(:disabled)`; as one declaration the outcome would depend on the
+  compiler's pseudo-class ordering instead of on something readable.
+  **The layer must repeat the variant's value as its `default`.** A later style
+  that names a property replaces it whole, so `{ default: null, ":hover": x }`
+  erases the variant's value instead of keeping it. That shipped: every enabled
+  Button, Modal button and SourceCard action rendered with the browser's
+  default fill (white buttons with only the accent glow left), while disabled
+  ones — no hover layer — looked right. Tests in `button.test.tsx` and
+  `modal.test.tsx` now fail if an enabled button carries fewer of the
+  variant's classes than a disabled one.
+- **`type="button"` is now the default.** A bare `<button>` inside a form
+  submits it. The only form using the primitive (`features/auth/auth-form.tsx`)
+  passes `type="submit"` itself, so the default costs nothing — and that same
+  line is the only `className` override on a primitive in the whole renderer.
+- **Two values have no token behind them.** The `ghost`/`outline` hover is the
+  accent at 10% alpha, hard-coded here as it is in the desktop's stylesheet. And
+  the `transition` token is the CSS shorthand `"150ms ease"`, which no longhand
+  accepts, so the component splits it into duration and easing. Both are debts
+  of the token layer, not of the component.
+
+### Testing
+
+`packages/ui` runs vitest with the renderer's conventions (Testing Library,
+jsdom, co-located tests) and **the StyleX babel plugin with the same options as
+every other transform** — invariant 3, and not optional either: `stylex.create`
+is a compile-time call, so without the plugin the module throws on import.
+
+The tests assert relationships between emitted classes, never a hash: a hash
+changes with any value change, which is a refactor the test must survive.
+"primary and danger do not look the same" and "a disabled button carries no
+hover rule" are the properties whose breakage would reach a user.
+
+The setup file is four lines, against the renderer's ~150 of IPC, i18n and
+settings stubs. That gap is ADR 0009's boundary working; if the file starts
+growing stubs, the boundary was crossed.
+
+### The CPU-budget test failure this exposed
+
+Adding this test suite took `turbo`'s test tasks from 9 to 10 at
+`concurrency: 20`, and two tests in
+`pages/video-editor/video-editor-page.test.tsx` then failed under
+`bun run verify` — a different one each run, while passing in isolation (25/25),
+passing with the desktop suite alone (194 files, 1329 tests), and `verify` green
+on a clean tree.
+
+There turned out to be **two** causes, found one at a time because each run
+surfaced a different test:
+
+1. **Testing Library's default `findBy*` timeout of 1000 ms.** The two heaviest
+   assertions landed at 1016 ms and 1106 ms. They were already `await findBy*` —
+   the selectors were never the problem, the budget was. The renderer's setup now
+   sets `asyncUtilTimeout: 5000`. A suite's wall-clock under parallel load is not
+   a property of the product; a genuinely missing element still fails, five
+   seconds later.
+2. **Assertions that read the DOM one render too early.** `R arms the Box tool`
+   asserted `className` synchronously right after `fireEvent.keyDown`, so it only
+   passed when the machine won the race. Five assertions in that file now wait
+   for the render or effect they describe.
+
+Three of those five were negatives — `expect(startExport).not.toHaveBeenCalled()`
+straight after a click. A negative with nothing to anchor it passes just as
+happily when the handler never ran, so each now waits for the guard's toast first
+and asserts the negative after. They were green for the wrong reason before.
+
+The file also gained a test: `V` handing the tool back to `select` after `R`
+armed Box. `toolForShortcut` proved the mapping as a pure function, but nothing
+proved the page acted on it and disarmed the previous tool.
+
+Stability check: `bun run verify` green three consecutive times, 10/10 test
+tasks, 26 tests in that file.
 
 ## Motivation
 

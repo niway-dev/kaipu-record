@@ -5,7 +5,7 @@
  *   bun run plan revoke <email>
  *   bun run plan show <email>
  *
- * Uses DATABASE_URL from the environment (the root script loads apps/server-hono/.env,
+ * Uses DATABASE_URL from the environment (the root script loads packages/infra-db/.env,
  * which never overrides a value already set, so a production URL can be passed inline).
  */
 import { grantManualPlan, ManualPlanGrantError, revokeManualPlan } from "@kaipu/application";

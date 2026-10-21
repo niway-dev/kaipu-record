@@ -1,0 +1,253 @@
+---
+title: "ADR 0005: Draft → Ready for review is the release-candidate readiness signal"
+description: Draft → Ready for review requests release checks and builds; Merge requirements reports the merge gate, with a temporary alias during ruleset migration. Consolidation remains a future proposal.
+---
+
+# ADR 0005: Draft → Ready for review is the release-candidate readiness signal
+
+## Status
+
+Draft-readiness policy merged in [PR #174](https://github.com/niway-dev/kaipu-record/pull/174)
+on 2026-09-25; full GitHub lifecycle validation remains pending. This follow-up changes documentation and display
+names only; consolidation is deferred. Amends the candidate tier of
+[ADR 0004](./0004-local-first-release-verification). The live ruleset still required
+`Release candidate verified` when inspected on 2026-09-25.
+
+## Context
+
+The label-based candidate workflow subscribed to all label changes. On PR #165,
+run #13 started for `autorelease: tagged`, #14 for `verify`, #15 for a newer commit,
+and #16 for removal of `autorelease: pending` after merge. #15 legitimately replaced
+an older revision; #13 and #16 were unnecessary work. Checking readiness inside the
+expensive job also allocated a runner to report a normal not-ready state as failure.
+
+The first Draft → Ready implementation separated verification, cancellation and a
+required gate. An ordinary PR showed two skipped checks plus the gate and its
+temporary legacy alias. The owner found these names and extra checks confusing.
+The initial recommendation preserved the existing gate without comparing a single
+conditional job. The “optimize pipeline” discussion explored consolidation, but the
+owner requested only documentation and clearer names now. The proposal is recorded
+below for later evaluation, not authorized for implementation.
+
+## Decision
+
+1. Release-please creates drafts using `draft-pull-request: true`, distinct from
+   drafting a GitHub Release. Draft updates do not allocate a verification runner.
+2. The human presses GitHub's **Ready for review** button. This emits
+   `ready_for_review`; it is an event, not a pipeline step or proof of verification.
+3. A ready release candidate runs the full verification and both app builds.
+   Later code changes while ready trigger verification again. New revisions cancel
+   superseded work. One request is not a promise of one execution regardless of changes.
+4. The workflow is **PR checks**. **Run release checks and builds** performs the expensive
+   verification. **Merge requirements** is the separate gate: ordinary PRs pass without
+   release verification; ready release PRs require a successful verification result.
+5. The gate distinguishes success, failure, cancellation and unexpected skips. It does
+   not perform the tests itself. The temporary alias mirrors the gate result.
+6. Concurrency is scoped to the expensive job, keyed by PR (or selected ref for manual
+   dispatch). **Cancel verification when returned to draft** joins that group to cancel
+   in-flight verification. The gate and alias do not join the group.
+7. Draft creation and ordinary draft updates keep the expensive jobs skipped at job level
+   to preserve runner savings, but **the gate itself never skips** (corrected 2026-09-27,
+   see below). Returning a release PR to draft also runs the cancellation job.
+8. Label events are absent. Closed or merged PRs and title/body edits allocate no
+   runner. `edited` with a base change supports stacked PRs retargeted to `main`.
+   Irrelevant events do not join the cancelling concurrency group.
+9. Manual dispatch intentionally verifies the selected ref without a PR or draft check.
+
+## Correction, 2026-09-27: one report per commit, from the run that verified it
+
+This section has now been wrong twice, in opposite directions, and both errors came from
+guessing at how GitHub resolves a required check instead of measuring it. The measurement,
+taken on the desktop 0.9.0 candidate (PR #178):
+
+| Commit    | Check runs named `Release candidate verified` | Rollup    | Merge       |
+| --------- | --------------------------------------------- | --------- | ----------- |
+| `0626081` | skipped + success                             | `SUCCESS` | allowed     |
+| `c78b287` | failure + success                             | `FAILURE` | **BLOCKED** |
+| `fa01a9b` | failure + success                             | `FAILURE` | **BLOCKED** |
+
+**GitHub takes the worst conclusion across every run of that name on the commit, not the
+latest one.** `skipped` is neutral; a `failure` is permanent and cannot be outvoted by a
+success that arrives later.
+
+### Why a commit gets more than one run
+
+release-please force-pushes the branch **and** rewrites the PR body, so `synchronize` and
+`edited` arrive in the same second and GitHub starts two runs on the same commit. Returning
+a candidate to draft and marking it ready again does the same thing without a new commit.
+
+### What each version of this decision got wrong
+
+**The original** had the gate skip on drafts and irrelevant events, reasoning that a skipped
+job reports nothing and leaves the check unsatisfied. Half wrong: a skipped job does report
+a check run, but it is neutral, so it cannot satisfy the requirement on its own either.
+
+**The first correction** over-generalized from that into "the required check must never
+skip", made the gate unskippable and had it fail closed on any run that verified nothing.
+That is what blocked desktop 0.9.0 on three consecutive revisions: the twin `edited` run
+finished in three seconds with `GATE: failure`, the real run passed four minutes later, and
+because the rollup takes the worst conclusion the verified candidate could not merge. The
+regression script even asserted the broken property — it banned every condition on the gate,
+which is exactly the condition it needed.
+
+### The rule that replaces both
+
+> **A commit receives exactly one report of the required check, and it comes from the run
+> that verified that commit.**
+
+The gate reports when this run's `verify` — and, for a desktop candidate, its E2E — reached
+a real conclusion, whatever that conclusion is. It stays silent when they are `skipped`
+(the twin `edited` run, or a draft) or `cancelled` (superseded by a newer revision). A run
+that knows nothing about the commit says nothing about it.
+
+Silence is safe for a reason worth stating, because it is the whole safety argument:
+`skipped` is neutral, so it can only decline to speak, never approve. What satisfies the
+requirement is a real success, and the only job that can produce one is `verify` in the same
+run. Every non-draft candidate revision gets such a run, because `synchronize` and
+`ready_for_review` both start one.
+
+The conditions are read off `needs.*.result` and never off the event shape. A condition on
+`draft`, `state` or `changes.base` is how a run that **did** verify ends up silent — the
+original failure mode. `scripts/check-workflow-eligibility.ts` enforces that distinction
+per scenario: it evaluates the real `if:` expressions against a modelled `needs` context and
+fails if a run that verified stays silent, or a run that did not verify speaks.
+
+## User-visible flow and names
+
+| Situation                          | Gate behavior                               | Actual work                                           |
+| ---------------------------------- | ------------------------------------------- | ----------------------------------------------------- |
+| Ordinary PR, any event             | `Merge requirements` succeeds               | Brief applicability summary; no candidate tests       |
+| Release opened or updated in draft | **Silent** — no report on this commit       | No candidate runner; GitHub blocks draft merge anyway |
+| Human marks release ready          | `Merge requirements` waits for verification | Separate job runs checks and both app builds          |
+| Ready release changes              | New gate waits for verification             | Replaces obsolete verification                        |
+| release-please rewrites the body   | **Silent** — the twin run verified nothing  | Nothing; the `synchronize` run owns the verdict       |
+| Verification fails                 | `Merge requirements` fails                  | Merge blocked                                         |
+| Verification succeeds              | `Merge requirements` succeeds               | Required check satisfied                              |
+| Verification superseded            | **Silent** — the newer run owns the verdict | Older run cancelled                                   |
+| Human returns PR to draft          | **Silent** — no report on this commit       | Cancellation job supersedes older verification        |
+
+Inside the verification job, steps check out candidate code, set up Bun, restore Bun
+and Turbo caches, install locked
+dependencies, **run lint, formatting, type checks and tests**, **build web app**, and
+**build API**. The separate gate step is **Check whether release verification permits merging**.
+
+| Previous name                  | Clearer display name                       | Responsibility                                                        |
+| ------------------------------ | ------------------------------------------ | --------------------------------------------------------------------- |
+| Verify release candidate       | Run release checks and builds              | Execute checks and both bundles                                       |
+| Cancel superseded verification | Cancel verification when returned to draft | Cancel in-flight candidate work on conversion to draft                |
+| Merge readiness                | Merge requirements                         | Interpret verification results and report the gate                    |
+| Release candidate verified     | Unchanged during migration                 | Compatibility alias for the current ruleset, not another verification |
+
+An ordinary PR still shows two skipped jobs, the successful gate and the temporary
+alias. Skipped jobs allocate no runner. Renaming them does not hide them.
+
+On a release candidate the twin run that release-please's body rewrite starts now shows
+every job skipped, the gate included. That is the run that used to go red in three seconds
+and block the release.
+
+## Deferred proposal: optimize pipeline
+
+The owner asked to save this comparison and revisit it later. Do not implement it
+as part of the naming/documentation change.
+
+|                          | Current separate jobs, after alias removal          | Proposed single conditional job                      |
+| ------------------------ | --------------------------------------------------- | ---------------------------------------------------- |
+| Ordinary PR checks       | Two skipped jobs plus successful Merge requirements | One successful Merge requirements                    |
+| Ordinary PR runner use   | One brief gate job                                  | One brief combined job                               |
+| Ready release runner use | Verification job, then gate job                     | One job does verification and reports its own result |
+| Failed tests             | Verification and gate fail                          | One check fails; test failure visible in its steps   |
+| Detail visibility        | Separate public job results                         | Conditional steps inside the one public check        |
+
+Draft → Ready remains a human action through GitHub's button in either design. A
+ready candidate still re-verifies on code changes; a failed candidate blocks merge.
+The proposed job would conditionally perform checkout, install, checks and builds,
+while ordinary PRs would report that release verification is not applicable.
+Consolidating cancellation and preserving failure propagation require evaluation.
+The illustrative green check for drafts in chat is not current behavior; decide
+whether to retain zero-runner draft updates before any future implementation.
+
+An automatic release label does not hide skipped jobs; an `if` still reports a skip.
+Release branches are already identifiable. A selectively dispatched workflow could
+avoid some checks but adds result-to-revision and merge-gate coordination. Keeping
+the separate jobs remains a valid alternative. Compare UI clarity, actual billed
+jobs and maintenance complexity before selecting a design.
+
+## Required-check migration
+
+Ruleset `main release` (ID `23974690`) still requires `Release candidate verified`.
+The temporary alias mirrors the gate job: success passes; failure,
+cancellation or an unexpected skip fails. Its old name must stay literal until migration.
+
+1. Merge the workflow with both `Merge requirements` and the legacy alias.
+2. Confirm `Merge requirements` reports on a PR.
+3. With owner authorization, fetch the current ruleset and replace only the old
+   required-check context with `Merge requirements`. Preserve integration ID `15368`,
+   enforcement, bypass settings, branch targets, deletion/non-fast-forward protections
+   and the current strictness setting. Do not disable protection during migration.
+4. Remove `legacy-gate` in a follow-up change. Retire the unused `verify` label if desired.
+
+Do not migrate through the intermediate name `Merge readiness`. Until migration,
+ordinary PRs show **two successful checks plus two skipped checks**; afterward they
+show **one successful check plus two skipped checks**. Existing
+historical runs keep their old names. Live ruleset changes are not part of this local edit.
+
+## Alternatives rejected
+
+- **Keep the verify label as readiness signal:** label bookkeeping caused unrelated runs;
+  draft readiness is explicit and GitHub blocks draft merges natively.
+- **Require checks only for a source branch:** the current branch ruleset targets the
+  destination; it does not express this source-branch condition.
+- **Drop the gate or skip verification of later ready revisions:** permits publishing
+  code that the candidate verification did not validate.
+
+## Consequences and cost
+
+Ordinary ready PRs still allocate one brief runner; this is not zero-cost CI.
+Successful release verification uses a verification runner and a separate gate runner.
+Draft updates allocate no CANDIDATE runner, but the gate runs on every pull-request event
+by necessity (see the correction below), so it is a brief runner each time rather than
+none. Conversion back to draft also uses a brief cancellation run. The temporary alias
+still adds a job.
+Release-please maintenance and tag publication workflows retain their own costs.
+Savings require billing measurement, not multiplying UI durations.
+
+Names are clearer, but job count, triggers, conditions, dependencies, concurrency,
+permissions, commands and runner allocation are unchanged by this follow-up.
+
+## Validation and integration dependencies
+
+`bun run verify` runs `scripts/check-workflow-eligibility.ts`, so the harness now runs on
+every pre-push rather than when someone remembers it; `actionlint` still has to be run by
+hand against the workflow. The harness covers eligibility, concurrency configuration, the
+one-report-per-commit invariant, and the real gate and alias shell scripts. It does not
+emulate GitHub's scheduler.
+
+**It no longer has to prove check selection across multiple runs on one commit — that is
+measured.** GitHub takes the worst conclusion of all runs of a check name on the commit,
+not the latest; the numbers are in the correction above. The harness encodes the
+consequence: a run that verified must report, a run that did not must stay silent.
+
+Before declaring cloud validation complete, exercise ordinary and retargeted PRs,
+draft updates, Ready → Draft → Ready (including the same SHA), a new commit during
+verification, failure/cancellation, irrelevant edits/labels, and manual dispatch.
+Confirm the required check blocks while the latest verification is pending or failed.
+Check that release-please creates drafts and preserves manually selected readiness
+when updating. Existing release PRs are not automatically converted by this config;
+inspect their current states at integration rather than assuming none are open.
+
+## Non-goals
+
+Consolidating jobs now, zero runner cost for every PR, changes to tests/builds/caching,
+removing tag-time verification, cross-workflow dispatch infrastructure, or changing the live ruleset
+without a coordinated migration.
+
+## Reopen when
+
+An unverified revision can merge, cancellation or same-SHA lifecycle checks behave
+incorrectly, a second collaborator needs ordinary cloud verification, or measured
+gate costs justify a different reporting mechanism.
+
+## Guidance
+
+Reusable mechanics: [PR checks](https://github.com/csdev19/general-knowledge/blob/main/monorepos/pr-checks.md)
+and [release-gated verification](https://github.com/csdev19/general-knowledge/blob/main/monorepos/release-gated-verification.md).

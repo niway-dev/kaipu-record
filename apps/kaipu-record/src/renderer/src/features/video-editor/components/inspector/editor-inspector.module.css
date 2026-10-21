@@ -1,0 +1,11 @@
+/* A flex column so a panel can claim the leftover height and push its destructive
+   action to the bottom (.panel { flex: 1 } + .dangerButton { margin-top: auto }). */
+.column {
+  display: flex;
+  flex-direction: column;
+  width: 288px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  border-left: 1px solid var(--border);
+  background: var(--bg-card);
+}

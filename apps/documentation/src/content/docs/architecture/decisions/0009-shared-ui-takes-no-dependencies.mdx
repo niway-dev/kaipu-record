@@ -1,0 +1,108 @@
+---
+title: "ADR 0009: Shared UI components take no dependencies, and labels arrive as props"
+description: "@kaipu/ui components may not import a router, i18n, IPC or the domain; text and navigation are passed in by each surface. Components are grouped as atoms by a mechanical rule rather than by taxonomy."
+---
+
+# ADR 0009: Shared UI components take no dependencies, and labels arrive as props
+
+## Status
+
+| Field         | Value                                                                    |
+| ------------- | ------------------------------------------------------------------------ |
+| Status        | Accepted — one component migrated (`Button`), its consumers not yet      |
+| Date          | 2026-10-02                                                               |
+| Amends        | —                                                                        |
+| Builds on     | [ADR 0008](/architecture/decisions/0008-stylex-shared-styling/), stage 2 |
+| Superseded by | —                                                                        |
+
+## Context
+
+ADR 0008's stage 2 moves the pieces of the desktop UI that the landing replicates
+by hand into `@kaipu/ui`, so the landing's mini-Kaipu becomes the product's own
+shell. Taking the existing components as they are does not work, and the reasons
+are specific rather than stylistic.
+
+**The same string already exists twice, under two names.** The landing and the
+desktop name the identical label in different i18n namespaces:
+
+| Desktop                    | Landing                 | Value             |
+| -------------------------- | ----------------------- | ----------------- |
+| `record.readyToRecord`     | `landing.homeAppReady`  | "Ready to record" |
+| `record.startRecordingBtn` | `landing.homeAppStart`  | "Start Recording" |
+| `record.change`            | `landing.homeAppChange` | "Change"          |
+| `record.micLabel`          | `landing.homeAppMic`    | "Mic"             |
+
+A component that called `useTranslations` for itself would have to pick one
+namespace and break the other surface.
+
+**Navigation is a different library on each surface.** The desktop's rail is
+built on `react-router-dom`'s `NavLink`; the web runs TanStack Router. On the
+landing the replica navigates nowhere at all — there the link is a `<span>`.
+
+**The desktop's components reach for the renderer's world.** The renderer's own
+test setup needs roughly 150 lines of IPC, settings and i18n stubs before a
+component will render. A component carrying that cannot be mounted by the web.
+
+## Decision
+
+**A component in `@kaipu/ui` may not import a router, `@kaipu/i18n`, IPC
+(`window.electronAPI`), `@kaipu/domain`, a repository or a fetcher.** Labels,
+navigation and data arrive as props. Each app keeps a thin container that
+resolves the text, navigates, and passes the values down.
+
+**Components are grouped as `atoms/` by a mechanical rule:** an atom imports no
+other component from this package and holds no state. A piece that composes
+atoms, or keeps presentation state, goes in `molecules/` — created when the
+first one exists, not in advance. The complete product window, when it arrives,
+goes in `shell/` rather than `organisms/`, because it will hold exactly one
+thing and the name should say what it is.
+
+**Consumer overrides are StyleX styles (`style?: StyleXStyles`), never a
+`className`.** The classes are generated and atomic, so a string cannot win the
+cascade predictably.
+
+## Alternatives rejected
+
+- **Let components translate themselves.** Measured false premise: the two
+  surfaces hold the same strings under different namespaces, so one of them
+  would break. Consolidating the namespaces first is possible, but it couples a
+  component migration to an i18n cleanup for no gain.
+- **A flat `components/` folder**, as `@kaipu/web-ui`, shadcn, Radix and MUI all
+  use. This is the mainstream choice and the reason is real — the atom/molecule
+  border gets argued in every review. The mechanical rule above removes the
+  argument, and the owner wants the layered base; if the rule stops settling
+  cases, this is the alternative to return to.
+- **Move the desktop components as they are and let the web adapt.** They import
+  the router and the IPC bridge; the web cannot mount them, which is the whole
+  problem rather than a detail of it.
+- **Keep two implementations in sync by hand.** The status quo the landing's
+  hand-drawn replica already demonstrates failing.
+
+## Consequences
+
+- `@kaipu/ui`'s test setup is four lines. If it ever starts growing stubs, the
+  boundary has been crossed somewhere — the file says so in a comment.
+- Every shared component grows a prop for each label it shows. That is verbose
+  on purpose: it is what lets one component serve a product screen and a
+  marketing replica.
+- The duplicated i18n keys above stay duplicated for now. They can be
+  consolidated later without touching the components, because no component
+  depends on either namespace.
+- The desktop's `ui/` primitives keep their `className` passthrough until each
+  one migrates. Exactly one call site in the renderer uses it
+  (`features/auth/auth-form.tsx`), so the cost of dropping it is known.
+
+## Non-goals
+
+A visual redesign, replacing the desktop's primitives wholesale, and extracting
+anything the landing does not replicate. Pieces the landing draws deliberately
+as something else — the Finder window in "Your files", the macOS titlebar
+lights, the native menu-bar card — are not product UI and never move here.
+
+## What would reopen this
+
+The mechanical atom rule failing to settle where a component belongs, which
+would send the structure back to a flat `components/` folder; or a shared
+component needing so many label props that the prop list becomes the reason
+nobody reuses it, which would argue for passing a resolved strings object
+instead of one prop per label.

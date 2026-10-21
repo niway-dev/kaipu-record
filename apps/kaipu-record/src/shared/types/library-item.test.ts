@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { AVAILABILITIES, hasCloudCopy, hasLocalCopy, type LibraryItem } from "./library-item";
+import {
+  AVAILABILITIES,
+  hasCloudCopy,
+  hasLocalCopy,
+  isCloudUploadEligible,
+  type LibraryItem,
+} from "./library-item";
 
 const base: LibraryItem = {
   assetId: "a1",
@@ -8,6 +14,8 @@ const base: LibraryItem = {
   createdAt: 1,
   durationSeconds: 10,
   derivedFromAssetId: null,
+  editSavedAt: null,
+  editExportedSavedAt: null,
   local: null,
   cloud: null,
   availability: "unverified",
@@ -35,5 +43,13 @@ describe("library item helpers", () => {
       "local-unavailable",
       "unverified",
     ]);
+  });
+});
+
+describe("isCloudUploadEligible (NIW2-217)", () => {
+  it("keeps GIF exports local-only", () => {
+    expect(isCloudUploadEligible({ kind: "gif" })).toBe(false);
+    expect(isCloudUploadEligible({ kind: "recording" })).toBe(true);
+    expect(isCloudUploadEligible({ kind: "screenshot" })).toBe(true);
   });
 });

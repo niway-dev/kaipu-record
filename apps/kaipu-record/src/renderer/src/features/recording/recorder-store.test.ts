@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { LocalRecording } from "@shared/types";
+import type { LocalRecording, RecordingSettings } from "@shared/types";
 import type { ControlCommand } from "@shared/types/ipc";
 import { startEngine, type EngineHandle } from "@renderer/features/recording/recorder-engine";
+// Type-only (erased at runtime), so it does not run the store's import-time side effect early.
+import type { StartInput } from "./recorder-store";
 import { reportError } from "@renderer/features/analytics";
 import { DEFAULT_LOCALE } from "@kaipu/i18n";
 import es from "@kaipu/i18n/messages/es";
@@ -61,13 +63,18 @@ const input = {
   systemAudio: false,
 };
 
-function fakeEngine(): EngineHandle {
+function fakeEngine(over: Partial<EngineHandle> = {}): EngineHandle {
   return {
     pause: vi.fn(),
     resume: vi.fn(),
     stop: vi.fn(async () => {}),
     readLevels: vi.fn(() => [0, 0, 0, 0, 0]),
     thumbnail: null,
+    firstMediaTimestamp: Promise.resolve({ rendererMs: 0, quality: "estimated" as const }),
+    hasSystemAudio: true,
+    setMicrophoneEnabled: vi.fn(async () => "ok" as const),
+    setSystemAudioEnabled: vi.fn(() => "ok" as const),
+    ...over,
   };
 }
 
@@ -200,6 +207,25 @@ describe("recorder-store", () => {
     unsubscribe();
   });
 
+  it("finalizes with the unfloored elapsed time in durationMs, not durationSeconds * 1000", async () => {
+    const engine = fakeEngine();
+    startEngineMock.mockResolvedValue(engine);
+
+    store.requestStartRecording(() => input);
+    await vi.advanceTimersByTimeAsync(3000); // countdown → recording starts
+    // Recording for 2.4 s: durationSeconds floors to 2, but durationMs must carry
+    // the real 2400 ms — the cursor tracker's tail cut needs the unfloored value
+    // (bug fix: RecordingFinalizeMeta.durationMs).
+    await vi.advanceTimersByTimeAsync(2400);
+
+    await stopAndSettle();
+
+    expect(window.electronAPI.recordingFinalize).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ durationSeconds: 2, durationMs: 2400 }),
+    );
+  });
+
   it("tears down and restores the window when the engine fails mid-recording", async () => {
     let onError: ((error: unknown) => void) | undefined;
     startEngineMock.mockImplementation(async (opts) => {
@@ -249,3 +275,116 @@ async function stopAndSettle(): Promise<void> {
   store.stopOrCancelRecording();
   await vi.advanceTimersByTimeAsync(700);
 }
+
+describe("recorder-store live settings", () => {
+  const settingsListeners = new Set<(settings: RecordingSettings) => void>();
+  const updateSettings = vi.fn();
+  const base: RecordingSettings = {
+    selectedSource: null,
+    selectedMicrophone: { deviceId: "mic-1", label: "Mic" },
+    isMicrophoneEnabled: true,
+    isSystemAudioEnabled: false,
+    isCameraEnabled: false,
+  };
+  const broadcast = (patch: Partial<RecordingSettings>): void => {
+    for (const listener of settingsListeners) listener({ ...base, ...patch });
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    settingsListeners.clear();
+    updateSettings.mockClear();
+    window.electronAPI.updateRecordingSettings = updateSettings;
+    window.electronAPI.onRecordingSettingsChanged = vi.fn((listener) => {
+      settingsListeners.add(listener);
+      return () => settingsListeners.delete(listener);
+    });
+    window.electronAPI.recordingWrite = vi.fn();
+    window.electronAPI.recordingFinalize = vi.fn(async () => RECORDING);
+    window.electronAPI.recordingAbort = vi.fn(async () => {});
+    window.electronAPI.recordingReportTick = vi.fn();
+    startEngineMock.mockReset();
+    expect(store.getRecorderSnapshot()).toEqual({ status: "idle", countdown: null });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function startWith(engine: EngineHandle, over: Partial<StartInput> = {}): Promise<void> {
+    startEngineMock.mockResolvedValue(engine);
+    store.requestStartRecording(() => ({ ...input, ...over }));
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(store.getRecorderSnapshot().status).toBe("recording");
+  }
+
+  it("forwards mic and system-audio changes to the engine during a take", async () => {
+    const engine = fakeEngine();
+    await startWith(engine);
+
+    broadcast({ isMicrophoneEnabled: false });
+    await vi.advanceTimersByTimeAsync(0);
+    broadcast({ isMicrophoneEnabled: false, isSystemAudioEnabled: true });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(engine.setMicrophoneEnabled).toHaveBeenCalledTimes(1);
+    expect(engine.setMicrophoneEnabled).toHaveBeenCalledWith(false, "mic-1");
+    expect(engine.setSystemAudioEnabled).toHaveBeenCalledTimes(1);
+    expect(engine.setSystemAudioEnabled).toHaveBeenCalledWith(true);
+    expect(updateSettings).not.toHaveBeenCalled();
+
+    await stopAndSettle();
+  });
+
+  it("writes the mic back to off when a late acquisition is unavailable", async () => {
+    const engine = fakeEngine({ setMicrophoneEnabled: vi.fn(async () => "unavailable" as const) });
+    await startWith(engine, { microphoneDeviceId: null });
+
+    broadcast({ isMicrophoneEnabled: true });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(engine.setMicrophoneEnabled).toHaveBeenCalledWith(true, "mic-1");
+    expect(updateSettings).toHaveBeenCalledWith({ isMicrophoneEnabled: false });
+
+    await stopAndSettle();
+  });
+
+  it("writes system audio back to off when there is no loopback track", async () => {
+    const engine = fakeEngine({
+      hasSystemAudio: false,
+      setSystemAudioEnabled: vi.fn(() => "unavailable" as const),
+    });
+    await startWith(engine);
+
+    broadcast({ isSystemAudioEnabled: true });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(updateSettings).toHaveBeenCalledWith({ isSystemAudioEnabled: false });
+    await stopAndSettle();
+  });
+
+  it("corrects a system-audio 'on' setting at start when the take has no loopback", async () => {
+    await startWith(fakeEngine({ hasSystemAudio: false }), { systemAudio: true });
+    expect(updateSettings).toHaveBeenCalledWith({ isSystemAudioEnabled: false });
+    await stopAndSettle();
+  });
+
+  it("reports loopback availability in the tick", async () => {
+    await startWith(fakeEngine({ hasSystemAudio: false }));
+    await vi.advanceTimersByTimeAsync(100);
+    expect(window.electronAPI.recordingReportTick).toHaveBeenCalledWith(
+      expect.objectContaining({ systemAudioAvailable: false }),
+    );
+    await stopAndSettle();
+  });
+
+  it("stops forwarding once the take ends", async () => {
+    const engine = fakeEngine();
+    await startWith(engine);
+    await stopAndSettle();
+
+    expect(settingsListeners.size).toBe(0);
+    broadcast({ isMicrophoneEnabled: false });
+    expect(engine.setMicrophoneEnabled).not.toHaveBeenCalled();
+  });
+});

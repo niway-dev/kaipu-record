@@ -14,13 +14,22 @@ import {
   PermissionsSettingsPage,
   RecordingQualitySettingsPage,
   RecordingSettingsPage,
+  ScreenshotsSettingsPage,
 } from "@renderer/pages/settings/settings-pages";
 import { CloudPage } from "@renderer/pages/cloud/cloud-page";
 import { ShortcutsPage } from "@renderer/pages/shortcuts/shortcuts-page";
 import { ScreenshotsPage } from "@renderer/pages/screenshots/screenshots-page";
 import { ScreenshotEditorPage } from "@renderer/pages/screenshot-editor/screenshot-editor-page";
 import { VideoEditorPage } from "@renderer/pages/video-editor/video-editor-page";
+import { EditorHomePage } from "@renderer/pages/editor/editor-home-page";
+import { EditorNewPage } from "@renderer/pages/editor/editor-new-page";
+import {
+  EditorImagePage,
+  EditorVideoPage,
+  LegacyScreenshotEditorRedirect,
+} from "@renderer/pages/editor/editor-routes";
 import { AuthPage } from "@renderer/pages/auth/auth-page";
+import { ROUTES } from "@shared/routes";
 
 /**
  * Route tree for the app.
@@ -41,8 +50,8 @@ import { AuthPage } from "@renderer/pages/auth/auth-page";
  *     version gate, so they survive on every route.
  *   - <AppShell /> (sidebar + status bar) hosts the regular pages. Add new sidebar
  *     pages as its children so they share the layout.
- *   - /sign-in and /sign-up are full-window pages: siblings of the shell, not
- *     children, so they render without the sidebar.
+ *   - /sign-in is a full-window page: a sibling of the shell, not a child, so it
+ *     renders without the sidebar.
  */
 const router = createHashRouter([
   {
@@ -53,15 +62,24 @@ const router = createHashRouter([
         element: <AppShell />,
         children: [
           { index: true, element: <RecordPage /> },
-          { path: "/library", element: <LibraryPage /> },
-          { path: "/library/:assetId", element: <LibraryDetailPage /> },
-          { path: "/screenshots", element: <ScreenshotsPage /> },
-          { path: "/screenshot-editor", element: <ScreenshotEditorPage /> },
-          { path: "/video-editor", element: <VideoEditorPage /> },
-          { path: "/shortcuts", element: <ShortcutsPage /> },
-          { path: "/cloud", element: <CloudPage /> },
+          { path: ROUTES.library, element: <LibraryPage /> },
+          { path: ROUTES.libraryDetail, element: <LibraryDetailPage /> },
+          { path: ROUTES.screenshots, element: <ScreenshotsPage /> },
+          // Editor workspace: every Edit lands here, addressed by URL.
+          { path: ROUTES.editor, element: <EditorHomePage /> },
+          // New: an empty editor that opens the image editor on a pasted image.
+          { path: ROUTES.editorNew, element: <EditorNewPage /> },
+          { path: ROUTES.editorVideo, element: <EditorVideoPage /> },
+          { path: ROUTES.editorImage, element: <EditorImagePage /> },
+          // A fresh capture is not in the vault yet: its image travels in router state.
+          { path: ROUTES.editorCapture, element: <ScreenshotEditorPage /> },
+          // Legacy paths, kept so old navigations land on the new routes.
+          { path: ROUTES.screenshotEditor, element: <LegacyScreenshotEditorRedirect /> },
+          { path: ROUTES.videoEditor, element: <VideoEditorPage /> },
+          { path: ROUTES.shortcuts, element: <ShortcutsPage /> },
+          { path: ROUTES.cloud, element: <CloudPage /> },
           {
-            path: "/settings",
+            path: ROUTES.settings,
             element: <SettingsLayout />,
             children: [
               { index: true, element: <Navigate to="general" replace /> },
@@ -69,6 +87,7 @@ const router = createHashRouter([
               { path: "permissions", element: <PermissionsSettingsPage /> },
               { path: "recording-quality", element: <RecordingQualitySettingsPage /> },
               { path: "recording", element: <RecordingSettingsPage /> },
+              { path: "screenshots", element: <ScreenshotsSettingsPage /> },
               { path: "files", element: <FilesSettingsPage /> },
               { path: "app", element: <AppSettingsPage /> },
               ...(import.meta.env.DEV
@@ -79,8 +98,7 @@ const router = createHashRouter([
           { path: "*", element: <NotFound /> },
         ],
       },
-      { path: "/sign-in", element: <AuthPage mode="sign-in" /> },
-      { path: "/sign-up", element: <AuthPage mode="sign-up" /> },
+      { path: ROUTES.signIn, element: <AuthPage /> },
     ],
   },
 ]);

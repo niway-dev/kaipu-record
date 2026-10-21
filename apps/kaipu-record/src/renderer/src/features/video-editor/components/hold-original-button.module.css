@@ -1,0 +1,38 @@
+.button {
+  position: absolute;
+  right: var(--space-sm);
+  bottom: var(--space-sm);
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 4px 10px;
+  border: 1px solid color-mix(in srgb, #fff 18%, transparent);
+  border-radius: 999px;
+  background: rgba(8, 8, 10, 0.45);
+  backdrop-filter: blur(8px);
+  color: #fff;
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  user-select: none;
+  touch-action: none;
+}
+
+.active {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+.chip {
+  position: absolute;
+  top: var(--space-sm);
+  left: var(--space-sm);
+  z-index: 5;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: rgba(8, 8, 10, 0.85);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  pointer-events: none;
+}

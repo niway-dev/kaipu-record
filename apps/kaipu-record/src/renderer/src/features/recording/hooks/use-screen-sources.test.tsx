@@ -87,4 +87,48 @@ describe("useScreenSources", () => {
     expect(result.current.isLoading).toBe(false);
     expect(result.current.sources).toHaveLength(1);
   });
+
+  it("asks for screens only and never retries when thumbnails are not wanted", async () => {
+    vi.useFakeTimers();
+    // Without thumbnails every one is blank by design — that must not read as
+    // "not captured yet" and bring back the 4 × 250 ms loop the call exists to skip.
+    const screensOnly: ScreenSource[] = [
+      { id: "screen:0", name: "Display 1", thumbnail: "", type: "screen" },
+    ];
+    const getScreenSources = vi.fn().mockResolvedValue(screensOnly);
+    window.electronAPI.getScreenSources = getScreenSources;
+
+    const { result } = renderHook(() => useScreenSources());
+    await act(async () => {
+      const pending = result.current.refresh({ withThumbnails: false });
+      await vi.runAllTimersAsync();
+      await pending;
+    });
+
+    expect(getScreenSources).toHaveBeenCalledTimes(1);
+    expect(getScreenSources).toHaveBeenCalledWith({ withThumbnails: false });
+    expect(result.current.sources).toEqual(screensOnly);
+  });
+
+  it("keeps the latest list when an earlier, slower call resolves after it", async () => {
+    // The screens-only call (on mount) and the picker's full call can overlap. If
+    // the quick one landed last it would wipe the picker's windows and thumbnails.
+    let resolveFirst: (value: ScreenSource[]) => void = () => {};
+    const first = new Promise<ScreenSource[]>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const getScreenSources = vi.fn().mockReturnValueOnce(first).mockResolvedValueOnce(sources);
+    window.electronAPI.getScreenSources = getScreenSources;
+
+    const { result } = renderHook(() => useScreenSources());
+    await act(async () => {
+      const stale = result.current.refresh({ withThumbnails: false });
+      await result.current.refresh();
+      resolveFirst([{ id: "screen:0", name: "Display 1", thumbnail: "", type: "screen" }]);
+      await stale;
+    });
+
+    expect(result.current.sources).toEqual(sources);
+    expect(result.current.isLoading).toBe(false);
+  });
 });

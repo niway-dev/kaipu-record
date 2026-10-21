@@ -148,3 +148,35 @@ describe("AnnotationOptions", () => {
     expect(screen.getByRole("button", { name: "Reset" })).toBeDisabled();
   });
 });
+
+/**
+ * The same defect as the video editor's, in the other editor, found the same way: by
+ * the owner clicking a preset and watching nothing happen. `fontPx` wins over `size`,
+ * so a control that writes only `size` lights up while the label stays where a corner
+ * drag left it.
+ */
+describe("a label sized by dragging a corner", () => {
+  const custom: Annotation = { ...text, fontPx: 64 };
+
+  it("clears fontPx when a preset is picked, so the preset takes effect", () => {
+    const scene = makeScene([custom], "t1");
+    render(<AnnotationOptions tools={makeTools()} scene={scene} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Size L" }));
+
+    const [, patch] = (scene.commitAnnotation as ReturnType<typeof vi.fn>).mock.calls.at(-1)!;
+    expect(patch).toMatchObject({ size: 3 });
+    // The key's PRESENCE, not its value: vitest's deep equality ignores properties
+    // whose value is undefined, so comparing whole objects passes against the bug.
+    expect(Object.hasOwn(patch, "fontPx")).toBe(true);
+  });
+
+  it("highlights no preset while a corner-dragged size is in force", () => {
+    render(<AnnotationOptions tools={makeTools()} scene={makeScene([custom], "t1")} />);
+    for (const label of ["XS", "S", "M", "L"]) {
+      expect(screen.getByRole("button", { name: `Size ${label}` }).className).not.toMatch(
+        /pickerOn/,
+      );
+    }
+  });
+});

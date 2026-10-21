@@ -1,4 +1,8 @@
-import type { LocalRecording } from "@shared/types";
+import type { LocalRecording, RecordingSettings } from "@shared/types";
+import {
+  beginCursorTrackSession,
+  type CursorTrackSession,
+} from "@renderer/features/recording/cursor-track-session";
 import {
   elapsedMs,
   pauseElapsed,
@@ -9,6 +13,7 @@ import {
 import { startEngine, type EngineHandle } from "@renderer/features/recording/recorder-engine";
 import type { WatermarkConfig } from "@renderer/features/watermark/watermark";
 import { reportError } from "@renderer/features/analytics";
+import { finalizeErrorKey } from "./finalize-error-message";
 import { runtimeT } from "@renderer/lib/runtime-i18n";
 
 export type RecorderStatus =
@@ -57,6 +62,7 @@ const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
 
 let snapshot: RecorderSnapshot = { status: "idle", countdown: null };
 let engine: EngineHandle | null = null;
+let cursorTrack: CursorTrackSession | null = null;
 let sessionId: string | null = null;
 let clock: ElapsedState | null = null;
 let tickTimer: ReturnType<typeof setInterval> | null = null;
@@ -68,6 +74,8 @@ let stopping = false;
 let cancelRequested = false;
 let sessionCounter = 0;
 let lastResolveInput: (() => StartInput) | null = null;
+/** Unsubscribes the live-settings forwarder of the active take. */
+let stopLiveSettings: (() => void) | null = null;
 
 const listeners = new Set<() => void>();
 const completeListeners = new Set<(recording: LocalRecording) => void>();
@@ -161,41 +169,56 @@ async function beginEngine(input: StartInput): Promise<void> {
   window.electronAPI.recordingStart({ sourceId: input.sourceId, sourceName: input.sourceName });
   try {
     await window.electronAPI.recordingCreate(id);
-    const handle = await startEngine({
-      sourceId: input.sourceId,
-      microphoneDeviceId: input.microphoneDeviceId,
-      systemAudio: input.systemAudio,
-      width: input.width,
-      height: input.height,
-      frameRate: input.frameRate,
-      videoBitrate: input.videoBitrate,
-      watermark: input.watermark,
-      onChunk: (data, position) => window.electronAPI.recordingWrite(id, data, position),
-      // A failure mid-recording (encoder error or the screen capture ending)
-      // runs the same robust stop — finalize-or-abort + always restore the
-      // window/Dock/bar — so the app never gets stuck.
-      onError: (error) => {
-        reportError(runtimeT()("record.errorStopped"), error, {
-          context: { sourceId: input.sourceId, phase: "mid-recording" },
-          retry: () => {
-            if (lastResolveInput) requestStartRecording(lastResolveInput);
-          },
-        });
-        void stopRecording();
-      },
-    });
+    // Best-effort, and started CONCURRENTLY with the engine: main resolves the
+    // captured display through desktopCapturer.getSources(), which costs
+    // 100–500 ms, and the recording must never wait for it. The call never
+    // throws — it resolves to a no-op session when main declines (window source,
+    // unknown display), when IPC fails, or after its own 500 ms timeout.
+    const [track, handle] = await Promise.all([
+      beginCursorTrackSession(window.electronAPI, id, input.sourceId),
+      startEngine({
+        sourceId: input.sourceId,
+        microphoneDeviceId: input.microphoneDeviceId,
+        systemAudio: input.systemAudio,
+        width: input.width,
+        height: input.height,
+        frameRate: input.frameRate,
+        videoBitrate: input.videoBitrate,
+        watermark: input.watermark,
+        onChunk: (data, position) => window.electronAPI.recordingWrite(id, data, position),
+        // A failure mid-recording (encoder error or the screen capture ending)
+        // runs the same robust stop — finalize-or-abort + always restore the
+        // window/Dock/bar — so the app never gets stuck.
+        onError: (error) => {
+          reportError(runtimeT()("record.errorStopped"), error, {
+            context: { sourceId: input.sourceId, phase: "mid-recording" },
+            retry: () => {
+              if (lastResolveInput) requestStartRecording(lastResolveInput);
+            },
+          });
+          void stopRecording();
+        },
+      }),
+    ]);
+    cursorTrack = track;
 
     if (cancelRequested) {
       cancelRequested = false;
       await handle.stop();
       await window.electronAPI.recordingAbort(id);
       window.electronAPI.recordingStop(); // undo the early hide
+      cursorTrack = null;
       sessionId = null;
       update({ status: "idle", countdown: null });
       return;
     }
 
     engine = handle;
+    stopLiveSettings = forwardLiveSettings(handle, input);
+    const activeTrack = cursorTrack;
+    void handle.firstMediaTimestamp.then(({ rendererMs, quality }) =>
+      activeTrack?.anchor(rendererMs, quality),
+    );
     clock = startElapsed(Date.now());
     update({ status: "recording", countdown: null });
 
@@ -206,6 +229,7 @@ async function beginEngine(input: StartInput): Promise<void> {
         elapsedSeconds: Math.floor(elapsedMs(clock, Date.now()) / 1000),
         levels: paused ? [0, 0, 0, 0, 0] : engine.readLevels(),
         status: paused ? "paused" : "recording",
+        systemAudioAvailable: engine.hasSystemAudio,
       });
     }, 100);
   } catch (error) {
@@ -221,6 +245,7 @@ async function beginEngine(input: StartInput): Promise<void> {
     // leave it hidden with nothing recording.
     window.electronAPI.recordingStop();
     engine = null;
+    cursorTrack = null;
     sessionId = null;
     // Back to idle (not a separate "error" state) so the Start button is
     // immediately usable again; the toast above carries the retry action.
@@ -228,16 +253,70 @@ async function beginEngine(input: StartInput): Promise<void> {
   }
 }
 
+/**
+ * While a take runs, forward the user's live toggles (any window, any shortcut —
+ * they all just write `RecordingSettings`) to the engine. When the engine answers
+ * "unavailable", write the setting back to `false` so every surface shows the
+ * truth. Calls are serialized so a quick off/on never lands out of order.
+ * Returns the unsubscribe.
+ */
+function forwardLiveSettings(handle: EngineHandle, input: StartInput): () => void {
+  let micOn = input.microphoneDeviceId !== null;
+  let sysOn = input.systemAudio;
+  let queue: Promise<void> = Promise.resolve();
+  let active = true;
+  const writeBack = (patch: Partial<RecordingSettings>): void => {
+    if (active) window.electronAPI.updateRecordingSettings(patch);
+  };
+
+  // System audio requested but no loopback (e.g. a macOS dev build): the toggle
+  // must not claim "on" for a take that cannot carry it.
+  if (sysOn && !handle.hasSystemAudio) {
+    sysOn = false;
+    writeBack({ isSystemAudioEnabled: false });
+  }
+
+  const unsubscribe = window.electronAPI.onRecordingSettingsChanged((settings) => {
+    if (settings.isMicrophoneEnabled !== micOn) {
+      micOn = settings.isMicrophoneEnabled;
+      const on = micOn;
+      const deviceId = settings.selectedMicrophone?.deviceId ?? null;
+      queue = queue.then(async () => {
+        const result = await handle.setMicrophoneEnabled(on, deviceId);
+        if (result === "unavailable" && on) {
+          micOn = false;
+          writeBack({ isMicrophoneEnabled: false });
+        }
+      });
+    }
+    if (settings.isSystemAudioEnabled !== sysOn) {
+      sysOn = settings.isSystemAudioEnabled;
+      if (handle.setSystemAudioEnabled(sysOn) === "unavailable" && sysOn) {
+        sysOn = false;
+        writeBack({ isSystemAudioEnabled: false });
+      }
+    }
+  });
+  return () => {
+    active = false;
+    unsubscribe();
+  };
+}
+
 export function pauseRecording(): void {
   if (!engine || !clock) return;
+  const pausedAt = performance.now();
   engine.pause();
+  cursorTrack?.pause(pausedAt);
   clock = pauseElapsed(clock, Date.now());
   update({ status: "paused" });
 }
 
 export function resumeRecording(): void {
   if (!engine || !clock) return;
+  const resumedAt = performance.now();
   engine.resume();
+  cursorTrack?.resume(resumedAt);
   clock = resumeElapsed(clock, Date.now());
   update({ status: "recording" });
 }
@@ -248,8 +327,11 @@ async function stopRecording(): Promise<void> {
   // Guard re-entry: the user clicking Stop and an engine-failure can both fire.
   if (stopping || !activeEngine || !activeSessionId) return;
   stopping = true;
+  stopLiveSettings?.();
+  stopLiveSettings = null;
   update({ status: "finalizing", countdown: null });
-  const durationSeconds = clock ? Math.floor(elapsedMs(clock, Date.now()) / 1000) : 0;
+  const durationMs = clock ? elapsedMs(clock, Date.now()) : 0;
+  const durationSeconds = Math.floor(durationMs / 1000);
   // Flip the bar to "Saving…" before the timer stops, so the finalize wait reads
   // as progress instead of a frozen widget.
   window.electronAPI.recordingReportTick({
@@ -270,19 +352,20 @@ async function stopRecording(): Promise<void> {
         return window.electronAPI.recordingFinalize(activeSessionId, {
           title,
           durationSeconds,
+          durationMs,
           thumbnail: activeEngine.thumbnail,
         });
       })(),
       delay(MIN_SAVING_MS),
     ]);
   } catch (error) {
-    reportError(runtimeT()("record.errorSave"), error, {
+    reportError(runtimeT()(finalizeErrorKey(error)), error, {
       context: { sessionId: activeSessionId, phase: "finalize" },
       retry: () => {
         if (lastResolveInput) requestStartRecording(lastResolveInput);
       },
     });
-    await window.electronAPI.recordingAbort(activeSessionId);
+    await window.electronAPI.recordingAbort(activeSessionId); // no-op for a stranded take
   }
 
   // Notify BEFORE the main window reappears, so completion listeners (the app
@@ -290,6 +373,7 @@ async function stopRecording(): Promise<void> {
   if (recording) for (const listener of completeListeners) listener(recording);
   window.electronAPI.recordingStop();
   engine = null;
+  cursorTrack = null;
   sessionId = null;
   clock = null;
   stopping = false;

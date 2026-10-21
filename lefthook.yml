@@ -1,6 +1,12 @@
-# Git hooks. Docs: https://lefthook.dev — contract: /specs/2026-09-06-lefthook-migration-design
-# commit = fix what you commit · push = verify what you share (read-only, same as CI)
+# Git hooks. Docs: https://lefthook.dev — contract: /specs/2026-09-06-lefthook-migration-design,
+# pre-push narrowed by ADR 0010 (/architecture/decisions/0010-checks-run-in-actions-on-every-pr).
+# commit = fix what you commit · push = the fast checks only (lint, format, types)
 # commit-msg = reject what release-please cannot parse. Bypass once: LEFTHOOK=0 git <cmd>.
+#
+# Tests, the app bundles and the desktop end-to-end suite run in Actions on every pull
+# request (pr-checks.yml), not here. The e2e suite opens the app thirteen times and took
+# the screen for half a minute on every push; on a public repository the same run costs
+# nothing in the cloud. `bun run verify` still runs the full set locally when you want it.
 min_version: 2.0.0
 
 pre-commit:
@@ -28,9 +34,8 @@ commit-msg:
         exit 1
 
 pre-push:
-  parallel: true
   jobs:
-    - name: lint
-      run: bunx oxlint
-    - name: format-check
-      run: bunx oxfmt --check .
+    # Lint, format check, package builds (cached by Turbo) and type checks. No tests and no
+    # end-to-end suite — see the header.
+    - name: verify-local
+      run: bun run verify:local

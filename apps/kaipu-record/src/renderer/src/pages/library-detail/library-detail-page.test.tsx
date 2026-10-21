@@ -1,9 +1,24 @@
-import { act, render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { act, render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LibraryItem } from "@shared/types/library-item";
+import { DEFAULT_SETTINGS } from "@shared/types";
 import { dismissToast, getToasts } from "@renderer/ui/toast-store";
+import { StatusStackProvider } from "@renderer/features/status-cards/status-stack";
 import { LibraryDetailPage } from "./library-detail-page";
+
+// Share reads the file through mediabunny; here only the facts it returns matter.
+const probe = vi.hoisted(() =>
+  vi.fn(async () => ({
+    width: 2560,
+    height: 1440,
+    durationSec: 78,
+    fps: 30,
+    hasAudio: true,
+    sampleRate: 48000,
+  })),
+);
+vi.mock("@renderer/features/video-editor/export/probe-source", () => ({ probeSource: probe }));
 
 /** A cloud-only screenshot: no local file at all. Exercises the actions that
  *  require a local copy (Reveal, Edit, Copy, Delete) and confirms they are all
@@ -15,6 +30,8 @@ const cloudOnlyItem: LibraryItem = {
   createdAt: 1000,
   durationSeconds: 0,
   derivedFromAssetId: null,
+  editSavedAt: null,
+  editExportedSavedAt: null,
   local: null,
   cloud: {
     assetId: "cloud-1",
@@ -49,6 +66,8 @@ const exportedOnlyItem: LibraryItem = {
   createdAt: 2000,
   durationSeconds: 45,
   derivedFromAssetId: null,
+  editSavedAt: null,
+  editExportedSavedAt: null,
   local: {
     id: "local-b",
     assetId: "asset-b",
@@ -102,6 +121,7 @@ function renderDetail(assetId: string) {
     [
       { path: "/library/:assetId", element: <LibraryDetailPage /> },
       { path: "/library", element: <div>library-page</div> },
+      { path: "/editor/video/:assetId", element: <div>editor-video</div> },
     ],
     { initialEntries: [`/library/${assetId}`] },
   );
@@ -139,6 +159,34 @@ describe("LibraryDetailPage", () => {
     expect(screen.queryByRole("button", { name: /^copy$/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /delete/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /remove local download/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Share" })).toBeNull();
+  });
+
+  it("offers Share on a local recording, raw or already an export (NIW2-218)", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [exportedOnlyItem],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+
+    renderDetail("asset-b");
+    await waitForLoaded();
+
+    expect(screen.getByRole("button", { name: "Share" })).toBeEnabled();
+  });
+
+  it("Edit video lands on the recording's Editor URL", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [exportedOnlyItem],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+
+    const router = renderDetail("asset-b");
+    await waitForLoaded();
+    fireEvent.click(screen.getByRole("button", { name: "Edit video" }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/editor/video/asset-b"));
   });
 
   it("shows Remove local download for a local-and-cloud, same-bytes, exported-only item", async () => {
@@ -224,5 +272,340 @@ describe("LibraryDetailPage", () => {
         }),
       ),
     );
+  });
+});
+
+describe("LibraryDetailPage — lineage and edit badge", () => {
+  beforeEach(() => {
+    window.electronAPI.removeLocalCopy = vi.fn(async () => ({ ok: true as const }));
+    window.electronAPI.onLibraryChanged = () => () => {};
+  });
+
+  afterEach(() => {
+    for (const t of getToasts()) dismissToast(t.id);
+  });
+
+  const base = {
+    kind: "recording" as const,
+    createdAt: 1_000,
+    durationSeconds: 10,
+    local: null,
+    cloud: null,
+    availability: "local" as const,
+    transfer: { state: "idle" as const },
+    comparison: "same" as const,
+    editing: "project-available" as const,
+    sharing: "private" as const,
+    derivedFromAssetId: null,
+    editSavedAt: null,
+    editExportedSavedAt: null,
+  };
+  const local = (id: string) => ({
+    id,
+    assetId: id,
+    kind: "recording" as const,
+    title: id,
+    filePath: `/vault/${id}.mp4`,
+    createdAt: 1_000,
+    sizeBytes: 1,
+    durationSeconds: 10,
+    derivedFromAssetId: null,
+    contentSha256: null,
+  });
+
+  it("links an export to its source and lists exports on the source", async () => {
+    const items = [
+      { ...base, assetId: "src", title: "Original take", local: local("src") },
+      {
+        ...base,
+        assetId: "exp",
+        title: "Original take (export)",
+        createdAt: 2_000,
+        derivedFromAssetId: "src",
+        local: { ...local("exp"), derivedFromAssetId: "src" },
+      },
+    ];
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items,
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+    renderDetail("exp");
+    await waitForLoaded();
+    const link = await screen.findByRole("link", { name: /original take$/i });
+    expect(link).toHaveAttribute("href", "/library/src");
+
+    renderDetail("src");
+    await waitForLoaded();
+    expect(await screen.findByText(/^exports$/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /original take \(export\)/i })).toBeInTheDocument();
+  });
+
+  it("says the source was deleted when the parent is not in the list", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [
+        {
+          ...base,
+          assetId: "exp",
+          title: "Orphan",
+          derivedFromAssetId: "gone",
+          local: local("exp"),
+        },
+      ],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+    renderDetail("exp");
+    await waitForLoaded();
+    expect(await screen.findByText(/source recording was deleted/i)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /gone/ })).toBeNull();
+  });
+
+  it("links to a cloud-only source (no local id)", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [
+        {
+          ...base,
+          assetId: "src",
+          title: "In the cloud",
+          availability: "cloud" as const,
+          editing: "needs-source" as const,
+        },
+        {
+          ...base,
+          assetId: "exp",
+          title: "Export",
+          derivedFromAssetId: "src",
+          local: local("exp"),
+        },
+      ],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+    renderDetail("exp");
+    await waitForLoaded();
+    expect(await screen.findByRole("link", { name: /in the cloud/i })).toHaveAttribute(
+      "href",
+      "/library/src",
+    );
+  });
+
+  it("shows 'Edited · not exported' instead of the editing line when a session has no export", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [{ ...base, assetId: "src", title: "Take", local: local("src"), editSavedAt: 5_000 }],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+    renderDetail("src");
+    await waitForLoaded();
+    expect(await screen.findByText(/edited · not exported/i)).toBeInTheDocument();
+    expect(screen.queryByText(/editing project available/i)).toBeNull();
+  });
+
+  it("says the latest edits are unexported — not 'not exported' — above an Exports list", async () => {
+    // The screenshot that started this: "Edited · not exported" sitting directly above
+    // a populated EXPORTS section reads as a contradiction. An export exists; what is
+    // missing from a file is only the edits made after it.
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [
+        {
+          ...base,
+          assetId: "src",
+          title: "Take",
+          local: local("src"),
+          editSavedAt: 9_000,
+          editExportedSavedAt: 5_000,
+        },
+        { ...base, assetId: "exp", title: "Take (edited)", derivedFromAssetId: "src" },
+      ],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+    renderDetail("src");
+    await waitForLoaded();
+    expect(await screen.findByText(/latest edits not exported/i)).toBeInTheDocument();
+    expect(screen.queryByText(/edited · not exported/i)).toBeNull();
+  });
+
+  it("drops the badge once the stamp matches the session, even with an older export date", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [
+        {
+          ...base,
+          assetId: "src",
+          title: "Take",
+          local: local("src"),
+          createdAt: 9_999,
+          editSavedAt: 5_000,
+          editExportedSavedAt: 5_000,
+        },
+        // createdAt BEFORE the session's savedAt — the real shape of every export, and
+        // what the old date comparison mistook for a stale export.
+        {
+          ...base,
+          assetId: "exp",
+          title: "Take (edited)",
+          derivedFromAssetId: "src",
+          createdAt: 1,
+        },
+      ],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+    renderDetail("src");
+    await waitForLoaded();
+    expect(await screen.findByText(/^edited$/i)).toBeInTheDocument();
+    expect(screen.queryByText(/not exported/i)).toBeNull();
+  });
+
+  /** An original and an export of it, both with a local file to play. */
+  const pair = () =>
+    vi.fn(async () => ({
+      items: [
+        { ...base, assetId: "src", title: "Take", local: local("src") },
+        {
+          ...base,
+          assetId: "exp",
+          title: "Take (edited)",
+          derivedFromAssetId: "src",
+          local: local("exp"),
+        },
+      ],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+
+  it("labels the player on an original as showing the unedited file", async () => {
+    // The player streams the vault file, which ADR 0003 keeps untouched — so it never
+    // shows the edits. Nothing said so, which is what made the badge above it read as
+    // a contradiction.
+    window.electronAPI.listLibraryItems = pair();
+    renderDetail("src");
+    await waitForLoaded();
+    expect(await screen.findByText(/edits are not shown here/i)).toBeInTheDocument();
+  });
+
+  it("omits that label on an export, where the player IS the edited video", async () => {
+    window.electronAPI.listLibraryItems = pair();
+    renderDetail("exp");
+    await waitForLoaded();
+    expect(screen.queryByText(/edits are not shown here/i)).toBeNull();
+  });
+});
+
+describe("LibraryDetailPage — heavy to send (NIW2-218)", () => {
+  const withSize = (sizeBytes: number): LibraryItem => ({
+    ...exportedOnlyItem,
+    local: { ...exportedOnlyItem.local!, sizeBytes },
+    cloud: null,
+    availability: "local",
+  });
+
+  beforeEach(() => {
+    window.electronAPI.onLibraryChanged = () => () => {};
+    window.electronAPI.getSettings = vi.fn().mockResolvedValue(DEFAULT_SETTINGS);
+    probe.mockClear();
+  });
+
+  it("over 25 MB: amber size, and a banner with the Light estimate that opens the sheet on that row", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [withSize(119_000_000)],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+    renderDetail("asset-b");
+    await waitForLoaded();
+
+    expect(screen.getByText("119 MB")).toHaveAttribute("data-heavy", "true");
+    expect(screen.getByText("119 MB is heavy to send.")).toBeInTheDocument();
+    // The Light row's estimate for 78 s, which fits GitHub's 100 MB.
+    expect(
+      await screen.findByText(/about 7.6 MB, small enough for GitHub or Jira/),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Make a light copy →" }));
+    expect(await screen.findByRole("heading", { name: "Share a copy" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /^Light/ })).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("up to 25 MB: no banner, no amber, and the file isn't read until Share", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [withSize(20_000_000)],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+    renderDetail("asset-b");
+    await waitForLoaded();
+
+    expect(screen.queryByText(/heavy to send/)).toBeNull();
+    expect(screen.getByText("20 MB")).toHaveAttribute("data-heavy", "false");
+    expect(probe).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Share" }));
+    expect(await screen.findByRole("heading", { name: "Share a copy" })).toBeInTheDocument();
+    // Share itself opens on Settings → Export quality.
+    expect(screen.getByRole("radio", { name: /^Balanced/ })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+  });
+});
+
+describe("LibraryDetailPage — Recording saved card (NIW2-218)", () => {
+  const heavy: LibraryItem = {
+    ...exportedOnlyItem,
+    local: { ...exportedOnlyItem.local!, sizeBytes: 119_000_000 },
+    cloud: null,
+    availability: "local",
+  };
+
+  function renderFresh(fromRecording: boolean) {
+    const router = createMemoryRouter(
+      [{ path: "/library/:assetId", element: <LibraryDetailPage /> }],
+      { initialEntries: [{ pathname: "/library/asset-b", state: { fromRecording } }] },
+    );
+    render(
+      <StatusStackProvider>
+        <RouterProvider router={router} />
+      </StatusStackProvider>,
+    );
+  }
+
+  beforeEach(() => {
+    window.electronAPI.onLibraryChanged = () => () => {};
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [heavy],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+  });
+
+  it("right after recording a file over 10 MB, offers a light copy that opens Share on Light", async () => {
+    window.electronAPI.getSettings = vi.fn().mockResolvedValue(DEFAULT_SETTINGS);
+    renderFresh(true);
+    const card = await screen.findByRole("region", { name: "Recording saved" });
+    expect(await screen.findByText("~7.6 MB · fits GitHub")).toBeInTheDocument();
+    fireEvent.click(within(card).getByRole("button", { name: "Share a light copy" }));
+    expect(await screen.findByRole("heading", { name: "Share a copy" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /^Light/ })).toHaveAttribute("aria-checked", "true");
+    expect(screen.queryByRole("region", { name: "Recording saved" })).toBeNull();
+  });
+
+  it("not when Settings turned it off", async () => {
+    window.electronAPI.getSettings = vi
+      .fn()
+      .mockResolvedValue({ ...DEFAULT_SETTINGS, showRecordingSavedCard: false });
+    renderFresh(true);
+    await waitForLoaded();
+    await act(async () => {});
+    expect(screen.queryByRole("region", { name: "Recording saved" })).toBeNull();
+  });
+
+  it("not when the page was opened from the Library", async () => {
+    window.electronAPI.getSettings = vi.fn().mockResolvedValue(DEFAULT_SETTINGS);
+    renderFresh(false);
+    await waitForLoaded();
+    await act(async () => {});
+    expect(screen.queryByRole("region", { name: "Recording saved" })).toBeNull();
   });
 });

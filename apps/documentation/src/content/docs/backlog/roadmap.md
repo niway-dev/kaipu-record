@@ -13,11 +13,147 @@ Status legend: ⬜ todo · 🔨 in progress · ✅ done
 
 ---
 
+## Mute, editor space, window presets — shipped (2026-10-01) 🟢
+
+[#199](https://github.com/niway-dev/kaipu-record/pull/199): mute as a real edit (ranges and
+the whole video, burned into the export, heard in the preview, deleted from the inspector), the
+video editor's width given back to the timeline, one stable window for every screen with the
+video editor as the only exception, routes as constants, and the fox in the macOS menu bar.
+Owner-verified by hand; packaged-build validation pending. Details:
+[video-editor-mute](./video-editor-mute) ·
+[editor-space-and-window-presets](./editor-space-and-window-presets). Follow-ups recorded:
+[capture-panel-latency](./capture-panel-latency), and the Audio toggle still fails silently when
+macOS denies system-audio capture to a dev build.
+
+## Landing shortcuts — fixed (2026-09-30) ✅
+
+The landing's keyboard shortcuts now come from
+`packages/domain/src/constants/shortcuts.ts`, which is also what the desktop app
+registers. One definition, so the two cannot disagree.
+
+**The note this replaces was wrong.** It said the glyphs "happen to match today; that
+is luck". They did not match at all — every one was false:
+
+| The page printed | The real binding |
+| ---------------- | ---------------- |
+| ⌘⇧P start        | ⌘⌃C              |
+| ⌘⌃4 screenshot   | ⌘⌃X              |
+| ⌘L open library  | no such shortcut |
+
+Six places were hardcoded, not five: `hero.tsx`, four in `app-window.tsx`, and
+`homeChapter1Pill2` in both message catalogues. The "open library" row lost its key
+entirely — there is no global binding for it, and an invented one is the same lie in a
+smaller font.
+
+The pill stays a literal because pills come from the catalogues; a test in
+`@kaipu/i18n` pins it to the constant, the same shape that pins `DEFAULT_LOCALE`.
+Reverting the constant by hand makes it fail, which was checked.
+
+Still open:
+
+- **The Windows column is unvalidated.** Nobody has tested `Control+Alt+<key>` against
+  Windows' reserved shortcuts, because there is no Windows build. `Command` is
+  macOS-only, so the previous defaults would have been dead bindings there.
+- **`openLibrary` is not implemented.** The approved shape in
+  [open decisions §3](./open-decisions-editor-audio) lists five actions; only the four
+  the app actually registers are in the constant. Adding a default for an action
+  nobody binds would recreate the drift this removes — it belongs with the work that
+  implements it.
+- **Nobody has reviewed the landing in a browser.** It was measured at five viewports,
+  which verifies geometry, not judgement.
+- Merging `editor-audio` settled the rail label in favour of the hover version; one
+  revert undoes it if the other reading is preferred.
+
 ## Proposed for later analysis
 
+- **🟢 Capture panel latency** (2026-10-01, applied 2026-10-05): the tray widget showed a
+  loader before it appeared, because the panel paid for a thumbnail of every open window
+  just to default to "Screen 1". The three fixes in
+  [capture-panel-latency](./capture-panel-latency) are applied — screens-only enumeration
+  on mount, the panel pre-created, the retry kept on the picker only. Feel it on a
+  packaged build.
+- **🟡 Product growth beyond cloud** (2026-09-27): the owner reviewed the Recordly comparison and decided: no watermark on the free tier ([done on branch](./free-tier-no-watermark)), [Windows recording-only beta](./windows-beta), [AGPL-3.0 open source at launch](/marketing/open-source/), and a roadmap with GIF, keystroke visualizer, captions on Parakeet, export presets, silence cutting and a CLI. See the [prioritized proposal](./product-growth) and [marketing hub](/marketing/). Existing release blockers retain priority.
 - **🔵 StyleX across desktop and web** (2026-09-12): evaluate typed shared tokens,
   replacing Tailwind and CSS Modules, and opportunities for shared UI. No delivery
   date or implementation commitment. See [proposal](./stylex-migration).
+- **⚪ Cursor-free capture + drawn cursor (video editor v2.1)** (2026-09-22): the one
+  structural gap between our auto-zoom and Screen Studio / Cap — the OS cursor is baked
+  into our frames, so it blurs when zoomed. Deferred, gated on a one-day capture spike;
+  reopen if users flag the zoomed cursor. See [proposal](./cursor-sprite-capture).
+
+## Video editor v2 wave (2026-09-22 → 23)
+
+Everything written or shipped in the two days around video editor v2, grouped so it can
+be picked up in order. Status legend as in the [backlog index](./index).
+
+### Shipped ✅
+
+| What                                                                                                            | PRs                       | Where the knowledge lives                                                                                   |
+| --------------------------------------------------------------------------------------------------------------- | ------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| **Video editor v2** — cursor track, click hook, auto-zoom, blur/cover, four-track timeline, export pass, polish | #132–#141 (stacked chain) | [backlog doc](./video-editor-zoom-blur-cover) · [plans 00–12](/plans/video-editor-v2/00-audit/)             |
+| Cursor-track inspector + CLI + real fixture + tail-cut fix                                                      | #143                      | `bun run cursor-track:check <id>` · [handoff](./video-editor-v2-handoff)                                    |
+| Annotation options in the inspector + camera box body-drag                                                      | #152                      | [annotation inspector](./video-editor-annotation-inspector) · [camera box UX](./video-editor-camera-box-ux) |
+| Onboarding: Accessibility as a permissions card, language picker, English-first, real shortcut on Done          | #153                      | [permissions & onboarding](/desktop/permissions-and-onboarding/)                                            |
+| ADR 0003 — an export never replaces the original                                                                | #147                      | [ADR 0003](/architecture/decisions/0003-export-never-replaces-the-original/)                                |
+| Repo hygiene: no postinstall (rebuild:native + doctor), "What to review" on every PR                            | #151, #149                | `CLAUDE.md` § Native dependencies · `.claude/commands/pr-summary.md`                                        |
+
+### Still to validate on hardware 🟢
+
+The checklist lives in the [handoff](./video-editor-v2-handoff#what-still-needs-a-human-hardware-not-the-suite):
+export leak checks (privacy first), A/V sync + export perf, poller CPU cost, the
+Accessibility flow on a Mac that has not granted it, camera-box geometry, the GPU
+blur check, and the detector calibration fixture (a real recording _with clicks_).
+Plus #152's and #153's own manual items.
+
+### Proposed, in suggested order 🔵
+
+1. **[Edit-state indicators](./edit-state-indicators)** — "Saving…" in the editor and
+   "Edited · not exported" in the library. Small, and it closes the one way a user shares
+   the untouched original believing it carries the edits. Sonnet-sized.
+2. **[Live recording controls](./live-recording-controls)** — mute the mic, toggle
+   system audio and the camera bubble _while recording_, from the floating bar and
+   global shortcuts. The camera already follows its toggle; the audio graph needs two
+   gain nodes and an always-present audio track. Medium.
+3. **[Video editor — mute](./video-editor-mute)** — silence the whole video or chosen
+   ranges; same source-anchored model as zooms and redactions, real silence in the
+   export. Small–medium.
+4. **[Editor — name the capture](./editor-title-input)** — a title input in the
+   screenshot editor's toolbar, prefilled and editable before and after saving; renames
+   through the existing IPC. Low.
+5. **[Library — lineage](./library-lineage)** — `derivedFromAssetId` is already recorded;
+   make it navigable: Source link on an export, Exports list on a recording, deleted
+   source handled. Small.
+6. **[Cursor-free capture + drawn cursor](./cursor-sprite-capture)** (v2.1) — deferred,
+   gated on a one-day capture spike; reopen if users flag the blurred cursor under zoom.
+
+## Settings follow-ups (2026-09-23) 🔵
+
+Two owner requests from using the 0.6 → 0.7 build, both small and both on the Settings
+page. Each has its own doc; neither is scheduled.
+
+1. **[Settings → Updates](./settings-updates)** — the installed version, the updater's
+   real state and a **Check for updates** button. Today the updater checks once at launch
+   and every 6 h, and only the final "restart" state is visible — so a fresh release looks
+   like nothing happened. The feed itself works (verified against `0.7.0`).
+2. **[Settings → Screenshots](./settings-screenshots)** — one control: save every capture
+   **automatically** (default, recording parity) or **when I click Save**. Resolves the
+   open decision in the [save strategy doc](./screenshot-save-strategy) as a preference.
+
+## Owner notes (2026-09-23)
+
+Four more items from the same session, each with its doc:
+
+- **[Watermark redesign](./watermark-redesign)** 🔵 — prettier mark, `bottom-left`
+  default. The compositor already supports the position; the work is the asset. Low.
+- **[Bug — last terminal line missing](./bug-control-bar-hides-last-terminal-line)** 🔵 —
+  hypothesis: the content-protected control bar sits over the last line and leaves a
+  blank patch in the capture. Confirm with "Show bar in recording"; fix by moving the
+  bar to a corner. Low–medium.
+- **[Dock and app switcher](./dock-and-app-switcher)** ✅ decided — macOS cannot separate
+  them (one activation policy drives both); keep one toggle, fix its copy.
+- **[Standalone editor](./standalone-editor)** ⚪ idea — open any photo/video, join two
+  videos. Architectural; brainstorm before any plan. Suggested first slice: import into
+  the Library only.
 
 ## Kill order
 

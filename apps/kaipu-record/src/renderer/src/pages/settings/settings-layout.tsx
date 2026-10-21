@@ -1,6 +1,15 @@
 import React from "react";
 import { NavLink, Outlet } from "react-router-dom";
-import { AppWindow, Code, Folder, Monitor, Settings, SlidersHorizontal, Video } from "lucide-react";
+import {
+  AppWindow,
+  Camera,
+  Code,
+  Folder,
+  Monitor,
+  Settings,
+  SlidersHorizontal,
+  Video,
+} from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { cx } from "@renderer/ui/cx";
 import styles from "./settings-layout.module.css";
@@ -10,6 +19,7 @@ type SettingsNavKey =
   | "permissions"
   | "recordingQuality"
   | "recording"
+  | "screenshots"
   | "files"
   | "app"
   | "developer";
@@ -19,6 +29,7 @@ const NAV: ReadonlyArray<{ to: string; labelKey: SettingsNavKey; Icon: typeof Se
   { to: "permissions", labelKey: "permissions", Icon: Monitor },
   { to: "recording-quality", labelKey: "recordingQuality", Icon: SlidersHorizontal },
   { to: "recording", labelKey: "recording", Icon: Video },
+  { to: "screenshots", labelKey: "screenshots", Icon: Camera },
   { to: "files", labelKey: "files", Icon: Folder },
   { to: "app", labelKey: "app", Icon: AppWindow },
   // Dev-only page; `import.meta.env.DEV` is a build-time literal, so prod strips it.

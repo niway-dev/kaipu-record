@@ -11,11 +11,14 @@
 import {
   HAND_FONT,
   STROKE_WIDTHS,
-  TEXT_PX,
+  resolveFontPx,
   handleCursor,
   handlesFor,
   roughArrow,
   roughRect,
+  TEXT_LINE_HEIGHT,
+  textBoxPx,
+  textLines,
 } from "@renderer/features/screenshots/annotations";
 import type { VideoOverlay } from "../scene";
 import styles from "./video-annotation-layer.module.css";
@@ -109,7 +112,10 @@ export function OverlayShape({
   // text
   const tx = o.x * W;
   const ty = o.y * H;
-  const fs = TEXT_PX[o.size];
+  const fs = resolveFontPx(o.size, o.fontPx);
+  // The box governs the text: a width set by dragging a side wraps it by words.
+  const wrapPx = o.width ? o.width * W : undefined;
+  const box = textBoxPx(o.text, fs, wrapPx);
   return (
     <g opacity={opacity}>
       <text
@@ -122,15 +128,23 @@ export function OverlayShape({
         dominantBaseline="hanging"
         style={{ userSelect: "none" }}
       >
-        {o.text}
+        {/* One tspan per line: SVG text does not honour a newline on its own. */}
+        {textLines(o.text, fs, wrapPx).map((line, i) => (
+          <tspan key={i} x={tx} dy={i === 0 ? 0 : fs * TEXT_LINE_HEIGHT}>
+            {line}
+          </tspan>
+        ))}
       </text>
       {selected && (
+        // Sized by the shared helper rather than `text.length` and a copy of the
+        // advance constant: a two-line label used to draw an outline twice as wide as
+        // the text and only one line tall, so half of it was not selectable.
         <rect
           className={styles.selOutline}
           x={tx - 4}
           y={ty - 4}
-          width={o.text.length * fs * 0.55 + 8}
-          height={fs * 1.3 + 8}
+          width={box.w + 8}
+          height={box.h + 8}
         />
       )}
     </g>

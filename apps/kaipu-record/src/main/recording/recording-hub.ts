@@ -1,5 +1,17 @@
-import { app, BrowserWindow, desktopCapturer, ipcMain } from "electron";
+import {
+  app,
+  BrowserWindow,
+  desktopCapturer,
+  dialog,
+  ipcMain,
+  screen,
+  systemPreferences,
+} from "electron";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { createMainTranslator } from "@kaipu/i18n/main";
 import { IPC_CHANNELS } from "@shared/types";
+import { FINALIZE_ELSEWHERE_MARKER, FINALIZE_KEPT_MARKER } from "@shared/types/ipc";
 import type {
   ControlCommand,
   RecordingActivity,
@@ -8,9 +20,14 @@ import type {
   RecordingStartInfo,
   RecordingTick,
 } from "@shared/types/ipc";
+import { serializeCursorTrack } from "@shared/cursor-track";
+import { LibraryVault } from "../library/library-vault";
+import { pickCapturedDisplay } from "./captured-display";
+import { ClickHook, type HookLike } from "./click-hook";
+import { CursorTrackRegistry } from "./cursor-tracker";
 import { ControlBarWindow } from "./control-bar-window";
 import { CameraBubbleWindow } from "./camera-bubble-window";
-import { RecordingWriter, timestampId } from "./recording-writer";
+import { FinalizeMoveError, RecordingWriter, timestampId } from "./recording-writer";
 import { IDLE_ACTIVITY, applyTick, startedActivity, stoppedActivity } from "./recording-activity";
 import { vaultDirectory } from "../library/vault-location";
 import {
@@ -19,9 +36,22 @@ import {
   getAppSettings,
 } from "../infrastructure/settings-store";
 
+/** The three input toggles a global shortcut can flip. */
+export type LiveRecordingToggle =
+  | "isMicrophoneEnabled"
+  | "isSystemAudioEnabled"
+  | "isCameraEnabled";
+
 export interface RecordingHubHandle {
   /** True while a recording is active or paused. */
   isActive(): boolean;
+  /**
+   * Flip one of the three input toggles, exactly as clicking it in a window
+   * does (the global shortcuts use this). Mid-take the recorder picks the
+   * change up from the settings broadcast; outside a take it is just the
+   * pre-recording setting.
+   */
+  toggleRecordingSetting(key: LiveRecordingToggle): void;
   /**
    * Hide the camera bubble for the duration of a screenshot capture (it sits
    * always-on-top, so it would otherwise land in the shot) without releasing
@@ -59,6 +89,42 @@ export function registerRecordingHub(
     newId: () => timestampId(Date.now()),
   });
 
+  // Cursor tracks, keyed by writer session id (see plans/video-editor-v2/02).
+  const cursorTracks = new CursorTrackRegistry({
+    now: () => performance.now(),
+    cursorPoint: () => screen.getCursorScreenPoint(),
+    every: (ms, fn) => {
+      const handle = setInterval(fn, ms);
+      return () => clearInterval(handle);
+    },
+  });
+  // Mouse-down only, and only while a recording samples (see plans/video-editor-v2/03).
+  const clickHook = new ClickHook(
+    {
+      platform: process.platform,
+      // `false` = check only. Passing true here would show the macOS prompt mid-recording.
+      isAccessibilityTrusted: () =>
+        process.platform === "darwin" && systemPreferences.isTrustedAccessibilityClient(false),
+      load: () => {
+        try {
+          // Lazy require: a broken/missing native binary must not crash main at startup.
+          return (require("uiohook-napi") as { uIOhook: HookLike }).uIOhook;
+        } catch (error) {
+          console.warn("uiohook-napi failed to load", error);
+          return null;
+        }
+      },
+    },
+    (button) => {
+      for (const tracker of cursorTracks.all()) tracker.addClick(button);
+    },
+  );
+  // Sessions whose whole recording had the hook running.
+  const clickSessions = new Set<string>();
+  const stopHookIfIdle = (): void => {
+    if (!cursorTracks.active) clickHook.stop();
+  };
+
   // Single source of truth for "is a recording happening", broadcast to every
   // window so non-recorder windows (reopened Record page, Capture Panel) can
   // reflect it and refuse to start a second recording. Transitions live in the
@@ -89,7 +155,7 @@ export function registerRecordingHub(
     }
   };
   ipcMain.handle(IPC_CHANNELS.recordingSettingsGet, (): RecordingSettings => settings);
-  ipcMain.on(IPC_CHANNELS.recordingSettingsUpdate, (_e, patch: Partial<RecordingSettings>) => {
+  const applySettingsPatch = (patch: Partial<RecordingSettings>): void => {
     const cameraWasOn = settings.isCameraEnabled;
     Object.assign(settings, patch);
     broadcastSettings();
@@ -108,9 +174,39 @@ export function registerRecordingHub(
         cameraBubble.destroy();
       }
     }
+  };
+  ipcMain.on(IPC_CHANNELS.recordingSettingsUpdate, (_e, patch: Partial<RecordingSettings>) => {
+    applySettingsPatch(patch);
   });
 
   // ── Disk writer ──────────────────────────────────────────────────────
+  function videosDir(): string {
+    try {
+      return app.getPath("videos");
+    } catch {
+      return homedir();
+    }
+  }
+
+  /** The vault is unreachable: let the user pick where the finished take goes. Resolves the chosen path, or null. */
+  async function offerSaveElsewhere(sessionId: string): Promise<string | null> {
+    const t = createMainTranslator(getAppSettings().locale);
+    // Deliberately parentless: the main window is hidden while the control bar is up.
+    const result = await dialog.showSaveDialog({
+      title: t("dialogs.saveRecordingElsewhere"),
+      defaultPath: join(videosDir(), `${timestampId(Date.now())}.mp4`),
+      filters: [{ name: "MP4", extensions: ["mp4"] }],
+    });
+    if (result.canceled || !result.filePath) return null;
+    try {
+      await writer.salvage(sessionId, result.filePath);
+      return result.filePath;
+    } catch (error) {
+      console.error("salvage failed", error);
+      return null;
+    }
+  }
+
   // Whether we've already told the renderer to stop for a failed write, so the
   // "stop" is sent once per recording (writes are fire-and-forget and keep
   // arriving after the first failure). Reset on each new session.
@@ -138,9 +234,79 @@ export function registerRecordingHub(
   );
   ipcMain.handle(
     IPC_CHANNELS.recordingFinalize,
-    (_e, sessionId: string, meta: RecordingFinalizeMeta) => writer.finalize(sessionId, meta),
+    async (_e, sessionId: string, meta: RecordingFinalizeMeta) => {
+      let recording;
+      try {
+        recording = await writer.finalize(sessionId, meta);
+      } catch (error) {
+        cursorTracks.discard(sessionId);
+        clickSessions.delete(sessionId);
+        stopHookIfIdle();
+        if (error instanceof FinalizeMoveError) {
+          const saved = await offerSaveElsewhere(sessionId);
+          throw new Error(
+            `${saved ? FINALIZE_ELSEWHERE_MARKER : FINALIZE_KEPT_MARKER} ${error.message}`,
+          );
+        }
+        throw error;
+      }
+      // Best effort: a recording is never failed by its cursor track. The tracker
+      // is still sampling here (finalize runs after the encoder stopped), so the
+      // tail past the last frame is cut with the recording's duration. `+ 250`
+      // (not `meta.durationMs` exactly) covers the last frame's own duration and
+      // clock jitter: the whole point of this cut is to drop the 0.6–2 s of
+      // "saving" samples, not to be frame-exact.
+      const track = cursorTracks.finish(
+        sessionId,
+        clickSessions.delete(sessionId),
+        meta.durationMs + 250,
+      );
+      stopHookIfIdle();
+      if (track) {
+        await new LibraryVault(vaultDirectory().path)
+          .writeCursorTrack(recording.id, serializeCursorTrack(track))
+          .catch((error) => console.error("cursor track write failed", error));
+      }
+      return recording;
+    },
   );
-  ipcMain.handle(IPC_CHANNELS.recordingAbort, (_e, sessionId: string) => writer.abort(sessionId));
+  // NIW2-218: Small-file size check before finalize. Takes a session id only, like write.
+  ipcMain.handle(IPC_CHANNELS.recordingStat, (_e, sessionId: string): Promise<number> => {
+    if (typeof sessionId !== "string") throw new Error("recordingStat: invalid session id");
+    return writer.stat(sessionId);
+  });
+  ipcMain.handle(IPC_CHANNELS.recordingAbort, (_e, sessionId: string) => {
+    cursorTracks.discard(sessionId);
+    clickSessions.delete(sessionId);
+    stopHookIfIdle();
+    return writer.abort(sessionId);
+  });
+  ipcMain.handle(
+    IPC_CHANNELS.cursorTrackStart,
+    async (_e, sessionId: string, sourceId: string): Promise<{ enabled: boolean }> => {
+      const display = pickCapturedDisplay(
+        sourceId,
+        await displayIdForSource(sourceId),
+        screen.getAllDisplays(),
+      );
+      if (!display) return { enabled: false };
+      cursorTracks.start(sessionId, display);
+      if (clickHook.ensureRunning()) clickSessions.add(sessionId);
+      return { enabled: true };
+    },
+  );
+  ipcMain.handle(IPC_CHANNELS.cursorClockNow, () => performance.now());
+  ipcMain.on(
+    IPC_CHANNELS.cursorTrackAnchor,
+    (_e, sessionId: string, t0MainMs: number, quality: "exact" | "estimated") =>
+      cursorTracks.get(sessionId)?.setAnchor(t0MainMs, quality),
+  );
+  ipcMain.on(IPC_CHANNELS.cursorTrackPause, (_e, sessionId: string, atMainMs: number) =>
+    cursorTracks.get(sessionId)?.pause(atMainMs),
+  );
+  ipcMain.on(IPC_CHANNELS.cursorTrackResume, (_e, sessionId: string, atMainMs: number) =>
+    cursorTracks.get(sessionId)?.resume(atMainMs),
+  );
 
   // ── Window orchestration ────────────────────────────────────────────
   ipcMain.on(IPC_CHANNELS.recordingStart, (_e, info: RecordingStartInfo) => {
@@ -186,6 +352,7 @@ export function registerRecordingHub(
 
   return {
     isActive: () => activity.active,
+    toggleRecordingSetting: (key) => applySettingsPatch({ [key]: !settings[key] }),
     hideCameraBubbleForCapture: () => {
       if (!cameraBubble.isVisible()) return;
       cameraBubbleHiddenForCapture = true;
@@ -197,6 +364,9 @@ export function registerRecordingHub(
       if (settings.isCameraEnabled) cameraBubble.show();
     },
     forceReset: () => {
+      cursorTracks.discardAll();
+      clickSessions.clear();
+      clickHook.stop();
       if (!activity.active) return;
       applyStopWindowState();
     },

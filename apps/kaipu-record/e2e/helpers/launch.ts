@@ -106,7 +106,41 @@ export async function launchApp(): Promise<{
   const args = [MAIN_ENTRY, `--user-data-dir=${userDataDir}`];
   if (process.env.CI) args.push("--no-sandbox");
 
-  const app = await electron.launch({ args });
+  // No test in this suite records anything, so the app must not ask macOS for screen
+  // capture on its way to the Record page (the default route). Without this, every launch
+  // raises a system permission dialog and a full run stacks one per test.
+  const app = await electron.launch({
+    args,
+    env: { ...process.env, KAIPU_DISABLE_SCREEN_CAPTURE: "1" },
+  });
+
+  // Why this instrumentation exists.
+  //
+  // Twice the suite has died with `Target page, context or browser has been closed`
+  // mid-click, on a locator already reported visible, enabled and stable, and on a
+  // different test each time. Playwright reports that the target went away; it cannot say
+  // whether Electron exited, crashed, or was killed, and that is precisely the missing
+  // fact. `firstWindow()` is also a race when the app owns several windows, so a closed
+  // window is worth naming too.
+  //
+  // These handlers add no behaviour and cannot fail a test. They only make the next
+  // occurrence self-describing in the CI log instead of sending someone back here.
+  let closedDeliberately = false;
+  const pid = app.process().pid ?? -1;
+  app.process().once("exit", (code, signal) => {
+    if (closedDeliberately) return;
+    console.error(
+      `[e2e] Electron pid=${pid} exited on its own: code=${code ?? "null"} ` +
+        `signal=${signal ?? "null"}. The test was still using it.`,
+    );
+  });
+  app.on("window", (window) => {
+    window.once("close", () => {
+      if (closedDeliberately) return;
+      console.error(`[e2e] a window closed while the test was still running: ${window.url()}`);
+    });
+  });
+
   const page = await app.firstWindow();
 
   return {
@@ -114,6 +148,7 @@ export async function launchApp(): Promise<{
     page,
     vaultDir,
     teardown: async () => {
+      closedDeliberately = true;
       await app.close();
       await rm(userDataDir, { recursive: true, force: true });
       await rm(vaultDir, { recursive: true, force: true });

@@ -6,7 +6,7 @@ description: Where Kaipu Record actually is right now — shipped, in flight, an
 # Roadmap
 
 **Last reviewed: 2026-09-02.** Status determined from GitHub PR history
-(`gh pr list --state merged|open` against `csdev19/kaipu-record-monorepo`) — this
+(`gh pr list --state merged|open` against `niway-dev/kaipu-record`) — this
 repo has real, usable PR history, so no `git log` fallback was needed.
 
 ## Shipped

@@ -47,6 +47,20 @@ export interface SessionMeta {
   sourceMtimeMs: number;
   assetIds: string[];
   savedAt: number;
+  /**
+   * The `savedAt` of the scene that was last burned into an export, or null when no
+   * export of this session's content exists.
+   *
+   * This is the anchor for the library's "not exported" badge, and it is a stamp
+   * rather than a timestamp comparison on purpose. The old rule compared an export
+   * file's `createdAt` (its birthtime — when the encode *started*) against this
+   * session's `savedAt`, but exporting always writes the session immediately
+   * afterwards (`video-editor-page.tsx`, the `onSaved` callback), so `savedAt` landed
+   * after the export's birthtime every single time and a freshly exported recording
+   * always read as "not exported". Equality between two values the same write sets
+   * has no such race, and it survives a slow encode of any length.
+   */
+  exportedSavedAt: number | null;
 }
 
 // ── Core logic ────────────────────────────────────────────────────────────────
@@ -54,6 +68,13 @@ export interface SessionMeta {
 export interface SavePayload {
   sessionJson: string;
   assets: { assetId: string; bytes: ArrayBuffer }[];
+  /**
+   * True only for the save that follows a successful export: it stamps
+   * `exportedSavedAt` with this write's own `savedAt`, marking this exact scene as
+   * burned into a file. Every other save leaves the previous stamp untouched, which
+   * is what makes a later edit read as "not exported" again.
+   */
+  exported?: boolean;
 }
 
 export interface LoadResult {
@@ -61,10 +82,25 @@ export interface LoadResult {
   assets: { assetId: string; bytes: ArrayBuffer }[];
 }
 
+/**
+ * The export stamp already on disk, or null when there is no readable meta sidecar.
+ * Best effort by design: a missing or corrupt sidecar means "nothing is known to be
+ * exported", which is the safe side — the badge then tells the user to export.
+ */
+async function readExportedSavedAt(id: string): Promise<number | null> {
+  try {
+    const raw = await readFile(sessionMetaPath(vaultDirectory().path, id), "utf-8");
+    const meta = JSON.parse(raw) as Partial<SessionMeta>;
+    return typeof meta.exportedSavedAt === "number" ? meta.exportedSavedAt : null;
+  } catch {
+    return null;
+  }
+}
+
 // Exported (not just used via the IPC handlers below) so unit tests can exercise the
 // atomic-write/prune/delete behaviour directly against a temp vault dir.
 export async function saveSession(id: string, payload: SavePayload): Promise<void> {
-  const { sessionJson, assets } = payload;
+  const { sessionJson, assets, exported = false } = payload;
 
   // Atomic session JSON write (temp + rename so a crash never truncates the file).
   const sp = sessionPath(id);
@@ -113,11 +149,16 @@ export async function saveSession(id: string, payload: SavePayload): Promise<voi
     // Source missing at save time — record nothing.
   }
   if (source) {
+    // Carry the previous export stamp forward. Dropping it on an ordinary save would
+    // make every edit after an export look like it had never been exported at all,
+    // collapsing the two states the badge exists to tell apart.
+    const savedAt = Date.now();
     const meta: SessionMeta = {
       sourceSizeBytes: source.size,
       sourceMtimeMs: source.mtimeMs,
       assetIds: [...keptIds],
-      savedAt: Date.now(),
+      savedAt,
+      exportedSavedAt: exported ? savedAt : await readExportedSavedAt(id),
     };
     const mp = sessionMetaPath(vaultDirectory().path, id);
     await writeFile(`${mp}.tmp`, JSON.stringify(meta), "utf-8");
@@ -182,8 +223,13 @@ export async function deleteVideoEditSession(id: string): Promise<void> {
 export function registerVideoEditSessionHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.videoEditSaveSession,
-    (_event, id: string, sessionJson: string, assets: { assetId: string; bytes: ArrayBuffer }[]) =>
-      saveSession(id, { sessionJson, assets }),
+    (
+      _event,
+      id: string,
+      sessionJson: string,
+      assets: { assetId: string; bytes: ArrayBuffer }[],
+      exported?: boolean,
+    ) => saveSession(id, { sessionJson, assets, exported }),
   );
 
   ipcMain.handle(IPC_CHANNELS.videoEditLoadSession, (_event, id: string) => loadSession(id));

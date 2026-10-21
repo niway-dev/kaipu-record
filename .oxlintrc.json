@@ -155,6 +155,7 @@
   "globals": {},
   "ignorePatterns": [
     "**/routeTree.gen.ts",
+    "**/.claude/worktrees/**",
     "**/*routeTree.gen.ts",
     "routeTree.gen.ts",
     "apps/web-hono/src/routeTree.gen.ts",

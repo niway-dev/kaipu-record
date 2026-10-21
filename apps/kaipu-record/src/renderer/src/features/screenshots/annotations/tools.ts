@@ -70,11 +70,65 @@ export const HAND_FONT = "Caveat, 'Comic Sans MS', 'Segoe Print', cursive";
  * rendered tspans and the exported SVG so preview and export never diverge. */
 export const TEXT_LINE_HEIGHT = 1.3;
 
-/** Split a text annotation into its display lines. A newline is inserted with
- * Alt+Enter / Shift+Enter while editing (plain Enter commits), so a label can span
- * several lines like in Excalidraw or a spreadsheet cell. */
-export function textLines(text: string): string[] {
-  return text.split("\n");
+/**
+ * The font size an annotation is drawn at, in px.
+ *
+ * `size` is an INDEX into TEXT_PX — the XS/S/M/L presets. `fontPx` is a free value set
+ * by dragging a corner, and it wins when present, which is what makes a corner drag
+ * continuous instead of snapping between four levels. Absent on every label saved
+ * before corners scaled, so those keep their preset and nothing migrates.
+ */
+export function resolveFontPx(size: number, fontPx?: number): number {
+  if (fontPx !== undefined && Number.isFinite(fontPx) && fontPx > 0) return fontPx;
+  return TEXT_PX[size] ?? TEXT_PX[1]!;
+}
+
+/**
+ * The display lines of a text annotation — THE entry point, deliberately the only one.
+ *
+ * A newline is inserted with Alt/Shift+Enter while editing (plain Enter commits). Given
+ * a font size and a wrap width, lines also break by whole words to fit the box. A word
+ * that cannot fit on a line of its own is broken mid-letter, like CSS
+ * `overflow-wrap: anywhere`: the alternative is a line running past the box that the
+ * selection outline, the hit-test and the export all measure from — a label whose text
+ * visibly escapes its own frame. Without a width it breaks only on the user's newlines.
+ *
+ * This absorbed `wrapText`, which used to sit on top of it. A pair where one function
+ * ignores the width is a pair a caller gets wrong, and the video editor's renderer did
+ * exactly that — reaching for the narrower one and silently dropping every wrap.
+ */
+export function textLines(text: string, fs?: number, maxWidthPx?: number): string[] {
+  const hard = text.split("\n");
+  if (!fs || !maxWidthPx || maxWidthPx <= 0) return hard;
+  const maxChars = Math.max(1, Math.floor(maxWidthPx / (fs * CHAR_ADVANCE)));
+  const out: string[] = [];
+  for (const line of hard) {
+    let current = "";
+    for (const word of line.split(" ")) {
+      // Too long to ever fit a line. Like CSS `overflow-wrap: break-word` (and the
+      // inline editor's own textarea), give it a fresh line first, then break it
+      // every `maxChars` — so only the part that truly does not fit gets split.
+      let rest = word;
+      if (rest.length > maxChars && current !== "") {
+        out.push(current);
+        current = "";
+      }
+      while (rest.length > maxChars) {
+        out.push(rest.slice(0, maxChars));
+        rest = rest.slice(maxChars);
+      }
+      if (current === "") {
+        current = rest;
+      } else if (`${current} ${rest}`.length <= maxChars) {
+        current += ` ${rest}`;
+      } else {
+        out.push(current); // the next word does not fit — wrap, never split it
+        current = rest;
+      }
+    }
+    out.push(current); // trailing content, and preserves an empty hard line
+  }
+  return out;
 }
 
 /** Approximate advance (px) of one glyph in the hand font at size `fs`. Used to turn
@@ -83,44 +137,26 @@ export function textLines(text: string): string[] {
 const CHAR_ADVANCE = 0.55;
 
 /**
- * Split text into display lines, word-wrapping to `maxWidthPx` when given (the text
- * box's width, set by dragging its right edge). The user's own newlines are always
- * hard breaks. Wrapping is greedy by whole words — a word never splits mid-letter;
- * a single word wider than the box overflows on its own line instead. Without a
- * width it degrades to `textLines` (break only on explicit newlines).
- */
-export function wrapText(text: string, fs: number, maxWidthPx?: number): string[] {
-  const hard = textLines(text);
-  if (!maxWidthPx || maxWidthPx <= 0) return hard;
-  const maxChars = Math.max(1, Math.floor(maxWidthPx / (fs * CHAR_ADVANCE)));
-  const out: string[] = [];
-  for (const line of hard) {
-    let current = "";
-    for (const word of line.split(" ")) {
-      if (current === "") {
-        current = word;
-      } else if (`${current} ${word}`.length <= maxChars) {
-        current += ` ${word}`;
-      } else {
-        out.push(current); // the next word doesn't fit — wrap, never split it
-        current = word;
-      }
-    }
-    out.push(current); // trailing content, and preserves an empty hard line
-  }
-  return out;
-}
-
-/**
  * Pixel bounds of a rendered text annotation — the single source for the selection
  * outline, the hit box, the resize handles and the export. With a wrap width the box
  * IS that width and the height comes from the wrapped line count; without one, width
  * comes from the longest line. Height always from the line count × line height.
  */
 export function textBoxPx(text: string, fs: number, maxWidthPx?: number): { w: number; h: number } {
-  const lines = wrapText(text, fs, maxWidthPx);
+  const lines = textLines(text, fs, maxWidthPx);
   const h = lines.length * fs * TEXT_LINE_HEIGHT;
   if (maxWidthPx && maxWidthPx > 0) return { w: maxWidthPx, h };
   const longest = lines.reduce((max, line) => Math.max(max, line.length), 0);
   return { w: longest * fs * CHAR_ADVANCE, h };
+}
+
+/**
+ * Keep a dragged font size usable: never invisible, never past the frame.
+ *
+ * Lives here rather than with the handles because it falls back to the preset table,
+ * and that table has exactly one owner — see `one-owner.test.ts`.
+ */
+export function clampFontPx(px: number): number {
+  if (!Number.isFinite(px)) return TEXT_PX[1]!;
+  return Math.min(400, Math.max(6, Math.round(px)));
 }

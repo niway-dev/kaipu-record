@@ -34,17 +34,20 @@ afterEach(() => {
 });
 
 describe("CapturePanel — tabs", () => {
-  it("defaults to the Record tab (recording controls, not the capture button)", () => {
+  it("defaults to the Record tab (recording controls, not the capture buttons)", () => {
     render(<CapturePanel />);
     expect(screen.getByRole("tab", { name: "Record" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("button", { name: /Start Recording/ })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Capture Screen/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Screen/ })).not.toBeInTheDocument();
   });
 
-  it("switches to the Capture tab and shows the Capture Screen action", () => {
+  it("switches to the Capture tab and shows the Frame and Screen actions, and no Window (it is off)", () => {
     render(<CapturePanel />);
     fireEvent.click(screen.getByRole("tab", { name: "Capture" }));
-    expect(screen.getByRole("button", { name: /Capture Screen/ })).toBeInTheDocument();
+    for (const name of [/^Frame/, /^Screen/]) {
+      expect(screen.getByRole("button", { name })).toBeInTheDocument();
+    }
+    expect(screen.queryByRole("button", { name: /^Window/ })).not.toBeInTheDocument();
     // Recording controls are no longer mounted on the capture tab.
     expect(screen.queryByRole("button", { name: /Start Recording/ })).not.toBeInTheDocument();
   });
@@ -58,13 +61,30 @@ describe("CapturePanel — tabs", () => {
     expect(requestChooseSource).toHaveBeenCalledTimes(1);
   });
 
-  it("asks main to run the capture when the Capture Screen button is clicked", () => {
+  it("captures in the chosen mode when a chip is clicked, without touching the stored mode", async () => {
     const requestCaptureScreenshot = vi.fn();
-    window.electronAPI = { ...realApi, requestCaptureScreenshot };
+    const updateSettings = vi.fn();
+    window.electronAPI = { ...realApi, requestCaptureScreenshot, updateSettings };
     render(<CapturePanel />);
     fireEvent.click(screen.getByRole("tab", { name: "Capture" }));
-    fireEvent.click(screen.getByRole("button", { name: /Capture Screen/ }));
-    expect(requestCaptureScreenshot).toHaveBeenCalledTimes(1);
+    fireEvent.click(await screen.findByRole("button", { name: /^Screen/ }));
+    expect(requestCaptureScreenshot.mock.calls).toEqual([["screen"]]);
+    expect(updateSettings).not.toHaveBeenCalled();
+  });
+
+  it("captures with the remembered mode from the Capture tab's primary button", async () => {
+    const requestCaptureScreenshot = vi.fn();
+    const settings = await realApi.getSettings();
+    window.electronAPI = {
+      ...realApi,
+      requestCaptureScreenshot,
+      getSettings: async () => ({ ...settings, screenshotMode: "screen" }),
+    };
+    render(<CapturePanel />);
+    fireEvent.click(screen.getByRole("tab", { name: "Capture" }));
+    await screen.findByText("Last used: Screen. Switch inside the selector.");
+    fireEvent.click(screen.getByRole("button", { name: /^Capture/ }));
+    expect(requestCaptureScreenshot.mock.calls).toEqual([["screen"]]);
   });
 
   it("locks the tabs to Record while a recording is in progress", async () => {
@@ -78,6 +98,32 @@ describe("CapturePanel — tabs", () => {
     expect(screen.getByRole("tab", { name: "Record" })).toBeDisabled();
     // Clicking the locked Capture tab does not reveal the capture action.
     fireEvent.click(screen.getByRole("tab", { name: "Capture" }));
-    expect(screen.queryByRole("button", { name: /Capture Screen/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Screen/ })).not.toBeInTheDocument();
+  });
+
+  it("keeps the three toggles live mid-take while the source card stays locked", async () => {
+    window.electronAPI = {
+      ...realApi,
+      getRecordingState: async () => ({
+        active: true,
+        status: "recording",
+        elapsedSeconds: 5,
+        systemAudioAvailable: false,
+      }),
+    };
+    const { container } = render(<CapturePanel />);
+    await waitFor(() => expect(container.querySelector("[inert]")).not.toBeNull());
+
+    const toggles = screen.getAllByText("OFF").map((el) => el.closest("button")!);
+    expect(toggles).toHaveLength(3);
+    for (const toggle of toggles) expect(toggle.closest("[inert]")).toBeNull();
+    // No loopback in this take → the system-audio tile (second) is disabled.
+    expect(toggles[0]).toBeEnabled();
+    expect(toggles[1]).toBeDisabled();
+    expect(toggles[2]).toBeEnabled();
+    // The source card sits in the locked (inert) wrapper.
+    const locked = container.querySelectorAll("[inert]");
+    expect(locked).toHaveLength(1);
+    expect(locked[0].querySelector("button")).not.toBeNull();
   });
 });

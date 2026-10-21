@@ -10,7 +10,7 @@
  *                  size level), the E edge sets the wrap width.
  */
 
-import { TEXT_LINE_HEIGHT, TEXT_PX, textBoxPx } from "./tools";
+import { clampFontPx, resolveFontPx, TEXT_LINE_HEIGHT, textBoxPx } from "./tools";
 import type { Annotation } from "./scene";
 
 export type HandleId = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "p1" | "p2";
@@ -76,7 +76,11 @@ export function annotationBox(a: Annotation, size: Size): Box | null {
   // text — mirror the rendered selection outline (see Shape): when a wrap width is
   // set the box IS that width (height from the wrapped line count); otherwise width
   // from the longest line. Both in normalized space.
-  const fs = TEXT_PX[a.size];
+  // Through the SAME resolver the renderer uses. Reading `size` directly here is what
+  // made the handles float away from the label: the moment a corner drag set a free
+  // `fontPx`, this measured the preset while the screen drew the custom size, and the
+  // dots were placed around a box nobody could see.
+  const fs = resolveFontPx(a.size, a.fontPx);
   const widthPx = a.width ? a.width * (size.w || 1) : undefined;
   const box = textBoxPx(a.text, fs, widthPx);
   const w = box.w / (size.w || 1);
@@ -95,11 +99,17 @@ export function handlesFor(a: Annotation, size: Size): Handle[] {
   const b = annotationBox(a, size);
   if (!b) return [];
   if (a.kind === "text") {
-    // Two handles: the SE corner scales the font (nearest size level), the E edge
-    // sets the wrap width so the text reflows by words (Excalidraw-style).
+    // Excalidraw's shape: a dot in each corner to scale the text, and both side
+    // midpoints to set the width it wraps to. Corners change how big the text is;
+    // sides change how much room it has. Two handles used to sit on one edge, which
+    // read as "this box has no size" and gave the corner nothing to pull against.
     return [
+      { id: "nw", x: b.x, y: b.y },
+      { id: "ne", x: b.x + b.w, y: b.y },
+      { id: "sw", x: b.x, y: b.y + b.h },
       { id: "se", x: b.x + b.w, y: b.y + b.h },
       { id: "e", x: b.x + b.w, y: b.y + b.h / 2 },
+      { id: "w", x: b.x, y: b.y + b.h / 2 },
     ];
   }
   const cx = b.x + b.w / 2;
@@ -137,20 +147,6 @@ function resizeBox(orig: Box, handle: HandleId, p: Pt): Box {
   };
 }
 
-/** Index of the text size whose px value is closest to `px`. */
-function nearestTextLevel(px: number): number {
-  let best = 0;
-  let bestDelta = Infinity;
-  TEXT_PX.forEach((v, i) => {
-    const d = Math.abs(v - px);
-    if (d < bestDelta) {
-      bestDelta = d;
-      best = i;
-    }
-  });
-  return best;
-}
-
 /**
  * The geometry patch for dragging `handle` of annotation `a` to point `p`.
  * Returns a `Partial<Annotation>` to feed straight into `updateAnnotation`.
@@ -167,12 +163,16 @@ export function resizeAnnotation(
       : { x2: clamp01(p.x), y2: clamp01(p.y) };
   }
   if (a.kind === "text") {
-    const fs = TEXT_PX[a.size];
+    const fs = resolveFontPx(a.size, a.fontPx);
     const wrapPx = a.width ? a.width * (size.w || 1) : undefined;
-    if (handle === "e") {
-      // The east edge sets the wrap width; the text reflows to it by words.
+    if (handle === "e" || handle === "w") {
+      // A side sets the wrap width; the text reflows to it by words. Dragging the
+      // west side keeps the right edge put by moving x as the width grows.
       const minWidth = (fs * 2) / (size.w || 1); // never collapse below ~2 glyphs
-      return { width: Math.max(minWidth, clamp01(p.x) - a.x) };
+      if (handle === "e") return { width: Math.max(minWidth, clamp01(p.x) - a.x) };
+      const right = a.x + (a.width ?? textBoxPx(a.text, fs, wrapPx).w / (size.w || 1));
+      const width = Math.max(minWidth, right - clamp01(p.x));
+      return { width, x: clamp01(right - width) };
     }
     // The se corner scales the font. It compares the dragged height against the
     // CURRENT box height and applies that RATIO to the font — the raw height can't
@@ -180,16 +180,19 @@ export function resizeAnnotation(
     // would always map to the largest level (i.e. the handle would look dead once
     // the east edge made the text wrap).
     const origH = textBoxPx(a.text, fs, wrapPx).h || fs * TEXT_LINE_HEIGHT;
-    const draggedH = (clamp01(p.y) - a.y) * (size.h || 1);
-    const level = nearestTextLevel((fs * draggedH) / origH);
-    if (a.width === undefined) return { size: level };
-    // With a wrap width set, the width scales by the same factor so the label keeps
-    // its shape instead of reflowing into a taller, narrower block.
-    const minWidth = (TEXT_PX[level] * 2) / (size.w || 1);
-    return {
-      size: level,
-      width: clamp01(Math.max(minWidth, a.width * (TEXT_PX[level] / fs))),
-    };
+    // Any corner scales, measured from the edge the user is NOT dragging, so the
+    // opposite corner stays put. `fontPx` is written raw rather than snapped to a
+    // preset: the four levels are a starting point, not the only sizes that exist,
+    // and snapping is what made a slow drag jump.
+    const anchorY = handle === "nw" || handle === "ne" ? a.y + origH / (size.h || 1) : a.y;
+    const draggedH = Math.abs(clamp01(p.y) - anchorY) * (size.h || 1);
+    const ratio = draggedH / origH;
+    const fontPx = clampFontPx(fs * ratio);
+    if (a.width === undefined) return { fontPx };
+    // With a width set, it scales by the same factor so the label keeps its shape
+    // instead of reflowing into a taller, narrower block.
+    const minWidth = (fontPx * 2) / (size.w || 1);
+    return { fontPx, width: clamp01(Math.max(minWidth, a.width * (fontPx / fs))) };
   }
   const orig = annotationBox(a, size);
   if (!orig) return {};

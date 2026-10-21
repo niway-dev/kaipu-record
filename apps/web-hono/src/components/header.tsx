@@ -1,10 +1,11 @@
 import { Link } from "@tanstack/react-router";
+import { KaipuLogo } from "@kaipu/brand";
 import { useTranslations } from "@kaipu/i18n";
 
-import { KaipuMark } from "./kaipu-mark";
 import UserMenu from "./user-menu";
 import { LocaleSwitcher } from "./locale-switcher";
 import type { AuthSession } from "@/lib/auth/types";
+import { DEFAULT_SIGNED_IN_PATH } from "@/lib/post-sign-in";
 
 interface HeaderProps {
   isAuthenticated: boolean;
@@ -18,14 +19,18 @@ export default function Header({ isAuthenticated, userName, userEmail }: HeaderP
     <header className="fixed top-0 left-0 right-0 z-50 bg-background border-b">
       <div className="flex flex-row items-center justify-between px-4 py-2">
         <nav className="flex items-center gap-4 text-lg">
-          <Link to="/" className="flex items-center gap-2 font-semibold">
-            <KaipuMark size={20} className="text-[var(--kaipu-accent-primary)]" />
+          <Link
+            to={isAuthenticated ? DEFAULT_SIGNED_IN_PATH : "/"}
+            className="flex items-center gap-2 font-semibold"
+          >
+            <KaipuLogo use="product" size={22} />
             {t("brand")}
           </Link>
           {isAuthenticated && (
             <Link
-              to="/recordings"
+              to="/dashboard"
               className="text-muted-foreground hover:text-foreground transition-colors"
+              activeProps={{ className: "text-foreground font-medium" }}
             >
               {t("dashboard")}
             </Link>

@@ -5,6 +5,11 @@
  * All components reference tokens via var(--token).
  */
 @import "@kaipu/tokens/css";
+/* StyleX experiment: shared @kaipu/ui components reference the PREFIXED
+ * variables (--kaipu-*), the same spelling the web uses, so the shared code
+ * has one spelling. Same values, same generator, additive. The experiment's
+ * verdict decides whether defineVars replaces both imports. */
+@import "@kaipu/tokens/css/kaipu";
 
 *,
 *::before,
@@ -56,4 +61,21 @@ body {
 *::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
   background-clip: padding-box;
+}
+
+/*
+ * Export tones (NIW2-218 export redesign): teal for what a lighter copy saves, amber for a
+ * file that is heavy to send. Desktop-only for now, so they live here rather than in
+ * @kaipu/tokens; move them there if the web ever needs them.
+ */
+:root {
+  --tone-saving: #2dd4bf;
+  --tone-saving-strong: #14b8a6;
+  --tone-heavy: #f5b544;
+}
+
+[data-theme="light"] {
+  --tone-saving: #0f766e;
+  --tone-saving-strong: #0d9488;
+  --tone-heavy: #b45309;
 }

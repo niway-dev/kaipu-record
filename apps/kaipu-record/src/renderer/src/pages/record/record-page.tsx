@@ -94,21 +94,24 @@ export function RecordPage(): React.JSX.Element {
         </div>
       )}
 
-      <div
-        className={styles.lockable}
-        data-locked={isRecording || undefined}
-        inert={isRecording || undefined}
-      >
-        <SourceCard
-          source={setup.selectedSource}
-          locked={isRecording}
-          onChoose={setup.openSourcePicker}
-        />
+      <div className={styles.lockable}>
+        <div
+          className={styles.locked}
+          data-locked={isRecording || undefined}
+          inert={isRecording || undefined}
+        >
+          <SourceCard
+            source={setup.selectedSource}
+            locked={isRecording}
+            onChoose={setup.openSourcePicker}
+          />
+        </div>
 
         <RecordingToggles
           isMicrophoneEnabled={setup.isMicrophoneEnabled}
           isSystemAudioEnabled={setup.isSystemAudioEnabled}
           isCameraEnabled={setup.isCameraEnabled}
+          isSystemAudioUnavailable={isRecording && activity.systemAudioAvailable === false}
           onToggleMicrophone={setup.toggleMicrophone}
           onToggleSystemAudio={setup.toggleSystemAudio}
           onToggleCamera={setup.toggleCamera}
@@ -122,13 +125,19 @@ export function RecordPage(): React.JSX.Element {
             />
           ) : (
             setup.microphones.length > 0 && (
-              <MicPicker
-                microphones={setup.microphones}
-                selected={setup.selectedMicrophone}
-                isOpen={setup.isMicrophoneMenuOpen}
-                onToggle={setup.toggleMicrophoneMenu}
-                onSelect={setup.selectMicrophone}
-              />
+              <div
+                className={styles.locked}
+                data-locked={isRecording || undefined}
+                inert={isRecording || undefined}
+              >
+                <MicPicker
+                  microphones={setup.microphones}
+                  selected={setup.selectedMicrophone}
+                  isOpen={setup.isMicrophoneMenuOpen}
+                  onToggle={setup.toggleMicrophoneMenu}
+                  onSelect={setup.selectMicrophone}
+                />
+              </div>
             )
           ))}
 

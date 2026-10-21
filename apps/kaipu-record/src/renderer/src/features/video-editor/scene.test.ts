@@ -15,3 +15,12 @@ describe("initialScene", () => {
     expect(newId()).not.toBe(newId());
   });
 });
+
+describe("initialScene — v2 fields", () => {
+  it("starts with no zooms, no redactions and the default sensitivity", () => {
+    const scene = initialScene(10);
+    expect(scene.zoomSegments).toEqual([]);
+    expect(scene.redactions).toEqual([]);
+    expect(scene.zoomSensitivity).toBe(55);
+  });
+});

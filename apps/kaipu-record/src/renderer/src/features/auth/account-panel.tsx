@@ -1,8 +1,9 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
+import { planCopyValues } from "@kaipu/domain/constants";
 import { useTranslations } from "@kaipu/i18n";
-import { Button } from "@renderer/ui/button";
-import { Row } from "@renderer/ui/row";
+import { Button } from "@kaipu/ui";
+import { Row } from "@kaipu/ui";
 import type { AuthPageLocationState } from "@renderer/pages/auth/auth-page";
 import type { AuthStatus } from "@shared/types/auth";
 import { useAuthStatus } from "./use-auth-status";
@@ -59,7 +60,9 @@ export function AccountPanel({
   return (
     <Row
       label={t("accountTitle")}
-      description={<span className={styles.accountNote}>{t("accountDescription")}</span>}
+      description={
+        <span className={styles.accountNote}>{t("accountDescription", planCopyValues())}</span>
+      }
       action={
         <Button size="sm" onClick={() => navigate("/sign-in", { state: RETURN_TO })}>
           {t("signIn")}

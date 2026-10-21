@@ -1,8 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_SETTINGS, DEFAULT_SHORTCUTS } from "@shared/types";
+import { DEFAULT_EXPORT_QUALITY, DEFAULT_SETTINGS } from "@shared/types";
+import { defaultShortcutsFor } from "@shared/shortcut-defaults";
 import { DEFAULT_QUALITY, QUALITY_PRESETS } from "@shared/recording-quality";
 import { DEFAULT_LOCALE } from "@kaipu/i18n";
-import { isValidTheme, mergeSettings, mergeShortcuts } from "./settings.service";
+import {
+  isValidTheme,
+  mergeSettings as mergeSettingsFor,
+  mergeShortcuts as mergeShortcutsFor,
+} from "./settings.service";
+
+// Pin the platform so these tests do not depend on the machine running them.
+const DEFAULT_SHORTCUTS = defaultShortcutsFor("darwin");
+const mergeSettings = (stored: Parameters<typeof mergeSettingsFor>[0]) =>
+  mergeSettingsFor(stored, "darwin");
+const mergeShortcuts = (stored: unknown) => mergeShortcutsFor(stored, "darwin");
+const MAC_SETTINGS = { ...DEFAULT_SETTINGS, shortcuts: DEFAULT_SHORTCUTS };
 
 describe("DEFAULT_SETTINGS", () => {
   // `@shared/types` cannot import the i18n package (preload bundle), so its
@@ -30,8 +42,8 @@ describe("isValidTheme", () => {
 
 describe("mergeSettings", () => {
   it("returns the defaults when nothing is stored", () => {
-    expect(mergeSettings(null)).toEqual(DEFAULT_SETTINGS);
-    expect(mergeSettings(undefined)).toEqual(DEFAULT_SETTINGS);
+    expect(mergeSettings(null)).toEqual(MAC_SETTINGS);
+    expect(mergeSettings(undefined)).toEqual(MAC_SETTINGS);
   });
 
   it("keeps valid stored values", () => {
@@ -40,6 +52,12 @@ describe("mergeSettings", () => {
       stopRecording: "Command+Control+2",
       bringToFront: "Command+Control+3",
       captureScreenshot: "Command+Control+4",
+      captureScreen: "Command+Control+8",
+      captureFrame: "Command+Control+9",
+      captureWindow: "Command+Control+0",
+      toggleMicrophone: "Command+Control+5",
+      toggleSystemAudio: "Command+Control+6",
+      toggleCamera: "Command+Control+7",
     };
     expect(
       mergeSettings({
@@ -49,9 +67,17 @@ describe("mergeSettings", () => {
         showInDock: false,
         recordingQuality: QUALITY_PRESETS.max,
         showBarInRecording: true,
+        showBrandBadge: true,
+        screenshotCopy: "manual",
         shortcuts,
         deviceId: "stored-id",
         uploadMode: "manual",
+        exportQuality: "maximum",
+        showRecordingSavedCard: false,
+        screenshotFrame: { "1": { x: 10, y: 20, width: 300, height: 200 } },
+        screenshotMode: "frame",
+        trayHintShown: true,
+        diagnosticsEnabled: false,
       }),
     ).toEqual({
       theme: "dark",
@@ -60,10 +86,90 @@ describe("mergeSettings", () => {
       showInDock: false,
       recordingQuality: QUALITY_PRESETS.max,
       showBarInRecording: true,
+      showBrandBadge: true,
+      screenshotCopy: "manual",
       shortcuts,
       deviceId: "stored-id",
       uploadMode: "manual",
+      exportQuality: "maximum",
+      showRecordingSavedCard: false,
+      screenshotFrame: { "1": { x: 10, y: 20, width: 300, height: 200 } },
+      screenshotMode: "frame",
+      trayHintShown: true,
+      diagnosticsEnabled: false,
     });
+  });
+
+  it("remembers no frame by default and drops malformed remembered frames", () => {
+    expect(DEFAULT_SETTINGS.screenshotFrame).toEqual({});
+    expect(mergeSettings({}).screenshotFrame).toEqual({});
+    expect(mergeSettings({ screenshotFrame: "nope" as never }).screenshotFrame).toEqual({});
+    expect(
+      mergeSettings({
+        screenshotFrame: {
+          "1": { x: -5, y: 0, width: 640, height: 480 },
+          "2": { x: 0, y: 0, width: 0, height: 480 },
+          "3": { x: 0, y: Number.NaN, width: 10, height: 10 },
+          "4": "big" as never,
+        },
+      }).screenshotFrame,
+    ).toEqual({ "1": { x: -5, y: 0, width: 640, height: 480 } });
+  });
+
+  it("defaults the current screenshot mode to Frame", () => {
+    expect(DEFAULT_SETTINGS.screenshotMode).toBe("frame");
+    expect(mergeSettings({}).screenshotMode).toBe("frame");
+    expect(mergeSettings({ screenshotMode: "screen" }).screenshotMode).toBe("screen");
+  });
+
+  it('reads a stored "window" as Frame while Window mode is off (the flag as shipped)', () => {
+    expect(mergeSettings({ screenshotMode: "window" }).screenshotMode).toBe("frame");
+  });
+
+  it('migrates a stored legacy "area" mode, and drops an unknown one, to Frame', () => {
+    expect(mergeSettings({ screenshotMode: "area" as never }).screenshotMode).toBe("frame");
+    expect(mergeSettings({ screenshotMode: "banana" as never }).screenshotMode).toBe("frame");
+    expect(mergeSettings({ screenshotMode: 2 as never }).screenshotMode).toBe("frame");
+  });
+
+  it("defaults Export quality to Balanced and sanitizes it (NIW2-218)", () => {
+    expect(DEFAULT_SETTINGS.exportQuality).toBe(DEFAULT_EXPORT_QUALITY);
+    expect(mergeSettings({}).exportQuality).toBe("balanced");
+    expect(mergeSettings({ exportQuality: "maximum" }).exportQuality).toBe("maximum");
+    expect(mergeSettings({ exportQuality: "original" as never }).exportQuality).toBe("balanced");
+  });
+
+  it("shows the Recording saved card by default and keeps a boolean choice (NIW2-218)", () => {
+    expect(DEFAULT_SETTINGS.showRecordingSavedCard).toBe(true);
+    expect(mergeSettings({}).showRecordingSavedCard).toBe(true);
+    expect(mergeSettings({ showRecordingSavedCard: false }).showRecordingSavedCard).toBe(false);
+    expect(mergeSettings({ showRecordingSavedCard: "no" as never }).showRecordingSavedCard).toBe(
+      true,
+    );
+  });
+
+  it("has not shown the tray hint by default and keeps a boolean flag", () => {
+    expect(DEFAULT_SETTINGS.trayHintShown).toBe(false);
+    expect(mergeSettings({}).trayHintShown).toBe(false);
+    expect(mergeSettings({ trayHintShown: true }).trayHintShown).toBe(true);
+    expect(mergeSettings({ trayHintShown: "yes" as never }).trayHintShown).toBe(false);
+  });
+
+  it("sends diagnostics by default and keeps a boolean opt-out", () => {
+    expect(DEFAULT_SETTINGS.diagnosticsEnabled).toBe(true);
+    expect(mergeSettings({}).diagnosticsEnabled).toBe(true);
+    expect(mergeSettings({ diagnosticsEnabled: false }).diagnosticsEnabled).toBe(false);
+    expect(mergeSettings({ diagnosticsEnabled: "off" as never }).diagnosticsEnabled).toBe(true);
+  });
+
+  it("drops the last-used export preset keys older settings files carry (NIW2-218)", () => {
+    const merged = mergeSettings({
+      lastExportPreset: "vertical",
+      lastExportFraming: "fill",
+    } as never);
+    expect(merged).not.toHaveProperty("lastExportPreset");
+    expect(merged).not.toHaveProperty("lastExportFraming");
+    expect(merged.exportQuality).toBe("balanced");
   });
 
   it('coerces a legacy persisted "system" theme to the dark default', () => {
@@ -93,8 +199,9 @@ describe("mergeSettings", () => {
   it("sanitizes recordingQuality — keeps valid, defaults garbage/absent", () => {
     expect(mergeSettings({}).recordingQuality).toEqual(DEFAULT_QUALITY);
     expect(
-      mergeSettings({ recordingQuality: { resolution: 9, fps: 1, bitrate: "x" } as never })
-        .recordingQuality,
+      mergeSettings({
+        recordingQuality: { resolution: 9, fps: 1, bitrate: "x" } as never,
+      }).recordingQuality,
     ).toEqual(DEFAULT_QUALITY);
     const custom = { resolution: 2160, fps: 48, bitrate: "max" } as const;
     expect(mergeSettings({ recordingQuality: custom }).recordingQuality).toEqual(custom);
@@ -107,7 +214,7 @@ describe("mergeSettings", () => {
         launchAtLogin: "yes" as never,
         showInDock: 1 as never,
       }),
-    ).toEqual(DEFAULT_SETTINGS);
+    ).toEqual(MAC_SETTINGS);
   });
 });
 
@@ -119,16 +226,63 @@ describe("mergeShortcuts", () => {
   });
 
   it("keeps valid per-action bindings and defaults the rest", () => {
-    expect(mergeShortcuts({ startRecording: "Command+Control+G", stopRecording: "" })).toEqual({
+    expect(
+      mergeShortcuts({
+        startRecording: "Command+Control+G",
+        stopRecording: "",
+      }),
+    ).toEqual({
       startRecording: "Command+Control+G",
       stopRecording: DEFAULT_SHORTCUTS.stopRecording,
       bringToFront: DEFAULT_SHORTCUTS.bringToFront,
       captureScreenshot: DEFAULT_SHORTCUTS.captureScreenshot,
+      captureScreen: DEFAULT_SHORTCUTS.captureScreen,
+      captureFrame: DEFAULT_SHORTCUTS.captureFrame,
+      captureWindow: DEFAULT_SHORTCUTS.captureWindow,
+      toggleMicrophone: DEFAULT_SHORTCUTS.toggleMicrophone,
+      toggleSystemAudio: DEFAULT_SHORTCUTS.toggleSystemAudio,
+      toggleCamera: DEFAULT_SHORTCUTS.toggleCamera,
     });
+  });
+
+  it("gives settings stored before the live toggles existed their new defaults", () => {
+    const merged = mergeShortcuts({
+      startRecording: "Command+Control+1",
+      stopRecording: "Command+Control+2",
+      bringToFront: "Command+Control+3",
+      captureScreenshot: "Command+Control+4",
+    });
+    expect(merged.toggleMicrophone).toBe("Command+Control+M");
+    expect(merged.toggleSystemAudio).toBe("Command+Control+A");
+    expect(merged.toggleCamera).toBe("Command+Control+K");
+  });
+
+  it("gives settings stored before Screen and Frame existed their new defaults", () => {
+    const merged = mergeShortcuts({
+      startRecording: "Command+Control+1",
+      captureScreenshot: "Command+Control+4",
+    });
+    expect(merged.captureScreenshot).toBe("Command+Control+4");
+    expect(merged.captureScreen).toBe("Command+Control+Shift+X");
+    expect(merged.captureFrame).toBe("Command+Control+Shift+F");
+    expect(merged.captureWindow).toBe("Command+Control+W");
   });
 
   it("ignores non-string bindings", () => {
     expect(mergeShortcuts({ bringToFront: 42 }).bringToFront).toBe(DEFAULT_SHORTCUTS.bringToFront);
+  });
+});
+
+describe("platform-specific shortcut defaults", () => {
+  it("gives a Windows user Control+Alt defaults", () => {
+    expect(mergeSettingsFor(null, "win32").shortcuts).toEqual(defaultShortcutsFor("win32"));
+    expect(mergeSettingsFor(null, "win32").shortcuts.startRecording).toBe("Control+Alt+C");
+  });
+
+  it("keeps a stored binding and fills the rest with the platform's defaults", () => {
+    const merged = mergeShortcutsFor({ startRecording: "Control+Alt+G" }, "win32");
+    expect(merged.startRecording).toBe("Control+Alt+G");
+    expect(merged.stopRecording).toBe("Control+Alt+S");
   });
 });
 
@@ -162,5 +316,38 @@ describe("uploadMode", () => {
     expect(mergeSettings({ uploadMode: "everything" as unknown as "manual" }).uploadMode).toBe(
       "local-only",
     );
+  });
+});
+
+describe("screenshotSave (removed)", () => {
+  it("drops the retired preference from a stored file", () => {
+    expect(mergeSettings({ screenshotSave: "manual" } as never)).not.toHaveProperty(
+      "screenshotSave",
+    );
+  });
+});
+
+describe("showBrandBadge", () => {
+  it("defaults to off — the free app carries no watermark", () => {
+    expect(DEFAULT_SETTINGS.showBrandBadge).toBe(false);
+    expect(mergeSettings(null).showBrandBadge).toBe(false);
+  });
+
+  it("keeps a stored boolean and coerces anything else to off", () => {
+    expect(mergeSettings({ showBrandBadge: true }).showBrandBadge).toBe(true);
+    expect(mergeSettings({ showBrandBadge: "yes" as never }).showBrandBadge).toBe(false);
+  });
+});
+
+describe("screenshotCopy", () => {
+  it("defaults to auto", () => {
+    expect(DEFAULT_SETTINGS.screenshotCopy).toBe("auto");
+    expect(mergeSettings(null).screenshotCopy).toBe("auto");
+  });
+
+  it("keeps a valid stored mode and coerces anything else to the default", () => {
+    expect(mergeSettings({ screenshotCopy: "manual" }).screenshotCopy).toBe("manual");
+    expect(mergeSettings({ screenshotCopy: "always" as never }).screenshotCopy).toBe("auto");
+    expect(mergeSettings({ screenshotCopy: 3 as never }).screenshotCopy).toBe("auto");
   });
 });

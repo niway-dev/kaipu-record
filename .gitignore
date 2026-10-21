@@ -12,6 +12,8 @@ build
 
 # Environment variables
 .env
+.env.*
+.env.production
 .env*.local
 .env.bak*
 .env.keys
@@ -19,6 +21,9 @@ build
 !.env.example
 !.env.signing.example
 !.env.x
+
+# Written by the release workflows for `wrangler deploy --secrets-file`; never committed.
+worker-secrets.json
 
 # Code signing / notarization secrets (never commit these)
 *.p12
@@ -79,3 +84,6 @@ docs/specs
 
 # lefthook per-developer overrides (never committed)
 lefthook-local.yml
+
+# git worktrees live here; they are checkouts of other branches, not sources
+.claude/worktrees/

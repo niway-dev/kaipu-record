@@ -8,6 +8,10 @@
   position: relative;
   height: 20px;
   flex-shrink: 0;
+  /* v2: same slab as the Activity / Zooms / Privacy lanes so the stack reads as one
+     timeline (UI spec § 6). Pills still fill the row, so it only shows in empty time. */
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
 }
 
 .pill {

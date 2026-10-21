@@ -41,6 +41,8 @@ rather than the only thing standing between a capture and oblivion. Add lightwei
 (multi-select delete, or a "discard" action in the editor that removes the auto-saved row). Treat
 auto-save as the floor; curation tools are the follow-up.
 
+_Resolved 2026-09-23 as a preference — see [Settings → Screenshots](./settings-screenshots)._
+
 ## 2. Naming
 
 **Options.** (a) Keep `screenshot-<iso-timestamp>` as both id and default title. (b) A friendlier

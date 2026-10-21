@@ -1,0 +1,41 @@
+.box {
+  position: absolute;
+  z-index: 4;
+  border: 1.5px solid var(--accent-primary);
+  cursor: move;
+  touch-action: none;
+}
+
+.handle {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border: 1px solid var(--accent-primary);
+  border-radius: 2px;
+  background: #fff;
+  touch-action: none;
+}
+
+.nw {
+  top: -5px;
+  left: -5px;
+  cursor: nwse-resize;
+}
+
+.ne {
+  top: -5px;
+  right: -5px;
+  cursor: nesw-resize;
+}
+
+.sw {
+  bottom: -5px;
+  left: -5px;
+  cursor: nesw-resize;
+}
+
+.se {
+  bottom: -5px;
+  right: -5px;
+  cursor: nwse-resize;
+}

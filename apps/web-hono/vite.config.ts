@@ -11,7 +11,24 @@ export default defineConfig({
     tsconfigPaths(),
     tanstackStart(),
     cloudflare({ viteEnvironment: { name: "ssr" }, inspectorPort: 9233 }),
-    viteReact(),
+    viteReact({
+      babel: {
+        plugins: [
+          [
+            "@stylexjs/babel-plugin",
+            {
+              // Always false: it must MATCH the postcss scanner (babel.config.cjs,
+              // dev:false) — with dev:true the transform emits different class
+              // names than the sheet carries and dev renders unstyled.
+              dev: false,
+              runtimeInjection: false,
+              treeshakeCompensation: true,
+              unstable_moduleResolution: { type: "commonJS" },
+            },
+          ],
+        ],
+      },
+    }),
   ],
   server: {
     port: 3001,

@@ -5,7 +5,12 @@ description: Rework the download landing so the product's features (record, scre
 
 # Landing redesign — feature showcase with looping demos
 
-> **Status: 🟢 Ready to validate.**
+> **Status: ⚪ Superseded** (2026-09-30) by
+> [Marketing landing — the four-moments home](./marketing-landing), which
+> replaced `components/landing/` wholesale. Kept for the reasoning below on
+> looping video vs GIF, which still holds if demo clips return.
+>
+> Previously: 🟢 Ready to validate.
 > Structure + copy + `FeatureDemo` component shipped in PR #45. The four demo
 > clips (`hero`, `record`, `screenshot`, `editor`) landed on branch
 > `feat/landing-demo-clips` as `.webm` + `.mp4` + `.jpg` under `public/demos/`

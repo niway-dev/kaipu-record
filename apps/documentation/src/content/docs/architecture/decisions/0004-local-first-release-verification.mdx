@@ -1,0 +1,179 @@
+---
+title: "ADR 0004: Local-first verification with cloud release gates"
+description: Iterative checks move to a Lefthook pre-push that runs the same `verify` command the release workflows run in the cloud; GitHub Actions validates only release candidates and the exact SHA being published. Replaces per-PR-update cloud validation, which exhausted the account's Actions quota and blocked releases.
+---
+
+# ADR 0004: Local-first verification with cloud release gates
+
+## Status
+
+| Field         | Value                                                                                                                                                                                                                       |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Superseded by ADR 0010 — verification moved back to Actions when the repository went public                                                                                                                                 |
+| Date          | 2026-09-24                                                                                                                                                                                                                  |
+| Supersedes    | The pre-push scope of the 2026-09-06 Lefthook spec (types stayed in CI)                                                                                                                                                     |
+| Amended by    | [ADR 0005](./0005-draft-ready-release-candidate-readiness) — candidate readiness, event handling and the required-check name · [ADR 0006](./0006-desktop-e2e-in-the-candidate-tier) — desktop E2E moves in front of the tag |
+| Superseded by | [ADR 0010](./0010-checks-run-in-actions-on-every-pr)                                                                                                                                                                        |
+
+## Context
+
+The owner iterates in many small PRs, often several pushes each. Every PR update started
+up to four Linux workflows in parallel (`ci.yml`, `ci-desktop.yml`, `ci-api.yml`,
+`ci-web.yml`). In September 2026 those four consumed **802 Linux minutes**, about 59.5% of
+this repository's gross Actions usage, and `release-please.yml` added 90 more by running on
+every push to `main`, docs merges included. The account is a single-owner personal account:
+its quota is shared with `invisible-assistant`, whose macOS PR job was the largest single
+item account-wide.
+
+On 2026-09-19 the account hit its quota and the owner upgraded to Pro ($4.00). On
+2026-09-23 the quota was exhausted again and the two most recent `release-please` runs
+failed before starting: _"The job was not started because recent account payments have
+failed or your spending limit needs to be increased."_ The desktop release PR stopped
+updating. The evidence, the archived billing exports and the before/after protocol are in
+[the audit](/specs/2026-09-23-ci-minutes-audit/) and
+[the baseline](/specs/2026-09-ci-usage-baseline/).
+
+Two facts shaped the decision:
+
+- **The local gate is cheap.** Measured on the owner's machine in a clean worktree on
+  2026-09-24: lint under 1 s, format check 2 s, all-workspace type-check 8 s cold, the
+  whole test suite (1,167 tests, 181 files in the desktop app alone) 18 s cold. The full
+  `verify` sequence takes **27 s cold and 3 s with a warm Turbo cache**. The same desktop
+  suite takes 208 s on a GitHub runner.
+- **Cloud PR checks were not the publication gate.** The repository has no branch
+  protection or rulesets (verified through three REST endpoints on 2026-09-24), and
+  `release-desktop.yml` had no lint, type or test job before building, signing and writing
+  the update feed to R2. Removing PR checks therefore relocates coverage rather than
+  removing a server-enforced gate, provided the release gate is added first.
+
+The desktop E2E suite ran on Linux in PRs, where the export test skips itself (headless
+Linux Chromium has no H.264 encoder). The export path had therefore **never** been
+validated in the cloud.
+
+## Decision
+
+1. **One verification entry point.** The root `bun run verify` runs lint, read-only
+   formatting check, `@kaipu/*` package builds, all-workspace type checks and all unit and
+   component tests. It is the only definition of "verified" in the repository.
+2. **Lefthook pre-push runs `verify`.** Pre-commit stays fast and staged-file-scoped.
+   Commit-msg is unchanged. `LEFTHOOK=0 git push` remains the documented one-off bypass.
+3. **Cloud validation moves to the release boundary.** Each `release-*.yml` gains a Linux
+   `verify` job that the publishing job `needs:`. It runs on the exact tagged SHA, and
+   nothing is written to R2, Cloudflare Workers or a GitHub Release until it passes.
+4. **Desktop E2E runs on the macOS release runner**, after `bun run build` and before
+   `electron-builder`, so the export test runs with a real encoder for the first time. The
+   build and install are shared with the packaging step; the marginal cost is the Playwright
+   run plus an ffmpeg install.
+
+   > **Amended by [ADR 0006](./0006-desktop-e2e-in-the-candidate-tier).** The suite also runs
+   > in the candidate tier now, before the tag exists. Running it only at release time is
+   > how desktop 0.8.0 was tagged and left with a published, empty GitHub Release.
+
+5. **PR-triggered workflows are retired.** The four `ci*.yml` keep `workflow_dispatch` for
+   validating a candidate on demand. `release-please.yml` runs only when a releasable path
+   changes.
+6. **A candidate tier on the release PR.** The candidate job runs `verify` plus the
+   web and API bundles on the PR that release-please maintains, so `main` is validated as
+   it will be tagged, before the tag exists. On every other PR it is skipped. It can also
+   be dispatched by hand for the risky-change list below.
+
+   > **Amended by [ADR 0005](./0005-draft-ready-release-candidate-readiness).** The file is
+   > now `pr-checks.yml`, readiness is the Draft → Ready for review transition rather than a
+   > `verify` label, and the required check is named `Merge requirements`. The claim that the
+   > workflow costs nothing on other PRs was never quite true: the lightweight gate is a
+   > real job on a real runner.
+
+7. **Measurement before any savings claim.** The September exports are the "before". The
+   "after" is a later export in its own dated directory, following the protocol in the
+   baseline document.
+
+## Alternatives rejected
+
+- **Keep every PR check.** Preserves independent feedback before review but keeps the
+  iteration cost that exhausted the quota; the checks were never enforced anyway.
+- **Move checks to every push to `main`.** Pays per merge instead of per release candidate.
+  In September 40 of the last 40 pushes to `main` were PR merges; the saving would be
+  marginal and the signal would arrive after merge.
+- **Only migrate `invisible-assistant` from Husky to Lefthook.** Changes the hook manager,
+  not the cloud trigger or the missing release gate.
+- **Remove cloud verification entirely.** Loses the only clean-environment check on the
+  SHA that ships, and the only place the macOS export path is exercised.
+- **Run the desktop E2E on Linux at release time.** Cheaper, but the export test would keep
+  skipping; a green run would not mean what it appears to mean.
+- **Buy more minutes.** A non-zero spending limit is still required so that quota
+  exhaustion blocks nothing, but paying for per-push validation that nobody reads is not
+  the fix.
+
+## Consequences
+
+- Pushes take longer locally: about 27 s cold, 3 s warm. Turbo caching makes repeat pushes
+  nearly free.
+- A problem that only reproduces in a clean environment is discovered at release
+  preparation, not at PR time, and `main` may contain such a regression until then.
+- Hooks are bypassable and attest nothing about the pushed SHA. The release gate on the
+  tagged SHA is the actual publication guarantee.
+- If the release gate fails, the tag and the empty GitHub Release created by release-please
+  already exist. The recovery is to fix forward and cut a patch release, not to delete tags.
+- Cloud execution now scales with release candidates instead of with edits.
+- No saving is claimed until a comparable "after" period is measured.
+
+## What is given up, and how each gap is closed
+
+Compared with cloud checks on every PR update, stated plainly:
+
+| Lost                                                                                                                                                          | Closed by                                                                                                                                                                                                                                                   |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Clean-environment detection per PR: uncommitted files, stale lockfile, native deps that only fail on a fresh install, env present locally but not on a runner | The risky-change list: dispatch `Release candidate` before merging a PR that touches `bun.lock`, `scripts/`, `.github/workflows/`, native dependencies or package build config. Minutes per use, not per push.                                              |
+| Bisection: a red gate after many merges has many suspects                                                                                                     | The candidate tier keeps the window to one release PR; a dispatch after a risky merge keeps it shorter. **Since 2026-09-26 the desktop end-to-end suite also runs pre-push on desktop changes (~37 s), so a desktop regression is attributed to one push.** |
+| Bypass: `LEFTHOOK=0`, or a working tree that differs from the pushed commit                                                                                   | The release gate on the tagged SHA is the guarantee; the hook is convenience. Push with a clean tree.                                                                                                                                                       |
+| Timing: problems surface at release preparation, not at PR time                                                                                               | The candidate job fails before the tag exists, so the cost is a push, not a patch release.                                                                                                                                                                  |
+
+What is not lost: types were checked before and are checked now, at every push locally and
+at every release in the cloud. Flows are exercised on the platform that ships, against the
+bundle that ships, for the first time. Nothing was ever enforced on PRs, because the
+repository has no branch protection.
+
+Security assessment for a single-owner repository with tag-driven releases: publication is
+safer than before, iteration is less convenient. The day a second person merges, this
+decision reopens (branch protection plus a required `verify` check on PRs).
+
+## Non-goals
+
+Changing product behaviour, removing or rewriting tests, building signed installers on
+every push, self-hosted runners, splitting the renderer test project into Node and jsdom
+(a candidate optimisation, unmeasured and now unnecessary for the gate), and migrating
+`invisible-assistant` in this repository's PRs.
+
+## Reopen when
+
+- Release-time validation repeatedly finds regressions that `verify` missed locally.
+- Collaboration requires server-enforced pre-merge checks (add branch protection and a
+  required check at that point; a `paths`-filtered check must not be made required).
+- `verify` grows past roughly a minute warm and bypasses become routine.
+- Release frequency grows to the point where per-release validation costs more than the
+  retired PR checks did.
+
+## Implementation
+
+Stacked PRs, in merge order:
+
+1. [#160](https://github.com/niway-dev/kaipu-record/pull/160) — `release-please.yml`
+   path filter (urgent: it was the workflow the block hit first).
+2. Local gate: `verify` script, Lefthook pre-push, this ADR and the audit documents.
+3. Release gates: `verify` job in the three `release-*.yml`, E2E on the macOS release job.
+4. Retire the `pull_request` triggers from the four `ci*.yml`.
+5. Candidate tier: the candidate job on the release-please PR and on dispatch (now
+   `pr-checks.yml`; see [ADR 0005](./0005-draft-ready-release-candidate-readiness)).
+
+The account was quota-blocked while these were written, so none of the workflow changes
+had a cloud run. The first real check of the release gate is the next desktop release.
+
+## Guidance
+
+Reusable mechanics belong in the general-knowledge hub, not here:
+[CI runner cost](https://github.com/csdev19/general-knowledge/blob/main/monorepos/ci-runner-cost.md)
+(the "release-only" rung of the escalation ladder) and
+[PR checks](https://github.com/csdev19/general-knowledge/blob/main/monorepos/pr-checks.md).
+Once the release gate has run for real, the hub playbook should gain what this decision
+exposed: when a check belongs in a hook, in a PR, or at release, and that a release
+workflow must never publish without a verification job on the same SHA.

@@ -1,3 +1,4 @@
+import type { PlanId } from "@kaipu/domain/constants";
 import type { AuthStatus } from "./types/auth";
 
 /**
@@ -12,11 +13,16 @@ import type { AuthStatus } from "./types/auth";
  * touching every call site.
  */
 export interface Entitlements {
-  plan: "free" | "pro";
+  plan: PlanId;
   status: "active" | "canceled" | "past_due";
   /** ISO timestamp, or null when the grant does not lapse on its own. */
   currentPeriodEnd: string | null;
   features: {
+    /**
+     * Legacy: the desktop no longer gates anything on it — the free app ships
+     * without a watermark (backlog/free-tier-no-watermark). Still on the wire
+     * until the server drops it.
+     */
     watermarkRemoval: boolean;
     /** Whether the account can upload recordings to cloud storage. */
     cloudUploads: boolean;
@@ -25,28 +31,21 @@ export interface Entitlements {
   };
 }
 
-/** The account before anyone paid — and what an unreachable server falls back to on first run. */
+/**
+ * The account before anyone paid — and what an unreachable server falls back to on first run.
+ * `cloudStorageBytes` is a LITERAL copy of `PLANS.free.cloudStorageBytes` (250 MB): this file is
+ * reachable from the preload bundle, which cannot take value imports from workspace packages
+ * (CLAUDE.md). entitlements.test.ts pins it to the domain plan table.
+ */
 export const FREE_ENTITLEMENTS: Entitlements = {
   plan: "free",
   status: "active",
   currentPeriodEnd: null,
-  features: { watermarkRemoval: false, cloudUploads: false, cloudStorageBytes: 1_000_000_000 },
+  features: { watermarkRemoval: false, cloudUploads: false, cloudStorageBytes: 250_000_000 },
 };
 
 /** The entitlements a status carries, if any: signed-in always, `unknown` when cached, signed-out never. */
 export function entitlementsFromStatus(status: AuthStatus): Entitlements | null {
   if (status.kind === "signed-out") return null;
   return status.entitlements ?? null;
-}
-
-/**
- * Whether to skip burning the watermark. Reads the server-derived feature, with
- * one local check on top: a cached period end that has already passed revokes it,
- * so an offline app cannot ride a stale `true` past the day the plan lapsed.
- */
-export function isWatermarkRemovalGranted(status: AuthStatus, now: Date): boolean {
-  const entitlements = entitlementsFromStatus(status);
-  if (!entitlements?.features.watermarkRemoval) return false;
-  if (entitlements.currentPeriodEnd === null) return true;
-  return Date.parse(entitlements.currentPeriodEnd) > now.getTime();
 }

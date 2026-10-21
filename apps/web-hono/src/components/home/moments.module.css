@@ -1,0 +1,75 @@
+/*
+ * A band between the hero and the Kai section: as tall as its three lines of
+ * text and their breathing room, never a viewport. The previous version pinned
+ * 92vh here, which put a second full screen between the opening and the first
+ * product proof (home audit H13).
+ */
+.band {
+  position: relative;
+  display: grid;
+  place-items: center;
+  /*
+   * Generous, but still a band and not the 92vh screen this used to be (home
+   * audit H13). The tight version left only ~144px between this promise and the
+   * Kai section below, and on a single flat surface two sections that close
+   * read as one long one. The air IS the separator here — there is no rule or
+   * tint between them.
+   */
+  padding: 150px var(--kl-gutter) 130px;
+  overflow: hidden;
+}
+
+.inner {
+  position: relative;
+  z-index: 1;
+  max-width: 1120px;
+  text-align: center;
+}
+
+.eyebrow {
+  font-family: var(--kl-font-mono);
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: var(--kl-tracking-label);
+  text-transform: uppercase;
+  color: var(--kl-faint);
+}
+
+/*
+ * The page's voice in one rule: a tight sans statement, then a serif italic
+ * answer in pink. Both live in the same heading because they are one sentence —
+ * splitting them into two elements would let a screen reader read them as two.
+ * An h2, not a second h1: the hero owns the page's title.
+ */
+.title {
+  margin: 18px 0 0;
+  font-size: var(--kl-fs-h2);
+  font-weight: 700;
+  line-height: var(--kl-leading-h);
+  letter-spacing: var(--kl-tracking-h1);
+  text-wrap: balance;
+}
+
+.serif {
+  font-family: var(--kl-font-serif);
+  font-size: var(--kl-fs-h2-serif);
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.01em; /* the serif is already open; it does not want the sans tracking */
+  color: var(--kl-pink-tx);
+}
+
+.sub {
+  max-width: 620px;
+  margin: 26px auto 0;
+  font-size: var(--kl-fs-body);
+  line-height: var(--kl-leading-body);
+  color: var(--kl-dim);
+  text-wrap: pretty;
+}
+
+@media (width < 980px) {
+  .band {
+    padding: 96px 20px 84px;
+  }
+}

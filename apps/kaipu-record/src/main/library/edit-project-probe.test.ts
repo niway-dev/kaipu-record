@@ -9,7 +9,7 @@ vi.mock("./vault-location", () => ({
 }));
 
 import { saveSession, sessionMetaPath } from "./video-edit-session";
-import { hasEditSession, probeEditing } from "./edit-project-probe";
+import { hasEditSession, probeEditing, probeEditSession } from "./edit-project-probe";
 
 describe("probeEditing", () => {
   let dir: string;
@@ -84,5 +84,57 @@ describe("probeEditing", () => {
     await writeFile(join(dir, ".kaipu", "corrupt.edit.json"), "{}");
     await writeFile(sessionMetaPath(dir, "corrupt"), "{not json");
     expect(await probeEditing(dir, local("corrupt"))).toBe("missing-dependencies");
+  });
+
+  it("probeEditSession returns the session's savedAt, or null without a session", async () => {
+    await writeFile(join(dir, "r.mp4"), "v");
+    expect(await probeEditSession(dir, "r")).toEqual({ savedAt: null, exportedSavedAt: null });
+    await saveSession("r", { sessionJson: "{}", assets: [] });
+    const { savedAt } = await probeEditSession(dir, "r");
+    expect(typeof savedAt).toBe("number");
+    expect(savedAt).toBeGreaterThan(0);
+  });
+
+  it("probeEditSession returns nulls for a session without meta or with corrupt meta", async () => {
+    await writeFile(join(dir, "r.mp4"), "v");
+    await writeFile(join(dir, ".kaipu", "r.edit.json"), "{}");
+    expect(await probeEditSession(dir, "r")).toEqual({ savedAt: null, exportedSavedAt: null });
+    await writeFile(sessionMetaPath(dir, "r"), "not json");
+    expect(await probeEditSession(dir, "r")).toEqual({ savedAt: null, exportedSavedAt: null });
+  });
+
+  it("reports exportedSavedAt only for the save that carried `exported`", async () => {
+    await writeFile(join(dir, "r.mp4"), "v");
+    await saveSession("r", { sessionJson: "{}", assets: [] });
+    expect((await probeEditSession(dir, "r")).exportedSavedAt).toBeNull();
+
+    await saveSession("r", { sessionJson: "{}", assets: [], exported: true });
+    const exported = await probeEditSession(dir, "r");
+    // The export save stamps its OWN savedAt: equality is what the badge reads as
+    // "every edit is in a file", and it cannot race a slow encode.
+    expect(exported.exportedSavedAt).toBe(exported.savedAt);
+  });
+
+  it("keeps the export stamp across later saves, so it reads as edited-since-export", async () => {
+    // `savedAt` is Date.now(): two saves inside one millisecond (a fast CI runner)
+    // would stamp the same value, so the clock is pinned to two distinct instants.
+    const clock = vi.spyOn(Date, "now");
+    try {
+      await writeFile(join(dir, "r.mp4"), "v");
+      clock.mockReturnValue(1_000);
+      await saveSession("r", { sessionJson: "{}", assets: [], exported: true });
+      const stamp = (await probeEditSession(dir, "r")).exportedSavedAt;
+      expect(stamp).toBe(1_000);
+
+      // A plain edit must neither clear the stamp (that would claim it was never
+      // exported) nor advance it (that would claim the new edit is already in a file).
+      clock.mockReturnValue(2_000);
+      await saveSession("r", { sessionJson: '{"v":2}', assets: [] });
+      const after = await probeEditSession(dir, "r");
+      expect(after.exportedSavedAt).toBe(stamp);
+      expect(after.savedAt).toBe(2_000);
+    } finally {
+      clock.mockRestore();
+    }
   });
 });

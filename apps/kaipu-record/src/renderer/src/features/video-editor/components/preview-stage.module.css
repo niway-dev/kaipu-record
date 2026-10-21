@@ -3,28 +3,63 @@
   position: relative;
   max-width: 100%;
   max-height: 100%;
+  /* v2: clips the zoomed content layer to the frame. Known consequence: an annotation's
+     resize handles right at the frame edge, and the inline text input opened near the
+     right edge, are clipped too — accepted, see the "overflow: hidden is a real
+     regression" decision in plans/video-editor-v2/09. */
+  overflow: hidden;
 }
 
+/* v2: everything that belongs to the FOOTAGE (video, slide, privacy regions,
+   annotations) lives here and receives the camera transform.
+
+   It also takes over the contained-player caps that used to sit on .video, plus an
+   explicit aspect-ratio fed from the decoded frame size (--frame-ratio, set inline on
+   loadedmetadata). Shrink-wrapping the <video> is not enough: when the HEIGHT cap binds,
+   a max-content wrapper keeps its full width while the video letterboxes inside it, and
+   the camera box — positioned, sized and drag-converted in percentages of THIS element —
+   would frame a rectangle that is not the picture. `width: min(capW, capH × ratio)` lets
+   both caps bind while keeping the ratio exact, so this box IS the picture. */
+.content {
+  position: relative;
+  transform-origin: 0 0;
+  aspect-ratio: var(--frame-ratio);
+  /* THE INVARIANT: this box is the picture, exactly. Every geometry in the editor — the
+     camera box, its scrim, the zoom transform, privacy regions, annotations — is stored
+     and dragged as a percentage of this element, so the moment it is wider or taller than
+     the picture, all of it frames a rectangle the user is not looking at, and .stage's
+     `overflow: hidden` clips the difference.
+
+     Both axes therefore bind against the SAME box, and that box is the container, not the
+     viewport. `d491b7d` capped only the height row-relative (`min(46vh, 100%)`) and left
+     the width deriving from `46vh`; below roughly an 850 px window the stage row is
+     shorter than 46vh, so the height clamped while the width kept its larger viewport
+     figure. The box stopped matching the ratio and, with a zoom applied, the bottom of the
+     recorded screen was cut off — the exact failure this rule now makes unexpressible.
+
+     Container query units say what a viewport unit cannot: "the height of the row I am
+     actually in". .videoRegion carries `container-type: size` for them to resolve
+     against. */
+  width: min(100cqw, calc(100cqh * var(--frame-ratio)));
+  max-width: 100cqw;
+  max-height: 100cqh;
+}
+
+/* Fullscreen: lift the compact caps, keep the ratio. */
+.contentExpanded {
+  width: min(100vw, calc(100vh * var(--frame-ratio)));
+  max-width: 100vw;
+  max-height: 100vh;
+}
+
+/* The video fills a box that already has its exact aspect ratio, so there is nothing to
+   letterbox; object-fit stays `contain` as a guard for the frames decoded before
+   loadedmetadata reports the real size. */
 .video {
   display: block;
-  /* Contained-player sizing (CapCut-style): the video is a compact, centered box, NOT
-     the full-width protagonist, so the toolbar/transport/timeline stay comfortable.
-     Caps are viewport-relative on purpose — a `max-height: 100%` here resolves against
-     this element's auto-height wrapper and is ignored, which let the video stretch to
-     full width. `vh`/`vw` always resolve, so both dimensions actually bind. width/height
-     stay auto so the element box tracks the video's real aspect (no internal letterbox),
-     keeping the annotation overlay aligned to the wrapper. */
-  width: auto;
-  height: auto;
-  max-height: 46vh;
-  max-width: 64vw;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
-}
-
-/* Fullscreen: lift the compact caps so the video fills the screen. */
-.videoExpanded {
-  max-height: 100vh;
-  max-width: 100vw;
 }
 
 /* Slide image: covers the video's rendered box exactly (the .stage wrapper shrinks to

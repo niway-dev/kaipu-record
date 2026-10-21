@@ -1,6 +1,9 @@
 import { DEFAULT_LOCALE, type Locale } from "@kaipu/i18n";
-import es from "@kaipu/i18n/messages/es";
-import en from "@kaipu/i18n/messages/en";
+// Named imports on purpose: Vite's JSON plugin turns each top-level key into its
+// own export, so importing `seo` alone keeps the rest of the catalog out of the
+// client bundle. Do not switch these to the default import.
+import { seo as esSeo } from "@kaipu/i18n/messages/es";
+import { seo as enSeo } from "@kaipu/i18n/messages/en";
 
 /** Canonical origin of the public site; `www.kaipu.app` should redirect here. */
 export const SITE_URL = "https://kaipu.app";
@@ -13,10 +16,10 @@ export const OG_IMAGE = `${SITE_URL}/og-image.png`;
  * `useTranslations`, because `head()` runs outside React — there is no provider
  * to read from at that point.
  */
-const SEO = { es: es.seo, en: en.seo } as const;
+const SEO = { es: esSeo, en: enSeo } as const;
 
 /** Page ids with their own title and description in the `seo.pages` namespace. */
-export type SeoPage = keyof typeof en.seo.pages;
+export type SeoPage = keyof typeof enSeo.pages;
 
 function copyFor(locale: Locale) {
   return SEO[locale] ?? SEO[DEFAULT_LOCALE];

@@ -1,0 +1,746 @@
+name: PR checks
+
+# Tier: pull-request gate (ADR 0027, /architecture/decisions/0027-verify-release-candidates-only/,
+# which supersedes ADR 0010's "every pull request is verified in Actions").
+#
+# Only release candidates are verified here: the pull requests release-please opens
+# (`release-please--branches--*`) and a manual dispatch. `main` is validated as it will be
+# tagged, before the tag exists. Every other pull request, stacked ones included, gets an
+# immediate pass from the gate; the author's pre-push hook (lint, format, cached builds,
+# types) is its check. Merges stay fast; a regression surfaces on the release pull request.
+#
+# 1. `Classify the change` — runs first on every non-draft revision. It outputs `release`
+#    (is this a candidate?), `docs_only` and `e2e`. Everything below waits on it.
+# 2. `Merge requirements` — the REQUIRED check. It reports exactly once per commit: an
+#    immediate pass for an ordinary pull request, or the verdict of the run that verified a
+#    candidate. The rule and the evidence are on the job itself.
+# 3. `All checks passed` — candidates only. `bun run verify` split into parallel parts (lint,
+#    build and type-check, unit tests, the web and API Workers bundle, the docs site build),
+#    on Linux. Job names carry no prefix when they cover the whole workspace, and
+#    `<scope> - <what>` when they cover one part of it (`Desktop - unit tests (1/3)`).
+# 4. `Desktop - E2E tests (macOS)` — candidates that change more than documentation, and a
+#    manual dispatch. Playwright drives the real Electron build on the platform that ships;
+#    it is the only thing that exercises the export path, the library actions and settings
+#    persistence against a real build (ADR 0006).
+#
+# READINESS POLICY — draft means "still accumulating", ready means "verify this". A draft
+# starts no runner at all, and the required check waits until the pull request is ready.
+#
+# release-please opens its release PRs as drafts (`draft-pull-request` in
+# release-please-config.json) and rewrites them on every releasable merge to `main`. While
+# the PR is a draft none of those rewrites allocate a verification runner. Marking it
+# **Ready for review** is the signal to verify, and from that moment every new revision is
+# re-verified, with the superseded run cancelled.
+#
+# This replaced a `verify` LABEL that did the same job badly: the workflow listened to every
+# `labeled`/`unlabeled` event, so release-please's own `autorelease: pending` / `autorelease:
+# tagged` bookkeeping started full verifications — including one 13 seconds AFTER the PR had
+# merged and the tag already existed (PR #165, runs #13 and #16 on 2026-09-25). Draft state
+# is a first-class GitHub concept, it cannot be churned by a bot's label housekeeping, and
+# GitHub already refuses to merge a draft.
+#
+# Eligibility is decided at the JOB level, before a runner is allocated. The old workflow
+# checked the label in a *step*, so it booted a full VM just to print an error and exit.
+
+on:
+  pull_request:
+    # No `branches:` filter, since 2026-10-19: a stacked pull request targets the branch of
+    # the one below it, yet GitHub judges every pull request in a stack against the stack's
+    # base (`main`) and its required check. With `branches: [main]` the upper pull requests
+    # never ran, so "Release candidate verified" stayed "Expected" forever and "Merge stack"
+    # was impossible (PR #347). The check now runs on every pull request and stays attached
+    # to the head commit, so a pull request later retargeted onto `main` keeps its result.
+    #
+    # Why each of these, since the default set is not enough and every extra type is a
+    # potential wasted run:
+    #   ready_for_review  — THE trigger. "This candidate is the one I am publishing."
+    #   synchronize       — a new revision. Re-verify it; cancel the superseded run.
+    #   converted_to_draft— back to accumulating. Cancel in-flight verification.
+    #   opened/reopened   — an ordinary PR needs its required check from the start.
+    # `labeled`/`unlabeled` are deliberately ABSENT. See the readiness policy above.
+    #
+    # `edited` is ABSENT too, since 2026-10-05. It existed for one case — a stacked PR
+    # retargeted onto `main` — and opened a hole: release-please edits its PR body in the
+    # same second it force-pushes, so every rewrite started a second run that verified
+    # nothing and reported every check as `skipped`. GitHub treats a skipped required check
+    # as passing, so while the real run was still working the PR read "All checks have
+    # passed" and could be merged unverified (seen on desktop 0.10.0, PR #195). Without
+    # `edited`, the required check stays "Expected" until the run that verifies reports it.
+    # A retargeted stacked PR needs no new run: it was verified when it was opened against
+    # the branch below it (see the note on `branches` above).
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+      - converted_to_draft
+  workflow_dispatch:
+
+# NOTE: there is no workflow-level `concurrency` on purpose. With one, an irrelevant event
+# (a title edit) starts a run that cancels an in-flight verification *before* the new run's
+# job conditions get a chance to skip it — destroying a valid verification to run nothing.
+# Cancellation is scoped to the expensive job instead, below, so only runs that actually
+# verify can supersede one another.
+
+permissions:
+  contents: read
+
+jobs:
+  # `bun run verify`, split into jobs that run side by side (2026-10-05). As one job it took
+  # ~6 minutes: install, package builds, type checks and ~3.5 minutes of tests, in series on
+  # one runner. Split, the run takes as long as its slowest part. Every part has the same
+  # eligibility, so they start together or not at all, and each cancels its own superseded
+  # run. `verify` below collects them; `Merge requirements` still reads only `verify`.
+  lint:
+    name: Lint, format and workflow rules
+    runs-on: ubuntu-latest
+    needs: [changes]
+    # Release candidates only (ADR 0027): an ordinary pull request starts no runner here.
+    if: >-
+      ${{ needs.changes.result == 'success' && needs.changes.outputs.release == 'true' }}
+    concurrency:
+      group: lint-pr-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Check out candidate code
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.4
+
+      - name: Restore Bun dependency cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Check the PR workflow's eligibility rules
+        run: bun run check-workflows
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Check formatting
+        run: bunx oxfmt --check .
+
+  types:
+    name: Build and type-check
+    runs-on: ubuntu-latest
+    needs: [changes]
+    # Release candidates only (ADR 0027): an ordinary pull request starts no runner here.
+    if: >-
+      ${{ needs.changes.result == 'success' && needs.changes.outputs.release == 'true' }}
+    concurrency:
+      group: types-pr-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Check out candidate code
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.4
+
+      - name: Restore Bun dependency cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      # Turbo's local cache. Keyed on the lockfile + turbo config, NOT on the SHA: entries
+      # are immutable, so a per-SHA key mints a fresh entry on every push of an open PR and
+      # eats the repository's 10 GB budget. Turbo validates each task's own input hash, so
+      # an entry that predates the current code is partially reused, never wrongly reused.
+      - name: Restore Turbo task cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ hashFiles('bun.lock', 'turbo.json') }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-
+
+      - name: Build the workspace packages
+        run: bun run build --filter='@kaipu/*'
+
+      - name: Type-check every package and app
+        run: bun run check-types
+
+  # The desktop renderer suite is most of the test time, so it is split three ways with
+  # Vitest's own sharding; the rest of the workspace runs as one more part.
+  tests:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    needs: [changes]
+    # Release candidates only (ADR 0027): an ordinary pull request starts no runner here.
+    if: >-
+      ${{ needs.changes.result == 'success' && needs.changes.outputs.release == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { part: packages, name: "Packages, web and API - unit tests" }
+          - { part: desktop 1/3, name: "Desktop - unit tests (1/3)" }
+          - { part: desktop 2/3, name: "Desktop - unit tests (2/3)" }
+          - { part: desktop 3/3, name: "Desktop - unit tests (3/3)" }
+    concurrency:
+      group: tests-${{ matrix.part }}-pr-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Check out candidate code
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.4
+
+      - name: Restore Bun dependency cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      # Turbo's local cache. Keyed on the lockfile + turbo config, NOT on the SHA: entries
+      # are immutable, so a per-SHA key mints a fresh entry on every push of an open PR and
+      # eats the repository's 10 GB budget. Turbo validates each task's own input hash, so
+      # an entry that predates the current code is partially reused, never wrongly reused.
+      - name: Restore Turbo task cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ hashFiles('bun.lock', 'turbo.json') }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-
+
+      - name: Build the workspace packages
+        run: bun run build --filter='@kaipu/*'
+
+      - name: Test the workspace except the desktop app
+        if: ${{ matrix.part == 'packages' }}
+        run: bunx turbo run test --filter='!kaipu-record'
+
+      - name: Test one shard of the desktop app
+        if: ${{ matrix.part != 'packages' }}
+        working-directory: apps/kaipu-record
+        env:
+          PART: ${{ matrix.part }}
+        run: bun run test -- --shard="${PART#desktop }"
+
+  # The two app bundles are otherwise built only inside release-web / release-api.
+  bundles:
+    name: Web and API - Workers bundle
+    runs-on: ubuntu-latest
+    needs: [changes]
+    # Release candidates only (ADR 0027): an ordinary pull request starts no runner here.
+    if: >-
+      ${{ needs.changes.result == 'success' && needs.changes.outputs.release == 'true' }}
+    concurrency:
+      group: bundles-pr-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Check out candidate code
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.4
+
+      - name: Restore Bun dependency cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      # Turbo's local cache. Keyed on the lockfile + turbo config, NOT on the SHA: entries
+      # are immutable, so a per-SHA key mints a fresh entry on every push of an open PR and
+      # eats the repository's 10 GB budget. Turbo validates each task's own input hash, so
+      # an entry that predates the current code is partially reused, never wrongly reused.
+      - name: Restore Turbo task cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ hashFiles('bun.lock', 'turbo.json') }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-
+
+      - name: Build the workspace packages
+        run: bun run build --filter='@kaipu/*'
+
+      - name: Build web app
+        working-directory: apps/web-hono
+        env:
+          VITE_SERVER_URL: https://placeholder.example.com
+          DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
+        run: bun run build
+
+      - name: Build API
+        working-directory: apps/server-hono
+        run: bun run build
+
+      # The exact deploy command of release-api.yml / release-web.yml, with --dry-run:
+      # same script, same pinned wrangler, same --secrets-file. api-v0.5.0 failed on the
+      # tag with "Unknown arguments: secrets-file" because nothing ran it before.
+      - name: Dry-run the Worker deploys
+        run: |
+          echo '{}' > apps/server-hono/worker-secrets.json
+          echo '{}' > apps/web-hono/worker-secrets.json
+          bash scripts/deploy-worker.sh apps/server-hono --dry-run
+          bash scripts/deploy-worker.sh apps/web-hono --dry-run
+
+  # The docs site (`apps/documentation`, Astro Starlight) was built nowhere in CI: a broken
+  # frontmatter or a page that fails to compile reached `main` unnoticed, and two of every
+  # three pull requests change documentation. `astro build` needs no secret and no workspace
+  # package, so this is the one job a docs-only pull request cannot do without.
+  docs:
+    name: Documentation - build
+    runs-on: ubuntu-latest
+    needs: [changes]
+    # Release candidates only (ADR 0027): an ordinary pull request starts no runner here.
+    if: >-
+      ${{ needs.changes.result == 'success' && needs.changes.outputs.release == 'true' }}
+    concurrency:
+      group: docs-pr-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Check out candidate code
+        uses: actions/checkout@v4
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.4
+      - name: Restore Bun dependency cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+      - name: Build the docs site
+        working-directory: apps/documentation
+        run: bun run build
+
+  # Collects the parts above into the one result `Merge requirements` reads.
+  #
+  # `always()` so a failed part still produces a verdict (failure) instead of a skip. A
+  # CANCELLED part means a newer revision superseded this run; then this job is skipped
+  # rather than run, because a run that knows nothing about the commit must report nothing
+  # (see the gate). Each part is named explicitly: `needs.*` is not something the
+  # eligibility check in scripts/ can evaluate, and it must evaluate this condition.
+  verify:
+    name: All checks passed
+    runs-on: ubuntu-latest
+    needs: [changes, lint, types, tests, bundles, docs]
+    if: >-
+      ${{
+        always() &&
+        needs.changes.result == 'success' &&
+        needs.changes.outputs.release == 'true' &&
+        needs.lint.result != 'cancelled' &&
+        needs.types.result != 'cancelled' &&
+        needs.tests.result != 'cancelled' &&
+        needs.bundles.result != 'cancelled' &&
+        needs.docs.result != 'cancelled'
+      }}
+    concurrency:
+      group: verify-pr-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Require every part to have passed
+        env:
+          LINT: ${{ needs.lint.result }}
+          TYPES: ${{ needs.types.result }}
+          TESTS: ${{ needs.tests.result }}
+          BUNDLES: ${{ needs.bundles.result }}
+          DOCS: ${{ needs.docs.result }}
+        run: |
+          set -euo pipefail
+          echo "lint=$LINT types=$TYPES tests=$TESTS bundles=$BUNDLES docs=$DOCS"
+          [ "$LINT" = success ] && [ "$TYPES" = success ] && [ "$TESTS" = success ] && [ "$BUNDLES" = success ] && [ "$DOCS" = success ]
+
+  # Decides whether this pull request changes documentation only, so `e2e_desktop` can skip.
+  #
+  # Two of every three pull requests merged in September 2026 touched docs only, and each
+  # waited on a macOS build that cannot be affected by Markdown: no app imports a `.md` file.
+  #
+  # The filter lives in a JOB, never in `on.pull_request.paths`. A workflow skipped by a path
+  # filter reports nothing, so the required check waits on "Expected" forever and the pull
+  # request cannot merge — the deadlock that made PR #173 unmergeable. Here the workflow
+  # always runs and the gate always gets a verdict; only the E2E job is skipped.
+  #
+  # The rule is an allowlist that fails toward running the suite: docs-only means EVERY
+  # changed path, including the old path of a rename, is under `apps/documentation/` or ends
+  # in `.md`/`.mdx`. Anything else, an empty list, a list at the API's 3000-file cap, or a
+  # manual dispatch counts as code. A wrong rule therefore runs the E2E too often, never too
+  # rarely.
+  changes:
+    name: Classify the change
+    runs-on: ubuntu-latest
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event.pull_request.state == 'open' &&
+          github.event.pull_request.draft == false
+        )
+      }}
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      docs_only: ${{ steps.classify.outputs.docs_only }}
+      e2e: ${{ steps.classify.outputs.e2e }}
+      release: ${{ steps.classify.outputs.release }}
+    steps:
+      - name: List changed files
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          gh api --paginate "repos/$REPO/pulls/$PR/files" \
+            --jq '.[] | .filename, (.previous_filename // empty)' > "$RUNNER_TEMP/changed-files.txt"
+
+      - name: Classify the change
+        id: classify
+        env:
+          FILES: ${{ runner.temp }}/changed-files.txt
+          EVENT: ${{ github.event_name }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          docs_only=false
+          if [ -s "$FILES" ]; then
+            count=$(wc -l < "$FILES" | tr -d ' ')
+            if [ "$count" -lt 3000 ] && ! grep -qvE '^apps/documentation/|\.mdx?$' "$FILES"; then
+              docs_only=true
+            fi
+          fi
+
+          # Verification runs only on release candidates (release-please branches) and on a
+          # manual dispatch (ADR 0027). Every other pull request gets an immediate verdict
+          # from the gate. The macOS E2E additionally skips a docs-only candidate.
+          release=false
+          case "$EVENT:$HEAD_REF" in
+            workflow_dispatch:* | pull_request:release-please--branches--*) release=true ;;
+          esac
+          e2e=false
+          if [ "$release" = "true" ] && [ "$docs_only" = "false" ]; then
+            e2e=true
+          fi
+
+          {
+            echo "docs_only=$docs_only"
+            echo "release=$release"
+            echo "e2e=$e2e"
+          } | tee -a "$GITHUB_OUTPUT"
+
+  # The desktop end-to-end suite, on release candidates that are not docs-only (ADR 0006;
+  # ADR 0010 widened it to every pull request; ADR 0027 narrowed it back).
+  #
+  # A faithful copy of the E2E step in release-desktop.yml, native rebuild included, because
+  # a candidate that does not exercise what ships is not a candidate. This is the only place
+  # the export path runs in the cloud: on Linux runners it self-skips, as headless Chromium
+  # has no H.264 encoder.
+  #
+  # `testing`, never `production`. This job used to declare `production` only to read
+  # MAIN_VITE_SERVER_URL, and that handed every pull request branch the production
+  # Environment and everything in it. `production` is for `main` and the release tags —
+  # its deployment-branch policy enforces that — so pull request checks get their own
+  # Environment: no protection rules, open to every branch, and holding only what the
+  # checks need. Today that is one public URL the build inlines into the main bundle.
+  e2e_desktop:
+    name: Desktop - E2E tests (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 30
+    environment: testing
+    needs: [changes]
+    # Same eligibility as `verify`, minus docs-only pull requests. It used to be gated to
+    # desktop release candidates because a macOS minute billed at ten; on a public
+    # repository it bills at nothing. The docs-only skip is about wall-clock, not money.
+    # A failed or missing classification runs nothing here; the gate reports it as a failure.
+    if: >-
+      ${{
+        (
+          github.event_name == 'workflow_dispatch' ||
+          (
+            github.event.pull_request.state == 'open' &&
+            github.event.pull_request.draft == false
+          )
+        ) &&
+        needs.changes.result == 'success' &&
+        needs.changes.outputs.e2e == 'true'
+      }}
+    concurrency:
+      group: e2e-desktop-pr-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.4
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # Same reasoning as release-desktop.yml: `electron-builder.yml` sets
+      # `npmRebuild: false`, so uiohook-napi must be rebuilt against Electron's ABI
+      # explicitly. Skip it and the app degrades to "no clicks" rather than crashing, which
+      # would let this suite pass against something users never run.
+      - name: Rebuild native dependencies for Electron
+        run: bash scripts/rebuild-native.sh
+
+      - name: Build
+        working-directory: apps/kaipu-record
+        env:
+          MAIN_VITE_SERVER_URL: ${{ vars.MAIN_VITE_SERVER_URL }}
+          MAIN_VITE_WEB_URL: ${{ vars.MAIN_VITE_WEB_URL }}
+        run: |
+          test -n "$MAIN_VITE_SERVER_URL" || {
+            echo "::error::MAIN_VITE_SERVER_URL is not set — add it to the testing Environment"
+            exit 1
+          }
+          bun run build
+
+      # `playwright test` directly, not `bun run test:e2e`, so the build above is not
+      # repeated. ffprobe is deliberately not installed (`brew install ffmpeg` costs macOS
+      # minutes): the export still runs end to end and only the codec assertion skips.
+      # Invoked through node by path, never `bunx playwright`: a bun runtime loads
+      # Playwright's modules twice, every test() registers against an instance the
+      # runner never reads, and the run ends "No tests found" — a gate that tests
+      # nothing while looking like it ran. See playwright.config.ts.
+      - name: E2E (Playwright, built app)
+        working-directory: apps/kaipu-record
+        run: node node_modules/@playwright/test/cli.js test
+
+      - name: Upload Playwright artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-pr
+          path: |
+            apps/kaipu-record/playwright-report
+            apps/kaipu-record/test-results
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # Returning a ready PR to draft means "not this one after all". Joining the verify
+  # job's concurrency group from a job that costs seconds cancels the in-flight verification
+  # instead of paying out the remaining minutes of a result nobody will read.
+  cancel-superseded:
+    name: Cancel verification when returned to draft
+    runs-on: ubuntu-latest
+    if: ${{ github.event.action == 'converted_to_draft' }}
+    concurrency:
+      group: verify-pr-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      - name: Explain cancellation after returning to draft
+        run: |
+          echo "Returned to draft; any in-flight verification for this PR is cancelled."
+          echo "Mark the pull request ready for review again to verify the current revision."
+
+  # THE REQUIRED CHECK.
+  #
+  # ONE RULE GOVERNS THIS JOB: a given commit must receive exactly one report of this
+  # check, and it must come from the run that actually verified the commit.
+  #
+  # That rule exists because GitHub resolves a required check across every check run of
+  # that name on the head commit by taking the WORST conclusion, not the latest. Measured
+  # on this repository on 2026-09-27, on the desktop 0.9.0 candidate (PR #178):
+  #
+  #   commit 0626081  skipped + success  -> rollup SUCCESS   (skipped is neutral)
+  #   commit c78b287  failure + success  -> rollup FAILURE    (mergeable, but BLOCKED)
+  #   commit fa01a9b  failure + success  -> rollup FAILURE    (mergeable, but BLOCKED)
+  #
+  # A commit gets more than one run because release-please force-pushes the branch AND
+  # rewrites the body, so `synchronize` and `edited` arrive in the same second and GitHub
+  # starts two runs. Returning a candidate to draft and back does the same on one commit.
+  #
+  # So a run that did not verify must report NOTHING. A previous revision of this workflow
+  # made this job unskippable and fail closed, reasoning that a skipped check reads as
+  # passed. Half of that was right — skipped IS neutral — but the conclusion was backwards:
+  # failing closed in the run that verified nothing left a permanent FAILURE on the commit,
+  # and because the rollup takes the worst conclusion, the verified candidate could never
+  # merge. That is what blocked desktop 0.9.0 for three revisions in a row.
+  #
+  # Skipping is safe here for a reason that is worth stating, because it is the whole
+  # safety argument: skipped is neutral, so a skip cannot satisfy the requirement on its
+  # own — it can only decline to speak. What satisfies it is a real success, and the only
+  # job that can produce one is `verify` in this same run. Every non-draft candidate
+  # revision gets such a run, because `synchronize` and `ready_for_review` both start one.
+  gate:
+    name: Merge requirements
+    runs-on: ubuntu-latest
+    needs: [changes, verify, e2e_desktop]
+    # Report iff this run decided: both checks reached a real conclusion. `skipped` means
+    # this run was a prose-`edited` twin or the PR is a draft; `cancelled` means a newer
+    # revision superseded it. Neither knows anything about the commit, so neither may
+    # speak about it. Every non-draft revision gets a run that does decide, because
+    # `opened`, `synchronize` and `ready_for_review` all start one.
+    #
+    # The conditions are read off `needs.*.result`, never off the event shape. A condition
+    # on `draft`, `state` or `changes.base` would make a run that DID verify stay silent,
+    # which is the failure mode this job is built to prevent; the regression check in
+    # scripts/check-workflow-eligibility.ts enforces that distinction.
+    #
+    # The E2E counts as decided in two more cases, both read off `needs.changes`: it was
+    # skipped because this run classified the change as docs-only, or the classification
+    # itself failed (a real verdict about this commit — the script below fails it).
+    if: >-
+      ${{
+        always() && github.event_name == 'pull_request' &&
+        (
+          (needs.changes.result == 'success' && needs.changes.outputs.release == 'false') ||
+          needs.changes.result == 'failure' ||
+          (
+            (needs.verify.result == 'success' || needs.verify.result == 'failure') &&
+            (
+              needs.e2e_desktop.result == 'success' || needs.e2e_desktop.result == 'failure' ||
+              (needs.e2e_desktop.result == 'skipped' && needs.changes.result == 'success' && needs.changes.outputs.e2e == 'false')
+            )
+          )
+        )
+      }}
+    steps:
+      - name: Check whether verification permits merging
+        env:
+          IS_DRAFT: ${{ github.event.pull_request.draft }}
+          VERIFY: ${{ needs.verify.result }}
+          E2E: ${{ needs.e2e_desktop.result }}
+          CHANGES: ${{ needs.changes.result }}
+          DOCS_ONLY: ${{ needs.changes.outputs.docs_only }}
+          E2E_REQUIRED: ${{ needs.changes.outputs.e2e }}
+          RELEASE: ${{ needs.changes.outputs.release }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          # Unreachable as the job is currently conditioned: a draft never verifies, so
+          # the gate stays silent and this step does not run. It is kept because it fails
+          # closed and says why, so loosening the condition above degrades to a clear red
+          # rather than to a green on an unverified pull request.
+          if [ "$IS_DRAFT" = "true" ]; then
+            echo "::error title=Pull request is still a draft::Mark it ready for review to verify it. Nothing has been verified while it is a draft."
+            exit 1
+          fi
+
+          if [ "$CHANGES" != "success" ]; then
+            echo "::error title=Change detection failed::Could not classify $SHA (changes job: $CHANGES). Re-run the failed jobs."
+            exit 1
+          fi
+
+          # ADR 0027: only release candidates are verified here. The author's pre-push hook
+          # (lint, format, builds, types) is the check for everything else.
+          if [ "$RELEASE" = "false" ]; then
+            echo "Not a release candidate: verification runs on the release-please pull request."
+            exit 0
+          fi
+
+          case "$VERIFY" in
+            success) ;;
+            failure)
+              echo "::error title=Verification failed::\`bun run verify\` or an app bundle build failed on $SHA. Fix it and push; the new revision is verified automatically."
+              exit 1
+              ;;
+            cancelled)
+              echo "::error title=Verification cancelled::It was superseded by a newer revision, or this PR was returned to draft. Mark it ready for review again to verify the current revision."
+              exit 1
+              ;;
+            *)
+              echo "::error title=Not verified::Verification did not run for this revision (verify job: $VERIFY). Return the pull request to draft and mark it ready for review again."
+              exit 1
+              ;;
+          esac
+
+
+          case "$E2E" in
+            success) ;;
+            skipped)
+              if [ "$E2E_REQUIRED" = "false" ] && [ "$DOCS_ONLY" = "true" ]; then
+                echo "Docs-only change: the desktop end-to-end suite is not required."
+              elif [ "$E2E_REQUIRED" = "false" ]; then
+                echo "Not a release candidate: the desktop end-to-end suite runs on the release-please pull request."
+              else
+                echo "::error title=Desktop E2E did not run::A release candidate that changes more than documentation must pass the macOS end-to-end suite. Return the pull request to draft and mark it ready for review again."
+                exit 1
+              fi
+              ;;
+            failure)
+              echo "::error title=Desktop E2E failed::Playwright failed against the built app on macOS for $SHA. Fix it and push; the new revision is verified automatically."
+              exit 1
+              ;;
+            cancelled)
+              echo "::error title=Desktop E2E cancelled::It was superseded by a newer revision, or this PR was returned to draft. Mark it ready for review again to verify the current revision."
+              exit 1
+              ;;
+            *)
+              echo "::error title=Desktop E2E did not run::A release candidate that changes more than documentation must pass the macOS end-to-end suite (e2e_desktop job: $E2E). Return the pull request to draft and mark it ready for review again."
+              exit 1
+              ;;
+          esac
+
+          if [ "$E2E" = "success" ]; then
+            echo "Verified on $SHA: checks, builds and the desktop end-to-end suite passed."
+          else
+            echo "Verified on $SHA: checks and builds passed; docs-only, so no desktop end-to-end suite."
+          fi
+
+  # TRANSITIONAL — delete once the `main release` ruleset requires `Merge requirements`.
+  #
+  # The live ruleset (id 23974690) still requires a check literally named "Release candidate
+  # verified". Renaming the gate job without this alias would leave every PR waiting on a
+  # check name nothing reports any more, which blocks merge on `main` for everyone. This job
+  # reports the old name with the new job's result, so the rename and the ruleset update can
+  # happen in either order and neither blocks the other. Migration steps are in ADR 0005.
+  legacy-gate:
+    name: Release candidate verified
+    runs-on: ubuntu-latest
+    needs: [gate]
+    # Mirror the gate's silence as well as its verdict. This job carries the name the live
+    # ruleset requires, so reporting a failure here when `gate` declined to speak would
+    # leave the same permanent FAILURE on the commit that the gate's own condition exists
+    # to avoid — the rollup takes the worst conclusion across runs. See the gate above.
+    if: >-
+      ${{
+        always() && github.event_name == 'pull_request' &&
+        needs.gate.result != 'skipped' && needs.gate.result != 'cancelled'
+      }}
+    steps:
+      - name: Mirror merge requirements for the existing branch rule
+        env:
+          GATE: ${{ needs.gate.result }}
+        run: |
+          set -euo pipefail
+          echo "Deprecated check name. The decision is made by 'Merge requirements' (result: $GATE)."
+          [ "$GATE" = "success" ]

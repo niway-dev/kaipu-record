@@ -59,7 +59,7 @@ consume the R2 feed.
 ### Web — `deploy-web.yml`
 
 1. Installs deps, builds the `@kaipu/*` packages, then builds the web app (`apps/web-hono`).
-2. Deploys the Worker via `cloudflare/wrangler-action`. The Worker is attached to `kaipu.app` +
+2. Deploys the Worker with `scripts/deploy-worker.sh apps/web-hono`. The Worker is attached to `kaipu.app` +
    `www.kaipu.app` (custom domains in `apps/web-hono/wrangler.jsonc`), so DNS + SSL are provisioned
    automatically on deploy.
 
@@ -69,7 +69,38 @@ buttons point at the R2 installers.
 ### API — `deploy-api.yml`
 
 1. Installs deps, builds the `@kaipu/*` packages.
-2. Deploys the Worker (`apps/server-hono`) via `cloudflare/wrangler-action`.
+2. Deploys the Worker with `scripts/deploy-worker.sh apps/server-hono`.
+
+### Worker secrets travel with the deploy
+
+Both release jobs write their Worker secrets to a JSON file and run
+`wrangler deploy --secrets-file`, so code and secrets go live as **one** version. Do not
+use the action's `secrets:` input. It runs `wrangler secret bulk` first, which deploys the
+previous code with the new secrets as a separate version, and Cloudflare refuses that edit
+outright when the latest uploaded version is not the deployed one — which is exactly the
+state `preview-web.yml` leaves behind. That is how `web-v0.9.0` failed on 2026-10-06.
+
+`--secrets-file` is additive: a secret missing from the file keeps its current value, and
+the jobs drop empty values so a missing GitHub secret cannot blank one. Removing a secret
+from a Worker is a deliberate `wrangler secret delete`, never a side effect of a release.
+
+### One deploy script, dry-run on the release candidate
+
+Both release jobs deploy through `scripts/deploy-worker.sh`. It pins wrangler
+(`WRANGLER_VERSION`, 4.148.0), installs it globally with bun if needed, and calls it by
+absolute path. The workspace still has 4.63.0 for local development, which lacks
+`--secrets-file`; bump both together when the workspace upgrades, and keep the
+`preview-web.yml` pin equal.
+
+The jobs do not use `cloudflare/wrangler-action` for the deploy. The action resolves
+wrangler with `npx` inside the app directory, so `apps/server-hono`'s own 4.63.0
+devDependency shadowed the pinned version and `api-v0.5.0` failed on 2026-10-20 with
+`Unknown arguments: secrets-file`. `release-web` kept working only because
+`apps/web-hono` has no local wrangler.
+
+The release-candidate PR check (`Web and API - Workers bundle`) runs the same script with
+`--dry-run` for both apps after building them, with an empty secrets file. A deploy
+command that cannot run now fails on the release pull request instead of on the tag.
 
 ## First-deploy order (one-time)
 
@@ -109,6 +140,35 @@ Deploys read from the repo's **`production`** Environment:
 > Cloudflare API token does **not** work for it. The R2 account id reuses `CLOUDFLARE_ACCOUNT_ID`,
 > and the bucket name is a plain constant in the workflow (`kaipu-bucket`) — neither is a secret.
 
+## GitHub Environments: who may reach what
+
+The repository is public, so the Environments are the boundary around the secrets, and their
+deployment-branch policies decide which refs may cross it. The reasoning and the audit for the
+day a repository goes public are in the hub's
+[public-repo-production-protection](https://github.com/csdev19/general-knowledge/blob/main/monorepos/public-repo-production-protection.md);
+this is the configuration as applied here (inspected 2026-10-06).
+
+| Environment  | May be declared from                                     | Holds                                                                                 | Declared by                                                                                     |
+| ------------ | -------------------------------------------------------- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `production` | `main` (branch), `desktop-v*`, `web-v*`, `api-v*` (tags) | everything in the table above, plus `RELEASE_PLEASE_TOKEN` and `MAIN_VITE_SERVER_URL` | `release-desktop.yml`, `release-web.yml`, `release-api.yml` (tags); `release-please.yml` (main) |
+| `preview`    | any ref                                                  | the Cloudflare token and account id, a throwaway `DATABASE_URL`                       | `preview-web.yml` — uploads a version, deploys nothing                                          |
+| `testing`    | any ref                                                  | `MAIN_VITE_SERVER_URL` only (a public URL the desktop build inlines)                  | `pr-checks.yml` → `Desktop - E2E tests (macOS)`                                                 |
+
+Rules that follow from the table:
+
+- **A job on a `pull_request` event never declares `production`.** The E2E job used to, only to
+  read `MAIN_VITE_SERVER_URL`; that handed every PR branch the signing keys and the database URL.
+  A PR-time job that needs a value gets it from `testing`; a value only `testing` needs is added
+  there, never to `production`.
+- **The administrator bypass on `production` is off**, so the policy applies to the maintainer
+  too. A one-off manual deploy from another branch means adding that branch to the policy first.
+- **The `main` ruleset requires a pull request** (zero approvals — the maintainer cannot approve
+  their own) and the `Release candidate verified` check; force pushes and deletion are blocked.
+- **Fork pull requests run nothing until approved** (Actions → General, "all external
+  contributors"); a fork's run holds no Environment secrets and a read-only token either way.
+- **Secret scanning, push protection and Dependabot alerts are on.** They were off while the
+  repository was private; nothing fails when they are off, which is why they are listed here.
+
 ## PR checks
 
 Two workflows run on PRs into `main` (neither deploys): `pr-validation.yml` (lint, format
@@ -116,3 +176,11 @@ check, typecheck, build the packages/web/api, desktop unit suite) and `e2e-deskt
 Playwright + Electron E2E suite for the desktop app). They are kept **separate on purpose** — a
 cheap monorepo-wide gate vs an expensive desktop-only one. See
 [PR checks — validation & E2E](/deployment/pr-checks) for what each does and why the split.
+
+## Claude review (advisory)
+
+`claude-review.yml` posts a Claude code review on a pull request when it is ready for review, and
+on the owner's `@claude review` comment. Findings arrive as inline review comments; nothing blocks
+a merge. It needs the **repository** secret `ANTHROPIC_API_KEY` (Settings → Secrets and variables
+→ Actions → Repository secrets), not an environment secret. Why and how:
+[ADR 0028](/architecture/decisions/0028-advisory-claude-review-on-pull-requests).

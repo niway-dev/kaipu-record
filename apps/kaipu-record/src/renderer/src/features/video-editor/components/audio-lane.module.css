@@ -1,0 +1,75 @@
+/*
+ * Audio lane. Same geometry as the zoom lane so the two read as one timeline,
+ * but a neutral grey rather than the accent: a muted stretch is an absence, and
+ * painting it in the brand colour would make silence look like the loudest
+ * thing on the track.
+ */
+
+.lane {
+  position: relative;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+}
+
+.empty,
+.allMuted {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+/* The whole-video state fills the lane, so it reads as a property of the track
+   rather than as one more range sitting on it. */
+.allMuted {
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--text-muted) 14%, transparent);
+  color: var(--text-secondary);
+}
+
+.block {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  min-width: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: 0 4px;
+  border: 1px solid color-mix(in srgb, var(--text-muted) 45%, transparent);
+  border-radius: var(--radius-sm);
+  background: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--text-muted) 22%, transparent) 0 5px,
+    transparent 5px 10px
+  );
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.selected {
+  border-color: var(--text-secondary);
+  background: color-mix(in srgb, var(--text-muted) 34%, transparent);
+  color: var(--text-primary);
+  z-index: 1;
+}
+
+.handle {
+  position: absolute;
+  top: 0;
+  width: 6px;
+  height: 100%;
+  border-radius: var(--radius-sm);
+  background: var(--text-secondary);
+  cursor: ew-resize;
+  touch-action: none;
+  z-index: 2;
+}

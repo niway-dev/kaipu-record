@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { IPC_CHANNELS } from "@shared/types";
 import type { AppSettings } from "@shared/types";
-import { normalizeLocale } from "@kaipu/i18n";
 import { mergeSettings } from "../services/settings.service";
 
 /**
@@ -28,20 +27,13 @@ function load(): void {
   }
   settings = mergeSettings(parsed);
 
-  let dirty = false;
-  // First run (or a settings file predating i18n): seed the locale from the OS
-  // so the app opens in the user's language instead of the hardcoded default.
-  // `app.getLocale()` is only valid after `app.whenReady()`, which is where
-  // `registerSettings()` (our only caller) runs.
-  if (!parsed || !("locale" in parsed)) {
-    settings = { ...settings, locale: normalizeLocale(app.getLocale()) };
-    dirty = true;
-  }
+  // The locale is NOT seeded from `app.getLocale()`: a first run opens in English
+  // (`DEFAULT_LOCALE`) and the onboarding welcome step is where the user picks their
+  // language. The owner chose one predictable first screen over OS detection.
   if (!settings.deviceId) {
     settings = { ...settings, deviceId: randomUUID() };
-    dirty = true;
+    persist();
   }
-  if (dirty) persist();
 }
 
 function persist(): void {
@@ -70,16 +62,37 @@ export function getAppSettings(): AppSettings {
   return settings;
 }
 
+type ActivationPolicy = "regular" | "accessory";
+
+/**
+ * The activation policy this process last applied, or `null` before the first
+ * call. Both policy setters go through `setActivationPolicy` and return early
+ * when the policy is unchanged, because the transition itself is not free on
+ * macOS: `app.dock.show()` on an active app briefly activates the Dock and
+ * re-transforms the process into a foreground app, and AppKit orders every
+ * window out and back in while it does. Seen by the user as "the main window
+ * disappears when focus moves to the camera bubble" — the camera-on path
+ * re-asserts the policy, and each re-assertion was a blur → hide → show cycle.
+ * See backlog/bug-main-window-hides-on-blur.
+ */
+let appliedPolicy: ActivationPolicy | null = null;
+
+function setActivationPolicy(policy: ActivationPolicy): void {
+  if (process.platform !== "darwin") return;
+  if (appliedPolicy === policy) return;
+  appliedPolicy = policy;
+  app.setActivationPolicy(policy);
+  if (policy === "regular") app.dock?.show();
+}
+
 /**
  * macOS Dock + Cmd+Tab visibility from the current settings. Exported so the
  * recording hub can re-assert it after hiding/showing the main window (hide/show
  * cycles, and showing a floating panel, can otherwise drop the app from the
- * switcher).
+ * switcher). Idempotent: a call that changes nothing touches no AppKit state.
  */
 export function applyDockPolicy(): void {
-  if (process.platform !== "darwin") return;
-  app.setActivationPolicy(settings.showInDock ? "regular" : "accessory");
-  if (settings.showInDock) app.dock?.show();
+  setActivationPolicy(settings.showInDock ? "regular" : "accessory");
 }
 
 /**
@@ -89,9 +102,7 @@ export function applyDockPolicy(): void {
  * Pair with `applyDockPolicy()` to restore the preference afterwards.
  */
 export function forceRegularPolicy(): void {
-  if (process.platform !== "darwin") return;
-  app.setActivationPolicy("regular");
-  app.dock?.show();
+  setActivationPolicy("regular");
 }
 
 /** Push the current settings to every window so renderer consumers stay in sync
@@ -119,6 +130,20 @@ function applySideEffects(): void {
 }
 
 /**
+ * Merge `patch` into the persisted settings, then persist, apply side effects, notify
+ * main listeners and broadcast to every window: the same path the renderer's
+ * `updateSettings` takes, for main-side writers (a mode-specific capture shortcut).
+ */
+export function updateAppSettings(patch: Partial<AppSettings>): AppSettings {
+  settings = mergeSettings({ ...settings, ...patch });
+  persist();
+  applySideEffects();
+  for (const listener of settingsListeners) listener(settings);
+  broadcastSettings();
+  return settings;
+}
+
+/**
  * Loads persisted settings, registers the get/update IPC, and applies side
  * effects (Dock policy, launch-at-login). Call once after `app.whenReady`.
  */
@@ -127,12 +152,8 @@ export function registerSettings(): void {
   applySideEffects();
 
   ipcMain.handle(IPC_CHANNELS.getSettings, (): AppSettings => settings);
-  ipcMain.handle(IPC_CHANNELS.updateSettings, (_e, patch: Partial<AppSettings>): AppSettings => {
-    settings = mergeSettings({ ...settings, ...patch });
-    persist();
-    applySideEffects();
-    for (const listener of settingsListeners) listener(settings);
-    broadcastSettings();
-    return settings;
-  });
+  ipcMain.handle(
+    IPC_CHANNELS.updateSettings,
+    (_e, patch: Partial<AppSettings>): AppSettings => updateAppSettings(patch),
+  );
 }

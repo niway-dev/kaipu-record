@@ -5,6 +5,21 @@ export const serverEnvSchema = z.object({
   DATABASE_URL: z.string().min(1),
   CORS_ORIGIN: commaSeparatedList,
   BETTER_AUTH_SECRET: z.string().min(1),
+  /**
+   * Public origin Better Auth builds OAuth redirect URIs from. It must be the WEB
+   * origin (http://localhost:3001 in dev, https://kaipu.app in prod), not the API:
+   * the web Worker proxies /api/auth/*, and the OAuth state cookie lives on the web
+   * origin. No trailing slash. Optional so the API still boots without it.
+   */
+  BETTER_AUTH_URL: z
+    .string()
+    .url()
+    .refine((value) => !value.endsWith("/"), "BETTER_AUTH_URL must not end with a slash")
+    .optional(),
+  // Google OAuth client (sign in with Google). Optional so the API still boots
+  // without it; Google is simply not registered until BOTH values are set.
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
   // Cloudflare R2 (S3-compatible) credentials for cloud recordings. Optional so
   // the API still boots without cloud storage configured — the recording
   // endpoints report "not configured" until these are set as Worker secrets.

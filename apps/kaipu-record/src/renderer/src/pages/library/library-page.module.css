@@ -77,16 +77,37 @@
 
 /* ── Toolbar ────────────────────────────────── */
 
+/* Sticks to the top of the shell's scroll area. The negative top and the
+   matching padding cancel the shell's own padding, so the bar sits flush with
+   the edge and the cards scroll out of sight behind it. */
+.stickyBar {
+  position: sticky;
+  top: calc(var(--space-xl) * -1);
+  z-index: 3;
+  margin: 0 calc(var(--space-xl) * -1);
+  /* Constant padding (not added when stuck) so the bar never changes height
+     and the collection does not jump as it sticks. */
+  padding: var(--space-lg) var(--space-xl) var(--space-sm);
+  background: var(--bg-app);
+  transition: box-shadow var(--transition);
+}
+
+.stickyBar > .toolbar {
+  margin-top: 0;
+}
+
+.stickyBar[data-stuck="true"] {
+  /* Inset line, not a border: a border would add 1px and nudge the cards. */
+  box-shadow:
+    inset 0 -1px 0 var(--border),
+    0 10px 20px -16px rgba(0, 0, 0, 0.8);
+}
+
 .toolbar {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
   margin-top: var(--space-lg);
-}
-
-.search {
-  flex: 1;
-  min-width: 0;
 }
 
 .viewToggle {
@@ -125,19 +146,97 @@
 
 /* ── Filter chips ───────────────────────────── */
 
-.chipRow {
+/* Filters: one row for type + location, one for tags. Each group carries a
+   short label; its title attribute explains what the group does. */
+.filterRow {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-xs);
+  gap: var(--space-xs) var(--space-lg);
   margin-top: var(--space-md);
 }
 
-.chipDivider {
-  width: 1px;
-  align-self: stretch;
-  margin: 2px var(--space-xs);
-  background: var(--border);
+.filterRow + .filterRow {
+  margin-top: var(--space-sm);
+}
+
+.filterGroup,
+.tagGroup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.tagGroup {
+  flex: 1;
+}
+
+.groupLabel {
+  flex-shrink: 0;
+  min-width: 64px;
+  margin-right: 2px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  cursor: help;
+}
+
+/* Icon-only, ghost: it belongs to the tags row, not to the page like Sync. */
+.manageTags {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    color var(--transition),
+    background var(--transition);
+}
+
+.manageTags:hover {
+  color: var(--text-primary);
+  background: var(--bg-input);
+}
+
+.manageTags:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+/* The tag chips stay on one line and scroll sideways when they outgrow it. */
+.tagScroller {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  padding-bottom: 2px;
+  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+}
+
+.tagScroller > * {
+  flex-shrink: 0;
+}
+
+.groupEmpty {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
+.filteredBy {
+  letter-spacing: 0.04em;
+  text-transform: none;
 }
 
 .storageDotChip {
@@ -247,4 +346,10 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   overflow: hidden;
+}
+
+.tagCount {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-muted);
 }

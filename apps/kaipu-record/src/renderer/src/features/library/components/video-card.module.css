@@ -11,6 +11,10 @@
   border-color: rgba(246, 5, 92, 0.4);
 }
 
+.card[data-selected="true"] {
+  border-color: var(--accent-primary);
+}
+
 .card:focus-visible {
   outline: none;
   border-color: var(--accent-primary);
@@ -132,7 +136,11 @@
 }
 
 .metaLine {
-  margin-top: 5px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: 28px;
+  margin-top: 3px;
 }
 
 .specs {
@@ -153,9 +161,7 @@
 /* ── Actions (revealed on hover) ──────── */
 
 .actions {
-  position: absolute;
-  top: 11px;
-  right: 11px;
+  margin-left: auto;
   display: flex;
   gap: 4px;
   opacity: 0;
@@ -192,4 +198,30 @@
 .delete:hover {
   color: var(--accent-red);
   border-color: rgba(239, 68, 68, 0.5);
+}
+
+/* ── Tags (always visible) ────────────── */
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tag,
+.tagMore {
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--text-secondary);
+}
+
+.tagMore {
+  border-style: dashed;
+  color: var(--text-muted);
 }

@@ -1,16 +1,60 @@
-import { Shield, Check } from "lucide-react";
-import type { PermissionKind, PermissionStatus } from "@shared/types";
+import { Check, Info, MousePointerClick } from "lucide-react";
+import type { AccessibilityStatus, PermissionKind, PermissionStatus } from "@shared/types";
 import { useTranslations } from "@kaipu/i18n";
-import { Badge } from "@renderer/ui/badge";
-import { Button } from "@renderer/ui/button";
+import { KaipuLogo } from "@kaipu/brand";
+import * as stylex from "@stylexjs/stylex";
+import { Badge, Button } from "@kaipu/ui";
+import { tokens } from "@kaipu/tokens/kaipu.stylex";
+import { Popover } from "@kaipu/ui";
 import { PERMISSION_META } from "../permissions";
 import styles from "./permissions-step.module.css";
+
+/** The "granted" pill's own shape, moved out of permissions-step.module.css:
+ *  the shared Badge takes StyleX styles, not a className. */
+const sx = stylex.create({
+  granted: {
+    flexShrink: 0,
+    paddingBlock: "6px",
+    paddingInline: "11px",
+    borderRadius: "8px",
+    fontFamily: tokens.fontMono,
+    letterSpacing: "0.08em",
+  },
+});
 
 interface PermissionsStepProps {
   status: PermissionStatus;
   denied: Record<PermissionKind, boolean>;
   onRequest: (kind: PermissionKind) => void;
   onOpenSettings: (kind: PermissionKind) => void;
+  /**
+   * macOS Accessibility for the click hook (plans/video-editor-v2/03 § UI). It is not a
+   * `PermissionKind` — a single mac-only tri-state, not a per-kind grant — so it gets
+   * its own row below the media ones, and no row at all when "not-required".
+   */
+  accessibility: AccessibilityStatus;
+  /** The single onboarding call site for `requestAccessibility()` (the other is Settings). */
+  onRequestAccessibility: () => void;
+}
+
+/**
+ * The "why" behind each permission lives behind an (i), not under the name: four cards
+ * with a description each did not fit the default window, and most users only need
+ * the name. Same trigger + popover as the recording-quality sliders in Settings.
+ */
+function WhyPopover({ label, children }: { label: string; children: string }): React.JSX.Element {
+  const t = useTranslations("onboarding");
+  return (
+    <Popover
+      trigger={
+        <span className={styles.infoIcon} role="img" aria-label={t("whatIs", { label })}>
+          <Info size={14} />
+        </span>
+      }
+    >
+      <p className={styles.info}>{children}</p>
+    </Popover>
+  );
 }
 
 export function PermissionsStep({
@@ -18,12 +62,14 @@ export function PermissionsStep({
   denied,
   onRequest,
   onOpenSettings,
+  accessibility,
+  onRequestAccessibility,
 }: PermissionsStepProps): React.JSX.Element {
   const t = useTranslations("onboarding");
   return (
     <div className={styles.step}>
-      <span className={styles.shield}>
-        <Shield size={26} strokeWidth={1.8} />
+      <span className={styles.mark}>
+        <KaipuLogo use="permissions" size={96} />
       </span>
       <h1 className={styles.title}>{t("permTitle")}</h1>
       <p className={styles.subtitle}>{t("permSubtitle")}</p>
@@ -34,21 +80,21 @@ export function PermissionsStep({
           const wasDenied = denied[kind] && !granted;
           return (
             <div key={kind} className={styles.row}>
-              <span className={styles.icon}>
-                <Icon size={18} strokeWidth={1.8} />
-              </span>
-              <div className={styles.info}>
+              <div className={styles.header}>
+                <span className={styles.icon}>
+                  <Icon size={18} strokeWidth={1.8} />
+                </span>
                 <div className={styles.nameRow}>
                   <span className={styles.name}>{t(nameKey)}</span>
-                  <Badge variant={required ? "info" : "neutral"}>
-                    {required ? t("required") : t("optional")}
-                  </Badge>
+                  <span className={styles.meta}>
+                    <Badge variant={required ? "info" : "neutral"}>
+                      {required ? t("required") : t("optional")}
+                    </Badge>
+                    <WhyPopover label={t(nameKey)}>{t(descriptionKey)}</WhyPopover>
+                  </span>
                 </div>
-                <p className={styles.description}>{t(descriptionKey)}</p>
-              </div>
-              <div className={styles.action}>
                 {granted ? (
-                  <Badge variant="success" className={styles.granted}>
+                  <Badge variant="success" style={sx.granted}>
                     <Check size={14} strokeWidth={2.4} /> {t("granted")}
                   </Badge>
                 ) : wasDenied ? (
@@ -64,6 +110,35 @@ export function PermissionsStep({
             </div>
           );
         })}
+
+        {accessibility !== "not-required" && (
+          <div className={styles.row}>
+            <div className={styles.header}>
+              <span className={styles.icon}>
+                <MousePointerClick size={18} strokeWidth={1.8} />
+              </span>
+              <div className={styles.nameRow}>
+                <span className={styles.name}>{t("accessibilityTitle")}</span>
+                <span className={styles.meta}>
+                  <Badge variant="neutral">{t("optional")}</Badge>
+                  <WhyPopover label={t("accessibilityTitle")}>{t("accessibilityDesc")}</WhyPopover>
+                </span>
+              </div>
+              {accessibility === "granted" ? (
+                <Badge variant="success" style={sx.granted}>
+                  <Check size={14} strokeWidth={2.4} /> {t("granted")}
+                </Badge>
+              ) : (
+                // Granting happens in System Settings; `requestAccessibility()` registers
+                // the app, prompts once and deep-links the pane, so one button covers
+                // both the first ask and the retry (there is no "denied" branch to detect).
+                <Button variant="primary" size="sm" onClick={onRequestAccessibility}>
+                  {t("accessibilityGrant")}
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

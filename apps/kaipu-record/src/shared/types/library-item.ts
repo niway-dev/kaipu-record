@@ -68,11 +68,24 @@ export interface CloudCatalogEntry {
 
 export interface LibraryItem {
   assetId: string;
-  kind: "recording" | "screenshot";
+  /** "gif" items are local-only (NIW2-217); the cloud catalog never holds one. */
+  kind: "recording" | "screenshot" | "gif";
   title: string;
   createdAt: number;
   durationSeconds: number;
   derivedFromAssetId: string | null;
+  /**
+   * Epoch ms of the last video-edit-session save on this device, or null when there is
+   * no session (or no local copy). Compared against the item's exports to say
+   * "edited, not exported" (backlog/edit-state-indicators).
+   */
+  editSavedAt: number | null;
+  /**
+   * The `savedAt` already burned into an export, or null when none is. Equal to
+   * `editSavedAt` exactly when every edit is in an export; see
+   * `SessionMeta.exportedSavedAt` for why this is a stamp and not a date comparison.
+   */
+  editExportedSavedAt: number | null;
   /** The local copy, when the file is present and readable. */
   local: LocalRecording | null;
   /** The cloud copy as last seen in the catalog cache. */
@@ -84,6 +97,15 @@ export interface LibraryItem {
   editing: EditingState;
   /** Plan 04 fills this; here it is always `"private"`. */
   sharing: SharingState;
+}
+
+/**
+ * Whether an item of this kind may ever be uploaded to the cloud. GIF exports are
+ * local-only in v1 (NIW2-217); the cloud upload flow (NIW2-214) must check this both in
+ * the UI and in the main-process handler.
+ */
+export function isCloudUploadEligible(item: Pick<LibraryItem, "kind">): boolean {
+  return item.kind !== "gif";
 }
 
 export function hasLocalCopy(item: Pick<LibraryItem, "availability">): boolean {

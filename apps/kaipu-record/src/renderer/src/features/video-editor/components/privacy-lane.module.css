@@ -1,0 +1,68 @@
+.lane {
+  position: relative;
+  height: 38px;
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+}
+
+.block,
+.ghost {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  min-width: 10px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 5px;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.block {
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+/* UI spec § 6.4: blur = translucent blue #58a6ff, cover = light neutral. */
+.blur {
+  background: color-mix(in srgb, #58a6ff 22%, transparent);
+  color: #58a6ff;
+}
+
+.cover {
+  background: color-mix(in srgb, var(--text-primary) 14%, transparent);
+  color: var(--text-primary);
+}
+
+.selected {
+  border-color: var(--accent-primary);
+  z-index: 1;
+}
+
+.text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ghost {
+  border: 1px dashed var(--accent-primary);
+  color: var(--accent-primary);
+  pointer-events: none;
+}
+
+.handle {
+  position: absolute;
+  top: 0;
+  width: 6px;
+  height: 100%;
+  border-radius: var(--radius-sm);
+  background: var(--accent-primary);
+  cursor: ew-resize;
+  touch-action: none;
+  z-index: 2;
+}

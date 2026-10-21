@@ -39,6 +39,7 @@
     "use-intl": "^4.11.0"
   },
   "devDependencies": {
+    "@kaipu/domain": "workspace:*",
     "@types/node": "^22.14.1",
     "@types/react": "^19",
     "tsdown": "catalog:",

@@ -8,7 +8,9 @@ import {
 import { implement } from "@orpc/server";
 import { meContract } from "../../contract/me.contract";
 import { env } from "../../env";
+import { auth } from "../../lib/auth";
 import { authMiddleware } from "../../middleware/auth";
+import { setPasswordForSession, takeNoticesFor } from "./sign-in-methods";
 
 const db = createDatabaseClient(env.DATABASE_URL);
 const repo = new SubscriptionRepository(db);
@@ -33,5 +35,14 @@ export const meRouter = impl.router({
       entitlements,
     });
     return { data, error: null };
+  }),
+  setPassword: impl.setPassword
+    .use(authMiddleware)
+    .handler(async ({ context, input }) =>
+      setPasswordForSession(auth.api, context.headers, input.newPassword),
+    ),
+  takeNotices: impl.takeNotices.use(authMiddleware).handler(async ({ context }) => {
+    const { internalAdapter } = await auth.$context;
+    return takeNoticesFor(internalAdapter, context.user.id);
   }),
 });

@@ -7,8 +7,7 @@
 export const VERSION_GATE_THROTTLE_MS = 10 * 60 * 1000;
 
 /** Where the "Actualizar" button points when the config omits a downloadUrl. */
-export const DEFAULT_DOWNLOAD_URL =
-  "https://github.com/csdev19/kaipu-record-monorepo/releases/latest";
+export const DEFAULT_DOWNLOAD_URL = "https://github.com/niway-dev/kaipu-record/releases/latest";
 
 export interface VersionGateConfig {
   minVersion: string;

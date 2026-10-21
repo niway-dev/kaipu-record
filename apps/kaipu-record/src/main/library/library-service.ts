@@ -8,7 +8,12 @@ import type {
 } from "@shared/types/library-item";
 import type { CatalogCache } from "../cloud/catalog-cache";
 import { composeLibrary } from "./compose-library";
-import { hasEditSession, probeEditing } from "./edit-project-probe";
+import {
+  hasEditSession,
+  probeEditing,
+  probeEditSession,
+  type EditSessionState,
+} from "./edit-project-probe";
 import type { LibraryVault } from "./library-vault";
 import { canRemoveLocalCopy } from "./remove-local-copy-policy";
 
@@ -43,11 +48,13 @@ export class LibraryService {
     const catalog = account ? await this.deps.cache.read(account.userId) : null;
 
     const editing: Record<string, EditingState> = {};
+    const editSession: Record<string, EditSessionState> = {};
     for (const rec of local ?? []) {
       editing[rec.id] = await probeEditing(this.deps.vaultDir(), rec);
+      editSession[rec.id] = await probeEditSession(this.deps.vaultDir(), rec.id);
     }
 
-    const { items, catalogUpdates } = composeLibrary({ local, catalog, editing });
+    const { items, catalogUpdates } = composeLibrary({ local, catalog, editing, editSession });
     if (account && catalog && local && JSON.stringify(catalogUpdates) !== JSON.stringify(catalog)) {
       // Best-effort: remembering which cloud items were also local is what lets an
       // unplugged drive read as "local unavailable" instead of "cloud only". Skipped

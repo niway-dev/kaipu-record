@@ -1,6 +1,4 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Camera } from "lucide-react";
-import { useTranslations } from "@kaipu/i18n";
 import { RecordingIndicator } from "@renderer/features/recording/components/recording-indicator";
 import { useRecordingSetup } from "@renderer/features/recording/hooks/use-recording-setup";
 import { useRecordingActivity } from "@renderer/features/recording/hooks/use-recording-activity";
@@ -10,14 +8,15 @@ import { SourceCard } from "@renderer/features/recording/components/source-card"
 import { RecordingToggles } from "@renderer/features/recording/components/recording-toggles";
 import { MicPicker } from "@renderer/features/recording/components/mic-picker";
 import { RecordButton } from "@renderer/features/recording/components/record-button";
+import { CaptureModeButtons } from "@renderer/features/screenshots/capture-mode-buttons";
 import { PanelHeader } from "./components/panel-header";
 import { PanelTabs, type PanelTab } from "./components/panel-tabs";
+import type { CaptureMode } from "@shared/types/screenshot-capture";
 import styles from "./capture-panel.module.css";
 
 // Compact composition of the recording controls, shown from the menu-bar tray.
 // Reuses the same dumb components + useRecordingSetup hook as the Record page.
 export function CapturePanel(): React.JSX.Element {
-  const t = useTranslations("panel");
   const rootRef = useRef<HTMLDivElement>(null);
   const setup = useRecordingSetup();
   const shortcuts = useShortcutLabels();
@@ -36,6 +35,14 @@ export function CapturePanel(): React.JSX.Element {
   // future idea). `activeTab` forces Record while busy regardless of the last pick.
   const [tab, setTab] = useState<PanelTab>("record");
   const activeTab: PanelTab = isBusy ? "record" : tab;
+
+  // The menu-bar icon mirrors this selection — it is often the only part of
+  // Kaipu on screen, so it should say which mode a shortcut would start.
+  // The panel calls the second tab "capture"; the brand calls that mark
+  // "screenshot". Mapped here rather than renaming either vocabulary.
+  useEffect(() => {
+    window.electronAPI.setTrayMode(activeTab === "record" ? "record" : "screenshot");
+  }, [activeTab]);
 
   // Keep the Electron window height matched to the content (mic menu, etc.).
   useEffect(() => {
@@ -57,9 +64,10 @@ export function CapturePanel(): React.JSX.Element {
   const chooseSource = (): void => window.electronAPI?.requestChooseSource();
   // Start from the tray: open the main window and have its Record page start.
   const requestStart = (): void => window.electronAPI?.requestStartRecording();
-  // Capture from the tray: main dismisses the panel and runs the interactive region
-  // select (same flow as the ⌘⌃X hotkey), landing the user in the editor.
-  const requestCapture = (): void => window.electronAPI?.requestCaptureScreenshot();
+  // Capture from the tray: main dismisses the panel and runs the chosen mode (same flow as
+  // its global hotkey), landing the user in the editor.
+  const requestCapture = (mode: CaptureMode): void =>
+    window.electronAPI?.requestCaptureScreenshot(mode);
 
   return (
     <div ref={rootRef} className={styles.panel}>
@@ -79,34 +87,45 @@ export function CapturePanel(): React.JSX.Element {
             />
           )}
 
-          {/* While a recording is in progress its settings are locked — changing the
-              source/mic mid-recording does nothing, so the controls go inert. */}
-          <div
-            className={styles.lockable}
-            data-locked={isBusy || undefined}
-            inert={isBusy || undefined}
-          >
-            <SourceCard source={setup.selectedSource} variant="compact" onChoose={chooseSource} />
+          {/* Mid-take only the source and mic device stay locked (changing them would
+              restart the encoder or move levels); the three toggles stay live —
+              muting writes silence into the same track, the camera is captured as
+              part of the screen. */}
+          <div className={styles.lockable}>
+            <div
+              className={styles.locked}
+              data-locked={isBusy || undefined}
+              inert={isBusy || undefined}
+            >
+              <SourceCard source={setup.selectedSource} variant="compact" onChoose={chooseSource} />
+            </div>
 
             <RecordingToggles
               variant="compact"
               isMicrophoneEnabled={setup.isMicrophoneEnabled}
               isSystemAudioEnabled={setup.isSystemAudioEnabled}
               isCameraEnabled={setup.isCameraEnabled}
+              isSystemAudioUnavailable={isBusy && activity.systemAudioAvailable === false}
               onToggleMicrophone={setup.toggleMicrophone}
               onToggleSystemAudio={setup.toggleSystemAudio}
               onToggleCamera={setup.toggleCamera}
             />
 
             {setup.isMicrophoneEnabled && setup.microphones.length > 0 && (
-              <MicPicker
-                variant="compact"
-                microphones={setup.microphones}
-                selected={setup.selectedMicrophone}
-                isOpen={setup.isMicrophoneMenuOpen}
-                onToggle={setup.toggleMicrophoneMenu}
-                onSelect={setup.selectMicrophone}
-              />
+              <div
+                className={styles.locked}
+                data-locked={isBusy || undefined}
+                inert={isBusy || undefined}
+              >
+                <MicPicker
+                  variant="compact"
+                  microphones={setup.microphones}
+                  selected={setup.selectedMicrophone}
+                  isOpen={setup.isMicrophoneMenuOpen}
+                  onToggle={setup.toggleMicrophoneMenu}
+                  onSelect={setup.selectMicrophone}
+                />
+              </div>
             )}
           </div>
 
@@ -121,16 +140,15 @@ export function CapturePanel(): React.JSX.Element {
           />
         </>
       ) : (
-        // Screenshot mode: a single action that hands off to the native region select.
-        <button type="button" className={styles.captureButton} onClick={requestCapture}>
-          <span className={styles.captureLabel}>
-            <Camera size={16} />
-            {t("captureScreen")}
-          </span>
-          {shortcuts?.captureScreenshot && (
-            <kbd className={styles.captureShortcut}>{shortcuts.captureScreenshot}</kbd>
-          )}
-        </button>
+        // Screenshot mode: the Capture button and the Frame, Window and Screen chips,
+        // each handed off to main. `recording` stays wired for the day the tab lock above
+        // lifts; today a recording forces the Record tab, so it is null here in practice.
+        <CaptureModeButtons
+          variant="panel"
+          onCapture={requestCapture}
+          shortcuts={shortcuts}
+          recording={isBusy ? { elapsedSeconds: activity.elapsedSeconds } : null}
+        />
       )}
     </div>
   );

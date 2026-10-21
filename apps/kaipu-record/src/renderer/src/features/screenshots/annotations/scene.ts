@@ -31,10 +31,14 @@ export interface TextAnnotation {
   text: string;
   color: string;
   size: number;
-  /** Optional wrap width in normalized (0–1) units. Set by dragging the right-edge
-   * handle: the text word-wraps to it (Excalidraw-style). Absent = auto width, so the
+  /** Optional wrap width in normalized (0–1) units. Set by dragging a side handle:
+   * the text word-wraps to it (Excalidraw-style). Absent = auto width, so the
    * label only breaks on the user's own newlines. */
   width?: number;
+  /** Free font size in px, set by dragging a corner. Wins over `size`, which is an
+   * index into the S/M/L/XL presets — this is what makes a corner drag continuous
+   * instead of snapping between four levels. Absent = use the preset. */
+  fontPx?: number;
 }
 /** A freehand pen stroke: the user's captured path, smoothed at render time. */
 export interface PathAnnotation {

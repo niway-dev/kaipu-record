@@ -1,24 +1,52 @@
-import { Film, Trash2, Play } from "lucide-react";
+import { Film, PenLine, Tag, Trash2, Play } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { formatDuration, formatSize } from "@renderer/features/library/format";
+import type { TagSummary } from "@shared/types";
 import type { LibraryVideo } from "@renderer/features/library/types";
+import { TagChip } from "../tags/tag-chip";
+import type { EditBadge as EditBadgeState } from "@renderer/features/library/lineage";
 import { StorageMeta } from "./storage-meta";
 import { KindBadge } from "./kind-badge";
+import { EditBadge } from "./edit-badge";
 import { cx } from "@renderer/ui/cx";
 import styles from "./video-card.module.css";
 
+const CARD_TAGS_SHOWN = 3;
+
 interface VideoCardProps {
   video: LibraryVideo;
+  badge?: EditBadgeState;
   onNavigate(): void;
   onDelete(): void;
+  /** Opens the item in the Editor workspace; omitted when it cannot be edited. */
+  onEdit?(): void;
+  /** Opens the tag side panel for this item; omitted when it cannot be tagged. */
+  onTags?(): void;
+  /** This item is the one in the tag side panel. */
+  selected?: boolean;
+  /** The item's tags, resolved from the registry (name + color). */
+  tags?: readonly TagSummary[];
 }
 
-export function VideoCard({ video, onNavigate, onDelete }: VideoCardProps): React.JSX.Element {
+export function VideoCard({
+  video,
+  badge = null,
+  onNavigate,
+  onDelete,
+  onEdit,
+  onTags,
+  selected = false,
+  tags = [],
+}: VideoCardProps): React.JSX.Element {
   const t = useTranslations("library");
+  // A few tags always visible under the title, the rest as "+N".
+  const cardTags = tags.slice(0, CARD_TAGS_SHOWN);
+  const hiddenTags = tags.length - cardTags.length;
 
   return (
     <div
       className={styles.card}
+      data-selected={selected}
       onClick={onNavigate}
       role="button"
       tabIndex={0}
@@ -61,23 +89,43 @@ export function VideoCard({ video, onNavigate, onDelete }: VideoCardProps): Reac
         <p className={styles.title}>{video.title || t("untitled")}</p>
         <div className={styles.metaLine}>
           <StorageMeta video={video} />
+          <EditBadge state={badge} />
+          <div className={styles.actions} onClick={(e) => e.stopPropagation()}>
+            {onTags && (
+              <button className={styles.action} onClick={onTags} title={t("tagsEdit")}>
+                <Tag size={14} strokeWidth={1.8} />
+              </button>
+            )}
+            {onEdit && (
+              <button className={styles.action} onClick={onEdit} title={t("edit")}>
+                <PenLine size={14} strokeWidth={1.8} />
+              </button>
+            )}
+            {video.id !== null && (
+              <button
+                className={cx(styles.action, styles.delete)}
+                onClick={onDelete}
+                title={t("delete")}
+              >
+                <Trash2 size={14} strokeWidth={1.8} />
+              </button>
+            )}
+          </div>
         </div>
         <span className={styles.specs}>
           {formatSize(video.fileSizeBytes)}
           {video.kind !== "screenshot" && ` · ${formatDuration(video.durationSeconds)}`}
         </span>
-
-        <div className={styles.actions} onClick={(e) => e.stopPropagation()}>
-          {video.id !== null && (
-            <button
-              className={cx(styles.action, styles.delete)}
-              onClick={onDelete}
-              title={t("delete")}
-            >
-              <Trash2 size={14} strokeWidth={1.8} />
-            </button>
-          )}
-        </div>
+        {cardTags.length > 0 && (
+          <ul className={styles.tags} aria-label={t("tagsLabel")}>
+            {cardTags.map((tag) => (
+              <li key={tag.id}>
+                <TagChip name={tag.name} color={tag.color} />
+              </li>
+            ))}
+            {hiddenTags > 0 && <li className={styles.tagMore}>+{hiddenTags}</li>}
+          </ul>
+        )}
       </div>
     </div>
   );

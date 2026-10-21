@@ -10,9 +10,21 @@
  *   5. Finalize the MP4 and notify the renderer.
  *
  * Chunks are posted via transferable ArrayBuffers so the renderer can write them to
- * disk without an extra copy. Positions are non-monotonic because mediabunny writes
- * the moov box at the END of the file and then seeks back to patch the ftyp offset —
- * hence `StreamTarget` (positional) is required instead of `AppendOnlyStreamTarget`.
+ * disk without an extra copy. Positions are non-monotonic: with `fastStart: 'reserve'`
+ * (NIW2-218) mediabunny reserves room for the moov box at the START of the file and
+ * seeks back to fill it at finalize (without fast start it writes moov at the end and
+ * patches earlier headers) — hence `StreamTarget` (positional) is required instead of
+ * `AppendOnlyStreamTarget`. Never `'in-memory'`: it buffers the whole file in the worker.
+ *
+ * Presets (NIW2-218, `msg.target`): Balanced, Light and Maximum compose straight onto the
+ * output canvas (same aspect as the source). Fixed-canvas presets compose a source-size
+ * VIEW first (frame → redactions → overlays → zoom crop, exactly as Maximum) and then
+ * frame it onto the target canvas (Fit/Fill, see `createFramer`).
+ *
+ * Encoding (NIW2-218): AVC with a keyframe every 10 s (2 s for YouTube). The quality tiers
+ * use quantizer mode (constant quality) on the hardware encoder, at most 24 fps; everything
+ * else, and a platform without quantizer support, targets a bitrate. `pickVideoEncoding` probes
+ * the encoder first and the renderer logs a software fallback (video-encoding.ts).
  *
  * Audio API choice: the WebCodecs-backed `AudioSample`/`AudioSampleSink`/
  * `AudioSampleSource` path is used, NOT the Web-Audio `AudioBuffer` one. The DOM
@@ -52,17 +64,30 @@ import {
   AudioSampleSink,
   AudioSampleSource,
   BlobSource,
+  canEncodeAudio,
+  canEncodeVideo,
   CanvasSink,
   CanvasSource,
   Input,
   Mp4OutputFormat,
   Output,
-  QUALITY_HIGH,
+  Quality,
   StreamTarget,
 } from "mediabunny";
 import type { StreamTargetChunk } from "mediabunny";
 import type { ExportStartMessage, ExportWorkerMessage } from "./export-messages";
+import { silencedSpansFor } from "../audio-edits";
 import { rebaseVideoTimestamp } from "./rebase-timestamp";
+import { createFramer, createOutputComposer } from "./compose-output-frame";
+import {
+  audioEncodingCandidates,
+  packetCountsFor,
+  slideFrameCount,
+  type AudioEncoding,
+  type ResolvedExportTarget,
+} from "./export-presets";
+import { cappedSlideFps, createFrameRateCap } from "./frame-rate-cap";
+import { chooseVideoEncoding, type VideoEncodingChoice } from "./video-encoding";
 
 // ---------------------------------------------------------------------------
 // Typing helper: TypeScript doesn't expose `Worker` on `self` in module workers.
@@ -102,7 +127,11 @@ async function runExport(msg: ExportStartMessage): Promise<void> {
 }
 
 async function runExportWithInput(msg: ExportStartMessage, input: Input): Promise<void> {
-  const { plan, output: size } = msg;
+  const { plan, output: size, target: preset } = msg;
+  // Fixed-canvas presets compose at SOURCE size into a view canvas, then frame it onto the
+  // output. Identity framing (Balanced, Light, Maximum) composes straight onto the output.
+  const framed = preset.framing !== "identity";
+  const composeSize = framed ? msg.source : size;
 
   const videoTrack = await input.getPrimaryVideoTrack();
   if (!videoTrack) throw new Error("source has no video track");
@@ -128,39 +157,98 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
   );
 
   const out = new Output({
-    format: new Mp4OutputFormat({ fastStart: false }),
+    format: new Mp4OutputFormat({ fastStart: preset.fastStart }),
     target,
   });
 
+  // A composite view canvas for the fixed-canvas presets (see the header comment).
+  const view = framed ? new OffscreenCanvas(composeSize.width, composeSize.height) : null;
+  const viewCtx = view ? view.getContext("2d") : ctx;
+  if (!viewCtx) throw new Error("export-worker: no 2D context on the view canvas");
+  const framer = view
+    ? createFramer({ ctx, width: size.width, height: size.height, padding: preset.padding })
+    : null;
+
+  // Hardware AVC in quantizer mode for the tiers, else at the bitrate, else whatever the
+  // platform offers (see video-encoding.ts). Portrait 1080×1920 needs H.264 level ≥ 4.0, which
+  // some hardware encoders refuse: that also lands on the platform's pick rather than failing.
+  const encoding = await pickVideoEncoding(preset, size);
+  post({ type: "encoder", choice: encoding });
   const videoSource = new CanvasSource(canvas, {
     codec: "avc",
-    bitrate: QUALITY_HIGH,
-    hardwareAcceleration: "prefer-hardware",
+    quality: videoQuality(encoding),
+    keyFrameInterval: encoding.keyFrameInterval,
+    hardwareAcceleration: encoding.hardwareAcceleration,
   });
   // Omit frameRate from VideoTrackMetadata so mediabunny does NOT snap all
   // timestamps to a track-wide grid. Timing is driven entirely by the explicit
   // timestamp+duration pairs passed to videoSource.add(...): clip frames keep
-  // the source's native cadence (wrapped.duration from CanvasSink), and slide
-  // frames are synthesized at plan.slideFps. A track-wide frameRate hint would
-  // collapse high-fps clip frame pairs onto a coarser grid, producing
-  // zero-duration or duplicate frames in the encoder.
-  out.addVideoTrack(videoSource);
-
-  const audioSource = audioTrack
-    ? new AudioSampleSource({ codec: "aac", bitrate: QUALITY_HIGH })
-    : null;
-  if (audioSource) out.addAudioTrack(audioSource);
-
+  // the source's own timestamps (thinned by the preset's fps cap, frame-rate-cap.ts),
+  // and slide frames are synthesized at plan.slideFps (or the cap, if lower). A
+  // track-wide frameRate hint would collapse high-fps clip frame pairs onto a
+  // coarser grid, producing zero-duration or duplicate frames in the encoder.
+  //
+  // A whole-video mute produces a file with NO audio track, not a silent one:
+  // smaller, and no dead volume control in the player. This is the same branch a
+  // screen-only recording already takes, so nothing downstream is new.
+  const audioMuted = plan.audio.audioMuted;
   // Sample rate / channel count for synthesized slide silence — derived from
   // the source track so it matches the real audio instead of assuming a
   // fixed layout; 48000/2 is only a fallback if the track ever reports 0.
   const silenceSampleRate = audioTrack ? (await audioTrack.getSampleRate()) || 48000 : 48000;
-  const silenceChannelCount = audioTrack ? (await audioTrack.getNumberOfChannels()) || 2 : 2;
+  const sourceChannels = audioTrack ? (await audioTrack.getNumberOfChannels()) || 2 : 2;
+  // An explicit AAC config (every preset but Maximum) is checked against the encoder first:
+  // Light asks for mono 64 kbps, which Chromium's AAC encoder on macOS refuses.
+  const audioEncoding =
+    preset.audioBitrate === "high" || !audioTrack || audioMuted
+      ? null
+      : await pickAudioEncoding(audioEncodingCandidates(preset, sourceChannels), silenceSampleRate);
+  const audioSource =
+    audioTrack && !audioMuted
+      ? new AudioSampleSource({
+          codec: "aac",
+          quality: audioEncoding
+            ? new Quality({ bitrate: audioEncoding.bitrate })
+            : new Quality("high"),
+        })
+      : null;
+  // Downmix (Light) only when the encoder took the mono config; silence matches it.
+  const downmix = audioEncoding?.numberOfChannels === 1 && sourceChannels !== 1;
+  const silenceChannelCount = audioEncoding?.numberOfChannels ?? sourceChannels;
+
+  // `maximumPacketCount` for the moov reservation: the renderer's estimate, raised with the
+  // real source rate/sample rate when the worker sees more (too small → the muxer throws
+  // and the hook retries once without fast start).
+  const stats = await videoTrack.computePacketStats(240).catch(() => null);
+  const workerCounts = packetCountsFor({
+    durationSec: plan.totalDuration,
+    fps: stats?.averagePacketRate ?? 30,
+    maxFps: preset.maxFps,
+    slideFrames: slideFrameCount(plan.segments, plan.slideFps),
+    hasAudio: audioSource !== null,
+    sampleRate: silenceSampleRate,
+  });
+  const maxVideoPackets = Math.max(preset.packetCounts.video, workerCounts.video);
+  const maxAudioPackets = Math.max(preset.packetCounts.audio, workerCounts.audio);
+  const reserve = preset.fastStart === "reserve";
+  out.addVideoTrack(videoSource, reserve ? { maximumPacketCount: maxVideoPackets } : {});
+  if (audioSource) {
+    out.addAudioTrack(audioSource, reserve ? { maximumPacketCount: maxAudioPackets } : {});
+  }
 
   await out.start();
 
-  // Lookup helpers built once, not rebuilt per-frame.
-  const overlayByIds = new Map(msg.overlays.map((o) => [o.overlayId, o]));
+  // Per-frame composition (fill → zoom/redactions/overlays) is shared with the GIF worker
+  // in compose-output-frame.ts so the two exports can never diverge on privacy.
+  const compose = createOutputComposer({
+    ctx: viewCtx,
+    width: composeSize.width,
+    height: composeSize.height,
+    camera: msg.camera,
+    redactions: plan.redactions,
+    overlayWindows: plan.overlayWindows,
+    overlayBitmaps: new Map(msg.overlays.map((o) => [o.overlayId, o.bitmap])),
+  });
   const slideBitmaps = new Map(msg.slides.map((s) => [s.assetId, s.bitmap]));
 
   // Progress is throttled via performance.now() to ~4 Hz (≤250 ms intervals)
@@ -174,13 +262,15 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
     post({ type: "progress", fraction: Math.min(1, outTs / plan.totalDuration) });
   };
 
-  // Stamp any overlay whose visibility window covers the current output timestamp.
-  const stampOverlays = (outTs: number): void => {
-    for (const window of plan.overlayWindows) {
-      if (outTs < window.start || outTs > window.end) continue;
-      const overlay = overlayByIds.get(window.overlayId);
-      if (overlay) ctx.drawImage(overlay.bitmap, 0, 0, size.width, size.height);
-    }
+  // Poster = the first composed output frame (see ExportWorkerMessage "poster"). Encoded
+  // before that frame is handed to the encoder, so it shows exactly what the file starts
+  // with — cuts, slides, overlays (and in v2, zoom and privacy regions) included.
+  let posterSent = false;
+  const sendPosterOnce = async (): Promise<void> => {
+    if (posterSent) return;
+    posterSent = true;
+    const data = await encodePoster(canvas);
+    if (data) post({ type: "poster", data }, [data]);
   };
 
   // Release Output encoders on any error path. Do NOT cancel on the success
@@ -193,11 +283,15 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
     // detect and drop a straddling frame that would regress across a cut boundary.
     // ---------------------------------------------------------------------------
     let prevOutTs: number | null = null;
+    // fps cap (the quality tiers, 24 fps): one frame per 1/maxFps slot, see frame-rate-cap.ts.
+    const cap = createFrameRateCap(preset.maxFps);
+    const minFrameGap = preset.maxFps ? 1 / preset.maxFps : 0;
+    const slideFps = cappedSlideFps(plan.slideFps, preset.maxFps);
     for (const segment of plan.segments) {
       if (segment.kind === "clip") {
         const sink = new CanvasSink(videoTrack, {
-          width: size.width,
-          height: size.height,
+          width: composeSize.width,
+          height: composeSize.height,
           // 'contain' letterboxes so the aspect ratio is never distorted.
           fit: "contain",
         });
@@ -213,31 +307,37 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
             prevOutTs,
           );
           if (outTs === null) continue; // straddle/duplicate frame — skip, don't advance prevOutTs
-          ctx.fillStyle = "#000";
-          ctx.fillRect(0, 0, size.width, size.height);
-          ctx.drawImage(wrapped.canvas, 0, 0);
-          stampOverlays(outTs);
-          // Use the frame's own decoded duration so clip frames preserve the
-          // source's native cadence without rounding to a fixed grid.
-          await videoSource.add(outTs, wrapped.duration);
+          // fps cap: drop a frame whose slot is taken. The kept frame's sample lasts until
+          // the next kept one (the muxer derives durations from timestamp deltas), so
+          // timestamps stay monotonic and the timeline length is unchanged.
+          if (!cap.keep(outTs)) continue;
+          compose.clip(wrapped.canvas, wrapped.timestamp, wrapped.duration, outTs);
+          if (framer && view) framer.frame(view, preset.framing === "fill" ? "fill" : "fit");
+          await sendPosterOnce();
+          // The frame's own decoded duration (at least one cap slot); the muxer
+          // stretches it to the next kept frame anyway.
+          await videoSource.add(outTs, Math.max(wrapped.duration, minFrameGap));
           reportProgress(outTs);
           prevOutTs = outTs;
         }
       } else {
-        // Slide segment: synthesize fixed-cadence frames at plan.slideFps. These are
+        // Slide segment: synthesize fixed-cadence frames at slideFps. These are
         // already monotonic by construction (fixed cadence from segment.timelineStart),
         // so they don't need rebaseVideoTimestamp's clamp/skip — just keep prevOutTs
         // current so a following clip segment's boundary check has the right value.
+        // They go through the cap too: the first one may share a slot with the clip
+        // frame before it.
         const bitmap = slideBitmaps.get(segment.assetId);
-        const frameDuration = 1 / plan.slideFps;
-        const frameCount = Math.round(segment.duration * plan.slideFps);
+        const frameDuration = 1 / slideFps;
+        const frameCount = Math.round(segment.duration * slideFps);
 
         for (let i = 0; i < frameCount; i++) {
           const outTs = segment.timelineStart + i * frameDuration;
-          ctx.fillStyle = "#000";
-          ctx.fillRect(0, 0, size.width, size.height);
-          if (bitmap) drawContained(ctx, bitmap, size.width, size.height);
-          stampOverlays(outTs);
+          if (!cap.keep(outTs)) continue;
+          compose.slide(bitmap, outTs);
+          // Slides are always contained ("fit"), never cropped, whatever the clip framing.
+          if (framer && view) framer.frame(view, "fit");
+          await sendPosterOnce();
           await videoSource.add(outTs, frameDuration);
           reportProgress(outTs);
           prevOutTs = outTs;
@@ -261,15 +361,27 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
       let audioCursor = 0;
       for (const segment of plan.segments) {
         if (segment.kind === "clip") {
+          // Muted spans of THIS segment, clipped and merged. Walking them in
+          // order lets each decoded sample be zeroed in place rather than
+          // dropped: dropping would shorten the audio and drift it out of sync
+          // with the video, which is silence's whole job to avoid.
+          const silenced = silencedSpansFor(segment.sourceStart, segment.sourceEnd, plan.audio);
           const sink = new AudioSampleSink(audioTrack);
           for await (const sample of sink.samples(segment.sourceStart, segment.sourceEnd)) {
             // Clip each decoded sample to the segment's exact source range — see the
             // "Audio trimming" header comment for why this is needed.
             const trimmed = trimAudioSample(sample, segment.sourceStart, segment.sourceEnd);
             if (trimmed) {
-              trimmed.setTimestamp(audioCursor);
-              audioCursor += trimmed.duration;
-              await audioSource.add(trimmed);
+              const start = trimmed.timestamp;
+              const end = start + trimmed.duration;
+              const muted = silenced.some((span) => start < span.end && end > span.start);
+              const shaped = downmix ? downmixToMono(trimmed) : trimmed;
+              const emitted = muted ? zeroedLike(shaped) : shaped;
+              emitted.setTimestamp(audioCursor);
+              audioCursor += emitted.duration;
+              await audioSource.add(emitted);
+              if (emitted !== shaped) emitted.close();
+              if (shaped !== trimmed) shaped.close();
               if (trimmed !== sample) trimmed.close();
             }
             sample.close();
@@ -326,6 +438,109 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
  * common case for interior samples), a new trimmed `AudioSample` when it does
  * (the caller closes it), or `null` if trimming leaves nothing to encode.
  */
+/**
+ * A silent copy of a sample: same layout, same duration, zeroed data.
+ *
+ * A copy rather than a mutation because `AudioSample` owns its backing buffer
+ * and the caller still has to close the original. Same rate and channel count,
+ * so the encoder sees one continuous stream and not a format change mid-file.
+ */
+function zeroedLike(sample: AudioSample): AudioSample {
+  return new AudioSample({
+    data: new Float32Array(sample.numberOfFrames * sample.numberOfChannels),
+    format: "f32",
+    numberOfChannels: sample.numberOfChannels,
+    sampleRate: sample.sampleRate,
+    timestamp: sample.timestamp,
+  });
+}
+
+/**
+ * Light (NIW2-218): average every channel into one. A mono source passes through
+ * unchanged; the caller closes a new sample when one is returned.
+ */
+/**
+ * Probes the hardware AVC encoder for the preset's rate control and picks per
+ * video-encoding.ts. The quantizer probe passes a quantizer-only Quality: with a bitrate
+ * fallback in it, `canEncodeVideo` would say yes whenever the bitrate alone works.
+ */
+async function pickVideoEncoding(
+  preset: ResolvedExportTarget,
+  size: { width: number; height: number },
+): Promise<VideoEncodingChoice> {
+  const probe = (quality: Quality): Promise<boolean> =>
+    canEncodeVideo("avc", {
+      width: size.width,
+      height: size.height,
+      quality,
+      hardwareAcceleration: "prefer-hardware",
+      frameRate: preset.maxFps ?? undefined,
+    }).catch(() => false);
+  const hardwareQuantizer =
+    preset.quantizer !== null && (await probe(new Quality({ quantizer: preset.quantizer })));
+  const hardwareBitrate = hardwareQuantizer || (await probe(bitrateQuality(preset.videoBitrate)));
+  return chooseVideoEncoding(preset, { hardwareQuantizer, hardwareBitrate });
+}
+
+/**
+ * The bitrate as a mediabunny Quality. Maximum's "high" stays bitrate-driven
+ * (`preferBitrate`): since mediabunny 1.52 a bare quality level would switch to quantizer mode,
+ * and Maximum is meant to be the pre-preset export.
+ */
+function bitrateQuality(bitrate: number | "high"): Quality {
+  return bitrate === "high"
+    ? new Quality({ quality: "high", preferBitrate: true })
+    : new Quality({ bitrate });
+}
+
+/** Quantizer with the bitrate as mediabunny's fallback, or the bitrate alone. */
+function videoQuality(choice: VideoEncodingChoice): Quality {
+  if (
+    choice.rateControl === "quantizer" &&
+    choice.quantizer !== null &&
+    choice.bitrate !== "high"
+  ) {
+    return new Quality({ quantizer: choice.quantizer, bitrate: choice.bitrate });
+  }
+  return bitrateQuality(choice.bitrate);
+}
+
+/** The first AAC config the platform encoder accepts; the last one when none says yes. */
+async function pickAudioEncoding(
+  candidates: AudioEncoding[],
+  sampleRate: number,
+): Promise<AudioEncoding> {
+  for (const candidate of candidates) {
+    const ok = await canEncodeAudio("aac", {
+      numberOfChannels: candidate.numberOfChannels,
+      sampleRate,
+      quality: new Quality({ bitrate: candidate.bitrate }),
+    }).catch(() => false);
+    if (ok) return candidate;
+  }
+  return candidates[candidates.length - 1]!;
+}
+
+function downmixToMono(sample: AudioSample): AudioSample {
+  const channels = sample.numberOfChannels;
+  if (channels <= 1) return sample;
+  const frames = sample.numberOfFrames;
+  const mono = new Float32Array(frames);
+  const plane = new Float32Array(frames);
+  for (let c = 0; c < channels; c++) {
+    sample.copyTo(plane, { planeIndex: c, format: "f32-planar" });
+    for (let i = 0; i < frames; i++) mono[i] += plane[i];
+  }
+  for (let i = 0; i < frames; i++) mono[i] /= channels;
+  return new AudioSample({
+    data: mono,
+    format: "f32",
+    numberOfChannels: 1,
+    sampleRate: sample.sampleRate,
+    timestamp: sample.timestamp,
+  });
+}
+
 function trimAudioSample(
   sample: AudioSample,
   rangeStart: number,
@@ -351,18 +566,21 @@ function trimAudioSample(
   return sample.trim(leadTrim, leadTrim + keepLength);
 }
 
-/**
- * Draw `bitmap` into `(w × h)` with letterboxing (contain), centred, on a
- * black background that was already filled by the caller.
- */
-function drawContained(
-  ctx: OffscreenCanvasRenderingContext2D,
-  bitmap: ImageBitmap,
-  w: number,
-  h: number,
-): void {
-  const scale = Math.min(w / bitmap.width, h / bitmap.height);
-  const dw = bitmap.width * scale;
-  const dh = bitmap.height * scale;
-  ctx.drawImage(bitmap, (w - dw) / 2, (h - dh) / 2, dw, dh);
+/** Poster width in px; height follows the output aspect (same size generate-thumbnail used). */
+const POSTER_WIDTH = 640;
+
+/** JPEG of `source` scaled to POSTER_WIDTH; null if the platform cannot encode (cosmetic). */
+async function encodePoster(source: OffscreenCanvas): Promise<ArrayBuffer | null> {
+  try {
+    const width = Math.min(POSTER_WIDTH, source.width);
+    const height = Math.max(1, Math.round((source.height * width) / source.width));
+    const poster = new OffscreenCanvas(width, height);
+    const pctx = poster.getContext("2d");
+    if (!pctx) return null;
+    pctx.drawImage(source, 0, 0, width, height);
+    const blob = await poster.convertToBlob({ type: "image/jpeg", quality: 0.7 });
+    return await blob.arrayBuffer();
+  } catch {
+    return null;
+  }
 }

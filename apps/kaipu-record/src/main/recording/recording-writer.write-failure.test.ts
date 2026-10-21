@@ -56,9 +56,9 @@ describe("RecordingWriter — write failure", () => {
     await writer.create("s1");
     await expect(writer.write("s1", new TextEncoder().encode("x").buffer, 0)).rejects.toThrow();
 
-    await expect(writer.finalize("s1", { title: "T", durationSeconds: 1 })).rejects.toThrow(
-      /ENOSPC/,
-    );
+    await expect(
+      writer.finalize("s1", { title: "T", durationSeconds: 1, durationMs: 1000 }),
+    ).rejects.toThrow(/ENOSPC/);
     // The truncated .part is deleted (never renamed into the vault) and the
     // session is gone, so a second finalize/hasFailed sees nothing.
     expect(unlinkMock).toHaveBeenCalledWith("/tmp/kaipu-rec-s1.mp4.part");

@@ -1,9 +1,14 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LocalRecording } from "@shared/types/library-storage";
 import { dismissToast, getToasts } from "@renderer/ui/toast-store";
-import { VideoEditorPage, type VideoEditorSource } from "./video-editor-page";
+import {
+  toolForShortcut,
+  VideoEditorLoader,
+  VideoEditorPage,
+  type VideoEditorSource,
+} from "./video-editor-page";
 
 /** jsdom's <video> never decodes real media, so videoWidth/videoHeight default to
  *  0 — the same "still loading" state handleExport's metadata guard refuses to
@@ -27,7 +32,7 @@ function stubDecodedVideoSize(width: number, height: number): void {
 // useBlocker — so the hook is replaced with a controllable stub whose `start` drives
 // onSaved directly, without spinning up a fake Worker.
 const startExport = vi.fn(
-  async (args: { onSaved: (recording: LocalRecording) => void | Promise<void> }) => {
+  async (args: { onSaved: (recording: LocalRecording) => void | Promise<void> }): Promise<void> => {
     await args.onSaved({
       id: "new-rec",
       assetId: "00000000-0000-0000-0000-000000000001",
@@ -90,10 +95,10 @@ const SOURCE: VideoEditorSource = {
 function renderEditor() {
   const router = createMemoryRouter(
     [
-      { path: "/", element: <VideoEditorPage /> },
+      { path: "/", element: <VideoEditorLoader source={SOURCE} /> },
       { path: "/library/:assetId", element: <div>library-detail</div> },
     ],
-    { initialEntries: [{ pathname: "/", state: SOURCE }] },
+    { initialEntries: ["/"] },
   );
   render(<RouterProvider router={router} />);
   return router;
@@ -107,6 +112,24 @@ async function waitForEditorLoaded(): Promise<HTMLElement> {
     expect(document.querySelector("footer")).not.toBeNull();
   });
   return document.querySelector("footer")!;
+}
+
+/**
+ * Press an editor shortcut until the page reacts to it.
+ *
+ * The footer `waitForEditorLoaded` waits for appears on the commit that renders the
+ * editor; the page registers its `keydown` listener in a `useEffect` of that same
+ * component, which runs a moment AFTER the commit. A key fired in that gap reaches
+ * no listener and is lost. On a fast machine the gap is never hit; on a GitHub
+ * runner it was, and "arming the Box tool (R)" waited 10 s for a panel the dropped
+ * key never opened. Re-pressing inside `waitFor` closes the gap — every shortcut
+ * used this way is idempotent (R arms Box again; it does not toggle it off).
+ */
+async function pressUntil(key: string, assertion: () => void): Promise<void> {
+  await waitFor(() => {
+    fireEvent.keyDown(window, { key });
+    assertion();
+  });
 }
 
 /** Adds an image slide via the toolbar — the simplest way to produce one undoable
@@ -123,18 +146,39 @@ async function makeDirty(footer: HTMLElement): Promise<void> {
   });
 }
 
-describe("VideoEditorPage — invalid source guard", () => {
-  it("redirects to /library when the nav state has no positive duration", () => {
+/**
+ * "Export" opens the export sheet (NIW2-217); its primary "Export ~N MB" runs the MP4
+ * export. When the metadata guard refuses, no sheet opens and only the first click happens.
+ */
+function clickExportVideo(): void {
+  fireEvent.click(screen.getByRole("button", { name: "Export" }));
+  const sheet = screen.queryByRole("alertdialog");
+  if (sheet) fireEvent.click(within(sheet).getByRole("button", { name: /^Export( |$)/ }));
+}
+
+describe("VideoEditorPage — legacy /video-editor redirect", () => {
+  const renderLegacy = (state: unknown) => {
     const router = createMemoryRouter(
       [
-        { path: "/", element: <VideoEditorPage /> },
-        { path: "/library", element: <div>library</div> },
+        { path: "/video-editor", element: <VideoEditorPage /> },
+        { path: "/editor", element: <div>editor-home</div> },
+        { path: "/editor/video/:assetId", element: <div>editor-video</div> },
       ],
-      { initialEntries: [{ pathname: "/", state: { ...SOURCE, durationSeconds: 0 } }] },
+      { initialEntries: [{ pathname: "/video-editor", state }] },
     );
     render(<RouterProvider router={router} />);
+    return router;
+  };
 
-    expect(screen.getByText("library")).not.toBeNull();
+  it("lands an old navigation that carries the recording on its editor URL", () => {
+    const router = renderLegacy(SOURCE);
+    expect(screen.getByText("editor-video")).not.toBeNull();
+    expect(router.state.location.pathname).toBe("/editor/video/asset-1");
+  });
+
+  it("sends a stateless (or unusable) navigation to the Editor home", () => {
+    renderLegacy({ ...SOURCE, durationSeconds: 0 });
+    expect(screen.getByText("editor-home")).not.toBeNull();
   });
 });
 
@@ -214,7 +258,7 @@ describe("VideoEditorPage — add-image wiring", () => {
   });
 });
 
-describe("VideoEditorPage — post-export navigation vs. useBlocker", () => {
+describe("VideoEditorPage — background export vs. useBlocker", () => {
   beforeEach(() => {
     vi.stubGlobal("Image", FakeImage);
     startExport.mockClear();
@@ -230,38 +274,104 @@ describe("VideoEditorPage — post-export navigation vs. useBlocker", () => {
 
   const DISCARD_DIALOG_TITLE = "Discard the video changes?";
 
-  it("a successful export's onSaved navigates straight to the library item, without the discard-changes dialog", async () => {
+  it("an export runs in the background: the user stays in the editor, and the session is stamped as exported", async () => {
+    // The global stub is a plain async function, not a spy; wrap it for this test only.
+    const save = vi.spyOn(window.electronAPI, "saveVideoEditSession");
     renderEditor();
-    const footer = await waitForEditorLoaded();
-    await makeDirty(footer); // controller.dirty === true, same as right before a real export
-
-    fireEvent.click(screen.getByRole("button", { name: "Export" }));
-
-    // startExport's onSaved awaits saveVideoEditSession (mocked, resolves), calls
-    // markClean(), flips the bypass ref, then navigates — all async, so wait for the
-    // target route's element to land.
-    await waitFor(() => {
-      expect(screen.getByText("library-detail")).toBeInTheDocument();
-    });
-    expect(startExport).toHaveBeenCalledOnce();
-    // The critical regression: if the blocker predicate still read stale `dirty`
-    // state at navigate-time, this dialog would render instead of the route change.
-    expect(screen.queryByText(DISCARD_DIALOG_TITLE)).toBeNull();
-  });
-
-  it("blocks a normal (non-export) navigation while dirty", async () => {
-    const router = renderEditor();
     const footer = await waitForEditorLoaded();
     await makeDirty(footer);
 
-    await act(async () => {
-      await router.navigate("/library/rec-1");
-    });
+    clickExportVideo();
 
-    expect(await screen.findByText(DISCARD_DIALOG_TITLE)).toBeInTheDocument();
-    // Navigation is paused mid-flight: still on the editor, not the target route.
+    // The 4th argument stamps this scene as the one burned into the file. Without it the
+    // library shows "not exported" on a recording the user exported a second ago.
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(String),
+        expect.any(Array),
+        true,
+      ),
+    );
+    expect(startExport).toHaveBeenCalledOnce();
+    // No navigation: the "Ready to share" card takes over, and the editor stays open.
     expect(screen.queryByText("library-detail")).toBeNull();
-    expect(startExport).not.toHaveBeenCalled();
+    expect(screen.queryByText(DISCARD_DIALOG_TITLE)).toBeNull();
+  });
+
+  it("does not stamp the session when the user kept editing while the export ran", async () => {
+    let pending: { onSaved: (recording: LocalRecording) => void | Promise<void> } | null = null;
+    startExport.mockImplementationOnce(async (args) => {
+      pending = args;
+    });
+    const save = vi.spyOn(window.electronAPI, "saveVideoEditSession");
+    save.mockClear();
+    renderEditor();
+    const footer = await waitForEditorLoaded();
+    await makeDirty(footer);
+    clickExportVideo();
+    await waitFor(() => expect(pending).not.toBeNull());
+
+    // Another edit while the export encodes.
+    fireEvent.click(screen.getByRole("button", { name: "Add image" }));
+    fireEvent.change(screen.getByTestId("slide-image-input"), {
+      target: { files: [new File([new Uint8Array([0x89, 0x50])], "y.png", { type: "image/png" })] },
+    });
+    await waitFor(() => expect(footer.querySelectorAll("button")).toHaveLength(3));
+
+    await act(async () => {
+      await pending!.onSaved({
+        id: "new-rec",
+        assetId: "00000000-0000-0000-0000-000000000001",
+        kind: "recording",
+        title: "My recording (edited)",
+        filePath: "/vault/new-rec.mp4",
+        createdAt: 1,
+        sizeBytes: 100,
+        durationSeconds: 10,
+        thumbnailUrl: null,
+        derivedFromAssetId: null,
+        contentSha256: null,
+      });
+    });
+    expect(save).not.toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.any(Array),
+      true,
+    );
+  });
+
+  it("blocks a normal (non-export) navigation while dirty", async () => {
+    // The blocker only fires while an edit is pending, i.e. not yet written. Two
+    // things make that depend on the runner's speed; either one lets the navigation
+    // through, which is how this failed on CI:
+    //  - autosave writes AUTOSAVE_DEBOUNCE_MS after the edit and clears the flag, so a
+    //    write that never resolves keeps the edit pending for the whole test;
+    //  - the flag is set in a passive effect that runs a moment AFTER the commit
+    //    `makeDirty` waits for. Navigating in that gap finds nothing pending and goes
+    //    through. The "Saving…" chip is set by the same effect, so waiting for it
+    //    proves the flag is up.
+    const save = vi
+      .spyOn(window.electronAPI, "saveVideoEditSession")
+      .mockReturnValue(new Promise(() => {}));
+    try {
+      const router = renderEditor();
+      const footer = await waitForEditorLoaded();
+      await makeDirty(footer);
+      expect(await screen.findByText("Saving…")).toBeInTheDocument();
+
+      await act(async () => {
+        await router.navigate("/library/rec-1");
+      });
+
+      expect(await screen.findByText(DISCARD_DIALOG_TITLE)).toBeInTheDocument();
+      // Navigation is paused mid-flight: still on the editor, not the target route.
+      expect(screen.queryByText("library-detail")).toBeNull();
+      expect(startExport).not.toHaveBeenCalled();
+    } finally {
+      save.mockRestore();
+    }
   });
 
   it("never blocks navigation when the editor is clean", async () => {
@@ -295,14 +405,20 @@ describe("VideoEditorPage — handleExport metadata guard", () => {
 
     // Initial scene has one clip so the export button is enabled (not disabled by
     // the empty-timeline guard) — clicking it hits the videoWidth === 0 guard instead.
-    fireEvent.click(screen.getByRole("button", { name: "Export" }));
+    clickExportVideo();
 
+    // Wait for the toast first, then assert the negative. A bare
+    // `not.toHaveBeenCalled()` after a click passes just as happily when the
+    // handler never ran at all, so it needs an observable effect to anchor it —
+    // the toast proves the guard is what refused.
+    await waitFor(() => {
+      expect(getToasts()).toContainEqual(
+        expect.objectContaining({
+          message: "The video is still loading. Try again in a moment.",
+        }),
+      );
+    });
     expect(startExport).not.toHaveBeenCalled();
-    expect(getToasts()).toContainEqual(
-      expect.objectContaining({
-        message: "The video is still loading. Try again in a moment.",
-      }),
-    );
   });
 
   it("refuses to start the export when only videoHeight is 0", async () => {
@@ -310,8 +426,17 @@ describe("VideoEditorPage — handleExport metadata guard", () => {
     renderEditor();
     await waitForEditorLoaded();
 
-    fireEvent.click(screen.getByRole("button", { name: "Export" }));
+    clickExportVideo();
 
+    // Same guard, same toast: waiting for it is what makes the negative below mean
+    // "the guard refused" rather than "the handler had not started".
+    await waitFor(() => {
+      expect(getToasts()).toContainEqual(
+        expect.objectContaining({
+          message: "The video is still loading. Try again in a moment.",
+        }),
+      );
+    });
     expect(startExport).not.toHaveBeenCalled();
     stubDecodedVideoSize(0, 0); // restore the undecoded default for other suites
   });
@@ -321,9 +446,11 @@ describe("VideoEditorPage — handleExport metadata guard", () => {
     renderEditor();
     await waitForEditorLoaded();
 
-    fireEvent.click(screen.getByRole("button", { name: "Export" }));
+    clickExportVideo();
 
-    expect(startExport).toHaveBeenCalledOnce();
+    await waitFor(() => {
+      expect(startExport).toHaveBeenCalledOnce();
+    });
     stubDecodedVideoSize(0, 0); // restore the undecoded default for other suites
   });
 });
@@ -423,7 +550,140 @@ describe("VideoEditorPage — keydown gate behind open modals", () => {
 
     fireEvent.keyDown(window, { key: " " });
 
+    // Let any queued effect or promise the keydown could have started settle, so
+    // this negative means "the gate held" and not "playback had not begun yet".
+    await act(async () => {});
+
     expect(playSpy).not.toHaveBeenCalled();
     playSpy.mockRestore();
   });
+});
+
+describe("toolForShortcut — the keyboard agrees with the toolbar's disabled states", () => {
+  it("maps each annotation shortcut to its tool", () => {
+    expect(toolForShortcut("v", { onSlide: false })).toBe("select");
+    expect(toolForShortcut("r", { onSlide: false })).toBe("box");
+    expect(toolForShortcut("a", { onSlide: false })).toBe("arrow");
+    expect(toolForShortcut("t", { onSlide: false })).toBe("text");
+  });
+
+  it("maps B and C to the privacy tools off a slide", () => {
+    expect(toolForShortcut("b", { onSlide: false })).toBe("blur");
+    expect(toolForShortcut("c", { onSlide: false })).toBe("cover");
+  });
+
+  it("refuses B and C on a slide — the toolbar disables those buttons there", () => {
+    expect(toolForShortcut("b", { onSlide: true })).toBeNull();
+    expect(toolForShortcut("c", { onSlide: true })).toBeNull();
+  });
+
+  it("leaves the annotation tools alone on a slide — only privacy is gated", () => {
+    expect(toolForShortcut("v", { onSlide: true })).toBe("select");
+    expect(toolForShortcut("r", { onSlide: true })).toBe("box");
+    expect(toolForShortcut("t", { onSlide: true })).toBe("text");
+  });
+
+  it("returns null for a key that is not a shortcut", () => {
+    expect(toolForShortcut("q", { onSlide: false })).toBeNull();
+    expect(toolForShortcut("enter", { onSlide: false })).toBeNull();
+    // `key in obj` walks the prototype chain; a real KeyboardEvent never produces
+    // these, but the lookup must not resolve them to a "tool" either.
+    expect(toolForShortcut("constructor", { onSlide: false })).toBeNull();
+  });
+});
+
+describe("VideoEditorPage — tool shortcuts end to end", () => {
+  beforeEach(() => {
+    vi.stubGlobal("Image", FakeImage);
+    stubDecodedVideoSize(1280, 720);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    stubDecodedVideoSize(0, 0);
+  });
+
+  it("R arms the Box tool from the keyboard", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+
+    // The class lands on a re-render, not on the event. Asserting it synchronously
+    // reads the DOM one render too early and only passes when the machine is fast
+    // enough — which is how this failed under a parallel `turbo run test`.
+    await pressUntil("r", () => {
+      expect(screen.getByRole("button", { name: "Box" }).className).toMatch(/toolActive/);
+    });
+  });
+
+  it("V hands the tool back to select after R armed Box", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+
+    await pressUntil("r", () => {
+      expect(screen.getByRole("button", { name: "Box" }).className).toMatch(/toolActive/);
+    });
+
+    fireEvent.keyDown(window, { key: "v" });
+
+    // The way back was untested: `toolForShortcut` proves "v" maps to select as a
+    // pure function, but nothing proved the page acts on it and disarms Box.
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Box" }).className).not.toMatch(/toolActive/);
+    });
+    expect(screen.getByRole("button", { name: "Select" }).className).toMatch(/toolActive/);
+  });
+});
+
+// The floating `OverlayOptions` popover (`.optionsFloat`) is gone — annotation controls
+// now live in the inspector column alongside ZoomInspector / BlurInspector /
+// CoverInspector (backlog/video-editor-annotation-inspector). These tests cover what the
+// page harness can honestly reach; see the comment before the last test for what is
+// deliberately NOT covered here (and why).
+describe("VideoEditorPage — inspector column priority (annotation follow-ups)", () => {
+  beforeEach(() => {
+    vi.stubGlobal("Image", FakeImage);
+    stubDecodedVideoSize(1280, 720);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    stubDecodedVideoSize(0, 0);
+  });
+
+  it("shows the Detection panel by default (select tool, nothing selected)", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+
+    // The footer this harness waits on and the inspector column land on different
+    // renders, so the inspector's heading is a `findBy`, not a `getBy`.
+    expect(await screen.findByRole("heading", { name: "Detection" })).toBeInTheDocument();
+  });
+
+  it("arming the Box tool (R) shows the annotation defaults panel in the inspector, with no floating popover duplicating its controls", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+
+    await pressUntil("r", () => {
+      expect(screen.getByRole("heading", { name: "Next annotation" })).toBeInTheDocument();
+    });
+    // Before this change, the same "Color" picker rendered twice: once in the floating
+    // OverlayOptions popover over the stage, once (if it existed) in the inspector. Now
+    // there is exactly one, and it lives inside the inspector column.
+    const colorLabels = screen.getAllByText("Color");
+    expect(colorLabels).toHaveLength(1);
+    const inspector = document.querySelector('[data-testid="editor-inspector"]')!;
+    expect(inspector.contains(colorLabels[0])).toBe(true);
+  });
+
+  // The seek-on-zoom-select rule (seekTargetForSegment: seek only when the playhead is
+  // outside the segment) is a pure function covered on its own in select-seek.test.ts.
+  // Driving a REAL zoom segment through this page's harness would require a cursor-track
+  // fixture wired through withInitialZooms/useZoomEditing, which this file's harness
+  // does not set up (no test here creates a cursor track) — faking that path would test
+  // a shape the real detector never produces, so it is intentionally left uncovered at
+  // the page level. Likewise, the post-selection focus move (focusInspectorFirstControl,
+  // scheduled via requestAnimationFrame) has its own unit tests in
+  // focus-inspector.test.ts; asserting the rAF callback fired from inside this page's
+  // jsdom harness would be timing-fragile without an existing fake-timers/rAF-flush
+  // pattern already in this file, so it is skipped here too.
 });

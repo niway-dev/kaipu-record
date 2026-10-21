@@ -11,10 +11,29 @@ name: release-please
 # default GITHUB_TOKEN). RELEASE_PLEASE_TOKEN is a fine-grained PAT with
 # Contents + Pull requests read/write.
 
+# Cost note (2026-09-24): every push to main used to start this job, including
+# docs-only merges. Each run takes 45-96 s but bills a full minute, so September's
+# 88 runs cost 90 Linux minutes — about 11% of this repo's Actions usage — and the
+# account's quota exhaustion on 2026-09-23 blocked the release PRs themselves.
+# Skipping a run is safe: release-please reads the whole history on every run, so
+# the next matching push picks up any commits a skipped run did not see. Merging a
+# release PR always touches the app's package.json, so the tag is never skipped.
+# See /specs/2026-09-23-ci-minutes-audit and /specs/2026-09-ci-usage-baseline.
+
 on:
   push:
     branches:
       - main
+    paths:
+      - "apps/kaipu-record/**"
+      - "apps/web-hono/**"
+      - "apps/server-hono/**"
+      - "packages/**"
+      - "bun.lock"
+      - "release-please-config.json"
+      - ".release-please-manifest.json"
+      - ".github/workflows/release-please.yml"
+  workflow_dispatch:
 
 permissions:
   contents: write

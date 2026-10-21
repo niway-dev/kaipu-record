@@ -19,6 +19,8 @@ function makeVideo(overrides: Partial<LibraryVideo> = {}): LibraryVideo {
     editing: "project-available",
     transfer: { state: "idle" },
     derivedFromAssetId: null,
+    editSavedAt: null,
+    editExportedSavedAt: null,
     ...overrides,
   };
 }
@@ -89,5 +91,10 @@ describe("VideoRow", () => {
       video: makeVideo({ kind: "screenshot", durationSeconds: 0 }),
     });
     expect(container.textContent).not.toMatch(/\d:\d\d/);
+  });
+
+  it("shows the edit badge when given one", () => {
+    renderRow({ badge: "never-exported" });
+    expect(screen.getByText(/edited · not exported/i)).toBeInTheDocument();
   });
 });

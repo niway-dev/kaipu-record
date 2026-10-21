@@ -131,4 +131,25 @@ describe("useSourceSelection", () => {
     expect(result.current.setup.selectedSource).toBeNull();
     expect(result.current.setup.canStartRecording).toBe(false);
   });
+
+  it("loads screens only on mount, and the full list only when the picker opens", async () => {
+    const getScreenSources = vi.fn(async () => [screen1, screen2, safari]);
+    window.electronAPI.getScreenSources = getScreenSources;
+
+    const { result } = renderHook(() => useHarness());
+    await waitFor(() => expect(result.current.setup.selectedSource?.id).toBe("screen:0"));
+
+    // Mount: the cheap call — no window list, no screenshot of every window.
+    expect(getScreenSources).toHaveBeenCalledTimes(1);
+    expect(getScreenSources).toHaveBeenLastCalledWith({ withThumbnails: false });
+
+    act(() => result.current.setup.openSourcePicker());
+    await waitFor(() => expect(getScreenSources).toHaveBeenCalledTimes(2));
+    expect(getScreenSources).toHaveBeenLastCalledWith(undefined);
+
+    // Closing the picker fetches nothing.
+    act(() => result.current.setup.closeSourcePicker());
+    await waitFor(() => expect(result.current.sources.isLoading).toBe(false));
+    expect(getScreenSources).toHaveBeenCalledTimes(2);
+  });
 });

@@ -1,0 +1,178 @@
+---
+title: "ADR 0010: Checks run in Actions on every pull request; the pre-push hook keeps only the fast ones"
+description: With the repository going public, verification moves back from the author's machine to GitHub Actions — `verify`, the app bundles and the macOS desktop E2E on every non-draft pull request. The pre-push hook shrinks to lint, format and types. Supersedes ADR 0004's local-first verification.
+---
+
+# ADR 0010: Checks run in Actions on every pull request; the pre-push hook keeps only the fast ones
+
+## Status
+
+| Field         | Value                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Superseded by ADR 0027 (2026-10-19). Was: Accepted — implemented in `pr-checks.yml` and `lefthook.yml`. Amended 2026-10-05: docs-only pull requests skip the desktop E2E ([amendment](#amendment-docs-only-pull-requests-skip-the-e2e)); the amendment has not run on a real docs-only pull request yet. Amended 2026-10-19: the macOS E2E runs only on release candidates, and stacked pull requests are verified ([amendment](#amendment-the-macos-e2e-is-for-release-candidates-stacked-pull-requests-are-verified)) |
+| Date          | 2026-10-05                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Supersedes    | [ADR 0004](./0004-local-first-release-verification) — the local-first pre-push gate                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Amends        | [ADR 0006](./0006-desktop-e2e-in-the-candidate-tier) — the desktop E2E is no longer gated to desktop candidates · [ADR 0005](./0005-draft-ready-release-candidate-readiness) — draft/ready now applies to every PR                                                                                                                                                                                                                                                                                                      |
+| Superseded by | [ADR 0027](./0027-verify-release-candidates-only) — only release candidates are verified; decision 5 (light pre-push) stays                                                                                                                                                                                                                                                                                                                                                                                             |
+
+## Context
+
+ADR 0004 moved verification onto the author's machine because Actions minutes were the
+bottleneck: 802 Linux minutes in September 2026, an account quota exhausted twice, and
+releases blocked by a spending limit. Its pre-push hook ran the full `bun run verify`, and
+ADR 0006 later added the desktop end-to-end suite to it for pushes touching the app.
+
+Two things changed.
+
+**The repository is going public** under AGPL-3.0 (see
+[Open source under AGPL-3.0](/marketing/open-source/)). GitHub-hosted runners are free for
+public repositories, macOS included. The cost that justified ADR 0004 disappears.
+
+**The local gate stopped being cheap for the owner.** The desktop E2E suite opens the app
+thirteen times per push and takes the screen for about half a minute. That is the cost
+ADR 0006 named and accepted when minutes were scarce; with free minutes it is no longer
+worth paying.
+
+ADR 0004's own reopen condition also holds: _"Collaboration requires server-enforced
+pre-merge checks."_ A public project receives pull requests from people who never install
+our hooks.
+
+## Decision
+
+1. **Every non-draft pull request to `main` is verified in Actions**: `bun run verify`, the
+   web and API bundle builds on Linux, and the Playwright desktop suite against the built
+   app on macOS. Release-please candidates are no longer special: they get the same jobs.
+2. **The desktop E2E runs on every pull request that changes more than documentation.**
+   _Amended 2026-10-05, see [Amendment: docs-only pull requests skip the E2E](#amendment-docs-only-pull-requests-skip-the-e2e)._
+   As first accepted, it ran on every pull request with no path filter, and a docs-only pull
+   request waited for it.
+3. **`Merge requirements` stays the one required check**, with the same invariant: a commit
+   receives exactly one report, from the run that verified it. It reports when both
+   `verify` and the E2E reached a verdict, and stays silent otherwise.
+4. **Draft means "do not spend runners yet"** for every pull request, not just release
+   candidates. Mark a pull request ready for review to have it checked.
+5. **The pre-push hook keeps only the fast checks**: lint, format check, the package builds
+   (Turbo-cached) and type checks — `bun run verify:local`, about 7 s warm. Tests and the
+   E2E suite are not run on push. `bun run verify` still runs everything locally on demand.
+6. **`verify` runs as parallel jobs** (added 2026-10-05, after the first real runs took about
+   six minutes): lint and format; package builds and types; the workspace tests; the desktop
+   renderer suite in three Vitest shards; the web and API bundles. A `verify` job collects
+   them, so `Merge requirements` and its single-report invariant are unchanged. A part
+   cancelled by a newer revision makes `verify` skip rather than fail.
+7. **`edited` is no longer a trigger** (2026-10-05). Its run verified nothing and reported
+   every check as skipped, and GitHub counts a skipped required check as passing: while the
+   real run worked, release PR #195 read "All checks have passed". A stacked pull request
+   retargeted onto `main` now needs one push, or close and reopen, to start its checks.
+8. The release workflows keep their own gates (ADR 0006's E2E before signing): a release
+   still validates the exact commit it publishes.
+
+## Alternatives rejected
+
+- **Keep ADR 0004 and only drop the E2E from pre-push.** It would remove the screen
+  takeover, but a public repository would still accept pull requests checked by nobody
+  but their author.
+- **Path-filter the macOS job to desktop-affecting changes.** Saves wall-clock on docs and
+  web pull requests, at the price of a `changes` job whose output the gate must also read
+  — the paths-filter deadlock is how PR #173 became unmergeable. Reconsider if waiting on
+  macOS becomes the common complaint. _(Adopted for docs-only changes on 2026-10-05; see the
+  amendment. Web and API pull requests still run it.)_
+- **Run the checks in Actions while the repository is still private.** macOS bills at ten
+  times the Linux rate on a private repository; that is the September problem again. The
+  change is meant to land together with the repository going public.
+
+## Consequences
+
+- Feedback moves later for the author: a type or lint error still fails on push, but a
+  failing unit test or E2E shows up on the pull request a few minutes after it.
+- Every pull request needs a macOS runner. On a degraded Actions day nothing merges — the
+  ruleset blocks even an administrator, as it did on 2026-10-05.
+- `scripts/check-workflow-eligibility.ts` now models ordinary pull requests as verifying
+  runs, and it enforces the single report rule for them too.
+- **If the repository stays private, this decision costs money**: every pull request would
+  bill macOS minutes at ten times the Linux rate.
+
+## Non-goals
+
+Self-hosted runners, changing the release workflows, a path filter beyond docs-only, and
+changing what `bun run verify` contains.
+
+## Reopen when
+
+- The repository is not public, or GitHub stops offering free hosted runners to public
+  repositories.
+- Waiting on the macOS job becomes the routine reason pull requests sit unmerged — then
+  add the path filter, with the gate reading its output.
+- Flaky runners make the required check unreliable often enough that merges routinely
+  need a re-run.
+
+## Amendment: the macOS E2E is for release candidates; stacked pull requests are verified
+
+**2026-10-19.** Two problems, met on the same day:
+
+- The second reopen condition above was met. A run measured on PR #345 took 234 s, and the
+  macOS E2E alone took 210 s; every other job ran in parallel and finished within about 100 s.
+  Waiting on macOS was the routine reason a pull request sat unmerged.
+- `pr-checks.yml` listened only to pull requests targeting `main`. A pull request in a GitHub
+  stack targets the branch below it, so it never ran, while GitHub judges every pull request in
+  a stack against the stack's base and its required check. "Release candidate verified" stayed
+  "Expected" on PR #347 and "Merge stack" could not be used.
+
+**Decision.**
+
+1. **The macOS E2E runs only on release candidates** — pull requests from release-please
+   branches (`release-please--branches--*`) that change more than documentation — and on a
+   manual dispatch. `Classify the change` outputs `e2e`, the E2E job runs on it, and the gate
+   accepts a skip that this run classified as not required. This narrows decision 1 back
+   toward ADR 0006 for the E2E only: lint, format, types, unit tests, bundles and the docs
+   build still run on every pull request.
+2. **The `branches: [main]` filter is removed**: every pull request runs `PR checks`, so each
+   pull request in a stack carries the required check. The result is attached to the head
+   commit, so a stacked pull request retargeted onto `main` keeps it, and decision 7's "one
+   push, or close and reopen" is no longer needed.
+
+**Cost.** A regression only the E2E catches (export path, library actions, settings
+persistence against a real build) is found on the release pull request rather than on the pull
+request that caused it. Unit tests still run everywhere, so this covers only what they cannot
+reach. A stack must have the updated workflow at its bottom branch to benefit: `pull_request`
+runs read the workflow from the merge of the head into its base.
+
+**Reopen when** a release pull request fails the E2E on a change that an ordinary pull
+request introduced and the culprit takes more than one bisect to find — then run the E2E on
+pull requests that touch `apps/kaipu-record/` again.
+
+## Amendment: docs-only pull requests skip the E2E
+
+**2026-10-05.** The second reopen condition was met on the day this ADR merged: waiting on
+macOS for a Markdown change became the owner's complaint (PR #239). Of the 145 pull requests
+merged into `main` in the 30 days before, 98 changed documentation only.
+
+**Decision.** A `Classify the change` job runs with the same eligibility as the verify
+parts and outputs `docs_only`. `Desktop - E2E tests (macOS)` skips when it is `true`. `Merge
+requirements` treats that skip as a verdict and reports success when `verify` passed.
+Everything in `verify` (lint, format, types, tests, bundles, the docs site build) still runs
+on docs-only pull requests.
+
+**Amendment, 2026-10-06.** Job names follow one rule: no prefix when the job covers the whole
+workspace (`Lint, format and workflow rules`, `Build and type-check`, `All checks passed`), and
+`<scope> - <what>` when it covers one part of it (`Desktop - unit tests (1/3)`,
+`Web and API - Workers bundle`, `Documentation - build`). The docs site build is new: before
+it, `apps/documentation` was built nowhere in CI, so a page that failed to compile reached
+`main` unnoticed — on the two of every three pull requests that change documentation.
+
+**Rules that keep the PR #173 deadlock from coming back:**
+
+- The filter is a job, never `on.pull_request.paths`. The workflow always runs, so the
+  required check always receives a report.
+- Docs-only is an allowlist that fails toward running the E2E: every changed path, including
+  a renamed file's old path, must be under `apps/documentation/` or end in `.md`/`.mdx`. An
+  empty list, a list at the API's 3000-file cap, or a manual dispatch counts as code. No app
+  imports a Markdown file, which is why `.md` anywhere qualifies; that changes if one ever does.
+- The gate counts the E2E as decided only when this run classified the change as docs-only,
+  or when the classification failed (then it fails, with a message to re-run). A cancelled
+  classification stays silent, like any other superseded run.
+- `scripts/check-workflow-eligibility.ts` runs the real classifier step against file lists
+  and the real gate script against every combination, and fails if a workflow-level path
+  filter appears.
+
+**Reopen when** an app starts importing Markdown at build or run time, or a docs-only pull
+request is found to have broken the desktop app.

@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  DEFAULT_WATERMARK_CONFIG,
-  resolveWatermarkEnabled,
-  watermarkRect,
-  type WatermarkConfig,
-} from "./watermark";
+import { DEFAULT_WATERMARK_CONFIG, watermarkRect, type WatermarkConfig } from "./watermark";
 
 const base: WatermarkConfig = {
   ...DEFAULT_WATERMARK_CONFIG,
@@ -44,23 +39,27 @@ describe("watermarkRect", () => {
   });
 });
 
-describe("resolveWatermarkEnabled", () => {
-  it("shows the watermark for free users with the flag on", () => {
-    expect(resolveWatermarkEnabled({ flagOn: true, isPaid: false, devForce: null })).toBe(true);
+describe("DEFAULT_WATERMARK_CONFIG", () => {
+  // The mark is a signature, not a claim on the frame: it sits in a corner and
+  // stays under the content. Moved off `middle-right`, which overlapped the video.
+  it("is faint enough not to compete with the content", () => {
+    expect(DEFAULT_WATERMARK_CONFIG.opacity).toBeLessThanOrEqual(0.75);
   });
 
-  it("removes it for paid users", () => {
-    expect(resolveWatermarkEnabled({ flagOn: true, isPaid: true, devForce: null })).toBe(false);
+  it("sits in the frame's bottom-right corner at 1080p", () => {
+    const aspect = 1974 / 352; // the shipped wordmark asset
+    const r = watermarkRect(1920, 1080, aspect, DEFAULT_WATERMARK_CONFIG);
+    const margin = Math.round(1080 * DEFAULT_WATERMARK_CONFIG.marginRatio);
+    expect(r.x).toBe(1920 - r.width - margin);
+    expect(r.y).toBe(1080 - r.height - margin);
   });
 
-  it("the flag can kill it entirely", () => {
-    expect(resolveWatermarkEnabled({ flagOn: false, isPaid: false, devForce: null })).toBe(false);
-  });
-
-  it("the dev force overrides the real entitlement", () => {
-    // forced paid → off, even though the real entitlement is free
-    expect(resolveWatermarkEnabled({ flagOn: true, isPaid: false, devForce: "paid" })).toBe(false);
-    // forced free → on, even though the real entitlement is paid
-    expect(resolveWatermarkEnabled({ flagOn: true, isPaid: true, devForce: "free" })).toBe(true);
+  // The first build of this change used a 2.5 % margin and the mark read as stuck
+  // to the bottom edge, overlapping the recorded content's own bottom bar. The
+  // gap below the mark must stay comparable to the mark's own height.
+  it("keeps the mark clear of the bottom edge, not glued to it", () => {
+    const r = watermarkRect(1920, 1080, 1974 / 352, DEFAULT_WATERMARK_CONFIG);
+    const gapBelow = 1080 - (r.y + r.height);
+    expect(gapBelow).toBeGreaterThanOrEqual(r.height * 0.75);
   });
 });

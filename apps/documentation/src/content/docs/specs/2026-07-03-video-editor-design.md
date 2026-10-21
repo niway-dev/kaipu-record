@@ -8,7 +8,9 @@ description: "Quick, simple video editor for recordings: timeline with cut/trim,
 > **Status: 🔵 Approved design** (2026-07-03). Implementation decomposed into six plans
 > under `plans/2026-07-03-video-editor-0*.md`, executed one PR at a time. Owner decisions
 > baked in: sequential slides first (overlay image track later), time-ranged annotations,
-> export writes a new file + re-editable session JSON (replace-vs-duplicate choice later).
+> export writes a new file + re-editable session JSON (the replace-vs-duplicate choice was
+> closed on 2026-09-22 by [ADR 0003](/architecture/decisions/0003-export-never-replaces-the-original/):
+> never replace).
 
 ## Goal
 

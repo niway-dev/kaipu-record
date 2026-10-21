@@ -1,14 +1,57 @@
-# Monorepo Template
+# Kaipu — This. Captured.
 
-A production-ready monorepo template with DDD + Hexagonal Architecture, authentication, deployment configs, and a Todo CRUD example. Built with TypeScript, Bun, and Turborepo.
+Screen recordings and screenshots, kept in a folder you own.
+
+Kaipu is a local-first desktop app for recording bugs, explaining changes, annotating
+screenshots, and finding those explanations again. Record, trim, annotate, and export
+without an account for local use. Cloud capabilities are optional.
+
+## Why Kaipu
+
+**Kaipu = KAY + khiPU → «Esto, registrado».** Our name is a creative brand construction
+inspired by “this” and the khipu/quipu, the Andean system of recording information with
+cords and knots. It is not a literal Quechua translation. **“This. Captured.”** is our
+English brand signature.
+
+**Kai** is the name of our companion, with a small knot that keeps moments as the
+preferred visual direction. Final logo, mascot, and notch-state artwork integration
+is still pending.
+
+The [canonical brand identity](apps/documentation/src/content/docs/marketing/brand-identity.md)
+preserves the adopted meaning, origin story, and sources. Start there for brand work.
+
+## Product and status
+
+- Screen, voice, and camera recording, global shortcuts, and floating recording controls.
+- Screenshot capture and annotation, crop, freehand, and redaction tools.
+- Lightweight video editing with trim, annotations, auto-zoom, and MP4 export.
+- A filesystem-first library that keeps original recordings and exported results.
+- macOS is the current product target; a recording-only Windows beta is planned.
+- This branch removes mandatory watermarks and adds an opt-in “Made with Kaipu” badge,
+  off by default. Packaged-build validation is pending; see the
+  [validation checklist](apps/documentation/src/content/docs/backlog/free-tier-no-watermark.md).
+
+Visit [kaipu.app](https://kaipu.app) for available downloads. The source is public under
+AGPL-3.0-only. Roadmap items are not claims about the currently downloaded release.
+
+## Start reading
+
+- [Product philosophy](apps/documentation/src/content/docs/desktop/product-philosophy.mdx)
+- [Marketing and growth](apps/documentation/src/content/docs/marketing/index.md)
+- [Brand and website execution plan](apps/documentation/src/content/docs/plans/2026-09-27-brand-and-website-rollout.md)
+- [Product growth roadmap](apps/documentation/src/content/docs/backlog/product-growth.mdx)
+- [Commands](apps/documentation/src/content/docs/commands.md)
+
+All maintained project documentation lives in the Astro Starlight site at
+`apps/documentation/`. Run `bun run dev` from that directory to read it locally.
 
 ## Getting Started
 
 ### Prerequisites
 
 - [Bun](https://bun.sh) v1.3.4 or higher
-- The [Infisical CLI](https://infisical.com/docs/cli/overview) — every dev and
-  database script fetches its environment from it
+- The [Infisical CLI](https://infisical.com/docs/cli/overview) — it generates the
+  local `.env` files every dev and database script reads
 - Access to the `kaipu-recorder` Infisical project
 
 `bun run setup` checks both and prints how to install anything missing. It never
@@ -30,19 +73,17 @@ bun install
 bun run setup
 ```
 
-3. Sign in to Infisical:
+3. Set up environment variables — see
+   [Set up environment variables](#set-up-environment-variables) below.
+
+4. For the desktop app, follow any native-rebuild instruction from `bun run setup`,
+   then run `bun run dev` in `apps/kaipu-record`. Native rebuilding is explicit:
 
 ```bash
-infisical login
+bun run rebuild:native
 ```
 
-**There are no `.env` files to create.** Every value comes from Infisical and is
-fetched at start-up. Where a `.env` exists it is generated and gitignored —
-editing it does nothing, because the next start overwrites it.
-
-Change a value in Infisical, restart, done.
-
-4. Push the database schema:
+For backend development, push the database schema:
 
 ```bash
 bun run db:push
@@ -58,6 +99,39 @@ The application will be available at:
 
 - **Web App**: http://localhost:3001
 - **API Server**: http://localhost:3000
+
+### Set up environment variables
+
+Infisical is the source of truth, but nothing talks to it at start-up. One
+command generates every local `.env` file, and `bun run dev` and the `db:*`
+scripts only read those files — so an Infisical outage blocks a refresh, never
+your work.
+
+1. Install the Infisical CLI (`bun run setup` prints the command for your OS).
+2. Sign in once per machine:
+
+   ```bash
+   infisical login
+   ```
+
+3. Generate the files, from the repository root:
+
+   ```bash
+   bun env:pull
+   ```
+
+   It writes `apps/server-hono/.env`, `apps/web-hono/.env`, `apps/console/.env`,
+   `apps/kaipu-record/.env` and `packages/infra-db/.env` (the `db:*` scripts),
+   each with only its own values and readable only by you. It is all or nothing:
+   if Infisical fails part-way, every existing `.env` is left as it was.
+
+Run `bun env:pull` again when a value changes in Infisical, when a new variable
+is added, or when an app reports a missing variable at start-up — a missing file
+or variable says so and points back to this command. Do not hand-edit the files:
+the next pull overwrites them.
+
+To point one command somewhere else, set the variable inline; it wins over the
+file: `DATABASE_URL='<url>' bun run plan show <email>`.
 
 ### Environment variables
 
@@ -77,12 +151,13 @@ than an error, so tag it as you create it.
 ## Project Structure
 
 ```
-kaipu/
+kaipu-record-monorepo/
 ├── apps/
-│   ├── web/              # Frontend (TanStack Start on Cloudflare Workers)
-│   ├── server/           # Backend API (Elysia on Cloudflare Workers)
-│   ├── mobile/           # Mobile app (Expo / React Native)
-│   └── documentation/    # Documentation site (Astro Starlight)
+│   ├── kaipu-record/     # Electron desktop recorder and editors
+│   ├── web-hono/         # Website and web app (TanStack Start)
+│   ├── server-hono/      # Hono API on Cloudflare Workers
+│   ├── console/          # Operations console
+│   └── documentation/    # Astro Starlight documentation
 │
 ├── packages/
 │   ├── domain/           # Pure business logic: schemas, types, repository interfaces
@@ -90,6 +165,8 @@ kaipu/
 │   ├── infra-db/         # Infrastructure: Drizzle schemas, repositories, mappers
 │   ├── infra-auth/       # Infrastructure: Better Auth configuration
 │   ├── web-ui/           # Shared React UI components (shadcn/ui)
+│   ├── i18n/             # Shared English/Spanish messages
+│   ├── tokens/           # Shared light/dark design tokens
 │   └── config/           # Shared TypeScript configuration
 ```
 
@@ -116,11 +193,12 @@ The full reference — every command, per-app scripts, and how to make an accoun
 
 ### Plans (premium)
 
-- `bun run plan show|grant|revoke <email>` -- Inspect, grant or revoke pro (no watermark) for an account
+- `bun run plan show|grant|revoke <email>` -- Inspect, grant or revoke account entitlements; what each plan includes is documented on the docs site's Plans page (`features/plans`)
 
 ### Code Quality
 
 - `bun run check-types` -- Check TypeScript types across all packages
+- `bun run verify` -- Run workflow checks, lint, format checks, package builds, types, and tests
 - `bun run lint` -- Lint all files with oxlint
 - `bun run format` -- Format all files with oxfmt
 - `bun run format:tracked` -- Format only git-tracked files
@@ -128,7 +206,7 @@ The full reference — every command, per-app scripts, and how to make an accoun
 
 ## Architecture
 
-This template follows DDD + Hexagonal Architecture with a layer-first package structure. The dependency rule is strict: inner layers never depend on outer layers.
+The shared backend packages follow DDD + Hexagonal Architecture with a layer-first structure. Inner layers never depend on outer layers. Desktop-specific architecture is documented separately in the docs site.
 
 ```
                 ┌─────────────────┐
@@ -152,17 +230,12 @@ This template follows DDD + Hexagonal Architecture with a layer-first package st
                  ┌─────────────┐
                  │    apps     │  Wire everything together.
                  │ server, web │  Dependency injection happens here.
-                 │   mobile    │
+                 │   desktop   │
                  └─────────────┘
 ```
 
-The Todo CRUD example demonstrates this architecture end-to-end:
-
-1. **Domain** -- Zod schemas (`TodoBase`, `CreateTodo`, `UpdateTodo`) and repository interface (`ITodoRepository`)
-2. **Application** -- Use cases (`createTodo`, `listTodos`, `updateTodo`, `deleteTodo`)
-3. **Infrastructure** -- Drizzle table definition, `TodoRepository` implementation, `mapTodoToDomain` mapper
-4. **Server** -- Elysia REST routes at `/todos` wiring the repository to use cases
-5. **Web** -- TanStack Start pages under `/_authenticated/todos/`
+See the [desktop recording pipeline](apps/documentation/src/content/docs/desktop/recording-pipeline.mdx)
+and [architecture docs](apps/documentation/src/content/docs/architecture/) for the current implementation.
 
 ## Tech Stack
 
@@ -172,15 +245,15 @@ The Todo CRUD example demonstrates this architecture end-to-end:
 | Language      | TypeScript                             |
 | Monorepo      | Turborepo + Bun Workspaces             |
 | Frontend      | TanStack Start, React, TanStack Router |
-| Backend       | Elysia                                 |
-| Mobile        | Expo (React Native)                    |
+| Backend       | Hono, oRPC                             |
+| Desktop       | Electron, React, WebCodecs, Mediabunny |
 | Database      | Neon PostgreSQL, Drizzle ORM           |
 | Auth          | Better Auth                            |
 | UI Components | shadcn/ui, Tailwind CSS                |
 | Linting       | oxlint                                 |
 | Formatting    | oxfmt                                  |
 | Deployment    | Cloudflare Workers                     |
-| Documentation | Fumadocs (Next.js)                     |
+| Documentation | Astro Starlight                        |
 
 ## Deployment
 
@@ -188,18 +261,26 @@ The web app, API server and console deploy to Cloudflare Workers. Deploys are
 driven by release-please: merging its release PR tags a component (`api-v*`,
 `web-v*`, `desktop-v*`) and the matching workflow ships it.
 
-To deploy by hand:
-
-```bash
-cd apps/server-hono && bun run deploy
-cd apps/web-hono && bun run wrangler:dev   # local Worker run
-```
+For manual deployment commands and prerequisites, use the
+[deployment documentation](apps/documentation/src/content/docs/deployment/).
 
 **Worker secrets are not set with `wrangler secret put`.** Production still
 reads them from GitHub Secrets inside the release workflows; migrating that to
 Infisical with OIDC is pending. Setting a secret by hand creates a value no
 workflow knows about and that nothing will keep in sync.
 
+## Maintainer and contributing
+
+Kaipu Record is written and maintained by **Cristian Sotomayor
+([@csdev19](https://github.com/csdev19))** and published by **Niway S.A.C.**
+
+**Issues are open to everyone; pull requests are limited to collaborators.** Report bugs and
+request features through [issues](https://github.com/niway-dev/kaipu-record/issues) — see
+[CONTRIBUTING.md](CONTRIBUTING.md) for why, and [SECURITY.md](SECURITY.md) for reporting a
+vulnerability privately.
+
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+This project is licensed under **AGPL-3.0-only**. See [LICENSE](LICENSE).
+The [open-source plan](apps/documentation/src/content/docs/marketing/open-source.md)
+records why the repository is open and how contributions are handled.
