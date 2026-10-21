@@ -13,6 +13,7 @@ import {
 import { startEngine, type EngineHandle } from "@renderer/features/recording/recorder-engine";
 import type { WatermarkConfig } from "@renderer/features/watermark/watermark";
 import { reportError } from "@renderer/features/analytics";
+import { finalizeErrorKey } from "./finalize-error-message";
 import { runtimeT } from "@renderer/lib/runtime-i18n";
 
 export type RecorderStatus =
@@ -358,13 +359,13 @@ async function stopRecording(): Promise<void> {
       delay(MIN_SAVING_MS),
     ]);
   } catch (error) {
-    reportError(runtimeT()("record.errorSave"), error, {
+    reportError(runtimeT()(finalizeErrorKey(error)), error, {
       context: { sessionId: activeSessionId, phase: "finalize" },
       retry: () => {
         if (lastResolveInput) requestStartRecording(lastResolveInput);
       },
     });
-    await window.electronAPI.recordingAbort(activeSessionId);
+    await window.electronAPI.recordingAbort(activeSessionId); // no-op for a stranded take
   }
 
   // Notify BEFORE the main window reappears, so completion listeners (the app

@@ -13,6 +13,8 @@ import { cleanupDragCopies } from "./library/drag-copies";
 import { registerCloudStorageHandlers } from "./cloud";
 import { registerMediaProtocol, registerMediaScheme } from "./media-protocol";
 import { registerRecordingHub, type RecordingHubHandle } from "./recording/recording-hub";
+import { recoverStrandedRecordings } from "./recording/stranded-recordings";
+import { vaultDirectory } from "./library/vault-location";
 import {
   initAutoUpdater,
   getUpdateStatus,
@@ -825,6 +827,18 @@ app.whenReady().then(() => {
 
   // Stream local vault files to the renderer for playback (kaipu-media://).
   registerMediaProtocol();
+
+  // Recover takes a failed finalize or a crash left behind, so the first Library list sees them.
+  void recoverStrandedRecordings({
+    vaultDir: vaultDirectory().path,
+    fallbackTempDir: app.getPath("temp"),
+    title: createMainTranslator(getAppSettings().locale)("library.recoveredRecordingTitle"),
+  })
+    .then((r) => {
+      if (r.recovered.length) console.info(`recovered ${r.recovered.length} stranded recording(s)`);
+      if (r.failed.length) console.warn("stranded recordings left in place", r.failed);
+    })
+    .catch((error) => console.error("stranded recording sweep failed", error));
 
   createWindow();
 
