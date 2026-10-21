@@ -188,6 +188,20 @@ describe("VaultTagRepository", () => {
     expect((await registry()).tags).toHaveLength(2);
   });
 
+  it("does not persist an empty registry while the vault folder is missing", async () => {
+    const gone = join(directory, "unplugged");
+    vault = new LibraryVault(gone);
+    expect(await repo.list()).toEqual([]);
+    // Nothing was created at the vault path, so a real registry there is not shadowed.
+    await expect(readdir(gone)).rejects.toMatchObject({ code: "ENOENT" });
+
+    // The drive comes back with a legacy tag: the import still runs.
+    await mkdir(join(gone, ".kaipu"), { recursive: true });
+    await writeFile(join(gone, "one.webm"), Buffer.alloc(16));
+    await writeFile(join(gone, ".kaipu", "one.json"), JSON.stringify({ tags: ["legacy"] }));
+    expect((await repo.list()).map((t) => t.name)).toEqual(["legacy"]);
+  });
+
   it("refuses writes and keeps the file when tags.json is corrupt", async () => {
     await mkdir(kaipu(), { recursive: true });
     await writeFile(join(kaipu(), "tags.json"), "{ not json");

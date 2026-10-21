@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { copyFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   isTagColor,
@@ -119,6 +119,16 @@ export class VaultTagRepository implements TagRepository {
    * sidecars, never released) into entities once, and point the items at them.
    */
   private async importLegacy(): Promise<Tag[]> {
+    // A missing vault folder (unplugged drive) is not "an empty vault". Persisting
+    // here would create `.kaipu/tags.json` at that path, shadow the real registry
+    // when the drive returns, and mark the import done. Check before `list()`,
+    // which creates the folder itself.
+    try {
+      await stat(this.vault().directory);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+      throw error;
+    }
     const items = await this.vault().list();
     const tags: Tag[] = [];
     const bySlug = new Map<string, Tag>();
