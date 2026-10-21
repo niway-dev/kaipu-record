@@ -44,7 +44,7 @@ describe("decideLinkSideEffects — implicit sign-in", () => {
   it("unverified credential account: drops the password (FR6, pre-hijack)", () => {
     expect(decideLinkSideEffects(input())).toEqual({
       kind: "drop-unverified-credential",
-      credentialAccountIds: ["acc-cred"],
+      accountIds: ["acc-cred"],
     });
   });
 
@@ -54,19 +54,21 @@ describe("decideLinkSideEffects — implicit sign-in", () => {
     ).toMatchObject({ kind: "drop-unverified-credential" });
   });
 
-  it("unverified user with only another Google account: nothing to drop", () => {
+  it("unverified user with only another Google account: that row goes too", () => {
+    // It was linked by whoever held the unverified session, not by the inbox owner.
     expect(decideLinkSideEffects(input({ existingAccounts: [OTHER_GOOGLE] }))).toEqual({
-      kind: "none",
+      kind: "drop-unverified-credential",
+      accountIds: ["acc-g-old"],
     });
   });
 
-  it("drops every credential row, and only credential rows", () => {
+  it("drops every row attached while unverified: passwords and linked providers alike", () => {
     const second = { id: "acc-cred-2", providerId: "credential" };
     expect(
       decideLinkSideEffects(input({ existingAccounts: [CREDENTIAL, OTHER_GOOGLE, second] })),
     ).toEqual({
       kind: "drop-unverified-credential",
-      credentialAccountIds: ["acc-cred", "acc-cred-2"],
+      accountIds: ["acc-cred", "acc-g-old", "acc-cred-2"],
     });
   });
 

@@ -60,8 +60,10 @@ export type LinkDecision =
   | { kind: "none" }
   /** Abort the link: the hook throws LinkRefusedError; Better Auth answers `unable_to_link_account`. */
   | { kind: "refuse"; reason: "google-email-not-verified" | "google-email-mismatch" }
-  /** FR6: delete the unverified password, revoke every earlier session, then let the link go on. */
-  | { kind: "drop-unverified-credential"; credentialAccountIds: string[] }
+  /** FR6: delete every account row attached while the email was unverified (the password, and
+   *  any provider the holder of that session linked), revoke every earlier session, then let
+   *  the link go on. Only the Google row that proved the inbox survives. */
+  | { kind: "drop-unverified-credential"; accountIds: string[] }
   /** FR8/Q4: a signed-in user linked a Google account with the same, verified email. */
   | { kind: "mark-email-verified" };
 
@@ -100,11 +102,13 @@ export function decideLinkSideEffects(input: LinkDecisionInput): LinkDecision {
   // FR5: a verified account keeps its password and sessions.
   if (input.user.emailVerified) return { kind: "none" };
 
-  const credentialAccountIds = input.existingAccounts
-    .filter((account) => account.providerId === "credential")
-    .map((account) => account.id);
-  if (credentialAccountIds.length === 0) return { kind: "none" };
-  return { kind: "drop-unverified-credential", credentialAccountIds };
+  // Everything attached so far was attached by whoever registered the address without owning
+  // the inbox: the password, and any Google account linked from that session (FR8 lets an
+  // unverified user link a different email). Keeping any of it would let that person back into
+  // the account the real owner is about to claim.
+  const accountIds = input.existingAccounts.map((account) => account.id);
+  if (accountIds.length === 0) return { kind: "none" };
+  return { kind: "drop-unverified-credential", accountIds };
 }
 
 /**
@@ -205,7 +209,7 @@ export const accountLinkingHooks = {
         if (decision.kind !== "drop-unverified-credential") return;
 
         const adapter = ctx.context.internalAdapter;
-        for (const id of decision.credentialAccountIds) await adapter.deleteAccount(id);
+        for (const id of decision.accountIds) await adapter.deleteAccount(id);
         // Every session of this user is from before this sign-in: the new one is created only
         // after linkAccount returns (link-account.mjs). Desktop bearer sessions are DB rows too.
         // `deleteUserSessions(userId)` since 1.7; `deleteSessions` now takes session tokens.
