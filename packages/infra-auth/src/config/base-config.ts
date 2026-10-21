@@ -9,12 +9,7 @@ import {
 import type { BetterAuthOptions } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { bearer } from "better-auth/plugins";
-import { randomBytes, scrypt, timingSafeEqual } from "node:crypto";
-
-const scryptAsync = (password: string, salt: string, keylen: number): Promise<Buffer> =>
-  new Promise((resolve, reject) =>
-    scrypt(password, salt, keylen, (err, key) => (err ? reject(err) : resolve(key))),
-  );
+import { hashPassword, verifyPassword } from "./password";
 
 export const baseConfig: BetterAuthOptions = {
   appName: "Kaipu Record",
@@ -43,28 +38,10 @@ export const baseConfig: BetterAuthOptions = {
   emailAndPassword: {
     enabled: true,
     password: {
-      /**
-       * Hash password using scrypt from node:crypto (async: does not block the isolate).
-       * Stored format is `salt:hash`, unchanged, so existing hashes keep verifying.
-       */
-      hash: async (password: string): Promise<string> => {
-        const salt = randomBytes(16).toString("hex");
-        const hash = await scryptAsync(password, salt, 64);
-        return `${salt}:${hash.toString("hex")}`;
-      },
-
-      /**
-       * Verify password against hash in constant time (audit F-10).
-       */
-      verify: async ({ hash, password }: { hash: string; password: string }): Promise<boolean> => {
-        const [salt, key] = hash.split(":");
-        if (!salt || !key) return false;
-
-        const keyBuffer = Buffer.from(key, "hex");
-        const hashBuffer = await scryptAsync(password, salt, 64);
-        if (keyBuffer.length !== hashBuffer.length) return false;
-        return timingSafeEqual(keyBuffer, hashBuffer);
-      },
+      // Async scrypt + constant-time compare (audit F-10), same `salt:hash` stored format as
+      // before so existing hashes keep verifying. See ./password.ts and its tests.
+      hash: hashPassword,
+      verify: verifyPassword,
     },
   },
   rateLimit: {
