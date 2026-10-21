@@ -57,8 +57,16 @@ export class FinalizeMoveError extends Error {
   }
 }
 
-/** Rename, else copy (cross-volume). A failed copy removes the half-written destination, never an existing file. */
-export async function moveFile(from: string, to: string): Promise<void> {
+/**
+ * Rename, else copy (cross-volume). A failed copy removes the half-written destination, never an existing file.
+ * `overwrite` is for a destination the user already confirmed replacing (the save dialog asks): rename
+ * replaces on POSIX, so the copy fallback must too. Vault and sweep moves leave it off and never clobber a take.
+ */
+export async function moveFile(
+  from: string,
+  to: string,
+  options: { overwrite?: boolean } = {},
+): Promise<void> {
   try {
     await rename(from, to);
     return;
@@ -66,7 +74,7 @@ export async function moveFile(from: string, to: string): Promise<void> {
     // EXDEV or any rename failure: fall through to copy.
   }
   try {
-    await copyFile(from, to, constants.COPYFILE_EXCL); // never overwrite an existing take
+    await copyFile(from, to, options.overwrite ? 0 : constants.COPYFILE_EXCL);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") await unlink(to).catch(() => {});
     throw error;
@@ -213,7 +221,7 @@ export class RecordingWriter {
   async salvage(sessionId: string, destPath: string): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (!session?.stranded) throw new Error(`No stranded recording session "${sessionId}"`);
-    await moveFile(session.tempPath, destPath);
+    await moveFile(session.tempPath, destPath, { overwrite: true }); // the save dialog confirmed it
     this.sessions.delete(sessionId);
   }
 
