@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.14.1](https://github.com/niway-dev/kaipu-record/compare/desktop-v0.14.0...desktop-v0.14.1) (2026-10-20)
+
+
+### Bug Fixes
+
+* **desktop:** keep keyboard focus on the frame overlay with several displays ([8186354](https://github.com/niway-dev/kaipu-record/commit/81863542f2120e32f95b5fe0df72ea0c43a2ab5d))
+* **desktop:** keep keyboard focus on the frame overlay with several displays ([77eeede](https://github.com/niway-dev/kaipu-record/commit/77eeedec164250bf9e79e729b1f1312334dd889f))
+
 ## [0.14.0](https://github.com/niway-dev/kaipu-record/compare/desktop-v0.13.0...desktop-v0.14.0) (2026-10-20)
 
 
