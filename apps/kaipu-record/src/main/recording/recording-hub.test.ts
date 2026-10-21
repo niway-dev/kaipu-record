@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { IPC_CHANNELS } from "@shared/types/ipc";
+import { FINALIZE_ELSEWHERE_MARKER, FINALIZE_KEPT_MARKER, IPC_CHANNELS } from "@shared/types/ipc";
 
 const mockState = vi.hoisted(() => ({
   userDataDir: "",
@@ -12,6 +12,7 @@ const mockState = vi.hoisted(() => ({
   dockShow: vi.fn(),
   bubble: { show: vi.fn(), hide: vi.fn(), destroy: vi.fn(), isVisible: vi.fn(() => false) },
   bar: { show: vi.fn(), hide: vi.fn(), send: vi.fn() },
+  showSaveDialog: vi.fn(),
 }));
 
 vi.mock("electron", () => ({
@@ -32,6 +33,7 @@ vi.mock("electron", () => ({
   },
   BrowserWindow: { getAllWindows: () => [] },
   screen: { getCursorScreenPoint: () => ({ x: 0, y: 0 }) },
+  dialog: { showSaveDialog: mockState.showSaveDialog },
   desktopCapturer: { getSources: vi.fn(async () => []) },
   systemPreferences: { isTrustedAccessibilityClient: () => false },
 }));
@@ -128,5 +130,55 @@ describe("recording hub — camera on keeps the main window visible", () => {
     expect(mainWindow.hide).not.toHaveBeenCalled();
     expect(mockState.setActivationPolicy).not.toHaveBeenCalled();
     expect(mockState.dockShow).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * REC-B6: a finalize that cannot reach the vault must keep the take and tell the
+ * renderer which toast to show, instead of a generic "couldn't save".
+ */
+describe("recording hub — finalize into an unreachable vault", () => {
+  async function finalizeWithDialog(dialogResult: { canceled: boolean; filePath?: string }) {
+    // A vault path under a regular file: mkdir always fails.
+    const blocker = join(mockState.userDataDir, "blocker");
+    await writeFile(blocker, "x");
+    await writeFile(
+      join(mockState.userDataDir, "preferences.json"),
+      JSON.stringify({ vaultDirectory: join(blocker, "vault") }),
+    );
+    mockState.showSaveDialog.mockResolvedValue(dialogResult);
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    registerRecordingHub(() => null);
+    const create = mockState.ipcHandle.get(IPC_CHANNELS.recordingCreate);
+    const finalize = mockState.ipcHandle.get(IPC_CHANNELS.recordingFinalize);
+    if (!create || !finalize) throw new Error("recording handlers not registered");
+    await create({}, "s1");
+    return finalize({}, "s1", { title: "t", durationSeconds: 1, durationMs: 1000 });
+  }
+
+  beforeEach(async () => {
+    mockState.userDataDir = await mkdtemp(join(tmpdir(), "kaipu-hub-"));
+    mockState.ipcOn.clear();
+    mockState.ipcHandle.clear();
+    mockState.showSaveDialog.mockReset();
+    vi.resetModules();
+  });
+
+  afterEach(async () => {
+    await rm(mockState.userDataDir, { recursive: true, force: true });
+  });
+
+  it("tags the rejection with the kept marker when the user cancels the dialog", async () => {
+    await expect(finalizeWithDialog({ canceled: true })).rejects.toThrow(FINALIZE_KEPT_MARKER);
+  });
+
+  it("moves the take where the user chose and tags the rejection with the elsewhere marker", async () => {
+    const filePath = join(mockState.userDataDir, "chosen.mp4");
+    await expect(finalizeWithDialog({ canceled: false, filePath })).rejects.toThrow(
+      FINALIZE_ELSEWHERE_MARKER,
+    );
+    expect(await readFile(filePath)).toHaveLength(0);
   });
 });

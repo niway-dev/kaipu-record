@@ -161,7 +161,7 @@ describe("RecordingWriter — staging inside the vault", () => {
     const { tempPath } = await writer.create("s1");
     expect(tempPath.startsWith(join(vaultDir, ".kaipu", "tmp"))).toBe(true);
     await writer.write("s1", new TextEncoder().encode("abc").buffer, 0);
-    await writer.finalize("s1", { title: "t", durationSeconds: 1 });
+    await writer.finalize("s1", { title: "t", durationSeconds: 1, durationMs: 1000 });
     expect(await readdir(join(vaultDir, ".kaipu", "tmp"))).toHaveLength(0);
     expect(await readdir(vaultDir)).toContain("rec-fixed.mp4");
   });
@@ -194,9 +194,9 @@ describe("RecordingWriter — unreachable vault at finalize", () => {
     const writer = await stranded();
     const { tempPath } = await writer.create("s1");
     await writer.write("s1", new TextEncoder().encode("hello").buffer, 0);
-    await expect(writer.finalize("s1", { title: "t", durationSeconds: 1 })).rejects.toBeInstanceOf(
-      FinalizeMoveError,
-    );
+    await expect(
+      writer.finalize("s1", { title: "t", durationSeconds: 1, durationMs: 1000 }),
+    ).rejects.toBeInstanceOf(FinalizeMoveError);
     expect((await readFile(tempPath)).toString()).toBe("hello");
     await writer.abort("s1"); // the renderer always aborts after a failed finalize
     expect((await readFile(tempPath)).toString()).toBe("hello");
@@ -206,7 +206,9 @@ describe("RecordingWriter — unreachable vault at finalize", () => {
     const writer = await stranded();
     const { tempPath } = await writer.create("s1");
     await writer.write("s1", new TextEncoder().encode("hello").buffer, 0);
-    await writer.finalize("s1", { title: "t", durationSeconds: 1 }).catch(() => {});
+    await writer
+      .finalize("s1", { title: "t", durationSeconds: 1, durationMs: 1000 })
+      .catch(() => {});
     const dest = join(await mkdtemp(join(tmpdir(), "rw-else-")), "x.mp4");
     await writer.salvage("s1", dest);
     expect((await readFile(dest)).toString()).toBe("hello");

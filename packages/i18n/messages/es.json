@@ -58,6 +58,7 @@
     "changeFolderTitle": "Cambiar la carpeta de grabaciones",
     "changeFolderDetail": "Tus grabaciones actuales se quedan en la carpeta anterior; desde ahora Kaipu guarda y muestra las de la carpeta nueva. Puedes volver a la anterior cuando quieras.",
     "exportPdfTitle": "Exportar como PDF",
+    "saveRecordingElsewhere": "Tu carpeta de grabaciones no está disponible. Elige dónde guardar esta grabación.",
     "pdfFileType": "Documento PDF",
     "exportInProgress": "Hay una exportación en curso",
     "closeCancelsExportDetail": "Si cierras la ventana, se cancela. La grabación original no se toca.",
@@ -231,7 +232,9 @@
     "selectScreenOrWindow": "Elige una pantalla o ventana",
     "errorStopped": "La grabación se detuvo por un error. Guardamos lo que se pudo.",
     "errorStart": "No pudimos iniciar la grabación. Vuelve a intentarlo.",
-    "errorSave": "No pudimos guardar la grabación."
+    "errorSave": "No pudimos guardar la grabación.",
+    "errorSaveKept": "No pudimos acceder a tu carpeta de grabaciones. La grabación se conservó y Kaipu la recuperará la próxima vez que se abra.",
+    "errorSaveElsewhere": "Tu carpeta de grabaciones no estaba disponible, así que la grabación se guardó donde elegiste."
   },
   "header": {
     "brand": "Kaipu Record",

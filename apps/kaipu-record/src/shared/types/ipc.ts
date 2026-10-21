@@ -304,6 +304,10 @@ export const DEFAULT_SETTINGS: Omit<AppSettings, "shortcuts"> = {
   diagnosticsEnabled: true,
 };
 
+/** Prefixes on the `recording:finalize` rejection message; the renderer picks the toast from them. */
+export const FINALIZE_KEPT_MARKER = "[finalize:kept]";
+export const FINALIZE_ELSEWHERE_MARKER = "[finalize:elsewhere]";
+
 /**
  * Names of the IPC channels exposed by the preload bridge.
  * Using a const map keeps main and renderer in sync.

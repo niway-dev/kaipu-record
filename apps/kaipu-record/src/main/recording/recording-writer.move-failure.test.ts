@@ -33,9 +33,9 @@ describe("RecordingWriter — finalize move failure", () => {
     });
     const { tempPath } = await writer.create("s1");
     await writer.write("s1", new TextEncoder().encode("hello").buffer, 0);
-    await expect(writer.finalize("s1", { title: "t", durationSeconds: 1 })).rejects.toBeInstanceOf(
-      FinalizeMoveError,
-    );
+    await expect(
+      writer.finalize("s1", { title: "t", durationSeconds: 1, durationMs: 1000 }),
+    ).rejects.toBeInstanceOf(FinalizeMoveError);
     expect(unlinkMock).toHaveBeenCalledWith(join(vaultDir, "rec-fixed.mp4"));
     expect(unlinkMock).not.toHaveBeenCalledWith(tempPath);
     expect((await readFile(tempPath)).toString()).toBe("hello");

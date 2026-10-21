@@ -58,6 +58,7 @@
     "changeFolderTitle": "Change the recordings folder",
     "changeFolderDetail": "Your current recordings stay in the old folder; from now on Kaipu saves and shows the new folder's contents. You can switch back anytime.",
     "exportPdfTitle": "Export as PDF",
+    "saveRecordingElsewhere": "Your recordings folder isn't available. Choose where to save this recording.",
     "pdfFileType": "PDF document",
     "exportInProgress": "An export is still running",
     "closeCancelsExportDetail": "Closing the window cancels it. The original recording isn't touched.",
@@ -231,7 +232,9 @@
     "selectScreenOrWindow": "Select a Screen or Window",
     "errorStopped": "The recording stopped due to an error. We saved what we could.",
     "errorStart": "We couldn't start the recording. Please try again.",
-    "errorSave": "We couldn't save the recording."
+    "errorSave": "We couldn't save the recording.",
+    "errorSaveKept": "We couldn't reach your recordings folder. Your recording was kept and Kaipu will recover it the next time it opens.",
+    "errorSaveElsewhere": "Your recordings folder wasn't reachable, so the recording was saved where you chose."
   },
   "header": {
     "brand": "Kaipu Record",
