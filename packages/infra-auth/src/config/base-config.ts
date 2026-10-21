@@ -45,21 +45,32 @@ export const baseConfig: BetterAuthOptions = {
     },
   },
   rateLimit: {
-    // Explicit: Better Auth only enables the limiter when NODE_ENV === "production", and the
-    // Worker does not set it. Disabled only under the test runner.
+    // Explicit rather than Better Auth's default (on only when NODE_ENV === "production").
+    // wrangler inlines NODE_ENV as "production" at deploy and vitest sets "test", so this is
+    // on everywhere except under the test runner; it no longer depends on who sets NODE_ENV.
     enabled: process.env.NODE_ENV !== "test",
     // Per-isolate memory is useless on Workers (each isolate has its own counters), so the
     // counters live in the database, where Better Auth updates them atomically (ADR 0029).
     storage: "database",
     window: 10,
     max: 100,
+    // Keys match the endpoint path exactly (Better Auth strips the base path first). A rule
+    // here replaces the library's built-in special rule for that path.
     customRules: {
       "/sign-in/email": { window: 60, max: 5 },
       "/sign-up/email": { window: 60 * 60, max: 10 },
       "/request-password-reset": { window: 60 * 60, max: 5 },
-      "/forget-password": { window: 60 * 60, max: 5 },
       "/reset-password": { window: 15 * 60, max: 10 },
       "/send-verification-email": { window: 60 * 60, max: 5 },
+      // The desktop code exchange (ADR 0025). The code is single-use, 300 s and PKCE-bound, so
+      // the limit only caps database load; the default 100/10 s would be far looser.
+      "/electron/token": { window: 60, max: 10 },
+      "/electron/transfer-user": { window: 60, max: 10 },
+      // Not limited: it is a cookie/bearer read that every page load makes, limiting it costs
+      // two database queries per call for no protection, and the web app's SSR calls it
+      // server-side where a missing client address would collapse every user into one
+      // shared bucket and sign everyone out at once.
+      "/get-session": false,
     },
   },
   advanced: {

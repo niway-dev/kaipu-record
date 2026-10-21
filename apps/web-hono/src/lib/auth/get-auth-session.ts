@@ -11,9 +11,15 @@ export const getAuthSession = createServerFn({ method: "GET" }).handler(
 
     if (!cookie) return null;
 
+    // The API keys its rate limits and session metadata on cf-connecting-ip (set by the
+    // Cloudflare edge on the request that reached this Worker). A server-side fetch carries
+    // none of the browser's headers, so pass the client address on explicitly: without it the
+    // API would count every SSR session check in one shared bucket.
+    const clientIp = headers.get("cf-connecting-ip");
+
     try {
       const response = await apiFetch(`${env.VITE_SERVER_URL}/api/auth/get-session`, {
-        headers: { cookie },
+        headers: { cookie, ...(clientIp ? { "cf-connecting-ip": clientIp } : {}) },
       });
 
       if (!response.ok) return null;
