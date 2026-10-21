@@ -17,11 +17,13 @@
   "scripts": {
     "build": "tsdown",
     "check-types": "tsc -b",
+    "test": "vitest run",
     "clean": "rm -rf dist"
   },
   "devDependencies": {
     "@kaipu/config": "workspace:*",
     "tsdown": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "^4.1.9"
   }
 }
