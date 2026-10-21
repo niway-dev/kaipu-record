@@ -1,9 +1,13 @@
+import { constants } from "node:fs";
 import { copyFile, open, mkdir, rename, unlink, type FileHandle } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { LocalRecording } from "@shared/types/library-storage";
 import type { RecordingFinalizeMeta } from "@shared/types/ipc";
 import { LibraryVault } from "../library/library-vault";
+
+/** Staging folder inside the vault, so the final move is a same-volume rename. Exported for the sweep. */
+export const STAGING_DIR = join(".kaipu", "tmp");
 
 export interface RecordingWriterDeps {
   /** Current vault directory (can change at runtime). */
@@ -12,8 +16,10 @@ export interface RecordingWriterDeps {
   newId: () => string;
   /** Wall clock (ms) — injectable for tests. */
   now?: () => number;
-  /** Temp directory for in-progress files. */
+  /** Forces every in-progress file into this directory (tests). Unset: stage inside the vault. */
   tempDir?: string;
+  /** Used when the vault staging folder cannot be created. Default: os.tmpdir(). */
+  fallbackTempDir?: string;
 }
 
 interface Session {
@@ -32,6 +38,40 @@ interface Session {
    * as a saved recording once this is set.
    */
   failed?: Error;
+  /** Handle already closed (a retried finalize must not close it twice). */
+  closed?: boolean;
+  /** Finalize could not place the file; the .part is kept for recovery. */
+  stranded?: boolean;
+}
+
+/** Finalize could not move the finished file into the vault. The .part still exists at `tempPath`. */
+export class FinalizeMoveError extends Error {
+  constructor(
+    readonly tempPath: string,
+    readonly cause: unknown,
+  ) {
+    super(
+      `Could not move the recording into the vault: ${cause instanceof Error ? cause.message : String(cause)}`,
+    );
+    this.name = "FinalizeMoveError";
+  }
+}
+
+/** Rename, else copy (cross-volume). A failed copy removes the half-written destination, never an existing file. */
+export async function moveFile(from: string, to: string): Promise<void> {
+  try {
+    await rename(from, to);
+    return;
+  } catch {
+    // EXDEV or any rename failure: fall through to copy.
+  }
+  try {
+    await copyFile(from, to, constants.COPYFILE_EXCL); // never overwrite an existing take
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") await unlink(to).catch(() => {});
+    throw error;
+  }
+  await unlink(from).catch(() => {});
 }
 
 /**
@@ -43,16 +83,27 @@ interface Session {
  */
 export class RecordingWriter {
   private readonly sessions = new Map<string, Session>();
-  private readonly tempDir: string;
+  private readonly fallbackTempDir: string;
   private readonly now: () => number;
 
   constructor(private readonly deps: RecordingWriterDeps) {
-    this.tempDir = deps.tempDir ?? tmpdir();
+    this.fallbackTempDir = deps.fallbackTempDir ?? tmpdir();
     this.now = deps.now ?? (() => Date.now());
   }
 
+  private async stagingDir(): Promise<string> {
+    if (this.deps.tempDir) return this.deps.tempDir;
+    try {
+      const dir = join(this.deps.vaultDir(), STAGING_DIR);
+      await mkdir(dir, { recursive: true });
+      return dir;
+    } catch {
+      return this.fallbackTempDir; // vault missing/unwritable: record to tmp, finalize reports it
+    }
+  }
+
   async create(sessionId: string): Promise<{ tempPath: string }> {
-    const tempPath = join(this.tempDir, `kaipu-rec-${sessionId}.mp4.part`);
+    const tempPath = join(await this.stagingDir(), `kaipu-rec-${sessionId}.mp4.part`);
     const handle = await open(tempPath, "w+");
     this.sessions.set(sessionId, { handle, tempPath, queue: Promise.resolve() });
     return { tempPath };
@@ -111,20 +162,29 @@ export class RecordingWriter {
       throw session.failed;
     }
 
-    await session.handle.close();
-    this.sessions.delete(sessionId);
-
-    const vault = new LibraryVault(this.deps.vaultDir());
+    // Resolve the destination BEFORE touching the session: a vault that vanished
+    // (unplugged drive, revoked folder) must leave the take recoverable.
+    const vaultDir = this.deps.vaultDir();
+    const vault = new LibraryVault(vaultDir);
     const id = this.deps.newId();
-    await mkdir(this.deps.vaultDir(), { recursive: true });
-    const dest = await vault.filePath(id); // <id>.mp4 (does not exist yet)
+    let dest: string;
+    try {
+      await mkdir(vaultDir, { recursive: true });
+      dest = await vault.filePath(id); // <id>.mp4 (does not exist yet)
+    } catch (cause) {
+      session.stranded = true;
+      await this.closeHandle(session).catch(() => {});
+      throw new FinalizeMoveError(session.tempPath, cause);
+    }
+    await this.closeHandle(session);
 
     try {
-      await rename(session.tempPath, dest);
-    } catch {
-      await copyFile(session.tempPath, dest);
-      await unlink(session.tempPath).catch(() => {});
+      await moveFile(session.tempPath, dest);
+    } catch (cause) {
+      session.stranded = true;
+      throw new FinalizeMoveError(session.tempPath, cause);
     }
+    this.sessions.delete(sessionId);
 
     await vault.writeMeta(id, {
       title: meta.title,
@@ -143,9 +203,28 @@ export class RecordingWriter {
     return recording;
   }
 
+  private async closeHandle(session: Session): Promise<void> {
+    if (session.closed) return;
+    session.closed = true;
+    await session.handle.close();
+  }
+
+  /** Move a stranded take to a path the user picked, then forget the session. */
+  async salvage(sessionId: string, destPath: string): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (!session?.stranded) throw new Error(`No stranded recording session "${sessionId}"`);
+    await moveFile(session.tempPath, destPath);
+    this.sessions.delete(sessionId);
+  }
+
   async abort(sessionId: string): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (!session) return;
+    // A stranded take is kept on disk for recovery. The renderer aborts after every failed finalize.
+    if (session.stranded) {
+      this.sessions.delete(sessionId);
+      return;
+    }
     await session.queue; // let in-flight writes settle before closing the handle
     await session.handle.close().catch(() => {});
     await unlink(session.tempPath).catch(() => {});
