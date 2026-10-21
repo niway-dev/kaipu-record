@@ -16,7 +16,7 @@ If we want to deploy to Cloudflare Workers from local machine, we have to set up
 
 ```
 wrangler secret put DATABASE_URL
-wrangler secret put BETTER_AUTH_SECRET
+wrangler secret put BETTER_AUTH_SECRET   # at least 32 characters (openssl rand -base64 32); the API refuses to boot otherwise
 wrangler secret put BETTER_AUTH_URL
 ```
 

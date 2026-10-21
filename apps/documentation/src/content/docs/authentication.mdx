@@ -445,7 +445,7 @@ VITE_SERVER_URL=https://backend.workers.dev
 
 # Backend environment (Cloudflare Workers)
 CORS_ORIGIN=https://frontend.workers.dev
-BETTER_AUTH_SECRET=your-secret-key
+BETTER_AUTH_SECRET=<at least 32 characters: openssl rand -base64 32>
 BETTER_AUTH_URL=https://backend.workers.dev
 DATABASE_URL=postgresql://...
 ```

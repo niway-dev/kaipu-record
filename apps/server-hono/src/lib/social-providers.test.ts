@@ -66,7 +66,7 @@ describe("serverEnvSchema auth variables", () => {
   const base = {
     DATABASE_URL: "postgres://example",
     CORS_ORIGIN: "http://localhost:3001",
-    BETTER_AUTH_SECRET: "x",
+    BETTER_AUTH_SECRET: "x".repeat(32),
   };
 
   it("accepts the config without any Google or BETTER_AUTH_URL value", () => {
