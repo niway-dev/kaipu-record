@@ -147,9 +147,11 @@ export function createBrowserSignInClient(config: BrowserSignInConfig): BrowserS
       }
 
       if (result.error) {
-        // 4xx: the server refused the code (expired, used, wrong verifier). Anything else is
-        // the server, or the path to it, not the code.
+        // 429 is the API's per-address limit, not a verdict on the code. Other 4xx: the server
+        // refused the code (expired, used, wrong verifier). Anything else is the server, or the
+        // path to it, not the code.
         const status = result.error.status;
+        if (status === 429) throw { kind: "throttled" } satisfies AuthError;
         if (status >= 400 && status < 500) throw { kind: "invalid-code" } satisfies AuthError;
         throw { kind: "network" } satisfies AuthError;
       }

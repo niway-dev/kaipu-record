@@ -30,6 +30,12 @@ versions (`*.workers.dev`). Register only the apex in prod and redirect `www.kai
 `https://kaipu.app` in Cloudflare: the `state` cookie is host-only, so a flow started on
 `www` and called back on the apex fails.
 
+That redirect lives only in the Cloudflare dashboard (a 301 at the edge, path and query
+preserved; checked 2026-10-21) and more than OAuth depends on it: production `CORS_ORIGIN` is
+the apex only, so a request from `https://www.kaipu.app` would fail Better Auth's origin check
+on `/api/auth/*` and the CSRF check on `/api/v1/*` (NIW2-324) with a 403. If the rule is ever
+removed, add `https://www.kaipu.app` to `CORS_ORIGIN` or restore it.
+
 ## Google Cloud Console
 
 Current console naming is "Google Auth Platform". Use the Google account that should own

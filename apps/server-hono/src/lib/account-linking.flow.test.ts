@@ -270,6 +270,50 @@ describe("Continue with Google — implicit sign-in", () => {
     expect(Object.keys(event!).sort()).toEqual(["name", "ts", "userId"]);
   });
 
+  it("a Google account the squatter linked while unverified is dropped with the password", async () => {
+    // The pre-hijack residue: whoever registered victim@ without owning the inbox links their
+    // own Google account (FR8 allows a different email), the owner later claims the address
+    // through Google, and the squatter's Google row must not stay as a back door.
+    const { db, auth } = setup();
+    const email = "victim@example.com";
+    const squatterJar = await signUp(auth, email);
+    nextGoogle = {
+      sub: "g-squatter",
+      email: "squatter@example.com",
+      email_verified: true,
+      name: "S",
+    };
+    await googleRoundTrip(auth, squatterJar, {
+      path: "/link-social",
+      body: { callbackURL: "/dashboard/profile", errorCallbackURL: "/dashboard/profile" },
+    });
+    const user = userByEmail(db, email);
+    expect(accountsOf(db, user.id).sort()).toEqual(["credential", "google"]);
+
+    nextGoogle = { sub: "g-owner", email, email_verified: true, name: "Real Owner" };
+    const res = await googleRoundTrip(auth, cookieJar(), {
+      path: "/sign-in/social",
+      body: { callbackURL: "/dashboard" },
+    });
+    expect(res.headers.get("location")).toBe("/dashboard");
+
+    expect(db.account.filter((row) => row.userId === user.id).map((row) => row.accountId)).toEqual([
+      "g-owner",
+    ]);
+    // The squatter's Google account now lands in a fresh user, not in the owner's.
+    nextGoogle = {
+      sub: "g-squatter",
+      email: "squatter@example.com",
+      email_verified: true,
+      name: "S",
+    };
+    await googleRoundTrip(auth, cookieJar(), {
+      path: "/sign-in/social",
+      body: { callbackURL: "/" },
+    });
+    expect(userByEmail(db, "squatter@example.com").id).not.toBe(user.id);
+  });
+
   it("if the cleanup fails, the sign-in fails and nothing is linked (fails closed)", async () => {
     const { db, auth } = setup();
     const email = "flaky@example.com";

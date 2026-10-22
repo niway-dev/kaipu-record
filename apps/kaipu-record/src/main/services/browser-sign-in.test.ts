@@ -122,6 +122,11 @@ describe("createBrowserSignInClient", () => {
       kind: "invalid-code",
     });
 
+    plugin.authenticate.mockResolvedValue({ data: null, error: { status: 429, statusText: "" } });
+    await expect(createBrowserSignInClient(config).exchange(CODE)).rejects.toEqual({
+      kind: "throttled",
+    });
+
     plugin.authenticate.mockResolvedValue({ data: null, error: { status: 503, statusText: "" } });
     await expect(createBrowserSignInClient(config).exchange(CODE)).rejects.toEqual({
       kind: "network",

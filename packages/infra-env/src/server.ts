@@ -4,7 +4,9 @@ import { commaSeparatedList } from "./transforms";
 export const serverEnvSchema = z.object({
   DATABASE_URL: z.string().min(1),
   CORS_ORIGIN: commaSeparatedList,
-  BETTER_AUTH_SECRET: z.string().min(1),
+  // Signs session cookies and bearer tokens. Better Auth only warns below 32 characters;
+  // the schema refuses to boot with a weaker secret (audit F-11).
+  BETTER_AUTH_SECRET: z.string().min(32, "BETTER_AUTH_SECRET must be at least 32 characters"),
   /**
    * Public origin Better Auth builds OAuth redirect URIs from. It must be the WEB
    * origin (http://localhost:3001 in dev, https://kaipu.app in prod), not the API:

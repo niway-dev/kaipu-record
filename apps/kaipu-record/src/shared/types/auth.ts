@@ -38,6 +38,8 @@ export type AuthError =
   | { kind: "state-mismatch" }
   /** The code is malformed, expired (they live about five minutes) or was already used. */
   | { kind: "invalid-code" }
+  /** The API's per-address rate limit on the code exchange: the code may still be valid. */
+  | { kind: "throttled" }
   | { kind: "network" }
   /** The web address of Kaipu is not configured in this build, so there is nowhere to send the user. */
   | { kind: "not-configured" }

@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm";
-import { text, timestamp, boolean, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { text, timestamp, boolean, index, uniqueIndex, integer, bigint } from "drizzle-orm/pg-core";
 import { createTable } from "../utils/table-creator";
 import { recordingTable } from "./recording";
 import { subscriptionTable } from "./subscription";
@@ -101,3 +101,19 @@ export const accountRelations = relations(accountTable, ({ one }) => ({
     references: [userTable.id],
   }),
 }));
+
+/**
+ * Better Auth rate-limit counters (`rateLimit.storage: "database"`).
+ *
+ * Workers keep no state between isolates, so in-memory counters would let an
+ * attacker spread attempts across isolates. Better Auth's database storage
+ * updates this table with conditional increments, which keeps the limit exact
+ * under concurrent requests. The table must exist before the API that uses it
+ * is deployed (`bun run db:push`): a missing table fails every auth request.
+ */
+export const rateLimitTable = createTable("rate_limit", {
+  id: text("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  count: integer("count").notNull(),
+  lastRequest: bigint("last_request", { mode: "number" }).notNull(),
+});

@@ -16,7 +16,7 @@ import {
 } from "./auth-ui";
 import { isEmail, MIN_PASSWORD } from "./validation";
 
-type Failure = "credentials" | "network" | "other";
+type Failure = "credentials" | "throttled" | "network" | "other";
 
 /**
  * The email half of the sign-in tab, revealed by "Continue with email".
@@ -69,7 +69,9 @@ export default function SignInForm({
       if (error) {
         setPending(false);
         // 401 INVALID_EMAIL_OR_PASSWORD covers both a wrong password and an unknown email.
-        setFailure(error.status === 401 || error.status === 400 ? "credentials" : "other");
+        // 429 is the API's per-address limit on sign-in attempts: say so, or the user retries.
+        if (error.status === 429) setFailure("throttled");
+        else setFailure(error.status === 401 || error.status === 400 ? "credentials" : "other");
         return;
       }
     } catch {
@@ -126,6 +128,8 @@ export default function SignInForm({
                 {t("createWithThisEmail")}
               </AccentButton>
             </>
+          ) : failure === "throttled" ? (
+            t("tooManyAttempts")
           ) : failure === "network" ? (
             t("errorNetwork")
           ) : (
