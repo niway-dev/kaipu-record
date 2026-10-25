@@ -13,6 +13,7 @@ import {
 import { randomUUID } from "node:crypto";
 import type { LocalRecording } from "@shared/types/library-storage";
 import { normalizeExportPresetId, type StoredExportPresetId } from "@shared/types/export-preset";
+import { atomicWriteFile, withLock } from "./atomic-write";
 import { sha256FileBase64 } from "./content-hash";
 
 const META_DIR = ".kaipu";
@@ -80,9 +81,6 @@ async function exists(path: string): Promise<boolean> {
  * directory is injected so it's testable against a temp folder.
  */
 export class LibraryVault {
-  /** Guards `ensureIdentity` so two parallel `describe(id)` calls never mint two ids for the same id. */
-  private readonly identityInFlight = new Map<string, Promise<Sidecar & { assetId: string }>>();
-
   constructor(readonly directory: string) {}
 
   /** Resolve an id to its real file; if none exists yet, default to `.mp4`. */
@@ -191,15 +189,19 @@ export class LibraryVault {
    * loss. Also clears `localRemovedAt`, since the file is back.
    */
   private async ensureIdentity(id: string): Promise<Sidecar & { assetId: string }> {
-    const inFlight = this.identityInFlight.get(id);
-    if (inFlight) return inFlight;
-
-    const promise = (async (): Promise<Sidecar & { assetId: string }> => {
+    // Fast path, no lock: the common case once an item has an identity.
+    const quick = await this.sidecar(id);
+    if (quick.assetId && quick.localRemovedAt === undefined) {
+      return quick as Sidecar & { assetId: string };
+    }
+    const sidecarPath = this.sidecarPath(id);
+    // Module-level lock keyed by path: a second caller (even from another
+    // LibraryVault instance) waits, then re-reads and finds the first one's id.
+    return withLock(sidecarPath, async () => {
       const current = await this.sidecar(id);
       if (current.assetId && current.localRemovedAt === undefined) {
         return current as Sidecar & { assetId: string };
       }
-      const sidecarPath = this.sidecarPath(id);
       const next: Sidecar = {
         ...current,
         sidecarVersion: 2,
@@ -207,37 +209,34 @@ export class LibraryVault {
       };
       delete next.localRemovedAt;
       try {
-        await this.writeMeta(id, next);
+        await this.writeMetaLocked(id, next);
         readOnlyIdentityMemo.delete(sidecarPath);
       } catch {
         // Read-only vault: keep the in-memory identity; nothing else could persist either.
         readOnlyIdentityMemo.set(sidecarPath, next.assetId!);
       }
       return next as Sidecar & { assetId: string };
-    })();
-
-    this.identityInFlight.set(id, promise);
-    try {
-      return await promise;
-    } finally {
-      this.identityInFlight.delete(id);
-    }
+    });
   }
 
   /**
-   * Merge fields into the sidecar (used by rename, finalize and tags). Atomic
-   * (temp + rename): a crash mid-write never leaves a truncated sidecar, which
-   * would read back as `{}` and lose the item's title, identity and tags.
+   * Merge fields into the sidecar (used by rename, finalize and tags). Serialized per
+   * sidecar and atomic (unique temp + fsync + rename): concurrent writers never lose a
+   * field, and a crash mid-write never leaves a truncated sidecar, which would read
+   * back as `{}` and lose the item's title, identity and tags.
    */
   async writeMeta(id: string, meta: Sidecar): Promise<void> {
+    await withLock(this.sidecarPath(id), () => this.writeMetaLocked(id, meta));
+  }
+
+  /** Read-merge-write; the caller must hold the sidecar lock. */
+  private async writeMetaLocked(id: string, meta: Sidecar): Promise<void> {
     const current = await this.sidecar(id);
     await mkdir(this.metaDirectory(), { recursive: true });
-    const target = this.sidecarPath(id);
-    await writeFile(
-      `${target}.tmp`,
+    await atomicWriteFile(
+      this.sidecarPath(id),
       JSON.stringify({ ...current, ...meta, sidecarVersion: 2 }, null, 2),
     );
-    await rename(`${target}.tmp`, target);
   }
 
   /** Whether `id` names a media file in the vault right now (not deleted, not unknown). */
@@ -383,13 +382,16 @@ export class LibraryVault {
    * three previously swallowed even a permission/locked-file error on the video.
    */
   async remove(id: string): Promise<void> {
-    await Promise.allSettled([
-      rm(this.sidecarPath(id), { force: true }),
-      rm(this.thumbnailPath(id), { force: true }),
-      rm(this.cursorTrackPath(id), { force: true }),
-      // An interrupted writeCursorTrack can leave the temp file behind.
-      rm(`${this.cursorTrackPath(id)}.tmp`, { force: true }),
-    ]);
+    // Under the sidecar lock so a racing writeMeta cannot recreate the sidecar just after it is deleted.
+    await withLock(this.sidecarPath(id), () =>
+      Promise.allSettled([
+        rm(this.sidecarPath(id), { force: true }),
+        rm(this.thumbnailPath(id), { force: true }),
+        rm(this.cursorTrackPath(id), { force: true }),
+        // An interrupted writeCursorTrack can leave the temp file behind.
+        rm(`${this.cursorTrackPath(id)}.tmp`, { force: true }),
+      ]),
+    );
     await rm(await this.filePath(id), { force: true });
   }
 

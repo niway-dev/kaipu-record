@@ -267,6 +267,41 @@ describe("LibraryVault", () => {
   it("removeLocalCopy propagates a failure to delete the media file", async () => {
     await expect(vault.removeLocalCopy("nope")).rejects.toThrow();
   });
+
+  it("keeps every field when many writeMeta calls run at once across instances", async () => {
+    await writeRecording("clip");
+    await Promise.all(
+      Array.from({ length: 40 }, (_, i) =>
+        new LibraryVault(directory).writeMeta("clip", { [`field${i}`]: i } as never),
+      ),
+    );
+    const raw = await readFile(join(directory, ".kaipu", "clip.json"), "utf-8");
+    const sidecar = JSON.parse(raw); // must not throw
+    expect(sidecar.sidecarVersion).toBe(2);
+    for (let i = 0; i < 40; i++) expect(sidecar[`field${i}`]).toBe(i);
+    expect((await readdir(join(directory, ".kaipu"))).filter((n) => n.includes(".tmp"))).toEqual(
+      [],
+    );
+  });
+
+  it("mints one assetId when separate instances describe the same new item at once", async () => {
+    await writeRecording("fresh");
+    const results = await Promise.all(
+      [1, 2, 3, 4, 5].map(() => new LibraryVault(directory).describe("fresh")),
+    );
+    const ids = new Set(results.map((r) => r?.assetId));
+    expect(ids.size).toBe(1);
+    const sidecar = JSON.parse(await readFile(join(directory, ".kaipu", "fresh.json"), "utf-8"));
+    expect(sidecar.assetId).toBe([...ids][0]);
+  });
+
+  it("does not lose the title when a rename races the identity mint", async () => {
+    await writeRecording("race");
+    await Promise.all([vault.describe("race"), new LibraryVault(directory).rename("race", "Mine")]);
+    const sidecar = JSON.parse(await readFile(join(directory, ".kaipu", "race.json"), "utf-8"));
+    expect(sidecar.title).toBe("Mine");
+    expect(typeof sidecar.assetId).toBe("string");
+  });
 });
 
 describe("LibraryVault — screenshots", () => {
