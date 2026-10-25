@@ -1,3 +1,5 @@
+import { rm } from "node:fs/promises";
+import { join } from "node:path";
 import type { LocalRecording } from "@shared/types/library-storage";
 import { broadcastLibraryChanged, currentVault } from "../library";
 
@@ -22,15 +24,23 @@ export async function saveScreenshotToVault(
   meta: SaveScreenshotMeta,
 ): Promise<LocalRecording> {
   const id = meta.overwriteId ?? screenshotId();
+  const isNew = meta.overwriteId === undefined;
   const vault = currentVault();
   await vault.writeImage(id, png);
   const now = Date.now();
-  // Preserve the original createdAt when overwriting; stamp it for a new item.
-  await vault.writeMeta(id, {
-    title: meta.title,
-    ...(meta.overwriteId ? {} : { createdAt: now }),
-    ...(meta.manual ? { editorSavedAt: now } : {}),
-  });
+  try {
+    // Preserve the original createdAt when overwriting; stamp it for a new item.
+    await vault.writeMeta(id, {
+      title: meta.title,
+      ...(isNew ? { createdAt: now } : {}),
+      ...(meta.manual ? { editorSavedAt: now } : {}),
+    });
+  } catch (error) {
+    // A new item without a sidecar would be saved again under a second id when the
+    // caller retries, leaving this PNG orphaned. Remove it so the retry starts clean.
+    if (isNew) await rm(join(vault.directory, `${id}.png`), { force: true }).catch(() => {});
+    throw error;
+  }
   const saved = await vault.describe(id);
   if (!saved) throw new Error(`screenshot save: could not describe ${id} after writing`);
   // An editor already open on another item keeps its library list: without this it
