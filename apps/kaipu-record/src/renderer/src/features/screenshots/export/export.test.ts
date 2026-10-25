@@ -13,7 +13,7 @@ vi.mock("../annotations/compositor", async (importOriginal) => ({
 }));
 
 const { clearExportCache, EXPORTERS, exportScene, PDF_RASTER_SCALE } = await import("./index");
-const { buildPdf } = await import("./pdf-exporter");
+const { buildPdf } = await import("./build-pdf");
 
 const scene: Scene = {
   beautify: { bg: "none", padding: 0, radius: 0, shadow: 0 },

@@ -1,5 +1,5 @@
-import { PDFDocument } from "pdf-lib";
 import { compositeSceneAt } from "../annotations/compositor";
+import type { PdfRequest, PdfResponse } from "./pdf-messages";
 import type { Exporter } from "./types";
 
 /**
@@ -11,22 +11,37 @@ import type { Exporter } from "./types";
  */
 export const PDF_RASTER_SCALE = 3;
 
+function newPdfWorker(): Worker {
+  return new Worker(new URL("./pdf-worker.ts", import.meta.url), { type: "module" });
+}
+
 /**
- * One page, no margins, sized to the composed frame. The PNG is embedded as-is
- * (pdf-lib keeps its alpha, so a "None" background stays transparent) and drawn
- * to fill the page, which puts the extra resolution to work as zoom headroom.
+ * Build the PDF off the main thread. `png` is transferred, so it is unusable by
+ * the caller afterwards. Without `Worker` (jsdom) it runs inline: same output.
  */
-export async function buildPdf(
+export async function buildPdfOffThread(
   png: ArrayBuffer,
   width: number,
   height: number,
 ): Promise<ArrayBuffer> {
-  const doc = await PDFDocument.create();
-  const image = await doc.embedPng(png);
-  const page = doc.addPage([width, height]);
-  page.drawImage(image, { x: 0, y: 0, width, height });
-  const out = await doc.save();
-  return out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength) as ArrayBuffer;
+  if (typeof Worker === "undefined") {
+    const { buildPdf } = await import("./build-pdf");
+    return buildPdf(png, width, height);
+  }
+  return new Promise<ArrayBuffer>((resolve, reject) => {
+    const worker = newPdfWorker();
+    worker.onmessage = (event: MessageEvent<PdfResponse>) => {
+      worker.terminate();
+      if (event.data.type === "done") resolve(event.data.pdf);
+      else reject(new Error(event.data.message));
+    };
+    worker.onerror = (event) => {
+      worker.terminate();
+      reject(new Error(event.message || "pdf worker failed"));
+    };
+    const request: PdfRequest = { png, width, height };
+    worker.postMessage(request, [png]);
+  });
 }
 
 export const pdfExporter: Exporter = {
@@ -37,6 +52,6 @@ export const pdfExporter: Exporter = {
     const frame = await compositeSceneAt(scene, bytes, displayedW, {
       rasterScale: PDF_RASTER_SCALE,
     });
-    return buildPdf(frame.png, frame.width, frame.height);
+    return buildPdfOffThread(frame.png, frame.width, frame.height);
   },
 };
