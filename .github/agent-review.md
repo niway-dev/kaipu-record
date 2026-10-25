@@ -14,3 +14,7 @@
 - Documentation lives in `apps/documentation/src/content/docs/`, in English: a new feature gets a
   doc, and an ADR is append-only (status changes, history is not rewritten). A missing doc is a
   note.
+
+Accepted decision records (ADRs) live in `apps/documentation/src/content/docs/architecture/decisions/`,
+not in `docs/adr/`; the index is `apps/documentation/src/content/docs/architecture/decisions/index.mdx`.
+A change that contradicts an accepted ADR without superseding it is a "note" with category `adr`.
