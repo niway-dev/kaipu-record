@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { act, render, screen, fireEvent } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { AnnotationLayer } from "./annotation-layer";
 import { ANNOTATION_COLORS } from "./tools";
@@ -32,6 +32,7 @@ function makeScene(annotations: Annotation[], selectedId: string | null): Editor
     beginInteract: vi.fn(),
     updateAnnotation: vi.fn(),
     endInteract: vi.fn(),
+    removeAnnotation: vi.fn(),
     removeSelected: vi.fn(),
     crop: undefined,
     setCrop: vi.fn(),
@@ -187,8 +188,26 @@ describe("AnnotationLayer — text tool", () => {
     const input = screen.getByDisplayValue("Hello");
     fireEvent.change(input, { target: { value: "   " } });
     fireEvent.keyDown(input, { key: "Enter" });
-    expect(scene.removeSelected).toHaveBeenCalled();
+    expect(scene.removeAnnotation).toHaveBeenCalledWith("t1");
+    expect(scene.removeSelected).not.toHaveBeenCalled();
     expect(scene.commitAnnotation).not.toHaveBeenCalled();
+  });
+
+  it("clearing a label and then grabbing another shape deletes the label, not the shape (SHOT-B5)", async () => {
+    const farBox: BoxAnnotation = { ...box, x: 0.7, y: 0.7, w: 0.2, h: 0.2 };
+    const scene = makeScene([label, farBox], "t1");
+    const { layer } = renderSizedLayer(scene, makeTools({ tool: "select" }));
+    fireEvent.doubleClick(layer, { clientX: 30, clientY: 30 });
+    const input = screen.getByDisplayValue("Hello");
+    fireEvent.change(input, { target: { value: "" } });
+    fireEvent.pointerDown(layer, { clientX: 80, clientY: 80 }); // the far box
+    // Blur-to-commit only arms after one frame.
+    await act(async () => {
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+    });
+    fireEvent.blur(input);
+    expect(scene.removeAnnotation).toHaveBeenCalledWith("t1");
+    expect(scene.removeSelected).not.toHaveBeenCalled();
   });
 
   it("shows the resize handles for a selected label that is not being edited", () => {

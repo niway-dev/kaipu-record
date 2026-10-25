@@ -63,6 +63,31 @@ describe("useEditorScene", () => {
     expect(result.current.annotations).toHaveLength(0);
   });
 
+  it("removeAnnotation deletes by id and leaves another selection alone", () => {
+    const { result } = renderHook(() => useEditorScene());
+    act(() => result.current.addAnnotation({ ...box, id: "b1" }));
+    act(() => result.current.addAnnotation({ ...box, id: "b2" }));
+    act(() => result.current.select("b2"));
+    act(() => result.current.removeAnnotation("b1"));
+    expect(result.current.annotations.map((a) => a.id)).toEqual(["b2"]);
+    expect(result.current.selectedId).toBe("b2");
+    expect(result.current.canUndo).toBe(true);
+  });
+
+  it("removeAnnotation clears the selection only when it removes the selected one", () => {
+    const { result } = renderHook(() => useEditorScene());
+    act(() => result.current.addAnnotation(box));
+    act(() => result.current.select(box.id));
+    act(() => result.current.removeAnnotation(box.id));
+    expect(result.current.selectedId).toBeNull();
+  });
+
+  it("removeAnnotation ignores an unknown id", () => {
+    const { result } = renderHook(() => useEditorScene());
+    act(() => result.current.removeAnnotation("nope"));
+    expect(result.current.canUndo).toBe(false);
+  });
+
   it("setCrop commits an undoable crop change", () => {
     const { result } = renderHook(() => useEditorScene());
     act(() => result.current.setCrop({ x: 0.1, y: 0.1, w: 0.5, h: 0.5 }));

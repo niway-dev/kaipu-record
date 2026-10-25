@@ -314,13 +314,10 @@ export function AnnotationLayer({
     // Re-editing an existing label (double-click): update it in place as one undoable
     // change, or delete it if the user cleared the text (Excalidraw-style).
     if (editing?.id) {
-      if (text) {
-        scene.commitAnnotation(editing.id, { text });
-        scene.select(editing.id);
-      } else {
-        scene.select(editing.id);
-        scene.removeSelected();
-      }
+      // The id was captured when the edit started; selection is NOT consulted, because
+      // the blur that commits this can land after the user already selected another shape.
+      if (text) scene.commitAnnotation(editing.id, { text });
+      else scene.removeAnnotation(editing.id);
       setEditing(null);
       return;
     }
