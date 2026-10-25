@@ -323,3 +323,124 @@ describe("TimelineStrip ruler scrubber", () => {
     expect(playback.seek).not.toHaveBeenCalled();
   });
 });
+
+describe("TimelineStrip trim drag baseline and abort", () => {
+  // Same shape as twoClipLayout, but clip "a" has had its start trimmed to 1s (what the
+  // page produces after the first move) and the rest of the track has shifted up.
+  function withSourceStart(layout: LayoutEntry[], id: string, value: number): LayoutEntry[] {
+    return layout.map((entry) => {
+      if (entry.itemId === id) return { ...entry, sourceStart: value, timelineEnd: 5 - value };
+      return {
+        ...entry,
+        timelineStart: entry.timelineStart - value,
+        timelineEnd: entry.timelineEnd - value,
+      };
+    });
+  }
+
+  // Clip "a" grown to 8s while the drag is in flight: the timeline is now 13s long.
+  const longerLayout: LayoutEntry[] = [
+    { itemId: "a", kind: "clip", timelineStart: 0, timelineEnd: 8, sourceStart: 0, sourceEnd: 8 },
+    { itemId: "b", kind: "clip", timelineStart: 8, timelineEnd: 13, sourceStart: 5, sourceEnd: 10 },
+  ];
+
+  function props(
+    layout: LayoutEntry[],
+    onTrim: NonNullable<Parameters<typeof TimelineStrip>[0]["onTrim"]>,
+    overrides: Partial<Parameters<typeof TimelineStrip>[0]> = {},
+  ): Parameters<typeof TimelineStrip>[0] {
+    return {
+      layout,
+      playback: makePlayback(),
+      thumbnails: [],
+      selectedItemId: "a",
+      onSelectItem: vi.fn(),
+      onTrim,
+      overlays: [],
+      selectedOverlayId: null,
+      onSelectOverlay: vi.fn(),
+      ...overrides,
+    };
+  }
+
+  // jsdom has no layout or pointer capture: stub the capture APIs and give the track
+  // (the handle's parent) a 1000px width, so 10s of timeline is 0.01 s/px.
+  function stubHandle(container: HTMLElement, selector: string): HTMLElement {
+    const handle = container.querySelector(selector) as HTMLElement;
+    handle.setPointerCapture = vi.fn();
+    handle.hasPointerCapture = vi.fn(() => true);
+    handle.releasePointerCapture = vi.fn();
+    (handle.parentElement as HTMLElement).getBoundingClientRect = vi.fn(() => ({
+      left: 0,
+      right: 1000,
+      width: 1000,
+      top: 0,
+      bottom: 20,
+      height: 20,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    }));
+    return handle;
+  }
+
+  it("start handle: edge = original + pixel delta, unaffected by live re-renders (VID-B1)", () => {
+    const onTrim = vi.fn();
+    const { container, rerender } = render(<TimelineStrip {...props(twoClipLayout, onTrim)} />);
+    const handle = stubHandle(container, '[data-trim-handle="start"]');
+    fireEvent.pointerDown(handle, { pointerId: 1, clientX: 100 });
+    // The page applies the first move: a.sourceStart becomes 1 and the block re-renders.
+    rerender(<TimelineStrip {...props(withSourceStart(twoClipLayout, "a", 1), onTrim)} />);
+    fireEvent.pointerMove(handle, { pointerId: 1, clientX: 200 });
+    fireEvent.pointerMove(handle, { pointerId: 1, clientX: 200 });
+    const moves = onTrim.mock.calls.filter((c) => c[3] === "move");
+    expect(moves).toEqual([
+      ["a", "start", 1, "move"],
+      ["a", "start", 1, "move"],
+    ]);
+  });
+
+  it("end handle ignores timeline growth during the drag", () => {
+    const onTrim = vi.fn();
+    const { container, rerender } = render(<TimelineStrip {...props(twoClipLayout, onTrim)} />);
+    const handle = stubHandle(container, '[data-trim-handle="end"]');
+    fireEvent.pointerDown(handle, { pointerId: 1, clientX: 500 }); // orig 5
+    rerender(<TimelineStrip {...props(longerLayout, onTrim)} />);
+    fireEvent.pointerMove(handle, { pointerId: 1, clientX: 600 });
+    expect(onTrim).toHaveBeenLastCalledWith("a", "end", 6, "move");
+  });
+
+  it("pointer cancel ends the drag exactly once", () => {
+    const onTrim = vi.fn();
+    const { container } = render(<TimelineStrip {...props(twoClipLayout, onTrim)} />);
+    const handle = stubHandle(container, '[data-trim-handle="start"]');
+    fireEvent.pointerDown(handle, { pointerId: 1, clientX: 100 });
+    fireEvent.pointerCancel(handle, { pointerId: 1 });
+    fireEvent.lostPointerCapture(handle, { pointerId: 1 });
+    fireEvent.pointerUp(handle, { pointerId: 1, clientX: 100 });
+    expect(onTrim.mock.calls.filter((c) => c[3] === "end")).toHaveLength(1);
+  });
+
+  it("slide handle: duration = original + delta, and lost capture ends it once", () => {
+    const onSlideDuration = vi.fn();
+    const { container } = render(
+      <TimelineStrip
+        {...props(slideThenClipLayout, vi.fn(), { selectedItemId: "s1", onSlideDuration })}
+      />,
+    );
+    const handle = stubHandle(container, "[data-slide-handle]");
+    fireEvent.pointerDown(handle, { pointerId: 1, clientX: 300 });
+    fireEvent.pointerMove(handle, { pointerId: 1, clientX: 400 });
+    expect(onSlideDuration).toHaveBeenLastCalledWith("s1", 4, "move");
+    fireEvent.lostPointerCapture(handle, { pointerId: 1 });
+    expect(onSlideDuration.mock.calls.filter((c) => c[2] === "end")).toHaveLength(1);
+  });
+
+  it("a move with no prior pointerdown is ignored", () => {
+    const onTrim = vi.fn();
+    const { container } = render(<TimelineStrip {...props(twoClipLayout, onTrim)} />);
+    const handle = stubHandle(container, '[data-trim-handle="start"]');
+    fireEvent.pointerMove(handle, { pointerId: 1, clientX: 200 });
+    expect(onTrim).not.toHaveBeenCalled();
+  });
+});
