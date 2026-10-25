@@ -13,6 +13,11 @@ const SCREEN_MARGIN = 40;
  *
  * Unlike the control bar, this window is deliberately NOT content-protected, so it
  * *does* appear in the recording.
+ *
+ * On macOS it is a `panel` and joins full-screen Spaces with
+ * `skipTransformProcessType`: the bubble is destroyed and recreated on every
+ * camera toggle, and each creation used to hide the Dock icon (and Cmd+Tab)
+ * through Electron's default process transform. See ADR 0029.
  */
 export class CameraBubbleWindow {
   private window: BrowserWindow | null = null;
@@ -25,6 +30,7 @@ export class CameraBubbleWindow {
     this.window = new BrowserWindow({
       width: BUBBLE_SIZE,
       height: BUBBLE_SIZE,
+      ...(process.platform === "darwin" ? { type: "panel" } : {}),
       show: false,
       frame: false,
       transparent: true,
@@ -44,7 +50,10 @@ export class CameraBubbleWindow {
       },
     });
     this.window.setAlwaysOnTop(true, "screen-saver");
-    this.window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    this.window.setVisibleOnAllWorkspaces(true, {
+      visibleOnFullScreen: true,
+      skipTransformProcessType: true,
+    });
 
     if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
       void this.window.loadURL(`${process.env["ELECTRON_RENDERER_URL"]}/?window=camera-bubble`);

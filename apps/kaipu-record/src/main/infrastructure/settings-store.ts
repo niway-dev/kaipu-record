@@ -77,9 +77,26 @@ type ActivationPolicy = "regular" | "accessory";
  */
 let appliedPolicy: ActivationPolicy | null = null;
 
+/**
+ * Whether the process is a regular (Dock + Cmd+Tab) app right now, as AppKit
+ * sees it. Electron answers from NSRunningApplication's activation policy, so
+ * this reflects transforms made outside this module — the `app.dock.hide()`
+ * that `setVisibleOnAllWorkspaces(..., { visibleOnFullScreen: true })` runs
+ * unless `skipTransformProcessType` is set. See ADR 0029.
+ */
+function isRegularNow(): boolean {
+  return app.dock?.isVisible() ?? true;
+}
+
 function setActivationPolicy(policy: ActivationPolicy): void {
   if (process.platform !== "darwin") return;
-  if (appliedPolicy === policy) return;
+  // "Unchanged" is decided against the real process state, not the cache alone.
+  // The cache by itself turned a Dock drop made outside this module into a
+  // permanent one: the app vanished from Cmd+Tab after the first recording and
+  // every re-assertion (stop, the rescue shortcut) was a no-op. See
+  // backlog/bug-app-lost-from-app-switcher. The probe keeps the no-churn
+  // property: a re-assertion that matches reality still touches nothing.
+  if (appliedPolicy === policy && (policy === "regular") === isRegularNow()) return;
   appliedPolicy = policy;
   app.setActivationPolicy(policy);
   if (policy === "regular") app.dock?.show();
@@ -87,9 +104,9 @@ function setActivationPolicy(policy: ActivationPolicy): void {
 
 /**
  * macOS Dock + Cmd+Tab visibility from the current settings. Exported so the
- * recording hub can re-assert it after hiding/showing the main window (hide/show
- * cycles, and showing a floating panel, can otherwise drop the app from the
- * switcher). Idempotent: a call that changes nothing touches no AppKit state.
+ * recording hub can re-assert it after hiding/showing the main window and after
+ * its floating panels come and go. Idempotent: a call that changes nothing
+ * touches no AppKit state; a call that finds the Dock dropped restores it.
  */
 export function applyDockPolicy(): void {
   setActivationPolicy(settings.showInDock ? "regular" : "accessory");
