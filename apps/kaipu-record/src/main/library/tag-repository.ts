@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { copyFile, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   isTagColor,
@@ -13,6 +13,7 @@ import {
   type TagColor,
 } from "@kaipu/domain/constants";
 import type { TagSummary } from "@shared/types";
+import { atomicWriteFile } from "./atomic-write";
 import type { LibraryVault } from "./library-vault";
 
 /**
@@ -110,8 +111,7 @@ export class VaultTagRepository implements TagRepository {
     const target = this.registryPath();
     await mkdir(join(this.vault().directory, ".kaipu"), { recursive: true });
     const file: RegistryFile = { version: 1, tags };
-    await writeFile(`${target}.tmp`, JSON.stringify(file, null, 2), "utf-8");
-    await rename(`${target}.tmp`, target);
+    await atomicWriteFile(target, JSON.stringify(file, null, 2));
   }
 
   /**

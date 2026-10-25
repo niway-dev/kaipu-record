@@ -1,15 +1,5 @@
 import { basename, join } from "node:path";
-import {
-  access,
-  mkdir,
-  open,
-  readFile,
-  readdir,
-  rename,
-  rm,
-  stat,
-  writeFile,
-} from "node:fs/promises";
+import { access, mkdir, open, readFile, readdir, rename, rm, stat } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import type { LocalRecording } from "@shared/types/library-storage";
 import { normalizeExportPresetId, type StoredExportPresetId } from "@shared/types/export-preset";
@@ -295,15 +285,13 @@ export class LibraryVault {
 
   async writeThumbnail(id: string, jpg: Buffer): Promise<void> {
     await mkdir(this.metaDirectory(), { recursive: true });
-    await writeFile(this.thumbnailPath(id), jpg);
+    await atomicWriteFile(this.thumbnailPath(id), jpg);
   }
 
-  /** Atomic (temp + rename): a crash mid-write never leaves a truncated track. */
+  /** Atomic (unique temp + rename): a crash mid-write never leaves a truncated track. */
   async writeCursorTrack(id: string, json: string): Promise<void> {
     await mkdir(this.metaDirectory(), { recursive: true });
-    const target = this.cursorTrackPath(id);
-    await writeFile(`${target}.tmp`, json, "utf-8");
-    await rename(`${target}.tmp`, target);
+    await atomicWriteFile(this.cursorTrackPath(id), json);
   }
 
   /** The raw track JSON, or null when this recording has none. */
@@ -362,7 +350,9 @@ export class LibraryVault {
   /** Writes a screenshot PNG as `<id>.png` in the vault root. */
   async writeImage(id: string, png: Buffer): Promise<void> {
     await mkdir(this.directory, { recursive: true });
-    await writeFile(join(this.directory, `${id}.png`), png);
+    // `.part` is not a known extension, so `list()` never shows a half-written shot,
+    // and a failed write leaves the previous PNG untouched.
+    await atomicWriteFile(join(this.directory, `${id}.png`), png, "part");
   }
 
   /** Updates the user-facing title without touching the video file. */

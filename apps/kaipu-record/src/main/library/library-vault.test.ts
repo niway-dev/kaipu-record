@@ -323,6 +323,33 @@ describe("LibraryVault — screenshots", () => {
     // URL carries a `?v=<mtime>` cache-bust token so an in-place overwrite refreshes.
     expect(shot?.thumbnailUrl).toMatch(/^kaipu-media:\/\/screenshot\/shot-1\?v=\d+$/);
   });
+
+  it("writeImage replaces a screenshot without leaving temp files", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "vault-"));
+    dirs.push(dir);
+    const vault = new LibraryVault(dir);
+    await vault.writeImage("shot", Buffer.from("one"));
+    await vault.writeImage("shot", Buffer.from("two"));
+    expect((await readFile(join(dir, "shot.png"))).toString()).toBe("two");
+    expect((await readdir(dir)).filter((n) => n.endsWith(".part"))).toEqual([]);
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "writeImage keeps the original when the write fails",
+    async () => {
+      const dir = await mkdtemp(join(tmpdir(), "vault-"));
+      dirs.push(dir);
+      const vault = new LibraryVault(dir);
+      await vault.writeImage("shot", Buffer.from("original"));
+      await chmod(dir, 0o500);
+      try {
+        await expect(vault.writeImage("shot", Buffer.from("new"))).rejects.toThrow();
+      } finally {
+        await chmod(dir, 0o700);
+      }
+      expect((await readFile(join(dir, "shot.png"))).toString()).toBe("original");
+    },
+  );
 });
 
 describe("LibraryVault — mp4 + thumbnails", () => {
