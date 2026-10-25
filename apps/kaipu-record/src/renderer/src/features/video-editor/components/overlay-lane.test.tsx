@@ -191,3 +191,30 @@ describe("OverlayLane — handle drag (resize)", () => {
     expect(calls[2]).toEqual(["o1", 2, 5, "end"]);
   });
 });
+
+describe("OverlayLane — aborted drags", () => {
+  it("pointer cancel / lost capture on a pill body drag and on a resize handle each report end once", () => {
+    const { props, container } = renderLane();
+    const onWindowChange = props.onWindowChange as ReturnType<typeof vi.fn>;
+    const ends = (): unknown[][] => onWindowChange.mock.calls.filter((c) => c[3] === "end");
+
+    const pill = container.querySelector("button")!;
+    fireEvent.pointerDown(pill, { pointerId: 1, clientX: 250, clientY: 10 });
+    fireEvent.pointerCancel(pill, { pointerId: 1 });
+    fireEvent.lostPointerCapture(pill, { pointerId: 1 });
+    expect(ends()).toHaveLength(1);
+
+    onWindowChange.mockClear();
+    const handle = container.querySelector('[data-overlay-handle="end"]')!;
+    fireEvent.pointerDown(handle, { pointerId: 2, clientX: 500, clientY: 10 });
+    fireEvent.lostPointerCapture(handle, { pointerId: 2 });
+    fireEvent.pointerUp(handle, { pointerId: 2, clientX: 500, clientY: 10 });
+    expect(ends()).toHaveLength(1);
+  });
+
+  it("a stray pointerup on the pill with no drag in flight reports nothing", () => {
+    const { props, container } = renderLane();
+    fireEvent.pointerUp(container.querySelector("button")!, { pointerId: 1 });
+    expect(props.onWindowChange).not.toHaveBeenCalled();
+  });
+});

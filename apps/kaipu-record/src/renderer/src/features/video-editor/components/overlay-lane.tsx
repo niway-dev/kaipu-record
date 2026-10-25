@@ -111,9 +111,19 @@ function Pill({
     onWindowChange(overlay.id, start, start + length, "move");
   };
 
-  const onBodyPointerUp = (): void => {
+  // Reports "end" exactly once per drag: pointerup releases capture first, so the
+  // lostpointercapture it queues finds the ref already null (zoom-lane.tsx contract).
+  // pointercancel and lostpointercapture alone cover a drag that never sees a pointerup.
+  const abortBody = (): void => {
+    if (!bodyOrigin.current) return;
     bodyOrigin.current = null;
     onWindowChange(overlay.id, overlay.start, overlay.end, "end");
+  };
+
+  const onBodyPointerUp = (event: React.PointerEvent<HTMLButtonElement>): void => {
+    if (!bodyOrigin.current) return;
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+    abortBody();
   };
 
   // End handles resize by setting the dragged edge directly to the pointer's time
@@ -125,12 +135,20 @@ function Pill({
   // "move" phase maps straight to `updateLive`, which has no active-interaction guard.
   const resizeEdge = useRef<"start" | "end" | null>(null);
 
+  const abortResize = (): void => {
+    if (resizeEdge.current === null) return;
+    resizeEdge.current = null;
+    onWindowChange(overlay.id, overlay.start, overlay.end, "end");
+  };
+
   const handleHandlers = (
     edge: "start" | "end",
   ): {
     onPointerDown: React.PointerEventHandler<HTMLDivElement>;
     onPointerMove: React.PointerEventHandler<HTMLDivElement>;
     onPointerUp: React.PointerEventHandler<HTMLDivElement>;
+    onPointerCancel: React.PointerEventHandler<HTMLDivElement>;
+    onLostPointerCapture: React.PointerEventHandler<HTMLDivElement>;
   } => ({
     onPointerDown: (event) => {
       // Neither move the pill nor let the click bubble to a select/drag on the body.
@@ -154,9 +172,12 @@ function Pill({
     },
     onPointerUp: (event) => {
       event.stopPropagation();
-      resizeEdge.current = null;
-      onWindowChange(overlay.id, overlay.start, overlay.end, "end");
+      if (resizeEdge.current === null) return;
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+      abortResize();
     },
+    onPointerCancel: abortResize,
+    onLostPointerCapture: abortResize,
   });
 
   return (
@@ -168,6 +189,8 @@ function Pill({
         onPointerDown={onBodyPointerDown}
         onPointerMove={onBodyPointerMove}
         onPointerUp={onBodyPointerUp}
+        onPointerCancel={abortBody}
+        onLostPointerCapture={abortBody}
       >
         <Icon size={10} className={styles.icon} />
       </button>
