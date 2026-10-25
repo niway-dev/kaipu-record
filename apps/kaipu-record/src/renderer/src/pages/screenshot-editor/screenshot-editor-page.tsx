@@ -42,7 +42,11 @@ import {
   useEditorScene,
   type Scene,
 } from "@renderer/features/screenshots/annotations";
-import { exportScene, type ExportFormat } from "@renderer/features/screenshots/export";
+import {
+  clearExportCache,
+  exportScene,
+  type ExportFormat,
+} from "@renderer/features/screenshots/export";
 import { useTransientValue } from "@renderer/ui/use-transient-value";
 import { useCompactRow } from "@renderer/ui/use-compact-row";
 import styles from "./screenshot-editor-page.module.css";
@@ -115,11 +119,13 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
   };
   // False after unmount: jobs that start later and toast Retry buttons become no-ops
   // (a stale Retry would re-save a discarded capture with the wrong export scale).
+  // Unmount also drops the memoized export, which pins one composite PNG.
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true; // StrictMode re-runs effects
     return () => {
       alive.current = false;
+      clearExportCache();
     };
   }, []);
   // The vault id this editor is bound to: set when re-opening a saved shot, and
@@ -360,9 +366,10 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
 
   /**
    * Whatever the two preferences asked for, once, on open. Sequential on purpose:
-   * both paths composite the same scene through the queue, and the combined
-   * indicator needs both outcomes. Copy goes first — it is the one the user is
-   * waiting on to paste; the save round-trips to disk.
+   * both paths export the same scene through the queue (the second is served by
+   * `exportScene`'s memo), and the combined indicator needs both outcomes. Copy
+   * goes first — it is the one the user is waiting on to paste; the save
+   * round-trips to disk.
    */
   const runAutoActions = async (actions: AutoActions): Promise<void> => {
     const copied = actions.copy ? await copyToClipboard() : false;
