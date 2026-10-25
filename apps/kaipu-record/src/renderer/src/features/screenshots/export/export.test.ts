@@ -12,7 +12,7 @@ vi.mock("../annotations/compositor", async (importOriginal) => ({
   compositeScene: async (...args: unknown[]) => (await compositeSceneAt(...args)).png,
 }));
 
-const { EXPORTERS, exportScene, PDF_RASTER_SCALE } = await import("./index");
+const { clearExportCache, EXPORTERS, exportScene, PDF_RASTER_SCALE } = await import("./index");
 const { buildPdf } = await import("./pdf-exporter");
 
 const scene: Scene = {
@@ -27,7 +27,10 @@ async function tinyPng(): Promise<ArrayBuffer> {
   return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)).buffer;
 }
 
-afterEach(() => compositeSceneAt.mockReset());
+afterEach(() => {
+  compositeSceneAt.mockReset();
+  clearExportCache();
+});
 
 describe("export seam", () => {
   it("registers an exporter per format with its mime type and extension", () => {
@@ -75,6 +78,70 @@ describe("export seam", () => {
     const bytes = await buildPdf(png, 300, 150);
     const doc = await PDFDocument.load(bytes);
     expect(doc.getPage(0).getSize()).toEqual({ width: 300, height: 150 });
+  });
+});
+
+describe("export memo", () => {
+  it("composites once for the same scene, shot and width, even through a rebuilt scene wrapper", async () => {
+    const png = await tinyPng();
+    compositeSceneAt.mockResolvedValue({ png, width: 2, height: 2, scale: 1 });
+    const a = await exportScene("png", { scene, bytes: png, displayedW: 2 });
+    const b = await exportScene("png", { scene: { ...scene }, bytes: png, displayedW: 2 });
+    expect(compositeSceneAt).toHaveBeenCalledTimes(1);
+    expect(a).toBe(png);
+    expect(b).toBe(png);
+  });
+
+  it.each([
+    ["annotations", (s: Scene) => ({ ...s, annotations: [...s.annotations] })],
+    ["beautify", (s: Scene) => ({ ...s, beautify: { ...s.beautify } })],
+    ["crop", (s: Scene) => ({ ...s, crop: { x: 0, y: 0, w: 1, h: 1 } })],
+  ])("recomposites when %s changes", async (_name, change) => {
+    const png = await tinyPng();
+    compositeSceneAt.mockResolvedValue({ png, width: 2, height: 2, scale: 1 });
+    await exportScene("png", { scene, bytes: png, displayedW: 2 });
+    await exportScene("png", { scene: change(scene), bytes: png, displayedW: 2 });
+    expect(compositeSceneAt).toHaveBeenCalledTimes(2);
+  });
+
+  it("recomposites when displayedW or the shot bytes change", async () => {
+    const png = await tinyPng();
+    compositeSceneAt.mockResolvedValue({ png, width: 2, height: 2, scale: 1 });
+    await exportScene("png", { scene, bytes: png, displayedW: 2 });
+    await exportScene("png", { scene, bytes: png, displayedW: 3 });
+    await exportScene("png", { scene, bytes: await tinyPng(), displayedW: 3 });
+    expect(compositeSceneAt).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not share a result across formats", async () => {
+    const png = await tinyPng();
+    compositeSceneAt.mockResolvedValue({ png, width: 2, height: 2, scale: 1 });
+    await exportScene("png", { scene, bytes: png, displayedW: 2 });
+    await exportScene("pdf", { scene, bytes: png, displayedW: 2 });
+    expect(compositeSceneAt).toHaveBeenCalledTimes(2);
+    expect(compositeSceneAt).toHaveBeenLastCalledWith(scene, png, 2, {
+      rasterScale: PDF_RASTER_SCALE,
+    });
+  });
+
+  it("a failed composite is not cached", async () => {
+    const png = await tinyPng();
+    compositeSceneAt.mockRejectedValueOnce(new Error("boom"));
+    await expect(exportScene("png", { scene, bytes: png, displayedW: 2 })).rejects.toThrow("boom");
+    await Promise.resolve();
+    compositeSceneAt.mockResolvedValue({ png, width: 2, height: 2, scale: 1 });
+    await expect(exportScene("png", { scene, bytes: png, displayedW: 2 })).resolves.toBe(png);
+    expect(compositeSceneAt).toHaveBeenCalledTimes(2);
+  });
+
+  it("concurrent calls share the in-flight composite", async () => {
+    const png = await tinyPng();
+    compositeSceneAt.mockResolvedValue({ png, width: 2, height: 2, scale: 1 });
+    await Promise.all([
+      exportScene("png", { scene, bytes: png, displayedW: 2 }),
+      exportScene("png", { scene, bytes: png, displayedW: 2 }),
+    ]);
+    expect(compositeSceneAt).toHaveBeenCalledTimes(1);
   });
 });
 
