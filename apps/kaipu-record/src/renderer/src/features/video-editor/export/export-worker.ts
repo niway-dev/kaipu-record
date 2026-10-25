@@ -78,6 +78,7 @@ import type { StreamTargetChunk } from "mediabunny";
 import type { ExportStartMessage, ExportWorkerMessage } from "./export-messages";
 import { silencedSpansFor } from "../audio-edits";
 import { rebaseVideoTimestamp } from "./rebase-timestamp";
+import { exportCanvasSinkOptions } from "./canvas-sink-options";
 import { createFramer, createOutputComposer } from "./compose-output-frame";
 import {
   audioEncodingCandidates,
@@ -289,12 +290,10 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
     const slideFps = cappedSlideFps(plan.slideFps, preset.maxFps);
     for (const segment of plan.segments) {
       if (segment.kind === "clip") {
-        const sink = new CanvasSink(videoTrack, {
-          width: composeSize.width,
-          height: composeSize.height,
-          // 'contain' letterboxes so the aspect ratio is never distorted.
-          fit: "contain",
-        });
+        const sink = new CanvasSink(
+          videoTrack,
+          exportCanvasSinkOptions(composeSize.width, composeSize.height),
+        );
 
         for await (const wrapped of sink.canvases(segment.sourceStart, segment.sourceEnd)) {
           // Remap the source timestamp to the output (collapsed) timeline, clamped

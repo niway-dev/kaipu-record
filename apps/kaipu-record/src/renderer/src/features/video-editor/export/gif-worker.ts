@@ -13,6 +13,7 @@
  */
 import { ALL_FORMATS, BlobSource, CanvasSink, Input } from "mediabunny";
 import type { InputVideoTrack } from "mediabunny";
+import { exportCanvasSinkOptions } from "./canvas-sink-options";
 import { createOutputComposer } from "./compose-output-frame";
 import { gifFrameSchedule, locateTimelineTime } from "./export-plan";
 import {
@@ -96,7 +97,7 @@ function createFrameRenderer(msg: GifStartMessage, track: InputVideoTrack | null
   });
   const slides = new Map(msg.slides.map((s) => [s.assetId, s.bitmap]));
   const sink = track
-    ? new CanvasSink(track, { width: source.width, height: source.height, fit: "contain" })
+    ? new CanvasSink(track, exportCanvasSinkOptions(source.width, source.height))
     : null;
 
   const grab = (): Uint8ClampedArray => {
