@@ -9,9 +9,10 @@
  * right after `registerLibraryVaultHandlers()` so all library IPC stays in one module.
  */
 import { ipcMain } from "electron";
-import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { IPC_CHANNELS } from "@shared/types/ipc";
+import { atomicWriteFile } from "./atomic-write";
 import { LibraryVault } from "./library-vault";
 import { vaultDirectory } from "./vault-location";
 
@@ -105,9 +106,7 @@ export async function saveSession(id: string, payload: SavePayload): Promise<voi
   // Atomic session JSON write (temp + rename so a crash never truncates the file).
   const sp = sessionPath(id);
   await mkdir(metaDir(), { recursive: true });
-  const tmp = `${sp}.tmp`;
-  await writeFile(tmp, sessionJson, "utf-8");
-  await rename(tmp, sp);
+  await atomicWriteFile(sp, sessionJson);
 
   // Write asset files. Create dir even if there are no assets so `assetsDir` always
   // exists (simplifies the prune pass below: readdir won't throw on an empty dir).
@@ -161,8 +160,7 @@ export async function saveSession(id: string, payload: SavePayload): Promise<voi
       exportedSavedAt: exported ? savedAt : await readExportedSavedAt(id),
     };
     const mp = sessionMetaPath(vaultDirectory().path, id);
-    await writeFile(`${mp}.tmp`, JSON.stringify(meta), "utf-8");
-    await rename(`${mp}.tmp`, mp);
+    await atomicWriteFile(mp, JSON.stringify(meta));
   }
 }
 

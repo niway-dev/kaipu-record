@@ -267,6 +267,41 @@ describe("LibraryVault", () => {
   it("removeLocalCopy propagates a failure to delete the media file", async () => {
     await expect(vault.removeLocalCopy("nope")).rejects.toThrow();
   });
+
+  it("keeps every field when many writeMeta calls run at once across instances", async () => {
+    await writeRecording("clip");
+    await Promise.all(
+      Array.from({ length: 40 }, (_, i) =>
+        new LibraryVault(directory).writeMeta("clip", { [`field${i}`]: i } as never),
+      ),
+    );
+    const raw = await readFile(join(directory, ".kaipu", "clip.json"), "utf-8");
+    const sidecar = JSON.parse(raw); // must not throw
+    expect(sidecar.sidecarVersion).toBe(2);
+    for (let i = 0; i < 40; i++) expect(sidecar[`field${i}`]).toBe(i);
+    expect((await readdir(join(directory, ".kaipu"))).filter((n) => n.includes(".tmp"))).toEqual(
+      [],
+    );
+  });
+
+  it("mints one assetId when separate instances describe the same new item at once", async () => {
+    await writeRecording("fresh");
+    const results = await Promise.all(
+      [1, 2, 3, 4, 5].map(() => new LibraryVault(directory).describe("fresh")),
+    );
+    const ids = new Set(results.map((r) => r?.assetId));
+    expect(ids.size).toBe(1);
+    const sidecar = JSON.parse(await readFile(join(directory, ".kaipu", "fresh.json"), "utf-8"));
+    expect(sidecar.assetId).toBe([...ids][0]);
+  });
+
+  it("does not lose the title when a rename races the identity mint", async () => {
+    await writeRecording("race");
+    await Promise.all([vault.describe("race"), new LibraryVault(directory).rename("race", "Mine")]);
+    const sidecar = JSON.parse(await readFile(join(directory, ".kaipu", "race.json"), "utf-8"));
+    expect(sidecar.title).toBe("Mine");
+    expect(typeof sidecar.assetId).toBe("string");
+  });
 });
 
 describe("LibraryVault — screenshots", () => {
@@ -288,6 +323,34 @@ describe("LibraryVault — screenshots", () => {
     // URL carries a `?v=<mtime>` cache-bust token so an in-place overwrite refreshes.
     expect(shot?.thumbnailUrl).toMatch(/^kaipu-media:\/\/screenshot\/shot-1\?v=\d+$/);
   });
+
+  it("writeImage replaces a screenshot without leaving temp files", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "vault-"));
+    dirs.push(dir);
+    const vault = new LibraryVault(dir);
+    await vault.writeImage("shot", Buffer.from("one"));
+    await vault.writeImage("shot", Buffer.from("two"));
+    expect((await readFile(join(dir, "shot.png"))).toString()).toBe("two");
+    expect((await readdir(dir)).filter((n) => n.endsWith(".part"))).toEqual([]);
+  });
+
+  // chmod does not stop root (some CI containers), so the write would succeed there.
+  it.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+    "writeImage keeps the original when the write fails",
+    async () => {
+      const dir = await mkdtemp(join(tmpdir(), "vault-"));
+      dirs.push(dir);
+      const vault = new LibraryVault(dir);
+      await vault.writeImage("shot", Buffer.from("original"));
+      await chmod(dir, 0o500);
+      try {
+        await expect(vault.writeImage("shot", Buffer.from("new"))).rejects.toThrow();
+      } finally {
+        await chmod(dir, 0o700);
+      }
+      expect((await readFile(join(dir, "shot.png"))).toString()).toBe("original");
+    },
+  );
 });
 
 describe("LibraryVault — mp4 + thumbnails", () => {
