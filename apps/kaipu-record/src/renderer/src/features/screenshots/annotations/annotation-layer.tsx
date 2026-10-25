@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "@kaipu/i18n";
 import {
   BLUR_STD,
@@ -34,26 +34,37 @@ type Drag =
 const HANDLE_PX = 10;
 const HANDLE_HIT_PX = 12;
 
+interface LayerProps {
+  scene: EditorScene;
+  tools: AnnotationToolsController;
+  /** The shot's display URL — a blur box re-draws a blurred copy of it under the rect. */
+  src: string;
+}
+
 /**
  * Interactive annotation overlay. Annotations are stored in normalized (0–1)
  * coordinates so they survive resize; this layer measures its displayed pixel
  * size and renders in px (so stroke/text sizes match the design regardless of
  * the image's natural resolution).
  */
-export function AnnotationLayer({
-  scene,
-  tools,
-  src,
-}: {
-  scene: EditorScene;
-  tools: AnnotationToolsController;
-  /** The shot's display URL — a blur box re-draws a blurred copy of it under the rect. */
-  src: string;
-}): React.JSX.Element {
+function AnnotationLayerImpl({ scene, tools, src }: LayerProps): React.JSX.Element {
   const t = useTranslations("screenshots");
   const ref = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<Size>({ w: 0, h: 0 });
   const [draft, setDraft] = useState<Annotation | null>(null);
+  // A move/resize in flight lives here, not in the scene: the dragged shape renders as
+  // `{ ...a, ...patch }` and the scene is touched once, on release, so a drag re-renders
+  // this layer only (not the whole editor page) and ends up as one undo entry. The ref
+  // mirrors the state for the pointerup/abort handlers, which must read the latest patch.
+  const [live, setLive] = useState<{ id: string; patch: Partial<Annotation> } | null>(null);
+  const liveRef = useRef<{ id: string; patch: Partial<Annotation> } | null>(null);
+  const setLiveBoth = useCallback(
+    (next: { id: string; patch: Partial<Annotation> } | null): void => {
+      liveRef.current = next;
+      setLive(next);
+    },
+    [],
+  );
   // A text edit in progress. `id` present = re-editing an existing label (double
   // click), so commit updates it in place and an emptied label is deleted; absent =
   // a fresh label at (x, y). The prefill fields mirror the edited label so the
@@ -167,7 +178,6 @@ export function AnnotationLayer({
         const tol = { x: HANDLE_HIT_PX / (size.w || 1), y: HANDLE_HIT_PX / (size.h || 1) };
         const handle = hitHandle(handlesFor(sel, size), p, tol);
         if (handle) {
-          scene.beginInteract();
           drag.current = { mode: "resize", id: sel.id, handle, orig: sel };
           ref.current?.setPointerCapture(e.pointerId);
           return;
@@ -183,7 +193,6 @@ export function AnnotationLayer({
       // editing to select it" is unchanged.
       const editingThis = editing?.id !== undefined && hit?.id === editing.id;
       if (hit && !editingThis) {
-        scene.beginInteract();
         drag.current = { mode: "move", id: hit.id, start: p, orig: hit };
         (e.target as Element).setPointerCapture?.(e.pointerId);
       }
@@ -219,12 +228,12 @@ export function AnnotationLayer({
     if (!d) return;
     const p = toNorm(e);
     if (d.mode === "move") {
-      scene.updateAnnotation(d.id, moveBy(d.orig, p.x - d.start.x, p.y - d.start.y));
+      setLiveBoth({ id: d.id, patch: moveBy(d.orig, p.x - d.start.x, p.y - d.start.y) });
       return;
     }
     if (d.mode === "resize") {
       // Resize from the ORIGINAL geometry each frame (fixed edges stay put, no drift).
-      scene.updateAnnotation(d.id, resizeAnnotation(d.orig, d.handle, p, size));
+      setLiveBoth({ id: d.id, patch: resizeAnnotation(d.orig, d.handle, p, size) });
       return;
     }
     if (d.mode === "draw-pen") {
@@ -275,12 +284,20 @@ export function AnnotationLayer({
     }
   };
 
+  // Ends a move/resize: one commit (one history entry, one page render) with whatever
+  // was last shown. A press without movement never set a patch, so it commits nothing.
+  const commitLive = (): void => {
+    const l = liveRef.current;
+    setLiveBoth(null);
+    if (l) scene.commitAnnotation(l.id, l.patch);
+  };
+
   const onPointerUp = (): void => {
     const d = drag.current;
     drag.current = null;
     if (!d) return;
     if (d.mode === "move" || d.mode === "resize") {
-      scene.endInteract();
+      commitLive();
       return;
     }
     if (draft && isBigEnough(draft)) {
@@ -302,7 +319,7 @@ export function AnnotationLayer({
   const onPointerAbort = (): void => {
     const d = drag.current;
     drag.current = null;
-    if (d?.mode === "move" || d?.mode === "resize") scene.endInteract();
+    if (d?.mode === "move" || d?.mode === "resize") commitLive();
     setDraft(null);
   };
 
@@ -314,13 +331,10 @@ export function AnnotationLayer({
     // Re-editing an existing label (double-click): update it in place as one undoable
     // change, or delete it if the user cleared the text (Excalidraw-style).
     if (editing?.id) {
-      if (text) {
-        scene.commitAnnotation(editing.id, { text });
-        scene.select(editing.id);
-      } else {
-        scene.select(editing.id);
-        scene.removeSelected();
-      }
+      // The id was captured when the edit started; selection is NOT consulted, because
+      // the blur that commits this can land after the user already selected another shape.
+      if (text) scene.commitAnnotation(editing.id, { text });
+      else scene.removeAnnotation(editing.id);
       setEditing(null);
       return;
     }
@@ -347,9 +361,19 @@ export function AnnotationLayer({
   // STORED annotation, which stops matching the moment the user types, so the box
   // visibly deforms around the editor; and there is nothing to resize mid-edit,
   // since the label's size follows its text until the edit is committed.
+  // Both read `shown` so the handles follow the drag; hit-testing keeps using the scene.
+  const shown = useMemo(
+    () =>
+      live
+        ? scene.annotations.map((a) =>
+            a.id === live.id ? ({ ...a, ...live.patch } as Annotation) : a,
+          )
+        : scene.annotations,
+    [scene.annotations, live],
+  );
   const selectedAnnotation =
     tools.tool === "select" && !editing
-      ? (scene.annotations.find((a) => a.id === scene.selectedId) ?? null)
+      ? (shown.find((a) => a.id === scene.selectedId) ?? null)
       : null;
 
   return (
@@ -365,7 +389,7 @@ export function AnnotationLayer({
       onDoubleClick={onDoubleClick}
     >
       <svg className={styles.svg} width={size.w} height={size.h}>
-        {scene.annotations.map((a) =>
+        {shown.map((a) =>
           // Hide the label being re-edited — the inline editor sits on top of it.
           a.id === editing?.id ? null : (
             <Shape key={a.id} a={a} size={size} selected={scene.selectedId === a.id} src={src} />
@@ -436,6 +460,24 @@ export function AnnotationLayer({
   );
 }
 
+// The editor page re-renders on every beautify-slider tick; the layer only needs to
+// follow the props it reads. Add every new prop here too, or the layer stops seeing it
+// change.
+function sameLayerProps(p: LayerProps, n: LayerProps): boolean {
+  return (
+    p.src === n.src &&
+    p.scene.annotations === n.scene.annotations &&
+    p.scene.selectedId === n.scene.selectedId &&
+    p.scene.removeSelected === n.scene.removeSelected &&
+    p.tools.tool === n.tools.tool &&
+    p.tools.color === n.tools.color &&
+    p.tools.stroke === n.tools.stroke &&
+    p.tools.textSize === n.tools.textSize
+  );
+}
+
+export const AnnotationLayer = React.memo(AnnotationLayerImpl, sameLayerProps);
+
 /** Resize handles drawn over the selected shape. Hit-testing is geometric (in the
  *  layer's onPointerDown), so these are purely visual + carry the resize cursor. */
 function Handles({ a, size }: { a: Annotation; size: Size }): React.JSX.Element {
@@ -459,7 +501,7 @@ function Handles({ a, size }: { a: Annotation; size: Size }): React.JSX.Element 
   );
 }
 
-function Shape({
+const Shape = React.memo(function Shape({
   a,
   size,
   selected,
@@ -483,7 +525,7 @@ function Shape({
     // those pixels (not the whole shot) and doesn't fade at the rect's edge.
     const m = BLUR_STD * 3;
     return (
-      <g>
+      <g data-annotation={a.id}>
         <defs>
           <clipPath id={`bclip-${a.id}`}>
             <rect x={bx} y={by} width={bw} height={bh} />
@@ -520,7 +562,7 @@ function Shape({
     const sw = STROKE_WIDTHS[a.stroke];
     const path = roughRect(bw, bh, 14, a.seed);
     return (
-      <g transform={`translate(${a.x * W},${a.y * H})`}>
+      <g data-annotation={a.id} transform={`translate(${a.x * W},${a.y * H})`}>
         <path d={path} fill={`${a.color}2e`} stroke="none" />
         <path
           d={path}
@@ -553,7 +595,7 @@ function Shape({
     const y2 = a.y2 * H;
     const sw = STROKE_WIDTHS[a.stroke];
     return (
-      <g>
+      <g data-annotation={a.id}>
         <path
           d={roughArrow(x1, y1, x2, y2, a.seed)}
           fill="none"
@@ -580,7 +622,7 @@ function Shape({
     const sw = STROKE_WIDTHS[a.stroke];
     const d = smoothPath(a.points.map((pt) => ({ x: pt.x * W, y: pt.y * H })));
     return (
-      <g>
+      <g data-annotation={a.id}>
         <path
           d={d}
           fill="none"
@@ -603,7 +645,7 @@ function Shape({
   const lines = textLines(a.text, fs, widthPx);
   const box = textBoxPx(a.text, fs, widthPx);
   return (
-    <g>
+    <g data-annotation={a.id}>
       <text
         x={tx}
         y={ty}
@@ -631,7 +673,7 @@ function Shape({
       )}
     </g>
   );
-}
+});
 
 /** True when the keyboard event originated in a text field (so the canvas shouldn't grab it). */
 function isEditingText(target: EventTarget | null): boolean {

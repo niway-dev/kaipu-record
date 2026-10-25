@@ -1,5 +1,5 @@
-import { render, screen, fireEvent } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act, render, screen, fireEvent } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AnnotationLayer } from "./annotation-layer";
 import { ANNOTATION_COLORS } from "./tools";
 import { handlesFor } from "./handles";
@@ -30,12 +30,11 @@ function makeScene(annotations: Annotation[], selectedId: string | null): Editor
     addAnnotation: vi.fn(),
     commitAnnotation: vi.fn(),
     beginInteract: vi.fn(),
-    updateAnnotation: vi.fn(),
     endInteract: vi.fn(),
+    removeAnnotation: vi.fn(),
     removeSelected: vi.fn(),
     crop: undefined,
     setCrop: vi.fn(),
-    setCropLive: vi.fn(),
     undo: vi.fn(),
     redo: vi.fn(),
     canUndo: false,
@@ -54,6 +53,13 @@ const box: BoxAnnotation = {
   stroke: 1,
   seed: 1,
 };
+
+afterEach(() => {
+  // @ts-expect-error — drop the instance-less stubs renderSizedLayer put on the prototype
+  delete HTMLElement.prototype.clientWidth;
+  // @ts-expect-error — see above
+  delete HTMLElement.prototype.clientHeight;
+});
 
 describe("AnnotationLayer — keyboard", () => {
   it("deletes the selected annotation on Backspace", () => {
@@ -143,8 +149,15 @@ describe("AnnotationLayer — text tool", () => {
   // Give the layer a real box so toNorm maps client coords to normalized space and
   // the geometric hit-test can find a label (jsdom reports 0×0 otherwise).
   function renderSizedLayer(scene: EditorScene, tools: AnnotationToolsController) {
+    // The layer measures itself from clientWidth/clientHeight on mount (jsdom: 0×0),
+    // which would make every px-based derivation (handle tolerance, shape transforms)
+    // degenerate. Restored in afterEach.
+    for (const prop of ["clientWidth", "clientHeight"]) {
+      Object.defineProperty(HTMLElement.prototype, prop, { configurable: true, get: () => 100 });
+    }
     const utils = render(<AnnotationLayer scene={scene} tools={tools} src="" />);
     const layer = utils.container.firstChild as HTMLElement;
+    layer.setPointerCapture = vi.fn();
     layer.getBoundingClientRect = () =>
       ({
         left: 0,
@@ -187,8 +200,26 @@ describe("AnnotationLayer — text tool", () => {
     const input = screen.getByDisplayValue("Hello");
     fireEvent.change(input, { target: { value: "   " } });
     fireEvent.keyDown(input, { key: "Enter" });
-    expect(scene.removeSelected).toHaveBeenCalled();
+    expect(scene.removeAnnotation).toHaveBeenCalledWith("t1");
+    expect(scene.removeSelected).not.toHaveBeenCalled();
     expect(scene.commitAnnotation).not.toHaveBeenCalled();
+  });
+
+  it("clearing a label and then grabbing another shape deletes the label, not the shape (SHOT-B5)", async () => {
+    const farBox: BoxAnnotation = { ...box, x: 0.7, y: 0.7, w: 0.2, h: 0.2 };
+    const scene = makeScene([label, farBox], "t1");
+    const { layer } = renderSizedLayer(scene, makeTools({ tool: "select" }));
+    fireEvent.doubleClick(layer, { clientX: 30, clientY: 30 });
+    const input = screen.getByDisplayValue("Hello");
+    fireEvent.change(input, { target: { value: "" } });
+    fireEvent.pointerDown(layer, { clientX: 80, clientY: 80 }); // the far box
+    // Blur-to-commit only arms after one frame.
+    await act(async () => {
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+    });
+    fireEvent.blur(input);
+    expect(scene.removeAnnotation).toHaveBeenCalledWith("t1");
+    expect(scene.removeSelected).not.toHaveBeenCalled();
   });
 
   it("shows the resize handles for a selected label that is not being edited", () => {
@@ -217,9 +248,9 @@ describe("AnnotationLayer — text tool", () => {
     const handle = handlesFor(label, { w: 100, h: 100 })[0];
     fireEvent.pointerDown(layer, { clientX: handle.x * 100, clientY: handle.y * 100 });
     fireEvent.pointerMove(layer, { clientX: handle.x * 100 + 20, clientY: handle.y * 100 + 20 });
+    fireEvent.pointerUp(layer);
     // A resize of a text label rescales its font; nothing may do that mid-edit.
-    const updates = (scene.updateAnnotation as ReturnType<typeof vi.fn>).mock.calls;
-    for (const [, patch] of updates) expect(patch).not.toHaveProperty("fontPx");
+    expect(scene.commitAnnotation).not.toHaveBeenCalled();
   });
 
   it("does not drag the label out from under its own inline editor", () => {
@@ -231,7 +262,8 @@ describe("AnnotationLayer — text tool", () => {
     fireEvent.doubleClick(layer, { clientX: 30, clientY: 30 });
     fireEvent.pointerDown(layer, { clientX: 31, clientY: 31 });
     fireEvent.pointerMove(layer, { clientX: 45, clientY: 45 });
-    expect(scene.updateAnnotation).not.toHaveBeenCalled();
+    fireEvent.pointerUp(layer);
+    expect(scene.commitAnnotation).not.toHaveBeenCalled();
   });
 
   it("still lets another shape be grabbed while a label is being edited", () => {
@@ -244,8 +276,62 @@ describe("AnnotationLayer — text tool", () => {
     screen.getByDisplayValue("Hello"); // the label's editor is open
     fireEvent.pointerDown(layer, { clientX: 10, clientY: 10 }); // inside the box
     fireEvent.pointerMove(layer, { clientX: 20, clientY: 20 });
+    fireEvent.pointerUp(layer);
     expect(scene.select).toHaveBeenCalledWith("b1");
-    expect(scene.updateAnnotation).toHaveBeenCalled();
+    expect(scene.commitAnnotation).toHaveBeenCalledWith("b1", expect.any(Object));
+  });
+
+  // A box big enough that its centre is outside every handle's 12px hit tolerance.
+  const bigBox: BoxAnnotation = { ...box, w: 0.6, h: 0.6 };
+
+  it("commits a move once on release with the final geometry", () => {
+    const scene = makeScene([bigBox], "b1"); // bigBox at 0.1,0.1, clear of every handle
+    const { layer } = renderSizedLayer(scene, makeTools({ tool: "select" }));
+    fireEvent.pointerDown(layer, { clientX: 40, clientY: 40 });
+    fireEvent.pointerMove(layer, { clientX: 50, clientY: 50 });
+    fireEvent.pointerMove(layer, { clientX: 50, clientY: 50 });
+    expect(scene.commitAnnotation).not.toHaveBeenCalled();
+    fireEvent.pointerUp(layer);
+    expect(scene.commitAnnotation).toHaveBeenCalledTimes(1);
+    expect(scene.commitAnnotation).toHaveBeenCalledWith(
+      "b1",
+      expect.objectContaining({ x: expect.closeTo(0.2, 5), y: expect.closeTo(0.2, 5) }),
+    );
+    expect(scene.beginInteract).not.toHaveBeenCalled();
+  });
+
+  it("a click without movement commits nothing", () => {
+    const scene = makeScene([bigBox], "b1");
+    const { layer } = renderSizedLayer(scene, makeTools({ tool: "select" }));
+    fireEvent.pointerDown(layer, { clientX: 40, clientY: 40 });
+    fireEvent.pointerUp(layer);
+    expect(scene.commitAnnotation).not.toHaveBeenCalled();
+  });
+
+  it("the dragged shape moves in the DOM before any commit", () => {
+    const scene = makeScene([bigBox], "b1");
+    const { layer, container } = renderSizedLayer(scene, makeTools({ tool: "select" }));
+    const group = (): string | null | undefined =>
+      container.querySelector("g[data-annotation='b1']")?.getAttribute("transform");
+    const before = group();
+    expect(before).toBeTruthy();
+    fireEvent.pointerDown(layer, { clientX: 40, clientY: 40 });
+    fireEvent.pointerMove(layer, { clientX: 60, clientY: 60 });
+    expect(group()).not.toBe(before);
+    expect(scene.commitAnnotation).not.toHaveBeenCalled();
+  });
+
+  it("commits a resize once on release", () => {
+    const scene = makeScene([box], "b1");
+    const { layer } = renderSizedLayer(scene, makeTools({ tool: "select" }));
+    const handle = handlesFor(box, { w: 100, h: 100 })[0];
+    fireEvent.pointerDown(layer, { clientX: handle.x * 100, clientY: handle.y * 100 });
+    fireEvent.pointerMove(layer, { clientX: handle.x * 100 + 5, clientY: handle.y * 100 + 5 });
+    fireEvent.pointerMove(layer, { clientX: handle.x * 100 + 10, clientY: handle.y * 100 + 10 });
+    expect(scene.commitAnnotation).not.toHaveBeenCalled();
+    fireEvent.pointerUp(layer);
+    expect(scene.commitAnnotation).toHaveBeenCalledTimes(1);
+    expect(scene.beginInteract).not.toHaveBeenCalled();
   });
 
   it("auto-selects after committing text (switches to the select tool)", () => {

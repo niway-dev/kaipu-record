@@ -149,7 +149,7 @@ function resizeBox(orig: Box, handle: HandleId, p: Pt): Box {
 
 /**
  * The geometry patch for dragging `handle` of annotation `a` to point `p`.
- * Returns a `Partial<Annotation>` to feed straight into `updateAnnotation`.
+ * Returns a `Partial<Annotation>` to feed straight into `commitAnnotation`.
  */
 export function resizeAnnotation(
   a: Annotation,

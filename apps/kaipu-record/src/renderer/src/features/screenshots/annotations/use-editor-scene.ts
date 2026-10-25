@@ -14,16 +14,14 @@ export interface EditorScene {
   commitAnnotation(id: string, patch: Partial<Annotation>): void;
   /** Snapshot the scene before a continuous interaction (move/draw). */
   beginInteract(): void;
-  /** Live-update an annotation during an interaction (no history yet). */
-  updateAnnotation(id: string, patch: Partial<Annotation>): void;
   /** Commit the interaction to history if the scene changed. */
   endInteract(): void;
+  /** Delete one annotation by id as a single undoable change (selection is not consulted). */
+  removeAnnotation(id: string): void;
   removeSelected(): void;
   crop?: CropRect;
   /** Set the crop as one undoable change (Reset/Esc, or an external set). */
   setCrop(crop: CropRect | undefined): void;
-  /** Live crop update during a drag (no history); pair with beginInteract/endInteract. */
-  setCropLive(crop: CropRect | undefined): void;
   undo(): void;
   redo(): void;
   canUndo: boolean;
@@ -86,13 +84,6 @@ export function useEditorScene(initialBeautify: BeautifyState = DEFAULT_BEAUTIFY
     [commit],
   );
 
-  const updateAnnotation = useCallback((id: string, patch: Partial<Annotation>) => {
-    setScene((s) => ({
-      ...s,
-      annotations: s.annotations.map((a) => (a.id === id ? ({ ...a, ...patch } as Annotation) : a)),
-    }));
-  }, []);
-
   const commitAnnotation = useCallback(
     (id: string, patch: Partial<Annotation>) => {
       commit({
@@ -112,20 +103,21 @@ export function useEditorScene(initialBeautify: BeautifyState = DEFAULT_BEAUTIFY
     [commit],
   );
 
-  const setCropLive = useCallback((crop: CropRect | undefined) => {
-    setScene((s) => ({ ...s, crop }));
-    // Keep the ref in sync so endInteract can compare correctly within the same tick.
-    sceneRef.current = { ...sceneRef.current, crop };
-  }, []);
+  const removeAnnotation = useCallback(
+    (id: string) => {
+      if (!sceneRef.current.annotations.some((a) => a.id === id)) return;
+      commit({
+        ...sceneRef.current,
+        annotations: sceneRef.current.annotations.filter((a) => a.id !== id),
+      });
+      setSelectedId((cur) => (cur === id ? null : cur));
+    },
+    [commit],
+  );
 
   const removeSelected = useCallback(() => {
-    if (!selectedId) return;
-    commit({
-      ...sceneRef.current,
-      annotations: sceneRef.current.annotations.filter((a) => a.id !== selectedId),
-    });
-    setSelectedId(null);
-  }, [selectedId, commit]);
+    if (selectedId) removeAnnotation(selectedId);
+  }, [selectedId, removeAnnotation]);
 
   const beautify: BeautifyController = {
     state: scene.beautify,
@@ -148,12 +140,11 @@ export function useEditorScene(initialBeautify: BeautifyState = DEFAULT_BEAUTIFY
     addAnnotation,
     commitAnnotation,
     beginInteract,
-    updateAnnotation,
     endInteract,
+    removeAnnotation,
     removeSelected,
     crop: scene.crop,
     setCrop,
-    setCropLive,
     undo,
     redo,
     canUndo: past.length > 0,
