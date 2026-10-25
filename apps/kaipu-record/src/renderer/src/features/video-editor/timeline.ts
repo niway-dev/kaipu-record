@@ -111,14 +111,27 @@ export function trimClip(
   itemId: string,
   edge: "start" | "end",
   sourceTime: number,
+  /** Length of the source recording; the end edge never goes past it. */
+  sourceDuration: number = Infinity,
 ): TrackItem[] {
   return items.map((item) => {
     if (item.id !== itemId || item.kind !== "clip") return item;
+    // Order-independent neighbour bounds: a cut leaves other clips' source ranges
+    // disjoint, so the dragged edge stops at the nearest other clip lying wholly on that
+    // side (a deleted gap can be reclaimed, another clip's footage cannot). Clips that
+    // ALREADY overlap this one (legacy/persisted state) are ignored so it is never trapped.
+    let lower = 0;
+    let upper = sourceDuration;
+    for (const other of items) {
+      if (other.id === itemId || other.kind !== "clip") continue;
+      if (other.sourceEnd <= item.sourceStart) lower = Math.max(lower, other.sourceEnd);
+      if (other.sourceStart >= item.sourceEnd) upper = Math.min(upper, other.sourceStart);
+    }
     if (edge === "start") {
-      const next = Math.min(Math.max(0, sourceTime), item.sourceEnd - MIN_ITEM_DURATION);
+      const next = Math.min(Math.max(lower, sourceTime), item.sourceEnd - MIN_ITEM_DURATION);
       return { ...item, sourceStart: next };
     }
-    const next = Math.max(sourceTime, item.sourceStart + MIN_ITEM_DURATION);
+    const next = Math.min(Math.max(sourceTime, item.sourceStart + MIN_ITEM_DURATION), upper);
     return { ...item, sourceEnd: next };
   });
 }

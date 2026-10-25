@@ -166,6 +166,40 @@ describe("trimClip", () => {
     });
     expect(trimClip(items, "a", "start", -5)[0]).toMatchObject({ sourceStart: 0 });
   });
+
+  it("clamps the end edge to the source duration", () => {
+    expect(trimClip([clip("a", 0, 30)], "a", "end", 90, 60)[0]).toMatchObject({ sourceEnd: 60 });
+  });
+
+  it("start edge stops at the previous clip's end in source, or reclaims a deleted gap", () => {
+    expect(trimClip([clip("a", 0, 10), clip("b", 10, 20)], "b", "start", 4)[1]).toMatchObject({
+      sourceStart: 10,
+    });
+    expect(trimClip([clip("a", 0, 5), clip("b", 10, 20)], "b", "start", 4)[1]).toMatchObject({
+      sourceStart: 5,
+    });
+  });
+
+  it("end edge stops at the next clip's start", () => {
+    expect(trimClip([clip("a", 0, 10), clip("b", 10, 20)], "a", "end", 15)[0]).toMatchObject({
+      sourceEnd: 10,
+    });
+    expect(trimClip([clip("a", 0, 5), clip("b", 10, 20)], "a", "end", 15)[0]).toMatchObject({
+      sourceEnd: 10,
+    });
+  });
+
+  it("bounds do not depend on item order", () => {
+    expect(trimClip([clip("b", 10, 20), clip("a", 0, 10)], "b", "start", 0)[0]).toMatchObject({
+      sourceStart: 10,
+    });
+  });
+
+  it("ignores clips that already overlap (legacy sessions)", () => {
+    expect(trimClip([clip("a", 0, 15), clip("b", 10, 20)], "b", "start", 2)[1]).toMatchObject({
+      sourceStart: 2,
+    });
+  });
 });
 
 describe("setSlideDuration", () => {
