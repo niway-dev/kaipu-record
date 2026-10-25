@@ -334,7 +334,8 @@ describe("LibraryVault — screenshots", () => {
     expect((await readdir(dir)).filter((n) => n.endsWith(".part"))).toEqual([]);
   });
 
-  it.skipIf(process.platform === "win32")(
+  // chmod does not stop root (some CI containers), so the write would succeed there.
+  it.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
     "writeImage keeps the original when the write fails",
     async () => {
       const dir = await mkdtemp(join(tmpdir(), "vault-"));
