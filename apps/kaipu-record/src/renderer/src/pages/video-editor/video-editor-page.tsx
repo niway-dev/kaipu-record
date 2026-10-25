@@ -830,6 +830,12 @@ function VideoEditor({
     playback.seek(target);
   }, [layout, playback]);
 
+  // The overlays as they were when the current trim/slide drag began. Clamping from the
+  // live scene would truncate annotations permanently on the way down; clamping from this
+  // snapshot lets a shorten-then-lengthen drag give the windows back. One shared ref is
+  // fine: only one drag is active at a time.
+  const dragOverlaysRef = useRef<VideoOverlay[] | null>(null);
+
   // Trim drags don't go through commit(): a continuous drag must collapse into one
   // undo step, so "move" only updates the live scene and "start"/"end" own history.
   const handleTrim = useCallback(
@@ -839,36 +845,54 @@ function VideoEditor({
       sourceTime: number,
       phase: "start" | "move" | "end",
     ) => {
-      if (phase === "start") controller.beginInteract();
+      if (phase === "start") {
+        dragOverlaysRef.current = controller.scene.overlays;
+        controller.beginInteract();
+      }
       if (phase === "move") {
-        const items = trimClip(controller.scene.items, itemId, edge, sourceTime);
+        const items = trimClip(
+          controller.scene.items,
+          itemId,
+          edge,
+          sourceTime,
+          source.durationSeconds,
+        );
         const duration = layoutDuration(toLayout(items));
         controller.updateLive({
           ...controller.scene,
           items,
-          overlays: clampOverlays(controller.scene.overlays, duration),
+          overlays: clampOverlays(dragOverlaysRef.current ?? controller.scene.overlays, duration),
         });
       }
-      if (phase === "end") controller.endInteract();
+      if (phase === "end") {
+        dragOverlaysRef.current = null;
+        controller.endInteract();
+      }
     },
-    [controller],
+    [controller, source.durationSeconds],
   );
 
   // A slide's right-edge duration drag. Same begin/live/end contract as handleTrim so a
   // continuous drag collapses into one undo step; setSlideDuration clamps to the minimum.
   const handleSlideDuration = useCallback(
     (itemId: string, nextDuration: number, phase: "start" | "move" | "end") => {
-      if (phase === "start") controller.beginInteract();
+      if (phase === "start") {
+        dragOverlaysRef.current = controller.scene.overlays;
+        controller.beginInteract();
+      }
       if (phase === "move") {
         const items = setSlideDuration(controller.scene.items, itemId, nextDuration);
         const duration = layoutDuration(toLayout(items));
         controller.updateLive({
           ...controller.scene,
           items,
-          overlays: clampOverlays(controller.scene.overlays, duration),
+          overlays: clampOverlays(dragOverlaysRef.current ?? controller.scene.overlays, duration),
         });
       }
-      if (phase === "end") controller.endInteract();
+      if (phase === "end") {
+        dragOverlaysRef.current = null;
+        controller.endInteract();
+      }
     },
     [controller],
   );

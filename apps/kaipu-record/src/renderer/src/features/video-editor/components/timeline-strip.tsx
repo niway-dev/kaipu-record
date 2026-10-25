@@ -103,13 +103,12 @@ export function TimelineStrip({
     [duration],
   );
 
-  // Track-relative shorthand — passed down to TrackBlock trim/slide-duration handlers
-  // which receive { clientX } directly without a React event target reference.
-  const timeFromPointer = useCallback(
-    (event: { clientX: number }): number =>
-      timeFromPointerOnElement(event.clientX, trackRef.current),
-    [timeFromPointerOnElement],
-  );
+  // Seconds per CSS pixel of the track right now. Drags freeze it on pointerdown: a trim
+  // changes `duration`, so the live pixel->time mapping moves under the pointer.
+  const secondsPerPixel = useCallback((): number => {
+    const rect = trackRef.current?.getBoundingClientRect();
+    return rect && rect.width > 0 ? duration / rect.width : 0;
+  }, [duration]);
 
   // The ruler is the dedicated scrub surface. It sits in its own row ABOVE all clip
   // blocks, so it is always reachable no matter how the clips are laid out. Blocks
@@ -198,7 +197,7 @@ export function TimelineStrip({
               thumbnails={thumbnails}
               selected={entry.itemId === selectedItemId}
               onSelect={() => onSelectItem(entry.itemId)}
-              timeFromPointer={timeFromPointer}
+              secondsPerPixel={secondsPerPixel}
               onTrim={onTrim}
               slideUrlFor={slideUrlFor}
               onSlideDuration={onSlideDuration}
@@ -237,13 +236,18 @@ function LaneRow({
   );
 }
 
+type DragHandlers = Pick<
+  React.DOMAttributes<HTMLDivElement>,
+  "onPointerDown" | "onPointerMove" | "onPointerUp" | "onPointerCancel" | "onLostPointerCapture"
+>;
+
 function TrackBlock({
   entry,
   duration,
   thumbnails,
   selected,
   onSelect,
-  timeFromPointer,
+  secondsPerPixel,
   onTrim,
   slideUrlFor,
   onSlideDuration,
@@ -253,7 +257,7 @@ function TrackBlock({
   thumbnails: SourceThumbnail[];
   selected: boolean;
   onSelect: () => void;
-  timeFromPointer: (event: { clientX: number }) => number;
+  secondsPerPixel: () => number;
   onTrim?: (
     itemId: string,
     edge: "start" | "end",
@@ -279,63 +283,102 @@ function TrackBlock({
         )
       : [];
 
-  // The pointer moves in timeline space; the handle drags in SOURCE space for this
-  // entry — convert via the entry's own timeline↔source offset (see timeline.ts).
-  const sourceTimeFromPointer = (event: { clientX: number }): number =>
-    entry.sourceStart + (timeFromPointer(event) - entry.timelineStart);
+  // A drag freezes its baseline on pointerdown (same idea as overlay-lane's bodyOrigin):
+  // `orig` is the dragged value then, x0 the pointer x, secPerPx the track scale. Moves
+  // are `orig + (clientX - x0) * secPerPx`, never derived from the live entry, so a
+  // start trim (which changes entry.sourceStart every frame) cannot feed back.
+  const trimDrag = useRef<{
+    edge: "start" | "end";
+    orig: number;
+    x0: number;
+    secPerPx: number;
+    last: number;
+  } | null>(null);
 
   // One handler factory for both edges — pointerdown seeds the drag with the edge's
-  // current source time, move reports the live source time, up ends the drag. The
-  // page maps these three phases to beginInteract/updateLive+trimClip/endInteract.
-  const trimHandlers = (
-    edge: "start" | "end",
-  ): {
-    onPointerDown: React.PointerEventHandler<HTMLDivElement>;
-    onPointerMove: React.PointerEventHandler<HTMLDivElement>;
-    onPointerUp: React.PointerEventHandler<HTMLDivElement>;
-  } => ({
-    onPointerDown: (event) => {
-      // Neither scrub the track nor re-select the block underneath.
-      event.stopPropagation();
-      event.currentTarget.setPointerCapture(event.pointerId);
-      onTrim?.(entry.itemId, edge, edge === "start" ? entry.sourceStart : entry.sourceEnd, "start");
-    },
-    onPointerMove: (event) => {
-      event.stopPropagation();
-      if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
-      onTrim?.(entry.itemId, edge, sourceTimeFromPointer(event), "move");
-    },
-    onPointerUp: (event) => {
-      event.stopPropagation();
-      onTrim?.(entry.itemId, edge, sourceTimeFromPointer(event), "end");
-    },
-  });
+  // current source time, move reports the live source time, up/cancel/lost capture end
+  // it. The page maps these phases to beginInteract/updateLive+trimClip/endInteract.
+  const trimHandlers = (edge: "start" | "end"): DragHandlers => {
+    // Reports "end" exactly once: pointerup releases capture first, so the
+    // lostpointercapture it queues finds the ref already null (zoom-lane.tsx contract).
+    const finish = (): void => {
+      const drag = trimDrag.current;
+      if (!drag) return;
+      trimDrag.current = null;
+      onTrim?.(entry.itemId, drag.edge, drag.last, "end");
+    };
+    return {
+      onPointerDown: (event) => {
+        // Neither scrub the track nor re-select the block underneath.
+        event.stopPropagation();
+        event.currentTarget.setPointerCapture(event.pointerId);
+        const orig = edge === "start" ? entry.sourceStart : entry.sourceEnd;
+        trimDrag.current = {
+          edge,
+          orig,
+          x0: event.clientX,
+          secPerPx: secondsPerPixel(),
+          last: orig,
+        };
+        onTrim?.(entry.itemId, edge, orig, "start");
+      },
+      onPointerMove: (event) => {
+        event.stopPropagation();
+        const drag = trimDrag.current;
+        if (!drag || !event.currentTarget.hasPointerCapture(event.pointerId)) return;
+        drag.last = drag.orig + (event.clientX - drag.x0) * drag.secPerPx;
+        onTrim?.(entry.itemId, edge, drag.last, "move");
+      },
+      onPointerUp: (event) => {
+        event.stopPropagation();
+        const drag = trimDrag.current;
+        if (!drag) return;
+        drag.last = drag.orig + (event.clientX - drag.x0) * drag.secPerPx;
+        event.currentTarget.releasePointerCapture?.(event.pointerId);
+        finish();
+      },
+      onPointerCancel: finish,
+      onLostPointerCapture: finish,
+    };
+  };
 
-  // A slide has no source range to trim — its right handle sets the hold DURATION, so
-  // it drags in timeline space: duration = pointer time − the slide's start. Same three
-  // phases as trimHandlers so the page collapses the drag into one undo step.
-  const slideDurationHandlers = (): {
-    onPointerDown: React.PointerEventHandler<HTMLDivElement>;
-    onPointerMove: React.PointerEventHandler<HTMLDivElement>;
-    onPointerUp: React.PointerEventHandler<HTMLDivElement>;
-  } => {
-    const durationFromPointer = (event: { clientX: number }): number =>
-      timeFromPointer(event) - entry.timelineStart;
+  // A slide's right handle sets the hold DURATION: same frozen-baseline contract.
+  const slideDrag = useRef<{ orig: number; x0: number; secPerPx: number; last: number } | null>(
+    null,
+  );
+
+  const slideDurationHandlers = (): DragHandlers => {
+    const finish = (): void => {
+      const drag = slideDrag.current;
+      if (!drag) return;
+      slideDrag.current = null;
+      onSlideDuration?.(entry.itemId, drag.last, "end");
+    };
     return {
       onPointerDown: (event) => {
         event.stopPropagation();
         event.currentTarget.setPointerCapture(event.pointerId);
-        onSlideDuration?.(entry.itemId, entry.timelineEnd - entry.timelineStart, "start");
+        const orig = entry.timelineEnd - entry.timelineStart;
+        slideDrag.current = { orig, x0: event.clientX, secPerPx: secondsPerPixel(), last: orig };
+        onSlideDuration?.(entry.itemId, orig, "start");
       },
       onPointerMove: (event) => {
         event.stopPropagation();
-        if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
-        onSlideDuration?.(entry.itemId, durationFromPointer(event), "move");
+        const drag = slideDrag.current;
+        if (!drag || !event.currentTarget.hasPointerCapture(event.pointerId)) return;
+        drag.last = drag.orig + (event.clientX - drag.x0) * drag.secPerPx;
+        onSlideDuration?.(entry.itemId, drag.last, "move");
       },
       onPointerUp: (event) => {
         event.stopPropagation();
-        onSlideDuration?.(entry.itemId, durationFromPointer(event), "end");
+        const drag = slideDrag.current;
+        if (!drag) return;
+        drag.last = drag.orig + (event.clientX - drag.x0) * drag.secPerPx;
+        event.currentTarget.releasePointerCapture?.(event.pointerId);
+        finish();
       },
+      onPointerCancel: finish,
+      onLostPointerCapture: finish,
     };
   };
 
