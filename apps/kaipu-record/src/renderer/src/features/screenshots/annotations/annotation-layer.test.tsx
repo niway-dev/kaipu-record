@@ -35,7 +35,6 @@ function makeScene(annotations: Annotation[], selectedId: string | null): Editor
     removeSelected: vi.fn(),
     crop: undefined,
     setCrop: vi.fn(),
-    setCropLive: vi.fn(),
     undo: vi.fn(),
     redo: vi.fn(),
     canUndo: false,

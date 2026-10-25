@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   clampCrop,
   cropHandles,
@@ -48,8 +48,18 @@ export function CropOverlay({ scene }: { scene: EditorScene }): React.JSX.Elemen
   const sceneRef = useRef(scene);
   sceneRef.current = scene;
 
-  // The crop rect being edited = the scene crop, or the full frame if none yet.
-  const cropRect = scene.crop ?? FULL_CROP;
+  // The rect being dragged lives here, not in the scene: the scene is touched once, on
+  // release, so a crop drag is one undo entry and never re-renders the editor page. The
+  // ref mirrors the state for the pointerup/abort/Esc handlers, which need the latest.
+  const [liveCrop, setLiveCrop] = useState<CropRect | undefined>();
+  const liveCropRef = useRef<CropRect | undefined>(undefined);
+  const setLive = useCallback((next: CropRect | undefined): void => {
+    liveCropRef.current = next;
+    setLiveCrop(next);
+  }, []);
+
+  // The crop rect being edited = the drag in flight, else the scene crop, else the full frame.
+  const cropRect = liveCrop ?? scene.crop ?? FULL_CROP;
 
   useEffect(() => {
     const el = ref.current;
@@ -68,15 +78,16 @@ export function CropOverlay({ scene }: { scene: EditorScene }): React.JSX.Elemen
       const scn = sceneRef.current;
       // Esc resets the crop to the full frame. Abort any in-progress drag first so the
       // trailing pointerup can't commit a second history entry.
-      if (e.key === "Escape" && scn.crop) {
+      if (e.key === "Escape" && (scn.crop || liveCropRef.current)) {
         e.preventDefault();
         if (drag.current) drag.current = null;
-        scn.setCrop(undefined);
+        setLive(undefined);
+        if (scn.crop) scn.setCrop(undefined);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [setLive]);
 
   const toNorm = (e: React.PointerEvent): Pt => {
     const r = ref.current!.getBoundingClientRect();
@@ -87,7 +98,6 @@ export function CropOverlay({ scene }: { scene: EditorScene }): React.JSX.Elemen
     const p = toNorm(e);
     const tol = { x: HANDLE_HIT_PX / (size.w || 1), y: HANDLE_HIT_PX / (size.h || 1) };
     const handle = hitCropHandle(cropRect, p, tol, size);
-    scene.beginInteract();
     // Move only an EXISTING sub-crop; with no crop yet, `cropRect` is FULL_CROP (covers
     // everything), so an interior press must draw a fresh rect, not no-op move it.
     const insideExisting =
@@ -111,40 +121,47 @@ export function CropOverlay({ scene }: { scene: EditorScene }): React.JSX.Elemen
     if (!d) return;
     const p = toNorm(e);
     if (d.mode === "resize") {
-      scene.setCropLive(resizeCrop(d.orig, d.handle, p, size));
+      setLive(resizeCrop(d.orig, d.handle, p, size));
       return;
     }
     if (d.mode === "move") {
-      scene.setCropLive(moveCrop(d.orig, p.x - d.start.x, p.y - d.start.y));
+      setLive(moveCrop(d.orig, p.x - d.start.x, p.y - d.start.y));
       return;
     }
     const dw = Math.abs(p.x - d.start.x);
     const dh = Math.abs(p.y - d.start.y);
     // Ignore a click / tiny twitch: don't set a crop until the drag is meaningful, so a
-    // plain click commits nothing (endInteract sees no change → no phantom history).
+    // plain click never sets a live rect and commits nothing (no phantom history).
     if (dw < CROP_DRAW_MIN && dh < CROP_DRAW_MIN) return;
     const x = Math.min(d.start.x, p.x);
     const y = Math.min(d.start.y, p.y);
     // Clamp so a pointer dragged past the edge can't produce a crop outside [0,1].
-    scene.setCropLive(clampCrop({ x, y, w: dw, h: dh }));
+    setLive(clampCrop({ x, y, w: dw, h: dh }));
+  };
+
+  // Ends a drag: one commit with whatever was last shown. A crop that ended up covering
+  // the whole frame is "no crop" — normalize it to undefined so it doesn't render through
+  // the windowed path. Nothing is committed when the result equals the current crop.
+  const commitLive = (): void => {
+    const c = liveCropRef.current;
+    setLive(undefined);
+    if (!c) return;
+    const next = isFullCrop(c) ? undefined : c;
+    if (!sameCrop(next, scene.crop)) scene.setCrop(next);
   };
 
   const onPointerUp = (): void => {
     const d = drag.current;
     drag.current = null;
     if (!d) return;
-    // A crop that ended up covering the whole frame is "no crop" — normalize it back to
-    // undefined so it doesn't render through the windowed path or leave a phantom entry.
-    const c = sceneRef.current.crop;
-    if (c && isFullCrop(c)) scene.setCropLive(undefined);
-    scene.endInteract();
+    commitLive();
   };
 
   // A pointer gesture can end without a pointerup (system gesture, capture stolen).
   const onPointerAbort = (): void => {
     if (drag.current) {
       drag.current = null;
-      scene.endInteract();
+      commitLive();
     }
   };
 
@@ -192,4 +209,9 @@ export function CropOverlay({ scene }: { scene: EditorScene }): React.JSX.Elemen
 function isEditingText(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   return target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable;
+}
+
+function sameCrop(a: CropRect | undefined, b: CropRect | undefined): boolean {
+  if (!a || !b) return a === b;
+  return a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
 }

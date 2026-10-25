@@ -96,18 +96,4 @@ describe("useEditorScene", () => {
     act(() => result.current.undo());
     expect(result.current.crop).toBeUndefined();
   });
-
-  it("setCropLive updates without pushing history; endInteract commits once", () => {
-    const { result } = renderHook(() => useEditorScene());
-    act(() => {
-      result.current.beginInteract();
-      result.current.setCropLive({ x: 0, y: 0, w: 0.8, h: 0.8 });
-      result.current.setCropLive({ x: 0, y: 0, w: 0.6, h: 0.6 });
-      result.current.endInteract();
-    });
-    expect(result.current.crop).toEqual({ x: 0, y: 0, w: 0.6, h: 0.6 });
-    expect(result.current.canUndo).toBe(true);
-    act(() => result.current.undo());
-    expect(result.current.crop).toBeUndefined();
-  });
 });

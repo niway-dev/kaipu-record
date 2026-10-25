@@ -22,8 +22,6 @@ export interface EditorScene {
   crop?: CropRect;
   /** Set the crop as one undoable change (Reset/Esc, or an external set). */
   setCrop(crop: CropRect | undefined): void;
-  /** Live crop update during a drag (no history); pair with beginInteract/endInteract. */
-  setCropLive(crop: CropRect | undefined): void;
   undo(): void;
   redo(): void;
   canUndo: boolean;
@@ -105,12 +103,6 @@ export function useEditorScene(initialBeautify: BeautifyState = DEFAULT_BEAUTIFY
     [commit],
   );
 
-  const setCropLive = useCallback((crop: CropRect | undefined) => {
-    setScene((s) => ({ ...s, crop }));
-    // Keep the ref in sync so endInteract can compare correctly within the same tick.
-    sceneRef.current = { ...sceneRef.current, crop };
-  }, []);
-
   const removeAnnotation = useCallback(
     (id: string) => {
       if (!sceneRef.current.annotations.some((a) => a.id === id)) return;
@@ -153,7 +145,6 @@ export function useEditorScene(initialBeautify: BeautifyState = DEFAULT_BEAUTIFY
     removeSelected,
     crop: scene.crop,
     setCrop,
-    setCropLive,
     undo,
     redo,
     canUndo: past.length > 0,
