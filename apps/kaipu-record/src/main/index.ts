@@ -48,6 +48,7 @@ import { registerAnalyticsIpc } from "./services/analytics-ipc";
 import { isCaptureMode, type CaptureRequestPayload } from "@shared/types/screenshot-capture";
 import { registerScreenshotHandlers, type ScreenshotHandlers } from "./screenshots/screenshot-ipc";
 import { resolveShortcutCapture, type CaptureShortcut } from "./screenshots/shortcut-capture";
+import { routeCaptureRequest } from "./screenshots/capture-request";
 import {
   createCaptureToastWindow,
   saveFromToast,
@@ -454,16 +455,32 @@ function bringAppToFront(): void {
  * AppShell runs `useScreenshotCapture().capture()`. It deliberately does NOT bring
  * the window forward: the native `screencapture` region selector floats above
  * everything, and `screenshotCapture` then hides the app so it isn't in the shot
- * (see `captureWindowHooks`). The window comes back via `revealAfterCapture`.
+ * (see `captureWindowHooks`). The window comes back via `revealAfterCapture`. A recording in
+ * progress is refused here with a system notification (see `routeCaptureRequest`).
  */
 function triggerCaptureScreenshot(request: CaptureRequestPayload): void {
-  // The capture flow runs in the renderer, so the window must exist. If it was
-  // closed (macOS keeps the app alive in the tray), recreate it HIDDEN — never
-  // show a hidden one: the capture handler hides the window anyway, and bringing
-  // it forward here would put the app back in the shot. The renderer reveals it
-  // after a successful capture.
-  if (!mainWindow || mainWindow.isDestroyed()) createWindow(false);
-  sendToRenderer(IPC_CHANNELS.screenshotHotkey, request);
+  routeCaptureRequest({
+    isRecordingActive: () => hub?.isActive() ?? false,
+    notifyBusy: () => {
+      // The main window is hidden during a take, so the renderer cannot show its
+      // "finish the recording first" toast — use a system notification.
+      if (!Notification.isSupported()) return;
+      const t = createMainTranslator(getAppSettings().locale);
+      new Notification({
+        title: t("dialogs.captureWhileRecordingTitle"),
+        body: t("screenshots.captureWhileRecording"),
+      }).show();
+    },
+    forwardToRenderer: () => {
+      // The capture flow runs in the renderer, so the window must exist. If it was
+      // closed (macOS keeps the app alive in the tray), recreate it HIDDEN — never
+      // show a hidden one: the capture handler hides the window anyway, and bringing
+      // it forward here would put the app back in the shot. The renderer reveals it
+      // after a successful capture.
+      if (!mainWindow || mainWindow.isDestroyed()) createWindow(false);
+      sendToRenderer(IPC_CHANNELS.screenshotHotkey, request);
+    },
+  });
 }
 
 /** Set once the screenshot IPC is registered; until then a shortcut trusts the stored mode. */

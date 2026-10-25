@@ -51,6 +51,7 @@
     "quitStopsDetail": "Quitting now stops the recording. Kaipu will save what's captured so far.",
     "alreadyRecordingTitle": "A recording is already in progress",
     "alreadyRecordingBody": "Stop it from the floating bar before starting another.",
+    "captureWhileRecordingTitle": "Finish the recording first",
     "chooseFolder": "Choose recordings folder",
     "folderUnusable": "We couldn't use that folder",
     "folderUnusableDetail": "Kaipu can't write there. Pick another folder.",

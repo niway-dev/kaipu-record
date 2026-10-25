@@ -51,6 +51,7 @@
     "quitStopsDetail": "Salir ahora detiene la grabación. Kaipu guardará lo grabado hasta este momento.",
     "alreadyRecordingTitle": "Ya hay una grabación en curso",
     "alreadyRecordingBody": "Deténla desde la barra flotante antes de iniciar otra.",
+    "captureWhileRecordingTitle": "Termina la grabación primero",
     "chooseFolder": "Elegir carpeta de grabaciones",
     "folderUnusable": "No pudimos usar esa carpeta",
     "folderUnusableDetail": "Kaipu no puede escribir ahí. Elige otra carpeta.",
