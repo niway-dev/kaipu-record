@@ -6,7 +6,10 @@ import type { ImageSource } from "@renderer/features/screenshots/image-source";
 import { ScreenshotEditorPage } from "./screenshot-editor-page";
 
 const exportScene = vi.hoisted(() => vi.fn());
-vi.mock("@renderer/features/screenshots/export", () => ({ exportScene }));
+vi.mock("@renderer/features/screenshots/export", () => ({
+  exportScene,
+  clearExportCache: vi.fn(),
+}));
 
 const deferred = <T,>() => {
   let resolve!: (v: T) => void;
