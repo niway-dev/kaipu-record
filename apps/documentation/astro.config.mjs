@@ -100,6 +100,8 @@ export default defineConfig({
             { slug: "backlog/ci-cost-handoff" },
             { slug: "backlog/watermark-redesign" },
             { slug: "backlog/bug-control-bar-hides-last-terminal-line" },
+            { slug: "backlog/bug-main-window-hides-on-blur" },
+            { slug: "backlog/bug-app-lost-from-app-switcher" },
             { slug: "backlog/dock-and-app-switcher" },
             { slug: "backlog/standalone-editor" },
             { slug: "backlog/editor-new-from-clipboard" },

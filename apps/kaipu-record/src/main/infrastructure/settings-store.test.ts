@@ -8,6 +8,8 @@ import type { AppSettings } from "@shared/types/ipc";
 const mockState = vi.hoisted(() => ({
   userDataDir: "",
   handlers: new Map<string, (event: unknown, ...args: unknown[]) => unknown>(),
+  /** What AppKit would report: the process' real activation policy. */
+  dockVisible: true,
   setActivationPolicy: vi.fn(),
   dockShow: vi.fn(),
 }));
@@ -16,7 +18,7 @@ vi.mock("electron", () => ({
   app: {
     getPath: (name: string) => (name === "userData" ? mockState.userDataDir : "/tmp"),
     setActivationPolicy: mockState.setActivationPolicy,
-    dock: { show: mockState.dockShow },
+    dock: { show: mockState.dockShow, isVisible: () => mockState.dockVisible },
     setLoginItemSettings: vi.fn(),
   },
   ipcMain: {
@@ -51,8 +53,12 @@ describe("activation policy (macOS Dock + Cmd+Tab)", () => {
   beforeEach(async () => {
     mockState.userDataDir = await mkdtemp(join(tmpdir(), "kaipu-settings-"));
     mockState.handlers.clear();
-    mockState.setActivationPolicy.mockClear();
+    mockState.setActivationPolicy.mockReset();
+    mockState.setActivationPolicy.mockImplementation((policy: string) => {
+      mockState.dockVisible = policy === "regular";
+    });
     mockState.dockShow.mockClear();
+    mockState.dockVisible = true;
     setPlatform("darwin");
   });
 
@@ -121,6 +127,30 @@ describe("activation policy (macOS Dock + Cmd+Tab)", () => {
     store.applyDockPolicy();
     expect(mockState.setActivationPolicy).toHaveBeenLastCalledWith("accessory");
     expect(mockState.setActivationPolicy).toHaveBeenCalledTimes(2);
+  });
+
+  it("restores regular when something outside this module hid the Dock", async () => {
+    // Electron's `setVisibleOnAllWorkspaces(..., { visibleOnFullScreen: true })`
+    // runs `app.dock.hide()` unless `skipTransformProcessType` is set, so the
+    // process can be an accessory app while this module still remembers
+    // "regular". A re-assertion must then be a real transition, not a no-op —
+    // the cache alone left the app out of Cmd+Tab until the user toggled the
+    // Dock setting off and on (backlog/bug-app-lost-from-app-switcher, ADR 0029).
+    const store = await loadStore();
+    store.registerSettings();
+    mockState.setActivationPolicy.mockClear();
+    mockState.dockShow.mockClear();
+
+    mockState.dockVisible = false; // the external DockHide
+    store.applyDockPolicy();
+    expect(mockState.setActivationPolicy).toHaveBeenLastCalledWith("regular");
+    expect(mockState.dockShow).toHaveBeenCalledTimes(1);
+
+    // Reality matches again: idempotent as before.
+    store.applyDockPolicy();
+    store.forceRegularPolicy();
+    expect(mockState.setActivationPolicy).toHaveBeenCalledTimes(1);
+    expect(mockState.dockShow).toHaveBeenCalledTimes(1);
   });
 
   it("does nothing off macOS", async () => {

@@ -11,6 +11,13 @@ const BOTTOM_MARGIN = 40;
  * renders the renderer in control-bar mode (`?window=control-bar`). It floats
  * over every other app — including fullscreen — so the user keeps control while
  * working in the app they're recording.
+ *
+ * On macOS it is a `panel` and joins full-screen Spaces with
+ * `skipTransformProcessType`, like every other floating window here. Without
+ * that flag Electron hides the Dock icon to get a plain window over a
+ * full-screen app, which also removes Kaipu from Cmd+Tab — and the activation
+ * policy setter, which only applies real transitions, had no reason to put it
+ * back. See ADR 0029 and backlog/bug-app-lost-from-app-switcher.
  */
 export interface ControlBarOptions {
   /** Include the bar in the screen recording (default false → content-protected). */
@@ -38,6 +45,7 @@ export class ControlBarWindow {
     this.window = new BrowserWindow({
       width: BAR_WIDTH,
       height: BAR_HEIGHT,
+      ...(process.platform === "darwin" ? { type: "panel" } : {}),
       show: false,
       frame: false,
       transparent: true,
@@ -59,7 +67,10 @@ export class ControlBarWindow {
       },
     });
     this.window.setAlwaysOnTop(true, "screen-saver");
-    this.window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    this.window.setVisibleOnAllWorkspaces(true, {
+      visibleOnFullScreen: true,
+      skipTransformProcessType: true,
+    });
     this.applyContentProtection();
 
     if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {

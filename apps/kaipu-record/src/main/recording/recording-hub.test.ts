@@ -8,6 +8,8 @@ const mockState = vi.hoisted(() => ({
   userDataDir: "",
   ipcOn: new Map<string, (event: unknown, ...args: unknown[]) => unknown>(),
   ipcHandle: new Map<string, (event: unknown, ...args: unknown[]) => unknown>(),
+  /** What AppKit would report: the process' real activation policy. */
+  dockVisible: true,
   setActivationPolicy: vi.fn(),
   dockShow: vi.fn(),
   bubble: { show: vi.fn(), hide: vi.fn(), destroy: vi.fn(), isVisible: vi.fn(() => false) },
@@ -19,7 +21,7 @@ vi.mock("electron", () => ({
   app: {
     getPath: (name: string) => (name === "userData" ? mockState.userDataDir : "/tmp"),
     setActivationPolicy: mockState.setActivationPolicy,
-    dock: { show: mockState.dockShow },
+    dock: { show: mockState.dockShow, isVisible: () => mockState.dockVisible },
     setLoginItemSettings: vi.fn(),
     focus: vi.fn(),
   },
@@ -84,8 +86,13 @@ describe("recording hub — camera on keeps the main window visible", () => {
       ...Object.values(mockState.bubble),
       ...Object.values(mockState.bar),
     ]) {
-      fn.mockClear();
+      fn.mockReset();
     }
+    mockState.bubble.isVisible.mockReturnValue(false);
+    mockState.setActivationPolicy.mockImplementation((policy: string) => {
+      mockState.dockVisible = policy === "regular";
+    });
+    mockState.dockVisible = true;
     Object.defineProperty(process, "platform", { value: "darwin", configurable: true });
     vi.resetModules();
   });
@@ -130,6 +137,93 @@ describe("recording hub — camera on keeps the main window visible", () => {
     expect(mainWindow.hide).not.toHaveBeenCalled();
     expect(mockState.setActivationPolicy).not.toHaveBeenCalled();
     expect(mockState.dockShow).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Regression for backlog/bug-app-lost-from-app-switcher (ADR 0029): the floating
+ * panels used to hide the Dock icon as a side effect of joining full-screen
+ * Spaces, and the policy setter — trusting only its cache — never put it back.
+ * Even though the panels no longer transform the process, every re-assertion
+ * point must restore the Dock when AppKit reports it gone.
+ */
+describe("recording hub — a Dock dropped by a floating panel comes back", () => {
+  beforeEach(async () => {
+    mockState.userDataDir = await mkdtemp(join(tmpdir(), "kaipu-hub-"));
+    mockState.ipcOn.clear();
+    mockState.ipcHandle.clear();
+    for (const fn of [
+      mockState.setActivationPolicy,
+      mockState.dockShow,
+      ...Object.values(mockState.bubble),
+      ...Object.values(mockState.bar),
+    ]) {
+      fn.mockReset();
+    }
+    mockState.bubble.isVisible.mockReturnValue(false);
+    mockState.setActivationPolicy.mockImplementation((policy: string) => {
+      mockState.dockVisible = policy === "regular";
+    });
+    mockState.dockVisible = true;
+    Object.defineProperty(process, "platform", { value: "darwin", configurable: true });
+    vi.resetModules();
+  });
+
+  afterEach(async () => {
+    Object.defineProperty(process, "platform", { value: realPlatform, configurable: true });
+    await rm(mockState.userDataDir, { recursive: true, force: true });
+  });
+
+  it("stopping a recording restores the Dock the control bar dropped", async () => {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    const mainWindow = fakeMainWindow();
+    registerRecordingHub(() => mainWindow as never);
+    mockState.setActivationPolicy.mockClear();
+    mockState.dockShow.mockClear();
+    // Stands in for Electron's default process transform on a window that joins
+    // full-screen Spaces: the process becomes an accessory app behind our back.
+    mockState.bar.show.mockImplementation(() => {
+      mockState.dockVisible = false;
+    });
+
+    const start = mockState.ipcOn.get(IPC_CHANNELS.recordingStart);
+    const stop = mockState.ipcOn.get(IPC_CHANNELS.recordingStop);
+    if (!start || !stop) throw new Error("recording start/stop listeners not registered");
+
+    start({}, { sourceId: "screen:1:0", sourceName: "Screen 1" });
+    // Nothing changed when the recording started: the app was already regular.
+    expect(mockState.setActivationPolicy).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(mockState.bar.show).toHaveBeenCalledTimes(1));
+    expect(mockState.dockVisible).toBe(false);
+
+    stop({});
+    expect(mockState.setActivationPolicy).toHaveBeenLastCalledWith("regular");
+    expect(mockState.dockShow).toHaveBeenCalledTimes(1);
+    expect(mockState.dockVisible).toBe(true);
+    expect(mainWindow.show).toHaveBeenCalled();
+  });
+
+  it("turning the camera on restores the Dock the bubble dropped, without hiding the main window", async () => {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    const mainWindow = fakeMainWindow();
+    const hub = registerRecordingHub(() => mainWindow as never);
+    mockState.setActivationPolicy.mockClear();
+    mockState.dockShow.mockClear();
+    mockState.bubble.show.mockImplementation(() => {
+      mockState.dockVisible = false;
+    });
+
+    hub.toggleRecordingSetting("isCameraEnabled");
+
+    expect(mockState.bubble.show).toHaveBeenCalledTimes(1);
+    expect(mainWindow.hide).not.toHaveBeenCalled();
+    expect(mockState.setActivationPolicy).toHaveBeenLastCalledWith("regular");
+    expect(mockState.dockShow).toHaveBeenCalledTimes(1);
+    expect(mockState.dockVisible).toBe(true);
   });
 });
 
