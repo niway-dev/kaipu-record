@@ -1,0 +1,107 @@
+---
+title: "ADR 0029: Floating windows never change the activation policy, and the policy setter checks AppKit before skipping"
+description: On macOS, every always-on-top window that joins full-screen Spaces passes skipTransformProcessType and is a panel, so no window can drop Kaipu from the Dock and Cmd+Tab as a side effect; and the one activation-policy setter decides "unchanged" against app.dock.isVisible(), not only its own cache, so an external drop is repaired at the next re-assertion instead of becoming permanent.
+---
+
+# ADR 0029: Floating windows never change the activation policy, and the policy setter checks AppKit before skipping
+
+## Status
+
+| Field         | Value                                                                                                                                                                                                                     |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Implemented on `fix/dock-lost-after-floating-panels`; owner QA outstanding — [backlog](/backlog/bug-app-lost-from-app-switcher/)                                                                                          |
+| Date          | 2026-10-24                                                                                                                                                                                                                |
+| Relates to    | [Dock and app switcher — one toggle](/backlog/dock-and-app-switcher/) (why `showInDock` is the activation policy); [bug: main window hides on blur](/backlog/bug-main-window-hides-on-blur/) (the fix this one completes) |
+| Superseded by | —                                                                                                                                                                                                                         |
+
+## Context
+
+Kaipu has one lever for "is the app in the Dock and in ⌘-Tab": the macOS activation policy,
+set from the `showInDock` setting by a single setter in `main/infrastructure/settings-store.ts`.
+Since 2026-10-07 that setter applies a policy only on an actual `regular ⇄ accessory`
+transition, because `app.dock.show()` on an active app orders every window out and back in
+(the "main window vanishes when the camera turns on" bug).
+
+That fix assumed the setter is the only thing that changes the policy. It is not. Electron's
+`BrowserWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })` — the call every
+floating window makes to float over a full-screen app — runs `app.dock.hide()` first unless
+`skipTransformProcessType: true` is passed (Electron 39.8.10, `NativeWindowMac::SetVisibleOnAllWorkspaces`
+→ `Browser::DockHide()` → `TransformProcessType(kProcessTransformToUIElementApplication)`). The
+process becomes a UI-element app: no Dock icon, no ⌘-Tab entry.
+
+The recording control bar and the camera bubble made that call without the flag. Before the
+2026-10-07 fix it never showed, by accident: `forceRegularPolicy()` ran `app.dock.show()` right
+before the bar was created, and Electron drops a `DockHide` that lands within one second of a
+`DockShow`; and stopping the recording re-applied `regular` unconditionally. After the fix both
+calls were no-ops — the cache said "regular" and nothing in our code had changed it — so the
+first recording of a session, and every camera toggle, removed Kaipu from ⌘-Tab until the user
+toggled the Dock setting off and on (the only path that still forced a real transition). The
+`⌘⌃O` rescue shortcut went through the same no-op.
+
+Two classes of defect, then: a window that changes process-wide state as a side effect, and a
+setter that trusts its memory over the OS.
+
+## Decision
+
+1. **A floating window never transforms the process.** On macOS every always-on-top window
+   that joins full-screen Spaces — capture panel, capture overlays, capture toast, control
+   bar, camera bubble, and any future one — is created with `type: "panel"` and calls
+   `setVisibleOnAllWorkspaces(open, { visibleOnFullScreen: open, skipTransformProcessType: true })`.
+   A panel can float over another app's full-screen Space on its own; the process transform
+   was Electron's workaround for plain windows and is never wanted here.
+2. **The activation policy is owned by one setter, and it checks AppKit before skipping.**
+   `setActivationPolicy` in `settings-store.ts` keeps its "last applied" cache for the
+   no-churn property, but it treats a call as unchanged only when the cache matches **and**
+   `app.dock.isVisible()` — which Electron answers from the process' real
+   `NSRunningApplication.activationPolicy` — agrees. A policy that reality contradicts is
+   re-applied. No other module calls `app.setActivationPolicy`, `app.dock.show()` or
+   `app.dock.hide()`.
+3. **Every point that re-asserts the policy keeps doing so.** Recording start and stop, the
+   camera toggle, settings changes and the `⌘⌃O` rescue shortcut all call `applyDockPolicy()`
+   or `forceRegularPolicy()`. With decision 2 those calls are the repair path for any drop the
+   code did not cause; they cost nothing when nothing is wrong.
+
+## Alternatives rejected
+
+- **Drop the cache and apply the policy on every call.** Restores the 2026-10-07 bug: each
+  `app.dock.show()` on an active app blurs, hides and re-shows every window.
+- **Only the flag (decision 1), no probe (decision 2).** Fixes the two windows we know of and
+  leaves the next one — or an Electron upgrade that adds a transform elsewhere — to recreate
+  the same permanent vanish. The probe makes the failure self-healing instead of relying on
+  review catching one missing option.
+- **Only the probe, no flag.** The app would still flicker out of the Dock on every bar
+  creation and camera toggle until the next re-assertion; and the panels would keep paying
+  Electron's transform (window out and back in) for a result a `panel` gets for free.
+- **Keep the bar and bubble as plain windows with the flag.** A plain window of a regular app
+  cannot be placed over another app's full-screen Space; the capture panel learned this the
+  hard way (its header comment) and moved to `panel`. Same recipe here.
+- **An `app.on("activate")` or timer watchdog that re-checks the Dock.** Repairs it eventually
+  but adds a second owner of the policy and a loop that can fight the user's `showInDock: false`.
+
+## Consequences
+
+- The control bar and the camera bubble are now non-activating `NSPanel`s. Clicking them does
+  not activate Kaipu, which is what a recording overlay wants; dragging and buttons work as
+  before but need owner QA, including over a full-screen app.
+- `settings-store.ts` reads `app.dock.isVisible()` on every policy call. Electron notes the
+  value can lag a moment after `DockShow`; the setter applies `app.setActivationPolicy()`
+  synchronously first, so the window is theoretical, and the worst case is one extra show.
+- Tests mock `app.dock.isVisible()` and `setActivationPolicy` together, so a test that fakes a
+  Dock drop also fakes its repair. `floating-window-policy.test.ts` pins the window options
+  for the two recording panels; `capture-panel-window.test.ts` already pinned the capture one.
+
+## Non-goals
+
+- Splitting Dock from ⌘-Tab (decided impossible in [dock-and-app-switcher](/backlog/dock-and-app-switcher/)).
+- Windows and Linux: no activation policy there; `type: "panel"` is macOS-only and stays
+  behind a platform check.
+
+## Reopen when
+
+- Electron changes `setVisibleOnAllWorkspaces` so that a `panel` with
+  `skipTransformProcessType` no longer floats over full-screen Spaces (then revisit decision 1,
+  never by dropping the flag silently).
+- `app.dock.isVisible()` stops reflecting the real activation policy (then the probe needs a
+  different source of truth, not removal).
+- A new floating window needs to activate the app on click; a non-activating panel is the
+  wrong type for it and it must still pass the flag.

@@ -10,6 +10,18 @@ description: "Reported as 'the app disappears when I switch the camera on'. Inst
 > desaparecería?" The camera turned out to be the trigger that made it visible, not the
 > cause. To validate: open the main window, switch Camera ON — the window stays.
 
+## Follow-up (2026-10-24)
+
+The cache below had a second half. Hypothesis 2 — `setVisibleOnAllWorkspaces(true,
+{ visibleOnFullScreen: true })` on the control bar and the camera bubble — was not secondary:
+without `skipTransformProcessType` Electron hides the Dock icon to get there, and once this
+fix made re-assertions no-ops nothing restored it. The app left ⌘-Tab after the first
+recording of a session. See
+[Kaipu gone from the Dock and ⌘-Tab](./bug-app-lost-from-app-switcher) and
+[ADR 0029](/architecture/decisions/0029-floating-windows-never-change-the-activation-policy/):
+the panels no longer transform the process, and the setter now checks `app.dock.isVisible()`
+before treating a call as unchanged.
+
 ## Fix
 
 `applyDockPolicy()` and `forceRegularPolicy()` in `main/infrastructure/settings-store.ts`
