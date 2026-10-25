@@ -66,6 +66,10 @@ async function streamFile(target: string, rangeHeader: string | null): Promise<R
     // kaipu-media://). Paired with the scheme's `corsEnabled` privilege, this lets the
     // renderer read the response body; element loads (<video>/<img>) don't need it.
     "access-control-allow-origin": "*",
+    // Cross-origin readers (mediabunny's UrlSource) learn the file size from these. CORS hides
+    // every response header outside the safelist unless it is listed here; without
+    // Content-Range the size stays unknown and a moov-at-end MP4 cannot be read by range.
+    "access-control-expose-headers": "content-range, content-length, accept-ranges",
   };
   const body = (stream: Readable): BodyInit =>
     // Node's web-stream type and the DOM ReadableStream type are structurally
