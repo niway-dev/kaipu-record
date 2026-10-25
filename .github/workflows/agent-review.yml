@@ -1,0 +1,19 @@
+name: Agent review
+# Get the key at https://console.anthropic.com and save it as the repository secret ANTHROPIC_API_KEY.
+# `v1` floats to compatible fixes; to freeze, replace it with a full commit SHA of this repository.
+# First install: the installing pull request gets only the automatic review. `@agent-review review`
+# and thread replies work from the next pull request, because `issue_comment` runs from the default branch.
+# This repository is public: the reusable workflow skips fork pull requests on purpose (they get no
+# secrets), and only the operator's comment starts an on-demand run.
+# The review focus for this repository is in `.github/agent-review.md`.
+on:
+  pull_request: { types: [opened, ready_for_review] }
+  issue_comment: { types: [created] }
+permissions: { contents: read, pull-requests: write, issues: read }
+jobs:
+  review:
+    uses: niway-dev/agent-review/.github/workflows/review.yml@v1
+    with:
+      operator: csdev19
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
