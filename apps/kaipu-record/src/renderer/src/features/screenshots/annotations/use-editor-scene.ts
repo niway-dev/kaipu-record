@@ -14,8 +14,6 @@ export interface EditorScene {
   commitAnnotation(id: string, patch: Partial<Annotation>): void;
   /** Snapshot the scene before a continuous interaction (move/draw). */
   beginInteract(): void;
-  /** Live-update an annotation during an interaction (no history yet). */
-  updateAnnotation(id: string, patch: Partial<Annotation>): void;
   /** Commit the interaction to history if the scene changed. */
   endInteract(): void;
   /** Delete one annotation by id as a single undoable change (selection is not consulted). */
@@ -88,13 +86,6 @@ export function useEditorScene(initialBeautify: BeautifyState = DEFAULT_BEAUTIFY
     [commit],
   );
 
-  const updateAnnotation = useCallback((id: string, patch: Partial<Annotation>) => {
-    setScene((s) => ({
-      ...s,
-      annotations: s.annotations.map((a) => (a.id === id ? ({ ...a, ...patch } as Annotation) : a)),
-    }));
-  }, []);
-
   const commitAnnotation = useCallback(
     (id: string, patch: Partial<Annotation>) => {
       commit({
@@ -157,7 +148,6 @@ export function useEditorScene(initialBeautify: BeautifyState = DEFAULT_BEAUTIFY
     addAnnotation,
     commitAnnotation,
     beginInteract,
-    updateAnnotation,
     endInteract,
     removeAnnotation,
     removeSelected,

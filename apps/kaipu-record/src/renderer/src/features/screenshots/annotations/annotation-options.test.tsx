@@ -29,7 +29,6 @@ function makeScene(annotations: Annotation[], selectedId: string | null): Editor
     addAnnotation: vi.fn(),
     commitAnnotation: vi.fn(),
     beginInteract: vi.fn(),
-    updateAnnotation: vi.fn(),
     endInteract: vi.fn(),
     removeAnnotation: vi.fn(),
     removeSelected: vi.fn(),
