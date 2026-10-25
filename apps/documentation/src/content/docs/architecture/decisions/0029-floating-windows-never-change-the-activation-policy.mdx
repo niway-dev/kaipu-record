@@ -84,8 +84,15 @@ setter that trusts its memory over the OS.
   not activate Kaipu, which is what a recording overlay wants; dragging and buttons work as
   before but need owner QA, including over a full-screen app.
 - `settings-store.ts` reads `app.dock.isVisible()` on every policy call. Electron notes the
-  value can lag a moment after `DockShow`; the setter applies `app.setActivationPolicy()`
-  synchronously first, so the window is theoretical, and the worst case is one extra show.
+  value can lag a moment after `DockShow` (the transform inside it is dispatched 1 ms later
+  on an active app). The setter never depends on that transform: it calls
+  `app.setActivationPolicy()` first, and measured on Electron 39.8.10 against real AppKit the
+  probe reads `true` immediately after that call, before `app.dock.show()` runs, and stays
+  `true` at 1, 5, 20, 100 and 300 ms. A re-assertion that lands inside Electron's dispatch
+  window therefore sees cache and probe agree and touches nothing; a repeated `dock.show()`
+  cannot come from the probe. The same run confirmed the cause (a plain window joining
+  full-screen Spaces without the flag flips the probe to `false` at once) and the recipe (a
+  `panel` with the flag leaves it `true`).
 - Tests mock `app.dock.isVisible()` and `setActivationPolicy` together, so a test that fakes a
   Dock drop also fakes its repair. `floating-window-policy.test.ts` pins the window options
   for the two recording panels; `capture-panel-window.test.ts` already pinned the capture one.

@@ -66,6 +66,9 @@ restores the Dock the bubble dropped without hiding the main window).
 3. With **Show in Dock & app switcher** off: record and stop; the app stays menu-bar only
    during and after (the preference is respected, nothing forces it back).
 4. `⌘⌃O` brings the main window forward in every state above.
+5. Rapid start/stop and quick camera on/off/on, several times in a row: the main window must
+   not blink out and back (that would be a repeated `dock.show()`, the churn the blur fix
+   removed), and Kaipu stays in ⌘-Tab throughout.
 
 If step 2 fails (panels not over the full-screen app), the ADR's first reopen condition is
 met; do not fix it by removing `skipTransformProcessType`.
