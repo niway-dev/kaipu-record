@@ -100,6 +100,7 @@ describe("mergeSettings", () => {
       screenshotMode: "frame",
       trayHintShown: true,
       diagnosticsEnabled: false,
+      cameraBubble: { shape: "circle", size: 240, deviceId: null },
     });
   });
 
@@ -364,5 +365,33 @@ describe("screenshotCopy", () => {
     expect(mergeSettings({ screenshotCopy: "manual" }).screenshotCopy).toBe("manual");
     expect(mergeSettings({ screenshotCopy: "always" as never }).screenshotCopy).toBe("auto");
     expect(mergeSettings({ screenshotCopy: 3 as never }).screenshotCopy).toBe("auto");
+  });
+});
+
+describe("mergeSettings — cameraBubble", () => {
+  it("defaults to a medium circle on the OS default camera", () => {
+    expect(mergeSettings(null).cameraBubble).toEqual({
+      shape: "circle",
+      size: 240,
+      deviceId: null,
+    });
+  });
+
+  it("keeps a valid stored value", () => {
+    const cameraBubble = { shape: "rounded", size: 300, deviceId: "cam-1" } as const;
+    expect(mergeSettings({ cameraBubble }).cameraBubble).toEqual(cameraBubble);
+  });
+
+  it("falls back field by field and clamps the size", () => {
+    expect(
+      mergeSettings({ cameraBubble: { shape: "hexagon", size: 9000, deviceId: 4 } } as never)
+        .cameraBubble,
+    ).toEqual({ shape: "circle", size: 480, deviceId: null });
+    expect(mergeSettings({ cameraBubble: { size: 50.4 } } as never).cameraBubble).toEqual({
+      shape: "circle",
+      size: 120,
+      deviceId: null,
+    });
+    expect(mergeSettings({ cameraBubble: "big" } as never).cameraBubble.size).toBe(240);
   });
 });

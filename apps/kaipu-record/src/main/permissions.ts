@@ -2,6 +2,7 @@ import { desktopCapturer, ipcMain, shell, systemPreferences } from "electron";
 import {
   IPC_CHANNELS,
   type AccessibilityStatus,
+  type CameraAccessStatus,
   type PermissionKind,
   type PermissionStatus,
 } from "@shared/types";
@@ -74,6 +75,18 @@ function checkPermission(kind: PermissionKind): boolean {
   }
 }
 
+function cameraAccessStatus(): CameraAccessStatus {
+  if (!isMac() && !isWindows()) return "granted";
+  try {
+    const status = systemPreferences.getMediaAccessStatus("camera");
+    if (status === "granted") return "granted";
+    if (status === "denied" || status === "restricted") return "blocked";
+    return "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
 function checkAllPermissions(): PermissionStatus {
   return {
     screen: checkPermission("screen"),
@@ -141,6 +154,8 @@ export function registerPermissionHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.checkPermissions, async (): Promise<PermissionStatus> => {
     return checkAllPermissions();
   });
+
+  ipcMain.handle(IPC_CHANNELS.cameraAccessStatus, (): CameraAccessStatus => cameraAccessStatus());
 
   ipcMain.handle(
     IPC_CHANNELS.requestPermission,

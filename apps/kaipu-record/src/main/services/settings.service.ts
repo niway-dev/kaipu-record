@@ -14,6 +14,7 @@ import {
 } from "@shared/types";
 import { defaultShortcutsFor } from "@shared/shortcut-defaults";
 import { sanitizeQuality } from "@shared/recording-quality";
+import { sanitizeCameraBubble } from "@shared/camera-bubble";
 import { DEFAULT_LOCALE, isLocale } from "@kaipu/i18n";
 
 /**
@@ -129,5 +130,6 @@ export function mergeSettings(
       typeof safe.diagnosticsEnabled === "boolean"
         ? safe.diagnosticsEnabled
         : DEFAULT_SETTINGS.diagnosticsEnabled,
+    cameraBubble: sanitizeCameraBubble(safe.cameraBubble),
   };
 }

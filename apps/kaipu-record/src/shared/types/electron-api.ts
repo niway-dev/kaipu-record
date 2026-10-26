@@ -89,6 +89,14 @@ export type PermissionKind = "screen" | "microphone" | "camera";
 /** Whether each permission is currently granted. */
 export type PermissionStatus = Record<PermissionKind, boolean>;
 
+/**
+ * Camera access as the OS reports it. "blocked" means denied or restricted: the OS
+ * will not prompt again, so the UI sends the user to System Settings instead of
+ * offering a toggle that cannot work. "unknown" is "not asked yet" (the first
+ * getUserMedia prompts), so it must never read as blocked.
+ */
+export type CameraAccessStatus = "granted" | "blocked" | "unknown";
+
 /** macOS Accessibility (click hook, see plans/video-editor-v2/03). "not-required" off macOS. */
 export type AccessibilityStatus = "granted" | "denied" | "not-required";
 
@@ -184,6 +192,15 @@ export interface KaipuElectronAPI {
   requestAccessibility(): Promise<AccessibilityStatus>;
   /** Deep-link System Settings to the relevant Privacy pane (for denied permissions). */
   openSystemSettings(kind: PermissionKind): Promise<void>;
+  /** Camera access as a tri-state (no prompt). See {@link CameraAccessStatus}. */
+  getCameraAccessStatus(): Promise<CameraAccessStatus>;
+  /**
+   * Camera bubble → main: resize the bubble to `size` while its grip is dragged, from its
+   * anchored bottom-left corner. Not persisted (the grip writes `cameraBubble` through
+   * `updateSettings` on release). Resolves the size actually applied once the range and
+   * the recorded area clamp it.
+   */
+  previewCameraBubbleSize(size: number): Promise<number>;
 
   /** List recordings stored in the local vault. */
   listLocalRecordings(): Promise<LocalRecording[]>;

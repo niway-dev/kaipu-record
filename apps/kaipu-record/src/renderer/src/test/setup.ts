@@ -75,6 +75,7 @@ const STUB_SETTINGS = {
   screenshotMode: "frame",
   trayHintShown: false,
   diagnosticsEnabled: true,
+  cameraBubble: { shape: "circle", size: 240, deviceId: null },
 } as const;
 
 // Vitest does not expose `afterEach` as a global (globals: false), so
@@ -105,6 +106,8 @@ window.electronAPI = {
   getAccessibilityStatus: async () => "not-required" as const,
   requestAccessibility: async () => "not-required" as const,
   openSystemSettings: async () => {},
+  getCameraAccessStatus: async () => "granted" as const,
+  previewCameraBubbleSize: async (size: number) => size,
   listLocalRecordings: async () => [],
   renameLocalRecording: async () => {},
   markOpenedInEditor: async () => {},
