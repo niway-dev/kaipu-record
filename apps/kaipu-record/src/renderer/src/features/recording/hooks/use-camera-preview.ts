@@ -1,10 +1,20 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 
-/** A small, square-ish preview is all the UI shows, so we cap the resolution. */
-const PREVIEW_CONSTRAINTS: MediaStreamConstraints = {
-  video: { facingMode: "user", width: { ideal: 320 }, height: { ideal: 240 } },
-  audio: false,
-};
+/**
+ * The bubble is at most 480 DIP (960 px on a Retina screen) and is recorded as part of
+ * the screen, so 640×480 is the ceiling worth asking for; more would only cost CPU.
+ */
+const PREVIEW_SIZE = { width: { ideal: 640 }, height: { ideal: 480 } };
+
+/** The chosen camera when there is one; otherwise the user-facing default. */
+function previewConstraints(deviceId: string | null): MediaStreamConstraints {
+  return {
+    video: deviceId
+      ? { deviceId: { exact: deviceId }, ...PREVIEW_SIZE }
+      : { facingMode: "user", ...PREVIEW_SIZE },
+    audio: false,
+  };
+}
 
 export interface CameraPreview {
   videoRef: RefObject<HTMLVideoElement | null>;
@@ -14,8 +24,10 @@ export interface CameraPreview {
 /**
  * Opens a live camera stream while `enabled` and wires it to a <video> ref.
  * Stops all tracks when disabled or on unmount so the camera light turns off.
+ * A `deviceId` change reopens the stream on that camera; a device that is gone
+ * (unplugged since it was picked) falls back to the default camera.
  */
-export function useCameraPreview(enabled: boolean): CameraPreview {
+export function useCameraPreview(enabled: boolean, deviceId: string | null = null): CameraPreview {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [hasStream, setHasStream] = useState(false);
@@ -41,7 +53,13 @@ export function useCameraPreview(enabled: boolean): CameraPreview {
 
     const open = async (): Promise<void> => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia(PREVIEW_CONSTRAINTS);
+        let stream: MediaStream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(previewConstraints(deviceId));
+        } catch (error) {
+          if (!deviceId || controller.signal.aborted) throw error;
+          stream = await navigator.mediaDevices.getUserMedia(previewConstraints(null));
+        }
         if (controller.signal.aborted) {
           for (const track of stream.getTracks()) track.stop();
           return;
@@ -60,7 +78,7 @@ export function useCameraPreview(enabled: boolean): CameraPreview {
       controller.abort();
       releaseStream();
     };
-  }, [enabled]);
+  }, [enabled, deviceId]);
 
   return { videoRef, hasStream };
 }
