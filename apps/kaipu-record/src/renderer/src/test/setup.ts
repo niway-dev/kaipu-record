@@ -72,6 +72,7 @@ const STUB_SETTINGS = {
   showRecordingSavedCard: true,
   screenshotFrame: {},
   recordingArea: {},
+  recordingMode: "screen",
   screenshotMode: "frame",
   trayHintShown: false,
   diagnosticsEnabled: true,
@@ -173,6 +174,9 @@ window.electronAPI = {
   requestChooseSource: () => {},
   onRequestChooseSource: () => () => {},
   requestCaptureScreenshot: () => {},
+  requestRecordSelector: () => {},
+  reportRecorderPhase: () => {},
+  onRecordingShadeState: () => () => {},
   getShortcutStatus: async () => ({
     startRecording: true,
     stopRecording: true,

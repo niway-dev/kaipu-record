@@ -11,7 +11,12 @@ import type { TagColor } from "@kaipu/domain/constants";
 import { DEFAULT_QUALITY, type RecordingQuality } from "../recording-quality";
 import type { Locale } from "@kaipu/i18n";
 import type { ExportPresetId, ExportQuality } from "./export-preset";
-import { ENABLED_CAPTURE_MODES, type CaptureMode, type CaptureRect } from "./screenshot-capture";
+import {
+  ENABLED_CAPTURE_MODES,
+  type CaptureMode,
+  type CaptureRect,
+  type RememberedArea,
+} from "./screenshot-capture";
 
 /**
  * "system" (follow the OS appearance) is a deliberate non-goal for now — the
@@ -270,7 +275,13 @@ export interface AppSettings {
    * from `screenshotFrame` because a recording stage and a screenshot frame are rarely the
    * same rectangle, and sharing one would make each feature undo the other's last choice.
    */
-  recordingArea: Record<string, CaptureRect>;
+  recordingArea: Record<string, RememberedArea>;
+  /**
+   * The mode "Start recording" opens the selector in (design "Kaipu Record Modes"): the
+   * last one the user recorded with or picked on the Record page or the tray. `window`
+   * opens the thumbnail picker while Window mode is off in the overlay (NIW2-469).
+   */
+  recordingMode: CaptureMode;
   /**
    * The one current screenshot mode, app-wide. The Screenshots page, the tray panel and the
    * generic `captureScreenshot` shortcut all capture with it; picking a mode on the page or
@@ -318,6 +329,7 @@ export const DEFAULT_SETTINGS: Omit<AppSettings, "shortcuts"> = {
   showRecordingSavedCard: true,
   screenshotFrame: {},
   recordingArea: {},
+  recordingMode: "screen",
   screenshotMode: "frame",
   trayHintShown: false,
   diagnosticsEnabled: true,
@@ -485,6 +497,14 @@ export const IPC_CHANNELS = {
   // Capture Panel "Change" asks the main window to open the screen picker (panel → main
   // → Record page opens the source picker). Reused as the main → renderer broadcast too.
   recordingRequestSourcePicker: "recording:request-source-picker",
+  // Record page / Capture Panel "Start recording" or a mode chip: main opens the selector
+  // (the capture overlay with the record intent, or the thumbnail picker for Window).
+  recordingRequestSelector: "recording:request-selector",
+  // Main renderer → main: the recorder's phase while a start is pending, so main can draw
+  // the countdown on the chosen region (recording shade window).
+  recordingRecorderPhase: "recording:recorder-phase",
+  // Main → recording shade window: countdown tick or recording.
+  recordingShadeState: "recording-shade:state",
   // Capture Panel asks main to run the interactive screenshot capture (panel → main →
   // same flow as the ⌘⌃X hotkey). Send-only; the capture result flows through the
   // existing screenshot channels.
@@ -616,6 +636,21 @@ export interface RecordingBackfillMeta {
   durationSeconds: number;
   thumbnail: ArrayBuffer | null;
 }
+
+/**
+ * The recorder's phase as main needs it to draw the countdown over the chosen region
+ * (main renderer → main). `counting` carries the tick (3, 2, 1); `starting` is the gap
+ * while streams are acquired; `idle` after a cancel or a failed start.
+ */
+export type RecorderPhaseReport =
+  | { phase: "counting"; value: number }
+  | { phase: "starting" }
+  | { phase: "idle" };
+
+/** What the recording shade paints (main → shade window). */
+export type RecordingShadeState =
+  | { phase: "countdown"; value: number | null }
+  | { phase: "recording" };
 
 /** Source identity for placing the bar on the recorded screen. */
 export interface RecordingStartInfo {
