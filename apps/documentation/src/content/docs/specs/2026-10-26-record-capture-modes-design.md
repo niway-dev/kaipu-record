@@ -72,6 +72,14 @@ in `before-input-event`, so a packaged overlay would never receive it. In the `r
 selected is remembered in `recordingArea` whichever intent opened the overlay; one that is shot
 is remembered in `screenshotFrame`. The Window picker shows Record disabled.
 
+_Implementation note (decision 6, camera bubble shape and size)._ The bubble's shape (circle or
+rounded square) and size (120–480 px, presets S 160 · M 240 · L 360) are now settings
+(`AppSettings.cameraBubble`), changed live from the split Camera tile or the bubble's hover grip
+([backlog](/backlog/camera-bubble-shape-and-size/)). The bubble stays at this decision's fixed
+bottom-left corner and grows up and to the right; it is **not draggable** and its position is
+not persisted. "Cannot hold the bubble" now means "cannot hold even the 120 px minimum": a
+larger size the area cannot hold is shrunk to what fits instead of hiding the bubble.
+
 ### Open questions
 
 1. **Compositor cost for an area in the hidden main window.** The compositor draws on
