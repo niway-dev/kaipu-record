@@ -460,7 +460,16 @@ export function registerRecordingHub(
     // The countdown is over: Esc belongs to the apps again.
     clearCountdownRegion();
     setPending(false);
+    // An area (ADR 0030): main's own, and only for the source it was chosen with: a window
+    // cannot set one (`windowSettingsPatch`), so the renderer's copy in `info` is the same value.
+    const chosen =
+      settings.area && settings.selectedSource?.id === info.sourceId ? settings.area : null;
+    const areaDisplay = chosen
+      ? screen.getAllDisplays().find((display) => display.id === chosen.displayId)
+      : undefined;
+    const area = areaDisplay ? sanitizeArea(chosen, areaDisplay) : null;
     try {
+      const scale = areaDisplay?.scaleFactor || 1;
       captureMainEvent(
         RECORDING_STARTED_EVENT,
         buildRecordingStartedProperties({
@@ -468,6 +477,13 @@ export function registerRecordingHub(
           area: Boolean(info.area),
           platform: process.platform,
           displays: screen.getAllDisplays().length,
+          areaSize: area
+            ? {
+                width: Math.round(area.rect.width * scale),
+                height: Math.round(area.rect.height * scale),
+              }
+            : null,
+          ratio: area?.ratio,
         }),
       );
     } catch (error) {
@@ -479,17 +495,9 @@ export function registerRecordingHub(
     // it isn't lost while only the floating panels are visible. Restored on stop.
     forceRegularPolicy();
     broadcastActivity();
-    // An area (ADR 0030): mark it on its display and keep the camera bubble, which is
+    // The area (above): mark it on its display and keep the camera bubble, which is
     // recorded as part of the screen, inside the area. The shade sits under the bar and
     // the bubble; raising them once it shows covers Windows, which ignores window levels.
-    // Main's own area, and only for the source it was chosen with: a window cannot set one
-    // (`windowSettingsPatch`), so the renderer's copy in `info` is the same value.
-    const chosen =
-      settings.area && settings.selectedSource?.id === info.sourceId ? settings.area : null;
-    const areaDisplay = chosen
-      ? screen.getAllDisplays().find((display) => display.id === chosen.displayId)
-      : undefined;
-    const area = areaDisplay ? sanitizeArea(chosen, areaDisplay) : null;
     const areaGlobal = area && areaDisplay ? areaToGlobal(area, areaDisplay.bounds) : null;
     // Place the bar on the screen being recorded (resolved from the source id), outside the
     // area when only part of it is recorded (design "Kaipu Record Modes").

@@ -101,4 +101,35 @@ describe("buildRecordingStartedProperties", () => {
     expect(buildRecordingStartedProperties(leaky)).not.toHaveProperty("title");
     expect(buildRecordingStartedProperties(leaky)).not.toHaveProperty("sourceId");
   });
+
+  it("adds the size bucket and the ratio for an area, never the dimensions", () => {
+    const base = { platform: "darwin", displays: 1, sourceId: "screen:1:0" };
+    expect(
+      buildRecordingStartedProperties({
+        ...base,
+        area: true,
+        areaSize: { width: 2560, height: 1440 },
+        ratio: "16:9",
+      }),
+    ).toEqual({ mode: "area", platform: "darwin", displays: 1, size: "1440p+", ratio: "16:9" });
+    // No locked ratio: inferred from the size, like the capture metadata.
+    expect(
+      buildRecordingStartedProperties({
+        ...base,
+        area: true,
+        areaSize: { width: 720, height: 1280 },
+      }),
+    ).toMatchObject({ size: "720p", ratio: "9:16" });
+    expect(
+      buildRecordingStartedProperties({
+        ...base,
+        area: true,
+        areaSize: { width: 900, height: 500 },
+      }),
+    ).toMatchObject({ size: "<720p", ratio: "free" });
+    // A whole screen carries neither.
+    expect(
+      buildRecordingStartedProperties({ ...base, area: false, areaSize: { width: 1, height: 1 } }),
+    ).toEqual({ mode: "screen", platform: "darwin", displays: 1 });
+  });
 });

@@ -6,7 +6,11 @@
  * No TS enums (house rule): `as const` arrays + derived types, one source for
  * the value and its type — same idiom as IPC_CHANNELS.
  */
-import { recordingCaptureMode } from "./recording-capture";
+import {
+  inferRecordingRatio,
+  recordingCaptureMode,
+  type RecordingCaptureRatio,
+} from "./recording-capture";
 
 /** Feature flags the app reads. Names must match the PostHog dashboard exactly. */
 export const FLAG_NAMES = ["bypass-login"] as const;
@@ -85,23 +89,57 @@ export function buildScreenshotCapturedProperties(
 export const RECORDING_STARTED_EVENT = "recording_started";
 
 /**
+ * Coarse size buckets for an area recording (spec decision 12), by the area's shorter side
+ * in physical pixels: enough to tell a thumbnail-sized clip from a full-HD one, never the
+ * exact dimensions.
+ */
+export const RECORDING_SIZE_BUCKETS = ["<720p", "720p", "1080p", "1440p+"] as const;
+export type RecordingSizeBucket = (typeof RECORDING_SIZE_BUCKETS)[number];
+
+export function recordingSizeBucket(width: number, height: number): RecordingSizeBucket {
+  const side = Math.min(width, height);
+  if (side >= 1440) return "1440p+";
+  if (side >= 1080) return "1080p";
+  if (side >= 720) return "720p";
+  return "<720p";
+}
+
+/**
  * The whole payload of `recording_started` (ADR 0030): which target people record — a whole
- * screen, an area of one, or a window — on which platform, with how many displays. No source
- * names, no window titles, no rectangles.
+ * screen, an area of one, or a window — on which platform, with how many displays; for an
+ * area, its size bucket and ratio chip. No source names, no window titles, no rectangles.
  */
 export interface RecordingStartedProperties {
   mode: "screen" | "area" | "window";
   platform: string;
   displays: number;
+  /** Area only. */
+  size?: RecordingSizeBucket;
+  /** Area only: the chip the box was locked to, or the one its size matches ("free" otherwise). */
+  ratio?: RecordingCaptureRatio;
 }
 
-/** Derives the mode from the source id and whether an area was set; copies nothing else. */
+/**
+ * Derives the mode from the source id and whether an area was set; for an area with a known
+ * size (physical px), adds its bucket and ratio. Copies nothing else.
+ */
 export function buildRecordingStartedProperties(input: {
   sourceId: string;
   area: boolean;
   platform: string;
   displays: number;
+  /** The area's size in physical pixels (DIP × scale factor). */
+  areaSize?: { width: number; height: number } | null;
+  /** The ratio the area was locked to, when the overlay reported one. */
+  ratio?: RecordingCaptureRatio;
 }): RecordingStartedProperties {
   const mode = recordingCaptureMode(input.sourceId, input.area);
-  return { mode, platform: input.platform, displays: input.displays };
+  const base = { mode, platform: input.platform, displays: input.displays };
+  const size = input.areaSize;
+  if (mode !== "area" || !size || !(size.width > 0) || !(size.height > 0)) return base;
+  return {
+    ...base,
+    size: recordingSizeBucket(size.width, size.height),
+    ratio: input.ratio ?? inferRecordingRatio(size.width, size.height),
+  };
 }
