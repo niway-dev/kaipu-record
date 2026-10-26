@@ -27,6 +27,9 @@ const mockState = vi.hoisted(() => ({
     bounds: { x: number; y: number; width: number; height: number };
   }>,
   showSaveDialog: vi.fn(),
+  getSources: vi.fn(
+    async (): Promise<Array<{ id: string; name: string; display_id: string }>> => [],
+  ),
 }));
 
 vi.mock("electron", () => ({
@@ -51,7 +54,7 @@ vi.mock("electron", () => ({
     getAllDisplays: () => mockState.displays,
   },
   dialog: { showSaveDialog: mockState.showSaveDialog },
-  desktopCapturer: { getSources: vi.fn(async () => []) },
+  desktopCapturer: { getSources: mockState.getSources },
   systemPreferences: { isTrustedAccessibilityClient: () => false },
 }));
 
@@ -349,5 +352,98 @@ describe("recording hub — finalize into an unreachable vault", () => {
       FINALIZE_ELSEWHERE_MARKER,
     );
     expect(await readFile(filePath)).toHaveLength(0);
+  });
+});
+
+describe("recording hub — choosing an area or a display on the overlay", () => {
+  const display = {
+    id: 2,
+    bounds: { x: 1512, y: 0, width: 1512, height: 982 },
+  };
+
+  beforeEach(async () => {
+    mockState.userDataDir = await mkdtemp(join(tmpdir(), "kaipu-hub-"));
+    mockState.ipcOn.clear();
+    mockState.ipcHandle.clear();
+    mockState.displays = [{ id: 1, bounds: { x: 0, y: 0, width: 1512, height: 982 } }, display];
+    mockState.getSources.mockReset();
+    mockState.getSources.mockResolvedValue([
+      { id: "screen:1:0", name: "Screen 1", display_id: "1" },
+      { id: "screen:2:0", name: "Screen 2", display_id: "2" },
+    ]);
+    vi.resetModules();
+  });
+
+  afterEach(async () => {
+    await rm(mockState.userDataDir, { recursive: true, force: true });
+  });
+
+  async function hub() {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    const handle = registerRecordingHub(() => fakeMainWindow() as never);
+    const settings = () =>
+      mockState.ipcHandle.get(IPC_CHANNELS.recordingSettingsGet)!({}) as Record<string, unknown>;
+    return { handle, settings };
+  }
+
+  it("an area becomes that display's screen source plus the area", async () => {
+    const { handle, settings } = await hub();
+    const rect = { x: 100.4, y: 50, width: 640, height: 360.6 };
+
+    expect(await handle.selectArea(2, rect)).toBe(true);
+
+    expect(settings().selectedSource).toEqual({
+      id: "screen:2:0",
+      name: "Area · 640 × 361",
+      type: "screen",
+    });
+    expect(settings().area).toEqual({
+      displayId: 2,
+      rect: { x: 100, y: 50, width: 640, height: 361 },
+      displaySize: { width: 1512, height: 982 },
+    });
+  });
+
+  it("a whole display becomes its screen source with no area", async () => {
+    const { handle, settings } = await hub();
+    await handle.selectArea(2, { x: 0, y: 0, width: 640, height: 360 });
+
+    expect(await handle.selectArea(1, null)).toBe(true);
+
+    expect(settings().selectedSource).toEqual({
+      id: "screen:1:0",
+      name: "Screen 1",
+      type: "screen",
+    });
+    expect(settings().area).toBeNull();
+  });
+
+  it("a display that is gone, or has no screen source, changes nothing", async () => {
+    const { handle, settings } = await hub();
+    const before = { ...settings() };
+
+    expect(await handle.selectArea(9, null)).toBe(false);
+    mockState.getSources.mockResolvedValue([]);
+    expect(await handle.selectArea(2, { x: 0, y: 0, width: 640, height: 360 })).toBe(false);
+
+    expect(settings()).toEqual(before);
+  });
+
+  it("never changes the target of a recording in progress", async () => {
+    const { handle, settings } = await hub();
+    mockState.ipcOn.get(IPC_CHANNELS.recordingStart)!(
+      {},
+      { sourceId: "screen:1:0", sourceName: "Screen 1" },
+    );
+
+    expect(await handle.selectArea(2, { x: 0, y: 0, width: 640, height: 360 })).toBe(false);
+    expect(settings().area).toBeNull();
+  });
+
+  it("an area smaller than the minimum is refused", async () => {
+    const { handle } = await hub();
+    expect(await handle.selectArea(2, { x: 0, y: 0, width: 63, height: 400 })).toBe(false);
   });
 });

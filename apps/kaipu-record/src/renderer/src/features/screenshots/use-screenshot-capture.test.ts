@@ -72,6 +72,15 @@ describe("useScreenshotCapture", () => {
     expect(api.revealAfterCapture).toHaveBeenCalled();
   });
 
+  it("passes a record intent through, and keeps the plain call for a screenshot", async () => {
+    const api = stubApi({ kind: "cancelled" });
+    const { result } = renderHook(() => useScreenshotCapture());
+    await act(() => result.current.capture("frame", "record"));
+    expect(api.captureScreenshot).toHaveBeenLastCalledWith("frame", "record");
+    await act(() => result.current.capture("screen", "capture"));
+    expect(api.captureScreenshot).toHaveBeenLastCalledWith("screen");
+  });
+
   it("opens the bytes in memory when main could not save the shot", async () => {
     const api = stubApi({
       kind: "captured",

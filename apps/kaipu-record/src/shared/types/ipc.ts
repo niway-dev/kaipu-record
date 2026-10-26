@@ -29,6 +29,7 @@ export const SHORTCUT_ACTIONS = [
   "captureScreen",
   "captureFrame",
   "captureWindow",
+  "recordArea",
   "toggleMicrophone",
   "toggleSystemAudio",
   "toggleCamera",
@@ -132,6 +133,16 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
     label: "Capture window",
     description: "Capture one window, not the screen around it",
     statusWord: "window",
+  },
+  // Opens the capture overlay to choose what to record (ADR 0030): Enter keeps the area as
+  // the recording target, ⌘R / Ctrl+R records it at once.
+  {
+    action: "recordArea",
+    defaultAccelerator: { mac: "Command+Control+Shift+R", win: "Control+Alt+Shift+R" },
+    group: "recording",
+    label: "Record an area",
+    description: "Choose part of the screen to record",
+    statusWord: "area",
   },
   // Live input toggles: they flip the recording setting with or without a take
   // (outside a take they change the pre-recording toggle, as clicking it does).

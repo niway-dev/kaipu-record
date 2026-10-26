@@ -235,7 +235,8 @@
     "errorStart": "No pudimos iniciar la grabación. Vuelve a intentarlo.",
     "errorSave": "No pudimos guardar la grabación.",
     "errorSaveKept": "No pudimos acceder a tu carpeta de grabaciones. La grabación se conservó y Kaipu la recuperará la próxima vez que se abra.",
-    "errorSaveElsewhere": "Tu carpeta de grabaciones no estaba disponible, así que la grabación se guardó donde elegiste."
+    "errorSaveElsewhere": "Tu carpeta de grabaciones no estaba disponible, así que la grabación se guardó donde elegiste.",
+    "areaSource": "Área · {width} × {height}"
   },
   "header": {
     "brand": "Kaipu Record",
@@ -682,7 +683,12 @@
       "findingWindows": "Buscando ventanas…",
       "noWindows": "No hay ventanas en esta pantalla",
       "hintFrame": "Enter para capturar · {copyKey} para copiar · {keys} cambia de modo · Esc para cancelar",
-      "hintPick": "Clic o Enter para capturar · {copyKey} para copiar · {keys} cambia de modo · Esc para cancelar"
+      "hintPick": "Clic o Enter para capturar · {copyKey} para copiar · {keys} cambia de modo · Esc para cancelar",
+      "useSelection": "Usar selección",
+      "recordSelection": "Grabar",
+      "hintFrameRecord": "Enter para usar esta área · {recordKey} para grabar · {keys} cambian el modo · Esc para cancelar",
+      "hintPickRecord": "Clic o Enter para usar esta pantalla · {recordKey} para grabar · {keys} cambian el modo · Esc para cancelar",
+      "recordDisplay": "Grabar esta pantalla"
     },
     "overline": "CAPTURAS",
     "pageTitle": "Captura y documenta",
@@ -1110,6 +1116,8 @@
     "captureFrameDesc": "Captura lo que hay dentro de un marco recordado",
     "captureWindowLabel": "Capturar ventana",
     "captureWindowDesc": "Captura una sola ventana, sin la pantalla que la rodea",
+    "recordAreaLabel": "Grabar un área",
+    "recordAreaDesc": "Elige qué parte de la pantalla grabar",
     "toggleMicrophoneLabel": "Silenciar / activar micrófono",
     "toggleMicrophoneDesc": "Activa o silencia tu voz, también durante la grabación",
     "toggleSystemAudioLabel": "Audio del sistema sí / no",

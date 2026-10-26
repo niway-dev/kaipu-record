@@ -1,5 +1,5 @@
 import type { Display } from "electron";
-import type { CaptureMode, OverlayAnswer } from "@shared/types/screenshot-capture";
+import type { CaptureIntent, CaptureMode, OverlayAnswer } from "@shared/types/screenshot-capture";
 import type { WindowLister } from "./window-lister";
 
 /** What the user picked on an overlay; shared with the overlay renderer. */
@@ -7,8 +7,11 @@ export type { OverlayAnswer };
 
 /** The picking UI a provider may use; main-only, so Electron types are fine. */
 export interface OverlayPort {
-  /** Show one overlay per display in `ui` mode; resolve with the user's answer. */
-  pick(ui: CaptureMode, displays: Display[]): Promise<OverlayAnswer>;
+  /**
+   * Show one overlay per display in `ui` mode; resolve with the user's answer. `intent`
+   * (default `capture`) tells the renderer whether it opened to shoot or to record.
+   */
+  pick(ui: CaptureMode, displays: Display[], intent?: CaptureIntent): Promise<OverlayAnswer>;
   /**
    * Hide every overlay and resolve once they are off screen: hidden, one tick, and one
    * renderer animation frame (or a short cap). The backend captures only after this

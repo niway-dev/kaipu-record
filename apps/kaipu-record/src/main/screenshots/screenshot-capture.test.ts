@@ -119,6 +119,37 @@ describe("MacProvider", () => {
       expect(out.kind).toBe("captured");
     });
 
+    it.each([
+      ["record", true],
+      ["select", false],
+    ] as const)(
+      "a %s answer chooses a recording target and captures nothing",
+      async (action, start) => {
+        displays = [main, left];
+        const rect = { x: 100, y: 50, width: 640, height: 360 };
+        answer = { kind: "rect", mode: "frame", action, displayId: 2, rect };
+        const out = await macProvider().capture({ mode: "frame", overlay: fake, intent: "record" });
+        expect(fake.pick).toHaveBeenCalledWith("frame", displays, "record");
+        expect(log).toEqual(["pick:frame", "destroyAll"]);
+        expect(out).toEqual({ kind: "record", start, displayId: 2, rect });
+      },
+    );
+
+    it("a record answer on the Screen chooser records the whole display", async () => {
+      displays = [main, left];
+      answer = { kind: "display", mode: "screen", action: "record", displayId: 2 };
+      const out = await macProvider().capture({ mode: "screen", overlay: fake });
+      expect(out).toEqual({ kind: "record", start: true, displayId: 2, rect: null });
+      expect(runCli).not.toHaveBeenCalled();
+    });
+
+    it("screen with one display in the record intent selects it without an overlay", async () => {
+      const out = await macProvider().capture({ mode: "screen", overlay: fake, intent: "record" });
+      expect(fake.pick).not.toHaveBeenCalled();
+      expect(out).toEqual({ kind: "record", start: false, displayId: 1, rect: null });
+      expect(runCli).not.toHaveBeenCalled();
+    });
+
     it("frame converts the display-relative rect to global DIP", async () => {
       displays = [main, left];
       answer = {

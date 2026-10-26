@@ -51,7 +51,10 @@ export function AppRoot(): React.JSX.Element {
   // Global ⌘⌃X hotkey: main brings the window to front and broadcasts this event;
   // we run the region-capture flow here so navigation (useNavigate) is available.
   useEffect(
-    () => window.electronAPI.onCaptureScreenshotHotkey(({ mode }) => void capture(mode)),
+    () =>
+      window.electronAPI.onCaptureScreenshotHotkey(
+        ({ mode, intent }) => void capture(mode, intent),
+      ),
     [capture],
   );
 

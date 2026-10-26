@@ -5,6 +5,7 @@ import type { WindowPresetName } from "../window-size";
  */
 
 import type {
+  CaptureIntent,
   CaptureMode,
   CaptureRequestPayload,
   CaptureResult,
@@ -323,7 +324,8 @@ export interface KaipuElectronAPI {
 
   // ── Screenshots ───────────────────────────────────────────────────────
   /** Run a capture in `mode`; always answers captured, cancelled or unsupported. */
-  captureScreenshot(mode: CaptureMode): Promise<CaptureResult>;
+  /** `intent: "record"` opens the overlay to choose what to record (ADR 0030). */
+  captureScreenshot(mode: CaptureMode, intent?: CaptureIntent): Promise<CaptureResult>;
   /** Modes this platform can capture; an absent mode renders its entry point disabled. */
   screenshotSupportedModes(): Promise<CaptureMode[]>;
   /**

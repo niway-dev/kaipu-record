@@ -46,6 +46,7 @@ import {
 } from "./services/analytics.service";
 import { registerAnalyticsIpc } from "./services/analytics-ipc";
 import { isCaptureMode, type CaptureRequestPayload } from "@shared/types/screenshot-capture";
+import type { RecordTarget } from "./screenshots/capture-handler";
 import { registerScreenshotHandlers, type ScreenshotHandlers } from "./screenshots/screenshot-ipc";
 import { resolveShortcutCapture, type CaptureShortcut } from "./screenshots/shortcut-capture";
 import { routeCaptureRequest } from "./screenshots/capture-request";
@@ -483,6 +484,33 @@ function triggerCaptureScreenshot(request: CaptureRequestPayload): void {
   });
 }
 
+/**
+ * The overlay chose what to record (ADR 0030). Record starts the take through the same path
+ * as the tray's Start; Use selection only sets the target, and opens the tray panel when the
+ * app is out of sight, so the choice is visible next to the Record button. A take already
+ * running is never touched.
+ */
+async function applyRecordTarget(target: RecordTarget): Promise<void> {
+  if (!hub) return;
+  if (hub.isActive()) {
+    showAlreadyRecordingNotice();
+    return;
+  }
+  const applied = await hub.selectArea(target.displayId, target.rect);
+  if (!applied) return;
+  if (target.start) {
+    triggerStartRecording();
+    return;
+  }
+  const mainVisible = !!mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible();
+  if (!mainVisible && tray && capturePanel) capturePanel.show(tray.getBounds());
+}
+
+/** The `recordArea` shortcut: the overlay in Frame, opened to choose what to record. */
+function triggerRecordArea(): void {
+  triggerCaptureScreenshot({ mode: "frame", intent: "record" });
+}
+
 /** Set once the screenshot IPC is registered; until then a shortcut trusts the stored mode. */
 let screenshotHandlers: ScreenshotHandlers | null = null;
 
@@ -687,6 +715,7 @@ app.whenReady().then(() => {
       captureScreen: () => triggerShortcutCapture("captureScreen"),
       captureFrame: () => triggerShortcutCapture("captureFrame"),
       captureWindow: () => triggerShortcutCapture("captureWindow"),
+      recordArea: triggerRecordArea,
       // Live input toggles write the shared RecordingSettings, never the engine:
       // mid-take the recorder forwards the change, outside a take it is just the
       // pre-recording toggle.
@@ -716,8 +745,10 @@ app.whenReady().then(() => {
     openQuietCapture,
   });
   captureToast = toast;
-  screenshotHandlers = registerScreenshotHandlers(captureWindowHooks, (request) =>
-    toast.show(request),
+  screenshotHandlers = registerScreenshotHandlers(
+    captureWindowHooks,
+    (request) => toast.show(request),
+    (target) => void applyRecordTarget(target),
   );
 
   /**

@@ -164,6 +164,17 @@ describe("CaptureOverlayWindows: creating the overlays", () => {
     });
   });
 
+  it("tells the renderer it was opened to record, and says nothing for a screenshot", () => {
+    void overlays().pick("frame", [left], "record");
+    expect(String(created[0].window.loadFile.mock.calls[0]?.[1]?.search)).toContain(
+      "&intent=record",
+    );
+
+    created.length = 0;
+    void overlays().pick("frame", [left]);
+    expect(String(created[0].window.loadFile.mock.calls[0]?.[1]?.search)).not.toContain("intent");
+  });
+
   it("writes negative origins as-is, for a display left of the primary", () => {
     void overlays().pick("screen", [display(3, -1920)]);
 
@@ -321,6 +332,15 @@ describe("CaptureOverlayWindows: answers", () => {
       ).toEqual({ kind: "rect", mode: "frame", action: "copy", displayId: 1, rect });
     });
 
+    it.each(["record", "select"] as const)(
+      "accepts the %s action, which chooses a recording target",
+      async (action) => {
+        expect(
+          await answerWith("frame", { kind: "rect", mode: "frame", action, displayId: 1, rect }),
+        ).toEqual({ kind: "rect", mode: "frame", action, displayId: 1, rect });
+      },
+    );
+
     it("accepts a window answer by id, with main's own rect and whole size, not the renderer's", async () => {
       const fullSize = { width: 900, height: 400 };
       const port = new CaptureOverlayWindows({
@@ -357,7 +377,7 @@ describe("CaptureOverlayWindows: answers", () => {
     it.each([
       ["a window answer without an id", { kind: "window", displayId: 1, windowId: "", rect }],
       ["a rect answer claiming another mode", { kind: "rect", mode: "screen", displayId: 1, rect }],
-      ["an unknown action", { kind: "display", displayId: 1, action: "record" }],
+      ["an unknown action", { kind: "display", displayId: 1, action: "share" }],
     ])("refuses %s", async (_name, payload) => {
       expect(await answerWith("frame", payload)).toEqual({ kind: "cancelled" });
     });

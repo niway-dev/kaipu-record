@@ -22,6 +22,8 @@ import type {
   RecordingTick,
 } from "@shared/types/ipc";
 import { serializeCursorTrack } from "@shared/cursor-track";
+import { MIN_AREA_SIZE } from "@shared/capture-geometry";
+import type { CaptureRect } from "@shared/types/screenshot-capture";
 import { LibraryVault } from "../library/library-vault";
 import { areaCapturedDisplay, pickCapturedDisplay } from "./captured-display";
 import { ClickHook, type HookLike } from "./click-hook";
@@ -65,6 +67,14 @@ export interface RecordingHubHandle {
    *  for it AND the camera toggle is still on (it may have been turned off
    *  mid-capture). */
   restoreCameraBubbleAfterCapture(): void;
+  /**
+   * Make a display, or an area of it, the recording target (ADR 0030): the display's
+   * `screen:` source becomes `selectedSource`, and `area` is set for a rectangle (display-
+   * relative DIP) or cleared for the whole display. Resolves false, changing nothing, when
+   * the display is gone, has no screen source, or the area is under the minimum size, so a
+   * stale pick never records another display.
+   */
+  selectArea(displayId: number, rect: CaptureRect | null): Promise<boolean>;
   /**
    * Best-effort recovery when the recorder renderer is gone (crash, or the
    * main window destroyed) mid-recording: resets activity, hides the bar, and
@@ -397,6 +407,34 @@ export function registerRecordingHub(
       cameraBubbleHiddenForCapture = false;
       if (settings.isCameraEnabled) cameraBubble.show();
     },
+    selectArea: async (displayId, rect) => {
+      // The source is locked for the length of a take.
+      if (activity.active) return false;
+      const display = screen.getAllDisplays().find((candidate) => candidate.id === displayId);
+      if (!display) return false;
+      const area = rect ? roundRect(rect) : null;
+      if (area && (area.width < MIN_AREA_SIZE || area.height < MIN_AREA_SIZE)) return false;
+      const source = await screenSourceForDisplay(displayId, screen.getAllDisplays().length);
+      if (!source) return false;
+      const t = createMainTranslator(getAppSettings().locale);
+      applySettingsPatch({
+        selectedSource: {
+          id: source.id,
+          name: area
+            ? t("record.areaSource", { width: area.width, height: area.height })
+            : source.name,
+          type: "screen",
+        },
+        area: area
+          ? {
+              displayId,
+              rect: area,
+              displaySize: { width: display.bounds.width, height: display.bounds.height },
+            }
+          : null,
+      });
+      return true;
+    },
     forceReset: () => {
       cursorTracks.discardAll();
       clickSessions.clear();
@@ -418,5 +456,37 @@ async function displayIdForSource(sourceId: string): Promise<string | undefined>
     return sources.find((source) => source.id === sourceId)?.display_id || undefined;
   } catch {
     return undefined;
+  }
+}
+
+/** Whole DIP: what the overlay draws and what the source name prints. */
+function roundRect(rect: CaptureRect): CaptureRect {
+  return {
+    x: Math.round(rect.x),
+    y: Math.round(rect.y),
+    width: Math.round(rect.width),
+    height: Math.round(rect.height),
+  };
+}
+
+/**
+ * The `screen:` source that records a display. Some platforms report an empty `display_id`;
+ * with a single display that source is unambiguous, with several it is not trusted.
+ */
+async function screenSourceForDisplay(
+  displayId: number,
+  displayCount: number,
+): Promise<{ id: string; name: string } | null> {
+  try {
+    const sources = await desktopCapturer.getSources({
+      types: ["screen"],
+      thumbnailSize: { width: 0, height: 0 },
+    });
+    const match =
+      sources.find((source) => source.display_id === String(displayId)) ??
+      (displayCount === 1 && sources.length === 1 ? sources[0] : undefined);
+    return match ? { id: match.id, name: match.name } : null;
+  } catch {
+    return null;
   }
 }

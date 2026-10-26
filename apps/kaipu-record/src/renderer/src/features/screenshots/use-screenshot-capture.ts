@@ -3,15 +3,17 @@ import { useTranslations } from "@kaipu/i18n";
 import { getRecorderSnapshot } from "@renderer/features/recording/recorder-store";
 import { useOpenInEditor } from "@renderer/features/editor/open-in-editor";
 import { showToast } from "@renderer/ui/toast-store";
-import type { CaptureMode } from "@shared/types/screenshot-capture";
+import type { CaptureIntent, CaptureMode } from "@shared/types/screenshot-capture";
 import { screenshotTitle } from "@shared/screenshot-title";
 import type { ImageSource } from "./image-source";
 
-export function useScreenshotCapture(): { capture: (mode?: CaptureMode) => Promise<void> } {
+export function useScreenshotCapture(): {
+  capture: (mode?: CaptureMode, intent?: CaptureIntent) => Promise<void>;
+} {
   const { openCapture, openScreenshot } = useOpenInEditor();
   const t = useTranslations("screenshots");
   const capture = useCallback(
-    async (mode: CaptureMode = "frame") => {
+    async (mode: CaptureMode = "frame", intent: CaptureIntent = "capture") => {
       // A recording — including its countdown/starting phase — must never be
       // interrupted by a screenshot: it would race the native region selector
       // against the recording start, and bringing the window forward afterward
@@ -20,7 +22,11 @@ export function useScreenshotCapture(): { capture: (mode?: CaptureMode) => Promi
         showToast({ message: t("captureWhileRecording") });
         return;
       }
-      const shot = await window.electronAPI.captureScreenshot(mode);
+      // `record` opens the overlay to choose what to record (ADR 0030); main handles that
+      // answer itself and replies `cancelled`, so the rest of this flow is screenshot-only.
+      const shot = await (intent === "record"
+        ? window.electronAPI.captureScreenshot(mode, intent)
+        : window.electronAPI.captureScreenshot(mode));
       if (shot.kind === "cancelled") return; // main already restored the window if needed
       if (shot.kind === "unsupported") {
         showToast({

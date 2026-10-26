@@ -37,6 +37,7 @@ function setup(
   }));
   const copyToClipboard = vi.fn();
   const onQuietCapture = vi.fn();
+  const onRecordTarget = vi.fn();
   const handler = createCaptureHandler({
     platform,
     provider: { capture, supports, supportedModes: () => [] },
@@ -51,9 +52,66 @@ function setup(
     copyToClipboard,
     thumbnail: () => "data:image/png;base64,thumb",
     onQuietCapture,
+    onRecordTarget,
   });
-  return { handler, windows, track, rememberMode, saveToVault, copyToClipboard, onQuietCapture };
+  return {
+    handler,
+    windows,
+    track,
+    rememberMode,
+    saveToVault,
+    copyToClipboard,
+    onQuietCapture,
+    onRecordTarget,
+  };
 }
+
+describe("createCaptureHandler — choosing what to record", () => {
+  const rect = { x: 100, y: 50, width: 640, height: 360 };
+
+  it("opens the overlay with the request's intent", async () => {
+    const capture = vi.fn(async (): Promise<ProviderResult> => ({ kind: "cancelled" }));
+    const { handler } = setup(capture);
+    await handler({ mode: "frame", intent: "record" });
+    expect(capture).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: "frame", intent: "record" }),
+    );
+  });
+
+  it("hands a record answer to main and takes no screenshot", async () => {
+    const { handler, onRecordTarget, saveToVault, track, rememberMode, windows } = setup(
+      async () => ({ kind: "record", start: true, displayId: 2, rect }),
+    );
+    expect(await handler({ mode: "frame" })).toEqual({ kind: "cancelled" });
+    expect(onRecordTarget).toHaveBeenCalledExactlyOnceWith({ displayId: 2, rect, start: true });
+    expect(saveToVault).not.toHaveBeenCalled();
+    expect(rememberMode).not.toHaveBeenCalled();
+    // Not a screenshot: nothing goes into screenshot_captured.
+    expect(track).not.toHaveBeenCalled();
+    expect(windows.afterCapture).toHaveBeenCalledWith("cancelled");
+  });
+
+  it("a recording request that throws still restores the windows", async () => {
+    const { handler, onRecordTarget, windows } = setup(async () => ({
+      kind: "record",
+      start: false,
+      displayId: 2,
+      rect: null,
+    }));
+    onRecordTarget.mockImplementation(() => {
+      throw new Error("hub gone");
+    });
+    expect(await handler({ mode: "screen" })).toEqual({ kind: "cancelled" });
+    expect(windows.afterCapture).toHaveBeenCalledWith("cancelled");
+  });
+
+  it("refuses an unknown intent", async () => {
+    const capture = vi.fn();
+    const { handler } = setup(capture);
+    await expect(handler({ mode: "frame", intent: "film" })).rejects.toThrow(/intent/);
+    expect(capture).not.toHaveBeenCalled();
+  });
+});
 
 describe("createCaptureHandler", () => {
   it("makes the mode the overlay captured with the current one, only on a captured result", async () => {

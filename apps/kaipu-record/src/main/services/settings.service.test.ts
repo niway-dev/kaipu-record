@@ -55,6 +55,7 @@ describe("mergeSettings", () => {
       captureScreen: "Command+Control+8",
       captureFrame: "Command+Control+9",
       captureWindow: "Command+Control+0",
+      recordArea: "Command+Control+Shift+1",
       toggleMicrophone: "Command+Control+5",
       toggleSystemAudio: "Command+Control+6",
       toggleCamera: "Command+Control+7",
@@ -251,6 +252,7 @@ describe("mergeShortcuts", () => {
       captureScreen: DEFAULT_SHORTCUTS.captureScreen,
       captureFrame: DEFAULT_SHORTCUTS.captureFrame,
       captureWindow: DEFAULT_SHORTCUTS.captureWindow,
+      recordArea: DEFAULT_SHORTCUTS.recordArea,
       toggleMicrophone: DEFAULT_SHORTCUTS.toggleMicrophone,
       toggleSystemAudio: DEFAULT_SHORTCUTS.toggleSystemAudio,
       toggleCamera: DEFAULT_SHORTCUTS.toggleCamera,
@@ -278,6 +280,7 @@ describe("mergeShortcuts", () => {
     expect(merged.captureScreen).toBe("Command+Control+Shift+X");
     expect(merged.captureFrame).toBe("Command+Control+Shift+F");
     expect(merged.captureWindow).toBe("Command+Control+W");
+    expect(merged.recordArea).toBe("Command+Control+Shift+R");
   });
 
   it("ignores non-string bindings", () => {

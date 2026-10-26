@@ -37,6 +37,11 @@ describe("DEFAULT_ACCELERATORS", () => {
     });
   });
 
+  it("binds recording an area on both platforms", () => {
+    expect(DEFAULT_ACCELERATORS.mac.recordArea).toBe("Command+Control+Shift+R");
+    expect(DEFAULT_ACCELERATORS.windows.recordArea).toBe("Control+Alt+Shift+R");
+  });
+
   it("keeps Command off the Windows column", () => {
     // Command is macOS-only: Electron maps it to nothing on Windows, so such a
     // binding registers as dead rather than failing loudly.

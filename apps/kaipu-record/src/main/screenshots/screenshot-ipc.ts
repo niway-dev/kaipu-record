@@ -7,7 +7,11 @@ import { IPC_CHANNELS } from "@shared/types/ipc";
 import type { LocalRecording } from "@shared/types/library-storage";
 import type { CaptureMode, OverlayAnswer } from "@shared/types/screenshot-capture";
 import { assertExportPayload, exportFileName } from "./export-file-name";
-import { createCaptureHandler, type CaptureWindowHooks } from "./capture-handler";
+import {
+  createCaptureHandler,
+  type CaptureWindowHooks,
+  type RecordTarget,
+} from "./capture-handler";
 import { CaptureOverlayWindows } from "./capture-overlay-windows";
 import type { OverlayPort } from "./overlay-port";
 import { createScreenshotProvider } from "./screenshot-capture";
@@ -28,14 +32,14 @@ let observePick: (answer: OverlayAnswer) => void = () => {};
  * app, and most sessions never open an overlay. Before `ready` a pick answers `cancelled`.
  */
 const overlay: OverlayPort = {
-  pick: async (ui, displays) => {
+  pick: async (ui, displays, intent) => {
     if (!app.isReady()) return { kind: "cancelled" };
     // macOS lists through osascript JXA, Windows through PowerShell; other platforms find
     // nothing. Our own windows are dropped by pid (plus HWND on Windows).
     overlayWindows ??= new CaptureOverlayWindows({
       windowLister: createWindowLister(process.platform),
     });
-    const answer = await overlayWindows.pick(ui, displays);
+    const answer = await overlayWindows.pick(ui, displays, intent);
     observePick(answer);
     return answer;
   },
@@ -59,6 +63,8 @@ export function registerScreenshotHandlers(
    * windows back, with the display the shot came from.
    */
   showToast?: (request: CaptureToastShowRequest) => void,
+  /** The user chose what to record on the overlay (ADR 0030); main applies it. */
+  onRecordTarget?: (target: RecordTarget) => void,
 ): ScreenshotHandlers {
   const provider = createScreenshotProvider(process.platform);
   const toastSeam = deferToastUntilAfterCapture(
@@ -96,6 +102,7 @@ export function registerScreenshotHandlers(
       ).toDataURL();
     },
     onQuietCapture: toastSeam.onQuietCapture,
+    onRecordTarget,
   });
   ipcMain.handle(IPC_CHANNELS.screenshotCapture, (_event, request) => handleCapture(request));
   ipcMain.handle(IPC_CHANNELS.screenshotSupportedModes, () => provider.supportedModes());

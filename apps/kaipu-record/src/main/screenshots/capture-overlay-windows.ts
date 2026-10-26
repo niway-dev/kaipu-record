@@ -5,8 +5,10 @@ import { is } from "@electron-toolkit/utils";
 import { IPC_CHANNELS } from "@shared/types/ipc";
 import {
   ENABLED_CAPTURE_MODES,
+  isCaptureAction,
   isCaptureMode,
   type CaptureAction,
+  type CaptureIntent,
   type CaptureMode,
   type ListedWindow,
   type OverlayState,
@@ -165,6 +167,7 @@ export function overlayQuery(
   index: number,
   displayIds: readonly number[],
   frameDisplayId: number | null = null,
+  intent: CaptureIntent = "capture",
 ): string {
   return (
     `?window=capture-overlay&display=${display.id}&ui=${ui}` +
@@ -172,7 +175,9 @@ export function overlayQuery(
     `&bounds=${rectParam(display.bounds)}&work=${rectParam(display.workArea)}` +
     `&ids=${displayIds.join(",")}` +
     (ui === "frame" && frameDisplayId !== null ? `&frame=${frameDisplayId}` : "") +
-    (display.internal ? "&internal=1" : "")
+    (display.internal ? "&internal=1" : "") +
+    // Only the record intent is written: every screenshot query stays exactly as it was.
+    (intent === "record" ? "&intent=record" : "")
   );
 }
 
@@ -183,7 +188,7 @@ function isFiniteNumber(value: unknown): value is number {
 function parseAction(value: unknown): CaptureAction | null {
   // An answer without an action is a plain Capture; anything else must be a known action.
   if (value === undefined) return "capture";
-  return value === "capture" || value === "copy" ? value : null;
+  return isCaptureAction(value) ? value : null;
 }
 
 function parseRect(value: unknown): Rectangle | null {
@@ -270,6 +275,8 @@ export class CaptureOverlayWindows implements OverlayPort {
   private hiding: Promise<void> | null = null;
   /** The mode every overlay renders right now. */
   private mode: CaptureMode = "frame";
+  /** Why the current session opened; written into every overlay's query. */
+  private intent: CaptureIntent = "capture";
   private hoverDisplayId: number | null = null;
   /** Frame mode only: the one display that shows the frame; `null` in every other mode. */
   private frameDisplayId: number | null = null;
@@ -283,7 +290,11 @@ export class CaptureOverlayWindows implements OverlayPort {
     this.registerListeners();
   }
 
-  pick(requested: OverlayUi, displays: Display[]): Promise<OverlayAnswer> {
+  pick(
+    requested: OverlayUi,
+    displays: Display[],
+    intent: CaptureIntent = "capture",
+  ): Promise<OverlayAnswer> {
     if (this.session || displays.length === 0) return Promise.resolve({ kind: "cancelled" });
     // A disabled mode opens in Frame, the same fallback the page and the tray show.
     const ui: OverlayUi = this.deps.enabledModes.includes(requested) ? requested : "frame";
@@ -298,6 +309,7 @@ export class CaptureOverlayWindows implements OverlayPort {
         watchdog: null,
       };
       this.mode = ui;
+      this.intent = intent;
       this.hoverDisplayId = null;
       this.windows = null;
       const cursor = this.deps.cursorPoint();
@@ -508,7 +520,7 @@ export class CaptureOverlayWindows implements OverlayPort {
 
     this.deps.loadRenderer(
       window,
-      overlayQuery(ui, display, index, displayIds, this.frameDisplayId),
+      overlayQuery(ui, display, index, displayIds, this.frameDisplayId, this.intent),
     );
     return entry;
   }

@@ -7,7 +7,9 @@ import type { Display, Rectangle } from "electron";
 import {
   CAPTURE_MODES,
   ENABLED_CAPTURE_MODES,
+  isRecordAction,
   type CaptureAction,
+  type CaptureIntent,
   type CaptureMode,
 } from "@shared/types/screenshot-capture";
 import { cropForDisplay, physicalSizeFor, toGlobal } from "./capture-geometry";
@@ -15,13 +17,23 @@ import type { OverlayPort } from "./overlay-port";
 
 const execFileAsync = promisify(execFile);
 
-export type CaptureRequest = { mode: CaptureMode; overlay: OverlayPort };
+export type CaptureRequest = {
+  mode: CaptureMode;
+  overlay: OverlayPort;
+  /** Why the overlay opens; absent means `capture`. */
+  intent?: CaptureIntent;
+};
 
 /** Main-side result; the IPC handler turns it into the renderer's `CaptureResult`. */
 export type ProviderResult =
   | { kind: "captured"; png: Buffer; mode: CaptureMode; action: CaptureAction }
   | { kind: "cancelled" }
-  | { kind: "unsupported"; mode: CaptureMode };
+  | { kind: "unsupported"; mode: CaptureMode }
+  /**
+   * The user chose what to RECORD (ADR 0030): Record (`start`) or Use selection. No pixels
+   * were taken; `rect` is display-relative DIP, `null` for the whole display.
+   */
+  | { kind: "record"; start: boolean; displayId: number; rect: Rectangle | null };
 
 export interface ScreenshotCaptureProvider {
   /** Whether `capture` can serve `mode`; lets the handler answer before hiding any window. */
@@ -85,8 +97,12 @@ export async function pickTarget(
   overlay: OverlayPort,
   ui: CaptureMode,
   displays: Display[],
+  intent: CaptureIntent = "capture",
 ): Promise<CaptureTarget | null> {
-  const answer = await overlay.pick(ui, displays);
+  // The intent is passed only when it is not the default, so a screenshot pick is unchanged.
+  const answer = await (intent === "record"
+    ? overlay.pick(ui, displays, intent)
+    : overlay.pick(ui, displays));
   if (answer.kind === "cancelled") return null;
   const display = displays.find((candidate) => candidate.id === answer.displayId);
   if (!display) return null;
@@ -109,9 +125,13 @@ export async function pickTarget(
   }
 }
 
-/** Screen on a lone display needs no overlay: the whole display, captured as asked. */
-function wholeDisplay(display: Display): CaptureTarget {
-  return { display, rect: null, mode: "screen", action: "capture", viaOverlay: false };
+/**
+ * Screen on a lone display needs no overlay: the whole display, captured as asked, or chosen
+ * as the recording target when the overlay was opened to record.
+ */
+function wholeDisplay(display: Display, intent: CaptureIntent = "capture"): CaptureTarget {
+  const action: CaptureAction = intent === "record" ? "select" : "capture";
+  return { display, rect: null, mode: "screen", action, viaOverlay: false };
 }
 
 /**
@@ -128,6 +148,17 @@ export async function runWithOverlay(
   try {
     const target = await choose();
     if (!target) return { kind: "cancelled" };
+    // Record or Use selection: the target is the answer, and nothing is captured. A window
+    // cannot be a recording area (Window keeps the thumbnail picker), so it cancels.
+    if (isRecordAction(target.action)) {
+      if (target.mode === "window") return { kind: "cancelled" };
+      return {
+        kind: "record",
+        start: target.action === "record",
+        displayId: target.display.id,
+        rect: target.rect,
+      };
+    }
     await overlay.hideAll(); // Failure 1: capture only once no overlay is on screen
     // The window server / DWM can keep a hidden transparent window for a few frames.
     // No overlay was shown (single-display Screen): `choose` already waited for the app.
@@ -162,7 +193,7 @@ export class MacProvider implements ScreenshotCaptureProvider {
     return CAPTURE_MODES.filter((mode) => this.supports(mode));
   }
 
-  async capture({ mode, overlay }: CaptureRequest): Promise<ProviderResult> {
+  async capture({ mode, overlay, intent = "capture" }: CaptureRequest): Promise<ProviderResult> {
     return runWithOverlay(
       overlay,
       async () => {
@@ -171,9 +202,9 @@ export class MacProvider implements ScreenshotCaptureProvider {
         if (mode === "screen" && displays.length === 1) {
           // No overlay to wait on, but `beforeCapture` just hid the app: let it leave the screen.
           await this.deps.settle();
-          return wholeDisplay(displays[0]!);
+          return wholeDisplay(displays[0]!, intent);
         }
-        return pickTarget(overlay, mode, displays);
+        return pickTarget(overlay, mode, displays, intent);
       },
       // `-R` takes global points (DIP), not pixels, and handles Retina itself.
       (target) => this.captureTarget(target),
@@ -283,16 +314,16 @@ export class WindowsProvider implements ScreenshotCaptureProvider {
     return CAPTURE_MODES.filter((mode) => this.supports(mode));
   }
 
-  async capture({ mode, overlay }: CaptureRequest): Promise<ProviderResult> {
+  async capture({ mode, overlay, intent = "capture" }: CaptureRequest): Promise<ProviderResult> {
     return runWithOverlay(
       overlay,
       async () => {
         const displays = await this.deps.getDisplays();
         if (mode === "screen" && displays.length === 1) {
           await this.deps.settle(); // the app was just hidden: let it leave the screen
-          return wholeDisplay(displays[0]!);
+          return wholeDisplay(displays[0]!, intent);
         }
-        return pickTarget(overlay, mode, displays);
+        return pickTarget(overlay, mode, displays, intent);
       },
       async ({ display, rect, mode: picked, action, windowId, fullSize }) => {
         if (picked === "window" && windowId && rect) {
