@@ -20,9 +20,11 @@ import type { ProviderResult, ScreenshotCaptureProvider } from "./screenshot-cap
  * How a capture ended, for `afterCapture`: `editor` (the renderer is about to show the
  * editor and reveals the window itself), `quiet` (main saved and copied; the window
  * comes back where it was, without taking focus), `cancelled` (nothing was captured: Esc,
- * an unsupported answer or a throw; the window comes back where it was).
+ * an unsupported answer or a throw; the window comes back where it was), `recording` (the
+ * overlay started a recording: the countdown runs on the chosen region and the window stays
+ * out of sight, as it does for the whole take).
  */
-export type CaptureEnding = "editor" | "quiet" | "cancelled";
+export type CaptureEnding = "editor" | "quiet" | "cancelled" | "recording";
 
 /**
  * Window orchestration around a capture, owned by main (which holds the windows).
@@ -141,6 +143,8 @@ export function createCaptureHandler(
     let result: ProviderResult = { kind: "cancelled" };
     let answer: CaptureResult = { kind: "cancelled" };
     let failed = false;
+    // Set once a Record answer was handed to main without a throw: the take is starting.
+    let recordStarted = false;
     try {
       // Inside the try: a throw while hiding windows must still release the guard.
       deps.windows.beforeCapture();
@@ -155,6 +159,7 @@ export function createCaptureHandler(
         const { displayId, rect, start } = result;
         try {
           deps.onRecordTarget?.({ displayId, rect, start });
+          recordStarted = start && deps.onRecordTarget !== undefined;
         } catch (error) {
           console.error("recording target could not be applied", error);
         }
@@ -169,7 +174,9 @@ export function createCaptureHandler(
     } finally {
       capturing = false;
       // Only the editor path reveals the window itself; cancel and quiet restore it here.
-      deps.windows.afterCapture(answer.kind === "captured" ? answer.after : "cancelled");
+      deps.windows.afterCapture(
+        answer.kind === "captured" ? answer.after : recordStarted ? "recording" : "cancelled",
+      );
     }
     // Choosing a recording target is not a screenshot outcome.
     if (result.kind === "record") return answer;

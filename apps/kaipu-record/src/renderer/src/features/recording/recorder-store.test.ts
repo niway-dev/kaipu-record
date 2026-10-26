@@ -128,6 +128,31 @@ describe("recorder-store", () => {
     await stopAndSettle();
   });
 
+  it("reports each pending phase to main so the countdown can be drawn on the region", async () => {
+    const reports = vi.fn();
+    window.electronAPI.reportRecorderPhase = reports;
+    store.requestStartRecording(() => input);
+    await vi.advanceTimersByTimeAsync(1000);
+    store.stopOrCancelRecording();
+    expect(reports.mock.calls.map(([report]) => report)).toEqual([
+      { phase: "counting", value: 3 },
+      { phase: "counting", value: 2 },
+      { phase: "idle" },
+    ]);
+
+    reports.mockClear();
+    store.requestStartRecording(() => input);
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(store.getRecorderSnapshot().status).toBe("recording");
+    expect(reports.mock.calls.map(([report]) => report)).toEqual([
+      { phase: "counting", value: 3 },
+      { phase: "counting", value: 2 },
+      { phase: "counting", value: 1 },
+      { phase: "starting" },
+    ]);
+    await stopAndSettle();
+  });
+
   it("resolves the take's input when the countdown ends, not when the start is requested", async () => {
     // Main starts a take chosen on the overlay by broadcasting the new source and area, then
     // requesting a start; the broadcast may reach React after the request. Reading the input

@@ -33,6 +33,11 @@ export interface OverlayQuery {
   internal: boolean;
   /** Why the overlay opened: `record` only when main wrote it; anything else is a screenshot. */
   intent: CaptureIntent;
+  /**
+   * The display's scale factor (`&scale=`, written only for the record intent): the Frame
+   * box's size readout prints device pixels. Absent or malformed reads as 1.
+   */
+  scaleFactor?: number;
 }
 
 function parseIds(value: string | null): number[] | null {
@@ -80,7 +85,13 @@ export function parseOverlayQuery(search: string): OverlayQuery | null {
     frame: parseInteger(params.get("frame")),
     internal: params.get("internal") === "1",
     intent: params.get("intent") === "record" ? "record" : "capture",
+    scaleFactor: parseScale(params.get("scale")),
   };
+}
+
+function parseScale(value: string | null): number {
+  const scale = value === null ? Number.NaN : Number(value);
+  return Number.isFinite(scale) && scale > 0 ? scale : 1;
 }
 
 /** The work area in the window's own (display-relative) coordinates. */

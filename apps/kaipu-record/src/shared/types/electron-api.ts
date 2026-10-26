@@ -33,7 +33,9 @@ import type {
   RecordingBackfillMeta,
   RecordingArea,
   RecordingFinalizeMeta,
+  RecorderPhaseReport,
   RecordingSettings,
+  RecordingShadeState,
   RecordingStartInfo,
   RecordingTick,
 } from "./ipc";
@@ -310,9 +312,22 @@ export interface KaipuElectronAPI {
   /** Capture Panel "Change" → main: open the main window + Record page's source picker. */
   requestChooseSource(): void;
   /** Record page subscribes so a panel "Change" opens its source picker. */
-  onRequestChooseSource(callback: () => void): () => void;
+  /**
+   * `startOnPick`: the picker was opened as the Window mode of "Start recording", so picking
+   * a source also starts the countdown.
+   */
+  onRequestChooseSource(callback: (request: { startOnPick: boolean }) => void): () => void;
   /** Capture Panel → main: run the interactive screenshot capture (same as ⌘⌃X). */
   requestCaptureScreenshot(mode: CaptureMode): void;
+  /**
+   * Record page / Capture Panel → main: open the recording selector, in `mode` (a mode
+   * chip, which also makes it the last used one) or in the last used mode (Start).
+   */
+  requestRecordSelector(mode?: CaptureMode): void;
+  /** Main renderer → main: the recorder's countdown phase (see `RecorderPhaseReport`). */
+  reportRecorderPhase(report: RecorderPhaseReport): void;
+  /** Recording shade window: what to paint (countdown tick or recording). */
+  onRecordingShadeState(callback: (state: RecordingShadeState) => void): () => void;
 
   // ── Global shortcuts ──────────────────────────────────────────────────
   /** Per-action registration state of the global shortcuts (false = unavailable). */

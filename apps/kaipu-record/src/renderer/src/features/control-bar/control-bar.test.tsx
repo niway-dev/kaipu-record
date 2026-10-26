@@ -9,6 +9,29 @@ const baseTick = {
 };
 
 describe("ControlBar", () => {
+  it("names what is recorded: the ratio of an area, else the mode", () => {
+    const { rerender } = render(
+      <ControlBar
+        tick={baseTick}
+        onPause={vi.fn()}
+        onResume={vi.fn()}
+        onStop={vi.fn()}
+        modeChip={{ mode: "frame", ratio: "16:9" }}
+      />,
+    );
+    expect(screen.getByTestId("control-bar-mode")).toHaveTextContent("16:9");
+    rerender(
+      <ControlBar
+        tick={baseTick}
+        onPause={vi.fn()}
+        onResume={vi.fn()}
+        onStop={vi.fn()}
+        modeChip={{ mode: "screen", ratio: null }}
+      />,
+    );
+    expect(screen.getByTestId("control-bar-mode")).toHaveTextContent("Screen");
+  });
+
   it("renders the mono timer from elapsed seconds", () => {
     render(<ControlBar tick={baseTick} onPause={vi.fn()} onResume={vi.fn()} onStop={vi.fn()} />);
     expect(screen.getByText("00:04:17")).toBeInTheDocument();

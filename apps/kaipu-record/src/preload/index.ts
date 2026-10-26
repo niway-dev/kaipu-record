@@ -15,6 +15,7 @@ import type {
   ControlCommand,
   RecordingActivity,
   RecordingSettings,
+  RecordingShadeState,
   RecordingTick,
   UpdateStatus,
 } from "@shared/types/ipc";
@@ -146,6 +147,14 @@ const kaipuApi: KaipuElectronAPI = {
   requestStartRecording: () => ipcRenderer.send(IPC_CHANNELS.recordingRequestStart),
   requestCaptureScreenshot: (mode) =>
     ipcRenderer.send(IPC_CHANNELS.screenshotRequestCapture, { mode }),
+  requestRecordSelector: (mode) =>
+    ipcRenderer.send(IPC_CHANNELS.recordingRequestSelector, mode ? { mode } : {}),
+  reportRecorderPhase: (report) => ipcRenderer.send(IPC_CHANNELS.recordingRecorderPhase, report),
+  onRecordingShadeState: (callback) => {
+    const listener = (_e: IpcRendererEvent, state: RecordingShadeState): void => callback(state);
+    ipcRenderer.on(IPC_CHANNELS.recordingShadeState, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.recordingShadeState, listener);
+  },
   getShortcutStatus: () => ipcRenderer.invoke(IPC_CHANNELS.shortcutsGetStatus),
   suspendShortcuts: () => ipcRenderer.send(IPC_CHANNELS.shortcutsSuspend),
   resumeShortcuts: () => ipcRenderer.send(IPC_CHANNELS.shortcutsResume),
@@ -156,7 +165,8 @@ const kaipuApi: KaipuElectronAPI = {
   },
   requestChooseSource: () => ipcRenderer.send(IPC_CHANNELS.recordingRequestSourcePicker),
   onRequestChooseSource: (callback) => {
-    const listener = (): void => callback();
+    const listener = (_e: IpcRendererEvent, request?: { startOnPick?: boolean }): void =>
+      callback({ startOnPick: request?.startOnPick === true });
     ipcRenderer.on(IPC_CHANNELS.recordingRequestSourcePicker, listener);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.recordingRequestSourcePicker, listener);
   },

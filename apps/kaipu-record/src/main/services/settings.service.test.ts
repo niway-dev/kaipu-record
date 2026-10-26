@@ -77,6 +77,7 @@ describe("mergeSettings", () => {
         showRecordingSavedCard: false,
         screenshotFrame: { "1": { x: 10, y: 20, width: 300, height: 200 } },
         recordingArea: { "2": { x: 0, y: 0, width: 640, height: 360 } },
+        recordingMode: "window",
         screenshotMode: "frame",
         trayHintShown: true,
         diagnosticsEnabled: false,
@@ -97,10 +98,33 @@ describe("mergeSettings", () => {
       showRecordingSavedCard: false,
       screenshotFrame: { "1": { x: 10, y: 20, width: 300, height: 200 } },
       recordingArea: { "2": { x: 0, y: 0, width: 640, height: 360 } },
+      recordingMode: "window",
       screenshotMode: "frame",
       trayHintShown: true,
       diagnosticsEnabled: false,
     });
+  });
+
+  it("keeps a known ratio on a remembered recording area and drops an unknown one", () => {
+    expect(
+      mergeSettings({
+        recordingArea: {
+          "1": { x: 0, y: 0, width: 640, height: 360, ratio: "16:9" },
+          "2": { x: 0, y: 0, width: 300, height: 300, ratio: "4:3" },
+        } as never,
+      }).recordingArea,
+    ).toEqual({
+      "1": { x: 0, y: 0, width: 640, height: 360, ratio: "16:9" },
+      "2": { x: 0, y: 0, width: 300, height: 300 },
+    });
+  });
+
+  it("defaults the recording mode to Screen and keeps any known mode, Window included", () => {
+    expect(DEFAULT_SETTINGS.recordingMode).toBe("screen");
+    expect(mergeSettings({}).recordingMode).toBe("screen");
+    expect(mergeSettings({ recordingMode: "window" }).recordingMode).toBe("window");
+    expect(mergeSettings({ recordingMode: "frame" }).recordingMode).toBe("frame");
+    expect(mergeSettings({ recordingMode: "area" as never }).recordingMode).toBe("screen");
   });
 
   it("remembers no frame by default and drops malformed remembered frames", () => {

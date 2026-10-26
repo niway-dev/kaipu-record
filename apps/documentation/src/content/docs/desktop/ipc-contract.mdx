@@ -238,10 +238,21 @@ with `{ mode: "screen" | "area" | "window", platform, displays }`.
 
 ### Cross-window triggers (panel/atajo → Record page)
 
-| Canal                             | Dir       | En `electronAPI`                                          | Registrador |
-| --------------------------------- | --------- | --------------------------------------------------------- | ----------- |
-| `recording:request-start`         | r→m / m→r | `requestStartRecording()` / `onRequestStartRecording(cb)` | `index.ts`  |
-| `recording:request-source-picker` | r→m / m→r | `requestChooseSource()` / `onRequestChooseSource(cb)`     | `index.ts`  |
+| Canal                             | Dir       | En `electronAPI`                                          | Registrador        |
+| --------------------------------- | --------- | --------------------------------------------------------- | ------------------ |
+| `recording:request-start`         | r→m / m→r | `requestStartRecording()` / `onRequestStartRecording(cb)` | `index.ts`         |
+| `recording:request-source-picker` | r→m / m→r | `requestChooseSource()` / `onRequestChooseSource(cb)`     | `index.ts`         |
+| `recording:request-selector`      | r→m       | `requestRecordSelector(mode?)`                            | `index.ts`         |
+| `recording:recorder-phase`        | r→m       | `reportRecorderPhase(report)`                             | `recording-hub.ts` |
+| `recording-shade:state`           | m→r       | `onRecordingShadeState(cb)`                               | `recording-hub.ts` |
+
+Record capture modes, task 5 (design "Kaipu Record Modes"): `recording:request-selector` takes
+`{ mode?: CaptureMode }` and opens the capture overlay with the `record` intent in that mode or
+in `AppSettings.recordingMode` (Window opens the thumbnail picker; main then sends
+`recording:request-source-picker` with `{ startOnPick: true }`). `recording:recorder-phase`
+carries `{ phase: "counting", value } | { phase: "starting" } | { phase: "idle" }` while a start
+is pending, so main draws the countdown on the chosen region; `recording-shade:state` tells the
+shade window `{ phase: "countdown", value } | { phase: "recording" }`.
 
 ### Shortcuts
 

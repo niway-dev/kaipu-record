@@ -97,6 +97,26 @@ export interface CaptureRect {
   height: number;
 }
 
+/**
+ * Aspect ratios the Frame box offers when the overlay opens to record (design "Kaipu
+ * Record Modes"): `free` draws any rectangle, the others lock width over height.
+ */
+export const RECORDING_RATIOS = ["free", "16:9", "9:16", "1:1"] as const;
+export type RecordingRatio = (typeof RECORDING_RATIOS)[number];
+
+export function isRecordingRatio(value: unknown): value is RecordingRatio {
+  return (RECORDING_RATIOS as readonly unknown[]).includes(value);
+}
+
+/**
+ * A remembered recording area for one display: the rectangle (display-relative DIP) and
+ * the ratio it was drawn with. `ratio` is optional so areas remembered before ratios
+ * existed still load (they read as `free`).
+ */
+export interface RememberedArea extends CaptureRect {
+  ratio?: RecordingRatio;
+}
+
 /** A DIP size. */
 export interface CaptureSize {
   width: number;

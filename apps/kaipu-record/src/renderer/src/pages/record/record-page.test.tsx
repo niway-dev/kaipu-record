@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import type { RecordingSetup } from "@renderer/features/recording/hooks/use-recording-setup";
 import { RecordPage } from "./record-page";
@@ -116,5 +116,79 @@ describe("RecordPage auto-start", () => {
     expect(openSourcePicker).toHaveBeenCalledTimes(1);
     rerender();
     expect(openSourcePicker).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("RecordPage idle layout (design Kaipu Record Modes)", () => {
+  const realApi = window.electronAPI;
+  beforeEach(() => {
+    setupState = { selectedSource: SCREEN, isRecording: false };
+  });
+  afterEach(() => {
+    window.electronAPI = realApi;
+  });
+
+  it("shows Start, the last used mode with its remembered area, and the inputs", async () => {
+    const requestRecordSelector = vi.fn();
+    const settings = await realApi.getSettings();
+    window.electronAPI = {
+      ...realApi,
+      requestRecordSelector,
+      getSettings: async () => ({
+        ...settings,
+        recordingMode: "frame",
+        recordingArea: { "7": { x: 0, y: 0, width: 1280, height: 720, ratio: "16:9" } },
+      }),
+    };
+    renderAt(undefined);
+    expect(screen.getByText("RECORD")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Ready to record" })).toBeInTheDocument();
+    expect(await screen.findByTestId("frame-caption")).toHaveTextContent("16:9 · 1280 × 720");
+    expect(screen.getByRole("button", { name: /^Frame/ })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("SOUND & CAMERA")).toBeInTheDocument();
+    // No source card: what to record is picked in the selector.
+    expect(screen.queryByText("CHOOSE A SOURCE")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /Start recording/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Screen/ }));
+    expect(requestRecordSelector.mock.calls).toEqual([[undefined], ["screen"]]);
+    // A click never starts a take by itself: main opens the selector first.
+    expect(startRecording).not.toHaveBeenCalled();
+  });
+
+  it("lists the four newest recordings under Recent, and nothing when there are none", async () => {
+    const recording = (n: number) => ({
+      id: `r${n}`,
+      assetId: `a${n}`,
+      title: `Take ${n}`,
+      filePath: `/v/r${n}.mp4`,
+      createdAt: n,
+      sizeBytes: 1,
+      durationSeconds: 60 + n,
+      thumbnailUrl: null,
+      kind: "recording" as const,
+      derivedFromAssetId: null,
+      contentSha256: null,
+    });
+    window.electronAPI = {
+      ...realApi,
+      listLocalRecordings: async () => [1, 2, 3, 4, 5].map(recording),
+    };
+    renderAt(undefined);
+    await screen.findByTestId("recent-recordings");
+    expect(screen.getAllByText(/^Take/).map((node) => node.textContent)).toEqual([
+      "Take 5",
+      "Take 4",
+      "Take 3",
+      "Take 2",
+    ]);
+    expect(screen.getByText("1:05")).toBeInTheDocument();
+  });
+
+  it("keeps the recording layout while a take runs", () => {
+    setupState.isRecording = true;
+    renderAt(undefined);
+    expect(screen.queryByRole("button", { name: /Start recording/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /Stop recording/ })).toBeInTheDocument();
   });
 });

@@ -177,7 +177,8 @@ export function overlayQuery(
     (ui === "frame" && frameDisplayId !== null ? `&frame=${frameDisplayId}` : "") +
     (display.internal ? "&internal=1" : "") +
     // Only the record intent is written: every screenshot query stays exactly as it was.
-    (intent === "record" ? "&intent=record" : "")
+    // The scale only feeds the record intent's size readout (device pixels).
+    (intent === "record" ? `&intent=record&scale=${display.scaleFactor}` : "")
   );
 }
 

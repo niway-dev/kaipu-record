@@ -1,13 +1,35 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "@kaipu/i18n";
 import { clampFrameToDisplay } from "@shared/capture-geometry";
-import type { CaptureAction, CaptureRect } from "@shared/types/screenshot-capture";
+import type {
+  CaptureAction,
+  CaptureRect,
+  RecordingRatio,
+  RememberedArea,
+} from "@shared/types/screenshot-capture";
 import { cropHandles, hitCropHandle, moveCrop, resizeCrop } from "../annotations/crop";
 import { handleCursor, type HandleId, type Pt, type Size } from "../annotations/handles";
 import type { CropRect } from "../annotations/scene";
 import { MIN_AREA_SIZE } from "@shared/capture-geometry";
 import { isRecordAction } from "@shared/types/screenshot-capture";
 import { actionForKey } from "./overlay-keys";
+import {
+  devicePixelSize,
+  fitRatio,
+  ratioValue,
+  resizeWithRatio,
+  spanWithRatio,
+} from "./ratio-geometry";
+import {
+  CameraPreview,
+  RatioBar,
+  RecordWidget,
+  StartPill,
+  cameraPreviewPlacement,
+  ratioBarPlacement,
+  startPillPlacement,
+  widgetPlacement,
+} from "./record-chrome";
 import { workAreaInWindow, type OverlayQuery } from "./overlay-query";
 import { SelectionToolbar, type OverlayChrome } from "./selection-chrome";
 import styles from "./capture-overlay.module.css";
@@ -97,10 +119,14 @@ const MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "Meta"]);
 
 interface FrameBoxProps {
   query: OverlayQuery;
-  remembered: CaptureRect | null;
+  /** The remembered rectangle; a recording area also carries the ratio it was drawn with. */
+  remembered: RememberedArea | null;
   chrome: OverlayChrome;
-  /** The confirmed frame, display-relative DIP, with the action bar's choice. */
-  onConfirm(rect: CaptureRect, action: CaptureAction): void;
+  /**
+   * The confirmed frame, display-relative DIP, with the action bar's choice and, when the
+   * overlay opened to record, the ratio the box was locked to.
+   */
+  onConfirm(rect: CaptureRect, action: CaptureAction, ratio?: RecordingRatio): void;
 }
 
 /**
@@ -123,12 +149,23 @@ export function FrameBox({
     () => ({ id: query.displayId, bounds: query.bounds, workArea: query.work, scaleFactor: 1 }),
     [query],
   );
-  const [frame, setFrame] = useState<CaptureRect>(() => initialFrame(query, remembered));
+  // Ratios only exist when the overlay opened to record; a screenshot frame is always free.
+  const recording = chrome.intent === "record";
+  const [ratio, setRatio] = useState<RecordingRatio>(() =>
+    recording ? (remembered?.ratio ?? "free") : "free",
+  );
+  const [frame, setFrame] = useState<CaptureRect>(() => {
+    const start = initialFrame(query, remembered);
+    return recording ? fitRatio(start, remembered?.ratio ?? "free", area) : start;
+  });
+  const locked = ratioValue(ratio);
   const drag = useRef<Drag | null>(null);
 
   // Latest frame for the window-level Enter listener without re-subscribing per move.
   const latest = useRef(frame);
   latest.current = frame;
+  const latestRatio = useRef(ratio);
+  latestRatio.current = ratio;
   const confirm = useRef(onConfirm);
   confirm.current = onConfirm;
   const platform = chrome.platform;
@@ -145,14 +182,14 @@ export function FrameBox({
         event.preventDefault();
         // A box under the recording minimum can be shot, never recorded.
         if (isRecordAction(action) && !recordable(latest.current)) return;
-        confirm.current(latest.current, action);
+        confirm.current(latest.current, action, recording ? latestRatio.current : undefined);
         return;
       }
       if (dragging) setFrame(dragging.origin);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [platform, intent]);
+  }, [platform, intent, recording]);
 
   const fromCrop = (crop: CropRect): CaptureRect =>
     clampFrameToDisplay(
@@ -205,7 +242,14 @@ export function FrameBox({
         if (travelled < MIN_DRAG_DIP) return;
         current.moved = true;
       }
-      setFrame(drawnRect(from, { x: event.clientX, y: event.clientY }, workAreaInWindow(query)));
+      const to = { x: event.clientX, y: event.clientY };
+      setFrame(locked === null ? drawnRect(from, to, area) : spanWithRatio(from, to, locked, area));
+      return;
+    }
+    if (current.kind === "resize" && locked !== null) {
+      // The box as it was when the drag began, resized with the ratio locked.
+      const pointer = { x: event.clientX, y: event.clientY };
+      setFrame(resizeWithRatio(current.origin, current.handle, pointer, locked, area));
       return;
     }
     const point = toPoint(event.clientX, event.clientY, area);
@@ -222,6 +266,10 @@ export function FrameBox({
 
   const handles = cropHandles(toCrop(frame, area), size);
   const pillInside = frame.y - PILL_ROOM_DIP < 0;
+  const chooseRatio = (next: RecordingRatio): void => {
+    setRatio(next);
+    setFrame((current) => fitRatio(current, next, area));
+  };
 
   return (
     <div
@@ -235,7 +283,7 @@ export function FrameBox({
         role="group"
         aria-label={t("overlay.frame")}
         data-testid="capture-frame"
-        className={styles.frameBox}
+        className={recording ? `${styles.frameBox} ${styles.frameBoxRecord}` : styles.frameBox}
         style={{ left: frame.x, top: frame.y, width: frame.width, height: frame.height }}
       />
       {/* Marching ants over the pink border; drawn in window pixels so the dashes keep
@@ -263,24 +311,87 @@ export function FrameBox({
           }}
         />
       ))}
-      <div
-        className={styles.sizePill}
-        style={{
-          left: frame.x,
-          top: pillInside ? frame.y + 8 : frame.y - PILL_ROOM_DIP,
-          marginLeft: pillInside ? 8 : 0,
-        }}
-      >
-        {frame.width} × {frame.height}
-      </div>
-      <SelectionToolbar
-        chrome={chrome}
-        selection={frame}
-        area={area}
-        onAction={(action) => onConfirm(frame, action)}
-        canRecord={recordable(frame)}
-      />
+      {recording ? (
+        <RecordFrameChrome
+          frame={frame}
+          area={area}
+          ratio={ratio}
+          onRatio={chooseRatio}
+          scaleFactor={query.scaleFactor ?? 1}
+          chrome={chrome}
+          onStart={() => onConfirm(frame, "record", ratio)}
+        />
+      ) : (
+        <>
+          <div
+            className={styles.sizePill}
+            style={{
+              left: frame.x,
+              top: pillInside ? frame.y + 8 : frame.y - PILL_ROOM_DIP,
+              marginLeft: pillInside ? 8 : 0,
+            }}
+          >
+            {frame.width} × {frame.height}
+          </div>
+          <SelectionToolbar
+            chrome={chrome}
+            selection={frame}
+            area={area}
+            onAction={(action) => onConfirm(frame, action)}
+            canRecord={recordable(frame)}
+          />
+        </>
+      )}
     </div>
+  );
+}
+
+/**
+ * The Frame box's chrome when the overlay opened to record: the ratio bar and size readout
+ * above it, the mode and input widget beside it, the Start pill under it and the camera
+ * preview inside it while the camera is on.
+ */
+function RecordFrameChrome({
+  frame,
+  area,
+  ratio,
+  onRatio,
+  scaleFactor,
+  chrome,
+  onStart,
+}: {
+  frame: CaptureRect;
+  area: CaptureRect;
+  ratio: RecordingRatio;
+  onRatio(ratio: RecordingRatio): void;
+  scaleFactor: number;
+  chrome: OverlayChrome;
+  onStart(): void;
+}): React.JSX.Element {
+  const t = useTranslations("screenshots");
+  const bar = ratioBarPlacement(frame, area);
+  const widget = widgetPlacement(frame, area);
+  const pill = startPillPlacement(frame, area);
+  const preview = chrome.toggles?.camera ? cameraPreviewPlacement(frame) : null;
+  return (
+    <>
+      {preview && <CameraPreview rect={preview} />}
+      <RatioBar
+        ratio={ratio}
+        onRatio={onRatio}
+        size={devicePixelSize(frame, scaleFactor)}
+        left={bar.left}
+        top={bar.top}
+      />
+      {chrome.toggles && <RecordWidget chrome={chrome} toggles={chrome.toggles} {...widget} />}
+      <StartPill
+        label={t("overlay.startRecording")}
+        onStart={onStart}
+        disabled={!recordable(frame)}
+        centerX={pill.centerX}
+        top={pill.top}
+      />
+    </>
   );
 }
 

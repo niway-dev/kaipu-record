@@ -1,0 +1,25 @@
+/*
+ * What the recording entry points add to the screenshot picker's styles
+ * (`capture-mode-buttons.module.css`): the record dot in the primary button and the mono
+ * caption of the remembered Frame area.
+ */
+
+.primary {
+  gap: 10px;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.caption {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
