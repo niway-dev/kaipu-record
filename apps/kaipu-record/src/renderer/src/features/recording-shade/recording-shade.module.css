@@ -1,0 +1,14 @@
+/*
+ * The recording shade: a clear box at the recorded area whose huge spread shadow dims the
+ * rest of the display. 0.6 leaves the desktop recognisable while making the boundary
+ * unmistakable. The 1.5 px outline is the capture overlay's accent, so the shade reads as
+ * the same selection the user just drew.
+ */
+.area {
+  --shade-accent: var(--accent-primary, #f6055c);
+  position: fixed;
+  box-sizing: border-box;
+  border: 1.5px solid var(--shade-accent);
+  box-shadow: 0 0 0 99999px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}

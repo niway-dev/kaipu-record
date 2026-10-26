@@ -28,6 +28,8 @@ import { ClickHook, type HookLike } from "./click-hook";
 import { CursorTrackRegistry } from "./cursor-tracker";
 import { ControlBarWindow } from "./control-bar-window";
 import { CameraBubbleWindow } from "./camera-bubble-window";
+import { RecordingShadeWindow } from "./recording-shade-window";
+import { areaToGlobal } from "./area-geometry";
 import { FinalizeMoveError, RecordingWriter, timestampId } from "./recording-writer";
 import { IDLE_ACTIVITY, applyTick, startedActivity, stoppedActivity } from "./recording-activity";
 import { vaultDirectory } from "../library/vault-location";
@@ -85,6 +87,7 @@ export function registerRecordingHub(
 ): RecordingHubHandle {
   const bar = new ControlBarWindow();
   const cameraBubble = new CameraBubbleWindow();
+  const shade = new RecordingShadeWindow();
   const writer = new RecordingWriter({
     vaultDir: () => vaultDirectory().path,
     newId: () => timestampId(Date.now()),
@@ -334,10 +337,28 @@ export function registerRecordingHub(
     void displayIdForSource(info.sourceId).then((displayId) =>
       bar.show(displayId, { includeInRecording }),
     );
+    // An area (ADR 0030): dim the rest of its display and keep the camera bubble, which is
+    // recorded as part of the screen, inside the area. The shade sits under the bar and
+    // the bubble; raising them once it shows covers Windows, which ignores window levels.
+    const area = info.area;
+    const areaDisplay = area
+      ? screen.getAllDisplays().find((display) => display.id === area.displayId)
+      : undefined;
+    if (area && areaDisplay) {
+      shade.show(areaDisplay, area.rect, () => {
+        bar.raise();
+        cameraBubble.raise();
+      });
+      cameraBubble.anchorTo(areaToGlobal(area, areaDisplay.bounds));
+    }
   });
   const applyStopWindowState = (): void => {
     activity = stoppedActivity(activity);
     bar.hide();
+    shade.hide();
+    cameraBubble.anchorTo(null);
+    // A bubble an area was too small for comes back now, if the camera is still on.
+    if (settings.isCameraEnabled) cameraBubble.show();
     const main = getMainWindow();
     main?.show();
     main?.focus();

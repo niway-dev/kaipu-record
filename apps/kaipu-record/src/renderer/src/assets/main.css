@@ -65,6 +65,11 @@ body[data-window="capture-overlay"] {
   overflow: hidden;
 }
 
+/* The recording shade covers a display exactly and only paints; nothing scrolls. */
+body[data-window="recording-shade"] {
+  overflow: hidden;
+}
+
 /* The capture toast: a fixed 380 × 150 window the card fills; nothing scrolls. */
 body[data-window="capture-toast"],
 body[data-window="capture-toast"] #root {
