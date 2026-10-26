@@ -5,7 +5,14 @@ import { IPC_CHANNELS } from "@shared/types";
 import icon from "../../resources/icon.png?asset";
 import { CapturePanelWindow } from "./capture-panel-window";
 import { createMainTranslator } from "@kaipu/i18n/main";
-import { createTray, rebuildTrayMenu, setTrayState, type TrayState } from "./tray";
+import {
+  createTray,
+  rebuildTrayMenu,
+  setTrayRecording,
+  setTrayState,
+  type TrayState,
+} from "./tray";
+import { ROUTES } from "@shared/routes";
 import { registerRecordingSourceHandlers } from "./recording-sources";
 import { registerPermissionHandlers } from "./permissions";
 import { currentVault, registerLibraryVaultHandlers } from "./library";
@@ -482,6 +489,23 @@ function triggerChooseSource(): void {
   sendToRenderer(IPC_CHANNELS.recordingRequestSourcePicker);
 }
 
+/**
+ * Show the main window on a route. The renderer uses a hash router, so changing the
+ * hash navigates in place without a reload. A window that had to be recreated is
+ * still loading, so the hash is set once it has finished.
+ */
+function showMainWindowAt(route: string): void {
+  const recreated = !mainWindow || mainWindow.isDestroyed();
+  showMainWindow();
+  const win = mainWindow;
+  if (!win || win.isDestroyed()) return;
+  const go = (): void => {
+    void win.webContents.executeJavaScript(`window.location.hash = ${JSON.stringify("#" + route)}`);
+  };
+  if (recreated || win.webContents.isLoading()) win.webContents.once("did-finish-load", go);
+  else go();
+}
+
 /** Bring the app back to the foreground from any state (the rescue shortcut). */
 function bringAppToFront(): void {
   showMainWindow();
@@ -757,7 +781,10 @@ app.whenReady().then(() => {
   registerRecordingSourceHandlers();
 
   // Recording engine: disk writer, control-bar window, state relay.
-  hub = registerRecordingHub(() => mainWindow);
+  hub = registerRecordingHub(
+    () => mainWindow,
+    (activity) => setTrayRecording(activity.active),
+  );
 
   // Global (system-wide) shortcuts. Reuse the existing start/stop paths so the
   // recorder logic stays in one place. Re-register when the bindings change.
@@ -949,7 +976,19 @@ app.whenReady().then(() => {
 
   // Menu-bar tray + its Capture Panel.
   capturePanel = new CapturePanelWindow();
-  tray = createTray(capturePanel, showMainWindow, getAppSettings().locale);
+  tray = createTray(capturePanel, showMainWindow, getAppSettings().locale, {
+    getShortcuts: () => getAppSettings().shortcuts,
+    actions: {
+      recordScreen: triggerStartRecording,
+      recordArea: triggerRecordArea,
+      // The source picker (screens and windows) lives on the Record page.
+      recordWindow: triggerChooseSource,
+      stopRecording: () => mainWindow?.webContents.send(IPC_CHANNELS.recordingCommand, "stop"),
+      takeScreenshot: () => triggerShortcutCapture("captureScreenshot"),
+      openLibrary: () => showMainWindowAt(ROUTES.library),
+      openSettings: () => showMainWindowAt(ROUTES.settings),
+    },
+  });
   // Load the panel hidden so the first tray click does not pay a cold start. After
   // the main window is ready, not alongside it: the main window's start-up comes
   // first, and the end-to-end suite takes the first window to open as the app.

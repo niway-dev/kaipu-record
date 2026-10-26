@@ -6,6 +6,8 @@ import trayWindowsScreenshotPath from "../../resources/tray-windows-screenshot.i
 import { createMainTranslator } from "@kaipu/i18n/main";
 import type { Locale } from "@kaipu/i18n";
 import type { CapturePanelWindow } from "./capture-panel-window";
+import { buildTrayMenuTemplate, type TrayMenuActions } from "./tray-menu";
+import type { ShortcutSettings } from "@shared/types";
 import { trayIconFor, type TrayIconFile, type TrayState } from "./tray-icon";
 
 export type { TrayState } from "./tray-icon";
@@ -13,7 +15,8 @@ export type { TrayState } from "./tray-icon";
 /**
  * Creates the menu-bar tray icon.
  *  - Left click  → toggle the Capture Panel anchored to the tray.
- *  - Right click → context menu (open main window / quit), translated.
+ *  - Right click → context menu (Open, Record submenu, Stop while recording,
+ *    screenshot, Library, Settings, Quit), translated. See `tray-menu.ts`.
  *
  * On macOS each icon is a monochrome black+alpha template image;
  * `setTemplateImage(true)` lets macOS recolor it for light/dark menu bars
@@ -64,20 +67,69 @@ export function setTrayState(state: TrayState): void {
   trayRef.setImage(loadTrayIcon(state));
 }
 
+/** What the menu needs from main: the things it triggers and the live bindings. */
+export interface TrayMenuDeps {
+  actions: Omit<TrayMenuActions, "open" | "quit">;
+  getShortcuts: () => ShortcutSettings;
+}
+
+let menuDeps: TrayMenuDeps | null = null;
+let currentLocale: Locale = "en";
+let recording = false;
+
 function buildContextMenu(locale: Locale): Menu {
   const t = createMainTranslator(locale);
-  return Menu.buildFromTemplate([
-    { label: t("tray.open"), click: () => showMain?.() },
-    { type: "separator" },
-    { label: t("tray.quit"), click: () => app.quit() },
-  ]);
+  const deps = menuDeps;
+  const noop = (): void => {};
+  return Menu.buildFromTemplate(
+    buildTrayMenuTemplate({
+      labels: {
+        open: t("tray.open"),
+        record: t("tray.record"),
+        recordScreen: t("tray.recordScreen"),
+        recordArea: t("tray.recordArea"),
+        recordWindow: t("tray.recordWindow"),
+        stopRecording: t("tray.stopRecording"),
+        takeScreenshot: t("tray.takeScreenshot"),
+        library: t("tray.library"),
+        settings: t("tray.settings"),
+        quit: t("tray.quit"),
+      },
+      actions: {
+        open: () => showMain?.(),
+        quit: () => app.quit(),
+        recordScreen: deps?.actions.recordScreen ?? noop,
+        recordArea: deps?.actions.recordArea ?? noop,
+        recordWindow: deps?.actions.recordWindow ?? noop,
+        stopRecording: deps?.actions.stopRecording ?? noop,
+        takeScreenshot: deps?.actions.takeScreenshot ?? noop,
+        openLibrary: deps?.actions.openLibrary ?? noop,
+        openSettings: deps?.actions.openSettings ?? noop,
+      },
+      shortcuts: deps?.getShortcuts() ?? ({} as ShortcutSettings),
+      recording,
+    }),
+  );
+}
+
+/**
+ * Tell the tray whether a recording is active (or paused). Rebuilds the menu only
+ * on a change: the hub reports every status flip and timer tick.
+ */
+export function setTrayRecording(active: boolean): void {
+  if (active === recording) return;
+  recording = active;
+  contextMenu = buildContextMenu(currentLocale);
 }
 
 export function createTray(
   panel: CapturePanelWindow,
   showMainWindow: () => void,
   initialLocale: Locale,
+  deps: TrayMenuDeps,
 ): Tray {
+  menuDeps = deps;
+  currentLocale = initialLocale;
   const tray = new Tray(loadTrayIcon(trayState));
   trayRef = tray;
   showMain = showMainWindow;
@@ -95,5 +147,6 @@ export function createTray(
 
 /** Rebuild the tray context menu in a new language. Safe to call before createTray (no-op). */
 export function rebuildTrayMenu(locale: Locale): void {
+  currentLocale = locale;
   contextMenu = buildContextMenu(locale);
 }

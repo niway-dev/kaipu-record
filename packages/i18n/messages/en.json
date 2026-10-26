@@ -38,6 +38,14 @@
   },
   "tray": {
     "open": "Open Kaipu Record",
+    "record": "Record",
+    "recordScreen": "Record screen",
+    "recordArea": "Record area",
+    "recordWindow": "Record window…",
+    "stopRecording": "Stop recording",
+    "takeScreenshot": "Take screenshot",
+    "library": "Library",
+    "settings": "Settings…",
     "quit": "Quit",
     "closedToTrayTitle": "Kaipu is still running",
     "closedToTrayBody": "Find it in the system tray. Right-click the icon to quit."

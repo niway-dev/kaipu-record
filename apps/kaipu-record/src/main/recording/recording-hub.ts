@@ -118,6 +118,8 @@ function parsePhaseReport(value: unknown): RecorderPhaseReport | null {
  */
 export function registerRecordingHub(
   getMainWindow: () => BrowserWindow | null,
+  /** Called on every activity change (start, pause/resume, stop); the tray menu follows it. */
+  onActivityChange?: (activity: RecordingActivity) => void,
 ): RecordingHubHandle {
   const bar = new ControlBarWindow();
   const cameraBubble = new CameraBubbleWindow(() => getAppSettings().cameraBubble.size);
@@ -181,6 +183,7 @@ export function registerRecordingHub(
   // pure `recording-activity` module; the hub only owns the broadcast.
   let activity: RecordingActivity = IDLE_ACTIVITY;
   const broadcastActivity = (): void => {
+    onActivityChange?.(activity);
     for (const window of BrowserWindow.getAllWindows()) {
       if (!window.isDestroyed()) {
         window.webContents.send(IPC_CHANNELS.recordingState, activity);
