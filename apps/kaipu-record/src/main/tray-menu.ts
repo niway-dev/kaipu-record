@@ -18,6 +18,7 @@ export interface TrayMenuLabels {
   recordArea: string;
   recordWindow: string;
   stopRecording: string;
+  cancelCountdown: string;
   takeScreenshot: string;
   library: string;
   settings: string;
@@ -42,6 +43,12 @@ export interface TrayMenuInput {
   shortcuts: ShortcutSettings;
   /** A recording is active or paused. Pause keeps Stop enabled, so it is not a separate input. */
   recording: boolean;
+  /**
+   * A take is pending: its countdown is running (or its streams are being acquired), so no
+   * recording is active yet. The Record items are disabled and "Cancel countdown" replaces
+   * Stop; it sends the same stop command, which cancels a pending start.
+   */
+  countingDown?: boolean;
 }
 
 /** Display-only accelerator; an empty binding shows nothing. */
@@ -52,6 +59,8 @@ function display(accelerator: string | undefined): Partial<MenuItemConstructorOp
 
 export function buildTrayMenuTemplate(input: TrayMenuInput): MenuItemConstructorOptions[] {
   const { labels, actions, shortcuts, recording } = input;
+  const countingDown = !recording && input.countingDown === true;
+  const busy = recording || countingDown;
   const items: MenuItemConstructorOptions[] = [
     {
       label: labels.open,
@@ -62,25 +71,29 @@ export function buildTrayMenuTemplate(input: TrayMenuInput): MenuItemConstructor
     {
       label: labels.record,
       submenu: [
-        {
-          label: labels.recordScreen,
-          enabled: !recording,
-          ...display(shortcuts.startRecording),
-          click: actions.recordScreen,
-        },
+        // Each item opens the selector in its own mode, like the Record page's chips.
+        // Record screen shows no accelerator: `startRecording` opens the LAST used mode,
+        // which is not always Screen. `recordArea` does open Frame, so it is shown.
+        { label: labels.recordScreen, enabled: !busy, click: actions.recordScreen },
         {
           label: labels.recordArea,
-          enabled: !recording,
+          enabled: !busy,
           ...display(shortcuts.recordArea),
           click: actions.recordArea,
         },
-        { label: labels.recordWindow, enabled: !recording, click: actions.recordWindow },
+        { label: labels.recordWindow, enabled: !busy, click: actions.recordWindow },
       ],
     },
   ];
   if (recording) {
     items.push({
       label: labels.stopRecording,
+      ...display(shortcuts.stopRecording),
+      click: actions.stopRecording,
+    });
+  } else if (countingDown) {
+    items.push({
+      label: labels.cancelCountdown,
       ...display(shortcuts.stopRecording),
       click: actions.stopRecording,
     });

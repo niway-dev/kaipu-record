@@ -10,6 +10,7 @@ const labels: TrayMenuLabels = {
   recordArea: "Record area",
   recordWindow: "Record window…",
   stopRecording: "Stop recording",
+  cancelCountdown: "Cancel countdown",
   takeScreenshot: "Take screenshot",
   library: "Library",
   settings: "Settings…",
@@ -60,13 +61,31 @@ describe("buildTrayMenuTemplate", () => {
     ]);
   });
 
-  it("idle: the Record submenu is enabled and shows the configured accelerators", () => {
+  it("idle: the Record submenu is enabled and shows only the accelerators that do the same", () => {
     const sub = submenu(build(false));
     expect(names(sub)).toEqual(["Record screen", "Record area", "Record window…"]);
     expect(sub.map((i) => i.enabled)).toEqual([true, true, true]);
-    expect(sub[0]).toMatchObject({ accelerator: "Command+Control+C", registerAccelerator: false });
+    // startRecording opens the last used mode, not always Screen: not shown on Record screen.
+    expect(sub[0]!.accelerator).toBeUndefined();
     expect(sub[1]).toMatchObject({ accelerator: "Command+Control+A", registerAccelerator: false });
     expect(sub[2]!.accelerator).toBeUndefined();
+  });
+
+  it("countdown: the Record items are disabled and Cancel countdown takes Stop's place", () => {
+    const a = actions();
+    const items = buildTrayMenuTemplate({
+      labels,
+      actions: a,
+      shortcuts,
+      recording: false,
+      countingDown: true,
+    });
+    expect(names(items).slice(0, 4)).toEqual(["Open", "---", "Record", "Cancel countdown"]);
+    expect(submenu(items).map((i) => i.enabled)).toEqual([false, false, false]);
+    expect(names(items)).not.toContain("Stop recording");
+    click(items.find((i) => i.label === "Cancel countdown"));
+    // The same stop command cancels a pending start.
+    expect(a.stopRecording).toHaveBeenCalledTimes(1);
   });
 
   it("recording: Stop appears right after Record and the submenu is disabled", () => {

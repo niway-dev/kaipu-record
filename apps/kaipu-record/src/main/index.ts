@@ -8,6 +8,7 @@ import { createMainTranslator } from "@kaipu/i18n/main";
 import {
   createTray,
   rebuildTrayMenu,
+  setTrayCountdown,
   setTrayRecording,
   setTrayState,
   type TrayState,
@@ -784,6 +785,7 @@ app.whenReady().then(() => {
   hub = registerRecordingHub(
     () => mainWindow,
     (activity) => setTrayRecording(activity.active),
+    setTrayCountdown,
   );
 
   // Global (system-wide) shortcuts. Reuse the existing start/stop paths so the
@@ -979,10 +981,12 @@ app.whenReady().then(() => {
   tray = createTray(capturePanel, showMainWindow, getAppSettings().locale, {
     getShortcuts: () => getAppSettings().shortcuts,
     actions: {
-      recordScreen: triggerStartRecording,
-      recordArea: triggerRecordArea,
-      // The source picker (screens and windows) lives on the Record page.
-      recordWindow: triggerChooseSource,
+      // Each Record item opens the selector in its own mode, as the Record page's chips do
+      // (and makes it the last used one). Window opens the thumbnail picker while its
+      // overlay mode is off (NIW2-469); a pick there starts the countdown.
+      recordScreen: () => triggerRecordSelector("screen"),
+      recordArea: () => triggerRecordSelector("frame"),
+      recordWindow: () => triggerRecordSelector("window"),
       stopRecording: () => mainWindow?.webContents.send(IPC_CHANNELS.recordingCommand, "stop"),
       takeScreenshot: () => triggerShortcutCapture("captureScreenshot"),
       openLibrary: () => showMainWindowAt(ROUTES.library),

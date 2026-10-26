@@ -321,6 +321,29 @@ describe("recording hub — a Dock dropped by a floating panel comes back", () =
     expect(mockState.shortcutUnregister).toHaveBeenCalledWith("Escape");
   });
 
+  it("reports a pending take to the tray: on while counting, off once it starts or is cancelled", async () => {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    const onPendingChange = vi.fn();
+    registerRecordingHub(() => fakeMainWindow() as never, undefined, onPendingChange);
+    const phase = mockState.ipcOn.get(IPC_CHANNELS.recordingRecorderPhase)!;
+
+    // Any countdown counts, prepared region or not (the Record page's picker path).
+    phase({}, { phase: "counting", value: 3 });
+    phase({}, { phase: "counting", value: 2 });
+    phase({}, { phase: "idle" });
+    expect(onPendingChange.mock.calls).toEqual([[true], [false]]);
+
+    phase({}, { phase: "counting", value: 1 });
+    phase({}, { phase: "starting" });
+    mockState.ipcOn.get(IPC_CHANNELS.recordingStart)!(
+      {},
+      { sourceId: "screen:1:0", sourceName: "Screen" },
+    );
+    expect(onPendingChange.mock.calls).toEqual([[true], [false], [true], [false]]);
+  });
+
   it("a countdown nobody prepared draws nothing, and junk reports are ignored", async () => {
     mockState.shortcutRegister.mockClear();
     const { registerSettings } = await import("../infrastructure/settings-store");

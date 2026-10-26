@@ -121,6 +121,11 @@ export function registerRecordingHub(
   getMainWindow: () => BrowserWindow | null,
   /** Called on every activity change (start, pause/resume, stop); the tray menu follows it. */
   onActivityChange?: (activity: RecordingActivity) => void,
+  /**
+   * Called when a take becomes pending (its countdown starts) or stops being pending (it
+   * started, was cancelled or failed). The tray menu disables Record and offers Cancel.
+   */
+  onPendingChange?: (pending: boolean) => void,
 ): RecordingHubHandle {
   const bar = new ControlBarWindow();
   const cameraBubble = new CameraBubbleWindow(() => getAppSettings().cameraBubble.size);
@@ -417,6 +422,12 @@ export function registerRecordingHub(
       getMainWindow()?.webContents.send(IPC_CHANNELS.recordingCommand, "stop");
     });
   };
+  let pending = false;
+  const setPending = (next: boolean): void => {
+    if (next === pending) return;
+    pending = next;
+    onPendingChange?.(next);
+  };
   const clearCountdownRegion = (): void => {
     if (countdownRegionTimer) clearTimeout(countdownRegionTimer);
     countdownRegionTimer = null;
@@ -425,6 +436,8 @@ export function registerRecordingHub(
   };
   ipcMain.on(IPC_CHANNELS.recordingRecorderPhase, (_e, raw: unknown) => {
     const report = parsePhaseReport(raw);
+    // Every countdown (overlay region or Record page) is a pending take for the tray.
+    if (report && !activity.active) setPending(report.phase !== "idle");
     if (!report || !countdownRegion || activity.active) return;
     const { display, rect } = countdownRegion;
     if (report.phase === "counting") {
@@ -446,6 +459,7 @@ export function registerRecordingHub(
     activity = startedActivity();
     // The countdown is over: Esc belongs to the apps again.
     clearCountdownRegion();
+    setPending(false);
     try {
       captureMainEvent(
         RECORDING_STARTED_EVENT,
@@ -579,6 +593,7 @@ export function registerRecordingHub(
       clickHook.stop();
       // A shade must never outlive the renderer that would have stopped it.
       clearCountdownRegion();
+      setPending(false);
       shade.hide();
       if (!activity.active) return;
       applyStopWindowState();

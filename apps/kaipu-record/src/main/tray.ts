@@ -76,6 +76,7 @@ export interface TrayMenuDeps {
 let menuDeps: TrayMenuDeps | null = null;
 let currentLocale: Locale = "en";
 let recording = false;
+let countingDown = false;
 
 function buildContextMenu(locale: Locale): Menu {
   const t = createMainTranslator(locale);
@@ -90,6 +91,7 @@ function buildContextMenu(locale: Locale): Menu {
         recordArea: t("tray.recordArea"),
         recordWindow: t("tray.recordWindow"),
         stopRecording: t("tray.stopRecording"),
+        cancelCountdown: t("tray.cancelCountdown"),
         takeScreenshot: t("tray.takeScreenshot"),
         library: t("tray.library"),
         settings: t("tray.settings"),
@@ -108,6 +110,7 @@ function buildContextMenu(locale: Locale): Menu {
       },
       shortcuts: deps?.getShortcuts() ?? ({} as ShortcutSettings),
       recording,
+      countingDown,
     }),
   );
 }
@@ -119,6 +122,13 @@ function buildContextMenu(locale: Locale): Menu {
 export function setTrayRecording(active: boolean): void {
   if (active === recording) return;
   recording = active;
+  contextMenu = buildContextMenu(currentLocale);
+}
+
+/** Tell the tray a take is pending (countdown or acquiring). Rebuilds only on a change. */
+export function setTrayCountdown(pending: boolean): void {
+  if (pending === countingDown) return;
+  countingDown = pending;
   contextMenu = buildContextMenu(currentLocale);
 }
 
