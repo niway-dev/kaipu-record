@@ -1,0 +1,100 @@
+---
+title: "ADR 0030: A recording targets a display, an area or a window; an area is cropped in the recording compositor and the cursor sidecar is normalized to it"
+description: The recording contract carries a typed target instead of a bare source id. An area is recorded from a full-display capture and cropped on the compositor canvas with the shared DPI geometry, so macOS and Windows share one path and no native module is added; the cursor sidecar is normalized to the recorded rectangle so the editor's zoom keeps pointing at the right place.
+---
+
+# ADR 0030: A recording targets a display, an area or a window; an area is cropped in the recording compositor and the cursor sidecar is normalized to it
+
+## Status
+
+| Field         | Value                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Status        | Proposed — [design](/specs/2026-10-26-record-capture-modes-design/), Linear [NIW2-513](https://linear.app/niway/issue/NIW2-513/record-capture-modes-record-a-display-or-a-selected-area-through-the); nothing implemented yet                                                                                                                                                                                                        |
+| Date          | 2026-10-26                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Relates to    | [0022](/architecture/decisions/0022-screenshot-capture-native-where-the-os-has-it/) (the overlay never captures), [0024](/architecture/decisions/0024-window-mode-and-quiet-capture/) (the Record seat this fills; its "recording through the overlay" non-goal is the feature designed here), [0029](/architecture/decisions/0029-floating-windows-never-change-the-activation-policy/) (the recipe for the recording shade window) |
+| Superseded by | —                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+
+## Context
+
+A recording covers whatever `desktopCapturer` source the user picked from the thumbnail picker:
+a whole screen or a window. The engine asks `getUserMedia` for that source at native resolution
+and, whenever the size must be capped or a watermark burned, redraws every frame on a canvas (the
+recording compositor) and encodes the canvas track. The cursor tracker in main samples the pointer
+and normalizes it to the captured display's bounds; the video editor's auto-zoom reads that
+sidecar.
+
+The owner wants to record one display chosen visually, or a rectangle drawn on the screen, the
+way screenshots already offer Frame and Screen on the shared overlay — and ADR 0024 reserved a
+Record button there for this. Two things need a decision a later reader will question: how a
+rectangle is cut out of a desktop capture without a native module per platform, and what the
+cursor sidecar is normalized to when the video is a part of a display.
+
+The owner's constraint: not against a native dependency in principle, but the implementation
+must be ours and must work on macOS and Windows alike.
+
+## Decision
+
+1. **The recording contract carries a typed target**, not a bare source id:
+   `{ kind: "display", displayId }`, `{ kind: "area", displayId, rect }` (display-relative DIP) or
+   `{ kind: "window", sourceId }`. Main resolves a display or area target to the `screen:<id>`
+   source; the engine still receives a source id and, for an area, the rectangle and the display
+   geometry. The current mode is a persisted setting, as `screenshotMode` is.
+2. **An area is recorded from a full-display capture and cropped in the recording compositor.**
+   The crop rectangle in physical pixels is `cropForDisplay(trackSize, display, rect)` — the
+   pure function the Windows screenshot backend uses, which derives the scale from the frame it
+   actually received — and the output size is `fitToCap(cropWidth, cropHeight, capHeight)`
+   rounded to even. The compositor's `drawImage` gains a source rectangle; with an area target it
+   always runs. No native module is added.
+3. **The cursor sidecar is normalized to the recorded rectangle.** `CursorTrack.display` holds
+   the rectangle's DIP size and the display's scale factor; an optional `region` records the
+   display id and the rectangle's origin. The editor does not change.
+4. **The overlay stays shared UI that only answers** (ADR 0022 decision 3): with a `record`
+   intent it returns the same rectangle or display answer plus the action pressed (`select`,
+   `record`, `capture`, `copy`); main decides what happens, and recording happens in the engine as
+   today.
+
+## Alternatives rejected
+
+- **Native crop at the source** (ScreenCaptureKit `sourceRect` on macOS, Windows.Graphics.Capture
+  on Windows). Exact pixels and no wasted bandwidth, but two platform bindings with their own
+  Electron ABI rebuilds, for what is one source rectangle in a `drawImage` the app already runs on
+  every MacBook. The repo's native-dependencies rule and ADR 0022 rejected the same trade for
+  screenshots. Kept as the escape hatch if the compositor cannot hold the frame rate (see below).
+- **Chromium Region Capture (`cropTo`).** Only crops tab (self) captures; it does not apply to
+  screen or window sources, so it cannot serve a desktop recorder.
+- **Record the whole display and crop in the editor or at export** (the area as metadata). Keeps
+  every pixel for later reframing, but the raw file is the display's size, and the player, the
+  thumbnails, the zoom and every export would have to honour the crop. It is a different feature
+  ("crop a video"), not "record an area".
+- **Normalize the cursor to the display and let the editor subtract the region.** Every consumer
+  of the sidecar (pause detection, camera path, click markers) would carry the offset; one
+  normalization at the writer keeps them unchanged.
+- **A second picker for recording.** Rejected by ADR 0024 decision 5; the seat was reserved so
+  this would not happen.
+
+## Consequences
+
+- One more branch in the engine (`area`) and one more argument to the compositor; the two paths
+  that ship (display, window) keep their exact behaviour and a golden test pins it.
+- The compositor runs for every area recording, including the rare case where no resize and no
+  watermark are needed. Its cost in the hidden main window is an open question the design
+  measures before the feature ships.
+- `RecordingSettings.selectedSource` migrates to `target`; the IPC contract doc changes.
+- The cursor tracker takes a region; the sidecar gains an optional field, version unchanged.
+- A new floating window kind (the recording shade) follows ADR 0029 and is content-protected and
+  click-through; `floating-window-policy.test.ts` pins it.
+
+## Non-goals
+
+- Changing the area while recording; exact dimensions or aspect locks in the picker; Window mode
+  inside the overlay for recording; compositing the camera into the canvas; Linux.
+
+## Reopen when
+
+- The compositor measures sustained dropped frames for a 1280×720 area at the default preset on
+  the Mac mini or the first Windows build, after moving the draw loop off `requestAnimationFrame`
+  (then the native crop behind the same engine seam, built for both platforms at once).
+- Chromium extends Region Capture to screen sources (then `cropTo` replaces the canvas crop, inside
+  this decision).
+- Analytics show Area used by fewer than one in twenty recordings three months after shipping:
+  the mode stays, but presets and exact dimensions do not get built on its account.
