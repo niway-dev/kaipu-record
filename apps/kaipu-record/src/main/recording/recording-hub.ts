@@ -24,7 +24,6 @@ import type {
 import { serializeCursorTrack } from "@shared/cursor-track";
 import { buildRecordingStartedProperties, RECORDING_STARTED_EVENT } from "@shared/analytics";
 import { captureMainEvent } from "../services/analytics.service";
-import { MIN_AREA_SIZE } from "@shared/capture-geometry";
 import type { CaptureRect } from "@shared/types/screenshot-capture";
 import { LibraryVault } from "../library/library-vault";
 import { areaCapturedDisplay, pickCapturedDisplay } from "./captured-display";
@@ -33,7 +32,7 @@ import { CursorTrackRegistry } from "./cursor-tracker";
 import { ControlBarWindow } from "./control-bar-window";
 import { CameraBubbleWindow } from "./camera-bubble-window";
 import { RecordingShadeWindow } from "./recording-shade-window";
-import { areaToGlobal } from "./area-geometry";
+import { areaToGlobal, sanitizeArea } from "./area-geometry";
 import { FinalizeMoveError, RecordingWriter, timestampId } from "./recording-writer";
 import { IDLE_ACTIVITY, applyTick, startedActivity, stoppedActivity } from "./recording-activity";
 import { vaultDirectory } from "../library/vault-location";
@@ -193,6 +192,10 @@ export function registerRecordingHub(
     }
   };
   ipcMain.on(IPC_CHANNELS.recordingSettingsUpdate, (_e, patch: Partial<RecordingSettings>) => {
+    // An area from a window is untrusted: keep it only clamped to the display it names.
+    if (patch && "area" in patch && patch.area !== null) {
+      patch = { ...patch, area: sanitizeAreaOnScreen(patch.area) };
+    }
     applySettingsPatch(patch);
   });
 
@@ -314,10 +317,8 @@ export function registerRecordingHub(
       if (!display) return { enabled: false };
       // An area on this display: normalize to the area, so the editor's zoom lands on the
       // recorded frame (ADR 0030). An area naming another display is ignored, not trusted.
-      const space =
-        area && String(area.displayId) === display.id
-          ? areaCapturedDisplay(display, area)
-          : display;
+      const safe = sanitizeArea(area, { id: Number(display.id), bounds: display.bounds });
+      const space = safe ? areaCapturedDisplay(display, safe) : display;
       cursorTracks.start(sessionId, space);
       if (clickHook.ensureRunning()) clickSessions.add(sessionId);
       return { enabled: true };
@@ -366,10 +367,10 @@ export function registerRecordingHub(
     // An area (ADR 0030): dim the rest of its display and keep the camera bubble, which is
     // recorded as part of the screen, inside the area. The shade sits under the bar and
     // the bubble; raising them once it shows covers Windows, which ignores window levels.
-    const area = info.area;
-    const areaDisplay = area
-      ? screen.getAllDisplays().find((display) => display.id === area.displayId)
+    const areaDisplay = info.area
+      ? screen.getAllDisplays().find((display) => display.id === info.area?.displayId)
       : undefined;
+    const area = areaDisplay ? sanitizeArea(info.area, areaDisplay) : null;
     if (area && areaDisplay) {
       shade.show(areaDisplay, area.rect, () => {
         bar.raise();
@@ -428,8 +429,8 @@ export function registerRecordingHub(
       if (activity.active) return false;
       const display = screen.getAllDisplays().find((candidate) => candidate.id === displayId);
       if (!display) return false;
-      const area = rect ? roundRect(rect) : null;
-      if (area && (area.width < MIN_AREA_SIZE || area.height < MIN_AREA_SIZE)) return false;
+      const area = rect ? sanitizeArea({ displayId, rect }, display) : null;
+      if (rect && !area) return false;
       const source = await screenSourceForDisplay(displayId, screen.getAllDisplays().length);
       if (!source) return false;
       const t = createMainTranslator(getAppSettings().locale);
@@ -437,17 +438,11 @@ export function registerRecordingHub(
         selectedSource: {
           id: source.id,
           name: area
-            ? t("record.areaSource", { width: area.width, height: area.height })
+            ? t("record.areaSource", { width: area.rect.width, height: area.rect.height })
             : source.name,
           type: "screen",
         },
-        area: area
-          ? {
-              displayId,
-              rect: area,
-              displaySize: { width: display.bounds.width, height: display.bounds.height },
-            }
-          : null,
+        area,
       });
       return true;
     },
@@ -475,16 +470,6 @@ async function displayIdForSource(sourceId: string): Promise<string | undefined>
   }
 }
 
-/** Whole DIP: what the overlay draws and what the source name prints. */
-function roundRect(rect: CaptureRect): CaptureRect {
-  return {
-    x: Math.round(rect.x),
-    y: Math.round(rect.y),
-    width: Math.round(rect.width),
-    height: Math.round(rect.height),
-  };
-}
-
 /**
  * The `screen:` source that records a display. Some platforms report an empty `display_id`;
  * with a single display that source is unambiguous, with several it is not trusted.
@@ -505,4 +490,12 @@ async function screenSourceForDisplay(
   } catch {
     return null;
   }
+}
+
+/** An untrusted area, kept only when it is valid on the display it names. */
+function sanitizeAreaOnScreen(value: unknown): RecordingArea | null {
+  const displayId =
+    value && typeof value === "object" ? (value as { displayId?: unknown }).displayId : undefined;
+  const display = screen.getAllDisplays().find((candidate) => candidate.id === displayId);
+  return display ? sanitizeArea(value, display) : null;
 }

@@ -367,6 +367,9 @@ describe("recording hub — choosing an area or a display on the overlay", () =>
     mockState.ipcHandle.clear();
     mockState.displays = [{ id: 1, bounds: { x: 0, y: 0, width: 1512, height: 982 } }, display];
     mockState.getSources.mockReset();
+    for (const fn of [...Object.values(mockState.shade), ...Object.values(mockState.bubble)]) {
+      fn.mockReset();
+    }
     mockState.getSources.mockResolvedValue([
       { id: "screen:1:0", name: "Screen 1", display_id: "1" },
       { id: "screen:2:0", name: "Screen 2", display_id: "2" },
@@ -440,6 +443,44 @@ describe("recording hub — choosing an area or a display on the overlay", () =>
 
     expect(await handle.selectArea(2, { x: 0, y: 0, width: 640, height: 360 })).toBe(false);
     expect(settings().area).toBeNull();
+  });
+
+  it("a settings patch from a window cannot set an area that is malformed or off its display", async () => {
+    const { settings } = await hub();
+    const update = mockState.ipcOn.get(IPC_CHANNELS.recordingSettingsUpdate)!;
+
+    update({}, { area: { displayId: 2, rect: { x: 0, y: 0, width: 0, height: 0 } } });
+    expect(settings().area).toBeNull();
+
+    update({}, { area: { displayId: 2, rect: { x: -500, y: 0, width: 5000, height: 400 } } });
+    expect(settings().area).toEqual({
+      displayId: 2,
+      rect: { x: 0, y: 0, width: 1512, height: 400 },
+      displaySize: { width: 1512, height: 982 },
+    });
+  });
+
+  it("a recording start clamps its area before the shade and the bubble use it", async () => {
+    await hub();
+    mockState.shade.show.mockReset();
+    mockState.ipcOn.get(IPC_CHANNELS.recordingStart)!(
+      {},
+      {
+        sourceId: "screen:2:0",
+        sourceName: "Area",
+        area: {
+          displayId: 2,
+          rect: { x: 1400, y: 0, width: 640, height: 360 },
+          displaySize: { width: 1512, height: 982 },
+        },
+      },
+    );
+    // 1400 + 640 runs off a 1512-wide display: only 112 DIP of it is on screen.
+    expect(mockState.shade.show).toHaveBeenCalledWith(
+      display,
+      { x: 1400, y: 0, width: 112, height: 360 },
+      expect.any(Function),
+    );
   });
 
   it("an area smaller than the minimum is refused", async () => {
