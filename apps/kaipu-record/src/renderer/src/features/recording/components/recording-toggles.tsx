@@ -1,4 +1,4 @@
-import React from "react";
+import React, { type ReactNode } from "react";
 import { Mic, Volume2, Camera } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { StatusToggleRow } from "@kaipu/ui";
@@ -13,6 +13,11 @@ interface RecordingTogglesProps {
    */
   isSystemAudioUnavailable?: boolean;
   variant?: "full" | "compact";
+  /**
+   * Rendered in the Camera tile's place: the split toggle + settings chevron
+   * (features/camera-settings). Without it the Camera tile is a plain toggle.
+   */
+  cameraSlot?: ReactNode;
   onToggleMicrophone: () => void;
   onToggleSystemAudio: () => void;
   onToggleCamera: () => void;
@@ -26,6 +31,7 @@ export function RecordingToggles({
   isCameraEnabled,
   isSystemAudioUnavailable = false,
   variant = "full",
+  cameraSlot,
   onToggleMicrophone,
   onToggleSystemAudio,
   onToggleCamera,
@@ -59,6 +65,7 @@ export function RecordingToggles({
           label: t("cameraLabel"),
           isActive: isCameraEnabled,
           onToggle: onToggleCamera,
+          element: cameraSlot,
         },
       ]}
     />
