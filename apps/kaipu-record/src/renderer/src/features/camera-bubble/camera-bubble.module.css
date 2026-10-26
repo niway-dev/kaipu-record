@@ -1,22 +1,33 @@
-/* A fixed-size square → a true circle (a percentage height wouldn't resolve
-   against the auto-height window body, which is what gave the oval). Centered in
-   a slightly larger window so the shadow shows. */
+/* The window is the bubble plus a 24 px transparent pad on every side
+   (CAMERA_BUBBLE_WINDOW_PAD): room for the shadow, the hover size label and the grip.
+   The bubble fills the window minus that pad, so a resize from main is all it takes to
+   resize it. No `-webkit-app-region: drag`: the bubble is fixed at its corner. */
+
+.root {
+  --pad: 24px;
+  position: fixed;
+  inset: 0;
+}
+
 .bubble {
-  -webkit-app-region: drag;
-  width: 192px;
-  height: 192px;
-  border-radius: 50%;
+  position: absolute;
+  inset: var(--pad);
   overflow: hidden;
   background: var(--bg-card);
   border: 3px solid var(--accent-primary);
-  /* On a transparent floating window a box-shadow is CLIPPED to the window's
-     rectangular bounds — if it reaches the edge you get an ugly dark box. Keep it
-     small enough to fully fade within the window margin (window 224 − bubble 192 =
-     16px each side, so an 8px blur fades well before the edge). */
+  box-sizing: border-box;
+  /* On a transparent floating window a box-shadow is CLIPPED to the window's bounds;
+     keep it small enough to fade well inside the 24 px pad. */
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* Hover chrome (never while recording): a 2 px pink outline around the bubble. */
+.root[data-chrome] .bubble {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
 }
 
 .video {
@@ -29,4 +40,52 @@
 
 .placeholder {
   color: var(--text-muted);
+}
+
+.sizeLabel {
+  position: absolute;
+  top: 2px;
+  left: var(--pad);
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent-primary);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 16px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Circle: a 22 px white dot with a pink border, on the rim at 45° top-right
+   (cos 45° = 0.7071 → 50% ± 35.36% of the side). */
+.gripCircle {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  box-sizing: border-box;
+  left: calc(var(--pad) + (100% - 2 * var(--pad)) * 0.8536);
+  top: calc(var(--pad) + (100% - 2 * var(--pad)) * 0.1464);
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: #fff;
+  border: 3px solid var(--accent-primary);
+  cursor: nesw-resize;
+  touch-action: none;
+}
+
+/* Rounded: a white L with a pink edge at the top-right corner, following the radius
+   (set inline from the bubble's own). */
+.gripRounded {
+  position: absolute;
+  top: calc(var(--pad) - 5px);
+  right: calc(var(--pad) - 5px);
+  width: 30px;
+  height: 30px;
+  box-sizing: border-box;
+  border-top: 5px solid #fff;
+  border-right: 5px solid #fff;
+  filter: drop-shadow(0 0 1px var(--accent-primary)) drop-shadow(0 0 1px var(--accent-primary));
+  cursor: nesw-resize;
+  touch-action: none;
 }

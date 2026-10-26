@@ -1,0 +1,132 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { AppSettings, CameraAccessStatus } from "@shared/types";
+import { DEFAULT_CAMERA_BUBBLE, type CameraBubbleSettings } from "@shared/camera-bubble";
+
+export interface CameraDevice {
+  deviceId: string;
+  /** Empty while the OS hides names (camera not granted yet). */
+  label: string;
+}
+
+export interface CameraSettingsStore {
+  bubble: CameraBubbleSettings;
+  /** Applies at once on screen; persisting is throttled so a slider drag is not a disk write per pixel. */
+  update(patch: Partial<CameraBubbleSettings>): void;
+  cameras: CameraDevice[];
+  access: CameraAccessStatus;
+  openSystemSettings(): void;
+}
+
+/** How often a burst of changes (slider drag, held arrow key) reaches main. */
+const PERSIST_EVERY_MS = 60;
+
+/**
+ * Lists the `videoinput` devices, refreshed on plug/unplug. Never opens the camera to
+ * read labels (that would light the camera on a page where nothing records); unnamed
+ * devices are labelled by ordinal at render time.
+ */
+export function useCameras(): CameraDevice[] {
+  const [cameras, setCameras] = useState<CameraDevice[]>([]);
+  useEffect(() => {
+    const media = navigator.mediaDevices;
+    if (!media?.enumerateDevices) return;
+    let cancelled = false;
+    const load = async (): Promise<void> => {
+      try {
+        const devices = await media.enumerateDevices();
+        if (cancelled) return;
+        setCameras(
+          devices
+            .filter((device) => device.kind === "videoinput" && device.deviceId !== "")
+            .map((device) => ({ deviceId: device.deviceId, label: device.label })),
+        );
+      } catch {
+        if (!cancelled) setCameras([]);
+      }
+    };
+    void load();
+    media.addEventListener?.("devicechange", load);
+    return () => {
+      cancelled = true;
+      media.removeEventListener?.("devicechange", load);
+    };
+  }, []);
+  return cameras;
+}
+
+/** Camera access, re-read when the window regains focus (it is granted in System Settings). */
+export function useCameraAccess(): CameraAccessStatus {
+  const [access, setAccess] = useState<CameraAccessStatus>("unknown");
+  useEffect(() => {
+    let cancelled = false;
+    const check = (): void => {
+      void window.electronAPI
+        .getCameraAccessStatus()
+        .then((next) => {
+          if (!cancelled) setAccess(next);
+        })
+        .catch(() => {});
+    };
+    check();
+    window.addEventListener("focus", check);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", check);
+    };
+  }, []);
+  return access;
+}
+
+/**
+ * The camera bubble settings (persisted in AppSettings by main), plus what the settings
+ * UI needs around them: the cameras to choose from and whether access is blocked.
+ * Query on mount + subscribe, like every cross-window setting.
+ */
+export function useCameraSettings(): CameraSettingsStore {
+  const [bubble, setBubble] = useState<CameraBubbleSettings>(DEFAULT_CAMERA_BUBBLE);
+  const latest = useRef(bubble);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSent = useRef(0);
+
+  useEffect(() => {
+    const accept = (settings: AppSettings): void => {
+      // A change of ours still waiting to be sent wins over the echo of an older one.
+      if (timer.current) return;
+      latest.current = settings.cameraBubble;
+      setBubble(settings.cameraBubble);
+    };
+    void window.electronAPI.getSettings().then(accept);
+    const unsubscribe = window.electronAPI.onSettingsChanged(accept);
+    return () => {
+      unsubscribe();
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, []);
+
+  const send = useCallback((): void => {
+    timer.current = null;
+    lastSent.current = Date.now();
+    void window.electronAPI.updateSettings({ cameraBubble: latest.current });
+  }, []);
+
+  const update = useCallback(
+    (patch: Partial<CameraBubbleSettings>): void => {
+      const next = { ...latest.current, ...patch };
+      latest.current = next;
+      setBubble(next);
+      if (timer.current) return;
+      const wait = PERSIST_EVERY_MS - (Date.now() - lastSent.current);
+      if (wait <= 0) send();
+      else timer.current = setTimeout(send, wait);
+    },
+    [send],
+  );
+
+  const cameras = useCameras();
+  const access = useCameraAccess();
+  const openSystemSettings = useCallback((): void => {
+    void window.electronAPI.openSystemSettings("camera");
+  }, []);
+
+  return { bubble, update, cameras, access, openSystemSettings };
+}

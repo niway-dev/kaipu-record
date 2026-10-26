@@ -1,7 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 import { tokens } from "@kaipu/tokens/kaipu.stylex";
 import { StatusToggle } from "../atoms/status-toggle";
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import type { StyleXStyles } from "@stylexjs/stylex";
 
 /**
@@ -28,6 +28,12 @@ export interface StatusToggleItem {
   disabled?: boolean;
   /** Native tooltip, e.g. why the tile is disabled. */
   title?: string;
+  /**
+   * Renders this element in the tile's place, sharing the row like a tile does. For a
+   * consumer that needs more than a toggle in one slot (the desktop's camera tile, split
+   * into a toggle and a settings chevron); the other fields are then ignored.
+   */
+  element?: ReactNode;
 }
 
 export interface StatusToggleRowProps {
@@ -49,20 +55,24 @@ export function StatusToggleRow({
   const compact = variant === "compact";
   return (
     <div {...stylex.props(styles.row, compact && styles.compact, style)}>
-      {items.map((item) => (
-        <StatusToggle
-          key={item.id}
-          icon={item.icon}
-          label={compact ? undefined : item.label}
-          isActive={item.isActive}
-          compact={compact}
-          onText={onText}
-          offText={offText}
-          onToggle={item.onToggle}
-          disabled={item.disabled}
-          title={item.title}
-        />
-      ))}
+      {items.map((item) =>
+        item.element !== undefined ? (
+          <Fragment key={item.id}>{item.element}</Fragment>
+        ) : (
+          <StatusToggle
+            key={item.id}
+            icon={item.icon}
+            label={compact ? undefined : item.label}
+            isActive={item.isActive}
+            compact={compact}
+            onText={onText}
+            offText={offText}
+            onToggle={item.onToggle}
+            disabled={item.disabled}
+            title={item.title}
+          />
+        ),
+      )}
     </div>
   );
 }

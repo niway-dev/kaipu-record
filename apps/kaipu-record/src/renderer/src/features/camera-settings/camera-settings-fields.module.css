@@ -1,0 +1,225 @@
+/* Shared by the popover (full) and the drawer (compact). The device chip is last in
+   the DOM (Tab order) but drawn in the container's header: the container is
+   `position: relative` and sets --camera-settings-header-top. */
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fields[data-compact] {
+  gap: 6px;
+}
+
+.label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.chips {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.chip {
+  flex: 1 1 0%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+  appearance: none;
+  cursor: pointer;
+}
+
+.chips[data-compact] .chip {
+  height: 26px;
+  padding: 0 4px;
+  font-size: 11px;
+}
+
+.chip:hover {
+  color: var(--text-primary);
+}
+
+.chip[aria-checked="true"] {
+  background: rgba(246, 5, 92, 0.12);
+  border-color: rgba(246, 5, 92, 0.32);
+  color: var(--accent-primary);
+}
+
+.chip[aria-disabled="true"] {
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.chip:focus-visible,
+.device:focus-visible,
+.blockedButton:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.slider {
+  position: relative;
+  padding-top: 4px;
+}
+
+.slider input[type="range"] {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--accent-primary);
+  cursor: pointer;
+}
+
+.slider input[type="range"]:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.ticks {
+  position: relative;
+  height: 6px;
+  /* The native thumb is ~16 px: inset so a tick sits under the thumb's center. */
+  margin: 0 8px;
+}
+
+.tick {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 6px;
+  background: var(--text-muted);
+  transform: translateX(-50%);
+}
+
+.tick[data-current] {
+  background: var(--accent-primary);
+}
+
+.range {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-muted);
+}
+
+.note {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.note:empty {
+  display: none;
+}
+
+.note[data-live] {
+  color: var(--accent-primary);
+  background: rgba(246, 5, 92, 0.08);
+  border: 1px solid rgba(246, 5, 92, 0.24);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+}
+
+.device {
+  position: absolute;
+  top: var(--camera-settings-header-top, 12px);
+  right: var(--camera-settings-header-right, 12px);
+  max-width: 128px;
+  height: 24px;
+  padding: 0 6px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-family: var(--font-family);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.fields[data-compact] .device {
+  max-width: 120px;
+  height: 22px;
+  font-size: 10px;
+}
+
+.blocked {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 4px 4px;
+  text-align: center;
+}
+
+.blockedIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid rgba(248, 81, 73, 0.4);
+  color: #f88b85;
+}
+
+.blocked[data-compact] .blockedIcon {
+  width: 32px;
+  height: 32px;
+}
+
+.blockedTitle {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.blockedBody {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.blockedButton {
+  margin-top: 4px;
+  height: 30px;
+  padding: 0 12px;
+  background: var(--accent-primary);
+  border: none;
+  border-radius: var(--radius-sm);
+  color: #fff;
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+
+.blocked[data-compact] .blockedButton {
+  height: 26px;
+  font-size: 11px;
+}

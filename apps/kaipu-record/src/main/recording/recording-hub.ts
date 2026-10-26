@@ -42,6 +42,7 @@ import {
   applyDockPolicy,
   forceRegularPolicy,
   getAppSettings,
+  onSettingsChanged,
 } from "../infrastructure/settings-store";
 
 /** The three input toggles a global shortcut can flip. */
@@ -119,7 +120,19 @@ export function registerRecordingHub(
   getMainWindow: () => BrowserWindow | null,
 ): RecordingHubHandle {
   const bar = new ControlBarWindow();
-  const cameraBubble = new CameraBubbleWindow();
+  const cameraBubble = new CameraBubbleWindow(() => getAppSettings().cameraBubble.size);
+  // Shape and size apply live, mid-take included (the bubble is part of the recorded
+  // screen, so the video shows the change). The shape is the renderer's; the size is the
+  // window's bounds, re-placed from the anchored corner.
+  let appliedBubbleSize = getAppSettings().cameraBubble.size;
+  onSettingsChanged((next) => {
+    if (next.cameraBubble.size === appliedBubbleSize) return;
+    appliedBubbleSize = next.cameraBubble.size;
+    cameraBubble.applySize();
+  });
+  ipcMain.handle(IPC_CHANNELS.cameraBubblePreviewSize, (_e, size: unknown): number =>
+    cameraBubble.preview(typeof size === "number" ? size : appliedBubbleSize),
+  );
   const shade = new RecordingShadeWindow();
   const writer = new RecordingWriter({
     vaultDir: () => vaultDirectory().path,

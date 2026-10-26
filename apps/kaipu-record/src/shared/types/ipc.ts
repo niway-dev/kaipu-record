@@ -18,6 +18,7 @@ import {
   type CaptureRect,
   type RememberedArea,
 } from "./screenshot-capture";
+import { DEFAULT_CAMERA_BUBBLE, type CameraBubbleSettings } from "../camera-bubble";
 
 /**
  * "system" (follow the OS appearance) is a deliberate non-goal for now — the
@@ -304,6 +305,12 @@ export interface AppSettings {
    * describes it, and SignPath's signing terms require the opt-out.
    */
   diagnosticsEnabled: boolean;
+  /**
+   * The camera bubble's shape, size and device (see `shared/camera-bubble.ts`). Changed
+   * from the Camera settings popover (Record page), drawer (capture panel) or the
+   * bubble's resize grip, and applied to a showing bubble live, mid-take included.
+   */
+  cameraBubble: CameraBubbleSettings;
 }
 
 /**
@@ -334,6 +341,7 @@ export const DEFAULT_SETTINGS: Omit<AppSettings, "shortcuts"> = {
   screenshotMode: "frame",
   trayHintShown: false,
   diagnosticsEnabled: true,
+  cameraBubble: DEFAULT_CAMERA_BUBBLE,
 };
 
 /** Prefixes on the `recording:finalize` rejection message; the renderer picks the toast from them. */
@@ -371,6 +379,10 @@ export const IPC_CHANNELS = {
   checkPermissions: "permissions:check",
   requestPermission: "permissions:request",
   openSystemSettings: "permissions:open-settings",
+  /** Camera access as a tri-state, so "blocked" is never confused with "not asked yet". */
+  cameraAccessStatus: "permissions:camera-access-status",
+  /** Bubble → main: resize the bubble while its grip is dragged (not persisted). */
+  cameraBubblePreviewSize: "camera-bubble:preview-size",
   // macOS Accessibility, for the click hook. Status never prompts; request does (PR 10).
   accessibilityStatus: "permissions:accessibility-status",
   accessibilityRequest: "permissions:accessibility-request",

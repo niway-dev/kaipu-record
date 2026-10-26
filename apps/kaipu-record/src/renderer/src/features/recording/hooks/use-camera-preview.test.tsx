@@ -29,7 +29,7 @@ describe("useCameraPreview", () => {
     expect(getUserMedia).not.toHaveBeenCalled();
   });
 
-  it("opens a capped 320×240 user-facing stream when enabled", async () => {
+  it("opens a capped 640×480 user-facing stream when enabled", async () => {
     const { stream } = fakeStream();
     getUserMedia.mockResolvedValue(stream);
 
@@ -37,7 +37,25 @@ describe("useCameraPreview", () => {
 
     await waitFor(() => expect(result.current.hasStream).toBe(true));
     expect(getUserMedia).toHaveBeenCalledWith({
-      video: { facingMode: "user", width: { ideal: 320 }, height: { ideal: 240 } },
+      video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
+      audio: false,
+    });
+  });
+
+  it("opens the chosen camera, and falls back to the default when it is gone", async () => {
+    const { stream } = fakeStream();
+    getUserMedia.mockRejectedValueOnce(new Error("OverconstrainedError"));
+    getUserMedia.mockResolvedValueOnce(stream);
+
+    const { result } = renderHook(() => useCameraPreview(true, "cam-2"));
+
+    await waitFor(() => expect(result.current.hasStream).toBe(true));
+    expect(getUserMedia).toHaveBeenNthCalledWith(1, {
+      video: { deviceId: { exact: "cam-2" }, width: { ideal: 640 }, height: { ideal: 480 } },
+      audio: false,
+    });
+    expect(getUserMedia).toHaveBeenNthCalledWith(2, {
+      video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
       audio: false,
     });
   });

@@ -17,6 +17,7 @@ import { RecordingIndicator } from "@renderer/features/recording/components/reco
 import { CountdownOverlay } from "@renderer/features/recording/components/countdown-overlay";
 import { ScreenSourceSelector } from "@renderer/features/recording/components/screen-source-selector";
 import { PermissionNotice } from "@renderer/features/recording/components/permission-notice";
+import { CameraControlWithPopover } from "@renderer/features/camera-settings";
 import { useTranslations } from "@kaipu/i18n";
 import type { CaptureMode } from "@shared/types/screenshot-capture";
 import styles from "./record-page.module.css";
@@ -117,6 +118,13 @@ export function RecordPage(): React.JSX.Element {
       onToggleMicrophone={setup.toggleMicrophone}
       onToggleSystemAudio={setup.toggleSystemAudio}
       onToggleCamera={setup.toggleCamera}
+      cameraSlot={
+        <CameraControlWithPopover
+          on={setup.isCameraEnabled}
+          onToggle={setup.toggleCamera}
+          isRecording={isRecording}
+        />
+      }
     />
   );
 

@@ -42,4 +42,20 @@ describe("StatusToggleRow", () => {
     expect(screen.getAllByText("Sí")).toHaveLength(1);
     expect(screen.getAllByText("No")).toHaveLength(2);
   });
+
+  it("renders an item's own element in its slot", () => {
+    const [mic, audio] = items();
+    render(
+      <StatusToggleRow
+        items={[
+          mic!,
+          audio!,
+          { ...items()[2]!, element: <div data-testid="custom-camera">custom</div> },
+        ]}
+      />,
+    );
+    expect(screen.getByTestId("custom-camera")).toBeInTheDocument();
+    expect(screen.queryByText("Camera")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button")).toHaveLength(2);
+  });
 });
