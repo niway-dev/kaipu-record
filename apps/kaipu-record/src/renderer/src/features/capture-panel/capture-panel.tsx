@@ -9,6 +9,11 @@ import { RecordingToggles } from "@renderer/features/recording/components/record
 import { MicPicker } from "@renderer/features/recording/components/mic-picker";
 import { RecordButton } from "@renderer/features/recording/components/record-button";
 import { CaptureModeButtons } from "@renderer/features/screenshots/capture-mode-buttons";
+import {
+  CameraPanelDrawer,
+  CameraPanelTile,
+  useCameraControl,
+} from "@renderer/features/camera-settings";
 import { PanelHeader } from "./components/panel-header";
 import { PanelTabs, type PanelTab } from "./components/panel-tabs";
 import type { CaptureMode } from "@shared/types/screenshot-capture";
@@ -28,6 +33,8 @@ export function CapturePanel(): React.JSX.Element {
   // the global activity broadcast — it can't tell from its own (idle) recorder.
   const activity = useRecordingActivity();
   const isBusy = activity.active;
+  // The split Camera tile and its inline drawer share this.
+  const camera = useCameraControl();
   const stopRecording = (): void => window.electronAPI?.controlCommand("stop");
 
   // Two modes: recording controls and the screenshot action. A recording locks the
@@ -109,7 +116,16 @@ export function CapturePanel(): React.JSX.Element {
               onToggleMicrophone={setup.toggleMicrophone}
               onToggleSystemAudio={setup.toggleSystemAudio}
               onToggleCamera={setup.toggleCamera}
+              cameraSlot={
+                <CameraPanelTile
+                  control={camera}
+                  on={setup.isCameraEnabled}
+                  onToggle={setup.toggleCamera}
+                />
+              }
             />
+
+            <CameraPanelDrawer control={camera} on={setup.isCameraEnabled} isRecording={isBusy} />
 
             {setup.isMicrophoneEnabled && setup.microphones.length > 0 && (
               <div

@@ -1,0 +1,8 @@
+.drawer {
+  box-sizing: border-box;
+  padding: 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  text-align: left;
+}

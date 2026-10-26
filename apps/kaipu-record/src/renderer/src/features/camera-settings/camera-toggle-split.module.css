@@ -1,0 +1,143 @@
+/* Mirrors @kaipu/ui StatusToggle (the Mic and Audio tiles) so the row reads as one:
+   same paddings, radius, colors and ON/OFF readout. The tile is split into a body
+   (the toggle) and a chevron segment (the camera settings). */
+
+.split {
+  flex: 1 1 0%;
+  display: flex;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+  color: var(--text-muted);
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
+}
+
+.split[data-active] {
+  background: rgba(246, 5, 92, 0.12);
+  border-color: rgba(246, 5, 92, 0.32);
+  color: var(--accent-primary);
+}
+
+.split[data-blocked] {
+  border-color: rgba(248, 81, 73, 0.4);
+  color: #f88b85;
+  background: var(--bg-input);
+}
+
+.split[data-compact] {
+  border-radius: var(--radius-sm);
+}
+
+.body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 8px 12px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-family: var(--font-family);
+  appearance: none;
+  cursor: pointer;
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
+}
+
+.split[data-compact] .body {
+  gap: 4px;
+  padding: 9px 4px;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+
+.body:hover {
+  filter: brightness(1.1);
+}
+
+.body[aria-disabled="true"] {
+  cursor: not-allowed;
+  filter: none;
+}
+
+.icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-secondary);
+}
+
+.status {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: #3a3a3e;
+}
+
+.split[data-compact] .status {
+  font-size: 9px;
+}
+
+.split[data-active] .status {
+  color: var(--accent-primary);
+}
+
+.split[data-blocked] .status {
+  color: #f88b85;
+}
+
+.chevron {
+  flex: 0 0 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-left: 1px solid var(--border);
+  color: inherit;
+  appearance: none;
+  cursor: pointer;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+}
+
+.split[data-active] .chevron {
+  border-left-color: rgba(246, 5, 92, 0.32);
+}
+
+.split[data-blocked] .chevron {
+  border-left-color: rgba(248, 81, 73, 0.4);
+}
+
+.split[data-compact] .chevron {
+  flex-basis: 22px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.chevron:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.chevron svg {
+  transition: transform 120ms ease;
+}
+
+.chevron[data-open] svg {
+  transform: rotate(180deg);
+}
+
+.body:focus-visible,
+.chevron:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
