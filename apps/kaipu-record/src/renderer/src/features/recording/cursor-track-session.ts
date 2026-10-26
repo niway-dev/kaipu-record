@@ -11,10 +11,15 @@
  * blocked for an unbounded time (a permission dialog, a busy encoder). Without the race
  * a stalled IPC would leave the recorder store in "starting" forever.
  */
+import type { RecordingArea } from "@shared/types/ipc";
 import { measureClockOffset } from "./clock-sync";
 
 export interface CursorTrackApi {
-  cursorTrackStart(sessionId: string, sourceId: string): Promise<{ enabled: boolean }>;
+  cursorTrackStart(
+    sessionId: string,
+    sourceId: string,
+    area?: RecordingArea,
+  ): Promise<{ enabled: boolean }>;
   cursorClockNow(): Promise<number>;
   cursorTrackAnchor(sessionId: string, t0MainMs: number, quality: "exact" | "estimated"): void;
   cursorTrackPause(sessionId: string, atMainMs: number): void;
@@ -30,6 +35,8 @@ export interface CursorTrackSession {
 export interface CursorTrackSessionOptions {
   /** Renderer clock; injected by the tests. */
   now?: () => number;
+  /** A recording area: main normalizes the track to it instead of the whole display. */
+  area?: RecordingArea | null;
   /** Budget for `cursorTrackStart` + the ping handshake together. */
   timeoutMs?: number;
 }
@@ -56,7 +63,11 @@ export async function beginCursorTrackSession(
   const timeoutMs = options.timeoutMs ?? CURSOR_TRACK_START_TIMEOUT_MS;
   const open = async (): Promise<CursorTrackSession> => {
     try {
-      const { enabled } = await api.cursorTrackStart(sessionId, sourceId);
+      // Two calls rather than passing `undefined`: a full-display take keeps the exact
+      // three-argument call it made before areas existed, which the existing tests pin.
+      const { enabled } = await (options.area
+        ? api.cursorTrackStart(sessionId, sourceId, options.area)
+        : api.cursorTrackStart(sessionId, sourceId));
       if (!enabled) return NOOP_SESSION;
       const { offset } = await measureClockOffset(() => api.cursorClockNow(), now);
       return {

@@ -18,6 +18,7 @@ const shortcuts = {
   captureScreen: "⌃⇧⌘X",
   captureFrame: "⌃⇧⌘F",
   captureWindow: "⌃⌘W",
+  recordArea: "⌃⇧⌘R",
   toggleMicrophone: "⌃⌘M",
   toggleSystemAudio: "⌃⌘A",
   toggleCamera: "⌃⌘K",

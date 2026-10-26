@@ -1,4 +1,9 @@
-import { ENABLED_CAPTURE_MODES, type CaptureMode } from "@shared/types/screenshot-capture";
+import {
+  ENABLED_CAPTURE_MODES,
+  type CaptureAction,
+  type CaptureIntent,
+  type CaptureMode,
+} from "@shared/types/screenshot-capture";
 
 /** Which modifier means "copy" on the overlay: ⌘C on macOS, Ctrl+C everywhere else. */
 export type KeyPlatform = "mac" | "other";
@@ -42,4 +47,47 @@ export function modeForKey(
   if (event.metaKey || event.ctrlKey || event.altKey) return null;
   const index = ["1", "2", "3"].indexOf(event.key);
   return index < 0 ? null : (enabledModes[index] ?? null);
+}
+
+/** The Record shortcut as the action bar and the hint pill print it: the same everywhere. */
+export function recordKeyLabel(_platform: KeyPlatform): string {
+  return "R";
+}
+
+/**
+ * R with no modifier. Not ⌘R / Ctrl+R: outside dev, `optimizer.watchWindowShortcuts` (main
+ * installs it on every window) cancels those in `before-input-event` so they cannot reload a
+ * page, and the overlay would never see them. Plain letters are free on the overlay.
+ */
+export function isRecordKey(event: KeyboardEvent): boolean {
+  return (
+    event.key.toLowerCase() === "r" &&
+    !event.metaKey &&
+    !event.ctrlKey &&
+    !event.altKey &&
+    !event.shiftKey
+  );
+}
+
+/**
+ * What Enter does: take the screenshot, or (opened to record) keep the selection as the
+ * recording target without starting, so camera and audio can still be set (ADR 0030).
+ */
+export function primaryAction(intent: CaptureIntent): "capture" | "select" {
+  return intent === "record" ? "select" : "capture";
+}
+
+/**
+ * The action a key fires on a selection: Enter the primary one, R Record in
+ * either intent, ⌘C / Ctrl+C Copy only when the overlay opened to take a screenshot.
+ */
+export function actionForKey(
+  event: KeyboardEvent,
+  platform: KeyPlatform,
+  intent: CaptureIntent,
+): CaptureAction | null {
+  if (isCaptureKey(event)) return primaryAction(intent);
+  if (isRecordKey(event)) return "record";
+  if (intent === "capture" && isCopyKey(event, platform)) return "copy";
+  return null;
 }

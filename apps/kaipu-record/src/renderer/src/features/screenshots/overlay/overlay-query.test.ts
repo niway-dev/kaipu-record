@@ -17,7 +17,13 @@ describe("parseOverlayQuery", () => {
       ids: [7, 42, 9],
       frame: null,
       internal: false,
+      intent: "capture",
     });
+  });
+
+  it("reads the record intent, and treats anything else as a screenshot", () => {
+    expect(parseOverlayQuery(`${QUERY}&intent=record`)?.intent).toBe("record");
+    expect(parseOverlayQuery(`${QUERY}&intent=film`)?.intent).toBe("capture");
   });
 
   it("marks the built-in display", () => {

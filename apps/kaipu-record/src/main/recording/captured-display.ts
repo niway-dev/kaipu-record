@@ -6,6 +6,7 @@
  * mapping: Electron cannot read another app's window bounds, and the window can move or
  * resize mid-recording, so there is nothing stable to normalize against.
  */
+import type { RecordingArea } from "@shared/types/ipc";
 import type { CapturedDisplay } from "./cursor-tracker";
 
 export interface DisplayLike {
@@ -29,5 +30,26 @@ export function pickCapturedDisplay(
     id: String(display.id),
     bounds: { ...display.bounds },
     scaleFactor: display.scaleFactor,
+  };
+}
+
+/**
+ * The space an AREA recording's cursor is normalized to (ADR 0030): the area itself, in
+ * global DIP, so x/y of 0–1 span the recorded frame and the editor's zoom needs no offset.
+ */
+export function areaCapturedDisplay(
+  display: CapturedDisplay,
+  area: RecordingArea,
+): CapturedDisplay {
+  return {
+    id: display.id,
+    bounds: {
+      x: display.bounds.x + area.rect.x,
+      y: display.bounds.y + area.rect.y,
+      width: area.rect.width,
+      height: area.rect.height,
+    },
+    scaleFactor: display.scaleFactor,
+    region: { displayId: display.id, x: area.rect.x, y: area.rect.y },
   };
 }

@@ -15,18 +15,24 @@ import { FINALIZE_ELSEWHERE_MARKER, FINALIZE_KEPT_MARKER } from "@shared/types/i
 import type {
   ControlCommand,
   RecordingActivity,
+  RecordingArea,
   RecordingFinalizeMeta,
   RecordingSettings,
   RecordingStartInfo,
   RecordingTick,
 } from "@shared/types/ipc";
 import { serializeCursorTrack } from "@shared/cursor-track";
+import { buildRecordingStartedProperties, RECORDING_STARTED_EVENT } from "@shared/analytics";
+import { captureMainEvent } from "../services/analytics.service";
+import type { CaptureRect } from "@shared/types/screenshot-capture";
 import { LibraryVault } from "../library/library-vault";
-import { pickCapturedDisplay } from "./captured-display";
+import { areaCapturedDisplay, pickCapturedDisplay } from "./captured-display";
 import { ClickHook, type HookLike } from "./click-hook";
 import { CursorTrackRegistry } from "./cursor-tracker";
 import { ControlBarWindow } from "./control-bar-window";
 import { CameraBubbleWindow } from "./camera-bubble-window";
+import { RecordingShadeWindow } from "./recording-shade-window";
+import { areaToGlobal, sanitizeArea } from "./area-geometry";
 import { FinalizeMoveError, RecordingWriter, timestampId } from "./recording-writer";
 import { IDLE_ACTIVITY, applyTick, startedActivity, stoppedActivity } from "./recording-activity";
 import { vaultDirectory } from "../library/vault-location";
@@ -63,6 +69,14 @@ export interface RecordingHubHandle {
    *  mid-capture). */
   restoreCameraBubbleAfterCapture(): void;
   /**
+   * Make a display, or an area of it, the recording target (ADR 0030): the display's
+   * `screen:` source becomes `selectedSource`, and `area` is set for a rectangle (display-
+   * relative DIP) or cleared for the whole display. Resolves false, changing nothing, when
+   * the display is gone, has no screen source, or the area is under the minimum size, so a
+   * stale pick never records another display.
+   */
+  selectArea(displayId: number, rect: CaptureRect | null): Promise<boolean>;
+  /**
    * Best-effort recovery when the recorder renderer is gone (crash, or the
    * main window destroyed) mid-recording: resets activity, hides the bar, and
    * restores the Dock policy without waiting on IPC that will never arrive
@@ -84,6 +98,7 @@ export function registerRecordingHub(
 ): RecordingHubHandle {
   const bar = new ControlBarWindow();
   const cameraBubble = new CameraBubbleWindow();
+  const shade = new RecordingShadeWindow();
   const writer = new RecordingWriter({
     vaultDir: () => vaultDirectory().path,
     newId: () => timestampId(Date.now()),
@@ -146,6 +161,7 @@ export function registerRecordingHub(
     isMicrophoneEnabled: true,
     isSystemAudioEnabled: false,
     isCameraEnabled: false,
+    area: null,
   };
   const broadcastSettings = (): void => {
     for (const window of BrowserWindow.getAllWindows()) {
@@ -176,8 +192,26 @@ export function registerRecordingHub(
     }
   };
   ipcMain.on(IPC_CHANNELS.recordingSettingsUpdate, (_e, patch: Partial<RecordingSettings>) => {
-    applySettingsPatch(patch);
+    applySettingsPatch(windowSettingsPatch(patch, settings));
   });
+  // A display unplugged or resized after its area was chosen: the stored area no longer
+  // describes it, and the engine would crop with the old size. Drop it with its source so
+  // the next take asks again. A take in progress keeps its copy; stop checks again.
+  const dropStaleArea = (): void => {
+    const area = settings.area;
+    if (!area || activity.active) return;
+    const display = screen.getAllDisplays().find((candidate) => candidate.id === area.displayId);
+    if (
+      display &&
+      display.bounds.width === area.displaySize.width &&
+      display.bounds.height === area.displaySize.height
+    ) {
+      return;
+    }
+    applySettingsPatch({ selectedSource: null, area: null });
+  };
+  screen.on("display-removed", dropStaleArea);
+  screen.on("display-metrics-changed", dropStaleArea);
 
   // ── Disk writer ──────────────────────────────────────────────────────
   function videosDir(): string {
@@ -283,14 +317,23 @@ export function registerRecordingHub(
   });
   ipcMain.handle(
     IPC_CHANNELS.cursorTrackStart,
-    async (_e, sessionId: string, sourceId: string): Promise<{ enabled: boolean }> => {
+    async (
+      _e,
+      sessionId: string,
+      sourceId: string,
+      area?: RecordingArea | null,
+    ): Promise<{ enabled: boolean }> => {
       const display = pickCapturedDisplay(
         sourceId,
         await displayIdForSource(sourceId),
         screen.getAllDisplays(),
       );
       if (!display) return { enabled: false };
-      cursorTracks.start(sessionId, display);
+      // An area on this display: normalize to the area, so the editor's zoom lands on the
+      // recorded frame (ADR 0030). An area naming another display is ignored, not trusted.
+      const safe = sanitizeArea(area, { id: Number(display.id), bounds: display.bounds });
+      const space = safe ? areaCapturedDisplay(display, safe) : display;
+      cursorTracks.start(sessionId, space);
       if (clickHook.ensureRunning()) clickSessions.add(sessionId);
       return { enabled: true };
     },
@@ -309,8 +352,25 @@ export function registerRecordingHub(
   );
 
   // ── Window orchestration ────────────────────────────────────────────
+  // Set while the camera bubble is held inside a recorded area; only then does stop move it back.
+  let bubbleAnchoredToArea = false;
+  let cameraBubbleHiddenForCapture = false;
   ipcMain.on(IPC_CHANNELS.recordingStart, (_e, info: RecordingStartInfo) => {
     activity = startedActivity();
+    try {
+      captureMainEvent(
+        RECORDING_STARTED_EVENT,
+        buildRecordingStartedProperties({
+          sourceId: info.sourceId,
+          area: Boolean(info.area),
+          platform: process.platform,
+          displays: screen.getAllDisplays().length,
+        }),
+      );
+    } catch (error) {
+      // Analytics must never change what the user sees.
+      console.error("recording analytics failed", error);
+    }
     getMainWindow()?.hide();
     // The main window is now hidden; force the app to stay in the Dock/Cmd+Tab so
     // it isn't lost while only the floating panels are visible. Restored on stop.
@@ -321,10 +381,38 @@ export function registerRecordingHub(
     void displayIdForSource(info.sourceId).then((displayId) =>
       bar.show(displayId, { includeInRecording }),
     );
+    // An area (ADR 0030): dim the rest of its display and keep the camera bubble, which is
+    // recorded as part of the screen, inside the area. The shade sits under the bar and
+    // the bubble; raising them once it shows covers Windows, which ignores window levels.
+    // Main's own area, and only for the source it was chosen with: a window cannot set one
+    // (`windowSettingsPatch`), so the renderer's copy in `info` is the same value.
+    const chosen =
+      settings.area && settings.selectedSource?.id === info.sourceId ? settings.area : null;
+    const areaDisplay = chosen
+      ? screen.getAllDisplays().find((display) => display.id === chosen.displayId)
+      : undefined;
+    const area = areaDisplay ? sanitizeArea(chosen, areaDisplay) : null;
+    if (area && areaDisplay) {
+      shade.show(areaDisplay, area.rect, () => {
+        bar.raise();
+        cameraBubble.raise();
+      });
+      cameraBubble.anchorTo(areaToGlobal(area, areaDisplay.bounds));
+      bubbleAnchoredToArea = true;
+    }
   });
   const applyStopWindowState = (): void => {
     activity = stoppedActivity(activity);
     bar.hide();
+    shade.hide();
+    if (bubbleAnchoredToArea) {
+      bubbleAnchoredToArea = false;
+      cameraBubble.anchorTo(null);
+      // A bubble an area was too small for comes back now, if the camera is still on and no
+      // screenshot has it hidden.
+      if (settings.isCameraEnabled && !cameraBubbleHiddenForCapture) cameraBubble.show();
+    }
+    dropStaleArea();
     const main = getMainWindow();
     main?.show();
     main?.focus();
@@ -348,8 +436,6 @@ export function registerRecordingHub(
     getMainWindow()?.webContents.send(IPC_CHANNELS.recordingCommand, command);
   });
 
-  let cameraBubbleHiddenForCapture = false;
-
   return {
     isActive: () => activity.active,
     toggleRecordingSetting: (key) => applySettingsPatch({ [key]: !settings[key] }),
@@ -363,10 +449,34 @@ export function registerRecordingHub(
       cameraBubbleHiddenForCapture = false;
       if (settings.isCameraEnabled) cameraBubble.show();
     },
+    selectArea: async (displayId, rect) => {
+      // The source is locked for the length of a take.
+      if (activity.active) return false;
+      const display = screen.getAllDisplays().find((candidate) => candidate.id === displayId);
+      if (!display) return false;
+      const area = rect ? sanitizeArea({ displayId, rect }, display) : null;
+      if (rect && !area) return false;
+      const source = await screenSourceForDisplay(displayId, screen.getAllDisplays().length);
+      if (!source) return false;
+      const t = createMainTranslator(getAppSettings().locale);
+      applySettingsPatch({
+        selectedSource: {
+          id: source.id,
+          name: area
+            ? t("record.areaSource", { width: area.rect.width, height: area.rect.height })
+            : source.name,
+          type: "screen",
+        },
+        area,
+      });
+      return true;
+    },
     forceReset: () => {
       cursorTracks.discardAll();
       clickSessions.clear();
       clickHook.stop();
+      // A shade must never outlive the renderer that would have stopped it.
+      shade.hide();
       if (!activity.active) return;
       applyStopWindowState();
     },
@@ -385,4 +495,44 @@ async function displayIdForSource(sourceId: string): Promise<string | undefined>
   } catch {
     return undefined;
   }
+}
+
+/**
+ * The `screen:` source that records a display. Some platforms report an empty `display_id`;
+ * with a single display that source is unambiguous, with several it is not trusted.
+ */
+async function screenSourceForDisplay(
+  displayId: number,
+  displayCount: number,
+): Promise<{ id: string; name: string } | null> {
+  try {
+    const sources = await desktopCapturer.getSources({
+      types: ["screen"],
+      thumbnailSize: { width: 0, height: 0 },
+    });
+    const match =
+      sources.find((source) => source.display_id === String(displayId)) ??
+      (displayCount === 1 && sources.length === 1 ? sources[0] : undefined);
+    return match ? { id: match.id, name: match.name } : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A settings patch from a window. Only main sets an area, together with its display's screen
+ * source (`selectArea`), so a window may clear the area but never set one, and a window that
+ * changes the source clears it: `area` never names a display `selectedSource` does not record.
+ */
+export function windowSettingsPatch(
+  patch: Partial<RecordingSettings>,
+  current: RecordingSettings,
+): Partial<RecordingSettings> {
+  if (!patch || typeof patch !== "object") return {};
+  const next = { ...patch };
+  if ("area" in next && next.area !== null) delete next.area;
+  if ("selectedSource" in next && next.selectedSource?.id !== current.selectedSource?.id) {
+    next.area = null;
+  }
+  return next;
 }

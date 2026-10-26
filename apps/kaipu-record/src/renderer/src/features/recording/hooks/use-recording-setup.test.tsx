@@ -45,6 +45,7 @@ const SETTINGS = (over: Partial<RecordingSettings> = {}): RecordingSettings => (
   isMicrophoneEnabled: true,
   isSystemAudioEnabled: false,
   isCameraEnabled: false,
+  area: null,
   ...over,
 });
 
@@ -117,6 +118,38 @@ describe("useRecordingSetup", () => {
     expect(resolveInput()).toEqual(
       expect.objectContaining({ sourceId: "s1", microphoneDeviceId: "m1" }),
     );
+  });
+
+  it("startRecording carries the shared recording area into the start input", () => {
+    const area = {
+      displayId: 1,
+      rect: { x: 100, y: 50, width: 640, height: 360 },
+      displaySize: { width: 1512, height: 982 },
+    };
+    mockSettings = SETTINGS({ selectedSource: SCREEN, area });
+    const { result } = renderHook(() => useRecordingSetup());
+
+    act(() => result.current.startRecording());
+
+    const resolveInput = recorderRequestStart.mock.calls[0][0] as () => unknown;
+    expect(resolveInput()).toEqual(expect.objectContaining({ sourceId: "s1", area }));
+  });
+
+  it("choosing a source in the picker drops a previously chosen area", () => {
+    mockSettings = SETTINGS({
+      selectedSource: SCREEN,
+      area: {
+        displayId: 1,
+        rect: { x: 0, y: 0, width: 640, height: 360 },
+        displaySize: { width: 1512, height: 982 },
+      },
+    });
+    const { result } = renderHook(() => useRecordingSetup());
+    const safari = { id: "window:9", name: "Safari", type: "window" as const };
+
+    act(() => result.current.selectSource(safari));
+
+    expect(mockUpdate).toHaveBeenCalledWith({ selectedSource: safari, area: null });
   });
 
   it("startRecording is a no-op without a selected source", () => {

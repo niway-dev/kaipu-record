@@ -307,22 +307,29 @@
   padding: 0 10px;
   font-family: inherit;
   font-size: var(--font-size-base);
-  color: var(--overlay-muted);
+  font-weight: var(--font-weight-semibold);
+  color: #f3f3f5;
   background: transparent;
-  border: 0;
+  border: 1px solid var(--overlay-pill-line);
   border-radius: 7px;
-  cursor: not-allowed;
-  opacity: 0.6;
+  cursor: pointer;
 }
 
-.soonTag {
-  padding: 1px 5px;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  border: 1px solid var(--overlay-pill-line);
-  border-radius: 4px;
+/* The record dot, in the recording red the control bar uses. */
+.recordButton svg {
+  color: #ff453a;
+  fill: currentColor;
+}
+
+.recordButton:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.32);
+}
+
+/* Under the recording minimum, or a window: visible but not pressable. */
+.recordButton:disabled,
+.captureButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 /* ── Window mode ───────────────────────────────────────────────── */
@@ -432,17 +439,6 @@
 .modeSegment[aria-pressed="true"] {
   color: #fff;
   background: var(--overlay-accent);
-}
-
-.cardRecord {
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.1em;
-  text-align: center;
-  text-transform: uppercase;
-  color: var(--overlay-muted);
-  opacity: 0.7;
-  cursor: default;
 }
 
 /* ── Every overlay ─────────────────────────────────────────────── */

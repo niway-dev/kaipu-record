@@ -8,13 +8,29 @@ const mockState = vi.hoisted(() => ({
   userDataDir: "",
   ipcOn: new Map<string, (event: unknown, ...args: unknown[]) => unknown>(),
   ipcHandle: new Map<string, (event: unknown, ...args: unknown[]) => unknown>(),
+  screenOn: new Map<string, () => void>(),
   /** What AppKit would report: the process' real activation policy. */
   dockVisible: true,
   setActivationPolicy: vi.fn(),
   dockShow: vi.fn(),
-  bubble: { show: vi.fn(), hide: vi.fn(), destroy: vi.fn(), isVisible: vi.fn(() => false) },
-  bar: { show: vi.fn(), hide: vi.fn(), send: vi.fn() },
+  bubble: {
+    show: vi.fn(),
+    hide: vi.fn(),
+    destroy: vi.fn(),
+    isVisible: vi.fn(() => false),
+    anchorTo: vi.fn(),
+    raise: vi.fn(),
+  },
+  bar: { show: vi.fn(), hide: vi.fn(), send: vi.fn(), raise: vi.fn() },
+  shade: { show: vi.fn(), hide: vi.fn() },
+  displays: [] as Array<{
+    id: number;
+    bounds: { x: number; y: number; width: number; height: number };
+  }>,
   showSaveDialog: vi.fn(),
+  getSources: vi.fn(
+    async (): Promise<Array<{ id: string; name: string; display_id: string }>> => [],
+  ),
 }));
 
 vi.mock("electron", () => ({
@@ -34,9 +50,15 @@ vi.mock("electron", () => ({
     },
   },
   BrowserWindow: { getAllWindows: () => [] },
-  screen: { getCursorScreenPoint: () => ({ x: 0, y: 0 }) },
+  screen: {
+    getCursorScreenPoint: () => ({ x: 0, y: 0 }),
+    getAllDisplays: () => mockState.displays,
+    on: (event: string, fn: () => void) => {
+      mockState.screenOn.set(event, fn);
+    },
+  },
   dialog: { showSaveDialog: mockState.showSaveDialog },
-  desktopCapturer: { getSources: vi.fn(async () => []) },
+  desktopCapturer: { getSources: mockState.getSources },
   systemPreferences: { isTrustedAccessibilityClient: () => false },
 }));
 
@@ -46,6 +68,15 @@ vi.mock("./camera-bubble-window", () => ({
     hide = mockState.bubble.hide;
     destroy = mockState.bubble.destroy;
     isVisible = mockState.bubble.isVisible;
+    anchorTo = mockState.bubble.anchorTo;
+    raise = mockState.bubble.raise;
+  },
+}));
+
+vi.mock("./recording-shade-window", () => ({
+  RecordingShadeWindow: class {
+    show = mockState.shade.show;
+    hide = mockState.shade.hide;
   },
 }));
 
@@ -54,6 +85,7 @@ vi.mock("./control-bar-window", () => ({
     show = mockState.bar.show;
     hide = mockState.bar.hide;
     send = mockState.bar.send;
+    raise = mockState.bar.raise;
   },
 }));
 
@@ -85,6 +117,7 @@ describe("recording hub — camera on keeps the main window visible", () => {
       mockState.dockShow,
       ...Object.values(mockState.bubble),
       ...Object.values(mockState.bar),
+      ...Object.values(mockState.shade),
     ]) {
       fn.mockReset();
     }
@@ -157,6 +190,7 @@ describe("recording hub — a Dock dropped by a floating panel comes back", () =
       mockState.dockShow,
       ...Object.values(mockState.bubble),
       ...Object.values(mockState.bar),
+      ...Object.values(mockState.shade),
     ]) {
       fn.mockReset();
     }
@@ -203,6 +237,58 @@ describe("recording hub — a Dock dropped by a floating panel comes back", () =
     expect(mockState.dockShow).toHaveBeenCalledTimes(1);
     expect(mockState.dockVisible).toBe(true);
     expect(mainWindow.show).toHaveBeenCalled();
+  });
+
+  it("an area recording shades the display outside it and keeps the bubble inside, until stop", async () => {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    const hub = registerRecordingHub(() => fakeMainWindow() as never);
+    const display = { id: 2, bounds: { x: 1512, y: 0, width: 1512, height: 982 } };
+    mockState.displays = [{ id: 1, bounds: { x: 0, y: 0, width: 1512, height: 982 } }, display];
+    mockState.getSources.mockResolvedValue([
+      { id: "screen:2:0", name: "Screen 2", display_id: "2" },
+    ]);
+    const area = {
+      displayId: 2,
+      rect: { x: 100, y: 50, width: 640, height: 360 },
+      displaySize: { width: 1512, height: 982 },
+    };
+    await hub.selectArea(2, area.rect);
+
+    const start = mockState.ipcOn.get(IPC_CHANNELS.recordingStart)!;
+    const stop = mockState.ipcOn.get(IPC_CHANNELS.recordingStop)!;
+    start({}, { sourceId: "screen:2:0", sourceName: "Area · 640 × 360", area });
+
+    expect(mockState.shade.show).toHaveBeenCalledWith(display, area.rect, expect.any(Function));
+    expect(mockState.bubble.anchorTo).toHaveBeenLastCalledWith({
+      x: 1612,
+      y: 50,
+      width: 640,
+      height: 360,
+    });
+
+    stop({});
+    expect(mockState.shade.hide).toHaveBeenCalled();
+    expect(mockState.bubble.anchorTo).toHaveBeenLastCalledWith(null);
+  });
+
+  it("a full-display recording shows no shade and leaves the bubble where it was", async () => {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    registerRecordingHub(() => fakeMainWindow() as never);
+
+    mockState.ipcOn.get(IPC_CHANNELS.recordingStart)!(
+      {},
+      {
+        sourceId: "screen:1:0",
+        sourceName: "Screen 1",
+      },
+    );
+
+    expect(mockState.shade.show).not.toHaveBeenCalled();
+    expect(mockState.bubble.anchorTo).not.toHaveBeenCalled();
   });
 
   it("turning the camera on restores the Dock the bubble dropped, without hiding the main window", async () => {
@@ -274,5 +360,218 @@ describe("recording hub — finalize into an unreachable vault", () => {
       FINALIZE_ELSEWHERE_MARKER,
     );
     expect(await readFile(filePath)).toHaveLength(0);
+  });
+});
+
+describe("recording hub — choosing an area or a display on the overlay", () => {
+  const display = {
+    id: 2,
+    bounds: { x: 1512, y: 0, width: 1512, height: 982 },
+  };
+
+  beforeEach(async () => {
+    mockState.userDataDir = await mkdtemp(join(tmpdir(), "kaipu-hub-"));
+    mockState.ipcOn.clear();
+    mockState.ipcHandle.clear();
+    mockState.displays = [{ id: 1, bounds: { x: 0, y: 0, width: 1512, height: 982 } }, display];
+    mockState.getSources.mockReset();
+    for (const fn of [...Object.values(mockState.shade), ...Object.values(mockState.bubble)]) {
+      fn.mockReset();
+    }
+    mockState.getSources.mockResolvedValue([
+      { id: "screen:1:0", name: "Screen 1", display_id: "1" },
+      { id: "screen:2:0", name: "Screen 2", display_id: "2" },
+    ]);
+    vi.resetModules();
+  });
+
+  afterEach(async () => {
+    await rm(mockState.userDataDir, { recursive: true, force: true });
+  });
+
+  async function hub() {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    const handle = registerRecordingHub(() => fakeMainWindow() as never);
+    const settings = () =>
+      mockState.ipcHandle.get(IPC_CHANNELS.recordingSettingsGet)!({}) as Record<string, unknown>;
+    return { handle, settings };
+  }
+
+  it("an area becomes that display's screen source plus the area", async () => {
+    const { handle, settings } = await hub();
+    const rect = { x: 100.4, y: 50, width: 640, height: 360.6 };
+
+    expect(await handle.selectArea(2, rect)).toBe(true);
+
+    expect(settings().selectedSource).toEqual({
+      id: "screen:2:0",
+      name: "Area · 640 × 361",
+      type: "screen",
+    });
+    expect(settings().area).toEqual({
+      displayId: 2,
+      rect: { x: 100, y: 50, width: 640, height: 361 },
+      displaySize: { width: 1512, height: 982 },
+    });
+  });
+
+  it("a whole display becomes its screen source with no area", async () => {
+    const { handle, settings } = await hub();
+    await handle.selectArea(2, { x: 0, y: 0, width: 640, height: 360 });
+
+    expect(await handle.selectArea(1, null)).toBe(true);
+
+    expect(settings().selectedSource).toEqual({
+      id: "screen:1:0",
+      name: "Screen 1",
+      type: "screen",
+    });
+    expect(settings().area).toBeNull();
+  });
+
+  it("a display that is gone, or has no screen source, changes nothing", async () => {
+    const { handle, settings } = await hub();
+    const before = { ...settings() };
+
+    expect(await handle.selectArea(9, null)).toBe(false);
+    mockState.getSources.mockResolvedValue([]);
+    expect(await handle.selectArea(2, { x: 0, y: 0, width: 640, height: 360 })).toBe(false);
+
+    expect(settings()).toEqual(before);
+  });
+
+  it("never changes the target of a recording in progress", async () => {
+    const { handle, settings } = await hub();
+    mockState.ipcOn.get(IPC_CHANNELS.recordingStart)!(
+      {},
+      { sourceId: "screen:1:0", sourceName: "Screen 1" },
+    );
+
+    expect(await handle.selectArea(2, { x: 0, y: 0, width: 640, height: 360 })).toBe(false);
+    expect(settings().area).toBeNull();
+  });
+
+  it("a settings patch from a window can clear the area but never set one", async () => {
+    const { handle, settings } = await hub();
+    const update = mockState.ipcOn.get(IPC_CHANNELS.recordingSettingsUpdate)!;
+
+    update({}, { area: { displayId: 2, rect: { x: 0, y: 0, width: 640, height: 360 } } });
+    expect(settings().area).toBeNull();
+
+    await handle.selectArea(2, { x: 0, y: 0, width: 640, height: 360 });
+    update({}, { area: { displayId: 1, rect: { x: 0, y: 0, width: 640, height: 360 } } });
+    expect(settings().area).toMatchObject({ displayId: 2 });
+
+    update({}, { area: null });
+    expect(settings().area).toBeNull();
+  });
+
+  it("a window that changes the source drops the area chosen for the old one", async () => {
+    const { handle, settings } = await hub();
+    await handle.selectArea(2, { x: 0, y: 0, width: 640, height: 360 });
+    const update = mockState.ipcOn.get(IPC_CHANNELS.recordingSettingsUpdate)!;
+
+    update({}, { isMicrophoneEnabled: false });
+    expect(settings().area).not.toBeNull();
+
+    update({}, { selectedSource: { id: "window:7:0", name: "Editor", type: "window" } });
+    expect(settings().area).toBeNull();
+  });
+
+  it("a recording start shades the area main chose, not one the renderer sends", async () => {
+    const { handle } = await hub();
+    const start = mockState.ipcOn.get(IPC_CHANNELS.recordingStart)!;
+    const stop = mockState.ipcOn.get(IPC_CHANNELS.recordingStop)!;
+    const forged = {
+      displayId: 1,
+      rect: { x: 0, y: 0, width: 640, height: 360 },
+      displaySize: { width: 1512, height: 982 },
+    };
+
+    start({}, { sourceId: "screen:2:0", sourceName: "Screen 2", area: forged });
+    expect(mockState.shade.show).not.toHaveBeenCalled();
+    stop({});
+
+    await handle.selectArea(2, { x: 100, y: 50, width: 640, height: 360 });
+    start({}, { sourceId: "screen:2:0", sourceName: "Area", area: forged });
+    expect(mockState.shade.show).toHaveBeenCalledWith(
+      display,
+      { x: 100, y: 50, width: 640, height: 360 },
+      expect.any(Function),
+    );
+  });
+
+  it("a display unplugged or resized after its area was chosen drops the area and its source", async () => {
+    const { handle, settings } = await hub();
+    await handle.selectArea(2, { x: 0, y: 0, width: 640, height: 360 });
+    const metricsChanged = mockState.screenOn.get("display-metrics-changed")!;
+
+    // Same size (a work-area or position change): the area still fits.
+    metricsChanged();
+    expect(settings().area).not.toBeNull();
+
+    mockState.displays = [
+      mockState.displays[0],
+      { id: 2, bounds: { x: 1512, y: 0, width: 1280, height: 800 } },
+    ];
+    metricsChanged();
+    expect(settings().area).toBeNull();
+    expect(settings().selectedSource).toBeNull();
+
+    mockState.displays = [mockState.displays[0], display];
+    await handle.selectArea(2, { x: 0, y: 0, width: 640, height: 360 });
+    mockState.displays = [mockState.displays[0]];
+    mockState.screenOn.get("display-removed")!();
+    expect(settings().area).toBeNull();
+  });
+
+  it("a display change during a take waits for stop before dropping the area", async () => {
+    const { handle, settings } = await hub();
+    await handle.selectArea(2, { x: 0, y: 0, width: 640, height: 360 });
+    mockState.ipcOn.get(IPC_CHANNELS.recordingStart)!(
+      {},
+      { sourceId: "screen:2:0", sourceName: "Area" },
+    );
+
+    mockState.displays = [mockState.displays[0]];
+    mockState.screenOn.get("display-removed")!();
+    expect(settings().area).not.toBeNull();
+
+    mockState.ipcOn.get(IPC_CHANNELS.recordingStop)!({});
+    expect(settings().area).toBeNull();
+  });
+
+  it("stop moves and shows the bubble only after an area take, never over a screenshot", async () => {
+    const { handle } = await hub();
+    const start = mockState.ipcOn.get(IPC_CHANNELS.recordingStart)!;
+    const stop = mockState.ipcOn.get(IPC_CHANNELS.recordingStop)!;
+    mockState.ipcOn.get(IPC_CHANNELS.recordingSettingsUpdate)!({}, { isCameraEnabled: true });
+    mockState.bubble.show.mockClear();
+
+    start({}, { sourceId: "screen:1:0", sourceName: "Screen 1" });
+    stop({});
+    expect(mockState.bubble.anchorTo).not.toHaveBeenCalled();
+    expect(mockState.bubble.show).not.toHaveBeenCalled();
+
+    await handle.selectArea(2, { x: 0, y: 0, width: 640, height: 360 });
+    start({}, { sourceId: "screen:2:0", sourceName: "Area" });
+    mockState.bubble.isVisible.mockReturnValue(true);
+    handle.hideCameraBubbleForCapture();
+    stop({});
+    expect(mockState.bubble.anchorTo).toHaveBeenLastCalledWith(null);
+    expect(mockState.bubble.show).not.toHaveBeenCalled();
+  });
+
+  it("a forced reset removes a shade even when no take is active", async () => {
+    const { handle } = await hub();
+    handle.forceReset();
+    expect(mockState.shade.hide).toHaveBeenCalled();
+  });
+
+  it("an area smaller than the minimum is refused", async () => {
+    const { handle } = await hub();
+    expect(await handle.selectArea(2, { x: 0, y: 0, width: 63, height: 400 })).toBe(false);
   });
 });

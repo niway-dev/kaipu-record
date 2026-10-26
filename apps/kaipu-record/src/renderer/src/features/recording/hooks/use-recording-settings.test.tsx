@@ -9,6 +9,7 @@ const SETTINGS = (over: Partial<RecordingSettings> = {}): RecordingSettings => (
   isMicrophoneEnabled: true,
   isSystemAudioEnabled: false,
   isCameraEnabled: false,
+  area: null,
   ...over,
 });
 

@@ -28,6 +28,16 @@ describe("parseCursorTrack", () => {
     const tr = track({ t: [0, 10], x: [0.1, 0.2], y: [0.3, 0.4] });
     expect(parseCursorTrack(serializeCursorTrack(tr))).toEqual(tr);
   });
+  it("keeps an area track's region, omits it when absent, rejects a malformed one", () => {
+    const region = { displayId: "1", x: 100, y: 50 };
+    expect(parseCursorTrack(serializeCursorTrack(track({ region })))?.region).toEqual(region);
+    expect(parseCursorTrack(serializeCursorTrack(track()))).not.toHaveProperty("region");
+    expect(
+      parseCursorTrack(
+        serializeCursorTrack(track({ region: { displayId: "1", x: "a" } as never })),
+      ),
+    ).toBeNull();
+  });
   it("keeps truncatedAtMs when it is there, and omits it when it is not", () => {
     const tr = track({ t: [0], x: [0], y: [0], truncatedAtMs: 8_000_000 });
     expect(parseCursorTrack(serializeCursorTrack(tr))?.truncatedAtMs).toBe(8_000_000);

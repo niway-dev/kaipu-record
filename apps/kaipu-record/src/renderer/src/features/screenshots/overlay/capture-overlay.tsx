@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KaipuElectronAPI } from "@shared/types/electron-api";
 import {
   ENABLED_CAPTURE_MODES,
+  isRecordAction,
   type CaptureAction,
+  type CaptureIntent,
   type CaptureMode,
   type CaptureRect,
   type OverlayAnswer,
@@ -10,7 +12,13 @@ import {
 } from "@shared/types/screenshot-capture";
 import { useTranslations } from "@kaipu/i18n";
 import { FrameBox } from "./frame-box";
-import { copyKeyLabel, detectKeyPlatform, modeForKey, type KeyPlatform } from "./overlay-keys";
+import {
+  copyKeyLabel,
+  detectKeyPlatform,
+  modeForKey,
+  recordKeyLabel,
+  type KeyPlatform,
+} from "./overlay-keys";
 import type { OverlayQuery } from "./overlay-query";
 import { ScreenCard } from "./screen-card";
 import type { OverlayChrome } from "./selection-chrome";
@@ -201,8 +209,15 @@ export function CaptureOverlay({
   );
 
   const chrome = useMemo<OverlayChrome>(
-    () => ({ mode, modes: enabledModes, platform, onMode: switchMode, onCancel: cancel }),
-    [mode, enabledModes, platform, switchMode, cancel],
+    () => ({
+      mode,
+      modes: enabledModes,
+      platform,
+      intent: query.intent,
+      onMode: switchMode,
+      onCancel: cancel,
+    }),
+    [mode, enabledModes, platform, query.intent, switchMode, cancel],
   );
 
   const body =
@@ -236,7 +251,12 @@ export function CaptureOverlay({
   return (
     <>
       {body}
-      <HintPill mode={mode} platform={platform} modeCount={enabledModes.length} />
+      <HintPill
+        mode={mode}
+        platform={platform}
+        modeCount={enabledModes.length}
+        intent={query.intent}
+      />
       <DisplayLabel index={query.index} />
     </>
   );
@@ -247,19 +267,28 @@ function HintPill({
   mode,
   platform,
   modeCount,
+  intent,
 }: {
   mode: CaptureMode;
   platform: KeyPlatform;
   modeCount: number;
+  intent: CaptureIntent;
 }): React.JSX.Element {
   const t = useTranslations("screenshots");
   const copyKey = copyKeyLabel(platform);
+  const recordKey = recordKeyLabel(platform);
   const keys = `1–${modeCount}`;
+  const text =
+    intent === "record"
+      ? mode === "frame"
+        ? t("overlay.hintFrameRecord", { recordKey, keys })
+        : t("overlay.hintPickRecord", { recordKey, keys })
+      : mode === "frame"
+        ? t("overlay.hintFrame", { copyKey, keys })
+        : t("overlay.hintPick", { copyKey, keys });
   return (
     <span className={styles.hintPill} data-testid="hint-pill">
-      {mode === "frame"
-        ? t("overlay.hintFrame", { copyKey, keys })
-        : t("overlay.hintPick", { copyKey, keys })}
+      {text}
     </span>
   );
 }
@@ -338,6 +367,9 @@ function ActiveFrame({
   send: SendAnswer;
 }): React.JSX.Element {
   const key = String(query.displayId);
+  // A recording area and a screenshot frame are remembered apart (ADR 0030): the overlay
+  // opened to record starts from the last recording area.
+  const memory = query.intent === "record" ? "recordingArea" : "screenshotFrame";
   // undefined while loading; null when nothing is remembered (or settings failed).
   const [remembered, setRemembered] = useState<CaptureRect | null | undefined>(undefined);
 
@@ -346,7 +378,7 @@ function ActiveFrame({
     api
       .getSettings()
       .then((settings) => {
-        if (live) setRemembered(settings.screenshotFrame?.[key] ?? null);
+        if (live) setRemembered(settings[memory]?.[key] ?? null);
       })
       .catch(() => {
         if (live) setRemembered(null);
@@ -354,16 +386,17 @@ function ActiveFrame({
     return () => {
       live = false;
     };
-  }, [api, key]);
+  }, [api, key, memory]);
 
   const confirm = useCallback(
     (rect: CaptureRect, action: CaptureAction) => {
+      // Remembered by what it became: a rectangle that was recorded is the next recording
+      // area, whichever intent opened the overlay; one that was shot is the next frame.
+      const into = isRecordAction(action) ? "recordingArea" : "screenshotFrame";
       send({ kind: "rect", mode: "frame", action, displayId: query.displayId, rect }, async () => {
-        // Re-read so another display's remembered frame is kept, not overwritten.
+        // Re-read so another display's remembered rectangle is kept, not overwritten.
         const current = await api.getSettings();
-        await api.updateSettings({
-          screenshotFrame: { ...current.screenshotFrame, [key]: rect },
-        });
+        await api.updateSettings({ [into]: { ...current[into], [key]: rect } });
       });
     },
     [api, key, query.displayId, send],

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type DisplayLike, pickCapturedDisplay } from "./captured-display";
+import { areaCapturedDisplay, type DisplayLike, pickCapturedDisplay } from "./captured-display";
 
 const A: DisplayLike = { id: 1, bounds: { x: 0, y: 0, width: 1512, height: 982 }, scaleFactor: 2 };
 const B: DisplayLike = {
@@ -24,5 +24,27 @@ describe("pickCapturedDisplay", () => {
   });
   it("never tracks window sources", () => {
     expect(pickCapturedDisplay("window:123:0", "1", [A])).toBeNull();
+  });
+});
+
+describe("areaCapturedDisplay", () => {
+  it("moves the area to global DIP and remembers where on the display it was", () => {
+    const display = {
+      id: "2",
+      bounds: { x: 1512, y: 0, width: 1512, height: 982 },
+      scaleFactor: 2,
+    };
+    expect(
+      areaCapturedDisplay(display, {
+        displayId: 2,
+        rect: { x: 100, y: 50, width: 640, height: 360 },
+        displaySize: { width: 1512, height: 982 },
+      }),
+    ).toEqual({
+      id: "2",
+      bounds: { x: 1612, y: 50, width: 640, height: 360 },
+      scaleFactor: 2,
+      region: { displayId: "2", x: 100, y: 50 },
+    });
   });
 });

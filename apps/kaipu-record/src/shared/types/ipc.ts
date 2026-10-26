@@ -29,6 +29,7 @@ export const SHORTCUT_ACTIONS = [
   "captureScreen",
   "captureFrame",
   "captureWindow",
+  "recordArea",
   "toggleMicrophone",
   "toggleSystemAudio",
   "toggleCamera",
@@ -132,6 +133,16 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
     label: "Capture window",
     description: "Capture one window, not the screen around it",
     statusWord: "window",
+  },
+  // Opens the capture overlay to choose what to record (ADR 0030): Enter keeps the area as
+  // the recording target, R records it at once.
+  {
+    action: "recordArea",
+    defaultAccelerator: { mac: "Command+Control+Shift+R", win: "Control+Alt+Shift+R" },
+    group: "recording",
+    label: "Record an area",
+    description: "Choose part of the screen to record",
+    statusWord: "area",
   },
   // Live input toggles: they flip the recording setting with or without a take
   // (outside a take they change the pre-recording toggle, as clicking it does).
@@ -254,6 +265,13 @@ export interface AppSettings {
    */
   screenshotFrame: Record<string, CaptureRect>;
   /**
+   * The same memory for the overlay opened to RECORD (the `recordArea` shortcut, or Record
+   * pressed on the overlay): the last area the user confirmed, per display id. Kept apart
+   * from `screenshotFrame` because a recording stage and a screenshot frame are rarely the
+   * same rectangle, and sharing one would make each feature undo the other's last choice.
+   */
+  recordingArea: Record<string, CaptureRect>;
+  /**
    * The one current screenshot mode, app-wide. The Screenshots page, the tray panel and the
    * generic `captureScreenshot` shortcut all capture with it; picking a mode on the page or
    * the tray, or pressing a mode-specific shortcut (`captureScreen`, `captureFrame`, `captureWindow`), makes
@@ -299,6 +317,7 @@ export const DEFAULT_SETTINGS: Omit<AppSettings, "shortcuts"> = {
   exportQuality: "balanced",
   showRecordingSavedCard: true,
   screenshotFrame: {},
+  recordingArea: {},
   screenshotMode: "frame",
   trayHintShown: false,
   diagnosticsEnabled: true,
@@ -602,6 +621,22 @@ export interface RecordingBackfillMeta {
 export interface RecordingStartInfo {
   sourceId: string;
   sourceName: string;
+  /** Set when only part of the source's display is recorded (ADR 0030). */
+  area?: RecordingArea | null;
+}
+
+/**
+ * Part of one display to record (ADR 0030). The source is still that display's whole
+ * `screen:` capture; the engine crops `rect` out of it on the compositor canvas.
+ * `displaySize` travels with it because the renderer that encodes has no `screen` module
+ * and the crop's scale is the captured track's size over this DIP size.
+ */
+export interface RecordingArea {
+  displayId: number;
+  /** Display-relative DIP. */
+  rect: CaptureRect;
+  /** The display's size in DIP (`Display.bounds`), when the area was chosen. */
+  displaySize: { width: number; height: number };
 }
 
 /**
@@ -619,4 +654,10 @@ export interface RecordingSettings {
   isMicrophoneEnabled: boolean;
   isSystemAudioEnabled: boolean;
   isCameraEnabled: boolean;
+  /**
+   * Record only this part of `selectedSource`'s display; `null` records the whole source.
+   * Set together with `selectedSource` (that display's screen source) when an area is
+   * chosen on the overlay; picking a source in the thumbnail picker clears it.
+   */
+  area: RecordingArea | null;
 }

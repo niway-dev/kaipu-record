@@ -5,7 +5,7 @@ description: Design for choosing what a recording covers the way screenshots alr
 
 # Record capture modes — design
 
-**Status: 🔵 Proposed · 2026-10-26.** Linear: [NIW2-513](https://linear.app/niway/issue/NIW2-513/record-capture-modes-record-a-display-or-a-selected-area-through-the)
+**Status: 🟡 In progress · 2026-10-26.** Tasks 1–4 and 6 implemented on `feat/record-capture-modes` (owner QA pending); task 5 (widget and Record page layout) waits for the design file. Two refinements made during implementation are marked _Implementation note_ below. Linear: [NIW2-513](https://linear.app/niway/issue/NIW2-513/record-capture-modes-record-a-display-or-a-selected-area-through-the)
 (parent; one child per task in section 8 once this design is approved). Builds on the
 [screenshot capture modes design](/specs/2026-10-15-screenshot-capture-modes-design/) and
 [screenshot modes v2](/specs/2026-10-17-screenshot-modes-v2-design/), whose decision 12 reserved
@@ -56,6 +56,21 @@ it.
 | 11  | **Full-screen and Window recordings are unchanged in the engine**: a `display` target resolves to the `screen:<id>` source and encodes as today; a `window` target keeps `sourceId`.                                                                                                                                                                                                                     | The feature adds a path; it must not touch the two that ship.                                                                                                                                                                                                                                                                                                                | —           |
 | 12  | **Analytics.** The recording-start event gains `mode: "screen" \| "area" \| "window"` and, for an area, its output size bucket. No rectangles, no titles.                                                                                                                                                                                                                                                | The owner wants to know whether Area is used before investing in presets or exact dimensions.                                                                                                                                                                                                                                                                                | —           |
 | 13  | A `record` action during a running recording is refused with the system notification from #374, never a second take.                                                                                                                                                                                                                                                                                     | Same rule as a screenshot during a recording.                                                                                                                                                                                                                                                                                                                                | —           |
+
+_Implementation note (decision 1)._ The target is stored as `RecordingSettings.area:
+RecordingArea | null` beside the existing `selectedSource`, not as a new union replacing it. A
+display target is that display's `screen:` source with `area = null`, an area target is the
+same source with `area` set, a window target is unchanged; picking a source in the thumbnail
+picker clears `area`. Same behaviour as the union, no settings migration, and decision 11 holds
+by construction. `AppSettings.recordingMode` was not added: until the widget has a mode row
+(task 5) there is nothing to remember it for.
+
+_Implementation note (decision 2)._ Record is the plain **R** key, not ⌘R / Ctrl+R: outside dev,
+`@electron-toolkit/utils`' `watchWindowShortcuts`, installed on every window, cancels Cmd/Ctrl+R
+in `before-input-event`, so a packaged overlay would never receive it. In the `record` intent the Capture button has no shortcut
+(click only), so ⌘C / Ctrl+C never means anything but copy. A rectangle that is recorded or
+selected is remembered in `recordingArea` whichever intent opened the overlay; one that is shot
+is remembered in `screenshotFrame`. The Window picker shows Record disabled.
 
 ### Open questions
 
@@ -173,8 +188,8 @@ no watermark are needed.
 - `CaptureAction` becomes `"capture" | "copy" | "record" | "select"`. `OverlayAnswer` carries it
   as today; the overlay never captures or records (ADR 0022 decision 3).
 - Action bar by intent:
-  - `capture`: **Capture** (Enter, primary) · Copy (⌘C / Ctrl+C) · Record (⌘R / Ctrl+R) · Cancel (Esc).
-  - `record`: **Use selection** (Enter, primary) · Record (⌘R / Ctrl+R) · Capture (⌘⇧C / Ctrl+Shift+C) · Cancel (Esc).
+  - `capture`: **Capture** (Enter, primary) · Copy (⌘C / Ctrl+C) · Record (R) · Cancel (Esc).
+  - `record`: **Use selection** (Enter, primary) · Record (R) · Capture (click only) · Cancel (Esc).
 - The Screen card gets the same bar in place of its "Record this display · soon" label.
 - The pill lists `ENABLED_CAPTURE_MODES` as today; in `record` intent the Frame box starts from
   the recording area memory, not the screenshot one (decision 10).
@@ -273,9 +288,9 @@ Surfaces to design, each with its states:
 3. Capture overlay in RECORD intent (full-display translucent sheet, one per display). The
    Frame box with eight handles, size label and the vertical mode pill (Frame, Screen) on its
    right edge as in v2. The ACTION BAR under the box changes: primary "Use selection" (Enter),
-   then "Record" (⌘R), then "Capture" (⌘⇧C), then Cancel (Esc). Also the Screen card variant
+   then "Record" (R), then "Capture" (click only), then Cancel (Esc). Also the Screen card variant
    with the same bar. Show the CAPTURE intent bar beside it for contrast: primary Capture
-   (Enter), Copy (⌘C), Record (⌘R), Cancel — the Record button is enabled now, not "soon".
+   (Enter), Copy (⌘C), Record (R), Cancel — the Record button is enabled now, not "soon".
 
 4. Recording shade: the recorded display while an area is being recorded. The area is fully
    clear with a 1.5 px border; everything outside is covered by a dark translucent shade (pick

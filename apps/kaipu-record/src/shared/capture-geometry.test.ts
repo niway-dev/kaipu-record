@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   clampFrameToDisplay,
   cropForDisplay,
+  cropForSize,
+  MIN_AREA_SIZE,
   physicalSizeFor,
   toDisplayRelative,
   toGlobal,
@@ -152,5 +154,51 @@ describe("toGlobal", () => {
     const d = display({ x: -1920, y: 40, width: 1920, height: 1080 });
     const global = { x: -1000, y: 100, width: 10, height: 20 };
     expect(toGlobal(toDisplayRelative(global, d), d)).toEqual(global);
+  });
+});
+
+describe("cropForSize — a recording area out of a captured display track", () => {
+  it("maps a DIP area on a 2x display to physical pixels of the track", () => {
+    expect(
+      cropForSize(
+        { width: 3024, height: 1964 },
+        { width: 1512, height: 982 },
+        { x: 100, y: 50, width: 640, height: 360 },
+      ),
+    ).toEqual({ x: 200, y: 100, width: 1280, height: 720 });
+  });
+
+  it("covers every selected pixel on a 150% display (floor the origin, ceil the size)", () => {
+    expect(
+      cropForSize(
+        { width: 2880, height: 1620 },
+        { width: 1920, height: 1080 },
+        { x: 10, y: 10, width: 101, height: 101 },
+      ),
+    ).toEqual({ x: 15, y: 15, width: 152, height: 152 });
+  });
+
+  it("derives the scale from the track it received, not from a scale factor", () => {
+    // A track delivered at half the native size still crops the same region.
+    expect(
+      cropForSize(
+        { width: 1512, height: 982 },
+        { width: 1512, height: 982 },
+        { x: 100, y: 50, width: 640, height: 360 },
+      ),
+    ).toEqual({ x: 100, y: 50, width: 640, height: 360 });
+  });
+
+  it("is what cropForDisplay uses, so the two never disagree", () => {
+    const d = display({ x: 1512, y: 0, width: 1512, height: 982 }, 2);
+    const rect = { x: 33, y: 21, width: 400, height: 300 };
+    const size = { width: 3024, height: 1964 };
+    expect(cropForDisplay(size, d, rect)).toEqual(
+      cropForSize(size, { width: 1512, height: 982 }, rect),
+    );
+  });
+
+  it("names a 64 DIP minimum for a recording area", () => {
+    expect(MIN_AREA_SIZE).toBe(64);
   });
 });

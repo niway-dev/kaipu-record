@@ -42,6 +42,11 @@ export async function startRecordingCompositor(
   target: { width: number; height: number },
   watermark: WatermarkConfig | null,
   frameRate: number,
+  /**
+   * A recording area (ADR 0030): the physical pixels of the track to draw. Fixed for the
+   * whole take; without it the whole frame is drawn, re-read every frame as before.
+   */
+  sourceRect?: Rect,
 ): Promise<RecordingCompositor> {
   const screenTrack = screenStream.getVideoTracks()[0];
 
@@ -79,15 +84,17 @@ export async function startRecordingCompositor(
     // and uniformly fitting (letterboxed, never stretched) every frame keeps the
     // output correct even if the source's AR drifts from `target`'s mid-recording,
     // instead of stretching the current frame into the fixed target box.
-    const vw = video.videoWidth || target.width;
-    const vh = video.videoHeight || target.height;
+    const sx = sourceRect?.x ?? 0;
+    const sy = sourceRect?.y ?? 0;
+    const vw = sourceRect?.width ?? (video.videoWidth || target.width);
+    const vh = sourceRect?.height ?? (video.videoHeight || target.height);
     const fit = Math.min(target.width / vw, target.height / vh);
     const dw = vw * fit;
     const dh = vh * fit;
     const dx = (target.width - dw) / 2;
     const dy = (target.height - dh) / 2;
     ctx.clearRect(0, 0, target.width, target.height);
-    ctx.drawImage(video, 0, 0, vw, vh, dx, dy, dw, dh);
+    ctx.drawImage(video, sx, sy, vw, vh, dx, dy, dw, dh);
     if (stamp && rect) {
       ctx.save();
       ctx.globalAlpha = opacity;

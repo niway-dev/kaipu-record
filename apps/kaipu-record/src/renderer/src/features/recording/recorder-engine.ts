@@ -13,6 +13,8 @@ import {
   qualityToEngine,
 } from "@shared/recording-quality";
 import type { WatermarkConfig } from "@renderer/features/watermark/watermark";
+import type { RecordingArea } from "@shared/types/ipc";
+import { areaEncodePlan } from "./area-crop";
 import { startRecordingCompositor, type RecordingCompositor } from "./recording-compositor";
 import { levelsFromTimeDomain } from "./audio-levels";
 import { waitForFirstMediaTimestamp, type FirstMediaTimestamp } from "./first-media-timestamp";
@@ -51,6 +53,11 @@ export const GAIN_RAMP_SECONDS = 0.02;
 
 export interface EngineOptions {
   sourceId: string;
+  /**
+   * Record only this part of the source's display (ADR 0030). The source is still the whole
+   * display; the compositor draws just the area, so it always runs when this is set.
+   */
+  area?: RecordingArea | null;
   /** Mic to open at start, or `null` when the mic is off (it can be acquired later). */
   microphoneDeviceId: string | null;
   /**
@@ -154,7 +161,10 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
   const captured = screenTrack.getSettings();
   const sourceW = captured.width ?? fallbackWidth;
   const sourceH = captured.height ?? capHeight;
-  const target = fitToCap(sourceW, sourceH, capHeight);
+  const areaPlan = options.area
+    ? areaEncodePlan({ width: sourceW, height: sourceH }, options.area, capHeight)
+    : null;
+  const target = areaPlan ? areaPlan.target : fitToCap(sourceW, sourceH, capHeight);
 
   // 1c. Composite through a canvas only when we must downscale to the target OR
   // burn a watermark; a native frame already at the target with no watermark is
@@ -164,12 +174,14 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
   const needsResize = target.width !== sourceW || target.height !== sourceH;
   let compositor: RecordingCompositor | null = null;
   let encodeTrack = screenTrack;
-  if (options.watermark || needsResize) {
+  if (areaPlan || options.watermark || needsResize) {
     compositor = await startRecordingCompositor(
       screenStream,
       target,
       options.watermark ?? null,
       frameRate,
+      // Passed only for an area, so a full-display call stays exactly what it was.
+      ...(areaPlan ? [areaPlan.source] : []),
     );
     encodeTrack = compositor.track;
   }

@@ -5,6 +5,7 @@ import type { WindowPresetName } from "../window-size";
  */
 
 import type {
+  CaptureIntent,
   CaptureMode,
   CaptureRequestPayload,
   CaptureResult,
@@ -30,6 +31,7 @@ import type {
   RecordingActivity,
   GifSaveMeta,
   RecordingBackfillMeta,
+  RecordingArea,
   RecordingFinalizeMeta,
   RecordingSettings,
   RecordingStartInfo,
@@ -265,7 +267,12 @@ export interface KaipuElectronAPI {
   /** Tell the hub recording ended: hide the bar, restore main window. */
   recordingStop(): void;
   /** Start sampling the pointer for this writer session. `enabled: false` = no track (window source, unknown display). */
-  cursorTrackStart(sessionId: string, sourceId: string): Promise<{ enabled: boolean }>;
+  /** `area`: normalize the track to that part of the display (ADR 0030). */
+  cursorTrackStart(
+    sessionId: string,
+    sourceId: string,
+    area?: RecordingArea,
+  ): Promise<{ enabled: boolean }>;
   /** Main-process performance.now(), for the renderer→main clock handshake. */
   cursorClockNow(): Promise<number>;
   /** Video time 0 of this session, in main-clock ms. */
@@ -317,7 +324,8 @@ export interface KaipuElectronAPI {
 
   // ── Screenshots ───────────────────────────────────────────────────────
   /** Run a capture in `mode`; always answers captured, cancelled or unsupported. */
-  captureScreenshot(mode: CaptureMode): Promise<CaptureResult>;
+  /** `intent: "record"` opens the overlay to choose what to record (ADR 0030). */
+  captureScreenshot(mode: CaptureMode, intent?: CaptureIntent): Promise<CaptureResult>;
   /** Modes this platform can capture; an absent mode renders its entry point disabled. */
   screenshotSupportedModes(): Promise<CaptureMode[]>;
   /**

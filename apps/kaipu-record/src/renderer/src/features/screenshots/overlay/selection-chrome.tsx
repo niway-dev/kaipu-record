@@ -1,11 +1,22 @@
-import { AppWindow, Camera, Circle, Copy, Frame, Monitor, X, type LucideIcon } from "lucide-react";
+import {
+  AppWindow,
+  Camera,
+  Check,
+  Circle,
+  Copy,
+  Frame,
+  Monitor,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import {
   type CaptureAction,
+  type CaptureIntent,
   type CaptureMode,
   type CaptureRect,
 } from "@shared/types/screenshot-capture";
-import { copyKeyLabel, type KeyPlatform } from "./overlay-keys";
+import { copyKeyLabel, recordKeyLabel, type KeyPlatform } from "./overlay-keys";
 import styles from "./capture-overlay.module.css";
 
 /** Gap between the selection and the toolbar attached to it. */
@@ -31,6 +42,11 @@ export interface OverlayChrome {
   /** The modes the toolbar and the Screen card row offer, in order (keys 1..n). */
   modes: readonly CaptureMode[];
   platform: KeyPlatform;
+  /**
+   * Why the overlay opened. `capture`: Capture is primary, with Copy and Record beside it.
+   * `record`: Use selection is primary, with Record and Capture beside it (ADR 0030).
+   */
+  intent: CaptureIntent;
   /** Switch every overlay to `mode` (the toolbar, the Screen card row). */
   onMode(mode: CaptureMode): void;
   /** The toolbar's Cancel button: the same as Esc. */
@@ -91,19 +107,22 @@ function useModeLabels(): Record<CaptureMode, string> {
 
 /**
  * The one horizontal toolbar attached to the selection: the segmented mode group (icon, name
- * on wide selections, key badge),
- * Capture (Enter), Copy (⌘C / Ctrl+C), the reserved, disabled Record seat, and Cancel (Esc).
+ * on wide selections, key badge), the actions of the overlay's intent (see `ActionButtons`),
+ * and Cancel (Esc). `canRecord` false (a selection under the recording minimum) disables
+ * Record and Use selection; Capture and Copy stay.
  */
 export function SelectionToolbar({
   chrome,
   selection,
   area,
   onAction,
+  canRecord = true,
 }: {
   chrome: OverlayChrome;
   selection: CaptureRect;
   area: CaptureRect;
   onAction(action: CaptureAction): void;
+  canRecord?: boolean;
 }): React.JSX.Element {
   const t = useTranslations("screenshots");
   const labels = useModeLabels();
@@ -144,18 +163,96 @@ export function SelectionToolbar({
         })}
       </div>
       <span className={styles.barDivider} aria-hidden />
+      <ActionButtons chrome={chrome} onAction={onAction} canRecord={canRecord} />
+      <span className={styles.barDivider} aria-hidden />
       <button
         type="button"
-        className={styles.captureButton}
-        aria-label={t("overlay.capture")}
-        onClick={() => onAction("capture")}
+        className={styles.cancelButton}
+        aria-label={t("overlay.cancel")}
+        title={t("overlay.cancelTitle")}
+        onClick={chrome.onCancel}
       >
-        <Camera size={14} aria-hidden />
-        {t("overlay.capture")}
+        <X size={16} aria-hidden />
+      </button>
+    </div>
+  );
+}
+
+/**
+ * The action buttons for the overlay's intent, shared by the selection toolbar and the
+ * Screen card. Opened to capture: Capture (Enter) · Copy (⌘C) | Record (R). Opened to
+ * record: Use selection (Enter) · Record (R) | Capture (click only, so ⌘C keeps meaning
+ * copy everywhere else in the app).
+ */
+export function ActionButtons({
+  chrome,
+  onAction,
+  canRecord = true,
+  captureLabel,
+}: {
+  chrome: OverlayChrome;
+  onAction(action: CaptureAction): void;
+  canRecord?: boolean;
+  /** The Screen card names its Capture button after the display ("Capture · 2"). */
+  captureLabel?: { text: string; aria: string };
+}): React.JSX.Element {
+  const t = useTranslations("screenshots");
+  const capture = (primary: boolean): React.JSX.Element => (
+    <button
+      type="button"
+      className={primary ? styles.captureButton : styles.copyButton}
+      aria-label={captureLabel?.aria ?? t("overlay.capture")}
+      onClick={() => onAction("capture")}
+    >
+      <Camera size={14} aria-hidden />
+      {captureLabel?.text ?? t("overlay.capture")}
+      {primary && (
         <kbd className={styles.kbd} aria-hidden>
           ↩
         </kbd>
-      </button>
+      )}
+    </button>
+  );
+  const record = (
+    <button
+      type="button"
+      className={styles.recordButton}
+      aria-label={t("overlay.record")}
+      disabled={!canRecord}
+      onClick={() => onAction("record")}
+    >
+      <Circle size={12} aria-hidden />
+      {t("overlay.record")}
+      <kbd className={styles.kbd} aria-hidden>
+        {recordKeyLabel(chrome.platform)}
+      </kbd>
+    </button>
+  );
+  if (chrome.intent === "record") {
+    return (
+      <>
+        <button
+          type="button"
+          className={styles.captureButton}
+          aria-label={t("overlay.useSelection")}
+          disabled={!canRecord}
+          onClick={() => onAction("select")}
+        >
+          <Check size={14} aria-hidden />
+          {t("overlay.useSelection")}
+          <kbd className={styles.kbd} aria-hidden>
+            ↩
+          </kbd>
+        </button>
+        {record}
+        <span className={styles.barDivider} aria-hidden />
+        {capture(false)}
+      </>
+    );
+  }
+  return (
+    <>
+      {capture(true)}
       <button
         type="button"
         className={styles.copyButton}
@@ -169,29 +266,8 @@ export function SelectionToolbar({
         </kbd>
       </button>
       <span className={styles.barDivider} aria-hidden />
-      <button
-        type="button"
-        className={styles.recordButton}
-        aria-label={t("overlay.recordSoon")}
-        disabled
-      >
-        <Circle size={12} aria-hidden />
-        {t("overlay.record")}
-        <span className={styles.soonTag} aria-hidden>
-          {t("overlay.soon")}
-        </span>
-      </button>
-      <span className={styles.barDivider} aria-hidden />
-      <button
-        type="button"
-        className={styles.cancelButton}
-        aria-label={t("overlay.cancel")}
-        title={t("overlay.cancelTitle")}
-        onClick={chrome.onCancel}
-      >
-        <X size={16} aria-hidden />
-      </button>
-    </div>
+      {record}
+    </>
   );
 }
 

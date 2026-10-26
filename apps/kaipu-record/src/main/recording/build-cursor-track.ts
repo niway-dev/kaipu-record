@@ -30,6 +30,8 @@ export interface BuildCursorTrackInput {
   maxMs?: number;
   /** `CursorSampleBuffer.truncatedAtMs` — main clock, null when the cap was never hit. */
   truncatedAtMainMs?: number | null;
+  /** An area recording's origin on its display (ADR 0030); copied to the track as is. */
+  region?: CursorTrack["region"];
 }
 
 export function buildCursorTrack(input: BuildCursorTrackInput): CursorTrack {
@@ -74,6 +76,7 @@ export function buildCursorTrack(input: BuildCursorTrackInput): CursorTrack {
     y,
     clicks,
   };
+  if (input.region) track.region = { ...input.region };
   if (input.truncatedAtMainMs != null) {
     const v = toVideoTimeMs(input.truncatedAtMainMs, input.anchor);
     // A cap hit inside a pause, or after the last frame, is not worth reporting.

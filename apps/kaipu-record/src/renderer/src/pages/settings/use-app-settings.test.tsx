@@ -20,6 +20,7 @@ const SETTINGS: AppSettings = {
   exportQuality: "balanced",
   showRecordingSavedCard: true,
   screenshotFrame: {},
+  recordingArea: {},
   screenshotMode: "frame",
   trayHintShown: false,
   diagnosticsEnabled: true,

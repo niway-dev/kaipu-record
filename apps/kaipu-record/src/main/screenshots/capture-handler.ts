@@ -1,5 +1,8 @@
+import type { Rectangle } from "electron";
 import {
+  isCaptureIntent,
   isCaptureMode,
+  type CaptureIntent,
   type CaptureMode,
   type CaptureResult,
   type CaptureToastPayload,
@@ -65,6 +68,19 @@ interface CaptureHandlerDeps {
    * Default no-op, so quiet capture works without a toast window.
    */
   onQuietCapture?(payload: CaptureToastPayload): void;
+  /**
+   * The user chose what to record on the overlay (ADR 0030): Record (`start`) or Use
+   * selection. Main sets the recording target and, for Record, starts the take. Optional,
+   * so a handler built without recording support simply ignores the answer.
+   */
+  onRecordTarget?(target: RecordTarget): void;
+}
+
+/** A recording target chosen on the overlay: display-relative DIP, `null` for all of it. */
+export interface RecordTarget {
+  displayId: number;
+  rect: Rectangle | null;
+  start: boolean;
 }
 
 function assertCaptureMode(value: unknown): CaptureMode {
@@ -74,10 +90,18 @@ function assertCaptureMode(value: unknown): CaptureMode {
   return value;
 }
 
+function assertCaptureIntent(value: unknown): CaptureIntent {
+  if (value === undefined) return "capture";
+  if (!isCaptureIntent(value)) {
+    throw new Error(`screenshot capture: unknown intent ${JSON.stringify(value)}`);
+  }
+  return value;
+}
+
 /** Builds the `screenshot:capture` handler: validates, guards re-entrancy, answers a typed result. */
 export function createCaptureHandler(
   deps: CaptureHandlerDeps,
-): (request: { mode?: unknown } | undefined) => Promise<CaptureResult> {
+): (request: { mode?: unknown; intent?: unknown } | undefined) => Promise<CaptureResult> {
   // Re-entrancy guard: a second capture while one is in flight would stack overlays
   // and clobber the saved window-visibility state (leaving the app stuck hidden on
   // cancel). Answer `cancelled` without touching the first one.
@@ -85,6 +109,7 @@ export function createCaptureHandler(
 
   return async (request) => {
     const mode = assertCaptureMode(request?.mode);
+    const intent = assertCaptureIntent(request?.intent);
     const report = (
       outcome: ScreenshotCapturedProperties["outcome"],
       after?: "editor" | "quiet",
@@ -119,12 +144,20 @@ export function createCaptureHandler(
     try {
       // Inside the try: a throw while hiding windows must still release the guard.
       deps.windows.beforeCapture();
-      result = await deps.provider.capture({ mode, overlay: deps.overlay });
+      result = await deps.provider.capture({ mode, overlay: deps.overlay, intent });
       if (result.kind === "captured") {
         // Before the policy: a quiet save that fails and falls back to the editor still
         // remembers the mode the user captured in.
         remember(deps, result.mode);
         answer = await finish(deps, result);
+      } else if (result.kind === "record") {
+        // A recording target, not a screenshot: no save, no mode memory, no analytics here.
+        const { displayId, rect, start } = result;
+        try {
+          deps.onRecordTarget?.({ displayId, rect, start });
+        } catch (error) {
+          console.error("recording target could not be applied", error);
+        }
       } else if (result.kind === "unsupported") {
         answer = { kind: "unsupported", mode: result.mode, platform: deps.platform };
       }
@@ -138,6 +171,8 @@ export function createCaptureHandler(
       // Only the editor path reveals the window itself; cancel and quiet restore it here.
       deps.windows.afterCapture(answer.kind === "captured" ? answer.after : "cancelled");
     }
+    // Choosing a recording target is not a screenshot outcome.
+    if (result.kind === "record") return answer;
     // A throw answers `cancelled` to the renderer but is a failure for the owner's numbers.
     report(
       failed ? "failed" : result.kind,

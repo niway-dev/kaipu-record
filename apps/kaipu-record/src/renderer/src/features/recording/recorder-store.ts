@@ -1,4 +1,5 @@
 import type { LocalRecording, RecordingSettings } from "@shared/types";
+import type { RecordingArea } from "@shared/types/ipc";
 import {
   beginCursorTrackSession,
   type CursorTrackSession,
@@ -27,6 +28,8 @@ export type RecorderStatus =
 export interface StartInput {
   sourceId: string;
   sourceName: string;
+  /** Record only this part of the source's display (ADR 0030). */
+  area?: RecordingArea | null;
   microphoneDeviceId: string | null;
   systemAudio: boolean;
   /** Encoder targets resolved from the user's quality preset (optional → engine defaults). */
@@ -166,7 +169,11 @@ async function beginEngine(input: StartInput): Promise<void> {
   // Hide the main window BEFORE the engine acquires streams, not after — so the
   // app's own window is never the first thing on screen when the recording
   // starts (previously ~0.5-1s of the app itself was captured every time).
-  window.electronAPI.recordingStart({ sourceId: input.sourceId, sourceName: input.sourceName });
+  window.electronAPI.recordingStart({
+    sourceId: input.sourceId,
+    sourceName: input.sourceName,
+    area: input.area ?? null,
+  });
   try {
     await window.electronAPI.recordingCreate(id);
     // Best-effort, and started CONCURRENTLY with the engine: main resolves the
@@ -175,9 +182,15 @@ async function beginEngine(input: StartInput): Promise<void> {
     // throws — it resolves to a no-op session when main declines (window source,
     // unknown display), when IPC fails, or after its own 500 ms timeout.
     const [track, handle] = await Promise.all([
-      beginCursorTrackSession(window.electronAPI, id, input.sourceId),
+      beginCursorTrackSession(
+        window.electronAPI,
+        id,
+        input.sourceId,
+        input.area ? { area: input.area } : {},
+      ),
       startEngine({
         sourceId: input.sourceId,
+        area: input.area ?? null,
         microphoneDeviceId: input.microphoneDeviceId,
         systemAudio: input.systemAudio,
         width: input.width,

@@ -9,16 +9,18 @@ import { CameraBubble } from "./features/camera-bubble/camera-bubble";
 import { CaptureOverlay } from "./features/screenshots/overlay/capture-overlay";
 import { parseOverlayQuery } from "./features/screenshots/overlay/overlay-query";
 import { CaptureToast } from "./features/screenshots/toast/capture-toast";
+import { parseShadeRect, RecordingShade } from "./features/recording-shade/recording-shade";
 import { installCrashForwarder } from "./features/analytics/crash-forwarder";
 import { I18nRoot } from "./app/i18n-root";
 import { StylexProbe } from "./dev/stylex-probe";
 
-// Same HTML entry, six render targets selected by query param:
+// Same HTML entry, seven render targets selected by query param:
 //   ?mode=capture           → the menu-bar tray's compact panel
 //   ?window=control-bar     → the floating recording control bar
 //   ?window=camera-bubble   → the floating webcam bubble
 //   ?window=capture-overlay → one screenshot capture overlay per display
 //   ?window=capture-toast   → the toast after a quiet capture
+//   ?window=recording-shade → the dim around an area being recorded
 //   (default)               → the full app
 const root = createRoot(document.getElementById("root")!);
 
@@ -46,6 +48,13 @@ async function bootstrap(): Promise<void> {
       window.electronAPI.captureOverlay.answer({ kind: "cancelled" });
       node = <></>;
     }
+  } else if (windowKind === "recording-shade") {
+    // Transparent, display-sized, click-through: only the dim around the area paints.
+    document.body.style.background = "transparent";
+    document.body.dataset.window = "recording-shade";
+    installCrashForwarder("recording-shade");
+    const rect = parseShadeRect(window.location.search);
+    node = rect ? <RecordingShade rect={rect} /> : <></>;
   } else if (windowKind === "capture-toast") {
     // Transparent, fixed-size window: only the card paints (see main.css).
     document.body.style.background = "transparent";

@@ -5,6 +5,7 @@ import {
   FLAG_DEFAULTS,
   FLAG_NAMES,
   SCREENSHOT_CAPTURED_EVENT,
+  buildRecordingStartedProperties,
   buildScreenshotCapturedProperties,
   serializeError,
 } from "./analytics";
@@ -76,5 +77,28 @@ describe("screenshot_captured", () => {
       outcome: "captured",
       after: "quiet",
     });
+  });
+});
+
+describe("buildRecordingStartedProperties", () => {
+  it("names the mode from the source and the area, and nothing else", () => {
+    const base = { platform: "darwin", displays: 2 };
+    expect(
+      buildRecordingStartedProperties({ ...base, sourceId: "screen:1:0", area: false }),
+    ).toEqual({ mode: "screen", platform: "darwin", displays: 2 });
+    expect(
+      buildRecordingStartedProperties({ ...base, sourceId: "screen:1:0", area: true }),
+    ).toEqual({ mode: "area", platform: "darwin", displays: 2 });
+    expect(
+      buildRecordingStartedProperties({ ...base, sourceId: "window:42:0", area: false }),
+    ).toEqual({ mode: "window", platform: "darwin", displays: 2 });
+    const leaky = {
+      ...base,
+      sourceId: "screen:1:0",
+      area: true,
+      title: "Secret plan",
+    } as Parameters<typeof buildRecordingStartedProperties>[0];
+    expect(buildRecordingStartedProperties(leaky)).not.toHaveProperty("title");
+    expect(buildRecordingStartedProperties(leaky)).not.toHaveProperty("sourceId");
   });
 });

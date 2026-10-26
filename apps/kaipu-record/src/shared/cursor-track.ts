@@ -45,6 +45,19 @@ export interface CursorTrack {
    * very long take whose pointer "freezes" halfway is diagnosable from the sidecar.
    */
   truncatedAtMs?: number;
+  /**
+   * Present only for an area recording (ADR 0030): the area's origin on its display, in
+   * display-relative DIP. `display` then holds the AREA's size and every x/y is normalized
+   * to the area, so consumers need nothing from this field; it is kept for diagnostics.
+   */
+  region?: CursorTrackRegion;
+}
+
+export interface CursorTrackRegion {
+  /** Electron `Display.id` as a string. */
+  displayId: string;
+  x: number;
+  y: number;
 }
 
 export interface CursorPoint {
@@ -89,6 +102,17 @@ export function parseCursorTrack(json: string): CursorTrack | null {
   if (typeof r.clicksAvailable !== "boolean") return null;
   // Optional: absent unless the sample cap was hit. Present-but-malformed is a reject.
   if (r.truncatedAtMs !== undefined && !isNum(r.truncatedAtMs)) return null;
+  // Optional: only area recordings carry it. Present-but-malformed is a reject.
+  const g = r.region as Record<string, unknown> | undefined;
+  if (
+    g !== undefined &&
+    (typeof g !== "object" ||
+      g === null ||
+      typeof g.displayId !== "string" ||
+      !isNum(g.x) ||
+      !isNum(g.y))
+  )
+    return null;
 
   if (!isNumArray(r.t) || !isNumArray(r.x) || !isNumArray(r.y)) return null;
   if (r.t.length !== r.x.length || r.t.length !== r.y.length) return null;
@@ -118,6 +142,7 @@ export function parseCursorTrack(json: string): CursorTrack | null {
     clicks,
   };
   if (isNum(r.truncatedAtMs)) track.truncatedAtMs = r.truncatedAtMs;
+  if (g) track.region = { displayId: g.displayId as string, x: g.x as number, y: g.y as number };
   return track;
 }
 

@@ -128,6 +128,33 @@ describe("recorder-store", () => {
     await stopAndSettle();
   });
 
+  it("resolves the take's input when the countdown ends, not when the start is requested", async () => {
+    // Main starts a take chosen on the overlay by broadcasting the new source and area, then
+    // requesting a start; the broadcast may reach React after the request. Reading the input
+    // only at the end of the countdown is what makes that safe (see applyRecordTarget).
+    let current: StartInput = input;
+    store.requestStartRecording(() => current);
+    const area = {
+      displayId: 2,
+      rect: { x: 0, y: 0, width: 640, height: 360 },
+      displaySize: { width: 1512, height: 982 },
+    };
+    current = { ...input, sourceId: "screen:2", sourceName: "Area", area };
+
+    await vi.advanceTimersByTimeAsync(3000);
+
+    expect(window.electronAPI.recordingStart).toHaveBeenCalledWith({
+      sourceId: "screen:2",
+      sourceName: "Area",
+      area,
+    });
+    expect(startEngineMock).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceId: "screen:2", area }),
+    );
+
+    await stopAndSettle();
+  });
+
   it("cancelling during the countdown never starts the engine", async () => {
     store.requestStartRecording(() => input);
     store.stopOrCancelRecording();
@@ -285,6 +312,7 @@ describe("recorder-store live settings", () => {
     isMicrophoneEnabled: true,
     isSystemAudioEnabled: false,
     isCameraEnabled: false,
+    area: null,
   };
   const broadcast = (patch: Partial<RecordingSettings>): void => {
     for (const listener of settingsListeners) listener({ ...base, ...patch });

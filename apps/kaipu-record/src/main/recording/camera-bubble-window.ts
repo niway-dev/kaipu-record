@@ -1,10 +1,10 @@
 import { BrowserWindow, screen } from "electron";
 import { join } from "path";
 import { is } from "@electron-toolkit/utils";
+import { BUBBLE_MARGIN, BUBBLE_SIZE, bubbleBoundsInArea, type Rect } from "./area-geometry";
 
-// Window is a bit bigger than the circle so its drop-shadow isn't clipped.
-const BUBBLE_SIZE = 224;
-const SCREEN_MARGIN = 40;
+// The window is a bit bigger than the circle so its drop-shadow isn't clipped.
+const SCREEN_MARGIN = BUBBLE_MARGIN;
 
 /**
  * The floating webcam bubble. A frameless, transparent, always-on-top window
@@ -21,10 +21,12 @@ const SCREEN_MARGIN = 40;
  */
 export class CameraBubbleWindow {
   private window: BrowserWindow | null = null;
+  /** The recorded area (global DIP) while an area records; null otherwise. */
+  private anchor: Rect | null = null;
 
   show(): void {
     if (this.window && !this.window.isDestroyed()) {
-      this.window.showInactive();
+      if (this.fits()) this.window.showInactive();
       return;
     }
     this.window = new BrowserWindow({
@@ -65,11 +67,29 @@ export class CameraBubbleWindow {
 
     this.window.once("ready-to-show", () => {
       this.position();
-      this.window?.showInactive();
+      if (this.fits()) this.window?.showInactive();
     });
     this.window.on("closed", () => {
       this.window = null;
     });
+  }
+
+  /**
+   * Keep the bubble inside a recorded area (ADR 0030): the bubble is recorded as part of the
+   * screen, so outside the area it would vanish from the video without a word. An area too
+   * small for it hides it until the anchor is cleared; `null` returns it to its usual corner
+   * (the caller shows it again if the camera is still on).
+   */
+  anchorTo(area: Rect | null): void {
+    this.anchor = area;
+    if (!this.window || this.window.isDestroyed()) return;
+    this.position();
+    if (!this.fits()) this.window.hide();
+  }
+
+  /** Bring the bubble above other always-on-top windows (Windows orders them by show time). */
+  raise(): void {
+    if (this.window && !this.window.isDestroyed()) this.window.moveTop();
   }
 
   /** True while the bubble has an active (non-destroyed) window and is visible. */
@@ -97,9 +117,21 @@ export class CameraBubbleWindow {
     this.window = null;
   }
 
-  /** Default to the bottom-left corner of the active display (clear of the bar). */
+  private fits(): boolean {
+    return this.anchor === null || bubbleBoundsInArea(this.anchor) !== null;
+  }
+
+  /**
+   * Inside the recorded area when there is one; otherwise the bottom-left corner of the
+   * active display (clear of the bar).
+   */
   private position(): void {
     if (!this.window) return;
+    if (this.anchor) {
+      const inside = bubbleBoundsInArea(this.anchor);
+      if (inside) this.window.setBounds(inside);
+      return;
+    }
     const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
     const { x, y, height } = display.workArea;
     this.window.setBounds({

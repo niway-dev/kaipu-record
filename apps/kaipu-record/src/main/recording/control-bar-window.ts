@@ -90,6 +90,11 @@ export class ControlBarWindow {
     });
   }
 
+  /** Bring the bar above other always-on-top windows (Windows orders them by show time). */
+  raise(): void {
+    if (this.window && !this.window.isDestroyed()) this.window.moveTop();
+  }
+
   /**
    * Apply content protection from `includeInRecording`. On = keep the bar out of
    * the recording (macOS `NSWindowSharingNone`); off = leave it capturable. The

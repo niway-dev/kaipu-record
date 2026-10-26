@@ -1,12 +1,11 @@
 import { useEffect, useRef } from "react";
-import { Camera, Copy } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import type { CaptureOverlayBridge } from "@shared/types/electron-api";
 import type { CaptureAction } from "@shared/types/screenshot-capture";
 import type { SendAnswer } from "./capture-overlay";
-import { copyKeyLabel, isCaptureKey, isCopyKey } from "./overlay-keys";
+import { actionForKey, primaryAction } from "./overlay-keys";
 import type { OverlayQuery } from "./overlay-query";
-import { keepPointer, ModeRow, type OverlayChrome } from "./selection-chrome";
+import { ActionButtons, keepPointer, ModeRow, type OverlayChrome } from "./selection-chrome";
 import styles from "./capture-overlay.module.css";
 
 interface ScreenCardProps {
@@ -49,10 +48,11 @@ export function ScreenCard({
   const latest = useRef({ answer, hoverDisplayId });
   latest.current = { answer, hoverDisplayId };
   const platform = chrome.platform;
+  const intent = chrome.intent;
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      const action = isCaptureKey(event) ? "capture" : isCopyKey(event, platform) ? "copy" : null;
+      const action = actionForKey(event, platform, intent);
       if (!action) return;
       event.preventDefault();
       const { answer: send, hoverDisplayId: hovered } = latest.current;
@@ -60,7 +60,7 @@ export function ScreenCard({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [platform]);
+  }, [platform, intent]);
 
   const report = (next: number | null): void => {
     if (reported.current === next) return;
@@ -79,7 +79,7 @@ export function ScreenCard({
       onPointerEnter={() => report(displayId)}
       onPointerMove={() => report(displayId)}
       onPointerLeave={() => report(null)}
-      onClick={() => answer("capture")}
+      onClick={() => answer(primaryAction(intent))}
     >
       <div className={styles.screenCard} data-testid="screen-card">
         <div className={styles.cardHeader}>
@@ -95,33 +95,16 @@ export function ScreenCard({
           </span>
         </div>
         <div className={styles.cardButtons} {...keepPointer}>
-          <button
-            type="button"
-            className={`${styles.captureButton} ${styles.cardCapture}`}
-            aria-label={t("overlay.captureDisplay", { index })}
-            onClick={() => answer("capture")}
-          >
-            <Camera size={14} aria-hidden />
-            {t("overlay.captureNumber", { index })}
-          </button>
-          <button
-            type="button"
-            className={`${styles.copyButton} ${styles.cardCopy}`}
-            aria-label={t("overlay.copy")}
-            onClick={() => answer("copy")}
-          >
-            <Copy size={14} aria-hidden />
-            {t("overlay.copy")}
-            <kbd className={styles.kbd} aria-hidden>
-              {copyKeyLabel(platform)}
-            </kbd>
-          </button>
+          <ActionButtons
+            chrome={chrome}
+            onAction={(action) => answer(action)}
+            captureLabel={{
+              text: t("overlay.captureNumber", { index }),
+              aria: t("overlay.captureDisplay", { index }),
+            }}
+          />
         </div>
         <ModeRow chrome={chrome} />
-        {/* The reserved Record seat: it answers nothing, so a click on it captures nothing. */}
-        <span className={styles.cardRecord} {...keepPointer}>
-          {t("overlay.recordDisplaySoon")}
-        </span>
       </div>
     </div>
   );

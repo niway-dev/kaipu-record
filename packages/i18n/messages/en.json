@@ -235,7 +235,8 @@
     "errorStart": "We couldn't start the recording. Please try again.",
     "errorSave": "We couldn't save the recording.",
     "errorSaveKept": "We couldn't reach your recordings folder. Your recording was kept and Kaipu will recover it the next time it opens.",
-    "errorSaveElsewhere": "Your recordings folder wasn't reachable, so the recording was saved where you chose."
+    "errorSaveElsewhere": "Your recordings folder wasn't reachable, so the recording was saved where you chose.",
+    "areaSource": "Area · {width} × {height}"
   },
   "header": {
     "brand": "Kaipu Record",
@@ -668,9 +669,6 @@
       "capture": "Capture",
       "copy": "Copy",
       "record": "Record",
-      "recordSoon": "Record · soon",
-      "soon": "Soon",
-      "recordDisplaySoon": "Record this display · soon",
       "cancel": "Cancel",
       "cancelTitle": "Cancel · Esc",
       "modes": "Capture mode",
@@ -682,7 +680,10 @@
       "findingWindows": "Finding windows…",
       "noWindows": "No windows on this display",
       "hintFrame": "Enter to capture · {copyKey} to copy · {keys} switch mode · Esc to cancel",
-      "hintPick": "Click or Enter to capture · {copyKey} to copy · {keys} switch mode · Esc to cancel"
+      "hintPick": "Click or Enter to capture · {copyKey} to copy · {keys} switch mode · Esc to cancel",
+      "useSelection": "Use selection",
+      "hintFrameRecord": "Enter to use this area · {recordKey} to record · {keys} switch mode · Esc to cancel",
+      "hintPickRecord": "Click or Enter to use this display · {recordKey} to record · {keys} switch mode · Esc to cancel"
     },
     "overline": "SCREENSHOTS",
     "pageTitle": "Capture and document",
@@ -1110,6 +1111,8 @@
     "captureFrameDesc": "Capture what is inside a remembered frame",
     "captureWindowLabel": "Capture window",
     "captureWindowDesc": "Capture one window, not the screen around it",
+    "recordAreaLabel": "Record an area",
+    "recordAreaDesc": "Choose part of the screen to record",
     "toggleMicrophoneLabel": "Mute / unmute microphone",
     "toggleMicrophoneDesc": "Turn your voice on or off, also mid-recording",
     "toggleSystemAudioLabel": "System audio on / off",
