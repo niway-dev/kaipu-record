@@ -105,6 +105,65 @@ describe("CameraBubble", () => {
   });
 });
 
+describe("CameraBubble — grip release races", () => {
+  it("waits for a preview that lands after release, sends the queued size, and saves its result", async () => {
+    withStream();
+    const resolvers: Array<(applied: number) => void> = [];
+    const preview = vi.fn(
+      (_size: number) => new Promise<number>((resolve) => resolvers.push(resolve)),
+    );
+    const updateSettings = vi.fn(async () => ({}) as never);
+    window.electronAPI.previewCameraBubbleSize = preview;
+    window.electronAPI.updateSettings = updateSettings;
+    const { container } = render(<CameraBubble />);
+    fireEvent.pointerEnter(container.firstElementChild!);
+    const grip = screen.getByTestId("bubble-resize-grip");
+
+    fireEvent.pointerDown(grip, { screenX: 100, screenY: 100, pointerId: 1 });
+    fireEvent.pointerMove(grip, { screenX: 120, screenY: 80, pointerId: 1 });
+    fireEvent.pointerMove(grip, { screenX: 140, screenY: 60, pointerId: 1 });
+    fireEvent.pointerUp(grip, { pointerId: 1 });
+    // Released before main answered: nothing saved yet.
+    expect(updateSettings).not.toHaveBeenCalled();
+
+    await act(async () => resolvers[0]!(250));
+    // The queued second move goes out after the first reply…
+    await waitFor(() => expect(preview).toHaveBeenCalledTimes(2));
+    await act(async () => resolvers[1]!(300));
+    // …and its applied size is what gets saved.
+    await waitFor(() =>
+      expect(updateSettings).toHaveBeenCalledWith({
+        cameraBubble: { shape: "circle", size: 300, deviceId: null },
+      }),
+    );
+    expect(updateSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("a recording that starts mid-drag saves the size the drag reached", async () => {
+    withStream();
+    let push: ((activity: RecordingActivity) => void) | null = null;
+    window.electronAPI.onRecordingState = (callback) => {
+      push = callback;
+      return () => {};
+    };
+    const updateSettings = vi.fn(async () => ({}) as never);
+    window.electronAPI.previewCameraBubbleSize = vi.fn(async () => 280);
+    window.electronAPI.updateSettings = updateSettings;
+    const { container } = render(<CameraBubble />);
+    fireEvent.pointerEnter(container.firstElementChild!);
+    const grip = screen.getByTestId("bubble-resize-grip");
+    fireEvent.pointerDown(grip, { screenX: 100, screenY: 100, pointerId: 1 });
+    fireEvent.pointerMove(grip, { screenX: 140, screenY: 60, pointerId: 1 });
+
+    act(() => push?.({ active: true, status: "recording", elapsedSeconds: 0 }));
+    await waitFor(() =>
+      expect(updateSettings).toHaveBeenCalledWith({
+        cameraBubble: { shape: "circle", size: 280, deviceId: null },
+      }),
+    );
+  });
+});
+
 describe("gripDragSize", () => {
   it("projects the pointer onto the up-right diagonal", () => {
     expect(gripDragSize(240, 40, -40)).toBe(280);

@@ -41,6 +41,54 @@ export function gripDragSize(startSize: number, dx: number, dy: number): number 
   return clampCameraBubbleSize(startSize + (dx - dy) / 2);
 }
 
+/** One grip drag: where it started, what main last applied, and its preview queue. */
+interface GripSession {
+  x: number;
+  y: number;
+  size: number;
+  /** The size main last put on screen (it clamps to the area). */
+  applied: number;
+  /** The preview request in flight, if any. */
+  inFlight: Promise<void> | null;
+  /** The latest size wanted while a request was in flight; sent when it returns. */
+  queued: number | null;
+}
+
+/** One preview request at a time per session; the latest wanted size wins. */
+function requestPreview(session: GripSession, wanted: number): void {
+  if (session.inFlight) {
+    session.queued = wanted;
+    return;
+  }
+  session.inFlight = window.electronAPI
+    .previewCameraBubbleSize(wanted)
+    .then((applied) => {
+      session.applied = applied;
+    })
+    .catch(() => {})
+    .finally(() => {
+      session.inFlight = null;
+      const next = session.queued;
+      session.queued = null;
+      if (next !== null) requestPreview(session, next);
+    });
+}
+
+/**
+ * Wait for the session's previews (in flight, then queued), then save what is on screen
+ * (the area may have clamped what was asked for). The bubble is read after the wait, so a
+ * shape or device change made meanwhile is kept.
+ */
+async function settleGrip(
+  session: GripSession,
+  bubble: { readonly current: CameraBubbleSettings },
+): Promise<void> {
+  while (session.inFlight) await session.inFlight;
+  await window.electronAPI.updateSettings({
+    cameraBubble: { ...bubble.current, size: session.applied },
+  });
+}
+
 /**
  * Root mounted in the floating camera-bubble window (`?window=camera-bubble`). Shows the
  * live webcam in a circle or a rounded square; the screen recording captures it because
@@ -60,9 +108,11 @@ export function CameraBubble(): React.JSX.Element {
   const [size, setSize] = useState(sizeFromWindow);
   const [hovered, setHovered] = useState(false);
   const [dragging, setDragging] = useState(false);
-  const drag = useRef<{ x: number; y: number; size: number; applied: number } | null>(null);
-  const inFlight = useRef(false);
-  const queued = useRef<number | null>(null);
+  // The pointer drag in progress. Its session outlives it: a preview reply that lands after
+  // the release still updates the session, and the release waits for it before saving.
+  const drag = useRef<GripSession | null>(null);
+  const latestBubble = useRef(bubble);
+  latestBubble.current = bubble;
 
   useEffect(() => {
     const onResize = (): void => setSize(sizeFromWindow());
@@ -71,47 +121,39 @@ export function CameraBubble(): React.JSX.Element {
   }, []);
 
   const recording = activity.active;
-  // A recording that starts mid-drag ends the drag: no chrome may reach the video.
+  // A recording that starts mid-drag ends the drag (no chrome may reach the video) and saves
+  // the size it reached, so the window never keeps an unsaved preview size for the take.
   useEffect(() => {
-    if (recording) {
-      drag.current = null;
-      setDragging(false);
-    }
+    if (!recording) return;
+    const session = drag.current;
+    drag.current = null;
+    setDragging(false);
+    if (session) void settleGrip(session, latestBubble);
   }, [recording]);
   const showChrome = !recording && (hovered || dragging);
-
-  /** One preview request at a time; the latest wanted size wins. */
-  const requestPreview = (wanted: number): void => {
-    if (inFlight.current) {
-      queued.current = wanted;
-      return;
-    }
-    inFlight.current = true;
-    void window.electronAPI
-      .previewCameraBubbleSize(wanted)
-      .then((applied) => {
-        if (drag.current) drag.current.applied = applied;
-      })
-      .finally(() => {
-        inFlight.current = false;
-        const next = queued.current;
-        queued.current = null;
-        if (next !== null && drag.current) requestPreview(next);
-      });
-  };
 
   const onGripDown = (event: PointerEvent<HTMLDivElement>): void => {
     if (recording) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture?.(event.pointerId);
-    drag.current = { x: event.screenX, y: event.screenY, size, applied: size };
+    drag.current = {
+      x: event.screenX,
+      y: event.screenY,
+      size,
+      applied: size,
+      inFlight: null,
+      queued: null,
+    };
     setDragging(true);
   };
 
   const onGripMove = (event: PointerEvent<HTMLDivElement>): void => {
     const start = drag.current;
     if (!start) return;
-    requestPreview(gripDragSize(start.size, event.screenX - start.x, event.screenY - start.y));
+    requestPreview(
+      start,
+      gripDragSize(start.size, event.screenX - start.x, event.screenY - start.y),
+    );
   };
 
   const onGripUp = (event: PointerEvent<HTMLDivElement>): void => {
@@ -120,10 +162,7 @@ export function CameraBubble(): React.JSX.Element {
     drag.current = null;
     setDragging(false);
     if (!start) return;
-    // Persist what is on screen (the area may have clamped what was asked for).
-    void window.electronAPI.updateSettings({
-      cameraBubble: { ...bubble, size: start.applied },
-    });
+    void settleGrip(start, latestBubble);
   };
 
   const preset = cameraBubblePresetFor(size);
