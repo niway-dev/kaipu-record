@@ -38,6 +38,14 @@
   },
   "tray": {
     "open": "Abrir Kaipu Record",
+    "record": "Grabar",
+    "recordScreen": "Grabar pantalla",
+    "recordArea": "Grabar área",
+    "recordWindow": "Grabar ventana…",
+    "stopRecording": "Detener grabación",
+    "takeScreenshot": "Tomar captura",
+    "library": "Biblioteca",
+    "settings": "Ajustes…",
     "quit": "Salir",
     "closedToTrayTitle": "Kaipu sigue abierto",
     "closedToTrayBody": "Lo encuentras en la bandeja del sistema. Haz clic derecho en el icono para salir."
