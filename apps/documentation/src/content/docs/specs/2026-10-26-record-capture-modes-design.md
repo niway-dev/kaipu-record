@@ -13,7 +13,7 @@ the Record seat this design fills. ADRs: [0030](/architecture/decisions/0030-rec
 (new) alongside [0022](/architecture/decisions/0022-screenshot-capture-native-where-the-os-has-it/),
 [0024](/architecture/decisions/0024-window-mode-and-quiet-capture/) and
 [0029](/architecture/decisions/0029-floating-windows-never-change-the-activation-policy/), which
-all stand. Design file: Claude Design project "kaipu-recorder", new file "Kaipu Record Modes" to
+stand, except that 0030 amends 0024's non-goal "recording through the overlay". Design file: Claude Design project "kaipu-recorder", new file "Kaipu Record Modes" to
 be produced from the brief in section 7. Window mode in the overlay stays behind its flag
 ([NIW2-469](https://linear.app/niway/issue/NIW2-469/window-screenshot-mode-fix-what-the-owner-found-buggy-and-re-enable));
 the Window target keeps the thumbnail picker.
