@@ -62,6 +62,8 @@ export interface CaptureOverlayBridge {
   chooseFrameDisplay(displayId: number): void;
   /** The mode pill or keys 1–3: ask main to switch every overlay to `mode`. */
   setMode(mode: CaptureMode): void;
+  /** P / V or the Capture | Record switch: ask main to switch every overlay to `intent`. */
+  setIntent(intent: CaptureIntent): void;
   /** Main's state broadcast (mode, hover, frame display, window list). Returns an unsubscribe fn. */
   onState(callback: (state: OverlayState) => void): () => void;
   /** Main hid the overlays and asks for an ack after the next frame. Returns an unsubscribe fn. */

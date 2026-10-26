@@ -87,6 +87,7 @@ function fakeApi(
       hover: vi.fn(),
       chooseFrameDisplay: vi.fn(),
       setMode: vi.fn(),
+      setIntent: vi.fn(),
       onState: vi.fn((cb: (state: OverlayState) => void) => {
         stateListener = cb;
         if (initialState) cb(state);
@@ -127,6 +128,7 @@ function fakeApi(
       }),
     answer: api.captureOverlay.answer,
     setMode: api.captureOverlay.setMode,
+    setIntent: api.captureOverlay.setIntent,
     chooseFrameDisplay: api.captureOverlay.chooseFrameDisplay,
     pushState: (patch: Partial<OverlayState>) =>
       act(() => {
@@ -1817,6 +1819,49 @@ describe("CaptureOverlay — record chrome (design Kaipu Record Modes)", () => {
     await screen.findByTestId("capture-frame");
     expect(screen.getByTestId("hint-pill")).toHaveTextContent(
       "Drag the box or its handles · 1–3 switch mode · ↵ start · Esc cancel",
+    );
+  });
+});
+
+describe("CaptureOverlay — the intent is shared across displays", () => {
+  it("V on the overlay that has the frame asks main to switch every overlay", async () => {
+    const first = fakeApi({ "42": { x: 100, y: 120, width: 640, height: 360 } });
+    render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("frame")}
+        api={first.api}
+        platform="mac"
+      />,
+    );
+    await screen.findByTestId("capture-frame");
+    press("v");
+    expect(first.setIntent).toHaveBeenCalledExactlyOnceWith("record");
+  });
+
+  it("the other display's overlay, opened to capture, records once main broadcasts the switch", async () => {
+    // Display 7 shows the Screen card; display 42 (another window) pressed V.
+    const other = fakeApi(
+      {},
+      { mode: "screen", hoverDisplayId: 7, frameDisplayId: null, windows: null },
+    );
+    render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("screen", { displayId: 7 })}
+        api={other.api}
+        platform="mac"
+      />,
+    );
+    expect(screen.queryByText(/Record this display/)).toBeNull();
+    other.pushState({ intent: "record" });
+    expect(await screen.findByText(/Record this display/)).toBeInTheDocument();
+    // A click there now records, not screenshots.
+    fireEvent.click(screen.getByText(/Record this display/));
+    await waitFor(() =>
+      expect(other.answer).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: "display", action: "record", displayId: 7 }),
+      ),
     );
   });
 });

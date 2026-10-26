@@ -100,7 +100,18 @@ export function CaptureOverlay({
   const answered = useRef(false);
   // Opened to capture or to record (the URL), then switched in place with P / V or the
   // Capture | Record switch. Only the confirm actions follow it; the selection stays.
-  const [intent, setIntent] = useState<CaptureIntent>(query.intent);
+  const [intent, setLocalIntent] = useState<CaptureIntent>(query.intent);
+  /** Like `requestedMode`: the intent this overlay asked main for, not confirmed yet. */
+  const requestedIntent = useRef<CaptureIntent | null>(null);
+  // Switch here at once and tell main, which switches every other overlay.
+  const setIntent = useCallback(
+    (next: CaptureIntent) => {
+      setLocalIntent(next);
+      requestedIntent.current = next;
+      bridge.setIntent(next);
+    },
+    [bridge],
+  );
   const persisting = useRef(false);
   // Seeded from the URL query so the first paint is right; main's broadcast keeps it live.
   const [state, setState] = useState<OverlayState>(() => ({
@@ -123,6 +134,13 @@ export function CaptureOverlay({
   useEffect(
     () =>
       bridge.onState((incoming) => {
+        if (incoming.intent !== undefined) {
+          const asked = requestedIntent.current;
+          if (asked === null || incoming.intent === asked) {
+            requestedIntent.current = null;
+            setLocalIntent(incoming.intent);
+          }
+        }
         const requested = requestedMode.current;
         if (requested === null || incoming.mode === requested) {
           requestedMode.current = null;

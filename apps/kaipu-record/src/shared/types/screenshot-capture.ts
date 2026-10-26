@@ -200,6 +200,11 @@ export type OverlayAnswer =
  */
 export interface OverlayState {
   mode: CaptureMode;
+  /**
+   * Capture or record, as switched by any overlay (P / V or the switch). Main broadcasts it
+   * so every display's overlay confirms with the same intent. Absent from older senders.
+   */
+  intent?: CaptureIntent;
   hoverDisplayId: number | null;
   frameDisplayId: number | null;
   windows: ListedWindow[] | null;

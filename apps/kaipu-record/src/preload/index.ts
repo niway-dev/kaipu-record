@@ -188,6 +188,7 @@ const kaipuApi: KaipuElectronAPI = {
     chooseFrameDisplay: (displayId) =>
       ipcRenderer.send(IPC_CHANNELS.screenshotOverlayFrameDisplay, { displayId }),
     setMode: (mode) => ipcRenderer.send(IPC_CHANNELS.screenshotOverlayMode, { mode }),
+    setIntent: (intent) => ipcRenderer.send(IPC_CHANNELS.screenshotOverlayIntent, { intent }),
     onState: (callback) => {
       const listener = (_e: IpcRendererEvent, state: OverlayState): void => callback(state);
       ipcRenderer.on(IPC_CHANNELS.screenshotOverlayState, listener);

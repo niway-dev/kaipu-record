@@ -204,6 +204,7 @@ window.electronAPI = {
     hover: () => {},
     chooseFrameDisplay: () => {},
     setMode: () => {},
+    setIntent: () => {},
     onState: () => () => {},
     onHiddenAckRequest: () => () => {},
     hiddenAck: () => {},

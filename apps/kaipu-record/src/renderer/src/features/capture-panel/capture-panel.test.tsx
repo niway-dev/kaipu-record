@@ -143,7 +143,7 @@ describe("CapturePanel — tabs", () => {
       requestRecordSelector,
       getRecordingState: async () => ({
         active: false,
-        status: "idle",
+        status: "recording" as const,
         elapsedSeconds: 0,
         pending: true,
       }),

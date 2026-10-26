@@ -455,6 +455,7 @@ export const IPC_CHANNELS = {
   // Overlay → main: switch every overlay to this mode (`{ mode: CaptureMode }`); main
   // validates, rebroadcasts the state, and lists the windows the first time Window is entered.
   screenshotOverlayMode: "screenshot:overlay-mode",
+  screenshotOverlayIntent: "screenshot:overlay-intent",
   // Overlay → main (Frame): "move the frame to this display" (`{ displayId: number }`).
   screenshotOverlayFrameDisplay: "screenshot:overlay-frame-display",
   // Main → overlay (no payload): "reply after your next animation frame"; overlay → main

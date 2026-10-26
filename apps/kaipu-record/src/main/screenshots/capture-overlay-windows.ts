@@ -6,6 +6,7 @@ import { IPC_CHANNELS } from "@shared/types/ipc";
 import {
   ENABLED_CAPTURE_MODES,
   isCaptureAction,
+  isCaptureIntent,
   isCaptureMode,
   isRecordingRatio,
   type CaptureAction,
@@ -553,6 +554,7 @@ export class CaptureOverlayWindows implements OverlayPort {
   private sendState(window: OverlayWindow): void {
     const state: OverlayState = {
       mode: this.mode,
+      intent: this.intent,
       hoverDisplayId: this.hoverDisplayId,
       frameDisplayId: this.frameDisplayId,
       windows: this.windows,
@@ -658,6 +660,16 @@ export class CaptureOverlayWindows implements OverlayPort {
       this.frameDisplayId = mode === "frame" ? sender : null;
       if (mode === "frame") this.focusOn(sender, true);
       if (mode === "window") this.requestWindows();
+      this.broadcastState();
+    });
+
+    // P / V or the switch on one overlay: every overlay confirms with the same intent, so a
+    // click on another display never takes a screenshot after the user chose Record.
+    this.deps.ipc.on(IPC_CHANNELS.screenshotOverlayIntent, (event, payload) => {
+      if (!this.session?.settle || this.displayOf(event) === null) return;
+      const intent = (payload as { intent?: unknown } | undefined)?.intent;
+      if (!isCaptureIntent(intent) || intent === this.intent) return;
+      this.intent = intent;
       this.broadcastState();
     });
 
