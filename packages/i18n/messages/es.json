@@ -669,9 +669,6 @@
       "capture": "Capturar",
       "copy": "Copiar",
       "record": "Grabar",
-      "recordSoon": "Grabar · pronto",
-      "soon": "Pronto",
-      "recordDisplaySoon": "Grabar esta pantalla · pronto",
       "cancel": "Cancelar",
       "cancelTitle": "Cancelar · Esc",
       "modes": "Modo de captura",
@@ -685,10 +682,8 @@
       "hintFrame": "Enter para capturar · {copyKey} para copiar · {keys} cambia de modo · Esc para cancelar",
       "hintPick": "Clic o Enter para capturar · {copyKey} para copiar · {keys} cambia de modo · Esc para cancelar",
       "useSelection": "Usar selección",
-      "recordSelection": "Grabar",
       "hintFrameRecord": "Enter para usar esta área · {recordKey} para grabar · {keys} cambian el modo · Esc para cancelar",
-      "hintPickRecord": "Clic o Enter para usar esta pantalla · {recordKey} para grabar · {keys} cambian el modo · Esc para cancelar",
-      "recordDisplay": "Grabar esta pantalla"
+      "hintPickRecord": "Clic o Enter para usar esta pantalla · {recordKey} para grabar · {keys} cambian el modo · Esc para cancelar"
     },
     "overline": "CAPTURAS",
     "pageTitle": "Captura y documenta",

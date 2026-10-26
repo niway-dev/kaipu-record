@@ -669,9 +669,6 @@
       "capture": "Capture",
       "copy": "Copy",
       "record": "Record",
-      "recordSoon": "Record · soon",
-      "soon": "Soon",
-      "recordDisplaySoon": "Record this display · soon",
       "cancel": "Cancel",
       "cancelTitle": "Cancel · Esc",
       "modes": "Capture mode",
@@ -685,10 +682,8 @@
       "hintFrame": "Enter to capture · {copyKey} to copy · {keys} switch mode · Esc to cancel",
       "hintPick": "Click or Enter to capture · {copyKey} to copy · {keys} switch mode · Esc to cancel",
       "useSelection": "Use selection",
-      "recordSelection": "Record",
       "hintFrameRecord": "Enter to use this area · {recordKey} to record · {keys} switch mode · Esc to cancel",
-      "hintPickRecord": "Click or Enter to use this display · {recordKey} to record · {keys} switch mode · Esc to cancel",
-      "recordDisplay": "Record this display"
+      "hintPickRecord": "Click or Enter to use this display · {recordKey} to record · {keys} switch mode · Esc to cancel"
     },
     "overline": "SCREENSHOTS",
     "pageTitle": "Capture and document",

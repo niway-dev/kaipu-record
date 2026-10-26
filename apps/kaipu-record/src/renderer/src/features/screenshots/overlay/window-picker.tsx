@@ -3,7 +3,7 @@ import { useTranslations } from "@kaipu/i18n";
 import type { CaptureOverlayBridge } from "@shared/types/electron-api";
 import type { CaptureAction, CaptureRect, ListedWindow } from "@shared/types/screenshot-capture";
 import type { SendAnswer } from "./capture-overlay";
-import { isCaptureKey, isCopyKey } from "./overlay-keys";
+import { actionForKey } from "./overlay-keys";
 import { workAreaInWindow, type OverlayQuery } from "./overlay-query";
 import { CHROME_GAP_DIP, SelectionToolbar, type OverlayChrome } from "./selection-chrome";
 import styles from "./capture-overlay.module.css";
@@ -126,7 +126,9 @@ export function WindowPicker({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      const action = isCaptureKey(event) ? "capture" : isCopyKey(event, platform) ? "copy" : null;
+      // A window is captured, never recorded from here (Window keeps the thumbnail picker).
+      const keyed = actionForKey(event, platform, "capture");
+      const action = keyed === "capture" || keyed === "copy" ? keyed : null;
       const target = latest.current.hovered;
       if (!action || !target) return;
       event.preventDefault();
@@ -217,6 +219,8 @@ export function WindowPicker({
             selection={hovered.rect}
             area={area}
             onAction={(action) => answer(hovered, action)}
+            // A window is captured, not recorded, from here (ADR 0030 non-goal).
+            canRecord={false}
           />
         </>
       )}

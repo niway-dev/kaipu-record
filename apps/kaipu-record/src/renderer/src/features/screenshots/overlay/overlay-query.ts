@@ -1,5 +1,6 @@
 import {
   isCaptureMode,
+  type CaptureIntent,
   type CaptureMode,
   type CaptureRect,
 } from "@shared/types/screenshot-capture";
@@ -30,6 +31,8 @@ export interface OverlayQuery {
   frame: number | null;
   /** True for the built-in display (a laptop's panel), false for an external one. */
   internal: boolean;
+  /** Why the overlay opened: `record` only when main wrote it; anything else is a screenshot. */
+  intent: CaptureIntent;
 }
 
 function parseIds(value: string | null): number[] | null {
@@ -76,6 +79,7 @@ export function parseOverlayQuery(search: string): OverlayQuery | null {
     ids,
     frame: parseInteger(params.get("frame")),
     internal: params.get("internal") === "1",
+    intent: params.get("intent") === "record" ? "record" : "capture",
   };
 }
 

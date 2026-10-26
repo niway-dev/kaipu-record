@@ -5,7 +5,9 @@ import type { CaptureAction, CaptureRect } from "@shared/types/screenshot-captur
 import { cropHandles, hitCropHandle, moveCrop, resizeCrop } from "../annotations/crop";
 import { handleCursor, type HandleId, type Pt, type Size } from "../annotations/handles";
 import type { CropRect } from "../annotations/scene";
-import { isCaptureKey, isCopyKey } from "./overlay-keys";
+import { MIN_AREA_SIZE } from "@shared/capture-geometry";
+import { isRecordAction } from "@shared/types/screenshot-capture";
+import { actionForKey } from "./overlay-keys";
 import { workAreaInWindow, type OverlayQuery } from "./overlay-query";
 import { SelectionToolbar, type OverlayChrome } from "./selection-chrome";
 import styles from "./capture-overlay.module.css";
@@ -130,6 +132,7 @@ export function FrameBox({
   const confirm = useRef(onConfirm);
   confirm.current = onConfirm;
   const platform = chrome.platform;
+  const intent = chrome.intent;
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -137,9 +140,11 @@ export function FrameBox({
       // Whatever the key does next (confirm, switch mode, cancel), the drag ends first.
       const dragging = drag.current;
       drag.current = null;
-      const action = isCaptureKey(event) ? "capture" : isCopyKey(event, platform) ? "copy" : null;
+      const action = actionForKey(event, platform, intent);
       if (action) {
         event.preventDefault();
+        // A box under the recording minimum can be shot, never recorded.
+        if (isRecordAction(action) && !recordable(latest.current)) return;
         confirm.current(latest.current, action);
         return;
       }
@@ -147,7 +152,7 @@ export function FrameBox({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [platform]);
+  }, [platform, intent]);
 
   const fromCrop = (crop: CropRect): CaptureRect =>
     clampFrameToDisplay(
@@ -273,7 +278,13 @@ export function FrameBox({
         selection={frame}
         area={area}
         onAction={(action) => onConfirm(frame, action)}
+        canRecord={recordable(frame)}
       />
     </div>
   );
+}
+
+/** Big enough to record (ADR 0030): at least `MIN_AREA_SIZE` DIP on each side. */
+function recordable(frame: CaptureRect): boolean {
+  return frame.width >= MIN_AREA_SIZE && frame.height >= MIN_AREA_SIZE;
 }
