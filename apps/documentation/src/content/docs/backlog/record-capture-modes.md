@@ -5,7 +5,7 @@ description: "Proposal: choose what a recording covers — a display, an area dr
 
 # Record capture modes
 
-> **Status: 🟡 In progress** (2026-10-26). Core merged from `feat/record-capture-modes`: Record on the capture overlay, the `recordArea` shortcut, compositor crop, shade, bubble and cursor. The selector chrome, widget and Record page from the design file "Kaipu Record Modes" are implemented on `feat/record-modes-ui` (PR open). Owner QA pending for both. Owner request after using the screenshot modes:
+> **Status: 🟡 In progress** (2026-10-26). Core merged from `feat/record-capture-modes`: Record on the capture overlay, the `recordArea` shortcut, compositor crop, shade, bubble and cursor. The selector chrome, widget, Record page and tray submenu from the design file "Kaipu Record Modes" are implemented in #383, #382, #380 and #381, integrated on `feat/record-modes-integration`. Owner QA pending for both. Owner request after using the screenshot modes:
 > "now I want to choose a full screen or a selection range, like screenshot". Design:
 > [Record capture modes](/specs/2026-10-26-record-capture-modes-design/) · ADR
 > [0030](/architecture/decisions/0030-recording-target-and-area-crop-in-the-compositor/) ·

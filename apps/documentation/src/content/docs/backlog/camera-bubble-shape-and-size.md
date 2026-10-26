@@ -5,9 +5,10 @@ description: "The camera toggle becomes configurable without weighing more: a sp
 
 # Camera bubble — shape and size
 
-> **Status: 🟢 Ready to validate (prod review pending)** (2026-10-26). Implemented on
-> `feat/camera-bubble-controls`; unit tests and type checks pass, nothing has been checked yet in
-> a running app with a real camera. Design: Claude Design project "Kaipu Camera Controls",
+> **Status: 🟢 Ready to validate (prod review pending)** (2026-10-26). PR #380, integrated with
+> the rest of task 5 on `feat/record-modes-integration`, where the split tile sits in the new
+> Record page and tray layouts and the overlay's Camera toggle honours a blocked camera; unit
+> tests and type checks pass, nothing has been checked yet in a running app with a real camera. Design: Claude Design project "Kaipu Camera Controls",
 > direction **1a — split toggle + popover**. Builds on
 > [Record capture modes](/specs/2026-10-26-record-capture-modes-design/) decision 6 (the bubble
 > lives at the bottom-left corner of the recorded area).

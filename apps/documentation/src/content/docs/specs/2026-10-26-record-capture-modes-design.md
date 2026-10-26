@@ -5,7 +5,7 @@ description: Design for choosing what a recording covers the way screenshots alr
 
 # Record capture modes — design
 
-**Status: 🟡 In progress · 2026-10-26.** Tasks 1–4 and 6 implemented on `feat/record-capture-modes` (merged, owner QA pending). Task 5 (selector chrome, widget and Record page) implemented on `feat/record-modes-ui` from the Claude Design file "Kaipu Record Modes" (PR open, owner QA pending; verified by unit and component tests only, never run on a real display). Refinements made during implementation are marked _Implementation note_ below; the ones task 5 brought are collected in "Task 5 implementation notes" after the open questions. Linear: [NIW2-513](https://linear.app/niway/issue/NIW2-513/record-capture-modes-record-a-display-or-a-selected-area-through-the)
+**Status: 🟡 In progress · 2026-10-26.** Tasks 1–4 and 6 implemented on `feat/record-capture-modes` (merged, owner QA pending). Task 5 (selector chrome, widget, Record page and tray submenu) is implemented across four PRs integrated on `feat/record-modes-integration`: #383 (selector and Record page, from the Claude Design file "Kaipu Record Modes"), #382 (capture metadata in the library), #380 (camera bubble shape and size) and #381 (tray Record submenu). Owner QA pending; verified by unit and component tests only, never run on a real display. Refinements made during implementation are marked _Implementation note_ below; the ones task 5 brought are collected in "Task 5 implementation notes" after the open questions. Linear: [NIW2-513](https://linear.app/niway/issue/NIW2-513/record-capture-modes-record-a-display-or-a-selected-area-through-the)
 (parent; one child per task in section 8 once this design is approved). Builds on the
 [screenshot capture modes design](/specs/2026-10-15-screenshot-capture-modes-design/) and
 [screenshot modes v2](/specs/2026-10-17-screenshot-modes-v2-design/), whose decision 12 reserved
@@ -63,8 +63,8 @@ RecordingArea | null` beside the existing `selectedSource`, not as a new union r
 display target is that display's `screen:` source with `area = null`, an area target is the
 same source with `area` set, a window target is unchanged; picking a source in the thumbnail
 picker clears `area`. Same behaviour as the union, no settings migration, and decision 11 holds
-by construction. `AppSettings.recordingMode` was not added: until the widget has a mode row
-(task 5) there is nothing to remember it for.
+by construction. `AppSettings.recordingMode` was not added by tasks 1–4; task 5 added it (see
+the task 5 notes, decision 8).
 
 _Implementation note (decision 2)._ Record is the plain **R** key, not ⌘R / Ctrl+R: outside dev,
 `@electron-toolkit/utils`' `watchWindowShortcuts`, installed on every window, cancels Cmd/Ctrl+R
@@ -78,10 +78,18 @@ recording, so the library can label it ("FRAME · 16:9", "SCREEN", "WINDOW"). Th
 stores, next to `durationSeconds`:
 `capture: { mode: "screen" | "area" | "window"; width: number; height: number; ratio: "free" | "16:9" | "9:16" | "1:1" | null; displayId?: number }`.
 `width`/`height` are the encoded output size (the compositor target the engine derives), `ratio`
-is the area's remembered ratio (`RecordingArea.ratio`) or, without one, inferred from the output
+is the chip the Frame box was locked to (`RecordingArea.ratio`: the overlay's record answer
+carries it and main keeps it on the area) or, for an area without one, inferred from the output
 size with a 1% tolerance; it is `null` for screen and window. It is local only: it never leaves
-the device, the cloud catalog does not carry it, and the analytics payload stays as decided above.
-See [Recording capture metadata](/backlog/recording-capture-metadata/).
+the device and the cloud catalog does not carry it. The Record page's "Recent" grid and the
+library show it with the same tag. See
+[Recording capture metadata](/backlog/recording-capture-metadata/).
+
+_Implementation note (decision 12, analytics)._ `recording_started` carries `mode`, `platform`
+and `displays`; for an area it adds `size`, a bucket of the area's shorter side in physical
+pixels (`<720p`, `720p`, `1080p`, `1440p+`; the area in DIP times the display's scale factor,
+known when the take starts, before the engine reports its output size), and `ratio` (the locked
+chip, else inferred as above). No rectangles, no titles.
 
 _Implementation note (decision 6, camera bubble shape and size)._ The bubble's shape (circle or
 rounded square) and size (120–480 px, presets S 160 · M 240 · L 360) are now settings
@@ -107,9 +115,8 @@ larger size the area cannot hold is shrunk to what fits instead of hiding the bu
    overlay, so there is nothing left to adjust after choosing.
 4. **Recording from a screenshot overlay** uses the widget's current camera, audio and
    microphone settings. Confirm that is expected, or the overlay would need its own toggles.
-5. **The analytics event name.** No recording-start event exists in `shared/analytics.ts`
-   today; task 6 adds `recording_started` with the closed payload of decision 12, or extends the
-   event if one is added before then.
+5. ~~**The analytics event name.**~~ Resolved: task 6 added `recording_started`; its area
+   fields are in the decision 12 analytics note.
 6. **The owner wrote "windows e iOS".** This design reads it as macOS and Windows: the desktop
    app has no iOS target.
 
@@ -165,7 +172,9 @@ What changed against the decisions above:
   component that renders the camera toggle). No selection card. **Window** opens the thumbnail
   picker on the Record page and a pick starts the countdown. `AppSettings.recordingMode`
   (`frame` | `window` | `screen`, default `screen`) is now stored. The page lists the four newest
-  recordings under "Recent" (no mode tag: recordings do not store their mode).
+  recordings under "Recent", each with its capture tag ("FRAME · 16:9", "SCREEN", "WINDOW") from
+  the decision 12 metadata; recordings made before it have none. The Camera toggle in both
+  layouts is #380's split tile: a popover on the page, an inline drawer in the tray panel.
 - _Decision 9 (shortcuts)._ `startRecording` now opens the selector in the last used mode, as the
   button does, instead of starting the current target at once.
 - _New: aspect ratios._ The Frame box opened to record offers Free, 16:9, 9:16 and 1:1. A locked
@@ -174,9 +183,18 @@ What changed against the decisions above:
   centre. The ratio is remembered with the area per display (`RememberedArea.ratio` in
   `AppSettings.recordingArea`; an area remembered before ratios loads as Free). Geometry:
   `ratio-geometry.ts`, unit-tested.
-- _Not done from task 5:_ the tray submenu (Record screen / area / window) — the design file has
-  no tray menu; the camera preview on the overlay is a placeholder circle where the bubble will
-  be anchored, not a live feed (the camera feature lives in the camera-bubble work).
+- _Tray submenu._ The tray icon's right-click menu has Record → Record screen, Record area,
+  Record window… ([backlog](/backlog/tray-record-submenu/)). Each opens the selector in its own
+  mode, like the Record page's chips (Window: the thumbnail picker while NIW2-469 keeps it off).
+  While a recording runs the Record items are disabled and Stop recording shows; while a
+  countdown runs they are disabled and Cancel countdown shows (the same stop command, which
+  cancels a pending start).
+- _Overlay camera toggle._ The widget's Camera toggle and the Screen card's Cam chip write the
+  same shared `RecordingSettings.isCameraEnabled` as the page and the tray. A camera blocked in
+  the OS (`getCameraAccessStatus`) shows a lock and cannot be turned on there either. The
+  overlay has no camera settings chevron: device, shape and size stay on the page and the tray.
+  The camera preview on the overlay is a placeholder, not a live feed, drawn at the bubble's
+  size and shape (`AppSettings.cameraBubble`) where main will anchor it.
 
 ### Out of scope
 
@@ -407,8 +425,8 @@ overlay (Window keeps the existing thumbnail picker).
 4. **Shade, bubble and cursor.** Shade window and route, bubble anchoring, cursor normalization and
    the `region` field. Tests: failures 3 to 7 and 9.
 5. **Widget and Record page.** Mode row, selection card, controls, from the approved design; tray
-   submenu; shortcuts (`recordArea`). _Implemented on `feat/record-modes-ui` from "Kaipu Record
-   Modes" (see the task 5 notes); no tray submenu._ Tests: panel and page rendering per state, shortcut defaults
+   submenu; shortcuts (`recordArea`). _Implemented by #383, #382, #380 and #381, integrated on
+   `feat/record-modes-integration` (see the task 5 notes)._ Tests: panel and page rendering per state, shortcut defaults
    pinned against `@kaipu/domain`.
 6. **Analytics and docs.** `recording_started` with `mode`; the recording pipeline doc and the
    backlog page flipped to 🟢.

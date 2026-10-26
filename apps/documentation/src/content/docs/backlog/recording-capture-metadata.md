@@ -5,7 +5,7 @@ description: "Every new recording stores its capture mode (screen, area, window)
 
 # Recording capture metadata
 
-> **Status: 🟢 Ready to validate** (2026-10-26). Implemented on `feat/recording-capture-metadata`;
+> **Status: 🟢 Ready to validate** (2026-10-26). PR #382, integrated with the rest of task 5 on `feat/record-modes-integration`; the Record page's Recent grid uses the same tag;
 > owner QA on a real recording pending. Follow-up of
 > [Record capture modes](./record-capture-modes) ·
 > [design, decision 12](/specs/2026-10-26-record-capture-modes-design/) · ADR
@@ -45,8 +45,8 @@ description: "Every new recording stores its capture mode (screen, area, window)
   recorder store builds the capture once the engine starts and sends it with
   `recordingFinalize`. The builder falls back to the area rect (DIP × scale) and then to zeros,
   but the engine always provides the output size today.
-- **Ratio** — `RecordingArea.ratio` when the Record page remembered one (field added as optional;
-  the Record page redesign sets it). Otherwise an area recording infers 16:9, 9:16 or 1:1 within
+- **Ratio** — `RecordingArea.ratio`: the chip the Frame box was locked to. The overlay's record
+  answer carries it, and main keeps it on the area (`sanitizeArea`). Otherwise an area recording infers 16:9, 9:16 or 1:1 within
   1% of `width / height` (even rounding moves it slightly), else `free`.
 - **Trust** — main sanitizes the value from IPC before writing it and again when reading the
   sidecar; a malformed value reads as `null`.
