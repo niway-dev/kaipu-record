@@ -9,13 +9,17 @@
  * No TS enums (house rule): `as const` arrays + derived types.
  */
 import type { RecordingArea } from "./types/ipc";
+import { RECORDING_RATIOS, type RecordingRatio } from "./types/screenshot-capture";
 
 export const RECORDING_CAPTURE_MODES = ["screen", "area", "window"] as const;
 export type RecordingCaptureMode = (typeof RECORDING_CAPTURE_MODES)[number];
 
-/** The aspect ratios a remembered area can be locked to; "free" = no lock. */
-export const RECORDING_CAPTURE_RATIOS = ["free", "16:9", "9:16", "1:1"] as const;
-export type RecordingCaptureRatio = (typeof RECORDING_CAPTURE_RATIOS)[number];
+/**
+ * The aspect ratios a remembered area can be locked to; "free" = no lock. The same list the
+ * overlay's ratio bar offers (`RECORDING_RATIOS`), so a stored ratio always names a chip.
+ */
+export const RECORDING_CAPTURE_RATIOS = RECORDING_RATIOS;
+export type RecordingCaptureRatio = RecordingRatio;
 
 export interface RecordingCapture {
   mode: RecordingCaptureMode;

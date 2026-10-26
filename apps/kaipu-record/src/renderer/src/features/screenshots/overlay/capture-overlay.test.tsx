@@ -1497,6 +1497,8 @@ describe("CaptureOverlay — opened to record (ADR 0030)", () => {
         action: "record",
         displayId: 42,
         rect: area,
+        // The answer carries the ratio too, so main stores it with the take.
+        ratio: "free",
       }),
     );
     expect(api.updateSettings).toHaveBeenCalledWith({

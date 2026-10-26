@@ -412,8 +412,18 @@ function ActiveFrame({
       const { x, y, width, height } = rect;
       const plain = { x, y, width, height };
       const stored = into === "recordingArea" && ratio ? { ...plain, ratio } : plain;
+      // The answer carries it too, so main can store the take's ratio without waiting for
+      // the settings write below (it lands after the answer).
+      const withRatio = into === "recordingArea" && ratio ? { ratio } : {};
       send(
-        { kind: "rect", mode: "frame", action, displayId: query.displayId, rect: plain },
+        {
+          kind: "rect",
+          mode: "frame",
+          action,
+          displayId: query.displayId,
+          rect: plain,
+          ...withRatio,
+        },
         async () => {
           // Re-read so another display's remembered rectangle is kept, not overwritten.
           const current = await api.getSettings();

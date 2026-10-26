@@ -558,7 +558,7 @@ async function applyRecordTarget(target: RecordTarget): Promise<void> {
     showAlreadyRecordingNotice();
     return;
   }
-  const applied = await hub.selectArea(target.displayId, target.rect);
+  const applied = await hub.selectArea(target.displayId, target.rect, target.ratio);
   if (!applied) {
     // The overlay kept the main window hidden for a countdown that will not come: bring the
     // app back, so a pick that failed (display gone, area too small) is never silent.

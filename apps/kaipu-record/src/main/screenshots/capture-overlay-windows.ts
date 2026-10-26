@@ -7,6 +7,7 @@ import {
   ENABLED_CAPTURE_MODES,
   isCaptureAction,
   isCaptureMode,
+  isRecordingRatio,
   type CaptureAction,
   type CaptureIntent,
   type CaptureMode,
@@ -244,7 +245,11 @@ function parseAnswer(
   if (!rect) return null;
   if (answer.kind === "rect") {
     if (answer.mode !== undefined && answer.mode !== "frame") return null;
-    return { kind: "rect", mode: "frame", action, displayId, rect };
+    // A ratio is kept only when it names a chip; anything else reads as unlocked.
+    const ratio = isRecordingRatio(answer.ratio) ? answer.ratio : undefined;
+    return ratio
+      ? { kind: "rect", mode: "frame", action, displayId, rect, ratio }
+      : { kind: "rect", mode: "frame", action, displayId, rect };
   }
   return null;
 }

@@ -167,7 +167,15 @@ export interface ListedWindow {
  * capture by it.
  */
 export type OverlayAnswer =
-  | { kind: "rect"; mode: "frame"; action: CaptureAction; displayId: number; rect: CaptureRect }
+  | {
+      kind: "rect";
+      mode: "frame";
+      action: CaptureAction;
+      displayId: number;
+      rect: CaptureRect;
+      /** Record intent only: the ratio the box was locked to, stored with the take. */
+      ratio?: RecordingRatio;
+    }
   | { kind: "display"; mode: "screen"; action: CaptureAction; displayId: number }
   | {
       kind: "window";

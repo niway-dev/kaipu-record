@@ -11,6 +11,7 @@ import {
   type CaptureAction,
   type CaptureIntent,
   type CaptureMode,
+  type RecordingRatio,
 } from "@shared/types/screenshot-capture";
 import { cropForDisplay, physicalSizeFor, toGlobal } from "./capture-geometry";
 import type { OverlayPort } from "./overlay-port";
@@ -33,7 +34,14 @@ export type ProviderResult =
    * The user chose what to RECORD (ADR 0030): Record (`start`) or Use selection. No pixels
    * were taken; `rect` is display-relative DIP, `null` for the whole display.
    */
-  | { kind: "record"; start: boolean; displayId: number; rect: Rectangle | null };
+  | {
+      kind: "record";
+      start: boolean;
+      displayId: number;
+      rect: Rectangle | null;
+      /** The ratio the Frame box was locked to, when the overlay reported one. */
+      ratio?: RecordingRatio;
+    };
 
 export interface ScreenshotCaptureProvider {
   /** Whether `capture` can serve `mode`; lets the handler answer before hiding any window. */
@@ -90,6 +98,8 @@ export interface CaptureTarget {
   fullSize?: { width: number; height: number };
   /** True when the user picked on our overlay, so `runWithOverlay` waits for it to leave. */
   viaOverlay: boolean;
+  /** Frame mode, record intent: the ratio the box was locked to. */
+  ratio?: RecordingRatio;
 }
 
 /** Shows the overlay in `ui` mode and resolves the answer to a target; null when cancelled. */
@@ -109,7 +119,9 @@ export async function pickTarget(
   const { mode, action } = answer;
   switch (answer.kind) {
     case "rect":
-      return { display, rect: answer.rect, mode, action, viaOverlay: true };
+      return answer.ratio
+        ? { display, rect: answer.rect, mode, action, viaOverlay: true, ratio: answer.ratio }
+        : { display, rect: answer.rect, mode, action, viaOverlay: true };
     case "window":
       return {
         display,
@@ -157,6 +169,7 @@ export async function runWithOverlay(
         start: target.action === "record",
         displayId: target.display.id,
         rect: target.rect,
+        ...(target.rect && target.ratio ? { ratio: target.ratio } : {}),
       };
     }
     await overlay.hideAll(); // Failure 1: capture only once no overlay is on screen

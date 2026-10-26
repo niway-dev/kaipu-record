@@ -81,6 +81,12 @@ describe("sanitizeArea — an area that crossed a process boundary", () => {
     });
   });
 
+  it("keeps the ratio the area was locked to, and drops one that names no chip", () => {
+    const rect = { x: 0, y: 0, width: 640, height: 360 };
+    expect(sanitizeArea({ ...area(rect), ratio: "16:9" }, display)?.ratio).toBe("16:9");
+    expect(sanitizeArea({ ...area(rect), ratio: "4:3" }, display)).not.toHaveProperty("ratio");
+  });
+
   it("clamps an area that hangs off the display to the part on it", () => {
     expect(
       sanitizeArea(area({ x: -500, y: 900, width: 5000, height: 400 }), display)?.rect,

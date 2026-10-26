@@ -4,6 +4,7 @@
  */
 import { MIN_AREA_SIZE } from "@shared/capture-geometry";
 import type { RecordingArea } from "@shared/types/ipc";
+import { isRecordingRatio } from "@shared/types/screenshot-capture";
 import {
   CAMERA_BUBBLE_MIN_SIZE,
   CAMERA_BUBBLE_WINDOW_PAD,
@@ -77,7 +78,7 @@ function isFiniteNumber(value: unknown): value is number {
  */
 export function sanitizeArea(value: unknown, display: AreaDisplay): RecordingArea | null {
   if (!value || typeof value !== "object") return null;
-  const { displayId, rect } = value as Record<string, unknown>;
+  const { displayId, rect, ratio } = value as Record<string, unknown>;
   if (displayId !== display.id || !rect || typeof rect !== "object") return null;
   const { x, y, width, height } = rect as Record<string, unknown>;
   if (![x, y, width, height].every(isFiniteNumber)) return null;
@@ -87,9 +88,13 @@ export function sanitizeArea(value: unknown, display: AreaDisplay): RecordingAre
   const right = Math.min(dw, Math.round((x as number) + (width as number)));
   const bottom = Math.min(dh, Math.round((y as number) + (height as number)));
   if (right - left < MIN_AREA_SIZE || bottom - top < MIN_AREA_SIZE) return null;
-  return {
+  const area: RecordingArea = {
     displayId: display.id,
     rect: { x: left, y: top, width: right - left, height: bottom - top },
     displaySize: { width: dw, height: dh },
   };
+  // The ratio the Frame box was locked to (#383) travels with the area so the take's capture
+  // metadata stores it instead of inferring it; anything that is not a chip is dropped.
+  if (isRecordingRatio(ratio)) area.ratio = ratio;
+  return area;
 }

@@ -343,6 +343,39 @@ describe("CaptureOverlayWindows: answers", () => {
       },
     );
 
+    it("keeps the ratio a record answer was locked to", async () => {
+      expect(
+        await answerWith("frame", {
+          kind: "rect",
+          mode: "frame",
+          action: "record",
+          displayId: 1,
+          rect,
+          ratio: "9:16",
+        }),
+      ).toEqual({
+        kind: "rect",
+        mode: "frame",
+        action: "record",
+        displayId: 1,
+        rect,
+        ratio: "9:16",
+      });
+    });
+
+    it("drops a ratio that names no chip", async () => {
+      expect(
+        await answerWith("frame", {
+          kind: "rect",
+          mode: "frame",
+          action: "record",
+          displayId: 1,
+          rect,
+          ratio: "4:3",
+        }),
+      ).toEqual({ kind: "rect", mode: "frame", action: "record", displayId: 1, rect });
+    });
+
     it("accepts a window answer by id, with main's own rect and whole size, not the renderer's", async () => {
       const fullSize = { width: 900, height: 400 };
       const port = new CaptureOverlayWindows({

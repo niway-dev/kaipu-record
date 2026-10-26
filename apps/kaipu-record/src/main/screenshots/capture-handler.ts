@@ -6,6 +6,7 @@ import {
   type CaptureMode,
   type CaptureResult,
   type CaptureToastPayload,
+  type RecordingRatio,
   type SavedScreenshotRef,
 } from "@shared/types/screenshot-capture";
 import type { ScreenshotCopyMode } from "@shared/types";
@@ -83,6 +84,8 @@ export interface RecordTarget {
   displayId: number;
   rect: Rectangle | null;
   start: boolean;
+  /** The ratio the Frame box was locked to; stored with the take's capture metadata. */
+  ratio?: RecordingRatio;
 }
 
 function assertCaptureMode(value: unknown): CaptureMode {
@@ -156,9 +159,11 @@ export function createCaptureHandler(
         answer = await finish(deps, result);
       } else if (result.kind === "record") {
         // A recording target, not a screenshot: no save, no mode memory, no analytics here.
-        const { displayId, rect, start } = result;
+        const { displayId, rect, start, ratio } = result;
         try {
-          deps.onRecordTarget?.({ displayId, rect, start });
+          deps.onRecordTarget?.(
+            ratio ? { displayId, rect, start, ratio } : { displayId, rect, start },
+          );
           recordStarted = start && deps.onRecordTarget !== undefined;
         } catch (error) {
           console.error("recording target could not be applied", error);

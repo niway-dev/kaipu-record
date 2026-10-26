@@ -26,7 +26,7 @@ import type {
 import { serializeCursorTrack } from "@shared/cursor-track";
 import { buildRecordingStartedProperties, RECORDING_STARTED_EVENT } from "@shared/analytics";
 import { captureMainEvent } from "../services/analytics.service";
-import type { CaptureRect } from "@shared/types/screenshot-capture";
+import type { CaptureRect, RecordingRatio } from "@shared/types/screenshot-capture";
 import { LibraryVault } from "../library/library-vault";
 import { areaCapturedDisplay, pickCapturedDisplay } from "./captured-display";
 import { ClickHook, type HookLike } from "./click-hook";
@@ -78,7 +78,8 @@ export interface RecordingHubHandle {
    * the display is gone, has no screen source, or the area is under the minimum size, so a
    * stale pick never records another display.
    */
-  selectArea(displayId: number, rect: CaptureRect | null): Promise<boolean>;
+  /** `ratio`: the chip the Frame box was locked to, kept on the area for capture metadata. */
+  selectArea(displayId: number, rect: CaptureRect | null, ratio?: RecordingRatio): Promise<boolean>;
   /**
    * The next start's countdown is drawn on this region of this display (design "Kaipu Record
    * Modes"): the overlay just chose it, and the main window stays hidden. `rect` is display-
@@ -550,12 +551,12 @@ export function registerRecordingHub(
       countdownRegion = { display, rect: area ? area.rect : null };
       countdownRegionTimer = setTimeout(clearCountdownRegion, COUNTDOWN_REGION_TTL_MS);
     },
-    selectArea: async (displayId, rect) => {
+    selectArea: async (displayId, rect, ratio) => {
       // The source is locked for the length of a take.
       if (activity.active) return false;
       const display = screen.getAllDisplays().find((candidate) => candidate.id === displayId);
       if (!display) return false;
-      const area = rect ? sanitizeArea({ displayId, rect }, display) : null;
+      const area = rect ? sanitizeArea({ displayId, rect, ratio }, display) : null;
       if (rect && !area) return false;
       const source = await screenSourceForDisplay(displayId, screen.getAllDisplays().length);
       if (!source) return false;

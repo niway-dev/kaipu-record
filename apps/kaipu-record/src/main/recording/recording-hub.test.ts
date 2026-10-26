@@ -530,6 +530,12 @@ describe("recording hub — choosing an area or a display on the overlay", () =>
     });
   });
 
+  it("keeps the overlay's locked ratio on the area, for the take's capture metadata", async () => {
+    const { handle, settings } = await hub();
+    expect(await handle.selectArea(2, { x: 0, y: 0, width: 640, height: 360 }, "16:9")).toBe(true);
+    expect(settings().area).toMatchObject({ displayId: 2, ratio: "16:9" });
+  });
+
   it("a whole display becomes its screen source with no area", async () => {
     const { handle, settings } = await hub();
     await handle.selectArea(2, { x: 0, y: 0, width: 640, height: 360 });
