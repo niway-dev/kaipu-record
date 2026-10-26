@@ -384,6 +384,128 @@ describe("recording hub — a Dock dropped by a floating panel comes back", () =
     expect(mockState.shade.show).toHaveBeenLastCalledWith(display, rect, expect.any(Function));
   });
 
+  it("reveals the hidden app when a prepared start never reaches the recorder", async () => {
+    vi.useFakeTimers();
+    try {
+      const { registerSettings } = await import("../infrastructure/settings-store");
+      const { registerRecordingHub, COUNTDOWN_REGION_TTL_MS } = await import("./recording-hub");
+      registerSettings();
+      const hub = registerRecordingHub(() => fakeMainWindow() as never);
+      mockState.displays = [{ id: 2, bounds: { x: 1512, y: 0, width: 1512, height: 982 } }];
+      const reveal = vi.fn();
+
+      hub.prepareRegionCountdown(2, { x: 100, y: 50, width: 640, height: 360 }, reveal);
+      vi.advanceTimersByTime(COUNTDOWN_REGION_TTL_MS - 1);
+      expect(reveal).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(reveal).toHaveBeenCalledTimes(1);
+      expect(mockState.shade.hide).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reveals the hidden app when the countdown is cancelled, and not once the take starts", async () => {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    const hub = registerRecordingHub(() => fakeMainWindow() as never);
+    mockState.displays = [{ id: 2, bounds: { x: 1512, y: 0, width: 1512, height: 982 } }];
+    const phase = mockState.ipcOn.get(IPC_CHANNELS.recordingRecorderPhase)!;
+    const reveal = vi.fn();
+
+    hub.prepareRegionCountdown(2, null, reveal);
+    phase({}, { phase: "counting", value: 3 });
+    phase({}, { phase: "idle" });
+    expect(reveal).toHaveBeenCalledTimes(1);
+
+    const revealAgain = vi.fn();
+    hub.prepareRegionCountdown(2, null, revealAgain);
+    phase({}, { phase: "counting", value: 1 });
+    mockState.ipcOn.get(IPC_CHANNELS.recordingStart)!(
+      {},
+      { sourceId: "screen:2:0", sourceName: "S" },
+    );
+    phase({}, { phase: "idle" });
+    expect(revealAgain).not.toHaveBeenCalled();
+  });
+
+  it("starts the region's TTL only once a recreated main window has loaded", async () => {
+    vi.useFakeTimers();
+    try {
+      const { registerSettings } = await import("../infrastructure/settings-store");
+      const { registerRecordingHub, COUNTDOWN_REGION_TTL_MS } = await import("./recording-hub");
+      registerSettings();
+      let loaded: (() => void) | null = null;
+      const loading = {
+        ...fakeMainWindow(),
+        webContents: {
+          send: vi.fn(),
+          isLoading: () => true,
+          once: (_event: string, cb: () => void) => {
+            loaded = cb;
+          },
+        },
+      };
+      const hub = registerRecordingHub(() => loading as never);
+      mockState.displays = [{ id: 2, bounds: { x: 1512, y: 0, width: 1512, height: 982 } }];
+      const reveal = vi.fn();
+
+      hub.prepareRegionCountdown(2, null, reveal);
+      vi.advanceTimersByTime(COUNTDOWN_REGION_TTL_MS * 3);
+      expect(reveal).not.toHaveBeenCalled();
+      loaded!();
+      vi.advanceTimersByTime(COUNTDOWN_REGION_TTL_MS);
+      expect(reveal).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a pending take is busy: isPending and the broadcast say so until it starts", async () => {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    const mainWindow = fakeMainWindow();
+    const hub = registerRecordingHub(() => mainWindow as never);
+    const phase = mockState.ipcOn.get(IPC_CHANNELS.recordingRecorderPhase)!;
+    const state = () =>
+      mockState.ipcHandle.get(IPC_CHANNELS.recordingGetState)!({}) as { pending?: boolean };
+
+    expect(hub.isPending()).toBe(false);
+    phase({}, { phase: "counting", value: 3 });
+    expect(hub.isPending()).toBe(true);
+    expect(state().pending).toBe(true);
+    mockState.ipcOn.get(IPC_CHANNELS.recordingStart)!(
+      {},
+      { sourceId: "screen:1:0", sourceName: "S" },
+    );
+    expect(hub.isPending()).toBe(false);
+    expect(state().pending).toBeUndefined();
+  });
+
+  it("a whole-display countdown turns into the border at once, even when the source lookup fails", async () => {
+    const display = { id: 1, bounds: { x: 0, y: 0, width: 1512, height: 982 } };
+    mockState.displays = [display];
+    mockState.getSources.mockRejectedValue(new Error("no sources"));
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    const hub = registerRecordingHub(() => fakeMainWindow() as never);
+    const phase = mockState.ipcOn.get(IPC_CHANNELS.recordingRecorderPhase)!;
+
+    hub.prepareRegionCountdown(1, null);
+    phase({}, { phase: "counting", value: 1 });
+    mockState.ipcOn.get(IPC_CHANNELS.recordingStart)!(
+      {},
+      { sourceId: "screen:1:0", sourceName: "S" },
+    );
+    // Synchronously: the recording phase (no countdown state) on the same display.
+    expect(mockState.shade.show).toHaveBeenLastCalledWith(display, null, expect.any(Function));
+    await vi.waitFor(() => expect(mockState.bar.show).toHaveBeenCalled());
+    expect(mockState.shade.hide).not.toHaveBeenCalled();
+  });
+
   it("a full-display recording gets the border around the display and leaves the bubble where it was", async () => {
     const display = { id: 1, bounds: { x: 0, y: 0, width: 1512, height: 982 } };
     mockState.displays = [display];

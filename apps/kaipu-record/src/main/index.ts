@@ -460,7 +460,9 @@ function triggerStartRecording(options: { reveal?: boolean } = {}): void {
  * on the Record page, which starts the countdown once a window is picked.
  */
 function triggerRecordSelector(requested?: CaptureMode): void {
-  if (hub?.isActive()) {
+  // A pending take (countdown) is refused like an active one: a second overlay would land in
+  // the video, and the hub's held Esc would cancel the countdown instead of the overlay.
+  if (hub?.isActive() || hub?.isPending()) {
     capturePanel?.hide();
     showAlreadyRecordingNotice();
     return;
@@ -524,7 +526,7 @@ function bringAppToFront(): void {
  */
 function triggerCaptureScreenshot(request: CaptureRequestPayload): void {
   routeCaptureRequest({
-    isRecordingActive: () => hub?.isActive() ?? false,
+    isRecordingActive: () => (hub?.isActive() || hub?.isPending()) ?? false,
     notifyBusy: () => {
       // The main window is hidden during a take, so the renderer cannot show its
       // "finish the recording first" toast — use a system notification.
@@ -570,7 +572,9 @@ async function applyRecordTarget(target: RecordTarget): Promise<void> {
   const mode: CaptureMode = target.rect ? "frame" : "screen";
   if (getAppSettings().recordingMode !== mode) updateAppSettings({ recordingMode: mode });
   if (target.start) {
-    hub.prepareRegionCountdown(target.displayId, target.rect);
+    // If the recorder never starts (a dialog in the hidden window, no source, not idle) or
+    // the countdown is cancelled, the hidden app comes back instead of staying out of sight.
+    hub.prepareRegionCountdown(target.displayId, target.rect, showMainWindow);
     // The renderer is not told the target: `selectArea` broadcast it as settings, and the
     // recorder reads source and area when its countdown ends, not when the request lands
     // (recorder-store test "resolves the take's input when the countdown ends"). A start

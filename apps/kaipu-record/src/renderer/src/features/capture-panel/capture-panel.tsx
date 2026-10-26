@@ -37,7 +37,8 @@ export function CapturePanel(): React.JSX.Element {
   // The recording runs in another window, so this panel learns about it through
   // the global activity broadcast — it can't tell from its own (idle) recorder.
   const activity = useRecordingActivity();
-  const isBusy = activity.active;
+  // A pending take (countdown) is busy too: no second selector while it counts.
+  const isBusy = activity.active || activity.pending === true;
   // The split Camera tile and its inline drawer share this.
   const camera = useCameraControl();
   const stopRecording = (): void => window.electronAPI?.controlCommand("stop");
@@ -133,7 +134,7 @@ export function CapturePanel(): React.JSX.Element {
         </RecordModeButtons>
       ) : activeTab === "record" ? (
         <>
-          {isBusy && (
+          {activity.active && (
             <RecordingIndicator
               variant="banner"
               paused={activity.status === "paused"}

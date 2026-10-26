@@ -136,6 +136,27 @@ describe("CapturePanel — tabs", () => {
     expect(screen.queryByRole("button", { name: /^Screen/ })).not.toBeInTheDocument();
   });
 
+  it("treats a pending take (countdown) as busy: no Start, no chips, tabs locked", async () => {
+    const requestRecordSelector = vi.fn();
+    window.electronAPI = {
+      ...realApi,
+      requestRecordSelector,
+      getRecordingState: async () => ({
+        active: false,
+        status: "idle",
+        elapsedSeconds: 0,
+        pending: true,
+      }),
+    };
+    render(<CapturePanel />);
+    await waitFor(() => expect(screen.getByRole("tab", { name: "Capture" })).toBeDisabled());
+    expect(screen.queryByRole("button", { name: /Start recording/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Frame/ })).not.toBeInTheDocument();
+    // No "Recording · 0:00" banner: nothing records yet.
+    expect(screen.queryByText(/Recording ·/)).not.toBeInTheDocument();
+    expect(requestRecordSelector).not.toHaveBeenCalled();
+  });
+
   it("keeps the three toggles live mid-take while the source card stays locked", async () => {
     window.electronAPI = {
       ...realApi,

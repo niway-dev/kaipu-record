@@ -1,5 +1,24 @@
 import { describe, expect, it } from "vitest";
-import { areaToGlobal, bubbleBoundsInArea, bubbleSizeOf, sanitizeArea } from "./area-geometry";
+import {
+  areaToGlobal,
+  bubbleBoundsInArea,
+  bubbleSizeOf,
+  fullDisplayBorderAllowed,
+  sanitizeArea,
+} from "./area-geometry";
+
+describe("fullDisplayBorderAllowed", () => {
+  it("skips the whole-display border only on Windows builds without capture exclusion", () => {
+    expect(fullDisplayBorderAllowed("darwin", "24.0.0")).toBe(true);
+    expect(fullDisplayBorderAllowed("linux", "6.8.0")).toBe(true);
+    expect(fullDisplayBorderAllowed("win32", "10.0.19041")).toBe(true);
+    expect(fullDisplayBorderAllowed("win32", "10.0.22631")).toBe(true);
+    expect(fullDisplayBorderAllowed("win32", "10.0.18363")).toBe(false);
+    expect(fullDisplayBorderAllowed("win32", "6.3.9600")).toBe(false);
+    // An unreadable release never hides the border.
+    expect(fullDisplayBorderAllowed("win32", "")).toBe(true);
+  });
+});
 
 describe("areaToGlobal", () => {
   it("moves a display-relative area to global DIP", () => {

@@ -604,6 +604,11 @@ export interface RecordingActivity {
   elapsedSeconds: number;
   /** See {@link RecordingTick.systemAudioAvailable}. Only meaningful while active. */
   systemAudioAvailable?: boolean;
+  /**
+   * A take is pending: its countdown runs or its streams are being acquired, so `active` is
+   * still false. Windows treat it as busy (no second selector, no screenshot).
+   */
+  pending?: boolean;
 }
 
 /** What the GIF export sends with the file bytes (`gifSave`). No path: main picks it. */

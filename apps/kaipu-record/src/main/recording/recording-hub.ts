@@ -8,7 +8,7 @@ import {
   screen,
   systemPreferences,
 } from "electron";
-import { homedir } from "node:os";
+import { homedir, release } from "node:os";
 import { join } from "node:path";
 import { createMainTranslator } from "@kaipu/i18n/main";
 import { IPC_CHANNELS } from "@shared/types";
@@ -34,7 +34,7 @@ import { CursorTrackRegistry } from "./cursor-tracker";
 import { ControlBarWindow } from "./control-bar-window";
 import { CameraBubbleWindow } from "./camera-bubble-window";
 import { RecordingShadeWindow } from "./recording-shade-window";
-import { areaToGlobal, sanitizeArea } from "./area-geometry";
+import { areaToGlobal, fullDisplayBorderAllowed, sanitizeArea } from "./area-geometry";
 import { FinalizeMoveError, RecordingWriter, timestampId } from "./recording-writer";
 import { IDLE_ACTIVITY, applyTick, startedActivity, stoppedActivity } from "./recording-activity";
 import { vaultDirectory } from "../library/vault-location";
@@ -54,6 +54,8 @@ export type LiveRecordingToggle =
 export interface RecordingHubHandle {
   /** True while a recording is active or paused. */
   isActive(): boolean;
+  /** True while a take is pending (countdown or acquiring): not active yet, but busy. */
+  isPending(): boolean;
   /**
    * Flip one of the three input toggles, exactly as clicking it in a window
    * does (the global shortcuts use this). Mid-take the recorder picks the
@@ -85,8 +87,15 @@ export interface RecordingHubHandle {
    * Modes"): the overlay just chose it, and the main window stays hidden. `rect` is display-
    * relative DIP, `null` for the whole display. Forgotten after `COUNTDOWN_REGION_TTL_MS`
    * when no countdown follows, so a later unrelated start never draws on a stale region.
+   * The TTL starts once the main window has loaded (a recreated window cold-loads first).
+   * `onAbandoned` runs when the start never came (TTL expired with no phase report) or ended
+   * before a take (cancelled or failed): the caller kept the app hidden and must reveal it.
    */
-  prepareRegionCountdown(displayId: number, rect: CaptureRect | null): void;
+  prepareRegionCountdown(
+    displayId: number,
+    rect: CaptureRect | null,
+    onAbandoned?: () => void,
+  ): void;
   /**
    * Best-effort recovery when the recorder renderer is gone (crash, or the
    * main window destroyed) mid-recording: resets activity, hides the bar, and
@@ -188,15 +197,20 @@ export function registerRecordingHub(
   // reflect it and refuse to start a second recording. Transitions live in the
   // pure `recording-activity` module; the hub only owns the broadcast.
   let activity: RecordingActivity = IDLE_ACTIVITY;
+  // A take whose countdown runs (or whose streams are acquiring): not active, but busy.
+  let pending = false;
+  const publicActivity = (): RecordingActivity =>
+    pending && !activity.active ? { ...activity, pending: true } : activity;
   const broadcastActivity = (): void => {
     onActivityChange?.(activity);
+    const state = publicActivity();
     for (const window of BrowserWindow.getAllWindows()) {
       if (!window.isDestroyed()) {
-        window.webContents.send(IPC_CHANNELS.recordingState, activity);
+        window.webContents.send(IPC_CHANNELS.recordingState, state);
       }
     }
   };
-  ipcMain.handle(IPC_CHANNELS.recordingGetState, (): RecordingActivity => activity);
+  ipcMain.handle(IPC_CHANNELS.recordingGetState, (): RecordingActivity => publicActivity());
 
   // Shared recording settings — single source of truth, mirrored to every window.
   const settings: RecordingSettings = {
@@ -422,17 +436,27 @@ export function registerRecordingHub(
       getMainWindow()?.webContents.send(IPC_CHANNELS.recordingCommand, "stop");
     });
   };
-  let pending = false;
   const setPending = (next: boolean): void => {
     if (next === pending) return;
     pending = next;
     onPendingChange?.(next);
+    broadcastActivity();
   };
+  // Who to tell when the prepared start never becomes a take (the app was kept hidden).
+  let countdownAbandoned: (() => void) | null = null;
   const clearCountdownRegion = (): void => {
     if (countdownRegionTimer) clearTimeout(countdownRegionTimer);
     countdownRegionTimer = null;
     countdownRegion = null;
+    countdownAbandoned = null;
     releaseEscape();
+  };
+  /** The prepared start will not become a take: forget it and let the caller reveal the app. */
+  const abandonCountdownRegion = (): void => {
+    const notify = countdownAbandoned;
+    clearCountdownRegion();
+    shade.hide();
+    notify?.();
   };
   ipcMain.on(IPC_CHANNELS.recordingRecorderPhase, (_e, raw: unknown) => {
     const report = parsePhaseReport(raw);
@@ -440,24 +464,29 @@ export function registerRecordingHub(
     if (report && !activity.active) setPending(report.phase !== "idle");
     if (!report || !countdownRegion || activity.active) return;
     const { display, rect } = countdownRegion;
-    if (report.phase === "counting") {
-      // The region is in use now: it no longer expires.
-      if (countdownRegionTimer) clearTimeout(countdownRegionTimer);
+    // The start arrived (a countdown, or straight to acquiring with no countdown): the
+    // region is in use now and no longer expires.
+    if (report.phase !== "idle" && countdownRegionTimer) {
+      clearTimeout(countdownRegionTimer);
       countdownRegionTimer = null;
+    }
+    if (report.phase === "counting") {
       shade.show(display, rect, raiseFloating, { phase: "countdown", value: report.value });
       holdEscape();
     } else if (report.phase === "starting") {
       shade.update({ phase: "countdown", value: null });
     } else {
-      // Cancelled (Esc, Stop) or failed before the take: nothing is marked any more.
-      clearCountdownRegion();
-      shade.hide();
+      // Cancelled (Esc, Stop) or failed before the take: nothing is marked any more, and the
+      // app that was kept hidden for the countdown comes back.
+      abandonCountdownRegion();
     }
   });
 
   ipcMain.on(IPC_CHANNELS.recordingStart, (_e, info: RecordingStartInfo) => {
     activity = startedActivity();
-    // The countdown is over: Esc belongs to the apps again.
+    // The countdown is over: Esc belongs to the apps again. The region it was drawn on is
+    // kept for the shade below.
+    const region = countdownRegion;
     clearCountdownRegion();
     setPending(false);
     // An area (ADR 0030): main's own, and only for the source it was chosen with: a window
@@ -502,17 +531,33 @@ export function registerRecordingHub(
     // Place the bar on the screen being recorded (resolved from the source id), outside the
     // area when only part of it is recorded (design "Kaipu Record Modes").
     const includeInRecording = getAppSettings().showBarInRecording;
+    // A whole display gets the pink border around its edges, unless content protection
+    // cannot keep it out of the video (old Windows); a window gets nothing (it moves).
+    const borderAllowed = fullDisplayBorderAllowed(process.platform, release());
+    // The countdown of a whole display was drawn on that display: turn it into the border
+    // now, without waiting for the source lookup below, which can fail.
+    const wholeDisplayCountdown = !area && region !== null && region.rect === null;
     void displayIdForSource(info.sourceId).then((displayId) => {
       bar.show(displayId, { includeInRecording, anchor: areaGlobal });
-      // A whole display gets the pink border around its edges; a window, nothing (it moves).
-      if (area || displayId === undefined || !activity.active) return;
-      const display = screen.getAllDisplays().find((d) => String(d.id) === displayId);
-      if (display) shade.show(display, null, raiseFloating);
+      if (area || wholeDisplayCountdown || !activity.active) return;
+      const display =
+        displayId === undefined
+          ? undefined
+          : screen.getAllDisplays().find((d) => String(d.id) === displayId);
+      if (display && borderAllowed) shade.show(display, null, raiseFloating);
+      // A lookup that failed (or a window) leaves no countdown dim behind.
+      else shade.hide();
     });
     if (area && areaDisplay && areaGlobal) {
       shade.show(areaDisplay, area.rect, raiseFloating);
       cameraBubble.anchorTo(areaGlobal);
       bubbleAnchoredToArea = true;
+    } else if (wholeDisplayCountdown && region) {
+      if (borderAllowed) shade.show(region.display, null, raiseFloating);
+      else shade.hide();
+    } else if (region) {
+      // A countdown drawn on a region that is not the take's area: never leave its dim up.
+      shade.hide();
     }
   });
   const applyStopWindowState = (): void => {
@@ -552,6 +597,7 @@ export function registerRecordingHub(
 
   return {
     isActive: () => activity.active,
+    isPending: () => pending && !activity.active,
     toggleRecordingSetting: (key) => applySettingsPatch({ [key]: !settings[key] }),
     hideCameraBubbleForCapture: () => {
       if (!cameraBubble.isVisible()) return;
@@ -563,15 +609,27 @@ export function registerRecordingHub(
       cameraBubbleHiddenForCapture = false;
       if (settings.isCameraEnabled) cameraBubble.show();
     },
-    prepareRegionCountdown: (displayId, rect) => {
+    prepareRegionCountdown: (displayId, rect, onAbandoned) => {
       clearCountdownRegion();
       if (activity.active) return;
       const display = screen.getAllDisplays().find((candidate) => candidate.id === displayId);
-      if (!display) return;
-      const area = rect ? sanitizeArea({ displayId, rect }, display) : null;
-      if (rect && !area) return;
-      countdownRegion = { display, rect: area ? area.rect : null };
-      countdownRegionTimer = setTimeout(clearCountdownRegion, COUNTDOWN_REGION_TTL_MS);
+      const area = display && rect ? sanitizeArea({ displayId, rect }, display) : null;
+      if (!display || (rect && !area)) {
+        // Nothing to draw on, but the start may still be dropped: the app must come back.
+        onAbandoned?.();
+        return;
+      }
+      const prepared = { display, rect: area ? area.rect : null };
+      countdownRegion = prepared;
+      countdownAbandoned = onAbandoned ?? null;
+      // The TTL counts from when the recorder can answer: a recreated main window loads first.
+      const startTtl = (): void => {
+        if (countdownRegion !== prepared || countdownRegionTimer) return;
+        countdownRegionTimer = setTimeout(abandonCountdownRegion, COUNTDOWN_REGION_TTL_MS);
+      };
+      const contents = getMainWindow()?.webContents;
+      if (contents?.isLoading?.()) contents.once("did-finish-load", startTtl);
+      else startTtl();
     },
     selectArea: async (displayId, rect, ratio) => {
       // The source is locked for the length of a take.

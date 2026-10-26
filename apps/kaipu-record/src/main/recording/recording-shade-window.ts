@@ -22,11 +22,12 @@ export function shadeSearch(rect: CaptureRect | null, state: RecordingShadeState
 }
 
 /**
- * The marker over the recorded display (ADR 0030, amended by the "Kaipu Record Modes"
- * design). While the countdown runs it dims everything outside the chosen region and shows
- * the number; while the take runs it draws only a pink border around the region (or the
- * whole display) and a "REC · border not recorded" tag, with NO dim, so the user keeps
- * working normally around it.
+ * The marker over the recorded display (spec "Record capture modes" decision 4, extended by
+ * its task 5 notes; no ADR amendment). While the countdown runs it dims everything outside
+ * the chosen region and shows the number. While an area records it keeps the dark fill
+ * outside the area and adds a pink border just outside it and a "REC · border not recorded"
+ * tag; a whole-display recording gets only a pink border around the display, no fill (and
+ * none at all where content protection cannot exclude it, see `fullDisplayBorderAllowed`).
  *
  * Three properties carry the whole design and are pinned by `floating-window-policy.test.ts`:
  * - content-protected, so the shade itself is never in the video;
