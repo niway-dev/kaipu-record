@@ -166,13 +166,15 @@ describe("CaptureOverlayWindows: creating the overlays", () => {
 
   it("tells the renderer it was opened to record, and says nothing for a screenshot", () => {
     void overlays().pick("frame", [left], "record");
+    // The scale feeds the record intent's size readout, in device pixels.
     expect(String(created[0].window.loadFile.mock.calls[0]?.[1]?.search)).toContain(
-      "&intent=record",
+      "&intent=record&scale=2",
     );
 
     created.length = 0;
     void overlays().pick("frame", [left]);
     expect(String(created[0].window.loadFile.mock.calls[0]?.[1]?.search)).not.toContain("intent");
+    expect(String(created[0].window.loadFile.mock.calls[0]?.[1]?.search)).not.toContain("scale");
   });
 
   it("writes negative origins as-is, for a display left of the primary", () => {

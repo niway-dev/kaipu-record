@@ -38,8 +38,23 @@ describe("actionForKey", () => {
     expect(actionForKey(key({ key: "Enter" }), "mac", "capture")).toBe("capture");
   });
 
-  it("Enter keeps the selection as the recording target when it opened to record", () => {
-    expect(actionForKey(key({ key: "Enter" }), "mac", "record")).toBe("select");
+  it("Enter starts the recording when the overlay opened to record", () => {
+    expect(actionForKey(key({ key: "Enter" }), "mac", "record")).toBe("record");
+    expect(actionForKey(key({ key: "Enter" }), "other", "record")).toBe("record");
+  });
+
+  it("no key answers Use selection any more: the overlay carries the audio toggles", () => {
+    for (const name of ["Enter", "r", "c", "s", " "]) {
+      for (const intent of ["capture", "record"] as const) {
+        expect(actionForKey(key({ key: name }), "mac", intent)).not.toBe("select");
+        expect(actionForKey(key({ key: name, metaKey: true }), "mac", intent)).not.toBe("select");
+      }
+    }
+  });
+
+  it("Enter with a modifier is not a confirm", () => {
+    expect(actionForKey(key({ key: "Enter", shiftKey: true }), "mac", "record")).toBeNull();
+    expect(actionForKey(key({ key: "Enter", metaKey: true }), "mac", "capture")).toBeNull();
   });
 
   it("R alone records, in either intent, on every platform", () => {

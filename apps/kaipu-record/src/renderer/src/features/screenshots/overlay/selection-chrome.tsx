@@ -1,11 +1,11 @@
 import {
   AppWindow,
   Camera,
-  Check,
   Circle,
   Copy,
   Frame,
   Monitor,
+  Video,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -17,14 +17,18 @@ import {
   type CaptureRect,
 } from "@shared/types/screenshot-capture";
 import { copyKeyLabel, recordKeyLabel, type KeyPlatform } from "./overlay-keys";
+import type { OverlayToggles } from "./record-chrome";
 import styles from "./capture-overlay.module.css";
 
 /** Gap between the selection and the toolbar attached to it. */
 export const CHROME_GAP_DIP = 10;
 /** The toolbar's height. */
 export const TOOLBAR_HEIGHT_DIP = 44;
-/** What the toolbar occupies besides its mode buttons (about: Capture, Copy, Record, Cancel, dividers). */
-export const TOOLBAR_BASE_WIDTH_DIP = 460;
+/**
+ * What the toolbar occupies besides its mode buttons (about: the Capture | Record switch,
+ * Capture, Copy, Record, Cancel, dividers).
+ */
+export const TOOLBAR_BASE_WIDTH_DIP = 540;
 /** One mode button with only its icon and key badge. */
 export const MODE_BUTTON_DIP = 44;
 /** What the mode's name adds to its button when the toolbar is wide enough to print it. */
@@ -44,13 +48,23 @@ export interface OverlayChrome {
   platform: KeyPlatform;
   /**
    * Why the overlay opened. `capture`: Capture is primary, with Copy and Record beside it.
-   * `record`: Use selection is primary, with Record and Capture beside it (ADR 0030).
+   * `record`: Frame and Screen draw their own record chrome (Start recording, Enter).
    */
   intent: CaptureIntent;
   /** Switch every overlay to `mode` (the toolbar, the Screen card row). */
   onMode(mode: CaptureMode): void;
   /** The toolbar's Cancel button: the same as Esc. */
   onCancel(): void;
+  /**
+   * Switch between taking a screenshot and recording without leaving the overlay (the
+   * Capture | Record switch, keys P and V). The selection and the mode stay as they are.
+   */
+  onIntent?(intent: CaptureIntent): void;
+  /**
+   * Mic, System audio and Camera as main holds them: the record intent's widget and Screen
+   * card toggle them in place. Absent outside the record intent.
+   */
+  toggles?: OverlayToggles;
 }
 
 export type Placement<Side extends string> = { side: Side; left: number; top: number };
@@ -141,6 +155,8 @@ export function SelectionToolbar({
       style={{ left, top }}
       {...keepPointer}
     >
+      <IntentSwitch chrome={chrome} />
+      <span className={styles.barDivider} aria-hidden />
       <div role="group" aria-label={t("overlay.modes")} className={styles.toolbarModes}>
         {chrome.modes.map((mode, index) => {
           const Icon = MODE_ICON[mode];
@@ -179,9 +195,56 @@ export function SelectionToolbar({
 }
 
 /**
+ * The two-state Capture | Record switch (camera and video icons, keys P and V), from the
+ * owner's "Kaipu Unified Capture" design: it changes only what the confirm actions do, never
+ * the selection or the mode. Drawn in the horizontal toolbar, the Screen card and, stacked,
+ * in the record intent's widget.
+ */
+export function IntentSwitch({
+  chrome,
+  vertical = false,
+}: {
+  chrome: OverlayChrome;
+  vertical?: boolean;
+}): React.JSX.Element | null {
+  const t = useTranslations("screenshots");
+  if (!chrome.onIntent) return null;
+  const options = [
+    { intent: "capture", icon: Camera, label: t("overlay.intentCapture") },
+    { intent: "record", icon: Video, label: t("overlay.intentRecord") },
+  ] as const;
+  return (
+    <div
+      role="group"
+      aria-label={t("overlay.intent")}
+      data-testid="intent-switch"
+      className={vertical ? styles.intentSwitchVertical : styles.intentSwitch}
+      {...keepPointer}
+    >
+      {options.map(({ intent, icon: Icon, label }) => (
+        <button
+          key={intent}
+          type="button"
+          className={vertical ? styles.widgetMode : styles.intentOption}
+          aria-pressed={chrome.intent === intent}
+          aria-label={label}
+          title={label}
+          onClick={() => chrome.onIntent?.(intent)}
+        >
+          <Icon size={vertical ? 16 : 15} aria-hidden />
+          <span className={styles.widgetDigit} aria-hidden>
+            {intent === "capture" ? "P" : "V"}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
  * The action buttons for the overlay's intent, shared by the selection toolbar and the
  * Screen card. Opened to capture: Capture (Enter) · Copy (⌘C) | Record (R). Opened to
- * record: Use selection (Enter) · Record (R) | Capture (click only, so ⌘C keeps meaning
+ * record (the Window picker only): Record (R) | Capture (click only, so ⌘C keeps meaning
  * copy everywhere else in the app).
  */
 export function ActionButtons({
@@ -229,21 +292,10 @@ export function ActionButtons({
     </button>
   );
   if (chrome.intent === "record") {
+    // Only the Window picker still draws this bar opened to record (Frame and Screen have
+    // their own record chrome): Record first, Capture beside it, no "Use selection".
     return (
       <>
-        <button
-          type="button"
-          className={styles.captureButton}
-          aria-label={t("overlay.useSelection")}
-          disabled={!canRecord}
-          onClick={() => onAction("select")}
-        >
-          <Check size={14} aria-hidden />
-          {t("overlay.useSelection")}
-          <kbd className={styles.kbd} aria-hidden>
-            ↩
-          </kbd>
-        </button>
         {record}
         <span className={styles.barDivider} aria-hidden />
         {capture(false)}
