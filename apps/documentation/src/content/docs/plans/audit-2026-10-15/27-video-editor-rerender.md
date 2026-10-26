@@ -156,7 +156,7 @@ New file:
 
 ```ts
 // features/video-editor/use-time-selector.ts
-import { useSyncExternalStore } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 import type { PreviewPlayback } from "./use-preview-playback";
 
 /**
@@ -168,10 +168,9 @@ export function useTimeSelector<T extends string | number | boolean | null>(
   select: (t: number) => T,
 ): T {
   const { subscribeTime, getTime } = playback;
-  return useSyncExternalStore(
-    (onChange) => subscribeTime(() => onChange()),
-    () => select(getTime()),
-  );
+  // A stable subscribe: an inline closure makes React unsubscribe and resubscribe on every render.
+  const subscribe = useCallback((onChange: () => void) => subscribeTime(() => onChange()), [subscribeTime]);
+  return useSyncExternalStore(subscribe, () => select(getTime()));
 }
 ```
 

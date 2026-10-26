@@ -87,10 +87,14 @@ describe("mintVaultId", () => {
     ).rejects.toThrow(/no free recording id/);
   });
 
-  it("two mints in the same millisecond differ", async () => {
-    const a = await mintVaultId("gif", vault, { now: () => at });
-    const b = await mintVaultId("gif", vault, { now: () => at });
-    expect(a).not.toBe(b);
+  it("a second finalize in the same millisecond gets a different id", async () => {
+    // Same clock and the same first suffix: only the on-disk check can tell them apart.
+    const suffixes = ["aaaa", "aaaa", "bbbb"];
+    const random = () => suffixes.shift()!;
+    const a = await mintVaultId("gif", vault, { now: () => at, random });
+    await writeFile(join(directory, `${a}.gif`), "x");
+    const b = await mintVaultId("gif", vault, { now: () => at, random });
+    expect(b).not.toBe(a);
   });
 
   it("sorts by time", async () => {

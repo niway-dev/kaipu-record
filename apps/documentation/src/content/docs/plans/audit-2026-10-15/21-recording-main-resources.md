@@ -23,6 +23,7 @@ description: "Closes REC-A2, REC-B4, REC-B3, REC-B5: a start that fails before c
 - Plan 22 also edits `forceReset` (release recorder sessions, abort exports) — merge: plan 22's per-prefix handling supersedes the plain `abortAll()` here if both land. Plan 02 edits `abort` (stranded guard); independent.
 - Marking ended at `recordingFinalize` entry would block a retried finalize's tracker start; the renderer never retries (it aborts), so accepted.
 - Follow-up, not here: the quit-path timeout can still cut a slow `copyFile` mid-finalize (needs a `finalizeInFlight` counter that re-arms the timeout).
+- The close/quit timeout calls `forceReset()` on a renderer that may only be slow, not dead. Aborting its writer sessions then makes a finalize still in flight fail because its session is gone. Accepted for now (the window is closing either way); the `finalizeInFlight` follow-up above is the fix.
 - Commit messages in English, conventional-commit style.
 
 ## Review Focus
@@ -126,7 +127,9 @@ it("recording:stop before the display lookup resolves keeps the bar hidden", asy
   ipcOn(IPC_CHANNELS.recordingStart)({}, { sourceId: "screen:1:0", sourceName: "s" });
   ipcOn(IPC_CHANNELS.recordingStop)({});
   release([{ id: "screen:1:0", display_id: "1" }]);
-  await Promise.resolve();
+  // One microtask is not enough for displayIdForSource(...).then(...); flush everything,
+  // or this passes without the generation guard.
+  await vi.runAllTimersAsync();
   expect(mockState.bar.show).not.toHaveBeenCalled();
 });
 

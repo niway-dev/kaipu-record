@@ -19,6 +19,7 @@ description: "Closes REC-A3, LIB-A9, LIB-B13, SHOT-A8, SHOT-B6, VID-A6: nothing 
 
 - Paths are relative to `apps/kaipu-record/src/`. Tests: `node_modules/.bin/vitest run <file>` from `apps/kaipu-record` — never `bunx`. No local Playwright.
 - `shared/**` takes no value imports from workspace packages. `shared/analytics.ts` must stay import-free.
+- The "never titles, paths, ids or error text" rule covers **event properties**. `captureMainException` is the existing crash-report path (gated by Send diagnostics, like `uncaughtException` today) and forwards the raw error, so an `execFile` message can carry the temp PNG path or stderr. Before wiring the two new exception calls, strip absolute paths from `error.message` in `buildExceptionProperties`, or report them as events with an error-kind enum instead.
 - Event names are snake_case. The one pre-existing event, `library-detail-missing`, keeps its kebab-case name (renaming splits its PostHog history).
 - Never emit `recording_completed` from main's `recording:finalize` handler: that IPC is shared with video exports (double count). Emit it only from `recorder-store.stopRecording`.
 - A telemetry hook must never change a flow's result: every hook call is wrapped in `try/catch`.

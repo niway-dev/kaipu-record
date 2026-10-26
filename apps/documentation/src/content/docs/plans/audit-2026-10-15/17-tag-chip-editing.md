@@ -88,10 +88,13 @@ it("ignores duplicates and invalid pieces in a paste", async () => {
 it("caps a paste at the per-item limit", async () => {
   const assigned = Array.from({ length: TAGS_PER_ITEM_MAX - 1 }, (_, i) => tag(`t${i}`));
   const onAssign = vi.fn();
-  render(<TagEditor assigned={assigned} all={[]} onAssign={onAssign} onCreate={async (n) => tag(n)} />);
+  const onCreate = vi.fn(async (n: string) => tag(n));
+  render(<TagEditor assigned={assigned} all={[]} onAssign={onAssign} onCreate={onCreate} />);
   fireEvent.change(input(), { target: { value: "x, y, z, " } });
   await waitFor(() => expect(onAssign).toHaveBeenCalledTimes(1));
   expect(onAssign.mock.calls[0][0]).toHaveLength(TAGS_PER_ITEM_MAX);
+  // Only the tag that fits is created; the rest would be orphans in the registry.
+  expect(onCreate).toHaveBeenCalledTimes(1);
 });
 
 it("two quick chip removals before the first save settles both apply", async () => {
@@ -170,6 +173,8 @@ Imports: `import React, { useId, useMemo, useRef, useState } from "react";`. Pro
     const resolved: string[] = [];
     const seen = new Set<string>();
     for (const raw of raws) {
+      // Stop before creating a tag that the per-item cap would refuse to assign.
+      if (idsRef.current.length + resolved.length >= TAGS_PER_ITEM_MAX) break;
       const name = normalizeTagName(raw.replace(/^#/, ""));
       if (name === null) continue;
       const slug = tagSlug(name);

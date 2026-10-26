@@ -19,6 +19,7 @@ description: "Closes LIB-A6: screenshot cards load the full-resolution PNG as th
 
 - Paths are relative to `apps/kaipu-record/src/`. Tests: `node_modules/.bin/vitest run <file>` from `apps/kaipu-record` — never `bunx`.
 - `library-detail-page.tsx:229` and `open-in-editor.ts` stay untouched.
+- The `thumb` route serves an existing poster as is; the freshness check only runs on its 404 fallback. A rewritten PNG therefore stays fresh only because `screenshotSave` calls `writeScreenshotPoster` after `vault.writeImage`. At `801a362c`, `screenshot-save.ts` is the only `vault.writeImage` caller (editor overwrite included). Any new caller must write the poster too, or the card keeps the old image.
 - `currentVault()` builds a fresh vault per call, so the in-flight dedupe map lives at module scope keyed by `vault.directory + id`.
 - No test for `media-protocol.ts` or `screenshot-ipc.ts`: all logic lives in the pure module; the electron pieces are covered by the manual steps.
 - JPEG has no alpha: a pasted transparent PNG gets a black poster background (cosmetic; code comment).

@@ -92,6 +92,9 @@ own refutation pass.
 Severity: 🔴 high · 🟠 medium · ⚪ low. Confidence: ✔ confirmed · ? plausible. "≈" marks a merge with
 another auditor's finding. Full evidence, fix sketch and effort are on each detail page.
 
+These tables are the snapshot at `d36b19dd` and do not change as fixes land. Which findings have
+shipped, and in which PR, is in the [fix plans index](/plans/audit-2026-10-15/00-index/) (Shipped table).
+
 ### Record — [lens A](/audits/2026-10-15/findings/record-a/) · [lens B](/audits/2026-10-15/findings/record-b/)
 
 | ID          | Sev | Conf | Finding                                                                                                                  |

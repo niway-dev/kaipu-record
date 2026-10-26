@@ -18,7 +18,7 @@ description: "Closes REC-A7: the recording compositor redraws on every requestAn
 ## Global Constraints
 
 - Paths are relative to `apps/kaipu-record/src/renderer/src/features/recording/`. Tests: `node_modules/.bin/vitest run <file>` from `apps/kaipu-record` — never `bunx`.
-- **R1 (output behaviour):** `captureStream` emits only on repaint. Source-driven draws on a static screen could leave MP4 timestamp gaps (VFR). The heartbeat bounds them to 1 s; if the manual `ffprobe` check shows gaps that hurt scrubbing or export, set the heartbeat to `minIntervalMs` (constant-rate output; keeps only the pause and over-refresh savings).
+- **R1 (output behaviour):** `captureStream` emits only on repaint. Source-driven draws on a static screen could leave MP4 timestamp gaps (VFR). The heartbeat bounds them to about 1.25 s (1 s threshold, checked every 250 ms); if the manual `ffprobe` check shows gaps that hurt scrubbing or export, set the heartbeat to `minIntervalMs` (constant-rate output; keeps only the pause and over-refresh savings).
 - **R2:** not confirmed that rVFC fires on a detached `<video>` fed by a `MediaStream` in the hidden window with background throttling off. Include the 500 ms switch to rAF if no rVFC callback has fired after start, and keep the optional draws/s counter during measurement.
 - Measure **before** merging: if draws/s is already ≈30 on the current code, the change only buys the pause saving — say so in the PR.
 - Add one paragraph to `backlog/recording-compositor-perf.md`: "Cadence: draws follow source frames, capped at frameRate, none while paused."
@@ -131,6 +131,9 @@ Replace the draw loop / `captureStream` / return block:
   // A static screen produces no source frames, and captureStream only emits when
   // the canvas changes, so redraw at least this often to keep the encoder fed.
   const HEARTBEAT_MS = 1000;
+  // Tick faster than the bound: a 1 s tick that skips because a frame drew 500 ms earlier
+  // would leave a ~2 s gap. A 250 ms tick keeps every gap under HEARTBEAT_MS + 250 ms.
+  const HEARTBEAT_TICK_MS = 250;
   let hasVideoFrameCallback = typeof video.requestVideoFrameCallback === "function";
   let handle = 0;
   let heartbeat: ReturnType<typeof setInterval> | undefined;
@@ -161,7 +164,7 @@ Replace the draw loop / `captureStream` / return block:
     schedule();
     heartbeat = setInterval(() => {
       if (performance.now() - lastDrawAt >= HEARTBEAT_MS) draw();
-    }, HEARTBEAT_MS);
+    }, HEARTBEAT_TICK_MS);
   };
 
   draw(); // the first frame must exist before captureStream is created
