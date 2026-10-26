@@ -499,6 +499,10 @@ async function applyRecordTarget(target: RecordTarget): Promise<void> {
   const applied = await hub.selectArea(target.displayId, target.rect);
   if (!applied) return;
   if (target.start) {
+    // The renderer is not told the target: `selectArea` broadcast it as settings, and the
+    // recorder reads source and area when its countdown ends, not when the request lands
+    // (recorder-store test "resolves the take's input when the countdown ends"). A start
+    // path without a countdown must carry the target in the request instead.
     triggerStartRecording();
     return;
   }

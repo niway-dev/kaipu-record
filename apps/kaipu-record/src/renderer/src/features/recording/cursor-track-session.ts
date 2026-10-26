@@ -63,6 +63,8 @@ export async function beginCursorTrackSession(
   const timeoutMs = options.timeoutMs ?? CURSOR_TRACK_START_TIMEOUT_MS;
   const open = async (): Promise<CursorTrackSession> => {
     try {
+      // Two calls rather than passing `undefined`: a full-display take keeps the exact
+      // three-argument call it made before areas existed, which the existing tests pin.
       const { enabled } = await (options.area
         ? api.cursorTrackStart(sessionId, sourceId, options.area)
         : api.cursorTrackStart(sessionId, sourceId));
