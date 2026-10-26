@@ -1,15 +1,19 @@
 import { BrowserWindow, screen } from "electron";
 import { join } from "path";
 import { is } from "@electron-toolkit/utils";
-import { BUBBLE_MARGIN, BUBBLE_SIZE, bubbleBoundsInArea, type Rect } from "./area-geometry";
-
-// The window is a bit bigger than the circle so its drop-shadow isn't clipped.
-const SCREEN_MARGIN = BUBBLE_MARGIN;
+import { DEFAULT_CAMERA_BUBBLE, clampCameraBubbleSize } from "@shared/camera-bubble";
+import { BUBBLE_PAD, bubbleBoundsInArea, bubbleSizeOf, type Rect } from "./area-geometry";
 
 /**
  * The floating webcam bubble. A frameless, transparent, always-on-top window
- * showing the live camera in a circle. The user drags it where they want; because
- * it sits on screen, the screen recording captures it — no compositing needed.
+ * showing the live camera in a circle or a rounded square. Because it sits on screen,
+ * the screen recording captures it — no compositing needed.
+ *
+ * It is fixed at the bottom-left corner of the recorded area (or of the display) and is
+ * not draggable: only its shape and size are settings. A size change, from the settings
+ * UI or the bubble's own resize grip, resizes the window from that anchored corner, so
+ * the bubble grows up and to the right. The window itself is not OS-resizable; the grip
+ * (in the renderer) is the only handle.
  *
  * Unlike the control bar, this window is deliberately NOT content-protected, so it
  * *does* appear in the recording.
@@ -23,6 +27,11 @@ export class CameraBubbleWindow {
   private window: BrowserWindow | null = null;
   /** The recorded area (global DIP) while an area records; null otherwise. */
   private anchor: Rect | null = null;
+  /** The size the grip is dragging to, until the release persists it. */
+  private previewSize: number | null = null;
+
+  /** `size` reads the persisted bubble size; injected so this class never reads disk. */
+  constructor(private readonly size: () => number = () => DEFAULT_CAMERA_BUBBLE.size) {}
 
   show(): void {
     if (this.window && !this.window.isDestroyed()) {
@@ -30,15 +39,17 @@ export class CameraBubbleWindow {
       return;
     }
     this.window = new BrowserWindow({
-      width: BUBBLE_SIZE,
-      height: BUBBLE_SIZE,
+      width: DEFAULT_CAMERA_BUBBLE.size + 2 * BUBBLE_PAD,
+      height: DEFAULT_CAMERA_BUBBLE.size + 2 * BUBBLE_PAD,
       ...(process.platform === "darwin" ? { type: "panel" } : {}),
       show: false,
       frame: false,
       transparent: true,
       backgroundColor: "#00000000",
       resizable: false,
-      movable: true,
+      // Fixed at its corner (spec record-capture-modes, decision 6): no drag region in the
+      // renderer, and nothing the OS could move or resize either.
+      movable: false,
       minimizable: false,
       maximizable: false,
       fullscreenable: false,
@@ -87,6 +98,28 @@ export class CameraBubbleWindow {
     if (!this.fits()) this.window.hide();
   }
 
+  /**
+   * Re-read the persisted size and re-place the bubble (a settings change). Clears a grip
+   * preview: the release that ended it is what persisted the size being applied now.
+   */
+  applySize(): void {
+    this.previewSize = null;
+    if (!this.window || this.window.isDestroyed()) return;
+    this.position();
+  }
+
+  /**
+   * Resize to `size` while the grip is dragged, without persisting. Returns the size
+   * actually applied once the range and the area (or display) clamp it.
+   */
+  preview(size: number): number {
+    this.previewSize = clampCameraBubbleSize(size);
+    if (!this.window || this.window.isDestroyed()) return this.previewSize;
+    const bounds = this.bounds();
+    if (bounds) this.window.setBounds(bounds);
+    return bounds ? bubbleSizeOf(bounds) : this.previewSize;
+  }
+
   /** Bring the bubble above other always-on-top windows (Windows orders them by show time). */
   raise(): void {
     if (this.window && !this.window.isDestroyed()) this.window.moveTop();
@@ -118,27 +151,27 @@ export class CameraBubbleWindow {
   }
 
   private fits(): boolean {
-    return this.anchor === null || bubbleBoundsInArea(this.anchor) !== null;
+    return this.anchor === null || bubbleBoundsInArea(this.anchor, this.currentSize()) !== null;
+  }
+
+  private currentSize(): number {
+    return this.previewSize ?? this.size();
   }
 
   /**
    * Inside the recorded area when there is one; otherwise the bottom-left corner of the
-   * active display (clear of the bar).
+   * active display's work area (clear of the bar). `null` only when an area cannot hold
+   * even the smallest bubble.
    */
+  private bounds(): Rect | null {
+    if (this.anchor) return bubbleBoundsInArea(this.anchor, this.currentSize());
+    const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+    return bubbleBoundsInArea(display.workArea, this.currentSize());
+  }
+
   private position(): void {
     if (!this.window) return;
-    if (this.anchor) {
-      const inside = bubbleBoundsInArea(this.anchor);
-      if (inside) this.window.setBounds(inside);
-      return;
-    }
-    const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-    const { x, y, height } = display.workArea;
-    this.window.setBounds({
-      x: x + SCREEN_MARGIN,
-      y: y + height - BUBBLE_SIZE - SCREEN_MARGIN,
-      width: BUBBLE_SIZE,
-      height: BUBBLE_SIZE,
-    });
+    const bounds = this.bounds();
+    if (bounds) this.window.setBounds(bounds);
   }
 }

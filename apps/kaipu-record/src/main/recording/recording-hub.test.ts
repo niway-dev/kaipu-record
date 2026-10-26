@@ -20,6 +20,8 @@ const mockState = vi.hoisted(() => ({
     isVisible: vi.fn(() => false),
     anchorTo: vi.fn(),
     raise: vi.fn(),
+    applySize: vi.fn(),
+    preview: vi.fn((size: number) => size),
   },
   bar: { show: vi.fn(), hide: vi.fn(), send: vi.fn(), raise: vi.fn() },
   shade: { show: vi.fn(), hide: vi.fn() },
@@ -70,6 +72,8 @@ vi.mock("./camera-bubble-window", () => ({
     isVisible = mockState.bubble.isVisible;
     anchorTo = mockState.bubble.anchorTo;
     raise = mockState.bubble.raise;
+    applySize = mockState.bubble.applySize;
+    preview = mockState.bubble.preview;
   },
 }));
 
@@ -573,5 +577,45 @@ describe("recording hub — choosing an area or a display on the overlay", () =>
   it("an area smaller than the minimum is refused", async () => {
     const { handle } = await hub();
     expect(await handle.selectArea(2, { x: 0, y: 0, width: 63, height: 400 })).toBe(false);
+  });
+});
+
+describe("recording hub — camera bubble size", () => {
+  beforeEach(async () => {
+    mockState.userDataDir = await mkdtemp(join(tmpdir(), "kaipu-hub-"));
+    mockState.ipcOn.clear();
+    mockState.ipcHandle.clear();
+    mockState.bubble.applySize.mockReset();
+    mockState.bubble.preview.mockReset();
+    mockState.bubble.preview.mockImplementation((size: number) => size);
+    vi.resetModules();
+  });
+
+  afterEach(async () => {
+    await rm(mockState.userDataDir, { recursive: true, force: true });
+  });
+
+  async function setup(): Promise<void> {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    registerRecordingHub(() => fakeMainWindow() as never);
+  }
+
+  it("re-places the bubble when its persisted size changes, and only then", async () => {
+    await setup();
+    const update = mockState.ipcHandle.get(IPC_CHANNELS.updateSettings)!;
+    update({}, { cameraBubble: { shape: "rounded", size: 240, deviceId: null } });
+    expect(mockState.bubble.applySize).not.toHaveBeenCalled();
+    update({}, { cameraBubble: { shape: "rounded", size: 360, deviceId: null } });
+    expect(mockState.bubble.applySize).toHaveBeenCalledOnce();
+  });
+
+  it("previews a grip drag and answers the applied size", async () => {
+    await setup();
+    mockState.bubble.preview.mockReturnValue(200);
+    const preview = mockState.ipcHandle.get(IPC_CHANNELS.cameraBubblePreviewSize)!;
+    expect(preview({}, 300)).toBe(200);
+    expect(mockState.bubble.preview).toHaveBeenCalledWith(300);
   });
 });

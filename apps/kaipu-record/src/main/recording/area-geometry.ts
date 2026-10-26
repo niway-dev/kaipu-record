@@ -4,6 +4,12 @@
  */
 import { MIN_AREA_SIZE } from "@shared/capture-geometry";
 import type { RecordingArea } from "@shared/types/ipc";
+import {
+  CAMERA_BUBBLE_MIN_SIZE,
+  CAMERA_BUBBLE_WINDOW_PAD,
+  DEFAULT_CAMERA_BUBBLE,
+  clampCameraBubbleSize,
+} from "@shared/camera-bubble";
 
 export interface Rect {
   x: number;
@@ -12,9 +18,10 @@ export interface Rect {
   height: number;
 }
 
-/** The camera bubble's window size and its distance from the area's edges, in DIP. */
-export const BUBBLE_SIZE = 224;
-export const BUBBLE_MARGIN = 40;
+/** Room the bubble's window keeps around the bubble (see `shared/camera-bubble.ts`). */
+export const BUBBLE_PAD = CAMERA_BUBBLE_WINDOW_PAD;
+/** The window's distance from the area's (or display's) left and bottom edges, in DIP. */
+export const BUBBLE_MARGIN = 32;
 
 /** A display-relative area in global DIP, given its display's bounds. */
 export function areaToGlobal(area: RecordingArea, displayBounds: Rect): Rect {
@@ -27,18 +34,27 @@ export function areaToGlobal(area: RecordingArea, displayBounds: Rect): Rect {
 }
 
 /**
- * The bubble's bounds inside an area (global DIP): its bottom-left corner, with the same
- * margin the bubble keeps from a display's edge. `null` when the area cannot hold the
- * bubble and both margins on either side: the bubble is then not shown, because outside
- * the area it would silently be missing from the video.
+ * The bubble window's bounds inside an area (global DIP), for a bubble of `size`: anchored
+ * at the area's bottom-left corner, growing up and to the right. A size the area cannot
+ * hold (with the margins on both sides) is clamped down to what fits; `null` when not even
+ * the minimum size fits. The bubble is then not shown, because outside the area it would
+ * silently be missing from the video.
  */
 export function bubbleBoundsInArea(
   area: Rect,
-  size = BUBBLE_SIZE,
+  size: number = DEFAULT_CAMERA_BUBBLE.size,
   margin = BUBBLE_MARGIN,
 ): Rect | null {
-  if (area.width < size + 2 * margin || area.height < size + 2 * margin) return null;
-  return { x: area.x + margin, y: area.y + area.height - size - margin, width: size, height: size };
+  const room = Math.min(area.width, area.height) - 2 * margin - 2 * BUBBLE_PAD;
+  const fitted = Math.min(clampCameraBubbleSize(size), Math.floor(room));
+  if (fitted < CAMERA_BUBBLE_MIN_SIZE) return null;
+  const side = fitted + 2 * BUBBLE_PAD;
+  return { x: area.x + margin, y: area.y + area.height - margin - side, width: side, height: side };
+}
+
+/** The bubble's own side for window bounds from {@link bubbleBoundsInArea}. */
+export function bubbleSizeOf(bounds: Rect): number {
+  return bounds.width - 2 * BUBBLE_PAD;
 }
 
 /** The slice of `Electron.Display` the validation reads. */

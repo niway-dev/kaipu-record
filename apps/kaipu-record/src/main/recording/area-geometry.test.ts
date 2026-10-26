@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { areaToGlobal, bubbleBoundsInArea, sanitizeArea } from "./area-geometry";
+import { areaToGlobal, bubbleBoundsInArea, bubbleSizeOf, sanitizeArea } from "./area-geometry";
 
 describe("areaToGlobal", () => {
   it("moves a display-relative area to global DIP", () => {
@@ -17,28 +17,51 @@ describe("areaToGlobal", () => {
 });
 
 describe("bubbleBoundsInArea", () => {
-  it("puts the bubble in the area's bottom-left corner with the usual margin", () => {
+  // Window = bubble + 2 × 24 px pad, 32 px from the area's left and bottom edges.
+  it("anchors the default (M, 240 px) bubble at the area's bottom-left corner", () => {
     expect(bubbleBoundsInArea({ x: 0, y: 0, width: 640, height: 360 })).toEqual({
-      x: 40,
-      y: 96,
-      width: 224,
-      height: 224,
+      x: 32,
+      y: 40,
+      width: 288,
+      height: 288,
     });
   });
 
   it("follows the area on a second display", () => {
-    expect(bubbleBoundsInArea({ x: 1612, y: 50, width: 640, height: 360 })).toEqual({
-      x: 1652,
-      y: 146,
-      width: 224,
-      height: 224,
+    expect(bubbleBoundsInArea({ x: 1612, y: 50, width: 1280, height: 720 }, 160)).toEqual({
+      x: 1644,
+      y: 530,
+      width: 208,
+      height: 208,
     });
   });
 
-  it("answers null when the area cannot hold the bubble and its margins", () => {
-    expect(bubbleBoundsInArea({ x: 0, y: 0, width: 300, height: 300 })).toBeNull();
-    expect(bubbleBoundsInArea({ x: 0, y: 0, width: 1280, height: 303 })).toBeNull();
-    expect(bubbleBoundsInArea({ x: 0, y: 0, width: 304, height: 304 })).not.toBeNull();
+  it("grows up and to the right from the same corner", () => {
+    const area = { x: 0, y: 0, width: 1440, height: 900 };
+    const small = bubbleBoundsInArea(area, 160)!;
+    const large = bubbleBoundsInArea(area, 360)!;
+    expect(large.x).toBe(small.x);
+    expect(large.y + large.height).toBe(small.y + small.height);
+    expect(bubbleSizeOf(large)).toBe(360);
+  });
+
+  it("clamps the size to the allowed range", () => {
+    const area = { x: 0, y: 0, width: 1440, height: 900 };
+    expect(bubbleSizeOf(bubbleBoundsInArea(area, 40)!)).toBe(120);
+    expect(bubbleSizeOf(bubbleBoundsInArea(area, 900)!)).toBe(480);
+  });
+
+  it("shrinks a bubble the area cannot hold to what fits", () => {
+    // 300 − 2 × 32 − 2 × 24 = 188 px of room.
+    expect(bubbleSizeOf(bubbleBoundsInArea({ x: 0, y: 0, width: 300, height: 300 }, 360)!)).toBe(
+      188,
+    );
+  });
+
+  it("answers null when not even the smallest bubble fits", () => {
+    expect(bubbleBoundsInArea({ x: 0, y: 0, width: 231, height: 600 })).toBeNull();
+    expect(bubbleBoundsInArea({ x: 0, y: 0, width: 1280, height: 231 })).toBeNull();
+    expect(bubbleBoundsInArea({ x: 0, y: 0, width: 232, height: 232 })).not.toBeNull();
   });
 });
 
