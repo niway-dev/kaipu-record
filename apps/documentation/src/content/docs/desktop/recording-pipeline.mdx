@@ -458,6 +458,12 @@ A recording can cover part of one display. The source is still that display's wh
 `screen:` capture; the area travels in `RecordingSettings.area` and `RecordingStartInfo.area`
 (display id, display-relative DIP rectangle, display size).
 
+- **Who sets it.** Only main, in `selectArea`, together with that display's `screen:` source.
+  A window's settings patch can clear the area but not set one, and a patch that changes the
+  source clears it, so the area always names the display the source records. A display
+  unplugged or resized after the choice drops the area and its source (after the take, if
+  one is running); the next take asks again instead of cropping with the old size.
+
 - **Crop.** After `getUserMedia`, the engine measures the track and `areaEncodePlan` maps the
   area to physical pixels of that track (`cropForSize`, the same DPI arithmetic the Windows
   screenshot backend uses), then caps its height with `fitToCap`. With an area the compositor
