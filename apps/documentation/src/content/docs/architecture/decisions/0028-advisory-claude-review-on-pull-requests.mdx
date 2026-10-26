@@ -7,13 +7,13 @@ description: Claude Sonnet 5.5 reviews each pull request once when it is ready, 
 
 ## Status
 
-| Field         | Value                                                                                                        |
-| ------------- | ------------------------------------------------------------------------------------------------------------ |
-| Status        | Accepted — implemented in `claude-review.yml` and `scripts/claude-review.ts`; not yet run in this repository |
-| Date          | 2026-10-20                                                                                                   |
-| Supersedes    | —                                                                                                            |
-| Amends        | —                                                                                                            |
-| Superseded by | —                                                                                                            |
+| Field         | Value                                                                                                                                                 |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Accepted — now consumed through the reusable workflow `niway-dev/agent-review` (`.github/workflows/agent-review.yml`); not yet run in this repository |
+| Date          | 2026-10-20                                                                                                                                            |
+| Supersedes    | —                                                                                                                                                     |
+| Amends        | —                                                                                                                                                     |
+| Superseded by | —                                                                                                                                                     |
 
 ## Context
 
@@ -48,7 +48,7 @@ keeps ordinary pull requests fast: they get an immediate pass, not a verificatio
    access, which never reach Claude.
 7. **Claude only reads**: no shell, no GitHub token, `/proc` denied; the script posts, and
    refuses text containing the key. This repository's review focus is
-   `.github/claude-review.md`.
+   `.github/agent-review.md`; the review runs through the reusable workflow `niway-dev/agent-review`.
 
 ## Alternatives rejected
 
