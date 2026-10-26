@@ -29,6 +29,11 @@ export interface CapturedDisplay {
   /** DIP, global desktop space — `Display.bounds` (NOT workArea: capture includes the menu bar). */
   bounds: { x: number; y: number; width: number; height: number };
   scaleFactor: number;
+  /**
+   * An area recording (ADR 0030): `bounds` is then the AREA in global DIP, so samples are
+   * normalized to it, and this records the area's origin on its display for the sidecar.
+   */
+  region?: { displayId: string; x: number; y: number };
 }
 
 export interface CursorTrackerDeps {
@@ -114,6 +119,7 @@ export class CursorTracker {
       clicksAvailable,
       maxMs,
       truncatedAtMainMs: this.samples.truncatedAtMs,
+      ...(this.display.region ? { region: this.display.region } : {}),
       display: {
         id: this.display.id,
         width: this.display.bounds.width,

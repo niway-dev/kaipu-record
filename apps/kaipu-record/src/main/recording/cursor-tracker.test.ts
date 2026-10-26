@@ -70,6 +70,29 @@ describe("CursorTrackRegistry", () => {
     expect(track.y.at(-1)).toBe(0.25);
   });
 
+  it("normalizes to a recorded area and stores the area as the track's frame", () => {
+    const f = fakeDeps();
+    const reg = new CursorTrackRegistry(f.deps);
+    // A 400×200 area at (1100, 100) on DISPLAY.
+    const tracker = reg.start("session-1", {
+      id: "7",
+      bounds: { x: 1100, y: 100, width: 400, height: 200 },
+      scaleFactor: 2,
+      region: { displayId: "7", x: 100, y: 100 },
+    });
+    tracker.setAnchor(0, "exact");
+    f.move(1300, 200); // the area's centre
+    f.tick(16);
+    f.move(1000, 200); // left of the area: outside [0, 1], kept
+    f.tick(16);
+    const track = reg.finish("session-1", false)!;
+    expect(track.display).toEqual({ id: "7", width: 400, height: 200, scaleFactor: 2 });
+    expect(track.region).toEqual({ displayId: "7", x: 100, y: 100 });
+    expect(track.x).toContain(0.5);
+    expect(track.y).toContain(0.5);
+    expect(Math.min(...track.x)).toBeLessThan(0);
+  });
+
   it("removes paused time and drops paused samples", () => {
     const f = fakeDeps();
     const reg = new CursorTrackRegistry(f.deps);

@@ -15,6 +15,7 @@ import { FINALIZE_ELSEWHERE_MARKER, FINALIZE_KEPT_MARKER } from "@shared/types/i
 import type {
   ControlCommand,
   RecordingActivity,
+  RecordingArea,
   RecordingFinalizeMeta,
   RecordingSettings,
   RecordingStartInfo,
@@ -22,7 +23,7 @@ import type {
 } from "@shared/types/ipc";
 import { serializeCursorTrack } from "@shared/cursor-track";
 import { LibraryVault } from "../library/library-vault";
-import { pickCapturedDisplay } from "./captured-display";
+import { areaCapturedDisplay, pickCapturedDisplay } from "./captured-display";
 import { ClickHook, type HookLike } from "./click-hook";
 import { CursorTrackRegistry } from "./cursor-tracker";
 import { ControlBarWindow } from "./control-bar-window";
@@ -284,14 +285,25 @@ export function registerRecordingHub(
   });
   ipcMain.handle(
     IPC_CHANNELS.cursorTrackStart,
-    async (_e, sessionId: string, sourceId: string): Promise<{ enabled: boolean }> => {
+    async (
+      _e,
+      sessionId: string,
+      sourceId: string,
+      area?: RecordingArea | null,
+    ): Promise<{ enabled: boolean }> => {
       const display = pickCapturedDisplay(
         sourceId,
         await displayIdForSource(sourceId),
         screen.getAllDisplays(),
       );
       if (!display) return { enabled: false };
-      cursorTracks.start(sessionId, display);
+      // An area on this display: normalize to the area, so the editor's zoom lands on the
+      // recorded frame (ADR 0030). An area naming another display is ignored, not trusted.
+      const space =
+        area && String(area.displayId) === display.id
+          ? areaCapturedDisplay(display, area)
+          : display;
+      cursorTracks.start(sessionId, space);
       if (clickHook.ensureRunning()) clickSessions.add(sessionId);
       return { enabled: true };
     },
