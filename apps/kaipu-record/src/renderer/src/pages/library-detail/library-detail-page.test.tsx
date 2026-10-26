@@ -164,6 +164,29 @@ describe("LibraryDetailPage", () => {
     expect(screen.queryByRole("button", { name: "Share" })).toBeNull();
   });
 
+  it("shows how a recording was captured in the metadata line", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [
+        {
+          ...exportedOnlyItem,
+          capture: {
+            mode: "area" as const,
+            width: 1234,
+            height: 567,
+            ratio: "free" as const,
+          },
+        },
+      ],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+
+    renderDetail("asset-b");
+    await waitForLoaded();
+
+    expect(screen.getByTestId("capture-meta")).toHaveTextContent("FRAME · 1234 × 567");
+  });
+
   it("offers Share on a local recording, raw or already an export (NIW2-218)", async () => {
     window.electronAPI.listLibraryItems = vi.fn(async () => ({
       items: [exportedOnlyItem],

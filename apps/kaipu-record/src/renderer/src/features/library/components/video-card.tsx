@@ -7,6 +7,7 @@ import { TagChip } from "../tags/tag-chip";
 import type { EditBadge as EditBadgeState } from "@renderer/features/library/lineage";
 import { StorageMeta } from "./storage-meta";
 import { KindBadge } from "./kind-badge";
+import { RecordingCaptureTag } from "./recording-capture-tag";
 import { EditBadge } from "./edit-badge";
 import { cx } from "@renderer/ui/cx";
 import styles from "./video-card.module.css";
@@ -70,6 +71,7 @@ export function VideoCard({
 
         <span className={styles.kindBadge}>
           <KindBadge kind={video.kind} />
+          <RecordingCaptureTag capture={video.capture} />
         </span>
 
         {video.durationSeconds > 0 && (
