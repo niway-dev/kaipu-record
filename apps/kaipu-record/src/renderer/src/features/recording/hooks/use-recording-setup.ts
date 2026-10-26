@@ -72,6 +72,7 @@ export function useRecordingSetup(): RecordingSetup {
     isMicrophoneEnabled,
     isSystemAudioEnabled,
     isCameraEnabled,
+    area,
     update,
   } = settings;
 
@@ -112,6 +113,8 @@ export function useRecordingSetup(): RecordingSetup {
 
   const sourceRef = useRef(selectedSource);
   sourceRef.current = selectedSource;
+  const areaRef = useRef(area);
+  areaRef.current = area;
   const micEnabledRef = useRef(isMicrophoneEnabled);
   micEnabledRef.current = isMicrophoneEnabled;
   const micRef = useRef(selectedMicrophone);
@@ -129,6 +132,7 @@ export function useRecordingSetup(): RecordingSetup {
       return {
         sourceId: source.id,
         sourceName: source.name,
+        area: areaRef.current,
         microphoneDeviceId: micEnabledRef.current ? (micRef.current?.deviceId ?? null) : null,
         systemAudio: systemAudioRef.current,
         width: engineQuality.width,
@@ -149,7 +153,8 @@ export function useRecordingSetup(): RecordingSetup {
 
   return {
     selectedSource,
-    selectSource: (source) => update({ selectedSource: source }),
+    // A source picked in the thumbnail picker is recorded whole: drop any area.
+    selectSource: (source) => update({ selectedSource: source, area: null }),
     isSourcePickerOpen,
     openSourcePicker: () => setSourcePickerOpen(true),
     closeSourcePicker: () => setSourcePickerOpen(false),

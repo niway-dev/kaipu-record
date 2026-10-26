@@ -204,6 +204,26 @@ describe("startEngine", () => {
     );
   });
 
+  it("crops a recording area on the compositor even when no resize or watermark is needed", async () => {
+    // 1920×1080 display captured at 1920×1080: only the area makes the compositor run.
+    await startEngine(
+      baseOptions({
+        area: {
+          displayId: 1,
+          rect: { x: 320, y: 180, width: 1280, height: 720 },
+          displaySize: { width: 1920, height: 1080 },
+        },
+      }),
+    );
+    expect(startRecordingCompositor).toHaveBeenCalledWith(
+      expect.anything(),
+      { width: 1280, height: 720 },
+      null,
+      expect.any(Number),
+      { x: 320, y: 180, width: 1280, height: 720 },
+    );
+  });
+
   it("encodes the raw track on a real 16:9 screen (no compositor)", async () => {
     // Default fake screen is 1920×1080 → target equals source → no re-frame.
     await startEngine(baseOptions());

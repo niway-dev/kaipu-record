@@ -109,8 +109,8 @@ const kaipuApi: KaipuElectronAPI = {
   recordingReportTick: (tick) => ipcRenderer.send(IPC_CHANNELS.recordingReportTick, tick),
   recordingStart: (info) => ipcRenderer.send(IPC_CHANNELS.recordingStart, info),
   recordingStop: () => ipcRenderer.send(IPC_CHANNELS.recordingStop),
-  cursorTrackStart: (sessionId, sourceId) =>
-    ipcRenderer.invoke(IPC_CHANNELS.cursorTrackStart, sessionId, sourceId),
+  cursorTrackStart: (sessionId, sourceId, area) =>
+    ipcRenderer.invoke(IPC_CHANNELS.cursorTrackStart, sessionId, sourceId, area),
   cursorClockNow: () => ipcRenderer.invoke(IPC_CHANNELS.cursorClockNow),
   cursorTrackAnchor: (sessionId, t0MainMs, quality) =>
     ipcRenderer.send(IPC_CHANNELS.cursorTrackAnchor, sessionId, t0MainMs, quality),
