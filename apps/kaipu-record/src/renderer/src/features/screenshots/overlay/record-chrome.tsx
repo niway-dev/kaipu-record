@@ -1,8 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Camera, Mic, Volume2, X, type LucideIcon } from "lucide-react";
+import { Camera, Lock, Mic, Volume2, X, type LucideIcon } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
-import type { KaipuElectronAPI } from "@shared/types/electron-api";
+import type { CameraAccessStatus, KaipuElectronAPI } from "@shared/types/electron-api";
 import type { RecordingSettings } from "@shared/types/ipc";
+import {
+  CAMERA_BUBBLE_MIN_SIZE,
+  CAMERA_BUBBLE_WINDOW_PAD,
+  DEFAULT_CAMERA_BUBBLE,
+  clampCameraBubbleSize,
+  type CameraBubbleShape,
+} from "@shared/camera-bubble";
 import {
   RECORDING_RATIOS,
   type CaptureMode,
@@ -38,12 +45,11 @@ export const RATIO_BAR_GAP_DIP = 8;
 export const START_PILL_HEIGHT_DIP = 36;
 export const START_PILL_GAP_DIP = 14;
 /**
- * The camera bubble's window size and margin inside a recorded area, mirroring
- * `BUBBLE_SIZE` and `BUBBLE_MARGIN` in `main/recording/area-geometry.ts` (main code cannot
- * be imported here). The preview is drawn where main will anchor the bubble.
+ * The camera bubble window's margin inside a recorded area, mirroring `BUBBLE_MARGIN` in
+ * `main/recording/area-geometry.ts` (main code cannot be imported here). The window adds
+ * `CAMERA_BUBBLE_WINDOW_PAD` around the bubble, so the visible bubble sits margin + pad in.
  */
-export const CAMERA_PREVIEW_SIZE_DIP = 224;
-export const CAMERA_PREVIEW_MARGIN_DIP = 40;
+export const CAMERA_PREVIEW_WINDOW_MARGIN_DIP = 32;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), Math.max(min, max));
@@ -95,24 +101,36 @@ export function startPillPlacement(
   };
 }
 
-/** Where main will put the camera bubble in `frame`, or null when the box cannot hold it. */
-export function cameraPreviewPlacement(frame: CaptureRect): CaptureRect | null {
-  const size = CAMERA_PREVIEW_SIZE_DIP;
-  const margin = CAMERA_PREVIEW_MARGIN_DIP;
-  if (frame.width < size + 2 * margin || frame.height < size + 2 * margin) return null;
+/**
+ * Where main will draw the visible camera bubble of `size` in `frame` (the same rule as
+ * `bubbleBoundsInArea`): bottom-left, shrunk to what the box holds, or null when not even
+ * the minimum size fits.
+ */
+export function cameraPreviewPlacement(
+  frame: CaptureRect,
+  size: number = DEFAULT_CAMERA_BUBBLE.size,
+): CaptureRect | null {
+  const inset = CAMERA_PREVIEW_WINDOW_MARGIN_DIP + CAMERA_BUBBLE_WINDOW_PAD;
+  const room = Math.min(frame.width, frame.height) - 2 * inset;
+  const fitted = Math.min(clampCameraBubbleSize(size), Math.floor(room));
+  if (fitted < CAMERA_BUBBLE_MIN_SIZE) return null;
   return {
-    x: frame.x + margin,
-    y: frame.y + frame.height - size - margin,
-    width: size,
-    height: size,
+    x: frame.x + inset,
+    y: frame.y + frame.height - inset - fitted,
+    width: fitted,
+    height: fitted,
   };
 }
 
-/** The slice of the preload bridge the toggles use; tests pass a fake. */
+/**
+ * The slice of the preload bridge the toggles use; tests pass a fake. Camera access and the
+ * bubble settings are optional so a fake without them reads "unknown" and the defaults.
+ */
 export type RecordingTogglesApi = Pick<
   KaipuElectronAPI,
   "getRecordingSettings" | "updateRecordingSettings" | "onRecordingSettingsChanged"
->;
+> &
+  Partial<Pick<KaipuElectronAPI, "getCameraAccessStatus" | "getSettings">>;
 
 type ToggleKey = "isMicrophoneEnabled" | "isSystemAudioEnabled" | "isCameraEnabled";
 
@@ -120,6 +138,13 @@ export interface OverlayToggles {
   microphone: boolean;
   systemAudio: boolean;
   camera: boolean;
+  /**
+   * Camera access is denied in the OS (`getCameraAccessStatus`, the same tri-state the
+   * Record page and the tray read): the Camera toggle cannot turn on, only off.
+   */
+  cameraBlocked: boolean;
+  /** The bubble's size and shape (`AppSettings.cameraBubble`), for the placeholder. */
+  cameraBubble: { size: number; shape: CameraBubbleShape };
   toggle(key: ToggleKey): void;
 }
 
@@ -134,6 +159,11 @@ export function useOverlayToggles(api: RecordingTogglesApi, enabled = true): Ove
     isSystemAudioEnabled: false,
     isCameraEnabled: false,
   });
+  const [access, setAccess] = useState<CameraAccessStatus>("unknown");
+  const [bubble, setBubble] = useState<{ size: number; shape: CameraBubbleShape }>({
+    size: DEFAULT_CAMERA_BUBBLE.size,
+    shape: DEFAULT_CAMERA_BUBBLE.shape,
+  });
   useEffect(() => {
     // A screenshot overlay has no inputs to show: it never reads recording settings.
     if (!enabled) return;
@@ -144,18 +174,37 @@ export function useOverlayToggles(api: RecordingTogglesApi, enabled = true): Ove
         if (live) setSettings(current);
       })
       .catch(() => {});
+    api
+      .getCameraAccessStatus?.()
+      .then((status) => {
+        if (live) setAccess(status);
+      })
+      .catch(() => {});
+    api
+      .getSettings?.()
+      .then((app) => {
+        if (live && app.cameraBubble) {
+          setBubble({ size: app.cameraBubble.size, shape: app.cameraBubble.shape });
+        }
+      })
+      .catch(() => {});
     const unsubscribe = api.onRecordingSettingsChanged((current) => setSettings(current));
     return () => {
       live = false;
       unsubscribe();
     };
   }, [api, enabled]);
+  const cameraBlocked = access === "blocked";
+  const blockedRef = useRef(cameraBlocked);
+  blockedRef.current = cameraBlocked;
   // Read through a ref so the write happens once per click, outside a state updater.
   const latest = useRef(settings);
   latest.current = settings;
   const toggle = useCallback(
     (key: ToggleKey) => {
       const next = !latest.current[key];
+      // A blocked camera cannot be turned on from here either; one that is on can go off.
+      if (key === "isCameraEnabled" && next && blockedRef.current) return;
       latest.current = { ...latest.current, [key]: next };
       setSettings(latest.current);
       api.updateRecordingSettings({ [key]: next });
@@ -167,9 +216,11 @@ export function useOverlayToggles(api: RecordingTogglesApi, enabled = true): Ove
       microphone: settings.isMicrophoneEnabled,
       systemAudio: settings.isSystemAudioEnabled,
       camera: settings.isCameraEnabled,
+      cameraBlocked,
+      cameraBubble: bubble,
       toggle,
     }),
-    [settings, toggle],
+    [settings, cameraBlocked, bubble, toggle],
   );
 }
 
@@ -219,6 +270,7 @@ export function RecordWidget({
   side: "right" | "left" | "inside";
 }): React.JSX.Element {
   const t = useTranslations("screenshots");
+  const tCamera = useTranslations("cameraSettings");
   const labels = useModeLabels();
   return (
     <div
@@ -267,21 +319,32 @@ export function RecordWidget({
       </div>
       <span className={styles.widgetDivider} aria-hidden />
       <div role="group" aria-label={t("overlay.inputs")} className={styles.widgetGroup}>
-        {TOGGLES.map(({ key, icon: Icon, label, state }) => {
+        {TOGGLES.map(({ key, icon, label, state }) => {
           const on = toggles[state];
-          const text = t(label);
+          // Same rule and words as the Record page's split tile: blocked reads off and
+          // cannot turn on; the title says why and where to allow it.
+          const blocked = state === "camera" && toggles.cameraBlocked;
+          const cannotToggle = blocked && !on;
+          const Icon = blocked ? Lock : icon;
+          const text = blocked ? tCamera("blockedTile") : t(label);
           return (
             <button
               key={key}
               type="button"
               className={styles.widgetToggle}
               aria-pressed={on}
+              aria-disabled={cannotToggle || undefined}
               aria-label={text}
-              title={`${text} · ${on ? t("overlay.on") : t("overlay.off")}`}
-              onClick={() => toggles.toggle(key)}
+              data-blocked={blocked || undefined}
+              title={
+                blocked
+                  ? `${text} · ${tCamera("blockedBody")}`
+                  : `${text} · ${on ? t("overlay.on") : t("overlay.off")}`
+              }
+              onClick={cannotToggle ? undefined : () => toggles.toggle(key)}
             >
               <Icon size={15} aria-hidden />
-              {!on && <span className={styles.widgetStrike} aria-hidden />}
+              {!on && !blocked && <span className={styles.widgetStrike} aria-hidden />}
             </button>
           );
         })}
@@ -381,11 +444,18 @@ export function StartPill({
 }
 
 /** Where the camera bubble will be recorded, drawn while the camera is on. */
-export function CameraPreview({ rect }: { rect: CaptureRect }): React.JSX.Element {
+export function CameraPreview({
+  rect,
+  shape = DEFAULT_CAMERA_BUBBLE.shape,
+}: {
+  rect: CaptureRect;
+  shape?: CameraBubbleShape;
+}): React.JSX.Element {
   return (
     <div
       className={styles.cameraPreview}
       data-testid="camera-preview"
+      data-shape={shape}
       aria-hidden
       style={{ left: rect.x, top: rect.y, width: rect.width, height: rect.height }}
     >

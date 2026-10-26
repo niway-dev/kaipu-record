@@ -372,10 +372,12 @@ function RecordFrameChrome({
   const bar = ratioBarPlacement(frame, area);
   const widget = widgetPlacement(frame, area);
   const pill = startPillPlacement(frame, area);
-  const preview = chrome.toggles?.camera ? cameraPreviewPlacement(frame) : null;
+  const preview = chrome.toggles?.camera
+    ? cameraPreviewPlacement(frame, chrome.toggles.cameraBubble.size)
+    : null;
   return (
     <>
-      {preview && <CameraPreview rect={preview} />}
+      {preview && <CameraPreview rect={preview} shape={chrome.toggles?.cameraBubble.shape} />}
       <RatioBar
         ratio={ratio}
         onRatio={onRatio}

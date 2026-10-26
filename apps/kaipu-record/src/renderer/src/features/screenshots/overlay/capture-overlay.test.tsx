@@ -1748,15 +1748,59 @@ describe("CaptureOverlay — record chrome (design Kaipu Record Modes)", () => {
     );
   });
 
+  it("a camera blocked in the OS reads locked on the widget and cannot be turned on", async () => {
+    const fake = fakeApi({}, FRAME_ON_42, { "42": area });
+    const api = { ...fake.api, getCameraAccessStatus: vi.fn(async () => "blocked" as const) };
+    render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("frame", { intent: "record", scaleFactor: 2 })}
+        api={api}
+        platform="mac"
+      />,
+    );
+    const widget = await screen.findByTestId("record-widget");
+    const camera = await within(widget).findByRole("button", { name: "Camera, blocked" });
+    expect(camera).toHaveAttribute("aria-disabled", "true");
+    expect(camera).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(camera);
+    expect(fake.api.updateRecordingSettings).not.toHaveBeenCalled();
+  });
+
+  it("sizes the camera placeholder from the bubble setting", async () => {
+    const fake = fakeApi({}, FRAME_ON_42, { "42": area });
+    const settings = await fake.api.getSettings();
+    const api = {
+      ...fake.api,
+      getSettings: vi.fn(async () => ({
+        ...settings,
+        cameraBubble: { ...settings.cameraBubble, size: 160, shape: "rounded" as const },
+      })),
+    };
+    render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("frame", { intent: "record", scaleFactor: 2 })}
+        api={api}
+        platform="mac"
+      />,
+    );
+    await screen.findByTestId("capture-frame");
+    fake.pushRecording({ isCameraEnabled: true });
+    await waitFor(() => expect(screen.getByTestId("camera-preview").style.width).toBe("160px"));
+    expect(screen.getByTestId("camera-preview")).toHaveAttribute("data-shape", "rounded");
+  });
+
   it("shows where the camera bubble will be while the camera is on", async () => {
     const { pushRecording } = renderRecord();
     await screen.findByTestId("capture-frame");
     expect(screen.queryByTestId("camera-preview")).toBeNull();
     pushRecording({ isCameraEnabled: true });
     const preview = screen.getByTestId("camera-preview");
-    // Bottom-left inside the box, 40 DIP in: (140, 480 - 40 - 224).
-    expect(preview.style.left).toBe("140px");
-    expect(preview.style.top).toBe("216px");
+    // Bottom-left inside the box, 56 DIP in (window margin + pad), default 240 DIP:
+    // (100 + 56, 480 - 56 - 240).
+    expect(preview.style.left).toBe("156px");
+    expect(preview.style.top).toBe("184px");
   });
 
   it("Cancel on the widget cancels, like Esc", async () => {

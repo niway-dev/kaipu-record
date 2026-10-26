@@ -55,7 +55,9 @@ export type CaptureOverlayApi = Pick<
   | "getRecordingSettings"
   | "updateRecordingSettings"
   | "onRecordingSettingsChanged"
->;
+> &
+  // Optional: a fake without it reads camera access as "unknown" (togglable).
+  Partial<Pick<KaipuElectronAPI, "getCameraAccessStatus">>;
 
 /**
  * Send `answer` once. `beforeSend` (the Frame box persisting its geometry) runs first,

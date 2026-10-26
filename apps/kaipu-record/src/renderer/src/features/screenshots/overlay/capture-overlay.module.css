@@ -625,6 +625,13 @@
   background: rgba(246, 5, 92, 0.12);
 }
 
+/* Camera access denied in the OS: a lock, dimmed, not clickable to turn on. */
+.widgetToggle[data-blocked],
+.cardInput[data-blocked] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 /* An input that is off: grey with a diagonal strike. */
 .widgetStrike {
   position: absolute;
@@ -696,6 +703,11 @@
   border-radius: 50%;
   box-shadow: 0 12px 28px -8px rgba(0, 0, 0, 0.6);
   pointer-events: none;
+}
+
+/* The bubble's rounded square (ROUNDED_RADIUS in camera-bubble.tsx). */
+.cameraPreview[data-shape="rounded"] {
+  border-radius: 18%;
 }
 
 /* The Capture | Record switch (keys P and V). */

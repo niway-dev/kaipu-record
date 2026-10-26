@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Camera, Mic, Volume2 } from "lucide-react";
+import { Camera, Lock, Mic, Volume2 } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import type { CaptureOverlayBridge } from "@shared/types/electron-api";
 import type { CaptureAction } from "@shared/types/screenshot-capture";
@@ -19,6 +19,7 @@ import styles from "./capture-overlay.module.css";
 /** Compact Mic · System · Cam chips on the Screen card opened to record. */
 function CardInputs({ toggles }: { toggles: OverlayToggles }): React.JSX.Element {
   const t = useTranslations("screenshots");
+  const tCamera = useTranslations("cameraSettings");
   const chips = [
     { key: "isMicrophoneEnabled", on: toggles.microphone, icon: Mic, label: t("overlay.chipMic") },
     {
@@ -36,18 +37,28 @@ function CardInputs({ toggles }: { toggles: OverlayToggles }): React.JSX.Element
       className={styles.cardInputs}
       {...keepPointer}
     >
-      {chips.map(({ key, on, icon: Icon, label }) => (
-        <button
-          key={key}
-          type="button"
-          className={styles.cardInput}
-          aria-pressed={on}
-          onClick={() => toggles.toggle(key)}
-        >
-          <Icon size={14} aria-hidden />
-          {label}
-        </button>
-      ))}
+      {chips.map(({ key, on, icon, label }) => {
+        // A blocked camera reads off and cannot turn on (same rule as the widget).
+        const blocked = key === "isCameraEnabled" && toggles.cameraBlocked;
+        const cannotToggle = blocked && !on;
+        const Icon = blocked ? Lock : icon;
+        return (
+          <button
+            key={key}
+            type="button"
+            className={styles.cardInput}
+            aria-pressed={on}
+            aria-disabled={cannotToggle || undefined}
+            aria-label={blocked ? tCamera("blockedTile") : undefined}
+            title={blocked ? tCamera("blockedBody") : undefined}
+            data-blocked={blocked || undefined}
+            onClick={cannotToggle ? undefined : () => toggles.toggle(key)}
+          >
+            <Icon size={14} aria-hidden />
+            {label}
+          </button>
+        );
+      })}
     </div>
   );
 }
