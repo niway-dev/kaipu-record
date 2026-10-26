@@ -15,6 +15,7 @@ import { startEngine, type EngineHandle } from "@renderer/features/recording/rec
 import type { WatermarkConfig } from "@renderer/features/watermark/watermark";
 import { reportError } from "@renderer/features/analytics";
 import { finalizeErrorKey } from "./finalize-error-message";
+import { buildRecordingCapture, type RecordingCapture } from "@shared/recording-capture";
 import { runtimeT } from "@renderer/lib/runtime-i18n";
 
 export type RecorderStatus =
@@ -67,6 +68,8 @@ let snapshot: RecorderSnapshot = { status: "idle", countdown: null };
 let engine: EngineHandle | null = null;
 let cursorTrack: CursorTrackSession | null = null;
 let sessionId: string | null = null;
+/** How the active take is captured; sent with finalize so the library can label it. */
+let capture: RecordingCapture | null = null;
 let clock: ElapsedState | null = null;
 let tickTimer: ReturnType<typeof setInterval> | null = null;
 let countdownTimer: ReturnType<typeof setInterval> | null = null;
@@ -227,6 +230,11 @@ async function beginEngine(input: StartInput): Promise<void> {
     }
 
     engine = handle;
+    capture = buildRecordingCapture({
+      sourceId: input.sourceId,
+      area: input.area ?? null,
+      output: handle.outputSize,
+    });
     stopLiveSettings = forwardLiveSettings(handle, input);
     const activeTrack = cursorTrack;
     void handle.firstMediaTimestamp.then(({ rendererMs, quality }) =>
@@ -337,6 +345,7 @@ export function resumeRecording(): void {
 async function stopRecording(): Promise<void> {
   const activeEngine = engine;
   const activeSessionId = sessionId;
+  const activeCapture = capture;
   // Guard re-entry: the user clicking Stop and an engine-failure can both fire.
   if (stopping || !activeEngine || !activeSessionId) return;
   stopping = true;
@@ -367,6 +376,7 @@ async function stopRecording(): Promise<void> {
           durationSeconds,
           durationMs,
           thumbnail: activeEngine.thumbnail,
+          capture: activeCapture,
         });
       })(),
       delay(MIN_SAVING_MS),
@@ -388,6 +398,7 @@ async function stopRecording(): Promise<void> {
   engine = null;
   cursorTrack = null;
   sessionId = null;
+  capture = null;
   clock = null;
   stopping = false;
   update({ status: "idle", countdown: null });

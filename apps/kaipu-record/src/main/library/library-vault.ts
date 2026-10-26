@@ -2,6 +2,7 @@ import { basename, join } from "node:path";
 import { access, mkdir, open, readFile, readdir, rename, rm, stat } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import type { LocalRecording } from "@shared/types/library-storage";
+import { sanitizeRecordingCapture, type RecordingCapture } from "@shared/recording-capture";
 import { normalizeExportPresetId, type StoredExportPresetId } from "@shared/types/export-preset";
 import { atomicWriteFile, withLock } from "./atomic-write";
 import { sha256FileBase64 } from "./content-hash";
@@ -48,6 +49,8 @@ export interface Sidecar {
   editorOpenedAt?: number;
   /** Screenshots: epoch ms of the last manual Save from the image editor ("Saved"). */
   editorSavedAt?: number;
+  /** New recordings: how the take was captured (library labels). Absent on older items. */
+  capture?: RecordingCapture;
 }
 
 // Keyed by the sidecar's absolute path (not per-instance), so a re-minted id on a
@@ -151,6 +154,7 @@ export class LibraryVault {
       export: describeExport(meta),
       editorOpenedAt: typeof meta.editorOpenedAt === "number" ? meta.editorOpenedAt : null,
       editorSavedAt: typeof meta.editorSavedAt === "number" ? meta.editorSavedAt : null,
+      capture: isImage || isGif ? null : sanitizeRecordingCapture(meta.capture),
       thumbnailUrl: isImage
         ? // `?v=<mtime>` busts the renderer image cache when a screenshot is
           // overwritten in place (same id/URL) — only the changed item, so the

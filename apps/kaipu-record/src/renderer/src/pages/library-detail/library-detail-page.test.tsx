@@ -54,6 +54,7 @@ const cloudOnlyItem: LibraryItem = {
   comparison: "same",
   editing: "needs-source",
   sharing: "private",
+  capture: null,
 };
 
 /** Local-and-cloud, identical bytes, an editor export with no editing project of
@@ -102,6 +103,7 @@ const exportedOnlyItem: LibraryItem = {
   comparison: "same",
   editing: "exported-only",
   sharing: "private",
+  capture: null,
 };
 
 /** Same shape as `exportedOnlyItem`, but with its own editing project still on
@@ -296,6 +298,7 @@ describe("LibraryDetailPage — lineage and edit badge", () => {
     comparison: "same" as const,
     editing: "project-available" as const,
     sharing: "private" as const,
+    capture: null,
     derivedFromAssetId: null,
     editSavedAt: null,
     editExportedSavedAt: null,

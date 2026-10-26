@@ -6,6 +6,7 @@
  * No TS enums (house rule): `as const` arrays + derived types, one source for
  * the value and its type — same idiom as IPC_CHANNELS.
  */
+import { recordingCaptureMode } from "./recording-capture";
 
 /** Feature flags the app reads. Names must match the PostHog dashboard exactly. */
 export const FLAG_NAMES = ["bypass-login"] as const;
@@ -101,6 +102,6 @@ export function buildRecordingStartedProperties(input: {
   platform: string;
   displays: number;
 }): RecordingStartedProperties {
-  const mode = input.sourceId.startsWith("window:") ? "window" : input.area ? "area" : "screen";
+  const mode = recordingCaptureMode(input.sourceId, input.area);
   return { mode, platform: input.platform, displays: input.displays };
 }

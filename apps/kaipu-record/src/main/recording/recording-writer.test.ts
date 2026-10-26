@@ -30,6 +30,43 @@ describe("RecordingWriter", () => {
     expect(rec.filePath.startsWith(vaultDir)).toBe(true);
   });
 
+  it("persists the capture metadata next to the duration, and none when it is absent", async () => {
+    const { writer, vaultDir } = await setup();
+    await writer.create("s1");
+    await writer.write("s1", new TextEncoder().encode("x").buffer, 0);
+    const rec = await writer.finalize("s1", {
+      title: "T",
+      durationSeconds: 2,
+      durationMs: 2000,
+      capture: { mode: "window", width: 800, height: 600, ratio: null },
+    });
+    expect(rec.capture).toEqual({
+      mode: "window",
+      width: 800,
+      height: 600,
+      ratio: null,
+    });
+    const sidecar = JSON.parse(await readFile(join(vaultDir, ".kaipu", "rec-fixed.json"), "utf-8"));
+    expect(sidecar).toMatchObject({
+      durationSeconds: 2,
+      capture: { mode: "window", width: 800, height: 600, ratio: null },
+    });
+  });
+
+  it("writes no capture field for a finalize without one (editor exports)", async () => {
+    const { writer, vaultDir } = await setup();
+    await writer.create("s1");
+    await writer.write("s1", new TextEncoder().encode("x").buffer, 0);
+    const rec = await writer.finalize("s1", {
+      title: "T",
+      durationSeconds: 1,
+      durationMs: 1000,
+    });
+    expect(rec.capture).toBeNull();
+    const sidecar = JSON.parse(await readFile(join(vaultDir, ".kaipu", "rec-fixed.json"), "utf-8"));
+    expect(sidecar).not.toHaveProperty("capture");
+  });
+
   it("drains fire-and-forget writes before finalize closes the file", async () => {
     const { writer } = await setup();
     await writer.create("s1");

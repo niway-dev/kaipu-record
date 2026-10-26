@@ -29,6 +29,11 @@ export interface EngineHandle {
   /** A still JPEG frame of the screen captured at start. */
   thumbnail: ArrayBuffer | null;
   /**
+   * The size the video is encoded at: the compositor's target (area crop or `fitToCap`
+   * downscale), which equals the native track size when frames are encoded raw.
+   */
+  outputSize: { width: number; height: number };
+  /**
    * Renderer-clock time of video time 0 (the MP4's first media sample). Resolves
    * within ~1 frame of start; "estimated" if mediabunny's private field is missing.
    */
@@ -332,6 +337,7 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
       return levelsFromTimeDomain(levelBuffer, 5);
     },
     thumbnail,
+    outputSize: { width: target.width, height: target.height },
     firstMediaTimestamp,
     hasSystemAudio: sysGain !== null,
     async setMicrophoneEnabled(on, deviceId) {

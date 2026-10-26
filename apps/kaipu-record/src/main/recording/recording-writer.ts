@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { LocalRecording } from "@shared/types/library-storage";
 import type { RecordingFinalizeMeta } from "@shared/types/ipc";
+import { sanitizeRecordingCapture } from "@shared/recording-capture";
 import { LibraryVault } from "../library/library-vault";
 
 /** Staging folder inside the vault, so the final move is a same-volume rename. Exported for the sweep. */
@@ -194,9 +195,12 @@ export class RecordingWriter {
     }
     this.sessions.delete(sessionId);
 
+    // Renderer-supplied, so validated before it lands on disk; exports send none.
+    const capture = sanitizeRecordingCapture(meta.capture);
     await vault.writeMeta(id, {
       title: meta.title,
       durationSeconds: meta.durationSeconds,
+      ...(capture ? { capture } : {}),
       createdAt: this.now(),
       derivedFromAssetId: meta.derivedFromAssetId ?? null,
       ...(meta.exportPreset ? { exportPreset: meta.exportPreset } : {}),
