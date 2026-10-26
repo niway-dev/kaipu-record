@@ -194,6 +194,12 @@ describe("RecordPage idle layout (design Kaipu Record Modes)", () => {
     expect(screen.getByText("SCREEN")).toBeInTheDocument();
   });
 
+  it("opens the camera settings popover from the split Camera tile in the idle layout", () => {
+    renderAt(undefined);
+    fireEvent.click(screen.getByRole("button", { name: "Camera settings" }));
+    expect(screen.getByRole("dialog", { name: "Camera settings" })).toBeInTheDocument();
+  });
+
   it("keeps the recording layout while a take runs", () => {
     setupState.isRecording = true;
     renderAt(undefined);

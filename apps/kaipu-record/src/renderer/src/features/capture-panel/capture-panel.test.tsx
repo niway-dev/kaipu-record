@@ -86,6 +86,16 @@ describe("CapturePanel — tabs", () => {
     expect(screen.getAllByText("OFF")).toHaveLength(3);
   });
 
+  it("splits the Camera tile in the idle layout and opens the inline drawer, growing the panel", async () => {
+    const { container } = render(<CapturePanel />);
+    const chevron = screen.getByRole("button", { name: "Camera settings" });
+    expect(screen.queryByRole("region", { name: "Camera settings" })).not.toBeInTheDocument();
+    fireEvent.click(chevron);
+    const drawer = screen.getByRole("region", { name: "Camera settings" });
+    // The drawer sits inside the root the ResizeObserver measures, so the window follows it.
+    expect(container.firstElementChild?.contains(drawer)).toBe(true);
+  });
+
   it("captures in the chosen mode when a chip is clicked, without touching the stored mode", async () => {
     const requestCaptureScreenshot = vi.fn();
     const updateSettings = vi.fn();

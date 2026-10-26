@@ -109,7 +109,16 @@ export function CapturePanel(): React.JSX.Element {
               onToggleMicrophone={setup.toggleMicrophone}
               onToggleSystemAudio={setup.toggleSystemAudio}
               onToggleCamera={setup.toggleCamera}
+              cameraSlot={
+                <CameraPanelTile
+                  control={camera}
+                  on={setup.isCameraEnabled}
+                  onToggle={setup.toggleCamera}
+                />
+              }
             />
+            {/* The drawer grows the panel downward; the ResizeObserver above follows it. */}
+            <CameraPanelDrawer control={camera} on={setup.isCameraEnabled} isRecording={false} />
             {setup.isMicrophoneEnabled && setup.microphones.length > 0 && (
               <MicPicker
                 variant="compact"
