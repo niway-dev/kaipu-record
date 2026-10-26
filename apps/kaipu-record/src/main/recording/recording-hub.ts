@@ -146,6 +146,7 @@ export function registerRecordingHub(
     isMicrophoneEnabled: true,
     isSystemAudioEnabled: false,
     isCameraEnabled: false,
+    area: null,
   };
   const broadcastSettings = (): void => {
     for (const window of BrowserWindow.getAllWindows()) {

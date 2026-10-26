@@ -7,6 +7,7 @@ const DEFAULT: RecordingSettings = {
   isMicrophoneEnabled: true,
   isSystemAudioEnabled: false,
   isCameraEnabled: false,
+  area: null,
 };
 
 export interface RecordingSettingsStore extends RecordingSettings {

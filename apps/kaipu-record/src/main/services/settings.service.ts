@@ -120,6 +120,7 @@ export function mergeSettings(
         ? safe.showRecordingSavedCard
         : DEFAULT_SETTINGS.showRecordingSavedCard,
     screenshotFrame: mergeScreenshotFrames(safe.screenshotFrame),
+    recordingArea: mergeScreenshotFrames(safe.recordingArea),
     // A stored "window" reads as Frame while Window mode is off (the file keeps it).
     screenshotMode: toEnabledCaptureMode(safe.screenshotMode),
     trayHintShown:

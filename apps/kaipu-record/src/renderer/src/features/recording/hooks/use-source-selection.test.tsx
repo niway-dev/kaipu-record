@@ -21,6 +21,7 @@ vi.mock("@renderer/features/recording/hooks/use-recording-settings", async () =>
         isMicrophoneEnabled: true,
         isSystemAudioEnabled: false,
         isCameraEnabled: false,
+        area: null,
       });
       const update = React.useCallback(
         (patch: Partial<RecordingSettings>) => setSettings((current) => ({ ...current, ...patch })),

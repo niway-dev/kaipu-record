@@ -33,6 +33,9 @@ export function physicalSizeFor(display: DisplayLike): Size {
   };
 }
 
+/** The smallest recording area the overlay accepts, in DIP on each side. */
+export const MIN_AREA_SIZE = 64;
+
 /**
  * Crop rectangle in PHYSICAL pixels of `image` for a DIP rectangle given
  * relative to the display's bounds. The scale is derived from the image the
@@ -45,8 +48,17 @@ export function cropForDisplay(
   display: DisplayLike,
   rectDip: Rectangle,
 ): Rectangle {
-  const scaleX = imageSize.width / display.bounds.width;
-  const scaleY = imageSize.height / display.bounds.height;
+  return cropForSize(imageSize, display.bounds, rectDip);
+}
+
+/**
+ * The same crop with only the display's DIP size: what a recording area needs, since
+ * the renderer that encodes it knows the display's size but not its `Display`. The
+ * origin is floored and the size ceiled, so every selected pixel is inside the crop.
+ */
+export function cropForSize(imageSize: Size, displaySize: Size, rectDip: Rectangle): Rectangle {
+  const scaleX = imageSize.width / displaySize.width;
+  const scaleY = imageSize.height / displaySize.height;
 
   const x = clamp(Math.floor(rectDip.x * scaleX + EPSILON), 0, Math.max(imageSize.width - 1, 0));
   const y = clamp(Math.floor(rectDip.y * scaleY + EPSILON), 0, Math.max(imageSize.height - 1, 0));

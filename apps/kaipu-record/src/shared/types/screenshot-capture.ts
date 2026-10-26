@@ -40,9 +40,23 @@ export function toEnabledCaptureMode(
   return isEnabledCaptureMode(value, enabledModes) ? value : "frame";
 }
 
+/**
+ * Why the overlay opened: to take a screenshot (`capture`, every entry point until now) or
+ * to choose what to record (`record`: the `recordArea` shortcut). The intent only changes
+ * which action Enter fires and which frame memory the overlay uses; both bars offer both.
+ */
+export const CAPTURE_INTENTS = ["capture", "record"] as const;
+export type CaptureIntent = (typeof CAPTURE_INTENTS)[number];
+
+export function isCaptureIntent(value: unknown): value is CaptureIntent {
+  return (CAPTURE_INTENTS as readonly unknown[]).includes(value);
+}
+
 /** Payload of every channel that asks for a capture (invoke, hotkey, panel request). */
 export interface CaptureRequestPayload {
   mode: CaptureMode;
+  /** Absent means `capture`. */
+  intent?: CaptureIntent;
 }
 
 /** What main did with a capture: opened the editor path, or finished it without one. */
@@ -90,10 +104,22 @@ export interface CaptureSize {
 }
 
 /**
- * What the user pressed on the overlay's action bar. `"record"` is reserved: it joins
- * this union when the recording picker reuses the overlay.
+ * What the user pressed on the overlay's action bar. `capture` and `copy` take a screenshot;
+ * `record` starts recording the selection; `select` makes it the recording target without
+ * starting (Enter in the `record` intent), so camera and audio can be set first. Main never
+ * captures pixels for `record` or `select` (ADR 0030).
  */
-export type CaptureAction = "capture" | "copy";
+export const CAPTURE_ACTIONS = ["capture", "copy", "record", "select"] as const;
+export type CaptureAction = (typeof CAPTURE_ACTIONS)[number];
+
+export function isCaptureAction(value: unknown): value is CaptureAction {
+  return (CAPTURE_ACTIONS as readonly unknown[]).includes(value);
+}
+
+/** The two actions that choose a recording target instead of taking a screenshot. */
+export function isRecordAction(action: CaptureAction): action is "record" | "select" {
+  return action === "record" || action === "select";
+}
 
 /** One on-screen window as the overlay sees it (display-relative DIP). */
 export interface ListedWindow {

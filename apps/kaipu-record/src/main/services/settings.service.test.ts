@@ -75,6 +75,7 @@ describe("mergeSettings", () => {
         exportQuality: "maximum",
         showRecordingSavedCard: false,
         screenshotFrame: { "1": { x: 10, y: 20, width: 300, height: 200 } },
+        recordingArea: { "2": { x: 0, y: 0, width: 640, height: 360 } },
         screenshotMode: "frame",
         trayHintShown: true,
         diagnosticsEnabled: false,
@@ -94,6 +95,7 @@ describe("mergeSettings", () => {
       exportQuality: "maximum",
       showRecordingSavedCard: false,
       screenshotFrame: { "1": { x: 10, y: 20, width: 300, height: 200 } },
+      recordingArea: { "2": { x: 0, y: 0, width: 640, height: 360 } },
       screenshotMode: "frame",
       trayHintShown: true,
       diagnosticsEnabled: false,
@@ -104,6 +106,16 @@ describe("mergeSettings", () => {
     expect(DEFAULT_SETTINGS.screenshotFrame).toEqual({});
     expect(mergeSettings({}).screenshotFrame).toEqual({});
     expect(mergeSettings({ screenshotFrame: "nope" as never }).screenshotFrame).toEqual({});
+    expect(DEFAULT_SETTINGS.recordingArea).toEqual({});
+    expect(mergeSettings({}).recordingArea).toEqual({});
+    expect(
+      mergeSettings({
+        recordingArea: {
+          "1": { x: 0, y: 0, width: 640, height: 360 },
+          "2": "junk",
+        } as never,
+      }).recordingArea,
+    ).toEqual({ "1": { x: 0, y: 0, width: 640, height: 360 } });
     expect(
       mergeSettings({
         screenshotFrame: {

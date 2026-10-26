@@ -285,6 +285,7 @@ describe("recorder-store live settings", () => {
     isMicrophoneEnabled: true,
     isSystemAudioEnabled: false,
     isCameraEnabled: false,
+    area: null,
   };
   const broadcast = (patch: Partial<RecordingSettings>): void => {
     for (const listener of settingsListeners) listener({ ...base, ...patch });
