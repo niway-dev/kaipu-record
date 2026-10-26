@@ -79,3 +79,28 @@ export function buildScreenshotCapturedProperties(
     ...(input.after ? { after: input.after } : {}),
   };
 }
+
+/** Event name for a recording that started (after the countdown). */
+export const RECORDING_STARTED_EVENT = "recording_started";
+
+/**
+ * The whole payload of `recording_started` (ADR 0030): which target people record — a whole
+ * screen, an area of one, or a window — on which platform, with how many displays. No source
+ * names, no window titles, no rectangles.
+ */
+export interface RecordingStartedProperties {
+  mode: "screen" | "area" | "window";
+  platform: string;
+  displays: number;
+}
+
+/** Derives the mode from the source id and whether an area was set; copies nothing else. */
+export function buildRecordingStartedProperties(input: {
+  sourceId: string;
+  area: boolean;
+  platform: string;
+  displays: number;
+}): RecordingStartedProperties {
+  const mode = input.sourceId.startsWith("window:") ? "window" : input.area ? "area" : "screen";
+  return { mode, platform: input.platform, displays: input.displays };
+}

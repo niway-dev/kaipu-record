@@ -22,6 +22,8 @@ import type {
   RecordingTick,
 } from "@shared/types/ipc";
 import { serializeCursorTrack } from "@shared/cursor-track";
+import { buildRecordingStartedProperties, RECORDING_STARTED_EVENT } from "@shared/analytics";
+import { captureMainEvent } from "../services/analytics.service";
 import { MIN_AREA_SIZE } from "@shared/capture-geometry";
 import type { CaptureRect } from "@shared/types/screenshot-capture";
 import { LibraryVault } from "../library/library-vault";
@@ -337,6 +339,20 @@ export function registerRecordingHub(
   // ── Window orchestration ────────────────────────────────────────────
   ipcMain.on(IPC_CHANNELS.recordingStart, (_e, info: RecordingStartInfo) => {
     activity = startedActivity();
+    try {
+      captureMainEvent(
+        RECORDING_STARTED_EVENT,
+        buildRecordingStartedProperties({
+          sourceId: info.sourceId,
+          area: Boolean(info.area),
+          platform: process.platform,
+          displays: screen.getAllDisplays().length,
+        }),
+      );
+    } catch (error) {
+      // Analytics must never change what the user sees.
+      console.error("recording analytics failed", error);
+    }
     getMainWindow()?.hide();
     // The main window is now hidden; force the app to stay in the Dock/Cmd+Tab so
     // it isn't lost while only the floating panels are visible. Restored on stop.

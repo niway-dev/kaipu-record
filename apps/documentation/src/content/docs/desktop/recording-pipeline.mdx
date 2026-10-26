@@ -451,3 +451,24 @@ Detalle y alternativas descartadas: [ADR 0001 — Mediabunny over FFmpeg](../arc
 - **Watermark** — pasada de dibujo extra en el mismo compositor.
 - **Grabar desde el Capture Panel** — hoy su botón abre la ventana principal (el encode no debe correr en la ventana transparente del menu-bar); falta el IPC panel→main para arrancar.
 - **Calidad configurable** — resolución/fps/bitrate están hardcodeados (1080p/30/auto), sin cablear a Settings.
+
+## Area recording (ADR 0030)
+
+A recording can cover part of one display. The source is still that display's whole
+`screen:` capture; the area travels in `RecordingSettings.area` and `RecordingStartInfo.area`
+(display id, display-relative DIP rectangle, display size).
+
+- **Crop.** After `getUserMedia`, the engine measures the track and `areaEncodePlan` maps the
+  area to physical pixels of that track (`cropForSize`, the same DPI arithmetic the Windows
+  screenshot backend uses), then caps its height with `fitToCap`. With an area the compositor
+  always runs and draws only that source rectangle; display and window recordings call it
+  exactly as before.
+- **Shade.** While an area records, main shows `recording-shade-window.ts` on its display:
+  clear inside the area with a 1.5 px accent outline, dimmed at 60 % outside, click-through,
+  content-protected and one level below the control bar and the camera bubble.
+- **Camera bubble.** Anchored to the area's bottom-left corner; hidden while the area cannot
+  hold it (224 px plus 40 px margins), back in its corner at stop.
+- **Cursor sidecar.** Normalized to the area, so `track.display` is the area's size and the
+  editor's zoom needs no offset; an optional `region` keeps the area's origin.
+- **Entry points.** The capture overlay's Record button in either intent and the `recordArea`
+  shortcut. The widget and Record page redesign that adds a mode row waits for its design file.
