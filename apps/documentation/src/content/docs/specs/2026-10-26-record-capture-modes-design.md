@@ -65,7 +65,9 @@ picker clears `area`. Same behaviour as the union, no settings migration, and de
 by construction. `AppSettings.recordingMode` was not added: until the widget has a mode row
 (task 5) there is nothing to remember it for.
 
-_Implementation note (decision 2)._ In the `record` intent the Capture button has no shortcut
+_Implementation note (decision 2)._ Record is the plain **R** key, not ⌘R / Ctrl+R: outside dev,
+`@electron-toolkit/utils`' `watchWindowShortcuts`, installed on every window, cancels Cmd/Ctrl+R
+in `before-input-event`, so a packaged overlay would never receive it. In the `record` intent the Capture button has no shortcut
 (click only), so ⌘C / Ctrl+C never means anything but copy. A rectangle that is recorded or
 selected is remembered in `recordingArea` whichever intent opened the overlay; one that is shot
 is remembered in `screenshotFrame`. The Window picker shows Record disabled.
@@ -183,8 +185,8 @@ no watermark are needed.
 - `CaptureAction` becomes `"capture" | "copy" | "record" | "select"`. `OverlayAnswer` carries it
   as today; the overlay never captures or records (ADR 0022 decision 3).
 - Action bar by intent:
-  - `capture`: **Capture** (Enter, primary) · Copy (⌘C / Ctrl+C) · Record (⌘R / Ctrl+R) · Cancel (Esc).
-  - `record`: **Use selection** (Enter, primary) · Record (⌘R / Ctrl+R) · Capture (click only) · Cancel (Esc).
+  - `capture`: **Capture** (Enter, primary) · Copy (⌘C / Ctrl+C) · Record (R) · Cancel (Esc).
+  - `record`: **Use selection** (Enter, primary) · Record (R) · Capture (click only) · Cancel (Esc).
 - The Screen card gets the same bar in place of its "Record this display · soon" label.
 - The pill lists `ENABLED_CAPTURE_MODES` as today; in `record` intent the Frame box starts from
   the recording area memory, not the screenshot one (decision 10).
@@ -283,9 +285,9 @@ Surfaces to design, each with its states:
 3. Capture overlay in RECORD intent (full-display translucent sheet, one per display). The
    Frame box with eight handles, size label and the vertical mode pill (Frame, Screen) on its
    right edge as in v2. The ACTION BAR under the box changes: primary "Use selection" (Enter),
-   then "Record" (⌘R), then "Capture" (click only), then Cancel (Esc). Also the Screen card variant
+   then "Record" (R), then "Capture" (click only), then Cancel (Esc). Also the Screen card variant
    with the same bar. Show the CAPTURE intent bar beside it for contrast: primary Capture
-   (Enter), Copy (⌘C), Record (⌘R), Cancel — the Record button is enabled now, not "soon".
+   (Enter), Copy (⌘C), Record (R), Cancel — the Record button is enabled now, not "soon".
 
 4. Recording shade: the recorded display while an area is being recorded. The area is fully
    clear with a 1.5 px border; everything outside is covered by a dark translucent shade (pick

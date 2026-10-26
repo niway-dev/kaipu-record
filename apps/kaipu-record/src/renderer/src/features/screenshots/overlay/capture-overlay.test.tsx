@@ -1477,7 +1477,7 @@ describe("CaptureOverlay — opened to record (ADR 0030)", () => {
     );
   });
 
-  it("⌘R records the area, and the bar offers Use selection, Record and Capture", async () => {
+  it("R records the area, and the bar offers Use selection, Record and Capture", async () => {
     const { api, answer } = fakeApi({}, FRAME_ON_42, { "42": area });
     render(
       <CaptureOverlay
@@ -1494,7 +1494,7 @@ describe("CaptureOverlay — opened to record (ADR 0030)", () => {
     expect(within(bar).getByRole("button", { name: /^Capture$/ })).toBeEnabled();
     expect(within(bar).queryByRole("button", { name: /^Copy/ })).toBeNull();
 
-    press("r", { metaKey: true });
+    press("r");
     await waitFor(() =>
       expect(answer).toHaveBeenCalledExactlyOnceWith(
         expect.objectContaining({ kind: "rect", action: "record", rect: area }),
@@ -1519,7 +1519,7 @@ describe("CaptureOverlay — opened to record (ADR 0030)", () => {
     expect(within(bar).getByRole("button", { name: /^Record/ })).toBeDisabled();
 
     press("Enter");
-    press("r", { metaKey: true });
+    press("r");
     await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
     expect(answer).not.toHaveBeenCalled();
   });
@@ -1580,5 +1580,41 @@ describe("CaptureOverlay — opened to record (ADR 0030)", () => {
       action: "select",
       displayId: 42,
     });
+  });
+});
+
+describe("CaptureOverlay — the Window picker opened to record", () => {
+  it("Enter does not take a screenshot of the hovered window", async () => {
+    const { api, answer, pushState } = fakeApi(
+      {},
+      { mode: "window", hoverDisplayId: null, frameDisplayId: null, windows: null },
+    );
+    render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("window", { intent: "record" })}
+        api={api}
+      />,
+    );
+    pushState({
+      windows: [
+        {
+          id: "11",
+          title: "Editor",
+          ownerName: "Kaipu",
+          displayId: 42,
+          rect: { x: 100, y: 100, width: 600, height: 400 },
+          fullSize: { width: 600, height: 400 },
+        },
+      ],
+      cursor: { x: 300, y: 300 },
+    });
+    fireEvent.pointerMove(await screen.findByTestId("window-picker"), {
+      clientX: 300,
+      clientY: 300,
+    });
+    press("Enter");
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(answer).not.toHaveBeenCalled();
   });
 });

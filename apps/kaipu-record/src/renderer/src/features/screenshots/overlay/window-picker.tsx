@@ -123,11 +123,13 @@ export function WindowPicker({
   const latest = useRef({ hovered, answer });
   latest.current = { hovered, answer };
   const platform = chrome.platform;
+  const intent = chrome.intent;
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       // A window is captured, never recorded from here (Window keeps the thumbnail picker).
-      const keyed = actionForKey(event, platform, "capture");
+      // Opened to record, Enter means "use selection", which a window cannot be: nothing.
+      const keyed = actionForKey(event, platform, intent);
       const action = keyed === "capture" || keyed === "copy" ? keyed : null;
       const target = latest.current.hovered;
       if (!action || !target) return;
@@ -136,7 +138,7 @@ export function WindowPicker({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [platform]);
+  }, [platform, intent]);
 
   const track = (event: React.PointerEvent<HTMLDivElement>): void => {
     pointerSeen.current = true;

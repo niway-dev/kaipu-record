@@ -180,8 +180,8 @@ export function SelectionToolbar({
 
 /**
  * The action buttons for the overlay's intent, shared by the selection toolbar and the
- * Screen card. Opened to capture: Capture (Enter) · Copy (⌘C) | Record (⌘R). Opened to
- * record: Use selection (Enter) · Record (⌘R) | Capture (click only, so ⌘C keeps meaning
+ * Screen card. Opened to capture: Capture (Enter) · Copy (⌘C) | Record (R). Opened to
+ * record: Use selection (Enter) · Record (R) | Capture (click only, so ⌘C keeps meaning
  * copy everywhere else in the app).
  */
 export function ActionButtons({

@@ -135,7 +135,7 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
     statusWord: "window",
   },
   // Opens the capture overlay to choose what to record (ADR 0030): Enter keeps the area as
-  // the recording target, ⌘R / Ctrl+R records it at once.
+  // the recording target, R records it at once.
   {
     action: "recordArea",
     defaultAccelerator: { mac: "Command+Control+Shift+R", win: "Control+Alt+Shift+R" },
