@@ -45,6 +45,7 @@ const item: LibraryItem = {
   comparison: "local-changes",
   editing: "project-available",
   sharing: "private",
+  capture: null,
 };
 
 describe("toLibraryVideo", () => {
@@ -70,6 +71,17 @@ describe("toLibraryVideo", () => {
       editSavedAt: 123,
       editExportedSavedAt: null,
     });
+  });
+
+  it("carries the capture metadata, null when the item has none", () => {
+    const capture = {
+      mode: "screen",
+      width: 1662,
+      height: 1080,
+      ratio: null,
+    } as const;
+    expect(toLibraryVideo({ ...item, capture }).capture).toEqual(capture);
+    expect(toLibraryVideo(item).capture).toBeNull();
   });
 
   it("a cloud-only item has no local id, no thumbnail yet, and the cloud size as its size", () => {

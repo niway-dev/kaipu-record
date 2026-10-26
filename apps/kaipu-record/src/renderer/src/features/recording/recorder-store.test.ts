@@ -70,6 +70,7 @@ function fakeEngine(over: Partial<EngineHandle> = {}): EngineHandle {
     stop: vi.fn(async () => {}),
     readLevels: vi.fn(() => [0, 0, 0, 0, 0]),
     thumbnail: null,
+    outputSize: { width: 1662, height: 1080 },
     firstMediaTimestamp: Promise.resolve({ rendererMs: 0, quality: "estimated" as const }),
     hasSystemAudio: true,
     setMicrophoneEnabled: vi.fn(async () => "ok" as const),
@@ -275,6 +276,35 @@ describe("recorder-store", () => {
     expect(window.electronAPI.recordingFinalize).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({ durationSeconds: 2, durationMs: 2400 }),
+    );
+  });
+
+  it("finalizes with the capture metadata: mode from the target, size from the engine", async () => {
+    startEngineMock.mockResolvedValue(fakeEngine({ outputSize: { width: 1280, height: 720 } }));
+    store.requestStartRecording(() => ({
+      ...input,
+      area: {
+        displayId: 4,
+        rect: { x: 0, y: 0, width: 640, height: 360 },
+        displaySize: { width: 1512, height: 982 },
+      },
+    }));
+    await vi.advanceTimersByTimeAsync(3000);
+    await vi.advanceTimersByTimeAsync(1000);
+
+    await stopAndSettle();
+
+    expect(window.electronAPI.recordingFinalize).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        capture: {
+          mode: "area",
+          width: 1280,
+          height: 720,
+          ratio: "16:9",
+          displayId: 4,
+        },
+      }),
     );
   });
 

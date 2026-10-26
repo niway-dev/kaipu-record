@@ -1,6 +1,7 @@
 /** Presentational types for the library UI. */
 
 import type { LocalRecording } from "@shared/types/library-storage";
+import type { RecordingCapture } from "@shared/recording-capture";
 import type {
   Availability,
   Comparison,
@@ -41,4 +42,6 @@ export interface LibraryVideo {
   gif?: { width: number; height: number; fps: number } | null;
   /** MP4 exports only: preset + what was encoded, for "already exported" reuse (NIW2-218). */
   export?: LocalRecording["export"];
+  /** How the recording was captured (library label); null for older and cloud-only items. */
+  capture?: RecordingCapture | null;
 }

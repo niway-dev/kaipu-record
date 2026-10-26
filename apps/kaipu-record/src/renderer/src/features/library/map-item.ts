@@ -25,5 +25,6 @@ export function toLibraryVideo(item: LibraryItem): LibraryVideo {
     export: item.local?.export ?? null,
     editorOpenedAt: item.local?.editorOpenedAt ?? null,
     editorSavedAt: item.local?.editorSavedAt ?? null,
+    capture: item.capture ?? null,
   };
 }

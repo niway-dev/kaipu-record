@@ -23,6 +23,7 @@ function localItem(
     comparison: "same",
     editing: "project-available",
     sharing: "private",
+    capture: null,
     ...over,
   };
 }
@@ -93,6 +94,7 @@ const cloudOnlyItem: LibraryItem = {
   comparison: "same",
   editing: "project-available",
   sharing: "private",
+  capture: null,
 };
 
 describe("useLocalLibrary", () => {

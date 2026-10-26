@@ -24,6 +24,22 @@ const video: LibraryVideo = {
 };
 
 describe("VideoCard", () => {
+  it("tags the poster with how the recording was captured, and nothing without it", () => {
+    const { rerender } = render(
+      <VideoCard
+        video={{
+          ...video,
+          capture: { mode: "area", width: 1280, height: 720, ratio: "16:9" },
+        }}
+        onNavigate={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("FRAME · 16:9")).toBeInTheDocument();
+    rerender(<VideoCard video={video} onNavigate={vi.fn()} onDelete={vi.fn()} />);
+    expect(screen.queryByText(/FRAME|SCREEN|WINDOW/)).toBeNull();
+  });
+
   it("shows the title and formatted size", () => {
     render(<VideoCard video={video} onNavigate={vi.fn()} onDelete={vi.fn()} />);
     expect(screen.getByText("My Recording")).toBeInTheDocument();

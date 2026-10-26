@@ -18,6 +18,7 @@ import { useMissingRecordingRecovery } from "@renderer/features/library/hooks/us
 import { reportError } from "@renderer/features/analytics";
 import { showToast } from "@renderer/ui/toast-store";
 import { StorageMeta } from "@renderer/features/library/components/storage-meta";
+import { useRecordingCaptureLabel } from "@renderer/features/library/components/recording-capture-tag";
 import { DeleteConfirmDialog } from "@renderer/features/library/components/delete-confirm-dialog";
 import { RecordingPlayer } from "@renderer/features/library/components/recording-player";
 import { ScreenshotViewer } from "@renderer/features/library/components/screenshot-viewer";
@@ -109,6 +110,7 @@ export function LibraryDetailPage(): React.JSX.Element {
   // and buildLineage works fine on an empty/loading `videos` list.
   const { openItem } = useOpenInEditor();
   const lineage = useMemo(() => buildLineage(videos), [videos]);
+  const captureLabel = useRecordingCaptureLabel(video?.capture);
 
   // NIW2-218: Share — the core action — opens from the button and from the "heavy to send"
   // banner. Reading the file up front only when the banner needs its estimate.
@@ -274,6 +276,14 @@ export function LibraryDetailPage(): React.JSX.Element {
               <>
                 <span className={styles.dot}>·</span>
                 <span className={styles.metaItem}>{formatDuration(video.durationSeconds)}</span>
+              </>
+            )}
+            {captureLabel && (
+              <>
+                <span className={styles.dot}>·</span>
+                <span className={styles.metaItem} data-testid="capture-meta">
+                  {captureLabel}
+                </span>
               </>
             )}
             <span className={styles.dot}>·</span>

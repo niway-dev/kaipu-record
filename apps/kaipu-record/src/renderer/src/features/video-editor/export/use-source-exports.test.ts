@@ -20,6 +20,7 @@ function item(assetId: string, derivedFromAssetId: string | null): LibraryItem {
     comparison: "same",
     editing: "exported-only",
     sharing: "private",
+    capture: null,
   };
 }
 

@@ -11,6 +11,7 @@ import type { TagColor } from "@kaipu/domain/constants";
 import { DEFAULT_QUALITY, type RecordingQuality } from "../recording-quality";
 import type { Locale } from "@kaipu/i18n";
 import type { ExportPresetId, ExportQuality } from "./export-preset";
+import type { RecordingCapture, RecordingCaptureRatio } from "../recording-capture";
 import {
   ENABLED_CAPTURE_MODES,
   type CaptureMode,
@@ -625,6 +626,11 @@ export interface RecordingFinalizeMeta {
    * `"edit:<hash>"` = the editor's scene at export time.
    */
   exportFingerprint?: string;
+  /**
+   * How a new take was captured (mode, output size, ratio), stored in the sidecar for
+   * library labels. Set by the recorder only; exports leave it unset. Main sanitizes it.
+   */
+  capture?: RecordingCapture | null;
 }
 
 /**
@@ -672,6 +678,11 @@ export interface RecordingArea {
   rect: CaptureRect;
   /** The display's size in DIP (`Display.bounds`), when the area was chosen. */
   displaySize: { width: number; height: number };
+  /**
+   * The aspect ratio the remembered area is locked to, when the Record page set one.
+   * Absent on areas chosen before ratios existed; the capture metadata then infers it.
+   */
+  ratio?: RecordingCaptureRatio;
 }
 
 /**

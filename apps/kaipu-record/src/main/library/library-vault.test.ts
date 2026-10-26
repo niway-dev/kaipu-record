@@ -60,6 +60,37 @@ describe("LibraryVault", () => {
     expect(recording.durationSeconds).toBe(42);
   });
 
+  it("round-trips capture metadata through the sidecar, and reads null without it", async () => {
+    await writeRecording("framed");
+    await writeRecording("legacy");
+    await vault.writeMeta("framed", {
+      durationSeconds: 5,
+      capture: {
+        mode: "area",
+        width: 1280,
+        height: 720,
+        ratio: "16:9",
+        displayId: 2,
+      },
+    });
+    expect((await vault.describe("framed"))?.capture).toEqual({
+      mode: "area",
+      width: 1280,
+      height: 720,
+      ratio: "16:9",
+      displayId: 2,
+    });
+    expect((await vault.describe("legacy"))?.capture).toBeNull();
+  });
+
+  it("reads a malformed capture value as null", async () => {
+    await writeRecording("bad");
+    await writeSidecar("bad", {
+      capture: { mode: "tab", width: 1, height: 1 },
+    });
+    expect((await vault.describe("bad"))?.capture).toBeNull();
+  });
+
   it("renames via the sidecar without touching the video file", async () => {
     await writeRecording("clip");
     await vault.rename("clip", "Renamed");

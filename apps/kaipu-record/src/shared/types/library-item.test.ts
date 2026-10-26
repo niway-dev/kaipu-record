@@ -16,6 +16,7 @@ const base: LibraryItem = {
   derivedFromAssetId: null,
   editSavedAt: null,
   editExportedSavedAt: null,
+  capture: null,
   local: null,
   cloud: null,
   availability: "unverified",
