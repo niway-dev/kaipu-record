@@ -11,6 +11,16 @@
   transition: opacity 140ms ease;
 }
 
+/* Mic · System · Cam under the mode chips, behind a divider (design "Kaipu Record Modes"). */
+.inputs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
 .panel {
   width: 340px;
   box-sizing: border-box;

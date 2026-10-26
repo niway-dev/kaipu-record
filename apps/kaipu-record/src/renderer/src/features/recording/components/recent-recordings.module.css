@@ -1,0 +1,16 @@
+/* The duration badge on a recent recording's thumbnail (bottom-right, as the design shows). */
+.poster {
+  position: relative;
+}
+
+.duration {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  padding: 1px 5px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 3px;
+}
