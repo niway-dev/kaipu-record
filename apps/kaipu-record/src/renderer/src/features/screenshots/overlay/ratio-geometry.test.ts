@@ -98,6 +98,45 @@ describe("resizeWithRatio", () => {
   });
 });
 
+describe("locked boxes never collapse below the minimum", () => {
+  const atLeastMin = (r: { width: number; height: number }): void => {
+    expect(r.width).toBeGreaterThanOrEqual(64);
+    expect(r.height).toBeGreaterThanOrEqual(64);
+  };
+
+  it("a corner dragged past the fixed corner into the left edge flips to the side with room", () => {
+    // The reviewer's probe: 16:9 at the left edge, ne dragged to (-40, 150).
+    const area = { x: 0, y: 0, width: 1440, height: 900 };
+    const start = { x: 0, y: 200, width: 640, height: 360 };
+    const out = resizeWithRatio(start, "ne", { x: -40, y: 150 }, WIDE, area);
+    atLeastMin(out);
+    expect(out.x).toBe(0);
+    expect(out.y + out.height).toBe(560);
+    expect(out.width / out.height).toBeCloseTo(WIDE, 1);
+  });
+
+  it("a corner dragged into the menu-bar strip keeps the minimum inside the work area", () => {
+    // Anchor on the top edge of the work area, pointer pulled up into the menu bar.
+    const start = { x: 200, y: 25, width: 320, height: 180 };
+    const out = resizeWithRatio(start, "sw", { x: 100, y: 5 }, WIDE, AREA);
+    atLeastMin(out);
+    expect(out.y).toBeGreaterThanOrEqual(AREA.y);
+  });
+
+  it("drawing from a point on the edge toward the edge spans away from it", () => {
+    const out = spanWithRatio({ x: 1440, y: 400 }, { x: 1500, y: 450 }, WIDE, AREA);
+    atLeastMin(out);
+    expect(out.x + out.width).toBeLessThanOrEqual(1440);
+  });
+
+  it("an edge drag with no room left keeps the minimum", () => {
+    const start = { x: 1300, y: 300, width: 140, height: 79 };
+    const out = resizeWithRatio(start, "e", { x: 1600, y: 300 }, WIDE, AREA);
+    atLeastMin(out);
+    expect(out.x + out.width).toBeLessThanOrEqual(1440);
+  });
+});
+
 describe("devicePixelSize", () => {
   it("multiplies DIP by the scale factor, falling back to 1 for a bad scale", () => {
     expect(devicePixelSize({ width: 640, height: 360 }, 2)).toEqual({ width: 1280, height: 720 });

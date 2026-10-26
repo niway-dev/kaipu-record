@@ -106,6 +106,10 @@ export function fitRatio(
  * A box at `ratio` spanned from a fixed `anchor` corner toward `pointer`: the side the
  * pointer pulls further decides the size, the room between the anchor and the work area's
  * edge caps it. Used for drawing a new box and for dragging a corner handle.
+ *
+ * Never below the minimum: when the pointer crosses the anchor toward an edge (or into the
+ * menu-bar / Dock strip) with less room than the minimum, the box flips to the side that has
+ * room; with room on neither side it keeps the minimum and is moved inside the area.
  */
 export function spanWithRatio(
   anchor: Pt,
@@ -114,15 +118,22 @@ export function spanWithRatio(
   area: CaptureRect,
   min: number = MIN_AREA_SIZE,
 ): CaptureRect {
-  const right = pointer.x >= anchor.x;
-  const down = pointer.y >= anchor.y;
+  const floor = minimumSize(ratio, min);
+  const roomX = (toRight: boolean): number =>
+    toRight ? area.x + area.width - anchor.x : anchor.x - area.x;
+  const roomY = (toBottom: boolean): number =>
+    toBottom ? area.y + area.height - anchor.y : anchor.y - area.y;
+  let right = pointer.x >= anchor.x;
+  let down = pointer.y >= anchor.y;
+  if (roomX(right) < floor.width && roomX(!right) >= floor.width) right = !right;
+  if (roomY(down) < floor.height && roomY(!down) >= floor.height) down = !down;
   const dx = Math.abs(pointer.x - anchor.x);
   const dy = Math.abs(pointer.y - anchor.y);
   const pulled =
     dx >= dy * ratio ? { width: dx, height: dx / ratio } : { width: dy * ratio, height: dy };
   const wanted = atLeastMinimum(pulled.width, pulled.height, ratio, min);
-  const maxW = right ? area.x + area.width - anchor.x : anchor.x - area.x;
-  const maxH = down ? area.y + area.height - anchor.y : anchor.y - area.y;
+  const maxW = Math.max(roomX(right), floor.width);
+  const maxH = Math.max(roomY(down), floor.height);
   const { width, height } = fitInside(wanted.width, wanted.height, ratio, maxW, maxH);
   return placeInside(
     right ? anchor.x : anchor.x - width,
@@ -159,7 +170,11 @@ export function resizeWithRatio(
   const cy = start.y + start.height / 2;
   if (handle === "e" || handle === "w") {
     const fixed = handle === "e" ? start.x : start.x + start.width;
-    const maxW = handle === "e" ? area.x + area.width - fixed : fixed - area.x;
+    // Never below the minimum: with no room left, the box is moved inside the area instead.
+    const maxW = Math.max(
+      handle === "e" ? area.x + area.width - fixed : fixed - area.x,
+      minimumSize(ratio, min).width,
+    );
     const raw = Math.max(handle === "e" ? pointer.x - fixed : fixed - pointer.x, 0);
     const wanted = atLeastMinimum(raw, raw / ratio, ratio, min);
     const { width, height } = fitInside(wanted.width, wanted.height, ratio, maxW, area.height);
@@ -173,7 +188,10 @@ export function resizeWithRatio(
   }
   if (handle === "n" || handle === "s") {
     const fixed = handle === "s" ? start.y : start.y + start.height;
-    const maxH = handle === "s" ? area.y + area.height - fixed : fixed - area.y;
+    const maxH = Math.max(
+      handle === "s" ? area.y + area.height - fixed : fixed - area.y,
+      minimumSize(ratio, min).height,
+    );
     const raw = Math.max(handle === "s" ? pointer.y - fixed : fixed - pointer.y, 0);
     const wanted = atLeastMinimum(raw * ratio, raw, ratio, min);
     const { width, height } = fitInside(wanted.width, wanted.height, ratio, area.width, maxH);
