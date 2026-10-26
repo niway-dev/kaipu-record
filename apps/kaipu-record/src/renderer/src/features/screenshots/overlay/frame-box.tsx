@@ -158,7 +158,8 @@ export function FrameBox({
     const start = initialFrame(query, remembered);
     return recording ? fitRatio(start, remembered?.ratio ?? "free", area) : start;
   });
-  const locked = ratioValue(ratio);
+  // A screenshot frame (after P) is free; the chosen ratio stays in state, so V brings it back.
+  const locked = recording ? ratioValue(ratio) : null;
   const drag = useRef<Drag | null>(null);
 
   // Latest frame for the window-level Enter listener without re-subscribing per move.

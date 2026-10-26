@@ -1714,6 +1714,32 @@ describe("CaptureOverlay — record chrome (design Kaipu Record Modes)", () => {
     expect(frameGeometry()).toEqual({ x: 100, y: 120, width: 960, height: 540 });
   });
 
+  it("after P the frame resizes freely; V locks the remembered ratio again", async () => {
+    renderRecord({ "42": { ...area, ratio: "16:9" } });
+    await screen.findByTestId("capture-frame");
+    press("p");
+    const sheet = screen.getByTestId("capture-frame").parentElement!;
+    fireEvent.pointerDown(sheet, { button: 0, clientX: 740, clientY: 480, pointerId: 1 });
+    fireEvent.pointerMove(sheet, { clientX: 1060, clientY: 900, pointerId: 1 });
+    fireEvent.pointerUp(sheet, { pointerId: 1 });
+    // Free: width and height follow the pointer independently.
+    expect(frameGeometry()).toEqual({ x: 100, y: 120, width: 960, height: 780 });
+
+    press("v");
+    expect(screen.getByRole("button", { name: "16:9" })).toHaveAttribute("aria-pressed", "true");
+    const box = frameGeometry();
+    fireEvent.pointerDown(sheet, {
+      button: 0,
+      clientX: box.x + box.width,
+      clientY: box.y + box.height,
+      pointerId: 2,
+    });
+    fireEvent.pointerMove(sheet, { clientX: box.x + 640, clientY: box.y + 100, pointerId: 2 });
+    fireEvent.pointerUp(sheet, { pointerId: 2 });
+    const locked = frameGeometry();
+    expect(Math.abs(locked.width / locked.height - 16 / 9)).toBeLessThan(0.01);
+  });
+
   it("the widget offers the modes, then Mic, System audio and Camera, then Cancel", async () => {
     const { api } = renderRecord();
     await screen.findByTestId("capture-frame");

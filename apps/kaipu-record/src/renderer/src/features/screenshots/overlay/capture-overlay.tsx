@@ -219,7 +219,7 @@ export function CaptureOverlay({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [cancel, switchMode, enabledModes]);
+  }, [cancel, switchMode, enabledModes, setIntent]);
 
   // Main hid the window and waits until this renderer has drawn one more frame, so its
   // last painted frame cannot end up in the shot. A hidden window may never run its
@@ -258,7 +258,7 @@ export function CaptureOverlay({
       onIntent: setIntent,
       ...(recording ? { toggles } : {}),
     }),
-    [mode, enabledModes, platform, intent, switchMode, cancel, recording, toggles],
+    [mode, enabledModes, platform, intent, switchMode, cancel, recording, toggles, setIntent],
   );
 
   const body =
