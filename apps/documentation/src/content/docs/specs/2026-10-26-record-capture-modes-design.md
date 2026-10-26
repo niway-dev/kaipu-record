@@ -72,6 +72,16 @@ in `before-input-event`, so a packaged overlay would never receive it. In the `r
 selected is remembered in `recordingArea` whichever intent opened the overlay; one that is shot
 is remembered in `screenshotFrame`. The Window picker shows Record disabled.
 
+_Implementation note (decision 12)._ The same mode is also persisted locally with every new
+recording, so the library can label it ("FRAME · 16:9", "SCREEN", "WINDOW"). The vault sidecar
+stores, next to `durationSeconds`:
+`capture: { mode: "screen" | "area" | "window"; width: number; height: number; ratio: "free" | "16:9" | "9:16" | "1:1" | null; displayId?: number }`.
+`width`/`height` are the encoded output size (the compositor target the engine derives), `ratio`
+is the area's remembered ratio (`RecordingArea.ratio`) or, without one, inferred from the output
+size with a 1% tolerance; it is `null` for screen and window. It is local only: it never leaves
+the device, the cloud catalog does not carry it, and the analytics payload stays as decided above.
+See [Recording capture metadata](/backlog/recording-capture-metadata/).
+
 ### Open questions
 
 1. **Compositor cost for an area in the hidden main window.** The compositor draws on
