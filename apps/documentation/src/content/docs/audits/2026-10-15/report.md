@@ -7,7 +7,7 @@ sidebar:
 
 # Audit report — 2026-10-15
 
-> **Status: 🟡 Plans written, none shipped.** `main` at `d36b19dd`. 8 read-only auditors (Opus), two per feature,
+> **Status: 🟡 Fixes in progress — 11 of 36 plans shipped.** `main` at `d36b19dd`. 8 read-only auditors (Opus), two per feature,
 > over the [feature map](/audits/2026-10-15/feature-map/). Method: [Pre-deploy audits](/audits/).
 > Every finding maps to one implementation plan: [fix plans index](/plans/audit-2026-10-15/00-index/).
 

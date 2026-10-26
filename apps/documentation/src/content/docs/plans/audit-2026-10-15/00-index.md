@@ -5,7 +5,7 @@ description: One implementation plan per root cause for every finding of the 202
 
 # Audit 2026-10-15 — fix plans
 
-**Status: 🔵 Plans written, none shipped.** Source: the
+**Status: 🟡 In progress — 11 of 36 plans shipped, 25 open.** Source: the
 [audit report](/audits/2026-10-15/report/) (78 findings, 68 distinct). Each plan below closes one
 root cause and lists the findings it retires. Batches follow the report's fix order: measure first,
 then data loss, then the Library fan-out, the trim handle, recording failure paths, and render cost.
@@ -23,16 +23,12 @@ analyses are not in the repo.
 
 ## Batch 2 — stop silent data loss
 
-| Plan                                                                                        | Closes                                      |
-| ------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| [02 Recording finalize recovery](/plans/audit-2026-10-15/02-recording-finalize-recovery/)   | REC-B6, REC-A8                              |
-| [03 Video session restore](/plans/audit-2026-10-15/03-video-session-restore/)               | VID-A1, VID-B3                              |
-| [04 Sidecar write serialization](/plans/audit-2026-10-15/04-sidecar-write-serialization/)   | LIB-B1, LIB-B8, LIB-B10, SHOT-B3            |
-| [05 Screenshot editor save races](/plans/audit-2026-10-15/05-screenshot-editor-save-races/) | SHOT-B1, SHOT-B2, SHOT-B4, SHOT-B8, SHOT-B9 |
-| [06 Library delete ordering](/plans/audit-2026-10-15/06-library-delete-ordering/)           | LIB-B3, LIB-B14                             |
-| [07 Tags registry integrity](/plans/audit-2026-10-15/07-tags-registry-integrity/)           | LIB-A4, LIB-B7, LIB-B6                      |
-| [08 Vault id collisions](/plans/audit-2026-10-15/08-vault-id-collisions/)                   | VID-B5                                      |
-| [09 Video autosave assets](/plans/audit-2026-10-15/09-video-autosave-assets/)               | VID-A2, VID-B6                              |
+| Plan                                                                              | Closes          |
+| --------------------------------------------------------------------------------- | --------------- |
+| [03 Video session restore](/plans/audit-2026-10-15/03-video-session-restore/)     | VID-A1, VID-B3  |
+| [06 Library delete ordering](/plans/audit-2026-10-15/06-library-delete-ordering/) | LIB-B3, LIB-B14 |
+| [08 Vault id collisions](/plans/audit-2026-10-15/08-vault-id-collisions/)         | VID-B5          |
+| [09 Video autosave assets](/plans/audit-2026-10-15/09-video-autosave-assets/)     | VID-A2, VID-B6  |
 
 ## Batch 3 — Library fan-out
 
@@ -50,9 +46,7 @@ analyses are not in the repo.
 
 ## Batch 4 — trim handle
 
-| Plan                                                  | Closes                         |
-| ----------------------------------------------------- | ------------------------------ |
-| [19 Trim drag](/plans/audit-2026-10-15/19-trim-drag/) | VID-B1, VID-B2, VID-B7, VID-B8 |
+All shipped.
 
 ## Batch 5 — recording failure paths
 
@@ -68,21 +62,33 @@ analyses are not in the repo.
 
 ## Batch 6 — render and copy cost
 
-| Plan                                                                                  | Closes                    |
-| ------------------------------------------------------------------------------------- | ------------------------- |
-| [27 Video editor re-render](/plans/audit-2026-10-15/27-video-editor-rerender/)        | VID-A4, VID-A8            |
-| [28 Video thumbnails by range](/plans/audit-2026-10-15/28-video-thumbnails-range/)    | VID-A3                    |
-| [29 Export canvas pool](/plans/audit-2026-10-15/29-export-canvas-pool/)               | VID-A5                    |
-| [30 Export runner token](/plans/audit-2026-10-15/30-export-runner-token/)             | VID-B4, VID-A9, VID-A10   |
-| [31 Screenshot composite once](/plans/audit-2026-10-15/31-screenshot-composite-once/) | SHOT-A1                   |
-| [32 PDF export off the main thread](/plans/audit-2026-10-15/32-pdf-export-offthread/) | SHOT-A2                   |
-| [33 Screenshot PNG copies](/plans/audit-2026-10-15/33-screenshot-png-copies/)         | SHOT-A3, SHOT-A4, SHOT-A6 |
-| [34 Clipboard peek on focus](/plans/audit-2026-10-15/34-clipboard-peek-focus/)        | SHOT-A5, VID-A7           |
-| [35 Annotation layer memo](/plans/audit-2026-10-15/35-annotation-layer-memo/)         | SHOT-A10, SHOT-B5         |
-| [36 Screenshot toast window](/plans/audit-2026-10-15/36-screenshot-toast-window/)     | SHOT-B7                   |
+| Plan                                                                           | Closes                    |
+| ------------------------------------------------------------------------------ | ------------------------- |
+| [27 Video editor re-render](/plans/audit-2026-10-15/27-video-editor-rerender/) | VID-A4, VID-A8            |
+| [30 Export runner token](/plans/audit-2026-10-15/30-export-runner-token/)      | VID-B4, VID-A9, VID-A10   |
+| [33 Screenshot PNG copies](/plans/audit-2026-10-15/33-screenshot-png-copies/)  | SHOT-A3, SHOT-A4, SHOT-A6 |
+| [34 Clipboard peek on focus](/plans/audit-2026-10-15/34-clipboard-peek-focus/) | SHOT-A5, VID-A7           |
+
+## Shipped
+
+Deleted from this folder once their PR merged; git keeps the plan text.
+
+| Plan                              | Closed                                                                        | PR                                                         |
+| --------------------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| 02 Recording finalize recovery    | REC-B6, REC-A8                                                                | [#359](https://github.com/niway-dev/kaipu-record/pull/359) |
+| 04 Sidecar write serialization    | LIB-B1, LIB-B8, LIB-B10, SHOT-B3                                              | [#367](https://github.com/niway-dev/kaipu-record/pull/367) |
+| 05 Screenshot editor save races   | SHOT-B1, SHOT-B4, SHOT-B8, SHOT-B9 (SHOT-B2 dropped: premise no longer holds) | [#360](https://github.com/niway-dev/kaipu-record/pull/360) |
+| 07 Tags registry integrity        | LIB-A4, LIB-B7, LIB-B6                                                        | [#358](https://github.com/niway-dev/kaipu-record/pull/358) |
+| 19 Trim drag                      | VID-B1, VID-B2, VID-B7, VID-B8                                                | [#368](https://github.com/niway-dev/kaipu-record/pull/368) |
+| 28 Video thumbnails by range      | VID-A3                                                                        | [#369](https://github.com/niway-dev/kaipu-record/pull/369) |
+| 29 Export canvas pool             | VID-A5                                                                        | [#371](https://github.com/niway-dev/kaipu-record/pull/371) |
+| 31 Screenshot composite once      | SHOT-A1                                                                       | [#372](https://github.com/niway-dev/kaipu-record/pull/372) |
+| 32 PDF export off the main thread | SHOT-A2                                                                       | [#373](https://github.com/niway-dev/kaipu-record/pull/373) |
+| 35 Annotation layer memo          | SHOT-A10, SHOT-B5                                                             | [#370](https://github.com/niway-dev/kaipu-record/pull/370) |
+| 36 Screenshot toast window        | SHOT-B7                                                                       | [#374](https://github.com/niway-dev/kaipu-record/pull/374) |
 
 ## Coverage check
 
-68 distinct findings, 36 plans, every finding listed exactly once above. Merged pairs from the
+68 distinct findings, 36 plans, every finding listed exactly once above (open plans plus the Shipped table). Merged pairs from the
 report (REC-A1≈B2, REC-A2≈B4, REC-A4≈B7, SHOT-A5≈VID-A7, SHOT-A8≈B6, SHOT-B3≈LIB-B10, LIB-A4≈B7,
 LIB-A7≈B9, LIB-A9≈B13, VID-A1≈B3, VID-A2≈B6) land in the same plan.
