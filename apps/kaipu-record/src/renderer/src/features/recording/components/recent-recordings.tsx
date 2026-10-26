@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLocale, useTranslations } from "@kaipu/i18n";
 import { formatDuration } from "@renderer/features/library/format";
+import { RecordingCaptureTag } from "@renderer/features/library/components/recording-capture-tag";
 import type { LocalRecording } from "@shared/types/library-storage";
 // The same strip as the Screenshots page's Recent, so both pages read alike.
 import styles from "@renderer/features/screenshots/recent-screenshots.module.css";
@@ -36,8 +37,9 @@ export function useRecentRecordings(limit = 4): LocalRecording[] {
 
 /**
  * "Recent" under the Record card: the last four recordings with their duration, title and
- * "Today 3:02 PM · MP4". Hidden when there are none. The design's mode tag per thumbnail
- * ("FRAME · 16:9") is not drawn: recordings do not store the mode they were made with.
+ * "Today 3:02 PM · MP4", plus the capture tag ("FRAME · 16:9", "SCREEN", "WINDOW") on the
+ * thumbnail. Hidden when there are none. Recordings made before capture metadata existed
+ * have no tag.
  */
 export function RecentRecordings(): React.JSX.Element | null {
   const navigate = useNavigate();
@@ -72,6 +74,7 @@ export function RecentRecordings(): React.JSX.Element | null {
           >
             <div className={`${styles.poster} ${own.poster}`}>
               {item.thumbnailUrl && <img src={item.thumbnailUrl} alt={item.title} />}
+              <RecordingCaptureTag capture={item.capture} className={own.capture} />
               {item.durationSeconds > 0 && (
                 <span className={own.duration}>{formatDuration(item.durationSeconds)}</span>
               )}

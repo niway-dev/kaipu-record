@@ -1,4 +1,4 @@
-/* The duration badge on a recent recording's thumbnail (bottom-right, as the design shows). */
+/* The capture tag (top-left) and the duration badge on a recent recording's thumbnail (bottom-right, as the design shows). */
 .poster {
   position: relative;
 }
@@ -13,4 +13,10 @@
   color: #fff;
   background: rgba(0, 0, 0, 0.6);
   border-radius: 3px;
+}
+
+.capture {
+  position: absolute;
+  top: 6px;
+  left: 6px;
 }

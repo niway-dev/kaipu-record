@@ -169,6 +169,12 @@ describe("RecordPage idle layout (design Kaipu Record Modes)", () => {
       kind: "recording" as const,
       derivedFromAssetId: null,
       contentSha256: null,
+      capture:
+        n === 5
+          ? { mode: "area" as const, width: 1280, height: 720, ratio: "16:9" as const }
+          : n === 4
+            ? { mode: "screen" as const, width: 1920, height: 1080, ratio: null }
+            : null,
     });
     window.electronAPI = {
       ...realApi,
@@ -183,6 +189,9 @@ describe("RecordPage idle layout (design Kaipu Record Modes)", () => {
       "Take 2",
     ]);
     expect(screen.getByText("1:05")).toBeInTheDocument();
+    // The capture tag from the library labels each take that has capture metadata.
+    expect(screen.getByText("FRAME · 16:9")).toBeInTheDocument();
+    expect(screen.getByText("SCREEN")).toBeInTheDocument();
   });
 
   it("keeps the recording layout while a take runs", () => {
