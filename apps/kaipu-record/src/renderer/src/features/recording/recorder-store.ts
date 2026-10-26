@@ -1,5 +1,5 @@
 import type { LocalRecording, RecordingSettings } from "@shared/types";
-import type { RecordingArea } from "@shared/types/ipc";
+import type { RecorderPhaseReport, RecordingArea } from "@shared/types/ipc";
 import {
   beginCursorTrackSession,
   type CursorTrackSession,
@@ -88,8 +88,35 @@ function emit(): void {
 }
 
 function update(patch: Partial<RecorderSnapshot>): void {
+  const previous = snapshot;
   snapshot = { ...snapshot, ...patch };
+  reportPhase(previous, snapshot);
   emit();
+}
+
+/**
+ * Tell main where a pending start is (countdown tick, acquiring, abandoned), so it can draw
+ * the countdown over the region the user chose while this window stays hidden. Only the
+ * pending phases are reported; the take itself is announced by `recordingStart`.
+ */
+function reportPhase(previous: RecorderSnapshot, next: RecorderSnapshot): void {
+  if (previous.status === next.status && previous.countdown === next.countdown) return;
+  const pending = previous.status === "counting" || previous.status === "starting";
+  const report: RecorderPhaseReport | null =
+    next.status === "counting" && next.countdown !== null
+      ? { phase: "counting", value: next.countdown }
+      : next.status === "starting"
+        ? { phase: "starting" }
+        : next.status === "idle" && pending
+          ? { phase: "idle" }
+          : null;
+  if (!report) return;
+  try {
+    window.electronAPI.reportRecorderPhase(report);
+  } catch (error) {
+    // The countdown on the region is a convenience; the take must not depend on it.
+    console.error("recorder phase report failed", error);
+  }
 }
 
 export function subscribeRecorder(listener: () => void): () => void {

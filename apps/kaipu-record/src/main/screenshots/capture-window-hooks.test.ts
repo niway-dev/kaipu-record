@@ -86,6 +86,15 @@ describe("createCaptureWindowHooks", () => {
     expect(deps.restoreCameraBubble).toHaveBeenCalledOnce();
   });
 
+  it("keeps a visible window hidden when the overlay started a recording", () => {
+    const { hooks, deps, window } = setup();
+    hooks.beforeCapture();
+    hooks.afterCapture("recording");
+    expect(deps.showMainWindow).not.toHaveBeenCalled();
+    expect(window.showInactive).not.toHaveBeenCalled();
+    expect(deps.restoreCameraBubble).toHaveBeenCalledOnce();
+  });
+
   it("reveal brings the app to the front", () => {
     const { hooks, deps } = setup();
     hooks.reveal();

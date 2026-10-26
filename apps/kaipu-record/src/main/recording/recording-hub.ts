@@ -3,6 +3,7 @@ import {
   BrowserWindow,
   desktopCapturer,
   dialog,
+  globalShortcut,
   ipcMain,
   screen,
   systemPreferences,
@@ -14,6 +15,7 @@ import { IPC_CHANNELS } from "@shared/types";
 import { FINALIZE_ELSEWHERE_MARKER, FINALIZE_KEPT_MARKER } from "@shared/types/ipc";
 import type {
   ControlCommand,
+  RecorderPhaseReport,
   RecordingActivity,
   RecordingArea,
   RecordingFinalizeMeta,
@@ -77,12 +79,32 @@ export interface RecordingHubHandle {
    */
   selectArea(displayId: number, rect: CaptureRect | null): Promise<boolean>;
   /**
+   * The next start's countdown is drawn on this region of this display (design "Kaipu Record
+   * Modes"): the overlay just chose it, and the main window stays hidden. `rect` is display-
+   * relative DIP, `null` for the whole display. Forgotten after `COUNTDOWN_REGION_TTL_MS`
+   * when no countdown follows, so a later unrelated start never draws on a stale region.
+   */
+  prepareRegionCountdown(displayId: number, rect: CaptureRect | null): void;
+  /**
    * Best-effort recovery when the recorder renderer is gone (crash, or the
    * main window destroyed) mid-recording: resets activity, hides the bar, and
    * restores the Dock policy without waiting on IPC that will never arrive
    * from a dead renderer. No-ops while idle.
    */
   forceReset(): void;
+}
+
+/** How long a region waits for its countdown before it is forgotten. */
+export const COUNTDOWN_REGION_TTL_MS = 5000;
+
+/** A renderer report, made safe: anything malformed is ignored. */
+function parsePhaseReport(value: unknown): RecorderPhaseReport | null {
+  if (!value || typeof value !== "object") return null;
+  const { phase, value: tick } = value as Record<string, unknown>;
+  if (phase === "counting") {
+    return typeof tick === "number" && Number.isFinite(tick) ? { phase, value: tick } : null;
+  }
+  return phase === "starting" || phase === "idle" ? { phase } : null;
 }
 
 /**
@@ -355,8 +377,58 @@ export function registerRecordingHub(
   // Set while the camera bubble is held inside a recorded area; only then does stop move it back.
   let bubbleAnchoredToArea = false;
   let cameraBubbleHiddenForCapture = false;
+  const raiseFloating = (): void => {
+    bar.raise();
+    cameraBubble.raise();
+  };
+
+  // ── Countdown on the chosen region ─────────────────────────────────
+  // The overlay chose a region and started: the countdown is drawn on it by the shade
+  // (dim outside, the number inside) while the main window stays hidden. Esc cancels
+  // through a global shortcut held only for the countdown, since nothing of ours has focus.
+  let countdownRegion: { display: Electron.Display; rect: CaptureRect | null } | null = null;
+  let countdownRegionTimer: ReturnType<typeof setTimeout> | null = null;
+  let escapeHeld = false;
+  const releaseEscape = (): void => {
+    if (!escapeHeld) return;
+    escapeHeld = false;
+    globalShortcut.unregister("Escape");
+  };
+  const holdEscape = (): void => {
+    if (escapeHeld) return;
+    escapeHeld = globalShortcut.register("Escape", () => {
+      getMainWindow()?.webContents.send(IPC_CHANNELS.recordingCommand, "stop");
+    });
+  };
+  const clearCountdownRegion = (): void => {
+    if (countdownRegionTimer) clearTimeout(countdownRegionTimer);
+    countdownRegionTimer = null;
+    countdownRegion = null;
+    releaseEscape();
+  };
+  ipcMain.on(IPC_CHANNELS.recordingRecorderPhase, (_e, raw: unknown) => {
+    const report = parsePhaseReport(raw);
+    if (!report || !countdownRegion || activity.active) return;
+    const { display, rect } = countdownRegion;
+    if (report.phase === "counting") {
+      // The region is in use now: it no longer expires.
+      if (countdownRegionTimer) clearTimeout(countdownRegionTimer);
+      countdownRegionTimer = null;
+      shade.show(display, rect, raiseFloating, { phase: "countdown", value: report.value });
+      holdEscape();
+    } else if (report.phase === "starting") {
+      shade.update({ phase: "countdown", value: null });
+    } else {
+      // Cancelled (Esc, Stop) or failed before the take: nothing is marked any more.
+      clearCountdownRegion();
+      shade.hide();
+    }
+  });
+
   ipcMain.on(IPC_CHANNELS.recordingStart, (_e, info: RecordingStartInfo) => {
     activity = startedActivity();
+    // The countdown is over: Esc belongs to the apps again.
+    clearCountdownRegion();
     try {
       captureMainEvent(
         RECORDING_STARTED_EVENT,
@@ -376,12 +448,7 @@ export function registerRecordingHub(
     // it isn't lost while only the floating panels are visible. Restored on stop.
     forceRegularPolicy();
     broadcastActivity();
-    // Place the bar on the screen being recorded (resolved from the source id).
-    const includeInRecording = getAppSettings().showBarInRecording;
-    void displayIdForSource(info.sourceId).then((displayId) =>
-      bar.show(displayId, { includeInRecording }),
-    );
-    // An area (ADR 0030): dim the rest of its display and keep the camera bubble, which is
+    // An area (ADR 0030): mark it on its display and keep the camera bubble, which is
     // recorded as part of the screen, inside the area. The shade sits under the bar and
     // the bubble; raising them once it shows covers Windows, which ignores window levels.
     // Main's own area, and only for the source it was chosen with: a window cannot set one
@@ -392,12 +459,20 @@ export function registerRecordingHub(
       ? screen.getAllDisplays().find((display) => display.id === chosen.displayId)
       : undefined;
     const area = areaDisplay ? sanitizeArea(chosen, areaDisplay) : null;
-    if (area && areaDisplay) {
-      shade.show(areaDisplay, area.rect, () => {
-        bar.raise();
-        cameraBubble.raise();
-      });
-      cameraBubble.anchorTo(areaToGlobal(area, areaDisplay.bounds));
+    const areaGlobal = area && areaDisplay ? areaToGlobal(area, areaDisplay.bounds) : null;
+    // Place the bar on the screen being recorded (resolved from the source id), outside the
+    // area when only part of it is recorded (design "Kaipu Record Modes").
+    const includeInRecording = getAppSettings().showBarInRecording;
+    void displayIdForSource(info.sourceId).then((displayId) => {
+      bar.show(displayId, { includeInRecording, anchor: areaGlobal });
+      // A whole display gets the pink border around its edges; a window, nothing (it moves).
+      if (area || displayId === undefined || !activity.active) return;
+      const display = screen.getAllDisplays().find((d) => String(d.id) === displayId);
+      if (display) shade.show(display, null, raiseFloating);
+    });
+    if (area && areaDisplay && areaGlobal) {
+      shade.show(areaDisplay, area.rect, raiseFloating);
+      cameraBubble.anchorTo(areaGlobal);
       bubbleAnchoredToArea = true;
     }
   });
@@ -449,6 +524,16 @@ export function registerRecordingHub(
       cameraBubbleHiddenForCapture = false;
       if (settings.isCameraEnabled) cameraBubble.show();
     },
+    prepareRegionCountdown: (displayId, rect) => {
+      clearCountdownRegion();
+      if (activity.active) return;
+      const display = screen.getAllDisplays().find((candidate) => candidate.id === displayId);
+      if (!display) return;
+      const area = rect ? sanitizeArea({ displayId, rect }, display) : null;
+      if (rect && !area) return;
+      countdownRegion = { display, rect: area ? area.rect : null };
+      countdownRegionTimer = setTimeout(clearCountdownRegion, COUNTDOWN_REGION_TTL_MS);
+    },
     selectArea: async (displayId, rect) => {
       // The source is locked for the length of a take.
       if (activity.active) return false;
@@ -476,6 +561,7 @@ export function registerRecordingHub(
       clickSessions.clear();
       clickHook.stop();
       // A shade must never outlive the renderer that would have stopped it.
+      clearCountdownRegion();
       shade.hide();
       if (!activity.active) return;
       applyStopWindowState();

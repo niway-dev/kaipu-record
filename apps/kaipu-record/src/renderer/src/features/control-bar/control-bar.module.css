@@ -94,6 +94,19 @@
   background: var(--border);
 }
 
+/* What is recorded: "16:9", "FRAME", "WINDOW" or "SCREEN", in mono caps. */
+.modeChip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--text-secondary, #a1a1aa);
+}
+
 /* Pause/resume — a squarer button with the icon centred and roomy padding. */
 .control {
   display: flex;

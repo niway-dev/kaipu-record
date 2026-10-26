@@ -1,9 +1,10 @@
 import React from "react";
-import { Loader2, Pause, Play, Square } from "lucide-react";
+import { AppWindow, Frame, Loader2, Monitor, Pause, Play, Square } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { formatElapsed } from "@renderer/features/recording/elapsed";
 import { cx } from "@renderer/ui/cx";
 import type { RecordingTick } from "@shared/types/ipc";
+import type { CaptureMode } from "@shared/types/screenshot-capture";
 import styles from "./control-bar.module.css";
 
 interface ControlBarProps {
@@ -13,7 +14,11 @@ interface ControlBarProps {
   onStop(): void;
   /** The real (rebindable) Stop shortcut label, e.g. "⌃⌘S". */
   stopShortcut?: string;
+  /** What is recorded: the mode and, for an area drawn with one, its ratio ("16:9"). */
+  modeChip?: { mode: CaptureMode; ratio: string | null };
 }
+
+const MODE_ICON = { frame: Frame, window: AppWindow, screen: Monitor } as const;
 
 /** Floating recording HUD: dot · timer · separator · live mic level · pause/resume · stop · shortcut. */
 export function ControlBar({
@@ -22,8 +27,10 @@ export function ControlBar({
   onResume,
   onStop,
   stopShortcut,
+  modeChip,
 }: ControlBarProps): React.JSX.Element {
   const t = useTranslations("panel");
+  const tModes = useTranslations("screenshots");
   if (tick.status === "saving") {
     return (
       <div className={styles.bar}>
@@ -47,6 +54,8 @@ export function ControlBar({
         </>
       )}
 
+      {modeChip && <ModeChip chip={modeChip} label={modeName(modeChip.mode, tModes)} />}
+
       {paused ? (
         <button
           className={styles.control}
@@ -67,6 +76,27 @@ export function ControlBar({
 
       {!paused && stopShortcut && <kbd className={styles.shortcut}>{stopShortcut}</kbd>}
     </div>
+  );
+}
+
+function modeName(mode: CaptureMode, t: ReturnType<typeof useTranslations<"screenshots">>): string {
+  return mode === "frame" ? t("modeFrame") : mode === "window" ? t("modeWindow") : t("modeScreen");
+}
+
+/** The mono mode chip: "16:9" for an area with a ratio, else the mode's name. */
+function ModeChip({
+  chip,
+  label,
+}: {
+  chip: { mode: CaptureMode; ratio: string | null };
+  label: string;
+}): React.JSX.Element {
+  const Icon = MODE_ICON[chip.mode];
+  return (
+    <span className={styles.modeChip} data-testid="control-bar-mode">
+      <Icon size={12} aria-hidden />
+      {chip.ratio ?? label}
+    </span>
   );
 }
 

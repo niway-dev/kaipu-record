@@ -34,6 +34,8 @@ export interface CaptureWindowHooksDeps {
  * - `cancelled`: a window that was up comes back, focused, as before the capture.
  * - `quiet` (failure 7): a window that was up comes back WITHOUT focus (`showInactive`),
  *   so the app the user was in keeps the foreground and ⌘V pastes there.
+ * - `recording`: the overlay started a take; the window stays hidden (the countdown is drawn
+ *   on the chosen region) and comes back when the take stops, like any recording.
  *
  * A window that was hidden stays hidden on every path.
  */

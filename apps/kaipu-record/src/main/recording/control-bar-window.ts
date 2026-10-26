@@ -1,10 +1,12 @@
 import { BrowserWindow, screen } from "electron";
 import { join } from "path";
 import { is } from "@electron-toolkit/utils";
+import type { Rect } from "./area-geometry";
+import { controlBarBounds } from "./control-bar-placement";
 
-const BAR_WIDTH = 430;
+// 480 since the bar carries the recording's mode chip ("16:9", "SCREEN").
+const BAR_WIDTH = 480;
 const BAR_HEIGHT = 82;
-const BOTTOM_MARGIN = 40;
 
 /**
  * The floating, always-on-top control bar. A frameless, transparent window that
@@ -22,6 +24,11 @@ const BOTTOM_MARGIN = 40;
 export interface ControlBarOptions {
   /** Include the bar in the screen recording (default false → content-protected). */
   includeInRecording?: boolean;
+  /**
+   * The recorded rectangle in global DIP (an area), so the bar sits outside it; `null` or
+   * absent for a whole display (bottom centre, as before). See `controlBarBounds`.
+   */
+  anchor?: Rect | null;
 }
 
 export class ControlBarWindow {
@@ -30,9 +37,12 @@ export class ControlBarWindow {
   private displayId: string | undefined;
   /** Whether the bar is left capturable (mirrors `AppSettings.showBarInRecording`). */
   private includeInRecording = false;
+  /** The recorded area to keep clear of, when only part of the display is recorded. */
+  private anchor: Rect | null = null;
 
   show(displayId?: string, options?: ControlBarOptions): void {
     this.displayId = displayId;
+    this.anchor = options?.anchor ?? null;
     if (options?.includeInRecording !== undefined) {
       this.includeInRecording = options.includeInRecording;
     }
@@ -128,12 +138,8 @@ export class ControlBarWindow {
         ? screen.getAllDisplays().find((d) => String(d.id) === this.displayId)
         : undefined;
     const display = recorded ?? screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-    const { x, y, width, height } = display.workArea;
-    this.window.setBounds({
-      x: Math.round(x + (width - BAR_WIDTH) / 2),
-      y: Math.round(y + height - BAR_HEIGHT - BOTTOM_MARGIN),
-      width: BAR_WIDTH,
-      height: BAR_HEIGHT,
-    });
+    this.window.setBounds(
+      controlBarBounds(display.workArea, { width: BAR_WIDTH, height: BAR_HEIGHT }, this.anchor),
+    );
   }
 }
