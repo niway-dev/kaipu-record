@@ -288,8 +288,6 @@
     "frameCaption": "{ratio} · {width} × {height}",
     "ratioFree": "Libre",
     "lastUsedNote": "Último usado: {mode}. Cámbialo dentro del selector.",
-    "recent": "Recientes",
-    "recentMeta": "{date} · MP4",
     "shadeRecTag": "REC · EL BORDE NO SE GRABA",
     "shadeCountdownHint": "La grabación empieza… presiona Esc para cancelar"
   },

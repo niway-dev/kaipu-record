@@ -81,8 +81,8 @@ stores, next to `durationSeconds`:
 is the chip the Frame box was locked to (`RecordingArea.ratio`: the overlay's record answer
 carries it and main keeps it on the area) or, for an area without one, inferred from the output
 size with a 1% tolerance; it is `null` for screen and window. It is local only: it never leaves
-the device and the cloud catalog does not carry it. The Record page's "Recent" grid and the
-library show it with the same tag. See
+the device and the cloud catalog does not carry it. The library shows it as a tag on each
+card. See
 [Recording capture metadata](/backlog/recording-capture-metadata/).
 
 _Implementation note (decision 12, analytics)._ `recording_started` carries `mode`, `platform`
@@ -180,9 +180,9 @@ What changed against the decisions above:
   in device pixels), and the existing Mic / Audio / Camera toggles (`RecordingToggles`, the one
   component that renders the camera toggle). No selection card. **Window** opens the thumbnail
   picker on the Record page and a pick starts the countdown. `AppSettings.recordingMode`
-  (`frame` | `window` | `screen`, default `screen`) is now stored. The page lists the four newest
-  recordings under "Recent", each with its capture tag ("FRAME · 16:9", "SCREEN", "WINDOW") from
-  the decision 12 metadata; recordings made before it have none. The Camera toggle in both
+  (`frame` | `window` | `screen`, default `screen`) is now stored. The page lists no recent
+  recordings: the owner dropped that row because the page is already full (the Screenshots page
+  keeps its Recent row). The Camera toggle in both
   layouts is #380's split tile: a popover on the page, an inline drawer in the tray panel.
 - _Decision 9 (shortcuts)._ `startRecording` now opens the selector in the last used mode, as the
   button does, instead of starting the current target at once.

@@ -288,8 +288,6 @@
     "frameCaption": "{ratio} · {width} × {height}",
     "ratioFree": "Free",
     "lastUsedNote": "Last used: {mode}. Switch inside the selector.",
-    "recent": "Recent",
-    "recentMeta": "{date} · MP4",
     "shadeRecTag": "REC · BORDER NOT RECORDED",
     "shadeCountdownHint": "Recording starts… press Esc to cancel"
   },

@@ -12,7 +12,6 @@ import { SourceCard } from "@renderer/features/recording/components/source-card"
 import { RecordingToggles } from "@renderer/features/recording/components/recording-toggles";
 import { MicPicker } from "@renderer/features/recording/components/mic-picker";
 import { RecordModeButtons } from "@renderer/features/recording/components/record-mode-buttons";
-import { RecentRecordings } from "@renderer/features/recording/components/recent-recordings";
 import { RecordingIndicator } from "@renderer/features/recording/components/recording-indicator";
 import { CountdownOverlay } from "@renderer/features/recording/components/countdown-overlay";
 import { ScreenSourceSelector } from "@renderer/features/recording/components/screen-source-selector";
@@ -220,7 +219,6 @@ export function RecordPage(): React.JSX.Element {
           </div>
         </RecordModeButtons>
 
-        <RecentRecordings />
         {pickerAndCountdown}
       </div>
     );

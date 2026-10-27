@@ -5,7 +5,7 @@ description: "Every new recording stores its capture mode (screen, area, window)
 
 # Recording capture metadata
 
-> **Status: 🟢 Ready to validate** (2026-10-26). PR #382, integrated with the rest of task 5 on `feat/record-modes-integration`; the Record page's Recent grid uses the same tag;
+> **Status: 🟢 Ready to validate** (2026-10-26). PR #382, integrated with the rest of task 5 on `feat/record-modes-integration`;
 > owner QA on a real recording pending. Follow-up of
 > [Record capture modes](./record-capture-modes) ·
 > [design, decision 12](/specs/2026-10-26-record-capture-modes-design/) · ADR
@@ -33,7 +33,7 @@ description: "Every new recording stores its capture mode (screen, area, window)
   label in the detail page's metadata line: `FRAME · 16:9`, `FRAME · 1280 × 720` (free ratio),
   `SCREEN`, `WINDOW`.
 - `RecordingCaptureTag` and `useRecordingCaptureLabel` in
-  `features/library/components/recording-capture-tag.tsx`, for the Record page's "Recent" grid.
+  `features/library/components/recording-capture-tag.tsx`, used by the library cards.
 
 ## How it works
 
