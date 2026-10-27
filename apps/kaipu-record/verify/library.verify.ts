@@ -8,7 +8,8 @@ test("library: seeded recording lists and opens its detail page", async () => {
   try {
     await dismissOnboarding(s.page);
     await s.page.evaluate(() => (location.hash = "#/library"));
-    await s.page.waitForTimeout(1000);
+    // The seeded recording's card, not a fixed sleep: the shot must show the list loaded.
+    await expect(s.page.getByText("E2E Sample", { exact: true }).first()).toBeVisible();
     await s.shot("library-list");
     await s.page.evaluate((id) => (location.hash = `#/library/${id}`), RECORDING_ASSET_ID);
     await expect(s.page.getByRole("button", { name: "Edit video" })).toBeVisible();
