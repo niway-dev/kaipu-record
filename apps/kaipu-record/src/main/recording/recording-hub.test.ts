@@ -473,6 +473,51 @@ describe("recording hub — a Dock dropped by a floating panel comes back", () =
     expect(revealAgain).not.toHaveBeenCalled();
   });
 
+  it("a cancelled countdown brings the app back as a stop does: Dock re-asserted, app activated", async () => {
+    const electron = await import("electron");
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    const hub = registerRecordingHub(() => fakeMainWindow() as never);
+    mockState.displays = [{ id: 1, bounds: { x: 0, y: 0, width: 1512, height: 982 } }];
+    const phase = mockState.ipcOn.get(IPC_CHANNELS.recordingRecorderPhase)!;
+    const reveal = vi.fn();
+    vi.mocked(electron.app.focus).mockClear();
+    mockState.dockShow.mockClear();
+
+    hub.prepareRegionCountdown(1, null, reveal);
+    phase({}, { phase: "counting", value: 3 });
+    // The user clicked into another app during 3-2-1 (the shade is click-through), and the
+    // hidden window dropped the app from the Dock.
+    mockState.dockVisible = false;
+    phase({}, { phase: "idle" });
+
+    expect(reveal).toHaveBeenCalledTimes(1);
+    // Showing the window alone leaves it unfocused behind the other app.
+    expect(electron.app.focus).toHaveBeenCalledWith({ steal: true });
+    expect(mockState.dockShow).toHaveBeenCalledTimes(1);
+    expect(mockState.dockVisible).toBe(true);
+  });
+
+  it("a stop that lands before the source lookup resolves never brings the bar up", async () => {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    registerRecordingHub(() => fakeMainWindow() as never);
+    mockState.displays = [{ id: 1, bounds: { x: 0, y: 0, width: 1512, height: 982 } }];
+    let resolve!: (sources: Array<{ id: string; name: string; display_id: string }>) => void;
+    mockState.getSources.mockImplementationOnce(() => new Promise((r) => (resolve = r)));
+    const start = mockState.ipcOn.get(IPC_CHANNELS.recordingStart)!;
+    const stop = mockState.ipcOn.get(IPC_CHANNELS.recordingStop)!;
+
+    start({}, { sourceId: "screen:1:0", sourceName: "S" });
+    stop({});
+    resolve([{ id: "screen:1:0", name: "S", display_id: "1" }]);
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(mockState.bar.show).not.toHaveBeenCalled();
+  });
+
   it("starts the region's TTL only once a recreated main window has loaded", async () => {
     vi.useFakeTimers();
     try {

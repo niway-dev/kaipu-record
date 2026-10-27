@@ -242,7 +242,7 @@ describe("recorder-store", () => {
     expect(startEngineMock).not.toHaveBeenCalled();
   });
 
-  it("cancelling during the 'starting' gap (engine acquiring) aborts once the engine resolves", async () => {
+  it("cancelling during the 'starting' gap restores the app at once and stops the engine when it resolves", async () => {
     let resolveEngine!: (handle: EngineHandle) => void;
     const engine = fakeEngine();
     startEngineMock.mockImplementation(() => new Promise((resolve) => (resolveEngine = resolve)));
@@ -252,13 +252,68 @@ describe("recorder-store", () => {
     expect(store.getRecorderSnapshot().status).toBe("starting");
 
     store.stopOrCancelRecording(); // arrives during the acquire gap — no engine yet
+    // Not deferred to the engine: the window comes back and the store is idle right away.
+    expect(store.getRecorderSnapshot()).toEqual({ status: "idle", countdown: null });
+    expect(window.electronAPI.recordingStop).toHaveBeenCalledOnce();
+
     resolveEngine(engine);
     await vi.advanceTimersByTimeAsync(0);
-    await Promise.resolve();
-    await Promise.resolve();
 
     expect(engine.stop).toHaveBeenCalledOnce();
     expect(window.electronAPI.recordingAbort).toHaveBeenCalledOnce();
+    expect(store.getRecorderSnapshot()).toEqual({ status: "idle", countdown: null });
+    expect(window.electronAPI.recordingStop).toHaveBeenCalledOnce();
+  });
+
+  it("a cancel during 'starting' works even when the engine never settles", async () => {
+    startEngineMock.mockImplementation(() => new Promise<EngineHandle>(() => {}));
+
+    store.requestStartRecording(() => input);
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(store.getRecorderSnapshot().status).toBe("starting");
+
+    commands[0]("stop"); // the bar's Stop, the tray, the stop shortcut
+    expect(store.getRecorderSnapshot()).toEqual({ status: "idle", countdown: null });
+    expect(window.electronAPI.recordingStop).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(window.electronAPI.recordingAbort).toHaveBeenCalledWith(
+      expect.stringMatching(/^session-/),
+    );
+
+    // Nothing is left blocking: a new start is accepted, and the hung one never reports.
+    store.requestStartRecording(() => input);
+    expect(store.getRecorderSnapshot().status).toBe("counting");
+    store.stopOrCancelRecording();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(reportErrorMock).not.toHaveBeenCalled();
+    expect(store.getRecorderSnapshot()).toEqual({ status: "idle", countdown: null });
+  });
+
+  it("fails a start that hangs, restores the app, and releases an engine that resolves late", async () => {
+    let resolveEngine!: (handle: EngineHandle) => void;
+    const late = fakeEngine();
+    let lateChunk: ((data: ArrayBuffer, position: number) => void) | null = null;
+    startEngineMock.mockImplementation((options) => {
+      // Keep the chunk sink to check it is cut off for the discarded take.
+      lateChunk = options.onChunk;
+      return new Promise((resolve) => (resolveEngine = resolve));
+    });
+
+    store.requestStartRecording(() => input);
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(store.getRecorderSnapshot().status).toBe("starting");
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(store.getRecorderSnapshot()).toEqual({ status: "idle", countdown: null });
+    expect(reportErrorMock).toHaveBeenCalledOnce();
+    expect(window.electronAPI.recordingStop).toHaveBeenCalledOnce();
+    expect(window.electronAPI.recordingAbort).toHaveBeenCalledOnce();
+
+    resolveEngine(late);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(late.stop).toHaveBeenCalledOnce();
+    lateChunk!(new ArrayBuffer(4), 0);
+    expect(window.electronAPI.recordingWrite).not.toHaveBeenCalled();
     expect(store.getRecorderSnapshot()).toEqual({ status: "idle", countdown: null });
   });
 
@@ -381,6 +436,22 @@ describe("recorder-store", () => {
     expect(window.electronAPI.recordingStop).toHaveBeenCalledOnce(); // undoes the hide
     // Idle (not a stuck "error" state) — the Start button is usable right away.
     expect(store.getRecorderSnapshot()).toEqual({ status: "idle", countdown: null });
+  });
+
+  it("goes back to idle, never 'starting', when the take's input cannot be resolved", async () => {
+    const reports = vi.fn();
+    window.electronAPI.reportRecorderPhase = reports;
+    store.requestStartRecording(() => {
+      throw new Error("startRecording: no source selected");
+    });
+    await vi.advanceTimersByTimeAsync(3000);
+
+    // Idle is what tells main to take the countdown down, release Esc and reveal the app.
+    expect(store.getRecorderSnapshot()).toEqual({ status: "idle", countdown: null });
+    expect(reports).toHaveBeenLastCalledWith({ phase: "idle" });
+    expect(reports).not.toHaveBeenCalledWith({ phase: "starting" });
+    expect(window.electronAPI.recordingStart).not.toHaveBeenCalled();
+    expect(reportErrorMock).toHaveBeenCalledOnce();
   });
 
   it("ignores a second start request while one is already in progress", async () => {

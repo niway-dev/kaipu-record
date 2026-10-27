@@ -6,6 +6,7 @@ import {
   type WatermarkConfig,
   type WatermarkVariant,
 } from "@renderer/features/watermark/watermark";
+import { playWithin } from "./frame-size";
 
 const ASSET_URL: Record<WatermarkVariant, string> = {
   wordmark: wordmarkUrl,
@@ -54,7 +55,13 @@ export async function startRecordingCompositor(
   const video = document.createElement("video");
   video.srcObject = new MediaStream([screenTrack]);
   video.muted = true;
-  await video.play();
+  try {
+    // Capped: a track with no frame fails the start instead of hanging it.
+    await playWithin(video);
+  } catch (error) {
+    video.srcObject = null;
+    throw error;
+  }
 
   const canvas = document.createElement("canvas");
   canvas.width = target.width;

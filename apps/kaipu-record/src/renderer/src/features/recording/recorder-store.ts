@@ -54,6 +54,12 @@ const COUNTDOWN_SECONDS = 3;
  * loading on the chosen region). Past it the countdown runs anyway: a take never depends on it.
  */
 const COUNTDOWN_VISIBLE_TIMEOUT_MS = 1500;
+/**
+ * How long a take may spend acquiring (session file, screen, mic, encoder) before the start
+ * is called failed. Each step is a browser or IPC promise that can hang, and the main window
+ * is already hidden: past this the start fails the usual way (toast, window restored).
+ */
+const START_TIMEOUT_MS = 10_000;
 /** Minimum time the bar shows "Saving…" so it never just flashes on short clips. */
 const MIN_SAVING_MS = 600;
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -81,10 +87,18 @@ let countdownTimer: ReturnType<typeof setInterval> | null = null;
 /** Bumped by every start request, so a countdown cancelled while waiting to be visible stays cancelled. */
 let countdownRequest = 0;
 let stopping = false;
-/** Set when cancel arrives during the brief "starting" gap (streams acquiring,
- *  no engine handle yet) — consumed as soon as `startEngine` resolves so a
- *  cancel is never silently swallowed. */
-let cancelRequested = false;
+/**
+ * The take being started (from `recordingStart` until it records). A cancel or a timeout
+ * drops it without waiting for it — the start may never settle — and whatever it acquires
+ * later is released by `discardStart`. `beginEngine` checks it after its await: a start that
+ * is no longer this one was cancelled and must not become a take.
+ */
+interface PendingStart {
+  id: string;
+  created: Promise<unknown>;
+  engine: Promise<EngineHandle> | null;
+}
+let pendingStart: PendingStart | null = null;
 let sessionCounter = 0;
 let lastResolveInput: (() => StartInput) | null = null;
 /** Unsubscribes the live-settings forwarder of the active take. */
@@ -190,8 +204,19 @@ function runCountdown(resolveInput: () => StartInput): void {
     remaining -= 1;
     if (remaining <= 0) {
       clearCountdownTimer();
+      // Resolved while still "counting": a throw (no source selected) then goes back to idle,
+      // which main reads as an abandoned countdown — the shade comes down, Esc is released
+      // and the hidden app returns. Thrown after "starting", it left all of that stranded.
+      let input: StartInput;
+      try {
+        input = resolveInput();
+      } catch (error) {
+        reportError(runtimeT()("record.errorStart"), error, { context: { phase: "start" } });
+        update({ status: "idle", countdown: null });
+        return;
+      }
       update({ status: "starting", countdown: null });
-      void beginEngine(resolveInput());
+      void beginEngine(input);
     } else {
       update({ countdown: remaining });
     }
@@ -202,8 +227,8 @@ function runCountdown(resolveInput: () => StartInput): void {
  * Cancel a pending start, or stop an active one — a single entry point so
  * every caller (the on-page Stop button, the bar's Stop, the global stop
  * shortcut) gets correct behaviour no matter which phase the recorder is in.
- * During the countdown this is instant; during "starting" it's consumed right
- * after the engine handle resolves; once recording/paused, it finalizes.
+ * During the countdown and during "starting" it is instant (the app comes back at once,
+ * whatever the acquisition is still waiting on); once recording/paused, it finalizes.
  */
 export function stopOrCancelRecording(): void {
   if (snapshot.status === "counting") {
@@ -212,7 +237,12 @@ export function stopOrCancelRecording(): void {
     return;
   }
   if (snapshot.status === "starting") {
-    cancelRequested = true;
+    const start = pendingStart;
+    pendingStart = null;
+    if (start) discardStart(start);
+    window.electronAPI.recordingStop(); // undo the early hide
+    sessionId = null;
+    update({ status: "idle", countdown: null });
     return;
   }
   void stopRecording();
@@ -229,21 +259,16 @@ async function beginEngine(input: StartInput): Promise<void> {
     sourceName: input.sourceName,
     area: input.area ?? null,
   });
+  const start: PendingStart = {
+    id,
+    created: window.electronAPI.recordingCreate(id),
+    engine: null,
+  };
+  pendingStart = start;
   try {
-    await window.electronAPI.recordingCreate(id);
-    // Best-effort, and started CONCURRENTLY with the engine: main resolves the
-    // captured display through desktopCapturer.getSources(), which costs
-    // 100–500 ms, and the recording must never wait for it. The call never
-    // throws — it resolves to a no-op session when main declines (window source,
-    // unknown display), when IPC fails, or after its own 500 ms timeout.
-    const [track, handle] = await Promise.all([
-      beginCursorTrackSession(
-        window.electronAPI,
-        id,
-        input.sourceId,
-        input.area ? { area: input.area } : {},
-      ),
-      startEngine({
+    const acquired = (async () => {
+      await start.created;
+      start.engine = startEngine({
         sourceId: input.sourceId,
         area: input.area ?? null,
         microphoneDeviceId: input.microphoneDeviceId,
@@ -253,7 +278,10 @@ async function beginEngine(input: StartInput): Promise<void> {
         frameRate: input.frameRate,
         videoBitrate: input.videoBitrate,
         watermark: input.watermark,
-        onChunk: (data, position) => window.electronAPI.recordingWrite(id, data, position),
+        // A discarded start still flushes on stop: its chunks go nowhere.
+        onChunk: (data, position) => {
+          if (sessionId === id) window.electronAPI.recordingWrite(id, data, position);
+        },
         // A failure mid-recording (encoder error or the screen capture ending)
         // runs the same robust stop — finalize-or-abort + always restore the
         // window/Dock/bar — so the app never gets stuck.
@@ -266,20 +294,36 @@ async function beginEngine(input: StartInput): Promise<void> {
           });
           void stopRecording();
         },
+      });
+      // Best-effort, and started CONCURRENTLY with the engine: main resolves the
+      // captured display through desktopCapturer.getSources(), which costs
+      // 100–500 ms, and the recording must never wait for it. The call never
+      // throws — it resolves to a no-op session when main declines (window source,
+      // unknown display), when IPC fails, or after its own 500 ms timeout.
+      return Promise.all([
+        beginCursorTrackSession(
+          window.electronAPI,
+          id,
+          input.sourceId,
+          input.area ? { area: input.area } : {},
+        ),
+        start.engine,
+      ]);
+    })();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const [track, handle] = await Promise.race([
+      acquired,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`recording start timed out after ${START_TIMEOUT_MS} ms`)),
+          START_TIMEOUT_MS,
+        );
       }),
-    ]);
+    ]).finally(() => clearTimeout(timer));
+    // Cancelled while acquiring: the cancel restored the app and released this start.
+    if (pendingStart !== start) return;
+    pendingStart = null;
     cursorTrack = track;
-
-    if (cancelRequested) {
-      cancelRequested = false;
-      await handle.stop();
-      await window.electronAPI.recordingAbort(id);
-      window.electronAPI.recordingStop(); // undo the early hide
-      cursorTrack = null;
-      sessionId = null;
-      update({ status: "idle", countdown: null });
-      return;
-    }
 
     engine = handle;
     capture = buildRecordingCapture({
@@ -306,14 +350,17 @@ async function beginEngine(input: StartInput): Promise<void> {
       });
     }, 100);
   } catch (error) {
-    cancelRequested = false;
+    // Cancelled first: the cancel already restored the app, and this is its fallout.
+    if (pendingStart !== start) return;
+    pendingStart = null;
+    // A timed-out start can still resolve later: release what it acquires.
+    discardStart(start);
     reportError(runtimeT()("record.errorStart"), error, {
       context: { sourceId: input.sourceId, phase: "start" },
       retry: () => {
         if (lastResolveInput) requestStartRecording(lastResolveInput);
       },
     });
-    if (sessionId) await window.electronAPI.recordingAbort(sessionId);
     // The window was hidden optimistically above — a start failure must never
     // leave it hidden with nothing recording.
     window.electronAPI.recordingStop();
@@ -324,6 +371,18 @@ async function beginEngine(input: StartInput): Promise<void> {
     // immediately usable again; the toast above carries the retry action.
     update({ status: "idle", countdown: null });
   }
+}
+
+/**
+ * Release a start that will not become a take, without waiting on it: the engine is stopped
+ * whenever it resolves, and the session's temp file is aborted once main has created it.
+ */
+function discardStart(start: PendingStart): void {
+  void start.engine?.then((handle) => handle.stop()).catch(() => undefined);
+  void start.created
+    .catch(() => undefined)
+    .then(() => window.electronAPI.recordingAbort(start.id))
+    .catch(() => undefined);
 }
 
 /**

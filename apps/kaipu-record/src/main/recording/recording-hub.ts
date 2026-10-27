@@ -89,7 +89,8 @@ export interface RecordingHubHandle {
    * when no countdown follows, so a later unrelated start never draws on a stale region.
    * The TTL starts once the main window has loaded (a recreated window cold-loads first).
    * `onAbandoned` runs when the start never came (TTL expired with no phase report) or ended
-   * before a take (cancelled or failed): the caller kept the app hidden and must reveal it.
+   * before a take (cancelled or failed): the caller kept the app hidden and must show its
+   * window; the hub then re-asserts the Dock and activates the app, as a stop does.
    */
   prepareRegionCountdown(
     displayId: number,
@@ -469,12 +470,24 @@ export function registerRecordingHub(
     markCountdownShown();
     countdownShown = false;
   };
+  /**
+   * Hand the app that was kept hidden for a countdown back to the user. The caller shows its
+   * window; the rest is the same restore as a stop (`applyStopWindowState`): another app may
+   * have taken focus during the click-through countdown, and a window shown without
+   * activating the app comes back unfocused, with grey traffic lights.
+   */
+  const revealAbandoned = (notify: (() => void) | null): void => {
+    if (!notify) return;
+    notify();
+    applyDockPolicy();
+    app.focus({ steal: true });
+  };
   /** The prepared start will not become a take: forget it and let the caller reveal the app. */
   const abandonCountdownRegion = (): void => {
     const notify = countdownAbandoned;
     clearCountdownRegion();
     shade.hide();
-    notify?.();
+    revealAbandoned(notify);
   };
   // Without a region the countdown is the Record page's own and is already visible. With one,
   // the shade loads a renderer before it can show "3": the recorder starts its clock after.
@@ -570,8 +583,11 @@ export function registerRecordingHub(
     // now, without waiting for the source lookup below, which can fail.
     const wholeDisplayCountdown = !area && region !== null && region.rect === null;
     void displayIdForSource(info.sourceId).then((displayId) => {
+      // Stopped (or cancelled) while the lookup ran: the always-on-top bar must not come up
+      // over a take that is already gone.
+      if (!activity.active) return;
       bar.show(displayId, { includeInRecording, anchor: areaGlobal });
-      if (area || wholeDisplayCountdown || !activity.active) return;
+      if (area || wholeDisplayCountdown) return;
       const display =
         displayId === undefined
           ? undefined
@@ -648,7 +664,7 @@ export function registerRecordingHub(
       const area = display && rect ? sanitizeArea({ displayId, rect }, display) : null;
       if (!display || (rect && !area)) {
         // Nothing to draw on, but the start may still be dropped: the app must come back.
-        onAbandoned?.();
+        revealAbandoned(onAbandoned ?? null);
         return;
       }
       const prepared = { display, rect: area ? area.rect : null };
