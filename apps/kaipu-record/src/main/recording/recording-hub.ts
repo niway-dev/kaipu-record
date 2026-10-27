@@ -586,6 +586,17 @@ export function registerRecordingHub(
     }
   });
 
+  // The countdown ended: the recorder asks this right before `recordingStart` (which hides the
+  // window too), on the same IPC pipe, so the answer is the state the take starts from. A take
+  // acquired during the countdown already captures the screen: told the window was on screen,
+  // it waits for it to leave the capture before it encodes.
+  ipcMain.handle(IPC_CHANNELS.recordingHideMainWindow, (): boolean => {
+    const mainWindow = getMainWindow();
+    if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible()) return false;
+    mainWindow.hide();
+    return true;
+  });
+
   // Bumped by every start: a display lookup still running for a take that was cancelled must
   // not show the bar or change the shade of the take that started after it.
   let takeCount = 0;

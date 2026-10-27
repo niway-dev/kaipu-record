@@ -220,6 +220,27 @@ describe("recording hub — a Dock dropped by a floating panel comes back", () =
     await rm(mockState.userDataDir, { recursive: true, force: true });
   });
 
+  it("hides the main window at the end of a countdown and says whether it was on screen", async () => {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    let visible = true;
+    const mainWindow = {
+      ...fakeMainWindow(),
+      isVisible: () => visible,
+      hide: vi.fn(() => (visible = false)),
+    };
+    registerRecordingHub(() => mainWindow as never);
+    const hideMain = mockState.ipcHandle.get(IPC_CHANNELS.recordingHideMainWindow)!;
+
+    // The Record page's countdown: the app was on screen, and the take must wait for it.
+    expect(hideMain({})).toBe(true);
+    expect(mainWindow.hide).toHaveBeenCalledOnce();
+    // A region countdown: the app was already out of sight, nothing to wait for.
+    expect(hideMain({})).toBe(false);
+    expect(mainWindow.hide).toHaveBeenCalledOnce();
+  });
+
   it("stopping a recording restores the Dock the control bar dropped", async () => {
     const { registerSettings } = await import("../infrastructure/settings-store");
     const { registerRecordingHub } = await import("./recording-hub");

@@ -154,6 +154,7 @@ window.electronAPI = {
   recordingStat: async () => 0,
   recordingReportTick: () => {},
   recordingStart: () => {},
+  recordingHideMainWindow: async () => false,
   recordingStop: () => {},
   cursorTrackStart: async () => ({ enabled: false }),
   cursorClockNow: async () => 0,

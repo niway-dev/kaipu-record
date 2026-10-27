@@ -293,6 +293,11 @@ export interface KaipuElectronAPI {
   recordingReportTick(tick: RecordingTick): void;
   /** Tell the hub recording started: hide main window, show the bar. */
   recordingStart(info: RecordingStartInfo): void;
+  /**
+   * Hide the main window, before `recordingStart`; true when it was on screen, so the
+   * recorder waits for it to leave the capture before the take encodes.
+   */
+  recordingHideMainWindow(): Promise<boolean>;
   /** Tell the hub recording ended: hide the bar, restore main window. */
   recordingStop(): void;
   /** Start sampling the pointer for this writer session. `enabled: false` = no track (window source, unknown display). */

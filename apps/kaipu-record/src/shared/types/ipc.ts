@@ -512,6 +512,10 @@ export const IPC_CHANNELS = {
   recordingStat: "recording:stat",
   recordingReportTick: "recording:report-tick",
   recordingStart: "recording:start",
+  // Main renderer → main (invoke), when a countdown ends, right before `recordingStart`: hide
+  // the main window and answer whether it was on screen. A take acquired during the countdown
+  // already captures the screen, and must not encode until the window has left it.
+  recordingHideMainWindow: "recording:hide-main-window",
   recordingStop: "recording:stop",
   // Cursor track (recorder renderer → main). Keyed by the writer session id. See
   // plans/video-editor-v2/02: main samples the pointer; the renderer sends the clock
