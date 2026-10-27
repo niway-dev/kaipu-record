@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, renderHook } from "@testing-library/react";
+import { act, fireEvent, renderHook } from "@testing-library/react";
 import { METER_BARS, spreadLevels, useMicLevelMeter } from "./use-mic-level-meter";
 
 const track = { stop: vi.fn() };
@@ -65,7 +65,9 @@ describe("useMicLevelMeter", () => {
   it("opens exactly the chosen device and reads levels into bars", async () => {
     const { result } = renderHook(() => useMicLevelMeter("a", true));
     await flush();
-    expect(getUserMedia).toHaveBeenCalledWith({ audio: { deviceId: { exact: "a" } } });
+    expect(getUserMedia).toHaveBeenCalledWith({
+      audio: { deviceId: { exact: "a" }, noiseSuppression: true },
+    });
     act(() => frames.at(-1)!(1000));
     expect(result.current).toHaveLength(METER_BARS);
     expect(result.current.every((level) => level > 0)).toBe(true);
@@ -91,10 +93,44 @@ describe("useMicLevelMeter", () => {
     rerender({ id: "b" });
     expect(track.stop).toHaveBeenCalledTimes(1);
     await flush();
-    expect(getUserMedia).toHaveBeenLastCalledWith({ audio: { deviceId: { exact: "b" } } });
+    expect(getUserMedia).toHaveBeenLastCalledWith({
+      audio: { deviceId: { exact: "b" }, noiseSuppression: true },
+    });
     unmount();
     expect(track.stop).toHaveBeenCalledTimes(2);
     expect(close).toHaveBeenCalledTimes(2);
+  });
+
+  it("releases the device while the window is not focused and reopens it on focus", async () => {
+    renderHook(() => useMicLevelMeter("a", true));
+    await flush();
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
+    act(() => {
+      fireEvent.blur(window);
+    });
+    expect(track.stop).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledOnce();
+    act(() => {
+      fireEvent.focus(window);
+    });
+    await flush();
+    expect(getUserMedia).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not open the device when the window starts unfocused", async () => {
+    const hasFocus = vi.spyOn(document, "hasFocus").mockReturnValue(false);
+    renderHook(() => useMicLevelMeter("a", true));
+    await flush();
+    expect(getUserMedia).not.toHaveBeenCalled();
+    hasFocus.mockRestore();
+  });
+
+  it("asks for the noise suppression the take will use", async () => {
+    renderHook(() => useMicLevelMeter("a", true, false));
+    await flush();
+    expect(getUserMedia).toHaveBeenCalledWith({
+      audio: { deviceId: { exact: "a" }, noiseSuppression: false },
+    });
   });
 
   it("stops a stream that arrives after the meter already closed", async () => {

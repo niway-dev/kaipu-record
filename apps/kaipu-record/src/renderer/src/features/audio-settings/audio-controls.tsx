@@ -65,6 +65,7 @@ function MicSettingsBody({
   const preTake = useMicLevelMeter(
     selectedMicrophone?.deviceId ?? null,
     micOn && !isRecording && microphones.length > 0,
+    control.store.audio.noiseSuppression,
   );
   const levels = isRecording ? spreadLevels(activity.micLevels) : preTake;
   return (

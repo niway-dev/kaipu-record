@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { exclusive } from "@renderer/features/settings-controls/use-settings-disclosure";
 import type { Microphone } from "@renderer/features/recording/types";
@@ -131,9 +131,22 @@ describe("MicControlWithPopover (Record page)", () => {
 
       await userEvent.click(screen.getByRole("button", { name: "Microphone settings" }));
       await waitFor(() =>
-        expect(getUserMedia).toHaveBeenCalledWith({ audio: { deviceId: { exact: "a" } } }),
+        expect(getUserMedia).toHaveBeenCalledWith({
+          audio: { deviceId: { exact: "a" }, noiseSuppression: true },
+        }),
       );
       await userEvent.keyboard("{Escape}");
+      await waitFor(() => expect(track.stop).toHaveBeenCalledOnce());
+    });
+
+    it("closes the popover and releases the device when the window loses focus", async () => {
+      render(<MicControlWithPopover on onToggle={() => {}} isRecording={false} {...devices} />);
+      await userEvent.click(screen.getByRole("button", { name: "Microphone settings" }));
+      await waitFor(() => expect(getUserMedia).toHaveBeenCalledOnce());
+      act(() => {
+        fireEvent.blur(window);
+      });
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
       await waitFor(() => expect(track.stop).toHaveBeenCalledOnce());
     });
 

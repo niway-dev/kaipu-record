@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { levelsFromTimeDomain } from "@renderer/features/recording/audio-levels";
+import { useWindowFocus } from "../settings-controls/use-window-focus";
 
 /** Bars in the settings' meter (the engine's activity broadcast has 5; see `spreadLevels`). */
 export const METER_BARS = 14;
@@ -14,13 +15,23 @@ const FRAME_MS = 66;
  * `active` (the settings are open, the mic is on, nothing is recording) and releases the
  * tracks and the AudioContext as soon as `active` turns false, the device changes or the
  * component unmounts. During a take the engine already holds the mic, so the caller reads
- * the activity broadcast instead (opening it twice would double the OS mic indicator work).
+ * the engine's mic levels instead (opening it twice would double the OS mic indicator work).
+ *
+ * It also requires the window to have focus: a hidden panel or a window sent to the tray
+ * does not reliably report itself hidden, and the meter must never keep the mic open there.
+ * `noiseSuppression` is what the take will request, so the meter hears the same signal.
  */
-export function useMicLevelMeter(deviceId: string | null, active: boolean): number[] {
+export function useMicLevelMeter(
+  deviceId: string | null,
+  active: boolean,
+  noiseSuppression = true,
+): number[] {
   const [levels, setLevels] = useState<number[]>(SILENT);
+  const focused = useWindowFocus();
+  const running = active && focused;
 
   useEffect(() => {
-    if (!active || !deviceId || !navigator.mediaDevices?.getUserMedia) {
+    if (!running || !deviceId || !navigator.mediaDevices?.getUserMedia) {
       setLevels(SILENT);
       return;
     }
@@ -38,7 +49,7 @@ export function useMicLevelMeter(deviceId: string | null, active: boolean): numb
     };
 
     void navigator.mediaDevices
-      .getUserMedia({ audio: { deviceId: { exact: deviceId } } })
+      .getUserMedia({ audio: { deviceId: { exact: deviceId }, noiseSuppression } })
       .then((opened) => {
         if (cancelled) {
           opened.getTracks().forEach((track) => track.stop());
@@ -69,7 +80,7 @@ export function useMicLevelMeter(deviceId: string | null, active: boolean): numb
       release();
       setLevels(SILENT);
     };
-  }, [deviceId, active]);
+  }, [deviceId, running, noiseSuppression]);
 
   return levels;
 }

@@ -92,6 +92,10 @@ afterEach(() => {
   cleanup();
 });
 
+// jsdom's `document.hasFocus()` is false until something is focused; a real window has focus.
+// Tests of the unfocused case spy on it.
+document.hasFocus = () => true;
+
 // Minimal `window.electronAPI` stub so renderer code that talks to the preload
 // bridge (e.g. usePermissions) works under jsdom. Individual tests can override.
 window.electronAPI = {
