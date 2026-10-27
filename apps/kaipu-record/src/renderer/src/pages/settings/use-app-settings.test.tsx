@@ -21,9 +21,11 @@ const SETTINGS: AppSettings = {
   showRecordingSavedCard: true,
   screenshotFrame: {},
   recordingArea: {},
+  recordingMode: "screen",
   screenshotMode: "frame",
   trayHintShown: false,
   diagnosticsEnabled: true,
+  cameraBubble: { shape: "circle", size: 240, deviceId: null },
 };
 
 describe("useAppSettings", () => {

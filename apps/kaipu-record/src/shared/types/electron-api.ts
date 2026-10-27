@@ -33,7 +33,9 @@ import type {
   RecordingBackfillMeta,
   RecordingArea,
   RecordingFinalizeMeta,
+  RecorderPhaseReport,
   RecordingSettings,
+  RecordingShadeState,
   RecordingStartInfo,
   RecordingTick,
 } from "./ipc";
@@ -60,6 +62,8 @@ export interface CaptureOverlayBridge {
   chooseFrameDisplay(displayId: number): void;
   /** The mode pill or keys 1–3: ask main to switch every overlay to `mode`. */
   setMode(mode: CaptureMode): void;
+  /** P / V or the Capture | Record switch: ask main to switch every overlay to `intent`. */
+  setIntent(intent: CaptureIntent): void;
   /** Main's state broadcast (mode, hover, frame display, window list). Returns an unsubscribe fn. */
   onState(callback: (state: OverlayState) => void): () => void;
   /** Main hid the overlays and asks for an ack after the next frame. Returns an unsubscribe fn. */
@@ -88,6 +92,14 @@ export type PermissionKind = "screen" | "microphone" | "camera";
 
 /** Whether each permission is currently granted. */
 export type PermissionStatus = Record<PermissionKind, boolean>;
+
+/**
+ * Camera access as the OS reports it. "blocked" means denied or restricted: the OS
+ * will not prompt again, so the UI sends the user to System Settings instead of
+ * offering a toggle that cannot work. "unknown" is "not asked yet" (the first
+ * getUserMedia prompts), so it must never read as blocked.
+ */
+export type CameraAccessStatus = "granted" | "blocked" | "unknown";
 
 /** macOS Accessibility (click hook, see plans/video-editor-v2/03). "not-required" off macOS. */
 export type AccessibilityStatus = "granted" | "denied" | "not-required";
@@ -184,6 +196,15 @@ export interface KaipuElectronAPI {
   requestAccessibility(): Promise<AccessibilityStatus>;
   /** Deep-link System Settings to the relevant Privacy pane (for denied permissions). */
   openSystemSettings(kind: PermissionKind): Promise<void>;
+  /** Camera access as a tri-state (no prompt). See {@link CameraAccessStatus}. */
+  getCameraAccessStatus(): Promise<CameraAccessStatus>;
+  /**
+   * Camera bubble → main: resize the bubble to `size` while its grip is dragged, from its
+   * anchored bottom-left corner. Not persisted (the grip writes `cameraBubble` through
+   * `updateSettings` on release). Resolves the size actually applied once the range and
+   * the recorded area clamp it.
+   */
+  previewCameraBubbleSize(size: number): Promise<number>;
 
   /** List recordings stored in the local vault. */
   listLocalRecordings(): Promise<LocalRecording[]>;
@@ -310,9 +331,22 @@ export interface KaipuElectronAPI {
   /** Capture Panel "Change" → main: open the main window + Record page's source picker. */
   requestChooseSource(): void;
   /** Record page subscribes so a panel "Change" opens its source picker. */
-  onRequestChooseSource(callback: () => void): () => void;
+  /**
+   * `startOnPick`: the picker was opened as the Window mode of "Start recording", so picking
+   * a source also starts the countdown.
+   */
+  onRequestChooseSource(callback: (request: { startOnPick: boolean }) => void): () => void;
   /** Capture Panel → main: run the interactive screenshot capture (same as ⌘⌃X). */
   requestCaptureScreenshot(mode: CaptureMode): void;
+  /**
+   * Record page / Capture Panel → main: open the recording selector, in `mode` (a mode
+   * chip, which also makes it the last used one) or in the last used mode (Start).
+   */
+  requestRecordSelector(mode?: CaptureMode): void;
+  /** Main renderer → main: the recorder's countdown phase (see `RecorderPhaseReport`). */
+  reportRecorderPhase(report: RecorderPhaseReport): void;
+  /** Recording shade window: what to paint (countdown tick or recording). */
+  onRecordingShadeState(callback: (state: RecordingShadeState) => void): () => void;
 
   // ── Global shortcuts ──────────────────────────────────────────────────
   /** Per-action registration state of the global shortcuts (false = unavailable). */

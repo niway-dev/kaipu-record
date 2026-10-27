@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  */
 
 const created: FakeWindow[] = [];
+let lastOptions: Record<string, unknown> | null = null;
 
 class FakeWindow {
   setAlwaysOnTop = vi.fn();
@@ -24,7 +25,8 @@ class FakeWindow {
   on = vi.fn();
   isDestroyed = () => false;
   isVisible = () => true;
-  constructor() {
+  constructor(options: Record<string, unknown>) {
+    lastOptions = options;
     created.push(this);
   }
 }
@@ -41,7 +43,7 @@ vi.mock("@electron-toolkit/utils", () => ({ is: { dev: false } }));
 const { CameraBubbleWindow } = await import("./camera-bubble-window");
 
 const FITS = { x: 1612, y: 50, width: 640, height: 360 };
-const TOO_SMALL = { x: 0, y: 0, width: 300, height: 300 };
+const TOO_SMALL = { x: 0, y: 0, width: 200, height: 200 };
 
 describe("CameraBubbleWindow.anchorTo", () => {
   beforeEach(() => {
@@ -53,10 +55,10 @@ describe("CameraBubbleWindow.anchorTo", () => {
     bubble.show();
     bubble.anchorTo(FITS);
     expect(created[0].setBounds).toHaveBeenLastCalledWith({
-      x: 1652,
-      y: 146,
-      width: 224,
-      height: 224,
+      x: 1644,
+      y: 90,
+      width: 288,
+      height: 288,
     });
     expect(created[0].hide).not.toHaveBeenCalled();
   });
@@ -84,10 +86,68 @@ describe("CameraBubbleWindow.anchorTo", () => {
     bubble.anchorTo(FITS);
     bubble.anchorTo(null);
     expect(created[0].setBounds).toHaveBeenLastCalledWith({
-      x: 40,
-      y: 636,
-      width: 224,
-      height: 224,
+      x: 32,
+      y: 580,
+      width: 288,
+      height: 288,
+    });
+  });
+});
+
+describe("CameraBubbleWindow size", () => {
+  beforeEach(() => {
+    created.length = 0;
+  });
+
+  it("is never movable by the OS", () => {
+    const bubble = new CameraBubbleWindow();
+    bubble.show();
+    expect(created[0]).toBeDefined();
+    expect(lastOptions?.movable).toBe(false);
+    expect(lastOptions?.resizable).toBe(false);
+  });
+
+  it("re-places a showing bubble from its corner when the persisted size changes", () => {
+    let size = 240;
+    const bubble = new CameraBubbleWindow(() => size);
+    bubble.show();
+    bubble.anchorTo({ x: 0, y: 0, width: 1440, height: 900 });
+    size = 360;
+    bubble.applySize();
+    expect(created[0].setBounds).toHaveBeenLastCalledWith({
+      x: 32,
+      y: 460,
+      width: 408,
+      height: 408,
+    });
+  });
+
+  it("previews a grip drag clamped to the area, and reports the size applied", () => {
+    const bubble = new CameraBubbleWindow(() => 240);
+    bubble.show();
+    bubble.anchorTo(FITS); // 360 tall: room for a 248 px bubble
+    expect(bubble.preview(480)).toBe(248);
+    expect(created[0].setBounds).toHaveBeenLastCalledWith({
+      x: 1644,
+      y: 82,
+      width: 296,
+      height: 296,
+    });
+    expect(bubble.preview(10)).toBe(120);
+  });
+
+  it("drops the preview once the settings apply", () => {
+    let size = 240;
+    const bubble = new CameraBubbleWindow(() => size);
+    bubble.show();
+    bubble.preview(300);
+    size = 160;
+    bubble.applySize();
+    expect(created[0].setBounds).toHaveBeenLastCalledWith({
+      x: 32,
+      y: 660,
+      width: 208,
+      height: 208,
     });
   });
 });

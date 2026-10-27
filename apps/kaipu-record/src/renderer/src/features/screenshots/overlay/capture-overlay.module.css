@@ -471,6 +471,330 @@
   pointer-events: none;
 }
 
+/* ── Opened to record (Claude Design "Kaipu Record Modes") ─────────── */
+
+/* The box dims less while choosing what to record: 32 % outside, as the design fixes. */
+.frameBoxRecord {
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.32);
+}
+
+/* Free · 16:9 · 9:16 · 1:1 and the size readout, above the box, left-aligned. */
+.ratioBar {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 34px;
+  box-sizing: border-box;
+  padding: 3px;
+  white-space: nowrap;
+  background: var(--overlay-pill-bg);
+  border: 1px solid var(--overlay-pill-line);
+  border-radius: 9px;
+  cursor: default;
+}
+
+.ratioChip {
+  height: 26px;
+  padding: 0 10px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: var(--font-weight-semibold);
+  color: #a1a1aa;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.ratioChip:hover {
+  color: #f3f3f5;
+}
+
+.ratioChip[aria-pressed="true"] {
+  color: #fff;
+  background: #3a3a42;
+}
+
+.ratioDivider {
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.ratioSize {
+  padding: 0 8px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: #f3f3f5;
+}
+
+/* The vertical widget attached to the box: modes, inputs, cancel. */
+.recordWidget {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 4px;
+  background: rgba(19, 19, 22, 0.96);
+  border: 1px solid var(--overlay-pill-line);
+  border-radius: 11px;
+  box-shadow: 0 18px 44px -16px rgba(0, 0, 0, 0.85);
+  cursor: default;
+}
+
+.widgetGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.widgetMode,
+.widgetToggle,
+.widgetCancel {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  padding: 0;
+  font-family: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.widgetMode {
+  height: 38px;
+  color: #c8c8d0;
+}
+
+.widgetMode:hover,
+.widgetCancel:hover {
+  background: #1c1c21;
+}
+
+.widgetMode[aria-pressed="true"] {
+  color: #fff;
+  background: var(--overlay-accent);
+}
+
+/* The active mode's name, floating beside the widget. */
+.widgetModeLabel {
+  position: absolute;
+  left: 46px;
+  top: 50%;
+  padding: 3px 7px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #fff;
+  white-space: nowrap;
+  background: var(--overlay-accent);
+  border-radius: 5px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+/* On the left of the box the label floats to the widget's left instead. */
+.widgetModeLabel[data-side="left"] {
+  left: auto;
+  right: 46px;
+}
+
+.widgetDigit {
+  position: absolute;
+  right: 3px;
+  bottom: 2px;
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  color: #62626a;
+}
+
+.widgetToggle {
+  height: 34px;
+  color: #55555c;
+}
+
+.widgetToggle[aria-pressed="true"] {
+  color: var(--overlay-accent);
+  background: rgba(246, 5, 92, 0.12);
+}
+
+/* Camera access denied in the OS: a lock, dimmed, not clickable to turn on. */
+.widgetToggle[data-blocked],
+.cardInput[data-blocked] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* An input that is off: grey with a diagonal strike. */
+.widgetStrike {
+  position: absolute;
+  width: 18px;
+  height: 1.5px;
+  background: #55555c;
+  transform: rotate(-45deg);
+}
+
+.widgetCancel {
+  height: 30px;
+  color: #8a8a92;
+}
+
+.widgetDivider {
+  width: 22px;
+  height: 1px;
+  margin: 2px auto;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* "● Start recording ↵", centred under the selection. */
+.startPill {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 15px;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: var(--font-weight-semibold);
+  color: #fff;
+  white-space: nowrap;
+  background: var(--overlay-accent);
+  border: 0;
+  border-radius: 9px;
+  box-shadow: 0 12px 28px -12px rgba(246, 5, 92, 0.95);
+  transform: translateX(-50%);
+  cursor: pointer;
+}
+
+.startPill:hover:not(:disabled) {
+  background: #ff3d82;
+}
+
+.startPill:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.startDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+/* Where the camera bubble will be recorded (inside the box, bottom-left). */
+.cameraPreview {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  color: rgba(255, 255, 255, 0.55);
+  background: linear-gradient(160deg, #2a2233, #17141c);
+  border: 3px solid var(--overlay-accent);
+  border-radius: 50%;
+  box-shadow: 0 12px 28px -8px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+
+/* The bubble's rounded square (ROUNDED_RADIUS in camera-bubble.tsx). */
+.cameraPreview[data-shape="rounded"] {
+  border-radius: 18%;
+}
+
+/* The Capture | Record switch (keys P and V). */
+.intentSwitch {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  background: #0f0f12;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+}
+
+.intentSwitchVertical {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.intentOption {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 28px;
+  padding: 0;
+  color: #8a8a92;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.intentOption:hover {
+  color: #f3f3f5;
+}
+
+.intentOption[aria-pressed="true"],
+.intentSwitchVertical .widgetMode[aria-pressed="true"] {
+  color: #fff;
+  background: #3a3a42;
+}
+
+.intentOption[aria-pressed="true"] .widgetDigit,
+.widgetMode[aria-pressed="true"] .widgetDigit {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* On the Screen card the switch sits at the header's right end. */
+.cardIntent {
+  margin-left: auto;
+}
+
+/* The Screen card opened to record: a full-width primary, then the modes and inputs. */
+.cardRecord {
+  justify-content: center;
+  width: 100%;
+  height: 40px;
+}
+
+.cardInputs {
+  display: flex;
+  gap: 6px;
+}
+
+.cardInput {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  font-family: inherit;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: #9b9ba3;
+  background: #141417;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.cardInput[aria-pressed="true"] {
+  color: var(--overlay-accent);
+  background: rgba(246, 5, 92, 0.12);
+  border-color: rgba(246, 5, 92, 0.5);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ants rect {
     animation: none;

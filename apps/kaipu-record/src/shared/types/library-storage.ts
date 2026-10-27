@@ -1,4 +1,5 @@
 import type { ExportPresetId } from "./export-preset";
+import type { RecordingCapture } from "../recording-capture";
 
 /**
  * A recording stored in the local vault, as returned by the main process.
@@ -53,6 +54,11 @@ export interface LocalRecording {
    */
   editorOpenedAt?: number | null;
   editorSavedAt?: number | null;
+  /**
+   * Recordings made after capture metadata existed: mode, output size and ratio, from the
+   * sidecar. null for older recordings, screenshots, GIFs and exports. Optional like `tagIds`.
+   */
+  capture?: RecordingCapture | null;
 }
 
 /** Where recordings are stored, and whether the user picked a custom folder. */

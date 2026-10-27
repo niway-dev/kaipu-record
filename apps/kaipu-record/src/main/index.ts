@@ -5,7 +5,15 @@ import { IPC_CHANNELS } from "@shared/types";
 import icon from "../../resources/icon.png?asset";
 import { CapturePanelWindow } from "./capture-panel-window";
 import { createMainTranslator } from "@kaipu/i18n/main";
-import { createTray, rebuildTrayMenu, setTrayState, type TrayState } from "./tray";
+import {
+  createTray,
+  rebuildTrayMenu,
+  setTrayCountdown,
+  setTrayRecording,
+  setTrayState,
+  type TrayState,
+} from "./tray";
+import { ROUTES } from "@shared/routes";
 import { registerRecordingSourceHandlers } from "./recording-sources";
 import { registerPermissionHandlers } from "./permissions";
 import { currentVault, registerLibraryVaultHandlers } from "./library";
@@ -45,7 +53,12 @@ import {
   shutdownMainAnalytics,
 } from "./services/analytics.service";
 import { registerAnalyticsIpc } from "./services/analytics-ipc";
-import { isCaptureMode, type CaptureRequestPayload } from "@shared/types/screenshot-capture";
+import {
+  isCaptureMode,
+  isEnabledCaptureMode,
+  type CaptureMode,
+  type CaptureRequestPayload,
+} from "@shared/types/screenshot-capture";
 import type { RecordTarget } from "./screenshots/capture-handler";
 import { registerScreenshotHandlers, type ScreenshotHandlers } from "./screenshots/screenshot-ipc";
 import { resolveShortcutCapture, type CaptureShortcut } from "./screenshots/shortcut-capture";
@@ -419,7 +432,7 @@ function showAlreadyRecordingNotice(): void {
   }).show();
 }
 
-function triggerStartRecording(): void {
+function triggerStartRecording(options: { reveal?: boolean } = {}): void {
   if (hub?.isActive()) {
     // Don't un-hide the (deliberately hidden) main window into an active
     // recording — it would get burned into the video with no explanation.
@@ -429,8 +442,43 @@ function triggerStartRecording(): void {
     return;
   }
   capturePanel?.hide();
-  showMainWindow();
+  if (options.reveal === false) {
+    // The countdown runs on the region the overlay chose (the recording shade); the
+    // recorder lives in the main window, which must exist but stays out of sight.
+    if (!mainWindow || mainWindow.isDestroyed()) createWindow(false);
+  } else {
+    showMainWindow();
+  }
   sendToRenderer(IPC_CHANNELS.recordingRequestStart);
+}
+
+/**
+ * "Start recording" (Record page, tray, the `startRecording` shortcut) and the mode chips:
+ * open the selector, the capture overlay with the `record` intent, in `requested` or in the
+ * last used mode (design "Kaipu Record Modes"). A chip also makes its mode the last used one.
+ * Window has no overlay picker while NIW2-469 keeps it off, so it opens the thumbnail picker
+ * on the Record page, which starts the countdown once a window is picked.
+ */
+function triggerRecordSelector(requested?: CaptureMode): void {
+  // A pending take (countdown) is refused like an active one: a second overlay would land in
+  // the video, and the hub's held Esc would cancel the countdown instead of the overlay.
+  if (hub?.isActive() || hub?.isPending()) {
+    capturePanel?.hide();
+    showAlreadyRecordingNotice();
+    return;
+  }
+  const settings = getAppSettings();
+  if (requested && requested !== settings.recordingMode) {
+    updateAppSettings({ recordingMode: requested });
+  }
+  const mode = requested ?? settings.recordingMode;
+  capturePanel?.hide();
+  if (!isEnabledCaptureMode(mode)) {
+    showMainWindow();
+    sendToRenderer(IPC_CHANNELS.recordingRequestSourcePicker, { startOnPick: true });
+    return;
+  }
+  triggerCaptureScreenshot({ mode, intent: "record" });
 }
 
 /**
@@ -442,6 +490,23 @@ function triggerChooseSource(): void {
   capturePanel?.hide();
   showMainWindow();
   sendToRenderer(IPC_CHANNELS.recordingRequestSourcePicker);
+}
+
+/**
+ * Show the main window on a route. The renderer uses a hash router, so changing the
+ * hash navigates in place without a reload. A window that had to be recreated is
+ * still loading, so the hash is set once it has finished.
+ */
+function showMainWindowAt(route: string): void {
+  const recreated = !mainWindow || mainWindow.isDestroyed();
+  showMainWindow();
+  const win = mainWindow;
+  if (!win || win.isDestroyed()) return;
+  const go = (): void => {
+    void win.webContents.executeJavaScript(`window.location.hash = ${JSON.stringify("#" + route)}`);
+  };
+  if (recreated || win.webContents.isLoading()) win.webContents.once("did-finish-load", go);
+  else go();
 }
 
 /** Bring the app back to the foreground from any state (the rescue shortcut). */
@@ -461,7 +526,7 @@ function bringAppToFront(): void {
  */
 function triggerCaptureScreenshot(request: CaptureRequestPayload): void {
   routeCaptureRequest({
-    isRecordingActive: () => hub?.isActive() ?? false,
+    isRecordingActive: () => (hub?.isActive() || hub?.isPending()) ?? false,
     notifyBusy: () => {
       // The main window is hidden during a take, so the renderer cannot show its
       // "finish the recording first" toast — use a system notification.
@@ -496,14 +561,25 @@ async function applyRecordTarget(target: RecordTarget): Promise<void> {
     showAlreadyRecordingNotice();
     return;
   }
-  const applied = await hub.selectArea(target.displayId, target.rect);
-  if (!applied) return;
+  const applied = await hub.selectArea(target.displayId, target.rect, target.ratio);
+  if (!applied) {
+    // The overlay kept the main window hidden for a countdown that will not come: bring the
+    // app back, so a pick that failed (display gone, area too small) is never silent.
+    if (target.start) showMainWindow();
+    return;
+  }
+  // What the user recorded with is what "Start recording" opens next time.
+  const mode: CaptureMode = target.rect ? "frame" : "screen";
+  if (getAppSettings().recordingMode !== mode) updateAppSettings({ recordingMode: mode });
   if (target.start) {
+    // If the recorder never starts (a dialog in the hidden window, no source, not idle) or
+    // the countdown is cancelled, the hidden app comes back instead of staying out of sight.
+    hub.prepareRegionCountdown(target.displayId, target.rect, showMainWindow);
     // The renderer is not told the target: `selectArea` broadcast it as settings, and the
     // recorder reads source and area when its countdown ends, not when the request lands
     // (recorder-store test "resolves the take's input when the countdown ends"). A start
     // path without a countdown must carry the target in the request instead.
-    triggerStartRecording();
+    triggerStartRecording({ reveal: false });
     return;
   }
   const mainVisible = !!mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible();
@@ -660,7 +736,12 @@ app.whenReady().then(() => {
   });
 
   // Capture Panel "Start" → open the main window and tell its Record page to start.
-  ipcMain.on(IPC_CHANNELS.recordingRequestStart, triggerStartRecording);
+  ipcMain.on(IPC_CHANNELS.recordingRequestStart, () => triggerStartRecording());
+
+  // Record page / Capture Panel "Start recording" or a mode chip → open the selector.
+  ipcMain.on(IPC_CHANNELS.recordingRequestSelector, (_event, request?: { mode?: unknown }) => {
+    triggerRecordSelector(isCaptureMode(request?.mode) ? request.mode : undefined);
+  });
 
   // Capture Panel "Change" → open the main window and open its source picker.
   ipcMain.on(IPC_CHANNELS.recordingRequestSourcePicker, triggerChooseSource);
@@ -705,14 +786,19 @@ app.whenReady().then(() => {
   registerRecordingSourceHandlers();
 
   // Recording engine: disk writer, control-bar window, state relay.
-  hub = registerRecordingHub(() => mainWindow);
+  hub = registerRecordingHub(
+    () => mainWindow,
+    (activity) => setTrayRecording(activity.active),
+    setTrayCountdown,
+  );
 
   // Global (system-wide) shortcuts. Reuse the existing start/stop paths so the
   // recorder logic stays in one place. Re-register when the bindings change.
   registerGlobalShortcuts({
     getShortcuts: () => getAppSettings().shortcuts,
     handlers: {
-      startRecording: triggerStartRecording,
+      // "Start recording" opens the selector in the last used mode, as the button does.
+      startRecording: () => triggerRecordSelector(),
       stopRecording: () => mainWindow?.webContents.send(IPC_CHANNELS.recordingCommand, "stop"),
       bringToFront: bringAppToFront,
       captureScreenshot: () => triggerShortcutCapture("captureScreenshot"),
@@ -896,7 +982,21 @@ app.whenReady().then(() => {
 
   // Menu-bar tray + its Capture Panel.
   capturePanel = new CapturePanelWindow();
-  tray = createTray(capturePanel, showMainWindow, getAppSettings().locale);
+  tray = createTray(capturePanel, showMainWindow, getAppSettings().locale, {
+    getShortcuts: () => getAppSettings().shortcuts,
+    actions: {
+      // Each Record item opens the selector in its own mode, as the Record page's chips do
+      // (and makes it the last used one). Window opens the thumbnail picker while its
+      // overlay mode is off (NIW2-469); a pick there starts the countdown.
+      recordScreen: () => triggerRecordSelector("screen"),
+      recordArea: () => triggerRecordSelector("frame"),
+      recordWindow: () => triggerRecordSelector("window"),
+      stopRecording: () => mainWindow?.webContents.send(IPC_CHANNELS.recordingCommand, "stop"),
+      takeScreenshot: () => triggerShortcutCapture("captureScreenshot"),
+      openLibrary: () => showMainWindowAt(ROUTES.library),
+      openSettings: () => showMainWindowAt(ROUTES.settings),
+    },
+  });
   // Load the panel hidden so the first tray click does not pay a cold start. After
   // the main window is ready, not alongside it: the main window's start-up comes
   // first, and the end-to-end suite takes the first window to open as the app.

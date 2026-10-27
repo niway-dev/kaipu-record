@@ -88,6 +88,21 @@ describe("createCaptureHandler — choosing what to record", () => {
     expect(rememberMode).not.toHaveBeenCalled();
     // Not a screenshot: nothing goes into screenshot_captured.
     expect(track).not.toHaveBeenCalled();
+    // The countdown runs on the chosen region: the main window stays out of sight.
+    expect(windows.afterCapture).toHaveBeenCalledWith("recording");
+  });
+
+  it("a Record answer main could not take restores the windows as a cancel", async () => {
+    const { handler, onRecordTarget, windows } = setup(async () => ({
+      kind: "record",
+      start: true,
+      displayId: 2,
+      rect,
+    }));
+    onRecordTarget.mockImplementation(() => {
+      throw new Error("hub gone");
+    });
+    await handler({ mode: "frame", intent: "record" });
     expect(windows.afterCapture).toHaveBeenCalledWith("cancelled");
   });
 

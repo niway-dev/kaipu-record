@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter, useNavigate } from "react-router-dom";
 import type { RecordingSetup } from "@renderer/features/recording/hooks/use-recording-setup";
 import { RecordPage } from "./record-page";
 
@@ -13,15 +13,21 @@ const { startRecording, openSourcePicker } = vi.hoisted(() => ({
 }));
 
 const SCREEN = { id: "s1", name: "Display 1", type: "screen" as const };
+const WINDOW = { id: "w1", name: "Safari", type: "window" as const };
 
 /** Mutable setup state each test tweaks before rendering. */
-let setupState: { selectedSource: typeof SCREEN | null; isRecording: boolean };
+let setupState: {
+  selectedSource: typeof SCREEN | typeof WINDOW | null;
+  isRecording: boolean;
+  isSourcePickerOpen?: boolean;
+  sources?: (typeof SCREEN | typeof WINDOW)[];
+};
 
 function makeSetup(): RecordingSetup {
   return {
     selectedSource: setupState.selectedSource,
     selectSource: vi.fn(),
-    isSourcePickerOpen: false,
+    isSourcePickerOpen: setupState.isSourcePickerOpen ?? false,
     openSourcePicker,
     closeSourcePicker: vi.fn(),
     isMicrophoneEnabled: false,
@@ -57,7 +63,11 @@ vi.mock("@renderer/features/recording/hooks/use-recording-activity", () => ({
   useRecordingActivity: () => ({ active: false, status: "recording", elapsedSeconds: 0 }),
 }));
 vi.mock("@renderer/features/recording/hooks/use-source-selection", () => ({
-  useSourceSelection: () => ({ sources: [], isLoading: false, error: null }),
+  useSourceSelection: () => ({
+    sources: (setupState.sources ?? []).map((source) => ({ ...source, thumbnail: "" })),
+    isLoading: false,
+    error: null,
+  }),
 }));
 vi.mock("@renderer/features/permissions", () => ({
   usePermissions: () => ({
@@ -67,14 +77,25 @@ vi.mock("@renderer/features/permissions", () => ({
   }),
 }));
 
+let navigateTo: ((state: Record<string, unknown>) => void) | null = null;
+
+/** Exposes the router's navigate so a test can arrive with a new nav state, as AppRoot does. */
+function NavProbe(): null {
+  const navigate = useNavigate();
+  navigateTo = (state) => navigate("/", { state });
+  return null;
+}
+
 function renderAt(state: Record<string, unknown> | undefined): { rerender: () => void } {
-  const ui = (
+  // A fresh element on every render: React skips a rerender of the identical element.
+  const ui = (): React.JSX.Element => (
     <MemoryRouter initialEntries={[{ pathname: "/", state }]}>
+      <NavProbe />
       <RecordPage />
     </MemoryRouter>
   );
-  const view = render(ui);
-  return { rerender: () => view.rerender(ui) };
+  const view = render(ui());
+  return { rerender: () => view.rerender(ui()) };
 }
 
 describe("RecordPage auto-start", () => {
@@ -116,5 +137,114 @@ describe("RecordPage auto-start", () => {
     expect(openSourcePicker).toHaveBeenCalledTimes(1);
     rerender();
     expect(openSourcePicker).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops a start-on-pick whose selection never landed when the picker opens again", () => {
+    setupState = {
+      selectedSource: SCREEN,
+      isRecording: false,
+      isSourcePickerOpen: true,
+      sources: [WINDOW],
+    };
+    const { rerender } = renderAt({ openPicker: 300, startOnPick: true });
+    fireEvent.click(screen.getByRole("button", { name: /^Windows/ }));
+    fireEvent.click(screen.getByText("Safari"));
+    // The selection has not round-tripped through main: nothing starts yet.
+    expect(startRecording).not.toHaveBeenCalled();
+
+    // The picker is opened again (a plain "Change"), then the window becomes the selection.
+    act(() => navigateTo!({ openPicker: 301 }));
+    setupState.selectedSource = WINDOW;
+    rerender();
+    expect(startRecording).not.toHaveBeenCalled();
+  });
+});
+
+describe("RecordPage idle layout (design Kaipu Record Modes)", () => {
+  const realApi = window.electronAPI;
+  beforeEach(() => {
+    setupState = { selectedSource: SCREEN, isRecording: false };
+  });
+  afterEach(() => {
+    window.electronAPI = realApi;
+  });
+
+  it("shows Start, the last used mode with its remembered area, and the inputs", async () => {
+    const requestRecordSelector = vi.fn();
+    const settings = await realApi.getSettings();
+    window.electronAPI = {
+      ...realApi,
+      requestRecordSelector,
+      getSettings: async () => ({
+        ...settings,
+        recordingMode: "frame",
+        recordingArea: { "7": { x: 0, y: 0, width: 1280, height: 720, ratio: "16:9" } },
+      }),
+    };
+    renderAt(undefined);
+    expect(screen.getByText("RECORD")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Ready to record" })).toBeInTheDocument();
+    expect(await screen.findByTestId("frame-caption")).toHaveTextContent("16:9 · 1280 × 720");
+    expect(screen.getByRole("button", { name: /^Frame/ })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("SOUND & CAMERA")).toBeInTheDocument();
+    // No source card: what to record is picked in the selector.
+    expect(screen.queryByText("CHOOSE A SOURCE")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /Start recording/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Screen/ }));
+    expect(requestRecordSelector.mock.calls).toEqual([[undefined], ["screen"]]);
+    // A click never starts a take by itself: main opens the selector first.
+    expect(startRecording).not.toHaveBeenCalled();
+  });
+
+  it("lists the four newest recordings under Recent, and nothing when there are none", async () => {
+    const recording = (n: number) => ({
+      id: `r${n}`,
+      assetId: `a${n}`,
+      title: `Take ${n}`,
+      filePath: `/v/r${n}.mp4`,
+      createdAt: n,
+      sizeBytes: 1,
+      durationSeconds: 60 + n,
+      thumbnailUrl: null,
+      kind: "recording" as const,
+      derivedFromAssetId: null,
+      contentSha256: null,
+      capture:
+        n === 5
+          ? { mode: "area" as const, width: 1280, height: 720, ratio: "16:9" as const }
+          : n === 4
+            ? { mode: "screen" as const, width: 1920, height: 1080, ratio: null }
+            : null,
+    });
+    window.electronAPI = {
+      ...realApi,
+      listLocalRecordings: async () => [1, 2, 3, 4, 5].map(recording),
+    };
+    renderAt(undefined);
+    await screen.findByTestId("recent-recordings");
+    expect(screen.getAllByText(/^Take/).map((node) => node.textContent)).toEqual([
+      "Take 5",
+      "Take 4",
+      "Take 3",
+      "Take 2",
+    ]);
+    expect(screen.getByText("1:05")).toBeInTheDocument();
+    // The capture tag from the library labels each take that has capture metadata.
+    expect(screen.getByText("FRAME · 16:9")).toBeInTheDocument();
+    expect(screen.getByText("SCREEN")).toBeInTheDocument();
+  });
+
+  it("opens the camera settings popover from the split Camera tile in the idle layout", () => {
+    renderAt(undefined);
+    fireEvent.click(screen.getByRole("button", { name: "Camera settings" }));
+    expect(screen.getByRole("dialog", { name: "Camera settings" })).toBeInTheDocument();
+  });
+
+  it("keeps the recording layout while a take runs", () => {
+    setupState.isRecording = true;
+    renderAt(undefined);
+    expect(screen.queryByRole("button", { name: /Start recording/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /Stop recording/ })).toBeInTheDocument();
   });
 });

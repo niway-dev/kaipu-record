@@ -166,13 +166,15 @@ describe("CaptureOverlayWindows: creating the overlays", () => {
 
   it("tells the renderer it was opened to record, and says nothing for a screenshot", () => {
     void overlays().pick("frame", [left], "record");
+    // The scale feeds the record intent's size readout, in device pixels.
     expect(String(created[0].window.loadFile.mock.calls[0]?.[1]?.search)).toContain(
-      "&intent=record",
+      "&intent=record&scale=2",
     );
 
     created.length = 0;
     void overlays().pick("frame", [left]);
     expect(String(created[0].window.loadFile.mock.calls[0]?.[1]?.search)).not.toContain("intent");
+    expect(String(created[0].window.loadFile.mock.calls[0]?.[1]?.search)).not.toContain("scale");
   });
 
   it("writes negative origins as-is, for a display left of the primary", () => {
@@ -341,6 +343,39 @@ describe("CaptureOverlayWindows: answers", () => {
       },
     );
 
+    it("keeps the ratio a record answer was locked to", async () => {
+      expect(
+        await answerWith("frame", {
+          kind: "rect",
+          mode: "frame",
+          action: "record",
+          displayId: 1,
+          rect,
+          ratio: "9:16",
+        }),
+      ).toEqual({
+        kind: "rect",
+        mode: "frame",
+        action: "record",
+        displayId: 1,
+        rect,
+        ratio: "9:16",
+      });
+    });
+
+    it("drops a ratio that names no chip", async () => {
+      expect(
+        await answerWith("frame", {
+          kind: "rect",
+          mode: "frame",
+          action: "record",
+          displayId: 1,
+          rect,
+          ratio: "4:3",
+        }),
+      ).toEqual({ kind: "rect", mode: "frame", action: "record", displayId: 1, rect });
+    });
+
     it("accepts a window answer by id, with main's own rect and whole size, not the renderer's", async () => {
       const fullSize = { width: 900, height: 400 };
       const port = new CaptureOverlayWindows({
@@ -448,6 +483,7 @@ describe("CaptureOverlayWindows: answers", () => {
     for (const window of [first, second]) {
       expect(window.webContents.send).toHaveBeenCalledWith(IPC_CHANNELS.screenshotOverlayState, {
         mode: "screen",
+        intent: "capture",
         hoverDisplayId: 2,
         frameDisplayId: null,
         windows: null,
@@ -468,14 +504,15 @@ describe("CaptureOverlayWindows: answers", () => {
       .filter(([channel]) => channel === IPC_CHANNELS.screenshotOverlayState)
       .map(([, state]) => state);
     expect(states).toEqual([
-      { mode: "screen", hoverDisplayId: 1, frameDisplayId: null, windows: null },
-      { mode: "screen", hoverDisplayId: 2, frameDisplayId: null, windows: null },
+      { mode: "screen", intent: "capture", hoverDisplayId: 1, frameDisplayId: null, windows: null },
+      { mode: "screen", intent: "capture", hoverDisplayId: 2, frameDisplayId: null, windows: null },
     ]);
 
     // The hovered display's own window can still clear it.
     second.send(IPC_CHANNELS.screenshotOverlayHover, { displayId: null });
     expect(second.webContents.send).toHaveBeenLastCalledWith(IPC_CHANNELS.screenshotOverlayState, {
       mode: "screen",
+      intent: "capture",
       hoverDisplayId: null,
       frameDisplayId: null,
       windows: null,
@@ -505,10 +542,22 @@ describe("CaptureOverlayWindows: answers", () => {
       const { first, second } = pickFrame({ x: 1500, y: 100 });
 
       expect(states(first)).toEqual([
-        { mode: "frame", hoverDisplayId: null, frameDisplayId: 2, windows: null },
+        {
+          mode: "frame",
+          intent: "capture",
+          hoverDisplayId: null,
+          frameDisplayId: 2,
+          windows: null,
+        },
       ]);
       expect(states(second)).toEqual([
-        { mode: "frame", hoverDisplayId: null, frameDisplayId: 2, windows: null },
+        {
+          mode: "frame",
+          intent: "capture",
+          hoverDisplayId: null,
+          frameDisplayId: 2,
+          windows: null,
+        },
       ]);
     });
 
@@ -516,7 +565,13 @@ describe("CaptureOverlayWindows: answers", () => {
       const { first } = pickFrame({ x: 5000, y: 5000 }, 2);
 
       expect(states(first)).toEqual([
-        { mode: "frame", hoverDisplayId: null, frameDisplayId: 2, windows: null },
+        {
+          mode: "frame",
+          intent: "capture",
+          hoverDisplayId: null,
+          frameDisplayId: 2,
+          windows: null,
+        },
       ]);
     });
 
@@ -531,7 +586,13 @@ describe("CaptureOverlayWindows: answers", () => {
       const { first, second } = pickFrame({ x: 5000, y: 5000 }, 99);
 
       expect(states(first)).toEqual([
-        { mode: "frame", hoverDisplayId: null, frameDisplayId: 1, windows: null },
+        {
+          mode: "frame",
+          intent: "capture",
+          hoverDisplayId: null,
+          frameDisplayId: 1,
+          windows: null,
+        },
       ]);
       expect(first.focus).toHaveBeenCalledOnce();
       expect(second.focus).not.toHaveBeenCalled();
@@ -557,7 +618,13 @@ describe("CaptureOverlayWindows: answers", () => {
       for (const window of [first, second]) {
         expect(window.webContents.send).toHaveBeenLastCalledWith(
           IPC_CHANNELS.screenshotOverlayState,
-          { mode: "frame", hoverDisplayId: null, frameDisplayId: 2, windows: null },
+          {
+            mode: "frame",
+            intent: "capture",
+            hoverDisplayId: null,
+            frameDisplayId: 2,
+            windows: null,
+          },
         );
       }
     });
@@ -585,7 +652,13 @@ describe("CaptureOverlayWindows: answers", () => {
       first.paint();
 
       expect(states(first)).toEqual([
-        { mode: "screen", hoverDisplayId: null, frameDisplayId: null, windows: null },
+        {
+          mode: "screen",
+          intent: "capture",
+          hoverDisplayId: null,
+          frameDisplayId: null,
+          windows: null,
+        },
       ]);
       second.send(IPC_CHANNELS.screenshotOverlayFrameDisplay, { displayId: 2 });
       expect(states(first)).toHaveLength(1);
@@ -683,11 +756,25 @@ describe("CaptureOverlayWindows: switching mode inside the overlay", () => {
     for (const window of [first, second]) {
       expect(states(window).at(-1)).toEqual({
         mode: "screen",
+        intent: "capture",
         hoverDisplayId: null,
         frameDisplayId: null,
         windows: null,
       });
     }
+  });
+
+  it("rebroadcasts a Capture | Record switch to every overlay, and ignores junk", () => {
+    const { first, second } = pickWith("screen");
+
+    second.send(IPC_CHANNELS.screenshotOverlayIntent, { intent: "record" });
+    for (const window of [first, second]) {
+      expect(states(window).at(-1)).toMatchObject({ mode: "screen", intent: "record" });
+    }
+    const count = states(first).length;
+    first.send(IPC_CHANNELS.screenshotOverlayIntent, { intent: "film" });
+    first.send(IPC_CHANNELS.screenshotOverlayIntent, { intent: "record" });
+    expect(states(first)).toHaveLength(count);
   });
 
   it("entering Frame puts the frame on the display that asked, and focuses it", () => {
@@ -710,6 +797,7 @@ describe("CaptureOverlayWindows: switching mode inside the overlay", () => {
     for (const window of [first, second]) {
       expect(states(window).at(-1)).toEqual({
         mode: "window",
+        intent: "capture",
         hoverDisplayId: null,
         frameDisplayId: null,
         windows: [editor],
@@ -844,7 +932,13 @@ describe("CaptureOverlayWindows: switching mode inside the overlay", () => {
     created[0].window.paint();
 
     expect(states(created[0].window)).toEqual([
-      { mode: "screen", hoverDisplayId: null, frameDisplayId: null, windows: null },
+      {
+        mode: "screen",
+        intent: "capture",
+        hoverDisplayId: null,
+        frameDisplayId: null,
+        windows: null,
+      },
     ]);
   });
 });

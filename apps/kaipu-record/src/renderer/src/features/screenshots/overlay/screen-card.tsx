@@ -1,12 +1,67 @@
 import { useEffect, useRef } from "react";
+import { Camera, Lock, Mic, Volume2 } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import type { CaptureOverlayBridge } from "@shared/types/electron-api";
 import type { CaptureAction } from "@shared/types/screenshot-capture";
 import type { SendAnswer } from "./capture-overlay";
 import { actionForKey, primaryAction } from "./overlay-keys";
 import type { OverlayQuery } from "./overlay-query";
-import { ActionButtons, keepPointer, ModeRow, type OverlayChrome } from "./selection-chrome";
+import {
+  ActionButtons,
+  IntentSwitch,
+  keepPointer,
+  ModeRow,
+  type OverlayChrome,
+} from "./selection-chrome";
+import type { OverlayToggles } from "./record-chrome";
 import styles from "./capture-overlay.module.css";
+
+/** Compact Mic · System · Cam chips on the Screen card opened to record. */
+function CardInputs({ toggles }: { toggles: OverlayToggles }): React.JSX.Element {
+  const t = useTranslations("screenshots");
+  const tCamera = useTranslations("cameraSettings");
+  const chips = [
+    { key: "isMicrophoneEnabled", on: toggles.microphone, icon: Mic, label: t("overlay.chipMic") },
+    {
+      key: "isSystemAudioEnabled",
+      on: toggles.systemAudio,
+      icon: Volume2,
+      label: t("overlay.chipSystem"),
+    },
+    { key: "isCameraEnabled", on: toggles.camera, icon: Camera, label: t("overlay.chipCamera") },
+  ] as const;
+  return (
+    <div
+      role="group"
+      aria-label={t("overlay.inputs")}
+      className={styles.cardInputs}
+      {...keepPointer}
+    >
+      {chips.map(({ key, on, icon, label }) => {
+        // A blocked camera reads off and cannot turn on (same rule as the widget).
+        const blocked = key === "isCameraEnabled" && toggles.cameraBlocked;
+        const cannotToggle = blocked && !on;
+        const Icon = blocked ? Lock : icon;
+        return (
+          <button
+            key={key}
+            type="button"
+            className={styles.cardInput}
+            aria-pressed={on}
+            aria-disabled={cannotToggle || undefined}
+            aria-label={blocked ? tCamera("blockedTile") : undefined}
+            title={blocked ? tCamera("blockedBody") : undefined}
+            data-blocked={blocked || undefined}
+            onClick={cannotToggle ? undefined : () => toggles.toggle(key)}
+          >
+            <Icon size={14} aria-hidden />
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 interface ScreenCardProps {
   query: OverlayQuery;
@@ -19,8 +74,9 @@ interface ScreenCardProps {
 
 /**
  * Screen mode: each overlay shows one card for its display — number, "Display n",
- * `W × H · Built-in/External`, Capture · n and Copy, the mode row, and the reserved
- * "Record this display · soon". A click anywhere on the display captures it. Enter and
+ * `W × H · Built-in/External`, Capture · n, Copy and Record, and the mode row. Opened to
+ * record, the card is "● Record this display", the mode row and the Mic · System · Cam
+ * chips. A click anywhere on the display answers the primary action. Enter and
  * ⌘C / Ctrl+C capture or copy the hovered display (this one when none is hovered). The
  * pointer's display is reported to main, which broadcasts it back, so exactly one display
  * highlights.
@@ -93,18 +149,41 @@ export function ScreenCard({
               {size} · {kind}
             </span>
           </span>
+          <span className={styles.cardIntent}>
+            <IntentSwitch chrome={chrome} />
+          </span>
         </div>
-        <div className={styles.cardButtons} {...keepPointer}>
-          <ActionButtons
-            chrome={chrome}
-            onAction={(action) => answer(action)}
-            captureLabel={{
-              text: t("overlay.captureNumber", { index }),
-              aria: t("overlay.captureDisplay", { index }),
-            }}
-          />
-        </div>
-        <ModeRow chrome={chrome} />
+        {chrome.intent === "record" ? (
+          <>
+            <div className={styles.cardButtons} {...keepPointer}>
+              <button
+                type="button"
+                className={`${styles.captureButton} ${styles.cardRecord}`}
+                aria-label={t("overlay.recordDisplay")}
+                onClick={() => answer("record")}
+              >
+                <span className={styles.startDot} aria-hidden />
+                {t("overlay.recordDisplay")}
+              </button>
+            </div>
+            <ModeRow chrome={chrome} />
+            {chrome.toggles && <CardInputs toggles={chrome.toggles} />}
+          </>
+        ) : (
+          <>
+            <div className={styles.cardButtons} {...keepPointer}>
+              <ActionButtons
+                chrome={chrome}
+                onAction={(action) => answer(action)}
+                captureLabel={{
+                  text: t("overlay.captureNumber", { index }),
+                  aria: t("overlay.captureDisplay", { index }),
+                }}
+              />
+            </div>
+            <ModeRow chrome={chrome} />
+          </>
+        )}
       </div>
     </div>
   );

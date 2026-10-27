@@ -1,5 +1,5 @@
 import type { LocalRecording, RecordingSettings } from "@shared/types";
-import type { RecordingArea } from "@shared/types/ipc";
+import type { RecorderPhaseReport, RecordingArea } from "@shared/types/ipc";
 import {
   beginCursorTrackSession,
   type CursorTrackSession,
@@ -15,6 +15,7 @@ import { startEngine, type EngineHandle } from "@renderer/features/recording/rec
 import type { WatermarkConfig } from "@renderer/features/watermark/watermark";
 import { reportError } from "@renderer/features/analytics";
 import { finalizeErrorKey } from "./finalize-error-message";
+import { buildRecordingCapture, type RecordingCapture } from "@shared/recording-capture";
 import { runtimeT } from "@renderer/lib/runtime-i18n";
 
 export type RecorderStatus =
@@ -67,6 +68,8 @@ let snapshot: RecorderSnapshot = { status: "idle", countdown: null };
 let engine: EngineHandle | null = null;
 let cursorTrack: CursorTrackSession | null = null;
 let sessionId: string | null = null;
+/** How the active take is captured; sent with finalize so the library can label it. */
+let capture: RecordingCapture | null = null;
 let clock: ElapsedState | null = null;
 let tickTimer: ReturnType<typeof setInterval> | null = null;
 let countdownTimer: ReturnType<typeof setInterval> | null = null;
@@ -88,8 +91,35 @@ function emit(): void {
 }
 
 function update(patch: Partial<RecorderSnapshot>): void {
+  const previous = snapshot;
   snapshot = { ...snapshot, ...patch };
+  reportPhase(previous, snapshot);
   emit();
+}
+
+/**
+ * Tell main where a pending start is (countdown tick, acquiring, abandoned), so it can draw
+ * the countdown over the region the user chose while this window stays hidden. Only the
+ * pending phases are reported; the take itself is announced by `recordingStart`.
+ */
+function reportPhase(previous: RecorderSnapshot, next: RecorderSnapshot): void {
+  if (previous.status === next.status && previous.countdown === next.countdown) return;
+  const pending = previous.status === "counting" || previous.status === "starting";
+  const report: RecorderPhaseReport | null =
+    next.status === "counting" && next.countdown !== null
+      ? { phase: "counting", value: next.countdown }
+      : next.status === "starting"
+        ? { phase: "starting" }
+        : next.status === "idle" && pending
+          ? { phase: "idle" }
+          : null;
+  if (!report) return;
+  try {
+    window.electronAPI.reportRecorderPhase(report);
+  } catch (error) {
+    // The countdown on the region is a convenience; the take must not depend on it.
+    console.error("recorder phase report failed", error);
+  }
 }
 
 export function subscribeRecorder(listener: () => void): () => void {
@@ -227,6 +257,11 @@ async function beginEngine(input: StartInput): Promise<void> {
     }
 
     engine = handle;
+    capture = buildRecordingCapture({
+      sourceId: input.sourceId,
+      area: input.area ?? null,
+      output: handle.outputSize,
+    });
     stopLiveSettings = forwardLiveSettings(handle, input);
     const activeTrack = cursorTrack;
     void handle.firstMediaTimestamp.then(({ rendererMs, quality }) =>
@@ -337,6 +372,7 @@ export function resumeRecording(): void {
 async function stopRecording(): Promise<void> {
   const activeEngine = engine;
   const activeSessionId = sessionId;
+  const activeCapture = capture;
   // Guard re-entry: the user clicking Stop and an engine-failure can both fire.
   if (stopping || !activeEngine || !activeSessionId) return;
   stopping = true;
@@ -367,6 +403,7 @@ async function stopRecording(): Promise<void> {
           durationSeconds,
           durationMs,
           thumbnail: activeEngine.thumbnail,
+          capture: activeCapture,
         });
       })(),
       delay(MIN_SAVING_MS),
@@ -388,6 +425,7 @@ async function stopRecording(): Promise<void> {
   engine = null;
   cursorTrack = null;
   sessionId = null;
+  capture = null;
   clock = null;
   stopping = false;
   update({ status: "idle", countdown: null });

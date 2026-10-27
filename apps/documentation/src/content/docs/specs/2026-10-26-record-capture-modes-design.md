@@ -5,7 +5,7 @@ description: Design for choosing what a recording covers the way screenshots alr
 
 # Record capture modes — design
 
-**Status: 🟡 In progress · 2026-10-26.** Tasks 1–4 and 6 implemented on `feat/record-capture-modes` (owner QA pending); task 5 (widget and Record page layout) waits for the design file. Two refinements made during implementation are marked _Implementation note_ below. Linear: [NIW2-513](https://linear.app/niway/issue/NIW2-513/record-capture-modes-record-a-display-or-a-selected-area-through-the)
+**Status: 🟡 In progress · 2026-10-26.** Tasks 1–4 and 6 implemented on `feat/record-capture-modes` (merged, owner QA pending). Task 5 (selector chrome, widget, Record page and tray submenu) is implemented across four PRs integrated on `feat/record-modes-integration`: #383 (selector and Record page, from the Claude Design file "Kaipu Record Modes"), #382 (capture metadata in the library), #380 (camera bubble shape and size) and #381 (tray Record submenu). Owner QA pending; verified by unit and component tests only, never run on a real display. Refinements made during implementation are marked _Implementation note_ below; the ones task 5 brought are collected in "Task 5 implementation notes" after the open questions. Linear: [NIW2-513](https://linear.app/niway/issue/NIW2-513/record-capture-modes-record-a-display-or-a-selected-area-through-the)
 (parent; one child per task in section 8 once this design is approved). Builds on the
 [screenshot capture modes design](/specs/2026-10-15-screenshot-capture-modes-design/) and
 [screenshot modes v2](/specs/2026-10-17-screenshot-modes-v2-design/), whose decision 12 reserved
@@ -13,8 +13,9 @@ the Record seat this design fills. ADRs: [0030](/architecture/decisions/0030-rec
 (new) alongside [0022](/architecture/decisions/0022-screenshot-capture-native-where-the-os-has-it/),
 [0024](/architecture/decisions/0024-window-mode-and-quiet-capture/) and
 [0029](/architecture/decisions/0029-floating-windows-never-change-the-activation-policy/), which
-stand, except that 0030 amends 0024's non-goal "recording through the overlay". Design file: Claude Design project "kaipu-recorder", new file "Kaipu Record Modes" to
-be produced from the brief in section 7. Window mode in the overlay stays behind its flag
+stand, except that 0030 amends 0024's non-goal "recording through the overlay". Design file: Claude Design project "kaipu-recorder", file "Kaipu Record Modes" (produced
+from the brief in section 7; the designer answered with a different model, see the task 5
+notes). Window mode in the overlay stays behind its flag
 ([NIW2-469](https://linear.app/niway/issue/NIW2-469/window-screenshot-mode-fix-what-the-owner-found-buggy-and-re-enable));
 the Window target keeps the thumbnail picker.
 
@@ -62,8 +63,8 @@ RecordingArea | null` beside the existing `selectedSource`, not as a new union r
 display target is that display's `screen:` source with `area = null`, an area target is the
 same source with `area` set, a window target is unchanged; picking a source in the thumbnail
 picker clears `area`. Same behaviour as the union, no settings migration, and decision 11 holds
-by construction. `AppSettings.recordingMode` was not added: until the widget has a mode row
-(task 5) there is nothing to remember it for.
+by construction. `AppSettings.recordingMode` was not added by tasks 1–4; task 5 added it (see
+the task 5 notes, decision 8).
 
 _Implementation note (decision 2)._ Record is the plain **R** key, not ⌘R / Ctrl+R: outside dev,
 `@electron-toolkit/utils`' `watchWindowShortcuts`, installed on every window, cancels Cmd/Ctrl+R
@@ -71,6 +72,35 @@ in `before-input-event`, so a packaged overlay would never receive it. In the `r
 (click only), so ⌘C / Ctrl+C never means anything but copy. A rectangle that is recorded or
 selected is remembered in `recordingArea` whichever intent opened the overlay; one that is shot
 is remembered in `screenshotFrame`. The Window picker shows Record disabled.
+
+_Implementation note (decision 12)._ The same mode is also persisted locally with every new
+recording, so the library can label it ("FRAME · 16:9", "SCREEN", "WINDOW"). The vault sidecar
+stores, next to `durationSeconds`:
+`capture: { mode: "screen" | "area" | "window"; width: number; height: number; ratio: "free" | "16:9" | "9:16" | "1:1" | null; displayId?: number }`.
+`width`/`height` are the encoded output size (the compositor target the engine derives), `ratio`
+is the chip the Frame box was locked to (`RecordingArea.ratio`: the overlay's record answer
+carries it and main keeps it on the area) or, for an area without one, inferred from the output
+size with a 1% tolerance; it is `null` for screen and window. It is local only: it never leaves
+the device and the cloud catalog does not carry it. The Record page's "Recent" grid and the
+library show it with the same tag. See
+[Recording capture metadata](/backlog/recording-capture-metadata/).
+
+_Implementation note (decision 12, analytics)._ `recording_started` carries `mode`, `platform`
+and `displays`; for an area it adds `size`, a bucket of the area's shorter side in physical
+pixels (`<720p`, `720p`, `1080p`, `1440p+`; the area in DIP times the display's scale factor,
+known when the take starts, before the engine reports its output size), and `ratio` (the locked
+chip, else inferred as above). No rectangles, no titles.
+
+_Implementation note (decision 6, camera bubble shape and size)._ The bubble's shape (circle or
+rounded square) and size (120–480 px, presets S 160 · M 240 · L 360) are now settings
+(`AppSettings.cameraBubble`), changed live from the split Camera tile or the bubble's hover grip
+([backlog](/backlog/camera-bubble-shape-and-size/)). The bubble stays at this decision's fixed
+bottom-left corner and grows up and to the right; it is **not draggable** and its position is
+not persisted. This also changes full-screen recordings, which decision 6 did not cover: there
+the bubble used to be draggable anywhere on the display, and now it is fixed at the display's
+bottom-left corner too. "Cannot hold the bubble" now means "cannot hold even the 120 px
+minimum": a larger size the area cannot hold is shrunk to what fits instead of hiding the
+bubble.
 
 ### Open questions
 
@@ -83,23 +113,112 @@ is remembered in `screenshotFrame`. The Window picker shows Record disabled.
 2. **Shade and full-screen apps.** The shade is a `panel` with the ADR 0029 recipe, so it floats
    over a full-screen Space without touching the Dock; whether a click-through panel still lets
    the full-screen app receive every gesture (scroll, drag) is QA, not design.
-3. **"Use selection" versus "Record" as Enter in `record` intent.** This design makes Enter set
-   the target and return to the widget, because the owner wants to adjust camera and audio
-   after choosing the area. If the common path turns out to be "choose and record", swap the
-   two: one constant.
+3. ~~**"Use selection" versus "Record" as Enter in `record` intent.**~~ Resolved by the design
+   file: Enter records (see the task 5 notes). Mic, System audio and Camera moved onto the
+   overlay, so there is nothing left to adjust after choosing.
 4. **Recording from a screenshot overlay** uses the widget's current camera, audio and
    microphone settings. Confirm that is expected, or the overlay would need its own toggles.
-5. **The analytics event name.** No recording-start event exists in `shared/analytics.ts`
-   today; task 6 adds `recording_started` with the closed payload of decision 12, or extends the
-   event if one is added before then.
+5. ~~**The analytics event name.**~~ Resolved: task 6 added `recording_started`; its area
+   fields are in the decision 12 analytics note.
 6. **The owner wrote "windows e iOS".** This design reads it as macOS and Windows: the desktop
    app has no iOS target.
+
+### Task 5 implementation notes (design "Kaipu Record Modes")
+
+The design file did not draw the brief's selection card and mode row; it chose one model with
+screenshots: **Start recording opens the selector** (the capture overlay with the `record`
+intent) in the last used mode, and the mode, the inputs and the action all live on the overlay.
+What changed against the decisions above:
+
+- _Decision 2 (overlay intent)._ **Enter starts the countdown** in the `record` intent; **R** stays
+  as an alias. "Use selection" is gone from the UI: the overlay never sends `select`, main still
+  accepts it. The Frame box, opened to record, carries its own chrome instead of the action bar:
+  a ratio bar above it (Free · 16:9 · 9:16 · 1:1 and the size in device pixels, from a new
+  `&scale=` query parameter written only for this intent), a vertical widget attached to its
+  right (Capture | Record switch, modes 1–n, Mic, System audio and Camera, Cancel) and a pink
+  "● Start recording ↵" pill under it. The Screen card becomes "● Record this display", the
+  mode row and Mic · System · Cam chips. The Window picker keeps the action bar (Record, then
+  Capture) and stays behind its flag (NIW2-469).
+- _Decision 2, owner addendum: switching intent inside the selector._ A two-state
+  **Capture | Record switch** (camera and video icons, keys **P** and **V**, from the owner's
+  "Kaipu Unified Capture" design) sits in the widget, in the screenshot action bar and on the
+  Screen card. The overlay's `intent` is now state initialised from the URL: switching changes
+  only the confirm actions; the box, its position and the mode stay. The frame memory is chosen
+  by the intent the overlay opened with, and a rectangle is remembered by what it became
+  (recorded → `recordingArea`, shot → `screenshotFrame`), as before. Each intent keeps its own
+  last mode: `screenshotMode` (written by a capture) and `recordingMode` (written by a take or a
+  mode chip), so "Start recording" opens in Record and the screenshot shortcuts open in Capture.
+  The switch is shared: an overlay sends it to main (`screenshot:overlay-intent`), which
+  broadcasts it in the overlay state, so on several displays every overlay confirms with the
+  same intent. After P the Frame box is free; the ratio it had stays and comes back with V.
+- _Decision 4 (recording shade)._ Kept as decided: dark outside, clear inside, click-through,
+  content-protected. The design's additions are drawn on top: a 2 px pink border 3 px outside
+  the area with a soft glow, and a "REC · border not recorded" tag. New: a **whole-display**
+  recording also gets the shade window, drawing only a 3 px pink border around the display with
+  no fill (a window recording gets nothing: the window can move).
+- _Decision 4, countdown._ When the overlay starts a take, the **countdown is drawn on the chosen
+  region** by the same shade window (2 px pink border, 40 % dim outside, the number, "Recording
+  starts… press Esc to cancel"; no border for a whole display) instead of the main window. The
+  main window stays hidden (`CaptureEnding` "recording"); the recorder reports its phase to main
+  (`recording:recorder-phase`) and **Esc is a global shortcut held only during the countdown**,
+  because nothing of ours has focus. It is a temporary registration that survives the settings
+  writes that re-apply the global shortcuts. Starting from the thumbnail picker (Window) keeps
+  the old countdown in the main window. While a take is pending (countdown or acquiring), the
+  selector, the screenshot shortcuts and the tray's Record items are refused like during a take.
+  If the start never reaches the recorder (a dialog in the hidden window, no source) or ends
+  before a take, main shows the app again instead of leaving it hidden. A whole-display
+  countdown turns into the recording border at once, without waiting for the source lookup.
+- _Decision 7 (control bar)._ Amended: the bar now **sits outside the recorded area**: centred
+  16 DIP below it when that fits the work area, else 16 DIP to its right (top-aligned), else to
+  its left, else bottom centre as before (`controlBarBounds`). A whole display keeps bottom
+  centre. The bar also shows a mono mode chip ("16:9", "FRAME", "WINDOW", "SCREEN"); it grew
+  from 430 to 480 DIP.
+- _Decision 8 (entry points)._ The Record page and the tray's Record tab show "Start recording"
+  (with the `startRecording` shortcut label), Frame · Window · Screen chips (the last used one
+  marked; a click opens the selector in that mode and makes it the last used), a
+  "16:9 · 1280 × 720" caption for a remembered Frame area (DIP, as stored; the overlay readout is
+  in device pixels), and the existing Mic / Audio / Camera toggles (`RecordingToggles`, the one
+  component that renders the camera toggle). No selection card. **Window** opens the thumbnail
+  picker on the Record page and a pick starts the countdown. `AppSettings.recordingMode`
+  (`frame` | `window` | `screen`, default `screen`) is now stored. The page lists the four newest
+  recordings under "Recent", each with its capture tag ("FRAME · 16:9", "SCREEN", "WINDOW") from
+  the decision 12 metadata; recordings made before it have none. The Camera toggle in both
+  layouts is #380's split tile: a popover on the page, an inline drawer in the tray panel.
+- _Decision 9 (shortcuts)._ `startRecording` now opens the selector in the last used mode, as the
+  button does, instead of starting the current target at once.
+- _New: aspect ratios._ This amends ADR 0030, which listed "aspect locks in the picker" as a
+  non-goal ([amendment of 2026-10-26](/architecture/decisions/0030-recording-target-and-area-crop-in-the-compositor/#amendments);
+  exact dimensions stay out of scope). The Frame box opened to record offers Free, 16:9, 9:16 and 1:1. A locked
+  ratio constrains drawing a new box, dragging a corner (the opposite corner stays) and dragging
+  an edge (the box grows around its centre line); picking a chip reshapes the box around its
+  centre. The ratio is remembered with the area per display (`RememberedArea.ratio` in
+  `AppSettings.recordingArea`; an area remembered before ratios loads as Free). Geometry:
+  `ratio-geometry.ts`, unit-tested.
+- _Owner QA: the full-screen border is not in the file._ Full-screen recordings now open a
+  display-sized, always-on-top shade window that draws only a pink border; before task 5 they had
+  no shade window at all. It stays out of the video only if content protection is honoured. Check
+  that the border is absent from the recorded file on macOS 15+ (ScreenCaptureKit) and on
+  Windows. On Windows builds before 10 2004 (no `WDA_EXCLUDEFROMCAPTURE`, where a protected
+  window shows black in captures) the whole-display border is skipped (`fullDisplayBorderAllowed`);
+  an area's shade is outside the recorded crop and is kept.
+- _Tray submenu._ The tray icon's right-click menu has Record → Record screen, Record area,
+  Record window… ([backlog](/backlog/tray-record-submenu/)). Each opens the selector in its own
+  mode, like the Record page's chips (Window: the thumbnail picker while NIW2-469 keeps it off).
+  While a recording runs the Record items are disabled and Stop recording shows; while a
+  countdown runs they are disabled and Cancel countdown shows (the same stop command, which
+  cancels a pending start).
+- _Overlay camera toggle._ The widget's Camera toggle and the Screen card's Cam chip write the
+  same shared `RecordingSettings.isCameraEnabled` as the page and the tray. A camera blocked in
+  the OS (`getCameraAccessStatus`) shows a lock and cannot be turned on there either. The
+  overlay has no camera settings chevron: device, shape and size stay on the page and the tray.
+  The camera preview on the overlay is a placeholder, not a live feed, drawn at the bubble's
+  size and shape (`AppSettings.cameraBubble`) where main will anchor it.
 
 ### Out of scope
 
 - Changing the area while a recording runs (the output dimensions are fixed at start).
-- Exact dimensions, aspect-ratio locks and size presets in the Frame box (Screen Studio and
-  CleanShot offer them; v1 draws a free rectangle with a minimum size and even dimensions).
+- Exact dimensions and size presets in the Frame box (Screen Studio and CleanShot offer them;
+  the box draws a free or ratio-locked rectangle with a minimum size and even dimensions).
 - Window mode inside the overlay for recording (follows NIW2-469), a window-following area, and
   Linux.
 - Compositing the camera into the canvas instead of recording the bubble from the screen (the
@@ -324,7 +443,8 @@ overlay (Window keeps the existing thumbnail picker).
 4. **Shade, bubble and cursor.** Shade window and route, bubble anchoring, cursor normalization and
    the `region` field. Tests: failures 3 to 7 and 9.
 5. **Widget and Record page.** Mode row, selection card, controls, from the approved design; tray
-   submenu; shortcuts (`recordArea`). Tests: panel and page rendering per state, shortcut defaults
+   submenu; shortcuts (`recordArea`). _Implemented by #383, #382, #380 and #381, integrated on
+   `feat/record-modes-integration` (see the task 5 notes)._ Tests: panel and page rendering per state, shortcut defaults
    pinned against `@kaipu/domain`.
 6. **Analytics and docs.** `recording_started` with `mode`; the recording pipeline doc and the
    backlog page flipped to 🟢.

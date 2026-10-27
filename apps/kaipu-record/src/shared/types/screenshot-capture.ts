@@ -97,6 +97,38 @@ export interface CaptureRect {
   height: number;
 }
 
+/**
+ * Aspect ratios the Frame box offers when the overlay opens to record (design "Kaipu
+ * Record Modes"): `free` draws any rectangle, the others lock width over height.
+ */
+export const RECORDING_RATIOS = ["free", "16:9", "9:16", "1:1"] as const;
+export type RecordingRatio = (typeof RECORDING_RATIOS)[number];
+
+export function isRecordingRatio(value: unknown): value is RecordingRatio {
+  return (RECORDING_RATIOS as readonly unknown[]).includes(value);
+}
+
+/** Width over height of each locked ratio: the one table the overlay and the metadata read. */
+export const RECORDING_RATIO_VALUES: Readonly<Record<Exclude<RecordingRatio, "free">, number>> = {
+  "16:9": 16 / 9,
+  "9:16": 9 / 16,
+  "1:1": 1,
+};
+
+/** Width over height for a locked ratio; `null` for Free. */
+export function recordingRatioValue(ratio: RecordingRatio): number | null {
+  return ratio === "free" ? null : RECORDING_RATIO_VALUES[ratio];
+}
+
+/**
+ * A remembered recording area for one display: the rectangle (display-relative DIP) and
+ * the ratio it was drawn with. `ratio` is optional so areas remembered before ratios
+ * existed still load (they read as `free`).
+ */
+export interface RememberedArea extends CaptureRect {
+  ratio?: RecordingRatio;
+}
+
 /** A DIP size. */
 export interface CaptureSize {
   width: number;
@@ -147,7 +179,15 @@ export interface ListedWindow {
  * capture by it.
  */
 export type OverlayAnswer =
-  | { kind: "rect"; mode: "frame"; action: CaptureAction; displayId: number; rect: CaptureRect }
+  | {
+      kind: "rect";
+      mode: "frame";
+      action: CaptureAction;
+      displayId: number;
+      rect: CaptureRect;
+      /** Record intent only: the ratio the box was locked to, stored with the take. */
+      ratio?: RecordingRatio;
+    }
   | { kind: "display"; mode: "screen"; action: CaptureAction; displayId: number }
   | {
       kind: "window";
@@ -172,6 +212,11 @@ export type OverlayAnswer =
  */
 export interface OverlayState {
   mode: CaptureMode;
+  /**
+   * Capture or record, as switched by any overlay (P / V or the switch). Main broadcasts it
+   * so every display's overlay confirms with the same intent. Absent from older senders.
+   */
+  intent?: CaptureIntent;
   hoverDisplayId: number | null;
   frameDisplayId: number | null;
   windows: ListedWindow[] | null;

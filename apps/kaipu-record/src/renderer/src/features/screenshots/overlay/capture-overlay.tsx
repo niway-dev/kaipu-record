@@ -6,20 +6,22 @@ import {
   type CaptureAction,
   type CaptureIntent,
   type CaptureMode,
-  type CaptureRect,
   type OverlayAnswer,
   type OverlayState,
+  type RecordingRatio,
+  type RememberedArea,
 } from "@shared/types/screenshot-capture";
 import { useTranslations } from "@kaipu/i18n";
 import { FrameBox } from "./frame-box";
 import {
   copyKeyLabel,
   detectKeyPlatform,
+  intentForKey,
   modeForKey,
-  recordKeyLabel,
   type KeyPlatform,
 } from "./overlay-keys";
 import type { OverlayQuery } from "./overlay-query";
+import { useOverlayToggles } from "./record-chrome";
 import { ScreenCard } from "./screen-card";
 import type { OverlayChrome } from "./selection-chrome";
 import { WindowPicker } from "./window-picker";
@@ -47,8 +49,15 @@ async function bestEffort(work: Promise<void>, ms: number): Promise<void> {
 /** The slice of the preload bridge the overlay uses; tests pass a fake. */
 export type CaptureOverlayApi = Pick<
   KaipuElectronAPI,
-  "captureOverlay" | "getSettings" | "updateSettings"
->;
+  | "captureOverlay"
+  | "getSettings"
+  | "updateSettings"
+  | "getRecordingSettings"
+  | "updateRecordingSettings"
+  | "onRecordingSettingsChanged"
+> &
+  // Optional: a fake without it reads camera access as "unknown" (togglable).
+  Partial<Pick<KaipuElectronAPI, "getCameraAccessStatus">>;
 
 /**
  * Send `answer` once. `beforeSend` (the Frame box persisting its geometry) runs first,
@@ -89,6 +98,20 @@ export function CaptureOverlay({
   const bridge = api.captureOverlay;
   const platform = useMemo(() => platformProp ?? detectKeyPlatform(), [platformProp]);
   const answered = useRef(false);
+  // Opened to capture or to record (the URL), then switched in place with P / V or the
+  // Capture | Record switch. Only the confirm actions follow it; the selection stays.
+  const [intent, setLocalIntent] = useState<CaptureIntent>(query.intent);
+  /** Like `requestedMode`: the intent this overlay asked main for, not confirmed yet. */
+  const requestedIntent = useRef<CaptureIntent | null>(null);
+  // Switch here at once and tell main, which switches every other overlay.
+  const setIntent = useCallback(
+    (next: CaptureIntent) => {
+      setLocalIntent(next);
+      requestedIntent.current = next;
+      bridge.setIntent(next);
+    },
+    [bridge],
+  );
   const persisting = useRef(false);
   // Seeded from the URL query so the first paint is right; main's broadcast keeps it live.
   const [state, setState] = useState<OverlayState>(() => ({
@@ -111,6 +134,13 @@ export function CaptureOverlay({
   useEffect(
     () =>
       bridge.onState((incoming) => {
+        if (incoming.intent !== undefined) {
+          const asked = requestedIntent.current;
+          if (asked === null || incoming.intent === asked) {
+            requestedIntent.current = null;
+            setLocalIntent(incoming.intent);
+          }
+        }
         const requested = requestedMode.current;
         if (requested === null || incoming.mode === requested) {
           requestedMode.current = null;
@@ -176,6 +206,12 @@ export function CaptureOverlay({
         cancel();
         return;
       }
+      const nextIntent = intentForKey(event);
+      if (nextIntent) {
+        event.preventDefault();
+        if (!answered.current) setIntent(nextIntent);
+        return;
+      }
       const next = modeForKey(event, enabledModes);
       if (!next) return;
       event.preventDefault();
@@ -183,7 +219,7 @@ export function CaptureOverlay({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [cancel, switchMode, enabledModes]);
+  }, [cancel, switchMode, enabledModes, setIntent]);
 
   // Main hid the window and waits until this renderer has drawn one more frame, so its
   // last painted frame cannot end up in the shot. A hidden window may never run its
@@ -208,16 +244,21 @@ export function CaptureOverlay({
     [bridge],
   );
 
+  // Mic, System audio and Camera live on the overlay only when it opened to record.
+  const recording = intent === "record";
+  const toggles = useOverlayToggles(api, recording);
   const chrome = useMemo<OverlayChrome>(
     () => ({
       mode,
       modes: enabledModes,
       platform,
-      intent: query.intent,
+      intent,
       onMode: switchMode,
       onCancel: cancel,
+      onIntent: setIntent,
+      ...(recording ? { toggles } : {}),
     }),
-    [mode, enabledModes, platform, query.intent, switchMode, cancel],
+    [mode, enabledModes, platform, intent, switchMode, cancel, recording, toggles, setIntent],
   );
 
   const body =
@@ -251,12 +292,7 @@ export function CaptureOverlay({
   return (
     <>
       {body}
-      <HintPill
-        mode={mode}
-        platform={platform}
-        modeCount={enabledModes.length}
-        intent={query.intent}
-      />
+      <HintPill mode={mode} platform={platform} modeCount={enabledModes.length} intent={intent} />
       <DisplayLabel index={query.index} />
     </>
   );
@@ -276,13 +312,12 @@ function HintPill({
 }): React.JSX.Element {
   const t = useTranslations("screenshots");
   const copyKey = copyKeyLabel(platform);
-  const recordKey = recordKeyLabel(platform);
   const keys = `1–${modeCount}`;
   const text =
     intent === "record"
       ? mode === "frame"
-        ? t("overlay.hintFrameRecord", { recordKey, keys })
-        : t("overlay.hintPickRecord", { recordKey, keys })
+        ? t("overlay.hintFrameRecord", { keys })
+        : t("overlay.hintPickRecord")
       : mode === "frame"
         ? t("overlay.hintFrame", { copyKey, keys })
         : t("overlay.hintPick", { copyKey, keys });
@@ -371,7 +406,7 @@ function ActiveFrame({
   // opened to record starts from the last recording area.
   const memory = query.intent === "record" ? "recordingArea" : "screenshotFrame";
   // undefined while loading; null when nothing is remembered (or settings failed).
-  const [remembered, setRemembered] = useState<CaptureRect | null | undefined>(undefined);
+  const [remembered, setRemembered] = useState<RememberedArea | null | undefined>(undefined);
 
   useEffect(() => {
     let live = true;
@@ -389,15 +424,32 @@ function ActiveFrame({
   }, [api, key, memory]);
 
   const confirm = useCallback(
-    (rect: CaptureRect, action: CaptureAction) => {
+    (rect: RememberedArea, action: CaptureAction, ratio?: RecordingRatio) => {
       // Remembered by what it became: a rectangle that was recorded is the next recording
       // area, whichever intent opened the overlay; one that was shot is the next frame.
       const into = isRecordAction(action) ? "recordingArea" : "screenshotFrame";
-      send({ kind: "rect", mode: "frame", action, displayId: query.displayId, rect }, async () => {
-        // Re-read so another display's remembered rectangle is kept, not overwritten.
-        const current = await api.getSettings();
-        await api.updateSettings({ [into]: { ...current[into], [key]: rect } });
-      });
+      // A recording area keeps the ratio it was drawn with; the answer carries the rectangle only.
+      const { x, y, width, height } = rect;
+      const plain = { x, y, width, height };
+      const stored = into === "recordingArea" && ratio ? { ...plain, ratio } : plain;
+      // The answer carries it too, so main can store the take's ratio without waiting for
+      // the settings write below (it lands after the answer).
+      const withRatio = into === "recordingArea" && ratio ? { ratio } : {};
+      send(
+        {
+          kind: "rect",
+          mode: "frame",
+          action,
+          displayId: query.displayId,
+          rect: plain,
+          ...withRatio,
+        },
+        async () => {
+          // Re-read so another display's remembered rectangle is kept, not overwritten.
+          const current = await api.getSettings();
+          await api.updateSettings({ [into]: { ...current[into], [key]: stored } });
+        },
+      );
     },
     [api, key, query.displayId, send],
   );

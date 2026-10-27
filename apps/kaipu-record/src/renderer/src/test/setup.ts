@@ -72,9 +72,11 @@ const STUB_SETTINGS = {
   showRecordingSavedCard: true,
   screenshotFrame: {},
   recordingArea: {},
+  recordingMode: "screen",
   screenshotMode: "frame",
   trayHintShown: false,
   diagnosticsEnabled: true,
+  cameraBubble: { shape: "circle", size: 240, deviceId: null },
 } as const;
 
 // Vitest does not expose `afterEach` as a global (globals: false), so
@@ -105,6 +107,8 @@ window.electronAPI = {
   getAccessibilityStatus: async () => "not-required" as const,
   requestAccessibility: async () => "not-required" as const,
   openSystemSettings: async () => {},
+  getCameraAccessStatus: async () => "granted" as const,
+  previewCameraBubbleSize: async (size: number) => size,
   listLocalRecordings: async () => [],
   renameLocalRecording: async () => {},
   markOpenedInEditor: async () => {},
@@ -173,6 +177,9 @@ window.electronAPI = {
   requestChooseSource: () => {},
   onRequestChooseSource: () => () => {},
   requestCaptureScreenshot: () => {},
+  requestRecordSelector: () => {},
+  reportRecorderPhase: () => {},
+  onRecordingShadeState: () => () => {},
   getShortcutStatus: async () => ({
     startRecording: true,
     stopRecording: true,
@@ -197,6 +204,7 @@ window.electronAPI = {
     hover: () => {},
     chooseFrameDisplay: () => {},
     setMode: () => {},
+    setIntent: () => {},
     onState: () => () => {},
     onHiddenAckRequest: () => () => {},
     hiddenAck: () => {},

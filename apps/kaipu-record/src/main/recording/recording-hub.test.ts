@@ -20,9 +20,13 @@ const mockState = vi.hoisted(() => ({
     isVisible: vi.fn(() => false),
     anchorTo: vi.fn(),
     raise: vi.fn(),
+    applySize: vi.fn(),
+    preview: vi.fn((size: number) => size),
   },
   bar: { show: vi.fn(), hide: vi.fn(), send: vi.fn(), raise: vi.fn() },
-  shade: { show: vi.fn(), hide: vi.fn() },
+  shade: { show: vi.fn(), hide: vi.fn(), update: vi.fn() },
+  shortcutRegister: vi.fn((_accelerator: string, _handler: () => void) => true),
+  shortcutUnregister: vi.fn(),
   displays: [] as Array<{
     id: number;
     bounds: { x: number; y: number; width: number; height: number };
@@ -60,6 +64,10 @@ vi.mock("electron", () => ({
   dialog: { showSaveDialog: mockState.showSaveDialog },
   desktopCapturer: { getSources: mockState.getSources },
   systemPreferences: { isTrustedAccessibilityClient: () => false },
+  globalShortcut: {
+    register: mockState.shortcutRegister,
+    unregister: mockState.shortcutUnregister,
+  },
 }));
 
 vi.mock("./camera-bubble-window", () => ({
@@ -70,6 +78,8 @@ vi.mock("./camera-bubble-window", () => ({
     isVisible = mockState.bubble.isVisible;
     anchorTo = mockState.bubble.anchorTo;
     raise = mockState.bubble.raise;
+    applySize = mockState.bubble.applySize;
+    preview = mockState.bubble.preview;
   },
 }));
 
@@ -77,6 +87,7 @@ vi.mock("./recording-shade-window", () => ({
   RecordingShadeWindow: class {
     show = mockState.shade.show;
     hide = mockState.shade.hide;
+    update = mockState.shade.update;
   },
 }));
 
@@ -261,6 +272,13 @@ describe("recording hub — a Dock dropped by a floating panel comes back", () =
     start({}, { sourceId: "screen:2:0", sourceName: "Area · 640 × 360", area });
 
     expect(mockState.shade.show).toHaveBeenCalledWith(display, area.rect, expect.any(Function));
+    // The bar keeps clear of the area (design "Kaipu Record Modes"), anchored to it globally.
+    await vi.waitFor(() =>
+      expect(mockState.bar.show).toHaveBeenCalledWith("2", {
+        includeInRecording: false,
+        anchor: { x: 1612, y: 50, width: 640, height: 360 },
+      }),
+    );
     expect(mockState.bubble.anchorTo).toHaveBeenLastCalledWith({
       x: 1612,
       y: 50,
@@ -273,7 +291,247 @@ describe("recording hub — a Dock dropped by a floating panel comes back", () =
     expect(mockState.bubble.anchorTo).toHaveBeenLastCalledWith(null);
   });
 
-  it("a full-display recording shows no shade and leaves the bubble where it was", async () => {
+  it("draws the countdown on the region the overlay chose, and Esc cancels it", async () => {
+    mockState.shortcutRegister.mockClear();
+    mockState.shortcutUnregister.mockClear();
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    const mainWindow = fakeMainWindow();
+    const hub = registerRecordingHub(() => mainWindow as never);
+    const display = { id: 2, bounds: { x: 1512, y: 0, width: 1512, height: 982 } };
+    mockState.displays = [display];
+    const rect = { x: 100, y: 50, width: 640, height: 360 };
+    const phase = mockState.ipcOn.get(IPC_CHANNELS.recordingRecorderPhase)!;
+
+    hub.prepareRegionCountdown(2, rect);
+    phase({}, { phase: "counting", value: 3 });
+    expect(mockState.shade.show).toHaveBeenLastCalledWith(display, rect, expect.any(Function), {
+      phase: "countdown",
+      value: 3,
+    });
+    expect(mockState.shortcutRegister).toHaveBeenCalledWith("Escape", expect.any(Function));
+
+    // Esc sends the recorder the same Stop that cancels a pending start.
+    const onEscape = mockState.shortcutRegister.mock.calls[0]![1];
+    onEscape();
+    expect(mainWindow.webContents.send).toHaveBeenCalledWith(IPC_CHANNELS.recordingCommand, "stop");
+    phase({}, { phase: "idle" });
+    expect(mockState.shade.hide).toHaveBeenCalled();
+    expect(mockState.shortcutUnregister).toHaveBeenCalledWith("Escape");
+  });
+
+  it("reports a pending take to the tray: on while counting, off once it starts or is cancelled", async () => {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    const onPendingChange = vi.fn();
+    registerRecordingHub(() => fakeMainWindow() as never, undefined, onPendingChange);
+    const phase = mockState.ipcOn.get(IPC_CHANNELS.recordingRecorderPhase)!;
+
+    // Any countdown counts, prepared region or not (the Record page's picker path).
+    phase({}, { phase: "counting", value: 3 });
+    phase({}, { phase: "counting", value: 2 });
+    phase({}, { phase: "idle" });
+    expect(onPendingChange.mock.calls).toEqual([[true], [false]]);
+
+    phase({}, { phase: "counting", value: 1 });
+    phase({}, { phase: "starting" });
+    mockState.ipcOn.get(IPC_CHANNELS.recordingStart)!(
+      {},
+      { sourceId: "screen:1:0", sourceName: "Screen" },
+    );
+    expect(onPendingChange.mock.calls).toEqual([[true], [false], [true], [false]]);
+  });
+
+  it("a countdown nobody prepared draws nothing, and junk reports are ignored", async () => {
+    mockState.shortcutRegister.mockClear();
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    registerRecordingHub(() => fakeMainWindow() as never);
+    const phase = mockState.ipcOn.get(IPC_CHANNELS.recordingRecorderPhase)!;
+    phase({}, { phase: "counting", value: 3 });
+    phase({}, "junk");
+    expect(mockState.shade.show).not.toHaveBeenCalled();
+    expect(mockState.shortcutRegister).not.toHaveBeenCalled();
+  });
+
+  it("the take starting releases Esc and keeps the region's shade for the recording", async () => {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    const hub = registerRecordingHub(() => fakeMainWindow() as never);
+    const display = { id: 2, bounds: { x: 1512, y: 0, width: 1512, height: 982 } };
+    mockState.displays = [display];
+    mockState.getSources.mockResolvedValue([
+      { id: "screen:2:0", name: "Screen 2", display_id: "2" },
+    ]);
+    const rect = { x: 100, y: 50, width: 640, height: 360 };
+    await hub.selectArea(2, rect);
+    hub.prepareRegionCountdown(2, rect);
+    const phase = mockState.ipcOn.get(IPC_CHANNELS.recordingRecorderPhase)!;
+    phase({}, { phase: "counting", value: 1 });
+    phase({}, { phase: "starting" });
+    expect(mockState.shade.update).toHaveBeenCalledWith({ phase: "countdown", value: null });
+
+    mockState.ipcOn.get(IPC_CHANNELS.recordingStart)!(
+      {},
+      { sourceId: "screen:2:0", sourceName: "Area" },
+    );
+    expect(mockState.shortcutUnregister).toHaveBeenCalledWith("Escape");
+    // The recording shade on the same region: the window turns from countdown to recording.
+    expect(mockState.shade.show).toHaveBeenLastCalledWith(display, rect, expect.any(Function));
+  });
+
+  it("reveals the hidden app when a prepared start never reaches the recorder", async () => {
+    vi.useFakeTimers();
+    try {
+      const { registerSettings } = await import("../infrastructure/settings-store");
+      const { registerRecordingHub, COUNTDOWN_REGION_TTL_MS } = await import("./recording-hub");
+      registerSettings();
+      const hub = registerRecordingHub(() => fakeMainWindow() as never);
+      mockState.displays = [{ id: 2, bounds: { x: 1512, y: 0, width: 1512, height: 982 } }];
+      const reveal = vi.fn();
+
+      hub.prepareRegionCountdown(2, { x: 100, y: 50, width: 640, height: 360 }, reveal);
+      vi.advanceTimersByTime(COUNTDOWN_REGION_TTL_MS - 1);
+      expect(reveal).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(reveal).toHaveBeenCalledTimes(1);
+      expect(mockState.shade.hide).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reveals the hidden app when the countdown is cancelled, and not once the take starts", async () => {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    const hub = registerRecordingHub(() => fakeMainWindow() as never);
+    mockState.displays = [{ id: 2, bounds: { x: 1512, y: 0, width: 1512, height: 982 } }];
+    const phase = mockState.ipcOn.get(IPC_CHANNELS.recordingRecorderPhase)!;
+    const reveal = vi.fn();
+
+    hub.prepareRegionCountdown(2, null, reveal);
+    phase({}, { phase: "counting", value: 3 });
+    phase({}, { phase: "idle" });
+    expect(reveal).toHaveBeenCalledTimes(1);
+
+    const revealAgain = vi.fn();
+    hub.prepareRegionCountdown(2, null, revealAgain);
+    phase({}, { phase: "counting", value: 1 });
+    mockState.ipcOn.get(IPC_CHANNELS.recordingStart)!(
+      {},
+      { sourceId: "screen:2:0", sourceName: "S" },
+    );
+    phase({}, { phase: "idle" });
+    expect(revealAgain).not.toHaveBeenCalled();
+  });
+
+  it("starts the region's TTL only once a recreated main window has loaded", async () => {
+    vi.useFakeTimers();
+    try {
+      const { registerSettings } = await import("../infrastructure/settings-store");
+      const { registerRecordingHub, COUNTDOWN_REGION_TTL_MS } = await import("./recording-hub");
+      registerSettings();
+      let loaded: (() => void) | null = null;
+      const loading = {
+        ...fakeMainWindow(),
+        webContents: {
+          send: vi.fn(),
+          isLoading: () => true,
+          once: (_event: string, cb: () => void) => {
+            loaded = cb;
+          },
+        },
+      };
+      const hub = registerRecordingHub(() => loading as never);
+      mockState.displays = [{ id: 2, bounds: { x: 1512, y: 0, width: 1512, height: 982 } }];
+      const reveal = vi.fn();
+
+      hub.prepareRegionCountdown(2, null, reveal);
+      vi.advanceTimersByTime(COUNTDOWN_REGION_TTL_MS * 3);
+      expect(reveal).not.toHaveBeenCalled();
+      loaded!();
+      vi.advanceTimersByTime(COUNTDOWN_REGION_TTL_MS);
+      expect(reveal).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a pending take is busy: isPending and the broadcast say so until it starts", async () => {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    const mainWindow = fakeMainWindow();
+    const hub = registerRecordingHub(() => mainWindow as never);
+    const phase = mockState.ipcOn.get(IPC_CHANNELS.recordingRecorderPhase)!;
+    const state = () =>
+      mockState.ipcHandle.get(IPC_CHANNELS.recordingGetState)!({}) as { pending?: boolean };
+
+    expect(hub.isPending()).toBe(false);
+    phase({}, { phase: "counting", value: 3 });
+    expect(hub.isPending()).toBe(true);
+    expect(state().pending).toBe(true);
+    mockState.ipcOn.get(IPC_CHANNELS.recordingStart)!(
+      {},
+      { sourceId: "screen:1:0", sourceName: "S" },
+    );
+    expect(hub.isPending()).toBe(false);
+    expect(state().pending).toBeUndefined();
+  });
+
+  it("a whole-display countdown turns into the border at once, even when the source lookup fails", async () => {
+    const display = { id: 1, bounds: { x: 0, y: 0, width: 1512, height: 982 } };
+    mockState.displays = [display];
+    mockState.getSources.mockRejectedValue(new Error("no sources"));
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    const hub = registerRecordingHub(() => fakeMainWindow() as never);
+    const phase = mockState.ipcOn.get(IPC_CHANNELS.recordingRecorderPhase)!;
+
+    hub.prepareRegionCountdown(1, null);
+    phase({}, { phase: "counting", value: 1 });
+    mockState.ipcOn.get(IPC_CHANNELS.recordingStart)!(
+      {},
+      { sourceId: "screen:1:0", sourceName: "S" },
+    );
+    // Synchronously: the recording phase (no countdown state) on the same display.
+    expect(mockState.shade.show).toHaveBeenLastCalledWith(display, null, expect.any(Function));
+    await vi.waitFor(() => expect(mockState.bar.show).toHaveBeenCalled());
+    expect(mockState.shade.hide).not.toHaveBeenCalled();
+  });
+
+  it("a full-display recording gets the border around the display and leaves the bubble where it was", async () => {
+    const display = { id: 1, bounds: { x: 0, y: 0, width: 1512, height: 982 } };
+    mockState.displays = [display];
+    mockState.getSources.mockResolvedValue([
+      { id: "screen:1:0", name: "Screen 1", display_id: "1" },
+    ]);
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    registerRecordingHub(() => fakeMainWindow() as never);
+
+    mockState.ipcOn.get(IPC_CHANNELS.recordingStart)!(
+      {},
+      { sourceId: "screen:1:0", sourceName: "Screen 1" },
+    );
+    await vi.waitFor(() =>
+      expect(mockState.shade.show).toHaveBeenCalledWith(display, null, expect.any(Function)),
+    );
+    expect(mockState.bar.show).toHaveBeenCalledWith("1", {
+      includeInRecording: false,
+      anchor: null,
+    });
+    expect(mockState.bubble.anchorTo).not.toHaveBeenCalled();
+  });
+
+  it("a full-display recording shows no shade before its display resolves", async () => {
     const { registerSettings } = await import("../infrastructure/settings-store");
     const { registerRecordingHub } = await import("./recording-hub");
     registerSettings();
@@ -415,6 +673,12 @@ describe("recording hub — choosing an area or a display on the overlay", () =>
       rect: { x: 100, y: 50, width: 640, height: 361 },
       displaySize: { width: 1512, height: 982 },
     });
+  });
+
+  it("keeps the overlay's locked ratio on the area, for the take's capture metadata", async () => {
+    const { handle, settings } = await hub();
+    expect(await handle.selectArea(2, { x: 0, y: 0, width: 640, height: 360 }, "16:9")).toBe(true);
+    expect(settings().area).toMatchObject({ displayId: 2, ratio: "16:9" });
   });
 
   it("a whole display becomes its screen source with no area", async () => {
@@ -573,5 +837,45 @@ describe("recording hub — choosing an area or a display on the overlay", () =>
   it("an area smaller than the minimum is refused", async () => {
     const { handle } = await hub();
     expect(await handle.selectArea(2, { x: 0, y: 0, width: 63, height: 400 })).toBe(false);
+  });
+});
+
+describe("recording hub — camera bubble size", () => {
+  beforeEach(async () => {
+    mockState.userDataDir = await mkdtemp(join(tmpdir(), "kaipu-hub-"));
+    mockState.ipcOn.clear();
+    mockState.ipcHandle.clear();
+    mockState.bubble.applySize.mockReset();
+    mockState.bubble.preview.mockReset();
+    mockState.bubble.preview.mockImplementation((size: number) => size);
+    vi.resetModules();
+  });
+
+  afterEach(async () => {
+    await rm(mockState.userDataDir, { recursive: true, force: true });
+  });
+
+  async function setup(): Promise<void> {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    registerRecordingHub(() => fakeMainWindow() as never);
+  }
+
+  it("re-places the bubble when its persisted size changes, and only then", async () => {
+    await setup();
+    const update = mockState.ipcHandle.get(IPC_CHANNELS.updateSettings)!;
+    update({}, { cameraBubble: { shape: "rounded", size: 240, deviceId: null } });
+    expect(mockState.bubble.applySize).not.toHaveBeenCalled();
+    update({}, { cameraBubble: { shape: "rounded", size: 360, deviceId: null } });
+    expect(mockState.bubble.applySize).toHaveBeenCalledOnce();
+  });
+
+  it("previews a grip drag and answers the applied size", async () => {
+    await setup();
+    mockState.bubble.preview.mockReturnValue(200);
+    const preview = mockState.ipcHandle.get(IPC_CHANNELS.cameraBubblePreviewSize)!;
+    expect(preview({}, 300)).toBe(200);
+    expect(mockState.bubble.preview).toHaveBeenCalledWith(300);
   });
 });

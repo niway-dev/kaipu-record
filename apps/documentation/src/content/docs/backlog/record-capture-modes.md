@@ -5,7 +5,7 @@ description: "Proposal: choose what a recording covers — a display, an area dr
 
 # Record capture modes
 
-> **Status: 🟡 In progress** (2026-10-26). Core implemented on `feat/record-capture-modes`: Record on the capture overlay, the `recordArea` shortcut, compositor crop, shade, bubble and cursor. Owner QA pending; the widget and Record page redesign waits for its design file. Owner request after using the screenshot modes:
+> **Status: 🟡 In progress** (2026-10-26). Core merged from `feat/record-capture-modes`: Record on the capture overlay, the `recordArea` shortcut, compositor crop, shade, bubble and cursor. The selector chrome, widget, Record page and tray submenu from the design file "Kaipu Record Modes" are implemented in #383, #382, #380 and #381, integrated on `feat/record-modes-integration`. Owner QA pending for both. Owner request after using the screenshot modes:
 > "now I want to choose a full screen or a selection range, like screenshot". Design:
 > [Record capture modes](/specs/2026-10-26-record-capture-modes-design/) · ADR
 > [0030](/architecture/decisions/0030-recording-target-and-area-crop-in-the-compositor/) ·
@@ -35,5 +35,7 @@ description: "Proposal: choose what a recording covers — a display, an area dr
   on Windows at 125 % and 150 %.
 - Measure the compositor's frame rate for a 1280×720 area in the hidden main window (spec,
   open question 1).
-- Task 5: the widget's mode row and selection card, from the Claude Design brief in the
-  spec, section 7.
+- Owner QA of task 5 (the integration PR from `feat/record-modes-integration`, which supersedes
+  #380–#383): ratio chips and the locked resize, Enter / R /
+  P / V on the overlay, the countdown drawn on the region with Esc, the border and REC tag over
+  the dark shade, the control bar beside the area. See the spec's task 5 notes.

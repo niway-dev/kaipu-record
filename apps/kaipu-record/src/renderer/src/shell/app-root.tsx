@@ -42,8 +42,8 @@ export function AppRoot(): React.JSX.Element {
   // page — navigate there with an `openPicker` flag the Record page reads.
   useEffect(
     () =>
-      window.electronAPI.onRequestChooseSource(() => {
-        navigate("/", { state: { openPicker: Date.now() } });
+      window.electronAPI.onRequestChooseSource(({ startOnPick }) => {
+        navigate("/", { state: { openPicker: Date.now(), startOnPick } });
       }),
     [navigate],
   );

@@ -6,6 +6,7 @@
  * Pure — imported by main and renderer.
  */
 import type { LocalRecording } from "./library-storage";
+import type { RecordingCapture } from "../recording-capture";
 
 export const AVAILABILITIES = [
   "local",
@@ -86,6 +87,12 @@ export interface LibraryItem {
    * `SessionMeta.exportedSavedAt` for why this is a stamp and not a date comparison.
    */
   editExportedSavedAt: number | null;
+  /**
+   * How the recording was captured (screen / area / window, output size, ratio), from the
+   * local sidecar. The cloud catalog does not carry it, so a cloud-only item reads null,
+   * as does any recording made before this metadata existed.
+   */
+  capture: RecordingCapture | null;
   /** The local copy, when the file is present and readable. */
   local: LocalRecording | null;
   /** The cloud copy as last seen in the catalog cache. */

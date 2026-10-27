@@ -6,7 +6,9 @@ import { IPC_CHANNELS } from "@shared/types/ipc";
 import {
   ENABLED_CAPTURE_MODES,
   isCaptureAction,
+  isCaptureIntent,
   isCaptureMode,
+  isRecordingRatio,
   type CaptureAction,
   type CaptureIntent,
   type CaptureMode,
@@ -177,7 +179,8 @@ export function overlayQuery(
     (ui === "frame" && frameDisplayId !== null ? `&frame=${frameDisplayId}` : "") +
     (display.internal ? "&internal=1" : "") +
     // Only the record intent is written: every screenshot query stays exactly as it was.
-    (intent === "record" ? "&intent=record" : "")
+    // The scale only feeds the record intent's size readout (device pixels).
+    (intent === "record" ? `&intent=record&scale=${display.scaleFactor}` : "")
   );
 }
 
@@ -243,7 +246,11 @@ function parseAnswer(
   if (!rect) return null;
   if (answer.kind === "rect") {
     if (answer.mode !== undefined && answer.mode !== "frame") return null;
-    return { kind: "rect", mode: "frame", action, displayId, rect };
+    // A ratio is kept only when it names a chip; anything else reads as unlocked.
+    const ratio = isRecordingRatio(answer.ratio) ? answer.ratio : undefined;
+    return ratio
+      ? { kind: "rect", mode: "frame", action, displayId, rect, ratio }
+      : { kind: "rect", mode: "frame", action, displayId, rect };
   }
   return null;
 }
@@ -547,6 +554,7 @@ export class CaptureOverlayWindows implements OverlayPort {
   private sendState(window: OverlayWindow): void {
     const state: OverlayState = {
       mode: this.mode,
+      intent: this.intent,
       hoverDisplayId: this.hoverDisplayId,
       frameDisplayId: this.frameDisplayId,
       windows: this.windows,
@@ -652,6 +660,16 @@ export class CaptureOverlayWindows implements OverlayPort {
       this.frameDisplayId = mode === "frame" ? sender : null;
       if (mode === "frame") this.focusOn(sender, true);
       if (mode === "window") this.requestWindows();
+      this.broadcastState();
+    });
+
+    // P / V or the switch on one overlay: every overlay confirms with the same intent, so a
+    // click on another display never takes a screenshot after the user chose Record.
+    this.deps.ipc.on(IPC_CHANNELS.screenshotOverlayIntent, (event, payload) => {
+      if (!this.session?.settle || this.displayOf(event) === null) return;
+      const intent = (payload as { intent?: unknown } | undefined)?.intent;
+      if (!isCaptureIntent(intent) || intent === this.intent) return;
+      this.intent = intent;
       this.broadcastState();
     });
 

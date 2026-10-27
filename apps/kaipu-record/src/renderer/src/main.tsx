@@ -9,7 +9,11 @@ import { CameraBubble } from "./features/camera-bubble/camera-bubble";
 import { CaptureOverlay } from "./features/screenshots/overlay/capture-overlay";
 import { parseOverlayQuery } from "./features/screenshots/overlay/overlay-query";
 import { CaptureToast } from "./features/screenshots/toast/capture-toast";
-import { parseShadeRect, RecordingShade } from "./features/recording-shade/recording-shade";
+import {
+  parseShadeRect,
+  parseShadeState,
+  RecordingShade,
+} from "./features/recording-shade/recording-shade";
 import { installCrashForwarder } from "./features/analytics/crash-forwarder";
 import { I18nRoot } from "./app/i18n-root";
 import { StylexProbe } from "./dev/stylex-probe";
@@ -20,7 +24,7 @@ import { StylexProbe } from "./dev/stylex-probe";
 //   ?window=camera-bubble   → the floating webcam bubble
 //   ?window=capture-overlay → one screenshot capture overlay per display
 //   ?window=capture-toast   → the toast after a quiet capture
-//   ?window=recording-shade → the dim around an area being recorded
+//   ?window=recording-shade → the countdown and the border around what is recorded
 //   (default)               → the full app
 const root = createRoot(document.getElementById("root")!);
 
@@ -49,12 +53,17 @@ async function bootstrap(): Promise<void> {
       node = <></>;
     }
   } else if (windowKind === "recording-shade") {
-    // Transparent, display-sized, click-through: only the dim around the area paints.
+    // Transparent, display-sized, click-through: only the marker around the region paints.
+    // No `rect` means the whole display (its border, or a full-display countdown).
     document.body.style.background = "transparent";
     document.body.dataset.window = "recording-shade";
     installCrashForwarder("recording-shade");
-    const rect = parseShadeRect(window.location.search);
-    node = rect ? <RecordingShade rect={rect} /> : <></>;
+    node = (
+      <RecordingShade
+        rect={parseShadeRect(window.location.search)}
+        initialState={parseShadeState(window.location.search)}
+      />
+    );
   } else if (windowKind === "capture-toast") {
     // Transparent, fixed-size window: only the card paints (see main.css).
     document.body.style.background = "transparent";

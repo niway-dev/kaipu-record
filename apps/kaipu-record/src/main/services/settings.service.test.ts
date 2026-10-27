@@ -77,6 +77,7 @@ describe("mergeSettings", () => {
         showRecordingSavedCard: false,
         screenshotFrame: { "1": { x: 10, y: 20, width: 300, height: 200 } },
         recordingArea: { "2": { x: 0, y: 0, width: 640, height: 360 } },
+        recordingMode: "window",
         screenshotMode: "frame",
         trayHintShown: true,
         diagnosticsEnabled: false,
@@ -97,10 +98,34 @@ describe("mergeSettings", () => {
       showRecordingSavedCard: false,
       screenshotFrame: { "1": { x: 10, y: 20, width: 300, height: 200 } },
       recordingArea: { "2": { x: 0, y: 0, width: 640, height: 360 } },
+      recordingMode: "window",
       screenshotMode: "frame",
       trayHintShown: true,
       diagnosticsEnabled: false,
+      cameraBubble: { shape: "circle", size: 240, deviceId: null },
     });
+  });
+
+  it("keeps a known ratio on a remembered recording area and drops an unknown one", () => {
+    expect(
+      mergeSettings({
+        recordingArea: {
+          "1": { x: 0, y: 0, width: 640, height: 360, ratio: "16:9" },
+          "2": { x: 0, y: 0, width: 300, height: 300, ratio: "4:3" },
+        } as never,
+      }).recordingArea,
+    ).toEqual({
+      "1": { x: 0, y: 0, width: 640, height: 360, ratio: "16:9" },
+      "2": { x: 0, y: 0, width: 300, height: 300 },
+    });
+  });
+
+  it("defaults the recording mode to Screen and keeps any known mode, Window included", () => {
+    expect(DEFAULT_SETTINGS.recordingMode).toBe("screen");
+    expect(mergeSettings({}).recordingMode).toBe("screen");
+    expect(mergeSettings({ recordingMode: "window" }).recordingMode).toBe("window");
+    expect(mergeSettings({ recordingMode: "frame" }).recordingMode).toBe("frame");
+    expect(mergeSettings({ recordingMode: "area" as never }).recordingMode).toBe("screen");
   });
 
   it("remembers no frame by default and drops malformed remembered frames", () => {
@@ -364,5 +389,33 @@ describe("screenshotCopy", () => {
     expect(mergeSettings({ screenshotCopy: "manual" }).screenshotCopy).toBe("manual");
     expect(mergeSettings({ screenshotCopy: "always" as never }).screenshotCopy).toBe("auto");
     expect(mergeSettings({ screenshotCopy: 3 as never }).screenshotCopy).toBe("auto");
+  });
+});
+
+describe("mergeSettings — cameraBubble", () => {
+  it("defaults to a medium circle on the OS default camera", () => {
+    expect(mergeSettings(null).cameraBubble).toEqual({
+      shape: "circle",
+      size: 240,
+      deviceId: null,
+    });
+  });
+
+  it("keeps a valid stored value", () => {
+    const cameraBubble = { shape: "rounded", size: 300, deviceId: "cam-1" } as const;
+    expect(mergeSettings({ cameraBubble }).cameraBubble).toEqual(cameraBubble);
+  });
+
+  it("falls back field by field and clamps the size", () => {
+    expect(
+      mergeSettings({ cameraBubble: { shape: "hexagon", size: 9000, deviceId: 4 } } as never)
+        .cameraBubble,
+    ).toEqual({ shape: "circle", size: 480, deviceId: null });
+    expect(mergeSettings({ cameraBubble: { size: 50.4 } } as never).cameraBubble).toEqual({
+      shape: "circle",
+      size: 120,
+      deviceId: null,
+    });
+    expect(mergeSettings({ cameraBubble: "big" } as never).cameraBubble.size).toBe(240);
   });
 });

@@ -1,4 +1,10 @@
-import { toEnabledCaptureMode, type CaptureRect } from "@shared/types/screenshot-capture";
+import {
+  isCaptureMode,
+  isRecordingRatio,
+  toEnabledCaptureMode,
+  type CaptureRect,
+  type RememberedArea,
+} from "@shared/types/screenshot-capture";
 import {
   type AppSettings,
   DEFAULT_SETTINGS,
@@ -14,6 +20,7 @@ import {
 } from "@shared/types";
 import { defaultShortcutsFor } from "@shared/shortcut-defaults";
 import { sanitizeQuality } from "@shared/recording-quality";
+import { sanitizeCameraBubble } from "@shared/camera-bubble";
 import { DEFAULT_LOCALE, isLocale } from "@kaipu/i18n";
 
 /**
@@ -82,6 +89,21 @@ export function mergeScreenshotFrames(stored: unknown): Record<string, CaptureRe
 }
 
 /**
+ * The recording area memory: the same well-formed rectangles as `mergeScreenshotFrames`,
+ * plus the ratio each was drawn with when it is a known one (an unknown ratio is dropped,
+ * so the area loads as Free instead of being lost).
+ */
+export function mergeRecordingAreas(stored: unknown): Record<string, RememberedArea> {
+  const rects = mergeScreenshotFrames(stored);
+  const result: Record<string, RememberedArea> = {};
+  for (const [displayId, rect] of Object.entries(rects)) {
+    const ratio = (stored as Record<string, { ratio?: unknown }>)[displayId]?.ratio;
+    result[displayId] = isRecordingRatio(ratio) ? { ...rect, ratio } : rect;
+  }
+  return result;
+}
+
+/**
  * Merge persisted (possibly partial or untrusted) settings on top of the
  * defaults, dropping any invalid fields.
  */
@@ -120,7 +142,11 @@ export function mergeSettings(
         ? safe.showRecordingSavedCard
         : DEFAULT_SETTINGS.showRecordingSavedCard,
     screenshotFrame: mergeScreenshotFrames(safe.screenshotFrame),
-    recordingArea: mergeScreenshotFrames(safe.recordingArea),
+    recordingArea: mergeRecordingAreas(safe.recordingArea),
+    // Every mode is valid here, Window included: it records through the thumbnail picker.
+    recordingMode: isCaptureMode(safe.recordingMode)
+      ? safe.recordingMode
+      : DEFAULT_SETTINGS.recordingMode,
     // A stored "window" reads as Frame while Window mode is off (the file keeps it).
     screenshotMode: toEnabledCaptureMode(safe.screenshotMode),
     trayHintShown:
@@ -129,5 +155,6 @@ export function mergeSettings(
       typeof safe.diagnosticsEnabled === "boolean"
         ? safe.diagnosticsEnabled
         : DEFAULT_SETTINGS.diagnosticsEnabled,
+    cameraBubble: sanitizeCameraBubble(safe.cameraBubble),
   };
 }

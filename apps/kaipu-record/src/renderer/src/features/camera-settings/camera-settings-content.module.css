@@ -1,0 +1,34 @@
+/* The settings' frame: the header row, and the anchor for the device chip that the
+   fields draw in it (see camera-settings-fields.module.css). */
+
+.content {
+  position: relative;
+  --camera-settings-header-top: 0px;
+  --camera-settings-header-right: 0px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  /* Room for the device chip on the right. */
+  padding-right: 132px;
+  margin-bottom: 4px;
+}
+
+.content[data-compact] .header {
+  height: 22px;
+  padding-right: 124px;
+}
+
+.headerIcon {
+  color: var(--accent-primary);
+  flex-shrink: 0;
+}
+
+.headerTitle {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}

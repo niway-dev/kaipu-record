@@ -18,7 +18,15 @@ describe("parseOverlayQuery", () => {
       frame: null,
       internal: false,
       intent: "capture",
+      scaleFactor: 1,
     });
+  });
+
+  it("reads the scale factor for the size readout, 1 when absent or malformed", () => {
+    expect(parseOverlayQuery(`${QUERY}&intent=record&scale=2`)?.scaleFactor).toBe(2);
+    expect(parseOverlayQuery(`${QUERY}&scale=1.5`)?.scaleFactor).toBe(1.5);
+    expect(parseOverlayQuery(`${QUERY}&scale=0`)?.scaleFactor).toBe(1);
+    expect(parseOverlayQuery(`${QUERY}&scale=abc`)?.scaleFactor).toBe(1);
   });
 
   it("reads the record intent, and treats anything else as a screenshot", () => {

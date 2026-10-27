@@ -161,6 +161,26 @@ describe("composeLibrary", () => {
     expect(items.find((i) => i.assetId === "B")?.editSavedAt).toBeNull();
   });
 
+  it("carries capture from the local copy; cloud-only and legacy items read null", () => {
+    const capture = {
+      mode: "area",
+      width: 1280,
+      height: 720,
+      ratio: "16:9",
+    } as const;
+    const { items } = composeLibrary({
+      local: [local("f1", "A", { capture }), local("f2", "C", { capture }), local("f3", "D")],
+      catalog: [cloud("A"), cloud("B")],
+      editing: {},
+      editSession: {},
+    });
+    const byId = (assetId: string) => items.find((i) => i.assetId === assetId)?.capture;
+    expect(byId("A")).toEqual(capture); // local + cloud
+    expect(byId("C")).toEqual(capture); // local only
+    expect(byId("B")).toBeNull(); // cloud only
+    expect(byId("D")).toBeNull(); // recorded before capture metadata
+  });
+
   it("with no account there are only local items", () => {
     const { items, catalogUpdates } = composeLibrary({
       local: [local("f1", "A")],

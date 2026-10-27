@@ -70,16 +70,30 @@ export function isRecordKey(event: KeyboardEvent): boolean {
 }
 
 /**
- * What Enter does: take the screenshot, or (opened to record) keep the selection as the
- * recording target without starting, so camera and audio can still be set (ADR 0030).
+ * P (photo) and V (video) with no modifier switch the overlay between taking a screenshot
+ * and recording, as in the owner's "Kaipu Unified Capture" design. Nothing else changes:
+ * the selection and the mode stay.
  */
-export function primaryAction(intent: CaptureIntent): "capture" | "select" {
-  return intent === "record" ? "select" : "capture";
+export function intentForKey(event: KeyboardEvent): CaptureIntent | null {
+  if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return null;
+  const key = event.key.toLowerCase();
+  return key === "p" ? "capture" : key === "v" ? "record" : null;
 }
 
 /**
- * The action a key fires on a selection: Enter the primary one, R Record in
- * either intent, ⌘C / Ctrl+C Copy only when the overlay opened to take a screenshot.
+ * What Enter does: take the screenshot, or (opened to record) start the countdown on the
+ * selection. Design "Kaipu Record Modes" moved Mic, System audio and Camera onto the
+ * overlay's mode widget, so the old "Use selection" step (`select`) has no seat any more:
+ * the overlay never sends it, main still accepts it.
+ */
+export function primaryAction(intent: CaptureIntent): "capture" | "record" {
+  return intent === "record" ? "record" : "capture";
+}
+
+/**
+ * The action a key fires on a selection: Enter the primary one, R Record in either intent
+ * (an alias of Enter when the overlay opened to record), ⌘C / Ctrl+C Copy only when the
+ * overlay opened to take a screenshot.
  */
 export function actionForKey(
   event: KeyboardEvent,

@@ -54,6 +54,7 @@ const cloudOnlyItem: LibraryItem = {
   comparison: "same",
   editing: "needs-source",
   sharing: "private",
+  capture: null,
 };
 
 /** Local-and-cloud, identical bytes, an editor export with no editing project of
@@ -102,6 +103,7 @@ const exportedOnlyItem: LibraryItem = {
   comparison: "same",
   editing: "exported-only",
   sharing: "private",
+  capture: null,
 };
 
 /** Same shape as `exportedOnlyItem`, but with its own editing project still on
@@ -160,6 +162,29 @@ describe("LibraryDetailPage", () => {
     expect(screen.queryByRole("button", { name: /delete/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /remove local download/i })).toBeNull();
     expect(screen.queryByRole("button", { name: "Share" })).toBeNull();
+  });
+
+  it("shows how a recording was captured in the metadata line", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [
+        {
+          ...exportedOnlyItem,
+          capture: {
+            mode: "area" as const,
+            width: 1234,
+            height: 567,
+            ratio: "free" as const,
+          },
+        },
+      ],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+
+    renderDetail("asset-b");
+    await waitForLoaded();
+
+    expect(screen.getByTestId("capture-meta")).toHaveTextContent("FRAME · 1234 × 567");
   });
 
   it("offers Share on a local recording, raw or already an export (NIW2-218)", async () => {
@@ -296,6 +321,7 @@ describe("LibraryDetailPage — lineage and edit badge", () => {
     comparison: "same" as const,
     editing: "project-available" as const,
     sharing: "private" as const,
+    capture: null,
     derivedFromAssetId: null,
     editSavedAt: null,
     editExportedSavedAt: null,

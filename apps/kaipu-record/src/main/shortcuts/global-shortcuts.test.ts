@@ -6,12 +6,18 @@ import { defaultShortcutsFor } from "@shared/shortcut-defaults";
 const DEFAULT_SHORTCUTS = defaultShortcutsFor("darwin");
 
 const register = vi.fn((_accelerator: string, _handler: () => void) => true);
+const unregister = vi.fn();
 vi.mock("electron", () => ({
-  globalShortcut: { register, unregisterAll: vi.fn() },
+  globalShortcut: { register, unregister, unregisterAll: vi.fn() },
 }));
 
-const { applyGlobalShortcuts, getShortcutStatus, registerGlobalShortcuts } =
-  await import("./global-shortcuts");
+const {
+  applyGlobalShortcuts,
+  getShortcutStatus,
+  holdTemporaryShortcut,
+  registerGlobalShortcuts,
+  releaseTemporaryShortcut,
+} = await import("./global-shortcuts");
 
 function handlers() {
   return Object.fromEntries(SHORTCUT_ACTIONS.map((action) => [action, vi.fn()])) as never;
@@ -27,6 +33,23 @@ describe("global shortcuts and Window mode", () => {
     expect(registered).toHaveLength(SHORTCUT_ACTIONS.length - 1);
     expect(getShortcutStatus().captureWindow).toBe(false);
     expect(getShortcutStatus().captureFrame).toBe(true);
+  });
+
+  it("re-registers a held temporary shortcut after a settings re-apply, until released", () => {
+    registerGlobalShortcuts({ getShortcuts: () => DEFAULT_SHORTCUTS, handlers: handlers() });
+    const onEscape = vi.fn();
+    expect(holdTemporaryShortcut("Escape", onEscape)).toBe(true);
+    register.mockClear();
+
+    // A settings write mid-countdown re-applies everything (unregisterAll first).
+    applyGlobalShortcuts();
+    expect(register).toHaveBeenCalledWith("Escape", onEscape);
+
+    releaseTemporaryShortcut("Escape");
+    expect(unregister).toHaveBeenCalledWith("Escape");
+    register.mockClear();
+    applyGlobalShortcuts();
+    expect(register.mock.calls.map(([accelerator]) => accelerator)).not.toContain("Escape");
   });
 
   it("registers captureWindow when Window is enabled", () => {

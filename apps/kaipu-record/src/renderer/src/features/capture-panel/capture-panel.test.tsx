@@ -37,8 +37,8 @@ describe("CapturePanel — tabs", () => {
   it("defaults to the Record tab (recording controls, not the capture buttons)", () => {
     render(<CapturePanel />);
     expect(screen.getByRole("tab", { name: "Record" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("button", { name: /Start Recording/ })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^Screen/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Start recording/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Capture/ })).not.toBeInTheDocument();
   });
 
   it("switches to the Capture tab and shows the Frame and Screen actions, and no Window (it is off)", () => {
@@ -49,16 +49,51 @@ describe("CapturePanel — tabs", () => {
     }
     expect(screen.queryByRole("button", { name: /^Window/ })).not.toBeInTheDocument();
     // Recording controls are no longer mounted on the capture tab.
-    expect(screen.queryByRole("button", { name: /Start Recording/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Start recording/ })).not.toBeInTheDocument();
   });
 
-  it("asks main to open the source picker when the source card's Choose/Change is clicked", () => {
-    const requestChooseSource = vi.fn();
-    window.electronAPI = { ...realApi, requestChooseSource };
+  it("Start opens the selector in the last used mode; a mode chip opens it in its own", async () => {
+    const requestRecordSelector = vi.fn();
+    const requestStartRecording = vi.fn();
+    const settings = await realApi.getSettings();
+    window.electronAPI = {
+      ...realApi,
+      requestRecordSelector,
+      requestStartRecording,
+      getSettings: async () => ({
+        ...settings,
+        recordingMode: "frame",
+        recordingArea: { "1": { x: 0, y: 0, width: 1280, height: 720, ratio: "16:9" } },
+      }),
+    };
     render(<CapturePanel />);
-    // The mocked setup has no selected source, so the source card shows "Choose".
-    fireEvent.click(screen.getByRole("button", { name: "Choose" }));
-    expect(requestChooseSource).toHaveBeenCalledTimes(1);
+    await screen.findByText("Last used: Frame · 16:9. Switch inside the selector.");
+    // Frame, Window and Screen: Window opens the thumbnail picker while its overlay is off.
+    for (const name of [/^Frame/, /^Window/, /^Screen/]) {
+      expect(screen.getByRole("button", { name })).toBeInTheDocument();
+    }
+    expect(screen.getByRole("button", { name: /^Frame/ })).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(screen.getByRole("button", { name: /Start recording/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Window/ }));
+    expect(requestRecordSelector.mock.calls).toEqual([[undefined], ["window"]]);
+    // Nothing starts a take straight from the tray any more.
+    expect(requestStartRecording).not.toHaveBeenCalled();
+  });
+
+  it("shows Mic, Audio and Camera under the mode chips", () => {
+    render(<CapturePanel />);
+    expect(screen.getAllByText("OFF")).toHaveLength(3);
+  });
+
+  it("splits the Camera tile in the idle layout and opens the inline drawer inside the measured root", async () => {
+    const { container } = render(<CapturePanel />);
+    const chevron = screen.getByRole("button", { name: "Camera settings" });
+    expect(screen.queryByRole("region", { name: "Camera settings" })).not.toBeInTheDocument();
+    fireEvent.click(chevron);
+    const drawer = screen.getByRole("region", { name: "Camera settings" });
+    // The drawer sits inside the root the ResizeObserver measures, so the window follows it.
+    expect(container.firstElementChild?.contains(drawer)).toBe(true);
   });
 
   it("captures in the chosen mode when a chip is clicked, without touching the stored mode", async () => {
@@ -99,6 +134,27 @@ describe("CapturePanel — tabs", () => {
     // Clicking the locked Capture tab does not reveal the capture action.
     fireEvent.click(screen.getByRole("tab", { name: "Capture" }));
     expect(screen.queryByRole("button", { name: /^Screen/ })).not.toBeInTheDocument();
+  });
+
+  it("treats a pending take (countdown) as busy: no Start, no chips, tabs locked", async () => {
+    const requestRecordSelector = vi.fn();
+    window.electronAPI = {
+      ...realApi,
+      requestRecordSelector,
+      getRecordingState: async () => ({
+        active: false,
+        status: "recording" as const,
+        elapsedSeconds: 0,
+        pending: true,
+      }),
+    };
+    render(<CapturePanel />);
+    await waitFor(() => expect(screen.getByRole("tab", { name: "Capture" })).toBeDisabled());
+    expect(screen.queryByRole("button", { name: /Start recording/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Frame/ })).not.toBeInTheDocument();
+    // No "Recording · 0:00" banner: nothing records yet.
+    expect(screen.queryByText(/Recording ·/)).not.toBeInTheDocument();
+    expect(requestRecordSelector).not.toHaveBeenCalled();
   });
 
   it("keeps the three toggles live mid-take while the source card stays locked", async () => {

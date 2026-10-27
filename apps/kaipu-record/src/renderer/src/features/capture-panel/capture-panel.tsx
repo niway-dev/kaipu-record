@@ -8,7 +8,15 @@ import { SourceCard } from "@renderer/features/recording/components/source-card"
 import { RecordingToggles } from "@renderer/features/recording/components/recording-toggles";
 import { MicPicker } from "@renderer/features/recording/components/mic-picker";
 import { RecordButton } from "@renderer/features/recording/components/record-button";
+import { RecordModeButtons } from "@renderer/features/recording/components/record-mode-buttons";
+import { useRecordingSettings } from "@renderer/features/recording/hooks/use-recording-settings";
+import { useRecordingMode } from "@renderer/features/recording/hooks/use-recording-mode";
 import { CaptureModeButtons } from "@renderer/features/screenshots/capture-mode-buttons";
+import {
+  CameraPanelDrawer,
+  CameraPanelTile,
+  useCameraControl,
+} from "@renderer/features/camera-settings";
 import { PanelHeader } from "./components/panel-header";
 import { PanelTabs, type PanelTab } from "./components/panel-tabs";
 import type { CaptureMode } from "@shared/types/screenshot-capture";
@@ -23,11 +31,16 @@ export function CapturePanel(): React.JSX.Element {
   // Same source loading/default-selection as the Record page, so both windows
   // show the same screen instead of a hardcoded placeholder.
   useSourceSelection(setup);
+  const { area } = useRecordingSettings();
+  const recordingMode = useRecordingMode(area);
 
   // The recording runs in another window, so this panel learns about it through
   // the global activity broadcast — it can't tell from its own (idle) recorder.
   const activity = useRecordingActivity();
-  const isBusy = activity.active;
+  // A pending take (countdown) is busy too: no second selector while it counts.
+  const isBusy = activity.active || activity.pending === true;
+  // The split Camera tile and its inline drawer share this.
+  const camera = useCameraControl();
   const stopRecording = (): void => window.electronAPI?.controlCommand("stop");
 
   // Two modes: recording controls and the screenshot action. A recording locks the
@@ -62,8 +75,10 @@ export function CapturePanel(): React.JSX.Element {
   // "Change" from the tray: the picker + source enumeration live in the main renderer,
   // so open the main window and have its Record page open the source picker.
   const chooseSource = (): void => window.electronAPI?.requestChooseSource();
-  // Start from the tray: open the main window and have its Record page start.
-  const requestStart = (): void => window.electronAPI?.requestStartRecording();
+  // Start from the tray: main opens the selector (the capture overlay with the record
+  // intent) in the last used mode, or straight in a chip's mode (design "Kaipu Record Modes").
+  const openSelector = (mode?: CaptureMode): void =>
+    window.electronAPI?.requestRecordSelector(mode);
   // Capture from the tray: main dismisses the panel and runs the chosen mode (same flow as
   // its global hotkey), landing the user in the editor.
   const requestCapture = (mode: CaptureMode): void =>
@@ -77,9 +92,49 @@ export function CapturePanel(): React.JSX.Element {
           while a recording is in progress. */}
       <PanelTabs active={activeTab} onChange={setTab} disabled={isBusy} />
 
-      {activeTab === "record" ? (
+      {activeTab === "record" && !isBusy ? (
+        <RecordModeButtons
+          variant="panel"
+          mode={recordingMode.mode}
+          area={recordingMode.area}
+          shortcut={shortcuts?.startRecording}
+          onStart={() => openSelector()}
+          onPick={openSelector}
+        >
+          <div className={styles.inputs}>
+            <RecordingToggles
+              variant="compact"
+              isMicrophoneEnabled={setup.isMicrophoneEnabled}
+              isSystemAudioEnabled={setup.isSystemAudioEnabled}
+              isCameraEnabled={setup.isCameraEnabled}
+              onToggleMicrophone={setup.toggleMicrophone}
+              onToggleSystemAudio={setup.toggleSystemAudio}
+              onToggleCamera={setup.toggleCamera}
+              cameraSlot={
+                <CameraPanelTile
+                  control={camera}
+                  on={setup.isCameraEnabled}
+                  onToggle={setup.toggleCamera}
+                />
+              }
+            />
+            {/* The drawer grows the panel downward; the ResizeObserver above follows it. */}
+            <CameraPanelDrawer control={camera} on={setup.isCameraEnabled} isRecording={false} />
+            {setup.isMicrophoneEnabled && setup.microphones.length > 0 && (
+              <MicPicker
+                variant="compact"
+                microphones={setup.microphones}
+                selected={setup.selectedMicrophone}
+                isOpen={setup.isMicrophoneMenuOpen}
+                onToggle={setup.toggleMicrophoneMenu}
+                onSelect={setup.selectMicrophone}
+              />
+            )}
+          </div>
+        </RecordModeButtons>
+      ) : activeTab === "record" ? (
         <>
-          {isBusy && (
+          {activity.active && (
             <RecordingIndicator
               variant="banner"
               paused={activity.status === "paused"}
@@ -109,7 +164,16 @@ export function CapturePanel(): React.JSX.Element {
               onToggleMicrophone={setup.toggleMicrophone}
               onToggleSystemAudio={setup.toggleSystemAudio}
               onToggleCamera={setup.toggleCamera}
+              cameraSlot={
+                <CameraPanelTile
+                  control={camera}
+                  on={setup.isCameraEnabled}
+                  onToggle={setup.toggleCamera}
+                />
+              }
             />
+
+            <CameraPanelDrawer control={camera} on={setup.isCameraEnabled} isRecording={isBusy} />
 
             {setup.isMicrophoneEnabled && setup.microphones.length > 0 && (
               <div
@@ -130,13 +194,13 @@ export function CapturePanel(): React.JSX.Element {
           </div>
 
           {/* Recording runs in the main window renderer (getDisplayMedia/WebCodecs
-              live there), not this transparent panel. While idle the button asks the
-              main window to start; while recording it stops via the hub command. */}
+              live there), not this transparent panel: mid-take the button stops it via
+              the hub command. */}
           <RecordButton
             variant="compact"
-            isRecording={isBusy}
-            shortcut={shortcuts?.startRecording}
-            onClick={isBusy ? stopRecording : requestStart}
+            isRecording
+            shortcut={shortcuts?.stopRecording}
+            onClick={stopRecording}
           />
         </>
       ) : (

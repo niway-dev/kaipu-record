@@ -11,7 +11,15 @@ import type { TagColor } from "@kaipu/domain/constants";
 import { DEFAULT_QUALITY, type RecordingQuality } from "../recording-quality";
 import type { Locale } from "@kaipu/i18n";
 import type { ExportPresetId, ExportQuality } from "./export-preset";
-import { ENABLED_CAPTURE_MODES, type CaptureMode, type CaptureRect } from "./screenshot-capture";
+import type { RecordingCapture } from "../recording-capture";
+import {
+  ENABLED_CAPTURE_MODES,
+  type CaptureMode,
+  type CaptureRect,
+  type RecordingRatio,
+  type RememberedArea,
+} from "./screenshot-capture";
+import { DEFAULT_CAMERA_BUBBLE, type CameraBubbleSettings } from "../camera-bubble";
 
 /**
  * "system" (follow the OS appearance) is a deliberate non-goal for now — the
@@ -270,7 +278,13 @@ export interface AppSettings {
    * from `screenshotFrame` because a recording stage and a screenshot frame are rarely the
    * same rectangle, and sharing one would make each feature undo the other's last choice.
    */
-  recordingArea: Record<string, CaptureRect>;
+  recordingArea: Record<string, RememberedArea>;
+  /**
+   * The mode "Start recording" opens the selector in (design "Kaipu Record Modes"): the
+   * last one the user recorded with or picked on the Record page or the tray. `window`
+   * opens the thumbnail picker while Window mode is off in the overlay (NIW2-469).
+   */
+  recordingMode: CaptureMode;
   /**
    * The one current screenshot mode, app-wide. The Screenshots page, the tray panel and the
    * generic `captureScreenshot` shortcut all capture with it; picking a mode on the page or
@@ -292,6 +306,12 @@ export interface AppSettings {
    * describes it, and SignPath's signing terms require the opt-out.
    */
   diagnosticsEnabled: boolean;
+  /**
+   * The camera bubble's shape, size and device (see `shared/camera-bubble.ts`). Changed
+   * from the Camera settings popover (Record page), drawer (capture panel) or the
+   * bubble's resize grip, and applied to a showing bubble live, mid-take included.
+   */
+  cameraBubble: CameraBubbleSettings;
 }
 
 /**
@@ -318,9 +338,11 @@ export const DEFAULT_SETTINGS: Omit<AppSettings, "shortcuts"> = {
   showRecordingSavedCard: true,
   screenshotFrame: {},
   recordingArea: {},
+  recordingMode: "screen",
   screenshotMode: "frame",
   trayHintShown: false,
   diagnosticsEnabled: true,
+  cameraBubble: DEFAULT_CAMERA_BUBBLE,
 };
 
 /** Prefixes on the `recording:finalize` rejection message; the renderer picks the toast from them. */
@@ -358,6 +380,10 @@ export const IPC_CHANNELS = {
   checkPermissions: "permissions:check",
   requestPermission: "permissions:request",
   openSystemSettings: "permissions:open-settings",
+  /** Camera access as a tri-state, so "blocked" is never confused with "not asked yet". */
+  cameraAccessStatus: "permissions:camera-access-status",
+  /** Bubble → main: resize the bubble while its grip is dragged (not persisted). */
+  cameraBubblePreviewSize: "camera-bubble:preview-size",
   // macOS Accessibility, for the click hook. Status never prompts; request does (PR 10).
   accessibilityStatus: "permissions:accessibility-status",
   accessibilityRequest: "permissions:accessibility-request",
@@ -430,6 +456,7 @@ export const IPC_CHANNELS = {
   // Overlay → main: switch every overlay to this mode (`{ mode: CaptureMode }`); main
   // validates, rebroadcasts the state, and lists the windows the first time Window is entered.
   screenshotOverlayMode: "screenshot:overlay-mode",
+  screenshotOverlayIntent: "screenshot:overlay-intent",
   // Overlay → main (Frame): "move the frame to this display" (`{ displayId: number }`).
   screenshotOverlayFrameDisplay: "screenshot:overlay-frame-display",
   // Main → overlay (no payload): "reply after your next animation frame"; overlay → main
@@ -485,6 +512,14 @@ export const IPC_CHANNELS = {
   // Capture Panel "Change" asks the main window to open the screen picker (panel → main
   // → Record page opens the source picker). Reused as the main → renderer broadcast too.
   recordingRequestSourcePicker: "recording:request-source-picker",
+  // Record page / Capture Panel "Start recording" or a mode chip: main opens the selector
+  // (the capture overlay with the record intent, or the thumbnail picker for Window).
+  recordingRequestSelector: "recording:request-selector",
+  // Main renderer → main: the recorder's phase while a start is pending, so main can draw
+  // the countdown on the chosen region (recording shade window).
+  recordingRecorderPhase: "recording:recorder-phase",
+  // Main → recording shade window: countdown tick or recording.
+  recordingShadeState: "recording-shade:state",
   // Capture Panel asks main to run the interactive screenshot capture (panel → main →
   // same flow as the ⌘⌃X hotkey). Send-only; the capture result flows through the
   // existing screenshot channels.
@@ -571,6 +606,11 @@ export interface RecordingActivity {
   elapsedSeconds: number;
   /** See {@link RecordingTick.systemAudioAvailable}. Only meaningful while active. */
   systemAudioAvailable?: boolean;
+  /**
+   * A take is pending: its countdown runs or its streams are being acquired, so `active` is
+   * still false. Windows treat it as busy (no second selector, no screenshot).
+   */
+  pending?: boolean;
 }
 
 /** What the GIF export sends with the file bytes (`gifSave`). No path: main picks it. */
@@ -605,6 +645,11 @@ export interface RecordingFinalizeMeta {
    * `"edit:<hash>"` = the editor's scene at export time.
    */
   exportFingerprint?: string;
+  /**
+   * How a new take was captured (mode, output size, ratio), stored in the sidecar for
+   * library labels. Set by the recorder only; exports leave it unset. Main sanitizes it.
+   */
+  capture?: RecordingCapture | null;
 }
 
 /**
@@ -616,6 +661,21 @@ export interface RecordingBackfillMeta {
   durationSeconds: number;
   thumbnail: ArrayBuffer | null;
 }
+
+/**
+ * The recorder's phase as main needs it to draw the countdown over the chosen region
+ * (main renderer → main). `counting` carries the tick (3, 2, 1); `starting` is the gap
+ * while streams are acquired; `idle` after a cancel or a failed start.
+ */
+export type RecorderPhaseReport =
+  | { phase: "counting"; value: number }
+  | { phase: "starting" }
+  | { phase: "idle" };
+
+/** What the recording shade paints (main → shade window). */
+export type RecordingShadeState =
+  | { phase: "countdown"; value: number | null }
+  | { phase: "recording" };
 
 /** Source identity for placing the bar on the recorded screen. */
 export interface RecordingStartInfo {
@@ -637,6 +697,11 @@ export interface RecordingArea {
   rect: CaptureRect;
   /** The display's size in DIP (`Display.bounds`), when the area was chosen. */
   displaySize: { width: number; height: number };
+  /**
+   * The aspect ratio the remembered area is locked to, when the Record page set one.
+   * Absent on areas chosen before ratios existed; the capture metadata then infers it.
+   */
+  ratio?: RecordingRatio;
 }
 
 /**

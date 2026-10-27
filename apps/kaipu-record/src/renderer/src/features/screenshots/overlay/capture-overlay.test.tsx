@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { DEFAULT_SETTINGS, type AppSettings } from "@shared/types";
+import { DEFAULT_SETTINGS, type AppSettings, type RecordingSettings } from "@shared/types";
 import { defaultShortcutsFor } from "@shared/shortcut-defaults";
 import {
   CAPTURE_MODES,
@@ -71,6 +71,15 @@ function fakeApi(
     windows: null,
   };
   let stateListener: ((state: OverlayState) => void) | null = null;
+  let recording: RecordingSettings = {
+    selectedSource: null,
+    selectedMicrophone: null,
+    isMicrophoneEnabled: true,
+    isSystemAudioEnabled: false,
+    isCameraEnabled: false,
+    area: null,
+  };
+  let recordingListener: ((settings: RecordingSettings) => void) | null = null;
   let ackListener: (() => void) | null = null;
   const api = {
     captureOverlay: {
@@ -78,6 +87,7 @@ function fakeApi(
       hover: vi.fn(),
       chooseFrameDisplay: vi.fn(),
       setMode: vi.fn(),
+      setIntent: vi.fn(),
       onState: vi.fn((cb: (state: OverlayState) => void) => {
         stateListener = cb;
         if (initialState) cb(state);
@@ -98,11 +108,27 @@ function fakeApi(
       settings = { ...settings, ...patch };
       return settings;
     }),
+    getRecordingSettings: vi.fn(async () => recording),
+    updateRecordingSettings: vi.fn((patch: Partial<RecordingSettings>) => {
+      recording = { ...recording, ...patch };
+    }),
+    onRecordingSettingsChanged: vi.fn((cb: (settings: RecordingSettings) => void) => {
+      recordingListener = cb;
+      return () => {
+        recordingListener = null;
+      };
+    }),
   } satisfies CaptureOverlayApi;
   return {
     api,
+    pushRecording: (patch: Partial<RecordingSettings>) =>
+      act(() => {
+        recording = { ...recording, ...patch };
+        recordingListener?.(recording);
+      }),
     answer: api.captureOverlay.answer,
     setMode: api.captureOverlay.setMode,
+    setIntent: api.captureOverlay.setIntent,
     chooseFrameDisplay: api.captureOverlay.chooseFrameDisplay,
     pushState: (patch: Partial<OverlayState>) =>
       act(() => {
@@ -353,13 +379,15 @@ describe("ScreenCard", () => {
 });
 
 describe("FrameBox", () => {
-  it("attaches one toolbar under the frame, centred: modes, Capture, Copy, Record, Cancel", async () => {
-    const { api } = fakeApi({ "42": { x: 100, y: 120, width: 400, height: 300 } });
+  it("attaches one toolbar under the frame, centred: switch, modes, Capture, Copy, Record, Cancel", async () => {
+    const { api } = fakeApi({ "42": { x: 400, y: 120, width: 400, height: 300 } });
     render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
     await screen.findByTestId("capture-frame");
     const bar = screen.getByTestId("selection-toolbar");
     const buttons = within(bar).getAllByRole("button");
     expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual([
+      "Screenshot (P)",
+      "Video (V)",
       "Frame (1)",
       "Window (2)",
       "Screen (3)",
@@ -381,10 +409,10 @@ describe("FrameBox", () => {
       "title",
       "Cancel · Esc",
     );
-    // 10 DIP under the bottom edge (120 + 300), centred on the frame (x = 300).
+    // 10 DIP under the bottom edge (120 + 300), centred on the frame (x = 600).
     const width = toolbarWidth(3, false);
     expect(bar).toHaveAttribute("data-side", "below");
-    expect(bar.style.left).toBe(`${300 - width / 2}px`);
+    expect(bar.style.left).toBe(`${600 - width / 2}px`);
     expect(bar.style.top).toBe("430px");
   });
 
@@ -1393,6 +1421,8 @@ describe("Window mode disabled (the flag as shipped)", () => {
     await screen.findByTestId("capture-frame");
     const buttons = within(screen.getByTestId("selection-toolbar")).getAllByRole("button");
     expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual([
+      "Screenshot (P)",
+      "Video (V)",
       "Frame (1)",
       "Screen (2)",
       "Capture",
@@ -1450,7 +1480,7 @@ describe("CaptureOverlay — opened to record (ADR 0030)", () => {
     expect(frameGeometry()).toEqual(area);
   });
 
-  it("Enter keeps the area as the recording target and remembers it as the recording area", async () => {
+  it("Enter starts recording the area and remembers it, with its ratio, as the recording area", async () => {
     const { api, answer } = fakeApi({ "42": frame }, FRAME_ON_42, { "42": area });
     render(
       <CaptureOverlay
@@ -1466,18 +1496,22 @@ describe("CaptureOverlay — opened to record (ADR 0030)", () => {
       expect(answer).toHaveBeenCalledExactlyOnceWith({
         kind: "rect",
         mode: "frame",
-        action: "select",
+        action: "record",
         displayId: 42,
         rect: area,
+        // The answer carries the ratio too, so main stores it with the take.
+        ratio: "free",
       }),
     );
-    expect(api.updateSettings).toHaveBeenCalledWith({ recordingArea: { "42": area } });
+    expect(api.updateSettings).toHaveBeenCalledWith({
+      recordingArea: { "42": { ...area, ratio: "free" } },
+    });
     expect(api.updateSettings).not.toHaveBeenCalledWith(
       expect.objectContaining({ screenshotFrame: expect.anything() }),
     );
   });
 
-  it("R records the area, and the bar offers Use selection, Record and Capture", async () => {
+  it("R records the area too; the record chrome replaces the screenshot toolbar", async () => {
     const { api, answer } = fakeApi({}, FRAME_ON_42, { "42": area });
     render(
       <CaptureOverlay
@@ -1488,11 +1522,11 @@ describe("CaptureOverlay — opened to record (ADR 0030)", () => {
       />,
     );
     await screen.findByTestId("capture-frame");
-    const bar = screen.getByTestId("selection-toolbar");
-    expect(within(bar).getByRole("button", { name: /Use selection/ })).toBeEnabled();
-    expect(within(bar).getByRole("button", { name: /^Record/ })).toBeEnabled();
-    expect(within(bar).getByRole("button", { name: /^Capture$/ })).toBeEnabled();
-    expect(within(bar).queryByRole("button", { name: /^Copy/ })).toBeNull();
+    expect(screen.queryByTestId("selection-toolbar")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Use selection/ })).toBeNull();
+    expect(screen.getByTestId("start-pill")).toBeEnabled();
+    expect(screen.getByTestId("record-widget")).toBeInTheDocument();
+    expect(screen.getByTestId("ratio-bar")).toBeInTheDocument();
 
     press("r");
     await waitFor(() =>
@@ -1502,7 +1536,7 @@ describe("CaptureOverlay — opened to record (ADR 0030)", () => {
     );
   });
 
-  it("an area under the minimum cannot be recorded or selected, only captured", async () => {
+  it("an area under the minimum cannot be recorded", async () => {
     const tiny = { x: 100, y: 120, width: 40, height: 300 };
     const { api, answer } = fakeApi({}, FRAME_ON_42, { "42": tiny });
     render(
@@ -1514,9 +1548,7 @@ describe("CaptureOverlay — opened to record (ADR 0030)", () => {
       />,
     );
     await screen.findByTestId("capture-frame");
-    const bar = screen.getByTestId("selection-toolbar");
-    expect(within(bar).getByRole("button", { name: /Use selection/ })).toBeDisabled();
-    expect(within(bar).getByRole("button", { name: /^Record/ })).toBeDisabled();
+    expect(screen.getByTestId("start-pill")).toBeDisabled();
 
     press("Enter");
     press("r");
@@ -1564,7 +1596,7 @@ describe("CaptureOverlay — opened to record (ADR 0030)", () => {
     });
   });
 
-  it("in the record intent, a click on the display chooses it without recording", async () => {
+  it("in the record intent, a click on the display records it", async () => {
     const { api, answer } = fakeApi({}, SCREEN);
     render(
       <CaptureOverlay
@@ -1577,7 +1609,7 @@ describe("CaptureOverlay — opened to record (ADR 0030)", () => {
     expect(answer).toHaveBeenCalledExactlyOnceWith({
       kind: "display",
       mode: "screen",
-      action: "select",
+      action: "record",
       displayId: 42,
     });
   });
@@ -1616,5 +1648,336 @@ describe("CaptureOverlay — the Window picker opened to record", () => {
     press("Enter");
     await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
     expect(answer).not.toHaveBeenCalled();
+  });
+});
+
+describe("CaptureOverlay — record chrome (design Kaipu Record Modes)", () => {
+  const area = { x: 100, y: 120, width: 640, height: 360 };
+
+  function renderRecord(
+    areas: Record<string, CaptureRect & { ratio?: string }> = { "42": area },
+    overrides: Partial<OverlayQuery> = {},
+  ) {
+    const fake = fakeApi({}, FRAME_ON_42, areas as Record<string, CaptureRect>);
+    render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("frame", { intent: "record", scaleFactor: 2, ...overrides })}
+        api={fake.api}
+        platform="mac"
+      />,
+    );
+    return fake;
+  }
+
+  it("prints the box's size in device pixels next to the ratio chips", async () => {
+    renderRecord();
+    await screen.findByTestId("capture-frame");
+    expect(screen.getByTestId("ratio-size")).toHaveTextContent("1280 × 720");
+    const bar = screen.getByTestId("ratio-bar");
+    const chips = within(bar).getAllByRole("button");
+    expect(chips.map((chip) => chip.textContent)).toEqual(["Free", "16:9", "9:16", "1:1"]);
+    expect(within(bar).getByRole("button", { name: "Free" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("a ratio chip reshapes the box around its centre and is remembered with the area", async () => {
+    const { answer, api } = renderRecord({ "42": { ...area, height: 300 } });
+    await screen.findByTestId("capture-frame");
+    fireEvent.click(screen.getByRole("button", { name: "1:1" }));
+    const box = frameGeometry();
+    expect(box.width).toBe(box.height);
+    expect(box.x + box.width / 2).toBe(420);
+
+    fireEvent.click(screen.getByTestId("start-pill"));
+    await waitFor(() =>
+      expect(answer).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ kind: "rect", action: "record", rect: box }),
+      ),
+    );
+    expect(api.updateSettings).toHaveBeenCalledWith({
+      recordingArea: { "42": { ...box, ratio: "1:1" } },
+    });
+  });
+
+  it("opens with the remembered ratio locked, and a corner drag keeps it", async () => {
+    renderRecord({ "42": { ...area, ratio: "16:9" } });
+    await screen.findByTestId("capture-frame");
+    expect(screen.getByRole("button", { name: "16:9" })).toHaveAttribute("aria-pressed", "true");
+    const sheet = screen.getByTestId("capture-frame").parentElement!;
+    // Grab the bottom-right corner (740, 480) and pull it right.
+    fireEvent.pointerDown(sheet, { button: 0, clientX: 740, clientY: 480, pointerId: 1 });
+    fireEvent.pointerMove(sheet, { clientX: 1060, clientY: 500, pointerId: 1 });
+    fireEvent.pointerUp(sheet, { pointerId: 1 });
+    expect(frameGeometry()).toEqual({ x: 100, y: 120, width: 960, height: 540 });
+  });
+
+  it("after P the frame resizes freely; V locks the remembered ratio again", async () => {
+    renderRecord({ "42": { ...area, ratio: "16:9" } });
+    await screen.findByTestId("capture-frame");
+    press("p");
+    const sheet = screen.getByTestId("capture-frame").parentElement!;
+    fireEvent.pointerDown(sheet, { button: 0, clientX: 740, clientY: 480, pointerId: 1 });
+    fireEvent.pointerMove(sheet, { clientX: 1060, clientY: 900, pointerId: 1 });
+    fireEvent.pointerUp(sheet, { pointerId: 1 });
+    // Free: width and height follow the pointer independently.
+    expect(frameGeometry()).toEqual({ x: 100, y: 120, width: 960, height: 780 });
+
+    press("v");
+    expect(screen.getByRole("button", { name: "16:9" })).toHaveAttribute("aria-pressed", "true");
+    // The free box is refit to the restored ratio at once, before any further drag.
+    const box = frameGeometry();
+    expect(Math.abs(box.width / box.height - 16 / 9)).toBeLessThan(0.01);
+    fireEvent.pointerDown(sheet, {
+      button: 0,
+      clientX: box.x + box.width,
+      clientY: box.y + box.height,
+      pointerId: 2,
+    });
+    fireEvent.pointerMove(sheet, { clientX: box.x + 640, clientY: box.y + 100, pointerId: 2 });
+    fireEvent.pointerUp(sheet, { pointerId: 2 });
+    const locked = frameGeometry();
+    expect(Math.abs(locked.width / locked.height - 16 / 9)).toBeLessThan(0.01);
+  });
+
+  it("the widget offers the modes, then Mic, System audio and Camera, then Cancel", async () => {
+    const { api } = renderRecord();
+    await screen.findByTestId("capture-frame");
+    const widget = screen.getByTestId("record-widget");
+    expect(widget).toHaveAttribute("data-side", "right");
+    const labels = within(widget)
+      .getAllByRole("button")
+      .map((button) => button.getAttribute("aria-label"));
+    expect(labels).toEqual([
+      "Screenshot (P)",
+      "Video (V)",
+      "Frame (1)",
+      "Window (2)",
+      "Screen (3)",
+      "Microphone",
+      "System audio",
+      "Camera",
+      "Cancel",
+    ]);
+    // Main's settings: the microphone is on, system audio is off.
+    await waitFor(() =>
+      expect(within(widget).getByRole("button", { name: "Microphone" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      ),
+    );
+    fireEvent.click(within(widget).getByRole("button", { name: "System audio" }));
+    expect(api.updateRecordingSettings).toHaveBeenCalledExactlyOnceWith({
+      isSystemAudioEnabled: true,
+    });
+    expect(within(widget).getByRole("button", { name: "System audio" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("a camera blocked in the OS reads locked on the widget and cannot be turned on", async () => {
+    const fake = fakeApi({}, FRAME_ON_42, { "42": area });
+    const api = { ...fake.api, getCameraAccessStatus: vi.fn(async () => "blocked" as const) };
+    render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("frame", { intent: "record", scaleFactor: 2 })}
+        api={api}
+        platform="mac"
+      />,
+    );
+    const widget = await screen.findByTestId("record-widget");
+    const camera = await within(widget).findByRole("button", { name: "Camera, blocked" });
+    expect(camera).toHaveAttribute("aria-disabled", "true");
+    expect(camera).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(camera);
+    expect(fake.api.updateRecordingSettings).not.toHaveBeenCalled();
+  });
+
+  it("sizes the camera placeholder from the bubble setting", async () => {
+    const fake = fakeApi({}, FRAME_ON_42, { "42": area });
+    const settings = await fake.api.getSettings();
+    const api = {
+      ...fake.api,
+      getSettings: vi.fn(async () => ({
+        ...settings,
+        cameraBubble: { ...settings.cameraBubble, size: 160, shape: "rounded" as const },
+      })),
+    };
+    render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("frame", { intent: "record", scaleFactor: 2 })}
+        api={api}
+        platform="mac"
+      />,
+    );
+    await screen.findByTestId("capture-frame");
+    fake.pushRecording({ isCameraEnabled: true });
+    await waitFor(() => expect(screen.getByTestId("camera-preview").style.width).toBe("160px"));
+    expect(screen.getByTestId("camera-preview")).toHaveAttribute("data-shape", "rounded");
+  });
+
+  it("shows where the camera bubble will be while the camera is on", async () => {
+    const { pushRecording } = renderRecord();
+    await screen.findByTestId("capture-frame");
+    expect(screen.queryByTestId("camera-preview")).toBeNull();
+    pushRecording({ isCameraEnabled: true });
+    const preview = screen.getByTestId("camera-preview");
+    // Bottom-left inside the box, 56 DIP in (window margin + pad), default 240 DIP:
+    // (100 + 56, 480 - 56 - 240).
+    expect(preview.style.left).toBe("156px");
+    expect(preview.style.top).toBe("184px");
+  });
+
+  it("Cancel on the widget cancels, like Esc", async () => {
+    const { answer } = renderRecord();
+    await screen.findByTestId("capture-frame");
+    fireEvent.click(
+      within(screen.getByTestId("record-widget")).getByRole("button", { name: "Cancel" }),
+    );
+    expect(answer).toHaveBeenCalledExactlyOnceWith({ kind: "cancelled" });
+  });
+
+  it("the hint names the record keys", async () => {
+    renderRecord();
+    await screen.findByTestId("capture-frame");
+    expect(screen.getByTestId("hint-pill")).toHaveTextContent(
+      "Drag the box or its handles · 1–3 switch mode · ↵ start · Esc cancel",
+    );
+  });
+});
+
+describe("CaptureOverlay — the intent is shared across displays", () => {
+  it("V on the overlay that has the frame asks main to switch every overlay", async () => {
+    const first = fakeApi({ "42": { x: 100, y: 120, width: 640, height: 360 } });
+    render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("frame")}
+        api={first.api}
+        platform="mac"
+      />,
+    );
+    await screen.findByTestId("capture-frame");
+    press("v");
+    expect(first.setIntent).toHaveBeenCalledExactlyOnceWith("record");
+  });
+
+  it("the other display's overlay, opened to capture, records once main broadcasts the switch", async () => {
+    // Display 7 shows the Screen card; display 42 (another window) pressed V.
+    const other = fakeApi(
+      {},
+      { mode: "screen", hoverDisplayId: 7, frameDisplayId: null, windows: null },
+    );
+    render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("screen", { displayId: 7 })}
+        api={other.api}
+        platform="mac"
+      />,
+    );
+    expect(screen.queryByText(/Record this display/)).toBeNull();
+    other.pushState({ intent: "record" });
+    expect(await screen.findByText(/Record this display/)).toBeInTheDocument();
+    // A click there now records, not screenshots.
+    fireEvent.click(screen.getByText(/Record this display/));
+    await waitFor(() =>
+      expect(other.answer).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: "display", action: "record", displayId: 7 }),
+      ),
+    );
+  });
+});
+
+describe("CaptureOverlay — the Capture | Record switch", () => {
+  const area = { x: 100, y: 120, width: 640, height: 360 };
+
+  it("P and V switch the confirm actions and keep the box and the mode", async () => {
+    const { api, answer, setMode } = fakeApi({}, FRAME_ON_42, { "42": area });
+    render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("frame", { intent: "record" })}
+        api={api}
+        platform="mac"
+      />,
+    );
+    await screen.findByTestId("capture-frame");
+    expect(screen.getByTestId("start-pill")).toBeInTheDocument();
+
+    press("p");
+    // Screenshot actions now: Capture (Enter) and Copy; the record chrome is gone.
+    const bar = screen.getByTestId("selection-toolbar");
+    expect(within(bar).getByRole("button", { name: "Capture" })).toBeEnabled();
+    expect(within(bar).getByRole("button", { name: "Copy" })).toBeEnabled();
+    expect(within(bar).getByRole("button", { name: "Screenshot (P)" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.queryByTestId("start-pill")).toBeNull();
+    expect(frameGeometry()).toEqual(area);
+    expect(setMode).not.toHaveBeenCalled();
+
+    press("v");
+    expect(screen.getByTestId("start-pill")).toBeInTheDocument();
+    expect(frameGeometry()).toEqual(area);
+
+    press("p");
+    press("Enter");
+    await waitFor(() =>
+      expect(answer).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ kind: "rect", action: "capture", rect: area }),
+      ),
+    );
+  });
+
+  it("a click on the switch turns a screenshot overlay into a recording one", async () => {
+    const { api, answer } = fakeApi({ "42": area });
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
+    await screen.findByTestId("capture-frame");
+    fireEvent.click(screen.getByRole("button", { name: "Video (V)" }));
+    expect(screen.queryByTestId("selection-toolbar")).toBeNull();
+    press("Enter");
+    await waitFor(() =>
+      expect(answer).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ kind: "rect", action: "record", rect: area }),
+      ),
+    );
+  });
+
+  it("the Screen card carries the switch and, opened to record, Record this display and the inputs", async () => {
+    const { api, answer } = fakeApi({}, SCREEN);
+    render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("screen", { intent: "record" })}
+        api={api}
+      />,
+    );
+    const card = await screen.findByTestId("screen-card");
+    expect(within(card).getByTestId("intent-switch")).toBeInTheDocument();
+    expect(within(card).getByRole("button", { name: "Mic" })).toBeInTheDocument();
+    expect(within(card).getByRole("button", { name: "System" })).toBeInTheDocument();
+    expect(within(card).getByRole("button", { name: "Cam" })).toBeInTheDocument();
+    expect(screen.getByTestId("hint-pill")).toHaveTextContent(
+      "Each display shows its own card · Esc cancel",
+    );
+
+    fireEvent.click(within(card).getByRole("button", { name: "Screenshot (P)" }));
+    expect(within(card).queryByRole("button", { name: "Mic" })).toBeNull();
+    expect(within(card).getByRole("button", { name: /Capture this display/ })).toBeInTheDocument();
+    fireEvent.click(within(card).getByRole("button", { name: "Video (V)" }));
+    fireEvent.click(within(card).getByRole("button", { name: "Record this display" }));
+    expect(answer).toHaveBeenCalledExactlyOnceWith({
+      kind: "display",
+      mode: "screen",
+      action: "record",
+      displayId: 42,
+    });
   });
 });
