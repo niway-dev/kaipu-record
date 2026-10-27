@@ -716,14 +716,22 @@ export function registerRecordingHub(
         micLevelWatched.delete(sender.id);
         micLevels.remove(sender.id);
       });
+      // A reload or a dead renderer drops the page without running its unsubscribe, so its
+      // count would keep the recorder sending forever; the reloaded page subscribes afresh.
+      sender.on("did-start-navigation", (details) => {
+        if (details.isMainFrame && !details.isSameDocument) micLevels.remove(sender.id);
+      });
+      sender.on("render-process-gone", () => micLevels.remove(sender.id));
     }
   });
   ipcMain.on(IPC_CHANNELS.micLevelsUnsubscribe, (e) => micLevels.unsubscribe(e.sender.id));
-  ipcMain.on(IPC_CHANNELS.micLevelsReport, (_e, levels: unknown) => {
-    // From a renderer: pass on only a short list of plain numbers.
+  ipcMain.on(IPC_CHANNELS.micLevelsReport, (e, levels: unknown) => {
+    // Only the recorder (the main window's renderer) reports levels, and only a short list
+    // of plain numbers, clamped to what a bar can show.
+    if (e.sender.id !== getMainWindow()?.webContents.id) return;
     if (!Array.isArray(levels) || levels.length > 16) return;
     if (!levels.every((level) => typeof level === "number" && Number.isFinite(level))) return;
-    micLevels.publish(levels);
+    micLevels.publish(levels.map((level: number) => Math.min(1, Math.max(0, level))));
   });
   ipcMain.handle(IPC_CHANNELS.micLevelsGetListening, () => micLevels.listening());
   ipcMain.on(IPC_CHANNELS.recordingReportTick, (_e, tick: RecordingTick) => {
