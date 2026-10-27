@@ -15,7 +15,7 @@ import {
 import type { WatermarkConfig } from "@renderer/features/watermark/watermark";
 import type { RecordingArea } from "@shared/types/ipc";
 import { areaEncodePlan } from "./area-crop";
-import { measureFrameSize } from "./frame-size";
+import { measureFrameSize, playWithin } from "./frame-size";
 import { startRecordingCompositor, type RecordingCompositor } from "./recording-compositor";
 import { levelsFromTimeDomain } from "./audio-levels";
 import { waitForFirstMediaTimestamp, type FirstMediaTimestamp } from "./first-media-timestamp";
@@ -183,14 +183,20 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
   let compositor: RecordingCompositor | null = null;
   let encodeTrack = screenTrack;
   if (areaPlan || options.watermark || needsResize) {
-    compositor = await startRecordingCompositor(
-      screenStream,
-      target,
-      options.watermark ?? null,
-      frameRate,
-      // Passed only for an area, so a full-display call stays exactly what it was.
-      ...(areaPlan ? [areaPlan.source] : []),
-    );
+    try {
+      compositor = await startRecordingCompositor(
+        screenStream,
+        target,
+        options.watermark ?? null,
+        frameRate,
+        // Passed only for an area, so a full-display call stays exactly what it was.
+        ...(areaPlan ? [areaPlan.source] : []),
+      );
+    } catch (error) {
+      // No take will own the capture: release it, or the screen stays "being recorded".
+      screenStream.getTracks().forEach((t) => t.stop());
+      throw error;
+    }
     encodeTrack = compositor.track;
   }
 
@@ -391,7 +397,7 @@ async function captureThumbnail(
     const video = document.createElement("video");
     video.srcObject = stream;
     video.muted = true;
-    await video.play();
+    await playWithin(video); // no frame in time: the take goes on without a poster
     await new Promise((r) => setTimeout(r, 150));
     const canvas = document.createElement("canvas");
     // Draw at the real output size — uniform scale (target keeps the source AR).

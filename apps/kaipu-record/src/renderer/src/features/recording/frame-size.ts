@@ -26,21 +26,14 @@ export async function measureFrameSize(
   const video = document.createElement("video");
   video.muted = true;
   video.srcObject = new MediaStream([track]);
-  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    await Promise.race([
-      video.play(),
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error("frame size: no frame in time")), timeoutMs);
-      }),
-    ]);
+    await playWithin(video, timeoutMs);
     if (video.videoWidth > 0 && video.videoHeight > 0) {
       return { width: video.videoWidth, height: video.videoHeight };
     }
   } catch {
     // Fall through to the reported size.
   } finally {
-    clearTimeout(timer);
     video.pause();
     video.srcObject = null;
   }
@@ -49,4 +42,27 @@ export async function measureFrameSize(
     width: reported.width ?? fallback.width,
     height: reported.height ?? fallback.height,
   };
+}
+
+/**
+ * `video.play()` for a live capture, rejected after `timeoutMs`. It only settles once the
+ * track has a frame, so every element a take plays (frame size, compositor, thumbnail) goes
+ * through this: one uncapped `play()` on a track that never delivers is a start that never
+ * ends, with the window hidden and Stop unable to reach an engine that does not exist yet.
+ */
+export async function playWithin(
+  video: HTMLVideoElement,
+  timeoutMs = FRAME_SIZE_TIMEOUT_MS,
+): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      video.play(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("capture: no frame in time")), timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
