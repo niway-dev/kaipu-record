@@ -9,8 +9,8 @@ description: "The Mic and Audio tiles split like the Camera tile: a popover on t
 > Unit tests, type checks and lint pass; nothing has been run in the Electron app yet, so the
 > audio chain, the live changes mid-take and the meter are untested with a real microphone.
 > Design: Claude Design project "Kaipu Camera Controls", section **0 / MIC & AUDIO** and
-> **0 / CAPTURE PANEL**. Plan (deleted by the shipping PR):
-> `plans/2026-10-27-mic-and-system-audio-settings.md`. Builds on
+> **0 / CAPTURE PANEL**. The implementation plan lives in git history (it shipped with this
+> branch and was deleted by its PR). Builds on
 > [Camera bubble — shape and size](/backlog/camera-bubble-shape-and-size/), whose split tile and
 > settings shell it reuses.
 
