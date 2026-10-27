@@ -87,6 +87,16 @@ describe("CameraSettingsFields — size", () => {
     await userEvent.keyboard("{ArrowRight}");
     expect(onChange).toHaveBeenLastCalledWith({ size: 160 });
   });
+
+  it("from the checked Custom chip, ← goes to the last preset and → to the first", async () => {
+    const { onChange } = renderFields({ bubble: { ...bubble, size: 300 } });
+    screen.getByRole("radio", { name: "Custom, 300 pixels" }).focus();
+    await userEvent.keyboard("{ArrowLeft}");
+    expect(onChange).toHaveBeenLastCalledWith({ size: 360 });
+    screen.getByRole("radio", { name: "Custom, 300 pixels" }).focus();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(onChange).toHaveBeenLastCalledWith({ size: 160 });
+  });
 });
 
 describe("CameraSettingsFields — slider", () => {
