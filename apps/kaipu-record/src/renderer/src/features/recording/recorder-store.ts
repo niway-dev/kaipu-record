@@ -434,11 +434,13 @@ async function stopRecording(): Promise<void> {
       (async (): Promise<LocalRecording> => {
         await activeEngine.stop();
         markRecordTiming("engine.stop resolved");
+        // Settled by stop (or given up on): a poster frame still pending saves without one.
+        const thumbnail = await Promise.race([activeEngine.thumbnail, Promise.resolve(null)]);
         const finalized = await window.electronAPI.recordingFinalize(activeSessionId, {
           title,
           durationSeconds,
           durationMs,
-          thumbnail: activeEngine.thumbnail,
+          thumbnail,
           capture: activeCapture,
         });
         markRecordTiming("finalize resolved");

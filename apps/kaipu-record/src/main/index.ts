@@ -36,6 +36,7 @@ import {
   getAppSettings,
   applyDockPolicy,
   onSettingsChanged,
+  onSettingsKeysChanged,
   updateAppSettings,
 } from "./infrastructure/settings-store";
 import { registerAuth } from "./infrastructure/auth-store";
@@ -831,9 +832,9 @@ app.whenReady().then(() => {
       toggleCamera: () => hub?.toggleRecordingSetting("isCameraEnabled"),
     },
   });
-  onSettingsChanged(() => applyGlobalShortcuts());
-  // Rebuild the native tray menu when the language changes.
-  onSettingsChanged((settings) => rebuildTrayMenu(settings.locale));
+  onSettingsKeysChanged(["shortcuts"], () => applyGlobalShortcuts());
+  // Rebuild the native tray menu when the language (or a shortcut it labels) changes.
+  onSettingsKeysChanged(["locale", "shortcuts"], (settings) => rebuildTrayMenu(settings.locale));
 
   // Library: local recordings vault + cloud catalog.
   registerLibraryVaultHandlers({ auth, serverUrl: authServerUrl });
