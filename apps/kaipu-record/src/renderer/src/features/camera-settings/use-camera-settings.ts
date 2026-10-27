@@ -129,7 +129,11 @@ export function useCameraSettings(): CameraSettingsStore {
     const unsubscribe = window.electronAPI.onSettingsChanged(accept);
     return () => {
       unsubscribe();
-      if (timer.current) clearTimeout(timer.current);
+      // A change still throttled when the popover or drawer closes is sent now, not lost.
+      if (timer.current) {
+        clearTimeout(timer.current);
+        send();
+      }
     };
   }, [send]);
 

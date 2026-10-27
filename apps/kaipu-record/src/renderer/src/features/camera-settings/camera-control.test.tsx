@@ -173,4 +173,29 @@ describe("useCameraSettings throttling", () => {
       vi.useRealTimers();
     }
   });
+
+  it("flushes a change still throttled when the control unmounts", async () => {
+    vi.useFakeTimers();
+    try {
+      const updateSettings = vi.fn(async () => ({}) as never);
+      window.electronAPI.updateSettings = updateSettings;
+      const { unmount } = render(
+        <CameraControlWithPopover on onToggle={() => {}} isRecording={false} />,
+      );
+      await act(async () => {
+        await Promise.resolve();
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Camera settings" }));
+      const slider = screen.getByRole("slider");
+      fireEvent.change(slider, { target: { value: "250" } });
+      // Within the throttle window: the second value is still waiting on the timer.
+      fireEvent.change(slider, { target: { value: "300" } });
+      unmount();
+      expect(updateSettings).toHaveBeenLastCalledWith({
+        cameraBubble: { shape: "circle", size: 300, deviceId: null },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
