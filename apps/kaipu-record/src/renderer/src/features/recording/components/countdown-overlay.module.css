@@ -13,6 +13,20 @@
   animation: fade 150ms ease-out;
 }
 
+/* Confined to a region (Frame / area recordings): a pink 2 px border, and everything
+   outside the region dimmed. Position and size come from inline style. */
+.region {
+  box-sizing: border-box;
+  border: 2px solid var(--accent-primary);
+  box-shadow: 0 0 0 99999px rgba(0, 0, 0, 0.4);
+}
+
+.hint {
+  font-family: var(--font-family);
+  font-size: 13.5px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
 .number {
   font-family: var(--font-family);
   font-size: 160px;
