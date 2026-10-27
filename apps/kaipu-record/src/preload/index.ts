@@ -154,6 +154,7 @@ const kaipuApi: KaipuElectronAPI = {
   requestRecordSelector: (mode) =>
     ipcRenderer.send(IPC_CHANNELS.recordingRequestSelector, mode ? { mode } : {}),
   reportRecorderPhase: (report) => ipcRenderer.send(IPC_CHANNELS.recordingRecorderPhase, report),
+  waitForCountdownVisible: () => ipcRenderer.invoke(IPC_CHANNELS.recordingCountdownVisible),
   onRecordingShadeState: (callback) => {
     const listener = (_e: IpcRendererEvent, state: RecordingShadeState): void => callback(state);
     ipcRenderer.on(IPC_CHANNELS.recordingShadeState, listener);

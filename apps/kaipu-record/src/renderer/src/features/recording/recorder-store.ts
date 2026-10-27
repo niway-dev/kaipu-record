@@ -49,6 +49,11 @@ export interface RecorderSnapshot {
 }
 
 const COUNTDOWN_SECONDS = 3;
+/**
+ * How long the first tick waits for main to say the countdown is on screen (the shade window
+ * loading on the chosen region). Past it the countdown runs anyway: a take never depends on it.
+ */
+const COUNTDOWN_VISIBLE_TIMEOUT_MS = 1500;
 /** Minimum time the bar shows "Saving…" so it never just flashes on short clips. */
 const MIN_SAVING_MS = 600;
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -73,6 +78,8 @@ let capture: RecordingCapture | null = null;
 let clock: ElapsedState | null = null;
 let tickTimer: ReturnType<typeof setInterval> | null = null;
 let countdownTimer: ReturnType<typeof setInterval> | null = null;
+/** Bumped by every start request, so a countdown cancelled while waiting to be visible stays cancelled. */
+let countdownRequest = 0;
 let stopping = false;
 /** Set when cancel arrives during the brief "starting" gap (streams acquiring,
  *  no engine handle yet) — consumed as soon as `startEngine` resolves so a
@@ -159,8 +166,26 @@ function clearCountdownTimer(): void {
 export function requestStartRecording(resolveInput: () => StartInput): void {
   if (snapshot.status !== "idle") return;
   lastResolveInput = resolveInput;
+  const request = ++countdownRequest;
+  update({ status: "counting", countdown: COUNTDOWN_SECONDS });
+  // "3" gets its whole second only once it is visible: a region countdown is drawn by a
+  // window main opens on this first report, and the clock used to run while it loaded,
+  // which read as "3.2...1".
+  void countdownVisible().then(() => {
+    // Cancelled (or cancelled and started again) while waiting.
+    if (request !== countdownRequest || snapshot.status !== "counting") return;
+    runCountdown(resolveInput);
+  });
+}
+
+async function countdownVisible(): Promise<void> {
+  const wait = window.electronAPI.waitForCountdownVisible?.();
+  if (!wait) return;
+  await Promise.race([wait.catch(() => undefined), delay(COUNTDOWN_VISIBLE_TIMEOUT_MS)]);
+}
+
+function runCountdown(resolveInput: () => StartInput): void {
   let remaining = COUNTDOWN_SECONDS;
-  update({ status: "counting", countdown: remaining });
   countdownTimer = setInterval(() => {
     remaining -= 1;
     if (remaining <= 0) {

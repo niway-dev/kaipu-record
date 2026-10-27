@@ -93,6 +93,7 @@ describe("recorder-store", () => {
     window.electronAPI.recordingFinalize = vi.fn(async () => RECORDING);
     window.electronAPI.recordingAbort = vi.fn(async () => {});
     window.electronAPI.recordingReportTick = vi.fn();
+    window.electronAPI.waitForCountdownVisible = vi.fn(async () => {});
     // Every test must leave the store idle for the next one — assert that
     // invariant up front so a leaky test fails loudly instead of silently
     // breaking an unrelated later test via a stuck non-idle status.
@@ -127,6 +128,47 @@ describe("recorder-store", () => {
     expect(callOrder).toEqual(["recordingStart", "recordingCreate", "startEngine"]);
 
     await stopAndSettle();
+  });
+
+  it("holds the first tick until main says the countdown is on screen", async () => {
+    let visible!: () => void;
+    window.electronAPI.waitForCountdownVisible = vi.fn(
+      () => new Promise<void>((resolve) => (visible = resolve)),
+    );
+    store.requestStartRecording(() => input);
+    // The shade is still loading: "3" stays, however long that takes (up to the cap).
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(store.getRecorderSnapshot().countdown).toBe(3);
+
+    visible();
+    await vi.advanceTimersByTimeAsync(999);
+    expect(store.getRecorderSnapshot().countdown).toBe(3);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(store.getRecorderSnapshot().countdown).toBe(2);
+    store.stopOrCancelRecording();
+  });
+
+  it("runs the countdown anyway when main never says it is visible", async () => {
+    window.electronAPI.waitForCountdownVisible = vi.fn(() => new Promise<void>(() => {}));
+    store.requestStartRecording(() => input);
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(store.getRecorderSnapshot().countdown).toBe(3);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(store.getRecorderSnapshot().countdown).toBe(2);
+    store.stopOrCancelRecording();
+  });
+
+  it("stays cancelled when cancelled while waiting for the countdown to show", async () => {
+    let visible!: () => void;
+    window.electronAPI.waitForCountdownVisible = vi.fn(
+      () => new Promise<void>((resolve) => (visible = resolve)),
+    );
+    store.requestStartRecording(() => input);
+    store.stopOrCancelRecording();
+    visible();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(store.getRecorderSnapshot().status).toBe("idle");
+    expect(window.electronAPI.recordingCreate).not.toHaveBeenCalled();
   });
 
   it("reports each pending phase to main so the countdown can be drawn on the region", async () => {

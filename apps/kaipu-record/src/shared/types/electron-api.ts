@@ -352,6 +352,11 @@ export interface KaipuElectronAPI {
   requestRecordSelector(mode?: CaptureMode): void;
   /** Main renderer → main: the recorder's countdown phase (see `RecorderPhaseReport`). */
   reportRecorderPhase(report: RecorderPhaseReport): void;
+  /**
+   * Main renderer → main: resolves once the countdown is visible — at once without a region,
+   * when the shade window has shown the first tick with one.
+   */
+  waitForCountdownVisible(): Promise<void>;
   /** Recording shade window: what to paint (countdown tick or recording). */
   onRecordingShadeState(callback: (state: RecordingShadeState) => void): () => void;
 

@@ -321,6 +321,49 @@ describe("recording hub — a Dock dropped by a floating panel comes back", () =
     expect(mockState.shortcutUnregister).toHaveBeenCalledWith("Escape");
   });
 
+  it("answers that the countdown is visible only once the region's shade has shown it", async () => {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    const hub = registerRecordingHub(() => fakeMainWindow() as never);
+    mockState.displays = [{ id: 2, bounds: { x: 0, y: 0, width: 1512, height: 982 } }];
+    const phase = mockState.ipcOn.get(IPC_CHANNELS.recordingRecorderPhase)!;
+    const visible = mockState.ipcHandle.get(IPC_CHANNELS.recordingCountdownVisible)!;
+
+    // No region: the Record page draws its own countdown, already on screen.
+    expect(visible({})).toBeUndefined();
+
+    hub.prepareRegionCountdown(2, { x: 100, y: 50, width: 640, height: 360 });
+    let shown = false;
+    const waiting = (visible({}) as Promise<void>).then(() => (shown = true));
+    phase({}, { phase: "counting", value: 3 });
+    await Promise.resolve();
+    expect(shown).toBe(false);
+
+    // The shade's ready-to-show callback.
+    const onShown = mockState.shade.show.mock.lastCall![2] as () => void;
+    onShown();
+    await waiting;
+    expect(shown).toBe(true);
+    expect(visible({})).toBeUndefined();
+  });
+
+  it("releases a recorder waiting on the countdown when the region is abandoned", async () => {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    const hub = registerRecordingHub(() => fakeMainWindow() as never);
+    mockState.displays = [{ id: 2, bounds: { x: 0, y: 0, width: 1512, height: 982 } }];
+    const phase = mockState.ipcOn.get(IPC_CHANNELS.recordingRecorderPhase)!;
+    const visible = mockState.ipcHandle.get(IPC_CHANNELS.recordingCountdownVisible)!;
+
+    hub.prepareRegionCountdown(2, { x: 100, y: 50, width: 640, height: 360 });
+    const waiting = visible({}) as Promise<void>;
+    phase({}, { phase: "counting", value: 3 });
+    phase({}, { phase: "idle" });
+    await expect(waiting).resolves.toBeUndefined();
+  });
+
   it("reports a pending take to the tray: on while counting, off once it starts or is cancelled", async () => {
     const { registerSettings } = await import("../infrastructure/settings-store");
     const { registerRecordingHub } = await import("./recording-hub");
