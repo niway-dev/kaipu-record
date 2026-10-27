@@ -15,6 +15,7 @@ import {
 import type { WatermarkConfig } from "@renderer/features/watermark/watermark";
 import type { RecordingArea } from "@shared/types/ipc";
 import { areaEncodePlan } from "./area-crop";
+import { measureFrameSize } from "./frame-size";
 import { startRecordingCompositor, type RecordingCompositor } from "./recording-compositor";
 import { levelsFromTimeDomain } from "./audio-levels";
 import { waitForFirstMediaTimestamp, type FirstMediaTimestamp } from "./first-media-timestamp";
@@ -162,10 +163,12 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
 
   // 1b. Derive the real output size from the MEASURED native dimensions, keeping
   // the screen's true aspect ratio (so a 3024×1964 MacBook records as 1662×1080,
-  // not a stretched 1920×1080).
-  const captured = screenTrack.getSettings();
-  const sourceW = captured.width ?? fallbackWidth;
-  const sourceH = captured.height ?? capHeight;
+  // not a stretched 1920×1080). Measured from the frames, not `getSettings()`,
+  // which can report the ceiling above (see `measureFrameSize`).
+  const { width: sourceW, height: sourceH } = await measureFrameSize(screenTrack, {
+    width: fallbackWidth,
+    height: capHeight,
+  });
   const areaPlan = options.area
     ? areaEncodePlan({ width: sourceW, height: sourceH }, options.area, capHeight)
     : null;

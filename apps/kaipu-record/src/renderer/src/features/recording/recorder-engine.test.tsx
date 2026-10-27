@@ -224,6 +224,45 @@ describe("startEngine", () => {
     );
   });
 
+  it("sizes and crops from the delivered frames when the track reports the capture ceiling", async () => {
+    // Chromium reported the 7680×4320 maxWidth/maxHeight ceiling while the frames were the
+    // MacBook's 3024×1964: the take came out 2560×1440 with the area at 5× its real offset.
+    screenVideoTrack.getSettings = vi.fn(() => ({ width: 7680, height: 4320 }));
+    vi.spyOn(HTMLVideoElement.prototype, "videoWidth", "get").mockReturnValue(3024);
+    vi.spyOn(HTMLVideoElement.prototype, "videoHeight", "get").mockReturnValue(1964);
+
+    await startEngine(
+      baseOptions({
+        area: {
+          displayId: 1,
+          rect: { x: 100, y: 50, width: 1000, height: 600 },
+          displaySize: { width: 1512, height: 982 },
+        },
+      }),
+    );
+    expect(startRecordingCompositor).toHaveBeenCalledWith(
+      expect.anything(),
+      { width: 1800, height: 1080 },
+      null,
+      expect.any(Number),
+      { x: 200, y: 100, width: 2000, height: 1200 },
+    );
+  });
+
+  it("frames a full display from the delivered frames, not the reported ceiling", async () => {
+    screenVideoTrack.getSettings = vi.fn(() => ({ width: 7680, height: 4320 }));
+    vi.spyOn(HTMLVideoElement.prototype, "videoWidth", "get").mockReturnValue(3024);
+    vi.spyOn(HTMLVideoElement.prototype, "videoHeight", "get").mockReturnValue(1964);
+
+    await startEngine(baseOptions());
+    expect(startRecordingCompositor).toHaveBeenCalledWith(
+      expect.anything(),
+      { width: 1662, height: 1080 },
+      null,
+      expect.any(Number),
+    );
+  });
+
   it("encodes the raw track on a real 16:9 screen (no compositor)", async () => {
     // Default fake screen is 1920×1080 → target equals source → no re-frame.
     await startEngine(baseOptions());
