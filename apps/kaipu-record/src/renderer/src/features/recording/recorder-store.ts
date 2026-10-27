@@ -1,4 +1,5 @@
 import type { LocalRecording, RecordingSettings } from "@shared/types";
+import { sanitizeAudioSettings, type AudioSettings } from "@shared/audio-settings";
 import {
   RECORDING_COUNTDOWN_SECONDS,
   type RecorderPhaseReport,
@@ -38,6 +39,8 @@ export interface StartInput {
   area?: RecordingArea | null;
   microphoneDeviceId: string | null;
   systemAudio: boolean;
+  /** Mic level, noise reduction, system-audio volume and ducking the take starts with. */
+  audio: AudioSettings;
   /** Encoder targets resolved from the user's quality preset (optional → engine defaults). */
   width?: number;
   height?: number;
@@ -67,6 +70,7 @@ const COUNTDOWN_VISIBLE_TIMEOUT_MS = 1500;
 const START_TIMEOUT_MS = 10_000;
 /** Minimum time the bar shows "Saving…" so it never just flashes on short clips. */
 const MIN_SAVING_MS = 600;
+const roundLevel = (level: number): number => Math.round(level * 100) / 100;
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
@@ -281,6 +285,7 @@ async function beginEngine(input: StartInput): Promise<void> {
         area: input.area ?? null,
         microphoneDeviceId: input.microphoneDeviceId,
         systemAudio: input.systemAudio,
+        audio: input.audio,
         width: input.width,
         height: input.height,
         frameRate: input.frameRate,
@@ -354,6 +359,8 @@ async function beginEngine(input: StartInput): Promise<void> {
       window.electronAPI.recordingReportTick({
         elapsedSeconds: Math.floor(elapsedMs(clock, Date.now()) / 1000),
         levels: paused ? [0, 0, 0, 0, 0] : engine.readLevels(),
+        // Rounded so a steady room produces identical ticks and main does not re-broadcast.
+        micLevels: paused ? [0, 0, 0, 0, 0] : engine.readMicLevels().map(roundLevel),
         status: paused ? "paused" : "recording",
         systemAudioAvailable: engine.hasSystemAudio,
       });
@@ -399,6 +406,10 @@ function discardStart(start: PendingStart): void {
  * they all just write `RecordingSettings`) to the engine. When the engine answers
  * "unavailable", write the setting back to `false` so every surface shows the
  * truth. Calls are serialized so a quick off/on never lands out of order.
+ *
+ * Also forwards the persisted `AppSettings.audio` (level, noise, volume, ducking) the same
+ * way: only the fields that differ from what the engine last got, on the same queue. The
+ * mic device is never switched mid-take.
  * Returns the unsubscribe.
  */
 function forwardLiveSettings(handle: EngineHandle, input: StartInput): () => void {
@@ -417,6 +428,26 @@ function forwardLiveSettings(handle: EngineHandle, input: StartInput): () => voi
     writeBack({ isSystemAudioEnabled: false });
   }
 
+  let audio = input.audio;
+  const unsubscribeAudio = window.electronAPI.onSettingsChanged((appSettings) => {
+    const next = sanitizeAudioSettings(appSettings.audio);
+    const previous = audio;
+    audio = next;
+    if (next.micLevel !== previous.micLevel) {
+      queue = queue.then(() => handle.setMicLevel(next.micLevel));
+    }
+    if (next.noiseSuppression !== previous.noiseSuppression) {
+      queue = queue.then(
+        async () => void (await handle.setNoiseSuppression(next.noiseSuppression)),
+      );
+    }
+    if (next.systemAudioVolume !== previous.systemAudioVolume) {
+      queue = queue.then(() => void handle.setSystemAudioVolume(next.systemAudioVolume));
+    }
+    if (next.duckSystemAudioWhileTalking !== previous.duckSystemAudioWhileTalking) {
+      queue = queue.then(() => void handle.setDucking(next.duckSystemAudioWhileTalking));
+    }
+  });
   const unsubscribe = window.electronAPI.onRecordingSettingsChanged((settings) => {
     if (settings.isMicrophoneEnabled !== micOn) {
       micOn = settings.isMicrophoneEnabled;
@@ -441,6 +472,7 @@ function forwardLiveSettings(handle: EngineHandle, input: StartInput): () => voi
   return () => {
     active = false;
     unsubscribe();
+    unsubscribeAudio();
   };
 }
 
@@ -480,6 +512,7 @@ async function stopRecording(): Promise<void> {
   window.electronAPI.recordingReportTick({
     elapsedSeconds: durationSeconds,
     levels: [0, 0, 0, 0, 0],
+    micLevels: [0, 0, 0, 0, 0],
     status: "saving",
   });
   stopTicks();

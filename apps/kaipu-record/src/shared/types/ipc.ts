@@ -598,6 +598,11 @@ export type UpdateStatus =
 export interface RecordingTick {
   elapsedSeconds: number;
   levels: number[];
+  /**
+   * The microphone alone, 5 bars (0..1), before its mute gain; zeros while paused or
+   * when no mic is open. Omitted by ticks that predate it. `levels` is the mix.
+   */
+  micLevels?: number[];
   status: RecordingStatus;
   /**
    * Whether this take has a loopback (system audio) track. Omitted = unknown,
@@ -623,6 +628,12 @@ export interface RecordingActivity {
   active: boolean;
   status: RecordingStatus;
   elapsedSeconds: number;
+  /**
+   * Latest {@link RecordingTick.micLevels}, for the mic meter in the settings popover and
+   * drawer. Only meaningful while active; re-broadcast whenever it changes (the store
+   * rounds it to 2 decimals so a steady room stays quiet on the wire).
+   */
+  micLevels?: number[];
   /** See {@link RecordingTick.systemAudioAvailable}. Only meaningful while active. */
   systemAudioAvailable?: boolean;
   /**

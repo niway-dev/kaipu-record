@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { LocalRecording, RecordingSettings } from "@shared/types";
+import type { AppSettings, LocalRecording, RecordingSettings } from "@shared/types";
+import { DEFAULT_AUDIO_SETTINGS, type AudioSettings } from "@shared/audio-settings";
 import type { ControlCommand } from "@shared/types/ipc";
 import { startEngine, type EngineHandle } from "@renderer/features/recording/recorder-engine";
 // Type-only (erased at runtime), so it does not run the store's import-time side effect early.
@@ -61,6 +62,7 @@ const input = {
   sourceName: "Screen 1",
   microphoneDeviceId: "mic-1",
   systemAudio: false,
+  audio: DEFAULT_AUDIO_SETTINGS,
 };
 
 function fakeEngine(over: Partial<EngineHandle> = {}): EngineHandle {
@@ -69,12 +71,17 @@ function fakeEngine(over: Partial<EngineHandle> = {}): EngineHandle {
     resume: vi.fn(),
     stop: vi.fn(async () => {}),
     readLevels: vi.fn(() => [0, 0, 0, 0, 0]),
+    readMicLevels: vi.fn(() => [0, 0, 0, 0, 0]),
     thumbnail: Promise.resolve(null),
     outputSize: { width: 1662, height: 1080 },
     firstMediaTimestamp: Promise.resolve({ rendererMs: 0, quality: "estimated" as const }),
     hasSystemAudio: true,
     setMicrophoneEnabled: vi.fn(async () => "ok" as const),
     setSystemAudioEnabled: vi.fn(() => "ok" as const),
+    setMicLevel: vi.fn(),
+    setNoiseSuppression: vi.fn(async () => "ok" as const),
+    setSystemAudioVolume: vi.fn(() => "ok" as const),
+    setDucking: vi.fn(() => "ok" as const),
     ...over,
   };
 }
@@ -482,6 +489,12 @@ describe("recorder-store live settings", () => {
     isCameraEnabled: false,
     area: null,
   };
+  const appListeners = new Set<(settings: AppSettings) => void>();
+  /** An app-settings broadcast whose `audio` is the defaults patched; the rest is irrelevant here. */
+  const broadcastAudio = (patch: Partial<AudioSettings>): void => {
+    const settings = { audio: { ...DEFAULT_AUDIO_SETTINGS, ...patch } } as AppSettings;
+    for (const listener of appListeners) listener(settings);
+  };
   const broadcast = (patch: Partial<RecordingSettings>): void => {
     for (const listener of settingsListeners) listener({ ...base, ...patch });
   };
@@ -494,6 +507,11 @@ describe("recorder-store live settings", () => {
     window.electronAPI.onRecordingSettingsChanged = vi.fn((listener) => {
       settingsListeners.add(listener);
       return () => settingsListeners.delete(listener);
+    });
+    appListeners.clear();
+    window.electronAPI.onSettingsChanged = vi.fn((listener) => {
+      appListeners.add(listener);
+      return () => appListeners.delete(listener);
     });
     window.electronAPI.recordingWrite = vi.fn();
     window.electronAPI.recordingFinalize = vi.fn(async () => RECORDING);
@@ -574,12 +592,88 @@ describe("recorder-store live settings", () => {
     await stopAndSettle();
   });
 
+  it("hands the engine the audio settings the take starts with", async () => {
+    const audio = { ...DEFAULT_AUDIO_SETTINGS, micLevel: 70, noiseSuppression: false };
+    await startWith(fakeEngine(), { audio });
+    expect(startEngineMock).toHaveBeenCalledWith(expect.objectContaining({ audio }));
+    await stopAndSettle();
+  });
+
+  it("forwards only the audio settings that changed during a take", async () => {
+    const engine = fakeEngine();
+    await startWith(engine);
+
+    broadcastAudio({}); // nothing differs from the start
+    broadcastAudio({ micLevel: 60 });
+    broadcastAudio({ micLevel: 60, noiseSuppression: false });
+    broadcastAudio({ micLevel: 60, noiseSuppression: false, systemAudioVolume: 30 });
+    broadcastAudio({
+      micLevel: 60,
+      noiseSuppression: false,
+      systemAudioVolume: 30,
+      duckSystemAudioWhileTalking: true,
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(engine.setMicLevel).toHaveBeenCalledTimes(1);
+    expect(engine.setMicLevel).toHaveBeenCalledWith(60);
+    expect(engine.setNoiseSuppression).toHaveBeenCalledTimes(1);
+    expect(engine.setNoiseSuppression).toHaveBeenCalledWith(false);
+    expect(engine.setSystemAudioVolume).toHaveBeenCalledTimes(1);
+    expect(engine.setSystemAudioVolume).toHaveBeenCalledWith(30);
+    expect(engine.setDucking).toHaveBeenCalledTimes(1);
+    expect(engine.setDucking).toHaveBeenCalledWith(true);
+    await stopAndSettle();
+  });
+
+  it("applies audio changes in the order they were made", async () => {
+    const order: string[] = [];
+    let releaseNoise!: () => void;
+    const engine = fakeEngine({
+      setNoiseSuppression: vi.fn(async () => {
+        order.push("noise");
+        await new Promise<void>((resolve) => (releaseNoise = resolve));
+        return "ok" as const;
+      }),
+      setMicLevel: vi.fn(() => void order.push("level")),
+    });
+    await startWith(engine);
+
+    broadcastAudio({ noiseSuppression: false });
+    broadcastAudio({ noiseSuppression: false, micLevel: 50 });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(order).toEqual(["noise"]); // the level waits for the slow constraint
+    releaseNoise();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(order).toEqual(["noise", "level"]);
+    await stopAndSettle();
+  });
+
+  it("reports the mic bars next to the mix levels, and zeros while paused", async () => {
+    const engine = fakeEngine({ readMicLevels: vi.fn(() => [0.123, 0.4, 0.5, 0.6, 0.789]) });
+    await startWith(engine);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(window.electronAPI.recordingReportTick).toHaveBeenLastCalledWith(
+      expect.objectContaining({ micLevels: [0.12, 0.4, 0.5, 0.6, 0.79] }),
+    );
+
+    store.pauseRecording();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(window.electronAPI.recordingReportTick).toHaveBeenLastCalledWith(
+      expect.objectContaining({ status: "paused", micLevels: [0, 0, 0, 0, 0] }),
+    );
+    await stopAndSettle();
+  });
+
   it("stops forwarding once the take ends", async () => {
     const engine = fakeEngine();
     await startWith(engine);
     await stopAndSettle();
 
     expect(settingsListeners.size).toBe(0);
+    expect(appListeners.size).toBe(0);
+    broadcastAudio({ micLevel: 10 });
+    expect(engine.setMicLevel).not.toHaveBeenCalled();
     broadcast({ isMicrophoneEnabled: false });
     expect(engine.setMicrophoneEnabled).not.toHaveBeenCalled();
   });

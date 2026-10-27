@@ -5,6 +5,11 @@ import {
   sanitizeQuality,
   type RecordingQuality,
 } from "@shared/recording-quality";
+import {
+  DEFAULT_AUDIO_SETTINGS,
+  sanitizeAudioSettings,
+  type AudioSettings,
+} from "@shared/audio-settings";
 import { useWatermark } from "@renderer/features/watermark/use-watermark";
 import { useMicrophones } from "@renderer/features/recording/hooks/use-microphones";
 import { useRecordingSettings } from "@renderer/features/recording/hooks/use-recording-settings";
@@ -94,6 +99,19 @@ export function useRecordingSetup(): RecordingSetup {
     });
   }, []);
 
+  // The audio settings (mic level, noise reduction, system volume, ducking) are persisted
+  // app settings too. Read on mount, then kept current through `onSettingsChanged`, so a
+  // level changed in the popover before pressing Record is the one the take starts with.
+  const audioRef = useRef<AudioSettings>(DEFAULT_AUDIO_SETTINGS);
+  useEffect(() => {
+    void window.electronAPI.getSettings().then((appSettings) => {
+      audioRef.current = sanitizeAudioSettings(appSettings.audio);
+    });
+    return window.electronAPI.onSettingsChanged((appSettings) => {
+      audioRef.current = sanitizeAudioSettings(appSettings.audio);
+    });
+  }, []);
+
   // Watermark decision (free → on, paid/forced → off) — the single seam. Kept in a
   // ref so the start callback reads the latest without re-subscribing.
   const watermark = useWatermark();
@@ -135,6 +153,7 @@ export function useRecordingSetup(): RecordingSetup {
         area: areaRef.current,
         microphoneDeviceId: micEnabledRef.current ? (micRef.current?.deviceId ?? null) : null,
         systemAudio: systemAudioRef.current,
+        audio: audioRef.current,
         width: engineQuality.width,
         height: engineQuality.height,
         frameRate: engineQuality.frameRate,
