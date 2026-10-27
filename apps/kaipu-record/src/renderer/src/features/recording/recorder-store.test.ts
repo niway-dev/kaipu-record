@@ -383,6 +383,22 @@ describe("recorder-store", () => {
     expect(store.getRecorderSnapshot()).toEqual({ status: "idle", countdown: null });
   });
 
+  it("goes back to idle, never 'starting', when the take's input cannot be resolved", async () => {
+    const reports = vi.fn();
+    window.electronAPI.reportRecorderPhase = reports;
+    store.requestStartRecording(() => {
+      throw new Error("startRecording: no source selected");
+    });
+    await vi.advanceTimersByTimeAsync(3000);
+
+    // Idle is what tells main to take the countdown down, release Esc and reveal the app.
+    expect(store.getRecorderSnapshot()).toEqual({ status: "idle", countdown: null });
+    expect(reports).toHaveBeenLastCalledWith({ phase: "idle" });
+    expect(reports).not.toHaveBeenCalledWith({ phase: "starting" });
+    expect(window.electronAPI.recordingStart).not.toHaveBeenCalled();
+    expect(reportErrorMock).toHaveBeenCalledOnce();
+  });
+
   it("ignores a second start request while one is already in progress", async () => {
     store.requestStartRecording(() => input);
     store.requestStartRecording(() => input); // must no-op — already counting

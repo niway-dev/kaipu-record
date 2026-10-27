@@ -190,8 +190,19 @@ function runCountdown(resolveInput: () => StartInput): void {
     remaining -= 1;
     if (remaining <= 0) {
       clearCountdownTimer();
+      // Resolved while still "counting": a throw (no source selected) then goes back to idle,
+      // which main reads as an abandoned countdown — the shade comes down, Esc is released
+      // and the hidden app returns. Thrown after "starting", it left all of that stranded.
+      let input: StartInput;
+      try {
+        input = resolveInput();
+      } catch (error) {
+        reportError(runtimeT()("record.errorStart"), error, { context: { phase: "start" } });
+        update({ status: "idle", countdown: null });
+        return;
+      }
       update({ status: "starting", countdown: null });
-      void beginEngine(resolveInput());
+      void beginEngine(input);
     } else {
       update({ countdown: remaining });
     }
