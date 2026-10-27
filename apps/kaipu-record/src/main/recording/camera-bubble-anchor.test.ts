@@ -11,7 +11,11 @@ let lastOptions: Record<string, unknown> | null = null;
 class FakeWindow {
   setAlwaysOnTop = vi.fn();
   setVisibleOnAllWorkspaces = vi.fn();
-  setBounds = vi.fn();
+  bounds = { x: 0, y: 0, width: 288, height: 288 };
+  setBounds = vi.fn((bounds: { x: number; y: number; width: number; height: number }) => {
+    this.bounds = bounds;
+  });
+  getBounds = () => this.bounds;
   showInactive = vi.fn();
   hide = vi.fn();
   destroy = vi.fn();
@@ -148,6 +152,96 @@ describe("CameraBubbleWindow size", () => {
       y: 660,
       width: 208,
       height: 208,
+    });
+  });
+});
+
+describe("CameraBubbleWindow drag-to-move", () => {
+  beforeEach(() => {
+    created.length = 0;
+  });
+
+  it("moves the bubble by the pointer's offset since the press", () => {
+    const bubble = new CameraBubbleWindow(() => 240);
+    bubble.show();
+    created[0].readyToShow?.(); // at the display's corner: x 32, y 580
+    bubble.beginMove();
+    bubble.moveBy(100, -50);
+    expect(created[0].setBounds).toHaveBeenLastCalledWith({
+      x: 132,
+      y: 530,
+      width: 288,
+      height: 288,
+    });
+    // Offsets are from the press, not from the previous step.
+    bubble.moveBy(200, -60);
+    expect(created[0].setBounds).toHaveBeenLastCalledWith({
+      x: 232,
+      y: 520,
+      width: 288,
+      height: 288,
+    });
+  });
+
+  it("ignores a move without a press", () => {
+    const bubble = new CameraBubbleWindow(() => 240);
+    bubble.show();
+    created[0].readyToShow?.();
+    created[0].setBounds.mockClear();
+    bubble.moveBy(100, 100);
+    expect(created[0].setBounds).not.toHaveBeenCalled();
+  });
+
+  it("keeps the bubble inside the recorded area", () => {
+    const bubble = new CameraBubbleWindow(() => 240);
+    bubble.show();
+    bubble.anchorTo(FITS); // window at x 1644, y 90 in a 640 x 360 area at (1612, 50)
+    bubble.beginMove();
+    bubble.moveBy(5000, -5000);
+    expect(created[0].setBounds).toHaveBeenLastCalledWith({
+      x: 1612 + 640 - 288,
+      y: 50,
+      width: 288,
+      height: 288,
+    });
+  });
+
+  it("grows from where it was dropped when the size changes", () => {
+    let size = 240;
+    const bubble = new CameraBubbleWindow(() => size);
+    bubble.show();
+    created[0].readyToShow?.();
+    bubble.beginMove();
+    bubble.moveBy(400, -200); // bottom-left corner at (432, 668)
+    size = 360;
+    bubble.applySize();
+    expect(created[0].setBounds).toHaveBeenLastCalledWith({
+      x: 432,
+      y: 668 - 408,
+      width: 408,
+      height: 408,
+    });
+  });
+
+  it("starts each area recording at the area's corner, and returns to the dropped spot after", () => {
+    const bubble = new CameraBubbleWindow(() => 240);
+    bubble.show();
+    created[0].readyToShow?.();
+    bubble.beginMove();
+    bubble.moveBy(400, -200);
+    bubble.anchorTo(FITS);
+    expect(created[0].setBounds).toHaveBeenLastCalledWith({
+      x: 1644,
+      y: 90,
+      width: 288,
+      height: 288,
+    });
+    bubble.anchorTo(null);
+    expect(created[0].setBounds).toHaveBeenLastCalledWith({
+      x: 432,
+      y: 380,
+      width: 288,
+      height: 288,
     });
   });
 });

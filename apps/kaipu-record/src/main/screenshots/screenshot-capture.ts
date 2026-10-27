@@ -138,11 +138,14 @@ export async function pickTarget(
 }
 
 /**
- * Screen on a lone display needs no overlay: the whole display, captured as asked, or chosen
- * as the recording target when the overlay was opened to record.
+ * Screen on a lone display needs no overlay: the whole display, captured as asked, or
+ * recorded when the overlay was opened to record. Only "Start recording" opens the selector
+ * in the record intent, and with nothing left to pick that request is the take itself, so
+ * it starts, as "Record this display" does on several displays. `select` would only set the
+ * target: the selector closes and nothing records.
  */
 function wholeDisplay(display: Display, intent: CaptureIntent = "capture"): CaptureTarget {
-  const action: CaptureAction = intent === "record" ? "select" : "capture";
+  const action: CaptureAction = intent === "record" ? "record" : "capture";
   return { display, rect: null, mode: "screen", action, viaOverlay: false };
 }
 

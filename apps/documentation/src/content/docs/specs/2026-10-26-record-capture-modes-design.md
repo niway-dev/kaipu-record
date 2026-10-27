@@ -95,10 +95,12 @@ _Implementation note (decision 6, camera bubble shape and size)._ The bubble's s
 rounded square) and size (120–480 px, presets S 160 · M 240 · L 360) are now settings
 (`AppSettings.cameraBubble`), changed live from the split Camera tile or the bubble's hover grip
 ([backlog](/backlog/camera-bubble-shape-and-size/)). The bubble stays at this decision's fixed
-bottom-left corner and grows up and to the right; it is **not draggable** and its position is
-not persisted. This also changes full-screen recordings, which decision 6 did not cover: there
-the bubble used to be draggable anywhere on the display, and now it is fixed at the display's
-bottom-left corner too. "Cannot hold the bubble" now means "cannot hold even the 120 px
+bottom-left corner and grows up and to the right; its position is not persisted. _Amended
+2026-10-26 (owner report, "the bubble can no longer be moved"):_ pressing on the bubble and
+dragging moves it again, before and during a take, clamped inside the recorded area (or the
+display's work area). Each area recording still starts at the area's bottom-left corner, where
+the overlay's placeholder shows it; see the
+[backlog page](/backlog/camera-bubble-shape-and-size/#moving-the-bubble). "Cannot hold the bubble" now means "cannot hold even the 120 px
 minimum": a larger size the area cannot hold is shrunk to what fits instead of hiding the
 bubble.
 
@@ -179,7 +181,9 @@ What changed against the decisions above:
   "16:9 · 1280 × 720" caption for a remembered Frame area (DIP, as stored; the overlay readout is
   in device pixels), and the existing Mic / Audio / Camera toggles (`RecordingToggles`, the one
   component that renders the camera toggle). No selection card. **Window** opens the thumbnail
-  picker on the Record page and a pick starts the countdown. `AppSettings.recordingMode`
+  picker on the Record page and a pick starts the countdown. **Screen** on a single display has
+  nothing to pick, so the overlay is skipped and the countdown starts on that display at once;
+  with several displays the chooser's "Record this display" starts it. `AppSettings.recordingMode`
   (`frame` | `window` | `screen`, default `screen`) is now stored. The page lists no recent
   recordings: the owner dropped that row because the page is already full (the Screenshots page
   keeps its Recent row). The Camera toggle in both

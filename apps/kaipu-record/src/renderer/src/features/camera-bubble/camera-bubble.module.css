@@ -1,7 +1,9 @@
 /* The window is the bubble plus a 24 px transparent pad on every side
    (CAMERA_BUBBLE_WINDOW_PAD): room for the shadow, the hover size label and the grip.
    The bubble fills the window minus that pad, so a resize from main is all it takes to
-   resize it. No `-webkit-app-region: drag`: the bubble is fixed at its corner. */
+   resize it. No `-webkit-app-region: drag`: an OS drag region would swallow the pointer
+   events the grip and the close button need, and could not keep the bubble inside the
+   recorded area. The bubble moves through pointer events instead (camera-bubble.tsx). */
 
 .root {
   --pad: 24px;
@@ -22,6 +24,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  cursor: grab;
+  touch-action: none;
+}
+
+.bubble:active {
+  cursor: grabbing;
 }
 
 /* Hover chrome (never while recording): a 2 px pink outline around the bubble. */
@@ -88,4 +96,46 @@
   filter: drop-shadow(0 0 1px var(--accent-primary)) drop-shadow(0 0 1px var(--accent-primary));
   cursor: nesw-resize;
   touch-action: none;
+}
+
+/* Turn the camera off: a 22 px dark dot with a white X, opposite the grip (top-left). On the
+   rim at 45° for the circle; inside the corner for the rounded square, clear of the size
+   label above it. */
+.closeCircle,
+.closeRounded {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  box-sizing: border-box;
+  padding: 0;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: rgba(17, 17, 17, 0.85);
+  color: #fff;
+  cursor: pointer;
+}
+
+.closeCircle:hover,
+.closeRounded:hover {
+  background: var(--accent-primary);
+}
+
+/* Frameless window: the OS focus ring would make a clicked button look pre-selected. */
+.closeCircle:focus,
+.closeRounded:focus {
+  outline: none;
+}
+
+.closeCircle {
+  left: calc(var(--pad) + (100% - 2 * var(--pad)) * 0.1464);
+  top: calc(var(--pad) + (100% - 2 * var(--pad)) * 0.1464);
+}
+
+.closeRounded {
+  left: calc(var(--pad) + 14px);
+  top: calc(var(--pad) + 14px);
 }

@@ -232,7 +232,8 @@
     "openSystemSettings": "Abrir Ajustes del Sistema",
     "bubbleLabel": "{size} px · {preset}",
     "bubbleLabelCustom": "{size} px",
-    "resizeGrip": "Cambiar el tamaño de la burbuja de cámara"
+    "resizeGrip": "Cambiar el tamaño de la burbuja de cámara",
+    "turnCameraOff": "Apagar la cámara"
   },
   "record": {
     "readyToRecord": "Todo listo para grabar",

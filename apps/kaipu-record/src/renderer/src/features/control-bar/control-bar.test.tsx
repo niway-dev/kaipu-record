@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ControlBar } from "./control-bar";
 
@@ -72,5 +72,24 @@ describe("ControlBar", () => {
     );
     expect(screen.getByText(/saving/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /stop/i })).not.toBeInTheDocument();
+  });
+
+  it("offers Turn camera off only while the camera is on", () => {
+    const onCameraOff = vi.fn();
+    const { rerender } = render(
+      <ControlBar tick={baseTick} onPause={vi.fn()} onResume={vi.fn()} onStop={vi.fn()} />,
+    );
+    expect(screen.queryByRole("button", { name: "Turn camera off" })).not.toBeInTheDocument();
+    rerender(
+      <ControlBar
+        tick={baseTick}
+        onPause={vi.fn()}
+        onResume={vi.fn()}
+        onStop={vi.fn()}
+        onCameraOff={onCameraOff}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Turn camera off" }));
+    expect(onCameraOff).toHaveBeenCalledTimes(1);
   });
 });

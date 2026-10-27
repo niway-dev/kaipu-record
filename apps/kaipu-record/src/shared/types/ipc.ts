@@ -384,6 +384,10 @@ export const IPC_CHANNELS = {
   cameraAccessStatus: "permissions:camera-access-status",
   /** Bubble → main: resize the bubble while its grip is dragged (not persisted). */
   cameraBubblePreviewSize: "camera-bubble:preview-size",
+  /** Bubble → main: a press on the bubble starts a move (remember the window's corner). */
+  cameraBubbleMoveStart: "camera-bubble:move-start",
+  /** Bubble → main: move the bubble by the pointer's offset since the press. */
+  cameraBubbleMove: "camera-bubble:move",
   // macOS Accessibility, for the click hook. Status never prompts; request does (PR 10).
   accessibilityStatus: "permissions:accessibility-status",
   accessibilityRequest: "permissions:accessibility-request",

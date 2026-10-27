@@ -30,10 +30,34 @@ every toggle; 1c (a camera card) because it doubled the camera's visual weight.
 | `size`     | 120–480 DIP                 | 240 (M)  | Presets S = 160, M = 240, L = 360. Clamped, not dropped. |
 | `deviceId` | a `videoinput` id or `null` | `null`   | `null` opens the OS default camera.                      |
 
-Only these persist. The bubble's **position does not**: it is fixed at the bottom-left corner of
-the recorded area (or of the display's work area when the whole screen records) and grows up and
-to the right. The bubble is **not draggable** any more: the old drag region is gone and the
-window is created with `movable: false` and `resizable: false`.
+Only these persist. The bubble's **position does not**: it starts at the bottom-left corner of
+the recorded area (or of the display's work area when the whole screen records), the user can
+drag it elsewhere (see [Moving the bubble](#moving-the-bubble)), and it grows up and to the right
+from wherever it sits.
+
+### Moving the bubble
+
+The first version of this feature made the bubble fixed (`movable: false` and no drag region,
+commit `96447be3`), which the owner reported as a regression: before it, the bubble could be
+dragged anywhere. Pressing anywhere on the bubble and dragging moves it again:
+
+- The drag is driven by pointer events in the renderer, not by `-webkit-app-region: drag`. An OS
+  drag region would swallow the pointer events the resize grip and the hover controls need, and
+  could not keep the bubble inside a recorded area. The renderer sends the pointer's offset since
+  the press (`beginCameraBubbleMove`, `moveCameraBubble`); `CameraBubbleWindow.moveBy` moves the
+  window and clamps it inside the recorded area, or inside the work area of the display it is
+  dragged onto. The window stays `movable: false` for the OS.
+- It works during a recording too: nothing is drawn for it, so the video only shows the bubble
+  moving.
+- The window's bottom-left corner is the bubble's anchor, so a resize (grip or settings) grows it
+  up and to the right from where it was dropped, pushed back inside the container if needed.
+- The position lives in main's memory: on the display, for the app session (across camera
+  toggles); inside an area, for the take. Each area recording starts at the area's bottom-left
+  corner, which is where the overlay's placeholder shows it, and the bubble returns to its
+  dropped spot on the display when the take ends.
+- The overlay's placeholder is not draggable: the bubble window is hidden while the overlay is up,
+  and moving the placeholder would need a per-area remembered offset. Drag the real bubble once
+  the take starts instead.
 
 Every change applies live, mid-take included. Main listens to settings changes and resizes the
 bubble window from its anchored corner (`CameraBubbleWindow.applySize`). The renderer reads the
@@ -62,11 +86,39 @@ stays 56 px in, as before. A size the area cannot hold is shrunk to what fits; w
   the camera on; the settings are replaced by "Camera access is blocked" and an "Open System
   Settings" button.
 - **Bubble.** Outside a recording, hovering shows a 2 px pink outline, a size label
-  ("240 px · M") above it and a resize grip (a white dot on the rim at 45° for the circle, a
-  white L at the top-right corner for the rounded square). Dragging the grip resizes diagonally
+  ("240 px · M") above it, a resize grip (a white dot on the rim at 45° for the circle, a
+  white L at the top-right corner for the rounded square) and a **Turn camera off** button
+  opposite the grip (a dark dot with a white ×, on the rim at 45° top-left, or inside the
+  rounded square's top-left corner). Dragging the grip resizes diagonally
   from the fixed corner, clamped to 120–480 and to the area; the release persists the size that
-  is on screen. **While recording none of this renders** (no outline, no label, no grip): the
-  bubble on screen is exactly the one in the video.
+  is on screen. **While recording none of this renders** (no outline, no label, no grip, no ×):
+  the bubble on screen is exactly the one in the video.
+- **Control bar.** While a take runs and the camera is on, the bar shows a **Turn camera off**
+  button (camera-off icon) between the mode chip and Pause. The bar is content-protected, so the
+  button is never in the video; it disappears once the camera is off. The bar window grew from
+  480 to 528 DIP to hold it.
+
+### Turning the camera off: placement
+
+The owner asked for a quick way to turn the camera off once the bubble is showing. Both new
+controls write the same global `isCameraEnabled` toggle the Record page, the tray, the overlay
+widget and the `toggleCamera` shortcut write, so main destroys the bubble and releases the device
+whichever one is used.
+
+- **Chosen: on the bubble itself, in its hover chrome**, outside a take. The bubble is the thing
+  the user wants gone, the hover chrome already holds its other direct controls (size label,
+  grip), and a hover × is the convention of other floating camera bubbles (Loom). It costs
+  nothing for someone who never hovers.
+- **Chosen too: the control bar, during a take.** The bubble's chrome never renders while
+  recording (it would be in the video), so the bubble alone would leave no quick way off
+  mid-take. The bar is already the mid-take control surface and is not recorded.
+- **Rejected: the overlay's Camera toggle.** It already exists (Mic · System audio · Camera on
+  the record widget), but it is only on screen while choosing an area, not while the bubble
+  floats over other apps.
+- **Rejected: a right-click menu on the bubble** (Circle / Rounded · S / M / L · Turn camera
+  off, deferred below). Not discoverable as the only way off; it can still come later.
+- **Rejected: a permanent badge on the bubble.** Anything always drawn on the bubble ends up in
+  every recording.
 
 "Blocked" comes from a new tri-state `getCameraAccessStatus()` (`granted` / `blocked` /
 `unknown`), not from `checkPermissions().camera`, which reads `false` before the user was ever
@@ -98,15 +150,21 @@ asked; treating "not asked yet" as blocked would have made the camera impossible
 2. Capture panel: the drawer grows the panel, the panel does not hide while using it (including
    the native device `<select>`), Esc closes it.
 3. Bubble hover chrome and grip outside a recording; nothing of it during a recording or in the
-   recorded file; a drag never moves the bubble's bottom-left corner.
-4. A small area (under 232 px) hides the bubble; a medium one shrinks it.
-5. Camera access denied in System Settings: BLOCKED tile, blocked card, the button opens the pane.
-6. Windows: same checks (the bubble's hover events on an inactive always-on-top window).
+   recorded file; a grip drag never moves the bubble's bottom-left corner.
+4. Turn camera off: the hover × on the bubble outside a take, and the control bar button during
+   one, turn the camera off (bubble gone, camera light off); neither shows in the recorded file.
+5. Drag-to-move: pressing on the bubble and dragging moves it, before and during a take, on macOS
+   and Windows; it stops at the edges of a recorded area; the grip still resizes from the dropped
+   spot.
+6. A small area (under 232 px) hides the bubble; a medium one shrinks it.
+7. Camera access denied in System Settings: BLOCKED tile, blocked card, the button opens the pane.
+8. Windows: same checks (the bubble's hover events on an inactive always-on-top window).
 
 ## Deferred
 
 - **Right-click context menu** on the bubble (Circle / Rounded square · Small / Medium / Large ·
-  Turn camera off): marked "next iteration" in the design, not built.
+  Turn camera off): marked "next iteration" in the design, not built. "Turn camera off" is
+  covered by the hover × and the control bar button.
 - The fox-nocam illustration for the blocked card: the app has no such asset, the lock icon is
   used.
 - Analytics: the app does not track camera toggles, so no shape or size event was added.

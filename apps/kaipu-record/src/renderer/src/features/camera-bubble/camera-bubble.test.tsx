@@ -105,6 +105,89 @@ describe("CameraBubble", () => {
   });
 });
 
+describe("CameraBubble — turn the camera off", () => {
+  it("offers a close button on hover that turns the camera off", () => {
+    withStream();
+    const update = vi.fn();
+    window.electronAPI.updateRecordingSettings = update;
+    const { container } = render(<CameraBubble />);
+    expect(screen.queryByTestId("bubble-camera-off")).not.toBeInTheDocument();
+    fireEvent.pointerEnter(container.firstElementChild!);
+    const close = screen.getByRole("button", { name: "Turn camera off" });
+    fireEvent.click(close);
+    expect(update).toHaveBeenCalledWith({ isCameraEnabled: false });
+  });
+
+  it("never draws the close button during a recording", () => {
+    withStream();
+    let push: ((activity: RecordingActivity) => void) | null = null;
+    window.electronAPI.onRecordingState = (callback) => {
+      push = callback;
+      return () => {};
+    };
+    const { container } = render(<CameraBubble />);
+    act(() => push?.({ active: true, status: "recording", elapsedSeconds: 0 }));
+    fireEvent.pointerEnter(container.firstElementChild!);
+    expect(screen.queryByTestId("bubble-camera-off")).not.toBeInTheDocument();
+  });
+
+  it("does not start a move from the close button", () => {
+    withStream();
+    const begin = vi.fn();
+    window.electronAPI.beginCameraBubbleMove = begin;
+    const { container } = render(<CameraBubble />);
+    fireEvent.pointerEnter(container.firstElementChild!);
+    fireEvent.pointerDown(screen.getByTestId("bubble-camera-off"), { button: 0, pointerId: 1 });
+    expect(begin).not.toHaveBeenCalled();
+  });
+});
+
+describe("CameraBubble — drag to move", () => {
+  it("moves the bubble by the pointer's offset from the press, during a recording too", () => {
+    withStream();
+    let push: ((activity: RecordingActivity) => void) | null = null;
+    window.electronAPI.onRecordingState = (callback) => {
+      push = callback;
+      return () => {};
+    };
+    const begin = vi.fn();
+    const moveBy = vi.fn();
+    window.electronAPI.beginCameraBubbleMove = begin;
+    window.electronAPI.moveCameraBubble = moveBy;
+    render(<CameraBubble />);
+    act(() => push?.({ active: true, status: "recording", elapsedSeconds: 0 }));
+    const bubble = screen.getByTestId("camera-bubble");
+
+    fireEvent.pointerDown(bubble, { button: 0, screenX: 100, screenY: 100, pointerId: 1 });
+    expect(begin).toHaveBeenCalledTimes(1);
+    fireEvent.pointerMove(bubble, { screenX: 130, screenY: 90, pointerId: 1 });
+    fireEvent.pointerMove(bubble, { screenX: 160, screenY: 70, pointerId: 1 });
+    expect(moveBy).toHaveBeenNthCalledWith(1, 30, -10);
+    expect(moveBy).toHaveBeenNthCalledWith(2, 60, -30);
+
+    fireEvent.pointerUp(bubble, { pointerId: 1 });
+    fireEvent.pointerMove(bubble, { screenX: 400, screenY: 400, pointerId: 1 });
+    expect(moveBy).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not move on a secondary button, nor while the grip resizes", () => {
+    withStream();
+    const moveBy = vi.fn();
+    window.electronAPI.moveCameraBubble = moveBy;
+    const { container } = render(<CameraBubble />);
+    const bubble = screen.getByTestId("camera-bubble");
+    fireEvent.pointerDown(bubble, { button: 2, screenX: 100, screenY: 100, pointerId: 1 });
+    fireEvent.pointerMove(bubble, { screenX: 150, screenY: 150, pointerId: 1 });
+
+    fireEvent.pointerEnter(container.firstElementChild!);
+    const grip = screen.getByTestId("bubble-resize-grip");
+    fireEvent.pointerDown(grip, { button: 0, screenX: 100, screenY: 100, pointerId: 2 });
+    fireEvent.pointerMove(grip, { screenX: 140, screenY: 60, pointerId: 2 });
+    fireEvent.pointerUp(grip, { pointerId: 2 });
+    expect(moveBy).not.toHaveBeenCalled();
+  });
+});
+
 describe("CameraBubble — grip release races", () => {
   it("waits for a preview that lands after release, sends the queued size, and saves its result", async () => {
     withStream();
