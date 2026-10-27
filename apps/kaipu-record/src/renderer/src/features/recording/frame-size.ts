@@ -1,5 +1,8 @@
 import type { Size } from "@shared/capture-geometry";
 
+/** How long a take waits for the first frame before sizing from the track's report. */
+export const FRAME_SIZE_TIMEOUT_MS = 1500;
+
 /**
  * The size of the frames a capture track actually delivers. `getSettings()` is not that for
  * desktop capture: Chromium can report the `maxWidth`/`maxHeight` ceiling the engine asked
@@ -10,19 +13,34 @@ import type { Size } from "@shared/capture-geometry";
  * A playing `<video>` knows the real size (`videoWidth`/`videoHeight`, set before `play()`
  * resolves), and it is the same size `drawImage` crops from. The report is the fallback
  * for an element that cannot tell (jsdom, a track that never plays).
+ *
+ * `play()` only settles once the track has a frame, and a track that never delivers one
+ * (source gone, permission half-granted) leaves it pending: the wait is capped at
+ * `timeoutMs` so the take starts on the reported size instead of hanging.
  */
-export async function measureFrameSize(track: MediaStreamTrack, fallback: Size): Promise<Size> {
+export async function measureFrameSize(
+  track: MediaStreamTrack,
+  fallback: Size,
+  timeoutMs = FRAME_SIZE_TIMEOUT_MS,
+): Promise<Size> {
   const video = document.createElement("video");
   video.muted = true;
   video.srcObject = new MediaStream([track]);
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    await video.play();
+    await Promise.race([
+      video.play(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("frame size: no frame in time")), timeoutMs);
+      }),
+    ]);
     if (video.videoWidth > 0 && video.videoHeight > 0) {
       return { width: video.videoWidth, height: video.videoHeight };
     }
   } catch {
     // Fall through to the reported size.
   } finally {
+    clearTimeout(timer);
     video.pause();
     video.srcObject = null;
   }
