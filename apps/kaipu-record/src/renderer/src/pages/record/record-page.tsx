@@ -113,6 +113,11 @@ export function RecordPage(): React.JSX.Element {
 
   const openSelector = (mode?: CaptureMode): void => window.electronAPI.requestRecordSelector(mode);
 
+  // Anything but idle is busy (countdown, acquiring, recording, saving): the Mic and Camera
+  // settings lock their device lists and the pre-take meter lets go of the device. Same
+  // meaning as the capture panel's `isBusy`.
+  const isBusy = setup.recordingStatus !== "idle";
+
   const isSystemAudioUnavailable = isRecording && activity.systemAudioAvailable === false;
 
   const toggles = (
@@ -128,7 +133,7 @@ export function RecordPage(): React.JSX.Element {
         <MicControlWithPopover
           on={setup.isMicrophoneEnabled}
           onToggle={setup.toggleMicrophone}
-          isRecording={isRecording}
+          isRecording={isBusy}
           microphones={setup.microphones}
           selectedMicrophone={setup.selectedMicrophone}
           onSelectMicrophone={setup.selectMicrophone}
@@ -146,7 +151,7 @@ export function RecordPage(): React.JSX.Element {
         <CameraControlWithPopover
           on={setup.isCameraEnabled}
           onToggle={setup.toggleCamera}
-          isRecording={isRecording}
+          isRecording={isBusy}
         />
       }
     />
