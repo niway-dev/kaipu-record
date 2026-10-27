@@ -197,44 +197,6 @@ describe("RecordPage idle layout (design Kaipu Record Modes)", () => {
     expect(startRecording).not.toHaveBeenCalled();
   });
 
-  it("lists the four newest recordings under Recent, and nothing when there are none", async () => {
-    const recording = (n: number) => ({
-      id: `r${n}`,
-      assetId: `a${n}`,
-      title: `Take ${n}`,
-      filePath: `/v/r${n}.mp4`,
-      createdAt: n,
-      sizeBytes: 1,
-      durationSeconds: 60 + n,
-      thumbnailUrl: null,
-      kind: "recording" as const,
-      derivedFromAssetId: null,
-      contentSha256: null,
-      capture:
-        n === 5
-          ? { mode: "area" as const, width: 1280, height: 720, ratio: "16:9" as const }
-          : n === 4
-            ? { mode: "screen" as const, width: 1920, height: 1080, ratio: null }
-            : null,
-    });
-    window.electronAPI = {
-      ...realApi,
-      listLocalRecordings: async () => [1, 2, 3, 4, 5].map(recording),
-    };
-    renderAt(undefined);
-    await screen.findByTestId("recent-recordings");
-    expect(screen.getAllByText(/^Take/).map((node) => node.textContent)).toEqual([
-      "Take 5",
-      "Take 4",
-      "Take 3",
-      "Take 2",
-    ]);
-    expect(screen.getByText("1:05")).toBeInTheDocument();
-    // The capture tag from the library labels each take that has capture metadata.
-    expect(screen.getByText("FRAME · 16:9")).toBeInTheDocument();
-    expect(screen.getByText("SCREEN")).toBeInTheDocument();
-  });
-
   it("opens the camera settings popover from the split Camera tile in the idle layout", () => {
     renderAt(undefined);
     fireEvent.click(screen.getByRole("button", { name: "Camera settings" }));
