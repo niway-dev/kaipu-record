@@ -228,6 +228,28 @@ export function overlayQuery(
   );
 }
 
+/**
+ * The query of a spare: everything that needs a reload (the display, its geometry and scale,
+ * the picked set) and nothing a loaded window can be told by message. The mode, the intent and
+ * the frame's display reach it as state when its pick opens (`sendState`), so the same spare
+ * serves Frame or Screen, record or capture, with the pointer on any display. `spare=1` makes
+ * the renderer paint nothing until that first state arrives; `ui=frame` is only a placeholder.
+ */
+export function overlaySpareQuery(
+  display: Display,
+  index: number,
+  displayIds: readonly number[],
+): string {
+  return (
+    `?window=capture-overlay&display=${display.id}&ui=frame` +
+    `&index=${index}&count=${displayIds.length}` +
+    `&bounds=${rectParam(display.bounds)}&work=${rectParam(display.workArea)}` +
+    `&ids=${displayIds.join(",")}` +
+    (display.internal ? "&internal=1" : "") +
+    `&scale=${display.scaleFactor}&spare=1`
+  );
+}
+
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
@@ -374,13 +396,16 @@ export class CaptureOverlayWindows implements OverlayPort {
       // that holds the frame, so there focus follows the frame, not the pointer.
       this.focusDisplayId = this.frameDisplayId ?? displays[Math.max(0, underCursor)].id;
       const queries = this.queriesFor(ui, displays, frameDisplayId, intent);
-      // Spares loaded for exactly this pick (same displays, mode, intent and frame) are used
-      // as they are; any others are thrown away, and this pick loads its own as it always did.
+      // Spares loaded for the same displays are used as they are, whatever the mode, intent or
+      // frame display: those reach them as state. Any others (the displays changed) are
+      // thrown away, and this pick loads its own as it always did.
       const spares = this.spares;
       this.spares = null;
-      if (spares && spares.key === queries.join("|")) {
+      if (spares && spares.key === this.spareQueries(displays).join("|")) {
+        markRecordTiming("overlay spares reused");
         this.entries.push(...spares.entries);
       } else {
+        markRecordTiming("overlay loaded fresh");
         this.destroySpares(spares);
         displays.forEach((display, index) => {
           this.entries.push(this.createOverlay(display, queries[index]!));
@@ -448,6 +473,12 @@ export class CaptureOverlayWindows implements OverlayPort {
     );
   }
 
+  /** What the spares of `displays` load: independent of mode, intent and frame (`overlaySpareQuery`). */
+  private spareQueries(displays: Display[]): string[] {
+    const displayIds = displays.map((display) => display.id);
+    return displays.map((display, index) => overlaySpareQuery(display, index + 1, displayIds));
+  }
+
   private scheduleWarm(delayMs: number): void {
     if (!this.deps.warmup || this.warmTimer) return;
     this.warmTimer = setTimeout(() => {
@@ -465,9 +496,7 @@ export class CaptureOverlayWindows implements OverlayPort {
     }
     const next = warmup.next(this.lastIntent);
     if (!next || next.displays.length === 0) return;
-    const ui: OverlayUi = this.deps.enabledModes.includes(next.ui) ? next.ui : "frame";
-    const { frameDisplayId } = this.initialFrame(ui, next.displays);
-    const queries = this.queriesFor(ui, next.displays, frameDisplayId, next.intent);
+    const queries = this.spareQueries(next.displays);
     this.spares = {
       key: queries.join("|"),
       entries: next.displays.map((display, index) => this.createOverlay(display, queries[index]!)),
@@ -657,6 +686,9 @@ export class CaptureOverlayWindows implements OverlayPort {
     // Answered or destroyed before it painted: never show a stale overlay.
     if (window.isDestroyed() || !this.session?.settle) return;
     this.setSpaceBehavior(window, true);
+    // The state first: a spare learns its mode, intent and frame display here, and it paints
+    // nothing until it has them.
+    this.sendState(window);
     // `show()` also makes the window key, so with several displays whichever overlay
     // painted LAST took the keyboard and Enter / ⌘C on the frame went nowhere. Only the
     // focus target is shown active; the others never take focus on their own.
@@ -666,8 +698,6 @@ export class CaptureOverlayWindows implements OverlayPort {
     } else {
       window.showInactive();
     }
-    // A renderer that loaded after the last broadcast still learns where the frame is.
-    this.sendState(window);
     if (this.intent === "record") markRecordTiming(`overlay shown on display ${displayId}`);
     const session = this.session;
     session.shown += 1;

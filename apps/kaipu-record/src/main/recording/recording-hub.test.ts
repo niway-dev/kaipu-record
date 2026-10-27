@@ -24,7 +24,7 @@ const mockState = vi.hoisted(() => ({
     preview: vi.fn((size: number) => size),
   },
   bar: { show: vi.fn(), hide: vi.fn(), sendTick: vi.fn(), reset: vi.fn(), raise: vi.fn() },
-  shade: { show: vi.fn(), hide: vi.fn(), update: vi.fn() },
+  shade: { show: vi.fn(), hide: vi.fn(), update: vi.fn(), prewarm: vi.fn() },
   shortcutRegister: vi.fn((_accelerator: string, _handler: () => void) => true),
   shortcutUnregister: vi.fn(),
   displays: [] as Array<{
@@ -88,6 +88,7 @@ vi.mock("./recording-shade-window", () => ({
     show = mockState.shade.show;
     hide = mockState.shade.hide;
     update = mockState.shade.update;
+    prewarm = mockState.shade.prewarm;
   },
 }));
 
@@ -1176,6 +1177,13 @@ describe("recording hub — choosing an area or a display on the overlay", () =>
     expect(await handle.selectArea(1, null)).toBe(true);
     expect(mockState.getSources).toHaveBeenCalledTimes(1);
     expect(settings().selectedSource).toMatchObject({ id: "screen:1:0" });
+  });
+
+  it("loads the shade window ahead of the first countdown", async () => {
+    const { handle } = await hub();
+    handle.prewarmShade();
+    expect(mockState.shade.prewarm).toHaveBeenCalledTimes(1);
+    expect(mockState.shade.show).not.toHaveBeenCalled();
   });
 
   it("lists the screen sources again after a display change", async () => {

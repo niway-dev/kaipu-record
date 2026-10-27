@@ -38,6 +38,11 @@ export interface OverlayQuery {
    * box's size readout prints device pixels. Absent or malformed reads as 1.
    */
   scaleFactor?: number;
+  /**
+   * `&spare=1`: a window loaded ahead of its pick. `ui`, `intent` and `frame` are placeholders
+   * then; the real ones arrive as the first state message, and nothing paints before it.
+   */
+  spare?: boolean;
 }
 
 function parseIds(value: string | null): number[] | null {
@@ -86,6 +91,7 @@ export function parseOverlayQuery(search: string): OverlayQuery | null {
     internal: params.get("internal") === "1",
     intent: params.get("intent") === "record" ? "record" : "capture",
     scaleFactor: parseScale(params.get("scale")),
+    spare: params.get("spare") === "1",
   };
 }
 

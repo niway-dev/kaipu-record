@@ -15,7 +15,7 @@ import type {
   ControlCommand,
   RecordingActivity,
   RecordingSettings,
-  RecordingShadeState,
+  RecordingShadeView,
   RecordingTick,
   UpdateStatus,
 } from "@shared/types/ipc";
@@ -158,7 +158,7 @@ const kaipuApi: KaipuElectronAPI = {
   waitForCountdownVisible: () => ipcRenderer.invoke(IPC_CHANNELS.recordingCountdownVisible),
   reportRecordTiming: (label, kind) => ipcRenderer.send(IPC_CHANNELS.recordingTiming, label, kind),
   onRecordingShadeState: (callback) => {
-    const listener = (_e: IpcRendererEvent, state: RecordingShadeState): void => callback(state);
+    const listener = (_e: IpcRendererEvent, state: RecordingShadeView): void => callback(state);
     ipcRenderer.on(IPC_CHANNELS.recordingShadeState, listener);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.recordingShadeState, listener);
   },

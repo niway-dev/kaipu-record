@@ -211,6 +211,57 @@ describe("CaptureOverlay", () => {
   });
 });
 
+describe("a spare (loaded ahead of its pick)", () => {
+  it("paints nothing until main's first state arrives", () => {
+    const { api, pushState } = fakeApi({}, null);
+    const { container } = render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("frame", { spare: true })}
+        api={api}
+      />,
+    );
+    expect(container).toBeEmptyDOMElement();
+
+    pushState({ mode: "screen", frameDisplayId: null });
+    expect(container).not.toBeEmptyDOMElement();
+    expect(screen.getByTestId("hint-pill")).toBeInTheDocument();
+  });
+
+  it("takes the mode and the frame display from the state, not from the loaded query", () => {
+    const { api, pushState } = fakeApi({}, null);
+    render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("frame", { spare: true })}
+        api={api}
+      />,
+    );
+    pushState({ mode: "frame", frameDisplayId: 42 });
+    expect(screen.queryByText("Click to move the frame here")).toBeNull();
+
+    // The same window is then reused by a pick whose frame is on another display.
+    pushState({ mode: "frame", frameDisplayId: 7 });
+    expect(screen.getByText("Click to move the frame here")).toBeInTheDocument();
+  });
+
+  it("opens with the intent main sends, for the remembered area too", async () => {
+    const { api, pushState } = fakeApi({}, null, {
+      "42": { x: 10, y: 10, width: 300, height: 200 },
+    });
+    render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("frame", { spare: true })}
+        api={api}
+      />,
+    );
+    pushState({ mode: "frame", frameDisplayId: 42, intent: "record" });
+    await waitFor(() => expect(screen.getByTestId("capture-frame")).toBeInTheDocument());
+    expect(frameGeometry()).toMatchObject({ width: 300, height: 200 });
+  });
+});
+
 describe("display label", () => {
   it.each(["frame", "window", "screen"] as const)("names the display on the %s overlay", (ui) => {
     const { api } = fakeApi({}, null);

@@ -36,7 +36,7 @@ import type {
   RecorderPhaseReport,
   RecordTimingKind,
   RecordingSettings,
-  RecordingShadeState,
+  RecordingShadeView,
   RecordingStartInfo,
   RecordingTick,
 } from "./ipc";
@@ -366,7 +366,7 @@ export interface KaipuElectronAPI {
   /** Main renderer → main: a `[record-timing]` mark (see `RecordTimingKind`). */
   reportRecordTiming(label: string, kind: RecordTimingKind): void;
   /** Recording shade window: what to paint (countdown tick or recording). */
-  onRecordingShadeState(callback: (state: RecordingShadeState) => void): () => void;
+  onRecordingShadeState(callback: (state: RecordingShadeView) => void): () => void;
 
   // ── Global shortcuts ──────────────────────────────────────────────────
   /** Per-action registration state of the global shortcuts (false = unavailable). */

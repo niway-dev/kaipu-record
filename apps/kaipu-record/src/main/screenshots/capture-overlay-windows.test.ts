@@ -87,6 +87,7 @@ vi.mock("@electron-toolkit/utils", () => ({ is: { dev: false } }));
 
 const { CaptureOverlayWindows, HIDDEN_ACK_CAP_MS, OVERLAY_READY_TIMEOUT_MS } =
   await import("./capture-overlay-windows");
+const { beginRecordTiming, endRecordTiming } = await import("../recording/record-timing");
 
 function display(id: number, x: number, scaleFactor = 2): Display {
   return {
@@ -1325,17 +1326,146 @@ describe("CaptureOverlayWindows: the next pick's windows load hidden (warm-up)",
     expect(second!.show).toHaveBeenCalledTimes(1);
   });
 
-  it("a pick in another mode or intent throws the spares away and loads its own", () => {
+  it("loads the spares with a neutral query: no frame, mode choice or intent in it", () => {
+    vi.useFakeTimers();
+    const { port } = warmed();
+    port.prewarm();
+    vi.advanceTimersByTime(0);
+
+    const searches = created.map(({ window }) =>
+      String(window.loadFile.mock.calls[0]?.[1]?.search),
+    );
+    expect(searches[0]).toBe(
+      "?window=capture-overlay&display=1&ui=frame&index=1&count=2" +
+        "&bounds=0,0,1440,900&work=0,25,1440,875&ids=1,2&scale=2&spare=1",
+    );
+    for (const search of searches) {
+      expect(search).not.toContain("frame=");
+      expect(search).not.toContain("intent");
+    }
+  });
+
+  it("reuses the spares when the cursor is on another display than at warm time", () => {
+    vi.useFakeTimers();
+    let cursor = { x: 100, y: 100 };
+    const port = new CaptureOverlayWindows({
+      platform: "darwin",
+      enabledModes: CAPTURE_MODES,
+      cursorPoint: () => cursor,
+      warmup: {
+        next: () => ({ ui: "frame", intent: "record", displays: [left, right] }),
+        canWarm: () => true,
+      },
+      warmDelayMs: 100,
+      warmRetryMs: 500,
+    });
+    port.prewarm();
+    vi.advanceTimersByTime(0);
+    const spares = created.map(({ window }) => window);
+    for (const spare of spares) spare.paint();
+
+    cursor = { x: 1500, y: 100 };
+    void port.pick("frame", [left, right], "record");
+
+    expect(created).toHaveLength(2);
+    for (const spare of spares) expect(spare.destroy).not.toHaveBeenCalled();
+    // The frame display reaches the loaded windows as state, and the cursor's window is key.
+    expect(spares[1]!.show).toHaveBeenCalledTimes(1);
+    expect(spares[0]!.showInactive).toHaveBeenCalledTimes(1);
+    for (const spare of spares) {
+      expect(spare.webContents.send).toHaveBeenCalledWith(
+        IPC_CHANNELS.screenshotOverlayState,
+        expect.objectContaining({ mode: "frame", intent: "record", frameDisplayId: 2 }),
+      );
+    }
+  });
+
+  it("reuses the spares for a pick in another mode or intent, sending both as state", () => {
+    vi.useFakeTimers();
+    const { port } = warmed();
+    port.prewarm();
+    vi.advanceTimersByTime(0);
+    const spares = created.map(({ window }) => window);
+    for (const spare of spares) spare.paint();
+
+    void port.pick("screen", [left, right], "capture");
+
+    expect(created).toHaveLength(2);
+    for (const spare of spares) {
+      expect(spare.destroy).not.toHaveBeenCalled();
+      expect(spare.webContents.send).toHaveBeenCalledWith(
+        IPC_CHANNELS.screenshotOverlayState,
+        expect.objectContaining({ mode: "screen", intent: "capture", frameDisplayId: null }),
+      );
+    }
+  });
+
+  it("sends the state before it shows a painted spare", () => {
+    vi.useFakeTimers();
+    const { port } = warmed();
+    port.prewarm();
+    vi.advanceTimersByTime(0);
+    const [first] = created.map(({ window }) => window);
+    first!.paint();
+    void port.pick("frame", [left, right], "record");
+
+    const sendOrder = first!.webContents.send.mock.invocationCallOrder[0]!;
+    expect(sendOrder).toBeLessThan(first!.showInactive.mock.invocationCallOrder[0]!);
+  });
+
+  it("throws the spares away and loads its own when the displays differ from the spares'", () => {
     vi.useFakeTimers();
     const { port } = warmed();
     port.prewarm();
     vi.advanceTimersByTime(0);
     const spares = created.map(({ window }) => window);
 
-    void port.pick("frame", [left, right]);
+    void port.pick("frame", [left]);
+    for (const spare of spares) expect(spare.destroy).toHaveBeenCalled();
+    expect(created).toHaveLength(3);
+  });
 
+  it("throws the spares away when a display moved or changed scale", () => {
+    vi.useFakeTimers();
+    const { port } = warmed();
+    port.prewarm();
+    vi.advanceTimersByTime(0);
+    const spares = created.map(({ window }) => window);
+
+    void port.pick("frame", [left, display(2, 1440, 3)]);
     for (const spare of spares) expect(spare.destroy).toHaveBeenCalled();
     expect(created).toHaveLength(4);
+  });
+
+  describe("[record-timing] marks", () => {
+    let info: ReturnType<typeof vi.spyOn>;
+    beforeEach(() => {
+      info = vi.spyOn(console, "info").mockImplementation(() => {});
+      beginRecordTiming("start clicked");
+    });
+    afterEach(() => {
+      endRecordTiming("done");
+      info.mockRestore();
+    });
+    const lines = () => info.mock.calls.map((call) => String(call[0]));
+
+    it("says the spares were reused", () => {
+      vi.useFakeTimers();
+      const { port } = warmed();
+      port.prewarm();
+      vi.advanceTimersByTime(0);
+      void port.pick("frame", [left, right], "record");
+      expect(lines().some((line) => line.includes("overlay spares reused"))).toBe(true);
+      expect(lines().some((line) => line.includes("overlay loaded fresh"))).toBe(false);
+    });
+
+    it("says the windows loaded fresh when there were no usable spares", () => {
+      vi.useFakeTimers();
+      const { port } = warmed();
+      void port.pick("frame", [left, right], "record");
+      expect(lines().some((line) => line.includes("overlay loaded fresh"))).toBe(true);
+      expect(lines().some((line) => line.includes("overlay spares reused"))).toBe(false);
+    });
   });
 
   it("loads the next spares once a pick ends, guessed from that pick's intent", () => {

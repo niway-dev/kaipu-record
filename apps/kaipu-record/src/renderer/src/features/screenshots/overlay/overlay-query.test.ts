@@ -19,7 +19,18 @@ describe("parseOverlayQuery", () => {
       internal: false,
       intent: "capture",
       scaleFactor: 1,
+      spare: false,
     });
+  });
+
+  it("reads a spare: loaded ahead, its mode, intent and frame come as state", () => {
+    expect(parseOverlayQuery(`${QUERY}&scale=2&spare=1`)).toMatchObject({
+      spare: true,
+      scaleFactor: 2,
+      frame: null,
+      intent: "capture",
+    });
+    expect(parseOverlayQuery(`${QUERY}&spare=0`)?.spare).toBe(false);
   });
 
   it("reads the scale factor for the size readout, 1 when absent or malformed", () => {

@@ -90,6 +90,8 @@ export interface RecordingHubHandle {
    * when the overlay opens to record. The list is kept until the displays change.
    */
   prefetchScreenSources(): void;
+  /** Load the countdown/recording shade window hidden, so the first countdown does not wait. */
+  prewarmShade(): void;
   /**
    * The next start's countdown is drawn on this region of this display (design "Kaipu Record
    * Modes"): the overlay just chose it, and the main window stays hidden. `rect` is display-
@@ -767,6 +769,7 @@ export function registerRecordingHub(
       else startTtl();
     },
     prefetchScreenSources: () => screenSources.prefetch(),
+    prewarmShade: () => shade.prewarm(),
     selectArea: async (displayId, rect, ratio) => {
       // The source is locked for the length of a take.
       if (activity.active) return false;

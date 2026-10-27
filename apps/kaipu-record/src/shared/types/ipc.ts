@@ -736,7 +736,18 @@ export type RecordTimingKind = "begin" | "mark" | "end";
 /** What the recording shade paints (main → shade window). */
 export type RecordingShadeState =
   | { phase: "countdown"; value: number | null }
-  | { phase: "recording" };
+  | { phase: "recording" }
+  // Neutral: nothing painted. The preloaded window waits in it, and a hidden one is reset to it.
+  | { phase: "idle" };
+
+/**
+ * What main sends the shade window: the state plus the region it is drawn on (display-relative
+ * DIP, `null` for the whole display). The window is reused across takes, so the region travels
+ * as state, not in its URL. Absent `rect` keeps the last one.
+ */
+export type RecordingShadeView = RecordingShadeState & {
+  rect?: CaptureRect | null;
+};
 
 /** Source identity for placing the bar on the recorded screen. */
 export interface RecordingStartInfo {

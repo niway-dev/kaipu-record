@@ -1,51 +1,30 @@
 import { act, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { CountdownOverlay } from "@renderer/features/recording/components/countdown-overlay";
-import type { RecordingShadeState } from "@shared/types/ipc";
-import { parseShadeRect, parseShadeState, RecordingShade } from "./recording-shade";
+import type { RecordingShadeView } from "@shared/types/ipc";
+import { RecordingShade } from "./recording-shade";
 
 const RECT = { x: 100, y: 50, width: 640, height: 360 };
 
 function fakeApi() {
-  let listener: ((state: RecordingShadeState) => void) | null = null;
+  let listener: ((state: RecordingShadeView) => void) | null = null;
   return {
     api: {
-      onRecordingShadeState: vi.fn((callback: (state: RecordingShadeState) => void) => {
+      onRecordingShadeState: vi.fn((callback: (state: RecordingShadeView) => void) => {
         listener = callback;
         return () => {
           listener = null;
         };
       }),
     },
-    push: (state: RecordingShadeState) => act(() => listener?.(state)),
+    push: (state: RecordingShadeView) => act(() => listener?.(state)),
   };
 }
-
-describe("parseShadeRect", () => {
-  it("reads the clear area from the query", () => {
-    expect(parseShadeRect("?window=recording-shade&rect=100,50,640,360")).toEqual(RECT);
-  });
-
-  it("answers null for a missing or malformed rect", () => {
-    expect(parseShadeRect("?window=recording-shade")).toBeNull();
-    expect(parseShadeRect("?rect=1,2,3")).toBeNull();
-    expect(parseShadeRect("?rect=1,2,0,4")).toBeNull();
-  });
-});
-
-describe("parseShadeState", () => {
-  it("reads a countdown tick, and recording otherwise", () => {
-    expect(parseShadeState("?phase=countdown&value=3")).toEqual({ phase: "countdown", value: 3 });
-    expect(parseShadeState("?phase=countdown")).toEqual({ phase: "countdown", value: null });
-    expect(parseShadeState("?phase=recording")).toEqual({ phase: "recording" });
-    expect(parseShadeState("")).toEqual({ phase: "recording" });
-  });
-});
 
 describe("RecordingShade", () => {
   it("while an area records: keeps the dark shade around a clear area, with the pink border and tag", () => {
     const { api } = fakeApi();
-    render(<RecordingShade rect={RECT} api={api} />);
+    render(<RecordingShade rect={RECT} initialState={{ phase: "recording" }} api={api} />);
     const area = screen.getByTestId("recording-shade-area");
     expect(area.style.left).toBe("100px");
     expect(area.style.top).toBe("50px");
@@ -60,13 +39,15 @@ describe("RecordingShade", () => {
 
   it("draws the tag inside the border when the area touches the top of the display", () => {
     const { api } = fakeApi();
-    render(<RecordingShade rect={{ ...RECT, y: 0 }} api={api} />);
+    render(
+      <RecordingShade rect={{ ...RECT, y: 0 }} initialState={{ phase: "recording" }} api={api} />,
+    );
     expect(screen.getByTestId("recording-shade-border").dataset.tagInside).toBe("true");
   });
 
   it("while a whole display records: only a border around the display", () => {
     const { api } = fakeApi();
-    render(<RecordingShade rect={null} api={api} />);
+    render(<RecordingShade rect={null} initialState={{ phase: "recording" }} api={api} />);
     expect(screen.getByTestId("recording-shade-display")).toBeInTheDocument();
     expect(screen.queryByTestId("recording-shade-area")).toBeNull();
     expect(screen.queryByText("REC · BORDER NOT RECORDED")).toBeNull();
@@ -106,5 +87,34 @@ describe("RecordingShade", () => {
     shade.unmount();
     render(<CountdownOverlay value={3} onCancel={() => {}} />);
     expect(screen.getByText("3").className).toBe(shadeClass);
+  });
+
+  it("paints nothing while neutral (the preloaded window waiting for a take)", () => {
+    const { api } = fakeApi();
+    const { container } = render(
+      <RecordingShade rect={null} initialState={{ phase: "idle" }} api={api} />,
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("takes the region from the state it is sent, and forgets it when reset", () => {
+    const { api, push } = fakeApi();
+    const { container } = render(
+      <RecordingShade rect={null} initialState={{ phase: "idle" }} api={api} />,
+    );
+
+    push({ phase: "countdown", value: 3, rect: RECT });
+    expect(screen.getByRole("status").style.left).toBe("100px");
+
+    push({ phase: "recording" });
+    expect(screen.getByTestId("recording-shade-area").style.width).toBe("640px");
+
+    push({ phase: "idle", rect: null });
+    expect(container).toBeEmptyDOMElement();
+
+    // The next take is a whole display: the previous take's area is gone.
+    push({ phase: "recording", rect: null });
+    expect(screen.queryByTestId("recording-shade-area")).toBeNull();
+    expect(screen.getByTestId("recording-shade-display")).toBeInTheDocument();
   });
 });

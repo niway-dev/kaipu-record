@@ -90,12 +90,23 @@ interface CaptureOverlayProps {
  * handler is not the only way out.
  */
 export function CaptureOverlay({
-  query,
+  query: loadedQuery,
   api = window.electronAPI,
   platform: platformProp,
   enabledModes = ENABLED_CAPTURE_MODES,
 }: CaptureOverlayProps): React.JSX.Element | null {
   const bridge = api.captureOverlay;
+  // A window loaded ahead of its pick (`spare=1`) paints nothing until main's first state
+  // arrives; that state also says which intent it opened for.
+  const [received, setReceived] = useState(!loadedQuery.spare);
+  const [openedIntent, setOpenedIntent] = useState<CaptureIntent | null>(
+    loadedQuery.spare ? null : loadedQuery.intent,
+  );
+  // What the children read: the loaded query, with the intent the pick opened for.
+  const query = useMemo<OverlayQuery>(
+    () => ({ ...loadedQuery, intent: openedIntent ?? loadedQuery.intent }),
+    [loadedQuery, openedIntent],
+  );
   const platform = useMemo(() => platformProp ?? detectKeyPlatform(), [platformProp]);
   const answered = useRef(false);
   // Opened to capture or to record (the URL), then switched in place with P / V or the
@@ -134,6 +145,8 @@ export function CaptureOverlay({
   useEffect(
     () =>
       bridge.onState((incoming) => {
+        setReceived(true);
+        setOpenedIntent((opened) => opened ?? incoming.intent ?? "capture");
         if (incoming.intent !== undefined) {
           const asked = requestedIntent.current;
           if (asked === null || incoming.intent === asked) {
@@ -260,6 +273,8 @@ export function CaptureOverlay({
     }),
     [mode, enabledModes, platform, intent, switchMode, cancel, recording, toggles, setIntent],
   );
+
+  if (!received) return null;
 
   const body =
     mode === "screen" ? (

@@ -1,24 +1,15 @@
-import { BrowserWindow } from "electron";
+import { BrowserWindow, screen } from "electron";
 import { join } from "path";
 import { is } from "@electron-toolkit/utils";
 import { IPC_CHANNELS } from "@shared/types";
-import type { RecordingShadeState } from "@shared/types/ipc";
+import type { RecordingShadeState, RecordingShadeView } from "@shared/types/ipc";
 import type { CaptureRect } from "@shared/types/screenshot-capture";
+import { markRecordTiming } from "./record-timing";
 
 /** The slice of `Electron.Display` the shade reads. */
 export interface ShadeDisplay {
   id: number;
   bounds: { x: number; y: number; width: number; height: number };
-}
-
-/** The renderer route for a shade: the region (absent for a whole display) and the phase. */
-export function shadeSearch(rect: CaptureRect | null, state: RecordingShadeState): string {
-  const region = rect ? `&rect=${[rect.x, rect.y, rect.width, rect.height].join(",")}` : "";
-  const phase =
-    state.phase === "countdown"
-      ? `&phase=countdown${state.value === null ? "" : `&value=${state.value}`}`
-      : "&phase=recording";
-  return `?window=recording-shade${region}${phase}`;
 }
 
 /**
@@ -38,16 +29,39 @@ export function shadeSearch(rect: CaptureRect | null, state: RecordingShadeState
  * It sits one level below the control bar and the camera bubble ("status" against their
  * "screen-saver"), so neither is ever covered; `onShown` lets the hub raise them as well,
  * because Windows ignores the levels and orders topmost windows by when they were shown.
+ *
+ * The window is loaded once, hidden and neutral (`prewarm`), and reused by every take: a
+ * `show` only moves it onto its display and sends it the region and phase as state, so the
+ * countdown does not wait for a renderer to load. `hide` keeps it and resets it to neutral
+ * while it is off screen, so a reused window never repaints the previous take.
  */
 export class RecordingShadeWindow {
   private window: BrowserWindow | null = null;
   /** What the current window covers, so a countdown shade can become the recording one. */
   private key: string | null = null;
-  private state: RecordingShadeState = { phase: "recording" };
+  private rect: CaptureRect | null = null;
+  private state: RecordingShadeState = { phase: "idle" };
+  /** The page has painted once; before that, showing the window would show nothing. */
+  private ready = false;
+  /** Whether the shade should be on screen. A show that finds the page loading waits for it. */
+  private wanted = false;
+  /** The window is on screen (shown and not hidden since). */
+  private visible = false;
+  /** The callback of the `show` that is waiting for the page to load. */
+  private pendingShown: (() => void) | undefined;
+
+  /**
+   * Load the window hidden and neutral, so the first `show` of a take only sends it a state
+   * (the way the control bar's window is kept). Call once the app is up; no-op when one exists.
+   */
+  prewarm(): void {
+    this.ensureWindow(screen.getPrimaryDisplay().bounds);
+  }
 
   /**
    * Cover `display`, marking `rect` (display-relative DIP) or, with `null`, the whole
-   * display. A shade already up for the same region only changes phase; any other replaces it.
+   * display. A shade already up for the same region only changes phase; any other region
+   * repaints the same window, moved onto its display.
    */
   show(
     display: ShadeDisplay,
@@ -56,15 +70,72 @@ export class RecordingShadeWindow {
     state: RecordingShadeState = { phase: "recording" },
   ): void {
     const key = JSON.stringify([display.id, display.bounds, rect]);
-    if (this.window && !this.window.isDestroyed() && this.key === key) {
+    if (this.window && !this.window.isDestroyed() && this.visible && this.key === key) {
       this.update(state);
       onShown?.();
       return;
     }
-    this.hide();
+    const reused = this.window !== null && !this.window.isDestroyed() && this.ready;
+    const window = this.ensureWindow(display.bounds);
+    window.setBounds(display.bounds);
     this.key = key;
+    this.rect = rect;
     this.state = state;
-    const { x, y, width, height } = display.bounds;
+    this.wanted = true;
+    this.pendingShown = onShown;
+    if (!this.ready) {
+      markRecordTiming("countdown shade loaded fresh");
+      return; // `ready-to-show` shows it with the latest state
+    }
+    if (reused) markRecordTiming("countdown shade reused");
+    this.present(window);
+  }
+
+  /** Change what the shade paints (the next countdown tick, or recording). */
+  update(state: RecordingShadeState): void {
+    this.state = state;
+    if (this.window && !this.window.isDestroyed() && this.ready) this.send(this.window);
+  }
+
+  /**
+   * Take the shade off screen, kept for the next take and reset to neutral while hidden: a
+   * window shown again repaints on its next frame, so the last take's region and number must
+   * already be gone.
+   */
+  hide(): void {
+    this.wanted = false;
+    this.visible = false;
+    this.pendingShown = undefined;
+    this.key = null;
+    this.rect = null;
+    this.state = { phase: "idle" };
+    const window = this.window;
+    if (!window || window.isDestroyed()) return;
+    window.hide();
+    if (this.ready) this.send(window);
+  }
+
+  private send(window: BrowserWindow): void {
+    const view: RecordingShadeView = { ...this.state, rect: this.rect };
+    window.webContents.send(IPC_CHANNELS.recordingShadeState, view);
+  }
+
+  /** Paint the current region and state, then put the window on screen. */
+  private present(window: BrowserWindow): void {
+    // State first: the window is never on screen with the previous take's paint.
+    this.send(window);
+    window.showInactive();
+    this.visible = true;
+    const onShown = this.pendingShown;
+    this.pendingShown = undefined;
+    onShown?.();
+  }
+
+  private ensureWindow(bounds: ShadeDisplay["bounds"]): BrowserWindow {
+    if (this.window && !this.window.isDestroyed()) return this.window;
+    this.ready = false;
+    this.visible = false;
+    const { x, y, width, height } = bounds;
     const window = new BrowserWindow({
       x,
       y,
@@ -88,6 +159,8 @@ export class RecordingShadeWindow {
       webPreferences: {
         preload: join(__dirname, "../preload/index.js"),
         sandbox: false,
+        // Hidden between takes: a throttled page would answer the first state late.
+        backgroundThrottling: false,
       },
     });
     this.window = window;
@@ -99,7 +172,7 @@ export class RecordingShadeWindow {
       skipTransformProcessType: true,
     });
 
-    const search = shadeSearch(rect, state);
+    const search = "?window=recording-shade";
     if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
       void window.loadURL(`${process.env["ELECTRON_RENDERER_URL"]}/${search}`);
     } else {
@@ -107,31 +180,17 @@ export class RecordingShadeWindow {
     }
     window.once("ready-to-show", () => {
       if (this.window !== window || window.isDestroyed()) return;
-      // A phase change that arrived while the page loaded is applied now.
-      window.webContents.send(IPC_CHANNELS.recordingShadeState, this.state);
-      window.showInactive();
-      onShown?.();
+      this.ready = true;
+      // A show or phase change that arrived while the page loaded is applied now.
+      if (this.wanted) this.present(window);
     });
     window.on("closed", () => {
-      if (this.window === window) {
-        this.window = null;
-        this.key = null;
-      }
+      if (this.window !== window) return;
+      this.window = null;
+      this.ready = false;
+      this.visible = false;
+      this.key = null;
     });
-  }
-
-  /** Change what the shade paints (the next countdown tick, or recording). */
-  update(state: RecordingShadeState): void {
-    this.state = state;
-    if (this.window && !this.window.isDestroyed()) {
-      this.window.webContents.send(IPC_CHANNELS.recordingShadeState, state);
-    }
-  }
-
-  /** Destroy the shade: it holds nothing worth keeping between takes. */
-  hide(): void {
-    if (this.window && !this.window.isDestroyed()) this.window.destroy();
-    this.window = null;
-    this.key = null;
+    return window;
   }
 }

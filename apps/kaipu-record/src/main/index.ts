@@ -1026,10 +1026,11 @@ app.whenReady().then(() => {
   // The capture overlay's windows too, a little later: "Start recording" opens them, and
   // loading one renderer per display was most of its wait. Held off while a take runs.
   mainWindow?.once("ready-to-show", () => {
-    setTimeout(
-      () => prewarmCaptureOverlay(() => (hub?.isActive() || hub?.isPending()) ?? false),
-      OVERLAY_PREWARM_AFTER_LAUNCH_MS,
-    );
+    setTimeout(() => {
+      prewarmCaptureOverlay(() => (hub?.isActive() || hub?.isPending()) ?? false);
+      // The countdown's shade window too: it showed only after loading a renderer.
+      hub?.prewarmShade();
+    }, OVERLAY_PREWARM_AFTER_LAUNCH_MS);
   });
 
   app.on("activate", function () {
