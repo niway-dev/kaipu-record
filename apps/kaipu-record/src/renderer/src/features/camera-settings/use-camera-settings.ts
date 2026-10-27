@@ -87,21 +87,11 @@ export function useCameraSettings(): CameraSettingsStore {
   const latest = useRef(bubble);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSent = useRef(0);
-
-  useEffect(() => {
-    const accept = (settings: AppSettings): void => {
-      // A change of ours still waiting to be sent wins over the echo of an older one.
-      if (timer.current) return;
-      latest.current = settings.cameraBubble;
-      setBubble(settings.cameraBubble);
-    };
-    void window.electronAPI.getSettings().then(accept);
-    const unsubscribe = window.electronAPI.onSettingsChanged(accept);
-    return () => {
-      unsubscribe();
-      if (timer.current) clearTimeout(timer.current);
-    };
-  }, []);
+  // Until the first read lands, `latest` holds the defaults, not the saved value: a change
+  // made then is kept as a patch and merged over the saved value, never over the defaults
+  // (which would wipe the saved device and shape).
+  const loaded = useRef(false);
+  const early = useRef<Partial<CameraBubbleSettings> | null>(null);
 
   const send = useCallback((): void => {
     timer.current = null;
@@ -109,11 +99,35 @@ export function useCameraSettings(): CameraSettingsStore {
     void window.electronAPI.updateSettings({ cameraBubble: latest.current });
   }, []);
 
+  useEffect(() => {
+    const accept = (settings: AppSettings): void => {
+      // A change of ours still waiting to be sent wins over the echo of an older one.
+      if (timer.current) return;
+      const patch = early.current;
+      early.current = null;
+      loaded.current = true;
+      const next = patch ? { ...settings.cameraBubble, ...patch } : settings.cameraBubble;
+      latest.current = next;
+      setBubble(next);
+      if (patch) send();
+    };
+    void window.electronAPI.getSettings().then(accept);
+    const unsubscribe = window.electronAPI.onSettingsChanged(accept);
+    return () => {
+      unsubscribe();
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, [send]);
+
   const update = useCallback(
     (patch: Partial<CameraBubbleSettings>): void => {
       const next = { ...latest.current, ...patch };
       latest.current = next;
       setBubble(next);
+      if (!loaded.current) {
+        early.current = { ...early.current, ...patch };
+        return;
+      }
       if (timer.current) return;
       const wait = PERSIST_EVERY_MS - (Date.now() - lastSent.current);
       if (wait <= 0) send();

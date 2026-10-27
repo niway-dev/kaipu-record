@@ -121,6 +121,35 @@ describe("Camera drawer (capture panel)", () => {
   });
 });
 
+describe("useCameraSettings before the saved value loads", () => {
+  it("merges an early change over the saved value, never over the defaults", async () => {
+    let release: (() => void) | null = null;
+    const saved = await original.getSettings();
+    window.electronAPI.getSettings = () =>
+      new Promise((resolve) => {
+        release = () =>
+          resolve({
+            ...saved,
+            cameraBubble: { shape: "rounded", size: 240, deviceId: "cam-9" },
+          });
+      });
+    const updateSettings = vi.fn(async () => ({}) as never);
+    window.electronAPI.updateSettings = updateSettings;
+    render(<CameraControlWithPopover on onToggle={() => {}} isRecording={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "Camera settings" }));
+    fireEvent.change(screen.getByRole("slider"), { target: { value: "300" } });
+    // Nothing written while the saved value is unknown.
+    expect(updateSettings).not.toHaveBeenCalled();
+
+    await act(async () => release!());
+    await waitFor(() =>
+      expect(updateSettings).toHaveBeenCalledWith({
+        cameraBubble: { shape: "rounded", size: 300, deviceId: "cam-9" },
+      }),
+    );
+  });
+});
+
 describe("useCameraSettings throttling", () => {
   it("sends a burst of slider changes as few writes, ending on the last value", async () => {
     vi.useFakeTimers();
