@@ -1,5 +1,9 @@
 import type { LocalRecording, RecordingSettings } from "@shared/types";
-import type { RecorderPhaseReport, RecordingArea } from "@shared/types/ipc";
+import {
+  RECORDING_COUNTDOWN_SECONDS,
+  type RecorderPhaseReport,
+  type RecordingArea,
+} from "@shared/types/ipc";
 import {
   beginCursorTrackSession,
   type CursorTrackSession,
@@ -49,7 +53,7 @@ export interface RecorderSnapshot {
   countdown: number | null;
 }
 
-const COUNTDOWN_SECONDS = 3;
+const COUNTDOWN_SECONDS = RECORDING_COUNTDOWN_SECONDS;
 /**
  * How long the first tick waits for main to say the countdown is on screen (the shade window
  * loading on the chosen region). Past it the countdown runs anyway: a take never depends on it.

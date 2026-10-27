@@ -484,6 +484,8 @@ function triggerRecordSelector(requested?: CaptureMode): void {
     sendToRenderer(IPC_CHANNELS.recordingRequestSourcePicker, { startOnPick: true });
     return;
   }
+  // The Record answer needs the display's screen source: list them while the overlay opens.
+  hub?.prefetchScreenSources();
   triggerCaptureScreenshot({ mode, intent: "record" });
 }
 
@@ -596,6 +598,7 @@ async function applyRecordTarget(target: RecordTarget): Promise<void> {
 /** The `recordArea` shortcut: the overlay in Frame, opened to choose what to record. */
 function triggerRecordArea(): void {
   beginRecordTiming("record area shortcut");
+  hub?.prefetchScreenSources();
   triggerCaptureScreenshot({ mode: "frame", intent: "record" });
 }
 

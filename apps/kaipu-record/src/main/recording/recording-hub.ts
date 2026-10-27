@@ -11,7 +11,11 @@ import { homedir, release } from "node:os";
 import { join } from "node:path";
 import { createMainTranslator } from "@kaipu/i18n/main";
 import { IPC_CHANNELS } from "@shared/types";
-import { FINALIZE_ELSEWHERE_MARKER, FINALIZE_KEPT_MARKER } from "@shared/types/ipc";
+import {
+  FINALIZE_ELSEWHERE_MARKER,
+  FINALIZE_KEPT_MARKER,
+  RECORDING_COUNTDOWN_SECONDS,
+} from "@shared/types/ipc";
 import type {
   ControlCommand,
   RecorderPhaseReport,
@@ -33,6 +37,7 @@ import { CursorTrackRegistry } from "./cursor-tracker";
 import { ControlBarWindow } from "./control-bar-window";
 import { CameraBubbleWindow } from "./camera-bubble-window";
 import { RecordingShadeWindow } from "./recording-shade-window";
+import { ScreenSourceCache, type ScreenSource } from "./screen-source-cache";
 import { areaToGlobal, fullDisplayBorderAllowed, sanitizeArea } from "./area-geometry";
 import { holdTemporaryShortcut, releaseTemporaryShortcut } from "../shortcuts/global-shortcuts";
 import { FinalizeMoveError, RecordingWriter, timestampId } from "./recording-writer";
@@ -84,6 +89,12 @@ export interface RecordingHubHandle {
   /** `ratio`: the chip the Frame box was locked to, kept on the area for capture metadata. */
   selectArea(displayId: number, rect: CaptureRect | null, ratio?: RecordingRatio): Promise<boolean>;
   /**
+   * List the screen sources now, in the background, so the `selectArea` that follows a pick
+   * finds them ready instead of waiting on `desktopCapturer` with nothing on screen. Call it
+   * when the overlay opens to record. The list is kept until the displays change.
+   */
+  prefetchScreenSources(): void;
+  /**
    * The next start's countdown is drawn on this region of this display (design "Kaipu Record
    * Modes"): the overlay just chose it, and the main window stays hidden. `rect` is display-
    * relative DIP, `null` for the whole display. Forgotten after `COUNTDOWN_REGION_TTL_MS`
@@ -91,6 +102,8 @@ export interface RecordingHubHandle {
    * The TTL starts once the main window has loaded (a recreated window cold-loads first).
    * `onAbandoned` runs when the start never came (TTL expired with no phase report) or ended
    * before a take (cancelled or failed): the caller kept the app hidden and must reveal it.
+   * The shade is opened here, painting the first tick, so it is loading while the start
+   * request travels and the recorder's `recordingCountdownVisible` wait is answered at once.
    */
   prepareRegionCountdown(
     displayId: number,
@@ -157,6 +170,7 @@ export function registerRecordingHub(
     if (typeof dx === "number" && typeof dy === "number") cameraBubble.moveBy(dx, dy);
   });
   const shade = new RecordingShadeWindow();
+  const screenSources = new ScreenSourceCache(listScreenSources);
   const writer = new RecordingWriter({
     vaultDir: () => vaultDirectory().path,
     newId: () => timestampId(Date.now()),
@@ -277,8 +291,14 @@ export function registerRecordingHub(
     }
     applySettingsPatch({ selectedSource: null, area: null });
   };
-  screen.on("display-removed", dropStaleArea);
-  screen.on("display-metrics-changed", dropStaleArea);
+  // A display change can renumber the screen sources (Windows lists them by index).
+  const onDisplaysChanged = (): void => {
+    screenSources.invalidate();
+    dropStaleArea();
+  };
+  screen.on("display-added", () => screenSources.invalidate());
+  screen.on("display-removed", onDisplaysChanged);
+  screen.on("display-metrics-changed", onDisplaysChanged);
 
   // ── Disk writer ──────────────────────────────────────────────────────
   function videosDir(): string {
@@ -392,7 +412,7 @@ export function registerRecordingHub(
     ): Promise<{ enabled: boolean }> => {
       const display = pickCapturedDisplay(
         sourceId,
-        await displayIdForSource(sourceId),
+        await displayIdForSource(screenSources, sourceId),
         screen.getAllDisplays(),
       );
       if (!display) return { enabled: false };
@@ -481,7 +501,8 @@ export function registerRecordingHub(
     notify?.();
   };
   // Without a region the countdown is the Record page's own and is already visible. With one,
-  // the shade loads a renderer before it can show "3": the recorder starts its clock after.
+  // the shade (opened when the region was prepared) loads a renderer before it can show "3":
+  // the recorder starts its clock after.
   ipcMain.handle(IPC_CHANNELS.recordingCountdownVisible, (): Promise<void> | undefined => {
     if (!countdownRegion || activity.active || countdownShown) return undefined;
     return new Promise((resolve) => countdownShownWaiters.push(resolve));
@@ -491,7 +512,6 @@ export function registerRecordingHub(
     // Every countdown (overlay region or Record page) is a pending take for the tray.
     if (report && !activity.active) setPending(report.phase !== "idle");
     if (!report || !countdownRegion || activity.active) return;
-    const { display, rect } = countdownRegion;
     // The start arrived (a countdown, or straight to acquiring with no countdown): the
     // region is in use now and no longer expires.
     if (report.phase !== "idle" && countdownRegionTimer) {
@@ -499,16 +519,9 @@ export function registerRecordingHub(
       countdownRegionTimer = null;
     }
     if (report.phase === "counting") {
-      shade.show(
-        display,
-        rect,
-        () => {
-          markRecordTiming("countdown shade shown");
-          raiseFloating();
-          markCountdownShown();
-        },
-        { phase: "countdown", value: report.value },
-      );
+      // The shade opened with the region (`prepareRegionCountdown`); a tick only repaints it.
+      // Showing it again here would answer `recordingCountdownVisible` before it loaded.
+      shade.update({ phase: "countdown", value: report.value });
       holdEscape();
     } else if (report.phase === "starting") {
       shade.update({ phase: "countdown", value: null });
@@ -574,7 +587,7 @@ export function registerRecordingHub(
     // The countdown of a whole display was drawn on that display: turn it into the border
     // now, without waiting for the source lookup below, which can fail.
     const wholeDisplayCountdown = !area && region !== null && region.rect === null;
-    void displayIdForSource(info.sourceId).then((displayId) => {
+    void displayIdForSource(screenSources, info.sourceId).then((displayId) => {
       bar.show(displayId, { includeInRecording, anchor: areaGlobal });
       if (area || wholeDisplayCountdown || !activity.active) return;
       const display =
@@ -660,6 +673,20 @@ export function registerRecordingHub(
       const prepared = { display, rect: area ? area.rect : null };
       countdownRegion = prepared;
       countdownAbandoned = onAbandoned ?? null;
+      // Open the shade now, on "3": it loads while the start request reaches the recorder,
+      // instead of after its first tick report. The recorder still starts its clock only
+      // once this window is on screen (`recordingCountdownVisible`).
+      shade.show(
+        display,
+        prepared.rect,
+        () => {
+          if (countdownRegion !== prepared) return;
+          markRecordTiming("countdown shade shown");
+          raiseFloating();
+          markCountdownShown();
+        },
+        { phase: "countdown", value: RECORDING_COUNTDOWN_SECONDS },
+      );
       // The TTL counts from when the recorder can answer: a recreated main window loads first.
       const startTtl = (): void => {
         if (countdownRegion !== prepared || countdownRegionTimer) return;
@@ -669,6 +696,7 @@ export function registerRecordingHub(
       if (contents?.isLoading?.()) contents.once("did-finish-load", startTtl);
       else startTtl();
     },
+    prefetchScreenSources: () => screenSources.prefetch(),
     selectArea: async (displayId, rect, ratio) => {
       // The source is locked for the length of a take.
       if (activity.active) return false;
@@ -677,7 +705,11 @@ export function registerRecordingHub(
       const area = rect ? sanitizeArea({ displayId, rect, ratio }, display) : null;
       if (rect && !area) return false;
       markRecordTiming("selectArea: resolving the screen source");
-      const source = await screenSourceForDisplay(displayId, screen.getAllDisplays().length);
+      const source = await screenSourceForDisplay(
+        screenSources,
+        displayId,
+        screen.getAllDisplays().length,
+      );
       markRecordTiming(`selectArea: screen source ${source ? "resolved" : "missing"}`);
       if (!source) return false;
       const t = createMainTranslator(getAppSettings().locale);
@@ -707,18 +739,19 @@ export function registerRecordingHub(
   };
 }
 
+/** Every `screen:` source, without thumbnails (the cheapest listing). */
+function listScreenSources(): Promise<ScreenSource[]> {
+  return desktopCapturer.getSources({ types: ["screen"], thumbnailSize: { width: 0, height: 0 } });
+}
+
 /** Resolve which display a screen source belongs to (windows have none). */
-async function displayIdForSource(sourceId: string): Promise<string | undefined> {
+async function displayIdForSource(
+  sources: ScreenSourceCache,
+  sourceId: string,
+): Promise<string | undefined> {
   if (!sourceId.startsWith("screen:")) return undefined;
-  try {
-    const sources = await desktopCapturer.getSources({
-      types: ["screen"],
-      thumbnailSize: { width: 0, height: 0 },
-    });
-    return sources.find((source) => source.id === sourceId)?.display_id || undefined;
-  } catch {
-    return undefined;
-  }
+  const source = await sources.find((list) => list.find((candidate) => candidate.id === sourceId));
+  return source?.display_id || undefined;
 }
 
 /**
@@ -726,21 +759,16 @@ async function displayIdForSource(sourceId: string): Promise<string | undefined>
  * with a single display that source is unambiguous, with several it is not trusted.
  */
 async function screenSourceForDisplay(
+  sources: ScreenSourceCache,
   displayId: number,
   displayCount: number,
 ): Promise<{ id: string; name: string } | null> {
-  try {
-    const sources = await desktopCapturer.getSources({
-      types: ["screen"],
-      thumbnailSize: { width: 0, height: 0 },
-    });
-    const match =
-      sources.find((source) => source.display_id === String(displayId)) ??
-      (displayCount === 1 && sources.length === 1 ? sources[0] : undefined);
-    return match ? { id: match.id, name: match.name } : null;
-  } catch {
-    return null;
-  }
+  const match = await sources.find(
+    (list) =>
+      list.find((source) => source.display_id === String(displayId)) ??
+      (displayCount === 1 && list.length === 1 ? list[0] : undefined),
+  );
+  return match ? { id: match.id, name: match.name } : null;
 }
 
 /**

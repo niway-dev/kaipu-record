@@ -683,6 +683,9 @@ export type RecorderPhaseReport =
   | { phase: "starting" }
   | { phase: "idle" };
 
+/** The countdown before a take: 3, 2, 1. Main paints the first tick before the recorder reports it. */
+export const RECORDING_COUNTDOWN_SECONDS = 3;
+
 /**
  * A `[record-timing]` mark from the main renderer: `begin` restarts main's clock (a stop),
  * `end` closes the timeline (the take is recording), `mark` is any step in between.
