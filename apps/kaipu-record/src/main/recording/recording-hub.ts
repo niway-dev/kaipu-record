@@ -785,6 +785,9 @@ export function registerRecordingHub(
       return true;
     },
     forceReset: (options) => {
+      // Its takes will never be finalized or aborted: release their file handles. The partial
+      // files stay on disk.
+      void writer.releaseAll().catch((error) => console.error("releasing takes failed", error));
       cursorTracks.discardAll();
       clickSessions.clear();
       clickHook.stop();

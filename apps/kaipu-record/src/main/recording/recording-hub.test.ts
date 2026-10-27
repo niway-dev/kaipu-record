@@ -1204,6 +1204,24 @@ describe("recording hub — choosing an area or a display on the overlay", () =>
     expect(mockState.bubble.show).not.toHaveBeenCalled();
   });
 
+  it("a forced reset releases the writer's open takes, so no file handle outlives the renderer", async () => {
+    const { RecordingWriter } = await import("./recording-writer");
+    const releaseAll = vi.spyOn(RecordingWriter.prototype, "releaseAll");
+    try {
+      const { handle } = await hub();
+      const create = mockState.ipcHandle.get(IPC_CHANNELS.recordingCreate)!;
+      await create({}, "session-crashed");
+
+      // The renderer crashed (or its window closed) mid-take: it will never finalize or abort.
+      handle.forceReset();
+
+      expect(releaseAll).toHaveBeenCalledOnce();
+      await releaseAll.mock.results[0]!.value;
+    } finally {
+      releaseAll.mockRestore();
+    }
+  });
+
   it("a forced reset removes a shade even when no take is active", async () => {
     const { handle } = await hub();
     handle.forceReset();
