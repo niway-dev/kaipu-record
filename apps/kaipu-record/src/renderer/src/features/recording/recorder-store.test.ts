@@ -265,6 +265,35 @@ describe("recorder-store", () => {
     expect(window.electronAPI.recordingStop).toHaveBeenCalledOnce();
   });
 
+  it("a cancel before main confirms the session never starts the engine", async () => {
+    // The take's file is created first (IPC). A cancel landing in that gap must not let the
+    // engine acquire the screen and mic afterwards.
+    let resolveCreate!: (value: { tempPath: string }) => void;
+    window.electronAPI.recordingCreate = vi.fn(
+      () => new Promise<{ tempPath: string }>((resolve) => (resolveCreate = resolve)),
+    );
+    try {
+      const engine = fakeEngine();
+      startEngineMock.mockResolvedValue(engine);
+
+      store.requestStartRecording(() => input);
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(store.getRecorderSnapshot().status).toBe("starting");
+
+      store.stopOrCancelRecording(); // recordingCreate still pending
+      resolveCreate({ tempPath: "/tmp/late" });
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(startEngineMock).not.toHaveBeenCalled();
+      expect(window.electronAPI.recordingAbort).toHaveBeenCalledWith(
+        expect.stringMatching(/^session-/),
+      );
+      expect(store.getRecorderSnapshot()).toEqual({ status: "idle", countdown: null });
+    } finally {
+      window.electronAPI.recordingCreate = recordingCreateMock;
+    }
+  });
+
   it("a cancel during 'starting' works even when the engine never settles", async () => {
     startEngineMock.mockImplementation(() => new Promise<EngineHandle>(() => {}));
 
@@ -332,6 +361,30 @@ describe("recorder-store", () => {
     expect(store.getRecorderSnapshot().status).toBe("recording");
 
     await stopAndSettle();
+  });
+
+  it("pause and resume are ignored while the take is finalizing", async () => {
+    const engine = fakeEngine();
+    let finishStop!: () => void;
+    engine.stop = vi.fn(() => new Promise<void>((resolve) => (finishStop = resolve)));
+    startEngineMock.mockResolvedValue(engine);
+    store.requestStartRecording(() => input);
+    await vi.advanceTimersByTimeAsync(3000);
+
+    store.stopOrCancelRecording();
+    try {
+      expect(store.getRecorderSnapshot().status).toBe("finalizing");
+
+      store.pauseRecording();
+      store.resumeRecording();
+      expect(engine.pause).not.toHaveBeenCalled();
+      expect(engine.resume).not.toHaveBeenCalled();
+      expect(store.getRecorderSnapshot().status).toBe("finalizing");
+    } finally {
+      finishStop();
+      await vi.advanceTimersByTimeAsync(1000);
+    }
+    expect(store.getRecorderSnapshot()).toEqual({ status: "idle", countdown: null });
   });
 
   it("stop shows Saving, finalizes, notifies completion listeners, restores the window", async () => {

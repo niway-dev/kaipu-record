@@ -276,6 +276,9 @@ async function beginEngine(input: StartInput): Promise<void> {
   try {
     const acquired = (async () => {
       await start.created;
+      // Cancelled while the take's file was being created: the engine must not open the
+      // screen or the mic for a take that is already gone (`discardStart` aborts the file).
+      if (pendingStart !== start) throw new Error("start cancelled before it was created");
       start.engine = startEngine({
         sourceId: input.sourceId,
         area: input.area ?? null,
@@ -445,7 +448,9 @@ function forwardLiveSettings(handle: EngineHandle, input: StartInput): () => voi
 }
 
 export function pauseRecording(): void {
-  if (!engine || !clock) return;
+  // Only a recording pauses: while finalizing the engine is already stopping, and a pause
+  // here would move the store out of "finalizing" under a take that is saving.
+  if (snapshot.status !== "recording" || !engine || !clock) return;
   const pausedAt = performance.now();
   engine.pause();
   cursorTrack?.pause(pausedAt);
@@ -454,7 +459,7 @@ export function pauseRecording(): void {
 }
 
 export function resumeRecording(): void {
-  if (!engine || !clock) return;
+  if (snapshot.status !== "paused" || !engine || !clock) return;
   const resumedAt = performance.now();
   engine.resume();
   cursorTrack?.resume(resumedAt);
