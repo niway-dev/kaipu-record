@@ -11,11 +11,7 @@ import { homedir, release } from "node:os";
 import { join } from "node:path";
 import { createMainTranslator } from "@kaipu/i18n/main";
 import { IPC_CHANNELS } from "@shared/types";
-import {
-  FINALIZE_ELSEWHERE_MARKER,
-  FINALIZE_KEPT_MARKER,
-  RECORDING_COUNTDOWN_SECONDS,
-} from "@shared/types/ipc";
+import { FINALIZE_ELSEWHERE_MARKER, FINALIZE_KEPT_MARKER } from "@shared/types/ipc";
 import type {
   ControlCommand,
   RecorderPhaseReport,
@@ -103,8 +99,10 @@ export interface RecordingHubHandle {
    * `onAbandoned` runs when the start never came (TTL expired with no phase report) or ended
    * before a take (cancelled or failed): the caller kept the app hidden and must show its
    * window; the hub then re-asserts the Dock and activates the app, as a stop does.
-   * The shade is opened here, painting the first tick, so it is loading while the start
-   * request travels and the recorder's `recordingCountdownVisible` wait is answered at once.
+   * The shade is opened here, painting the first tick (the countdown length from Settings), so
+   * it is loading while the start request travels and the recorder's `recordingCountdownVisible`
+   * wait is answered at once. With the countdown off (0) no shade is opened: the take starts
+   * right away and its own shade appears with `recordingStart`.
    */
   prepareRegionCountdown(
     displayId: number,
@@ -459,7 +457,13 @@ export function registerRecordingHub(
   // The overlay chose a region and started: the countdown is drawn on it by the shade
   // (dim outside, the number inside) while the main window stays hidden. Esc cancels
   // through a global shortcut held only for the countdown, since nothing of ours has focus.
-  let countdownRegion: { display: Electron.Display; rect: CaptureRect | null } | null = null;
+  // `drawn`: the countdown shade was opened for it. With the countdown off (Settings) nothing is
+  // drawn: the take's own shade is the first thing to appear, from `recordingStart`.
+  let countdownRegion: {
+    display: Electron.Display;
+    rect: CaptureRect | null;
+    drawn: boolean;
+  } | null = null;
   let countdownRegionTimer: ReturnType<typeof setTimeout> | null = null;
   let escapeHeld = false;
   const releaseEscape = (): void => {
@@ -544,7 +548,9 @@ export function registerRecordingHub(
       shade.update({ phase: "countdown", value: report.value });
       holdEscape();
     } else if (report.phase === "starting") {
-      shade.update({ phase: "countdown", value: null });
+      // The gap after the countdown: its dim stays up, number cleared. Nothing to clear when
+      // no countdown was drawn (it is off): the take's shade comes from `recordingStart`.
+      if (countdownRegion.drawn) shade.update({ phase: "countdown", value: null });
     } else {
       // Cancelled (Esc, Stop) or failed before the take: nothing is marked any more, and the
       // app that was kept hidden for the countdown comes back.
@@ -700,23 +706,30 @@ export function registerRecordingHub(
         revealAbandoned(onAbandoned ?? null);
         return;
       }
-      const prepared = { display, rect: area ? area.rect : null };
+      const seconds = getAppSettings().recordingCountdownSeconds;
+      const prepared = { display, rect: area ? area.rect : null, drawn: seconds > 0 };
       countdownRegion = prepared;
       countdownAbandoned = onAbandoned ?? null;
-      // Open the shade now, on "3": it loads while the start request reaches the recorder,
-      // instead of after its first tick report. The recorder still starts its clock only
-      // once this window is on screen (`recordingCountdownVisible`).
-      shade.show(
-        display,
-        prepared.rect,
-        () => {
-          if (countdownRegion !== prepared) return;
-          markRecordTiming("countdown shade shown");
-          raiseFloating();
-          markCountdownShown();
-        },
-        { phase: "countdown", value: RECORDING_COUNTDOWN_SECONDS },
-      );
+      if (prepared.drawn) {
+        // Open the shade now, on the first tick (the configured length): it loads while the
+        // start request reaches the recorder, instead of after its first tick report. The
+        // recorder still starts its clock only once this window is on screen
+        // (`recordingCountdownVisible`).
+        shade.show(
+          display,
+          prepared.rect,
+          () => {
+            if (countdownRegion !== prepared) return;
+            markRecordTiming("countdown shade shown");
+            raiseFloating();
+            markCountdownShown();
+          },
+          { phase: "countdown", value: seconds },
+        );
+      } else {
+        // No countdown, so no dim and no number: the recorder does not wait for either.
+        markCountdownShown();
+      }
       // The TTL counts from when the recorder can answer: a recreated main window loads first.
       const startTtl = (): void => {
         if (countdownRegion !== prepared || countdownRegionTimer) return;

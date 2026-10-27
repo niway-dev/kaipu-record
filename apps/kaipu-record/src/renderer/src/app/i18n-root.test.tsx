@@ -11,6 +11,7 @@ const SETTINGS: AppSettings = {
   showInDock: true,
   recordingQuality: DEFAULT_QUALITY,
   showBarInRecording: false,
+  recordingCountdownSeconds: 3,
   showBrandBadge: false,
   screenshotCopy: "auto",
   shortcuts: defaultShortcutsFor("darwin"),

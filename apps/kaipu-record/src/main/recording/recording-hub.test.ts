@@ -477,6 +477,102 @@ describe("recording hub — a Dock dropped by a floating panel comes back", () =
     expect(mockState.shade.show).toHaveBeenLastCalledWith(display, rect, expect.any(Function));
   });
 
+  describe("countdown length setting", () => {
+    afterEach(async () => {
+      const { updateAppSettings } = await import("../infrastructure/settings-store");
+      updateAppSettings({ recordingCountdownSeconds: 3 });
+    });
+
+    async function setup(seconds: 0 | 3 | 5) {
+      const { registerSettings, updateAppSettings } =
+        await import("../infrastructure/settings-store");
+      const { registerRecordingHub } = await import("./recording-hub");
+      registerSettings();
+      updateAppSettings({ recordingCountdownSeconds: seconds });
+      const hub = registerRecordingHub(() => fakeMainWindow() as never);
+      const display = { id: 2, bounds: { x: 1512, y: 0, width: 1512, height: 982 } };
+      mockState.displays = [display];
+      mockState.getSources.mockResolvedValue([
+        { id: "screen:2:0", name: "Screen 2", display_id: "2" },
+      ]);
+      return { hub, display };
+    }
+
+    it("paints the configured length as the shade's first tick", async () => {
+      const { hub, display } = await setup(5);
+      const rect = { x: 100, y: 50, width: 640, height: 360 };
+
+      hub.prepareRegionCountdown(2, rect);
+
+      expect(mockState.shade.show).toHaveBeenCalledTimes(1);
+      expect(mockState.shade.show).toHaveBeenCalledWith(display, rect, expect.any(Function), {
+        phase: "countdown",
+        value: 5,
+      });
+    });
+
+    it("with 0 draws no countdown shade, does not make the recorder wait, and holds no Esc", async () => {
+      mockState.shortcutRegister.mockClear();
+      const { hub } = await setup(0);
+      const phase = mockState.ipcOn.get(IPC_CHANNELS.recordingRecorderPhase)!;
+      const visible = mockState.ipcHandle.get(IPC_CHANNELS.recordingCountdownVisible)!;
+
+      hub.prepareRegionCountdown(2, { x: 100, y: 50, width: 640, height: 360 });
+      // The recorder skips the countdown and reports acquiring straight away.
+      phase({}, { phase: "starting" });
+
+      expect(mockState.shade.show).not.toHaveBeenCalled();
+      expect(mockState.shade.update).not.toHaveBeenCalled();
+      expect(visible({})).toBeUndefined();
+      expect(mockState.shortcutRegister).not.toHaveBeenCalled();
+    });
+
+    it("with 0 a Frame area still gets its shade and border when the take starts", async () => {
+      const { hub, display } = await setup(0);
+      const rect = { x: 100, y: 50, width: 640, height: 360 };
+      await hub.selectArea(2, rect);
+      hub.prepareRegionCountdown(2, rect);
+      const phase = mockState.ipcOn.get(IPC_CHANNELS.recordingRecorderPhase)!;
+      phase({}, { phase: "starting" });
+
+      mockState.ipcOn.get(IPC_CHANNELS.recordingStart)!(
+        {},
+        { sourceId: "screen:2:0", sourceName: "Area" },
+      );
+
+      // The only shade of the take: the recording one on the area, never a countdown dim.
+      expect(mockState.shade.show).toHaveBeenCalledOnce();
+      expect(mockState.shade.show).toHaveBeenCalledWith(display, rect, expect.any(Function));
+    });
+
+    it("with 0 a whole display gets its border when the take starts", async () => {
+      const { hub, display } = await setup(0);
+      await hub.selectArea(2, null);
+      hub.prepareRegionCountdown(2, null);
+      const phase = mockState.ipcOn.get(IPC_CHANNELS.recordingRecorderPhase)!;
+      phase({}, { phase: "starting" });
+
+      mockState.ipcOn.get(IPC_CHANNELS.recordingStart)!(
+        {},
+        { sourceId: "screen:2:0", sourceName: "Screen 2" },
+      );
+
+      expect(mockState.shade.show).toHaveBeenCalledOnce();
+      expect(mockState.shade.show).toHaveBeenCalledWith(display, null, expect.any(Function));
+    });
+
+    it("with 0 a start that fails before the take still brings the hidden app back", async () => {
+      const { hub } = await setup(0);
+      const reveal = vi.fn();
+      hub.prepareRegionCountdown(2, null, reveal);
+      const phase = mockState.ipcOn.get(IPC_CHANNELS.recordingRecorderPhase)!;
+
+      phase({}, { phase: "idle" });
+
+      expect(reveal).toHaveBeenCalledOnce();
+    });
+  });
+
   it("reveals the hidden app when a prepared start never reaches the recorder", async () => {
     vi.useFakeTimers();
     try {

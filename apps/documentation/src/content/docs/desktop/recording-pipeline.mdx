@@ -136,7 +136,7 @@ Ventana principal (oculta)                  Barra flotante (ventana aparte)
 
 **Piezas:**
 
-- `features/recording/recorder-store.ts` — **module-singleton** que posee el engine, la sesión del writer y el countdown 3-2-1. Deliberadamente vive fuera de React (mismo patrón que `ui/toast-store.ts`): sobrevive a navegación, remounts de página y desvíos al editor de screenshots. Ver [El engine ya no vive en la página](#el-engine-ya-no-vive-en-la-página) abajo.
+- `features/recording/recorder-store.ts` — **module-singleton** que posee el engine, la sesión del writer y el countdown (3-2-1 por defecto; Settings → Recording lo cambia a 5 s o lo apaga con 0, y se lee al pedir el inicio). Deliberadamente vive fuera de React (mismo patrón que `ui/toast-store.ts`): sobrevive a navegación, remounts de página y desvíos al editor de screenshots. Ver [El engine ya no vive en la página](#el-engine-ya-no-vive-en-la-página) abajo.
 - `features/recording/hooks/use-screen-recorder.ts` — binding fino de React sobre el store vía `useSyncExternalStore`; ya no tiene lógica propia.
 - `features/recording/recorder-engine.ts` — captura + mezcla de audio + encode mediabunny (MP4 H.264/AAC). Seam `videoProvider`/`audioProvider` para meter cámara/watermark después sin tocar lo de abajo.
 - `features/recording/elapsed.ts` + `audio-levels.ts` — lógica pura testeada (clock con pausa, RMS→5 barras).
@@ -353,7 +353,8 @@ se togglea desde Settings.
 
 ### El hueco "starting" después del countdown
 
-Tras el countdown `3·2·1`, el grabador entra en estado **`"starting"`** mientras
+Tras el countdown (`3·2·1` por defecto, `5·4·3·2·1` o ninguno según Settings), el
+grabador entra en estado **`"starting"`** mientras
 adquiere los streams y arma el encoder — ahí `isRecording` todavía es `false` y la
 ventana **aún no se ocultó**, así que el botón Start quedaba visible y clickeable
 ~0.5–1s (se podía disparar una segunda grabación). Se cierra por tres lados:
