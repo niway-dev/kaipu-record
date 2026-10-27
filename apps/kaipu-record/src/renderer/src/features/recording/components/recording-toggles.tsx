@@ -42,6 +42,8 @@ export function RecordingToggles({
   return (
     <StatusToggleRow
       variant={variant}
+      onText={t("statusOn")}
+      offText={t("statusOff")}
       items={[
         {
           id: "mic",

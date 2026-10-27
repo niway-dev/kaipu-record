@@ -257,6 +257,8 @@
     "audioLabel": "Audio",
     "audioUnavailable": "System audio isn't available for this recording",
     "cameraLabel": "Camera",
+    "statusOn": "ON",
+    "statusOff": "OFF",
     "micTitle": "MICROPHONE",
     "selectMic": "Select microphone",
     "micBuiltIn": "BUILT-IN",

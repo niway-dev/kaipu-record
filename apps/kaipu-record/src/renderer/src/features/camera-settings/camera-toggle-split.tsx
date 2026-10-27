@@ -35,6 +35,7 @@ export function CameraToggleSplit({
   chevronRef,
 }: CameraToggleSplitProps): React.JSX.Element {
   const t = useTranslations("cameraSettings");
+  const tStatus = useTranslations("record");
   const iconSize = compact ? 15 : 20;
   // A blocked camera cannot be turned on; one that is somehow on can still be turned off.
   const cannotToggle = blocked && !on;
@@ -58,7 +59,9 @@ export function CameraToggleSplit({
           {blocked ? <Lock size={iconSize} /> : <Camera size={iconSize} />}
         </span>
         {!compact && <span className={styles.label}>{t("camera")}</span>}
-        <span className={styles.status}>{blocked ? t("blocked") : on ? "ON" : "OFF"}</span>
+        <span className={styles.status}>
+          {blocked ? t("blocked") : on ? tStatus("statusOn") : tStatus("statusOff")}
+        </span>
       </button>
       <button
         ref={chevronRef}

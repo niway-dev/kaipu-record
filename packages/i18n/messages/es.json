@@ -257,6 +257,8 @@
     "audioLabel": "Audio",
     "audioUnavailable": "El audio del sistema no está disponible en esta grabación",
     "cameraLabel": "Cámara",
+    "statusOn": "SÍ",
+    "statusOff": "NO",
     "micTitle": "MICRÓFONO",
     "selectMic": "Seleccionar micrófono",
     "micBuiltIn": "INCORPORADO",
