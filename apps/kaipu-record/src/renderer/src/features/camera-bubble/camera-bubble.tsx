@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, type PointerEvent } from "react";
-import { Camera } from "lucide-react";
+import { Camera, X } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { useCameraPreview } from "@renderer/features/recording/hooks/use-camera-preview";
 import { useRecordingActivity } from "@renderer/features/recording/hooks/use-recording-activity";
@@ -96,10 +96,11 @@ async function settleGrip(
  * recording too: the pointer's offset goes to main, which moves the window and keeps it
  * inside the recorded area. There is no OS drag region, so the grip still gets its events.
  *
- * Outside a recording, hovering shows a pink outline, the size ("240 px · M") and a resize
- * grip; dragging the grip resizes the bubble from its anchored corner. Once a recording
- * starts none of that chrome renders, so the bubble on screen is exactly the one in the
- * video.
+ * Outside a recording, hovering shows a pink outline, the size ("240 px · M"), a resize
+ * grip and a close button that turns the camera off; dragging the grip resizes the bubble
+ * from its bottom-left corner. Once a recording starts none of that chrome renders, so the
+ * bubble on screen is exactly the one in the video (the control bar, which the video
+ * leaves out, offers the same "turn camera off" during a take).
  */
 export function CameraBubble(): React.JSX.Element {
   const t = useTranslations("cameraSettings");
@@ -222,6 +223,19 @@ export function CameraBubble(): React.JSX.Element {
         />
         {!hasStream && <Camera size={30} className={styles.placeholder} />}
       </div>
+      {showChrome && (
+        <button
+          type="button"
+          className={bubble.shape === "circle" ? styles.closeCircle : styles.closeRounded}
+          data-testid="bubble-camera-off"
+          aria-label={t("turnCameraOff")}
+          title={t("turnCameraOff")}
+          // The camera toggle is global: main destroys this window and releases the device.
+          onClick={() => window.electronAPI.updateRecordingSettings({ isCameraEnabled: false })}
+        >
+          <X size={12} strokeWidth={3} aria-hidden />
+        </button>
+      )}
       {showChrome && (
         <div
           className={bubble.shape === "circle" ? styles.gripCircle : styles.gripRounded}

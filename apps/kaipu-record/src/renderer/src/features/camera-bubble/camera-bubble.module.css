@@ -97,3 +97,45 @@
   cursor: nesw-resize;
   touch-action: none;
 }
+
+/* Turn the camera off: a 22 px dark dot with a white X, opposite the grip (top-left). On the
+   rim at 45° for the circle; inside the corner for the rounded square, clear of the size
+   label above it. */
+.closeCircle,
+.closeRounded {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  box-sizing: border-box;
+  padding: 0;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: rgba(17, 17, 17, 0.85);
+  color: #fff;
+  cursor: pointer;
+}
+
+.closeCircle:hover,
+.closeRounded:hover {
+  background: var(--accent-primary);
+}
+
+/* Frameless window: the OS focus ring would make a clicked button look pre-selected. */
+.closeCircle:focus,
+.closeRounded:focus {
+  outline: none;
+}
+
+.closeCircle {
+  left: calc(var(--pad) + (100% - 2 * var(--pad)) * 0.1464);
+  top: calc(var(--pad) + (100% - 2 * var(--pad)) * 0.1464);
+}
+
+.closeRounded {
+  left: calc(var(--pad) + 14px);
+  top: calc(var(--pad) + 14px);
+}

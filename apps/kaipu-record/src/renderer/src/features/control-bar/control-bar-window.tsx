@@ -28,6 +28,9 @@ export function ControlBarWindowRoot(): React.JSX.Element {
       onStop={() => window.electronAPI.controlCommand("stop")}
       stopShortcut={shortcuts?.stopRecording}
       modeChip={modeChip}
+      onCameraOff={
+        recording.isCameraEnabled ? () => recording.update({ isCameraEnabled: false }) : undefined
+      }
     />
   );
 }

@@ -232,7 +232,8 @@
     "openSystemSettings": "Open System Settings",
     "bubbleLabel": "{size} px · {preset}",
     "bubbleLabelCustom": "{size} px",
-    "resizeGrip": "Resize camera bubble"
+    "resizeGrip": "Resize camera bubble",
+    "turnCameraOff": "Turn camera off"
   },
   "record": {
     "readyToRecord": "Ready to record",

@@ -86,11 +86,39 @@ stays 56 px in, as before. A size the area cannot hold is shrunk to what fits; w
   the camera on; the settings are replaced by "Camera access is blocked" and an "Open System
   Settings" button.
 - **Bubble.** Outside a recording, hovering shows a 2 px pink outline, a size label
-  ("240 px · M") above it and a resize grip (a white dot on the rim at 45° for the circle, a
-  white L at the top-right corner for the rounded square). Dragging the grip resizes diagonally
+  ("240 px · M") above it, a resize grip (a white dot on the rim at 45° for the circle, a
+  white L at the top-right corner for the rounded square) and a **Turn camera off** button
+  opposite the grip (a dark dot with a white ×, on the rim at 45° top-left, or inside the
+  rounded square's top-left corner). Dragging the grip resizes diagonally
   from the fixed corner, clamped to 120–480 and to the area; the release persists the size that
-  is on screen. **While recording none of this renders** (no outline, no label, no grip): the
-  bubble on screen is exactly the one in the video.
+  is on screen. **While recording none of this renders** (no outline, no label, no grip, no ×):
+  the bubble on screen is exactly the one in the video.
+- **Control bar.** While a take runs and the camera is on, the bar shows a **Turn camera off**
+  button (camera-off icon) between the mode chip and Pause. The bar is content-protected, so the
+  button is never in the video; it disappears once the camera is off. The bar window grew from
+  480 to 528 DIP to hold it.
+
+### Turning the camera off: placement
+
+The owner asked for a quick way to turn the camera off once the bubble is showing. Both new
+controls write the same global `isCameraEnabled` toggle the Record page, the tray, the overlay
+widget and the `toggleCamera` shortcut write, so main destroys the bubble and releases the device
+whichever one is used.
+
+- **Chosen: on the bubble itself, in its hover chrome**, outside a take. The bubble is the thing
+  the user wants gone, the hover chrome already holds its other direct controls (size label,
+  grip), and a hover × is the convention of other floating camera bubbles (Loom). It costs
+  nothing for someone who never hovers.
+- **Chosen too: the control bar, during a take.** The bubble's chrome never renders while
+  recording (it would be in the video), so the bubble alone would leave no quick way off
+  mid-take. The bar is already the mid-take control surface and is not recorded.
+- **Rejected: the overlay's Camera toggle.** It already exists (Mic · System audio · Camera on
+  the record widget), but it is only on screen while choosing an area, not while the bubble
+  floats over other apps.
+- **Rejected: a right-click menu on the bubble** (Circle / Rounded · S / M / L · Turn camera
+  off, deferred below). Not discoverable as the only way off; it can still come later.
+- **Rejected: a permanent badge on the bubble.** Anything always drawn on the bubble ends up in
+  every recording.
 
 "Blocked" comes from a new tri-state `getCameraAccessStatus()` (`granted` / `blocked` /
 `unknown`), not from `checkPermissions().camera`, which reads `false` before the user was ever
@@ -123,17 +151,20 @@ asked; treating "not asked yet" as blocked would have made the camera impossible
    the native device `<select>`), Esc closes it.
 3. Bubble hover chrome and grip outside a recording; nothing of it during a recording or in the
    recorded file; a grip drag never moves the bubble's bottom-left corner.
-4. Drag-to-move: pressing on the bubble and dragging moves it, before and during a take, on macOS
+4. Turn camera off: the hover × on the bubble outside a take, and the control bar button during
+   one, turn the camera off (bubble gone, camera light off); neither shows in the recorded file.
+5. Drag-to-move: pressing on the bubble and dragging moves it, before and during a take, on macOS
    and Windows; it stops at the edges of a recorded area; the grip still resizes from the dropped
    spot.
-5. A small area (under 232 px) hides the bubble; a medium one shrinks it.
-6. Camera access denied in System Settings: BLOCKED tile, blocked card, the button opens the pane.
-7. Windows: same checks (the bubble's hover events on an inactive always-on-top window).
+6. A small area (under 232 px) hides the bubble; a medium one shrinks it.
+7. Camera access denied in System Settings: BLOCKED tile, blocked card, the button opens the pane.
+8. Windows: same checks (the bubble's hover events on an inactive always-on-top window).
 
 ## Deferred
 
 - **Right-click context menu** on the bubble (Circle / Rounded square · Small / Medium / Large ·
-  Turn camera off): marked "next iteration" in the design, not built.
+  Turn camera off): marked "next iteration" in the design, not built. "Turn camera off" is
+  covered by the hover × and the control bar button.
 - The fox-nocam illustration for the blocked card: the app has no such asset, the lock icon is
   used.
 - Analytics: the app does not track camera toggles, so no shape or size event was added.

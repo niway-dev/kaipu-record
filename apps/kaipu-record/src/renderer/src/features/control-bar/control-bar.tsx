@@ -1,5 +1,5 @@
 import React from "react";
-import { AppWindow, Frame, Loader2, Monitor, Pause, Play, Square } from "lucide-react";
+import { AppWindow, CameraOff, Frame, Loader2, Monitor, Pause, Play, Square } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { formatElapsed } from "@renderer/features/recording/elapsed";
 import { cx } from "@renderer/ui/cx";
@@ -16,11 +16,19 @@ interface ControlBarProps {
   stopShortcut?: string;
   /** What is recorded: the mode and, for an area drawn with one, its ratio ("16:9"). */
   modeChip?: { mode: CaptureMode; ratio: string | null };
+  /**
+   * Turn the camera off mid-take. Given only while the camera is on: the bubble hides its
+   * own close button during a recording (it would be in the video), and this bar is not.
+   */
+  onCameraOff?(): void;
 }
 
 const MODE_ICON = { frame: Frame, window: AppWindow, screen: Monitor } as const;
 
-/** Floating recording HUD: dot · timer · separator · live mic level · pause/resume · stop · shortcut. */
+/**
+ * Floating recording HUD: dot · timer · separator · live mic level · mode · camera off (while
+ * the camera is on) · pause/resume · stop · shortcut.
+ */
 export function ControlBar({
   tick,
   onPause,
@@ -28,9 +36,11 @@ export function ControlBar({
   onStop,
   stopShortcut,
   modeChip,
+  onCameraOff,
 }: ControlBarProps): React.JSX.Element {
   const t = useTranslations("panel");
   const tModes = useTranslations("screenshots");
+  const tCamera = useTranslations("cameraSettings");
   if (tick.status === "saving") {
     return (
       <div className={styles.bar}>
@@ -55,6 +65,18 @@ export function ControlBar({
       )}
 
       {modeChip && <ModeChip chip={modeChip} label={modeName(modeChip.mode, tModes)} />}
+
+      {onCameraOff && (
+        <button
+          className={styles.control}
+          type="button"
+          aria-label={tCamera("turnCameraOff")}
+          title={tCamera("turnCameraOff")}
+          onClick={onCameraOff}
+        >
+          <CameraOff size={17} />
+        </button>
+      )}
 
       {paused ? (
         <button

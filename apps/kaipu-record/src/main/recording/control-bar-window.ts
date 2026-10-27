@@ -4,8 +4,9 @@ import { is } from "@electron-toolkit/utils";
 import type { Rect } from "./area-geometry";
 import { controlBarBounds } from "./control-bar-placement";
 
-// 480 since the bar carries the recording's mode chip ("16:9", "SCREEN").
-const BAR_WIDTH = 480;
+// 480 since the bar carries the recording's mode chip ("16:9", "SCREEN"); 528 since it also
+// carries "Turn camera off" while the camera is on (a 36 px button and its 12 px gap).
+const BAR_WIDTH = 528;
 const BAR_HEIGHT = 82;
 
 /**
