@@ -1,4 +1,4 @@
-import React, { type KeyboardEvent, type ReactNode } from "react";
+import React, { useEffect, useRef, type KeyboardEvent, type ReactNode } from "react";
 import styles from "./settings-drawer.module.css";
 
 /** `panel`: the capture panel's compact drawer. `page`: the Record page's wide one. */
@@ -28,9 +28,16 @@ export function SettingsDrawer({
   onKeyDown,
   children,
 }: SettingsDrawerProps): React.JSX.Element | null {
+  const ref = useRef<HTMLDivElement>(null);
+  // On the Record page a drawer opened low in the window would start below the fold: bring
+  // it into view. The panel grows its own window instead, so it never needs this.
+  useEffect(() => {
+    if (open && variant === "page") ref.current?.scrollIntoView?.({ block: "nearest" });
+  }, [open, variant]);
   if (!open) return null;
   return (
     <div
+      ref={ref}
       id={id}
       role="region"
       aria-label={label}
