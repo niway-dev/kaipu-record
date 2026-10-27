@@ -4,6 +4,12 @@
   gap: 4px;
 }
 
+.devices[data-dense] .device {
+  min-height: 32px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
 .device {
   display: flex;
   align-items: center;

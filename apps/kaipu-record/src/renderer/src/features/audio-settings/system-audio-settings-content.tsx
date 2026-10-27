@@ -16,18 +16,21 @@ export interface SystemAudioSettingsContentProps {
   /** Ducking lowers the system audio under the user's voice: no mic, no voice. */
   micOn: boolean;
   compact?: boolean;
+  /** The Record page's wide layout: what to capture on the left, volume on the right. */
+  columns?: boolean;
   /** The capture group, which takes focus when the settings open. */
   firstRef: RefObject<HTMLElement | null>;
 }
 
 type CaptureChoice = "all" | "app";
 
-/** The system-audio settings, shared by the Record page's popover and the panel's drawer. */
+/** The system-audio settings, shared by the Record page's drawer and the panel's drawer. */
 export function SystemAudioSettingsContent({
   audio,
   onChange,
   micOn,
   compact = false,
+  columns = false,
   firstRef,
 }: SystemAudioSettingsContentProps): React.JSX.Element {
   const t = useTranslations("systemAudioSettings");
@@ -45,48 +48,56 @@ export function SystemAudioSettingsContent({
   ];
 
   return (
-    <div className={styles.content} data-compact={compact || undefined}>
+    <div
+      className={styles.content}
+      data-compact={compact || undefined}
+      data-columns={columns || undefined}
+    >
       <div className={styles.header}>
         <Volume2 size={compact ? 13 : 15} aria-hidden className={styles.headerIcon} />
         <span className={styles.headerTitle}>{t("systemAudio")}</span>
       </div>
 
-      <span className={styles.label} aria-hidden>
-        {t("whatToCapture")}
-      </span>
-      <RadioChips<CaptureChoice>
-        label={t("whatToCapture")}
-        options={choices}
-        value="all"
-        onChange={() => {}}
-        compact={compact}
-        groupRef={firstRef as RefObject<HTMLDivElement | null>}
-      />
-      <p className={styles.hint} aria-hidden>
-        {t("oneApp")} · {reason}
-      </p>
+      <div className={styles.column}>
+        <span className={styles.label} aria-hidden>
+          {t("whatToCapture")}
+        </span>
+        <RadioChips<CaptureChoice>
+          label={t("whatToCapture")}
+          options={choices}
+          value="all"
+          onChange={() => {}}
+          compact={compact}
+          groupRef={firstRef as RefObject<HTMLDivElement | null>}
+        />
+        <p className={styles.hint} aria-hidden>
+          {t("oneApp")} · {reason}
+        </p>
+      </div>
 
-      <span className={styles.label} aria-hidden>
-        {t("volume")}
-      </span>
-      <LevelSlider
-        label={t("volume")}
-        value={audio.systemAudioVolume}
-        min={SYSTEM_AUDIO_VOLUME_MIN}
-        max={SYSTEM_AUDIO_VOLUME_MAX}
-        valueText={t("volumeValue", { percent: audio.systemAudioVolume })}
-        icon={<Volume1 size={14} />}
-        onChange={(systemAudioVolume) => onChange({ systemAudioVolume })}
-      />
+      <div className={styles.column}>
+        <span className={styles.label} aria-hidden>
+          {t("volume")}
+        </span>
+        <LevelSlider
+          label={t("volume")}
+          value={audio.systemAudioVolume}
+          min={SYSTEM_AUDIO_VOLUME_MIN}
+          max={SYSTEM_AUDIO_VOLUME_MAX}
+          valueText={t("volumeValue", { percent: audio.systemAudioVolume })}
+          icon={<Volume1 size={14} />}
+          onChange={(systemAudioVolume) => onChange({ systemAudioVolume })}
+        />
 
-      <SwitchRow
-        title={t("duckTitle")}
-        hint={t("duckHint")}
-        checked={audio.duckSystemAudioWhileTalking}
-        onChange={(duckSystemAudioWhileTalking) => onChange({ duckSystemAudioWhileTalking })}
-        disabled={!micOn}
-        disabledReason={t("duckNeedsMic")}
-      />
+        <SwitchRow
+          title={t("duckTitle")}
+          hint={t("duckHint")}
+          checked={audio.duckSystemAudioWhileTalking}
+          onChange={(duckSystemAudioWhileTalking) => onChange({ duckSystemAudioWhileTalking })}
+          disabled={!micOn}
+          disabledReason={t("duckNeedsMic")}
+        />
+      </div>
     </div>
   );
 }

@@ -10,6 +10,41 @@
   gap: 6px;
 }
 
+/* A group of rows. Transparent to layout in the single-column settings. */
+.column {
+  display: contents;
+}
+
+/* The Record page's drawer: header across the top, two columns under it, one column when
+   the drawer (a size container, see settings-drawer.module.css) is narrower than 520 px. */
+.content[data-columns] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  column-gap: 20px;
+  row-gap: 6px;
+}
+
+.content[data-columns] .header {
+  grid-column: 1 / -1;
+}
+
+.content[data-columns] .column {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.content[data-columns] .column > .label:first-child {
+  margin-top: 0;
+}
+
+@container (max-width: 519px) {
+  .content[data-columns] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .header {
   display: flex;
   align-items: center;
