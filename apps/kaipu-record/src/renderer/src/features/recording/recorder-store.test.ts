@@ -714,6 +714,110 @@ describe("recorder-store live settings", () => {
     });
   });
 
+  describe("noise suppression the device could not apply", () => {
+    const updateAppSettings = vi.fn(async (_patch: unknown) => ({}) as never);
+    beforeEach(() => {
+      updateAppSettings.mockClear();
+      window.electronAPI.updateSettings = updateAppSettings;
+    });
+
+    it("writes the value actually in effect back to the settings, so the UI never lies", async () => {
+      const engine = fakeEngine({ setNoiseSuppression: vi.fn(async () => "unavailable" as const) });
+      await startWith(engine, { audio: { ...DEFAULT_AUDIO_SETTINGS, micLevel: 80 } });
+
+      broadcastAudio({ micLevel: 80, noiseSuppression: false });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(engine.setNoiseSuppression).toHaveBeenCalledWith(false);
+      expect(updateAppSettings).toHaveBeenCalledWith({
+        audio: expect.objectContaining({ micLevel: 80, noiseSuppression: true }),
+      });
+      await stopAndSettle();
+    });
+
+    it("leaves the setting alone when the engine applied it", async () => {
+      const engine = fakeEngine();
+      await startWith(engine);
+      broadcastAudio({ noiseSuppression: false });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(updateAppSettings).not.toHaveBeenCalled();
+      await stopAndSettle();
+    });
+
+    it("only the latest request writes back, so a newer choice is not overwritten", async () => {
+      let rejectFirst!: () => void;
+      const setNoiseSuppression = vi
+        .fn<EngineHandle["setNoiseSuppression"]>()
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              rejectFirst = () => resolve("unavailable");
+            }),
+        )
+        .mockResolvedValue("ok");
+      await startWith(fakeEngine({ setNoiseSuppression }));
+      broadcastAudio({ noiseSuppression: false });
+      await vi.advanceTimersByTimeAsync(0);
+      broadcastAudio({ noiseSuppression: true });
+      broadcastAudio({ noiseSuppression: false });
+      rejectFirst();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(updateAppSettings).not.toHaveBeenCalled();
+      await stopAndSettle();
+    });
+  });
+
+  describe("changes made while the engine is still acquiring", () => {
+    it("applies the latest audio settings once the engine exists", async () => {
+      let resolveEngine!: (engine: EngineHandle) => void;
+      startEngineMock.mockReturnValue(new Promise((resolve) => (resolveEngine = resolve)));
+      store.requestStartRecording(() => input);
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(store.getRecorderSnapshot().status).toBe("starting");
+
+      broadcastAudio({ micLevel: 40 });
+      broadcastAudio({ micLevel: 60, systemAudioVolume: 30 });
+      const engine = fakeEngine();
+      resolveEngine(engine);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(store.getRecorderSnapshot().status).toBe("recording");
+      expect(engine.setMicLevel).toHaveBeenCalledTimes(1);
+      expect(engine.setMicLevel).toHaveBeenCalledWith(60);
+      expect(engine.setSystemAudioVolume).toHaveBeenCalledWith(30);
+      await stopAndSettle();
+    });
+
+    it("applies nothing when the settings did not move meanwhile", async () => {
+      let resolveEngine!: (engine: EngineHandle) => void;
+      startEngineMock.mockReturnValue(new Promise((resolve) => (resolveEngine = resolve)));
+      store.requestStartRecording(() => input);
+      await vi.advanceTimersByTimeAsync(3000);
+      broadcastAudio({});
+      const engine = fakeEngine();
+      resolveEngine(engine);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(engine.setMicLevel).not.toHaveBeenCalled();
+      await stopAndSettle();
+    });
+
+    it("stops listening when the start is cancelled", async () => {
+      startEngineMock.mockReturnValue(new Promise(() => {}));
+      store.requestStartRecording(() => input);
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(appListeners.size).toBe(1);
+      store.stopOrCancelRecording();
+      expect(appListeners.size).toBe(0);
+    });
+
+    it("stops listening when the start fails", async () => {
+      startEngineMock.mockRejectedValue(new Error("no screen"));
+      store.requestStartRecording(() => input);
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(store.getRecorderSnapshot().status).toBe("idle");
+      expect(appListeners.size).toBe(0);
+    });
+  });
+
   it("stops forwarding once the take ends", async () => {
     const engine = fakeEngine();
     await startWith(engine);
